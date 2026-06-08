@@ -379,17 +379,19 @@ describe('Test Optimization debug intake', () => {
           assert.match(analysisText, /\nDatadog validation: https:\/\/app-dev-local\.datadoghq\.com/)
 
           const validationPayload = getValidationPayload(analysisText)
-          assert.deepStrictEqual(validationPayload.result, {
-            status: 'ok',
-            stage: 'Reporting complete',
-          })
-          assert.strictEqual(validationPayload.summary.requestCount, 2)
-          assert.strictEqual(validationPayload.summary.citestcycle.payloadCount, 1)
-          assert.strictEqual(validationPayload.summary.events.counts.test, 1)
-          assert.strictEqual(validationPayload.findings.stage, 'Reporting complete')
-          assert.strictEqual(validationPayload.findings.status, 'ok')
-          assert.strictEqual(validationPayload.findings.primary.stage, 'Reporting complete')
-          assert.strictEqual(validationPayload.findings.items[0].stage, 'Reporting complete')
+          const basicCheck = validationPayload.checks.find(check => check.id === 'basic-reporting')
+          const eventsStep = basicCheck.steps.find(step => step.id === 'check-events')
+
+          assert.strictEqual(validationPayload.version, 2)
+          assert.strictEqual(validationPayload.status, 'ok')
+          assert.strictEqual(validationPayload.summary, undefined)
+          assert.strictEqual(validationPayload.static, undefined)
+          assert.strictEqual(validationPayload.env, undefined)
+          assert.strictEqual(basicCheck.status, 'ok')
+          assert.strictEqual(eventsStep.status, 'ok')
+          assert.strictEqual(eventsStep.evidence.requestCount, 2)
+          assert.strictEqual(eventsStep.evidence.citestcyclePayloads, 1)
+          assert.strictEqual(eventsStep.evidence.events.tests, 1)
 
           const report = fs.readFileSync(intake.html, 'utf8')
           assert.match(report, /Test Optimization debug report/)
@@ -479,6 +481,8 @@ describe('Test Optimization debug intake', () => {
       '--settings-mode=efd',
       '--known-tests',
       knownTestsPath,
+      '--new-test-snippet-file',
+      'dd-test-optimization-efd-new-test-snippet.txt',
       '--no-clean',
       '--no-open',
     ]), {
@@ -486,6 +490,7 @@ describe('Test Optimization debug intake', () => {
       knownTests,
       open: false,
       outDir: tmpDir,
+      newTestSnippetFile: 'dd-test-optimization-efd-new-test-snippet.txt',
       readyTimeoutMs: 1234,
       service: 'ci-debug',
       settingsMode: 'efd',
@@ -674,25 +679,27 @@ describe('Test Optimization debug intake', () => {
     assert.match(report, /Agent JSON report: /)
 
     const validationPayload = getValidationPayload(report)
-    assert.deepStrictEqual(validationPayload.result, {
-      status: 'ok',
-      stage: 'Reporting complete',
+    const basicCheck = validationPayload.checks.find(check => check.id === 'basic-reporting')
+    const runTestsStep = basicCheck.steps.find(step => step.id === 'run-tests')
+    const eventsStep = basicCheck.steps.find(step => step.id === 'check-events')
+
+    assert.strictEqual(validationPayload.status, 'ok')
+    assert.deepStrictEqual(validationPayload.framework, {
+      id: 'mocha',
+      name: 'Mocha',
+      version: '11.7.6',
     })
-    assert.strictEqual(validationPayload.static.ddTraceVersion, '6.0.0-pre')
-    assert.deepStrictEqual(validationPayload.static.frameworks, [
-      {
-        id: 'mocha',
-        name: 'Mocha',
-        version: '11.7.6',
-      },
-    ])
-    assert.strictEqual(validationPayload.test.command, testCommand)
-    assert.strictEqual(validationPayload.test.exitCode, '0')
-    assert.strictEqual(validationPayload.test.result, '3 passing')
+    assert.strictEqual(runTestsStep.command, testCommand)
+    assert.strictEqual(runTestsStep.exitCode, '0')
+    assert.strictEqual(runTestsStep.result, '3 passing')
+    assert.strictEqual(eventsStep.evidence.events.sessions, 1)
+    assert.strictEqual(eventsStep.evidence.events.modules, 1)
+    assert.strictEqual(eventsStep.evidence.events.suites, 1)
+    assert.strictEqual(eventsStep.evidence.events.tests, 1)
     assert.strictEqual(validationPayload.artifacts.htmlFileUrl, pathToFileURL(htmlPath).href)
-    assert.strictEqual(validationPayload.env.find(entry => entry.key === 'DD_API_KEY').value, 'debug')
-    assert.strictEqual(validationPayload.findings.stage, 'Reporting complete')
-    assert.strictEqual(validationPayload.findings.items[0].status, 'ok')
+    assert.strictEqual(validationPayload.summary, undefined)
+    assert.strictEqual(validationPayload.env, undefined)
+    assert.strictEqual(validationPayload.test, undefined)
   })
 
   it('renders EFD evidence in the final runbook report', () => {
@@ -701,7 +708,14 @@ describe('Test Optimization debug intake', () => {
     const htmlPath = path.join(tmpDir, 'report.html')
     const testCommandPath = path.join(tmpDir, 'test-command.txt')
     const testExitCodePath = path.join(tmpDir, 'test-exit-code.txt')
-    const testCommand = 'npm test -- test/sum.spec.js'
+    const testCommand = 'npm test -- test/sum.spec.js test/dd-trace-efd-debug.spec.js'
+    const newTestSnippet = [
+      'describe("dd trace EFD debug", () => {',
+      '  it("dd trace EFD debug temporary test", () => {',
+      '    assert.strictEqual(1 + 1, 2)',
+      '  })',
+      '})',
+    ].join('\n')
 
     fs.writeFileSync(staticPath, JSON.stringify(getStaticReport(), null, 2))
     fs.writeFileSync(intakePath, JSON.stringify(getEfdIntakeArtifact(intakePath, htmlPath), null, 2))
@@ -714,6 +728,7 @@ describe('Test Optimization debug intake', () => {
       testCommandFile: testCommandPath,
       testExitCodeFile: testExitCodePath,
       testResult: '6 passing',
+      newTestSnippet,
     })
 
     assert.match(report, /Primary funnel stage: EFD retried new test/)
@@ -724,6 +739,17 @@ describe('Test Optimization debug intake', () => {
     assert.match(report, /- New tests observed: 1/)
     assert.match(report, /- Retried new tests: 1/)
     assert.match(report, /Early Flake Detection retried a new test for: npm test -- test\/sum\.spec\.js/)
+
+    const validationPayload = getValidationPayload(report)
+    const efdCheck = validationPayload.checks.find(check => check.id === 'efd-new-test-detection-and-retry')
+    const addNewTestStep = efdCheck.steps.find(step => step.id === 'add-new-test')
+    const retryStep = efdCheck.steps.find(step => step.id === 'check-new-test-retried')
+
+    assert.strictEqual(validationPayload.status, 'ok')
+    assert.strictEqual(validationPayload.checks.length, 2)
+    assert.strictEqual(efdCheck.status, 'ok')
+    assert.strictEqual(addNewTestStep.snippet, newTestSnippet)
+    assert.strictEqual(retryStep.evidence.retriedNewTests, 1)
   })
 
   it('requires a test command when rendering the final report', () => {

@@ -103,8 +103,9 @@ produce. Use these wrapper-generated root artifacts for Step 8:
 - `dd-test-optimization-report.html`
 
 The wrapper and analyzer print a `Datadog validation:` URL. It points to the local Datadog
-validation app with a pako-compatible encoded JSON payload. The decoded payload includes
-`findings.stage`, `findings.status`, `findings.primary`, and `findings.items`.
+validation app with a pako-compatible encoded JSON payload. The decoded payload is intentionally
+small: `status`, `checks[]`, each check's `steps[]`, optional `artifacts`, and optional
+`framework`.
 
 Analyzer JSON key paths used in this runbook:
 
@@ -184,6 +185,7 @@ rm -f \
   dd-intake-url.txt \
   dd-test-optimization-env.txt \
   dd-test-optimization-efd-command.txt \
+  dd-test-optimization-efd-new-test-snippet.txt \
   dd-test-optimization-efd-temp-test-file.txt \
   dd-test-optimization-known-tests.json \
   dd-test-optimization-agent-report.json \
@@ -772,11 +774,13 @@ fi
 test -f "$EFD_TEMP_TEST_FILE"
 printf 'Temporary EFD test file: %s\n' "$EFD_TEMP_TEST_FILE"
 printf '%s\n' "$EFD_TEMP_TEST_FILE" > dd-test-optimization-efd-temp-test-file.txt
+cat "$EFD_TEMP_TEST_FILE" > dd-test-optimization-efd-new-test-snippet.txt
 ```
 
 If the runner required appending a temporary test case to an existing file instead of creating a
 temporary sibling file, record the cleanup command in the final response and verify cleanup with a
-repository-specific command after Step 7d.
+repository-specific command after Step 7d. Also write only the temporary test snippet to
+`dd-test-optimization-efd-new-test-snippet.txt` before running Step 7c.
 
 Write the second command:
 
@@ -809,6 +813,7 @@ node ./node_modules/dd-trace/ci/test-optimization-debug.js \
   --test-command "$EFD_TEST_COMMAND" \
   --settings-mode efd \
   --known-tests dd-test-optimization-known-tests.json \
+  --new-test-snippet-file dd-test-optimization-efd-new-test-snippet.txt \
   --out-dir "$EFD_DIR" \
   --no-open
 ```
@@ -937,10 +942,14 @@ function countEvent (report, eventType) {
   return report?.summary?.events?.counts?.[eventType] || 0
 }
 
-function readFinalReportLine (prefix) {
-  const finalReport = readText("dd-test-optimization-final-report.txt", "")
+function readReportLine (path, prefix) {
+  const finalReport = readText(path, "")
   const line = finalReport.split(/\r?\n/).find(line => line.startsWith(prefix))
   return line ? line.slice(prefix.length).trim() : "unknown"
+}
+
+function readFinalReportLine (prefix) {
+  return readReportLine("dd-test-optimization-final-report.txt", prefix)
 }
 
 const basic = readJson("dd-test-optimization-agent-report.json", {})
@@ -961,6 +970,7 @@ const eventLevels =
 console.log(`HTML report: ${readText("dd-intake-html-file-url.txt", readFinalReportLine("HTML report:"))}`)
 console.log(`HTML report path: ${readText("dd-intake-html-path.txt", readFinalReportLine("HTML report path:"))}`)
 console.log(`Datadog validation: ${readFinalReportLine("Datadog validation:")}`)
+console.log(`EFD Datadog validation: ${readReportLine("dd-test-optimization-efd/dd-test-optimization-final-report.txt", "Datadog validation:")}`)
 console.log(`Final report path: ${process.cwd()}/dd-test-optimization-final-report.txt`)
 console.log(`Selected test command: ${readText("dd-test-optimization-test-command.txt")}`)
 console.log(`Test result: ${readText("dd-test-optimization-test-result.txt")}`)
@@ -984,6 +994,7 @@ The final response must include:
 
 - HTML report `file://` URL and absolute path.
 - Datadog validation URL.
+- EFD Datadog validation URL when Step 7 ran.
 - Final report path.
 - Selected test command and test result.
 - EFD check result when Step 7 ran, including known tests count and retried new tests count.
@@ -998,6 +1009,7 @@ Final response template:
 HTML report: file:///absolute/path/to/dd-test-optimization-report.html
 HTML report path: /absolute/path/to/dd-test-optimization-report.html
 Datadog validation: https://app-dev-local.datadoghq.com/ci/test/validation#pako:<payload>
+EFD Datadog validation: https://app-dev-local.datadoghq.com/ci/test/validation#pako:<payload>
 Final report path: /absolute/path/to/dd-test-optimization-final-report.txt
 
 Selected test command:

@@ -84,6 +84,10 @@ function parseArgs (args) {
       options.knownTests = normalizeKnownTests(readJsonFile(args[++i]))
     } else if (arg.startsWith('--known-tests=')) {
       options.knownTests = normalizeKnownTests(readJsonFile(arg.slice('--known-tests='.length)))
+    } else if (arg === '--new-test-snippet-file') {
+      options.newTestSnippetFile = args[++i]
+    } else if (arg.startsWith('--new-test-snippet-file=')) {
+      options.newTestSnippetFile = arg.slice('--new-test-snippet-file='.length)
     } else if (arg === '--no-clean') {
       options.clean = false
     } else if (arg === '--no-open') {
@@ -117,6 +121,7 @@ function getHelpText () {
     '  --ready-timeout-ms <ms>   Time to wait for the fake intake /health endpoint. Defaults to 5000.',
     '  --settings-mode <mode>    Fake settings mode: basic-reporting or efd.',
     '  --known-tests <file>      Known tests JSON to return for EFD/debug runs.',
+    '  --new-test-snippet-file <file>  Temporary test snippet used for EFD.',
     '  --no-clean                Keep prior debug artifacts before running.',
     '  --no-open                 Skip the best-effort local HTML open attempt.',
   ].join('\n')
@@ -207,6 +212,7 @@ function runDebug (options, callback) {
             testCommandFile: artifacts.testCommand,
             testExitCodeFile: artifacts.testExitCode,
             testResultFile: artifacts.testResult,
+            newTestSnippetFile: options.newTestSnippetFile,
           })
 
           fs.writeFileSync(artifacts.finalReport, `${finalReport}\n`)

@@ -3,7 +3,6 @@
 const zlib = require('node:zlib')
 
 const VALIDATION_APP_URL = 'https://app-dev-local.datadoghq.com/ci/test/validation'
-const SECRET_KEY_RE = /(?:API_?KEY|TOKEN|SECRET|PASSWORD)/i
 
 /**
  * Builds the payload rendered by the local Test Optimization validation web app.
@@ -14,85 +13,233 @@ const SECRET_KEY_RE = /(?:API_?KEY|TOKEN|SECRET|PASSWORD)/i
  * @param {string|undefined} input.testCommand selected test command
  * @param {string|undefined} input.testExitCode selected test command exit code
  * @param {string|undefined} input.testResult selected test command result summary
- * @param {Array<Array<string>>|undefined} input.env live run environment entries
+ * @param {string|undefined} input.newTestSnippet EFD temporary test snippet
  * @param {object|undefined} input.artifacts artifact paths and URLs
  * @returns {object} validation payload
  */
 function buildValidationPayload (input) {
   const analysis = input.analysis
   const summary = analysis.summary
-  const findingItems = analysis.findings.map(getFindingPayload)
-  const result = {
-    status: getResultStatus(analysis.findings),
-    stage: analysis.primaryStage,
-  }
+  const checks = getChecks(input, analysis)
+  const status = getChecksStatus(checks)
 
   return {
-    version: 1,
+    version: 2,
     source: 'dd-trace-js',
     type: 'test-optimization-validation',
-    result,
-    findings: {
-      status: result.status,
-      stage: result.stage,
-      primary: getPrimaryFinding(findingItems, result.stage),
-      items: findingItems,
+    status,
+    checks,
+    artifacts: {
+      htmlFileUrl: input.artifacts?.htmlFileUrl || summary.artifacts.htmlFileUrl,
+      htmlPath: input.artifacts?.htmlPath || summary.artifacts.htmlPath,
     },
-    summary: {
-      anyRequestReceived: summary.anyRequestReceived,
-      requestCount: summary.requestCount,
-      citestcycle: {
-        payloadCount: summary.citestcycle.payloadCount,
-      },
-      events: {
-        counts: summary.events.counts,
-        missingLevels: summary.events.missingLevels,
-        total: summary.events.total,
-        unlinkedTestSpans: summary.events.unlinkedTestSpans,
-      },
-      metadata: {
-        emptyFields: summary.metadata.emptyFields,
-        repositoryUrlPresent: !!summary.metadata.repositoryUrl,
-        commitShaPresent: !!summary.metadata.commitSha,
-        branchPresent: !!summary.metadata.branch,
-      },
-      settings: {
-        requestCount: summary.settings.requestCount,
-      },
-      efd: {
-        settingsEnabled: summary.efd.settingsEnabled,
-        requested: summary.efd.requested,
-        knownTestsReceived: summary.efd.knownTestsReceived,
-        newTests: summary.efd.newTests.length,
-        retriedNewTests: summary.efd.retriedNewTests,
-        retriedNewTestNames: summary.efd.retriedNewTestNames,
-      },
-      coverage: {
-        expected: summary.coverage.expected,
-        citestcov: summary.coverage.citestcov,
-        coverageReport: summary.coverage.coverageReport,
-      },
-      decodeErrors: summary.decodeErrors.map(error => ({
-        path: error.path,
-        error: error.error,
-      })),
-    },
-    static: getStaticPayload(input.staticReport),
-    test: getTestPayload(input),
-    env: getEnvPayload(input.env),
-    artifacts: getArtifactsPayload(input.artifacts, summary),
+    framework: getFramework(input.staticReport),
   }
 }
 
 /**
- * Gets the primary finding for the selected stage.
+ * Gets validation checks.
  *
- * @param {Array<object>} findings finding payloads
- * @param {string} stage primary stage
- * @returns {object|undefined} primary finding
+ * @param {object} input validation input
+ * @param {object} analysis intake analysis report
+ * @returns {Array<object>} validation checks
  */
-function getPrimaryFinding (findings, stage) {
-  return findings.find(finding => finding.stage === stage) || findings[0]
+function getChecks (input, analysis) {
+  const checks = [getBasicReportingCheck(input, analysis)]
+
+  if (isEfdCheckAttempted(input, analysis)) {
+    checks.push(getEfdCheck(input, analysis))
+  }
+
+  return checks
+}
+
+/**
+ * Gets the overall check status.
+ *
+ * @param {Array<object>} checks validation checks
+ * @returns {string} status
+ */
+function getChecksStatus (checks) {
+  return checks.some(check => check.status === 'failed') ? 'failed' : 'ok'
+}
+
+/**
+ * Gets the basic reporting validation check.
+ *
+ * @param {object} input validation input
+ * @param {object} analysis intake analysis report
+ * @returns {object} basic reporting check
+ */
+function getBasicReportingCheck (input, analysis) {
+  const summary = analysis.summary
+  const events = getEventCounts(summary)
+  const status = getBasicReportingStatus(summary)
+
+  return {
+    id: 'basic-reporting',
+    name: 'Basic reporting',
+    status,
+    steps: [
+      {
+        id: 'setup-intake',
+        name: 'Set up intake',
+        status: summary.artifacts.intakeUrl ? 'ok' : 'failed',
+      },
+      {
+        id: 'run-tests',
+        name: 'Run tests',
+        status: getTestCommandStatus(input),
+        command: input.testCommand,
+        exitCode: input.testExitCode,
+        result: input.testResult,
+      },
+      {
+        id: 'check-events',
+        name: 'Check that events show up',
+        status,
+        evidence: {
+          requestCount: summary.requestCount,
+          citestcyclePayloads: summary.citestcycle.payloadCount,
+          events,
+          missingLevels: summary.events.missingLevels,
+          decodeErrors: summary.decodeErrors.length,
+        },
+      },
+    ],
+  }
+}
+
+/**
+ * Gets the EFD validation check.
+ *
+ * @param {object} input validation input
+ * @param {object} analysis intake analysis report
+ * @returns {object} EFD check
+ */
+function getEfdCheck (input, analysis) {
+  const summary = analysis.summary
+  const status = getEfdStatus(summary)
+
+  return {
+    id: 'efd-new-test-detection-and-retry',
+    name: 'EFD new test detection and retry',
+    status,
+    steps: [
+      {
+        id: 'setup-intake',
+        name: 'Set up intake',
+        status: summary.efd.settingsEnabled && summary.efd.requested ? 'ok' : 'failed',
+        evidence: {
+          settingsEnabled: summary.efd.settingsEnabled,
+          knownTestsRequested: summary.efd.requested,
+          knownTestsReceived: summary.efd.knownTestsReceived,
+        },
+      },
+      {
+        id: 'add-new-test',
+        name: 'Add new test',
+        status: input.newTestSnippet || summary.efd.newTests.length > 0 ? 'ok' : 'failed',
+        snippet: input.newTestSnippet,
+        evidence: {
+          newTestsObserved: summary.efd.newTests.length,
+          retriedNewTestNames: summary.efd.retriedNewTestNames,
+        },
+      },
+      {
+        id: 'run-tests',
+        name: 'Run tests',
+        status: getTestCommandStatus(input),
+        command: input.testCommand,
+        exitCode: input.testExitCode,
+        result: input.testResult,
+      },
+      {
+        id: 'check-new-test-retried',
+        name: 'Check that new test is retried',
+        status,
+        evidence: {
+          retriedNewTests: summary.efd.retriedNewTests,
+          retriedNewTestNames: summary.efd.retriedNewTestNames,
+        },
+      },
+    ],
+  }
+}
+
+/**
+ * Checks whether the EFD check was attempted.
+ *
+ * @param {object} input validation input
+ * @param {object} analysis intake analysis report
+ * @returns {boolean} true if EFD evidence is present
+ */
+function isEfdCheckAttempted (input, analysis) {
+  const efd = analysis.summary.efd
+  return !!(
+    input.newTestSnippet ||
+    efd.settingsEnabled ||
+    efd.requested ||
+    efd.knownTestsReceived > 0 ||
+    efd.newTests.length > 0 ||
+    efd.retriedNewTests > 0
+  )
+}
+
+/**
+ * Gets basic reporting check status.
+ *
+ * @param {object} summary intake summary
+ * @returns {string} check status
+ */
+function getBasicReportingStatus (summary) {
+  if (summary.citestcycle.payloadCount === 0) return 'failed'
+  if (summary.events.missingLevels.length > 0) return 'failed'
+  if (summary.decodeErrors.length > 0) return 'failed'
+
+  return 'ok'
+}
+
+/**
+ * Gets EFD check status.
+ *
+ * @param {object} summary intake summary
+ * @returns {string} check status
+ */
+function getEfdStatus (summary) {
+  if (!summary.efd.settingsEnabled) return 'failed'
+  if (!summary.efd.requested) return 'failed'
+  if (summary.efd.knownTestsReceived === 0) return 'failed'
+  if (summary.efd.retriedNewTests === 0) return 'failed'
+
+  return 'ok'
+}
+
+/**
+ * Gets test command step status.
+ *
+ * @param {object} input validation input
+ * @returns {string} step status
+ */
+function getTestCommandStatus (input) {
+  if (input.testExitCode === undefined && !input.testCommand && !input.testResult) return 'unknown'
+
+  return input.testExitCode === '0' || input.testExitCode === 0 ? 'ok' : 'failed'
+}
+
+/**
+ * Gets compact event counts.
+ *
+ * @param {object} summary intake summary
+ * @returns {object} compact event counts
+ */
+function getEventCounts (summary) {
+  return {
+    sessions: summary.events.counts.test_session_end,
+    modules: summary.events.counts.test_module_end,
+    suites: summary.events.counts.test_suite_end,
+    tests: summary.events.counts.test,
+  }
 }
 
 /**
@@ -116,65 +263,23 @@ function getValidationAppUrl (payload) {
 }
 
 /**
- * Gets the validation status from fixed-rule findings.
- *
- * @param {Array<object>} findings fixed-rule findings
- * @returns {string} validation status
- */
-function getResultStatus (findings) {
-  if (findings.some(finding => finding.status === 'error')) return 'error'
-  if (findings.some(finding => finding.status === 'warning')) return 'warning'
-  if (findings.some(finding => finding.status === 'ok')) return 'ok'
-
-  return findings[0]?.status || 'unknown'
-}
-
-/**
- * Gets a compact finding payload.
- *
- * @param {object} finding fixed-rule finding
- * @returns {object} finding payload
- */
-function getFindingPayload (finding) {
-  return {
-    status: finding.status,
-    stage: finding.stage,
-    observation: finding.observation,
-    cause: finding.cause,
-    fix: finding.fix,
-  }
-}
-
-/**
- * Gets static diagnosis data for the validation payload.
+ * Gets the detected test framework.
  *
  * @param {object|undefined} staticReport static diagnosis report
- * @returns {object|undefined} static payload
+ * @returns {object|undefined} framework payload
  */
-function getStaticPayload (staticReport) {
+function getFramework (staticReport) {
   if (!staticReport) return
 
-  return {
-    ddTraceVersion: staticReport.ddTraceVersion,
-    frameworks: getFrameworks(staticReport),
-    findings: getStaticFindings(staticReport),
-  }
-}
-
-/**
- * Gets supported framework summaries.
- *
- * @param {object} staticReport static diagnosis report
- * @returns {Array<object>} framework payloads
- */
-function getFrameworks (staticReport) {
   const frameworks = Array.isArray(staticReport.supportedFrameworks) ? staticReport.supportedFrameworks : []
+  const framework = frameworks[0]
+  if (!framework) return
 
-  return frameworks.map(framework => ({
+  return {
     id: framework.id,
     name: framework.name,
     version: getFrameworkVersion(framework),
-  }))
+  }
 }
 
 /**
@@ -186,95 +291,6 @@ function getFrameworks (staticReport) {
 function getFrameworkVersion (framework) {
   const detections = Array.isArray(framework.versionDetections) ? framework.versionDetections : []
   return detections[0]?.version || detections[0]?.rawVersion
-}
-
-/**
- * Gets static warnings and errors.
- *
- * @param {object} staticReport static diagnosis report
- * @returns {Array<object>} static finding payloads
- */
-function getStaticFindings (staticReport) {
-  const results = Array.isArray(staticReport.results) ? staticReport.results : []
-  const findings = []
-
-  for (const result of results) {
-    if (result.status !== 'error' && result.status !== 'warning') continue
-
-    findings.push({
-      status: result.status,
-      title: result.title,
-      message: result.message,
-      recommendation: result.recommendation,
-    })
-  }
-
-  return findings
-}
-
-/**
- * Gets selected test command data for the validation payload.
- *
- * @param {object} input validation input
- * @returns {object|undefined} test payload
- */
-function getTestPayload (input) {
-  if (!input.testCommand && !input.testExitCode && !input.testResult) return
-
-  return {
-    command: input.testCommand,
-    exitCode: input.testExitCode,
-    result: input.testResult,
-  }
-}
-
-/**
- * Gets sanitized env entries for the validation payload.
- *
- * @param {Array<Array<string>>|undefined} env live run environment entries
- * @returns {Array<object>|undefined} env payload
- */
-function getEnvPayload (env) {
-  if (!Array.isArray(env)) return
-
-  return env.map(([key, value]) => ({
-    key,
-    value: maskEnvValue(key, value),
-  }))
-}
-
-/**
- * Masks secret-looking env values.
- *
- * @param {string} key env key
- * @param {string} value env value
- * @returns {string} safe value
- */
-function maskEnvValue (key, value) {
-  if (value === 'debug') return value
-  if (SECRET_KEY_RE.test(key)) return '<redacted>'
-
-  return value
-}
-
-/**
- * Gets artifact references for the validation payload.
- *
- * @param {object|undefined} artifacts explicit artifact references
- * @param {object} summary intake summary
- * @returns {object} artifact payload
- */
-function getArtifactsPayload (artifacts, summary) {
-  return {
-    htmlFileUrl: artifacts?.htmlFileUrl || summary.artifacts.htmlFileUrl,
-    htmlPath: artifacts?.htmlPath || summary.artifacts.htmlPath,
-    intakePath: artifacts?.intakePath || summary.artifacts.intakePath,
-    intakeUrl: artifacts?.intakeUrl || summary.artifacts.intakeUrl,
-    staticPath: artifacts?.staticPath,
-    agentReportPath: artifacts?.agentReportPath,
-    agentJsonReportPath: artifacts?.agentJsonReportPath,
-    finalReportPath: artifacts?.finalReportPath,
-  }
 }
 
 module.exports = {

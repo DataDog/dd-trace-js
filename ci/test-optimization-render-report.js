@@ -72,6 +72,14 @@ function parseArgs (args) {
       options.testResultFile = args[++i]
     } else if (arg.startsWith('--test-result-file=')) {
       options.testResultFile = arg.slice('--test-result-file='.length)
+    } else if (arg === '--new-test-snippet') {
+      options.newTestSnippet = args[++i]
+    } else if (arg.startsWith('--new-test-snippet=')) {
+      options.newTestSnippet = arg.slice('--new-test-snippet='.length)
+    } else if (arg === '--new-test-snippet-file') {
+      options.newTestSnippetFile = args[++i]
+    } else if (arg.startsWith('--new-test-snippet-file=')) {
+      options.newTestSnippetFile = arg.slice('--new-test-snippet-file='.length)
     } else if (arg === '--env') {
       options.env.push(args[++i])
     } else if (arg.startsWith('--env=')) {
@@ -123,6 +131,8 @@ function getHelpText () {
     '  --test-exit-code-file <file>   Read the selected test command exit code from a file.',
     '  --test-result <text>           Include a short test runner result summary.',
     '  --test-result-file <file>      Read the short test runner result summary from a file.',
+    '  --new-test-snippet <text>       Include the temporary test snippet used for EFD.',
+    '  --new-test-snippet-file <file>  Read the temporary test snippet used for EFD.',
     '  --env KEY=value                Include an environment variable used for the live run.',
     '  --env-file <file>              Read environment variables, one KEY=value per line.',
     '  --agent-report <file>          Path to the plain text analyzer artifact.',
@@ -149,6 +159,7 @@ function renderFinalReport (options) {
   const testCommand = readTextValue(options.testCommand, options.testCommandFile, 'test command')
   const testExitCode = readTextValue(options.testExitCode, options.testExitCodeFile, 'test exit code')
   const testResult = readOptionalTextValue(options.testResult, options.testResultFile)
+  const newTestSnippet = readOptionalTextValue(options.newTestSnippet, options.newTestSnippetFile)
   const env = getEnvList(options, analysis)
   const htmlPath = getHtmlPath(options, analysis)
   const htmlFileUrl = analysis.summary.artifacts.htmlFileUrl || pathToFileURL(htmlPath).href
@@ -162,6 +173,7 @@ function renderFinalReport (options) {
       htmlFileUrl,
     },
     env,
+    newTestSnippet,
     staticReport,
     testCommand,
     testExitCode,
