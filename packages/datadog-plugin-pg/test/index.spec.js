@@ -372,6 +372,96 @@ describe('Plugin', () => {
         })
       })
 
+      describe('when using a connection pool', () => {
+        let pool
+
+        before(() => {
+          return agent.load('pg')
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          pg = require(`../../../versions/pg@${version}`).get()
+
+          pool = new pg.Pool({
+            host: '127.0.0.1',
+            user: 'postgres',
+            password: 'postgres',
+            database: 'postgres',
+            application_name: 'test',
+            max: 1,
+          })
+        })
+
+        afterEach(() => {
+          return pool.end()
+        })
+
+        it('keeps a query that waits for a busy pool parented to its own caller', done => {
+          const root = tracer.startSpan('root')
+          const parent1 = tracer.startSpan('parent1', { childOf: root })
+          const parent2 = tracer.startSpan('parent2', { childOf: root })
+
+          agent.assertSomeTraces(traces => {
+            const spans = traces[0]
+            const first = spans.find(span => span.resource === 'SELECT 1 AS one')
+            const second = spans.find(span => span.resource === 'SELECT 2 AS two')
+
+            assert.ok(first, `missing first query span: ${inspect(spans.map(span => span.resource))}`)
+            assert.ok(second, `missing second query span: ${inspect(spans.map(span => span.resource))}`)
+            assert.strictEqual(first.parent_id.toString(), parent1.context().toSpanId())
+            assert.strictEqual(second.parent_id.toString(), parent2.context().toSpanId())
+          })
+            .then(done)
+            .catch(done)
+
+          let remaining = 2
+          const settle = error => {
+            if (error) {
+              done(error)
+            } else if (--remaining === 0) {
+              parent1.finish()
+              parent2.finish()
+              root.finish()
+            }
+          }
+
+          // Both queries are dispatched in the same tick with `max: 1`, so the second one
+          // waits in the pool's pending queue and its connect callback fires from the first
+          // query's release flow — the async context that drops on master.
+          tracer.scope().activate(parent1, () => {
+            pool.query('SELECT 1 AS one', settle)
+          })
+
+          tracer.scope().activate(parent2, () => {
+            pool.query('SELECT 2 AS two', settle)
+          })
+        })
+
+        it('keeps a promise-acquired pooled query parented to its caller', async () => {
+          const parent = tracer.startSpan('promise-parent')
+
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const span = traces[0].find(query => query.resource === 'SELECT 3 AS three')
+
+            assert.ok(span, `missing query span: ${inspect(traces[0].map(query => query.resource))}`)
+            assert.strictEqual(span.parent_id.toString(), parent.context().toSpanId())
+          })
+
+          await tracer.scope().activate(parent, async () => {
+            const client = await pool.connect()
+            await client.query('SELECT 3 AS three')
+            client.release()
+            parent.finish()
+          })
+
+          await tracePromise
+        })
+      })
+
       describe('with configuration', () => {
         before(() => {
           return agent.load('pg', { service: 'custom', truncate: 12 })
