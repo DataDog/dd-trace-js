@@ -29,6 +29,16 @@ runs:
       uses: ./.github/actions/datadog-ci
     - if: steps.check.outputs.has_files == 'true'
       shell: bash
-      run: find junit-results -name "*.xml" | xargs datadog-ci junit upload --service dd-trace-js-tests
+      # Upload each artifact directory separately, restoring the original GITHUB_JOB and
+      # JOB_CHECK_RUN_ID from the metadata file written at upload time. This ensures Datadog
+      # Test Optimization attributes results to the job that ran the tests, not to this job.
+      run: |
+        for dir in junit-results/*/; do
+          (
+            source "$dir.dd-ci-metadata" 2>/dev/null || true
+            find "$dir" -name "*.xml" \
+              | xargs -r datadog-ci junit upload --service dd-trace-js-tests
+          )
+        done
       env:
         DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}

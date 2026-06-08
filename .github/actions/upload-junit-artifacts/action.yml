@@ -10,9 +10,24 @@ runs:
   using: composite
   steps:
     - if: github.actor != 'dependabot[bot]'
+      id: check
+      shell: bash
+      run: |
+        count=$(find . -maxdepth 1 -name "*.xml" | wc -l | tr -d ' ')
+        echo "has_xml=$([ "$count" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+    - if: github.actor != 'dependabot[bot]' && steps.check.outputs.has_xml == 'true'
+      shell: bash
+      # Store CI context as sourceable shell variables so the central upload job
+      # can restore them per artifact. JOB_CHECK_RUN_ID (the numeric check run ID
+      # used to build the job URL in Datadog) may be absent on older GHE versions.
+      run: |
+        echo "GITHUB_JOB=$GITHUB_JOB" > .dd-ci-metadata
+        [ -n "${JOB_CHECK_RUN_ID:-}" ] && echo "JOB_CHECK_RUN_ID=$JOB_CHECK_RUN_ID" >> .dd-ci-metadata || true
+    - if: github.actor != 'dependabot[bot]' && steps.check.outputs.has_xml == 'true'
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: junit-${{ inputs.id }}
-        path: "*.xml"
-        if-no-files-found: ignore
+        path: |
+          *.xml
+          .dd-ci-metadata
         retention-days: 1
