@@ -1,7 +1,8 @@
 'use strict'
 
 const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
-const { HTTP_CLIENT_IP, NETWORK_CLIENT_IP } = require('../../../../ext/tags')
+const { HTTP_CLIENT_IP, NETWORK_CLIENT_IP, HTTP_USERAGENT } = require('../../../../ext/tags')
+const { USER_ID, USER_SESSION_ID } = require('../appsec/addresses')
 const { getActiveRequest } = require('../appsec/store')
 const log = require('../log')
 const { extractIp } = require('../plugins/util/ip_extractor')
@@ -16,6 +17,16 @@ const TAGS = require('./tags')
 const aiguardMetrics = telemetryMetrics.manager.namespace('ai_guard')
 
 const ALLOW = 'ALLOW'
+
+// Tags from the service entry span that must be mirrored onto every AI Guard span
+// so anomaly detection pipelines can process each span independently.
+const SERVICE_ENTRY_TAG_MAPPINGS = [
+  [HTTP_USERAGENT, TAGS.HTTP_USERAGENT_TAG_KEY],
+  [HTTP_CLIENT_IP, TAGS.HTTP_CLIENT_IP_TAG_KEY],
+  [NETWORK_CLIENT_IP, TAGS.NETWORK_CLIENT_IP_TAG_KEY],
+  [USER_ID, TAGS.USR_ID_TAG_KEY],
+  [USER_SESSION_ID, TAGS.USR_SESSION_ID_TAG_KEY],
+]
 
 /**
  * Reports a telemetry error
@@ -181,6 +192,22 @@ class AIGuard extends NoopAIGuard {
     }
   }
 
+  /**
+   * Copies service entry span tags needed by anomaly detection to the AI Guard span.
+   *
+   * @param {import('../opentracing/span')} guardSpan
+   * @param {import('../opentracing/span')} rootSpan
+   */
+  #copyServiceEntryTagsToGuardSpan (guardSpan, rootSpan) {
+    const rootTags = rootSpan.context().getTags()
+    for (const [sourceTag, destTag] of SERVICE_ENTRY_TAG_MAPPINGS) {
+      const value = rootTags[sourceTag]
+      if (value !== undefined && value !== null) {
+        guardSpan.setTag(destTag, value)
+      }
+    }
+  }
+
   evaluate (messages, opts) {
     if (!this.#initialized) {
       return super.evaluate(messages, opts)
@@ -206,6 +233,7 @@ class AIGuard extends NoopAIGuard {
       const rootSpan = span.context()?._trace?.started?.[0]
       if (rootSpan) {
         this.#setRootSpanClientIpTags(rootSpan)
+        this.#copyServiceEntryTagsToGuardSpan(span, rootSpan)
         // keepTrace must be called before executeRequest so the sampling decision
         // is propagated correctly to outgoing HTTP client calls.
         keepTrace(rootSpan, AI_GUARD)
