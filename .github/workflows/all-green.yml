@@ -41,28 +41,21 @@ jobs:
           GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
           POLLING_INTERVAL: 1
           RETRIES: 20
-      - name: Download JUnit artifacts
+      - name: Download artifacts
         if: "!cancelled() && hashFiles('run-ids.txt') != ''"
         run: |
-          mkdir -p junit-results
+          mkdir -p junit-results coverage-results
           while IFS= read -r run_id; do
             gh run download "$run_id" \
               --pattern "junit-*" \
               --dir "junit-results/$run_id" \
-              2>/dev/null || true
-          done < run-ids.txt
-        env:
-          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
-      - name: Download coverage artifacts
-        if: "!cancelled() && hashFiles('run-ids.txt') != ''"
-        run: |
-          mkdir -p coverage-results
-          while IFS= read -r run_id; do
+              2>/dev/null || true &
             gh run download "$run_id" \
               --pattern "coverage-*" \
               --dir "coverage-results/$run_id" \
-              2>/dev/null || true
+              2>/dev/null || true &
           done < run-ids.txt
+          wait
         env:
           GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
       - id: check-uploads
@@ -79,16 +72,9 @@ jobs:
       - if: "!cancelled() && steps.check-uploads.outputs.has_any == 'true'"
         uses: ./.github/actions/datadog-ci
       - if: "!cancelled() && steps.check-uploads.outputs.has_junit == 'true'"
-        # Restore per-artifact CI context (GITHUB_JOB, JOB_CHECK_RUN_ID) so Datadog
-        # attributes each result to the job that ran the tests, not to all-green.
         run: |
-          for dir in junit-results/*/*/; do
-            (
-              source "$dir.dd-ci-metadata" 2>/dev/null || true
-              find "$dir" -name "*.xml" \
-                | xargs -r datadog-ci junit upload --service dd-trace-js-tests
-            )
-          done
+          find junit-results -name "*.xml" \
+            | xargs -r datadog-ci junit upload --service dd-trace-js-tests
         env:
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
       - if: "!cancelled() && steps.check-uploads.outputs.has_coverage == 'true'"
@@ -96,8 +82,9 @@ jobs:
           for dir in coverage-results/*/*/; do
             flags=$(cat "$dir.dd-coverage-flags" 2>/dev/null || true)
             if [ -n "$flags" ]; then
-              datadog-ci coverage upload --flags "$flags" "$dir"
+              datadog-ci coverage upload --flags "$flags" "$dir" &
             fi
           done
+          wait
         env:
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
