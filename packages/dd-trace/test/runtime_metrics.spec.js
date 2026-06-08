@@ -202,8 +202,7 @@ function createGarbage (count = 50) {
         runtimeMetrics = proxyquire('../src/runtime_metrics/runtime_metrics', proxiedObject)
 
         config = {
-          hostname: 'localhost',
-          port: '8126',
+          url: new URL('http://localhost:8126'),
           dogstatsd: {
             hostname: 'localhost',
             port: 8125,
@@ -252,7 +251,7 @@ function createGarbage (count = 50) {
         })
 
         it('it should initialize the Dogstatsd client with an IPv6 URL', function () {
-          config.hostname = '::1'
+          config.url = new URL('http://[::1]:8126')
 
           runtimeMetrics.stop()
           runtimeMetrics.start(config)

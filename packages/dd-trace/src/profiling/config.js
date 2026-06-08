@@ -10,7 +10,6 @@ const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const { getIsAzureFunction } = require('../serverless')
 const { getAzureTagsFromMetadata, getAzureAppMetadata, getAzureFunctionMetadata } = require('../azure_metadata')
 const { getEnvironmentVariable } = require('../config/helper')
-const { getAgentUrl } = require('../agent/url')
 const { isACFActive } = require('../../../datadog-core/src/storage')
 
 const { AgentExporter } = require('./exporters/agent')
@@ -54,7 +53,7 @@ class Config {
     this.pprofPrefix = options.DD_PROFILING_PPROF_PREFIX
     this.v8ProfilerBugWorkaroundEnabled = options.DD_PROFILING_V8_PROFILER_BUG_WORKAROUND
 
-    this.url = getAgentUrl(options)
+    this.url = options.url
 
     this.libraryInjected = !!options.DD_INJECTION_ENABLED
 
