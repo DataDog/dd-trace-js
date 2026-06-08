@@ -21,16 +21,23 @@ const SECRET_KEY_RE = /(?:API_?KEY|TOKEN|SECRET|PASSWORD)/i
 function buildValidationPayload (input) {
   const analysis = input.analysis
   const summary = analysis.summary
+  const findingItems = analysis.findings.map(getFindingPayload)
+  const result = {
+    status: getResultStatus(analysis.findings),
+    stage: analysis.primaryStage,
+  }
 
   return {
     version: 1,
     source: 'dd-trace-js',
     type: 'test-optimization-validation',
-    result: {
-      status: getResultStatus(analysis.findings),
-      stage: analysis.primaryStage,
+    result,
+    findings: {
+      status: result.status,
+      stage: result.stage,
+      primary: getPrimaryFinding(findingItems, result.stage),
+      items: findingItems,
     },
-    findings: analysis.findings.map(getFindingPayload),
     summary: {
       anyRequestReceived: summary.anyRequestReceived,
       requestCount: summary.requestCount,
@@ -75,6 +82,17 @@ function buildValidationPayload (input) {
     env: getEnvPayload(input.env),
     artifacts: getArtifactsPayload(input.artifacts, summary),
   }
+}
+
+/**
+ * Gets the primary finding for the selected stage.
+ *
+ * @param {Array<object>} findings finding payloads
+ * @param {string} stage primary stage
+ * @returns {object|undefined} primary finding
+ */
+function getPrimaryFinding (findings, stage) {
+  return findings.find(finding => finding.stage === stage) || findings[0]
 }
 
 /**

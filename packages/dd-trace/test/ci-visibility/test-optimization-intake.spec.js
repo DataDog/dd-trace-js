@@ -386,7 +386,10 @@ describe('Test Optimization debug intake', () => {
           assert.strictEqual(validationPayload.summary.requestCount, 2)
           assert.strictEqual(validationPayload.summary.citestcycle.payloadCount, 1)
           assert.strictEqual(validationPayload.summary.events.counts.test, 1)
-          assert.strictEqual(validationPayload.findings[0].stage, 'Reporting complete')
+          assert.strictEqual(validationPayload.findings.stage, 'Reporting complete')
+          assert.strictEqual(validationPayload.findings.status, 'ok')
+          assert.strictEqual(validationPayload.findings.primary.stage, 'Reporting complete')
+          assert.strictEqual(validationPayload.findings.items[0].stage, 'Reporting complete')
 
           const report = fs.readFileSync(intake.html, 'utf8')
           assert.match(report, /Test Optimization debug report/)
@@ -688,6 +691,8 @@ describe('Test Optimization debug intake', () => {
     assert.strictEqual(validationPayload.test.result, '3 passing')
     assert.strictEqual(validationPayload.artifacts.htmlFileUrl, pathToFileURL(htmlPath).href)
     assert.strictEqual(validationPayload.env.find(entry => entry.key === 'DD_API_KEY').value, 'debug')
+    assert.strictEqual(validationPayload.findings.stage, 'Reporting complete')
+    assert.strictEqual(validationPayload.findings.items[0].status, 'ok')
   })
 
   it('renders EFD evidence in the final runbook report', () => {

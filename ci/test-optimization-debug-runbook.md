@@ -103,7 +103,8 @@ produce. Use these wrapper-generated root artifacts for Step 8:
 - `dd-test-optimization-report.html`
 
 The wrapper and analyzer print a `Datadog validation:` URL. It points to the local Datadog
-validation app with a pako-compatible encoded JSON payload.
+validation app with a pako-compatible encoded JSON payload. The decoded payload includes
+`findings.stage`, `findings.status`, `findings.primary`, and `findings.items`.
 
 Analyzer JSON key paths used in this runbook:
 
