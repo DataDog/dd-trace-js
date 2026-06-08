@@ -89,6 +89,47 @@ describe('AIGuard SDK integration tests', () => {
     })
   })
 
+  describe('service entry tag mirroring', () => {
+    it('copies http.useragent to ai_guard.http.useragent on the guard span', async () => {
+      const response = await executeRequest(`${url}/allow`, 'GET', {
+        'user-agent': 'test-agent/1.0',
+      })
+      assert.strictEqual(response.status, 200)
+
+      await agent.assertMessageReceived(({ payload }) => {
+        const guardSpan = payload[0].find(span => span.name === 'ai_guard')
+        assert.notStrictEqual(guardSpan, undefined)
+        assert.strictEqual(guardSpan.meta['ai_guard.http.useragent'], 'test-agent/1.0')
+      })
+    })
+
+    it('copies http.client_ip and network.client.ip to ai_guard.* tags on the guard span', async () => {
+      const response = await executeRequest(`${url}/allow`, 'GET', {
+        'x-forwarded-for': '203.0.113.10, 10.0.0.1',
+      })
+      assert.strictEqual(response.status, 200)
+
+      await agent.assertMessageReceived(({ payload }) => {
+        const guardSpan = payload[0].find(span => span.name === 'ai_guard')
+        assert.notStrictEqual(guardSpan, undefined)
+        assert.strictEqual(guardSpan.meta['ai_guard.http.client_ip'], '203.0.113.10')
+        assert.ok(guardSpan.meta['ai_guard.network.client.ip'])
+      })
+    })
+
+    it('copies usr.id and usr.session_id to ai_guard.* tags on the guard span', async () => {
+      const response = await executeRequest(`${url}/allow-with-user`, 'GET')
+      assert.strictEqual(response.status, 200)
+
+      await agent.assertMessageReceived(({ payload }) => {
+        const guardSpan = payload[0].find(span => span.name === 'ai_guard')
+        assert.notStrictEqual(guardSpan, undefined)
+        assert.strictEqual(guardSpan.meta['ai_guard.usr.id'], 'user-123')
+        assert.strictEqual(guardSpan.meta['ai_guard.usr.session_id'], 'session-456')
+      })
+    })
+  })
+
   it('adds client ip tags to the request root span when AI Guard runs', async () => {
     const response = await executeRequest(`${url}/allow`, 'GET', {
       'x-forwarded-for': '203.0.113.10, 10.0.0.1',
