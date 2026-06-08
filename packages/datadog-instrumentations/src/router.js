@@ -157,9 +157,9 @@ function createWrapRouterMethod (name, compile) {
   }
 
   function wrapNext (req, originalNext) {
-    // Per layer dispatch, N per request. `shimmer.wrapCallback` preserves
-    // only `name` + `length`; see its JSDoc for the full contract.
-    return shimmer.wrapCallback(originalNext, next => function (error) {
+    // Per layer dispatch, N per request. Named `next`/arity-1 mirrors the
+    // router continuation so wrapCallback skips its name/length rewrite.
+    return shimmer.wrapCallback(originalNext, original => function next (error) {
       if (error && error !== 'route' && error !== 'router') {
         errorChannel.publish({ req, error })
       }
@@ -167,7 +167,7 @@ function createWrapRouterMethod (name, compile) {
       nextChannel.publish({ req })
       finishChannel.publish({ req })
 
-      next.apply(this, arguments)
+      original.apply(this, arguments)
     })
   }
 
@@ -328,7 +328,8 @@ const routerParamStartCh = channel('datadog:router:param:start')
 const visitedParams = new WeakSet()
 
 function wrapHandleRequest (original) {
-  return function wrappedHandleRequest (req, res, next) {
+  return function wrappedHandleRequest (...args) {
+    const req = args[0]
     if (routerParamStartCh.hasSubscribers && !visitedParams.has(req.params) && Object.keys(req.params).length) {
       visitedParams.add(req.params)
 
@@ -336,7 +337,7 @@ function wrapHandleRequest (original) {
 
       routerParamStartCh.publish({
         req,
-        res,
+        res: args[1],
         params: req?.params,
         abortController,
       })
@@ -344,7 +345,7 @@ function wrapHandleRequest (original) {
       if (abortController.signal.aborted) return
     }
 
-    return original.apply(this, arguments)
+    return Reflect.apply(original, this, args)
   }
 }
 
@@ -358,7 +359,8 @@ addHook({
 function wrapParam (original) {
   return function wrappedProcessParams (...args) {
     args[1] = shimmer.wrapFunction(args[1], (originalFn) => {
-      return function wrappedFn (req, res) {
+      return function wrappedFn (...fnArgs) {
+        const req = fnArgs[0]
         if (routerParamStartCh.hasSubscribers && Object.keys(req.params).length && !visitedParams.has(req.params)) {
           visitedParams.add(req.params)
 
@@ -366,7 +368,7 @@ function wrapParam (original) {
 
           routerParamStartCh.publish({
             req,
-            res,
+            res: fnArgs[1],
             params: req?.params,
             abortController,
           })
@@ -374,7 +376,7 @@ function wrapParam (original) {
           if (abortController.signal.aborted) return
         }
 
-        return originalFn.apply(this, arguments)
+        return Reflect.apply(originalFn, this, fnArgs)
       }
     })
 

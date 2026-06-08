@@ -3,6 +3,7 @@
 const log = require('../log')
 const { TOP_LEVEL_KEY } = require('../constants')
 const { normalizeSpan } = require('./tags-processors')
+const { stringifySpanEvents } = require('./0.4')
 
 // Soft limit for estimated payload size. Triggers an early flush to stay under intake request size limits.
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
@@ -20,7 +21,10 @@ function formatSpan (span, isFirstSpan) {
   delete span.meta['_dd.p.tid']
 
   if (span.span_events) {
-    span.meta.events = JSON.stringify(span.span_events)
+    // Events arrive raw (`{ name, startTime, attributes? }`); stringifySpanEvents
+    // derives `time_unix_nano` and drops empty attributes, matching the JSON the
+    // reshaped array used to produce.
+    span.meta.events = stringifySpanEvents(span.span_events)
     delete span.span_events
   }
 

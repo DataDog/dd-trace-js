@@ -236,11 +236,12 @@ describe('encode', () => {
     })
 
     it('should encode span events within tags as a fallback to encoding as a top level field', () => {
+      // Events arrive raw: the encoder derives time_unix_nano = round(startTime * 1e6).
       const topLevelEvents = [
-        { name: 'Something went so wrong', time_unix_nano: 1000000 },
+        { name: 'Something went so wrong', startTime: 1 },
         {
           name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
-          time_unix_nano: 1633023102000000,
+          startTime: 1633023102,
           attributes: { emotion: 'happy', rating: 9.8, other: [1, 9.5, 1], idol: false },
         },
       ]
@@ -263,6 +264,19 @@ describe('encode', () => {
       // `addEvent` does not type-check `name`. The legacy stringifier must
       // tolerate the same inputs `JSON.stringify` did before the rewrite.
       const events = [
+        { name: undefined, startTime: 1 },
+        { name: null, startTime: 2, attributes: { ok: true } },
+        { name: 42, startTime: 3 },
+        { name: true, startTime: 4 },
+        { name: ['array', 'name'], startTime: 5 },
+        { name: { nested: 'object' }, startTime: 6 },
+        { name: Symbol('event'), startTime: 7 },
+        { name: 'plain', startTime: 8 },
+      ]
+
+      // The wire shape uses time_unix_nano = round(startTime * 1e6) and drops
+      // undefined attributes, matching the old formatter output.
+      const expected = JSON.stringify([
         { name: undefined, time_unix_nano: 1000000 },
         { name: null, time_unix_nano: 2000000, attributes: { ok: true } },
         { name: 42, time_unix_nano: 3000000 },
@@ -271,7 +285,7 @@ describe('encode', () => {
         { name: { nested: 'object' }, time_unix_nano: 6000000 },
         { name: Symbol('event'), time_unix_nano: 7000000 },
         { name: 'plain', time_unix_nano: 8000000 },
-      ]
+      ])
 
       data[0].span_events = events
 
@@ -279,7 +293,7 @@ describe('encode', () => {
 
       const buffer = encoder.makePayload()
       const decoded = msgpack.decode(buffer, { useBigInt64: true })
-      assert.strictEqual(decoded[0][0].meta.events, JSON.stringify(events))
+      assert.strictEqual(decoded[0][0].meta.events, expected)
     })
 
     it('should encode spanLinks', () => {
@@ -594,11 +608,12 @@ describe('encode', () => {
     })
 
     it('should encode span events as a top-level field when the agent version supports this', () => {
+      // Raw events carry startTime; the encoder derives time_unix_nano = round(startTime * 1e6).
       const topLevelEvents = [
-        { name: 'Something went so wrong', time_unix_nano: 1000000 },
+        { name: 'Something went so wrong', startTime: 1 },
         {
           name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
-          time_unix_nano: 1633023102000000,
+          startTime: 1633023102,
           attributes: { emotion: 'happy', happiness: 10, rating: 9.8, other: ['hi', false, 1, 1.2], idol: false },
         },
       ]
@@ -645,12 +660,12 @@ describe('encode', () => {
       const topLevelEvents = [
         {
           name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
-          time_unix_nano: 1633023102000000,
+          startTime: 1633023102,
           attributes: { emotion: { unsupportedNestedObject: 'happiness' }, array: [['nested_array']] },
         },
         {
           name: 'I can sing!!!',
-          time_unix_nano: 1633023102000000,
+          startTime: 1633023102,
           attributes: { emotion: { unsupportedNestedObject: 'happiness' }, array: [['nested_array'], 'valid_value'] },
         },
       ]
@@ -683,22 +698,22 @@ describe('encode', () => {
       const topLevelEvents = [
         {
           name: 'Event 1',
-          time_unix_nano: 1000000,
+          startTime: 1,
           attributes: { unsupported_key: { some: 'object' }, other_key: 'valid' },
         },
         {
           name: 'Event 2',
-          time_unix_nano: 2000000,
+          startTime: 2,
           attributes: { unsupported_key: { another: 'object' } },
         },
         {
           name: 'Event 3',
-          time_unix_nano: 3000000,
+          startTime: 3,
           attributes: { unsupported_key: { yet: 'another object' } },
         },
         {
           name: 'Event 4',
-          time_unix_nano: 4000000,
+          startTime: 4,
           attributes: { unsupported_key: { different: 'structure' } },
         },
       ]
@@ -719,17 +734,17 @@ describe('encode', () => {
       const topLevelEvents = [
         {
           name: 'Event 1',
-          time_unix_nano: 1000000,
+          startTime: 1,
           attributes: { unsupported_key1: { some: 'object' }, unsupported_key2: { another: 'object' } },
         },
         {
           name: 'Event 2',
-          time_unix_nano: 2000000,
+          startTime: 2,
           attributes: { unsupported_key1: { different: 'structure' }, unsupported_key3: { more: 'objects' } },
         },
         {
           name: 'Event 3',
-          time_unix_nano: 3000000,
+          startTime: 3,
           attributes: { unsupported_key2: { yet: 'another object' }, unsupported_key3: { extra: 'data' } },
         },
       ]
@@ -751,11 +766,11 @@ describe('encode', () => {
       // and would have aborted the entire trace. Bad entries are dropped
       // silently; the rest of the trace must still encode.
       const topLevelEvents = [
-        { name: null, time_unix_nano: 1000000, attributes: { ok: true } },
-        { name: 42, time_unix_nano: 2000000 },
-        { name: Symbol('event'), time_unix_nano: 3000000 },
-        { name: undefined, time_unix_nano: 4000000 },
-        { name: 'kept', time_unix_nano: 5000000, attributes: { mood: 'happy' } },
+        { name: null, startTime: 1, attributes: { ok: true } },
+        { name: 42, startTime: 2 },
+        { name: Symbol('event'), startTime: 3 },
+        { name: undefined, startTime: 4 },
+        { name: 'kept', startTime: 5, attributes: { mood: 'happy' } },
       ]
 
       data[0].span_events = topLevelEvents

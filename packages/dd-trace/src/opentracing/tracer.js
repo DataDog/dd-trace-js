@@ -23,6 +23,8 @@ class DatadogTracer {
   constructor (config, prioritySampler) {
     this._config = config
     this._service = config.service
+    // Lowercased once for span_format's per-span base-service comparison.
+    this.serviceLower = typeof config.service === 'string' ? config.service.toLowerCase() : ''
     this._version = config.version
     this._env = config.env
     this._logInjection = config.logInjection
