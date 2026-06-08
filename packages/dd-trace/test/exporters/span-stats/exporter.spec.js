@@ -17,7 +17,7 @@ describe('span-stats exporter', () => {
   let writer
 
   beforeEach(() => {
-    url = 'http://www.example.com:8126'
+    url = new URL('http://www.example.com:8126')
     writer = {
       append: sinon.spy(),
       flush: sinon.spy(),
@@ -41,14 +41,12 @@ describe('span-stats exporter', () => {
     sinon.assert.called(writer.flush)
   })
 
-  it('should set url from hostname and port', () => {
-    const hostname = '0.0.0.0'
-    const port = '1234'
-    const url = new URL(`http://${hostname}:${port}`)
+  it('should set url from config', () => {
+    const url = new URL('http://0.0.0.0:1234')
 
-    exporter = new Exporter({ hostname, port })
+    exporter = new Exporter({ url })
 
-    assert.deepStrictEqual(exporter._url, url)
+    assert.strictEqual(exporter._url.toString(), url.toString())
     sinon.assert.calledWith(Writer, {
       url: exporter._url,
     })
