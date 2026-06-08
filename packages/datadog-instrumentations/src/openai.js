@@ -2,7 +2,7 @@
 
 const dc = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
-const { addHook, AsyncResource } = require('./helpers/instrument')
+const { addHook } = require('./helpers/instrument')
 const aiGuard = require('./helpers/openai-ai-guard')
 
 const ch = dc.tracingChannel('apm:openai:request')
@@ -240,13 +240,12 @@ for (const extension of extensions) {
           }
 
           return ch.start.runStores(ctx, () => {
-            const apiProm = methodFn.apply(this, args)
+            // Capture the active `openai.request` span (set by the plugin's `ch.start`
+            // subscriber) so AI Guard nests `ai_guard` spans under it via explicit `childOf`,
+            // without relying on async-context binding at evaluation time.
+            if (guard) guard.parentSpan = ctx.currentStore?.span
 
-            // The OpenAI SDK returns a lazy APIPromise whose `parse`/`asResponse` run later, in
-            // the caller's async context. Bind them to the active `openai.request` span context
-            // captured here (inside `runStores`) so the AI Guard evaluations they publish nest the
-            // `ai_guard` span under it. Identity (no-op) when AI Guard is not active for this call.
-            const bindToSpan = guard ? fn => AsyncResource.bind(fn) : fn => fn
+            const apiProm = methodFn.apply(this, args)
 
             if (baseResource === 'chat.completions' && typeof apiProm._thenUnwrap === 'function') {
               // this should only ever be invoked from a client.beta.chat.completions.parse call
@@ -257,12 +256,12 @@ for (const extension of extensions) {
                 // this is a new apipromise instance
                 const unwrappedPromise = origApiPromThenUnwrap.apply(this, args)
 
-                shimmer.wrap(unwrappedPromise, 'parse', origApiPromParse => bindToSpan(function (...args) {
+                shimmer.wrap(unwrappedPromise, 'parse', origApiPromParse => function (...args) {
                   const parsedPromise = origApiPromParse.apply(this, args)
                     .then(body => Promise.all([this.responsePromise, body]))
 
                   return handleUnwrappedAPIPromise(parsedPromise, ctx, stream, guard)
-                }))
+                })
 
                 return unwrappedPromise
               })
@@ -270,14 +269,14 @@ for (const extension of extensions) {
 
             // wrapping `parse` avoids problematic wrapping of `then` when trying to call
             // `withResponse` in userland code after. This way, we can return the whole `APIPromise`
-            shimmer.wrap(apiProm, 'parse', origApiPromParse => bindToSpan(function (...args) {
+            shimmer.wrap(apiProm, 'parse', origApiPromParse => function (...args) {
               const parsedPromise = origApiPromParse.apply(this, args)
                 .then(body => Promise.all([this.responsePromise, body]))
 
               return handleUnwrappedAPIPromise(parsedPromise, ctx, stream, guard)
-            }))
+            })
 
-            if (guard) aiGuard.wrapAsResponse(apiProm, guard, bindToSpan)
+            if (guard) aiGuard.wrapAsResponse(apiProm, guard)
 
             ch.end.publish(ctx)
 
