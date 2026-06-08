@@ -2625,7 +2625,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_GCP_PUBSUB_PUSH_ENABLED": [
