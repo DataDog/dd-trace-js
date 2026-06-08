@@ -361,8 +361,29 @@ function wrapResolve (resolve) {
     const infoPath = info?.path
     const config = rootCtx.config
 
+    // IAST + AppSec subscribers receive EVERY resolver invocation, regardless
+    // of depth. The depth knob caps span creation, not channel publishes —
+    // taint tracking and WAF gates have to see resolvers at any depth so
+    // user-controlled args still flow through. Compute pathString once on
+    // demand (lazily — only when a subscriber is active).
+    const hasIastSub = iastResolveCh.hasSubscribers
+    const hasResolverSub = resolverStartCh.hasSubscribers
+    if (hasIastSub || hasResolverSub) {
+      const pathString = buildPathStringFromNode(infoPath)
+      if (hasIastSub) {
+        iastResolveCh.publish({ rootCtx, args, info, path: pathToArray(infoPath), pathString })
+      }
+      if (hasResolverSub) {
+        resolverStartCh.publish({
+          abortController: rootCtx.abortController,
+          resolverInfo: getResolverInfo(info, args),
+        })
+      }
+    }
+
     // Depth check directly on the linked-list — no array allocation needed.
-    // Moved before the Map lookup so depth-filtered resolvers bail immediately.
+    // Moved before the Map lookup so depth-filtered resolvers bail immediately
+    // out of span creation (channel publishes above already fired).
     if (!shouldInstrumentNode(config, infoPath)) return resolve.apply(this, arguments)
 
     // Map key strategy:
@@ -402,23 +423,6 @@ function wrapResolve (resolve) {
         span: null,
       }
       rootCtx.fields.set(mapKey, field)
-    }
-
-    // IAST exit hatch — IAST mutates `args` for taint tracking. Fires sync
-    // before the resolver body runs so taint propagates into user code.
-    // pathToArray is kept here (IAST needs the array form) but gated so APM-only
-    // runs pay zero cost.
-    if (iastResolveCh.hasSubscribers) {
-      const pathArr = pathToArray(infoPath)
-      iastResolveCh.publish({ rootCtx, args, info, path: pathArr, pathString: field.pathString })
-    }
-
-    // AppSec exit hatch.
-    if (resolverStartCh.hasSubscribers) {
-      resolverStartCh.publish({
-        abortController: rootCtx.abortController,
-        resolverInfo: getResolverInfo(info, args),
-      })
     }
 
     // Collapsed duplicates run the resolver but skip span creation. They still
