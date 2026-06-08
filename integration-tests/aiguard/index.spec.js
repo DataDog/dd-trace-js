@@ -238,6 +238,9 @@ describe('AIGuard SDK integration tests', () => {
   const openaiSuite = [
     { endpoint: '/openai-chat', name: 'chat.completions.create' },
     { endpoint: '/openai-responses', name: 'responses.create' },
+    // Structured output routes through the lazy APIPromise `_thenUnwrap`/`parse` path; the
+    // ai_guard spans must still nest under openai.request on it.
+    { endpoint: '/openai-chat-parse', name: 'chat.completions.parse' },
   ]
 
   for (const { endpoint, name } of openaiSuite) {
@@ -277,6 +280,7 @@ describe('AIGuard SDK integration tests', () => {
   const openaiAfterModelSuite = [
     { endpoint: '/openai-chat-after-deny', name: 'chat.completions.create' },
     { endpoint: '/openai-responses-after-deny', name: 'responses.create' },
+    { endpoint: '/openai-chat-parse-after-deny', name: 'chat.completions.parse' },
   ]
 
   for (const { endpoint, name } of openaiAfterModelSuite) {

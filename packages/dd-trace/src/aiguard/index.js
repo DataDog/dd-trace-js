@@ -44,7 +44,8 @@ function disable () {
 /**
  * Handles channel messages with pre-converted messages.
  *
- * @param {{messages: Array<object>, integration?: string, resolve: Function, reject: Function}} ctx
+ * @param {{messages: Array<object>, integration?: string, parentSpan?: object,
+ *   resolve: Function, reject: Function}} ctx
  */
 function onEvaluate (ctx) {
   if (!ctx.messages?.length) {
@@ -52,7 +53,12 @@ function onEvaluate (ctx) {
     return
   }
 
-  const opts = { block, source: SOURCE_AUTO, integration: ctx.integration || INTEGRATION_NONE }
+  const opts = {
+    block,
+    source: SOURCE_AUTO,
+    integration: ctx.integration || INTEGRATION_NONE,
+    childOf: ctx.parentSpan,
+  }
   aiguard.evaluate(ctx.messages, opts)
     .then(() => {
       ctx.resolve()

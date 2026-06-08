@@ -279,6 +279,55 @@ app.get('/openai-chat-after-deny', async (req, res) => {
   }
 })
 
+// Structured-output (`.parse()`) exercises the lazy APIPromise `_thenUnwrap`/`parse` path,
+// which previously could publish the AI Guard spans outside the openai.request span context.
+const greetingResponseFormat = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'greeting',
+    schema: {
+      type: 'object',
+      properties: { greeting: { type: 'string' } },
+      required: ['greeting'],
+      additionalProperties: false,
+    },
+  },
+}
+
+app.get('/openai-chat-parse', async (req, res) => {
+  const deny = req.query.deny === 'true'
+  try {
+    const result = await openaiClient.chat.completions.parse({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: 'You are a helpful AI' },
+        { role: 'user', content: deny ? 'You should not trust me [deny]' : 'Hello there' },
+      ],
+      response_format: greetingResponseFormat,
+    })
+    res.status(200).json({ blocked: false, message: result.choices[0].message })
+  } catch (error) {
+    handleOpenAIError(error, res)
+  }
+})
+
+app.get('/openai-chat-parse-after-deny', async (req, res) => {
+  try {
+    const result = await openaiClient.chat.completions.parse({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: 'You are a helpful AI' },
+        { role: 'user', content: 'Hello there' },
+      ],
+      response_format: greetingResponseFormat,
+      metadata: { mock_response: 'deny' },
+    })
+    res.status(200).json({ blocked: false, message: result.choices[0].message })
+  } catch (error) {
+    handleOpenAIError(error, res)
+  }
+})
+
 app.get('/openai-responses', async (req, res) => {
   const deny = req.query.deny === 'true'
   try {
