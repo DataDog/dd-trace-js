@@ -1,0 +1,18 @@
+name: Upload JUnit Artifacts
+description: Upload JUnit XML test result files as GitHub Actions artifacts for later collection
+
+inputs:
+  id:
+    description: Unique identifier for these artifacts — include all matrix variables for matrix jobs
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - if: github.actor != 'dependabot[bot]'
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: junit-${{ inputs.id }}
+        path: "*.xml"
+        if-no-files-found: ignore
+        retention-days: 1

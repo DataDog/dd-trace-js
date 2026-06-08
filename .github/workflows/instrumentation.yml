@@ -151,10 +151,10 @@ jobs:
         with:
           flags: instrumentations-${{ github.job }}-${{ matrix.node-version }}
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}-${{ strategy.job-index }}
 
   instrumentation-crypto:
     runs-on: ubuntu-latest
@@ -295,10 +295,10 @@ jobs:
         with:
           flags: instrumentations-${{ github.job }}
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   instrumentation-http-client-options:
     runs-on: ubuntu-latest
@@ -561,10 +561,10 @@ jobs:
         with:
           flags: platform-instrumentations-misc
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   integration-esbuild:
     strategy:
@@ -593,10 +593,10 @@ jobs:
         with:
           flags: instrumentations-integration-esbuild-${{ matrix.esbuild_version }}-${{ matrix.version }}
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}-${{ strategy.job-index }}
 
   integration-webpack:
     strategy:
@@ -621,7 +621,65 @@ jobs:
       # NYC counters end up bundled too and the bootstrap can't find them at the original
       # paths. Switch to `:coverage` once the harness handles bundled output.
       - run: yarn test:integration:webpack
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
+        with:
+          id: ${{ github.job }}-${{ strategy.job-index }}
+
+  push-to-test-optimization:
+    runs-on: ubuntu-latest
+    needs:
+      - esbuild
+      - webpack
+      - instrumentation-ai
+      - instrumentation-aws-sdk
+      - instrumentation-bluebird
+      - instrumentation-body-parser
+      - instrumentation-child_process
+      - instrumentation-cookie-parser
+      - instrumentation-couchbase
+      - instrumentation-crypto
+      - instrumentation-express-mongo-sanitize
+      - instrumentation-express-session
+      - instrumentation-express
+      - instrumentation-express-multi-version
+      - instrumentation-fastify
+      - instrumentation-fetch
+      - instrumentation-fs
+      - instrumentation-generic-pool
+      - instrumentation-hono
+      - instrumentation-http
+      - instrumentation-http-client-options
+      - instrumentation-kafkajs
+      - instrumentation-knex
+      - instrumentation-light-my-request
+      - instrumentation-mongoose
+      - instrumentation-multer
+      - instrumentation-mysql2
+      - instrumentation-openai-aiguard
+      - instrumentation-otel-sdk-trace
+      - instrumentation-passport
+      - instrumentation-passport-http
+      - instrumentation-passport-local
+      - instrumentation-pg
+      - instrumentation-promise-js
+      - instrumentation-promise
+      - instrumentation-q
+      - instrumentation-stripe
+      - instrumentation-router
+      - instrumentation-url
+      - instrumentation-when
+      - instrumentation-zlib
+      - instrumentations-misc
+      - integration-esbuild
+      - integration-webpack
+    if: "!cancelled()"
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
+      - uses: ./.github/actions/push_to_test_optimization
         with:
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}

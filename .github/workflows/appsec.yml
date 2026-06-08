@@ -37,10 +37,10 @@ jobs:
         with:
           flags: appsec-macos
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   ubuntu:
     name: ${{ github.workflow }} / ubuntu
@@ -64,10 +64,10 @@ jobs:
         with:
           flags: appsec-ubuntu
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   windows:
     name: ${{ github.workflow }} / windows
@@ -89,10 +89,10 @@ jobs:
         with:
           flags: appsec-windows
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   ldapjs:
     name: ${{ github.workflow }} / ldapjs
@@ -125,10 +125,10 @@ jobs:
         with:
           flags: appsec-ldapjs
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   postgres:
     name: ${{ github.workflow }} / postgres
@@ -159,10 +159,10 @@ jobs:
         with:
           flags: appsec-postgres
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   mysql:
     name: ${{ github.workflow }} / mysql
@@ -193,10 +193,10 @@ jobs:
         with:
           flags: appsec-mysql
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   express:
     name: ${{ github.workflow }} / express
@@ -218,10 +218,10 @@ jobs:
         with:
           flags: appsec-express
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   fastify:
     name: ${{ github.workflow }} / fastify
@@ -243,10 +243,10 @@ jobs:
         with:
           flags: appsec-fastify
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   graphql:
     name: ${{ github.workflow }} / graphql
@@ -268,10 +268,10 @@ jobs:
         with:
           flags: appsec-graphql
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   mongodb-core:
     name: ${{ github.workflow }} / mongodb-core
@@ -299,10 +299,10 @@ jobs:
         with:
           flags: appsec-mongodb-core
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   mongoose:
     name: ${{ github.workflow }} / mongoose
@@ -330,10 +330,10 @@ jobs:
         with:
           flags: appsec-mongoose
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   sourcing:
     runs-on: ubuntu-latest
@@ -358,10 +358,10 @@ jobs:
         with:
           flags: appsec-sourcing
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   next:
     strategy:
@@ -405,10 +405,10 @@ jobs:
         with:
           flags: appsec-next-${{ matrix.version }}-${{ matrix.range_clean || matrix.range }}
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}-${{ strategy.job-index }}
 
   lodash:
     name: ${{ github.workflow }} / lodash
@@ -430,10 +430,10 @@ jobs:
         with:
           flags: appsec-lodash
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   integration:
     strategy:
@@ -457,10 +457,10 @@ jobs:
         with:
           flags: appsec-integration-${{ matrix.version }}
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}-${{ strategy.job-index }}
 
   passport:
     runs-on: ubuntu-latest
@@ -481,10 +481,10 @@ jobs:
         with:
           flags: appsec-passport
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   template:
     runs-on: ubuntu-latest
@@ -505,10 +505,10 @@ jobs:
         with:
           flags: appsec-template
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   node-serialize:
     name: ${{ github.workflow }} / node-serialize
@@ -530,10 +530,10 @@ jobs:
         with:
           flags: appsec-node-serialize
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   kafka:
     runs-on: ubuntu-latest
@@ -573,10 +573,10 @@ jobs:
         with:
           flags: appsec-kafka
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   stripe:
     runs-on: ubuntu-latest
@@ -597,7 +597,41 @@ jobs:
         with:
           flags: appsec-stripe
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
+        with:
+          id: ${{ github.job }}
+
+  push-to-test-optimization:
+    runs-on: ubuntu-latest
+    needs:
+      - macos
+      - ubuntu
+      - windows
+      - ldapjs
+      - postgres
+      - mysql
+      - express
+      - fastify
+      - graphql
+      - mongodb-core
+      - mongoose
+      - sourcing
+      - next
+      - lodash
+      - integration
+      - passport
+      - template
+      - node-serialize
+      - kafka
+      - stripe
+    if: "!cancelled()"
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
+      - uses: ./.github/actions/push_to_test_optimization
         with:
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}

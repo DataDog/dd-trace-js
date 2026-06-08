@@ -5,11 +5,13 @@ inputs:
     description: 'Lower Node alias: oldest-maintenance-lts or newest-maintenance-lts.'
     required: false
     default: oldest-maintenance-lts
+  suffix:
+    description: 'Unique suffix for artifact naming — required when called from a matrix job.'
+    required: false
+    default: ''
 runs:
   using: composite
   steps:
-    - uses: ./.github/actions/dd-sts-api-key
-      id: dd-sts
     - if: ${{ inputs.node-floor == 'oldest-maintenance-lts' }}
       uses: ./.github/actions/node/oldest-maintenance-lts
     - if: ${{ inputs.node-floor == 'newest-maintenance-lts' }}
@@ -23,7 +25,7 @@ runs:
     # `test:plugins:upstream` runs each plugin's upstream test suite (e.g., axios's own tests)
     # against the unit-test harness, which intentionally does not produce NYC coverage for
     # dd-trace. Skip the coverage/upload step entirely here.
-    - uses: ./.github/actions/push_to_test_optimization
+    - uses: ./.github/actions/upload-junit-artifacts
       if: "!cancelled()"
       with:
-        dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+        id: ${{ github.job }}${{ inputs.suffix != '' && format('-{0}', inputs.suffix) || '' }}

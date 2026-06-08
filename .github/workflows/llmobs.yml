@@ -47,10 +47,10 @@ jobs:
         with:
           flags: llmobs-sdk-${{ matrix.version }}
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}-${{ strategy.job-index }}
 
   openai:
     strategy:
@@ -82,10 +82,10 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: llmobs-${{ github.job }}-${{ matrix.version }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}-${{ strategy.job-index }}
 
   langchain:
     runs-on: ubuntu-latest
@@ -115,10 +115,10 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: llmobs-${{ github.job }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   bedrock:
     runs-on: ubuntu-latest
@@ -146,10 +146,10 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: llmobs-${{ github.job }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   vertex-ai:
     runs-on: ubuntu-latest
@@ -179,10 +179,10 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: llmobs-${{ github.job }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   ai:
     runs-on: ubuntu-latest
@@ -212,10 +212,10 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: llmobs-${{ github.job }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   anthropic:
     runs-on: ubuntu-latest
@@ -245,10 +245,10 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: llmobs-${{ github.job }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   google-genai:
     runs-on: ubuntu-latest
@@ -278,10 +278,10 @@ jobs:
         uses: ./.github/actions/testagent/logs
         with:
           suffix: llmobs-${{ github.job }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   langgraph:
     runs-on: ubuntu-latest
@@ -304,3 +304,27 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/plugins/test
+
+  push-to-test-optimization:
+    runs-on: ubuntu-latest
+    needs:
+      - sdk
+      - openai
+      - langchain
+      - bedrock
+      - vertex-ai
+      - ai
+      - anthropic
+      - google-genai
+      - langgraph
+      - modelcontextprotocol-sdk
+    if: "!cancelled()"
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
+      - uses: ./.github/actions/push_to_test_optimization
+        with:
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}

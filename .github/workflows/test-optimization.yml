@@ -473,3 +473,26 @@ jobs:
         with:
           flags: test-optimization-vitest-${{ matrix.version }}
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+
+  push-to-test-optimization:
+    runs-on: ubuntu-latest
+    needs:
+      - integration
+      - integration-playwright
+      - integration-mocha
+      - integration-jest
+      - jest
+      - integration-cucumber
+      - integration-selenium
+      - integration-cypress
+      - integration-vitest
+    if: "!cancelled()"
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
+      - uses: ./.github/actions/push_to_test_optimization
+        with:
+          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
