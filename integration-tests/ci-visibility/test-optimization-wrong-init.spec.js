@@ -107,6 +107,7 @@ testFrameworks.forEach(({ testFramework, command, expectedOutput, extraTestConte
             DD_TRACE_AGENT_URL: `http://127.0.0.1:${receiver.port}`,
             DD_TRACE_DISABLED_INSTRUMENTATIONS: 'child_process',
             DD_TRACE_DEBUG: '1',
+            DD_CIVISIBILITY_AGENTLESS_URL: 'http://example.org',
             ...extraTestContext,
           },
         }
