@@ -105,6 +105,7 @@ for (const [product, scopes] of PRODUCTS) {
  * @property {string} subject
  * @property {string} pr
  * @property {boolean} internal
+ * @property {boolean} revert
  * @property {string} [warning]
  */
 
@@ -122,7 +123,7 @@ function createReleaseChangelog (entries) {
     const change = parseChange(entry)
 
     if (change.warning) warnings.push(change.warning)
-    if (change.category === 'Features') isMinor = true
+    if (change.category === 'Features' && !change.revert) isMinor = true
     if (entry.author) contributors.add(entry.author)
 
     const section = sections.get(change.category)
@@ -155,6 +156,7 @@ function parseChange (entry) {
       subject: subjectWithPullRequest.subject,
       pr: subjectWithPullRequest.pr,
       internal: true,
+      revert: false,
       warning: `Non-conventional release-note subject for ${entry.sha}: ${entry.subject}`,
     }
   }
@@ -172,6 +174,7 @@ function parseChange (entry) {
     subject: parsed.subject,
     pr: subjectWithPullRequest.pr,
     internal,
+    revert: parsed.isRevert,
     warning,
   }
 }
@@ -206,6 +209,7 @@ function parseConventionalSubject (subject) {
   return {
     type,
     scopes,
+    isRevert,
     subject: isRevert ? `Revert "${parsedSubject}"` : parsedSubject,
   }
 }

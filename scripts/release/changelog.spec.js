@@ -117,6 +117,29 @@ describe('release changelog', () => {
     ])
   })
 
+  it('does not promote the release to minor when a feature is reverted', () => {
+    const changelog = createReleaseChangelog([
+      {
+        sha: 'abc001',
+        subject: 'revert: feat(appsec): add experimental detection (#8689) (#8790)',
+      },
+      {
+        sha: 'abc002',
+        subject: 'fix(profiling): correct sample counts (#8791)',
+      },
+    ])
+
+    assert.strictEqual(changelog.isMinor, false)
+    assert.strictEqual(changelog.markdown, [
+      'Features',
+      '- <b>AppSec</b> Revert "Add experimental detection (#8689)" #8790',
+      '',
+      'Fixes',
+      '- <b>Profiling</b> Correct sample counts #8791',
+      '',
+    ].join('\n'))
+  })
+
   it('handles breaking markers and subjects without pull request numbers', () => {
     const changelog = createReleaseChangelog([
       {
