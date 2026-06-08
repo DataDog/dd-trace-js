@@ -149,7 +149,9 @@ const transformers = {
    * @param {string} value
    */
   toURL (value) {
-    return new URL(value)
+    try {
+      return new URL(value)
+    } catch {}
   },
   validatePropagationStyles (value, optionName) {
     value = transformers.toLowerCase(value)
