@@ -5,18 +5,13 @@
   "SpacesAfterTabs": false,
   "NoColor": false,
   "Exclude": [
-    "LICENSE",
-    "LICENSE.*",
-    "packages/dd-trace/test/appsec/bad-formatted-rules.json",
-    "packages/dd-trace/test/llmobs/cassettes",
-    "vendor"
+    "^\\.nyc_output/",
+    "^LICENSE",
+    "^coverage/",
+    "^packages/dd-trace/test/appsec/bad-formatted-rules\\.json$",
+    "^packages/dd-trace/test/llmobs/cassettes/",
+    "^vendor/"
   ],
   "AllowedContentTypes": [],
-  "PassedFiles": [],
-  "Disable": {
-    "Indentation": false,
-    "IndentSize": false,
-    "MaxLineLength": false,
-    "Charset": false
-  }
+  "PassedFiles": []
 }
