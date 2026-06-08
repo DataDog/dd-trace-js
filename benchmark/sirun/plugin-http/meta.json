@@ -31,7 +31,7 @@
       "env": {
         "SERVER_USE_TRACER": "1",
         "CLIENT_LONG_QUERYSTRING": "1",
-        "REQS": "20000"
+        "REQS": "14000"
       }
     }
   }

@@ -29,12 +29,21 @@ const aiguardChannel = dc.channel('dd-trace:ai:aiguard')
 /**
  * Publishes already-converted AI-style messages to the AI Guard evaluation channel.
  *
+ * Subscribers push async work into `pending` and abort `abortController` to block.
+ *
  * @param {Array<object>} messages - AI-style messages to evaluate.
  * @returns {Promise<void>}
  */
 function publishEvaluation (messages) {
-  return new Promise((resolve, reject) => {
-    aiguardChannel.publish({ messages, integration: 'openai', resolve, reject })
+  const abortController = new AbortController()
+  const ctx = { messages, integration: 'openai', abortController, pending: [] }
+
+  aiguardChannel.publish(ctx)
+
+  return Promise.all(ctx.pending).then(() => {
+    if (abortController.signal.aborted) {
+      throw abortController.signal.reason
+    }
   })
 }
 
