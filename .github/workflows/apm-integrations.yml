@@ -1005,6 +1005,10 @@ jobs:
           - "14.2.35"
           - "15.0.0"
           - "15.4.0"
+          - "*"
+        include:
+          - range: "*"
+            range_clean: latest
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -1020,7 +1024,7 @@ jobs:
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/coverage
         with:
-          flags: apm-integrations-next-${{ matrix.range }}
+          flags: apm-integrations-next-${{ matrix.range_clean || matrix.range }}
           dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/push_to_test_optimization
         if: "!cancelled()"
