@@ -13,7 +13,7 @@
         "DD_DYNAMIC_INSTRUMENTATION_ENABLED": "true",
         "INSTALL_ONLY": "true",
         "BREAKPOINT_FILE": "app.js",
-        "BREAKPOINT_LINE": "44"
+        "BREAKPOINT_LINE": "37"
       }
     },
     "line-probe-without-snapshot": {

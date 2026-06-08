@@ -24,6 +24,6 @@ http.createServer((req, res) => {
     return
   }
   // Drain and acknowledge diagnostics / snapshot uploads.
-  req.on('data', () => {})
+  req.resume()
   req.on('end', () => res.end())
 }).listen(port)

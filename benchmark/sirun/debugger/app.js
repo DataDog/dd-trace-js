@@ -1,8 +1,8 @@
 'use strict'
 
-// WARNING: the breakpoint targets below are referenced by line number from
-// meta.json (BREAKPOINT_LINE). Update meta.json if you move `data.n = n` or the
-// `dummy()` body.
+// WARNING: the breakpoint target below is referenced by line number from
+// meta.json (BREAKPOINT_LINE). Update the BREAKPOINT_LINE values there if you
+// move the `data.n = n` line.
 
 const guard = require('../startup-guard')
 
@@ -36,12 +36,6 @@ function doSomeWork (n) {
   const data = getSomeData()
   data.n = n
   return data.n
-}
-
-// Never executed: breakpoint target for the not-hit baseline variant.
-// eslint-disable-next-line no-unused-vars
-function dummy () {
-  throw new Error('This line should never execute')
 }
 
 function getSomeData () {
