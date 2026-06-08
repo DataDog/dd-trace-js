@@ -12,16 +12,6 @@ const {
 
 applyMajorOverrides(supportedConfigurations, DD_MAJOR)
 
-// Canonical names of configurations whose value is excluded from configuration
-// telemetry. Driven by the `sensitive: true` attribute in
-// `supported-configurations.json` so new entries opt in without code changes.
-const sensitiveConfigurations = new Set()
-for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) {
-  if (entries.some(entry => entry.sensitive)) {
-    sensitiveConfigurations.add(canonicalName)
-  }
-}
-
 let log
 let seqId = 0
 const configWithOrigin = new Map()
@@ -212,6 +202,11 @@ const fallbackConfigurations = new Map()
 
 const regExps = {}
 
+// Canonical names of configurations whose value is excluded from configuration
+// telemetry. Driven by the `sensitive: true` attribute in
+// `supported-configurations.json` so new entries opt in without code changes.
+const sensitiveConfigurations = new Set()
+
 for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) {
   if (entries.length !== 1) {
     // TODO: Determine if we really want to support multiple entries for a canonical name.
@@ -223,6 +218,9 @@ for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) 
     )
   }
   for (const entry of entries) {
+    if (entry.sensitive) {
+      sensitiveConfigurations.add(canonicalName)
+    }
     const configurationNames = entry.internalPropertyName ? [entry.internalPropertyName] : entry.configurationNames
     const fullPropertyName = configurationNames?.[0] ?? canonicalName
     const type = entry.type.toUpperCase()
