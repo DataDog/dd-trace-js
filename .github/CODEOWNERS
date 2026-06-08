@@ -296,7 +296,7 @@
 
 /.github/actions/ @DataDog/lang-platform-js
 
-/.gitlab/benchmarks/ @DataDog/lang-platform-js
+/.gitlab/benchmarks/ @DataDog/lang-platform-js @DataDog/ecosystems-performance
 
 /benchmark/* @DataDog/lang-platform-js
 /benchmark/sirun/* @DataDog/lang-platform-js
