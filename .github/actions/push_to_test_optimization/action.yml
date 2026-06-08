@@ -1,14 +1,11 @@
 name: Push to Test Optimization
 description: Download all JUnit artifacts from this run and upload to Datadog Test Optimization
 
-inputs:
-  dd_api_key:
-    description: DD_API_KEY used to push test results
-    required: true
-
 runs:
   using: composite
   steps:
+    - shell: bash
+      run: mkdir -p junit-results
     - if: github.actor != 'dependabot[bot]'
       # see https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull-request-events-for-forked-repositories
       #
@@ -20,10 +17,18 @@ runs:
       with:
         pattern: junit-*
         path: junit-results
-    - if: github.actor != 'dependabot[bot]'
-      uses: ./.github/actions/datadog-ci
-    - if: github.actor != 'dependabot[bot]'
+    - id: check
       shell: bash
-      run: find junit-results -name "*.xml" | xargs -r datadog-ci junit upload --service dd-trace-js-tests
+      run: |
+        count=$(find junit-results -name "*.xml" | wc -l | tr -d ' ')
+        echo "has_files=$([ "$count" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+    - if: steps.check.outputs.has_files == 'true'
+      uses: ./.github/actions/dd-sts-api-key
+      id: dd-sts
+    - if: steps.check.outputs.has_files == 'true'
+      uses: ./.github/actions/datadog-ci
+    - if: steps.check.outputs.has_files == 'true'
+      shell: bash
+      run: find junit-results -name "*.xml" | xargs datadog-ci junit upload --service dd-trace-js-tests
       env:
-        DD_API_KEY: ${{ inputs.dd_api_key }}
+        DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}

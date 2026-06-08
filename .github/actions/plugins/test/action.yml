@@ -31,4 +31,4 @@ runs:
     - uses: ./.github/actions/upload-junit-artifacts
       if: "!cancelled()"
       with:
-        id: ${{ github.job }}${{ inputs.suffix != '' && format('-{0}', inputs.suffix) || '' }}
+        id: ${{ github.job }}-test${{ inputs.suffix != '' && format('-{0}', inputs.suffix) || '' }}
