@@ -3115,6 +3115,25 @@ describe('Config', () => {
         assert.strictEqual(config.url.toString(), 'http://[::1]:8126/')
         assert.strictEqual(config.url.hostname, '[::1]')
       })
+
+      it('should build an HTTP URL in CI Visibility agentless mode', () => {
+        process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED = 'true'
+
+        const config = getConfig()
+
+        assert.strictEqual(config.url.toString(), 'http://127.0.0.1:8126/')
+        assert.strictEqual(config.DD_CIVISIBILITY_AGENTLESS_URL, undefined)
+      })
+
+      it('should resolve url to the agent and expose DD_CIVISIBILITY_AGENTLESS_URL as the intake override', () => {
+        process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED = 'true'
+        process.env.DD_CIVISIBILITY_AGENTLESS_URL = 'https://my-intake.example:443'
+
+        const config = getConfig()
+
+        assert.strictEqual(config.url.toString(), 'http://127.0.0.1:8126/')
+        assert.strictEqual(config.DD_CIVISIBILITY_AGENTLESS_URL.toString(), 'https://my-intake.example/')
+      })
     })
 
     context('socket exists', () => {
@@ -3192,12 +3211,17 @@ describe('Config', () => {
         assert.strictEqual(config.url.toString(), 'http://example.com:8126/')
       })
 
-      it('should remain unset in CI Visibility agentless mode so telemetry uses the agentless intake', () => {
+      it('should resolve to the agent socket in CI Visibility agentless mode', () => {
         process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED = 'true'
 
         const config = getConfig()
 
-        assert.strictEqual(config.url, '')
+        if (os.type() === 'Windows_NT') {
+          assert.strictEqual(config.url.toString(), 'http://127.0.0.1:8126/')
+        } else {
+          assert.strictEqual(config.url.toString(), 'unix:///var/run/datadog/apm.socket')
+        }
+        assert.strictEqual(config.DD_CIVISIBILITY_AGENTLESS_URL, undefined)
       })
     })
   })

@@ -322,21 +322,13 @@ class Config extends ConfigBase {
   #applyCalculated () {
     undo(this, 'calculated')
 
-    if (this.DD_CIVISIBILITY_AGENTLESS_URL ||
-        this.url ||
+    if (this.url ||
         os.type() !== 'Windows_NT' &&
         !trackedConfigOrigins.has('hostname') &&
         !trackedConfigOrigins.has('port') &&
-        !this.DD_CIVISIBILITY_AGENTLESS_ENABLED &&
         fs.existsSync('/var/run/datadog/apm.socket')) {
-      setAndTrack(
-        this,
-        'url',
-        new URL(this.DD_CIVISIBILITY_AGENTLESS_URL || this.url || 'unix:///var/run/datadog/apm.socket')
-      )
-    } else if (!this.DD_CIVISIBILITY_AGENTLESS_ENABLED) {
-      // CI Visibility agentless mode keeps `url` unset on purpose so telemetry falls back to the
-      // agentless intake (see telemetry/send-data.js); every other mode resolves it here.
+      setAndTrack(this, 'url', new URL(this.url || 'unix:///var/run/datadog/apm.socket'))
+    } else {
       setAndTrack(this, 'url', new URL(format({ protocol: 'http:', hostname: this.hostname, port: this.port })))
     }
 

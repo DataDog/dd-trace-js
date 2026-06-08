@@ -102,6 +102,9 @@ testFrameworks.forEach(({ testFramework, command, expectedOutput, extraTestConte
           env: {
             ...process.env,
             ...restEnvVars,
+            // DD_CIVISIBILITY_AGENTLESS_URL no longer doubles as the APM agent URL, so point the agent
+            // at the fake intake to receive the normal APM spans this test asserts on.
+            DD_TRACE_AGENT_URL: `http://127.0.0.1:${receiver.port}`,
             DD_TRACE_DISABLED_INSTRUMENTATIONS: 'child_process',
             DD_TRACE_DEBUG: '1',
             ...extraTestContext,
