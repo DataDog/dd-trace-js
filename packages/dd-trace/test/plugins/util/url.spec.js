@@ -136,6 +136,68 @@ describe('plugins/util/url', () => {
 
       assert.strictEqual(result, urlPath + 'secret/?data=<redacted>')
     })
+
+    it('should redact the whole value when the regex matches only a prefix of it', () => {
+      // A regex that matches the start of a value but not through to `&` used to
+      // leave the high-cardinality, often-sensitive tail in the tag. Redact the
+      // entire value of the matched parameter instead.
+      config.queryStringObfuscation = /campaign_id=[a-z0-9]+/gi
+
+      const result = url.obfuscateQs(
+        config,
+        urlPath + '?campaign_id=12345678-a7ea-47d9-8c62-b42f4618c5bf&limit=20'
+      )
+
+      assert.strictEqual(result, urlPath + '?campaign_id=<redacted>&limit=20')
+    })
+
+    it('should redact every matched parameter value while leaving the rest intact', () => {
+      config.queryStringObfuscation = /(?:search|min_timestamp_created)=[a-z0-9]+/gi
+
+      const result = url.obfuscateQs(
+        config,
+        urlPath + '?limit=50&min_timestamp_created=2024-02-10T14:57:32.697Z&search=abc-mN4DDcb&mode=focused'
+      )
+
+      assert.strictEqual(
+        result,
+        urlPath + '?limit=50&min_timestamp_created=<redacted>&search=<redacted>&mode=focused'
+      )
+    })
+
+    it('should redact the value but keep the key when the regex matches the key=value pair', () => {
+      // The default secrets regex matches `<key>=<value>` as a whole; the key is
+      // low-cardinality and safe to keep, so only the value is redacted.
+      config.queryStringObfuscation = /token=[a-z0-9]+/gi
+
+      const result = url.obfuscateQs(config, urlPath + '?token=supersecret123&user=alice')
+
+      assert.strictEqual(result, urlPath + '?token=<redacted>&user=alice')
+    })
+
+    it('should redact the trailing parameter value through the end of the query string', () => {
+      config.queryStringObfuscation = /before_id=[a-z0-9]+/gi
+
+      const result = url.obfuscateQs(config, urlPath + '?limit=20&before_id=98765-ab46-7309')
+
+      assert.strictEqual(result, urlPath + '?limit=20&before_id=<redacted>')
+    })
+
+    it('should leave the query string untouched when nothing matches', () => {
+      config.queryStringObfuscation = /password=[a-z0-9]+/gi
+
+      const result = url.obfuscateQs(config, urlPath + '?limit=50&search=abc&mode=focused')
+
+      assert.strictEqual(result, urlPath + '?limit=50&search=abc&mode=focused')
+    })
+
+    it('should redact a value-less parameter whole when it matches', () => {
+      config.queryStringObfuscation = /token/gi
+
+      const result = url.obfuscateQs(config, urlPath + '?debug&token&limit=50')
+
+      assert.strictEqual(result, urlPath + '?debug&<redacted>&limit=50')
+    })
   })
 
   describe('extractPathFromUrl', () => {

@@ -371,7 +371,7 @@ describe('Plugin', () => {
                 resource: 'GET',
                 meta: {
                   'span.kind': 'server',
-                  'http.url': `http://localhost:${port}/user?<redacted>foo=bar`,
+                  'http.url': `http://localhost:${port}/user?secret=<redacted>&foo=bar`,
                   'http.method': 'GET',
                   'http.status_code': '200',
                   component: 'http2',

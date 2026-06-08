@@ -38,7 +38,13 @@ function getProtocol (req) {
 /**
  * Obfuscate query string
  *
- * @param {object} config
+ * When the regex matches inside a parameter, the parameter's entire value is
+ * redacted (not only the matched span). Matching a prefix and leaving the tail
+ * both leaks the sensitive remainder and explodes `http.url` cardinality, since
+ * the tail is the high-cardinality part (timestamps, UUIDs, free-text search).
+ * Parameters with no value (no `=`) are redacted whole.
+ *
+ * @param {{ queryStringObfuscation: boolean | RegExp }} config
  * @param {string} url
  * @returns {string} obfuscated URL
  */
@@ -53,11 +59,26 @@ function obfuscateQs (config, url) {
   const path = url.slice(0, i)
   if (queryStringObfuscation === true) return path
 
-  let qs = url.slice(i + 1)
+  const qs = url.slice(i + 1)
 
-  qs = qs.replace(queryStringObfuscation, '<redacted>')
+  // Fast path: most requests carry no sensitive parameter, so a single scan
+  // over the whole query string short-circuits before paying the per-parameter
+  // split / rebuild below. The shared RegExp carries the global flag, so reset
+  // `lastIndex` before relying on `test`.
+  queryStringObfuscation.lastIndex = 0
+  if (!queryStringObfuscation.test(qs)) return url
 
-  return `${path}?${qs}`
+  const params = qs.split('&')
+  for (let p = 0; p < params.length; p++) {
+    const param = params[p]
+    queryStringObfuscation.lastIndex = 0
+    if (!queryStringObfuscation.test(param)) continue
+
+    const eq = param.indexOf('=')
+    params[p] = eq === -1 ? '<redacted>' : `${param.slice(0, eq)}=<redacted>`
+  }
+
+  return `${path}?${params.join('&')}`
 }
 
 /**
