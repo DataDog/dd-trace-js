@@ -2623,7 +2623,7 @@
     ],
     "DD_TRACE_FS_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
         "default": "false"
       }
