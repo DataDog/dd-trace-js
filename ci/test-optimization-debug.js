@@ -22,6 +22,7 @@ const {
   renderFinalReport,
 } = require('./test-optimization-render-report')
 const {
+  normalizeKnownTests,
   startIntake,
   stopIntake,
 } = require('./test-optimization-intake')
@@ -39,6 +40,7 @@ const ARTIFACTS = {
   testOutput: 'dd-test-optimization-test-output.txt',
   testResult: 'dd-test-optimization-test-result.txt',
 }
+const ANSI_ESCAPE_RE = new RegExp(`${String.fromCharCode(27)}${String.raw`\[[0-?]*[ -/]*[@-~]`}`, 'g')
 const DEFAULT_READY_TIMEOUT_MS = 5000
 const READY_RETRY_INTERVAL_MS = 50
 
@@ -74,6 +76,14 @@ function parseArgs (args) {
       options.readyTimeoutMs = Number(args[++i])
     } else if (arg.startsWith('--ready-timeout-ms=')) {
       options.readyTimeoutMs = Number(arg.slice('--ready-timeout-ms='.length))
+    } else if (arg === '--settings-mode') {
+      options.settingsMode = args[++i]
+    } else if (arg.startsWith('--settings-mode=')) {
+      options.settingsMode = arg.slice('--settings-mode='.length)
+    } else if (arg === '--known-tests') {
+      options.knownTests = normalizeKnownTests(readJsonFile(args[++i]))
+    } else if (arg.startsWith('--known-tests=')) {
+      options.knownTests = normalizeKnownTests(readJsonFile(arg.slice('--known-tests='.length)))
     } else if (arg === '--no-clean') {
       options.clean = false
     } else if (arg === '--no-open') {
@@ -105,6 +115,8 @@ function getHelpText () {
     '  --service <name>          DD_SERVICE value for the debug run. Defaults to dd-test-optimization-debug.',
     '  --out-dir <dir>           Artifact directory. Defaults to the current directory.',
     '  --ready-timeout-ms <ms>   Time to wait for the fake intake /health endpoint. Defaults to 5000.',
+    '  --settings-mode <mode>    Fake settings mode: basic-reporting or efd.',
+    '  --known-tests <file>      Known tests JSON to return for EFD/debug runs.',
     '  --no-clean                Keep prior debug artifacts before running.',
     '  --no-open                 Skip the best-effort local HTML open attempt.',
   ].join('\n')
@@ -137,8 +149,10 @@ function runDebug (options, callback) {
   fs.writeFileSync(artifacts.static, `${JSON.stringify(staticReport, null, 2)}\n`)
 
   startIntake({
+    knownTests: options.knownTests,
     out: artifacts.intake,
     html: artifacts.html,
+    settingsMode: options.settingsMode,
   }, (startError, intake) => {
     if (startError) {
       callback(startError)
@@ -201,6 +215,16 @@ function runDebug (options, callback) {
       })
     })
   })
+}
+
+/**
+ * Reads a JSON file.
+ *
+ * @param {string} file JSON file path
+ * @returns {unknown} parsed JSON
+ */
+function readJsonFile (file) {
+  return JSON.parse(fs.readFileSync(path.resolve(file), 'utf8'))
 }
 
 /**
@@ -466,12 +490,76 @@ function getSpawnExitCode (result) {
  */
 function getTestResult (output) {
   const lines = output.split(/\r?\n/)
-    .map(line => line.trim())
+    .map(line => stripAnsi(line).trim())
     .filter(Boolean)
-    .reverse()
+  const jestResult = getJestTestResult(lines)
 
-  return lines.find(line => /\b\d+\s+(passing|failing|failed|passed|pending|skipped)\b/i.test(line) ||
+  if (jestResult) return jestResult
+
+  return lines.reverse().find(line => /\b\d+\s+(passing|failing|failed|passed|pending|skipped)\b/i.test(line) ||
     /\b\d+\s+tests?\s+(passed|failed|skipped)\b/i.test(line)) || 'unknown'
+}
+
+/**
+ * Strips terminal formatting from test output lines.
+ *
+ * @param {string} value terminal output line
+ * @returns {string} line without ANSI escape sequences
+ */
+function stripAnsi (value) {
+  return value.replaceAll(ANSI_ESCAPE_RE, '')
+}
+
+/**
+ * Extracts a Jest summary from cleaned test output lines.
+ *
+ * @param {string[]} lines cleaned output lines
+ * @returns {string|undefined} short Jest result summary
+ */
+function getJestTestResult (lines) {
+  const testsLine = lines.find(line => /^Tests:\s+/i.test(line))
+  if (!testsLine) return
+
+  const testParts = getJestCountParts(testsLine, 'test')
+  if (testParts.length === 0) return
+
+  const suitesLine = lines.find(line => /^Test Suites:\s+/i.test(line))
+  const suiteParts = suitesLine ? getJestCountParts(suitesLine, 'suite') : []
+  if (suiteParts.length === 0) return testParts.join(', ')
+
+  return `${testParts.join(', ')} (${suiteParts.join(', ')})`
+}
+
+/**
+ * Extracts status counts from a Jest summary line.
+ *
+ * @param {string} line cleaned Jest summary line
+ * @param {string} noun singular noun for the summarized item
+ * @returns {string[]} formatted count parts
+ */
+function getJestCountParts (line, noun) {
+  const parts = []
+  const statuses = ['failed', 'passed', 'skipped', 'pending', 'todo']
+
+  for (const status of statuses) {
+    const match = line.match(new RegExp(String.raw`\b(\d+)\s+${status}\b`, 'i'))
+    if (!match) continue
+
+    parts.push(`${match[1]} ${pluralize(Number(match[1]), noun)} ${status}`)
+  }
+
+  return parts
+}
+
+/**
+ * Pluralizes a short noun for a count.
+ *
+ * @param {number} count item count
+ * @param {string} noun singular noun
+ * @returns {string} singular or plural noun
+ */
+function pluralize (count, noun) {
+  return count === 1 ? noun : `${noun}s`
 }
 
 if (require.main === module) {

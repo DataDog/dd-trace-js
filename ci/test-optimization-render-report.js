@@ -159,9 +159,7 @@ function renderFinalReport (options) {
     `Primary funnel stage: ${analysis.primaryStage}`,
     '',
     'Scope:',
-    '- Selected test subset only.',
-    '- Basic reporting only: session, module, suite, and test events.',
-    '- Does not validate EFD, ITR, test skipping, test management, coverage, or the full CI workflow.',
+    ...getScopeLines(analysis),
     '',
     'Summary:',
     `- dd-trace: ${staticReport.ddTraceVersion || 'unknown'}`,
@@ -178,6 +176,7 @@ function renderFinalReport (options) {
     `- Test result: ${testResult || 'not recorded'}`,
     `- Intake shutdown: ${intakeArtifact.intake?.stoppedAt ? 'successful' : 'not confirmed'}`,
     `- Final artifact flushed: ${intakeArtifact.intake?.stoppedAt ? 'yes' : 'partial artifact possible'}`,
+    ...getEfdSummaryLines(analysis),
     '',
     'Consistency checks:',
     ...getConsistencyChecks(env, intakeArtifact, analysis),
@@ -222,7 +221,7 @@ function renderFinalReport (options) {
     'What this does not prove:',
     '- The full test suite reports correctly.',
     '- The CI workflow is configured correctly.',
-    '- EFD, ITR, test skipping, test management, or coverage are working.',
+    ...getNotProvenLines(analysis),
     '',
     'Recommended next actions:'
   )
@@ -254,6 +253,62 @@ function renderFinalReport (options) {
   )
 
   return lines.join('\n')
+}
+
+/**
+ * Gets scope lines.
+ *
+ * @param {object} analysis intake analysis
+ * @returns {string[]} scope lines
+ */
+function getScopeLines (analysis) {
+  const lines = [
+    '- Selected test subset only.',
+    '- Basic reporting: session, module, suite, and test events.',
+  ]
+
+  if (analysis.summary.efd.settingsEnabled) {
+    lines.push(
+      '- EFD check: known tests endpoint, new-test detection, and retry evidence for the selected subset.',
+      '- Does not validate ITR, test skipping, test management, coverage, or the full CI workflow.'
+    )
+  } else {
+    lines.push('- Does not validate EFD, ITR, test skipping, test management, coverage, or the full CI workflow.')
+  }
+
+  return lines
+}
+
+/**
+ * Gets optional EFD summary lines.
+ *
+ * @param {object} analysis intake analysis
+ * @returns {string[]} EFD summary lines
+ */
+function getEfdSummaryLines (analysis) {
+  if (!analysis.summary.efd.settingsEnabled && !analysis.summary.efd.requested) return []
+
+  return [
+    `- EFD settings enabled: ${analysis.summary.efd.settingsEnabled ? 'yes' : 'no'}`,
+    `- Known tests requested: ${analysis.summary.efd.requested ? 'yes' : 'no'}`,
+    `- Known tests received: ${analysis.summary.efd.knownTestsReceived}`,
+    `- New tests observed: ${analysis.summary.efd.newTests.length}`,
+    `- Retried new tests: ${analysis.summary.efd.retriedNewTests}`,
+  ]
+}
+
+/**
+ * Gets limitations that remain unproven.
+ *
+ * @param {object} analysis intake analysis
+ * @returns {string[]} limitation lines
+ */
+function getNotProvenLines (analysis) {
+  if (analysis.summary.efd.settingsEnabled) {
+    return ['- ITR, test skipping, test management, or coverage are working.']
+  }
+
+  return ['- EFD, ITR, test skipping, test management, or coverage are working.']
 }
 
 /**
@@ -589,6 +644,10 @@ function hasStaticFinding (findings, title) {
 function getProvesText (analysis, testCommand) {
   if (analysis.primaryStage === 'Reporting complete') {
     return `dd-trace/ci/init can report session, module, suite, and test events for: ${testCommand}`
+  }
+
+  if (analysis.primaryStage === 'EFD retried new test') {
+    return `Early Flake Detection retried a new test for: ${testCommand}`
   }
 
   return `The selected command reached stage "${analysis.primaryStage}" in the basic reporting funnel.`

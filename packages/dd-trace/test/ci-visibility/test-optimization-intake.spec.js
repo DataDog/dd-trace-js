@@ -12,9 +12,11 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const { encode } = require('../../src/msgpack')
 const {
   analyzeIntakeArtifact,
+  buildKnownTestsFromArtifact,
   renderAnalysisText,
 } = require('../../../../ci/test-optimization-intake-analysis')
 const {
+  normalizeKnownTests,
   parseArgs,
   startIntake,
   stopIntake,
@@ -129,6 +131,180 @@ describe('Test Optimization debug intake', () => {
     assert.strictEqual(analysis.primaryStage, 'Incomplete test event levels')
     assert.deepStrictEqual(analysis.summary.events.missingLevels, ['test_module_end', 'test_suite_end'])
     assert.ok(hasFinding(analysis, 'Incomplete test event levels'))
+  })
+
+  it('builds known tests from captured test events', () => {
+    const knownTests = buildKnownTestsFromArtifact({
+      requests: [
+        {
+          category: 'citestcycle',
+          payload: {
+            events: [
+              getTestEvent({
+                framework: 'mocha',
+                name: 'adds numbers',
+                suite: 'test/sum.spec.js',
+              }),
+              getTestEvent({
+                framework: 'mocha',
+                name: 'subtracts numbers',
+                suite: 'test/sum.spec.js',
+              }),
+              getTestEvent({
+                framework: 'mocha',
+                name: 'adds numbers',
+                suite: 'test/sum.spec.js',
+              }),
+            ],
+          },
+        },
+      ],
+    })
+
+    assert.deepStrictEqual(knownTests, {
+      mocha: {
+        'test/sum.spec.js': ['adds numbers', 'subtracts numbers'],
+      },
+    })
+  })
+
+  it('reports EFD retry evidence for a new test', () => {
+    const analysis = analyzeIntakeArtifact({
+      intake: {
+        settingsMode: 'efd',
+      },
+      requests: [
+        {
+          category: 'settings',
+          payload: {
+            data: {
+              attributes: {
+                repository_url: 'git@example.com:org/repo.git',
+                sha: 'abcdef',
+                branch: 'main',
+              },
+            },
+          },
+        },
+        {
+          category: 'known_tests',
+        },
+        {
+          category: 'citestcycle',
+          payload: {
+            events: [
+              {
+                type: 'test_session_end',
+                content: {
+                  test_session_id: 123n,
+                },
+              },
+              {
+                type: 'test_module_end',
+                content: {
+                  test_session_id: 123n,
+                },
+              },
+              {
+                type: 'test_suite_end',
+                content: {
+                  test_session_id: 123n,
+                },
+              },
+              getTestEvent({
+                framework: 'mocha',
+                isNew: true,
+                isRetry: true,
+                name: 'new efd test',
+                suite: 'test/sum.spec.js',
+              }),
+            ],
+          },
+        },
+      ],
+      settings: {
+        responses: [
+          {
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': 3,
+              },
+            },
+            known_tests_enabled: true,
+          },
+        ],
+      },
+      knownTests: {
+        responses: [
+          {
+            data: {
+              attributes: {
+                tests: {
+                  mocha: {
+                    'test/sum.spec.js': ['adds numbers'],
+                  },
+                },
+              },
+            },
+          },
+        ],
+      },
+    })
+
+    assert.strictEqual(analysis.primaryStage, 'EFD retried new test')
+    assert.strictEqual(analysis.summary.efd.knownTestsReceived, 1)
+    assert.strictEqual(analysis.summary.efd.newTests.length, 1)
+    assert.strictEqual(analysis.summary.efd.retriedNewTests, 1)
+    assert.deepStrictEqual(analysis.summary.efd.retriedNewTestNames, ['new efd test'])
+    assert.ok(hasFinding(analysis, 'EFD retried new test'))
+  })
+
+  it('serves configured EFD settings and known tests', (done) => {
+    const knownTests = {
+      mocha: {
+        'test/sum.spec.js': ['adds numbers'],
+      },
+    }
+
+    startIntake({
+      knownTests,
+      out: path.join(tmpDir, 'intake.json'),
+      settingsMode: 'efd',
+    }, (error, startedIntake) => {
+      assert.ifError(error)
+      intake = startedIntake
+
+      postJsonResponse(intake.url, '/api/v2/libraries/tests/services/setting', {}, (settingsError, settings) => {
+        assert.ifError(settingsError)
+        assert.strictEqual(settings.data.attributes.known_tests_enabled, true)
+        assert.strictEqual(settings.data.attributes.early_flake_detection.enabled, true)
+
+        postJsonResponse(intake.url, '/api/v2/ci/libraries/tests', {}, (knownTestsError, response) => {
+          assert.ifError(knownTestsError)
+          assert.deepStrictEqual(response.data.attributes.tests, knownTests)
+          done()
+        })
+      })
+    })
+  })
+
+  it('normalizes known tests endpoint response files', () => {
+    assert.deepStrictEqual(normalizeKnownTests({
+      data: {
+        attributes: {
+          tests: {
+            mocha: {
+              'test/sum.spec.js': ['adds numbers'],
+            },
+          },
+        },
+      },
+    }), {
+      mocha: {
+        'test/sum.spec.js': ['adds numbers'],
+      },
+    })
   })
 
   it('records and analyzes decoded citestcycle payloads', (done) => {
@@ -268,6 +444,15 @@ describe('Test Optimization debug intake', () => {
   })
 
   it('parses debug wrapper arguments', () => {
+    const knownTestsPath = path.join(tmpDir, 'known-tests.json')
+    const knownTests = {
+      mocha: {
+        'test/sum.spec.js': ['adds numbers'],
+      },
+    }
+
+    fs.writeFileSync(knownTestsPath, JSON.stringify({ data: { attributes: { tests: knownTests } } }))
+
     assert.deepStrictEqual(parseDebugArgs([
       '--test-command',
       'npm test -- test/sum.spec.js',
@@ -275,14 +460,19 @@ describe('Test Optimization debug intake', () => {
       '--out-dir',
       tmpDir,
       '--ready-timeout-ms=1234',
+      '--settings-mode=efd',
+      '--known-tests',
+      knownTestsPath,
       '--no-clean',
       '--no-open',
     ]), {
       clean: false,
+      knownTests,
       open: false,
       outDir: tmpDir,
       readyTimeoutMs: 1234,
       service: 'ci-debug',
+      settingsMode: 'efd',
       testCommand: 'npm test -- test/sum.spec.js',
     })
   })
@@ -325,6 +515,14 @@ describe('Test Optimization debug intake', () => {
 
   it('extracts a deterministic one-line test result', () => {
     assert.strictEqual(getTestResult('\n  2 passing (4ms)\n'), '2 passing (4ms)')
+    assert.strictEqual(getTestResult([
+      '\u001b[1mTest Suites: \u001b[22m\u001b[1m\u001b[32m1 passed\u001b[39m\u001b[22m, 1 total',
+      '\u001b[1mTests:       \u001b[22m\u001b[1m\u001b[32m16 passed\u001b[39m\u001b[22m, 16 total',
+    ].join('\n')), '16 tests passed (1 suite passed)')
+    assert.strictEqual(getTestResult([
+      'Test Suites: 1 failed, 2 passed, 3 total',
+      'Tests:       4 failed, 8 passed, 12 total',
+    ].join('\n')), '4 tests failed, 8 tests passed (1 suite failed, 2 suites passed)')
     assert.strictEqual(getTestResult('no runner summary here\n'), 'unknown')
   })
 
@@ -459,6 +657,37 @@ describe('Test Optimization debug intake', () => {
     assert.match(report, /Agent JSON report: /)
   })
 
+  it('renders EFD evidence in the final runbook report', () => {
+    const staticPath = path.join(tmpDir, 'static.json')
+    const intakePath = path.join(tmpDir, 'intake.json')
+    const htmlPath = path.join(tmpDir, 'report.html')
+    const testCommandPath = path.join(tmpDir, 'test-command.txt')
+    const testExitCodePath = path.join(tmpDir, 'test-exit-code.txt')
+    const testCommand = 'npm test -- test/sum.spec.js'
+
+    fs.writeFileSync(staticPath, JSON.stringify(getStaticReport(), null, 2))
+    fs.writeFileSync(intakePath, JSON.stringify(getEfdIntakeArtifact(intakePath, htmlPath), null, 2))
+    fs.writeFileSync(testCommandPath, `${testCommand}\n`)
+    fs.writeFileSync(testExitCodePath, '0\n')
+
+    const report = renderFinalReport({
+      static: staticPath,
+      intake: intakePath,
+      testCommandFile: testCommandPath,
+      testExitCodeFile: testExitCodePath,
+      testResult: '6 passing',
+    })
+
+    assert.match(report, /Primary funnel stage: EFD retried new test/)
+    assert.match(report, /- EFD check: known tests endpoint, new-test detection, and retry evidence/)
+    assert.match(report, /- EFD settings enabled: yes/)
+    assert.match(report, /- Known tests requested: yes/)
+    assert.match(report, /- Known tests received: 1/)
+    assert.match(report, /- New tests observed: 1/)
+    assert.match(report, /- Retried new tests: 1/)
+    assert.match(report, /Early Flake Detection retried a new test for: npm test -- test\/sum\.spec\.js/)
+  })
+
   it('requires a test command when rendering the final report', () => {
     const staticPath = path.join(tmpDir, 'static.json')
     const intakePath = path.join(tmpDir, 'intake.json')
@@ -537,10 +766,139 @@ function getCompleteIntakeArtifact (intakePath, htmlPath) {
   }
 }
 
+function getEfdIntakeArtifact (intakePath, htmlPath) {
+  return {
+    ...getCompleteIntakeArtifact(intakePath, htmlPath),
+    intake: {
+      ...getCompleteIntakeArtifact(intakePath, htmlPath).intake,
+      settingsMode: 'efd',
+    },
+    requests: [
+      {
+        category: 'settings',
+        payload: {
+          data: {
+            attributes: {
+              branch: 'main',
+              repository_url: 'git@example.com:org/repo.git',
+              sha: 'abcdef',
+            },
+          },
+        },
+      },
+      {
+        category: 'known_tests',
+      },
+      {
+        category: 'citestcycle',
+        payload: {
+          events: [
+            { type: 'test_session_end', content: { test_session_id: '1' } },
+            { type: 'test_module_end', content: { test_session_id: '1' } },
+            { type: 'test_suite_end', content: { test_session_id: '1' } },
+            getTestEvent({
+              framework: 'mocha',
+              isNew: true,
+              isRetry: true,
+              name: 'sum dd trace EFD debug temporary test',
+              sessionId: '1',
+              suite: 'test/sum.spec.js',
+            }),
+          ],
+        },
+      },
+    ],
+    settings: {
+      responses: [
+        {
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': 3,
+            },
+          },
+          known_tests_enabled: true,
+        },
+      ],
+    },
+    knownTests: {
+      responses: [
+        {
+          data: {
+            attributes: {
+              tests: {
+                mocha: {
+                  'test/sum.spec.js': ['sum adds positive numbers'],
+                },
+              },
+            },
+          },
+        },
+      ],
+    },
+  }
+}
+
+function getTestEvent ({ framework, isNew, isRetry, name, sessionId = '123', suite }) {
+  const meta = {
+    'test.framework': framework,
+    'test.name': name,
+    'test.suite': suite,
+  }
+
+  if (isNew) {
+    meta['test.is_new'] = 'true'
+  }
+
+  if (isRetry) {
+    meta['test.is_retry'] = 'true'
+    meta['test.retry_reason'] = 'early_flake_detection'
+  }
+
+  return {
+    type: 'test',
+    content: {
+      test_session_id: sessionId,
+      meta,
+    },
+  }
+}
+
 function postJson (baseUrl, pathname, payload, callback) {
   postBuffer(baseUrl, pathname, Buffer.from(JSON.stringify(payload)), {
     'Content-Type': 'application/json',
   }, callback)
+}
+
+function postJsonResponse (baseUrl, pathname, payload, callback) {
+  const url = new URL(pathname, baseUrl)
+  const body = Buffer.from(JSON.stringify(payload))
+  const req = http.request({
+    method: 'POST',
+    hostname: url.hostname,
+    port: url.port,
+    path: url.pathname,
+    headers: {
+      'Content-Length': body.length,
+      'Content-Type': 'application/json',
+    },
+  }, (res) => {
+    const chunks = []
+
+    res.on('data', chunk => {
+      chunks.push(chunk)
+    })
+    res.once('end', () => {
+      try {
+        callback(undefined, JSON.parse(Buffer.concat(chunks).toString('utf8')))
+      } catch (error) {
+        callback(error)
+      }
+    })
+  })
+
+  req.once('error', callback)
+  req.end(body)
 }
 
 function getJson (url, callback) {

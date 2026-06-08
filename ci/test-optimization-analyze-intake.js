@@ -9,6 +9,7 @@ const path = require('node:path')
 
 const {
   analyzeIntakeArtifact,
+  buildKnownTestsFromArtifact,
   renderAnalysisText,
 } = require('./test-optimization-intake-analysis')
 
@@ -34,6 +35,10 @@ function parseArgs (args) {
       options.out = args[++i]
     } else if (arg.startsWith('--out=')) {
       options.out = arg.slice('--out='.length)
+    } else if (arg === '--known-tests-out') {
+      options.knownTestsOut = args[++i]
+    } else if (arg.startsWith('--known-tests-out=')) {
+      options.knownTestsOut = arg.slice('--known-tests-out='.length)
     } else if (arg === '--help' || arg === '-h') {
       options.help = true
     } else if (options.file) {
@@ -57,6 +62,7 @@ function getHelpText () {
     '',
     'Applies fixed Test Optimization decision-tree rules to a fake intake artifact.',
     'With --open, tries common browser commands and then the OS opener for the generated HTML report.',
+    'With --known-tests-out, writes known tests derived from captured test events.',
   ].join('\n')
 }
 
@@ -67,9 +73,17 @@ function getHelpText () {
  * @returns {object} analysis report
  */
 function analyzeFile (file) {
-  const artifactPath = path.resolve(file)
-  const artifact = JSON.parse(fs.readFileSync(artifactPath, 'utf8'))
-  return analyzeIntakeArtifact(artifact)
+  return analyzeIntakeArtifact(readArtifact(file))
+}
+
+/**
+ * Reads an artifact file.
+ *
+ * @param {string} file artifact path
+ * @returns {object} parsed artifact
+ */
+function readArtifact (file) {
+  return JSON.parse(fs.readFileSync(path.resolve(file), 'utf8'))
 }
 
 /**
@@ -236,9 +250,15 @@ if (require.main === module) {
     process.exitCode = 1
   } else if (options.file) {
     try {
-      const analysis = analyzeFile(options.file)
+      const artifact = readArtifact(options.file)
+      const analysis = analyzeIntakeArtifact(artifact)
       const openAttempt = options.open ? openHtmlReport(analysis) : undefined
       let output
+
+      if (options.knownTestsOut) {
+        const knownTests = buildKnownTestsFromArtifact(artifact)
+        fs.writeFileSync(path.resolve(options.knownTestsOut), `${JSON.stringify(knownTests, null, 2)}\n`)
+      }
 
       if (options.json) {
         output = JSON.stringify({
@@ -272,4 +292,5 @@ module.exports = {
   analyzeFile,
   openHtmlReport,
   parseArgs,
+  readArtifact,
 }

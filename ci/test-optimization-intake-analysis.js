@@ -8,6 +8,13 @@ const GIT_METADATA_FIELDS = [
   ['commitSha', 'sha'],
   ['branch', 'branch'],
 ]
+const EFD_SETTINGS_MODES = new Set(['debug-all', 'efd'])
+const TEST_FRAMEWORK = 'test.framework'
+const TEST_IS_NEW = 'test.is_new'
+const TEST_IS_RETRY = 'test.is_retry'
+const TEST_NAME = 'test.name'
+const TEST_RETRY_REASON = 'test.retry_reason'
+const TEST_SUITE = 'test.suite'
 
 /**
  * Builds a fixed-rule diagnosis from a fake intake artifact.
@@ -18,7 +25,9 @@ const GIT_METADATA_FIELDS = [
 function analyzeIntakeArtifact (artifact) {
   const summary = summarizeIntakeArtifact(artifact)
   const findings = []
-  const advancedFeatureChecks = artifact?.intake?.settingsMode === 'debug-all'
+  const settingsMode = artifact?.intake?.settingsMode
+  const advancedFeatureChecks = EFD_SETTINGS_MODES.has(settingsMode)
+  const efdChecks = settingsMode === 'efd'
 
   if (!summary.anyRequestReceived) {
     addFinding(findings, 'error', 'Nothing', {
@@ -113,6 +122,26 @@ function analyzeIntakeArtifact (artifact) {
     })
   }
 
+  if (efdChecks && summary.efd.settingsEnabled && summary.efd.requested && summary.efd.retriedNewTests === 0) {
+    addFinding(findings, 'error', 'EFD retry missing', {
+      observation: 'efd.retriedNewTests: 0',
+      cause:
+        'Early Flake Detection settings and known tests were requested, but no retry event was observed for a ' +
+        'test marked as new.',
+      fix:
+        'Confirm the second run served known tests from the first run, added a test that is not in that known ' +
+        'tests file, and selected that new test in the command.',
+    })
+  }
+
+  if (efdChecks && summary.efd.retriedNewTests > 0) {
+    addFinding(findings, 'ok', 'EFD retried new test', {
+      observation: `efd.retriedNewTests: ${summary.efd.retriedNewTests}`,
+      cause: 'The second run marked at least one test as new and retried it for Early Flake Detection.',
+      fix: 'No EFD retry fix is needed for the selected test subset.',
+    })
+  }
+
   if (advancedFeatureChecks && summary.coverage.expected && summary.coverage.citestcov === 0) {
     addFinding(findings, 'warning', 'Coverage missing', {
       observation: 'ITR or coverage was enabled, but citestcov: 0',
@@ -186,6 +215,9 @@ function summarizeIntakeArtifact (artifact) {
       settingsEnabled: efdSettingsEnabled,
       requested: (endpointCounts.known_tests || 0) > 0,
       knownTestsReceived,
+      newTests: getNewTests(events),
+      retriedNewTests: getRetriedNewTests(events).length,
+      retriedNewTestNames: getRetriedNewTests(events).map(test => test.name),
     },
     coverage: {
       expected: !!(settings.lastResponse?.itr_enabled || settings.lastResponse?.code_coverage),
@@ -194,6 +226,32 @@ function summarizeIntakeArtifact (artifact) {
     },
     decodeErrors: getDecodeErrors(requests),
   }
+}
+
+/**
+ * Builds known tests from decoded test events in a first-run intake artifact.
+ *
+ * @param {object} artifact fake intake artifact
+ * @returns {object} known tests object keyed by framework, suite, and test name
+ */
+function buildKnownTestsFromArtifact (artifact) {
+  const knownTests = {}
+
+  for (const event of collectEvents(Array.isArray(artifact?.requests) ? artifact.requests : [])) {
+    if (event.type !== 'test') continue
+
+    const test = getTestIdentity(event)
+    if (!test.name) continue
+
+    knownTests[test.framework] = knownTests[test.framework] || {}
+    knownTests[test.framework][test.suite] = knownTests[test.framework][test.suite] || []
+
+    if (!knownTests[test.framework][test.suite].includes(test.name)) {
+      knownTests[test.framework][test.suite].push(test.name)
+    }
+  }
+
+  return knownTests
 }
 
 /**
@@ -217,6 +275,7 @@ function renderAnalysisText (analysis) {
       `modules=${analysis.summary.events.counts.test_module_end}, ` +
       `suites=${analysis.summary.events.counts.test_suite_end}, ` +
       `tests=${analysis.summary.events.counts.test}`,
+    ...getEfdTextLines(analysis),
     '',
   ]
 
@@ -231,6 +290,24 @@ function renderAnalysisText (analysis) {
   }
 
   return lines.join('\n').trimEnd()
+}
+
+/**
+ * Gets optional EFD text lines.
+ *
+ * @param {object} analysis analysis report
+ * @returns {string[]} EFD lines
+ */
+function getEfdTextLines (analysis) {
+  if (!analysis.summary.efd.settingsEnabled && !analysis.summary.efd.requested) return []
+
+  return [
+    `EFD settings enabled: ${analysis.summary.efd.settingsEnabled}`,
+    `known tests requested: ${analysis.summary.efd.requested}`,
+    `known tests received: ${analysis.summary.efd.knownTestsReceived}`,
+    `new tests observed: ${analysis.summary.efd.newTests.length}`,
+    `retried new tests: ${analysis.summary.efd.retriedNewTests}`,
+  ]
 }
 
 /**
@@ -324,6 +401,64 @@ function collectEvents (requests) {
 }
 
 /**
+ * Gets tests marked as new.
+ *
+ * @param {Array<object>} events decoded events
+ * @returns {Array<object>} test identities
+ */
+function getNewTests (events) {
+  const tests = []
+
+  for (const event of events) {
+    if (event.type !== 'test') continue
+    if (event.content?.meta?.[TEST_IS_NEW] !== 'true') continue
+
+    tests.push(getTestIdentity(event))
+  }
+
+  return tests
+}
+
+/**
+ * Gets retried tests marked as new.
+ *
+ * @param {Array<object>} events decoded events
+ * @returns {Array<object>} test identities
+ */
+function getRetriedNewTests (events) {
+  const tests = []
+
+  for (const event of events) {
+    if (event.type !== 'test') continue
+
+    const meta = event.content?.meta || {}
+    if (meta[TEST_IS_NEW] !== 'true') continue
+    if (meta[TEST_IS_RETRY] !== 'true' && meta[TEST_RETRY_REASON] !== 'early_flake_detection') continue
+
+    tests.push(getTestIdentity(event))
+  }
+
+  return tests
+}
+
+/**
+ * Gets stable identifying fields for a test event.
+ *
+ * @param {object} event decoded test event
+ * @returns {{ framework: string, suite: string, name: string|undefined }} test identity
+ */
+function getTestIdentity (event) {
+  const content = event.content || {}
+  const meta = content.meta || {}
+
+  return {
+    framework: meta[TEST_FRAMEWORK] || 'unknown',
+    suite: meta[TEST_SUITE] || meta['test.source.file'] || content.resource || 'unknown',
+    name: meta[TEST_NAME] || content.name || content.resource,
+  }
+}
+
+/**
  * Finds missing git fields from the settings request payload.
  *
  * @param {Array<object>} requests recorded requests
@@ -375,14 +510,22 @@ function getKnownTestsReceived (artifact) {
   const lastResponse = responses[responses.length - 1]
   const tests = lastResponse?.data?.attributes?.tests
 
-  if (Array.isArray(tests)) return tests.length
-  if (!tests || typeof tests !== 'object') return 0
+  return countKnownTests(tests)
+}
+
+/**
+ * Counts known tests in nested known-tests response data.
+ *
+ * @param {unknown} value known tests value
+ * @returns {number} known test count
+ */
+function countKnownTests (value) {
+  if (Array.isArray(value)) return value.length
+  if (!value || typeof value !== 'object') return 0
 
   let count = 0
-  for (const value of Object.values(tests)) {
-    if (Array.isArray(value)) {
-      count += value.length
-    }
+  for (const child of Object.values(value)) {
+    count += countKnownTests(child)
   }
   return count
 }
@@ -473,6 +616,7 @@ function getDecodeErrors (requests) {
 
 module.exports = {
   analyzeIntakeArtifact,
+  buildKnownTestsFromArtifact,
   renderAnalysisText,
   summarizeIntakeArtifact,
 }

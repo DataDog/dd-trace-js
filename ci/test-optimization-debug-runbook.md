@@ -3,6 +3,20 @@
 This runbook is to diagnose Datadog Test Optimization setup problems in a JavaScript repository.
 Use repository-specific judgment to adapt commands.
 
+## Agent Execution Summary
+
+- Step 0: clean prior artifacts.
+- Wrapper path: choose one small test command from Step 2, then run
+  `node ./node_modules/dd-trace/ci/test-optimization-debug.js --test-command "$(cat dd-test-optimization-test-command.txt)" --no-open`
+  as described in the Preferred Wrapper section below.
+- Step 1 is optional on the wrapper path because the wrapper runs static diagnosis and writes
+  `dd-test-optimization-static.json`. Run Step 1 first when the wrapper is unavailable or when
+  command selection needs static framework details.
+- If the wrapper succeeds with `Reporting complete`, skip manual Steps 3-6 and continue to Step 7.
+- Step 7: run the EFD check: first run -> known tests file -> add temporary test -> second EFD run -> validation.
+- Step 7 cleanup: remove the temporary test and verify it is gone.
+- Step 8: use the final report template and answer the four diagnostic questions with the question text inline.
+
 The goal is to answer four questions:
 
 1. Is `dd-trace` installed and statically configured in a supported way?
@@ -16,7 +30,7 @@ Diagnostic question map:
 - Does `dd-trace/ci/init` reach the test process through `NODE_OPTIONS`? Steps 2 and 4.
 - Does a small test subset send Test Optimization requests to a local fake intake? Steps 3, 4, and 5.
 - If data is reported, does it include session, module, suite, and test events? Step 6.
-- Step 7: synthesize all diagnostic answers.
+- Step 8: synthesize all diagnostic answers.
 
 "All expected test event levels" means:
 
@@ -27,31 +41,82 @@ Diagnostic question map:
 
 Do not use a real Datadog API key for this flow. Always route to the local fake intake.
 
-## Quick Path
-
-- Clean prior artifacts.
-- Run static diagnosis.
-- Choose one small test command.
-- Start the fake intake.
-- Run the test command with injected Test Optimization env.
-- Stop the fake intake.
-- Run the analyzer and final report renderer.
-- Answer the four diagnostic questions with the question text inline.
-
 ## Preferred Wrapper
 
-Use this wrapper when available. Adapt only the `--test-command` value:
+Use this wrapper when available. Adapt only the `--test-command` value. Use `--no-open` by default
+for coding-agent runs; the HTML report URL and path are still printed and opening the file is not
+part of the diagnosis.
+
+Wrapper happy path:
+
+1. Choose one small test command using the Step 2 priority table.
+2. Run the wrapper with the selected command and `--no-open`; the wrapper binds `127.0.0.1`, so
+   sandboxed environments may need loopback bind/connect approval.
+3. If it reports `Reporting complete`, skip manual Steps 3-6.
+4. Run Step 7 to validate EFD.
+5. Run the Step 8 summary extractor and use the final response template.
 
 Adapt:
 
 ```bash
-node ./node_modules/dd-trace/ci/test-optimization-debug.js --test-command "npm test -- path/to/test.spec.js"
+node ./node_modules/dd-trace/ci/test-optimization-debug.js --test-command "npm test -- path/to/test.spec.js" --no-open
 ```
+
+Yarn example:
+
+```bash
+node ./node_modules/dd-trace/ci/test-optimization-debug.js --test-command "yarn test path/to/test.spec.js" --no-open
+```
+
+After completing Step 2, use the selected-command file:
+
+Verbatim:
+
+```bash
+node ./node_modules/dd-trace/ci/test-optimization-debug.js \
+  --test-command "$(cat dd-test-optimization-test-command.txt)" \
+  --no-open
+```
+
+Sandbox note: if wrapper startup fails with `listen EPERM 127.0.0.1`, retry the same wrapper
+command with loopback bind/connect approval. This is a local environment permission failure, not a
+Test Optimization reporting failure. After one loopback permission failure, run subsequent wrapper
+or manual fake-intake commands with the same loopback approval.
 
 The wrapper runs the static diagnosis, starts the fake intake in the same Node.js process, runs the
 selected test command, stops the intake, writes all artifacts, renders the final report, and tries
 to open the local HTML report. If the open attempt fails, continue; it does not affect the
-diagnosis.
+diagnosis. The wrapper writes `dd-test-optimization-test-command.txt`; later steps read that file
+instead of asking the agent to reconstruct the selected command.
+
+If the wrapper succeeds and the primary stage is `Reporting complete`, skip manual Steps 3-6 and
+continue to Step 7.
+
+Wrapper success produces the same analysis and final-report artifacts that manual Steps 3-6
+produce. Use these wrapper-generated root artifacts for Step 8:
+
+- `dd-test-optimization-agent-report.txt`
+- `dd-test-optimization-agent-report.json`
+- `dd-test-optimization-final-report.txt`
+- `dd-test-optimization-intake.json`
+- `dd-test-optimization-report.html`
+
+Analyzer JSON key paths used in this runbook:
+
+- `primaryStage`
+- `summary.requestCount`
+- `summary.citestcycle.payloadCount`
+- `summary.events.counts`
+- `summary.events.missingLevels`
+- `summary.decodeErrors`
+- `summary.efd.settingsEnabled`
+- `summary.efd.requested`
+- `summary.efd.knownTestsReceived`
+- `summary.efd.retriedNewTests`
+- `summary.efd.retriedNewTestNames`
+
+For the EFD check later in this runbook, use wrapper `--out-dir` values so the first and second
+runs do not overwrite each other.
 
 The wrapper binds a local fake intake on `127.0.0.1` and the test process connects back to it. In
 sandboxed agent environments, the wrapper may require the same loopback bind/connect approval as
@@ -62,8 +127,9 @@ debug logs show that `NODE_OPTIONS` reached the test process, rerun the manual p
 sequence with the intake alive through test execution, shutdown, and analysis before treating
 `Nothing` as a tracer failure.
 
-Use the manual steps below when the wrapper is unavailable, when it fails before producing
-artifacts, or when the repository needs framework-specific command handling.
+Use the manual fallback path below only when the wrapper is unavailable, when it fails before
+producing artifacts, when it reports `Nothing` after a confirmed test run, or when the repository
+needs framework-specific command handling.
 
 ## Tools
 
@@ -112,6 +178,9 @@ rm -f \
   dd-intake-shutdown-url.txt \
   dd-intake-url.txt \
   dd-test-optimization-env.txt \
+  dd-test-optimization-efd-command.txt \
+  dd-test-optimization-efd-temp-test-file.txt \
+  dd-test-optimization-known-tests.json \
   dd-test-optimization-agent-report.json \
   dd-test-optimization-final-report.txt \
   dd-test-optimization-static.json \
@@ -122,6 +191,10 @@ rm -f \
   dd-test-optimization-test-output.txt \
   dd-test-optimization-test-result.txt \
   dd-test-optimization-report.html
+
+rm -rf \
+  dd-test-optimization-basic \
+  dd-test-optimization-efd
 ```
 
 Reruns use stable artifact names by default. Remove stale intermediate artifacts before continuing.
@@ -165,10 +238,12 @@ The static diagnosis does not prove the live debug command has an API key. The l
 set `DD_API_KEY=debug`; without an API key, `dd-trace/ci/init` can warn and skip reporting while
 the selected tests still pass.
 
-### 2. Identify how to run a small test subset
+### 2. Choose a test command (wrapper path entry point)
 
 Inspect `package.json`, framework config files, and the static diagnosis output.
-Use the actionable static findings printed in Step 1.
+Use the actionable static findings printed in Step 1 when Step 1 was run. On the wrapper path, the
+wrapper produces the root `dd-test-optimization-static.json` after the selected command is chosen.
+This is the only step required before running the Preferred Wrapper.
 
 Run discovery commands:
 
@@ -176,6 +251,7 @@ Verbatim:
 
 ```bash
 cat package.json
+git status --short
 
 find . \
   \( -path ./node_modules -o -path ./.git -o -path ./vendor \) -prune -o \
@@ -190,20 +266,27 @@ find . \
   -print | head -20
 ```
 
-Choose the smallest command that genuinely runs tests:
+Choose the smallest command that genuinely runs tests.
+
+Command selection priority:
+
+| Priority | Repository shape | Selected command |
+| --- | --- | --- |
+| 1 | Yarn project where `scripts.test` accepts file arguments | `yarn test path/to/test-file` |
+| 2 | npm project where `scripts.test` accepts file arguments | `npm test -- path/to/test-file` |
+| 3 | `scripts.test` cannot accept direct file arguments | `./node_modules/.bin/runner-binary path/to/test-file` |
+| 4 | `scripts.test` is absent | `./node_modules/.bin/runner-binary path/to/test-file` |
+| 5 | Cypress project | repository Cypress command with one `--spec path/to/spec` equivalent |
+| 6 | Playwright project | repository Playwright command with one test file or grep filter |
+
+Selection guardrails:
 
 - Prefer one or two existing test files.
+- Prefer test files that are not listed in `git status --short`; avoid user-modified files when a
+  clean equivalent exists.
 - Preserve the repository's normal runner command when possible.
 - Avoid full suites, watch mode, update snapshots, browser UI mode, or destructive scripts.
-- For Jest, Mocha, Cucumber, Playwright, and Vitest, prefer a direct file argument when the runner supports it.
-- For Cypress, prefer a single spec with the repository's existing Cypress command.
-- The test runner binary is the executable that runs tests, such as `mocha`, `jest`, `vitest`, or `cypress`.
-- Check `package.json` `scripts.test` first. If it invokes a runner that accepts direct file arguments, prefer `npm test -- path/to/test-file`.
-- Runners that accept direct file arguments through `npm test -- path/to/test-file` include `mocha`, `jest`, `vitest`, and `cucumber-js`.
 - If `scripts.test` already contains runner flags, verify the file argument reaches the runner as intended.
-- If `scripts.test` is absent, use `./node_modules/.bin/runner-binary path/to/test-file`.
-- If `scripts.test` hardcodes a glob, hardcodes a config-specific file pattern, or has flags that conflict with a direct file argument, use `./node_modules/.bin/runner-binary path/to/test-file`.
-- If `scripts.test` cannot accept a file argument, use `./node_modules/.bin/runner-binary path/to/test-file`.
 - Never write a bare runner binary command such as `mocha test/sum.spec.js`.
 
 Set `SELECTED_TEST_COMMAND` to the selected command, then write it:
@@ -212,14 +295,21 @@ Adapt:
 
 ```bash
 SELECTED_TEST_COMMAND='FILL_IN' # replace FILL_IN before running, for example: npm test -- test/sum.spec.js
-# Alternative example: SELECTED_TEST_COMMAND='./node_modules/.bin/jest test/foo.test.js'
+# Yarn example: SELECTED_TEST_COMMAND='yarn test test/sum.spec.js'
+# Direct binary example: SELECTED_TEST_COMMAND='./node_modules/.bin/jest test/foo.test.js'
 if [ "$SELECTED_TEST_COMMAND" = 'FILL_IN' ] || [ -z "$SELECTED_TEST_COMMAND" ]; then
   echo "Replace FILL_IN with the selected test command before continuing."
   exit 1
 fi
+printf 'Selected test command: %s\n' "$SELECTED_TEST_COMMAND"
 printf '%s\n' "$SELECTED_TEST_COMMAND" > dd-test-optimization-test-command.txt
 printf '%s\n' 'unknown' > dd-test-optimization-test-result.txt
 ```
+
+## Manual Fallback Path
+
+Run manual Steps 3-6 only when the wrapper path is unavailable or inconclusive. If the wrapper
+succeeded with `Reporting complete`, skip to Step 7.
 
 ### 3. Start the fake intake and report artifact
 
@@ -233,6 +323,8 @@ Launch:
 Verbatim:
 
 ```bash
+set -e
+
 INTAKE_LOG="$(mktemp "${TMPDIR:-/tmp}/dd-test-optimization-intake.XXXXXX.log")"
 echo "$INTAKE_LOG" > dd-intake-log-path.txt
 
@@ -254,6 +346,8 @@ Verbatim:
 
 ```bash
 # Run after the launch block above completes.
+set -e
+
 INTAKE_LOG="$(cat dd-intake-log-path.txt)"
 INTAKE_URL="$(sed -n 's/^Intake URL: //p' "$INTAKE_LOG" | tail -n 1)"
 SHUTDOWN_URL="$(sed -n 's/^Shutdown URL: //p' "$INTAKE_LOG" | tail -n 1)"
@@ -342,6 +436,8 @@ Run the selected command:
 Verbatim:
 
 ```bash
+set -e
+
 INTAKE_URL="$(cat dd-intake-url.txt)"
 TEST_COMMAND="$(cat dd-test-optimization-test-command.txt)"
 TEST_OUTPUT=dd-test-optimization-test-output.txt
@@ -530,33 +626,417 @@ artifact/state problems before applying funnel-stage fixes.
 - If consistency checks are `ok` and the stage is still `Nothing`, use the matching decision-tree
   stage below.
 
-If the primary stage is anything other than `Reporting complete`, consult the decision tree under
-the matching stage heading before writing the final response.
+If the primary stage is anything other than `Reporting complete`, consult `## Decision Tree` below
+Step 8 under the matching stage heading before writing the final response.
 
 The first line of the analyzer text report is the canonical HTML report `file://` URL. Copy that
 line exactly into the final response instead of rewriting it from memory. The second line is the
 absolute HTML report path, and the third line is the suggested open command for the HTML report.
 
-### 7. Report back
+### 7. Test Early Flake Detection
 
-Include the Step 6c stdout report in the final response. Do not `cat`
-`dd-test-optimization-final-report.txt` after Step 6c; that duplicates the same report. Add notable
-weird cases not represented in the generated report only when needed.
+Run this step after the basic reporting result is `Reporting complete`. If basic reporting is not
+complete, do not run EFD yet; fix the basic reporting funnel first.
+
+EFD requires two runs:
+
+- First run: capture the currently known tests from the selected subset.
+- Second run: serve those known tests, add one new deterministic passing test, and verify that the
+  new test is retried.
+
+Step 7 always runs the wrapper again with `--out-dir`; do not reuse the root wrapper artifact as the
+EFD baseline.
+
+7a. Run the first baseline run in its own artifact directory and extract known tests:
+
+Required: use `--out-dir "$BASIC_DIR"` to avoid overwriting root artifacts. It prevents the
+baseline EFD run from overwriting the root wrapper artifacts used for Step 8.
+
+Verbatim:
+
+```bash
+set -e
+
+BASIC_DIR=dd-test-optimization-basic
+TEST_COMMAND="$(cat dd-test-optimization-test-command.txt)"
+
+node ./node_modules/dd-trace/ci/test-optimization-debug.js \
+  --test-command "$TEST_COMMAND" \
+  --out-dir "$BASIC_DIR" \
+  --no-open
+
+node ./node_modules/dd-trace/ci/test-optimization-analyze-intake.js \
+  "$BASIC_DIR/dd-test-optimization-intake.json" \
+  --json \
+  --known-tests-out dd-test-optimization-known-tests.json \
+  > "$BASIC_DIR/dd-test-optimization-agent-report.json"
+
+node -e '
+const fs = require("node:fs")
+const report = JSON.parse(fs.readFileSync("dd-test-optimization-basic/dd-test-optimization-agent-report.json", "utf8"))
+if (report.primaryStage !== "Reporting complete") {
+  console.error(`First EFD baseline run must be Reporting complete, got: ${report.primaryStage}`)
+  process.exit(1)
+}
+const knownTests = JSON.parse(fs.readFileSync("dd-test-optimization-known-tests.json", "utf8"))
+console.log(JSON.stringify(knownTests, null, 2))
+'
+```
+
+7b. Add one new deterministic passing test that is not present in
+`dd-test-optimization-known-tests.json`.
+
+Adapt:
+
+- Use a unique test name, for example `dd trace EFD debug temporary test`.
+- Prefer creating the temporary test next to a clean selected test file. Avoid appending to or
+  creating siblings beside user-modified files when a clean test file can be selected instead.
+
+EFD test insertion decision:
+
+| Condition | Action |
+| --- | --- |
+| The runner accepts multiple file arguments | Create a temporary sibling test file next to the selected test file. |
+| The runner cannot accept an additional file | Append one temporary test case to the selected test file. |
+
+Ensure the second command selects both the previously known tests and the new test. Record how to
+remove the temporary test after the EFD check.
+
+Common direct-file-runner example for Mocha, Jest, and Vitest:
+
+- If the first command is `npm test -- test/sum.spec.js`, create a temporary sibling test file such
+  as `test/dd-trace-efd-debug.spec.js`.
+- Put one deterministic passing test in that file with the name `dd trace EFD debug temporary test`.
+- Use `npm test -- test/sum.spec.js test/dd-trace-efd-debug.spec.js` for the second EFD command.
+- Remove `test/dd-trace-efd-debug.spec.js` after Step 7d passes.
+
+Yarn example:
+
+- If the first command is `yarn test test/sum.spec.js`, create `test/dd-trace-efd-debug.spec.js`.
+- Use `yarn test test/sum.spec.js test/dd-trace-efd-debug.spec.js` for the second EFD command.
+- Remove `test/dd-trace-efd-debug.spec.js` after Step 7d passes.
+
+Temporary test templates:
+
+Mocha or Jest CommonJS:
+
+```js
+'use strict'
+
+const assert = require('node:assert/strict')
+
+describe('dd trace EFD debug', () => {
+  it('dd trace EFD debug temporary test', () => {
+    assert.strictEqual(1 + 1, 2)
+  })
+})
+```
+
+Vitest:
+
+```js
+import { describe, expect, it } from 'vitest'
+
+describe('dd trace EFD debug', () => {
+  it('dd trace EFD debug temporary test', () => {
+    expect(1 + 1).toBe(2)
+  })
+})
+```
+
+Cypress:
+
+```js
+describe('dd trace EFD debug', () => {
+  it('dd trace EFD debug temporary test', () => {
+    expect(1 + 1).to.equal(2)
+  })
+})
+```
+
+After creating a temporary sibling test file, write and verify its path:
+
+Adapt:
+
+```bash
+EFD_TEMP_TEST_FILE='FILL_IN' # replace FILL_IN with the temporary test file path, for example: test/dd-trace-efd-debug.spec.js
+if [ "$EFD_TEMP_TEST_FILE" = 'FILL_IN' ] || [ -z "$EFD_TEMP_TEST_FILE" ]; then
+  echo "Replace FILL_IN with the temporary EFD test file path before continuing."
+  exit 1
+fi
+test -f "$EFD_TEMP_TEST_FILE"
+printf 'Temporary EFD test file: %s\n' "$EFD_TEMP_TEST_FILE"
+printf '%s\n' "$EFD_TEMP_TEST_FILE" > dd-test-optimization-efd-temp-test-file.txt
+```
+
+If the runner required appending a temporary test case to an existing file instead of creating a
+temporary sibling file, record the cleanup command in the final response and verify cleanup with a
+repository-specific command after Step 7d.
+
+Write the second command:
+
+Adapt:
+
+```bash
+EFD_TEST_COMMAND='FILL_IN' # replace FILL_IN with a command that runs the first-run tests plus the new test
+if [ "$EFD_TEST_COMMAND" = 'FILL_IN' ] || [ -z "$EFD_TEST_COMMAND" ]; then
+  echo "Replace FILL_IN with the EFD test command before continuing."
+  exit 1
+fi
+printf 'EFD test command: %s\n' "$EFD_TEST_COMMAND"
+printf '%s\n' "$EFD_TEST_COMMAND" > dd-test-optimization-efd-command.txt
+```
+
+7c. Run the second EFD run with known tests from the first run:
+
+Required: use `--out-dir "$EFD_DIR"` to avoid overwriting root artifacts. It prevents the second
+EFD run from overwriting the root wrapper artifacts and the first EFD baseline artifacts.
+
+Verbatim:
+
+```bash
+set -e
+
+EFD_DIR=dd-test-optimization-efd
+EFD_TEST_COMMAND="$(cat dd-test-optimization-efd-command.txt)"
+
+node ./node_modules/dd-trace/ci/test-optimization-debug.js \
+  --test-command "$EFD_TEST_COMMAND" \
+  --settings-mode efd \
+  --known-tests dd-test-optimization-known-tests.json \
+  --out-dir "$EFD_DIR" \
+  --no-open
+```
+
+The EFD fake settings endpoint returns:
+
+```json
+{
+  "early_flake_detection": {
+    "enabled": true,
+    "slow_test_retries": {
+      "5s": 3
+    }
+  },
+  "known_tests_enabled": true
+}
+```
+
+The known-tests endpoint returns the contents of `dd-test-optimization-known-tests.json` as:
+
+```json
+{
+  "data": {
+    "attributes": {
+      "tests": {
+        "<test.framework>": {
+          "<test.suite>": ["<test.name>"]
+        }
+      }
+    }
+  }
+}
+```
+
+7d. Validate the EFD result:
+
+Verbatim:
+
+```bash
+node -e '
+const fs = require("node:fs")
+const report = JSON.parse(fs.readFileSync("dd-test-optimization-efd/dd-test-optimization-agent-report.json", "utf8"))
+if (report.primaryStage !== "EFD retried new test") {
+  console.error(`Second EFD run must reach "EFD retried new test", got: ${report.primaryStage}`)
+  process.exit(1)
+}
+if (!report.summary.efd.settingsEnabled) {
+  console.error("EFD settings were not enabled in the second run.")
+  process.exit(1)
+}
+if (!report.summary.efd.requested) {
+  console.error("The second run did not request known tests.")
+  process.exit(1)
+}
+if (report.summary.efd.knownTestsReceived === 0) {
+  console.error("The second run received zero known tests.")
+  process.exit(1)
+}
+if (report.summary.efd.retriedNewTests === 0) {
+  console.error("No new test was retried by EFD.")
+  process.exit(1)
+}
+console.log(`EFD retried new tests: ${report.summary.efd.retriedNewTests}`)
+console.log(`Retried new test names: ${report.summary.efd.retriedNewTestNames.join(", ")}`)
+'
+```
+
+If this validation passes, report that EFD works for the selected subset.
+
+Remove and verify a temporary sibling test file. Remove the file recorded in
+`dd-test-optimization-efd-temp-test-file.txt`.
+
+Verbatim:
+
+```bash
+if [ -f dd-test-optimization-efd-temp-test-file.txt ]; then
+  EFD_TEMP_TEST_FILE="$(cat dd-test-optimization-efd-temp-test-file.txt)"
+  rm -f "$EFD_TEMP_TEST_FILE"
+  test ! -e "$EFD_TEMP_TEST_FILE"
+  printf 'Temporary EFD test removed: %s\n' "$EFD_TEMP_TEST_FILE"
+fi
+```
+
+If the EFD test was appended to an existing file, remove only the temporary test case and run the
+repository-specific cleanup verification recorded in Step 7b.
+
+### 8. Report back
+
+If the wrapper path was used, include the wrapper final report output or
+`dd-test-optimization-final-report.txt` in the final response. If manual Steps 3-6 were used,
+include the Step 6c stdout report. Do not `cat` `dd-test-optimization-final-report.txt` after Step
+6c; that duplicates the same report. Add notable weird cases not represented in the generated
+report only when needed.
+
+Report static warnings and errors from the initial root `dd-test-optimization-static.json`. If the
+wrapper is run without Step 1, use the wrapper-generated root `dd-test-optimization-static.json`.
+Do not switch to `dd-test-optimization-basic/dd-test-optimization-static.json` or
+`dd-test-optimization-efd/dd-test-optimization-static.json` unless the difference is the notable
+case being reported.
+
+Use this extractor to assemble the required fields from the root and EFD artifacts:
+
+Verbatim:
+
+```bash
+node -e '
+const fs = require("node:fs")
+
+function readJson (path, fallback) {
+  try {
+    return JSON.parse(fs.readFileSync(path, "utf8"))
+  } catch {
+    return fallback
+  }
+}
+
+function readText (path, fallback = "unknown") {
+  try {
+    return fs.readFileSync(path, "utf8").trim() || fallback
+  } catch {
+    return fallback
+  }
+}
+
+function countEvent (report, eventType) {
+  return report?.summary?.events?.counts?.[eventType] || 0
+}
+
+function readFinalReportLine (prefix) {
+  const finalReport = readText("dd-test-optimization-final-report.txt", "")
+  const line = finalReport.split(/\r?\n/).find(line => line.startsWith(prefix))
+  return line ? line.slice(prefix.length).trim() : "unknown"
+}
+
+const basic = readJson("dd-test-optimization-agent-report.json", {})
+const efd = readJson("dd-test-optimization-efd/dd-test-optimization-agent-report.json", {})
+const staticReport = readJson("dd-test-optimization-static.json", { results: [] })
+const staticFindings = (staticReport.results || [])
+  .filter(result => result.status === "error" || result.status === "warning")
+  .map(result => `${result.status}: ${result.title}`)
+const decodeErrors = Array.isArray(basic.summary?.decodeErrors)
+  ? basic.summary.decodeErrors.length
+  : basic.summary?.decodeErrors || 0
+const eventLevels =
+  `sessions=${countEvent(basic, "test_session_end")}, ` +
+  `modules=${countEvent(basic, "test_module_end")}, ` +
+  `suites=${countEvent(basic, "test_suite_end")}, ` +
+  `tests=${countEvent(basic, "test")}`
+
+console.log(`HTML report: ${readText("dd-intake-html-file-url.txt", readFinalReportLine("HTML report:"))}`)
+console.log(`HTML report path: ${readText("dd-intake-html-path.txt", readFinalReportLine("HTML report path:"))}`)
+console.log(`Final report path: ${process.cwd()}/dd-test-optimization-final-report.txt`)
+console.log(`Selected test command: ${readText("dd-test-optimization-test-command.txt")}`)
+console.log(`Test result: ${readText("dd-test-optimization-test-result.txt")}`)
+console.log(`Basic primary stage: ${basic.primaryStage || "unknown"}`)
+console.log(`Basic requests: ${basic.summary?.requestCount ?? "unknown"}`)
+console.log(`Event levels: ${eventLevels}`)
+console.log(`Decode errors: ${decodeErrors}`)
+console.log(`EFD status: ${efd.primaryStage === "EFD retried new test" ? "passed" : efd.primaryStage ? "failed" : "not run"}`)
+console.log(`EFD known tests received: ${efd.summary?.efd?.knownTestsReceived ?? "n/a"}`)
+console.log(`EFD retried new tests: ${efd.summary?.efd?.retriedNewTests ?? "n/a"}`)
+console.log(`EFD retried new test names: ${(efd.summary?.efd?.retriedNewTestNames || []).join(", ") || "none"}`)
+console.log(`Static warnings/errors: ${staticFindings.join("; ") || "none"}`)
+'
+```
+
+Frameworks can report test names with nested suite or `describe` text already included. Repeated
+words in `EFD retried new test names` are not automatically malformed; compare them with the
+selected temporary test's suite and test names.
 
 The final response must include:
 
 - HTML report `file://` URL and absolute path.
 - Final report path.
 - Selected test command and test result.
+- EFD check result when Step 7 ran, including known tests count and retried new tests count.
 - The four diagnostic question answers with each question text inline.
 - Static warnings and errors.
 - Recommended next actions.
+- Cleanup confirmation for any temporary EFD test file.
+
+Final response template:
+
+```text
+HTML report: file:///absolute/path/to/dd-test-optimization-report.html
+HTML report path: /absolute/path/to/dd-test-optimization-report.html
+Final report path: /absolute/path/to/dd-test-optimization-final-report.txt
+
+Selected test command:
+<command>
+
+Test result:
+<one-line result>
+
+Basic reporting:
+Primary stage: <stage>
+Requests: <count>
+Event levels: sessions=<count>, modules=<count>, suites=<count>, tests=<count>
+Decode errors: <count>
+
+EFD check:
+Status: <not run | passed | failed>
+Known tests received: <count>
+Retried new tests: <count>
+Retried new test names: <names or none>
+
+Diagnostic answers:
+- Is dd-trace installed and statically configured in a supported way? <answer>
+- Does dd-trace/ci/init reach the test process through NODE_OPTIONS? <answer>
+- Does a small test subset send Test Optimization requests to a local fake intake? <answer>
+- If data is reported, does it include session, module, suite, and test events? <answer>
+
+Static warnings/errors:
+- <finding>
+
+Recommended next actions:
+- <action>
+
+Notable execution cases:
+- <only include if needed>
+
+Cleanup confirmation:
+- Temporary EFD test removed: <yes | not created | no, explain>
+```
 
 ## Decision Tree
 
 The field names in this decision tree match `dd-test-optimization-agent-report.json`, not the raw
 intake artifact. Use `dd-test-optimization-agent-report.txt` for the final summary and
 `dd-test-optimization-agent-report.json` for rule traversal.
+
+To traverse the tree, read `primaryStage` from `dd-test-optimization-agent-report.json` and search
+for `### Stage: <primaryStage>`. Then confirm the observation fields under that stage.
 
 ### Stage: Nothing
 
@@ -649,8 +1129,25 @@ present.
 
 Cause: the basic Test Optimization reporting path is working for the selected command.
 
-Fix: no basic reporting fix is needed. Defer EFD, ITR, test skipping, test management, and coverage
-analysis to a later runbook version.
+Fix: no basic reporting fix is needed. Run Step 7 to validate EFD. Defer ITR, test skipping, test
+management, and coverage analysis to a later runbook version.
+
+### Stage: EFD Retry Missing
+
+Observation: `efd.retriedNewTests: 0`.
+
+Cause: EFD settings and known-tests request flow ran, but no new test retry event was captured.
+
+Fix: verify the second run served known tests from the first run, the temporary test was absent
+from `dd-test-optimization-known-tests.json`, and the second command selected the new test.
+
+### Stage: EFD Retried New Test
+
+Observation: `efd.retriedNewTests > 0`.
+
+Cause: EFD marked a test as new and retried it.
+
+Fix: no EFD retry fix is needed for the selected subset.
 
 ## Agent Judgment
 

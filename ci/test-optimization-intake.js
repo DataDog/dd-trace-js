@@ -41,6 +41,17 @@ const DEFAULT_SETTINGS = {
   coverage_report_upload_enabled: false,
 }
 
+const EFD_SETTINGS = {
+  ...DEFAULT_SETTINGS,
+  early_flake_detection: {
+    enabled: true,
+    slow_test_retries: {
+      '5s': 3,
+    },
+  },
+  known_tests_enabled: true,
+}
+
 /**
  * Starts the fake Test Optimization intake.
  *
@@ -49,7 +60,9 @@ const DEFAULT_SETTINGS = {
  * @param {string} [options.host] host to bind
  * @param {string} [options.out] artifact output path
  * @param {string} [options.html] HTML report output path
+ * @param {object} [options.knownTests] known tests endpoint response
  * @param {object} [options.settings] settings endpoint response attributes
+ * @param {string} [options.settingsMode] settings preset
  * @param {Function} callback called with (error, intake)
  */
 function startIntake (options = {}, callback) {
@@ -61,9 +74,10 @@ function startIntake (options = {}, callback) {
     artifact,
     html: resolveReportPath(out, options.html),
     host,
+    knownTests: options.knownTests || {},
     out,
     server: undefined,
-    settings: options.settings || DEFAULT_SETTINGS,
+    settings: options.settings || getSettings(options.settingsMode),
     shutdownToken: randomBytes(16).toString('hex'),
     stopped: false,
   }
@@ -298,7 +312,7 @@ function handlePostRequest (state, req, res, requestUrl, body) {
     const response = {
       data: {
         attributes: {
-          tests: [],
+          tests: state.knownTests,
         },
       },
     }
@@ -816,6 +830,14 @@ function parseArgs (args) {
       options.html = args[++i]
     } else if (arg.startsWith('--html=')) {
       options.html = arg.slice('--html='.length)
+    } else if (arg === '--settings-mode') {
+      options.settingsMode = args[++i]
+    } else if (arg.startsWith('--settings-mode=')) {
+      options.settingsMode = arg.slice('--settings-mode='.length)
+    } else if (arg === '--known-tests') {
+      options.knownTests = normalizeKnownTests(readJsonFile(args[++i]))
+    } else if (arg.startsWith('--known-tests=')) {
+      options.knownTests = normalizeKnownTests(readJsonFile(arg.slice('--known-tests='.length)))
     } else {
       options.unknown = arg
     }
@@ -835,6 +857,12 @@ function getHelpText () {
     '',
     'Runs a local fake Datadog Test Optimization intake and writes a static HTML report.',
     'The command prints a shutdown URL that cleanly flushes final artifacts without Ctrl-C.',
+    '',
+    'Options:',
+    '  --settings-mode basic-reporting  Default settings: basic reporting only.',
+    '  --settings-mode efd              Enable known tests and Early Flake Detection settings.',
+    '  --known-tests <file>             Known tests JSON to return from /api/v2/ci/libraries/tests.',
+    '',
     'Point tests at it with:',
     '',
     '  DD_API_KEY=debug \\',
@@ -844,6 +872,43 @@ function getHelpText () {
     '  NODE_OPTIONS="-r dd-trace/ci/init" \\',
     '  <test command>',
   ].join('\n')
+}
+
+/**
+ * Gets fake settings for a settings mode.
+ *
+ * @param {string|undefined} settingsMode settings mode
+ * @returns {object} settings response attributes
+ */
+function getSettings (settingsMode) {
+  if (settingsMode === 'efd') return EFD_SETTINGS
+  return DEFAULT_SETTINGS
+}
+
+/**
+ * Reads a JSON file.
+ *
+ * @param {string} file JSON file path
+ * @returns {unknown} parsed JSON
+ */
+function readJsonFile (file) {
+  return JSON.parse(fs.readFileSync(path.resolve(file), 'utf8'))
+}
+
+/**
+ * Normalizes known tests input to the endpoint tests object.
+ *
+ * @param {unknown} value parsed known tests JSON
+ * @returns {object} known tests object
+ */
+function normalizeKnownTests (value) {
+  if (value?.data?.attributes?.tests && typeof value.data.attributes.tests === 'object') {
+    return value.data.attributes.tests
+  }
+
+  if (value && typeof value === 'object') return value
+
+  return {}
 }
 
 /**
@@ -1249,6 +1314,8 @@ if (require.main === module) {
 module.exports = {
   createArtifact,
   decodeMsgpack,
+  getSettings,
+  normalizeKnownTests,
   parseArgs,
   startIntake,
   stopIntake,
