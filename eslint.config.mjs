@@ -90,6 +90,7 @@ export default [
       '!**/integration-tests/coverage/**',
       '**/dist', // Generated
       '**/docs', // Any JS here is for presentation only.
+      '**/.next', // Generated Next.js build output
       '**/out', // Generated
       '**/node_modules', // We don't own these.
       '**/versions', // This is effectively a node_modules tree.
@@ -888,6 +889,24 @@ export default [
     ],
     rules: {
       'import/no-extraneous-dependencies': 'off',
+    },
+  },
+  {
+    // The Next.js fixture apps import dd-trace the way a customer does
+    // (`require('dd-trace')`). The package is supplied to the app at runtime via a
+    // stub written into node_modules (see test/index.spec.js), so it never appears
+    // in a manifest the extraneous-dependency rules can read.
+    name: 'dd-trace/datadog-plugin-next/fixtures',
+    plugins: {
+      import: eslintPluginImport,
+    },
+    files: [
+      'packages/datadog-plugin-next/test/app/**/*.js',
+      'packages/datadog-plugin-next/test/**/pages/**/*.js',
+    ],
+    rules: {
+      'import/no-extraneous-dependencies': 'off',
+      'n/no-extraneous-require': 'off',
     },
   },
 ]
