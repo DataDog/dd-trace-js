@@ -56,4 +56,43 @@ describe('DataStreamWriter unix', () => {
       url: unixConfig.url,
     })
   })
+
+  it('drops the payload and logs when msgpack encoding hits the chunk cap', () => {
+    const localStubRequest = sinon.stub()
+    const errorLog = sinon.stub()
+    const overflow = new RangeError('cap simulation')
+    overflow.code = 'ERR_MSGPACK_CHUNK_OVERFLOW'
+
+    const { DataStreamsWriter: GuardedWriter } = proxyquire(
+      '../../src/datastreams/writer', {
+        '../exporters/common/request': localStubRequest,
+        '../msgpack': {
+          encode () { throw overflow },
+          MAX_SIZE: 50 * 1024 * 1024,
+        },
+        '../log': { error: errorLog, debug: sinon.stub() },
+        zlib: stubZlib,
+      })
+
+    const guarded = new GuardedWriter(unixConfig)
+    guarded.flush({ pathological: true })
+
+    sinon.assert.notCalled(localStubRequest)
+    sinon.assert.calledOnce(errorLog)
+  })
+
+  it('rethrows non-overflow encoding errors', () => {
+    const { DataStreamsWriter: ThrowingWriter } = proxyquire(
+      '../../src/datastreams/writer', {
+        '../exporters/common/request': sinon.stub(),
+        '../msgpack': {
+          encode () { throw new Error('not an overflow') },
+          MAX_SIZE: 50 * 1024 * 1024,
+        },
+        zlib: stubZlib,
+      })
+
+    const throwing = new ThrowingWriter(unixConfig)
+    assert.throws(() => throwing.flush({}), /not an overflow/)
+  })
 })

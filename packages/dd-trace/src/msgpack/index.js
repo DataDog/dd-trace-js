@@ -97,4 +97,4 @@ function writeMap (bytes, value) {
   }
 }
 
-module.exports = { MsgpackChunk, encode }
+module.exports = { MsgpackChunk, encode, MAX_SIZE: MsgpackChunk.MAX_SIZE }

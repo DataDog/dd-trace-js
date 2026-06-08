@@ -10,6 +10,14 @@ const SHRINK_AFTER_FLUSHES = 32
 // shape: after a halving step the post-shrink fill is the prior peak doubled,
 // still under 50 %.
 const SHRINK_USAGE_RATIO = 4
+// Hard cap on chunk growth. The agent's trace intake rejects payloads over
+// 50 MiB, so anything past that is dead on arrival anyway. A pathological
+// single trace (unsanitized meta tag the size of a media file, multi-MB
+// stack trace) used to grow the buffer without limit until either the
+// allocation failed or the process tripped its memory ceiling. `reserve`
+// now refuses the growth with a tagged `RangeError`; `AgentEncoder` catches
+// it, resets the in-flight payload, and logs.
+const MAX_SIZE = 50 * 1024 * 1024 // 50 MiB
 
 /**
  * Resizable msgpack write buffer. Owns the byte-layout primitives the encoder
@@ -100,11 +108,18 @@ class MsgpackChunk {
     const needed = this.length + size
 
     if (needed > this.buffer.length) {
+      if (needed > MAX_SIZE) {
+        const error = new RangeError(
+          `MsgpackChunk capped at ${MAX_SIZE} bytes; requested ${needed}`
+        )
+        error.code = 'ERR_MSGPACK_CHUNK_OVERFLOW'
+        throw error
+      }
       let newSize = this.buffer.length
       // `*= 2` instead of `<<= 1`: `1073741824 << 1` is negative as int32,
       // and msgpack values can legitimately reach the multi-GiB range.
       while (newSize < needed) newSize *= 2
-      this.#resize(newSize)
+      this.#resize(Math.min(newSize, MAX_SIZE))
     }
 
     this.length += size
@@ -454,3 +469,4 @@ class MsgpackChunk {
 }
 
 module.exports = MsgpackChunk
+module.exports.MAX_SIZE = MAX_SIZE
