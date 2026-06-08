@@ -3,10 +3,24 @@
 const dc = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const { addHook } = require('./helpers/instrument')
-const aiGuard = require('./helpers/openai-ai-guard')
 
 const ch = dc.tracingChannel('apm:openai:request')
 const onStreamedChunkCh = dc.channel('apm:openai:request:chunk')
+const chatCompletionsBeforeChannel = dc.channel('dd-trace:openai:chat.completions:before')
+const chatCompletionsAfterChannel = dc.channel('dd-trace:openai:chat.completions:after')
+const responsesBeforeChannel = dc.channel('dd-trace:openai:responses:before')
+const responsesAfterChannel = dc.channel('dd-trace:openai:responses:after')
+
+const LIFECYCLE_CHANNELS = {
+  'chat.completions': {
+    before: chatCompletionsBeforeChannel,
+    after: chatCompletionsAfterChannel,
+  },
+  responses: {
+    before: responsesBeforeChannel,
+    after: responsesAfterChannel,
+  },
+}
 
 const V4_PACKAGE_SHIMS = [
   {
@@ -170,6 +184,91 @@ addHook({ name: 'openai', file: 'dist/api.js', versions: ['>=3.0.0 <4'] }, expor
 })
 
 /**
+ * Publishes a provider-native lifecycle payload to a cancelable lifecycle channel.
+ *
+ * Subscribers push async work into `pending` synchronously during publication and
+ * abort `abortController` with an error before the pushed promise resolves to block.
+ *
+ * @param {object} lifecycleChannel
+ * @param {object} payload
+ * @returns {Promise<void>}
+ */
+function publishLifecycle (lifecycleChannel, payload) {
+  const abortController = new AbortController()
+  const ctx = { ...payload, abortController, pending: [] }
+
+  lifecycleChannel.publish(ctx)
+
+  return Promise.all(ctx.pending).then(() => {
+    if (abortController.signal.aborted) {
+      throw abortController.signal.reason
+    }
+  })
+}
+
+/**
+ * Builds a lifecycle handle for OpenAI SDK promise rewiring.
+ *
+ * @param {string} baseResource
+ * @param {Array<object>} args
+ * @param {boolean} stream
+ * @returns {{afterChannel: object, args: Array<object>, getBeforeVerdict: Function}|null}
+ */
+function createLifecycleHandle (baseResource, args, stream) {
+  if (stream) return null
+
+  const channels = LIFECYCLE_CHANNELS[baseResource]
+  if (!channels || (!channels.before.hasSubscribers && !channels.after.hasSubscribers)) return null
+
+  let beforeVerdictPromise
+  const getBeforeVerdict = () => {
+    beforeVerdictPromise ??= channels.before.hasSubscribers
+      ? publishLifecycle(channels.before, { args })
+      : Promise.resolve()
+    return beforeVerdictPromise
+  }
+
+  return { afterChannel: channels.after, args, getBeforeVerdict }
+}
+
+/**
+ * Wraps `apiProm.asResponse` so raw-response callers still receive the before verdict.
+ *
+ * @param {object} apiProm - APIPromise returned from the OpenAI SDK method
+ * @param {object} lifecycle
+ */
+function wrapAsResponse (apiProm, lifecycle) {
+  if (typeof apiProm.asResponse !== 'function') return
+  shimmer.wrap(apiProm, 'asResponse', origAsResponse => function (...args) {
+    const responsePromise = origAsResponse.apply(this, args)
+    return Promise.all([lifecycle.getBeforeVerdict(), responsePromise]).then(([, response]) => response)
+  })
+}
+
+/**
+ * Gates the parsed-body promise on the before lifecycle verdict.
+ *
+ * @param {Promise<unknown>} parsedPromise
+ * @param {object} lifecycle
+ * @returns {Promise<unknown>}
+ */
+function gateParse (parsedPromise, lifecycle) {
+  return Promise.all([lifecycle.getBeforeVerdict(), parsedPromise]).then(([, result]) => result)
+}
+
+/**
+ * Runs after lifecycle subscribers against the parsed response body.
+ *
+ * @param {object} lifecycle
+ * @param {object} body - Parsed OpenAI response body
+ * @returns {Promise<void>}
+ */
+function evaluateOutput (lifecycle, body) {
+  if (!lifecycle.afterChannel.hasSubscribers) return Promise.resolve()
+  return publishLifecycle(lifecycle.afterChannel, { args: lifecycle.args, body })
+}
+
+/**
  * For streamed responses, we need to accumulate all of the content in
  * the chunks, and let the combined content be the final response.
  * This way, spans look the same as when not streamed.
@@ -217,17 +316,14 @@ for (const extension of extensions) {
 
       for (const methodName of methods) {
         shimmer.wrap(targetPrototype, methodName, methodFn => function (...args) {
-          if (!ch.start.hasSubscribers && !aiGuard.hasSubscribers()) {
-            return methodFn.apply(this, args)
-          }
           // The OpenAI library lets you set `stream: true` on the options arg to any method
           // However, we only want to handle streamed responses in specific cases
           // chat.completions and completions
           const stream = streamedResponse && getOption(args, 'stream', false)
 
-          const guard = aiGuard.createGuard(baseResource, args[0], stream)
+          const lifecycle = createLifecycleHandle(baseResource, args, stream)
 
-          if (!ch.start.hasSubscribers && !guard) {
+          if (!ch.start.hasSubscribers && !lifecycle) {
             return methodFn.apply(this, args)
           }
 
@@ -255,7 +351,7 @@ for (const extension of extensions) {
                   const parsedPromise = origApiPromParse.apply(this, args)
                     .then(body => Promise.all([this.responsePromise, body]))
 
-                  return handleUnwrappedAPIPromise(parsedPromise, ctx, stream, guard)
+                  return handleUnwrappedAPIPromise(parsedPromise, ctx, stream, lifecycle)
                 })
 
                 return unwrappedPromise
@@ -268,10 +364,10 @@ for (const extension of extensions) {
               const parsedPromise = origApiPromParse.apply(this, args)
                 .then(body => Promise.all([this.responsePromise, body]))
 
-              return handleUnwrappedAPIPromise(parsedPromise, ctx, stream, guard)
+              return handleUnwrappedAPIPromise(parsedPromise, ctx, stream, lifecycle)
             })
 
-            if (guard) aiGuard.wrapAsResponse(apiProm, guard)
+            if (lifecycle) wrapAsResponse(apiProm, lifecycle)
 
             ch.end.publish(ctx)
 
@@ -284,8 +380,8 @@ for (const extension of extensions) {
   }
 }
 
-function handleUnwrappedAPIPromise (apiProm, ctx, stream, guard) {
-  const guardedApiProm = guard ? aiGuard.gateParse(apiProm, guard) : apiProm
+function handleUnwrappedAPIPromise (apiProm, ctx, stream, lifecycle) {
+  const guardedApiProm = lifecycle ? gateParse(apiProm, lifecycle) : apiProm
 
   return guardedApiProm
     .then(([{ response, options }, body]) => {
@@ -309,9 +405,9 @@ function handleUnwrappedAPIPromise (apiProm, ctx, stream, guard) {
         },
       })
 
-      if (!guard) return body
+      if (!lifecycle) return body
 
-      return aiGuard.evaluateOutput(guard, body).then(() => body)
+      return evaluateOutput(lifecycle, body).then(() => body)
     })
     .catch(error => {
       // ctx.result is set inside finish(); if absent, finish never ran (sync throw in
