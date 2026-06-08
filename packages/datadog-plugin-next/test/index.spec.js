@@ -130,10 +130,14 @@ describe('Plugin', function () {
         )
 
         // building in-process makes tests fail for an unknown reason
-        execSync('NODE_OPTIONS=--openssl-legacy-provider yarn exec next build', {
+        // next <12 needs OpenSSL's legacy provider for webpack's MD4 hashing on Node >=17; newer
+        // next does not, and from 16 the flag is rejected in a build worker's NODE_OPTIONS.
+        const legacyOpenssl = satisfies(realVersion, '<12') ? '--openssl-legacy-provider' : ''
+        execSync('yarn exec next build', {
           cwd,
           env: {
             ...process.env,
+            NODE_OPTIONS: legacyOpenssl,
             VERSION: realVersion,
           },
           stdio: ['pipe', 'ignore', 'pipe'],
