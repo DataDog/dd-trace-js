@@ -171,12 +171,14 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
     addVariableTags(this.config, span, args.variableValues)
 
-    ctx._ddArgs = args
-
     // Wrap the default field resolver + walk the schema to wrap explicit field
     // resolvers. Done ONCE per execute (patchedResolvers/patchedTypes WeakSets
-    // make this idempotent across calls that share a schema).
+    // make this idempotent across calls that share a schema). For object-form,
+    // this clones ctx.arguments[0] so the caller's args object is left
+    // untouched; record the (possibly cloned) view on ctx._ddArgs so hooks
+    // observe our wrapped fieldResolver, not the caller's original.
     setWrappedFieldResolver(ctx.arguments, defaultFieldResolver)
+    ctx._ddArgs = readArgs(ctx.arguments)
 
     const schema = args.schema
     if (schema) {
@@ -639,23 +641,34 @@ function readArgs (args) {
 // Constraints:
 //   - frozen/sealed args objects must not be modified (would throw TypeError)
 //   - caller-supplied fieldResolver must not be overwritten in-place
+// Wrap whatever fieldResolver flows into execute — caller-provided or
+// graphql's own default — so user code that supplies its own fieldResolver
+// still produces graphql.resolve spans. wrapResolve is idempotent via the
+// `patchedResolvers` WeakSet so wrapping a function twice is a no-op.
+//
+// For object-form (`graphql.execute({...})`), CLONE the caller's options
+// instead of mutating in place:
+//   - frozen/sealed caller-owned objects throw on direct mutation;
+//   - overwriting the caller's own fieldResolver reference is observable from
+//     outside, which the spec at "should not overwrite the caller-supplied
+//     fieldResolver" enforces. This mirrors master's #8502 fix.
+// graphql.execute receives the clone via ctx.arguments[0].
+// For positional form, only this rawArgs view is mutated — the caller's
+// individual argument values are not affected.
 function setWrappedFieldResolver (rawArgs, defaultFieldResolver) {
   if (!rawArgs || rawArgs.length === 0) return
 
   if (rawArgs.length === 1 && rawArgs[0] && typeof rawArgs[0] === 'object' && !Array.isArray(rawArgs[0])) {
-    const argsObj = rawArgs[0]
-    if (!Object.isExtensible(argsObj)) return
-    if (!Object.hasOwn(argsObj, 'fieldResolver')) {
-      argsObj.fieldResolver = wrapResolve(defaultFieldResolver)
+    const original = rawArgs[0]
+    rawArgs[0] = {
+      ...original,
+      fieldResolver: wrapResolve(original.fieldResolver || defaultFieldResolver),
     }
     return
   }
 
-  // Positional call: only inject if caller omitted fieldResolver.
-  if (rawArgs[6] == null) {
-    rawArgs[6] = wrapResolve(defaultFieldResolver)
-    if (rawArgs.length < 7) rawArgs.length = 7
-  }
+  rawArgs[6] = wrapResolve(rawArgs[6] || defaultFieldResolver)
+  if (rawArgs.length < 7) rawArgs.length = 7
 }
 
 function isWeakMapKey (value) {
