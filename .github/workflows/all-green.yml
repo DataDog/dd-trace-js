@@ -16,6 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
+      actions: read
     steps:
       - uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
         id: octo-sts
@@ -40,3 +41,38 @@ jobs:
           GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
           POLLING_INTERVAL: 1
           RETRIES: 20
+      - name: Download JUnit artifacts
+        if: "!cancelled() && hashFiles('run-ids.txt') != ''"
+        run: |
+          mkdir -p junit-results
+          while IFS= read -r run_id; do
+            gh run download "$run_id" \
+              --pattern "junit-*" \
+              --dir "junit-results/$run_id" \
+              2>/dev/null || true
+          done < run-ids.txt
+        env:
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+      - id: check-junit
+        if: "!cancelled()"
+        run: |
+          count=$(find junit-results -name "*.xml" 2>/dev/null | wc -l | tr -d ' ')
+          echo "has_files=$([ "$count" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - if: "!cancelled() && steps.check-junit.outputs.has_files == 'true'"
+        uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
+      - if: "!cancelled() && steps.check-junit.outputs.has_files == 'true'"
+        uses: ./.github/actions/datadog-ci
+      - if: "!cancelled() && steps.check-junit.outputs.has_files == 'true'"
+        # Restore per-artifact CI context (GITHUB_JOB, JOB_CHECK_RUN_ID) so Datadog
+        # attributes each result to the job that ran the tests, not to all-green.
+        run: |
+          for dir in junit-results/*/*/; do
+            (
+              source "$dir.dd-ci-metadata" 2>/dev/null || true
+              find "$dir" -name "*.xml" \
+                | xargs -r datadog-ci junit upload --service dd-trace-js-tests
+            )
+          done
+        env:
+          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}

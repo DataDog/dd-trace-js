@@ -1,3 +1,4 @@
+import { writeFileSync } from 'node:fs'
 import { setTimeout } from 'timers/promises'
 import { Octokit } from 'octokit'
 import { summary } from '@actions/core'
@@ -196,6 +197,10 @@ async function checkAllGreen () {
   const { runs, done } = await pollUntilDone()
 
   await printSummary(runs)
+
+  if (process.env.GITHUB_ACTIONS) {
+    writeFileSync('run-ids.txt', runs.map(r => String(r.id)).join('\n') + '\n')
+  }
 
   if (!done) {
     console.log(`State is still pending after ${RETRIES} retries.`)
