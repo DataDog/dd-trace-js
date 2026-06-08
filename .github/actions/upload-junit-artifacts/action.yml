@@ -24,11 +24,38 @@ runs:
         echo "GITHUB_JOB=$GITHUB_JOB" > .dd-ci-metadata
         [ -n "${JOB_CHECK_RUN_ID:-}" ] && echo "JOB_CHECK_RUN_ID=$JOB_CHECK_RUN_ID" >> .dd-ci-metadata || true
     - if: github.actor != 'dependabot[bot]' && steps.check.outputs.has_xml == 'true'
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-      with:
-        name: junit-${{ inputs.id }}
-        path: |
-          *.xml
-          .dd-ci-metadata
-        include-hidden-files: true
-        retention-days: 1
+      shell: bash
+      env:
+        ARTIFACT_NAME: junit-${{ inputs.id }}
+      run: |
+        node --input-type=module - <<'EOF'
+        import { execSync } from 'node:child_process'
+        import { readdirSync } from 'node:fs'
+        import { createRequire } from 'node:module'
+
+        const require = createRequire(import.meta.url)
+        const delays = [0, 5_000, 15_000]
+        for (const delay of delays) {
+          if (delay) await new Promise(r => setTimeout(r, delay))
+          try {
+            execSync(
+              'npm install --prefix /tmp/artifact-upload @actions/artifact --silent',
+              { stdio: 'inherit' }
+            )
+            const { DefaultArtifactClient } =
+              require('/tmp/artifact-upload/node_modules/@actions/artifact')
+            const files = [
+              ...readdirSync('.').filter(f => f.endsWith('.xml')),
+              '.dd-ci-metadata',
+            ]
+            await new DefaultArtifactClient().uploadArtifact(
+              process.env.ARTIFACT_NAME, files, '.',
+              { retentionDays: 1 }
+            )
+            process.exit(0)
+          } catch (err) {
+            console.error(`Upload attempt failed: ${err.message}`)
+          }
+        }
+        process.exit(1)
+        EOF
