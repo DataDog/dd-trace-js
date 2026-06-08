@@ -49,8 +49,6 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -70,7 +68,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-testopt-${{ matrix.version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   playwright-image:
     strategy:
@@ -172,7 +169,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-playwright-${{ matrix.node-version }}-${{ matrix.playwright-version }}-${{ matrix.spec }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-mocha:
     strategy:
@@ -203,7 +199,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-mocha-${{ matrix.version }}-${{ matrix.mocha-version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-jest:
     strategy:
@@ -240,7 +235,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-jest-${{ matrix.version }}-${{ matrix.jest-version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   # Unit tests for `packages/datadog-plugin-jest`. The `integration-jest` matrix above only runs
   # `integration-tests/jest/*.spec.js`, so this is the only CI invocation whose glob expands to
@@ -283,7 +277,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-cucumber-${{ matrix.version }}-${{ matrix.cucumber-version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   selenium-image:
     name: Ensure Selenium Docker image
@@ -355,7 +348,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-selenium-${{ matrix.version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-cypress:
     strategy:
@@ -437,7 +429,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-cypress-${{ matrix.version }}-${{ matrix.cypress-version }}-${{ matrix.module-type }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-vitest:
     runs-on: ubuntu-latest
@@ -472,4 +463,3 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-vitest-${{ matrix.version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}

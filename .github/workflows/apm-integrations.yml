@@ -72,8 +72,6 @@ jobs:
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.node-version }}
@@ -85,7 +83,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-aerospike-${{ matrix.node-version }}-${{ matrix.range_clean }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -223,8 +220,6 @@ jobs:
       PLUGINS: child_process
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
@@ -237,7 +232,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-child-process
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -296,8 +290,6 @@ jobs:
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.node-version }}
@@ -306,7 +298,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-confluentinc-kafka-javascript-${{ matrix.node-version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -359,8 +350,6 @@ jobs:
       DD_INJECT_FORCE: "true"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.node-version }}
@@ -370,7 +359,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-couchbase-${{ matrix.node-version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -394,8 +382,6 @@ jobs:
       PLUGINS: dns
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
@@ -408,7 +394,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-dns
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -430,15 +415,12 @@ jobs:
       SERVICES: elasticsearch
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-elasticsearch
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -613,8 +595,6 @@ jobs:
       PLUGINS: http
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.node-version }}
@@ -623,7 +603,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-http-${{ matrix.node-version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -637,8 +616,6 @@ jobs:
       PLUGINS: http2
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
@@ -651,7 +628,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-http2
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -693,8 +669,6 @@ jobs:
       SERVICES: kafka
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.node-version }}
@@ -703,7 +677,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-kafkajs-${{ matrix.node-version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -962,8 +935,6 @@ jobs:
       PLUGINS: net
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
@@ -976,7 +947,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-net
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -1015,15 +985,12 @@ jobs:
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-next-${{ matrix.range_clean || matrix.range }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -1076,8 +1043,6 @@ jobs:
       DD_INJECT_FORCE: "true"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -1102,7 +1067,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-oracledb
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -1197,8 +1161,6 @@ jobs:
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.node-version }}
@@ -1208,7 +1170,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-prisma-${{ matrix.node-version }}-${{ matrix.range_clean }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -1303,8 +1264,6 @@ jobs:
       PLUGINS: restify
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -1312,7 +1271,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-restify
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -1366,15 +1324,12 @@ jobs:
       PLUGINS: sharedb
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-sharedb
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -1398,8 +1353,6 @@ jobs:
       SERVICES: mssql
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
@@ -1407,7 +1360,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-tedious
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:

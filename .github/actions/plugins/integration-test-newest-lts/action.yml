@@ -12,8 +12,6 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: ./.github/actions/dd-sts-api-key
-      id: dd-sts
     - uses: ./.github/actions/node/newest-maintenance-lts
     - uses: ./.github/actions/install
     - run: yarn test:integration:plugins:coverage
@@ -21,7 +19,6 @@ runs:
     - uses: ./.github/actions/coverage
       with:
         flags: ${{ inputs.flags }}
-        dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
     - uses: ./.github/actions/upload-junit-artifacts
       if: "!cancelled()"
       with:

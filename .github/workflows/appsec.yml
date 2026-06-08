@@ -28,15 +28,12 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:appsec:ci
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-macos
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -49,8 +46,6 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:ci
@@ -63,7 +58,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-ubuntu
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -76,8 +70,6 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node
         with:
           version: 24.14.1 # TODO: remove pin when https://github.com/nodejs/node/issues/62991 is fixed
@@ -88,7 +80,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-windows
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -114,8 +105,6 @@ jobs:
           LDAP_PASSWORDS: "password1,password2"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -124,7 +113,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-ldapjs
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -148,8 +136,6 @@ jobs:
       SERVICES: postgres
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -158,7 +144,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-postgres
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -182,8 +167,6 @@ jobs:
       SERVICES: mysql
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -192,7 +175,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-mysql
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -207,8 +189,6 @@ jobs:
       PLUGINS: express|body-parser|cookie-parser|multer
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -217,7 +197,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-express
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -232,8 +211,6 @@ jobs:
       PLUGINS: fastify
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -242,7 +219,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-fastify
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -257,8 +233,6 @@ jobs:
       PLUGINS: apollo-server|apollo-server-express|apollo-server-fastify|apollo-server-core
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -267,7 +241,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-graphql
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -288,8 +261,6 @@ jobs:
       SERVICES: mongo
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -298,7 +269,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-mongodb-core
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -319,8 +289,6 @@ jobs:
       SERVICES: mongo
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/newest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -329,7 +297,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-mongoose
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -343,8 +310,6 @@ jobs:
       PLUGINS: cookie
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -357,7 +322,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-sourcing
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -394,8 +358,6 @@ jobs:
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -404,7 +366,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-next-${{ matrix.version }}-${{ matrix.range_clean || matrix.range }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -419,8 +380,6 @@ jobs:
       PLUGINS: lodash
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -429,7 +388,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-lodash
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -446,8 +404,6 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -456,7 +412,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-integration-${{ matrix.version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -470,8 +425,6 @@ jobs:
       PLUGINS: passport-local|passport-http
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -480,7 +433,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-passport
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -494,8 +446,6 @@ jobs:
       PLUGINS: handlebars|pug
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -504,7 +454,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-template
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -519,8 +468,6 @@ jobs:
       PLUGINS: node-serialize
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -529,7 +476,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-node-serialize
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -562,8 +508,6 @@ jobs:
       SERVICES: kafka
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -572,7 +516,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-kafka
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -586,8 +529,6 @@ jobs:
       PLUGINS: stripe
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:appsec:plugins:ci
@@ -596,7 +537,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: appsec-stripe
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:

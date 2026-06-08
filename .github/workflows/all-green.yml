@@ -53,17 +53,32 @@ jobs:
           done < run-ids.txt
         env:
           GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
-      - id: check-junit
+      - name: Download coverage artifacts
+        if: "!cancelled() && hashFiles('run-ids.txt') != ''"
+        run: |
+          mkdir -p coverage-results
+          while IFS= read -r run_id; do
+            gh run download "$run_id" \
+              --pattern "coverage-*" \
+              --dir "coverage-results/$run_id" \
+              2>/dev/null || true
+          done < run-ids.txt
+        env:
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+      - id: check-uploads
         if: "!cancelled()"
         run: |
-          count=$(find junit-results -name "*.xml" 2>/dev/null | wc -l | tr -d ' ')
-          echo "has_files=$([ "$count" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-      - if: "!cancelled() && steps.check-junit.outputs.has_files == 'true'"
+          junit_count=$(find junit-results -name "*.xml" 2>/dev/null | wc -l | tr -d ' ')
+          coverage_count=$(find coverage-results -mindepth 3 -maxdepth 3 -type f 2>/dev/null | wc -l | tr -d ' ')
+          echo "has_junit=$([ "$junit_count" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "has_coverage=$([ "$coverage_count" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "has_any=$([ "$((junit_count + coverage_count))" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - if: "!cancelled() && steps.check-uploads.outputs.has_any == 'true'"
         uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
-      - if: "!cancelled() && steps.check-junit.outputs.has_files == 'true'"
+      - if: "!cancelled() && steps.check-uploads.outputs.has_any == 'true'"
         uses: ./.github/actions/datadog-ci
-      - if: "!cancelled() && steps.check-junit.outputs.has_files == 'true'"
+      - if: "!cancelled() && steps.check-uploads.outputs.has_junit == 'true'"
         # Restore per-artifact CI context (GITHUB_JOB, JOB_CHECK_RUN_ID) so Datadog
         # attributes each result to the job that ran the tests, not to all-green.
         run: |
@@ -73,6 +88,16 @@ jobs:
               find "$dir" -name "*.xml" \
                 | xargs -r datadog-ci junit upload --service dd-trace-js-tests
             )
+          done
+        env:
+          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+      - if: "!cancelled() && steps.check-uploads.outputs.has_coverage == 'true'"
+        run: |
+          for dir in coverage-results/*/*/; do
+            flags=$(cat "$dir.dd-coverage-flags" 2>/dev/null || true)
+            if [ -n "$flags" ]; then
+              datadog-ci coverage upload --flags "$flags" "$dir"
+            fi
           done
         env:
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}

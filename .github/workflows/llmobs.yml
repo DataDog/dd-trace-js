@@ -31,8 +31,6 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -46,7 +44,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-sdk-${{ matrix.version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -64,8 +61,6 @@ jobs:
       PLUGINS: openai
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -77,7 +72,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-openai-${{ matrix.version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -95,8 +89,6 @@ jobs:
       PLUGINS: langchain
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/newest-maintenance-lts
       - uses: ./.github/actions/install
@@ -110,7 +102,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -128,8 +119,6 @@ jobs:
       PLUGINS: aws-sdk
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -141,7 +130,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -159,8 +147,6 @@ jobs:
       PLUGINS: google-cloud-vertexai
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -174,7 +160,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -192,8 +177,6 @@ jobs:
       PLUGINS: ai
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -207,7 +190,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -225,8 +207,6 @@ jobs:
       PLUGINS: anthropic
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -240,7 +220,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:
@@ -258,8 +237,6 @@ jobs:
       PLUGINS: google-genai
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -273,7 +250,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: llmobs-${{ github.job }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - if: always()
         uses: ./.github/actions/testagent/logs
         with:

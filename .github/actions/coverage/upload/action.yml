@@ -9,9 +9,6 @@ inputs:
     description: "Coverage report directory (defaults to 'coverage')"
     required: false
     default: coverage
-  dd_api_key:
-    description: "Datadog API key for coverage upload"
-    required: true
 
 runs:
   using: composite
@@ -46,15 +43,9 @@ runs:
       with:
         flags: ${{ steps.codecov-flags.outputs.value }}
 
-    - name: Install datadog-ci
+    - name: Upload coverage artifact
       if: always()
-      uses: ./.github/actions/datadog-ci
-
-    - name: Upload coverage to Datadog
-      if: always()
-      continue-on-error: true
-      shell: bash
-      run: datadog-ci coverage upload ${FLAGS:+--flags "$FLAGS"} .
-      env:
-        DD_API_KEY: ${{ inputs.dd_api_key }}
-        FLAGS: ${{ inputs.flags }}
+      uses: ./.github/actions/upload-coverage-artifact
+      with:
+        flags: ${{ inputs.flags }}
+        report-dir: ${{ inputs.report-dir }}

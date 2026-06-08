@@ -27,8 +27,6 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:esbuild:ci
@@ -37,7 +35,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: platform-esbuild
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   webpack:
     runs-on: ubuntu-latest
@@ -45,8 +42,6 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:webpack:ci
@@ -55,7 +50,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: platform-webpack
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   instrumentation-ai:
     runs-on: ubuntu-latest
@@ -139,8 +133,6 @@ jobs:
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.node-version }}
@@ -150,7 +142,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: instrumentations-${{ github.job }}-${{ matrix.node-version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -272,8 +263,6 @@ jobs:
       PLUGINS: http
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - name: Run instrumentation tests (oldest-maintenance, with retries)
@@ -294,7 +283,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: instrumentations-${{ github.job }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -542,8 +530,6 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:instrumentations:misc:ci
@@ -560,7 +546,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: platform-instrumentations-misc
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -578,8 +563,6 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -592,7 +575,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: instrumentations-integration-esbuild-${{ matrix.esbuild_version }}-${{ matrix.version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -609,8 +591,6 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
