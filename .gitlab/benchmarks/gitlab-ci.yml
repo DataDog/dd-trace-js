@@ -1,5 +1,27 @@
+# The microbenchmarks CI image is built in-repo from container/ via the shared
+# benchmarking-platform template (manual `build-benchmark-ci-images` job).
+# @see https://github.com/DataDog/benchmarking-platform-tools/blob/main/images/templates/gitlab/build-ci-images.template.yml
+include:
+  - project: 'DataDog/benchmarking-platform-tools'
+    file: 'images/templates/gitlab/build-ci-images.template.yml'
+
 variables:
+  # Consumed by the benchmark jobs below. After the first `build-benchmark-ci-images`
+  # run, repin this to the registry.ddbuild.io/ci/benchmarking-platform:dd-trace-js-<pipeline-id>
+  # tag it pushes (dd-trace-go pins the same way).
+  # TODO(BridgeAR): repin to the registry.ddbuild.io tag once the in-repo image is built.
   MICROBENCHMARKS_CI_IMAGE: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/benchmarking-platform:dd-trace-js
+
+  # Image build, consumed by the included build-ci-images template. The per-pipeline
+  # suffix pins each build to a unique tag so a rebuild can't shift what older
+  # pipelines pulled.
+  BASE_CI_IMAGE_SUFFIX: dd-trace-js-${CI_PIPELINE_ID}
+  BASE_CI_IMAGE_CONTAINER_DIR: .gitlab/benchmarks/container
+  # sirun and CPython are x86_64 only; the template defaults to multi-arch, which
+  # would build an arm64 leg with amd64 binaries (exec format error). Pin amd64.
+  BASE_CI_IMAGE_PLATFORM: linux/amd64
+  KUBERNETES_SERVICE_ACCOUNT_OVERWRITE: benchmarking-platform
+
   SLS_CI_IMAGE: registry.ddbuild.io/ci/serverless-tools:1
   SLS_CI_BRANCH: main
 
@@ -20,12 +42,12 @@ variables:
     - interruptible: true
   timeout: 30m  # TODO: Reduce this once GitLab CI runner availability improves
   script:
-    - cd benchmark/platform && bp-runner bp-runner.yml --debug
+    - cd .gitlab/benchmarks && bp-runner bp-runner.yml --debug
   artifacts:
     name: "artifacts"
     when: always
     paths:
-      - benchmark/platform/artifacts/
+      - .gitlab/benchmarks/artifacts/
     expire_in: 3 months
   retry:
     max: 2
@@ -46,7 +68,7 @@ benchmarks-pr-comment:
   tags: ["arch:amd64"]
   image: $MICROBENCHMARKS_CI_IMAGE
   script:
-    - cd benchmark/platform && bp-runner bp-runner.pr-comment.yml --debug
+    - cd .gitlab/benchmarks && bp-runner bp-runner.pr-comment.yml --debug
   allow_failure: true
 
 check-big-regressions:
@@ -61,7 +83,7 @@ check-big-regressions:
   tags: ["arch:amd64"]
   image: $MICROBENCHMARKS_CI_IMAGE
   script:
-    - cd benchmark/platform && bp-runner bp-runner.fail-on-regression.yml --debug
+    - cd .gitlab/benchmarks && bp-runner bp-runner.fail-on-regression.yml --debug
 
 benchmark:
   extends: .benchmarks

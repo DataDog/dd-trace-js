@@ -32,7 +32,7 @@ experiments:
 global_teardown:
   - name: Upload to S3
     run: shell
-    script: ./steps/upload-results-to-s3.sh
+    script: ./upload-results-to-s3.sh
 
   - name: Upload to BP API
     run: upload_to_bp_api
@@ -43,7 +43,7 @@ docker_config_for_local_runs:
   image_name: bp_microbenchmarks_js
   build_script: ./build-local-image.sh
   volumes:
-    - steps/:/app/steps/:ro
+    - upload-results-to-s3.sh:/app/upload-results-to-s3.sh:ro
     - bp-runner.pr-comment.yml:/app/bp-runner.pr-comment.yml:ro
     - bp-runner.fail-on-regression.yml:/app/bp-runner.fail-on-regression.yml:ro
   env:

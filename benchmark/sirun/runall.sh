@@ -100,7 +100,7 @@ done
 SHARDS_NEEDED=$(( (BENCH_COUNT + TOTAL_CPU_CORES - 1) / TOTAL_CPU_CORES ))
 if [[ ${SPLITS} -lt ${SHARDS_NEEDED} ]]; then
   echo "${BENCH_COUNT} variants on ${TOTAL_CPU_CORES} cores need ${SHARDS_NEEDED} shards, but SPLITS=${SPLITS}." >&2
-  echo "Set SPLITS and the GROUP rows per MAJOR_VERSION in .gitlab/benchmarks.yml to ${SHARDS_NEEDED}." >&2
+  echo "Set SPLITS and the GROUP rows per MAJOR_VERSION in .gitlab/benchmarks/gitlab-ci.yml to ${SHARDS_NEEDED}." >&2
   exit 1
 fi
 
