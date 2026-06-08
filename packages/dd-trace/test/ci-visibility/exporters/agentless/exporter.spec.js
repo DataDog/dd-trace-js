@@ -53,7 +53,7 @@ describe('CI Visibility Agentless Exporter', () => {
 
   it('can use CI Vis protocol right away', () => {
     const agentlessExporter = new AgentlessCiVisibilityExporter({
-      civisibilityAgentlessUrl: url, isGitUploadEnabled: true, tags: {},
+      DD_CIVISIBILITY_AGENTLESS_URL: url, isGitUploadEnabled: true, tags: {},
     })
     assert.strictEqual(agentlessExporter.canReportSessionTraces(), true)
   })
@@ -130,7 +130,7 @@ describe('CI Visibility Agentless Exporter', () => {
           },
         }))
       const agentlessExporter = new AgentlessCiVisibilityExporter({
-        civisibilityAgentlessUrl: url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
+        DD_CIVISIBILITY_AGENTLESS_URL: url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
       })
       agentlessExporter.getLibraryConfiguration({}, () => {
         assert.strictEqual(scope.isDone(), true)
@@ -153,7 +153,7 @@ describe('CI Visibility Agentless Exporter', () => {
           },
         }))
       const agentlessExporter = new AgentlessCiVisibilityExporter({
-        civisibilityAgentlessUrl: url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
+        DD_CIVISIBILITY_AGENTLESS_URL: url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
       })
       agentlessExporter.getLibraryConfiguration({}, () => {
         assert.strictEqual(scope.isDone(), true)
@@ -179,7 +179,7 @@ describe('CI Visibility Agentless Exporter', () => {
         }))
 
       const agentlessExporter = new AgentlessCiVisibilityExporter({
-        civisibilityAgentlessUrl: url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
+        DD_CIVISIBILITY_AGENTLESS_URL: url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
       })
       agentlessExporter.sendGitMetadata = () => {
         return /** @type {Promise<void>} */ (new Promise(resolve => {
@@ -235,9 +235,9 @@ describe('CI Visibility Agentless Exporter', () => {
       assert.strictEqual(agentlessExporter._coverageUrl.href, `https://citestcov-intake.${site}/`)
     })
 
-    it('uses civisibilityAgentlessUrl as the intake override for every endpoint', () => {
+    it('uses DD_CIVISIBILITY_AGENTLESS_URL as the intake override for every endpoint', () => {
       const agentlessExporter = new AgentlessCiVisibilityExporter({
-        civisibilityAgentlessUrl: url, site: 'd4tad0g.com', tags: {},
+        DD_CIVISIBILITY_AGENTLESS_URL: url, site: 'd4tad0g.com', tags: {},
       })
       assert.strictEqual(agentlessExporter._url.href, 'http://www.example.com/')
       assert.strictEqual(agentlessExporter._coverageUrl.href, 'http://www.example.com/')

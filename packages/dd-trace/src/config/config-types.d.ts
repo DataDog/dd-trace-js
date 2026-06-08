@@ -3,7 +3,6 @@ import type { GeneratedConfig } from './generated-config-types'
 type PayloadTaggingRules = ReturnType<typeof import('../payload-tagging/config').appendRules> | []
 
 export interface ConfigProperties extends GeneratedConfig {
-  civisibilityAgentlessUrl: URL | undefined
   cloudPayloadTagging: GeneratedConfig['cloudPayloadTagging'] & {
     requestsEnabled: boolean
     responsesEnabled: boolean

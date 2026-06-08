@@ -180,12 +180,12 @@ describe('sendData', () => {
     assert.deepStrictEqual(url, new URL('https://instrumentation-telemetry-intake.datadoghq.eu'))
   })
 
-  it('uses civisibilityAgentlessUrl for telemetry when the agentless intake is overridden', () => {
+  it('uses DD_CIVISIBILITY_AGENTLESS_URL for telemetry when the agentless intake is overridden', () => {
     sendDataModule.sendData(
       {
         isCiVisibility: true,
         DD_CIVISIBILITY_AGENTLESS_ENABLED: true,
-        civisibilityAgentlessUrl: new URL('https://my-intake.example/'),
+        DD_CIVISIBILITY_AGENTLESS_URL: new URL('https://my-intake.example/'),
         tags: { 'runtime-id': '123' },
         site: 'datadoghq.eu',
       },

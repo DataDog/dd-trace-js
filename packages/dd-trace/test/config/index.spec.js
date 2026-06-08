@@ -3122,7 +3122,7 @@ describe('Config', () => {
         const config = getConfig()
 
         assert.strictEqual(config.url.toString(), 'http://127.0.0.1:8126/')
-        assert.strictEqual(config.civisibilityAgentlessUrl, undefined)
+        assert.strictEqual(config.DD_CIVISIBILITY_AGENTLESS_URL, undefined)
       })
 
       it('should resolve url to the agent and expose DD_CIVISIBILITY_AGENTLESS_URL as the intake override', () => {
@@ -3132,7 +3132,7 @@ describe('Config', () => {
         const config = getConfig()
 
         assert.strictEqual(config.url.toString(), 'http://127.0.0.1:8126/')
-        assert.strictEqual(config.civisibilityAgentlessUrl.toString(), 'https://my-intake.example/')
+        assert.strictEqual(config.DD_CIVISIBILITY_AGENTLESS_URL.toString(), 'https://my-intake.example/')
       })
     })
 
@@ -3221,7 +3221,7 @@ describe('Config', () => {
         } else {
           assert.strictEqual(config.url.toString(), 'unix:///var/run/datadog/apm.socket')
         }
-        assert.strictEqual(config.civisibilityAgentlessUrl, undefined)
+        assert.strictEqual(config.DD_CIVISIBILITY_AGENTLESS_URL, undefined)
       })
     })
   })

@@ -332,10 +332,6 @@ class Config extends ConfigBase {
       setAndTrack(this, 'url', new URL(format({ protocol: 'http:', hostname: this.hostname, port: this.port })))
     }
 
-    if (this.DD_CIVISIBILITY_AGENTLESS_URL) {
-      setAndTrack(this, 'civisibilityAgentlessUrl', new URL(this.DD_CIVISIBILITY_AGENTLESS_URL))
-    }
-
     if (this.isCiVisibility) {
       setAndTrack(this, 'isServiceUserProvided', trackedConfigOrigins.has('service'))
       this.tags[ORIGIN_KEY] = 'ciapp-test'

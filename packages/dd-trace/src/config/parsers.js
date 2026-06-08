@@ -145,6 +145,12 @@ const transformers = {
     }
     return value.replaceAll(/\s*:\s*/g, ':')
   },
+  /**
+   * @param {string} value
+   */
+  toURL (value) {
+    return new URL(value)
+  },
   validatePropagationStyles (value, optionName) {
     value = transformers.toLowerCase(value)
     for (let index = 0; index < value.length; index++) {
