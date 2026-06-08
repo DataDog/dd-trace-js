@@ -2,14 +2,13 @@
 
 const assert = require('node:assert/strict')
 const { fork } = require('node:child_process')
-const fs = require('node:fs/promises')
-const fsync = require('node:fs')
 const path = require('node:path')
 
 const satisfies = require('semifies')
 
 const { Profile } = require('../../vendor/dist/pprof-format')
 const {
+  FakeAgent,
   sandboxCwd,
   stopProc,
   useSandbox,
@@ -48,35 +47,33 @@ function getSampleTypeNames (profile) {
   return profile.sampleType.map(sampleType => getString(strings, sampleType.type))
 }
 
-async function readLatestFile (cwd, pattern) {
-  const dirEntries = await fs.readdir(cwd)
-  const entries = dirEntries.filter(name => pattern.test(name))
-  assert.ok(entries.length > 0, `No file matching pattern ${pattern} found in ${cwd}`)
-
-  const entry = entries
-    .map(name => ({ name, modified: fsync.statSync(path.join(cwd, name), { bigint: true }).mtimeNs }))
-    .reduce((a, b) => a.modified > b.modified ? a : b)
-    .name
-
-  return fs.readFile(path.join(cwd, entry))
+function findFile (files, originalname) {
+  const file = files.find(file => file.originalname === originalname)
+  assert.ok(file, `Expected ${originalname} attachment`)
+  return file
 }
 
-async function runProfiler ({ cwd, allocationProfilingEnabled, pprofPrefix = '' }) {
-  const proc = fork(path.join(cwd, 'profiler/index.js'), {
-    cwd,
-    env: {
-      DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: 'off',
-      DD_PROFILING_ENABLED: '1',
-      DD_PROFILING_EXPERIMENTAL_ALLOCATION_ENABLED: allocationProfilingEnabled ? '1' : '0',
-      DD_PROFILING_EXPORTERS: 'file',
-      DD_PROFILING_PPROF_PREFIX: pprofPrefix,
-      DD_PROFILING_PROFILERS: 'space',
-      DD_PROFILING_SOURCE_MAP: '0',
-      DD_PROFILING_UPLOAD_PERIOD: '1',
-      DD_TRACE_ENABLED: '0',
-      TEST_DURATION_MS: '2500',
-    },
-  })
+function startProfiler ({ cwd, allocationProfilingEnabled, agent }) {
+  const env = {
+    DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: 'off',
+    DD_PROFILING_ENABLED: '1',
+    DD_PROFILING_EXPERIMENTAL_ALLOCATION_ENABLED: allocationProfilingEnabled ? '1' : '0',
+    DD_PROFILING_EXPORTERS: agent ? 'agent' : 'file',
+    DD_PROFILING_PROFILERS: 'space',
+    DD_PROFILING_SOURCE_MAP: '0',
+    DD_PROFILING_UPLOAD_PERIOD: '1',
+    TEST_DURATION_MS: '5000',
+  }
+
+  if (agent) {
+    env.DD_TRACE_AGENT_PORT = agent.port
+  }
+
+  return fork(path.join(cwd, 'profiler/index.js'), { cwd, env })
+}
+
+async function runProfiler ({ cwd, allocationProfilingEnabled }) {
+  const proc = startProfiler({ cwd, allocationProfilingEnabled })
 
   try {
     await processExitPromise(proc, TIMEOUT)
@@ -85,11 +82,31 @@ async function runProfiler ({ cwd, allocationProfilingEnabled, pprofPrefix = '' 
   }
 }
 
-async function getLatestProfilerOutput (cwd, pprofPrefix) {
-  const event = JSON.parse((await readLatestFile(cwd, /^event_.+\.json$/)).toString())
-  const spaceProfile = Profile.decode(await readLatestFile(cwd, new RegExp(`^${pprofPrefix}space_.+\\.pprof$`)))
+async function runProfilerAndGetUpload ({ cwd, allocationProfilingEnabled }) {
+  const agent = await new FakeAgent().start()
+  let upload
 
-  return { event, spaceProfile }
+  const messagePromise = agent.assertMessageReceived(({ files }) => {
+    assert.ok(files, 'Expected profiling upload')
+
+    upload = {
+      event: JSON.parse(findFile(files, 'event.json').buffer.toString()),
+      spaceProfile: Profile.decode(findFile(files, 'space.pprof').buffer),
+    }
+  }, TIMEOUT)
+
+  const proc = startProfiler({ cwd, allocationProfilingEnabled, agent })
+
+  try {
+    await Promise.all([
+      messagePromise,
+      processExitPromise(proc, TIMEOUT),
+    ])
+    return upload
+  } finally {
+    await stopProc(proc)
+    await agent.stop()
+  }
 }
 
 describe('allocation profiler', () => {
@@ -110,19 +127,16 @@ describe('allocation profiler', () => {
     const cases = [
       {
         allocationProfilingEnabled: false,
-        pprofPrefix: 'heap_',
         sampleTypes: ['objects', 'space'],
       },
       {
         allocationProfilingEnabled: true,
-        pprofPrefix: 'allocation_',
         sampleTypes: ['inuse_objects', 'alloc_objects', 'inuse_space', 'alloc_space'],
       },
     ]
 
-    for (const { allocationProfilingEnabled, pprofPrefix, sampleTypes } of cases) {
-      await runProfiler({ cwd, allocationProfilingEnabled, pprofPrefix })
-      const { event, spaceProfile } = await getLatestProfilerOutput(cwd, pprofPrefix)
+    for (const { allocationProfilingEnabled, sampleTypes } of cases) {
+      const { event, spaceProfile } = await runProfilerAndGetUpload({ cwd, allocationProfilingEnabled })
 
       assert.deepStrictEqual(event.attachments, ['space.pprof'])
       assert.strictEqual(event.info.profiler.settings.allocationProfilingEnabled, allocationProfilingEnabled)
