@@ -2574,6 +2574,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         },
         known_tests_enabled: true,
       })
+      // it.failing tests are skipped from EFD new-test analysis, so they won't
+      // be retried even with an empty known tests list.
+      receiver.setKnownTests({})
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
