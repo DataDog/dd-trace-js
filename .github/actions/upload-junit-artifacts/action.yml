@@ -30,4 +30,5 @@ runs:
         path: |
           *.xml
           .dd-ci-metadata
+        include-hidden-files: true
         retention-days: 1
