@@ -149,6 +149,7 @@ jobs:
           id: ${{ github.job }}
 
   push-to-test-optimization:
+    name: ${{ github.workflow }} / push-to-test-optimization
     runs-on: ubuntu-latest
     needs: [macos, ubuntu, windows]
     if: "!cancelled()"
