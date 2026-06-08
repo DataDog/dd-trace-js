@@ -1,7 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { channel } = require('dc-polyfill')
+const { channel, tracingChannel } = require('dc-polyfill')
 const { before, beforeEach, describe, it } = require('mocha')
 
 const evaluateChannel = channel('dd-trace:ai:aiguard')
@@ -148,6 +148,22 @@ describe('openai AI Guard instrumentation', () => {
 
       return completions.create({ messages: [{ role: 'user', content: 'Hi' }] }).parse()
         .then(body => assert.strictEqual(body.choices[0].message, assistant))
+    })
+
+    it('finishes the span without AI Guard when only APM tracing is active', () => {
+      // APM tracing subscribed (so `ch.start.hasSubscribers`) but no AI Guard subscriber,
+      // so `guard` is null and `handleUnwrappedAPIPromise` takes the no-guard finish path.
+      const apmChannel = tracingChannel('apm:openai:request')
+      const apmHandlers = { start () {} }
+      apmChannel.subscribe(apmHandlers)
+
+      const assistant = { role: 'assistant', content: 'Hello!' }
+      const completions = new Completions()
+      completions._nextApiPromise = new FakeAPIPromise({ choices: [{ message: assistant }] })
+
+      return completions.create({ messages: [{ role: 'user', content: 'Hi' }] }).parse()
+        .then(body => assert.strictEqual(body.choices[0].message, assistant))
+        .finally(() => apmChannel.unsubscribe(apmHandlers))
     })
 
     it('calls original directly when messages are missing', () => {
