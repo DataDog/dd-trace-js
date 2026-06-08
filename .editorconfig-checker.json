@@ -7,17 +7,15 @@
   "Exclude": [
     "LICENSE",
     "LICENSE.*",
+    "packages/dd-trace/test/appsec/bad-formatted-rules.json",
     "packages/dd-trace/test/llmobs/cassettes",
     "vendor"
   ],
   "AllowedContentTypes": [],
   "PassedFiles": [],
   "Disable": {
-    "EndOfLine": false,
     "Indentation": false,
     "IndentSize": false,
-    "InsertFinalNewline": false,
-    "TrimTrailingWhitespace": false,
     "MaxLineLength": false,
     "Charset": false
   }
