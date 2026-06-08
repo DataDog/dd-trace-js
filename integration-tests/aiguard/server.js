@@ -24,6 +24,15 @@ app.get('/allow', async (req, res) => {
   res.status(200).json(evaluation)
 })
 
+app.get('/allow-with-user', async (req, res) => {
+  tracer.appsec.setUser({ id: 'user-123', session_id: 'session-456' })
+  const evaluation = await tracer.aiguard.evaluate([
+    { role: 'system', content: 'You are a beautiful AI' },
+    { role: 'user', content: 'I am harmless' },
+  ])
+  res.status(200).json(evaluation)
+})
+
 app.get('/deny', async (req, res) => {
   const block = req.headers['x-blocking-enabled'] === 'true'
   try {
