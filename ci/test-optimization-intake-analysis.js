@@ -3,6 +3,11 @@
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 
+const {
+  buildValidationPayload,
+  getValidationAppUrl,
+} = require('./test-optimization-validation-link')
+
 const GIT_METADATA_FIELDS = [
   ['repositoryUrl', 'repository_url'],
   ['commitSha', 'sha'],
@@ -261,10 +266,13 @@ function buildKnownTestsFromArtifact (artifact) {
  * @returns {string} human-readable report
  */
 function renderAnalysisText (analysis) {
+  const validationAppUrl = getValidationAppUrl(buildValidationPayload({ analysis }))
+
   const lines = [
     `HTML report: ${getHtmlReportReference(analysis)}`,
     `HTML report path: ${analysis.summary.artifacts.htmlPath || 'not available'}`,
     `Open HTML report command: ${analysis.summary.artifacts.htmlOpenCommand || 'not available'}`,
+    `Datadog validation: ${validationAppUrl}`,
     'Datadog Test Optimization intake analysis',
     `Primary stage: ${analysis.primaryStage}`,
     `Requests: ${analysis.summary.requestCount}`,

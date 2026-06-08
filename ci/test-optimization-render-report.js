@@ -10,6 +10,10 @@ const { pathToFileURL } = require('node:url')
 const {
   analyzeIntakeArtifact,
 } = require('./test-optimization-intake-analysis')
+const {
+  buildValidationPayload,
+  getValidationAppUrl,
+} = require('./test-optimization-validation-link')
 
 const DEFAULT_ENV_KEYS = [
   'DD_API_KEY',
@@ -151,10 +155,23 @@ function renderFinalReport (options) {
   const frameworkSummary = getFrameworkSummary(staticReport)
   const staticHighlights = getStaticHighlights(staticReport)
   const artifactPaths = getArtifactPaths(options, staticPath, intakePath, htmlPath)
+  const validationAppUrl = getValidationAppUrl(buildValidationPayload({
+    analysis,
+    artifacts: {
+      ...artifactPaths,
+      htmlFileUrl,
+    },
+    env,
+    staticReport,
+    testCommand,
+    testExitCode,
+    testResult,
+  }))
 
   const lines = [
     `HTML report: ${htmlFileUrl}`,
     `HTML report path: ${htmlPath}`,
+    `Datadog validation: ${validationAppUrl}`,
     '',
     `Primary funnel stage: ${analysis.primaryStage}`,
     '',

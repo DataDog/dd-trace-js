@@ -15,7 +15,8 @@ Use repository-specific judgment to adapt commands.
 - If the wrapper succeeds with `Reporting complete`, skip manual Steps 3-6 and continue to Step 7.
 - Step 7: run the EFD check: first run -> known tests file -> add temporary test -> second EFD run -> validation.
 - Step 7 cleanup: remove the temporary test and verify it is gone.
-- Step 8: use the final report template and answer the four diagnostic questions with the question text inline.
+- Step 8: use the final report template, include the `Datadog validation:` URL, and answer the
+  four diagnostic questions with the question text inline.
 
 The goal is to answer four questions:
 
@@ -100,6 +101,9 @@ produce. Use these wrapper-generated root artifacts for Step 8:
 - `dd-test-optimization-final-report.txt`
 - `dd-test-optimization-intake.json`
 - `dd-test-optimization-report.html`
+
+The wrapper and analyzer print a `Datadog validation:` URL. It points to the local Datadog
+validation app with a pako-compatible encoded JSON payload.
 
 Analyzer JSON key paths used in this runbook:
 
@@ -629,9 +633,9 @@ artifact/state problems before applying funnel-stage fixes.
 If the primary stage is anything other than `Reporting complete`, consult `## Decision Tree` below
 Step 8 under the matching stage heading before writing the final response.
 
-The first line of the analyzer text report is the canonical HTML report `file://` URL. Copy that
-line exactly into the final response instead of rewriting it from memory. The second line is the
-absolute HTML report path, and the third line is the suggested open command for the HTML report.
+The analyzer text report includes the canonical HTML report `file://` URL, absolute HTML report
+path, suggested open command, and `Datadog validation:` URL. Copy those lines exactly into the
+final response instead of rewriting them from memory.
 
 ### 7. Test Early Flake Detection
 
@@ -955,6 +959,7 @@ const eventLevels =
 
 console.log(`HTML report: ${readText("dd-intake-html-file-url.txt", readFinalReportLine("HTML report:"))}`)
 console.log(`HTML report path: ${readText("dd-intake-html-path.txt", readFinalReportLine("HTML report path:"))}`)
+console.log(`Datadog validation: ${readFinalReportLine("Datadog validation:")}`)
 console.log(`Final report path: ${process.cwd()}/dd-test-optimization-final-report.txt`)
 console.log(`Selected test command: ${readText("dd-test-optimization-test-command.txt")}`)
 console.log(`Test result: ${readText("dd-test-optimization-test-result.txt")}`)
@@ -977,6 +982,7 @@ selected temporary test's suite and test names.
 The final response must include:
 
 - HTML report `file://` URL and absolute path.
+- Datadog validation URL.
 - Final report path.
 - Selected test command and test result.
 - EFD check result when Step 7 ran, including known tests count and retried new tests count.
@@ -990,6 +996,7 @@ Final response template:
 ```text
 HTML report: file:///absolute/path/to/dd-test-optimization-report.html
 HTML report path: /absolute/path/to/dd-test-optimization-report.html
+Datadog validation: https://app-dev-local.datadoghq.com/ci/test/validation#pako:<payload>
 Final report path: /absolute/path/to/dd-test-optimization-final-report.txt
 
 Selected test command:

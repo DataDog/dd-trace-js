@@ -6,6 +6,7 @@ const http = require('node:http')
 const os = require('node:os')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
+const zlib = require('node:zlib')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 
@@ -367,13 +368,25 @@ describe('Test Optimization debug intake', () => {
           assert.strictEqual(analysis.summary.events.counts.test, 1)
           assert.deepStrictEqual(analysis.summary.events.missingLevels, [])
           assert.strictEqual(analysis.summary.artifacts.htmlPath, intake.html)
+          const analysisText = renderAnalysisText(analysis)
           assert.match(
-            renderAnalysisText(analysis),
+            analysisText,
             new RegExp(`^HTML report: ${escapeRegExp(pathToFileURL(intake.html).href)}\\n`)
           )
-          assert.match(renderAnalysisText(analysis), new RegExp(`\\nHTML report path: ${escapeRegExp(intake.html)}\\n`))
-          assert.match(renderAnalysisText(analysis), /test event levels: sessions=1, modules=1, suites=1, tests=1/)
-          assert.match(renderAnalysisText(analysis), /\nOpen HTML report command: /)
+          assert.match(analysisText, new RegExp(`\\nHTML report path: ${escapeRegExp(intake.html)}\\n`))
+          assert.match(analysisText, /test event levels: sessions=1, modules=1, suites=1, tests=1/)
+          assert.match(analysisText, /\nOpen HTML report command: /)
+          assert.match(analysisText, /\nDatadog validation: https:\/\/app-dev-local\.datadoghq\.com/)
+
+          const validationPayload = getValidationPayload(analysisText)
+          assert.deepStrictEqual(validationPayload.result, {
+            status: 'ok',
+            stage: 'Reporting complete',
+          })
+          assert.strictEqual(validationPayload.summary.requestCount, 2)
+          assert.strictEqual(validationPayload.summary.citestcycle.payloadCount, 1)
+          assert.strictEqual(validationPayload.summary.events.counts.test, 1)
+          assert.strictEqual(validationPayload.findings[0].stage, 'Reporting complete')
 
           const report = fs.readFileSync(intake.html, 'utf8')
           assert.match(report, /Test Optimization debug report/)
@@ -635,6 +648,7 @@ describe('Test Optimization debug intake', () => {
     })
 
     assert.match(report, new RegExp(`^HTML report: ${escapeRegExp(pathToFileURL(htmlPath).href)}\\n`))
+    assert.match(report, /\nDatadog validation: https:\/\/app-dev-local\.datadoghq\.com/)
     assert.match(report, /Primary funnel stage: Reporting complete/)
     assert.match(report, /Scope:\n- Selected test subset only\./)
     assert.match(report, /- Framework: Mocha 11\.7\.6/)
@@ -655,6 +669,25 @@ describe('Test Optimization debug intake', () => {
     )
     assert.match(report, /Final report: /)
     assert.match(report, /Agent JSON report: /)
+
+    const validationPayload = getValidationPayload(report)
+    assert.deepStrictEqual(validationPayload.result, {
+      status: 'ok',
+      stage: 'Reporting complete',
+    })
+    assert.strictEqual(validationPayload.static.ddTraceVersion, '6.0.0-pre')
+    assert.deepStrictEqual(validationPayload.static.frameworks, [
+      {
+        id: 'mocha',
+        name: 'Mocha',
+        version: '11.7.6',
+      },
+    ])
+    assert.strictEqual(validationPayload.test.command, testCommand)
+    assert.strictEqual(validationPayload.test.exitCode, '0')
+    assert.strictEqual(validationPayload.test.result, '3 passing')
+    assert.strictEqual(validationPayload.artifacts.htmlFileUrl, pathToFileURL(htmlPath).href)
+    assert.strictEqual(validationPayload.env.find(entry => entry.key === 'DD_API_KEY').value, 'debug')
   })
 
   it('renders EFD evidence in the final runbook report', () => {
@@ -708,6 +741,18 @@ describe('Test Optimization debug intake', () => {
 
 function hasFinding (analysis, stage) {
   return analysis.findings.some(finding => finding.stage === stage)
+}
+
+function getValidationPayload (text) {
+  const line = text.split('\n').find(line => line.startsWith('Datadog validation: '))
+  assert.ok(line)
+
+  const url = line.slice('Datadog validation: '.length)
+  assert.match(url, /^https:\/\/app-dev-local\.datadoghq\.com\/ci\/test\/validation#pako:[A-Za-z0-9_-]+$/)
+
+  const encoded = url.slice(url.indexOf('#pako:') + '#pako:'.length)
+  const json = zlib.inflateSync(Buffer.from(encoded, 'base64url')).toString('utf8')
+  return JSON.parse(json)
 }
 
 function getStaticReport () {
