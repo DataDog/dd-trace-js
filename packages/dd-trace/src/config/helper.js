@@ -13,6 +13,7 @@
  * @property {string} [transform]
  * @property {string} [allowed]
  * @property {string|boolean} [deprecated]
+ * @property {boolean} [sensitive] Excludes the configuration value from configuration telemetry.
  */
 
 /**
