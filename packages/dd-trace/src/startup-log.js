@@ -3,7 +3,6 @@
 const os = require('os')
 const { inspect } = require('util')
 const tracerVersion = require('../../../package.json').version
-const { getAgentUrl } = require('./agent/url')
 const { warn } = require('./log/writer')
 
 const errors = {}
@@ -76,7 +75,7 @@ function logGenericError (message) {
  * @returns {Record<string, unknown>}
  */
 function configInfo () {
-  const url = getAgentUrl(config)
+  const url = config.url
 
   return {
     [inspect.custom] () {
