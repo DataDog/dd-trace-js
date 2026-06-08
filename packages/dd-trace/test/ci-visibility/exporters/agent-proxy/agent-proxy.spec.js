@@ -16,6 +16,7 @@ const DynamicInstrumentationLogsWriter = require('../../../../src/ci-visibility/
 const CoverageWriter = require('../../../../src/ci-visibility/exporters/agentless/coverage-writer')
 const AgentWriter = require('../../../../src/exporters/agent/writer')
 const { clearCache } = require('../../../../src/agent/info')
+const { defaults: { hostname, port } } = require('../../../../src/config/defaults')
 
 describe('AgentProxyCiVisibilityExporter', () => {
   beforeEach(() => {
@@ -25,7 +26,7 @@ describe('AgentProxyCiVisibilityExporter', () => {
   })
 
   const flushInterval = 50
-  const url = new URL('http://127.0.0.1:8126')
+  const url = new URL(`http://${hostname}:${port}`)
   const queryDelay = 50
   const tags = {}
 
