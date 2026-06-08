@@ -200,15 +200,11 @@ class AIGuard extends NoopAIGuard {
    */
   #copyServiceEntryTagsToGuardSpan (guardSpan, rootSpan) {
     const rootTags = rootSpan.context().getTags()
-    const newTags = {}
     for (const [sourceTag, destTag] of SERVICE_ENTRY_TAG_MAPPINGS) {
       const value = rootTags[sourceTag]
       if (value !== undefined && value !== null) {
-        newTags[destTag] = value
+        guardSpan.setTag(destTag, value)
       }
-    }
-    if (Object.keys(newTags).length > 0) {
-      guardSpan.addTags(newTags)
     }
   }
 
