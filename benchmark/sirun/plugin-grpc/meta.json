@@ -1,0 +1,16 @@
+{
+  "name": "plugin-grpc",
+  "run": "node index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "cachegrind": false,
+  "iterations": 12,
+  "instructions": true,
+  "variants": {
+    "unary": {
+      "env": { "VARIANT": "unary", "ITERATIONS": "120000000" }
+    },
+    "mixed": {
+      "env": { "VARIANT": "mixed", "ITERATIONS": "100000000" }
+    }
+  }
+}
