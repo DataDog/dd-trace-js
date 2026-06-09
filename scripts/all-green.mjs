@@ -2,6 +2,7 @@ import { setTimeout } from 'timers/promises'
 import { Octokit } from 'octokit'
 import { summary } from '@actions/core'
 import { context } from '@actions/github'
+import { downloadArtifacts } from './download-artifacts.mjs'
 
 /* eslint-disable no-console */
 
@@ -196,6 +197,10 @@ async function checkAllGreen () {
   const { runs, done } = await pollUntilDone()
 
   await printSummary(runs)
+
+  if (process.env.GITHUB_ACTIONS) {
+    await downloadArtifacts(octokit, { owner, repo, token: GITHUB_TOKEN, runs })
+  }
 
   if (!done) {
     console.log(`State is still pending after ${RETRIES} retries.`)
