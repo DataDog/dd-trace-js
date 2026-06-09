@@ -1195,17 +1195,15 @@ function deepFreeze (value) {
  *
  * When `withReceiver: true` is set, each test function receives
  * `(receiver, run)` arguments automatically — see `withReceiver` for details.
- * Pass `afterEach` (Mocha's global) alongside `withReceiver: true` so that
- * the receiver and subprocess are force-cleaned up on Mocha timeout, not only
- * when the test body settles naturally.
+ * An `afterEach` hook is registered per test so that the receiver and
+ * subprocess are force-cleaned up on Mocha timeout, not only when the test
+ * body settles naturally.
  *
  * @param {(name: string, fn: () => Promise<void>) => void} mochaIt
- * @param {{ concurrency?: number, withReceiver?: boolean, afterEach?: Function }} [options]
+ * @param {{ concurrency?: number, withReceiver?: boolean }} [options]
  * @returns {(name: string, fn: (...args: unknown[]) => Promise<void>, opts?: { retries?: number }) => void}
  */
-function createParallelIt (mochaIt, {
-  concurrency = 2, withReceiver: useReceiver = false, afterEach: mochaAfterEach,
-} = {}) {
+function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver = false } = {}) {
   // Keyed by Mocha Suite object; populated lazily on first run within each suite.
   const suiteStates = new Map()
   // All registered entries, queued by test title. A queue (array) per title
@@ -1255,11 +1253,11 @@ function createParallelIt (mochaIt, {
     if (!entriesByTitle.has(name)) entriesByTitle.set(name, [])
     entriesByTitle.get(name).push(entry)
 
-    if (useReceiver && mochaAfterEach) {
+    if (useReceiver) {
       // Force-clean up after each Mocha test even if it timed out before the
       // test body settled. The cleanup is idempotent: a no-op when the body
       // already completed normally and the finally block ran first.
-      mochaAfterEach(function () { return wrappedFn.cleanup() })
+      afterEach(function () { return wrappedFn.cleanup() })
     }
 
     mochaIt(name, function () {

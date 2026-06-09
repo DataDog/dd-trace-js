@@ -46,7 +46,7 @@ versions.forEach((version) => {
   }
 
   describe(`playwright@${version}`, function () {
-    const it = createParallelIt(global.it, { withReceiver: true, afterEach: global.afterEach })
+    const it = createParallelIt(global.it, { withReceiver: true })
 
     let cwd, webAppPort, webPortWithRedirect, webAppServer, webAppServerWithRedirect
 
