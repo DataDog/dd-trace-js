@@ -58,33 +58,20 @@ jobs:
           wait
         env:
           GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
-      - id: check-uploads
-        if: "!cancelled()"
-        run: |
-          junit_count=$(find junit-results -name "*.xml" 2>/dev/null | wc -l | tr -d ' ')
-          coverage_count=$(find coverage-results -mindepth 3 -maxdepth 3 -type f 2>/dev/null | wc -l | tr -d ' ')
-          echo "has_junit=$([ "$junit_count" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-          echo "has_coverage=$([ "$coverage_count" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-          echo "has_any=$([ "$((junit_count + coverage_count))" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
-      - if: "!cancelled() && steps.check-uploads.outputs.has_any == 'true'"
+      - if: "!cancelled()"
         uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
-      - if: "!cancelled() && steps.check-uploads.outputs.has_any == 'true'"
+      - if: "!cancelled()"
         uses: ./.github/actions/datadog-ci
-      - if: "!cancelled() && steps.check-uploads.outputs.has_junit == 'true'"
+      - if: "!cancelled()"
         run: |
           find junit-results -name "*.xml" \
             | xargs -r datadog-ci junit upload --service dd-trace-js-tests
         env:
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
-      - if: "!cancelled() && steps.check-uploads.outputs.has_coverage == 'true'"
+      - if: "!cancelled()"
         run: |
-          for dir in coverage-results/*/*/; do
-            flags=$(cat "$dir.dd-coverage-flags" 2>/dev/null || true)
-            if [ -n "$flags" ]; then
-              datadog-ci coverage upload --flags "$flags" "$dir" &
-            fi
-          done
-          wait
+          find coverage-results -name "lcov.info" -printf "%h\n" \
+            | xargs -r datadog-ci coverage upload
         env:
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
