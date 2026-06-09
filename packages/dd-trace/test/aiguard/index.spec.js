@@ -58,9 +58,9 @@ describe('AIGuard auto instrumentation channel', () => {
     sinon.restore()
   })
 
-  function publish (publishedMessages = messages, integration = 'openai') {
+  function publish (publishedMessages = messages, integration = 'openai', parentSpan) {
     const abortController = new AbortController()
-    const ctx = { messages: publishedMessages, integration, abortController, pending: [] }
+    const ctx = { messages: publishedMessages, integration, parentSpan, abortController, pending: [] }
     aiguardChannel.publish(ctx)
     return ctx
   }
@@ -74,16 +74,20 @@ describe('AIGuard auto instrumentation channel', () => {
   })
 
   it('pushes an allowed evaluation promise without aborting', async () => {
-    const ctx = publish()
+    const parentSpan = { fake: 'openai.request span' }
+    const ctx = publish(messages, 'openai', parentSpan)
 
     assert.strictEqual(ctx.pending.length, 1)
     await Promise.all(ctx.pending)
 
     assert.strictEqual(ctx.abortController.signal.aborted, false)
+    // `parentSpan` from the channel is forwarded to the SDK as `childOf` so the
+    // `ai_guard` span nests under the LLM span.
     sinon.assert.calledOnceWithExactly(evaluate, messages, {
       block: true,
       source: SOURCE_AUTO,
       integration: 'openai',
+      childOf: parentSpan,
     })
   })
 
@@ -616,6 +620,25 @@ describe('AIGuard SDK', () => {
           assert.ok(!Object.hasOwn(span.meta, EVENT_TAG_KEY), `Available keys: ${inspect(Object.keys(span.meta))}`)
         }
       }
+    })
+  })
+
+  it('parents the ai_guard span under the explicit childOf span', async () => {
+    mockFetch({
+      body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } },
+    })
+
+    // Create the parent span and evaluate outside its active scope, so only the explicit
+    // `childOf` can establish the parent-child relationship (not the active async context).
+    const parent = tracer.startSpan('explicit-parent')
+    await aiguard.evaluate(prompt, { childOf: parent })
+    parent.finish()
+
+    await agent.assertSomeTraces(traces => {
+      const parentSpan = traces[0].find(span => span.name === 'explicit-parent')
+      const guardSpan = traces[0].find(span => span.name === 'ai_guard')
+      assert.ok(parentSpan && guardSpan, 'expected both explicit-parent and ai_guard spans')
+      assert.strictEqual(guardSpan.parent_id.toString(), parentSpan.span_id.toString())
     })
   })
 
