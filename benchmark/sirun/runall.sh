@@ -18,11 +18,18 @@ function cleanup {
 
 trap cleanup EXIT
 
-# Temporary until merged to master
-wget -O sirun.tar.gz https://github.com/DataDog/sirun/releases/download/v0.1.10/sirun-v0.1.10-x86_64-unknown-linux-musl.tar.gz \
-	&& tar -xzf sirun.tar.gz \
-	&& rm sirun.tar.gz \
-	&& mv sirun /usr/bin/sirun
+# Install the pinned sirun unless the image already baked this exact version.
+# The benchmarking-platform image records what it baked in /opt/baked-sirun-version;
+# a mismatch means .sirun-version was bumped since the last image build, so fetch it
+# here until the image catches up.
+read -r SIRUN_VERSION SIRUN_SHA256 < "${CWD}/.sirun-version"
+if [[ "$(cat /opt/baked-sirun-version 2>/dev/null)" != "${SIRUN_VERSION}" ]]; then
+  wget -O sirun.tar.gz "https://github.com/DataDog/sirun/releases/download/v${SIRUN_VERSION}/sirun-v${SIRUN_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+  echo "${SIRUN_SHA256}  sirun.tar.gz" | sha256sum -c -
+  tar -xzf sirun.tar.gz
+  rm sirun.tar.gz
+  mv sirun /usr/bin/sirun
+fi
 
 if test -f ~/.nvm/nvm.sh; then
   source ~/.nvm/nvm.sh
@@ -61,7 +68,16 @@ echo "  CPUSET_START: ${CPUSET_START}"
 echo "  CPU_AFFINITY start: ${CPU_AFFINITY}"
 echo "  cpuset: $(cat /proc/self/status 2>/dev/null | grep Cpus_allowed_list || echo 'N/A')"
 
-nvm install $MAJOR_VERSION # provided by each benchmark stage
+# MAJOR_VERSION is provided by each benchmark stage. The exact patch is pinned once
+# in the plugin versions manifest (node-<major>); read it so a Node bump there is the
+# single change that moves the benchmark runtime.
+NODE_VERSION=$(sed -n "s/.*\"node-${MAJOR_VERSION}\": *\"npm:node@\([0-9.]*\)\".*/\1/p" \
+  "${CWD}/../../packages/dd-trace/test/plugins/versions/package.json")
+if [[ -z "${NODE_VERSION}" ]]; then
+  echo "No node-${MAJOR_VERSION} pin in packages/dd-trace/test/plugins/versions/package.json" >&2
+  exit 1
+fi
+nvm install "${NODE_VERSION}"
 export VERSION=`nvm current`
 export ENABLE_AFFINITY=true
 echo "using Node.js ${VERSION}"
@@ -84,7 +100,7 @@ done
 SHARDS_NEEDED=$(( (BENCH_COUNT + TOTAL_CPU_CORES - 1) / TOTAL_CPU_CORES ))
 if [[ ${SPLITS} -lt ${SHARDS_NEEDED} ]]; then
   echo "${BENCH_COUNT} variants on ${TOTAL_CPU_CORES} cores need ${SHARDS_NEEDED} shards, but SPLITS=${SPLITS}." >&2
-  echo "Set SPLITS and the GROUP rows per MAJOR_VERSION in .gitlab/benchmarks.yml to ${SHARDS_NEEDED}." >&2
+  echo "Set SPLITS and the GROUP rows per MAJOR_VERSION in .gitlab/benchmarks/gitlab-ci.yml to ${SHARDS_NEEDED}." >&2
   exit 1
 fi
 
