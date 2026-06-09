@@ -1286,13 +1286,10 @@ function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver
 
 /**
  * Wraps a test body with FakeCiVisIntake lifecycle management. Starts a
- * receiver before the test, passes it (and an optional `run` exec helper that
- * auto-kills on cleanup) to `fn`, then stops the receiver in a finally block.
- *
- * The returned function exposes a `cleanup()` method that is idempotent and
- * safe to call from an `afterEach` hook — it force-stops the receiver and
- * subprocess when Mocha times out before the test body settles, and is a
- * no-op if the body already completed and the finally block ran first.
+ * receiver before the test and passes it (and an optional `run` exec helper)
+ * to `fn`. Cleanup is driven externally via `cleanup()` — call it from an
+ * `afterEach` hook so it runs on both normal completion and Mocha timeout.
+ * Double-calling `cleanup()` is safe; the second call is a no-op.
  *
  * @param {(
  *   receiver: FakeCiVisIntake,
@@ -1301,34 +1298,29 @@ function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver
  * @returns {(() => Promise<void>) & { cleanup: () => Promise<void> }}
  */
 function withReceiver (fn) {
-  let doCleanup = null
-  let cleanedUp = false
-
-  async function cleanup () {
-    if (cleanedUp) return
-    cleanedUp = true
-    await doCleanup?.()
-  }
+  let receiver
+  let lastProc
 
   const wrapped = async () => {
-    const receiver = await new FakeCiVisIntake().start()
-    let lastProc
+    receiver = await new FakeCiVisIntake().start()
+    lastProc = undefined
     const run = (cmd, opts) => {
       lastProc = exec(cmd, opts)
       return lastProc
     }
-    doCleanup = async () => {
-      lastProc?.kill()
-      await receiver.stop()
-    }
-    try {
-      await fn(receiver, run)
-    } finally {
-      await cleanup()
-    }
+    await fn(receiver, run)
   }
 
-  wrapped.cleanup = cleanup
+  // Nulls out references before stopping so double-calls are safe.
+  wrapped.cleanup = async () => {
+    const proc = lastProc
+    const rcvr = receiver
+    lastProc = undefined
+    receiver = undefined
+    proc?.kill()
+    await rcvr?.stop()
+  }
+
   return wrapped
 }
 
