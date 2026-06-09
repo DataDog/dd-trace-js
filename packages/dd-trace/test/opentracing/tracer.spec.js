@@ -256,6 +256,21 @@ describe('Tracer', () => {
       sinon.assert.calledWith(span.addTags, fields.tags)
     })
 
+    it('should preserve the span version when the span service matches the global service', () => {
+      fields.tags = {
+        service: 'service',
+        version: '1.2.3',
+      }
+
+      tracer = new Tracer(config)
+      const testSpan = tracer.startSpan('name', fields)
+
+      sinon.assert.calledWith(span.addTags, fields.tags)
+      sinon.assert.calledWith(spanCtx.setTag, 'service.name', 'service')
+      assert.strictEqual(fields.tags.version, '1.2.3')
+      assert.strictEqual(testSpan, span)
+    })
+
     it('If span is granted a service name that differs from the global service name' +
       'ensure spans `version` tag is undefined.', () => {
       config.tags = {
