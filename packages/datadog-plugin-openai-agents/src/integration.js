@@ -82,6 +82,14 @@ class OpenAIAgentsIntegration {
     this.#modelProvider = getOpenAIModelProvider(baseURL)
   }
 
+  /**
+   * @param {string} spanId agents-core spanId
+   * @returns {import('../../dd-trace/src/opentracing/span') | undefined}
+   */
+  getDDSpan (spanId) {
+    return this.#oaiToDdSpan.get(spanId)
+  }
+
   clearState () {
     // Finish any dd-trace spans still in-flight so we don't leak open traces
     // when agents-core's TracingProcessor.shutdown() runs (e.g., process
