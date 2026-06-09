@@ -45,7 +45,7 @@ function formatLanguageModelInputMessages (instructions, messages) {
       ? instructions
       : Array.isArray(instructions)
         ? instructions.map(instruction => instruction.content).join('')
-        : instructions
+        : instructions.content
 
     inputMessages.push({ role: 'system', content: systemPrompt })
   }
