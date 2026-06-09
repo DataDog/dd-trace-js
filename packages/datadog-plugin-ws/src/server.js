@@ -94,7 +94,7 @@ function getRequestProtocol (req, fallback = 'ws') {
 
   // 2. Check for a trusted header set by a proxy
   if (req.headers && req.headers['x-forwarded-proto']) {
-    const proto = req.headers['x-forwarded-proto'].split(',')[0].trim()
+    const proto = req.headers['x-forwarded-proto'].split(',', 1)[0].trim()
     if (proto === 'https') return 'wss'
     if (proto === 'http') return 'ws'
   }

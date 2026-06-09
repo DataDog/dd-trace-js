@@ -9,7 +9,7 @@ const { getIsAzureFunction } = require('./serverless')
 
 function extractSubscriptionID (ownerName) {
   if (ownerName !== undefined) {
-    const subId = ownerName.split('+')[0].trim()
+    const subId = ownerName.split('+', 1)[0].trim()
     if (subId.length > 0) {
       return subId
     }

@@ -251,7 +251,7 @@ function getGitRemoteName () {
   )
 
   if (upstreamRemote) {
-    return upstreamRemote.split('/')[0]
+    return upstreamRemote.split('/', 1)[0]
   }
 
   const remotes = sanitizedExec(
@@ -263,7 +263,7 @@ function getGitRemoteName () {
     false
   )
 
-  return remotes.split('\n')[0] || 'origin'
+  return remotes.split('\n', 1)[0] || 'origin'
 }
 
 function getSourceBranch () {

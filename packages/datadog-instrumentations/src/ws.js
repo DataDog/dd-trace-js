@@ -106,7 +106,7 @@ function createWrapEmit (emit) {
     }
 
     const ctx = { req }
-    ctx.req.resStatus = headers[0].split(' ')[1]
+    ctx.req.resStatus = headers[0].split(' ', 2)[1]
 
     emitCh.runStores(ctx, () => {
       try {

@@ -132,7 +132,7 @@ function wrapTracer (tracer) {
     return function (...args) {
       const name = args[0]
       const options = args.length > 2 ? (args[1] ?? {}) : {} // startActiveSpan(name, fn)
-      const cb = args[args.length - 1]
+      const cb = args.at(-1)
 
       const ctx = {
         name,

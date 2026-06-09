@@ -672,7 +672,7 @@ async function main () {
 
     if (stderrErrors) {
       process.stdout.write(stderrErrors)
-      const last = entry.stderrErrBuf[entry.stderrErrBuf.length - 1]
+      const last = entry.stderrErrBuf.at(-1)
       if (last && !last.endsWith('\n')) process.stdout.write('\n')
     }
     if (hasFailures) {
@@ -700,7 +700,7 @@ async function main () {
         process.stdout.write(out)
       }
 
-      const last = entry.failureBuf[entry.failureBuf.length - 1]
+      const last = entry.failureBuf.at(-1)
       if (last && !last.endsWith('\n')) process.stdout.write('\n')
     }
   }

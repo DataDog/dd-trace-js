@@ -319,7 +319,7 @@ function isTypeScript6OrNewer (projectRoot) {
     // eslint-disable-next-line n/no-unpublished-require
     const packageJsonPath = require.resolve('typescript/package.json', { paths: [projectRoot] })
     const { version } = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'))
-    const major = Number(String(version).split('.')[0])
+    const major = Number(String(version).split('.', 1)[0])
     return major >= 6
   } catch {
     return false

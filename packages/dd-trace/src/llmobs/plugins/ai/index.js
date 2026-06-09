@@ -231,7 +231,7 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
     const promptInfo = getJsonStringValue(tags['ai.prompt'], {})
     const lastUserPrompt =
       promptInfo.prompt ??
-      promptInfo.messages.reverse().find(message => message.role === 'user')?.content
+      promptInfo.messages.findLast(message => message.role === 'user')?.content
     const prompt = Array.isArray(lastUserPrompt) ? lastUserPrompt.map(part => part.text ?? '').join('') : lastUserPrompt
 
     const output = tags['ai.response.object']
@@ -247,7 +247,7 @@ class VercelAILLMObsPlugin extends BaseLLMObsPlugin {
     const promptInfo = getJsonStringValue(tags['ai.prompt'], {})
     const lastUserPrompt =
       promptInfo.prompt ??
-      promptInfo.messages.reverse().find(message => message.role === 'user')?.content
+      promptInfo.messages.findLast(message => message.role === 'user')?.content
     const prompt = Array.isArray(lastUserPrompt) ? lastUserPrompt.map(part => part.text ?? '').join('') : lastUserPrompt
 
     const output = tags['ai.response.text']
