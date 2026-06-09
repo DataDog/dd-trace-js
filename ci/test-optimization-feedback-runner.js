@@ -27,6 +27,7 @@ const ARTIFACT_FILES = [
   'dd-test-optimization-env.txt',
   'dd-test-optimization-advanced-validation-url.txt',
   'dd-test-optimization-efd-command.txt',
+  'dd-test-optimization-efd-test-name.txt',
   'dd-test-optimization-efd-validation-url.txt',
   'dd-test-optimization-efd-new-test-snippet.txt',
   'dd-test-optimization-efd-temp-test-file.txt',
@@ -36,6 +37,7 @@ const ARTIFACT_FILES = [
   'dd-test-optimization-selected-files.input',
   'dd-test-optimization-atr-flaky-test-backup.txt',
   'dd-test-optimization-atr-flaky-test-file.txt',
+  'dd-test-optimization-atr-flaky-test-name.txt',
   'dd-test-optimization-atr-flaky-test-snippet.txt',
   'dd-test-optimization-actionable-feedback.txt',
   'dd-test-optimization-known-tests.json',
@@ -59,8 +61,10 @@ const ARTIFACT_FILES = [
   'nohup.out',
 ]
 const ARTIFACT_DIRS = [
+  'dd-test-optimization-atr-only',
   'dd-test-optimization-basic',
   'dd-test-optimization-efd',
+  'dd-test-optimization-efd-only',
 ]
 const COMMAND_FILE = 'dd-test-optimization-test-command.txt'
 const FEEDBACK_WRAPPER_LOG = 'dd-test-optimization-feedback-wrapper.log'
@@ -362,6 +366,8 @@ function verifyPostRunCleanup () {
     'dd-test-optimization-efd-temp-test-file.txt',
     'dd-test-optimization-atr-flaky-test-file.txt',
     'dd-test-optimization-atr-flaky-test-backup.txt',
+    'dd-test-optimization-efd-test-name.txt',
+    'dd-test-optimization-atr-flaky-test-name.txt',
   ]) {
     if (fs.existsSync(path.resolve(stateFile))) {
       throw new Error(`Temporary state file still exists: ${stateFile}`)

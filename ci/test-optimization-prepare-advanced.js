@@ -4,9 +4,9 @@
 
 const { spawnSync } = require('node:child_process')
 const fs = require('node:fs')
-const os = require('node:os')
 const path = require('node:path')
 
+const BACKUP_DIR = path.join('dd-test-optimization-efd', 'backups')
 const DEFAULT_EFD_TEST_NAME = 'dd trace EFD debug temporary test'
 const DEFAULT_KNOWN_TESTS_FILE = 'dd-test-optimization-known-tests.json'
 const DEFAULT_TEST_COMMAND_FILE = 'dd-test-optimization-test-command.txt'
@@ -14,8 +14,10 @@ const FLAKE_MESSAGE = 'dd trace auto retry debug flake'
 const STATE_FILES = {
   atrBackup: 'dd-test-optimization-atr-flaky-test-backup.txt',
   atrFile: 'dd-test-optimization-atr-flaky-test-file.txt',
+  atrName: 'dd-test-optimization-atr-flaky-test-name.txt',
   atrSnippet: 'dd-test-optimization-atr-flaky-test-snippet.txt',
   efdCommand: 'dd-test-optimization-efd-command.txt',
+  efdName: 'dd-test-optimization-efd-test-name.txt',
   efdSnippet: 'dd-test-optimization-efd-new-test-snippet.txt',
   efdTempFile: 'dd-test-optimization-efd-temp-test-file.txt',
 }
@@ -127,8 +129,10 @@ function prepareAdvancedChecks (options) {
   fs.writeFileSync(plan.efdTestFile, efdSource)
   fs.writeFileSync(flakyTestFile, source)
   fs.writeFileSync(STATE_FILES.efdTempFile, `${prepareOptions.efdTestFile}\n`)
+  fs.writeFileSync(STATE_FILES.efdName, `${prepareOptions.efdTestName}\n`)
   fs.writeFileSync(STATE_FILES.efdSnippet, efdSource)
   fs.writeFileSync(STATE_FILES.atrFile, `${prepareOptions.flakyTestFile}\n`)
+  fs.writeFileSync(STATE_FILES.atrName, `${prepareOptions.flakyTestName}\n`)
   fs.writeFileSync(STATE_FILES.atrBackup, `${backup}\n`)
   fs.writeFileSync(STATE_FILES.atrSnippet, `${snippet}\n`)
   fs.writeFileSync(STATE_FILES.efdCommand, `${prepareOptions.efdCommand}\n`)
@@ -164,6 +168,7 @@ function dryRunPrepareAdvancedChecks (options) {
  */
 function getPreparePlan (options) {
   const prepareOptions = options.auto ? inferPrepareOptions(options) : options
+  prepareOptions.efdTestName = prepareOptions.efdTestName || DEFAULT_EFD_TEST_NAME
 
   validatePrepareOptions(prepareOptions)
 
@@ -199,6 +204,7 @@ function restoreAdvancedChecks () {
 
     fs.rmSync(STATE_FILES.efdTempFile, { force: true })
   }
+  fs.rmSync(STATE_FILES.efdName, { force: true })
 
   if (fs.existsSync(STATE_FILES.atrFile)) {
     const flakyTestFile = fs.readFileSync(STATE_FILES.atrFile, 'utf8').trim()
@@ -214,6 +220,8 @@ function restoreAdvancedChecks () {
     fs.rmSync(backup, { force: true })
     fs.rmSync(STATE_FILES.atrFile, { force: true })
     fs.rmSync(STATE_FILES.atrBackup, { force: true })
+    fs.rmSync(STATE_FILES.atrName, { force: true })
+    removeEmptyBackupDirectory()
     console.log(`Temporary Auto Test Retries edit restored: ${flakyTestFile}`)
   }
 }
@@ -415,12 +423,40 @@ function getTemporaryEfdTestFile (suite) {
  * @returns {string} backup path
  */
 function createBackup (file) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-atr-'))
-  const backup = path.join(dir, 'flaky-test-backup')
+  fs.mkdirSync(BACKUP_DIR, { recursive: true })
+
+  const backupName = `${sanitizeBackupName(path.relative(process.cwd(), file))}.backup`
+  const backup = path.join(BACKUP_DIR, backupName)
+
+  if (fs.existsSync(backup)) {
+    throw new Error(`Auto Test Retries backup already exists: ${backup}`)
+  }
 
   fs.copyFileSync(file, backup)
 
   return backup
+}
+
+/**
+ * Sanitizes a path into a backup filename.
+ *
+ * @param {string} file file path
+ * @returns {string} filesystem-safe backup name
+ */
+function sanitizeBackupName (file) {
+  return file.replaceAll(/[^A-Za-z0-9_.-]/g, '_') || 'flaky-test'
+}
+
+/**
+ * Removes the backup directory when it is empty.
+ */
+function removeEmptyBackupDirectory () {
+  try {
+    fs.rmdirSync(BACKUP_DIR)
+    fs.rmdirSync(path.dirname(BACKUP_DIR))
+  } catch {
+    // Leave non-empty diagnostic artifact directories in place.
+  }
 }
 
 /**

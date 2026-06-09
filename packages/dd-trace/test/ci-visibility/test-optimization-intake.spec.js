@@ -890,6 +890,19 @@ describe('Test Optimization debug intake', () => {
         fs.readFileSync('dd-test-optimization-efd-command.txt', 'utf8'),
         'npm test -- test/sum.spec.js test/dd-trace-efd-debug.spec.js\n'
       )
+      assert.strictEqual(fs.readFileSync('dd-test-optimization-efd-test-name.txt', 'utf8'), [
+        'dd trace EFD debug temporary test',
+        '',
+      ].join('\n'))
+      assert.strictEqual(fs.readFileSync('dd-test-optimization-atr-flaky-test-name.txt', 'utf8'), [
+        'adds numbers',
+        '',
+      ].join('\n'))
+      const backup = fs.readFileSync('dd-test-optimization-atr-flaky-test-backup.txt', 'utf8').trim()
+      assert.strictEqual(
+        path.dirname(backup),
+        path.join('dd-test-optimization-efd', 'backups')
+      )
 
       restoreAdvancedChecks()
 
@@ -897,6 +910,9 @@ describe('Test Optimization debug intake', () => {
       assert.strictEqual(fs.readFileSync(testFile, 'utf8'), original)
       assert.ok(!fs.existsSync('dd-test-optimization-atr-flaky-test-file.txt'))
       assert.ok(!fs.existsSync('dd-test-optimization-atr-flaky-test-backup.txt'))
+      assert.ok(!fs.existsSync('dd-test-optimization-efd-test-name.txt'))
+      assert.ok(!fs.existsSync('dd-test-optimization-atr-flaky-test-name.txt'))
+      assert.ok(!fs.existsSync(backup))
     } finally {
       process.chdir(cwd)
     }
@@ -996,6 +1012,10 @@ describe('Test Optimization debug intake', () => {
       assert.strictEqual(
         fs.readFileSync('dd-test-optimization-efd-command.txt', 'utf8'),
         'npm test -- test/sum.spec.js test/dd-trace-efd-debug.spec.js\n'
+      )
+      assert.strictEqual(
+        fs.readFileSync('dd-test-optimization-atr-flaky-test-name.txt', 'utf8'),
+        'sum adds numbers\n'
       )
 
       restoreAdvancedChecks()

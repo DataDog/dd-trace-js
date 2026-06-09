@@ -3,6 +3,29 @@
 This runbook is to diagnose Datadog Test Optimization setup problems in a JavaScript repository.
 Use repository-specific judgment to adapt commands.
 
+## Customer Diagnostic Mode: Start Here
+
+Use customer diagnostic mode unless the user explicitly asks for feedback about this runbook.
+
+Customer diagnostic mode uses this path:
+
+1. Run Step 0 cleanup and source-edit restore safety.
+2. Run Step 2 to choose one small test command.
+3. Run the Preferred Wrapper.
+4. If the wrapper reports `Reporting complete`, run Step 7 for EFD and Auto Test Retries.
+5. Run Step 8 and report the diagnostic answers with each question text inline.
+
+Wrapper result routing:
+
+| Root wrapper result | Next action |
+| --- | --- |
+| `listen EPERM: operation not permitted 127.0.0.1` | Rerun the wrapper with loopback bind/connect approval. Do not diagnose Test Optimization from this result. |
+| `Reporting complete` | Run Step 7 to validate EFD and Auto Test Retries, then Step 8. |
+| `Nothing` | Confirm the selected test ran and `NODE_OPTIONS` reached it. Use the manual fallback/debug path only when those are true and the wrapper still captures no requests. Then run Step 8. |
+| Any other stage | Skip Step 7, consult the matching Decision Tree stage, then run the Step 8 extractor. |
+
+Feedback mode is below and is only for evaluating this runbook, not for customer diagnosis.
+
 ## Runbook Feedback Mode: Exact Path
 
 If the user asks for feedback about this runbook, execute this numbered procedure. Use the
@@ -114,8 +137,8 @@ Step 7, Step 8, or the Decision Tree unless the fallback path explicitly require
    Runbook completed: {yes | no, explain}
    Diagnostic outcome: {basic reporting worked | basic reporting did not work | runbook failed, explain}
    Basic reporting: {stage}, requests={count}, event levels={summary}, decode errors={count}
-   EFD: {passed | failed | not run}, known tests={count}, retried new tests={retry execution count}, distinct retried names={count}
-   Auto Test Retries: {passed | failed | not run}, failed={count}, passed={count}, retry passes={count}
+   EFD: {passed | failed | skipped: reason | not run}, known tests={count}, retried new tests={retry execution count}, distinct retried names={count}
+   Auto Test Retries: {passed | failed | skipped: reason | not run}, failed={count}, passed={count}, retry passes={count}
    Reports: {HTML file URL}, {final report path}, {compact summary path}
    Cleanup: {temporary EFD removed/restored status}, {flaky edit restored status}. Diagnostic artifacts intentionally remain untracked until the next Step 0 cleanup.
    Actionable feedback:
@@ -259,6 +282,7 @@ rm -f \
   dd-test-optimization-env.txt \
   dd-test-optimization-advanced-validation-url.txt \
   dd-test-optimization-efd-command.txt \
+  dd-test-optimization-efd-test-name.txt \
   dd-test-optimization-efd-validation-url.txt \
   dd-test-optimization-efd-new-test-snippet.txt \
   dd-test-optimization-efd-temp-test-file.txt \
@@ -268,6 +292,7 @@ rm -f \
   dd-test-optimization-selected-files.input \
   dd-test-optimization-atr-flaky-test-backup.txt \
   dd-test-optimization-atr-flaky-test-file.txt \
+  dd-test-optimization-atr-flaky-test-name.txt \
   dd-test-optimization-atr-flaky-test-snippet.txt \
   dd-test-optimization-actionable-feedback.txt \
   dd-test-optimization-known-tests.json \
@@ -292,7 +317,9 @@ rm -f \
 
 rm -rf \
   dd-test-optimization-basic \
-  dd-test-optimization-efd
+  dd-test-optimization-efd \
+  dd-test-optimization-efd-only \
+  dd-test-optimization-atr-only
 ```
 
 F0-discovery: inspect the repository before F0-select.
@@ -790,12 +817,14 @@ fails before producing artifacts, reports `Nothing` after a confirmed test run, 
 repository-specific process handling. A successful wrapper run with `Reporting complete` means
 manual Steps 3-6 are skipped.
 
-The goal is to answer four questions:
+The goal is to answer these diagnostic questions:
 
 1. Is `dd-trace` installed and statically configured in a supported way?
 2. Does `dd-trace/ci/init` reach the test process through `NODE_OPTIONS`?
 3. Does a small test subset send Test Optimization requests to a local fake intake?
 4. If data is reported, does it include "all expected test event levels"?
+5. Does EFD fetch known tests, mark a new test, and retry it?
+6. Does Auto Test Retries retry a failing known test and report retry tags?
 
 Diagnostic question map:
 
@@ -803,6 +832,8 @@ Diagnostic question map:
 - Does `dd-trace/ci/init` reach the test process through `NODE_OPTIONS`? Steps 2 and 4.
 - Does a small test subset send Test Optimization requests to a local fake intake? Steps 3, 4, and 5.
 - If data is reported, does it include session, module, suite, and test events? Step 6.
+- Does EFD fetch known tests, mark a new test, and retry it? Step 7.
+- Does Auto Test Retries retry a failing known test and report retry tags? Step 7.
 - Step 8: synthesize all diagnostic answers.
 
 Required final response checklist:
@@ -813,7 +844,7 @@ Required final response checklist:
 - Selected test command, advanced test command when Step 7 ran, and test result.
 - Basic reporting counts and decode errors.
 - EFD and Auto Test Retries status when Step 7 ran.
-- The four diagnostic question answers with each question text inline.
+- The diagnostic question answers with each question text inline.
 - Static warnings and errors, recommended next actions, and temporary-edit cleanup confirmation.
 
 "All expected test event levels" means:
@@ -987,6 +1018,7 @@ rm -f \
   dd-test-optimization-env.txt \
   dd-test-optimization-advanced-validation-url.txt \
   dd-test-optimization-efd-command.txt \
+  dd-test-optimization-efd-test-name.txt \
   dd-test-optimization-efd-validation-url.txt \
   dd-test-optimization-efd-new-test-snippet.txt \
   dd-test-optimization-efd-temp-test-file.txt \
@@ -996,6 +1028,7 @@ rm -f \
   dd-test-optimization-selected-files.input \
   dd-test-optimization-atr-flaky-test-backup.txt \
   dd-test-optimization-atr-flaky-test-file.txt \
+  dd-test-optimization-atr-flaky-test-name.txt \
   dd-test-optimization-atr-flaky-test-snippet.txt \
   dd-test-optimization-actionable-feedback.txt \
   dd-test-optimization-known-tests.json \
@@ -1021,7 +1054,9 @@ rm -f \
 
 rm -rf \
   dd-test-optimization-basic \
-  dd-test-optimization-efd
+  dd-test-optimization-efd \
+  dd-test-optimization-efd-only \
+  dd-test-optimization-atr-only
 ```
 
 Reruns use stable artifact names by default. Remove stale intermediate artifacts before continuing.
@@ -1567,8 +1602,10 @@ from the known test file. Existing unrelated dirty files in the repository must 
 After helper restore, these temporary source-edit state files must be absent:
 
 - `dd-test-optimization-efd-temp-test-file.txt`
+- `dd-test-optimization-efd-test-name.txt`
 - `dd-test-optimization-atr-flaky-test-file.txt`
 - `dd-test-optimization-atr-flaky-test-backup.txt`
+- `dd-test-optimization-atr-flaky-test-name.txt`
 
 These diagnostic artifacts may remain after helper restore:
 
@@ -1690,9 +1727,11 @@ name if the helper reports that it cannot match the suite-qualified name. Use `-
 or `--framework vitest` when that matches the selected command. The helper writes:
 
 - `dd-test-optimization-efd-temp-test-file.txt`
+- `dd-test-optimization-efd-test-name.txt`
 - `dd-test-optimization-efd-new-test-snippet.txt`
 - `dd-test-optimization-atr-flaky-test-file.txt`
 - `dd-test-optimization-atr-flaky-test-backup.txt`
+- `dd-test-optimization-atr-flaky-test-name.txt`
 - `dd-test-optimization-atr-flaky-test-snippet.txt`
 - `dd-test-optimization-efd-command.txt`
 
@@ -1783,13 +1822,19 @@ Adapt:
 
 ```bash
 EFD_TEMP_TEST_FILE='FILL_IN' # replace FILL_IN with the temporary test file path, for example: test/dd-trace-efd-debug.spec.js
+EFD_TEST_NAME='dd trace EFD debug temporary test' # replace if the temporary test uses a different name
 if [ "$EFD_TEMP_TEST_FILE" = 'FILL_IN' ] || [ -z "$EFD_TEMP_TEST_FILE" ]; then
   echo "Replace FILL_IN with the temporary EFD test file path before continuing."
+  exit 1
+fi
+if [ -z "$EFD_TEST_NAME" ]; then
+  echo "Set EFD_TEST_NAME to the temporary test name before continuing."
   exit 1
 fi
 test -f "$EFD_TEMP_TEST_FILE"
 printf 'Temporary EFD test file: %s\n' "$EFD_TEMP_TEST_FILE"
 printf '%s\n' "$EFD_TEMP_TEST_FILE" > dd-test-optimization-efd-temp-test-file.txt
+printf '%s\n' "$EFD_TEST_NAME" > dd-test-optimization-efd-test-name.txt
 cat "$EFD_TEMP_TEST_FILE" > dd-test-optimization-efd-new-test-snippet.txt
 ```
 
@@ -1805,7 +1850,7 @@ Adapt:
 - Choose one test from `dd-test-optimization-known-tests.json` that the second command will run.
 - Prefer a small, clean selected test file. Avoid user-modified files when a clean selected file
   exists.
-- Save the original file to a temporary backup before editing.
+- Save the original file to a backup under `dd-test-optimization-efd/backups/` before editing.
 - Change the known test so the first execution throws and the retry passes.
 - Write only the temporary flaky edit snippet to
   `dd-test-optimization-atr-flaky-test-snippet.txt`.
@@ -1834,10 +1879,21 @@ if [ "$ATR_FLAKY_TEST_FILE" = 'FILL_IN' ] || [ -z "$ATR_FLAKY_TEST_FILE" ]; then
   exit 1
 fi
 test -f "$ATR_FLAKY_TEST_FILE"
-ATR_FLAKY_BACKUP="$(mktemp "${TMPDIR:-/tmp}/dd-test-optimization-atr.XXXXXX")"
+ATR_BACKUP_DIR=dd-test-optimization-efd/backups
+mkdir -p "$ATR_BACKUP_DIR"
+ATR_FLAKY_BACKUP="$ATR_BACKUP_DIR/$(basename "$ATR_FLAKY_TEST_FILE").backup"
+if [ -e "$ATR_FLAKY_BACKUP" ]; then
+  echo "Auto Test Retries backup already exists: $ATR_FLAKY_BACKUP" >&2
+  exit 1
+fi
 cp "$ATR_FLAKY_TEST_FILE" "$ATR_FLAKY_BACKUP"
 printf '%s\n' "$ATR_FLAKY_TEST_FILE" > dd-test-optimization-atr-flaky-test-file.txt
 printf '%s\n' "$ATR_FLAKY_BACKUP" > dd-test-optimization-atr-flaky-test-backup.txt
+printf '%s\n' 'FILL_IN_KNOWN_TEST_NAME' > dd-test-optimization-atr-flaky-test-name.txt
+if grep -q 'FILL_IN' dd-test-optimization-atr-flaky-test-name.txt; then
+  echo "Replace FILL_IN_KNOWN_TEST_NAME with the known test name before continuing." >&2
+  exit 1
+fi
 printf 'Auto Test Retries flaky test file: %s\n' "$ATR_FLAKY_TEST_FILE"
 printf 'Auto Test Retries backup: %s\n' "$ATR_FLAKY_BACKUP"
 ```
@@ -1909,6 +1965,44 @@ The debug-all fake settings endpoint returns EFD and Auto Test Retries settings:
 }
 ```
 
+If the combined `debug-all` validation fails, the validation-and-restore block below restores the
+temporary edits before exiting. To isolate the failure, repeat Step 7b/7c preparation and rerun one
+isolated advanced check at a time before concluding that a feature is broken:
+
+- EFD-only: rerun the second command with `--settings-mode efd`, the known-tests file, and the
+  new-test snippet file.
+- Auto Test Retries-only: rerun the second command with `--settings-mode atr`, the known-tests file,
+  and the flaky-test snippet file.
+
+Use separate output directories so isolated runs do not overwrite root or combined artifacts. If an
+isolated run passes, report the combined-run failure as test setup interference rather than a
+feature failure.
+
+EFD-only fallback, used instead of the combined Step 7d command after Step 7b/7c preparation:
+
+```bash
+node ./node_modules/dd-trace/ci/test-optimization-debug.js \
+  --test-command-file dd-test-optimization-efd-command.txt \
+  --settings-mode efd \
+  --known-tests dd-test-optimization-known-tests.json \
+  --new-test-snippet-file dd-test-optimization-efd-new-test-snippet.txt \
+  --out-dir dd-test-optimization-efd-only \
+  --no-open
+```
+
+Auto Test Retries-only fallback, used instead of the combined Step 7d command after Step 7b/7c
+preparation:
+
+```bash
+node ./node_modules/dd-trace/ci/test-optimization-debug.js \
+  --test-command-file dd-test-optimization-efd-command.txt \
+  --settings-mode atr \
+  --known-tests dd-test-optimization-known-tests.json \
+  --flaky-test-snippet-file dd-test-optimization-atr-flaky-test-snippet.txt \
+  --out-dir dd-test-optimization-atr-only \
+  --no-open
+```
+
 The known-tests endpoint returns the contents of `dd-test-optimization-known-tests.json` as:
 
 ```json
@@ -1930,9 +2024,22 @@ The known-tests endpoint returns the contents of `dd-test-optimization-known-tes
 Verbatim:
 
 ```bash
+set +e
+
 node -e '
 const fs = require("node:fs")
 const report = JSON.parse(fs.readFileSync("dd-test-optimization-efd/dd-test-optimization-agent-report.json", "utf8"))
+function readOptional (file) {
+  try {
+    return fs.readFileSync(file, "utf8").trim()
+  } catch (_) {
+    return ""
+  }
+}
+function hasExpectedName (names, expected) {
+  if (!expected) return true
+  return names.some(name => name === expected || name.endsWith(` ${expected}`) || name.includes(expected))
+}
 if (!report.summary.efd.settingsEnabled) {
   console.error("EFD settings were not enabled in the second run.")
   process.exit(1)
@@ -1947,6 +2054,11 @@ if (report.summary.efd.knownTestsReceived === 0) {
 }
 if (report.summary.efd.retriedNewTests === 0) {
   console.error("No new test was retried by EFD.")
+  process.exit(1)
+}
+const expectedEfdName = readOptional("dd-test-optimization-efd-test-name.txt")
+if (!hasExpectedName(report.summary.efd.retriedNewTestNames, expectedEfdName)) {
+  console.error(`The retried EFD test names did not include the expected temporary test: ${expectedEfdName}`)
   process.exit(1)
 }
 if (!report.summary.atr.settingsEnabled) {
@@ -1969,29 +2081,39 @@ if (report.summary.atr.failedThenPassedRetryTests === 0) {
   console.error("No known flaky test reported both a failure and a passing retry.")
   process.exit(1)
 }
+const expectedAtrName = readOptional("dd-test-optimization-atr-flaky-test-name.txt")
+if (!hasExpectedName(report.summary.atr.failedThenPassedRetryTestNames, expectedAtrName)) {
+  console.error(`The Auto Test Retries flaky test names did not include the expected known test: ${expectedAtrName}`)
+  process.exit(1)
+}
 console.log(`EFD retried new tests: ${report.summary.efd.retriedNewTests}`)
 console.log(`Retried new test names: ${report.summary.efd.retriedNewTestNames.join(", ")}`)
 console.log(`Auto Test Retries flaky tests reported: ${report.summary.atr.failedThenPassedRetryTests}`)
 console.log(`Auto Test Retries flaky test names: ${report.summary.atr.failedThenPassedRetryTestNames.join(", ")}`)
 '
-```
+ADVANCED_VALIDATION_STATUS=$?
 
-If this validation passes, report that EFD and Auto Test Retries work for the selected subset.
-
-If Step 7b/7c used `test-optimization-prepare-advanced.js` or
-`test-optimization-prepare-advanced.js --auto`, restore the temporary edits with:
-
-Verbatim:
-
-```bash
 node ./node_modules/dd-trace/ci/test-optimization-prepare-advanced.js --restore
+ADVANCED_RESTORE_STATUS=$?
+
 git status --short
+
+if [ "$ADVANCED_RESTORE_STATUS" -ne 0 ]; then
+  echo "Advanced validation finished, but temporary edit restore failed." >&2
+  exit "$ADVANCED_RESTORE_STATUS"
+fi
+
+if [ "$ADVANCED_VALIDATION_STATUS" -ne 0 ]; then
+  echo "Advanced validation failed after temporary edits were restored." >&2
+  exit "$ADVANCED_VALIDATION_STATUS"
+fi
 ```
 
-The helper restore removes the helper-created EFD test file and restores the helper-edited flaky
-test file. After helper restore succeeds, the manual cleanup blocks below should be no-ops. Run
-them only to verify no recorded temporary state remains, or when Step 7b/7c used manual edits
-instead of the helper.
+If this validation-and-restore block passes, report that EFD and Auto Test Retries work for the
+selected subset. The restore command removes the helper-created EFD test file and restores the
+helper-edited flaky test file even when validation fails. After helper restore succeeds, the manual
+cleanup blocks below should be no-ops. Run them only to verify no recorded temporary state remains,
+or when Step 7b/7c used manual edits instead of the helper.
 
 Remove and verify a temporary sibling test file. Remove the file recorded in
 `dd-test-optimization-efd-temp-test-file.txt`.
@@ -2008,7 +2130,7 @@ if [ -f dd-test-optimization-efd-temp-test-file.txt ]; then
     exit 1
   fi
   printf 'Temporary EFD test removed: %s\n' "$EFD_TEMP_TEST_FILE"
-  rm -f dd-test-optimization-efd-temp-test-file.txt
+  rm -f dd-test-optimization-efd-temp-test-file.txt dd-test-optimization-efd-test-name.txt
 fi
 ```
 
@@ -2031,7 +2153,10 @@ if [ -f dd-test-optimization-atr-flaky-test-file.txt ]; then
   fi
   git diff --exit-code -- "$ATR_FLAKY_TEST_FILE"
   printf 'Temporary Auto Test Retries edit restored: %s\n' "$ATR_FLAKY_TEST_FILE"
-  rm -f dd-test-optimization-atr-flaky-test-file.txt dd-test-optimization-atr-flaky-test-backup.txt
+  rm -f \
+    dd-test-optimization-atr-flaky-test-file.txt \
+    dd-test-optimization-atr-flaky-test-backup.txt \
+    dd-test-optimization-atr-flaky-test-name.txt
 fi
 
 git status --short
@@ -2154,7 +2279,7 @@ The final response must include:
   and distinct retried new test name count.
 - Auto Test Retries check result when Step 7 ran, including failing executions, passing
   executions, and passing retry executions.
-- The four diagnostic question answers with each question text inline.
+- The diagnostic question answers with each question text inline.
 - Static warnings and errors.
 - Recommended next actions.
 - Cleanup confirmation for any temporary EFD test file and Auto Test Retries edit.
@@ -2184,8 +2309,8 @@ Compact feedback response shape:
 Runbook completed: {yes | no, explain}
 Diagnostic outcome: {basic reporting worked | basic reporting did not work | runbook failed, explain}
 Basic reporting: {stage}, requests={count}, event levels={summary}, decode errors={count}
-EFD: {passed | failed | not run}, known tests={count}, retried new tests={retry execution count}, distinct retried names={count}
-Auto Test Retries: {passed | failed | not run}, failed={count}, passed={count}, retry passes={count}
+EFD: {passed | failed | skipped: reason | not run}, known tests={count}, retried new tests={retry execution count}, distinct retried names={count}
+Auto Test Retries: {passed | failed | skipped: reason | not run}, failed={count}, passed={count}, retry passes={count}
 Reports: {HTML file URL}, {final report path}, {compact summary path}
 Cleanup: {temporary EFD removed/restored status}, {flaky edit restored status}. Diagnostic artifacts intentionally remain untracked until the next Step 0 cleanup.
 Actionable feedback:
@@ -2223,14 +2348,14 @@ Event levels: sessions={count}, modules={count}, suites={count}, tests={count}
 Decode errors: {count}
 
 EFD check:
-Status: {not run | passed | failed}
+Status: {not run | skipped: reason | passed | failed}
 Known tests received: {count}
 Retried new tests: {count}
 Distinct retried new test names: {count}
 Retried new test names: {names or none}
 
 Auto Test Retries check:
-Status: {not run | passed | failed}
+Status: {not run | skipped: reason | passed | failed}
 Failed executions: {count}
 Passed executions: {count}
 Passing retry executions: {count}
@@ -2242,6 +2367,8 @@ Diagnostic answers:
 - Does dd-trace/ci/init reach the test process through NODE_OPTIONS? {answer}
 - Does a small test subset send Test Optimization requests to a local fake intake? {answer}
 - If data is reported, does it include session, module, suite, and test events? {answer}
+- Does EFD fetch known tests, mark a new test, and retry it? {answer}
+- Does Auto Test Retries retry a failing known test and report retry tags? {answer}
 
 Static warnings/errors:
 - {finding}
