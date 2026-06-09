@@ -44,6 +44,7 @@
 /benchmark/sirun/fs/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-aws-sdk/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-cassandra-driver/ @DataDog/apm-idm-js
+/benchmark/sirun/plugin-couchbase/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-dns/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-http/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-kafkajs/ @DataDog/apm-idm-js

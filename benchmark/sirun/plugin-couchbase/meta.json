@@ -1,0 +1,16 @@
+{
+  "name": "plugin-couchbase",
+  "run": "node index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "cachegrind": false,
+  "iterations": 12,
+  "instructions": true,
+  "variants": {
+    "query": {
+      "env": { "VARIANT": "query", "ITERATIONS": "90000000" }
+    },
+    "upsert": {
+      "env": { "VARIANT": "upsert", "ITERATIONS": "180000000" }
+    }
+  }
+}
