@@ -240,9 +240,8 @@ for (const extension of extensions) {
           }
 
           return ch.start.runStores(ctx, () => {
-            // Capture the active `openai.request` span (set by the plugin's `ch.start`
-            // subscriber) so AI Guard nests `ai_guard` spans under it via explicit `childOf`,
-            // without relying on async-context binding at evaluation time.
+            // Explicit childOf rather than async-context: the _thenUnwrap/parse path
+            // decouples the lazy evaluation from the active scope at call time.
             if (guard) guard.parentSpan = ctx.currentStore?.span
 
             const apiProm = methodFn.apply(this, args)
