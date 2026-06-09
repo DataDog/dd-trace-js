@@ -2574,15 +2574,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         },
         known_tests_enabled: true,
       })
-      // FakeCiVisIntake was refactored from shared module-level variables to
-      // per-instance #private fields so that concurrent Playwright tests don't
-      // interfere with each other. Each new receiver starts with an empty object,
-      // but EFD still needs a `jest` key: jest.js treats a missing `jest` key as
-      // a faulty session (all suites unknown) and disables EFD. An empty
-      // `jest: {}` passes the faulty check (only 1 suite, threshold is 100).
-      // it.failing tests are excluded from EFD new-test analysis in jest.js
-      // (`if (event.failing) { return }` in the add_test handler), so they won't
-      // be retried or flagged as new regardless of known-tests contents.
+      // The `jest` key is required: jest.js disables EFD when it is absent
+      // (treats all suites as new, which exceeds the faulty threshold).
       receiver.setKnownTests({ jest: {} })
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
