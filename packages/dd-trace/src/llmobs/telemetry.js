@@ -3,6 +3,7 @@
 const ERROR_TYPE = require('../constants')
 
 const telemetryMetrics = require('../telemetry/metrics')
+const { getSegment } = require('../util')
 const {
   SPAN_KIND,
   MODEL_PROVIDER,
@@ -22,7 +23,7 @@ function extractIntegrationFromTags (tags) {
   if (!Array.isArray(tags)) return null
   const integrationTag = tags.find(tag => tag.startsWith('integration:'))
   if (!integrationTag) return null
-  return integrationTag.split(':', 2)[1] || null
+  return getSegment(integrationTag, ':', 1) || null
 }
 
 function extractTagsFromSpanEvent (event) {

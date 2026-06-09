@@ -6,6 +6,7 @@ const { URL } = require('url')
 const { getLageTestSessionName } = require('../../ci-visibility/lage')
 const log = require('../../log')
 const { getEnvironmentVariable } = require('../../config/helper')
+const { getSegment } = require('../../util')
 const satisfies = require('../../../../../vendor/dist/semifies')
 
 const istanbul = require('../../../../../vendor/dist/istanbul-lib-coverage')
@@ -494,7 +495,7 @@ module.exports = {
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
 function getPkgManager () {
   try {
-    return getEnvironmentVariable('npm_config_user_agent').split(' ', 1)[0].replace('/', '-')
+    return getSegment(getEnvironmentVariable('npm_config_user_agent'), ' ', 0).replace('/', '-')
   } catch {
     return ''
   }

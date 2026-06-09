@@ -1,10 +1,11 @@
 'use strict'
 
+const { getSegment } = require('../../../dd-trace/src/util')
 const LangChainHandler = require('./default')
 
 class LangChainEmbeddingHandler extends LangChainHandler {
   extractProvider (instance) {
-    return instance.constructor.name.split('Embeddings', 1)[0].toLowerCase()
+    return getSegment(instance.constructor.name, 'Embeddings', 0).toLowerCase()
   }
 
   extractModel (instance) {
