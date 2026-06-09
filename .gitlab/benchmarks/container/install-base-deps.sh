@@ -18,6 +18,15 @@ echo "9038680028e006d13ea1ff68fdcab0a5494d2026cdd2dbdfb067c5b80b6272f1  /tmp/pyt
 tar -xzf /tmp/python.tar.gz -C /opt
 rm /tmp/python.tar.gz
 
+# bp-install's install.sh runs `pyenv local 3.9` before `python3 -m venv`. CPython
+# 3.9 from python-build-standalone is already first on PATH, so selection is a no-op;
+# stub pyenv rather than compiling the full pyenv the fleet uses.
+cat > /usr/local/bin/pyenv <<'PYENV_STUB'
+#!/usr/bin/env bash
+exit 0
+PYENV_STUB
+chmod +x /usr/local/bin/pyenv
+
 # awscli 1.45+ dropped Python 3.9 (requires >=3.10); hold at the last 1.44.x until
 # the CPython pin above moves to 3.10+, or pip can't resolve awscli on this image.
 pip3 install awscli==1.44.87 virtualenv==21.4.2 setuptools==82.0.1
