@@ -13,6 +13,7 @@ const {
   TELEMETRY_GIT_COMMAND_ERRORS,
 } = require('../../ci-visibility/telemetry')
 const { storage } = require('../../../../datadog-core')
+const { getSegment } = require('../../util')
 const {
   GIT_COMMIT_SHA,
   GIT_BRANCH,
@@ -251,7 +252,7 @@ function getGitRemoteName () {
   )
 
   if (upstreamRemote) {
-    return upstreamRemote.split('/', 1)[0]
+    return getSegment(upstreamRemote, '/', 0)
   }
 
   const remotes = sanitizedExec(
@@ -263,7 +264,7 @@ function getGitRemoteName () {
     false
   )
 
-  return remotes.split('\n', 1)[0] || 'origin'
+  return getSegment(remotes, '\n', 0) || 'origin'
 }
 
 function getSourceBranch () {

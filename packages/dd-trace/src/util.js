@@ -77,6 +77,31 @@ function globMatch (pattern, subject) {
   return true
 }
 
+/**
+ * Return the segment at {index} when splitting {string} on {separator}, without
+ * allocating the intermediate array. Equivalent to
+ * `string.split(separator, index + 1)[index]`, but `split` with a limit forces
+ * V8 off its constant-limit fast path (per-call ToUint32 plus an array
+ * allocation), making it 60-170% slower than this scan for the small inputs
+ * tracer code splits (paths, request lines, version strings).
+ *
+ * @param {string} string
+ * @param {string} separator
+ * @param {number} index
+ * @param {string} [fallback] returned when fewer than {index} + 1 segments exist
+ * @returns {string | undefined}
+ */
+function getSegment (string, separator, index, fallback) {
+  let start = 0
+  for (let i = 0; i < index; i++) {
+    const next = string.indexOf(separator, start)
+    if (next === -1) return fallback
+    start = next + separator.length
+  }
+  const end = string.indexOf(separator, start)
+  return end === -1 ? string.slice(start) : string.slice(start, end)
+}
+
 function calculateDDBasePath (dirname) {
   const dirSteps = dirname.split(path.sep)
   const packagesIndex = dirSteps.lastIndexOf('packages')
@@ -97,6 +122,7 @@ module.exports = {
   isFalse,
   isError,
   globMatch,
+  getSegment,
   ddBasePath: globalThis.__DD_ESBUILD_BASEPATH || calculateDDBasePath(__dirname),
   normalizePluginEnvName,
 }

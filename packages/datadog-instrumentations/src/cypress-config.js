@@ -4,6 +4,7 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 const { pathToFileURL } = require('url')
+const { getSegment } = require('../../dd-trace/src/util')
 const { channel } = require('./helpers/instrument')
 
 const DD_CONFIG_WRAPPED = Symbol('dd-trace.cypress.config.wrapped')
@@ -319,7 +320,7 @@ function isTypeScript6OrNewer (projectRoot) {
     // eslint-disable-next-line n/no-unpublished-require
     const packageJsonPath = require.resolve('typescript/package.json', { paths: [projectRoot] })
     const { version } = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'))
-    const major = Number(String(version).split('.', 1)[0])
+    const major = Number(getSegment(String(version), '.', 0))
     return major >= 6
   } catch {
     return false
