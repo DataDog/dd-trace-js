@@ -22,6 +22,7 @@ let loopStartedAt
 function loopStart () {
   loopStartedAt = process.hrtime.bigint()
   if (process.env.SIRUN_READY_FD) {
+    process.stderr.write('startup-guard: sending ready signal via SIRUN_READY_FD\n')
     require('fs').writeSync(parseInt(process.env.SIRUN_READY_FD), 'x')
   }
 }
