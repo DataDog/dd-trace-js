@@ -55,7 +55,7 @@ function wrapAddHook (addHook) {
 
     if (typeof fn !== 'function') return addHook.apply(this, arguments)
 
-    arguments[arguments.length - 1] = shimmer.wrapFunction(fn, fn => function wrappedHook () {
+    arguments[arguments.length - 1] = shimmer.wrapFunction(fn, fn => function wrappedHook (...args) {
       // Fast path: every fastify request invokes each addHook'd handler, so the wrap
       // runs in the user's hot path. The only side effects this wrapper carries are
       // the three channels below; when none of them have a subscriber (the default
@@ -68,9 +68,9 @@ function wrapAddHook (addHook) {
       // inlining of the enclosing function. The slow path below builds a fresh args
       // array instead so the hot fast path keeps a clean forward.
       if (errorChannel.hasSubscribers || cookieParserReadCh.hasSubscribers || callbackFinishCh.hasSubscribers) {
-        return invokeHookWithContext(name, fn, this, arguments)
+        return invokeHookWithContext(name, fn, this, args)
       }
-      return fn.apply(this, arguments)
+      return fn.apply(this, args)
     })
 
     return addHook.apply(this, arguments)
