@@ -263,7 +263,7 @@ describe('EventBridge plugin requestInject', () => {
     EventBridge.prototype.setDSMCheckpoint.call(plugin, null, entry)
 
     assert.deepStrictEqual(calls, [[
-      ['direction:out', 'type:eventbridge:payments', 'topic:invoice.created'],
+      ['direction:out', 'type:eventbridge', 'topic:payments:invoice.created'],
       null,
       getHeadersSize(entry),
     ]])
@@ -281,7 +281,7 @@ describe('EventBridge plugin requestInject', () => {
     EventBridge.prototype.setDSMCheckpoint.call(plugin, null, entry)
 
     assert.deepStrictEqual(calls, [[
-      ['direction:out', 'type:eventbridge:default', 'topic:unknown'],
+      ['direction:out', 'type:eventbridge', 'topic:default:unknown'],
       null,
       getHeadersSize(entry),
     ]])

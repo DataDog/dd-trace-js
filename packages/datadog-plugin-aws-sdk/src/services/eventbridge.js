@@ -151,7 +151,7 @@ class EventBridge extends BaseAwsSdkPlugin {
     const detailType = entry.DetailType || DEFAULT_DETAIL_TYPE
     const payloadSize = getHeadersSize(entry)
     return this.tracer.setCheckpoint(
-      ['direction:out', `type:eventbridge:${eventBus}`, `topic:${detailType}`],
+      ['direction:out', 'type:eventbridge', `topic:${eventBus}:${detailType}`],
       span,
       payloadSize,
     )
