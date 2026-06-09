@@ -642,7 +642,23 @@ describe('request', function () {
       })
     })
 
-    for (const loopbackHost of ['127.0.0.1', 'localhost', '[::1]']) {
+    it('strips dd-api-key for a non-loopback host that merely starts with "127."', (done) => {
+      nock('http://127.evil.com', { badheaders: ['dd-api-key'] })
+        .post('/v1/input')
+        .reply(200, 'OK')
+
+      request(Buffer.from(''), {
+        method: 'POST',
+        url: new URL('http://127.evil.com/v1/input'),
+        headers: { 'dd-api-key': 'secret-key' },
+      }, (err, res) => {
+        assert.strictEqual(res, 'OK')
+        sinon.assert.calledOnce(log.error)
+        done(err)
+      })
+    })
+
+    for (const loopbackHost of ['127.0.0.1', '127.1.2.3', 'localhost', '[::1]']) {
       it(`keeps dd-api-key over http to the loopback host ${loopbackHost}`, (done) => {
         nock(`http://${loopbackHost}:9999`, {
           reqheaders: { 'dd-api-key': 'secret-key' },
