@@ -1,10 +1,11 @@
 'use strict'
 
+// const { storage } = require('../../datadog-core')
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const { getModelProvider, parseModelProvider } = require('./utils')
 
-class VercelAITracingCustomPlugin extends TracingPlugin {
+class DdTelemetryPlugin extends TracingPlugin {
   static id = 'ai'
   static prefix = 'tracing:dd-trace:vercel-ai'
 
@@ -31,14 +32,16 @@ class VercelAITracingCustomPlugin extends TracingPlugin {
   }
 }
 
-class VercelAITracingChannelPlugin extends TracingPlugin {
+class VercelAiTelemetryPlugin extends TracingPlugin {
   static id = 'ai'
-  static prefix = 'tracing:aisdk:telemetry'
+  static prefix = 'tracing:ai:telemetry'
 
   bindStart (ctx) {
     const { type: name, event } = ctx
     const model = event.modelId
-    const modelProvider = parseModelProvider(event.provider)
+    const modelProvider = parseModelProvider(event.provider, model)
+
+    // console.log('parent of', name, 'is', storage('legacy').getStore()?.span._name)
 
     this.startSpan(name, {
       meta: {
@@ -52,6 +55,9 @@ class VercelAITracingChannelPlugin extends TracingPlugin {
   }
 
   asyncEnd (ctx) {
+    if (ctx.type === 'streamText') {
+      // console.log(ctx)
+    }
     const span = ctx.currentStore?.span
     span?.finish()
   }
@@ -60,8 +66,8 @@ class VercelAITracingChannelPlugin extends TracingPlugin {
 class VercelAITracingPlugin extends CompositePlugin {
   static id = 'ai'
   static plugins = {
-    custom: VercelAITracingCustomPlugin,
-    tracingChannel: VercelAITracingChannelPlugin,
+    dd: DdTelemetryPlugin,
+    ai: VercelAiTelemetryPlugin,
   }
 }
 

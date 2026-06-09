@@ -1,6 +1,6 @@
 'use strict'
 
-const { parseModelId } = require('../../datadog-plugin-aws-sdk/src/services/bedrockruntime/utils')
+const { parseModelId: parseBedrockModelId } = require('../../datadog-plugin-aws-sdk/src/services/bedrockruntime/utils')
 
 /**
  * Get the model provider from the span tags or attributes.
@@ -28,7 +28,7 @@ function parseModelProvider (rawProvider, modelId) {
   const provider = providerParts?.[0]
 
   if (provider === 'amazon-bedrock') {
-    const model = modelId && parseModelId(modelId)
+    const model = modelId && parseBedrockModelId(modelId)
     return model?.modelProvider ?? provider
   }
 
