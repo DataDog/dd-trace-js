@@ -18,7 +18,9 @@ echo "9038680028e006d13ea1ff68fdcab0a5494d2026cdd2dbdfb067c5b80b6272f1  /tmp/pyt
 tar -xzf /tmp/python.tar.gz -C /opt
 rm /tmp/python.tar.gz
 
-pip3 install awscli==1.45.21 virtualenv==21.4.2 setuptools==82.0.1
+# awscli 1.45+ dropped Python 3.9 (requires >=3.10); hold at the last 1.44.x until
+# the CPython pin above moves to 3.10+, or pip can't resolve awscli on this image.
+pip3 install awscli==1.44.87 virtualenv==21.4.2 setuptools==82.0.1
 curl -sSL https://install.python-poetry.org | POETRY_HOME=/etc/poetry python3 - --version 2.4.1
 
 # Bootstrap bp-install so the Dockerfile can install the Benchmarking Platform
