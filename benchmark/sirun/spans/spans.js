@@ -20,8 +20,11 @@ const COUNT = Number(process.env.COUNT) || 2_000_000
 // finish-later defers the finish so it runs off the active-span path. Holding all
 // COUNT spans live at once would blow the heap (a 1M array of spans is ~1.6 GB);
 // instead run in fixed-size batches so the deferred-finish path is still exercised
-// while live memory stays flat.
-const BATCH = 10_000
+// while live memory stays flat. The batch size sets peak live spans, hence major-GC
+// pause size: 10k drove run-to-run jitter (the major share of finish-later's noise),
+// 500 added loop/reset overhead and got noisy again, 2000 sits in the valley (lower
+// stddev and ~10% faster locally). Overridable to re-sweep if the span shape changes.
+const BATCH = Number(process.env.BATCH) || 2000
 
 const spans = []
 
