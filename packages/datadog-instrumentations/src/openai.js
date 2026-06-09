@@ -318,10 +318,8 @@ function handleUnwrappedAPIPromise (apiProm, ctx, stream, guard) {
         return body
       }
 
-      // Run After Model AI Guard before finishing the span. When it blocks it rejects, so the
-      // outer catch finishes the span with the AIGuardAbortError and marks openai.request (the
-      // LLM Obs span) as errored. Finishing here also keeps openai.request wrapped around its
-      // child `ai_guard` span instead of closing before the After Model evaluation completes.
+      // Finish after evaluation so a block propagates the error to openai.request
+      // and the span wraps its ai_guard child instead of closing before it.
       return aiGuard.evaluateOutput(guard, body).then(() => {
         finish(ctx, responseData)
         return body
