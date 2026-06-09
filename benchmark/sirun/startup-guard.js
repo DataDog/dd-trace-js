@@ -21,6 +21,9 @@ let loopStartedAt
 
 function loopStart () {
   loopStartedAt = process.hrtime.bigint()
+  if (process.env.SIRUN_READY_FD) {
+    require('fs').writeSync(parseInt(process.env.SIRUN_READY_FD), 'x')
+  }
 }
 
 function done (maxShare = 0.10) {
