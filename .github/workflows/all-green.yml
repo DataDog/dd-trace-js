@@ -40,3 +40,16 @@ jobs:
           GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
           POLLING_INTERVAL: 1
           RETRIES: 20
+      - if: "!cancelled()"
+        uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
+      - if: "!cancelled()"
+        uses: ./.github/actions/datadog-ci
+      - if: "!cancelled()"
+        run: datadog-ci junit upload --service dd-trace-js-tests junit-results
+        env:
+          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+      - if: "!cancelled()"
+        run: datadog-ci coverage upload coverage-results
+        env:
+          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}

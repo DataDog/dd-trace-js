@@ -57,6 +57,7 @@ const codeCoverageReportCh = channel('ci:vitest:coverage-report')
 
 const taskToCtx = new WeakMap()
 const taskToStatuses = new WeakMap()
+const taskToReportedErrorCount = new WeakMap()
 const attemptToFixTaskToStatuses = new WeakMap()
 const originalHookFns = new WeakMap()
 const newTasks = new WeakSet()
@@ -318,6 +319,23 @@ function recordFinalAttemptToFixExecution (task, status, providedContext) {
 
 function disableFrameworkRetries (task) {
   task.retry = 0
+}
+
+/**
+ * Vitest accumulates retry and repeat errors on one task result. The first error added since
+ * the last reported attempt is the primary error for the failed attempt currently being reported.
+ *
+ * @param {object} task
+ * @param {Array<object> | undefined} errors
+ * @returns {object | undefined}
+ */
+function getCurrentAttemptTestError (task, errors) {
+  if (!errors?.length) return
+
+  const previousErrorCount = taskToReportedErrorCount.get(task) ?? 0
+  const testError = errors[previousErrorCount] ?? errors[0]
+  taskToReportedErrorCount.set(task, errors.length)
+  return testError
 }
 
 /**
@@ -993,7 +1011,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
       const promises = {}
       const shouldSetProbe = isDiEnabled && numAttempt === 1
       const ctx = taskToCtx.get(task)
-      const testError = task.result?.errors?.[0]
+      const testError = getCurrentAttemptTestError(task, task.result?.errors)
       if (ctx) {
         testErrorCh.publish({
           error: testError,
@@ -1023,7 +1041,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
       const ctx = taskToCtx.get(task)
       if (ctx) {
         if (lastExecutionStatus === 'fail') {
-          const testError = task.result?.errors?.[0]
+          const testError = getCurrentAttemptTestError(task, task.result?.errors)
           testErrorCh.publish({ error: testError, ...ctx.currentStore })
         } else {
           testPassCh.publish({ task, ...ctx.currentStore })
@@ -1047,7 +1065,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
 
       const ctx = taskToCtx.get(task)
       if (lastExecutionStatus === 'fail') {
-        const testError = task.result?.errors?.[0]
+        const testError = getCurrentAttemptTestError(task, task.result?.errors)
         testErrorCh.publish({ error: testError, ...ctx.currentStore })
       } else {
         testPassCh.publish({ task, ...ctx.currentStore })
@@ -1396,7 +1414,7 @@ addHook({
 
       if (result) {
         const { state, duration, errors } = result
-        const testError = errors?.[0]
+        const testError = getCurrentAttemptTestError(task, errors)
         if (attemptToFixTasks.has(task)) {
           const status = getFinalAttemptToFixStatus(task, state, isSwitchedStatus, testCtx)
           recordFinalAttemptToFixExecution(task, status, providedContext)

@@ -15,8 +15,8 @@ const aiguardChannel = dc.channel('dd-trace:ai:aiguard')
  * @typedef {object} ResourceHandler
  * @property {(callArgs: object) => (Array<object>|undefined)} getInputMessages
  * @property {(body: object) => Array<object>} getOutputMessages
- * @property {(inputMessages: Array<object>, outputMessages: Array<object>) => Promise<unknown>}
- *   publishOutputEvaluation
+ * @property {(inputMessages: Array<object>, outputMessages: Array<object>, parentSpan?: object)
+ *   => Promise<unknown>} publishOutputEvaluation
  */
 
 /**
@@ -24,17 +24,29 @@ const aiguardChannel = dc.channel('dd-trace:ai:aiguard')
  * @property {ResourceHandler} handler
  * @property {Array<object>} inputMessages
  * @property {() => Promise<void>} getInputEval
+ * @property {object} [parentSpan] - LLM span (`openai.request`) to nest `ai_guard` spans under.
+ *   Set by the instrumentation once the LLM span is active.
  */
 
 /**
  * Publishes already-converted AI-style messages to the AI Guard evaluation channel.
  *
+ * Subscribers push async work into `pending` and abort `abortController` to block.
+ *
  * @param {Array<object>} messages - AI-style messages to evaluate.
+ * @param {object} [parentSpan] - LLM span to use as the `ai_guard` span's parent.
  * @returns {Promise<void>}
  */
-function publishEvaluation (messages) {
-  return new Promise((resolve, reject) => {
-    aiguardChannel.publish({ messages, integration: 'openai', resolve, reject })
+function publishEvaluation (messages, parentSpan) {
+  const abortController = new AbortController()
+  const ctx = { messages, integration: 'openai', parentSpan, abortController, pending: [] }
+
+  aiguardChannel.publish(ctx)
+
+  return Promise.all(ctx.pending).then(() => {
+    if (abortController.signal.aborted) {
+      throw abortController.signal.reason
+    }
   })
 }
 
@@ -84,12 +96,13 @@ function getChatCompletionsOutputMessages (body) {
  *
  * @param {Array<object>} inputMessages
  * @param {Array<object>} outputMessages - One entry per choice
+ * @param {object} [parentSpan]
  * @returns {Promise<Array<void>>}
  */
-function publishChatCompletionsOutputEvaluation (inputMessages, outputMessages) {
+function publishChatCompletionsOutputEvaluation (inputMessages, outputMessages, parentSpan) {
   const evals = []
   for (const message of outputMessages) {
-    evals.push(publishEvaluation([...inputMessages, message]))
+    evals.push(publishEvaluation([...inputMessages, message], parentSpan))
   }
   return Promise.all(evals)
 }
@@ -157,10 +170,11 @@ function getResponsesOutputMessages (body) {
  *
  * @param {Array<object>} inputMessages
  * @param {Array<object>} outputMessages
+ * @param {object} [parentSpan]
  * @returns {Promise<void>}
  */
-function publishResponsesOutputEvaluation (inputMessages, outputMessages) {
-  return publishEvaluation([...inputMessages, ...outputMessages])
+function publishResponsesOutputEvaluation (inputMessages, outputMessages, parentSpan) {
+  return publishEvaluation([...inputMessages, ...outputMessages], parentSpan)
 }
 
 /**
@@ -215,8 +229,9 @@ function createGuard (baseResource, callArgs, stream) {
   if (!inputMessages) return null
 
   let inputEvalPromise
-  const getInputEval = () => (inputEvalPromise ??= publishEvaluation(inputMessages))
-  return { handler, inputMessages, getInputEval }
+  const guard = { handler, inputMessages, parentSpan: undefined }
+  guard.getInputEval = () => (inputEvalPromise ??= publishEvaluation(inputMessages, guard.parentSpan))
+  return guard
 }
 
 /**
@@ -257,7 +272,7 @@ function gateParse (parsedPromise, guard) {
 function evaluateOutput (guard, body) {
   const outputMessages = guard.handler.getOutputMessages(body)
   if (!outputMessages.length) return Promise.resolve()
-  return guard.handler.publishOutputEvaluation(guard.inputMessages, outputMessages)
+  return guard.handler.publishOutputEvaluation(guard.inputMessages, outputMessages, guard.parentSpan)
 }
 
 module.exports = {
