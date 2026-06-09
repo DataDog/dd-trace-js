@@ -1,4 +1,5 @@
 stages:
+  - ci-image
   - shared-pipeline
   - benchmarks
   - benchmarks-pr-comment
@@ -25,7 +26,7 @@ update_central_configurations_version_range_v2:
 
 include:
   - local: ".gitlab/one-pipeline.locked.yml"
-  - local: ".gitlab/benchmarks.yml"
+  - local: ".gitlab/benchmarks/gitlab-ci.yml"
   - project: "DataDog/apm-reliability/apm-sdks-benchmarks"
     file: ".gitlab/ci-node-express-realworld-parallel.yml"
     ref: "main"
