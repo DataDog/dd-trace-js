@@ -1,8 +1,8 @@
-import { writeFileSync } from 'node:fs'
 import { setTimeout } from 'timers/promises'
 import { Octokit } from 'octokit'
 import { summary } from '@actions/core'
 import { context } from '@actions/github'
+import { downloadArtifacts } from './download-artifacts.mjs'
 
 /* eslint-disable no-console */
 
@@ -199,7 +199,7 @@ async function checkAllGreen () {
   await printSummary(runs)
 
   if (process.env.GITHUB_ACTIONS) {
-    writeFileSync('run-ids.txt', runs.map(r => String(r.id)).join('\n') + '\n')
+    await downloadArtifacts(octokit, { owner, repo, token: GITHUB_TOKEN, runs })
   }
 
   if (!done) {

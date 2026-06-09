@@ -16,7 +16,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
-      actions: read
     steps:
       - uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
         id: octo-sts
@@ -41,23 +40,6 @@ jobs:
           GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
           POLLING_INTERVAL: 1
           RETRIES: 20
-      - name: Download artifacts
-        if: "!cancelled() && hashFiles('run-ids.txt') != ''"
-        run: |
-          mkdir -p junit-results coverage-results
-          while IFS= read -r run_id; do
-            gh run download "$run_id" \
-              --pattern "junit-*" \
-              --dir "junit-results/$run_id" \
-              2>/dev/null || true &
-            gh run download "$run_id" \
-              --pattern "coverage-*" \
-              --dir "coverage-results/$run_id" \
-              2>/dev/null || true &
-          done < run-ids.txt
-          wait
-        env:
-          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
       - if: "!cancelled()"
         uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
