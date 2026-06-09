@@ -92,6 +92,20 @@ function configureCypressTypeScriptCompilation (cwd) {
   fs.writeFileSync(path.join(cwd, 'cypress/e2e/tsconfig.json'), JSON.stringify(tsconfig, null, 2))
 }
 
+/**
+ * @param {{ type: string, content: { meta: Record<string, string> } }[]} events
+ * @param {string} tag
+ * @returns {void}
+ */
+function assertRequestErrorTag (events, tag) {
+  const eventTypes = ['test_session_end', 'test_module_end', 'test_suite_end', 'test']
+  for (const eventType of eventTypes) {
+    const event = events.find(event => event.type === eventType)
+    assert.ok(event, `should have ${eventType} event`)
+    assert.strictEqual(event.content.meta[tag], 'true', `${eventType} should have ${tag} tag`)
+  }
+}
+
 function shouldTestsRun (type) {
   if (DD_MAJOR === 5) {
     if (NODE_MAJOR <= 16) {
@@ -1350,7 +1364,7 @@ moduleTypes.forEach(({
       assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
     })
 
-    over12It('reports correct source file and line for pre-compiled typescript test files', async function () {
+    over12It('reports source file and line for pre-compiled typescript test files', async function () {
       const envVars = getCiVisAgentlessConfig(receiver.port)
 
       try {
@@ -1360,16 +1374,15 @@ moduleTypes.forEach(({
         // the original TypeScript source file and line via the adjacent .js.map file.
         compilePrecompiledTypeScriptSpecs(cwd, envVars)
 
-        // Run Cypress with the pre-compiled JS spec (compiled from spec-source-line.cy.ts).
-        // Cypress bundles the compiled JS via its own preprocessor; the plugin resolves
-        // the original TypeScript source line by scanning the compiled JS and mapping
-        // through the adjacent .js.map without needing any custom preprocessor.
+        const specToRun =
+          'cypress/e2e/dist/{spec-source-line,spec-source-line-fallback,spec-source-line-no-match}.cy.js'
+
         childProcess = exec(testCommand, {
           cwd,
           env: {
             ...envVars,
             CYPRESS_BASE_URL: webAppBaseUrl,
-            SPEC_PATTERN: 'cypress/e2e/dist/spec-source-line.cy.js',
+            SPEC_PATTERN: specToRun,
           },
         })
 
@@ -1379,9 +1392,9 @@ moduleTypes.forEach(({
             ({ url }) => url.endsWith('/api/v2/citestcycle'),
             (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
-              const tsTestEvents = events.filter(event =>
-                event.type === 'test' &&
-              event.content.resource.includes('spec source line')
+              const testEvents = events.filter(event => event.type === 'test')
+              const tsTestEvents = testEvents.filter(event =>
+                event.content.resource.includes('spec-source-line.cy.js.spec source line')
               )
 
               assert.strictEqual(tsTestEvents.length, 2, 'should have two typescript test events')
@@ -1418,6 +1431,46 @@ moduleTypes.forEach(({
                 /spec-source-line\.cy\.ts$/,
                 `TEST_SOURCE_FILE should point to TypeScript source, got: ${
                   testTestEvent.content.meta[TEST_SOURCE_FILE]
+                }`
+              )
+
+              const fallbackEvent = testEvents.find(event =>
+                event.content.resource.includes('spec source line fallback branch') &&
+                event.content.resource.includes('fallback branch literal title')
+              )
+
+              assert.ok(fallbackEvent, 'fallback-resolution test event should exist')
+              assert.strictEqual(
+                fallbackEvent.content.metrics[TEST_SOURCE_START],
+                7,
+                'should report TS source line resolved via declaration scanning fallback'
+              )
+              assert.match(
+                fallbackEvent.content.meta[TEST_SOURCE_FILE],
+                /spec-source-line-fallback\.cy\.ts$/,
+                `TEST_SOURCE_FILE should point to TypeScript source, got: ${
+                  fallbackEvent.content.meta[TEST_SOURCE_FILE]
+                }`
+              )
+
+              const noMatchEvent = testEvents.find(event =>
+                event.content.resource.includes('spec source line no match') &&
+                event.content.resource.includes('no match title')
+              )
+
+              assert.ok(noMatchEvent, 'no-match test event should exist')
+              assert.ok(
+                Number.isInteger(noMatchEvent.content.metrics[TEST_SOURCE_START]) &&
+                noMatchEvent.content.metrics[TEST_SOURCE_START] > 100,
+                `expected unresolved source line to remain a large generated/invocation line, got: ${
+                  noMatchEvent.content.metrics[TEST_SOURCE_START]
+                }`
+              )
+              assert.match(
+                noMatchEvent.content.meta[TEST_SOURCE_FILE],
+                /spec-source-line-no-match\.cy\.ts$/,
+                `TEST_SOURCE_FILE should point to TypeScript source, got: ${
+                  noMatchEvent.content.meta[TEST_SOURCE_FILE]
                 }`
               )
             }, { hardTimeout: 60000 })
@@ -1494,111 +1547,6 @@ moduleTypes.forEach(({
         assert.strictEqual(resolveOriginalSourceFile(compiledFilePath), path.join(tempDir, 'spec-prologue.ts'))
       } finally {
         fs.rmSync(tempDir, { recursive: true, force: true })
-      }
-    })
-
-    over12It('uses declaration scanning fallback when invocationDetails line is invalid', async function () {
-      const envVars = getCiVisAgentlessConfig(receiver.port)
-
-      try {
-        cleanupPrecompiledSourceLineDist(cwd)
-
-        compilePrecompiledTypeScriptSpecs(cwd, envVars)
-
-        childProcess = exec(testCommand, {
-          cwd,
-          env: {
-            ...envVars,
-            CYPRESS_BASE_URL: webAppBaseUrl,
-            SPEC_PATTERN: 'cypress/e2e/dist/spec-source-line-fallback.cy.js',
-          },
-        })
-
-        const receiverPromise = receiver
-          .gatherPayloadsUntilChildExit(
-            childProcess,
-            ({ url }) => url.endsWith('/api/v2/citestcycle'),
-            (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const fallbackEvent = events.find(event =>
-                event.type === 'test' &&
-              event.content.resource.includes('spec source line fallback branch') &&
-              event.content.resource.includes('fallback branch literal title')
-              )
-
-              assert.ok(fallbackEvent, 'fallback-resolution test event should exist')
-              assert.strictEqual(
-                fallbackEvent.content.metrics[TEST_SOURCE_START],
-                7,
-                'should report TS source line resolved via declaration scanning fallback'
-              )
-              assert.match(
-                fallbackEvent.content.meta[TEST_SOURCE_FILE],
-                /spec-source-line-fallback\.cy\.ts$/,
-                `TEST_SOURCE_FILE should point to TypeScript source, got: ${
-                  fallbackEvent.content.meta[TEST_SOURCE_FILE]
-                }`
-              )
-            }, { hardTimeout: 60000 })
-
-        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), receiverPromise])
-        assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
-      } finally {
-        cleanupPrecompiledSourceLineDist(cwd)
-      }
-    })
-
-    over12It('keeps original invocationDetails line when no declaration match is found', async function () {
-      this.timeout(140_000)
-      const envVars = getCiVisAgentlessConfig(receiver.port)
-
-      try {
-        cleanupPrecompiledSourceLineDist(cwd)
-
-        compilePrecompiledTypeScriptSpecs(cwd, envVars)
-
-        childProcess = exec(testCommand, {
-          cwd,
-          env: {
-            ...envVars,
-            CYPRESS_BASE_URL: webAppBaseUrl,
-            SPEC_PATTERN: 'cypress/e2e/dist/spec-source-line-no-match.cy.js',
-          },
-        })
-
-        const receiverPromise = receiver
-          .gatherPayloadsUntilChildExit(
-            childProcess,
-            ({ url }) => url.endsWith('/api/v2/citestcycle'),
-            (payloads) => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const noMatchEvent = events.find(event =>
-                event.type === 'test' &&
-              event.content.resource.includes('spec source line no match') &&
-              event.content.resource.includes('no match title')
-              )
-
-              assert.ok(noMatchEvent, 'no-match test event should exist')
-              assert.ok(
-                Number.isInteger(noMatchEvent.content.metrics[TEST_SOURCE_START]) &&
-                noMatchEvent.content.metrics[TEST_SOURCE_START] > 100,
-              `expected unresolved source line to remain a large generated/invocation line, got: ${
-                noMatchEvent.content.metrics[TEST_SOURCE_START]
-              }`
-              )
-              assert.match(
-                noMatchEvent.content.meta[TEST_SOURCE_FILE],
-                /spec-source-line-no-match\.cy\.ts$/,
-                `TEST_SOURCE_FILE should point to TypeScript source, got: ${
-                  noMatchEvent.content.meta[TEST_SOURCE_FILE]
-                }`
-              )
-            }, { hardTimeout: 60000 })
-
-        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), receiverPromise])
-        assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
-      } finally {
-        cleanupPrecompiledSourceLineDist(cwd)
       }
     })
 
@@ -1760,131 +1708,28 @@ moduleTypes.forEach(({
               ({ url }) => url.endsWith('/api/v2/citestcycle'),
               (payloads) => {
                 const events = payloads.flatMap(({ payload }) => payload.events)
-                const testSession = events.find(event => event.type === 'test_session_end').content
-                assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS], 'true',
-                  'test_session_end should have _dd.ci.library_configuration_error.settings tag')
-                const testModule = events.find(event => event.type === 'test_module_end')
-                assert.ok(testModule, 'should have test module event')
-                assert.strictEqual(testModule.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS], 'true',
-                  'test_module_end should have _dd.ci.library_configuration_error.settings tag')
-                const testSuiteEvent = events.find(event => event.type === 'test_suite_end')
-                assert.ok(testSuiteEvent, 'should have test suite event')
-                assert.strictEqual(testSuiteEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS], 'true',
-                  'test_suite_end should have _dd.ci.library_configuration_error.settings tag')
-                const testEvent = events.find(event => event.type === 'test')
-                assert.ok(testEvent, 'should have test event')
-                assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS], 'true',
-                  'test event should have _dd.ci.library_configuration_error.settings tag')
+                assertRequestErrorTag(events, DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS)
               })
 
           await Promise.all([eventsPromise, once(childProcess, 'exit')])
         })
 
       it(
-        'tags session and children with _dd.ci.library_configuration_error.skippable_tests when request fails 4xx',
+        'tags session and children when test optimization requests fail',
         async () => {
           const envVars = getCiVisAgentlessConfig(receiver.port)
 
+          receiver.setSettings({
+            code_coverage: true,
+            tests_skipping: true,
+            itr_enabled: true,
+            known_tests_enabled: true,
+            test_management: {
+              enabled: true,
+            },
+          })
           receiver.setSkippableSuitesResponseCode(404)
-          childProcess = exec(
-            testCommand,
-            {
-              cwd,
-              env: {
-                ...envVars,
-                CYPRESS_BASE_URL: webAppBaseUrl,
-                SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
-              },
-            }
-          )
-
-          // TODO: remove this once we have figured out flakiness
-          childProcess.stdout?.pipe(process.stdout)
-          childProcess.stderr?.pipe(process.stderr)
-
-          const eventsPromise = receiver
-            .gatherPayloadsUntilChildExit(
-              childProcess,
-              ({ url }) => url.endsWith('/api/v2/citestcycle'),
-              (payloads) => {
-                const events = payloads.flatMap(({ payload }) => payload.events)
-                const testSession = events.find(event => event.type === 'test_session_end').content
-                assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS], 'true',
-                  'test_session_end should have _dd.ci.library_configuration_error.skippable_tests tag')
-                const testModule = events.find(event => event.type === 'test_module_end')
-                assert.ok(testModule, 'should have test module event')
-                assert.strictEqual(testModule.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS], 'true',
-                  'test_module_end should have _dd.ci.library_configuration_error.skippable_tests tag')
-                const testSuiteEvent = events.find(event => event.type === 'test_suite_end')
-                assert.ok(testSuiteEvent, 'should have test suite event')
-                assert.strictEqual(
-                  testSuiteEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS],
-                  'true',
-                  'test_suite_end should have _dd.ci.library_configuration_error.skippable_tests tag')
-                const testEvent = events.find(event => event.type === 'test')
-                assert.ok(testEvent, 'should have test event')
-                assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS], 'true',
-                  'test event should have _dd.ci.library_configuration_error.skippable_tests tag')
-              })
-
-          await Promise.all([eventsPromise, once(childProcess, 'exit')])
-        })
-
-      it(
-        'tags session and children with _dd.ci.library_configuration_error.known_tests when request fails 4xx',
-        async () => {
-          const envVars = getCiVisAgentlessConfig(receiver.port)
-
-          receiver.setSettings({ known_tests_enabled: true })
           receiver.setKnownTestsResponseCode(404)
-          childProcess = exec(
-            testCommand,
-            {
-              cwd,
-              env: {
-                ...envVars,
-                CYPRESS_BASE_URL: webAppBaseUrl,
-                SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
-              },
-            }
-          )
-
-          // TODO: remove this once we have figured out flakiness
-          childProcess.stdout?.pipe(process.stdout)
-          childProcess.stderr?.pipe(process.stderr)
-
-          const eventsPromise = receiver
-            .gatherPayloadsUntilChildExit(
-              childProcess,
-              ({ url }) => url.endsWith('/api/v2/citestcycle'),
-              (payloads) => {
-                const events = payloads.flatMap(({ payload }) => payload.events)
-                const testSession = events.find(event => event.type === 'test_session_end').content
-                assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS], 'true',
-                  'test_session_end should have _dd.ci.library_configuration_error.known_tests tag')
-                const testModule = events.find(event => event.type === 'test_module_end')
-                assert.ok(testModule, 'should have test module event')
-                assert.strictEqual(testModule.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS], 'true',
-                  'test_module_end should have _dd.ci.library_configuration_error.known_tests tag')
-                const testSuiteEvent = events.find(event => event.type === 'test_suite_end')
-                assert.ok(testSuiteEvent, 'should have test suite event')
-                assert.strictEqual(testSuiteEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS], 'true',
-                  'test_suite_end should have _dd.ci.library_configuration_error.known_tests tag')
-                const testEvent = events.find(event => event.type === 'test')
-                assert.ok(testEvent, 'should have test event')
-                assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS], 'true',
-                  'test event should have _dd.ci.library_configuration_error.known_tests tag')
-              })
-
-          await Promise.all([eventsPromise, once(childProcess, 'exit')])
-        })
-
-      it(
-        'tags session and children with _dd.ci.library_configuration_error.test_management_tests when request fails',
-        async () => {
-          const envVars = getCiVisAgentlessConfig(receiver.port)
-
-          receiver.setSettings({ test_management: { enabled: true } })
           receiver.setTestManagementTestsResponseCode(404)
           childProcess = exec(
             testCommand,
@@ -1908,27 +1753,9 @@ moduleTypes.forEach(({
               ({ url }) => url.endsWith('/api/v2/citestcycle'),
               (payloads) => {
                 const events = payloads.flatMap(({ payload }) => payload.events)
-                const testSession = events.find(event => event.type === 'test_session_end').content
-                assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS], 'true',
-                  'test_session_end should have _dd.ci.library_configuration_error.test_management_tests tag')
-                const testModule = events.find(event => event.type === 'test_module_end')
-                assert.ok(testModule, 'should have test module event')
-                assert.strictEqual(
-                  testModule.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS], 'true',
-                  'test_module_end should have _dd.ci.library_configuration_error.test_management_tests tag'
-                )
-                const testSuiteEvent = events.find(event => event.type === 'test_suite_end')
-                assert.ok(testSuiteEvent, 'should have test suite event')
-                assert.strictEqual(
-                  testSuiteEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS], 'true',
-                  'test_suite_end should have _dd.ci.library_configuration_error.test_management_tests tag'
-                )
-                const testEvent = events.find(event => event.type === 'test')
-                assert.ok(testEvent, 'should have test event')
-                assert.strictEqual(
-                  testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS], 'true',
-                  'test event should have _dd.ci.library_configuration_error.test_management_tests tag'
-                )
+                assertRequestErrorTag(events, DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS)
+                assertRequestErrorTag(events, DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS)
+                assertRequestErrorTag(events, DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS)
               })
 
           await Promise.all([eventsPromise, once(childProcess, 'exit')])

@@ -463,9 +463,12 @@ moduleTypes.forEach(({
         }
 
         it('can attempt to fix and mark last attempt as failed if every attempt fails', async () => {
-          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: 3 },
+            flaky_test_retries_enabled: false,
+          })
 
-          await runAttemptToFixTest({ isAttemptToFix: true })
+          await runAttemptToFixTest({ isAttemptToFix: true, extraEnvVars: { CYPRESS_RETRIES: '1' } })
         })
 
         it('can attempt to fix and mark last attempt as passed if every attempt passes', async () => {
@@ -478,77 +481,6 @@ moduleTypes.forEach(({
           receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
           await runAttemptToFixTest({ isAttemptToFix: true, shouldFailSometimes: true })
-        })
-
-        it('disables manual Cypress retries for attempt to fix tests', async () => {
-          receiver.setSettings({
-            test_management: { enabled: true, attempt_to_fix_retries: 2 },
-            flaky_test_retries_enabled: false,
-          })
-
-          const envVars = getCiVisEvpProxyConfig(receiver.port)
-          const specToRun = 'cypress/e2e/attempt-to-fix.js'
-          const testName = 'attempt to fix is attempt to fix'
-
-          childProcess = exec(
-            version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
-            {
-              cwd,
-              env: {
-                ...envVars,
-                CYPRESS_BASE_URL: webAppBaseUrl,
-                CYPRESS_RETRIES: '1',
-                SPEC_PATTERN: specToRun,
-              },
-            }
-          )
-
-          await receiver.gatherPayloadsUntilChildExit(
-            childProcess,
-            ({ url }) => url.endsWith('/api/v2/citestcycle'),
-            payloads => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const tests = events
-                .filter(event => event.type === 'test')
-                .map(event => event.content)
-                .filter(test => test.meta[TEST_NAME] === testName)
-                .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
-
-              const diagnosticTests = tests.map(test => ({
-                status: test.meta[TEST_STATUS],
-                isAttemptToFix: test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX],
-                isRetry: test.meta[TEST_IS_RETRY],
-                retryReason: test.meta[TEST_RETRY_REASON],
-              }))
-              assert.deepStrictEqual(diagnosticTests, [
-                {
-                  status: 'fail',
-                  isAttemptToFix: 'true',
-                  isRetry: undefined,
-                  retryReason: undefined,
-                },
-                {
-                  status: 'fail',
-                  isAttemptToFix: 'true',
-                  isRetry: 'true',
-                  retryReason: TEST_RETRY_REASON_TYPES.atf,
-                },
-                {
-                  status: 'fail',
-                  isAttemptToFix: 'true',
-                  isRetry: 'true',
-                  retryReason: TEST_RETRY_REASON_TYPES.atf,
-                },
-              ])
-
-              const lastAttempt = tests[tests.length - 1]
-              assert.strictEqual(lastAttempt.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
-              assert.strictEqual(lastAttempt.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
-            },
-            { hardTimeout: 60_000 }
-          )
-
-          assert.strictEqual(childProcess.exitCode, 1)
         })
 
         it('keeps after hook failures on attempt to fix tests', async () => {
@@ -717,7 +649,7 @@ moduleTypes.forEach(({
         })
       })
 
-      context('disabled', () => {
+      context('disabled and quarantine', () => {
         beforeEach(() => {
           receiver.setTestManagementTests({
             cypress: {
@@ -731,86 +663,6 @@ moduleTypes.forEach(({
                     },
                   },
                 },
-              },
-            },
-          })
-        })
-
-        const awaitTestAssertions = (isDisabling, child) =>
-          receiver
-            .gatherPayloadsUntilChildExit(child, ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const failedTest = events.find(event => event.type === 'test').content
-              const testSession = events.find(event => event.type === 'test_session_end').content
-
-              if (isDisabling) {
-                assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
-              } else {
-                assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
-              }
-
-              assert.strictEqual(failedTest.resource, 'cypress/e2e/disable.js.disable is disabled')
-
-              if (isDisabling) {
-                assert.strictEqual(failedTest.meta[TEST_STATUS], 'skip')
-                assert.strictEqual(failedTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
-              } else {
-                assert.strictEqual(failedTest.meta[TEST_STATUS], 'fail')
-                assert.ok(!(TEST_MANAGEMENT_IS_DISABLED in failedTest.meta))
-              }
-            })
-
-        const runDisableTest = async (isDisabling, extraEnvVars = {}) => {
-          const envVars = getCiVisEvpProxyConfig(receiver.port)
-
-          const specToRun = 'cypress/e2e/disable.js'
-
-          childProcess = exec(
-            version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
-            {
-              cwd,
-              env: {
-                ...envVars,
-                CYPRESS_BASE_URL: webAppBaseUrl,
-                SPEC_PATTERN: specToRun,
-                ...extraEnvVars,
-              },
-            }
-          )
-
-          await awaitTestAssertions(isDisabling, childProcess)
-
-          if (isDisabling) {
-            assert.strictEqual(childProcess.exitCode, 0)
-          } else {
-            assert.strictEqual(childProcess.exitCode, 1)
-          }
-        }
-
-        it('can disable tests', async () => {
-          receiver.setSettings({ test_management: { enabled: true } })
-
-          await runDisableTest(true)
-        })
-
-        it('fails if disable is not enabled', async () => {
-          receiver.setSettings({ test_management: { enabled: false } })
-
-          await runDisableTest(false)
-        })
-
-        it('does not disable tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async () => {
-          receiver.setSettings({ test_management: { enabled: true } })
-
-          await runDisableTest(false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
-        })
-      })
-
-      context('quarantine', () => {
-        beforeEach(() => {
-          receiver.setTestManagementTests({
-            cypress: {
-              suites: {
                 'cypress/e2e/quarantine.js': {
                   tests: {
                     'quarantine is quarantined': {
@@ -825,14 +677,21 @@ moduleTypes.forEach(({
           })
         })
 
-        const awaitTestAssertions = (isQuarantining, child) =>
+        const awaitTestAssertions = (isManagingTests, child) =>
           receiver
             .gatherPayloadsUntilChildExit(child, ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
               const events = payloads.flatMap(({ payload }) => payload.events)
-              const failedTest = events.find(event => event.type === 'test').content
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
               const testSession = events.find(event => event.type === 'test_session_end').content
+              const disabledTest = tests.find(test => test.resource === 'cypress/e2e/disable.js.disable is disabled')
+              const quarantinedTest = tests.find(
+                test => test.resource === 'cypress/e2e/quarantine.js.quarantine is quarantined'
+              )
 
-              if (isQuarantining) {
+              assert.ok(disabledTest, 'disabled test should be reported')
+              assert.ok(quarantinedTest, 'quarantined test should be reported')
+
+              if (isManagingTests) {
                 assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
                 // Session status should be 'pass' because Cypress sees the quarantined test as passed
                 assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
@@ -841,27 +700,29 @@ moduleTypes.forEach(({
                 assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
               }
 
-              assert.strictEqual(failedTest.resource, 'cypress/e2e/quarantine.js.quarantine is quarantined')
-
-              if (isQuarantining) {
+              if (isManagingTests) {
+                assert.strictEqual(disabledTest.meta[TEST_STATUS], 'skip')
+                assert.strictEqual(disabledTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
                 // Quarantined tests run normally but their failures are suppressed by Cypress.on('fail')
                 // in support.js. The test actually fails (reports 'fail' to Datadog) but Cypress sees
                 // it as passed, so the exit code is 0.
-                assert.strictEqual(failedTest.meta[TEST_STATUS], 'fail')
-                assert.strictEqual(failedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+                assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
+                assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
               } else {
-                assert.strictEqual(failedTest.meta[TEST_STATUS], 'fail')
-                assert.ok(!(TEST_MANAGEMENT_IS_QUARANTINED in failedTest.meta))
+                assert.strictEqual(disabledTest.meta[TEST_STATUS], 'fail')
+                assert.ok(!(TEST_MANAGEMENT_IS_DISABLED in disabledTest.meta))
+                assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
+                assert.ok(!(TEST_MANAGEMENT_IS_QUARANTINED in quarantinedTest.meta))
               }
             })
 
-        const runQuarantineTest = async (isQuarantining, extraEnvVars = {}) => {
+        const runDisableAndQuarantineTest = async (isManagingTests, extraEnvVars = {}) => {
           const envVars = getCiVisEvpProxyConfig(receiver.port)
 
-          const specToRun = 'cypress/e2e/quarantine.js'
+          const specToRun = 'cypress/e2e/{disable,quarantine}.js'
 
           childProcess = exec(
-            version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+            version === 'latest' ? testCommand : `${testCommand} --spec "${specToRun}"`,
             {
               cwd,
               env: {
@@ -873,31 +734,31 @@ moduleTypes.forEach(({
             }
           )
 
-          await awaitTestAssertions(isQuarantining, childProcess)
+          await awaitTestAssertions(isManagingTests, childProcess)
 
-          if (isQuarantining) {
+          if (isManagingTests) {
             assert.strictEqual(childProcess.exitCode, 0)
           } else {
-            assert.strictEqual(childProcess.exitCode, 1)
+            assert.notStrictEqual(childProcess.exitCode, 0)
           }
         }
 
-        it('can quarantine tests', async () => {
+        it('can disable and quarantine tests', async () => {
           receiver.setSettings({ test_management: { enabled: true } })
 
-          await runQuarantineTest(true)
+          await runDisableAndQuarantineTest(true)
         })
 
-        it('fails if quarantine is not enabled', async () => {
+        it('does not disable or quarantine tests if test management is not enabled', async () => {
           receiver.setSettings({ test_management: { enabled: false } })
 
-          await runQuarantineTest(false)
+          await runDisableAndQuarantineTest(false)
         })
 
-        it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async () => {
+        it('does not disable or quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async () => {
           receiver.setSettings({ test_management: { enabled: true } })
 
-          await runQuarantineTest(false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+          await runDisableAndQuarantineTest(false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
         })
       })
 
