@@ -3,6 +3,7 @@
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing.js')
 const tags = require('../../../ext/tags.js')
 const { HTTP_HEADERS } = require('../../../ext/formats')
+const { getSegment } = require('../../dd-trace/src/util')
 const {
   createWebSocketSpanContext,
   hasTraceHeaders,
@@ -94,7 +95,7 @@ function getRequestProtocol (req, fallback = 'ws') {
 
   // 2. Check for a trusted header set by a proxy
   if (req.headers && req.headers['x-forwarded-proto']) {
-    const proto = req.headers['x-forwarded-proto'].split(',', 1)[0].trim()
+    const proto = getSegment(req.headers['x-forwarded-proto'], ',', 0).trim()
     if (proto === 'https') return 'wss'
     if (proto === 'http') return 'ws'
   }

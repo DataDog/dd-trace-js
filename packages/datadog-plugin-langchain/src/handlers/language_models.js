@@ -1,10 +1,11 @@
 'use strict'
 
+const { getSegment } = require('../../../dd-trace/src/util')
 const LangChainHandler = require('./default')
 
 class LangChainLanguageModelHandler extends LangChainHandler {
   extractProvider (instance) {
-    return typeof instance._llmType === 'function' && instance._llmType().split('-', 1)[0]
+    return typeof instance._llmType === 'function' && getSegment(instance._llmType(), '-', 0)
   }
 
   extractModel (instance) {
