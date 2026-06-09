@@ -55,11 +55,11 @@ const collectionMethodsWithFilter = [
   'remove',
 ]
 
-const collectionMethodsWithTwoFilters = [
+const collectionMethodsWithTwoFilters = new Set([
   'findOneAndUpdate',
   'updateMany',
   'updateOne',
-]
+])
 
 addHook({
   name: 'mongoose',
@@ -67,7 +67,7 @@ addHook({
   file: 'lib/model.js',
 }, Model => {
   for (const methodName of [...collectionMethodsWithFilter, ...collectionMethodsWithTwoFilters]) {
-    const useTwoArguments = collectionMethodsWithTwoFilters.includes(methodName)
+    const useTwoArguments = collectionMethodsWithTwoFilters.has(methodName)
     if (!(methodName in Model)) continue
 
     shimmer.wrap(Model, methodName, method => {

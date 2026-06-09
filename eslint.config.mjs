@@ -581,33 +581,34 @@ export default [
       ...eslintPluginUnicorn.configs.recommended.rules,
 
       // Overriding recommended unicorn rules
-      'unicorn/catch-error-name': ['off', { name: 'err' }], // 166 errors
+      'unicorn/catch-error-name': ['off', { name: 'err' }], // Many errors
       'unicorn/expiring-todo-comments': 'off',
-      'unicorn/explicit-length-check': 'off', // 68 errors
-      'unicorn/filename-case': ['off', { case: 'kebabCase' }], // 59 errors
-      'unicorn/prefer-at': 'off', // 17 errors | Difficult to fix
-      'unicorn/prefer-export-from': ['error', { ignoreUsedVariables: true }],
-      'unicorn/prevent-abbreviations': 'off', // too strict
+      'unicorn/filename-case': ['off', { case: 'kebabCase' }], // // Many errors
+      'unicorn/prevent-abbreviations': 'off', // Many errors
 
       // These rules require a newer Node.js version than we support
       'unicorn/no-array-reverse': 'off', // Node.js 20
       'unicorn/no-array-sort': 'off', // Node.js 20
 
       // These rules could potentially evaluated again at a much later point
+      'unicorn/explicit-length-check': 'off', // Not a big advantage
       'unicorn/no-array-callback-reference': 'off',
       'unicorn/no-for-loop': 'off', // Activate if this is resolved https://github.com/sindresorhus/eslint-plugin-unicorn/issues/2664
-      'unicorn/no-nested-ternary': 'off', // Not really an issue in the code and the benefit is small
       'unicorn/no-this-assignment': 'off', // This would need some further refactoring and the benefit is small
       'unicorn/prefer-code-point': 'off', // Should be activated, but needs a refactor of some code
+      'unicorn/prefer-queue-microtask': 'off', // No advantage for us
 
       // The following rules should not be activated!
       'unicorn/import-style': 'off', // Questionable benefit
       'unicorn/no-array-reduce': 'off', // Questionable benefit
       'unicorn/no-hex-escape': 'off', // Questionable benefit
+      'unicorn/no-nested-ternary': 'off', // Not really an issue in the code and the benefit is small
       'unicorn/no-new-array': 'off', // new Array is often used for performance reasons
       'unicorn/no-null': 'off', // We do not control external APIs and it is hard to differentiate these
+      'unicorn/no-this-outside-of-class': 'off', // This will not work for us
       'unicorn/prefer-event-target': 'off', // Benefit only outside of Node.js
       'unicorn/prefer-global-this': 'off', // Questionable benefit in Node.js alone
+      'unicorn/prefer-includes-over-repeated-comparisons': 'off', // Bad for performance
       'unicorn/prefer-math-trunc': 'off', // Math.trunc is not a 1-to-1 replacement for most of our usage
       'unicorn/prefer-module': 'off', // We use CJS
       'unicorn/prefer-node-protocol': 'off', // May not be used due to guardrails

@@ -90,7 +90,7 @@ function collectDependencies (deps, obj) {
     if (!resolved) continue
 
     // Get the actual dependency name even when aliased in the package.json
-    const name = resolved.split('/-')[0].split('npmjs.org/').reverse()[0]
+    const name = resolved.split('/-', 1)[0].split('npmjs.org/').reverse()[0]
 
     deps.add(name)
 
