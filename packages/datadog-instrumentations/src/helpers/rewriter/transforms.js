@@ -55,6 +55,12 @@ function traceFunction (state, node, program) {
 
   transforms.tracingChannelDeclaration(state, program)
 
+  // Arrow functions don't have their own `arguments` or `this` bindings,
+  // which are needed by the wrapper code. Convert to a regular function.
+  if (node.type === 'ArrowFunctionExpression') {
+    node.type = 'FunctionExpression'
+  }
+
   node.body = wrap(state, {
     type: 'ArrowFunctionExpression',
     params: node.params,

@@ -189,6 +189,11 @@ services:
       - LDAP_USERS=user01,user02
       - LDAP_PASSWORDS=password1,password2
 
+  nats:
+    image: nats:2.10-alpine
+    ports:
+      - "127.0.0.1:4222:4222"
+
   testagent:
     image: ghcr.io/datadog/dd-apm-test-agent/ddapm-test-agent:v1.33.1
     ports:
