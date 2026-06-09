@@ -86,7 +86,10 @@ const CHILD_MESSAGE_CALL = 1
 
 // Maximum time we'll wait for the tracer to flush
 const FLUSH_TIMEOUT = 10_000
+const JEST_SESSION_STATE = Symbol.for('dd-trace:jest:session')
+const JEST_BAIL_REPORTER_PATH = require.resolve('./jest/bail-reporter')
 const isJestWorker = !!getEnvironmentVariable('JEST_WORKER_ID')
+const jestSessionState = globalThis[JEST_SESSION_STATE] || (globalThis[JEST_SESSION_STATE] = {})
 
 // https://github.com/jestjs/jest/blob/41f842a46bb2691f828c3a5f27fc1d6290495b82/packages/jest-circus/src/types.ts#L9C8-L9C54
 const RETRY_TIMES = Symbol.for('RETRY_TIMES')
@@ -166,6 +169,7 @@ const MINIMUM_JEST_COVERAGE_BACKFILL_VERSION = '>=28.0.0'
 const atrSuppressedErrors = new Map()
 let hasWarnedDeprecatedJestVersion = false
 let isJestCoverageBackfillSupported = false
+let hasFinishedTestSession = false
 
 // Track quarantined tests whose errors were suppressed, keyed by "suite › testName"
 const quarantinedFailingTests = new Set()
@@ -1218,6 +1222,25 @@ function getCoverageBackfillRequire (CoverageReporter) {
   return require
 }
 
+function addDatadogBailReporter (globalConfig) {
+  if (!globalConfig.bail) return globalConfig
+
+  const reporters = globalConfig.reporters || [['default', {}]]
+  for (const [reporter] of reporters) {
+    if (reporter === JEST_BAIL_REPORTER_PATH) {
+      return globalConfig
+    }
+  }
+
+  return {
+    ...globalConfig,
+    reporters: [
+      ...reporters,
+      [JEST_BAIL_REPORTER_PATH, {}],
+    ],
+  }
+}
+
 function getTestContexts (tests) {
   if (!tests?.length) return
 
@@ -1282,6 +1305,115 @@ function applySkippedCoverageToJestCoverageMap (coverageMap, rootDir) {
     rootDir || process.cwd()
   )
 }
+
+function getSessionFinishError (results) {
+  const numFailedTestSuites = results?.numFailedTestSuites || 0
+  const numFailedTests = results?.numFailedTests || 0
+
+  return new Error(`Failed test suites: ${numFailedTestSuites}. Failed tests: ${numFailedTests}`)
+}
+
+function getTestSessionCoveragePayload (results, fallbackRootDir) {
+  const payload = {}
+  if (!shouldReportCodeCoverageLinesPct()) return payload
+
+  try {
+    const coverageMap = results?.coverageMap || lastCoverageMap
+    const coverageRootDir = lastCoverageMapRootDir ||
+      repositoryRoot ||
+      fallbackRootDir ||
+      process.cwd()
+    if (isSuitesSkipped) {
+      applySkippedCoverageToJestCoverageMap(coverageMap, coverageRootDir)
+    }
+    payload.testCodeCoverageLinesTotal = getTestCoverageLinesPercentage(
+      coverageMap,
+      undefined,
+      coverageRootDir
+    )
+    if (isTiaCoverageBackfillEnabled()) {
+      payload.testSessionCoverageFiles = getExecutableFilesFromCoverage(coverageMap).map(({ filename, bitmap }) => ({
+        filename: getTestSuitePath(filename, coverageRootDir),
+        bitmap,
+      }))
+    }
+  } catch {
+    // ignore errors
+  }
+
+  return payload
+}
+
+function getNumBailFailures (results) {
+  const numFailedTests = results?.numFailedTests || 0
+  const numFailedSuites = results?.numRuntimeErrorTestSuites === undefined
+    ? (numFailedTests === 0 ? results?.numFailedTestSuites || 0 : 0)
+    : results.numRuntimeErrorTestSuites
+
+  return numFailedTests + numFailedSuites
+}
+
+function shouldFinishBailTestSession (globalConfig, results) {
+  return !!globalConfig?.bail && getNumBailFailures(results) >= globalConfig.bail
+}
+
+async function waitForTestSessionFinish (payload) {
+  if (!testSessionFinishCh.hasSubscribers || hasFinishedTestSession) return
+
+  hasFinishedTestSession = true
+
+  let timeoutId
+
+  const flushPromise = new Promise((resolve) => {
+    payload.onDone = () => {
+      clearTimeout(timeoutId)
+      resolve()
+    }
+  })
+
+  const timeoutPromise = new Promise((resolve) => {
+    timeoutId = realSetTimeout(() => {
+      resolve('timeout')
+    }, FLUSH_TIMEOUT)
+    timeoutId.unref?.()
+  })
+
+  testSessionFinishCh.publish(payload)
+
+  const waitingResult = await Promise.race([flushPromise, timeoutPromise])
+
+  if (waitingResult === 'timeout') {
+    log.error('Timeout waiting for the tracer to flush')
+  }
+}
+
+function getTestSessionFinishPayload (status, error, extra = {}) {
+  return {
+    status,
+    isSuitesSkipped,
+    isSuitesSkippingEnabled,
+    isCodeCoverageEnabled,
+    isCoverageReportUploadEnabled,
+    numSkippedSuites,
+    hasUnskippableSuites,
+    hasForcedToRunSuites,
+    error,
+    isEarlyFlakeDetectionEnabled,
+    isEarlyFlakeDetectionFaulty,
+    isTestManagementTestsEnabled,
+    ...extra,
+  }
+}
+
+async function finishBailTestSession (results, fallbackRootDir) {
+  await waitForTestSessionFinish(getTestSessionFinishPayload(
+    'fail',
+    getSessionFinishError(results),
+    getTestSessionCoveragePayload(results, fallbackRootDir)
+  ))
+}
+
+jestSessionState.finishBailTestSession = finishBailTestSession
 
 function reporterDispatcherWrapper (reporterDispatcherPackage) {
   const ReporterDispatcher = reporterDispatcherPackage.default ?? reporterDispatcherPackage
@@ -1351,7 +1483,11 @@ function wrapCoverageReporter (CoverageReporter, hookMeta) {
     }
     lastCoverageMap = coverageMap
     lastCoverageMapRootDir = rootDir
-    return onRunComplete.call(this, coverageContexts, results)
+    const result = await onRunComplete.call(this, coverageContexts, results)
+    if (shouldFinishBailTestSession(this._globalConfig, results)) {
+      await finishBailTestSession(results, rootDir)
+    }
+    return result
   })
 }
 
@@ -1462,12 +1598,12 @@ function getCliWrapper (isNewJestVersion) {
       )
     }
     return shimmer.wrap(cli, 'runCLI', runCLI => async function () {
-      let onDone
       if (!libraryConfigurationCh.hasSubscribers) {
         return runCLI.apply(this, arguments)
       }
 
       resetSuiteSkippingRunState()
+      hasFinishedTestSession = false
 
       try {
         const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh, {
@@ -1576,7 +1712,6 @@ function getCliWrapper (isNewJestVersion) {
 
       const {
         results: {
-          coverageMap: resultCoverageMap,
           numFailedTestSuites,
           numFailedTests,
           numRuntimeErrorTestSuites = 0,
@@ -1590,36 +1725,6 @@ function getCliWrapper (isNewJestVersion) {
       const hasSuiteLevelFailures = numRuntimeErrorTestSuites > 0
       const hasRunLevelFailure = runExecError != null || wasInterrupted === true
       const mustNotFlipSuccess = hasSuiteLevelFailures || hasRunLevelFailure
-
-      let testCodeCoverageLinesTotal
-      let testSessionCoverageFiles
-      const shouldReportTestSessionCoverage = isTiaCoverageBackfillEnabled()
-
-      if (shouldReportCodeCoverageLinesPct()) {
-        try {
-          const coverageMap = resultCoverageMap || lastCoverageMap
-          const coverageRootDir = lastCoverageMapRootDir ||
-            repositoryRoot ||
-            result.globalConfig?.rootDir ||
-            process.cwd()
-          if (isSuitesSkipped) {
-            applySkippedCoverageToJestCoverageMap(coverageMap, coverageRootDir)
-          }
-          testCodeCoverageLinesTotal = getTestCoverageLinesPercentage(
-            coverageMap,
-            undefined,
-            coverageRootDir
-          )
-          if (shouldReportTestSessionCoverage) {
-            testSessionCoverageFiles = getExecutableFilesFromCoverage(coverageMap).map(({ filename, bitmap }) => ({
-              filename: getTestSuitePath(filename, coverageRootDir),
-              bitmap,
-            }))
-          }
-        } catch {
-          // ignore errors
-        }
-      }
 
       /**
        * If Early Flake Detection (EFD) is enabled the logic is as follows:
@@ -1774,46 +1879,9 @@ function getCliWrapper (isNewJestVersion) {
         error = new Error(`Failed test suites: ${numFailedTestSuites}. Failed tests: ${numFailedTests}`)
       }
 
-      let timeoutId
-
-      // Pass the resolve callback to defer it to DC listener
-      const flushPromise = new Promise((resolve) => {
-        onDone = () => {
-          clearTimeout(timeoutId)
-          resolve()
-        }
-      })
-
-      const timeoutPromise = new Promise((resolve) => {
-        timeoutId = realSetTimeout(() => {
-          resolve('timeout')
-        }, FLUSH_TIMEOUT)
-        timeoutId.unref?.()
-      })
-
-      testSessionFinishCh.publish({
-        status,
-        isSuitesSkipped,
-        isSuitesSkippingEnabled,
-        isCodeCoverageEnabled,
-        isCoverageReportUploadEnabled,
-        testCodeCoverageLinesTotal,
-        testSessionCoverageFiles,
-        numSkippedSuites,
-        hasUnskippableSuites,
-        hasForcedToRunSuites,
-        error,
-        isEarlyFlakeDetectionEnabled,
-        isEarlyFlakeDetectionFaulty,
-        isTestManagementTestsEnabled,
-        onDone,
-      })
-
-      const waitingResult = await Promise.race([flushPromise, timeoutPromise])
-
-      if (waitingResult === 'timeout') {
-        log.error('Timeout waiting for the tracer to flush')
-      }
+      await waitForTestSessionFinish(getTestSessionFinishPayload(status, error, {
+        ...getTestSessionCoveragePayload(result.results, result.globalConfig?.rootDir),
+      }))
 
       if (codeCoverageReportCh.hasSubscribers) {
         const rootDir = result.globalConfig?.rootDir || process.cwd()
@@ -2099,6 +2167,8 @@ function configureTestEnvironment (readConfigsResult) {
   if (readConfigsResult.globalConfig.forceExit) {
     log.warn("Jest's '--forceExit' flag has been passed. This may cause loss of data.")
   }
+
+  readConfigsResult.globalConfig = addDatadogBailReporter(readConfigsResult.globalConfig)
 
   if (isSuitesSkippingEnabled) {
     // If suite skipping is enabled, we pass `passWithNoTests` in case every test gets skipped.
