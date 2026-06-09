@@ -1,0 +1,19 @@
+{
+  "name": "test-ci-encode",
+  "run": "node index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "cachegrind": false,
+  "iterations": 12,
+  "instructions": true,
+  "variants": {
+    "small-suite": {
+      "env": { "VARIANT": "small-suite", "ENCODE_COUNT": "40000" }
+    },
+    "large-suite": {
+      "env": { "VARIANT": "large-suite", "ENCODE_COUNT": "4000" }
+    },
+    "wide-tags": {
+      "env": { "VARIANT": "wide-tags", "ENCODE_COUNT": "15000" }
+    }
+  }
+}
