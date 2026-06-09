@@ -9,20 +9,17 @@ const zeroId = new Uint8Array(8)
 
 let batch = 0
 
-// When DD_TRACE_SECURE_RANDOM=true, bypass the batch buffer entirely and call
-// randomFillSync on a fresh 8-byte buffer per ID. The batch buffer is heap state
-// that may be duplicated across process copies; per-call kernel reads have no
-// buffered state and guarantee ID uniqueness regardless of process origin.
-// id.js is a foundational module loaded before config initializes, so we read
-// the env var directly rather than going through the config system. We cannot
-// import util.js here because id.js is loaded standalone in sandbox environments
-// (e.g. integration-test/client.spec.js useSandbox) where only id.js itself is
-// copied — importing any sibling would cause Cannot find module errors there.
+// When running in a Lambda MicroVM environment (AWS_LAMBDA_MICROVM_IMAGE_ARN is
+// set by the platform), bypass the batch buffer and call randomFillSync on a
+// fresh 8-byte buffer per ID. The batch buffer is heap state serialised into
+// the Firecracker snapshot; all resumed clones would share identical contents
+// and produce duplicate IDs. Per-call kernel reads have no buffered state and
+// guarantee uniqueness regardless of when the snapshot was taken.
+// id.js is a foundational module loaded before config initialises, so we read
+// the env var directly. We cannot import siblings here because id.js is copied
+// standalone into sandbox environments (useSandbox in integration tests).
 // eslint-disable-next-line eslint-rules/eslint-process-env
-const _rawEnv = process.env.DD_TRACE_SECURE_RANDOM
-const _secureRandom = _rawEnv !== undefined && (
-  _rawEnv.toLowerCase() === 'true' || _rawEnv === '1'
-)
+const _secureRandom = !!process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
 const _secureBuf = _secureRandom ? new Uint8Array(8) : null
 
 // Internal representation of a trace or span ID.

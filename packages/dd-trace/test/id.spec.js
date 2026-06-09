@@ -157,11 +157,10 @@ describe('id', () => {
   })
 })
 
-describe('DD_TRACE_SECURE_RANDOM activation', () => {
-  const secureTruthy = ['true', '1', 'TRUE', 'True']
-  const secureFalsy = ['false', '0', '']
+describe('AWS_LAMBDA_MICROVM_IMAGE_ARN activation', () => {
+  const microVmArn = 'arn:aws:lambda:us-east-2:123456789012:microvm:my-app'
 
-  function loadWithMock (envValue) {
+  function loadWithMock (arn) {
     let secureCalls = 0
     let batchCalls = 0
     const mockCrypto = {
@@ -174,44 +173,46 @@ describe('DD_TRACE_SECURE_RANDOM activation', () => {
         for (let i = 0; i < buf.length; i++) buf[i] = 0xAB
       },
     }
-    if (envValue !== '') {
-      process.env.DD_TRACE_SECURE_RANDOM = envValue
+    if (arn !== undefined) {
+      process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN = arn
     } else {
-      delete process.env.DD_TRACE_SECURE_RANDOM
+      delete process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
     }
     const mod = proxyquire('../src/id', { crypto: mockCrypto })
-    delete process.env.DD_TRACE_SECURE_RANDOM
+    delete process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
     return { mod, secureCalls: () => secureCalls, batchCalls: () => batchCalls }
   }
 
-  for (const value of secureTruthy) {
-    it(`should use per-call randomFillSync when DD_TRACE_SECURE_RANDOM="${value}"`, () => {
-      const { mod, secureCalls } = loadWithMock(value)
-      mod()
-      assert.ok(secureCalls() > 0, `expected 8-byte randomFillSync call for value "${value}"`)
-    })
-  }
+  it('should use per-call randomFillSync when AWS_LAMBDA_MICROVM_IMAGE_ARN is set', () => {
+    const { mod, secureCalls } = loadWithMock(microVmArn)
+    mod()
+    assert.ok(secureCalls() > 0, 'expected 8-byte randomFillSync call when ARN is set')
+  })
 
-  for (const value of secureFalsy) {
-    it(`should use batch randomFillSync when DD_TRACE_SECURE_RANDOM="${value}"`, () => {
-      const { mod, batchCalls } = loadWithMock(value)
-      mod()
-      assert.ok(batchCalls() > 0, `expected batch randomFillSync call for value "${value}"`)
-    })
-  }
+  it('should use batch randomFillSync when AWS_LAMBDA_MICROVM_IMAGE_ARN is unset', () => {
+    const { mod, batchCalls } = loadWithMock(undefined)
+    mod()
+    assert.ok(batchCalls() > 0, 'expected batch randomFillSync call when ARN is unset')
+  })
+
+  it('should use batch randomFillSync when AWS_LAMBDA_MICROVM_IMAGE_ARN is empty string', () => {
+    const { mod, batchCalls } = loadWithMock('')
+    mod()
+    assert.ok(batchCalls() > 0, 'expected batch randomFillSync call when ARN is empty')
+  })
 })
 
-describe('id with DD_TRACE_SECURE_RANDOM=true', () => {
+describe('id in Lambda MicroVM environment', () => {
   let id
 
   beforeEach(() => {
-    process.env.DD_TRACE_SECURE_RANDOM = 'true'
+    process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN = 'arn:aws:lambda:us-east-2:123456789012:microvm:my-app'
     delete require.cache[require.resolve('../src/id')]
     id = require('../src/id')
   })
 
   afterEach(() => {
-    delete process.env.DD_TRACE_SECURE_RANDOM
+    delete process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
     delete require.cache[require.resolve('../src/id')]
   })
 

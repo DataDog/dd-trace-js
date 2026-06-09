@@ -893,7 +893,6 @@ describe('Config', () => {
       runtimeMetricsRuntimeId: false,
       sampleRate: undefined,
       scope: undefined,
-      secureRandom: false,
       service: 'node',
       spanAttributeSchema: 'v0',
       spanComputePeerService: false,
@@ -1033,7 +1032,6 @@ describe('Config', () => {
       { name: 'DD_TRACE_SAMPLE_RATE', value: null, origin: 'default' },
       { name: 'DD_TRACE_RATE_LIMIT', value: 100, origin: 'default' },
       { name: 'DD_TRACE_SAMPLING_RULES', value: '[]', origin: 'default' },
-      { name: 'DD_TRACE_SECURE_RANDOM', value: false, origin: 'default' },
       { name: 'DD_TRACE_SCOPE', value: null, origin: 'default' },
       { name: 'DD_SERVICE', value: null, origin: 'default' },
       { name: 'DD_SITE', value: 'datadoghq.com', origin: 'default' },
@@ -4696,24 +4694,6 @@ rules:
       const config = getConfig()
       assert.notStrictEqual(config.experimental.exporter, 'agentless')
       assert.notStrictEqual(config.sampler.rateLimit, -1)
-    })
-  })
-
-  describe('DD_TRACE_SECURE_RANDOM', () => {
-    it('should default secureRandom to false', () => {
-      const config = getConfig()
-      assert.strictEqual(config.secureRandom, false)
-    })
-
-    it('should set secureRandom to true via env var', () => {
-      process.env.DD_TRACE_SECURE_RANDOM = 'true'
-      const config = getConfig()
-      assert.strictEqual(config.secureRandom, true)
-    })
-
-    it('should set secureRandom to true via programmatic option', () => {
-      const config = getConfig({ secureRandom: true })
-      assert.strictEqual(config.secureRandom, true)
     })
   })
 
