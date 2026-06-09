@@ -1254,10 +1254,12 @@ function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver
     entriesByTitle.get(name).push(entry)
 
     if (useReceiver) {
-      // Force-clean up after each Mocha test even if it timed out before the
-      // test body settled. The cleanup is idempotent: a no-op when the body
-      // already completed normally and the finally block ran first.
-      afterEach(function () { return wrappedFn.cleanup() })
+      // Run cleanup when THIS test finishes (including on Mocha timeout).
+      // All afterEach hooks in a suite fire after every test, so guard by
+      // title to avoid cleaning up concurrently running sibling tests.
+      afterEach(function () {
+        if (this.currentTest.title === name) return wrappedFn.cleanup()
+      })
     }
 
     mochaIt(name, function () {
