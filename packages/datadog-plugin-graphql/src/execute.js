@@ -10,50 +10,21 @@ let tools
 
 const types = new Set(['query', 'mutation', 'subscription'])
 
-// Exit-hatch channels kept as synchronous publishes for downstream subscribers
-// that need to observe resolvers before/as they run:
-// - iastResolveCh: IAST mutates the resolver args object for taint tracking;
-//   must fire synchronously before the resolver body runs.
-// - resolverStartCh: AppSec receives the abort controller + resolverInfo.
-// Both are gated by hasSubscribers so APM-only runs pay zero cost for them.
 const iastResolveCh = dc.channel('apm:graphql:resolve:start')
 const resolverStartCh = dc.channel('datadog:graphql:resolver:start')
-
-// Legacy AppSec/WAF contract: emitted once per resolver invocation (including
-// each sibling of a collapsed list) right after the resolver settles. Payload
-// carries the parent `rootCtx` (with the execute-level abortController) and the
-// field's pathString so subscribers can abort the rest of the execute mid-flight.
 const updateFieldCh = dc.channel('apm:graphql:resolve:updateField')
-
-// Internal coordination channel published by the outer execute wrap in
-// packages/datadog-instrumentations/src/graphql.js when an `apm:graphql:execute:start`
-// subscriber aborted synchronously. The outer wrap throws AbortError before
-// delegating, so orchestrion's lifecycle never runs; this channel exists so the
-// plugin can still produce a clean execute span for the trace.
 const abortExecuteCh = dc.channel('datadog:graphql:execute:abort')
 
-// contexts: contextValue -> rootCtx. Holds per-execute tracing state so the wrapped
-// resolvers can look up the active execute context without walking any stack.
-// Also serves as the re-entrance short-circuit (master's contexts.has pattern):
-// when yoga's normalizedExecutor internally calls execute, the inner call sees
-// this map already populated and skips the whole setup.
 const contexts = new WeakMap()
-
 // ALS fallback for non-WeakMap-keyable contextValues (primitives, Symbols on Node 18).
-// set via enterWith() in bindStart; read via getStore() in resolveAsync.
 const primitiveContextAls = new AsyncLocalStorage()
 
-// WeakSet caches: wrap each resolver and each type at most once across the process.
-// Critical for recursive types (Human.friends: [Human]) — without patchedTypes the
-// schema walk would stack-overflow.
 const patchedResolvers = new WeakSet()
 const patchedTypes = new WeakSet()
 
-// Module-level fast path for the depth=0 variant: lets resolveAsync skip the
-// WeakMap lookup entirely when resolver instrumentation is disabled. Mirrors
-// master's startResolveCh.hasSubscribers gating shape — a single property read
-// before bailing. Maintained by GraphQLExecutePlugin.configure().
-let _depthDisabled = false
+// Module-level fast path: skip the resolver-side WeakMap lookup entirely
+// when depth=0 disables resolver instrumentation.
+let depthDisabled = false
 
 class AbortError extends Error {
   constructor (message) {
@@ -76,9 +47,12 @@ class GraphQLExecutePlugin extends TracingPlugin {
     'tracing:orchestrion:@graphql-tools/executor:apm:graphql:execute',
   ]
 
+  /**
+   * @param {{ depth?: number }} config
+   */
   configure (config) {
     super.configure(config)
-    _depthDisabled = config && config.depth === 0
+    depthDisabled = config.depth === 0
   }
 
   addTraceSubs () {
@@ -103,20 +77,22 @@ class GraphQLExecutePlugin extends TracingPlugin {
     }
 
     // Off-orchestrion path: the outer execute wrap publishes here when an
-    // `apm:graphql:execute:start` subscriber aborted synchronously. We create
-    // and immediately finish a clean execute span so the trace still shows the
-    // operation. No resolve spans, no error tag — matches master's contract.
-    this.addSub(abortExecuteCh.name, message => this._handleAbort(message))
+    // `apm:graphql:execute:start` subscriber aborted synchronously. The wrap
+    // throws AbortError without delegating, so orchestrion's lifecycle never
+    // runs and the trace would otherwise be missing the execute span.
+    this.addSub(abortExecuteCh.name, message => this.#handleAbort(message))
   }
 
-  _handleAbort (message) {
-    const args = message?.args || {}
-    const document = args.document
-    const operation = getOperation(document, args.operationName)
+  /**
+   * @param {{ args?: { document?: object, operationName?: string } }} message
+   */
+  #handleAbort (message) {
+    const { document, operationName } = message?.args ?? {}
+    const operation = getOperation(document, operationName)
     const type = operation?.operation
     const name = operation?.name?.value
     const docSource = document ? GraphQLParsePlugin.documentSources.get(document) : undefined
-    const source = this.config.source && document && docSource
+    const source = this.config.source && docSource
 
     const span = this.startSpan(this.operationName(), {
       service: this.config.service || this.serviceName(),
@@ -134,16 +110,14 @@ class GraphQLExecutePlugin extends TracingPlugin {
   }
 
   bindStart (ctx) {
-    // Normalize ctx.arguments into a shape we can read. Mutations applied below go
-    // directly on ctx.arguments so graphql.execute receives the wrapped resolver.
     const args = readArgs(ctx.arguments)
 
-    // Re-entrant execute() short-circuit: yoga's normalizedExecutor calls execute
-    // internally; the inner call shares the same contextValue and would otherwise
-    // double-span. This also covers any user-level recursive execute pattern.
-    const contextValue = args.contextValue
+    // Re-entrant execute() short-circuit (yoga's normalizedExecutor calls
+    // execute internally with the same contextValue — without this we'd
+    // double-span).
+    const { contextValue } = args
     if (contextValue && typeof contextValue === 'object' && contexts.has(contextValue)) {
-      ctx._ddSkipped = true
+      ctx.ddSkipped = true
       return ctx.currentStore
     }
 
@@ -153,7 +127,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
     const type = operation?.operation
     const name = operation?.name?.value
-    const source = this.config.source && document && docSource
+    const source = this.config.source && docSource
 
     ctx.collapse = this.config.collapse
 
@@ -171,14 +145,8 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
     addVariableTags(this.config, span, args.variableValues)
 
-    // Wrap the default field resolver + walk the schema to wrap explicit field
-    // resolvers. Done ONCE per execute (patchedResolvers/patchedTypes WeakSets
-    // make this idempotent across calls that share a schema). For object-form,
-    // this clones ctx.arguments[0] so the caller's args object is left
-    // untouched; record the (possibly cloned) view on ctx._ddArgs so hooks
-    // observe our wrapped fieldResolver, not the caller's original.
     setWrappedFieldResolver(ctx.arguments, defaultFieldResolver)
-    ctx._ddArgs = readArgs(ctx.arguments)
+    ctx.ddArgs = readArgs(ctx.arguments)
 
     const schema = args.schema
     if (schema) {
@@ -187,19 +155,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
       wrapFields(schema._subscriptionType)
     }
 
-    // Register execute context so wrapped resolvers can find their rootCtx.
-    // contextValue is used as-is — we never mutate the caller's args.
-    // WeakMap requires an object or function key (Node.js 18 doesn't allow
-    // Symbols; Node.js 20+ does but we target 18). For non-keyable values
-    // (primitives, Symbols on Node 18) we skip the WeakMap; resolvers will
-    // run without tracing rather than crashing.
-    const cv = args.contextValue
     const rootCtx = {
-      // Raw document source text, used by:
-      //  (a) the graphql.source span tag on resolve spans (when this.config.source
-      //      is enabled), and
-      //  (b) the IAST taint-tracking subscriber, which looks up tainted ranges
-      //      against this source string to detect hardcoded-literal injection.
       source: docSource,
       config: this.config,
       fields: new Map(),
@@ -207,13 +163,13 @@ class GraphQLExecutePlugin extends TracingPlugin {
       executeSpan: span,
       plugin: this,
     }
-    ctx._ddRootCtx = rootCtx
-    if (isWeakMapKey(cv)) {
-      contexts.set(cv, rootCtx)
-      ctx._ddContextValue = cv
+    ctx.ddRootCtx = rootCtx
+    if (isWeakMapKey(contextValue)) {
+      contexts.set(contextValue, rootCtx)
+      ctx.ddContextValue = contextValue
     } else {
-      // Primitive / non-keyable: store rootCtx in ALS so wrapped resolvers
-      // (which receive the original contextValue) can still find it.
+      // Primitive / non-keyable contextValue: ALS so wrapped resolvers can
+      // still find rootCtx via getStore() in resolveAsync.
       primitiveContextAls.enterWith(rootCtx)
     }
 
@@ -221,31 +177,30 @@ class GraphQLExecutePlugin extends TracingPlugin {
   }
 
   end (ctx) {
-    if (ctx._ddSkipped) return ctx.parentStore
+    if (ctx.ddSkipped) return ctx.parentStore
 
     const span = ctx?.currentStore?.span || this.activeSpan
     if (!span) return
 
-    // Synchronous error (e.g., execute(null, doc) throws).
-    // The error handler already tagged the span; just finish it.
+    // Synchronous execute() throw (e.g. execute(null, doc)) — error handler
+    // already tagged the span, just finish it.
     if (ctx.error) {
-      this._drain(ctx, span)
+      this.#drain(ctx, span)
       return ctx.parentStore
     }
 
     const result = ctx.result
 
-    // execute() can return a Promise (async execution) or a plain result.
-    if (result && typeof result.then === 'function') {
+    if (typeof result?.then === 'function') {
       result.then(
-        (res) => this._finishSpan(ctx, span, res),
+        (res) => this.#finishSpan(ctx, span, res),
         (err) => {
           span.setTag('error', err)
-          this._drain(ctx, span)
+          this.#drain(ctx, span)
         }
       )
     } else {
-      this._finishSpan(ctx, span, result)
+      this.#finishSpan(ctx, span, result)
     }
 
     return ctx.parentStore
@@ -258,10 +213,8 @@ class GraphQLExecutePlugin extends TracingPlugin {
     }
   }
 
-  _finishSpan (ctx, span, res) {
-    const args = ctx._ddArgs
-
-    this.config.hooks.execute(span, args, res)
+  #finishSpan (ctx, span, res) {
+    this.config.hooks.execute(span, ctx.ddArgs, res)
 
     if (res?.errors?.length) {
       span.setTag('error', res.errors[0])
@@ -270,26 +223,20 @@ class GraphQLExecutePlugin extends TracingPlugin {
       }
     }
 
-    this._drain(ctx, span)
+    this.#drain(ctx, span)
   }
 
-  // Finish the execute span and clear the contexts entry. Resolve spans are
-  // created and finished inline during resolver execution (see resolveAsync),
-  // so no batch-materialize pass is needed here.
-  _drain (ctx, span) {
+  #drain (ctx, span) {
     span.finish()
-    if (ctx._ddContextValue) {
-      contexts.delete(ctx._ddContextValue)
+    if (ctx.ddContextValue) {
+      contexts.delete(ctx.ddContextValue)
     }
   }
 
-  // Synchronous span creation at first-encounter. Builds the span with its
-  // start time + meta tags and returns it; finishing happens later from the
-  // resolver's then-callback via _finishResolveSpan. Inlining span creation
-  // (vs deferring all spans to a post-execute batch) keeps encoder buffers
-  // hot when each span finishes — in benchmarks the batch pattern produced a
-  // bursty encoding stall on collapse-off.
-  _startResolveSpan (field, rootCtx, executeSpan, startTime) {
+  // Public — called from wrapResolve (free function, crosses class boundary).
+  // Resolve-span creation is inline at first-encounter; deferring to a batch
+  // produces a bursty encoder stall when many spans finish together.
+  startResolveSpan (field, rootCtx, executeSpan, startTime) {
     const { fieldNode, fieldName, returnType, baseTypeName, variableValues, collapsedKey } = field
 
     const parent = getParentField(rootCtx, field)
@@ -326,9 +273,9 @@ class GraphQLExecutePlugin extends TracingPlugin {
     return span
   }
 
-  // Apply error/hook tags and finish the span. Called from the resolver's
-  // then-callback, so endTime reflects when the resolver actually completed.
-  _finishResolveSpan (span, field, error, result, endTime) {
+  // Public — called from wrapResolve. endTime reflects when the resolver
+  // actually completed, not when the field record was created.
+  finishResolveSpan (span, field, error, result, endTime) {
     if (error) span.setTag('error', error)
 
     if (this.config.hooks.resolve) {
@@ -336,7 +283,9 @@ class GraphQLExecutePlugin extends TracingPlugin {
         fieldName: field.fieldName,
         path: field.pathString,
         error: error || null,
-        result: result instanceof Promise ? undefined : result,
+        // Any thenable from any realm — keep undefined so the hook doesn't
+        // accidentally see the unresolved promise.
+        result: typeof result?.then === 'function' ? undefined : result,
       })
     }
 
@@ -350,10 +299,7 @@ function wrapResolve (resolve) {
   if (typeof resolve !== 'function' || patchedResolvers.has(resolve)) return resolve
 
   function resolveAsync (source, args, contextValue, info) {
-    // Fast-path: when resolver instrumentation is disabled (depth=0) skip the
-    // WeakMap lookup and any path computation. Single property read, matches
-    // the cost of master's startResolveCh.hasSubscribers gate.
-    if (_depthDisabled) return resolve.apply(this, arguments)
+    if (depthDisabled) return resolve.apply(this, arguments)
 
     const rootCtx = contexts.get(contextValue) ?? primitiveContextAls.getStore()
     if (!rootCtx) return resolve.apply(this, arguments)
@@ -361,14 +307,9 @@ function wrapResolve (resolve) {
     const infoPath = info?.path
     const config = rootCtx.config
 
-    // IAST + AppSec subscribers receive EVERY resolver invocation, regardless
-    // of depth or collapse. The depth knob caps span creation, not channel
-    // publishes — taint tracking and WAF gates have to see resolvers at any
-    // depth so user-controlled args still flow through. Likewise for collapse:
-    // each sibling of a list publishes its own pathString (collapsed form,
-    // e.g. 'friends.*.name'), so subscribers can group sibling calls by their
-    // collapsed key. Compute pathString once on demand (lazily — only when a
-    // subscriber is active).
+    // IAST and AppSec subscribers see EVERY resolver call, regardless of depth
+    // or collapse. The depth knob caps span creation only; channel publishes
+    // are how taint tracking and WAF gates observe args at every level.
     const hasIastSub = iastResolveCh.hasSubscribers
     const hasResolverSub = resolverStartCh.hasSubscribers
     if (hasIastSub || hasResolverSub) {
@@ -386,35 +327,22 @@ function wrapResolve (resolve) {
       }
     }
 
-    // Depth check directly on the linked-list — no array allocation needed.
-    // Moved before the Map lookup so depth-filtered resolvers bail immediately
-    // out of span creation (channel publishes above already fired).
     if (!shouldInstrumentNode(config, infoPath)) return resolve.apply(this, arguments)
 
-    // Map key strategy:
-    //   non-collapse → path node object reference (O(1) identity lookup, no string)
-    //   collapse     → collapsed path string (deduplicates array siblings automatically)
-    let mapKey, collapsedKey
+    let mapKey = infoPath
+    let collapsedKey
     if (config.collapse) {
       collapsedKey = buildCollapsedPathStringFromNode(infoPath)
       mapKey = collapsedKey
-    } else {
-      mapKey = infoPath
     }
 
-    // Record field on first-encounter. For collapsed mode, subsequent invocations
-    // of the same collapsed path key find the existing entry and run through
-    // without overwriting its timing (first resolver's timing represents the group).
     let field = rootCtx.fields.get(mapKey)
     const isFirst = !field
 
     if (isFirst) {
-      // Compute path string lazily — only on the first encounter per field entry.
       const pathString = config.collapse ? collapsedKey : buildPathStringFromNode(infoPath)
       if (!collapsedKey) collapsedKey = pathString
 
-      // Store only the scalars we actually use later; avoids retaining the full
-      // GraphQLResolveInfo object (which holds schema refs, variable maps, etc.).
       field = {
         fieldNode: info.fieldNodes?.[0],
         fieldName: info.fieldName,
@@ -430,10 +358,9 @@ function wrapResolve (resolve) {
       rootCtx.fields.set(mapKey, field)
     }
 
-    // Collapsed duplicates run the resolver but skip span creation. They still
-    // publish updateField (master's contract: one publish per resolver call,
-    // even when the span is collapsed) and route through callInAsyncScope so the
-    // execute-level abort signal stops siblings once a subscriber aborts.
+    // Collapsed siblings still publish updateField (master's contract: one
+    // publish per resolver call, even when the span is collapsed) and route
+    // through callInAsyncScope so the abort signal stops them mid-flight.
     if (!isFirst) {
       return callInAsyncScope(resolve, this, arguments, rootCtx.abortController, (err) => {
         if (updateFieldCh.hasSubscribers) {
@@ -442,20 +369,14 @@ function wrapResolve (resolve) {
       })
     }
 
-    // Use the execute span's clock so the recorded Unix-ms timestamps line up
-    // with the trace's reference; performance.now() alone would be ~0 since
-    // process start and produce malformed span timestamps.
     const executeSpan = rootCtx.executeSpan
-    const startTime = executeSpan._getTime ? executeSpan._getTime() : undefined
-    // Inline span creation: parents are recorded before children (graphql
-    // resolves a parent fully before its children), so getParentField finds
-    // the parent's span here.
-    const span = rootCtx.plugin._startResolveSpan(field, rootCtx, executeSpan, startTime)
+    const startTime = executeSpan._getTime()
+    const span = rootCtx.plugin.startResolveSpan(field, rootCtx, executeSpan, startTime)
     field.span = span
 
     return callInAsyncScope(resolve, this, arguments, rootCtx.abortController, (err, res) => {
-      const endTime = executeSpan._getTime ? executeSpan._getTime() : undefined
-      rootCtx.plugin._finishResolveSpan(span, field, err, res, endTime || startTime)
+      const endTime = executeSpan._getTime()
+      rootCtx.plugin.finishResolveSpan(span, field, err, res, endTime || startTime)
       if (updateFieldCh.hasSubscribers) {
         updateFieldCh.publish({ rootCtx, field, error: err, pathString: field.pathString })
       }
@@ -467,7 +388,7 @@ function wrapResolve (resolve) {
 }
 
 function wrapFields (type) {
-  if (!type || !type._fields || patchedTypes.has(type)) return
+  if (!type?._fields || patchedTypes.has(type)) return
 
   patchedTypes.add(type)
 
@@ -478,12 +399,12 @@ function wrapFields (type) {
 }
 
 function wrapFieldResolve (field) {
-  if (!field || !field.resolve) return
+  if (!field?.resolve) return
   field.resolve = wrapResolve(field.resolve)
 }
 
 function wrapFieldType (field) {
-  if (!field || !field.type) return
+  if (!field?.type) return
 
   let unwrapped = field.type
   while (unwrapped.ofType) unwrapped = unwrapped.ofType
@@ -492,7 +413,7 @@ function wrapFieldType (field) {
 }
 
 function callInAsyncScope (fn, thisArg, args, abortController, cb) {
-  cb = cb || (() => {})
+  cb ??= () => {}
 
   if (abortController?.signal.aborted) {
     cb(null, null)
@@ -501,7 +422,7 @@ function callInAsyncScope (fn, thisArg, args, abortController, cb) {
 
   try {
     const result = fn.apply(thisArg, args)
-    if (result && typeof result.then === 'function') {
+    if (typeof result?.then === 'function') {
       return result.then(
         res => { cb(null, res); return res },
         err => { cb(err); throw err }
@@ -529,29 +450,23 @@ function pathToArray (path) {
   return flattened
 }
 
-// Build a plain path string from a graphql linked-list Path node (root→leaf).
-// Used on first-encounter for non-collapsed fields. Avoids pathToArray + join
-// so the intermediate array is never allocated.
 function buildPathStringFromNode (path) {
-  let length = 0
-  for (let curr = path; curr; curr = curr.prev) length++
-  const segments = new Array(length)
-  let i = length
-  for (let curr = path; curr; curr = curr.prev) segments[--i] = curr.key
-  return segments.join('.')
+  let string = path.key
+  while (path.prev) {
+    path = path.prev
+    string = `${path.key}.${string}`
+  }
+  return string
 }
 
-// Build a collapsed path string from a linked-list node, replacing number
-// segments with '*' (array indices collapse to a single representative slot).
+// Number segments collapse to '*' (array indices share a representative slot).
 function buildCollapsedPathStringFromNode (path) {
-  let length = 0
-  for (let curr = path; curr; curr = curr.prev) length++
-  const segments = new Array(length)
-  let i = length
-  for (let curr = path; curr; curr = curr.prev) {
-    segments[--i] = typeof curr.key === 'number' ? '*' : curr.key
+  let string = typeof path.key === 'number' ? '*' : path.key
+  while (path.prev) {
+    path = path.prev
+    string = `${typeof path.key === 'number' ? '*' : path.key}.${string}`
   }
-  return segments.join('.')
+  return string
 }
 
 // Depth filtering directly on the linked-list node — no array allocation needed.
@@ -573,14 +488,11 @@ function shouldInstrumentNode (config, path) {
   return config.depth >= depth
 }
 
-// Walk up the path to find the nearest recorded ancestor field (for span parenting).
-// Non-collapse: traverse the linked-list prev chain, each node is a unique Map key.
-// Collapse: strip the last dotted segment of the collapsed key string, Map key is string.
 function getParentField (rootCtx, field) {
   if (!rootCtx.config.collapse) {
     for (let curr = field.infoPath?.prev; curr; curr = curr.prev) {
-      const f = rootCtx.fields.get(curr)
-      if (f) return f
+      const field = rootCtx.fields.get(curr)
+      if (field) return field
     }
     return null
   }
@@ -590,8 +502,8 @@ function getParentField (rootCtx, field) {
     const last = current.lastIndexOf('.')
     if (last === -1) break
     current = current.slice(0, last)
-    const f = rootCtx.fields.get(current)
-    if (f) return f
+    const field = rootCtx.fields.get(current)
+    if (field) return field
   }
   return null
 }
@@ -643,27 +555,8 @@ function readArgs (args) {
   }
 }
 
-// Set a wrapped fieldResolver on the underlying arguments array so graphql.execute
-// uses our wrapped default resolver. Works for both v16 (single-object) and v15
-// (positional) call signatures.
-//
-// Constraints:
-//   - frozen/sealed args objects must not be modified (would throw TypeError)
-//   - caller-supplied fieldResolver must not be overwritten in-place
-// Wrap whatever fieldResolver flows into execute — caller-provided or
-// graphql's own default — so user code that supplies its own fieldResolver
-// still produces graphql.resolve spans. wrapResolve is idempotent via the
-// `patchedResolvers` WeakSet so wrapping a function twice is a no-op.
-//
-// For object-form (`graphql.execute({...})`), CLONE the caller's options
-// instead of mutating in place:
-//   - frozen/sealed caller-owned objects throw on direct mutation;
-//   - overwriting the caller's own fieldResolver reference is observable from
-//     outside, which the spec at "should not overwrite the caller-supplied
-//     fieldResolver" enforces. This mirrors master's #8502 fix.
-// graphql.execute receives the clone via ctx.arguments[0].
-// For positional form, only this rawArgs view is mutated — the caller's
-// individual argument values are not affected.
+// No user input may be modified. Object-form clones rawArgs[0]; positional
+// form rewrites its own arguments slots (no caller-observable mutation).
 function setWrappedFieldResolver (rawArgs, defaultFieldResolver) {
   if (!rawArgs || rawArgs.length === 0) return
 
@@ -731,16 +624,10 @@ function addVariableTags (config, span, variableValues) {
 function getSignature (document, operationName, operationType, calculate) {
   if (calculate !== false && tools !== false) {
     try {
-      try {
-        tools = tools || require('./tools')
-      } catch (e) {
-        tools = false
-        throw e
-      }
-
+      tools ||= require('./tools')
       return tools.defaultEngineReportingSignature(document, operationName)
     } catch {
-      // safety net
+      tools = false
     }
   }
 

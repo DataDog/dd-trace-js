@@ -61,14 +61,16 @@ function getVariablesFilter (config) {
 }
 
 const noop = () => {}
+const noopHooks = { execute: noop, parse: noop, validate: noop, resolve: undefined }
 
 function getHooks ({ hooks }) {
-  const execute = hooks?.execute ?? noop
-  const parse = hooks?.parse ?? noop
-  const validate = hooks?.validate ?? noop
-  const resolve = hooks?.resolve
-
-  return { execute, parse, validate, resolve }
+  if (!hooks) return noopHooks
+  return {
+    execute: hooks.execute ?? noop,
+    parse: hooks.parse ?? noop,
+    validate: hooks.validate ?? noop,
+    resolve: hooks.resolve,
+  }
 }
 
 module.exports = GraphQLPlugin

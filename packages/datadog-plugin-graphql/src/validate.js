@@ -23,28 +23,26 @@ class GraphQLValidatePlugin extends TracingPlugin {
       },
     }, ctx)
 
-    // Stash for end handler
-    ctx._ddDocument = document
+    ctx.ddDocument = document
 
     return ctx.currentStore
   }
 
   end (ctx) {
-    const document = ctx._ddDocument
+    const document = ctx.ddDocument
     const errors = ctx.result
     const span = ctx?.currentStore?.span || this.activeSpan
 
     this.config.hooks.validate(span, document, errors)
 
-    if (errors && errors.length) {
-      // Set error tag on span (first error sets the main error)
+    if (errors?.length) {
       span.setTag('error', errors[0])
       for (const err of errors) {
         extractErrorIntoSpanEvent(this._tracerConfig, span, err)
       }
     }
 
-    span?.finish()
+    span.finish()
 
     return ctx.parentStore
   }
