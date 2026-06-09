@@ -13,7 +13,15 @@ const types = new Set(['query', 'mutation', 'subscription'])
 const iastResolveCh = dc.channel('apm:graphql:resolve:start')
 const resolverStartCh = dc.channel('datadog:graphql:resolver:start')
 const updateFieldCh = dc.channel('apm:graphql:resolve:updateField')
-const abortExecuteCh = dc.channel('datadog:graphql:execute:abort')
+
+// AppSec/WAF abort gate. Published synchronously from bindStart with a
+// payload carrying the abortController; subscribers that call
+// `payload.abortController.abort()` signal a pre-execute abort. bindStart
+// observes the aborted signal by replacing `ctx.arguments[0]` with a Proxy
+// whose getters throw AbortError — the orchestrion-emitted wrapper's
+// `try { __apm$traced() } catch { ...; throw err }` block then propagates
+// the AbortError to the caller of graphql.execute.
+const startExecuteCh = dc.channel('apm:graphql:execute:start')
 
 const contexts = new WeakMap()
 // ALS fallback for non-WeakMap-keyable contextValues (primitives, Symbols on Node 18).
@@ -75,38 +83,6 @@ class GraphQLExecutePlugin extends TracingPlugin {
         }
       }
     }
-
-    // Off-orchestrion path: the outer execute wrap publishes here when an
-    // `apm:graphql:execute:start` subscriber aborted synchronously. The wrap
-    // throws AbortError without delegating, so orchestrion's lifecycle never
-    // runs and the trace would otherwise be missing the execute span.
-    this.addSub(abortExecuteCh.name, message => this.#handleAbort(message))
-  }
-
-  /**
-   * @param {{ args?: { document?: object, operationName?: string } }} message
-   */
-  #handleAbort (message) {
-    const { document, operationName } = message?.args ?? {}
-    const operation = getOperation(document, operationName)
-    const type = operation?.operation
-    const name = operation?.name?.value
-    const docSource = document ? GraphQLParsePlugin.documentSources.get(document) : undefined
-    const source = this.config.source && docSource
-
-    const span = this.startSpan(this.operationName(), {
-      service: this.config.service || this.serviceName(),
-      resource: getSignature(document, name, type, this.config.signature),
-      kind: this.constructor.kind,
-      type: this.constructor.type,
-      meta: {
-        'graphql.operation.type': type,
-        'graphql.operation.name': name,
-        'graphql.source': source,
-      },
-    }, false)
-
-    span.finish()
   }
 
   bindStart (ctx) {
@@ -145,6 +121,34 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
     addVariableTags(this.config, span, args.variableValues)
 
+    const abortController = new AbortController()
+
+    // AppSec/WAF synchronous-abort gate. Publish before any resolver-wrapping
+    // work — if a subscriber aborts, none of that work matters because we'll
+    // make execute's body throw AbortError before it reaches any resolvers.
+    // bindStart runs as a bindStore transform on
+    // tracing:orchestrion:graphql:apm:graphql:execute:start, which fires
+    // BEFORE the orchestrion-emitted wrapper publishes its own :start and
+    // BEFORE the wrapped fn runs. The subscriber gets the abortController
+    // synchronously; on return we observe `signal.aborted` and act.
+    if (startExecuteCh.hasSubscribers) {
+      startExecuteCh.publish({ abortController, args })
+      if (abortController.signal.aborted) {
+        // Replace ctx.arguments[0] with a Proxy that throws AbortError on any
+        // property access. The orchestrion wrapper calls
+        // `__apm$wrapped.apply(this, ctx.arguments)`; graphql.execute's body
+        // begins with `const { schema, document, ... } = args` so the
+        // destructure triggers the trap immediately. The wrapper catches and
+        // rethrows, propagating AbortError to graphql.execute's caller.
+        ctx.arguments[0] = new Proxy({}, {
+          get () { throw new AbortError('Aborted') },
+          has () { throw new AbortError('Aborted') },
+        })
+        ctx.ddAborted = true
+        return ctx.currentStore
+      }
+    }
+
     setWrappedFieldResolver(ctx.arguments, defaultFieldResolver)
     ctx.ddArgs = readArgs(ctx.arguments)
 
@@ -159,7 +163,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
       source: docSource,
       config: this.config,
       fields: new Map(),
-      abortController: new AbortController(),
+      abortController,
       executeSpan: span,
       plugin: this,
     }
@@ -207,6 +211,9 @@ class GraphQLExecutePlugin extends TracingPlugin {
   }
 
   error (ctx) {
+    // Pre-execute WAF abort isn't an error condition — opSpan.error must
+    // stay 0 per master's contract.
+    if (ctx.ddAborted) return
     const span = ctx?.currentStore?.span || this.activeSpan
     if (span && ctx?.error) {
       span.setTag('error', ctx.error)
