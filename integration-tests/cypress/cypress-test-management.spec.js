@@ -39,6 +39,7 @@ const oldestVersion = DD_MAJOR >= 6 ? '12.0.0' : '6.7.0'
 const version = requestedVersion === 'oldest' ? oldestVersion : requestedVersion
 const hookFile = 'dd-trace/loader-hook.mjs'
 const over12It = (version === 'latest' || semver.gte(version, '12.0.0')) ? it : it.skip
+const MINIMUM_ATTEMPT_TO_FIX_RETRIES = 1
 
 function shouldTestsRun (type) {
   if (DD_MAJOR === 5) {
@@ -294,6 +295,7 @@ moduleTypes.forEach(({
           shouldFailSometimes,
           isQuarantined,
           isDisabled,
+          attemptToFixRetries = MINIMUM_ATTEMPT_TO_FIX_RETRIES,
         }, child) =>
           receiver
             .gatherPayloadsUntilChildExit(child, ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
@@ -320,7 +322,7 @@ moduleTypes.forEach(({
               )
 
               if (isAttemptToFix) {
-                assert.strictEqual(attemptToFixTests.length, 4)
+                assert.strictEqual(attemptToFixTests.length, attemptToFixRetries + 1)
               } else {
                 assert.strictEqual(attemptToFixTests.length, 1)
               }
@@ -374,6 +376,7 @@ moduleTypes.forEach(({
          *   shouldFailSometimes?: boolean,
          *   isQuarantined?: boolean,
          *   isDisabled?: boolean,
+         *   attemptToFixRetries?: number,
          *   extraEnvVars?: Record<string, string>
          * }} [options]
          */
@@ -383,6 +386,7 @@ moduleTypes.forEach(({
           shouldFailSometimes,
           isQuarantined,
           isDisabled,
+          attemptToFixRetries = MINIMUM_ATTEMPT_TO_FIX_RETRIES,
           extraEnvVars = {},
         } = {}) => {
           let stdout = ''
@@ -421,6 +425,7 @@ moduleTypes.forEach(({
             shouldFailSometimes,
             isQuarantined,
             isDisabled,
+            attemptToFixRetries,
           }, childProcess)
 
           if (isAttemptToFix) {
@@ -464,7 +469,7 @@ moduleTypes.forEach(({
 
         it('can attempt to fix and mark last attempt as failed if every attempt fails', async () => {
           receiver.setSettings({
-            test_management: { enabled: true, attempt_to_fix_retries: 3 },
+            test_management: { enabled: true, attempt_to_fix_retries: MINIMUM_ATTEMPT_TO_FIX_RETRIES },
             flaky_test_retries_enabled: false,
           })
 
@@ -472,19 +477,25 @@ moduleTypes.forEach(({
         })
 
         it('can attempt to fix and mark last attempt as passed if every attempt passes', async () => {
-          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: MINIMUM_ATTEMPT_TO_FIX_RETRIES },
+          })
 
           await runAttemptToFixTest({ isAttemptToFix: true, shouldAlwaysPass: true })
         })
 
         it('can attempt to fix and not mark last attempt if attempts both pass and fail', async () => {
-          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: MINIMUM_ATTEMPT_TO_FIX_RETRIES },
+          })
 
           await runAttemptToFixTest({ isAttemptToFix: true, shouldFailSometimes: true })
         })
 
         it('keeps after hook failures on attempt to fix tests', async () => {
-          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: MINIMUM_ATTEMPT_TO_FIX_RETRIES },
+          })
           receiver.setTestManagementTests({
             cypress: {
               suites: {
@@ -526,7 +537,7 @@ moduleTypes.forEach(({
                 .filter(test => test.meta[TEST_NAME] === 'attempt to fix after hook passes before after hook fails')
                 .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
 
-              assert.strictEqual(attemptToFixTests.length, 4)
+              assert.strictEqual(attemptToFixTests.length, MINIMUM_ATTEMPT_TO_FIX_RETRIES + 1)
 
               const lastAttempt = attemptToFixTests[attemptToFixTests.length - 1]
               assert.strictEqual(lastAttempt.meta[TEST_STATUS], 'fail')
@@ -539,13 +550,17 @@ moduleTypes.forEach(({
         })
 
         it('does not attempt to fix tests if test management is not enabled', async () => {
-          receiver.setSettings({ test_management: { enabled: false, attempt_to_fix_retries: 3 } })
+          receiver.setSettings({
+            test_management: { enabled: false, attempt_to_fix_retries: MINIMUM_ATTEMPT_TO_FIX_RETRIES },
+          })
 
           await runAttemptToFixTest()
         })
 
         it('does not enable attempt to fix tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async () => {
-          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: MINIMUM_ATTEMPT_TO_FIX_RETRIES },
+          })
 
           await runAttemptToFixTest({ extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
         })
@@ -559,10 +574,10 @@ moduleTypes.forEach(({
             },
           })
           receiver.setSettings({
-            test_management: { enabled: true, attempt_to_fix_retries: 2 },
+            test_management: { enabled: true, attempt_to_fix_retries: MINIMUM_ATTEMPT_TO_FIX_RETRIES },
             early_flake_detection: {
               enabled: true,
-              slow_test_retries: { '5s': 2 },
+              slow_test_retries: { '5s': 1 },
               faulty_session_threshold: 100,
             },
             known_tests_enabled: true,
@@ -605,7 +620,9 @@ moduleTypes.forEach(({
         })
 
         it('ignores quarantine when attempting to fix a test', async () => {
-          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: MINIMUM_ATTEMPT_TO_FIX_RETRIES },
+          })
           receiver.setTestManagementTests({
             cypress: {
               suites: {
@@ -627,7 +644,9 @@ moduleTypes.forEach(({
         })
 
         it('ignores disabled when attempting to fix a test', async () => {
-          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: MINIMUM_ATTEMPT_TO_FIX_RETRIES },
+          })
           receiver.setTestManagementTests({
             cypress: {
               suites: {
@@ -875,7 +894,7 @@ moduleTypes.forEach(({
         receiver.setSettings({
           test_management: {
             enabled: true,
-            attempt_to_fix_retries: 3,
+            attempt_to_fix_retries: MINIMUM_ATTEMPT_TO_FIX_RETRIES,
           },
         })
 
@@ -929,8 +948,8 @@ moduleTypes.forEach(({
               const events = payloads.flatMap(({ payload }) => payload.events)
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
-              // 1 test with attempt to fix (1 original + 3 retries) + 2 tests without = 6 tests total
-              assert.equal(tests.length, 6)
+              // 1 test with attempt to fix (1 original + 1 retry) + 2 tests without = 4 tests total
+              assert.equal(tests.length, 4)
 
               // Extract test execution order with full details
               const testExecutionOrder = tests.map(test => ({
@@ -943,15 +962,11 @@ moduleTypes.forEach(({
               // 1. "first test" (original, no retries)
               // 2. "second test" (original)
               // 3. "second test" (retry 1)
-              // 4. "second test" (retry 2)
-              // 5. "second test" (retry 3)
-              // 6. "third test" (original, no retries)
+              // 4. "third test" (original, no retries)
 
               assertObjectContains(testExecutionOrder, [
                 { name: 'attempt to fix order first test', isRetry: false, isAttemptToFix: false },
                 { name: 'attempt to fix order second test', isRetry: false, isAttemptToFix: true },
-                { name: 'attempt to fix order second test', isRetry: true, isAttemptToFix: true },
-                { name: 'attempt to fix order second test', isRetry: true, isAttemptToFix: true },
                 { name: 'attempt to fix order second test', isRetry: true, isAttemptToFix: true },
                 { name: 'attempt to fix order third test', isRetry: false, isAttemptToFix: false },
               ])

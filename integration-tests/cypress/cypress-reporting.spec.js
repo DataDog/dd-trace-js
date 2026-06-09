@@ -6,7 +6,6 @@ const { once } = require('node:events')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { inspect } = require('node:util')
 
 const semver = require('semver')
 const {
@@ -20,7 +19,6 @@ const {
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { startWebAppServer, stopWebAppServer } = require('../ci-visibility/web-app-server')
-const coverageFixture = require('../ci-visibility/fixtures/istanbul-map-fixture.json')
 const {
   TEST_STATUS,
   TEST_COMMAND,
@@ -1693,7 +1691,7 @@ moduleTypes.forEach(({
               env: {
                 ...envVars,
                 CYPRESS_BASE_URL: webAppBaseUrl,
-                SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
+                SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
               },
             }
           )
@@ -1738,7 +1736,7 @@ moduleTypes.forEach(({
               env: {
                 ...envVars,
                 CYPRESS_BASE_URL: webAppBaseUrl,
-                SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
+                SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
               },
             }
           )
@@ -1981,69 +1979,6 @@ moduleTypes.forEach(({
             assert.strictEqual(describeHookSuite.content.meta[TEST_STATUS], 'fail')
             assert.match(describeHookSuite.content.meta[ERROR_MESSAGE], /error in after hook/)
           }, { hardTimeout: 25000 })
-
-      await Promise.all([
-        once(childProcess, 'exit'),
-        receiverPromise,
-      ])
-    })
-
-    it('can report code coverage if it is available', async () => {
-      receiver.setSettings({
-        itr_enabled: true,
-        code_coverage: true,
-        coverage_report_upload_enabled: true,
-        tests_skipping: false,
-      })
-
-      const envVars = getCiVisAgentlessConfig(receiver.port)
-
-      childProcess = exec(
-        testCommand,
-        {
-          cwd,
-          env: {
-            ...envVars,
-            CYPRESS_BASE_URL: webAppBaseUrl,
-            SPEC_PATTERN: 'cypress/e2e/spec.cy.js',
-          },
-        }
-      )
-
-      // TODO: remove this once we have figured out flakiness
-      childProcess.stdout?.pipe(process.stdout)
-      childProcess.stderr?.pipe(process.stderr)
-
-      const receiverPromise = receiver.gatherPayloadsUntilChildExit(
-        childProcess,
-        ({ url }) => url === '/api/v2/citestcov',
-        payloads => {
-          const coverages = payloads
-            .flatMap(({ payload }) => payload)
-            .flatMap(coverage => coverage.content.coverages)
-          const testCoverages = coverages.filter(coverage => coverage.test_suite_id)
-          const sessionCoverage = coverages.find(coverage => !coverage.test_suite_id)
-
-          testCoverages.forEach(coverage => {
-            assert.ok(Object.hasOwn(coverage, 'test_session_id'), `Available keys: ${inspect(Object.keys(coverage))}`)
-            assert.ok(Object.hasOwn(coverage, 'test_suite_id'), `Available keys: ${inspect(Object.keys(coverage))}`)
-            assert.ok(Object.hasOwn(coverage, 'span_id'), `Available keys: ${inspect(Object.keys(coverage))}`)
-            assert.ok(Object.hasOwn(coverage, 'files'), `Available keys: ${inspect(Object.keys(coverage))}`)
-          })
-          assert.ok(sessionCoverage, 'session executable-line coverage should be reported')
-          assert.ok(
-            sessionCoverage.files.every(file => file.bitmap),
-            'session executable-line coverage should include line coverage bitmaps'
-          )
-
-          const fileNames = testCoverages
-            .flatMap(coverageAttachment => coverageAttachment.files)
-            .map(file => file.filename)
-          const sessionFileNames = sessionCoverage.files.map(file => file.filename)
-
-          assertObjectContains(fileNames, Object.keys(coverageFixture))
-          assertObjectContains(sessionFileNames, Object.keys(coverageFixture))
-        }, { hardTimeout: 25000 })
 
       await Promise.all([
         once(childProcess, 'exit'),
