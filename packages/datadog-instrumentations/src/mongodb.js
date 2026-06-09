@@ -20,11 +20,11 @@ const collectionMethodsWithFilter = [
   'replaceOne',
 ] // findOne is ignored because it calls to find
 
-const collectionMethodsWithTwoFilters = [
+const collectionMethodsWithTwoFilters = new Set([
   'findOneAndUpdate',
   'updateMany',
   'updateOne',
-]
+])
 
 const startCh = channel('datadog:mongodb:collection:filter:start')
 
@@ -32,7 +32,7 @@ addHook({ name: 'mongodb', versions: ['>=3.3 <5', '5', '>=6'] }, mongodb => {
   for (const methodName of [...collectionMethodsWithFilter, ...collectionMethodsWithTwoFilters]) {
     if (!(methodName in mongodb.Collection.prototype)) continue
 
-    const useTwoArguments = collectionMethodsWithTwoFilters.includes(methodName)
+    const useTwoArguments = collectionMethodsWithTwoFilters.has(methodName)
 
     shimmer.wrap(mongodb.Collection.prototype, methodName, method => {
       return function (...args) {

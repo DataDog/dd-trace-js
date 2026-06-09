@@ -99,7 +99,7 @@ const CI_APP_ORIGIN = 'ciapp-test'
 // - Math.random() float values (10+ decimal digits after 0.)
 const DYNAMIC_NAME_RE = new RegExp(
   String.raw`\b1[6-9]\d{8,11}\b|` +
-  String.raw`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|` +
+  '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|' +
   String.raw`\b\d{4}-\d{2}-\d{2}|` +
   String.raw`(?:localhost|127\.0\.0\.1|0\.0\.0\.0):\d{4,5}\b|` +
   String.raw`\b0\.\d{10,}`,
@@ -494,7 +494,7 @@ module.exports = {
 // Returns pkg manager and its version, separated by '-', e.g. npm-8.15.0 or yarn-1.22.19
 function getPkgManager () {
   try {
-    return getEnvironmentVariable('npm_config_user_agent').split(' ')[0].replace('/', '-')
+    return getEnvironmentVariable('npm_config_user_agent').split(' ', 1)[0].replace('/', '-')
   } catch {
     return ''
   }

@@ -28,7 +28,7 @@ class WSReceiverPlugin extends TracingPlugin {
     if (!socket.spanContext) return
 
     const spanTags = socket.spanTags
-    const path = spanTags['resource.name'].split(' ')[1]
+    const path = spanTags['resource.name'].split(' ', 2)[1]
     const opCode = binary ? 'binary' : 'text'
 
     const service = this.serviceName({ pluginConfig: this.config })

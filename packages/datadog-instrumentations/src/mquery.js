@@ -20,14 +20,14 @@ const methods = [
   'where',
 ]
 
-const methodsOptionalArgs = ['findOneAndUpdate']
+const methodsOptionalArgs = new Set(['findOneAndUpdate'])
 
 function getFilters (args, methodName) {
   const [arg0, arg1] = args
 
   const filters = arg0 !== null && typeof arg0 === 'object' ? [arg0] : []
 
-  if (arg1 !== null && typeof arg1 === 'object' && methodsOptionalArgs.includes(methodName)) {
+  if (arg1 !== null && typeof arg1 === 'object' && methodsOptionalArgs.has(methodName)) {
     filters.push(arg1)
   }
 

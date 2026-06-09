@@ -4,7 +4,7 @@ const LangChainHandler = require('./default')
 
 class LangChainEmbeddingHandler extends LangChainHandler {
   extractProvider (instance) {
-    return instance.constructor.name.split('Embeddings')[0].toLowerCase()
+    return instance.constructor.name.split('Embeddings', 1)[0].toLowerCase()
   }
 
   extractModel (instance) {

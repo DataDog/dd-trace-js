@@ -32,7 +32,7 @@ class Http2ClientPlugin extends ClientPlugin {
     const { authority, options, headers = {} } = message
     const sessionDetails = extractSessionDetails(authority, options)
     const path = headers[HTTP2_HEADER_PATH] || '/'
-    const pathname = path.split(/[?#]/)[0]
+    const pathname = path.split(/[?#]/, 1)[0]
     const method = headers[HTTP2_HEADER_METHOD] || HTTP2_METHOD_GET
     const base = `${sessionDetails.protocol}//${sessionDetails.host}:${sessionDetails.port}`
     const uri = `${base}${pathname}`

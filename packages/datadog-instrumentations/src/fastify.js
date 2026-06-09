@@ -96,7 +96,7 @@ function invokeHookWithContext (name, fn, thisArg, args) {
   const ctx = { req }
 
   try {
-    const lastArg = args[args.length - 1]
+    const lastArg = args.at(-1)
 
     if (typeof lastArg === 'function') {
       // Copy the args so we can swap the trailing `done` without touching the

@@ -1,4 +1,4 @@
-import { initialize as origInitialize, load as origLoad, resolve } from 'import-in-the-middle/hook.mjs'
+import { initialize as origInitialize, load as origLoad } from 'import-in-the-middle/hook.mjs'
 import regexpEscapeModule from './vendor/dist/escape-string-regexp/index.js'
 import hooks from './packages/datadog-instrumentations/src/helpers/hooks.js'
 import configHelper from './packages/dd-trace/src/config/helper.js'
@@ -74,4 +74,5 @@ export const iitmExclusions = [
   /@anthropic-ai\/sdk\/_shims/,
 ]
 
-export { initialize, load, resolve }
+export { initialize, load }
+export { resolve } from 'import-in-the-middle/hook.mjs'

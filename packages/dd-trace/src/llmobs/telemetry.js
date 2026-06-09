@@ -22,7 +22,7 @@ function extractIntegrationFromTags (tags) {
   if (!Array.isArray(tags)) return null
   const integrationTag = tags.find(tag => tag.startsWith('integration:'))
   if (!integrationTag) return null
-  return integrationTag.split(':')[1] || null
+  return integrationTag.split(':', 2)[1] || null
 }
 
 function extractTagsFromSpanEvent (event) {
