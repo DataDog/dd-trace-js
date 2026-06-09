@@ -12,6 +12,7 @@ const {
   ValueType,
 } = require('../../../../../vendor/dist/pprof-format')
 const { availableParallelism, effectiveLibuvThreadCount } = require('../libuv-size')
+const { NODE_MAJOR } = require('../../../../../version')
 const { END_TIMESTAMP_LABEL, SPAN_ID_LABEL, LOCAL_ROOT_SPAN_ID_LABEL, encodeProfileAsync } = require('./shared')
 const PoissonProcessSamplingFilter = require('./poisson')
 // perf_hooks uses millis, with fractional part representing nanos. We emit nanos into the pprof file.
@@ -82,6 +83,17 @@ class GCDecorator {
         this.kindLabels[value] = labelFromStr(stringTable, kindLabelKey, kind)
       }
     }
+
+    // V8's Minor Mark-Sweep collector (--minor-ms, stable in Node 22+) emits
+    // GC events with kind=2, but Node does not expose a corresponding
+    // NODE_PERFORMANCE_GC_* constant, so the loop above misses it and
+    // kindLabels[2] would otherwise be undefined. The runtime_metrics module
+    // handles this case in its gcType() switch; mirror that here so the
+    // profiler doesn't crash with "TypeError: Cannot read properties of
+    // undefined (reading 'key')" inside pprof Sample/Label serialization on
+    // the first MinorMS GC event.
+    const minorMSLabel = NODE_MAJOR >= 22 ? 'minor_mark_sweep' : 'minor_mark_compact'
+    this.kindLabels[2] = labelFromStr(stringTable, kindLabelKey, minorMSLabel)
   }
 
   decorateSample (sampleInput, item) {
