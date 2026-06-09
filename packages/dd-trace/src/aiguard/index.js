@@ -47,6 +47,7 @@ function disable () {
  * @param {object} ctx
  * @param {Array<object>} ctx.messages
  * @param {string} [ctx.integration]
+ * @param {object} [ctx.parentSpan] - LLM span to parent the `ai_guard` span under.
  * @param {AbortController} ctx.abortController
  * @param {Array<Promise<void>>} ctx.pending - Subscribers push only when they evaluate.
  */
@@ -56,7 +57,12 @@ function onEvaluate (ctx) {
     return
   }
 
-  const opts = { block, source: SOURCE_AUTO, integration: ctx.integration || INTEGRATION_NONE }
+  const opts = {
+    block,
+    source: SOURCE_AUTO,
+    integration: ctx.integration || INTEGRATION_NONE,
+    childOf: ctx.parentSpan,
+  }
 
   try {
     ctx.pending.push(aiguard.evaluate(ctx.messages, opts).catch(handleEvaluationError.bind(null, ctx)))
