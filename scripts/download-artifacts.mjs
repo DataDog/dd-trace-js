@@ -18,6 +18,7 @@ const execFileAsync = promisify(execFile)
  * @param {Array<{id: number}>} opts.runs
  */
 export async function downloadArtifacts (octokit, { owner, repo, token, runs }) {
+  console.log(`Listing artifacts for ${runs.length} workflow run(s)...`)
   const artifactLists = await Promise.all(
     runs.map(run =>
       octokit.paginate(octokit.rest.actions.listWorkflowRunArtifacts, {
@@ -32,6 +33,7 @@ export async function downloadArtifacts (octokit, { owner, repo, token, runs }) 
       .map(a => ({ runId, artifact: a }))
   )
 
+  console.log(`Downloading ${toDownload.length} artifact(s)...`)
   await Promise.all(toDownload.map(async ({ runId, artifact }) => {
     const baseDir = artifact.name.startsWith('junit-') ? 'junit-results' : 'coverage-results'
     const dir = join(baseDir, String(runId), artifact.name)
@@ -52,4 +54,5 @@ export async function downloadArtifacts (octokit, { owner, repo, token, runs }) 
       try { unlinkSync(tmpFile) } catch {}
     }
   }))
+  console.log('Artifact download complete.')
 }
