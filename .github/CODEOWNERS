@@ -170,6 +170,7 @@
 /.claude/skills/llmobs-testing @DataDog/ml-observability
 /benchmark/sirun/llmobs/ @DataDog/ml-observability
 /benchmark/sirun/llmobs-span-processor/ @DataDog/ml-observability
+/benchmark/sirun/llmobs-evaluations/ @DataDog/ml-observability
 /packages/datadog-instrumentations/src/ai.js @DataDog/ml-observability
 /packages/datadog-instrumentations/src/anthropic.js @DataDog/ml-observability
 /packages/datadog-instrumentations/src/google-cloud-vertexai.js @DataDog/ml-observability
