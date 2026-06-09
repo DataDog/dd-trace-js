@@ -199,6 +199,7 @@
 /benchmark/sirun/spans/ @DataDog/apm-sdk-capabilities-js
 /benchmark/sirun/sampling/ @DataDog/apm-sdk-capabilities-js
 /benchmark/sirun/span-format/ @DataDog/apm-sdk-capabilities-js
+/benchmark/sirun/test-codeowners/ @DataDog/ci-app-libraries
 
 /integration-tests/log_injection.spec.js @DataDog/apm-sdk-capabilities-js
 /integration-tests/opentelemetry/ @DataDog/apm-sdk-capabilities-js
