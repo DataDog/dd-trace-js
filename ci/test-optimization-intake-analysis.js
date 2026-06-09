@@ -14,12 +14,16 @@ const GIT_METADATA_FIELDS = [
   ['branch', 'branch'],
 ]
 const EFD_SETTINGS_MODES = new Set(['debug-all', 'efd'])
+const ATR_SETTINGS_MODES = new Set(['atr', 'debug-all'])
 const TEST_FRAMEWORK = 'test.framework'
 const TEST_IS_NEW = 'test.is_new'
 const TEST_IS_RETRY = 'test.is_retry'
 const TEST_NAME = 'test.name'
 const TEST_RETRY_REASON = 'test.retry_reason'
+const TEST_STATUS = 'test.status'
 const TEST_SUITE = 'test.suite'
+const TEST_RETRY_REASON_AUTO_TEST_RETRY = 'auto_test_retry'
+const TEST_RETRY_REASON_EARLY_FLAKE_DETECTION = 'early_flake_detection'
 
 /**
  * Builds a fixed-rule diagnosis from a fake intake artifact.
@@ -32,7 +36,8 @@ function analyzeIntakeArtifact (artifact) {
   const findings = []
   const settingsMode = artifact?.intake?.settingsMode
   const advancedFeatureChecks = EFD_SETTINGS_MODES.has(settingsMode)
-  const efdChecks = settingsMode === 'efd'
+  const efdChecks = EFD_SETTINGS_MODES.has(settingsMode)
+  const atrChecks = ATR_SETTINGS_MODES.has(settingsMode)
 
   if (!summary.anyRequestReceived) {
     addFinding(findings, 'error', 'Nothing', {
@@ -147,6 +152,28 @@ function analyzeIntakeArtifact (artifact) {
     })
   }
 
+  if (atrChecks && summary.atr.settingsEnabled && summary.atr.failedThenPassedRetryTests === 0) {
+    addFinding(findings, 'error', 'Auto test retry missing', {
+      observation: 'atr.failedThenPassedRetryTests: 0',
+      cause:
+        'Auto Test Retries settings were enabled, but no known flaky test reported a failed attempt followed ' +
+        'by a passing retry marked with test.is_retry=true.',
+      fix:
+        'Confirm the second run served known tests from the first run, changed one already-known selected ' +
+        'test to fail once and then pass, and selected that test in the command.',
+    })
+  }
+
+  if (atrChecks && summary.atr.failedThenPassedRetryTests > 0) {
+    addFinding(findings, 'ok', 'Auto test retry reported flaky test', {
+      observation: `atr.failedThenPassedRetryTests: ${summary.atr.failedThenPassedRetryTests}`,
+      cause:
+        'The flaky known test reported both failing and passing executions, and the passing execution was ' +
+        'marked as an automatic retry.',
+      fix: 'No Auto Test Retries fix is needed for the selected test subset.',
+    })
+  }
+
   if (advancedFeatureChecks && summary.coverage.expected && summary.coverage.citestcov === 0) {
     addFinding(findings, 'warning', 'Coverage missing', {
       observation: 'ITR or coverage was enabled, but citestcov: 0',
@@ -224,6 +251,7 @@ function summarizeIntakeArtifact (artifact) {
       retriedNewTests: getRetriedNewTests(events).length,
       retriedNewTestNames: getRetriedNewTests(events).map(test => test.name),
     },
+    atr: getAutoTestRetriesSummary(events, settings),
     coverage: {
       expected: !!(settings.lastResponse?.itr_enabled || settings.lastResponse?.code_coverage),
       citestcov: endpointCounts.citestcov || 0,
@@ -284,6 +312,7 @@ function renderAnalysisText (analysis) {
       `suites=${analysis.summary.events.counts.test_suite_end}, ` +
       `tests=${analysis.summary.events.counts.test}`,
     ...getEfdTextLines(analysis),
+    ...getAutoTestRetriesTextLines(analysis),
     '',
   ]
 
@@ -315,6 +344,24 @@ function getEfdTextLines (analysis) {
     `known tests received: ${analysis.summary.efd.knownTestsReceived}`,
     `new tests observed: ${analysis.summary.efd.newTests.length}`,
     `retried new tests: ${analysis.summary.efd.retriedNewTests}`,
+  ]
+}
+
+/**
+ * Gets optional Auto Test Retries text lines.
+ *
+ * @param {object} analysis analysis report
+ * @returns {string[]} Auto Test Retries lines
+ */
+function getAutoTestRetriesTextLines (analysis) {
+  if (!analysis.summary.atr.settingsEnabled && analysis.summary.atr.retriedTests === 0) return []
+
+  return [
+    `Auto Test Retries settings enabled: ${analysis.summary.atr.settingsEnabled}`,
+    `Auto Test Retries failed executions: ${analysis.summary.atr.failedExecutions}`,
+    `Auto Test Retries passed executions: ${analysis.summary.atr.passedExecutions}`,
+    `Auto Test Retries passed retry executions: ${analysis.summary.atr.passedRetryTests}`,
+    `Auto Test Retries flaky tests reported: ${analysis.summary.atr.failedThenPassedRetryTests}`,
   ]
 }
 
@@ -441,12 +488,121 @@ function getRetriedNewTests (events) {
 
     const meta = event.content?.meta || {}
     if (meta[TEST_IS_NEW] !== 'true') continue
-    if (meta[TEST_IS_RETRY] !== 'true' && meta[TEST_RETRY_REASON] !== 'early_flake_detection') continue
+    if (meta[TEST_IS_RETRY] !== 'true' && meta[TEST_RETRY_REASON] !== TEST_RETRY_REASON_EARLY_FLAKE_DETECTION) {
+      continue
+    }
 
     tests.push(getTestIdentity(event))
   }
 
   return tests
+}
+
+/**
+ * Gets Auto Test Retries summary fields.
+ *
+ * @param {Array<object>} events decoded events
+ * @param {object} settings settings summary
+ * @returns {object} Auto Test Retries summary
+ */
+function getAutoTestRetriesSummary (events, settings) {
+  const testGroups = getAutoRetryTestGroups(events)
+  const failedThenPassedRetryNames = []
+  const passedRetryNames = []
+  let failedExecutions = 0
+  let passedExecutions = 0
+  let passedRetryTests = 0
+  let retriedTests = 0
+
+  for (const group of testGroups.values()) {
+    if (group.failedExecutions > 0 && group.passedRetryTests > 0) {
+      failedThenPassedRetryNames.push(group.name)
+    }
+
+    if (group.passedRetryTests > 0) {
+      passedRetryNames.push(group.name)
+    }
+
+    failedExecutions += group.failedExecutions
+    passedExecutions += group.passedExecutions
+    passedRetryTests += group.passedRetryTests
+    retriedTests += group.retriedTests
+  }
+
+  return {
+    settingsEnabled: !!settings.lastResponse?.flaky_test_retries_enabled,
+    failedExecutions,
+    passedExecutions,
+    retriedTests,
+    retriedTestNames: getSortedValues([...testGroups.values()]
+      .filter(group => group.retriedTests > 0)
+      .map(group => group.name)),
+    passedRetryTests,
+    passedRetryTestNames: getSortedValues(passedRetryNames),
+    failedThenPassedRetryTests: failedThenPassedRetryNames.length,
+    failedThenPassedRetryTestNames: getSortedValues(failedThenPassedRetryNames),
+  }
+}
+
+/**
+ * Groups test events relevant to Auto Test Retries by identity.
+ *
+ * @param {Array<object>} events decoded events
+ * @returns {Map<string, object>} grouped tests
+ */
+function getAutoRetryTestGroups (events) {
+  const groups = new Map()
+
+  for (const event of events) {
+    if (event.type !== 'test') continue
+
+    const meta = event.content?.meta || {}
+    const retryReason = meta[TEST_RETRY_REASON]
+    const status = meta[TEST_STATUS]
+    const isAutoRetry = retryReason === TEST_RETRY_REASON_AUTO_TEST_RETRY
+    const isPassedRetry = status === 'pass' && meta[TEST_IS_RETRY] === 'true' && isAutoRetry
+
+    if (status !== 'fail' && !isAutoRetry && !isPassedRetry) continue
+    if (meta[TEST_IS_NEW] === 'true') continue
+
+    const test = getTestIdentity(event)
+    const key = `${test.framework}\0${test.suite}\0${test.name || ''}`
+    const group = groups.get(key) || {
+      name: test.name,
+      failedExecutions: 0,
+      passedExecutions: 0,
+      passedRetryTests: 0,
+      retriedTests: 0,
+    }
+
+    if (status === 'fail') {
+      group.failedExecutions++
+    } else if (status === 'pass') {
+      group.passedExecutions++
+    }
+
+    if (isAutoRetry) {
+      group.retriedTests++
+    }
+
+    if (isPassedRetry) {
+      group.passedRetryTests++
+    }
+
+    groups.set(key, group)
+  }
+
+  return groups
+}
+
+/**
+ * Gets sorted unique string values.
+ *
+ * @param {string[]} values values to normalize
+ * @returns {string[]} sorted unique values
+ */
+function getSortedValues (values) {
+  return [...new Set(values.filter(Boolean))].sort()
 }
 
 /**

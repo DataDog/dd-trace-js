@@ -2,7 +2,7 @@
 
 const zlib = require('node:zlib')
 
-const VALIDATION_APP_URL = 'https://app-dev-local.datadoghq.com/ci/test/validation'
+const VALIDATION_APP_PATH = 'ci/test/validation'
 
 /**
  * Builds the payload rendered by the local Test Optimization validation web app.
@@ -14,6 +14,7 @@ const VALIDATION_APP_URL = 'https://app-dev-local.datadoghq.com/ci/test/validati
  * @param {string|undefined} input.testExitCode selected test command exit code
  * @param {string|undefined} input.testResult selected test command result summary
  * @param {string|undefined} input.newTestSnippet EFD temporary test snippet
+ * @param {string|undefined} input.flakyTestSnippet Auto Test Retries temporary flaky test snippet
  * @param {object|undefined} input.artifacts artifact paths and URLs
  * @returns {object} validation payload
  */
@@ -49,6 +50,10 @@ function getChecks (input, analysis) {
 
   if (isEfdCheckAttempted(input, analysis)) {
     checks.push(getEfdCheck(input, analysis))
+  }
+
+  if (isAutoTestRetriesCheckAttempted(input, analysis)) {
+    checks.push(getAutoTestRetriesCheck(input, analysis))
   }
 
   return checks
@@ -168,6 +173,74 @@ function getEfdCheck (input, analysis) {
 }
 
 /**
+ * Gets the Auto Test Retries validation check.
+ *
+ * @param {object} input validation input
+ * @param {object} analysis intake analysis report
+ * @returns {object} Auto Test Retries check
+ */
+function getAutoTestRetriesCheck (input, analysis) {
+  const summary = analysis.summary
+  const status = getAutoTestRetriesStatus(summary)
+
+  return {
+    id: 'auto-test-retries',
+    name: 'Auto test retries',
+    status,
+    steps: [
+      {
+        id: 'setup-intake',
+        name: 'Set up intake',
+        status: summary.atr.settingsEnabled ? 'ok' : 'failed',
+        evidence: {
+          settingsEnabled: summary.atr.settingsEnabled,
+        },
+      },
+      {
+        id: 'make-known-test-flaky',
+        name: 'Make an already known test flaky',
+        status: input.flakyTestSnippet || summary.atr.failedExecutions > 0 ? 'ok' : 'failed',
+        snippet: input.flakyTestSnippet,
+        evidence: {
+          failedExecutions: summary.atr.failedExecutions,
+          failedThenPassedRetryTestNames: summary.atr.failedThenPassedRetryTestNames,
+        },
+      },
+      {
+        id: 'run-tests',
+        name: 'Run tests',
+        status: getTestCommandStatus(input),
+        command: input.testCommand,
+        exitCode: input.testExitCode,
+        result: input.testResult,
+      },
+      {
+        id: 'check-failing-and-passing-executions',
+        name: 'Check that failing and passing executions were reported',
+        status: summary.atr.failedExecutions > 0 && summary.atr.passedExecutions > 0 ? 'ok' : 'failed',
+        evidence: {
+          failedExecutions: summary.atr.failedExecutions,
+          passedExecutions: summary.atr.passedExecutions,
+          failedThenPassedRetryTests: summary.atr.failedThenPassedRetryTests,
+          failedThenPassedRetryTestNames: summary.atr.failedThenPassedRetryTestNames,
+        },
+      },
+      {
+        id: 'check-passing-execution-marked-retry',
+        name: 'Check that the passing execution is marked as a retry',
+        status,
+        evidence: {
+          passedRetryTests: summary.atr.passedRetryTests,
+          passedRetryTestNames: summary.atr.passedRetryTestNames,
+          retriedTests: summary.atr.retriedTests,
+          retriedTestNames: summary.atr.retriedTestNames,
+        },
+      },
+    ],
+  }
+}
+
+/**
  * Checks whether the EFD check was attempted.
  *
  * @param {object} input validation input
@@ -183,6 +256,23 @@ function isEfdCheckAttempted (input, analysis) {
     efd.knownTestsReceived > 0 ||
     efd.newTests.length > 0 ||
     efd.retriedNewTests > 0
+  )
+}
+
+/**
+ * Checks whether the Auto Test Retries check was attempted.
+ *
+ * @param {object} input validation input
+ * @param {object} analysis intake analysis report
+ * @returns {boolean} true if Auto Test Retries evidence is present
+ */
+function isAutoTestRetriesCheckAttempted (input, analysis) {
+  const atr = analysis.summary.atr
+  return !!(
+    input.flakyTestSnippet ||
+    atr.settingsEnabled ||
+    atr.retriedTests > 0 ||
+    atr.failedThenPassedRetryTests > 0
   )
 }
 
@@ -211,6 +301,22 @@ function getEfdStatus (summary) {
   if (!summary.efd.requested) return 'failed'
   if (summary.efd.knownTestsReceived === 0) return 'failed'
   if (summary.efd.retriedNewTests === 0) return 'failed'
+
+  return 'ok'
+}
+
+/**
+ * Gets Auto Test Retries check status.
+ *
+ * @param {object} summary intake summary
+ * @returns {string} check status
+ */
+function getAutoTestRetriesStatus (summary) {
+  if (!summary.atr.settingsEnabled) return 'failed'
+  if (summary.atr.failedExecutions === 0) return 'failed'
+  if (summary.atr.passedExecutions === 0) return 'failed'
+  if (summary.atr.passedRetryTests === 0) return 'failed'
+  if (summary.atr.failedThenPassedRetryTests === 0) return 'failed'
 
   return 'ok'
 }
@@ -253,13 +359,13 @@ function encodeValidationPayload (payload) {
 }
 
 /**
- * Gets a validation web app URL for a payload.
+ * Gets a validation web app path for a payload.
  *
  * @param {object} payload validation payload
- * @returns {string} validation web app URL
+ * @returns {string} validation web app path
  */
 function getValidationAppUrl (payload) {
-  return `${VALIDATION_APP_URL}#pako:${encodeValidationPayload(payload)}`
+  return `${VALIDATION_APP_PATH}#pako:${encodeValidationPayload(payload)}`
 }
 
 /**

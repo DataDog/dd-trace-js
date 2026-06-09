@@ -3,20 +3,792 @@
 This runbook is to diagnose Datadog Test Optimization setup problems in a JavaScript repository.
 Use repository-specific judgment to adapt commands.
 
-## Agent Execution Summary
+## Runbook Feedback Mode: Exact Path
 
-- Step 0: clean prior artifacts.
-- Wrapper path: choose one small test command from Step 2, then run
-  `node ./node_modules/dd-trace/ci/test-optimization-debug.js --test-command "$(cat dd-test-optimization-test-command.txt)" --no-open`
-  as described in the Preferred Wrapper section below.
-- Step 1 is optional on the wrapper path because the wrapper runs static diagnosis and writes
-  `dd-test-optimization-static.json`. Run Step 1 first when the wrapper is unavailable or when
-  command selection needs static framework details.
-- If the wrapper succeeds with `Reporting complete`, skip manual Steps 3-6 and continue to Step 7.
-- Step 7: run the EFD check: first run -> known tests file -> add temporary test -> second EFD run -> validation.
-- Step 7 cleanup: remove the temporary test and verify it is gone.
-- Step 8: use the final report template, include the `Datadog validation:` URL, and answer the
-  four diagnostic questions with the question text inline.
+If the user asks for feedback about this runbook, execute this numbered procedure. Use the
+Feedback Fallback Appendix only when Step 1 routes there. Do not use Customer diagnostic mode,
+Step 7, Step 8, or the Decision Tree unless the fallback path explicitly requires them.
+
+1. Run the Feedback Driver:
+
+   ```bash
+   node ./node_modules/dd-trace/ci/test-optimization-feedback-runner.js
+   ```
+
+   Expected: `Temporary EFD file absent:`, `Selected source files are clean after feedback-mode
+   wrapper.`, `Root wrapper stage: Reporting complete`, `EFD retried new tests:`, and `Auto Test
+   Retries flaky tests reported:`.
+
+   If the tool supports reusable approval prefixes, use this prefix for loopback approval:
+
+   ```text
+   node ./node_modules/dd-trace/ci/test-optimization-feedback-runner.js
+   ```
+
+   If the command tool accepts structured approval fields, use:
+
+   ```text
+   sandbox_permissions: "require_escalated"
+   justification: "Allow the feedback driver to bind and connect to 127.0.0.1 for the local fake intake."
+   prefix_rule: ["node", "./node_modules/dd-trace/ci/test-optimization-feedback-runner.js"]
+   ```
+
+   | Driver result | Next action |
+   | --- | --- |
+   | `listen EPERM: operation not permitted 127.0.0.1` | Rerun the same Feedback Driver command with loopback approval. If the approved rerun succeeds, do not count the initial unapproved EPERM as a failed runbook execution. Continue to Step 2. |
+   | Non-EPERM failure and `dd-test-optimization-agent-report.json` is missing | Use the Feedback Fallback Appendix F0a-F7, then resume at Step 2. |
+   | All five Expected strings are present in the output | Continue to Step 2. |
+
+   Feedback-mode happy path: run the driver, write the feedback artifact from runbook execution
+   friction only, run F9 in the normal sandbox, respond from F9 output or the caller's constrained
+   response shape, then stop.
+
+   Feedback mode only requires these Node commands:
+   `node ./node_modules/dd-trace/ci/test-optimization-feedback-runner.js` and
+   `node ./node_modules/dd-trace/ci/test-optimization-feedback-summary.js`.
+
+2. Create or overwrite the feedback artifact now:
+
+   File: `dd-test-optimization-actionable-feedback.txt`
+
+   Use the agent environment's file-write or edit tool first. If no file-write/edit tool is
+   available, use shell redirection such as `printf` or `cat >`. If neither path is available,
+   report that feedback artifact creation is blocked.
+
+   Allowed file shapes:
+
+   ```text
+   No actionable feedback.
+   ```
+
+   or:
+
+   ```text
+   - Change {specific instruction or command}. Reason: {why this helps a coding agent}.
+   - Change {specific instruction or command}. Reason: {why this helps a coding agent}.
+   ```
+
+   Review scope: evaluate the exact feedback path and any sections that were needed to execute it.
+   Review fallback or customer-diagnostic sections only when the run used them, they blocked the
+   exact path, or the user explicitly asked for a full-file editorial review.
+
+   The feedback artifact must contain only runbook-consumability issues discovered during this
+   execution. Do not write Test Optimization diagnostic findings, product findings, repository
+   warnings, or successful diagnostic outcomes into this file.
+
+   Actionable feedback is a change that would make the runbook easier or safer for the next coding
+   agent to execute. Examples: missing command routing, ambiguous step order, unclear substitution
+   rules, missing permission or retry guidance, source cleanup uncertainty, artifact mismatch
+   handling, or output requirements that caused duplicate, truncated, or misleading reports.
+   Non-actionable feedback includes successful execution notes, repository-specific warnings already
+   reported by the diagnosis, or preferences that do not change runbook execution.
+
+3. Run F9 in the normal sandbox, meaning no loopback or escalated approval:
+
+   ```bash
+   node ./node_modules/dd-trace/ci/test-optimization-feedback-summary.js
+   ```
+
+   Expected: compact feedback summary, `Pre-existing worktree changes`, and
+   `Current diagnostic artifacts`; also writes `dd-test-optimization-feedback-summary.txt`.
+   F9 reads artifacts and writes summary files; it does not bind the fake intake or run tests, so
+   it should not use loopback approval after the Feedback Driver succeeds.
+   If F9 itself exposes a runbook-consumability issue that was not written in Step 2, update
+   `dd-test-optimization-actionable-feedback.txt` and rerun this F9 command once.
+
+4. Stop. If the caller asked only for runbook feedback, respond with one sentence of execution
+   evidence, then the requested runbook feedback under `Actionable feedback`. Otherwise include
+   the compact diagnostic summary because this runbook requires execution evidence, then include
+   the requested runbook feedback under `Actionable feedback`. If the invoking prompt explicitly
+   requires a constrained final response shape, obey that constraint after Steps 1-3 have produced
+   the F9 terminal output and artifacts. Do not replace runbook feedback with Test Optimization
+   diagnostic findings. Respond using the F9 terminal output directly; do not re-read artifact
+   files to reconstruct fields already printed by F9. If F9 ran successfully, use its terminal
+   output as-is when the caller did not ask only for feedback. If the terminal output is truncated,
+   read `dd-test-optimization-feedback-summary.txt` for the compact summary and append the terminal
+   worktree/artifact sections only if they were not already included.
+
+   Default response shape, used only when F9 output is unavailable or too truncated to relay:
+
+   ```text
+   Runbook completed: {yes | no, explain}
+   Diagnostic outcome: {basic reporting worked | basic reporting did not work | runbook failed, explain}
+   Basic reporting: {stage}, requests={count}, event levels={summary}, decode errors={count}
+   EFD: {passed | failed | not run}, known tests={count}, retried new tests={retry execution count}, distinct retried names={count}
+   Auto Test Retries: {passed | failed | not run}, failed={count}, passed={count}, retry passes={count}
+   Reports: {HTML file URL}, {final report path}, {compact summary path}
+   Cleanup: {temporary EFD removed/restored status}, {flaky edit restored status}. Diagnostic artifacts intentionally remain untracked until the next Step 0 cleanup.
+   Actionable feedback:
+   - {feedback or "No actionable feedback."}
+   Pre-existing worktree changes:
+   {non-diagnostic status lines or "none"}
+   Current diagnostic artifacts:
+   {diagnostic artifact status lines or "none"}
+   ```
+
+**Feedback mode ends here. Do not read further unless Step 1 routed to the Feedback Fallback
+Appendix.**
+
+## Agent Quickstart
+
+Choose one mode first:
+
+- Customer diagnostic mode: use the Preferred Wrapper, Step 7, and Step 8 final response checklist.
+- Runbook feedback mode: use `Runbook Feedback Mode: Exact Path` above.
+
+Loopback prerequisite: if the first wrapper command returns
+`listen EPERM: operation not permitted 127.0.0.1`, rerun that command with loopback bind/connect
+approval. After loopback approval has been granted once, run every later wrapper command with that
+approval immediately.
+
+Commands that need loopback approval: feedback-driver and wrapper commands that run
+`node ./node_modules/dd-trace/ci/test-optimization-feedback-runner.js` or
+`node ./node_modules/dd-trace/ci/test-optimization-debug.js`. Analyzer, prepare, restore, and
+extractor commands read artifacts or edit files; they do not bind the fake intake or run the test
+process against it.
+
+For Codex, Claude Code, and other sandboxed command runners: request loopback/escalated approval
+only for wrapper commands that bind or connect to `127.0.0.1`. Keep cleanup, discovery, analyzer,
+prepare, restore, and feedback-summary commands in the normal sandbox unless they fail for a
+non-loopback permission reason.
+
+Step 1 is optional on the wrapper path. Run Step 1 only when static diagnosis is useful before
+choosing the selected test command. The root wrapper always writes
+`dd-test-optimization-static.json`.
+
+Use the wrapper path first in customer diagnostic mode. Do not run manual Steps 3-6 after a wrapper
+run reports `Reporting complete`; go directly to Step 7.
+
+For runbook feedback mode, use only `Runbook Feedback Mode: Exact Path` above unless the feedback
+fallback condition applies.
+
+Customer diagnostic mode, Preferred Wrapper, Step 7, Step 8, and the Decision Tree are out of
+scope for feedback runs unless the feedback fallback condition applies.
+
+Feedback fallback condition: use F1-F7 only when F-runner is unavailable, fails before producing
+root artifacts after a non-EPERM error, or reports `Nothing` after the selected test clearly ran
+and `NODE_OPTIONS` reached it. Do not use F1-F7 for `listen EPERM`; rerun the whole F-runner block
+with loopback approval.
+
+Do not run generic Step 0 cleanup separately in feedback mode. F0a is the pre-discovery cleanup.
+Use generic Step 0 only when recovering manually from an interrupted run with stale helper-created
+source edits.
+
+In feedback mode, do not use the required final response checklist or the final response template.
+Do not run the Step 8 field extractor unless you need extra local inspection; the feedback-summary
+renderer in F9 reads the required artifacts directly.
+
+Feedback-mode artifact rule: diagnostic artifacts may remain untracked until the next Step 0
+cleanup. Helper-created source edits and helper state files must be gone before responding.
+
+**STOP for successful feedback runs:** after Step 4, do not read or run the Feedback Fallback
+Appendix. Use the appendix only when the Step 1 routing table sends you there.
+
+## Feedback Fallback Appendix (F0a-F7)
+
+Use this appendix only when the Step 1 routing table sends you here. Do not read or run
+these blocks after the Feedback Driver succeeds.
+
+Fallback checklist:
+
+| Block | When to run | Sandbox / loopback mode | Expected artifact or state |
+| --- | --- | --- | --- |
+| Feedback Driver | Preferred feedback path | loopback approval may be required | root, baseline, and advanced artifacts; source edits restored |
+| F0a | Before discovery | normal sandbox | preexisting status captured; stale artifacts removed |
+| F0-discovery | After F0a | normal sandbox | package, git status, test files, and config files inspected |
+| F0-select | After F0-discovery | normal sandbox | selected command and selected files input files |
+| F0b | After F0-select | normal sandbox | selected command and selected files state |
+| F-runner | After F0b | loopback approval may be required | root, baseline, and advanced artifacts; wrapper log; source edits restored |
+| F-runner-postcheck | After F-runner | normal sandbox | selected source files clean; temporary EFD file absent |
+| F1-F7 | Fallback only when the feedback fallback condition applies | mixed | same artifacts as F-runner |
+
+After the last fallback block, resume `Runbook Feedback Mode: Exact Path` at Step 2.
+
+F0a: clean stale diagnostic artifacts before discovery.
+
+```bash
+set -e
+
+# [normal sandbox] Capture non-diagnostic worktree changes before cleanup.
+rm -f dd-test-optimization-preexisting-status.txt
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  git status --short | grep -Ev '^\?\? (dd-test-optimization|dd-intake)|^\?\? nohup\.out$' \
+    > dd-test-optimization-preexisting-status.txt || true
+  if [ ! -s dd-test-optimization-preexisting-status.txt ]; then
+    printf '%s\n' 'none' > dd-test-optimization-preexisting-status.txt
+  fi
+else
+  printf '%s\n' 'not a git worktree' > dd-test-optimization-preexisting-status.txt
+fi
+
+# [normal sandbox] Clean prior diagnostic artifacts and recorded helper state.
+if [ -f dd-intake-log-path.txt ]; then
+  INTAKE_LOG="$(cat dd-intake-log-path.txt)"
+  rm -f "$INTAKE_LOG"
+fi
+
+if [ -f dd-test-optimization-atr-flaky-test-file.txt ] && [ -f dd-test-optimization-atr-flaky-test-backup.txt ]; then
+  ATR_FLAKY_TEST_FILE="$(cat dd-test-optimization-atr-flaky-test-file.txt)"
+  ATR_FLAKY_BACKUP="$(cat dd-test-optimization-atr-flaky-test-backup.txt)"
+  if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if git status --short -- "$ATR_FLAKY_TEST_FILE" | grep . >/dev/null; then
+      git status --short -- "$ATR_FLAKY_TEST_FILE"
+      if ! grep -q 'dd trace auto retry debug flake' "$ATR_FLAKY_TEST_FILE" 2>/dev/null; then
+        echo "Recorded Auto Test Retries file has local changes but no runbook marker." >&2
+        echo "Inspect the recorded file and backup before restoring it." >&2
+        exit 1
+      fi
+    fi
+  fi
+  if [ -f "$ATR_FLAKY_BACKUP" ]; then
+    cp "$ATR_FLAKY_BACKUP" "$ATR_FLAKY_TEST_FILE"
+    rm -f "$ATR_FLAKY_BACKUP"
+  elif grep -q 'dd trace auto retry debug flake' "$ATR_FLAKY_TEST_FILE" 2>/dev/null; then
+    echo "Temporary Auto Test Retries edit is present, but the backup file is missing." >&2
+    exit 1
+  fi
+fi
+
+rm -f \
+  dd-intake-html-file-url.txt \
+  dd-intake-html-path.txt \
+  dd-intake-log-path.txt \
+  dd-intake.pid \
+  dd-intake-shutdown-url.txt \
+  dd-intake-url.txt \
+  dd-test-optimization-env.txt \
+  dd-test-optimization-advanced-validation-url.txt \
+  dd-test-optimization-efd-command.txt \
+  dd-test-optimization-efd-validation-url.txt \
+  dd-test-optimization-efd-new-test-snippet.txt \
+  dd-test-optimization-efd-temp-test-file.txt \
+  dd-test-optimization-feedback-summary.txt \
+  dd-test-optimization-feedback-wrapper.log \
+  dd-test-optimization-selected-command.input \
+  dd-test-optimization-selected-files.input \
+  dd-test-optimization-atr-flaky-test-backup.txt \
+  dd-test-optimization-atr-flaky-test-file.txt \
+  dd-test-optimization-atr-flaky-test-snippet.txt \
+  dd-test-optimization-actionable-feedback.txt \
+  dd-test-optimization-known-tests.json \
+  dd-test-optimization-advanced-dry-run.txt \
+  dd-test-optimization-agent-report.json \
+  dd-test-optimization-final-report.txt \
+  dd-test-optimization-static.json \
+  dd-test-optimization-intake.json \
+  dd-test-optimization-agent-report.txt \
+  dd-test-optimization-selected-test-files.txt \
+  dd-test-optimization-test-command.txt \
+  dd-test-optimization-test-exit-code.txt \
+  dd-test-optimization-test-output.txt \
+  dd-test-optimization-test-result.txt \
+  dd-test-optimization-validation-url.txt \
+  dd-test-optimization-full-validation-url.txt \
+  dd-test-optimization-full-advanced-validation-url.txt \
+  dd-test-optimization-report.html \
+  dd-test-optimization-root-stage.txt \
+  dd-test-optimization-summary.txt \
+  nohup.out
+
+rm -rf \
+  dd-test-optimization-basic \
+  dd-test-optimization-efd
+```
+
+F0-discovery: inspect the repository before F0-select.
+
+```bash
+node -e '
+const fs = require("node:fs")
+const p = JSON.parse(fs.readFileSync("package.json", "utf8"))
+const pickDeps = deps => Object.fromEntries(Object.entries(deps || {})
+  .filter(([name]) => /^(dd-trace|mocha|jest|vitest|cypress|playwright|@cucumber\/cucumber|cucumber-js)$/.test(name))
+)
+console.log(JSON.stringify({
+  packageManager: p.packageManager,
+  scripts: p.scripts || {},
+  dependencies: pickDeps(p.dependencies),
+  devDependencies: pickDeps(p.devDependencies),
+}, null, 2))
+'
+
+printf '%s\n' 'Pre-existing non-diagnostic worktree changes:'
+cat dd-test-optimization-preexisting-status.txt 2>/dev/null || \
+  git status --short | grep -Ev '^\?\? (dd-test-optimization|dd-intake)|^\?\? nohup\.out$' || true
+
+find . \
+  \( -path ./node_modules -o -path ./.git -o -path ./vendor \
+     -o -name dist -o -name build -o -name coverage \) -prune -o \
+  \( -name "*.test.js" -o -name "*.spec.js" -o -name "*.test.ts" -o -name "*.spec.ts" \
+     -o -name "*.cy.js" -o -name "*.cy.ts" \) \
+  -print | head -20
+
+find . \
+  \( -path ./node_modules -o -path ./.git -o -path ./vendor \
+     -o -name dist -o -name build -o -name coverage \) -prune -o \
+  \( -name "jest.config.*" -o -name ".mocharc.*" -o -name "cypress.config.*" \
+     -o -name "playwright.config.*" -o -name "vitest.config.*" -o -name "cucumber.*" \) \
+  -print | head -20
+```
+
+Use these criteria to validate the F0-select helper output, or to override it if the helper is
+unavailable or chooses the wrong file. Run F0-select before manually writing a command.
+
+The selected command must genuinely run tests. Prefer a clean test file that is not listed in
+`git status --short`, and preserve the repository's normal runner command when possible.
+
+Common selected-command patterns:
+
+- Yarn + Jest: `yarn test path/to/file.test.ts --runInBand`
+- npm + Jest: `npm test -- path/to/file.test.ts --runInBand`
+- Yarn + Mocha where `scripts.test` is Mocha: `yarn test test/foo.spec.js`
+- npm + Mocha where `scripts.test` is Mocha: `npm test -- test/foo.spec.js`
+- Direct local runner when no package script fits: `./node_modules/.bin/jest path/to/file.test.js`
+- Vitest: `npm test -- path/to/file.test.ts` or `./node_modules/.bin/vitest run path/to/file.test.ts`
+- Cypress: use the repository command with one `--spec path/to/spec.cy.ts` equivalent.
+- Playwright: use the repository command with one file path or one grep filter.
+
+Do not copy these examples literally unless the file exists in the current repository. The selected
+test file paths written below must match the command.
+
+F0-select: write the selected command and selected test files.
+
+Run the clean-test selection helper first. It filters out files listed by `git status --short`,
+prefers small unit-style tests, and writes both F0-select input files.
+
+```bash
+node ./node_modules/dd-trace/ci/test-optimization-select-command.js
+```
+
+Inspect the printed command and file. If the helper selected the wrong file or cannot infer a
+command, write the selected command and selected test files manually. Replace both `FILL_IN` values
+before running:
+
+```bash
+printf '%s\n' 'FILL_IN selected test command' > dd-test-optimization-selected-command.input
+printf '%s\n' 'FILL_IN selected test file path' > dd-test-optimization-selected-files.input
+```
+
+For multiple selected test files, write one path per line to
+`dd-test-optimization-selected-files.input`.
+
+F0b: write and validate the selected command.
+
+```bash
+set -e
+
+if [ -n "${DD_TEST_OPTIMIZATION_SELECTED_COMMAND:-}" ]; then
+  SELECTED_TEST_COMMAND="$DD_TEST_OPTIMIZATION_SELECTED_COMMAND"
+elif [ -s dd-test-optimization-selected-command.input ]; then
+  SELECTED_TEST_COMMAND="$(cat dd-test-optimization-selected-command.input)"
+else
+  echo "Write dd-test-optimization-selected-command.input or set DD_TEST_OPTIMIZATION_SELECTED_COMMAND."
+  exit 1
+fi
+
+SELECTED_TEST_FILES_FILE="${DD_TEST_OPTIMIZATION_SELECTED_FILES_FILE:-dd-test-optimization-selected-files.input}"
+if [ ! -s "$SELECTED_TEST_FILES_FILE" ]; then
+  echo "Write dd-test-optimization-selected-files.input or set DD_TEST_OPTIMIZATION_SELECTED_FILES_FILE."
+  exit 1
+fi
+
+# [normal sandbox] Write and validate the selected command.
+printf 'Selected test command: %s\n' "$SELECTED_TEST_COMMAND"
+printf '%s\n' "$SELECTED_TEST_COMMAND" > dd-test-optimization-test-command.txt
+sed '/^[[:space:]]*$/d' "$SELECTED_TEST_FILES_FILE" > dd-test-optimization-selected-test-files.txt
+printf '%s\n' 'unknown' > dd-test-optimization-test-result.txt
+while IFS= read -r file; do
+  test -f "$file"
+done < dd-test-optimization-selected-test-files.txt
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  DIRTY_SELECTED_TESTS=''
+  while IFS= read -r file; do
+    FILE_STATUS="$(git status --short -- "$file")"
+    if [ -n "$FILE_STATUS" ]; then
+      printf '%s\n' "$FILE_STATUS"
+      DIRTY_SELECTED_TESTS=1
+    fi
+  done < dd-test-optimization-selected-test-files.txt
+  if [ -n "$DIRTY_SELECTED_TESTS" ]; then
+    if [ "${DD_TEST_OPTIMIZATION_ALLOW_DIRTY_SELECTED_TESTS:-}" != "1" ]; then
+      echo "Selected test files have local changes." >&2
+      echo "Choose clean files or set DD_TEST_OPTIMIZATION_ALLOW_DIRTY_SELECTED_TESTS=1." >&2
+      exit 1
+    fi
+    echo "Selected test files have local changes; override accepted."
+  else
+    echo "Selected test files are clean."
+  fi
+fi
+```
+
+F-runner: run the feedback-mode wrapper. This block may require loopback approval. If it fails
+with `listen EPERM`, rerun this entire F-runner bash block with loopback approval. Do not rerun
+only the inner `node ./node_modules/dd-trace/ci/test-optimization-debug.js` line; the log handling
+and compact-status postprocessing must run in the same approved block. It replaces F1-F7 in the
+normal feedback path and restores temporary advanced-check source edits on failure.
+One successful F-runner command runs multiple wrapper passes internally: root basic reporting,
+baseline known-tests capture, and advanced EFD/Auto Test Retries. The wrapper log captures full
+test output and `Datadog validation:` lines. On success, this block prints only compact status.
+On failure, it prints the wrapper log before exiting. Continue to F-runner-postcheck after the
+command exits successfully.
+
+Approval target: execute the whole F-runner bash block below with loopback approval.
+
+Reusable loopback approval prefix for this block:
+
+```text
+node ./node_modules/dd-trace/ci/test-optimization-debug.js
+```
+
+The reusable prefix is only the approval rule for the inner wrapper process. The command to rerun
+after `listen EPERM` is the complete bash block, including `WRAPPER_LOG`, status capture, failure
+log printing, and compact-status postprocessing.
+
+```bash
+set -e
+
+WRAPPER_LOG=dd-test-optimization-feedback-wrapper.log
+set +e
+node ./node_modules/dd-trace/ci/test-optimization-debug.js \
+  --feedback-mode \
+  --test-command-file dd-test-optimization-test-command.txt \
+  --selected-test-files-file dd-test-optimization-selected-test-files.txt \
+  --no-open > "$WRAPPER_LOG" 2>&1
+WRAPPER_STATUS=$?
+set -e
+
+if [ "$WRAPPER_STATUS" -ne 0 ]; then
+  cat "$WRAPPER_LOG"
+  exit "$WRAPPER_STATUS"
+fi
+
+node -e '
+const fs = require("node:fs")
+
+function readReport (file) {
+  return JSON.parse(fs.readFileSync(file, "utf8"))
+}
+
+const root = readReport("dd-test-optimization-agent-report.json")
+const advanced = readReport("dd-test-optimization-efd/dd-test-optimization-agent-report.json")
+console.log(`Root wrapper stage: ${root.primaryStage || "unknown"}`)
+console.log(`Root requests: ${root.summary?.requestCount ?? "unknown"}`)
+console.log(`Advanced checks: ${advanced.primaryStage || "unknown"}`)
+console.log(`EFD retried new tests: ${advanced.summary?.efd?.retriedNewTests ?? "unknown"}`)
+console.log(`Auto Test Retries flaky tests reported: ${advanced.summary?.atr?.failedThenPassedRetryTests ?? "unknown"}`)
+console.log(`Wrapper log: ${process.cwd()}/dd-test-optimization-feedback-wrapper.log`)
+'
+```
+
+F-runner-postcheck: verify feedback-mode temporary source edits were restored.
+
+```bash
+set -e
+
+EFD_TEMP_FILE="$(sed -n 's/^Temporary EFD test file: //p' dd-test-optimization-advanced-dry-run.txt 2>/dev/null | tail -n 1)"
+if [ -n "$EFD_TEMP_FILE" ]; then
+  test ! -f "$EFD_TEMP_FILE"
+  printf 'Temporary EFD file absent: %s\n' "$EFD_TEMP_FILE"
+fi
+
+if [ -s dd-test-optimization-selected-test-files.txt ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  while IFS= read -r file; do
+    git diff --exit-code -- "$file"
+    git diff --cached --exit-code -- "$file"
+  done < dd-test-optimization-selected-test-files.txt
+  printf '%s\n' 'Selected source files are clean after feedback-mode wrapper.'
+fi
+
+test ! -f dd-test-optimization-efd-temp-test-file.txt
+test ! -f dd-test-optimization-atr-flaky-test-file.txt
+test ! -f dd-test-optimization-atr-flaky-test-backup.txt
+```
+
+F1-F7 fallback: use these blocks only when the feedback fallback condition applies: F-runner is
+unavailable, fails before producing root artifacts after a non-EPERM error, or reports `Nothing`
+after the selected test clearly ran and `NODE_OPTIONS` reached it. Do not use F1-F7 for
+`listen EPERM`; rerun the whole F-runner block with loopback approval.
+
+F1: run the root wrapper. This block may require loopback approval.
+
+```bash
+set -e
+
+node ./node_modules/dd-trace/ci/test-optimization-debug.js \
+  --test-command-file dd-test-optimization-test-command.txt \
+  --no-open
+```
+
+F2: record the root stage.
+
+```bash
+set -e
+
+ROOT_STAGE="$(node -e '
+const fs = require("node:fs")
+const report = JSON.parse(fs.readFileSync("dd-test-optimization-agent-report.json", "utf8"))
+console.log(report.primaryStage || "unknown")
+')"
+printf '%s\n' "$ROOT_STAGE" > dd-test-optimization-root-stage.txt
+printf 'Root wrapper stage: %s\n' "$ROOT_STAGE"
+```
+
+If F2 prints a value other than `Reporting complete`, skip F3 through F7 and return to
+`Runbook Feedback Mode: Exact Path` at Step 2.
+
+F3a: guard the baseline advanced-check wrapper.
+
+```bash
+set -e
+
+ROOT_STAGE="$(cat dd-test-optimization-root-stage.txt)"
+if [ "$ROOT_STAGE" != "Reporting complete" ]; then
+  printf 'Root wrapper stage was not Reporting complete: %s\n' "$ROOT_STAGE"
+  exit 0
+fi
+printf 'Root wrapper stage allows advanced checks: %s\n' "$ROOT_STAGE"
+```
+
+F3b: run the baseline advanced-check wrapper. This block may require loopback approval.
+
+```bash
+node ./node_modules/dd-trace/ci/test-optimization-debug.js \
+  --test-command-file dd-test-optimization-test-command.txt \
+  --out-dir dd-test-optimization-basic \
+  --no-open
+```
+
+F4: extract known tests and dry-run temporary advanced-check edits.
+
+```bash
+set -e
+
+ROOT_STAGE="$(cat dd-test-optimization-root-stage.txt)"
+if [ "$ROOT_STAGE" != "Reporting complete" ]; then
+  printf 'Root wrapper stage was not Reporting complete: %s\n' "$ROOT_STAGE"
+  exit 0
+fi
+
+node ./node_modules/dd-trace/ci/test-optimization-analyze-intake.js \
+  dd-test-optimization-basic/dd-test-optimization-intake.json \
+  --json \
+  --known-tests-out dd-test-optimization-known-tests.json \
+  > dd-test-optimization-basic/dd-test-optimization-agent-report.json
+
+node ./node_modules/dd-trace/ci/test-optimization-prepare-advanced.js --auto --dry-run \
+  | tee dd-test-optimization-advanced-dry-run.txt
+
+node -e '
+const { spawnSync } = require("node:child_process")
+const fs = require("node:fs")
+const path = require("node:path")
+
+function fail (message) {
+  console.error(message)
+  process.exit(1)
+}
+
+function normalize (file) {
+  return path.normalize(file)
+}
+
+function dryRunValue (prefix, isPath = true) {
+  const line = fs.readFileSync("dd-test-optimization-advanced-dry-run.txt", "utf8")
+    .split(/\r?\n/)
+    .find(line => line.startsWith(prefix))
+  if (!line) fail(`Dry run did not print: ${prefix}`)
+  const value = line.slice(prefix.length).trim()
+  return isPath ? normalize(value) : value
+}
+
+const selectedFiles = fs.readFileSync("dd-test-optimization-selected-test-files.txt", "utf8")
+  .trim()
+  .split(/\r?\n/)
+  .filter(Boolean)
+  .map(normalize)
+const selectedDirs = new Set(selectedFiles.map(file => path.dirname(file)))
+const efdFile = dryRunValue("Temporary EFD test file: ")
+const flakyFile = dryRunValue("Auto Test Retries flaky test file: ")
+const flakyTestName = dryRunValue("Auto Test Retries flaky test name: ", false)
+const knownTests = JSON.parse(fs.readFileSync("dd-test-optimization-known-tests.json", "utf8"))
+
+if (!selectedDirs.has(path.dirname(efdFile))) {
+  fail(`Temporary EFD file is not under a selected test directory: ${efdFile}`)
+}
+if (fs.existsSync(efdFile)) {
+  fail(`Temporary EFD file already exists: ${efdFile}`)
+}
+if (!selectedFiles.includes(flakyFile)) {
+  fail(`Auto Test Retries flaky file is not one of the selected test files: ${flakyFile}`)
+}
+
+const gitStatus = spawnSync("git", ["status", "--short", "--", flakyFile], { encoding: "utf8" })
+if (gitStatus.status === 0 && gitStatus.stdout.trim()) {
+  fail(`Auto Test Retries flaky file is not clean: ${flakyFile}`)
+}
+if (gitStatus.status !== 0) {
+  fail(`Could not verify git status for: ${flakyFile}`)
+}
+
+let knownTestFound = false
+for (const suites of Object.values(knownTests || {})) {
+  for (const [suite, tests] of Object.entries(suites || {})) {
+    if (normalize(suite) === flakyFile && Array.isArray(tests) && tests.includes(flakyTestName)) {
+      knownTestFound = true
+    }
+  }
+}
+if (!knownTestFound) {
+  fail(`Auto Test Retries flaky test name is not known for the selected file: ${flakyTestName}`)
+}
+
+console.log("Advanced dry-run guardrails: passed")
+'
+```
+
+The machine-checkable guard prints `Advanced dry-run guardrails: passed` before F5.
+It verifies all of these:
+
+- the temporary EFD file is under the selected test directory
+- the temporary EFD file does not already exist
+- the Auto Test Retries flaky test file is one of the clean selected test files
+- the Auto Test Retries flaky test name belongs to the selected subset
+
+Use a different clean selected test or the explicit helper form if any dry-run target is
+unexpected.
+
+Explicit helper dry-run template:
+
+```bash
+node ./node_modules/dd-trace/ci/test-optimization-prepare-advanced.js \
+  --framework jest \
+  --known-tests-file dd-test-optimization-known-tests.json \
+  --test-command-file dd-test-optimization-test-command.txt \
+  --efd-test-file path/to/dd-trace-efd-debug.test.ts \
+  --flaky-test-file path/to/existing-clean-test.test.ts \
+  --flaky-test-name 'suite-qualified known test name' \
+  --efd-command 'yarn test path/to/existing-clean-test.test.ts path/to/dd-trace-efd-debug.test.ts' \
+  --dry-run
+```
+
+If the explicit dry run is correct, use the same command without `--dry-run` in F5
+instead of `test-optimization-prepare-advanced.js --auto`.
+
+F5: apply temporary advanced-check edits.
+
+```bash
+set -e
+
+ROOT_STAGE="$(cat dd-test-optimization-root-stage.txt)"
+if [ "$ROOT_STAGE" != "Reporting complete" ]; then
+  printf 'Root wrapper stage was not Reporting complete: %s\n' "$ROOT_STAGE"
+  exit 0
+fi
+
+node ./node_modules/dd-trace/ci/test-optimization-prepare-advanced.js --auto
+```
+
+F6a: guard the advanced EFD and Auto Test Retries wrapper.
+
+```bash
+set -e
+
+ROOT_STAGE="$(cat dd-test-optimization-root-stage.txt)"
+if [ "$ROOT_STAGE" != "Reporting complete" ]; then
+  printf 'Root wrapper stage was not Reporting complete: %s\n' "$ROOT_STAGE"
+  exit 0
+fi
+printf 'Root wrapper stage allows advanced wrapper: %s\n' "$ROOT_STAGE"
+```
+
+F6b: run the advanced EFD and Auto Test Retries wrapper. This block may require loopback approval.
+
+```bash
+node ./node_modules/dd-trace/ci/test-optimization-debug.js \
+  --test-command-file dd-test-optimization-efd-command.txt \
+  --settings-mode debug-all \
+  --known-tests dd-test-optimization-known-tests.json \
+  --new-test-snippet-file dd-test-optimization-efd-new-test-snippet.txt \
+  --flaky-test-snippet-file dd-test-optimization-atr-flaky-test-snippet.txt \
+  --out-dir dd-test-optimization-efd \
+  --no-open
+```
+
+F7: assert advanced evidence and restore temporary source edits.
+
+```bash
+set -e
+
+ROOT_STAGE="$(cat dd-test-optimization-root-stage.txt)"
+if [ "$ROOT_STAGE" != "Reporting complete" ]; then
+  printf 'Root wrapper stage was not Reporting complete: %s\n' "$ROOT_STAGE"
+  exit 0
+fi
+
+node -e '
+const fs = require("node:fs")
+const report = JSON.parse(fs.readFileSync("dd-test-optimization-efd/dd-test-optimization-agent-report.json", "utf8"))
+function assertPassed (condition, message) {
+  if (condition) return
+  console.error(message)
+  process.exit(1)
+}
+assertPassed(report.summary.efd.settingsEnabled, "EFD settings were not enabled.")
+assertPassed(report.summary.efd.requested, "Known tests were not requested.")
+assertPassed(report.summary.efd.knownTestsReceived > 0, "Known tests response was empty.")
+assertPassed(report.summary.efd.retriedNewTests > 0, "No new test was retried by EFD.")
+assertPassed(report.summary.atr.settingsEnabled, "Auto Test Retries settings were not enabled.")
+assertPassed(report.summary.atr.failedExecutions > 0, "No failing execution was reported.")
+assertPassed(report.summary.atr.passedExecutions > 0, "No passing execution was reported.")
+assertPassed(report.summary.atr.passedRetryTests > 0, "No passing retry execution was reported.")
+assertPassed(report.summary.atr.failedThenPassedRetryTests > 0, "No known flaky test failed and passed on retry.")
+console.log(`EFD retried new tests: ${report.summary.efd.retriedNewTests}`)
+console.log(`Auto Test Retries flaky tests reported: ${report.summary.atr.failedThenPassedRetryTests}`)
+'
+
+node ./node_modules/dd-trace/ci/test-optimization-prepare-advanced.js --restore
+
+test ! -f dd-test-optimization-efd-temp-test-file.txt
+test ! -f dd-test-optimization-atr-flaky-test-file.txt
+test ! -f dd-test-optimization-atr-flaky-test-backup.txt
+```
+
+After the fallback path completes, return to Step 2 and Step 3 in
+`Runbook Feedback Mode: Exact Path` to write actionable feedback and render F9. Do not continue
+into customer diagnostic mode, Step 7, Step 8, the Decision Tree, or the customer final response
+checklist unless the fallback path explicitly required those sections.
+
+Customer diagnostic mode uses the Preferred Wrapper, Step 7, and Step 8 sections below. Its wrapper
+result routing is:
+
+| Root wrapper result | Next action |
+| --- | --- |
+| `listen EPERM: operation not permitted 127.0.0.1` | Rerun the wrapper with loopback bind/connect approval. Do not diagnose Test Optimization from this result. |
+| `Reporting complete` | Run Step 7 to validate EFD and Auto Test Retries, then Step 8. |
+| `Nothing` | Confirm the selected test ran and `NODE_OPTIONS` reached it. Use the manual fallback/debug path only when those are true and the wrapper still captures no requests. Then run Step 8. |
+| Any other stage | Skip Step 7, consult the matching Decision Tree stage, then run the Step 8 extractor. |
+
+## Detailed Section Index
+
+The Agent Quickstart above is the canonical execution flow. The detailed sections below provide
+the commands and adaptation rules for each referenced step:
+
+- Step 0: cleanup and source-edit restore safety.
+- Step 2: selected test command discovery.
+- Preferred Wrapper: root wrapper command details.
+- Step 7: advanced EFD and Auto Test Retries checks when basic reporting is complete.
+- Step 8: machine-oriented extractor and final response format.
+
+Feedback-mode fallback condition: use F1-F7 only when F-runner is unavailable, fails before
+producing root artifacts after a non-EPERM error, or reports `Nothing` after the selected test
+clearly ran and `NODE_OPTIONS` reached it. Do not use F1-F7 for `listen EPERM`; rerun the whole
+F-runner block with loopback approval.
+
+Customer-mode manual fallback condition: use manual Steps 3-6 only when the wrapper is unavailable,
+fails before producing artifacts, reports `Nothing` after a confirmed test run, or requires
+repository-specific process handling. A successful wrapper run with `Reporting complete` means
+manual Steps 3-6 are skipped.
 
 The goal is to answer four questions:
 
@@ -33,6 +805,17 @@ Diagnostic question map:
 - If data is reported, does it include session, module, suite, and test events? Step 6.
 - Step 8: synthesize all diagnostic answers.
 
+Required final response checklist:
+
+- HTML report `file://` URL and absolute path.
+- Datadog validation relative path, plus advanced validation relative path when Step 7 ran.
+- Final report path and compact summary path.
+- Selected test command, advanced test command when Step 7 ran, and test result.
+- Basic reporting counts and decode errors.
+- EFD and Auto Test Retries status when Step 7 ran.
+- The four diagnostic question answers with each question text inline.
+- Static warnings and errors, recommended next actions, and temporary-edit cleanup confirmation.
+
 "All expected test event levels" means:
 
 - `test_session_end`
@@ -44,51 +827,38 @@ Do not use a real Datadog API key for this flow. Always route to the local fake 
 
 ## Preferred Wrapper
 
-Use this wrapper when available. Adapt only the `--test-command` value. Use `--no-open` by default
-for coding-agent runs; the HTML report URL and path are still printed and opening the file is not
-part of the diagnosis.
+Use this wrapper when available. Use `--no-open` by default for coding-agent runs; the HTML report
+URL and path are still printed, the final report is still written, and opening the file is not part
+of the diagnosis. Do not use browser automation for the local HTML report.
 
-Wrapper happy path:
+The Agent Quickstart above is the authoritative wrapper flow. Apply the top-level loopback
+prerequisite for sandboxed environments.
 
-1. Choose one small test command using the Step 2 priority table.
-2. Run the wrapper with the selected command and `--no-open`; the wrapper binds `127.0.0.1`, so
-   sandboxed environments may need loopback bind/connect approval.
-3. If it reports `Reporting complete`, skip manual Steps 3-6.
-4. Run Step 7 to validate EFD.
-5. Run the Step 8 summary extractor and use the final response template.
-
-Adapt:
-
-```bash
-node ./node_modules/dd-trace/ci/test-optimization-debug.js --test-command "npm test -- path/to/test.spec.js" --no-open
-```
-
-Yarn example:
-
-```bash
-node ./node_modules/dd-trace/ci/test-optimization-debug.js --test-command "yarn test path/to/test.spec.js" --no-open
-```
-
-After completing Step 2, use the selected-command file:
+After completing Step 2, use only the selected-command file form:
 
 Verbatim:
 
 ```bash
 node ./node_modules/dd-trace/ci/test-optimization-debug.js \
-  --test-command "$(cat dd-test-optimization-test-command.txt)" \
+  --test-command-file dd-test-optimization-test-command.txt \
   --no-open
 ```
 
-Sandbox note: if wrapper startup fails with `listen EPERM 127.0.0.1`, retry the same wrapper
-command with loopback bind/connect approval. This is a local environment permission failure, not a
-Test Optimization reporting failure. After one loopback permission failure, run subsequent wrapper
-or manual fake-intake commands with the same loopback approval.
+Sandbox note: `listen EPERM 127.0.0.1` is a local environment permission failure, not a Test
+Optimization reporting failure. Use the loopback prerequisite at the top of this runbook.
+
+If the environment records reusable approvals, approve the command prefix for the wrapper:
+
+```text
+node ./node_modules/dd-trace/ci/test-optimization-debug.js
+```
 
 The wrapper runs the static diagnosis, starts the fake intake in the same Node.js process, runs the
-selected test command, stops the intake, writes all artifacts, renders the final report, and tries
-to open the local HTML report. If the open attempt fails, continue; it does not affect the
-diagnosis. The wrapper writes `dd-test-optimization-test-command.txt`; later steps read that file
-instead of asking the agent to reconstruct the selected command.
+selected test command, stops the intake, writes all artifacts, and renders the final report. With
+`--no-open`, it does not try to open the local HTML report. The wrapper writes
+`dd-test-optimization-test-command.txt`; later steps read that file instead of asking the agent to
+reconstruct the selected command.
+The wrapper intentionally overwrites `dd-test-optimization-test-command.txt` with the command it ran.
 
 If the wrapper succeeds and the primary stage is `Reporting complete`, skip manual Steps 3-6 and
 continue to Step 7.
@@ -102,10 +872,9 @@ produce. Use these wrapper-generated root artifacts for Step 8:
 - `dd-test-optimization-intake.json`
 - `dd-test-optimization-report.html`
 
-The wrapper and analyzer print a `Datadog validation:` URL. It points to the local Datadog
-validation app with a pako-compatible encoded JSON payload. The decoded payload is intentionally
-small: `status`, `checks[]`, each check's `steps[]`, optional `artifacts`, and optional
-`framework`.
+The wrapper and analyzer print a `Datadog validation:` relative path with a pako-compatible
+encoded JSON payload. The decoded payload is intentionally small: `status`, `checks[]`, each
+check's `steps[]`, optional `artifacts`, and optional `framework`.
 
 Analyzer JSON key paths used in this runbook:
 
@@ -120,13 +889,17 @@ Analyzer JSON key paths used in this runbook:
 - `summary.efd.knownTestsReceived`
 - `summary.efd.retriedNewTests`
 - `summary.efd.retriedNewTestNames`
+- `summary.atr.settingsEnabled`
+- `summary.atr.failedExecutions`
+- `summary.atr.passedExecutions`
+- `summary.atr.passedRetryTests`
+- `summary.atr.failedThenPassedRetryTests`
+- `summary.atr.failedThenPassedRetryTestNames`
 
-For the EFD check later in this runbook, use wrapper `--out-dir` values so the first and second
-runs do not overwrite each other.
+For the advanced checks later in this runbook, use wrapper `--out-dir` values so the first and
+second runs do not overwrite each other.
 
-The wrapper binds a local fake intake on `127.0.0.1` and the test process connects back to it. In
-sandboxed agent environments, the wrapper may require the same loopback bind/connect approval as
-the manual intake path.
+The wrapper binds a local fake intake on `127.0.0.1` and the test process connects back to it.
 
 If the wrapper reports `Nothing` but the selected test clearly ran and `dd-trace/ci/init` output or
 debug logs show that `NODE_OPTIONS` reached the test process, rerun the manual path in one shell
@@ -145,8 +918,11 @@ These files are published under the `dd-trace/ci` package directory:
 - `test-optimization-debug.js`: wrapper for the end-to-end debug flow.
 - `test-optimization-intake.js`: local fake intake and static self-contained HTML report.
 - `test-optimization-analyze-intake.js`: fixed-rule analyzer for saved intake artifacts.
+- `test-optimization-prepare-advanced.js`: optional helper for common Step 7 temporary test edits.
 - `test-optimization-render-report.js`: final customer-facing report renderer.
+- `test-optimization-feedback-summary.js`: feedback-mode F9 summary and status renderer.
 - `test-optimization-intake-analysis.js`: shared decision-tree rules.
+- `test-optimization-select-command.js`: clean-test command selector for feedback-mode F0-select.
 
 ## Expected Output
 
@@ -154,6 +930,9 @@ These files are published under the `dd-trace/ci` package directory:
   `NODE_OPTIONS="-r dd-trace/ci/init"`.
 - A successful basic reporting check has primary stage `Reporting complete`.
 - Successful basic reporting includes session, module, suite, and test events.
+- Successful EFD reports a retried new test.
+- Successful Auto Test Retries reports one known flaky test with a failed execution, a passing
+  execution, and `test.is_retry=true` on the passing retry.
 - Harmless stdout from `dd-trace/ci/init` can be ignored. Do not ignore warnings about missing
   `DD_API_KEY` or disabled CI Visibility reporting.
 
@@ -176,6 +955,28 @@ if [ -f dd-intake-log-path.txt ]; then
   rm -f "$INTAKE_LOG"
 fi
 
+if [ -f dd-test-optimization-atr-flaky-test-file.txt ] && [ -f dd-test-optimization-atr-flaky-test-backup.txt ]; then
+  ATR_FLAKY_TEST_FILE="$(cat dd-test-optimization-atr-flaky-test-file.txt)"
+  ATR_FLAKY_BACKUP="$(cat dd-test-optimization-atr-flaky-test-backup.txt)"
+  if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    if git status --short -- "$ATR_FLAKY_TEST_FILE" | grep . >/dev/null; then
+      git status --short -- "$ATR_FLAKY_TEST_FILE"
+      if ! grep -q 'dd trace auto retry debug flake' "$ATR_FLAKY_TEST_FILE" 2>/dev/null; then
+        echo "Recorded Auto Test Retries file has local changes but no runbook marker." >&2
+        echo "Inspect the recorded file and backup before restoring it." >&2
+        exit 1
+      fi
+    fi
+  fi
+  if [ -f "$ATR_FLAKY_BACKUP" ]; then
+    cp "$ATR_FLAKY_BACKUP" "$ATR_FLAKY_TEST_FILE"
+    rm -f "$ATR_FLAKY_BACKUP"
+  elif grep -q 'dd trace auto retry debug flake' "$ATR_FLAKY_TEST_FILE" 2>/dev/null; then
+    echo "Temporary Auto Test Retries edit is present, but the backup file is missing." >&2
+    exit 1
+  fi
+fi
+
 rm -f \
   dd-intake-html-file-url.txt \
   dd-intake-html-path.txt \
@@ -184,20 +985,39 @@ rm -f \
   dd-intake-shutdown-url.txt \
   dd-intake-url.txt \
   dd-test-optimization-env.txt \
+  dd-test-optimization-advanced-validation-url.txt \
   dd-test-optimization-efd-command.txt \
+  dd-test-optimization-efd-validation-url.txt \
   dd-test-optimization-efd-new-test-snippet.txt \
   dd-test-optimization-efd-temp-test-file.txt \
+  dd-test-optimization-feedback-summary.txt \
+  dd-test-optimization-feedback-wrapper.log \
+  dd-test-optimization-selected-command.input \
+  dd-test-optimization-selected-files.input \
+  dd-test-optimization-atr-flaky-test-backup.txt \
+  dd-test-optimization-atr-flaky-test-file.txt \
+  dd-test-optimization-atr-flaky-test-snippet.txt \
+  dd-test-optimization-actionable-feedback.txt \
   dd-test-optimization-known-tests.json \
+  dd-test-optimization-advanced-dry-run.txt \
   dd-test-optimization-agent-report.json \
   dd-test-optimization-final-report.txt \
   dd-test-optimization-static.json \
   dd-test-optimization-intake.json \
   dd-test-optimization-agent-report.txt \
+  dd-test-optimization-selected-test-files.txt \
   dd-test-optimization-test-command.txt \
   dd-test-optimization-test-exit-code.txt \
   dd-test-optimization-test-output.txt \
   dd-test-optimization-test-result.txt \
-  dd-test-optimization-report.html
+  dd-test-optimization-validation-url.txt \
+  dd-test-optimization-full-validation-url.txt \
+  dd-test-optimization-full-advanced-validation-url.txt \
+  dd-test-optimization-report.html \
+  dd-test-optimization-preexisting-status.txt \
+  dd-test-optimization-root-stage.txt \
+  dd-test-optimization-summary.txt \
+  nohup.out
 
 rm -rf \
   dd-test-optimization-basic \
@@ -205,6 +1025,26 @@ rm -rf \
 ```
 
 Reruns use stable artifact names by default. Remove stale intermediate artifacts before continuing.
+Successful runs intentionally leave diagnostic artifacts in the repository root and
+`dd-test-optimization-*` directories until the next Step 0 cleanup. If
+`test-optimization-prepare-advanced.js --restore` is used, it removes the helper-created EFD test
+file and restores the helper-edited flaky test file; it does not remove diagnostic artifacts.
+
+Generated diagnostic artifacts are safe to keep for the report and safe to remove on the next
+runbook execution:
+
+- `dd-test-optimization-*`
+- `dd-intake-*`
+- `dd-test-optimization-basic/`
+- `dd-test-optimization-efd/`
+
+Temporary source edits must be restored before the final response:
+
+- helper-created `dd-trace-efd-debug*.test.*` or `dd-trace-efd-debug*.spec.*` sibling test file
+- helper-edited known test file containing `dd trace auto retry debug flake`
+
+Do not remove or modify repository source files except through the explicit temporary-edit restore
+steps in Step 0 or Step 7e.
 
 ### 1. Check static setup
 
@@ -257,17 +1097,31 @@ Run discovery commands:
 Verbatim:
 
 ```bash
-cat package.json
+node -e '
+const fs = require("node:fs")
+const p = JSON.parse(fs.readFileSync("package.json", "utf8"))
+const pickDeps = deps => Object.fromEntries(Object.entries(deps || {})
+  .filter(([name]) => /^(dd-trace|mocha|jest|vitest|cypress|playwright|@cucumber\/cucumber|cucumber-js)$/.test(name))
+)
+console.log(JSON.stringify({
+  packageManager: p.packageManager,
+  scripts: p.scripts || {},
+  dependencies: pickDeps(p.dependencies),
+  devDependencies: pickDeps(p.devDependencies),
+}, null, 2))
+'
 git status --short
 
 find . \
-  \( -path ./node_modules -o -path ./.git -o -path ./vendor \) -prune -o \
+  \( -path ./node_modules -o -path ./.git -o -path ./vendor \
+     -o -name dist -o -name build -o -name coverage \) -prune -o \
   \( -name "*.test.js" -o -name "*.spec.js" -o -name "*.test.ts" -o -name "*.spec.ts" \
      -o -name "*.cy.js" -o -name "*.cy.ts" \) \
   -print | head -20
 
 find . \
-  \( -path ./node_modules -o -path ./.git -o -path ./vendor \) -prune -o \
+  \( -path ./node_modules -o -path ./.git -o -path ./vendor \
+     -o -name dist -o -name build -o -name coverage \) -prune -o \
   \( -name "jest.config.*" -o -name ".mocharc.*" -o -name "cypress.config.*" \
      -o -name "playwright.config.*" -o -name "vitest.config.*" -o -name "cucumber.*" \) \
   -print | head -20
@@ -289,6 +1143,7 @@ Command selection priority:
 Selection guardrails:
 
 - Prefer one or two existing test files.
+- Prefer source test files over generated `dist` test files when both are present.
 - Prefer test files that are not listed in `git status --short`; avoid user-modified files when a
   clean equivalent exists.
 - Preserve the repository's normal runner command when possible.
@@ -297,6 +1152,12 @@ Selection guardrails:
 - Never write a bare runner binary command such as `mocha test/sum.spec.js`.
 
 Set `SELECTED_TEST_COMMAND` to the selected command, then write it:
+
+Common Yarn + Jest example:
+
+```bash
+SELECTED_TEST_COMMAND='yarn test packages/plugin-gate/src/__tests__/scope.test.ts'
+```
 
 Adapt:
 
@@ -313,7 +1174,50 @@ printf '%s\n' "$SELECTED_TEST_COMMAND" > dd-test-optimization-test-command.txt
 printf '%s\n' 'unknown' > dd-test-optimization-test-result.txt
 ```
 
+Validate the selected test files:
+
+Adapt:
+
+```bash
+SELECTED_TEST_FILES='FILL_IN' # replace FILL_IN with one test file path per line
+# Multiple files example:
+# SELECTED_TEST_FILES="$(printf '%s\n' 'test/one.spec.js' 'test path/two.spec.js')"
+if [ "$SELECTED_TEST_FILES" = 'FILL_IN' ] || [ -z "$SELECTED_TEST_FILES" ]; then
+  echo "Replace FILL_IN with the selected test file paths before continuing."
+  exit 1
+fi
+
+printf '%s\n' "$SELECTED_TEST_FILES" | sed '/^[[:space:]]*$/d' > dd-test-optimization-selected-test-files.txt
+printf 'Selected test command: %s\n' "$(cat dd-test-optimization-test-command.txt)"
+
+while IFS= read -r file; do
+  test -f "$file"
+done < dd-test-optimization-selected-test-files.txt
+
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  DIRTY_SELECTED_TESTS=''
+  while IFS= read -r file; do
+    FILE_STATUS="$(git status --short -- "$file")"
+    if [ -n "$FILE_STATUS" ]; then
+      printf '%s\n' "$FILE_STATUS"
+      DIRTY_SELECTED_TESTS=1
+    fi
+  done < dd-test-optimization-selected-test-files.txt
+  if [ -n "$DIRTY_SELECTED_TESTS" ]; then
+    echo "Selected test files have local changes. Choose clean files when possible."
+  else
+    echo "Selected test files are clean."
+  fi
+fi
+```
+
+If the selected command is uncertain, run it once without Test Optimization instrumentation before
+the wrapper. Keep the same command in `dd-test-optimization-test-command.txt` if it selects the
+intended subset and exits normally.
+
 ## Manual Fallback Path
+
+STOP: do not run this section after a wrapper run reports `Reporting complete`.
 
 Run manual Steps 3-6 only when the wrapper path is unavailable or inconclusive. If the wrapper
 succeeded with `Reporting complete`, skip to Step 7.
@@ -332,7 +1236,7 @@ Verbatim:
 ```bash
 set -e
 
-INTAKE_LOG="$(mktemp "${TMPDIR:-/tmp}/dd-test-optimization-intake.XXXXXX.log")"
+INTAKE_LOG="$(mktemp "${TMPDIR:-/tmp}/dd-test-optimization-intake.XXXXXX")"
 echo "$INTAKE_LOG" > dd-intake-log-path.txt
 
 node ./node_modules/dd-trace/ci/test-optimization-intake.js \
@@ -612,10 +1516,12 @@ node ./node_modules/dd-trace/ci/test-optimization-render-report.js \
   --env-file dd-test-optimization-env.txt \
   --agent-report dd-test-optimization-agent-report.txt \
   --agent-json-report dd-test-optimization-agent-report.json \
-  --out dd-test-optimization-final-report.txt
+  --out dd-test-optimization-final-report.txt \
+  --summary-out dd-test-optimization-summary.txt
 ```
 
 The renderer prints the final report to stdout and also writes `dd-test-optimization-final-report.txt`.
+It writes a compact `dd-test-optimization-summary.txt` without the long pako validation paths.
 
 Use the final report renderer output, not the browser, as the source of the final diagnosis. Use
 the JSON analyzer output when traversing the decision tree. The `--open` attempt in 6a is
@@ -637,27 +1543,60 @@ If the primary stage is anything other than `Reporting complete`, consult `## De
 Step 8 under the matching stage heading before writing the final response.
 
 The analyzer text report includes the canonical HTML report `file://` URL, absolute HTML report
-path, suggested open command, and `Datadog validation:` URL. Copy those lines exactly into the
+path, suggested open command, and `Datadog validation:` relative path. Copy those lines exactly into the
 final response instead of rewriting them from memory.
 
-### 7. Test Early Flake Detection
+## Expected Worktree Changes
+
+Diagnostic artifacts may remain untracked until the next Step 0 cleanup:
+
+- `dd-test-optimization-*`
+- `dd-intake-*`
+- `dd-test-optimization-basic/`
+- `dd-test-optimization-efd/`
+- `nohup.out` if an agent or shell creates it while running background commands
+
+During Step 7, these temporary source edits may appear:
+
+- helper-created `dd-trace-efd-debug*.test.*` or `dd-trace-efd-debug*.spec.*` sibling test file
+- helper-edited known test file containing `dd trace auto retry debug flake`
+
+After Step 7e restore, the temporary EFD test file must be gone and the flaky edit must be gone
+from the known test file. Existing unrelated dirty files in the repository must remain untouched.
+
+After helper restore, these temporary source-edit state files must be absent:
+
+- `dd-test-optimization-efd-temp-test-file.txt`
+- `dd-test-optimization-atr-flaky-test-file.txt`
+- `dd-test-optimization-atr-flaky-test-backup.txt`
+
+These diagnostic artifacts may remain after helper restore:
+
+- `dd-test-optimization-efd-new-test-snippet.txt`
+- `dd-test-optimization-atr-flaky-test-snippet.txt`
+- `dd-test-optimization-basic/`
+- `dd-test-optimization-efd/`
+- root `dd-test-optimization-*` report, intake, command, output, and summary files
+
+### 7. Test Early Flake Detection and Auto Test Retries
 
 Run this step after the basic reporting result is `Reporting complete`. If basic reporting is not
-complete, do not run EFD yet; fix the basic reporting funnel first.
+complete, do not run advanced feature checks yet; fix the basic reporting funnel first.
 
-EFD requires two runs:
+The advanced checks require two runs:
 
 - First run: capture the currently known tests from the selected subset.
-- Second run: serve those known tests, add one new deterministic passing test, and verify that the
-  new test is retried.
+- Second run: serve those known tests, add one new deterministic passing test, make one already
+  known test fail once and then pass, and verify that both EFD and Auto Test Retries worked.
 
 Step 7 always runs the wrapper again with `--out-dir`; do not reuse the root wrapper artifact as the
-EFD baseline.
+advanced-check baseline.
 
 7a. Run the first baseline run in its own artifact directory and extract known tests:
 
 Required: use `--out-dir "$BASIC_DIR"` to avoid overwriting root artifacts. It prevents the
-baseline EFD run from overwriting the root wrapper artifacts used for Step 8.
+baseline advanced-check run from overwriting the root wrapper artifacts used for Step 8.
+Use the top-level loopback prerequisite if the wrapper fails with `listen EPERM 127.0.0.1`.
 
 Verbatim:
 
@@ -665,10 +1604,9 @@ Verbatim:
 set -e
 
 BASIC_DIR=dd-test-optimization-basic
-TEST_COMMAND="$(cat dd-test-optimization-test-command.txt)"
 
 node ./node_modules/dd-trace/ci/test-optimization-debug.js \
-  --test-command "$TEST_COMMAND" \
+  --test-command-file dd-test-optimization-test-command.txt \
   --out-dir "$BASIC_DIR" \
   --no-open
 
@@ -682,7 +1620,7 @@ node -e '
 const fs = require("node:fs")
 const report = JSON.parse(fs.readFileSync("dd-test-optimization-basic/dd-test-optimization-agent-report.json", "utf8"))
 if (report.primaryStage !== "Reporting complete") {
-  console.error(`First EFD baseline run must be Reporting complete, got: ${report.primaryStage}`)
+  console.error(`First advanced-check baseline run must be Reporting complete, got: ${report.primaryStage}`)
   process.exit(1)
 }
 const knownTests = JSON.parse(fs.readFileSync("dd-test-optimization-known-tests.json", "utf8"))
@@ -690,8 +1628,73 @@ console.log(JSON.stringify(knownTests, null, 2))
 '
 ```
 
+Prepare common Jest, Mocha, and Vitest layouts automatically:
+
+The dry run prints the inferred files and command without writing files. Run it before the helper
+that modifies source:
+
+Verbatim:
+
+```bash
+node ./node_modules/dd-trace/ci/test-optimization-prepare-advanced.js --auto --dry-run
+```
+
+The next command intentionally modifies repository source temporarily:
+
+- creates one sibling EFD test file
+- edits one known test so its first execution fails and its retry passes
+- records enough state for `test-optimization-prepare-advanced.js --restore` to undo both changes
+
+The helper refuses to edit a dirty or untracked known test file in a git worktree. If it fails with
+`Refusing to edit`, choose a clean selected test file, restore/stash the local change, or use the
+manual Step 7b and Step 7c path with an explicit clean file.
+
+Verbatim:
+
+```bash
+node ./node_modules/dd-trace/ci/test-optimization-prepare-advanced.js --auto
+```
+
 7b. Add one new deterministic passing test that is not present in
 `dd-test-optimization-known-tests.json`.
+
+For common Jest, Mocha, or Vitest files with simple `test(...)` or `it(...)` callback tests, use
+`test-optimization-prepare-advanced.js --auto`; it prepares Step 7b and Step 7c together. The
+helper reads `dd-test-optimization-known-tests.json` and
+`dd-test-optimization-test-command.txt`, chooses the first known suite/test, creates a temporary
+sibling EFD test, makes that known test fail once, and writes `dd-test-optimization-efd-command.txt`.
+If `--auto` succeeds, skip the manual Step 7b and Step 7c edit instructions and continue to Step
+7d. If `--auto` cannot infer a safe edit, use the explicit helper form or the manual Step 7b and
+Step 7c instructions below.
+
+The helper accepts the literal source-level test name from `test("name", ...)` or `it("name", ...)`;
+it also accepts a suite-qualified analyzer name when exactly one source-level test name matches the
+end. If the helper cannot match the known test, retry with the literal source-level name, then
+continue with the manual Step 7b and Step 7c instructions if needed.
+
+Adapt:
+
+```bash
+node ./node_modules/dd-trace/ci/test-optimization-prepare-advanced.js \
+  --framework jest \
+  --efd-test-file FILL_IN_TEMP_TEST_FILE \
+  --flaky-test-file FILL_IN_KNOWN_TEST_FILE \
+  --flaky-test-name "FILL_IN_KNOWN_TEST_NAME" \
+  --efd-command "FILL_IN_SECOND_TEST_COMMAND"
+```
+
+Replace `FILL_IN_TEMP_TEST_FILE`, `FILL_IN_KNOWN_TEST_FILE`, `FILL_IN_KNOWN_TEST_NAME`, and
+`FILL_IN_SECOND_TEST_COMMAND` before running. For `FILL_IN_KNOWN_TEST_NAME`, prefer the exact
+known-test name from `dd-test-optimization-known-tests.json`; use the literal source-level test
+name if the helper reports that it cannot match the suite-qualified name. Use `--framework mocha`
+or `--framework vitest` when that matches the selected command. The helper writes:
+
+- `dd-test-optimization-efd-temp-test-file.txt`
+- `dd-test-optimization-efd-new-test-snippet.txt`
+- `dd-test-optimization-atr-flaky-test-file.txt`
+- `dd-test-optimization-atr-flaky-test-backup.txt`
+- `dd-test-optimization-atr-flaky-test-snippet.txt`
+- `dd-test-optimization-efd-command.txt`
 
 Adapt:
 
@@ -715,15 +1718,18 @@ Common direct-file-runner example for Mocha, Jest, and Vitest:
   as `test/dd-trace-efd-debug.spec.js`.
 - Put one deterministic passing test in that file with the name `dd trace EFD debug temporary test`.
 - Use `npm test -- test/sum.spec.js test/dd-trace-efd-debug.spec.js` for the second EFD command.
-- Remove `test/dd-trace-efd-debug.spec.js` after Step 7d passes.
+- Remove `test/dd-trace-efd-debug.spec.js` after Step 7e passes.
 
 Yarn example:
 
 - If the first command is `yarn test test/sum.spec.js`, create `test/dd-trace-efd-debug.spec.js`.
 - Use `yarn test test/sum.spec.js test/dd-trace-efd-debug.spec.js` for the second EFD command.
-- Remove `test/dd-trace-efd-debug.spec.js` after Step 7d passes.
+- Remove `test/dd-trace-efd-debug.spec.js` after Step 7e passes.
 
 Temporary test templates:
+
+Match the selected test file's framework and module style. For TypeScript test files, prefer a
+TypeScript/global-runner style template over CommonJS `require`.
 
 Mocha or Jest CommonJS:
 
@@ -735,6 +1741,16 @@ const assert = require('node:assert/strict')
 describe('dd trace EFD debug', () => {
   it('dd trace EFD debug temporary test', () => {
     assert.strictEqual(1 + 1, 2)
+  })
+})
+```
+
+Jest TypeScript:
+
+```ts
+describe('dd trace EFD debug', () => {
+  test('dd trace EFD debug temporary test', () => {
+    expect(1 + 1).toBe(2)
   })
 })
 ```
@@ -779,8 +1795,66 @@ cat "$EFD_TEMP_TEST_FILE" > dd-test-optimization-efd-new-test-snippet.txt
 
 If the runner required appending a temporary test case to an existing file instead of creating a
 temporary sibling file, record the cleanup command in the final response and verify cleanup with a
-repository-specific command after Step 7d. Also write only the temporary test snippet to
-`dd-test-optimization-efd-new-test-snippet.txt` before running Step 7c.
+repository-specific command after Step 7e. Also write only the temporary test snippet to
+`dd-test-optimization-efd-new-test-snippet.txt` before Step 7d.
+
+7c. Make one already known test flaky for Auto Test Retries.
+
+Adapt:
+
+- Choose one test from `dd-test-optimization-known-tests.json` that the second command will run.
+- Prefer a small, clean selected test file. Avoid user-modified files when a clean selected file
+  exists.
+- Save the original file to a temporary backup before editing.
+- Change the known test so the first execution throws and the retry passes.
+- Write only the temporary flaky edit snippet to
+  `dd-test-optimization-atr-flaky-test-snippet.txt`.
+
+Temporary flaky edit pattern:
+
+```js
+let ddTraceAutoRetryCounter = 0
+
+it('already known test', () => {
+  if (ddTraceAutoRetryCounter++ === 0) throw new Error('dd trace auto retry debug flake')
+})
+```
+
+The real edit must preserve the existing known test name. Add the counter near the test in the
+same file and keep or restore any original assertions after the one-time failure branch.
+
+Record the file and backup path before editing:
+
+Adapt:
+
+```bash
+ATR_FLAKY_TEST_FILE='FILL_IN' # replace FILL_IN with the known test file to edit
+if [ "$ATR_FLAKY_TEST_FILE" = 'FILL_IN' ] || [ -z "$ATR_FLAKY_TEST_FILE" ]; then
+  echo "Replace FILL_IN with the known test file before continuing."
+  exit 1
+fi
+test -f "$ATR_FLAKY_TEST_FILE"
+ATR_FLAKY_BACKUP="$(mktemp "${TMPDIR:-/tmp}/dd-test-optimization-atr.XXXXXX")"
+cp "$ATR_FLAKY_TEST_FILE" "$ATR_FLAKY_BACKUP"
+printf '%s\n' "$ATR_FLAKY_TEST_FILE" > dd-test-optimization-atr-flaky-test-file.txt
+printf '%s\n' "$ATR_FLAKY_BACKUP" > dd-test-optimization-atr-flaky-test-backup.txt
+printf 'Auto Test Retries flaky test file: %s\n' "$ATR_FLAKY_TEST_FILE"
+printf 'Auto Test Retries backup: %s\n' "$ATR_FLAKY_BACKUP"
+```
+
+After editing, write the exact temporary snippet that was added or changed:
+
+Adapt:
+
+```bash
+cat > dd-test-optimization-atr-flaky-test-snippet.txt <<'EOF'
+FILL_IN exact temporary flaky edit snippet
+EOF
+if grep -q 'FILL_IN' dd-test-optimization-atr-flaky-test-snippet.txt; then
+  echo "Replace FILL_IN with the exact temporary flaky edit snippet before continuing."
+  exit 1
+fi
+```
 
 Write the second command:
 
@@ -796,10 +1870,11 @@ printf 'EFD test command: %s\n' "$EFD_TEST_COMMAND"
 printf '%s\n' "$EFD_TEST_COMMAND" > dd-test-optimization-efd-command.txt
 ```
 
-7c. Run the second EFD run with known tests from the first run:
+7d. Run the second advanced run with known tests from the first run:
 
 Required: use `--out-dir "$EFD_DIR"` to avoid overwriting root artifacts. It prevents the second
-EFD run from overwriting the root wrapper artifacts and the first EFD baseline artifacts.
+advanced run from overwriting the root wrapper artifacts and the first baseline artifacts.
+Use the top-level loopback prerequisite if the wrapper fails with `listen EPERM 127.0.0.1`.
 
 Verbatim:
 
@@ -807,18 +1882,18 @@ Verbatim:
 set -e
 
 EFD_DIR=dd-test-optimization-efd
-EFD_TEST_COMMAND="$(cat dd-test-optimization-efd-command.txt)"
 
 node ./node_modules/dd-trace/ci/test-optimization-debug.js \
-  --test-command "$EFD_TEST_COMMAND" \
-  --settings-mode efd \
+  --test-command-file dd-test-optimization-efd-command.txt \
+  --settings-mode debug-all \
   --known-tests dd-test-optimization-known-tests.json \
   --new-test-snippet-file dd-test-optimization-efd-new-test-snippet.txt \
+  --flaky-test-snippet-file dd-test-optimization-atr-flaky-test-snippet.txt \
   --out-dir "$EFD_DIR" \
   --no-open
 ```
 
-The EFD fake settings endpoint returns:
+The debug-all fake settings endpoint returns EFD and Auto Test Retries settings:
 
 ```json
 {
@@ -828,6 +1903,8 @@ The EFD fake settings endpoint returns:
       "5s": 3
     }
   },
+  "flaky_test_retries_enabled": true,
+  "flaky_test_retries_count": 1,
   "known_tests_enabled": true
 }
 ```
@@ -848,7 +1925,7 @@ The known-tests endpoint returns the contents of `dd-test-optimization-known-tes
 }
 ```
 
-7d. Validate the EFD result:
+7e. Validate the advanced result:
 
 Verbatim:
 
@@ -856,10 +1933,6 @@ Verbatim:
 node -e '
 const fs = require("node:fs")
 const report = JSON.parse(fs.readFileSync("dd-test-optimization-efd/dd-test-optimization-agent-report.json", "utf8"))
-if (report.primaryStage !== "EFD retried new test") {
-  console.error(`Second EFD run must reach "EFD retried new test", got: ${report.primaryStage}`)
-  process.exit(1)
-}
 if (!report.summary.efd.settingsEnabled) {
   console.error("EFD settings were not enabled in the second run.")
   process.exit(1)
@@ -876,12 +1949,49 @@ if (report.summary.efd.retriedNewTests === 0) {
   console.error("No new test was retried by EFD.")
   process.exit(1)
 }
+if (!report.summary.atr.settingsEnabled) {
+  console.error("Auto Test Retries settings were not enabled in the second run.")
+  process.exit(1)
+}
+if (report.summary.atr.failedExecutions === 0) {
+  console.error("No failing execution was reported for the flaky known test.")
+  process.exit(1)
+}
+if (report.summary.atr.passedExecutions === 0) {
+  console.error("No passing execution was reported for the flaky known test.")
+  process.exit(1)
+}
+if (report.summary.atr.passedRetryTests === 0) {
+  console.error("No passing execution was marked with test.is_retry=true and auto_test_retry.")
+  process.exit(1)
+}
+if (report.summary.atr.failedThenPassedRetryTests === 0) {
+  console.error("No known flaky test reported both a failure and a passing retry.")
+  process.exit(1)
+}
 console.log(`EFD retried new tests: ${report.summary.efd.retriedNewTests}`)
 console.log(`Retried new test names: ${report.summary.efd.retriedNewTestNames.join(", ")}`)
+console.log(`Auto Test Retries flaky tests reported: ${report.summary.atr.failedThenPassedRetryTests}`)
+console.log(`Auto Test Retries flaky test names: ${report.summary.atr.failedThenPassedRetryTestNames.join(", ")}`)
 '
 ```
 
-If this validation passes, report that EFD works for the selected subset.
+If this validation passes, report that EFD and Auto Test Retries work for the selected subset.
+
+If Step 7b/7c used `test-optimization-prepare-advanced.js` or
+`test-optimization-prepare-advanced.js --auto`, restore the temporary edits with:
+
+Verbatim:
+
+```bash
+node ./node_modules/dd-trace/ci/test-optimization-prepare-advanced.js --restore
+git status --short
+```
+
+The helper restore removes the helper-created EFD test file and restores the helper-edited flaky
+test file. After helper restore succeeds, the manual cleanup blocks below should be no-ops. Run
+them only to verify no recorded temporary state remains, or when Step 7b/7c used manual edits
+instead of the helper.
 
 Remove and verify a temporary sibling test file. Remove the file recorded in
 `dd-test-optimization-efd-temp-test-file.txt`.
@@ -893,20 +2003,51 @@ if [ -f dd-test-optimization-efd-temp-test-file.txt ]; then
   EFD_TEMP_TEST_FILE="$(cat dd-test-optimization-efd-temp-test-file.txt)"
   rm -f "$EFD_TEMP_TEST_FILE"
   test ! -e "$EFD_TEMP_TEST_FILE"
+  if git status --short -- "$EFD_TEMP_TEST_FILE" | grep .; then
+    echo "Temporary EFD test file still appears in git status." >&2
+    exit 1
+  fi
   printf 'Temporary EFD test removed: %s\n' "$EFD_TEMP_TEST_FILE"
+  rm -f dd-test-optimization-efd-temp-test-file.txt
 fi
 ```
 
 If the EFD test was appended to an existing file, remove only the temporary test case and run the
 repository-specific cleanup verification recorded in Step 7b.
 
+Restore and verify the known test file changed for Auto Test Retries:
+
+Verbatim:
+
+```bash
+if [ -f dd-test-optimization-atr-flaky-test-file.txt ]; then
+  ATR_FLAKY_TEST_FILE="$(cat dd-test-optimization-atr-flaky-test-file.txt)"
+  ATR_FLAKY_BACKUP="$(cat dd-test-optimization-atr-flaky-test-backup.txt)"
+  cp "$ATR_FLAKY_BACKUP" "$ATR_FLAKY_TEST_FILE"
+  rm -f "$ATR_FLAKY_BACKUP"
+  if grep -q 'dd trace auto retry debug flake' "$ATR_FLAKY_TEST_FILE"; then
+    echo "Temporary Auto Test Retries flaky edit is still present." >&2
+    exit 1
+  fi
+  git diff --exit-code -- "$ATR_FLAKY_TEST_FILE"
+  printf 'Temporary Auto Test Retries edit restored: %s\n' "$ATR_FLAKY_TEST_FILE"
+  rm -f dd-test-optimization-atr-flaky-test-file.txt dd-test-optimization-atr-flaky-test-backup.txt
+fi
+
+git status --short
+```
+
 ### 8. Report back
 
-If the wrapper path was used, include the wrapper final report output or
-`dd-test-optimization-final-report.txt` in the final response. If manual Steps 3-6 were used,
-include the Step 6c stdout report. Do not `cat` `dd-test-optimization-final-report.txt` after Step
-6c; that duplicates the same report. Add notable weird cases not represented in the generated
-report only when needed.
+If the wrapper path was used, read the root `dd-test-optimization-summary.txt` first for the basic
+reporting result and use `dd-test-optimization-final-report.txt` for the required validation paths
+and artifact paths. The root compact summary describes only the root/basic wrapper run. After Step
+7, advanced EFD and Auto Test Retries status must come from the Step 8 extractor or
+`dd-test-optimization-efd/dd-test-optimization-final-report.txt`, not from the root compact
+summary. If manual Steps 3-6 were used, include the Step 6c stdout report or the compact summary,
+then copy the required validation path lines from the final report. Do not `cat`
+`dd-test-optimization-final-report.txt` after Step 6c; that duplicates the same report. Add notable
+weird cases not represented in the generated report only when needed.
 
 Report static warnings and errors from the initial root `dd-test-optimization-static.json`. If the
 wrapper is run without Step 1, use the wrapper-generated root `dd-test-optimization-static.json`.
@@ -914,7 +2055,7 @@ Do not switch to `dd-test-optimization-basic/dd-test-optimization-static.json` o
 `dd-test-optimization-efd/dd-test-optimization-static.json` unless the difference is the notable
 case being reported.
 
-Use this extractor to assemble the required fields from the root and EFD artifacts:
+Use this extractor to assemble the required fields from the root and advanced-check artifacts:
 
 Verbatim:
 
@@ -961,6 +2102,7 @@ const staticFindings = (staticReport.results || [])
 const decodeErrors = Array.isArray(basic.summary?.decodeErrors)
   ? basic.summary.decodeErrors.length
   : basic.summary?.decodeErrors || 0
+const retriedNewTestNames = efd.summary?.efd?.retriedNewTestNames || []
 const eventLevels =
   `sessions=${countEvent(basic, "test_session_end")}, ` +
   `modules=${countEvent(basic, "test_module_end")}, ` +
@@ -970,18 +2112,28 @@ const eventLevels =
 console.log(`HTML report: ${readText("dd-intake-html-file-url.txt", readFinalReportLine("HTML report:"))}`)
 console.log(`HTML report path: ${readText("dd-intake-html-path.txt", readFinalReportLine("HTML report path:"))}`)
 console.log(`Datadog validation: ${readFinalReportLine("Datadog validation:")}`)
-console.log(`EFD Datadog validation: ${readReportLine("dd-test-optimization-efd/dd-test-optimization-final-report.txt", "Datadog validation:")}`)
+console.log(`Advanced Datadog validation: ${readReportLine("dd-test-optimization-efd/dd-test-optimization-final-report.txt", "Datadog validation:")}`)
 console.log(`Final report path: ${process.cwd()}/dd-test-optimization-final-report.txt`)
+console.log(`Compact summary path: ${process.cwd()}/dd-test-optimization-summary.txt`)
+console.log(`Feedback summary path: ${process.cwd()}/dd-test-optimization-feedback-summary.txt`)
 console.log(`Selected test command: ${readText("dd-test-optimization-test-command.txt")}`)
+console.log(`Advanced test command: ${readText("dd-test-optimization-efd-command.txt")}`)
 console.log(`Test result: ${readText("dd-test-optimization-test-result.txt")}`)
 console.log(`Basic primary stage: ${basic.primaryStage || "unknown"}`)
 console.log(`Basic requests: ${basic.summary?.requestCount ?? "unknown"}`)
 console.log(`Event levels: ${eventLevels}`)
 console.log(`Decode errors: ${decodeErrors}`)
-console.log(`EFD status: ${efd.primaryStage === "EFD retried new test" ? "passed" : efd.primaryStage ? "failed" : "not run"}`)
+console.log(`EFD status: ${efd.summary?.efd?.retriedNewTests > 0 ? "passed" : efd.primaryStage ? "failed" : "not run"}`)
 console.log(`EFD known tests received: ${efd.summary?.efd?.knownTestsReceived ?? "n/a"}`)
 console.log(`EFD retried new tests: ${efd.summary?.efd?.retriedNewTests ?? "n/a"}`)
-console.log(`EFD retried new test names: ${(efd.summary?.efd?.retriedNewTestNames || []).join(", ") || "none"}`)
+console.log(`EFD distinct retried new test names: ${new Set(retriedNewTestNames).size}`)
+console.log(`EFD retried new test names: ${retriedNewTestNames.join(", ") || "none"}`)
+console.log(`Auto Test Retries status: ${efd.summary?.atr?.failedThenPassedRetryTests > 0 ? "passed" : efd.primaryStage ? "failed" : "not run"}`)
+console.log(`Auto Test Retries failed executions: ${efd.summary?.atr?.failedExecutions ?? "n/a"}`)
+console.log(`Auto Test Retries passed executions: ${efd.summary?.atr?.passedExecutions ?? "n/a"}`)
+console.log(`Auto Test Retries passed retry executions: ${efd.summary?.atr?.passedRetryTests ?? "n/a"}`)
+console.log(`Auto Test Retries flaky tests reported: ${efd.summary?.atr?.failedThenPassedRetryTests ?? "n/a"}`)
+console.log(`Auto Test Retries flaky test names: ${(efd.summary?.atr?.failedThenPassedRetryTestNames || []).join(", ") || "none"}`)
 console.log(`Static warnings/errors: ${staticFindings.join("; ") || "none"}`)
 '
 ```
@@ -993,60 +2145,116 @@ selected temporary test's suite and test names.
 The final response must include:
 
 - HTML report `file://` URL and absolute path.
-- Datadog validation URL.
-- EFD Datadog validation URL when Step 7 ran.
-- Final report path.
+- Datadog validation relative path.
+- Advanced Datadog validation relative path when Step 7 ran.
+- Final report path and compact summary path.
+- Feedback summary path when the feedback extractor was run.
 - Selected test command and test result.
-- EFD check result when Step 7 ran, including known tests count and retried new tests count.
+- EFD check result when Step 7 ran, including known tests count, retried new test execution count,
+  and distinct retried new test name count.
+- Auto Test Retries check result when Step 7 ran, including failing executions, passing
+  executions, and passing retry executions.
 - The four diagnostic question answers with each question text inline.
 - Static warnings and errors.
 - Recommended next actions.
-- Cleanup confirmation for any temporary EFD test file.
+- Cleanup confirmation for any temporary EFD test file and Auto Test Retries edit.
+
+Reference-only feedback extractor: use Step 2 and Step 3 in `Runbook Feedback Mode: Exact Path`
+for feedback-mode execution. This section is retained only to show the equivalent
+renderer command near the customer-facing Step 8 material. Do not run it after the top-level F9
+block has already been run.
+
+Write actionable feedback text before running the extractor. Use `No actionable feedback.` when
+there is no actionable feedback. The default command below only writes the default text when the
+feedback file does not already exist or is empty.
+
+Verbatim:
+
+```bash
+if [ ! -s dd-test-optimization-actionable-feedback.txt ]; then
+  printf '%s\n' 'No actionable feedback.' > dd-test-optimization-actionable-feedback.txt
+fi
+
+node ./node_modules/dd-trace/ci/test-optimization-feedback-summary.js
+```
+
+Compact feedback response shape:
+
+```text
+Runbook completed: {yes | no, explain}
+Diagnostic outcome: {basic reporting worked | basic reporting did not work | runbook failed, explain}
+Basic reporting: {stage}, requests={count}, event levels={summary}, decode errors={count}
+EFD: {passed | failed | not run}, known tests={count}, retried new tests={retry execution count}, distinct retried names={count}
+Auto Test Retries: {passed | failed | not run}, failed={count}, passed={count}, retry passes={count}
+Reports: {HTML file URL}, {final report path}, {compact summary path}
+Cleanup: {temporary EFD removed/restored status}, {flaky edit restored status}. Diagnostic artifacts intentionally remain untracked until the next Step 0 cleanup.
+Actionable feedback:
+- {feedback or "No actionable feedback."}
+Pre-existing worktree changes:
+{non-diagnostic status lines or "none"}
+Current diagnostic artifacts:
+{diagnostic artifact status lines or "none"}
+```
 
 Final response template:
 
 ```text
 HTML report: file:///absolute/path/to/dd-test-optimization-report.html
 HTML report path: /absolute/path/to/dd-test-optimization-report.html
-Datadog validation: https://app-dev-local.datadoghq.com/ci/test/validation#pako:<payload>
-EFD Datadog validation: https://app-dev-local.datadoghq.com/ci/test/validation#pako:<payload>
+Datadog validation: ci/test/validation#pako:{payload}
+Advanced Datadog validation: ci/test/validation#pako:{payload}
 Final report path: /absolute/path/to/dd-test-optimization-final-report.txt
+Compact summary path: /absolute/path/to/dd-test-optimization-summary.txt
+Feedback summary path: /absolute/path/to/dd-test-optimization-feedback-summary.txt
 
 Selected test command:
-<command>
+{command}
+
+Advanced test command:
+{command}
 
 Test result:
-<one-line result>
+{one-line result}
 
 Basic reporting:
-Primary stage: <stage>
-Requests: <count>
-Event levels: sessions=<count>, modules=<count>, suites=<count>, tests=<count>
-Decode errors: <count>
+Primary stage: {stage}
+Requests: {count}
+Event levels: sessions={count}, modules={count}, suites={count}, tests={count}
+Decode errors: {count}
 
 EFD check:
-Status: <not run | passed | failed>
-Known tests received: <count>
-Retried new tests: <count>
-Retried new test names: <names or none>
+Status: {not run | passed | failed}
+Known tests received: {count}
+Retried new tests: {count}
+Distinct retried new test names: {count}
+Retried new test names: {names or none}
+
+Auto Test Retries check:
+Status: {not run | passed | failed}
+Failed executions: {count}
+Passed executions: {count}
+Passing retry executions: {count}
+Flaky tests reported: {count}
+Flaky test names: {names or none}
 
 Diagnostic answers:
-- Is dd-trace installed and statically configured in a supported way? <answer>
-- Does dd-trace/ci/init reach the test process through NODE_OPTIONS? <answer>
-- Does a small test subset send Test Optimization requests to a local fake intake? <answer>
-- If data is reported, does it include session, module, suite, and test events? <answer>
+- Is dd-trace installed and statically configured in a supported way? {answer}
+- Does dd-trace/ci/init reach the test process through NODE_OPTIONS? {answer}
+- Does a small test subset send Test Optimization requests to a local fake intake? {answer}
+- If data is reported, does it include session, module, suite, and test events? {answer}
 
 Static warnings/errors:
-- <finding>
+- {finding}
 
 Recommended next actions:
-- <action>
+- {action}
 
 Notable execution cases:
-- <only include if needed>
+- {only include if needed}
 
 Cleanup confirmation:
-- Temporary EFD test removed: <yes | not created | no, explain>
+- Temporary EFD test removed: {yes | not created | no, explain}
+- Temporary Auto Test Retries edit restored: {yes | not created | no, explain}
 ```
 
 ## Decision Tree
@@ -1168,6 +2376,25 @@ Observation: `efd.retriedNewTests > 0`.
 Cause: EFD marked a test as new and retried it.
 
 Fix: no EFD retry fix is needed for the selected subset.
+
+### Stage: Auto Test Retry Missing
+
+Observation: `atr.failedThenPassedRetryTests: 0`.
+
+Cause: Auto Test Retries settings were enabled, but no known flaky test reported both a failed
+execution and a passing execution marked with `test.is_retry=true`.
+
+Fix: verify the second run served known tests from the first run, the temporary flaky edit changed
+an already known selected test, and the second command selected that flaky known test.
+
+### Stage: Auto Test Retry Reported Flaky Test
+
+Observation: `atr.failedThenPassedRetryTests > 0`.
+
+Cause: the flaky known test reported both failing and passing executions, and the passing
+execution was marked as an automatic retry.
+
+Fix: no Auto Test Retries fix is needed for the selected subset.
 
 ## Agent Judgment
 

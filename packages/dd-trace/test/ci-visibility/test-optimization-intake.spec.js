@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { execFileSync } = require('node:child_process')
 const fs = require('node:fs')
 const http = require('node:http')
 const os = require('node:os')
@@ -23,14 +24,39 @@ const {
   stopIntake,
 } = require('../../../../ci/test-optimization-intake')
 const {
+  renderFeedbackSummary,
   renderFinalReport,
+  renderSummaryReport,
 } = require('../../../../ci/test-optimization-render-report')
 const {
+  assertAdvancedPlanMatchesSelectedFiles,
   getNodeOptions,
   getTestResult,
   parseArgs: parseDebugArgs,
   runDebug,
 } = require('../../../../ci/test-optimization-debug')
+const {
+  inferPrepareOptions,
+  insertFlakyFailure,
+  prepareAdvancedChecks,
+  restoreAdvancedChecks,
+} = require('../../../../ci/test-optimization-prepare-advanced')
+const {
+  buildTestCommand,
+  selectTestCommand,
+  writeSelection,
+} = require('../../../../ci/test-optimization-select-command')
+const {
+  cleanArtifacts: cleanFeedbackRunnerArtifacts,
+  isDiagnosticStatusLine,
+  getScriptSummary,
+  parseArgs: parseFeedbackRunnerArgs,
+} = require('../../../../ci/test-optimization-feedback-runner')
+const {
+  isDiagnosticStatusLine: isFeedbackSummaryDiagnosticStatusLine,
+  parseArgs: parseFeedbackSummaryArgs,
+  renderFeedbackSummaryOutput,
+} = require('../../../../ci/test-optimization-feedback-summary')
 
 describe('Test Optimization debug intake', () => {
   let tmpDir
@@ -261,6 +287,87 @@ describe('Test Optimization debug intake', () => {
     assert.ok(hasFinding(analysis, 'EFD retried new test'))
   })
 
+  it('reports Auto Test Retries evidence for a flaky known test', () => {
+    const analysis = analyzeIntakeArtifact({
+      intake: {
+        settingsMode: 'atr',
+      },
+      requests: [
+        {
+          category: 'settings',
+          payload: {
+            data: {
+              attributes: {
+                repository_url: 'git@example.com:org/repo.git',
+                sha: 'abcdef',
+                branch: 'main',
+              },
+            },
+          },
+        },
+        {
+          category: 'citestcycle',
+          payload: {
+            events: [
+              {
+                type: 'test_session_end',
+                content: {
+                  test_session_id: 123n,
+                },
+              },
+              {
+                type: 'test_module_end',
+                content: {
+                  test_session_id: 123n,
+                },
+              },
+              {
+                type: 'test_suite_end',
+                content: {
+                  test_session_id: 123n,
+                },
+              },
+              getTestEvent({
+                framework: 'mocha',
+                name: 'already known test',
+                status: 'fail',
+                suite: 'test/sum.spec.js',
+              }),
+              getTestEvent({
+                framework: 'mocha',
+                isRetry: true,
+                name: 'already known test',
+                retryReason: 'auto_test_retry',
+                status: 'pass',
+                suite: 'test/sum.spec.js',
+              }),
+            ],
+          },
+        },
+      ],
+      settings: {
+        responses: [
+          {
+            flaky_test_retries_enabled: true,
+            flaky_test_retries_count: 1,
+            early_flake_detection: {
+              enabled: false,
+            },
+          },
+        ],
+      },
+    })
+
+    assert.strictEqual(analysis.primaryStage, 'Auto test retry reported flaky test')
+    assert.strictEqual(analysis.summary.atr.settingsEnabled, true)
+    assert.strictEqual(analysis.summary.atr.failedExecutions, 1)
+    assert.strictEqual(analysis.summary.atr.passedExecutions, 1)
+    assert.strictEqual(analysis.summary.atr.passedRetryTests, 1)
+    assert.strictEqual(analysis.summary.atr.failedThenPassedRetryTests, 1)
+    assert.deepStrictEqual(analysis.summary.atr.failedThenPassedRetryTestNames, ['already known test'])
+    assert.ok(hasFinding(analysis, 'Auto test retry reported flaky test'))
+  })
+
   it('serves configured EFD settings and known tests', (done) => {
     const knownTests = {
       mocha: {
@@ -376,7 +483,7 @@ describe('Test Optimization debug intake', () => {
           assert.match(analysisText, new RegExp(`\\nHTML report path: ${escapeRegExp(intake.html)}\\n`))
           assert.match(analysisText, /test event levels: sessions=1, modules=1, suites=1, tests=1/)
           assert.match(analysisText, /\nOpen HTML report command: /)
-          assert.match(analysisText, /\nDatadog validation: https:\/\/app-dev-local\.datadoghq\.com/)
+          assert.match(analysisText, /\nDatadog validation: ci\/test\/validation#pako:/)
 
           const validationPayload = getValidationPayload(analysisText)
           const basicCheck = validationPayload.checks.find(check => check.id === 'basic-reporting')
@@ -474,6 +581,8 @@ describe('Test Optimization debug intake', () => {
     assert.deepStrictEqual(parseDebugArgs([
       '--test-command',
       'npm test -- test/sum.spec.js',
+      '--test-command-file',
+      'dd-test-optimization-test-command.txt',
       '--service=ci-debug',
       '--out-dir',
       tmpDir,
@@ -483,10 +592,13 @@ describe('Test Optimization debug intake', () => {
       knownTestsPath,
       '--new-test-snippet-file',
       'dd-test-optimization-efd-new-test-snippet.txt',
+      '--flaky-test-snippet-file',
+      'dd-test-optimization-atr-flaky-test-snippet.txt',
       '--no-clean',
       '--no-open',
     ]), {
       clean: false,
+      flakyTestSnippetFile: 'dd-test-optimization-atr-flaky-test-snippet.txt',
       knownTests,
       open: false,
       outDir: tmpDir,
@@ -495,7 +607,123 @@ describe('Test Optimization debug intake', () => {
       service: 'ci-debug',
       settingsMode: 'efd',
       testCommand: 'npm test -- test/sum.spec.js',
+      testCommandFile: 'dd-test-optimization-test-command.txt',
     })
+  })
+
+  it('parses feedback-mode wrapper arguments', () => {
+    assert.deepStrictEqual(parseDebugArgs([
+      '--feedback-mode',
+      '--test-command-file',
+      'dd-test-optimization-test-command.txt',
+      '--selected-test-files-file=dd-test-optimization-selected-test-files.txt',
+      '--no-open',
+    ]), {
+      clean: true,
+      feedbackMode: true,
+      open: false,
+      selectedTestFilesFile: 'dd-test-optimization-selected-test-files.txt',
+      service: 'dd-test-optimization-debug',
+      testCommandFile: 'dd-test-optimization-test-command.txt',
+    })
+  })
+
+  it('parses feedback runner arguments', () => {
+    assert.deepStrictEqual(parseFeedbackRunnerArgs(['--framework=jest']), {
+      framework: 'jest',
+    })
+    assert.deepStrictEqual(parseFeedbackRunnerArgs(['--framework', 'mocha']), {
+      framework: 'mocha',
+    })
+  })
+
+  it('filters feedback runner diagnostic status lines', () => {
+    assert.strictEqual(isDiagnosticStatusLine('?? dd-test-optimization-report.html'), true)
+    assert.strictEqual(isDiagnosticStatusLine('?? dd-intake-url.txt'), true)
+    assert.strictEqual(isDiagnosticStatusLine(' M dd-test-optimization-final-report.txt'), true)
+    assert.strictEqual(isDiagnosticStatusLine('?? nohup.out'), true)
+    assert.strictEqual(isDiagnosticStatusLine(' M package.json'), false)
+    assert.strictEqual(isDiagnosticStatusLine('?? unrelated.txt'), false)
+  })
+
+  it('parses feedback summary arguments', () => {
+    assert.deepStrictEqual(parseFeedbackSummaryArgs([
+      '--feedback-file=feedback.txt',
+      '--out',
+      'summary.txt',
+      '--preexisting-status-file',
+      'status.txt',
+    ]), {
+      feedbackFile: 'feedback.txt',
+      feedbackSummaryOut: 'summary.txt',
+      preexistingStatusFile: 'status.txt',
+    })
+  })
+
+  it('filters feedback summary diagnostic status lines', () => {
+    assert.strictEqual(isFeedbackSummaryDiagnosticStatusLine('?? dd-test-optimization-report.html'), true)
+    assert.strictEqual(isFeedbackSummaryDiagnosticStatusLine('?? dd-intake-url.txt'), true)
+    assert.strictEqual(isFeedbackSummaryDiagnosticStatusLine(' M dd-test-optimization-final-report.txt'), true)
+    assert.strictEqual(isFeedbackSummaryDiagnosticStatusLine('?? nohup.out'), true)
+    assert.strictEqual(isFeedbackSummaryDiagnosticStatusLine(' M package.json'), false)
+    assert.strictEqual(isFeedbackSummaryDiagnosticStatusLine('?? unrelated.txt'), false)
+  })
+
+  it('summarizes package scripts for feedback runner discovery output', () => {
+    assert.deepStrictEqual(getScriptSummary({
+      build: 'tsc',
+      lint: 'eslint .',
+      test: 'jest',
+      'test:debug': 'jest --runInBand',
+    }), {
+      count: 4,
+      test: 'jest',
+      testScripts: ['test', 'test:debug'],
+    })
+  })
+
+  it('cleans feedback runner artifacts without removing preexisting status', () => {
+    const cwd = process.cwd()
+    const artifact = path.join(tmpDir, 'dd-test-optimization-agent-report.json')
+    const directory = path.join(tmpDir, 'dd-test-optimization-basic')
+    const preexistingStatus = path.join(tmpDir, 'dd-test-optimization-preexisting-status.txt')
+
+    fs.writeFileSync(artifact, '{}\n')
+    fs.mkdirSync(directory)
+    fs.writeFileSync(path.join(directory, 'nested.txt'), 'nested\n')
+    fs.writeFileSync(preexistingStatus, ' M package.json\n')
+    process.chdir(tmpDir)
+
+    try {
+      cleanFeedbackRunnerArtifacts()
+
+      assert.strictEqual(fs.existsSync(artifact), false)
+      assert.strictEqual(fs.existsSync(directory), false)
+      assert.strictEqual(fs.readFileSync(preexistingStatus, 'utf8'), ' M package.json\n')
+    } finally {
+      process.chdir(cwd)
+    }
+  })
+
+  it('matches advanced dry-run targets against newline-selected files', () => {
+    assertAdvancedPlanMatchesSelectedFiles({
+      efdTestFile: 'test path/dd-trace-efd-debug.test.js',
+      flakyTestFile: 'test path/sum.spec.js',
+    }, ['test path/sum.spec.js'])
+
+    assert.throws(() => {
+      assertAdvancedPlanMatchesSelectedFiles({
+        efdTestFile: 'other/dd-trace-efd-debug.test.js',
+        flakyTestFile: 'test path/sum.spec.js',
+      }, ['test path/sum.spec.js'])
+    }, /Temporary EFD file is not under a selected test directory/)
+
+    assert.throws(() => {
+      assertAdvancedPlanMatchesSelectedFiles({
+        efdTestFile: 'test path/dd-trace-efd-debug.test.js',
+        flakyTestFile: 'test path/other.spec.js',
+      }, ['test path/sum.spec.js'])
+    }, /Auto Test Retries flaky file is not one of the selected test files/)
   })
 
   it('builds NODE_OPTIONS for regular and Vitest test processes', () => {
@@ -549,6 +777,7 @@ describe('Test Optimization debug intake', () => {
 
   it('runs the debug wrapper and writes artifacts', (done) => {
     const testCommand = 'node report.js'
+    const testCommandFile = path.join(tmpDir, 'selected-command.txt')
     const cwd = process.cwd()
 
     fs.mkdirSync(path.join(tmpDir, 'node_modules/dd-trace/ci'), { recursive: true })
@@ -561,6 +790,7 @@ describe('Test Optimization debug intake', () => {
       version: '6.0.0-test',
     }))
     fs.writeFileSync(path.join(tmpDir, 'node_modules/dd-trace/ci/init.js'), '')
+    fs.writeFileSync(testCommandFile, `${testCommand}\n`)
     fs.writeFileSync(path.join(tmpDir, 'report.js'), [
       'fetch(process.env.DD_CIVISIBILITY_AGENTLESS_URL + "/info")',
       '  .then(() => console.log("2 passing"))',
@@ -578,7 +808,7 @@ describe('Test Optimization debug intake', () => {
       outDir: tmpDir,
       service: 'ci-debug',
       silent: true,
-      testCommand,
+      testCommandFile,
     }, (error, report) => {
       try {
         process.chdir(cwd)
@@ -612,6 +842,7 @@ describe('Test Optimization debug intake', () => {
           /NODE_OPTIONS=-r dd-trace\/ci\/init\n/
         )
         assert.ok(fs.existsSync(path.join(tmpDir, 'dd-test-optimization-final-report.txt')))
+        assert.ok(fs.existsSync(path.join(tmpDir, 'dd-test-optimization-summary.txt')))
         assert.ok(fs.existsSync(path.join(tmpDir, 'dd-test-optimization-agent-report.json')))
         done()
       } catch (assertionError) {
@@ -619,6 +850,375 @@ describe('Test Optimization debug intake', () => {
         done(assertionError)
       }
     })
+  })
+
+  it('prepares and restores advanced check temporary edits', () => {
+    const cwd = process.cwd()
+    const testFile = path.join(tmpDir, 'test/sum.spec.js')
+    const efdTestFile = path.join(tmpDir, 'test/dd-trace-efd-debug.spec.js')
+    const original = [
+      'const assert = require(\'node:assert/strict\')',
+      '',
+      'describe(\'sum\', () => {',
+      '  it(\'adds numbers\', () => {',
+      '    assert.strictEqual(1 + 1, 2)',
+      '  })',
+      '})',
+      '',
+    ].join('\n')
+
+    fs.mkdirSync(path.dirname(testFile), { recursive: true })
+    fs.writeFileSync(testFile, original)
+    process.chdir(tmpDir)
+
+    try {
+      prepareAdvancedChecks({
+        efdCommand: 'npm test -- test/sum.spec.js test/dd-trace-efd-debug.spec.js',
+        efdTestFile: 'test/dd-trace-efd-debug.spec.js',
+        flakyTestFile: 'test/sum.spec.js',
+        flakyTestName: 'adds numbers',
+        framework: 'mocha',
+      })
+
+      assert.ok(fs.existsSync(efdTestFile))
+      assert.match(fs.readFileSync(testFile, 'utf8'), /dd trace auto retry debug flake/)
+      assert.match(
+        fs.readFileSync('dd-test-optimization-atr-flaky-test-snippet.txt', 'utf8'),
+        /it\('adds numbers'/
+      )
+      assert.strictEqual(
+        fs.readFileSync('dd-test-optimization-efd-command.txt', 'utf8'),
+        'npm test -- test/sum.spec.js test/dd-trace-efd-debug.spec.js\n'
+      )
+
+      restoreAdvancedChecks()
+
+      assert.ok(!fs.existsSync(efdTestFile))
+      assert.strictEqual(fs.readFileSync(testFile, 'utf8'), original)
+      assert.ok(!fs.existsSync('dd-test-optimization-atr-flaky-test-file.txt'))
+      assert.ok(!fs.existsSync('dd-test-optimization-atr-flaky-test-backup.txt'))
+    } finally {
+      process.chdir(cwd)
+    }
+  })
+
+  it('refuses to prepare advanced checks when the known test file has git changes', () => {
+    const cwd = process.cwd()
+    const testFile = path.join(tmpDir, 'test/sum.spec.js')
+    const efdTestFile = path.join(tmpDir, 'test/dd-trace-efd-debug.spec.js')
+    const original = [
+      'const assert = require(\'node:assert/strict\')',
+      '',
+      'describe(\'sum\', () => {',
+      '  it(\'adds numbers\', () => {',
+      '    assert.strictEqual(1 + 1, 2)',
+      '  })',
+      '})',
+      '',
+    ].join('\n')
+
+    fs.mkdirSync(path.dirname(testFile), { recursive: true })
+    fs.writeFileSync(testFile, original)
+    process.chdir(tmpDir)
+
+    try {
+      execFileSync('git', ['init'], { stdio: 'ignore' })
+      execFileSync('git', ['add', 'test/sum.spec.js'], { stdio: 'ignore' })
+      execFileSync('git', [
+        '-c',
+        'user.name=Test',
+        '-c',
+        'user.email=test@example.com',
+        '-c',
+        'commit.gpgsign=false',
+        'commit',
+        '-m',
+        'init',
+      ], { stdio: 'ignore' })
+
+      fs.appendFileSync(testFile, '// local edit\n')
+
+      assert.throws(() => prepareAdvancedChecks({
+        efdCommand: 'npm test -- test/sum.spec.js test/dd-trace-efd-debug.spec.js',
+        efdTestFile: 'test/dd-trace-efd-debug.spec.js',
+        flakyTestFile: 'test/sum.spec.js',
+        flakyTestName: 'adds numbers',
+        framework: 'mocha',
+      }), /Refusing to edit dirty known test file/)
+      assert.ok(!fs.existsSync(efdTestFile))
+      assert.ok(!fs.existsSync('dd-test-optimization-atr-flaky-test-file.txt'))
+    } finally {
+      process.chdir(cwd)
+    }
+  })
+
+  it('infers advanced check options from known-tests and selected-command artifacts', () => {
+    const cwd = process.cwd()
+    const testFile = path.join(tmpDir, 'test/sum.spec.js')
+    const efdTestFile = path.join(tmpDir, 'test/dd-trace-efd-debug.spec.js')
+    const original = [
+      'const assert = require(\'node:assert/strict\')',
+      '',
+      'describe(\'sum\', () => {',
+      '  it(\'adds numbers\', () => {',
+      '    assert.strictEqual(1 + 1, 2)',
+      '  })',
+      '})',
+      '',
+    ].join('\n')
+
+    fs.mkdirSync(path.dirname(testFile), { recursive: true })
+    fs.writeFileSync(testFile, original)
+    process.chdir(tmpDir)
+    fs.writeFileSync('dd-test-optimization-test-command.txt', 'npm test -- test/sum.spec.js\n')
+    fs.writeFileSync('dd-test-optimization-known-tests.json', JSON.stringify({
+      mocha: {
+        'test/sum.spec.js': ['sum adds numbers'],
+      },
+    }))
+
+    try {
+      assert.deepStrictEqual(inferPrepareOptions({ auto: true }), {
+        auto: true,
+        efdCommand: 'npm test -- test/sum.spec.js test/dd-trace-efd-debug.spec.js',
+        efdTestFile: 'test/dd-trace-efd-debug.spec.js',
+        efdTestName: 'dd trace EFD debug temporary test',
+        flakyTestFile: 'test/sum.spec.js',
+        flakyTestName: 'sum adds numbers',
+        framework: 'mocha',
+      })
+
+      prepareAdvancedChecks({ auto: true })
+
+      assert.ok(fs.existsSync(efdTestFile))
+      assert.match(fs.readFileSync(efdTestFile, 'utf8'), /assert\.strictEqual/)
+      assert.match(fs.readFileSync(testFile, 'utf8'), /dd trace auto retry debug flake/)
+      assert.strictEqual(
+        fs.readFileSync('dd-test-optimization-efd-command.txt', 'utf8'),
+        'npm test -- test/sum.spec.js test/dd-trace-efd-debug.spec.js\n'
+      )
+
+      restoreAdvancedChecks()
+
+      assert.ok(!fs.existsSync(efdTestFile))
+      assert.strictEqual(fs.readFileSync(testFile, 'utf8'), original)
+    } finally {
+      process.chdir(cwd)
+    }
+  })
+
+  it('inserts inferred EFD test files before trailing runner flags', () => {
+    const cwd = process.cwd()
+    const testFile = path.join(tmpDir, 'packages/plugin-gate/src/__tests__/scope.test.ts')
+
+    fs.mkdirSync(path.dirname(testFile), { recursive: true })
+    fs.writeFileSync(testFile, [
+      'describe(\'scope\', () => {',
+      '  test(\'parses scope\', () => {',
+      '    expect(true).toBe(true)',
+      '  })',
+      '})',
+      '',
+    ].join('\n'))
+    process.chdir(tmpDir)
+    fs.writeFileSync(
+      'dd-test-optimization-test-command.txt',
+      'yarn test packages/plugin-gate/src/__tests__/scope.test.ts --runInBand\n'
+    )
+    fs.writeFileSync('dd-test-optimization-known-tests.json', JSON.stringify({
+      jest: {
+        'packages/plugin-gate/src/__tests__/scope.test.ts': ['scope parses scope'],
+      },
+    }))
+
+    try {
+      assert.deepStrictEqual(inferPrepareOptions({ auto: true }), {
+        auto: true,
+        efdCommand:
+          'yarn test packages/plugin-gate/src/__tests__/scope.test.ts ' +
+          'packages/plugin-gate/src/__tests__/dd-trace-efd-debug.test.ts --runInBand',
+        efdTestFile: 'packages/plugin-gate/src/__tests__/dd-trace-efd-debug.test.ts',
+        efdTestName: 'dd trace EFD debug temporary test',
+        flakyTestFile: 'packages/plugin-gate/src/__tests__/scope.test.ts',
+        flakyTestName: 'scope parses scope',
+        framework: 'jest',
+      })
+    } finally {
+      process.chdir(cwd)
+    }
+  })
+
+  it('builds selected test commands for common package managers', () => {
+    assert.strictEqual(
+      buildTestCommand({
+        scripts: {
+          test: 'node node_modules/jest/bin/jest',
+        },
+      }, 'yarn', 'jest', 'packages/foo/src/__tests__/scope.test.ts'),
+      'yarn test packages/foo/src/__tests__/scope.test.ts --runInBand'
+    )
+    assert.strictEqual(
+      buildTestCommand({
+        scripts: {
+          test: 'mocha',
+        },
+      }, 'npm', 'mocha', 'test/sum.spec.js'),
+      'npm test -- test/sum.spec.js'
+    )
+    assert.strictEqual(
+      buildTestCommand({}, 'npm', 'vitest', 'test/sum.test.ts'),
+      './node_modules/.bin/vitest run test/sum.test.ts'
+    )
+  })
+
+  it('selects a clean unit test command and writes F0-select inputs', () => {
+    const cwd = process.cwd()
+    const e2eTestFile = path.join(tmpDir, 'e2e/cloud-run.test.ts')
+    const dirtyTestFile = path.join(tmpDir, 'packages/dirty/src/__tests__/scope.test.ts')
+    const selectedTestFile = path.join(tmpDir, 'packages/plugin-gate/src/__tests__/scope.test.ts')
+
+    fs.mkdirSync(path.dirname(e2eTestFile), { recursive: true })
+    fs.mkdirSync(path.dirname(dirtyTestFile), { recursive: true })
+    fs.mkdirSync(path.dirname(selectedTestFile), { recursive: true })
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({
+      devDependencies: {
+        jest: '29.6.4',
+      },
+      packageManager: 'yarn@4.10.3',
+      scripts: {
+        test: 'node node_modules/jest/bin/jest --colors',
+      },
+    }))
+    fs.writeFileSync(e2eTestFile, getSimpleJestTestSource('cloud run works'))
+    fs.writeFileSync(dirtyTestFile, getSimpleJestTestSource('dirty test works'))
+    fs.writeFileSync(selectedTestFile, getSimpleJestTestSource('scope test works'))
+
+    process.chdir(tmpDir)
+
+    try {
+      execFileSync('git', ['init'], { stdio: 'ignore' })
+      execFileSync('git', ['config', 'user.email', 'test@example.com'], { stdio: 'ignore' })
+      execFileSync('git', ['config', 'user.name', 'Test'], { stdio: 'ignore' })
+      execFileSync('git', ['add', '.'], { stdio: 'ignore' })
+      execFileSync('git', [
+        '-c',
+        'commit.gpgsign=false',
+        'commit',
+        '-m',
+        'init',
+      ], { stdio: 'ignore' })
+
+      fs.appendFileSync(dirtyTestFile, '// local edit\n')
+
+      const selection = selectTestCommand()
+
+      assert.deepStrictEqual({
+        command: selection.command,
+        file: selection.file,
+        framework: selection.framework,
+        packageManager: selection.packageManager,
+      }, {
+        command: 'yarn test packages/plugin-gate/src/__tests__/scope.test.ts --runInBand',
+        file: 'packages/plugin-gate/src/__tests__/scope.test.ts',
+        framework: 'jest',
+        packageManager: 'yarn',
+      })
+
+      writeSelection({
+        commandOut: 'dd-test-optimization-selected-command.input',
+        filesOut: 'dd-test-optimization-selected-files.input',
+      }, selection)
+
+      assert.strictEqual(
+        fs.readFileSync('dd-test-optimization-selected-command.input', 'utf8'),
+        'yarn test packages/plugin-gate/src/__tests__/scope.test.ts --runInBand\n'
+      )
+      assert.strictEqual(
+        fs.readFileSync('dd-test-optimization-selected-files.input', 'utf8'),
+        'packages/plugin-gate/src/__tests__/scope.test.ts\n'
+      )
+    } finally {
+      process.chdir(cwd)
+    }
+  })
+
+  it('dry-runs advanced check preparation without writing temporary edits', () => {
+    const cwd = process.cwd()
+    const testFile = path.join(tmpDir, 'test/sum.spec.js')
+    const efdTestFile = path.join(tmpDir, 'test/dd-trace-efd-debug.spec.js')
+    const prepareScript = path.join(cwd, 'ci/test-optimization-prepare-advanced.js')
+    const original = [
+      'const assert = require(\'node:assert/strict\')',
+      '',
+      'describe(\'sum\', () => {',
+      '  it(\'adds numbers\', () => {',
+      '    assert.strictEqual(1 + 1, 2)',
+      '  })',
+      '})',
+      '',
+    ].join('\n')
+
+    fs.mkdirSync(path.dirname(testFile), { recursive: true })
+    fs.writeFileSync(testFile, original)
+    process.chdir(tmpDir)
+    fs.writeFileSync('dd-test-optimization-test-command.txt', 'npm test -- test/sum.spec.js\n')
+    fs.writeFileSync('dd-test-optimization-known-tests.json', JSON.stringify({
+      mocha: {
+        'test/sum.spec.js': ['sum adds numbers'],
+      },
+    }))
+
+    try {
+      const output = execFileSync(process.execPath, [prepareScript, '--auto', '--dry-run'], {
+        encoding: 'utf8',
+      })
+
+      assert.ok(!fs.existsSync(efdTestFile))
+      assert.strictEqual(fs.readFileSync(testFile, 'utf8'), original)
+      assert.ok(!fs.existsSync('dd-test-optimization-efd-command.txt'))
+      assert.match(output, /Advanced helper dry run:/)
+      assert.match(output, /Temporary EFD test file: test\/dd-trace-efd-debug\.spec\.js/)
+      assert.match(output, /Auto Test Retries flaky test file: test\/sum\.spec\.js/)
+      assert.match(output, /No files written\./)
+    } finally {
+      process.chdir(cwd)
+    }
+  })
+
+  it('inserts one-time flaky failure into simple test callbacks', () => {
+    const source = [
+      'import {parseScope} from \'../utils\'',
+      '',
+      'describe(\'parseScope\', () => {',
+      '  test(\'falls back\', () => {',
+      '    expect(parseScope([\'\'])).toEqual({})',
+      '  })',
+      '})',
+      '',
+    ].join('\n')
+    const result = insertFlakyFailure(source, 'falls back')
+
+    assert.match(result.source, /let ddTraceAutoRetryCounter = 0/)
+    assert.match(result.source, /throw new Error\('dd trace auto retry debug flake'\)/)
+    assert.match(result.snippet, /test\('falls back'/)
+  })
+
+  it('matches suite-qualified names when preparing flaky known tests', () => {
+    const source = [
+      'import {parseScope} from \'../utils\'',
+      '',
+      'describe(\'parseScope\', () => {',
+      '  test(\'falls back\', () => {',
+      '    expect(parseScope([\'\'])).toEqual({})',
+      '  })',
+      '})',
+      '',
+    ].join('\n')
+    const result = insertFlakyFailure(source, 'parseScope falls back')
+
+    assert.match(result.source, /let ddTraceAutoRetryCounter = 0/)
+    assert.match(result.source, /throw new Error\('dd trace auto retry debug flake'\)/)
+    assert.match(result.snippet, /test\('falls back'/)
   })
 
   it('renders the final runbook report', () => {
@@ -656,7 +1256,7 @@ describe('Test Optimization debug intake', () => {
     })
 
     assert.match(report, new RegExp(`^HTML report: ${escapeRegExp(pathToFileURL(htmlPath).href)}\\n`))
-    assert.match(report, /\nDatadog validation: https:\/\/app-dev-local\.datadoghq\.com/)
+    assert.match(report, /\nDatadog validation: ci\/test\/validation#pako:/)
     assert.match(report, /Primary funnel stage: Reporting complete/)
     assert.match(report, /Scope:\n- Selected test subset only\./)
     assert.match(report, /- Framework: Mocha 11\.7\.6/)
@@ -679,6 +1279,16 @@ describe('Test Optimization debug intake', () => {
     assert.match(report, /Agent JSON report: /)
 
     const validationPayload = getValidationPayload(report)
+    const summary = renderSummaryReport({
+      static: staticPath,
+      intake: intakePath,
+      testCommandFile: testCommandPath,
+      testExitCodeFile: testExitCodePath,
+      testResult: '3 passing',
+      envFile: envPath,
+      agentReport: path.join(tmpDir, 'agent.txt'),
+      agentJsonReport: path.join(tmpDir, 'agent.json'),
+    })
     const basicCheck = validationPayload.checks.find(check => check.id === 'basic-reporting')
     const runTestsStep = basicCheck.steps.find(step => step.id === 'run-tests')
     const eventsStep = basicCheck.steps.find(step => step.id === 'check-events')
@@ -700,6 +1310,93 @@ describe('Test Optimization debug intake', () => {
     assert.strictEqual(validationPayload.summary, undefined)
     assert.strictEqual(validationPayload.env, undefined)
     assert.strictEqual(validationPayload.test, undefined)
+    assert.match(summary, /Test Optimization debug summary/)
+    assert.match(summary, /Primary funnel stage: Reporting complete/)
+    assert.match(summary, /Selected test command: npm test -- test\/sum\.spec\.js/)
+    assert.match(summary, /Test result: 3 passing/)
+    assert.match(summary, /EFD status: not run/)
+    assert.match(summary, /Auto Test Retries status: not run/)
+    assert.match(summary, /Validation path: see the final report Datadog validation line\./)
+  })
+
+  it('renders compact feedback summary from root and advanced reports', () => {
+    const basicReportPath = path.join(tmpDir, 'agent-report.json')
+    const efdDir = path.join(tmpDir, 'dd-test-optimization-efd')
+    const advancedReportPath = path.join(efdDir, 'agent-report.json')
+    const finalReportPath = path.join(tmpDir, 'final-report.txt')
+    const summaryPath = path.join(tmpDir, 'summary.txt')
+    const feedbackPath = path.join(tmpDir, 'feedback.txt')
+
+    fs.mkdirSync(efdDir)
+    fs.writeFileSync(
+      basicReportPath,
+      JSON.stringify(analyzeIntakeArtifact(getCompleteIntakeArtifact('intake.json', 'report.html')), null, 2)
+    )
+    fs.writeFileSync(
+      advancedReportPath,
+      JSON.stringify(analyzeIntakeArtifact(getDebugAllIntakeArtifact('efd-intake.json', 'efd-report.html')), null, 2)
+    )
+    fs.writeFileSync(finalReportPath, 'HTML report: file:///tmp/dd-test-optimization-report.html\n')
+    fs.writeFileSync(feedbackPath, 'No actionable feedback.\n')
+
+    const summary = renderFeedbackSummary({
+      agentJsonReport: basicReportPath,
+      advancedAgentJsonReport: advancedReportPath,
+      compactSummary: summaryPath,
+      feedbackFile: feedbackPath,
+      finalReport: finalReportPath,
+    })
+
+    assert.match(summary, /^Runbook completed: yes/m)
+    assert.match(summary, /Diagnostic outcome: basic reporting worked/)
+    assert.match(
+      summary,
+      /Basic reporting: Reporting complete, requests=1, event levels=sessions=1, modules=1, suites=1, tests=1/
+    )
+    assert.match(summary, /EFD: passed, known tests=1, retried new tests=1, distinct retried names=1/)
+    assert.match(summary, /Auto Test Retries: passed, failed=1, passed=1, retry passes=1/)
+    assert.match(summary, /Reports: file:\/\/\/tmp\/dd-test-optimization-report\.html/)
+    assert.match(summary, /Cleanup: temporary EFD removed\/restored, flaky edit restored/)
+    assert.match(summary, /Actionable feedback:\n- No actionable feedback\./)
+  })
+
+  it('renders feedback summary output with status sections', () => {
+    const cwd = process.cwd()
+    const efdDir = path.join(tmpDir, 'dd-test-optimization-efd')
+
+    execFileSync('git', ['init'], { cwd: tmpDir, stdio: 'ignore' })
+    fs.mkdirSync(efdDir)
+    fs.writeFileSync(
+      path.join(tmpDir, 'dd-test-optimization-agent-report.json'),
+      JSON.stringify(analyzeIntakeArtifact(getCompleteIntakeArtifact('intake.json', 'report.html')), null, 2)
+    )
+    fs.writeFileSync(
+      path.join(efdDir, 'dd-test-optimization-agent-report.json'),
+      JSON.stringify(analyzeIntakeArtifact(getDebugAllIntakeArtifact('efd-intake.json', 'efd-report.html')), null, 2)
+    )
+    fs.writeFileSync(
+      path.join(tmpDir, 'dd-test-optimization-final-report.txt'),
+      'HTML report: file:///tmp/dd-test-optimization-report.html\n'
+    )
+    fs.writeFileSync(path.join(tmpDir, 'dd-test-optimization-actionable-feedback.txt'), 'No actionable feedback.\n')
+    fs.writeFileSync(path.join(tmpDir, 'dd-test-optimization-preexisting-status.txt'), ' M package.json\n')
+
+    process.chdir(tmpDir)
+
+    try {
+      const output = renderFeedbackSummaryOutput(parseFeedbackSummaryArgs([]))
+
+      assert.match(output, /^Runbook completed: yes/m)
+      assert.match(output, /Feedback summary path:\n/)
+      assert.match(output, /Pre-existing worktree changes:\n M package\.json/)
+      assert.match(output, /Current diagnostic artifacts:\n(?:.*\n)*\?\? dd-test-optimization-agent-report\.json/)
+      assert.strictEqual(
+        fs.existsSync(path.join(tmpDir, 'dd-test-optimization-feedback-summary.txt')),
+        true
+      )
+    } finally {
+      process.chdir(cwd)
+    }
   })
 
   it('renders EFD evidence in the final runbook report', () => {
@@ -738,6 +1435,7 @@ describe('Test Optimization debug intake', () => {
     assert.match(report, /- Known tests received: 1/)
     assert.match(report, /- New tests observed: 1/)
     assert.match(report, /- Retried new tests: 1/)
+    assert.match(report, /- Distinct retried new test names: 1/)
     assert.match(report, /Early Flake Detection retried a new test for: npm test -- test\/sum\.spec\.js/)
 
     const validationPayload = getValidationPayload(report)
@@ -750,6 +1448,67 @@ describe('Test Optimization debug intake', () => {
     assert.strictEqual(efdCheck.status, 'ok')
     assert.strictEqual(addNewTestStep.snippet, newTestSnippet)
     assert.strictEqual(retryStep.evidence.retriedNewTests, 1)
+  })
+
+  it('renders Auto Test Retries evidence in the final runbook report', () => {
+    const staticPath = path.join(tmpDir, 'static.json')
+    const intakePath = path.join(tmpDir, 'intake.json')
+    const htmlPath = path.join(tmpDir, 'report.html')
+    const testCommandPath = path.join(tmpDir, 'test-command.txt')
+    const testExitCodePath = path.join(tmpDir, 'test-exit-code.txt')
+    const testCommand = 'npm test -- test/sum.spec.js test/dd-trace-efd-debug.spec.js'
+    const newTestSnippet = [
+      'describe("dd trace EFD debug", () => {',
+      '  it("dd trace EFD debug temporary test", () => {',
+      '    assert.strictEqual(1 + 1, 2)',
+      '  })',
+      '})',
+    ].join('\n')
+    const flakyTestSnippet = [
+      'let ddTraceAutoRetryCounter = 0',
+      'it("sum adds positive numbers", () => {',
+      '  if (ddTraceAutoRetryCounter++ === 0) throw new Error("dd trace auto retry debug flake")',
+      '  assert.strictEqual(1 + 1, 2)',
+      '})',
+    ].join('\n')
+
+    fs.writeFileSync(staticPath, JSON.stringify(getStaticReport(), null, 2))
+    fs.writeFileSync(intakePath, JSON.stringify(getDebugAllIntakeArtifact(intakePath, htmlPath), null, 2))
+    fs.writeFileSync(testCommandPath, `${testCommand}\n`)
+    fs.writeFileSync(testExitCodePath, '0\n')
+
+    const report = renderFinalReport({
+      static: staticPath,
+      intake: intakePath,
+      testCommandFile: testCommandPath,
+      testExitCodeFile: testExitCodePath,
+      testResult: '7 passing',
+      flakyTestSnippet,
+      newTestSnippet,
+    })
+
+    assert.match(report, /- Auto Test Retries check: failed and passing retry executions/)
+    assert.match(report, /- Auto Test Retries settings enabled: yes/)
+    assert.match(report, /- Auto Test Retries failed executions: 1/)
+    assert.match(report, /- Auto Test Retries passed executions: 1/)
+    assert.match(report, /- Auto Test Retries passed retry executions: 1/)
+    assert.match(report, /- Auto Test Retries flaky tests reported: 1/)
+
+    const validationPayload = getValidationPayload(report)
+    const atrCheck = validationPayload.checks.find(check => check.id === 'auto-test-retries')
+    const flakyStep = atrCheck.steps.find(step => step.id === 'make-known-test-flaky')
+    const executionsStep = atrCheck.steps.find(step => step.id === 'check-failing-and-passing-executions')
+    const retryStep = atrCheck.steps.find(step => step.id === 'check-passing-execution-marked-retry')
+
+    assert.strictEqual(validationPayload.status, 'ok')
+    assert.strictEqual(validationPayload.checks.length, 3)
+    assert.strictEqual(atrCheck.status, 'ok')
+    assert.strictEqual(flakyStep.snippet, flakyTestSnippet)
+    assert.strictEqual(executionsStep.evidence.failedExecutions, 1)
+    assert.strictEqual(executionsStep.evidence.passedExecutions, 1)
+    assert.deepStrictEqual(executionsStep.evidence.failedThenPassedRetryTestNames, ['sum adds positive numbers'])
+    assert.strictEqual(retryStep.evidence.passedRetryTests, 1)
+    assert.deepStrictEqual(retryStep.evidence.passedRetryTestNames, ['sum adds positive numbers'])
   })
 
   it('requires a test command when rendering the final report', () => {
@@ -779,7 +1538,7 @@ function getValidationPayload (text) {
   assert.ok(line)
 
   const url = line.slice('Datadog validation: '.length)
-  assert.match(url, /^https:\/\/app-dev-local\.datadoghq\.com\/ci\/test\/validation#pako:[A-Za-z0-9_-]+$/)
+  assert.match(url, /^ci\/test\/validation#pako:[A-Za-z0-9_-]+$/)
 
   const encoded = url.slice(url.indexOf('#pako:') + '#pako:'.length)
   const json = zlib.inflateSync(Buffer.from(encoded, 'base64url')).toString('utf8')
@@ -915,11 +1674,52 @@ function getEfdIntakeArtifact (intakePath, htmlPath) {
   }
 }
 
-function getTestEvent ({ framework, isNew, isRetry, name, sessionId = '123', suite }) {
+function getDebugAllIntakeArtifact (intakePath, htmlPath) {
+  const artifact = getEfdIntakeArtifact(intakePath, htmlPath)
+
+  artifact.intake.settingsMode = 'debug-all'
+  artifact.requests[2].payload.events.push(
+    getTestEvent({
+      framework: 'mocha',
+      name: 'sum adds positive numbers',
+      sessionId: '1',
+      status: 'fail',
+      suite: 'test/sum.spec.js',
+    }),
+    getTestEvent({
+      framework: 'mocha',
+      isRetry: true,
+      name: 'sum adds positive numbers',
+      retryReason: 'auto_test_retry',
+      sessionId: '1',
+      status: 'pass',
+      suite: 'test/sum.spec.js',
+    })
+  )
+  artifact.settings.responses[0].flaky_test_retries_enabled = true
+  artifact.settings.responses[0].flaky_test_retries_count = 1
+
+  return artifact
+}
+
+function getTestEvent ({
+  framework,
+  isNew,
+  isRetry,
+  name,
+  retryReason = 'early_flake_detection',
+  sessionId = '123',
+  status,
+  suite,
+}) {
   const meta = {
     'test.framework': framework,
     'test.name': name,
     'test.suite': suite,
+  }
+
+  if (status) {
+    meta['test.status'] = status
   }
 
   if (isNew) {
@@ -928,7 +1728,7 @@ function getTestEvent ({ framework, isNew, isRetry, name, sessionId = '123', sui
 
   if (isRetry) {
     meta['test.is_retry'] = 'true'
-    meta['test.retry_reason'] = 'early_flake_detection'
+    meta['test.retry_reason'] = retryReason
   }
 
   return {
@@ -1022,6 +1822,17 @@ function getExpectedOpenCommand (file) {
     `firefox ${shellQuote(file)}`,
     `xdg-open ${shellQuote(file)}`,
   ].join(' || ')
+}
+
+function getSimpleJestTestSource (testName) {
+  return [
+    'describe(\'selected test\', () => {',
+    `  test(${JSON.stringify(testName)}, () => {`,
+    '    expect(true).toBe(true)',
+    '  })',
+    '})',
+    '',
+  ].join('\n')
 }
 
 function shellQuote (value) {

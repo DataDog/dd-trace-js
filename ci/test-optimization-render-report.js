@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict'
 
-/* eslint-disable no-console */
+/* eslint-disable no-console, eslint-rules/eslint-process-env */
 
 const fs = require('node:fs')
 const path = require('node:path')
@@ -80,6 +80,14 @@ function parseArgs (args) {
       options.newTestSnippetFile = args[++i]
     } else if (arg.startsWith('--new-test-snippet-file=')) {
       options.newTestSnippetFile = arg.slice('--new-test-snippet-file='.length)
+    } else if (arg === '--flaky-test-snippet') {
+      options.flakyTestSnippet = args[++i]
+    } else if (arg.startsWith('--flaky-test-snippet=')) {
+      options.flakyTestSnippet = arg.slice('--flaky-test-snippet='.length)
+    } else if (arg === '--flaky-test-snippet-file') {
+      options.flakyTestSnippetFile = args[++i]
+    } else if (arg.startsWith('--flaky-test-snippet-file=')) {
+      options.flakyTestSnippetFile = arg.slice('--flaky-test-snippet-file='.length)
     } else if (arg === '--env') {
       options.env.push(args[++i])
     } else if (arg.startsWith('--env=')) {
@@ -104,6 +112,34 @@ function parseArgs (args) {
       options.out = args[++i]
     } else if (arg.startsWith('--out=')) {
       options.out = arg.slice('--out='.length)
+    } else if (arg === '--summary-out') {
+      options.summaryOut = args[++i]
+    } else if (arg.startsWith('--summary-out=')) {
+      options.summaryOut = arg.slice('--summary-out='.length)
+    } else if (arg === '--feedback-summary-out') {
+      options.feedbackSummaryOut = args[++i]
+    } else if (arg.startsWith('--feedback-summary-out=')) {
+      options.feedbackSummaryOut = arg.slice('--feedback-summary-out='.length)
+    } else if (arg === '--feedback') {
+      options.feedback = args[++i]
+    } else if (arg.startsWith('--feedback=')) {
+      options.feedback = arg.slice('--feedback='.length)
+    } else if (arg === '--feedback-file') {
+      options.feedbackFile = args[++i]
+    } else if (arg.startsWith('--feedback-file=')) {
+      options.feedbackFile = arg.slice('--feedback-file='.length)
+    } else if (arg === '--advanced-agent-json-report') {
+      options.advancedAgentJsonReport = args[++i]
+    } else if (arg.startsWith('--advanced-agent-json-report=')) {
+      options.advancedAgentJsonReport = arg.slice('--advanced-agent-json-report='.length)
+    } else if (arg === '--final-report') {
+      options.finalReport = args[++i]
+    } else if (arg.startsWith('--final-report=')) {
+      options.finalReport = arg.slice('--final-report='.length)
+    } else if (arg === '--compact-summary') {
+      options.compactSummary = args[++i]
+    } else if (arg.startsWith('--compact-summary=')) {
+      options.compactSummary = arg.slice('--compact-summary='.length)
     } else if (arg === '--help' || arg === '-h') {
       options.help = true
     } else {
@@ -133,12 +169,21 @@ function getHelpText () {
     '  --test-result-file <file>      Read the short test runner result summary from a file.',
     '  --new-test-snippet <text>       Include the temporary test snippet used for EFD.',
     '  --new-test-snippet-file <file>  Read the temporary test snippet used for EFD.',
+    '  --flaky-test-snippet <text>     Include the temporary flaky test snippet used for Auto Test Retries.',
+    '  --flaky-test-snippet-file <file>  Read the temporary flaky test snippet used for Auto Test Retries.',
     '  --env KEY=value                Include an environment variable used for the live run.',
     '  --env-file <file>              Read environment variables, one KEY=value per line.',
     '  --agent-report <file>          Path to the plain text analyzer artifact.',
     '  --agent-json-report <file>     Path to the JSON analyzer artifact.',
     '  --html <file>                  Override the HTML report path.',
     '  --out <file>                   Write the final report to a file.',
+    '  --summary-out <file>           Write a compact summary without long validation paths.',
+    '  --feedback-summary-out <file>  Write a compact coding-agent feedback summary.',
+    '  --feedback <text>              Actionable feedback text for the feedback summary.',
+    '  --feedback-file <file>         Read actionable feedback text for the feedback summary.',
+    '  --advanced-agent-json-report <file>  Advanced-check JSON report for the feedback summary.',
+    '  --final-report <file>          Final report path for the feedback summary.',
+    '  --compact-summary <file>       Compact summary path for the feedback summary.',
   ].join('\n')
 }
 
@@ -160,6 +205,7 @@ function renderFinalReport (options) {
   const testExitCode = readTextValue(options.testExitCode, options.testExitCodeFile, 'test exit code')
   const testResult = readOptionalTextValue(options.testResult, options.testResultFile)
   const newTestSnippet = readOptionalTextValue(options.newTestSnippet, options.newTestSnippetFile)
+  const flakyTestSnippet = readOptionalTextValue(options.flakyTestSnippet, options.flakyTestSnippetFile)
   const env = getEnvList(options, analysis)
   const htmlPath = getHtmlPath(options, analysis)
   const htmlFileUrl = analysis.summary.artifacts.htmlFileUrl || pathToFileURL(htmlPath).href
@@ -173,6 +219,7 @@ function renderFinalReport (options) {
       htmlFileUrl,
     },
     env,
+    flakyTestSnippet,
     newTestSnippet,
     staticReport,
     testCommand,
@@ -206,6 +253,7 @@ function renderFinalReport (options) {
     `- Intake shutdown: ${intakeArtifact.intake?.stoppedAt ? 'successful' : 'not confirmed'}`,
     `- Final artifact flushed: ${intakeArtifact.intake?.stoppedAt ? 'yes' : 'partial artifact possible'}`,
     ...getEfdSummaryLines(analysis),
+    ...getAutoTestRetriesSummaryLines(analysis),
     '',
     'Consistency checks:',
     ...getConsistencyChecks(env, intakeArtifact, analysis),
@@ -285,6 +333,297 @@ function renderFinalReport (options) {
 }
 
 /**
+ * Renders a compact report summary for agent responses.
+ *
+ * @param {object} options report options
+ * @returns {string} compact summary text
+ */
+function renderSummaryReport (options) {
+  validateOptions(options)
+
+  const staticPath = path.resolve(options.static)
+  const intakePath = path.resolve(options.intake)
+  const staticReport = readJson(staticPath)
+  const intakeArtifact = readJson(intakePath)
+  const analysis = analyzeIntakeArtifact(intakeArtifact)
+  const testCommand = readTextValue(options.testCommand, options.testCommandFile, 'test command')
+  const testExitCode = readTextValue(options.testExitCode, options.testExitCodeFile, 'test exit code')
+  const testResult = readOptionalTextValue(options.testResult, options.testResultFile)
+  const env = getEnvList(options, analysis)
+  const htmlPath = getHtmlPath(options, analysis)
+  const htmlFileUrl = analysis.summary.artifacts.htmlFileUrl || pathToFileURL(htmlPath).href
+  const staticHighlights = getStaticHighlights(staticReport)
+  const artifactPaths = getArtifactPaths(options, staticPath, intakePath, htmlPath)
+  const lines = [
+    'Test Optimization debug summary',
+    `HTML report: ${htmlFileUrl}`,
+    `HTML report path: ${htmlPath}`,
+    `Final report: ${artifactPaths.finalReportPath}`,
+    `Primary funnel stage: ${analysis.primaryStage}`,
+    `Selected test command: ${testCommand}`,
+    `Test exit code: ${testExitCode}`,
+    `Test result: ${testResult || 'not recorded'}`,
+    `Requests: ${analysis.summary.requestCount}`,
+    `citestcycle payloads: ${analysis.summary.citestcycle.payloadCount}`,
+    'Event levels: ' +
+      `sessions=${analysis.summary.events.counts.test_session_end}, ` +
+      `modules=${analysis.summary.events.counts.test_module_end}, ` +
+      `suites=${analysis.summary.events.counts.test_suite_end}, ` +
+      `tests=${analysis.summary.events.counts.test}`,
+    `Decode errors: ${analysis.summary.decodeErrors.length}`,
+    `EFD status: ${getEfdStatus(analysis)}`,
+    `EFD known tests received: ${analysis.summary.efd.knownTestsReceived}`,
+    `EFD retried new tests: ${analysis.summary.efd.retriedNewTests}`,
+    `EFD distinct retried new test names: ${getDistinctCount(analysis.summary.efd.retriedNewTestNames)}`,
+    `Auto Test Retries status: ${getAutoTestRetriesStatus(analysis)}`,
+    `Auto Test Retries failed executions: ${analysis.summary.atr.failedExecutions}`,
+    `Auto Test Retries passed executions: ${analysis.summary.atr.passedExecutions}`,
+    `Auto Test Retries passed retry executions: ${analysis.summary.atr.passedRetryTests}`,
+    `Auto Test Retries flaky tests reported: ${analysis.summary.atr.failedThenPassedRetryTests}`,
+    'Consistency checks:',
+    ...getConsistencyChecks(env, intakeArtifact, analysis),
+    'Static warnings/errors:',
+    ...getSummaryStaticLines(staticHighlights),
+    'Validation path: see the final report Datadog validation line.',
+  ]
+
+  return lines.join('\n')
+}
+
+/**
+ * Renders a compact coding-agent feedback summary.
+ *
+ * @param {object} options feedback summary options
+ * @returns {string} compact feedback summary text
+ */
+function renderFeedbackSummary (options) {
+  const basic = readOptionalJson(options.agentJsonReport || 'dd-test-optimization-agent-report.json', {})
+  const advanced = readOptionalJson(
+    options.advancedAgentJsonReport ||
+      path.join('dd-test-optimization-efd', 'dd-test-optimization-agent-report.json'),
+    {}
+  )
+  const stage = basic.primaryStage || 'unknown'
+  const decodeErrors = Array.isArray(basic.summary?.decodeErrors)
+    ? basic.summary.decodeErrors.length
+    : basic.summary?.decodeErrors || 0
+  const eventLevels =
+    `sessions=${countEvent(basic, 'test_session_end')}, ` +
+    `modules=${countEvent(basic, 'test_module_end')}, ` +
+    `suites=${countEvent(basic, 'test_suite_end')}, ` +
+    `tests=${countEvent(basic, 'test')}`
+  const retriedNewTestNames = advanced.summary?.efd?.retriedNewTestNames || []
+  const cleanup = [
+    fs.existsSync('dd-test-optimization-efd-temp-test-file.txt')
+      ? 'temporary EFD cleanup incomplete'
+      : 'temporary EFD removed/restored',
+    fs.existsSync('dd-test-optimization-atr-flaky-test-file.txt')
+      ? 'flaky edit cleanup incomplete'
+      : 'flaky edit restored',
+  ].join(', ')
+
+  return [
+    `Runbook completed: ${getRunbookCompletedStatus(stage)}`,
+    `Diagnostic outcome: ${getDiagnosticOutcome(stage)}`,
+    `Basic reporting: ${stage}, requests=${basic.summary?.requestCount ?? 'unknown'}, ` +
+      `event levels=${eventLevels}, decode errors=${decodeErrors}`,
+    `EFD: ${getAdvancedStatus(advanced, 'efd')}, ` +
+      `known tests=${advanced.summary?.efd?.knownTestsReceived ?? 'n/a'}, ` +
+      `retried new tests=${advanced.summary?.efd?.retriedNewTests ?? 'n/a'}, ` +
+      `distinct retried names=${getDistinctCount(retriedNewTestNames)}`,
+    `Auto Test Retries: ${getAdvancedStatus(advanced, 'atr')}, ` +
+      `failed=${advanced.summary?.atr?.failedExecutions ?? 'n/a'}, ` +
+      `passed=${advanced.summary?.atr?.passedExecutions ?? 'n/a'}, ` +
+      `retry passes=${advanced.summary?.atr?.passedRetryTests ?? 'n/a'}`,
+    `Reports: ${readReportLine(getFinalReportPath(options), 'HTML report:')}, ` +
+      `${path.resolve(getFinalReportPath(options))}, ${path.resolve(getCompactSummaryPath(options))}`,
+    `Cleanup: ${cleanup}. Diagnostic artifacts intentionally remain untracked until the next Step 0 cleanup.`,
+    'Actionable feedback:',
+    ...getFeedbackLines(options),
+  ].join('\n')
+}
+
+/**
+ * Reads optional JSON from disk.
+ *
+ * @param {string} file file path
+ * @param {object} fallback fallback value
+ * @returns {object} parsed JSON or fallback
+ */
+function readOptionalJson (file, fallback) {
+  try {
+    return readJson(file)
+  } catch {
+    return fallback
+  }
+}
+
+/**
+ * Gets the runbook completion status.
+ *
+ * @param {string} stage basic primary stage
+ * @returns {string} completion status
+ */
+function getRunbookCompletedStatus (stage) {
+  return stage === 'unknown' ? 'no; root analyzer report is missing' : 'yes'
+}
+
+/**
+ * Gets the diagnostic outcome.
+ *
+ * @param {string} stage basic primary stage
+ * @returns {string} diagnostic outcome
+ */
+function getDiagnosticOutcome (stage) {
+  if (stage === 'Reporting complete') return 'basic reporting worked'
+  if (stage === 'unknown') return 'runbook failed; root analyzer report is missing'
+
+  return 'basic reporting did not work'
+}
+
+/**
+ * Gets a count for a test event level.
+ *
+ * @param {object} report analyzer JSON report
+ * @param {string} eventType test event type
+ * @returns {number} event count
+ */
+function countEvent (report, eventType) {
+  return report?.summary?.events?.counts?.[eventType] || 0
+}
+
+/**
+ * Gets advanced-check status for feedback output.
+ *
+ * @param {object} report advanced analyzer JSON report
+ * @param {string} kind advanced feature kind
+ * @returns {string} feature status
+ */
+function getAdvancedStatus (report, kind) {
+  if (!report.primaryStage) return 'not run'
+  if (kind === 'efd') return report.summary?.efd?.retriedNewTests > 0 ? 'passed' : 'failed'
+
+  return report.summary?.atr?.failedThenPassedRetryTests > 0 ? 'passed' : 'failed'
+}
+
+/**
+ * Gets the final report path for feedback output.
+ *
+ * @param {object} options feedback summary options
+ * @returns {string} final report path
+ */
+function getFinalReportPath (options) {
+  return options.finalReport || 'dd-test-optimization-final-report.txt'
+}
+
+/**
+ * Gets the compact summary path for feedback output.
+ *
+ * @param {object} options feedback summary options
+ * @returns {string} compact summary path
+ */
+function getCompactSummaryPath (options) {
+  return options.compactSummary || 'dd-test-optimization-summary.txt'
+}
+
+/**
+ * Reads a line from a report.
+ *
+ * @param {string} file report file
+ * @param {string} prefix line prefix
+ * @returns {string} line value
+ */
+function readReportLine (file, prefix) {
+  const text = readOptionalTextFile(file)
+  const line = text.split(/\r?\n/).find(line => line.startsWith(prefix))
+
+  return line ? line.slice(prefix.length).trim() : 'unknown'
+}
+
+/**
+ * Reads optional text from a file.
+ *
+ * @param {string} file file path
+ * @returns {string} file text or empty string
+ */
+function readOptionalTextFile (file) {
+  try {
+    return fs.readFileSync(path.resolve(file), 'utf8').trim()
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * Gets formatted actionable feedback lines.
+ *
+ * @param {object} options feedback summary options
+ * @returns {string[]} feedback lines
+ */
+function getFeedbackLines (options) {
+  const text = getFeedbackText(options)
+  const lines = text.split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean)
+
+  if (lines.length === 0) return ['- <replace with feedback, or "No actionable feedback.">']
+
+  return lines.map(line => line.startsWith('- ') ? line : `- ${line}`)
+}
+
+/**
+ * Gets actionable feedback text from CLI options or environment.
+ *
+ * @param {object} options feedback summary options
+ * @returns {string} feedback text
+ */
+function getFeedbackText (options) {
+  if (options.feedback !== undefined) return String(options.feedback).trim()
+  if (options.feedbackFile) return readOptionalTextFile(options.feedbackFile)
+  if (process.env.DD_TEST_OPTIMIZATION_FEEDBACK) return process.env.DD_TEST_OPTIMIZATION_FEEDBACK.trim()
+
+  return ''
+}
+
+/**
+ * Gets compact EFD status text.
+ *
+ * @param {object} analysis intake analysis
+ * @returns {string} status text
+ */
+function getEfdStatus (analysis) {
+  if (analysis.summary.efd.retriedNewTests > 0) return 'passed'
+  if (analysis.summary.efd.settingsEnabled || analysis.summary.efd.requested) return 'failed'
+
+  return 'not run'
+}
+
+/**
+ * Gets compact Auto Test Retries status text.
+ *
+ * @param {object} analysis intake analysis
+ * @returns {string} status text
+ */
+function getAutoTestRetriesStatus (analysis) {
+  if (analysis.summary.atr.failedThenPassedRetryTests > 0) return 'passed'
+  if (analysis.summary.atr.settingsEnabled || analysis.summary.atr.retriedTests > 0) return 'failed'
+
+  return 'not run'
+}
+
+/**
+ * Gets compact static finding lines.
+ *
+ * @param {Array<object>} staticHighlights actionable static findings
+ * @returns {string[]} summary finding lines
+ */
+function getSummaryStaticLines (staticHighlights) {
+  if (staticHighlights.length === 0) return ['- none']
+
+  return staticHighlights.map(finding => `- ${finding.status}: ${finding.title}`)
+}
+
+/**
  * Gets scope lines.
  *
  * @param {object} analysis intake analysis
@@ -299,6 +638,7 @@ function getScopeLines (analysis) {
   if (analysis.summary.efd.settingsEnabled) {
     lines.push(
       '- EFD check: known tests endpoint, new-test detection, and retry evidence for the selected subset.',
+      '- Auto Test Retries check: failed and passing retry executions for one known flaky test.',
       '- Does not validate ITR, test skipping, test management, coverage, or the full CI workflow.'
     )
   } else {
@@ -323,6 +663,35 @@ function getEfdSummaryLines (analysis) {
     `- Known tests received: ${analysis.summary.efd.knownTestsReceived}`,
     `- New tests observed: ${analysis.summary.efd.newTests.length}`,
     `- Retried new tests: ${analysis.summary.efd.retriedNewTests}`,
+    `- Distinct retried new test names: ${getDistinctCount(analysis.summary.efd.retriedNewTestNames)}`,
+  ]
+}
+
+/**
+ * Counts distinct values.
+ *
+ * @param {string[]} values values to count
+ * @returns {number} distinct value count
+ */
+function getDistinctCount (values) {
+  return new Set(values || []).size
+}
+
+/**
+ * Gets optional Auto Test Retries summary lines.
+ *
+ * @param {object} analysis intake analysis
+ * @returns {string[]} Auto Test Retries summary lines
+ */
+function getAutoTestRetriesSummaryLines (analysis) {
+  if (!analysis.summary.atr.settingsEnabled && analysis.summary.atr.retriedTests === 0) return []
+
+  return [
+    `- Auto Test Retries settings enabled: ${analysis.summary.atr.settingsEnabled ? 'yes' : 'no'}`,
+    `- Auto Test Retries failed executions: ${analysis.summary.atr.failedExecutions}`,
+    `- Auto Test Retries passed executions: ${analysis.summary.atr.passedExecutions}`,
+    `- Auto Test Retries passed retry executions: ${analysis.summary.atr.passedRetryTests}`,
+    `- Auto Test Retries flaky tests reported: ${analysis.summary.atr.failedThenPassedRetryTests}`,
   ]
 }
 
@@ -333,7 +702,7 @@ function getEfdSummaryLines (analysis) {
  * @returns {string[]} limitation lines
  */
 function getNotProvenLines (analysis) {
-  if (analysis.summary.efd.settingsEnabled) {
+  if (analysis.summary.efd.settingsEnabled || analysis.summary.atr.settingsEnabled) {
     return ['- ITR, test skipping, test management, or coverage are working.']
   }
 
@@ -679,6 +1048,10 @@ function getProvesText (analysis, testCommand) {
     return `Early Flake Detection retried a new test for: ${testCommand}`
   }
 
+  if (analysis.primaryStage === 'Auto test retry reported flaky test') {
+    return `Auto Test Retries retried a known flaky test for: ${testCommand}`
+  }
+
   return `The selected command reached stage "${analysis.primaryStage}" in the basic reporting funnel.`
 }
 
@@ -754,13 +1127,24 @@ if (require.main === module) {
     process.exitCode = 1
   } else {
     try {
-      const report = renderFinalReport(options)
+      if (options.feedbackSummaryOut) {
+        const feedbackSummary = renderFeedbackSummary(options)
 
-      if (options.out) {
-        fs.writeFileSync(path.resolve(options.out), `${report}\n`)
+        fs.writeFileSync(path.resolve(options.feedbackSummaryOut), `${feedbackSummary}\n`)
+        console.log(feedbackSummary)
+      } else {
+        const report = renderFinalReport(options)
+
+        if (options.out) {
+          fs.writeFileSync(path.resolve(options.out), `${report}\n`)
+        }
+
+        if (options.summaryOut) {
+          fs.writeFileSync(path.resolve(options.summaryOut), `${renderSummaryReport(options)}\n`)
+        }
+
+        console.log(report)
       }
-
-      console.log(report)
     } catch (error) {
       console.error(error.message)
       process.exitCode = 1
@@ -770,5 +1154,7 @@ if (require.main === module) {
 
 module.exports = {
   parseArgs,
+  renderFeedbackSummary,
   renderFinalReport,
+  renderSummaryReport,
 }

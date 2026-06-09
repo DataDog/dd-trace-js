@@ -52,6 +52,18 @@ const EFD_SETTINGS = {
   known_tests_enabled: true,
 }
 
+const ATR_SETTINGS = {
+  ...DEFAULT_SETTINGS,
+  flaky_test_retries_enabled: true,
+  flaky_test_retries_count: 1,
+}
+
+const DEBUG_ALL_SETTINGS = {
+  ...EFD_SETTINGS,
+  flaky_test_retries_enabled: true,
+  flaky_test_retries_count: 1,
+}
+
 /**
  * Starts the fake Test Optimization intake.
  *
@@ -860,7 +872,9 @@ function getHelpText () {
     '',
     'Options:',
     '  --settings-mode basic-reporting  Default settings: basic reporting only.',
+    '  --settings-mode atr              Enable Auto Test Retries settings.',
     '  --settings-mode efd              Enable known tests and Early Flake Detection settings.',
+    '  --settings-mode debug-all        Enable known tests, EFD, and Auto Test Retries settings.',
     '  --known-tests <file>             Known tests JSON to return from /api/v2/ci/libraries/tests.',
     '',
     'Point tests at it with:',
@@ -881,6 +895,8 @@ function getHelpText () {
  * @returns {object} settings response attributes
  */
 function getSettings (settingsMode) {
+  if (settingsMode === 'atr') return ATR_SETTINGS
+  if (settingsMode === 'debug-all') return DEBUG_ALL_SETTINGS
   if (settingsMode === 'efd') return EFD_SETTINGS
   return DEFAULT_SETTINGS
 }

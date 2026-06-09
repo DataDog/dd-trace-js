@@ -3,7 +3,7 @@
 
 /* eslint-disable no-console, eslint-rules/eslint-process-env */
 
-const { spawn } = require('node:child_process')
+const { spawn, spawnSync } = require('node:child_process')
 const fs = require('node:fs')
 const http = require('node:http')
 const path = require('node:path')
@@ -16,10 +16,17 @@ const {
 } = require('./test-optimization-analyze-intake')
 const {
   analyzeIntakeArtifact,
+  buildKnownTestsFromArtifact,
   renderAnalysisText,
 } = require('./test-optimization-intake-analysis')
 const {
+  getPreparePlan,
+  prepareAdvancedChecks,
+  restoreAdvancedChecks,
+} = require('./test-optimization-prepare-advanced')
+const {
   renderFinalReport,
+  renderSummaryReport,
 } = require('./test-optimization-render-report')
 const {
   normalizeKnownTests,
@@ -35,12 +42,22 @@ const ARTIFACTS = {
   html: 'dd-test-optimization-report.html',
   intake: 'dd-test-optimization-intake.json',
   static: 'dd-test-optimization-static.json',
+  summary: 'dd-test-optimization-summary.txt',
   testCommand: 'dd-test-optimization-test-command.txt',
   testExitCode: 'dd-test-optimization-test-exit-code.txt',
   testOutput: 'dd-test-optimization-test-output.txt',
   testResult: 'dd-test-optimization-test-result.txt',
 }
 const ANSI_ESCAPE_RE = new RegExp(`${String.fromCharCode(27)}${String.raw`\[[0-?]*[ -/]*[@-~]`}`, 'g')
+const FEEDBACK_ARTIFACTS = {
+  advancedDryRun: 'dd-test-optimization-advanced-dry-run.txt',
+  basicDir: 'dd-test-optimization-basic',
+  efdDir: 'dd-test-optimization-efd',
+  efdCommand: 'dd-test-optimization-efd-command.txt',
+  knownTests: 'dd-test-optimization-known-tests.json',
+  rootStage: 'dd-test-optimization-root-stage.txt',
+  selectedTestFiles: 'dd-test-optimization-selected-test-files.txt',
+}
 const DEFAULT_READY_TIMEOUT_MS = 5000
 const READY_RETRY_INTERVAL_MS = 50
 
@@ -60,10 +77,20 @@ function parseArgs (args) {
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]
 
-    if (arg === '--test-command') {
+    if (arg === '--feedback-mode') {
+      options.feedbackMode = true
+    } else if (arg === '--test-command') {
       options.testCommand = args[++i]
     } else if (arg.startsWith('--test-command=')) {
       options.testCommand = arg.slice('--test-command='.length)
+    } else if (arg === '--test-command-file') {
+      options.testCommandFile = args[++i]
+    } else if (arg.startsWith('--test-command-file=')) {
+      options.testCommandFile = arg.slice('--test-command-file='.length)
+    } else if (arg === '--selected-test-files-file') {
+      options.selectedTestFilesFile = args[++i]
+    } else if (arg.startsWith('--selected-test-files-file=')) {
+      options.selectedTestFilesFile = arg.slice('--selected-test-files-file='.length)
     } else if (arg === '--service') {
       options.service = args[++i]
     } else if (arg.startsWith('--service=')) {
@@ -88,6 +115,10 @@ function parseArgs (args) {
       options.newTestSnippetFile = args[++i]
     } else if (arg.startsWith('--new-test-snippet-file=')) {
       options.newTestSnippetFile = arg.slice('--new-test-snippet-file='.length)
+    } else if (arg === '--flaky-test-snippet-file') {
+      options.flakyTestSnippetFile = args[++i]
+    } else if (arg.startsWith('--flaky-test-snippet-file=')) {
+      options.flakyTestSnippetFile = arg.slice('--flaky-test-snippet-file='.length)
     } else if (arg === '--no-clean') {
       options.clean = false
     } else if (arg === '--no-open') {
@@ -109,19 +140,24 @@ function parseArgs (args) {
  */
 function getHelpText () {
   return [
-    'Usage: dd-trace-ci-debug --test-command <command> [--service <name>] [--out-dir <dir>]',
+    'Usage: dd-trace-ci-debug (--test-command <command> | --test-command-file <file>) ' +
+      '[--service <name>] [--out-dir <dir>]',
     '',
     'Runs the Test Optimization debug flow end-to-end:',
     'static diagnosis, local fake intake, selected test command, analyzer, and final report.',
     '',
     'Options:',
     '  --test-command <command>  Exact test command to run, for example "npm test -- test/foo.spec.js".',
+    '  --test-command-file <file>  Read the exact selected test command from a file.',
+    '  --feedback-mode          Run root, baseline, and advanced feedback checks with restore safety.',
+    '  --selected-test-files-file <file>  Newline-delimited selected test files for --feedback-mode.',
     '  --service <name>          DD_SERVICE value for the debug run. Defaults to dd-test-optimization-debug.',
     '  --out-dir <dir>           Artifact directory. Defaults to the current directory.',
     '  --ready-timeout-ms <ms>   Time to wait for the fake intake /health endpoint. Defaults to 5000.',
-    '  --settings-mode <mode>    Fake settings mode: basic-reporting or efd.',
+    '  --settings-mode <mode>    Fake settings mode: basic-reporting, atr, efd, or debug-all.',
     '  --known-tests <file>      Known tests JSON to return for EFD/debug runs.',
     '  --new-test-snippet-file <file>  Temporary test snippet used for EFD.',
+    '  --flaky-test-snippet-file <file>  Temporary flaky test snippet used for Auto Test Retries.',
     '  --no-clean                Keep prior debug artifacts before running.',
     '  --no-open                 Skip the best-effort local HTML open attempt.',
   ].join('\n')
@@ -137,9 +173,17 @@ function runDebug (options, callback) {
   const root = process.cwd()
   const outDir = path.resolve(options.outDir || '.')
   const artifacts = getArtifactPaths(outDir)
+  let testCommand
 
-  if (!options.testCommand) {
-    callback(new Error('Missing --test-command.'))
+  try {
+    testCommand = readTextValue(options.testCommand, options.testCommandFile, 'test command')
+  } catch (error) {
+    callback(error)
+    return
+  }
+
+  if (!testCommand) {
+    callback(new Error('Missing --test-command or --test-command-file.'))
     return
   }
 
@@ -148,7 +192,7 @@ function runDebug (options, callback) {
   }
 
   fs.mkdirSync(outDir, { recursive: true })
-  fs.writeFileSync(artifacts.testCommand, `${options.testCommand}\n`)
+  fs.writeFileSync(artifacts.testCommand, `${testCommand}\n`)
 
   const staticReport = runDiagnosis({ root })
   fs.writeFileSync(artifacts.static, `${JSON.stringify(staticReport, null, 2)}\n`)
@@ -164,7 +208,7 @@ function runDebug (options, callback) {
       return
     }
 
-    const env = getTestEnv(options, intake, staticReport)
+    const env = getTestEnv({ ...options, testCommand }, intake, staticReport)
     const readyTimeoutMs = getReadyTimeoutMs(options)
     writeEnvFile(artifacts.env, env)
 
@@ -176,7 +220,7 @@ function runDebug (options, callback) {
         return
       }
 
-      runTestCommand(options.testCommand, root, env, (result) => {
+      runTestCommand(testCommand, root, env, (result) => {
         const output = `${result.stdout || ''}${result.stderr || ''}`
         fs.writeFileSync(artifacts.testOutput, output)
         fs.writeFileSync(artifacts.testExitCode, `${getSpawnExitCode(result)}\n`)
@@ -202,25 +246,341 @@ function runDebug (options, callback) {
             openAttempt,
           }, null, 2)}\n`)
 
-          const finalReport = renderFinalReport({
+          const reportOptions = {
             agentJsonReport: artifacts.agentJsonReport,
             agentReport: artifacts.agentReport,
             envFile: artifacts.env,
             intake: artifacts.intake,
             out: artifacts.finalReport,
+            summaryOut: artifacts.summary,
             static: artifacts.static,
             testCommandFile: artifacts.testCommand,
             testExitCodeFile: artifacts.testExitCode,
             testResultFile: artifacts.testResult,
+            flakyTestSnippetFile: options.flakyTestSnippetFile,
             newTestSnippetFile: options.newTestSnippetFile,
-          })
+          }
+          const finalReport = renderFinalReport(reportOptions)
+          const summaryReport = renderSummaryReport(reportOptions)
 
           fs.writeFileSync(artifacts.finalReport, `${finalReport}\n`)
+          fs.writeFileSync(artifacts.summary, `${summaryReport}\n`)
           callback(undefined, finalReport)
         })
       })
     })
   })
+}
+
+/**
+ * Runs the coding-agent feedback flow after command discovery.
+ *
+ * @param {object} options feedback-mode options
+ * @param {Function} callback called with (error, report)
+ */
+function runFeedbackMode (options, callback) {
+  let selectedTestFiles
+
+  try {
+    selectedTestFiles = readSelectedTestFiles(options.selectedTestFilesFile)
+    validateSelectedTestFiles(selectedTestFiles)
+    fs.writeFileSync(FEEDBACK_ARTIFACTS.selectedTestFiles, `${selectedTestFiles.join('\n')}\n`)
+  } catch (error) {
+    callback(error)
+    return
+  }
+
+  runDebug(getFeedbackDebugOptions(options), (rootError, rootReport) => {
+    if (rootError) {
+      callback(rootError)
+      return
+    }
+
+    console.log(rootReport)
+
+    const rootStage = getRootStage()
+
+    fs.writeFileSync(FEEDBACK_ARTIFACTS.rootStage, `${rootStage}\n`)
+    console.log(`Root wrapper stage: ${rootStage}`)
+
+    if (rootStage !== 'Reporting complete') {
+      callback(undefined, getFeedbackModeSummary(rootStage, false))
+      return
+    }
+
+    runDebug(getFeedbackDebugOptions(options, { outDir: FEEDBACK_ARTIFACTS.basicDir }), (basicError, basicReport) => {
+      if (basicError) {
+        callback(basicError)
+        return
+      }
+
+      console.log(basicReport)
+
+      try {
+        writeKnownTestsFromBaseline()
+        dryRunAdvancedChecks(selectedTestFiles)
+        prepareAdvancedChecks({ auto: true })
+      } catch (error) {
+        restoreAdvancedChecksAfterFailure(error, callback)
+        return
+      }
+
+      runDebug(getFeedbackDebugOptions(options, {
+        flakyTestSnippetFile: 'dd-test-optimization-atr-flaky-test-snippet.txt',
+        knownTests: normalizeKnownTests(readJsonFile(FEEDBACK_ARTIFACTS.knownTests)),
+        newTestSnippetFile: 'dd-test-optimization-efd-new-test-snippet.txt',
+        outDir: FEEDBACK_ARTIFACTS.efdDir,
+        settingsMode: 'debug-all',
+        testCommand: undefined,
+        testCommandFile: FEEDBACK_ARTIFACTS.efdCommand,
+      }), (advancedError, advancedReport) => {
+        let restoreError
+
+        try {
+          restoreAdvancedChecks()
+        } catch (error) {
+          restoreError = error
+        }
+
+        if (advancedError) {
+          callback(advancedError)
+          return
+        }
+
+        if (restoreError) {
+          callback(restoreError)
+          return
+        }
+
+        console.log(advancedReport)
+
+        try {
+          assertAdvancedFeedbackEvidence()
+        } catch (error) {
+          callback(error)
+          return
+        }
+
+        callback(undefined, getFeedbackModeSummary(rootStage, true))
+      })
+    })
+  })
+}
+
+/**
+ * Gets wrapper options for one feedback-mode wrapper run.
+ *
+ * @param {object} options feedback-mode options
+ * @param {object|undefined} overrides wrapper option overrides
+ * @returns {object} wrapper options
+ */
+function getFeedbackDebugOptions (options, overrides) {
+  return {
+    ...options,
+    clean: true,
+    feedbackMode: false,
+    open: false,
+    ...overrides,
+  }
+}
+
+/**
+ * Reads selected test files.
+ *
+ * @param {string|undefined} file selected test files file
+ * @returns {string[]} selected test files
+ */
+function readSelectedTestFiles (file) {
+  if (!file) throw new Error('Missing --selected-test-files-file.')
+
+  const selectedTestFiles = fs.readFileSync(path.resolve(file), 'utf8')
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean)
+
+  if (selectedTestFiles.length === 0) {
+    throw new Error('Selected test files file is empty.')
+  }
+
+  return selectedTestFiles
+}
+
+/**
+ * Validates selected test files before temporary edits are inferred.
+ *
+ * @param {string[]} selectedTestFiles selected test files
+ */
+function validateSelectedTestFiles (selectedTestFiles) {
+  for (const file of selectedTestFiles) {
+    if (!fs.existsSync(file)) {
+      throw new Error(`Selected test file does not exist: ${file}`)
+    }
+
+    const gitStatus = spawnSync('git', ['status', '--short', '--', file], { encoding: 'utf8' })
+
+    if (gitStatus.status === 0 && gitStatus.stdout.trim()) {
+      throw new Error(`Selected test file has local changes: ${file}`)
+    }
+
+    if (gitStatus.status !== 0) {
+      throw new Error(`Could not verify git status for selected test file: ${file}`)
+    }
+  }
+}
+
+/**
+ * Gets the root wrapper stage from the root analyzer artifact.
+ *
+ * @returns {string} root stage
+ */
+function getRootStage () {
+  const report = readJsonFile(ARTIFACTS.agentJsonReport)
+
+  return report.primaryStage || 'unknown'
+}
+
+/**
+ * Writes known tests from the baseline feedback run.
+ */
+function writeKnownTestsFromBaseline () {
+  const baselineIntake = readJsonFile(path.join(FEEDBACK_ARTIFACTS.basicDir, ARTIFACTS.intake))
+  const knownTests = buildKnownTestsFromArtifact(baselineIntake)
+
+  fs.writeFileSync(FEEDBACK_ARTIFACTS.knownTests, `${JSON.stringify(knownTests, null, 2)}\n`)
+}
+
+/**
+ * Prints and validates inferred advanced-check edits.
+ *
+ * @param {string[]} selectedTestFiles selected test files
+ */
+function dryRunAdvancedChecks (selectedTestFiles) {
+  const plan = getPreparePlan({ auto: true })
+  const { prepareOptions } = plan
+  const dryRunText = [
+    'Advanced helper dry run:',
+    `Temporary EFD test file: ${prepareOptions.efdTestFile}`,
+    `Auto Test Retries flaky test file: ${prepareOptions.flakyTestFile}`,
+    `Auto Test Retries flaky test name: ${prepareOptions.flakyTestName}`,
+    `Framework: ${prepareOptions.framework}`,
+    `EFD test command: ${prepareOptions.efdCommand}`,
+    'No files written.',
+  ].join('\n')
+
+  fs.writeFileSync(FEEDBACK_ARTIFACTS.advancedDryRun, `${dryRunText}\n`)
+  console.log(dryRunText)
+  assertAdvancedPlanMatchesSelectedFiles(prepareOptions, selectedTestFiles)
+  console.log('Advanced dry-run guardrails: passed')
+}
+
+/**
+ * Validates inferred advanced-check targets against selected test files.
+ *
+ * @param {object} prepareOptions inferred advanced-check options
+ * @param {string[]} selectedTestFiles selected test files
+ */
+function assertAdvancedPlanMatchesSelectedFiles (prepareOptions, selectedTestFiles) {
+  const selectedFiles = selectedTestFiles.map(file => path.normalize(file))
+  const selectedDirs = new Set(selectedFiles.map(file => path.dirname(file)))
+  const efdFile = path.normalize(prepareOptions.efdTestFile)
+  const flakyFile = path.normalize(prepareOptions.flakyTestFile)
+
+  if (!selectedDirs.has(path.dirname(efdFile))) {
+    throw new Error(`Temporary EFD file is not under a selected test directory: ${efdFile}`)
+  }
+
+  if (fs.existsSync(efdFile)) {
+    throw new Error(`Temporary EFD file already exists: ${efdFile}`)
+  }
+
+  if (!selectedFiles.includes(flakyFile)) {
+    throw new Error(`Auto Test Retries flaky file is not one of the selected test files: ${flakyFile}`)
+  }
+}
+
+/**
+ * Restores advanced edits after a preparation failure.
+ *
+ * @param {Error} originalError original failure
+ * @param {Function} callback called with the original failure
+ */
+function restoreAdvancedChecksAfterFailure (originalError, callback) {
+  try {
+    restoreAdvancedChecks()
+  } catch (restoreError) {
+    console.error(`Advanced edit restore failed after error: ${restoreError.message}`)
+  }
+
+  callback(originalError)
+}
+
+/**
+ * Asserts advanced feedback-mode evidence.
+ */
+function assertAdvancedFeedbackEvidence () {
+  const report = readJsonFile(path.join(FEEDBACK_ARTIFACTS.efdDir, ARTIFACTS.agentJsonReport))
+
+  assertFeedbackEvidence(report.summary.efd.settingsEnabled, 'EFD settings were not enabled.')
+  assertFeedbackEvidence(report.summary.efd.requested, 'Known tests were not requested.')
+  assertFeedbackEvidence(report.summary.efd.knownTestsReceived > 0, 'Known tests response was empty.')
+  assertFeedbackEvidence(report.summary.efd.retriedNewTests > 0, 'No new test was retried by EFD.')
+  assertFeedbackEvidence(report.summary.atr.settingsEnabled, 'Auto Test Retries settings were not enabled.')
+  assertFeedbackEvidence(report.summary.atr.failedExecutions > 0, 'No failing execution was reported.')
+  assertFeedbackEvidence(report.summary.atr.passedExecutions > 0, 'No passing execution was reported.')
+  assertFeedbackEvidence(report.summary.atr.passedRetryTests > 0, 'No passing retry execution was reported.')
+  assertFeedbackEvidence(
+    report.summary.atr.failedThenPassedRetryTests > 0,
+    'No known flaky test failed and passed on retry.'
+  )
+
+  console.log(`EFD retried new tests: ${report.summary.efd.retriedNewTests}`)
+  console.log(`Auto Test Retries flaky tests reported: ${report.summary.atr.failedThenPassedRetryTests}`)
+}
+
+/**
+ * Asserts a feedback-mode evidence condition.
+ *
+ * @param {boolean} condition assertion condition
+ * @param {string} message failure message
+ */
+function assertFeedbackEvidence (condition, message) {
+  if (condition) return
+
+  throw new Error(message)
+}
+
+/**
+ * Gets a short feedback-mode completion summary.
+ *
+ * @param {string} rootStage root wrapper stage
+ * @param {boolean} advancedRan whether advanced checks ran
+ * @returns {string} summary text
+ */
+function getFeedbackModeSummary (rootStage, advancedRan) {
+  return [
+    'Feedback mode completed.',
+    `Root wrapper stage: ${rootStage}`,
+    `Advanced checks: ${advancedRan ? 'completed' : 'skipped'}`,
+    'Write dd-test-optimization-actionable-feedback.txt, then run F9 to render the feedback summary.',
+  ].join('\n')
+}
+
+/**
+ * Reads a text value from an inline option or file option.
+ *
+ * @param {string|undefined} value inline value
+ * @param {string|undefined} file text file path
+ * @param {string} name value name
+ * @returns {string|undefined} text value
+ */
+function readTextValue (value, file, name) {
+  if (value !== undefined) return String(value).trim()
+  if (!file) return
+
+  const text = fs.readFileSync(path.resolve(file), 'utf8').trim()
+  if (!text) throw new Error(`Missing ${name}.`)
+
+  return text
 }
 
 /**
@@ -577,6 +937,16 @@ if (require.main === module) {
     console.error(`Unknown argument: ${options.unknown}`)
     console.error(getHelpText())
     process.exitCode = 1
+  } else if (options.feedbackMode) {
+    runFeedbackMode(options, (error, report) => {
+      if (error) {
+        console.error(error.message)
+        process.exitCode = 1
+        return
+      }
+
+      console.log(report)
+    })
   } else {
     runDebug(options, (error, report) => {
       if (error) {
@@ -591,9 +961,11 @@ if (require.main === module) {
 }
 
 module.exports = {
+  assertAdvancedPlanMatchesSelectedFiles,
   getNodeOptions,
   getTestResult,
   isVitestRun,
   parseArgs,
   runDebug,
+  runFeedbackMode,
 }
