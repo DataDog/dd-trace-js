@@ -362,14 +362,19 @@ function wrapResolve (resolve) {
     const config = rootCtx.config
 
     // IAST + AppSec subscribers receive EVERY resolver invocation, regardless
-    // of depth. The depth knob caps span creation, not channel publishes —
-    // taint tracking and WAF gates have to see resolvers at any depth so
-    // user-controlled args still flow through. Compute pathString once on
-    // demand (lazily — only when a subscriber is active).
+    // of depth or collapse. The depth knob caps span creation, not channel
+    // publishes — taint tracking and WAF gates have to see resolvers at any
+    // depth so user-controlled args still flow through. Likewise for collapse:
+    // each sibling of a list publishes its own pathString (collapsed form,
+    // e.g. 'friends.*.name'), so subscribers can group sibling calls by their
+    // collapsed key. Compute pathString once on demand (lazily — only when a
+    // subscriber is active).
     const hasIastSub = iastResolveCh.hasSubscribers
     const hasResolverSub = resolverStartCh.hasSubscribers
     if (hasIastSub || hasResolverSub) {
-      const pathString = buildPathStringFromNode(infoPath)
+      const pathString = config.collapse
+        ? buildCollapsedPathStringFromNode(infoPath)
+        : buildPathStringFromNode(infoPath)
       if (hasIastSub) {
         iastResolveCh.publish({ rootCtx, args, info, path: pathToArray(infoPath), pathString })
       }
