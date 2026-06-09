@@ -1296,6 +1296,11 @@ function withReceiver (fn) {
     try {
       await fn(receiver, run)
     } finally {
+      // Cleanup runs when fn settles, not immediately on Mocha timeout. This is
+      // acceptable because test bodies use gatherPayloadsMaxTimeout (15 s), so fn
+      // always resolves well within Mocha's 80–120 s suite timeout. Each test
+      // gets its own isolated receiver port, so a delayed cleanup does not
+      // interfere with concurrently running tests.
       lastProc?.kill()
       await receiver.stop()
     }

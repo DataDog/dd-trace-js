@@ -39,7 +39,7 @@ const DEFAULT_INFO_RESPONSE = {
   endpoints: ['/evp_proxy/v2', '/debugger/v1/input'],
 }
 const DEFAULT_CORRELATION_ID = '1234'
-const DEFAULT_KNOWN_TESTS = ['test-suite1.js.test-name1', 'test-suite2.js.test-name2']
+const DEFAULT_KNOWN_TESTS = {}
 
 const DEFAULT_TEST_MANAGEMENT_TESTS = {}
 const DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS = 200
