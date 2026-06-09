@@ -94,7 +94,9 @@ GROUP=${GROUP:-1}
 # broken benchmark. The candidate run records its passing variants below.
 SKIP_BASELINE_FAILURES=""
 RECORD_CANDIDATE_PASS=""
-CANDIDATE_PASSED_FILE="${ARTIFACTS_DIR:-/tmp}/candidate-passed-variants.txt"
+# In /tmp, not ARTIFACTS_DIR: analyze_microbenchmarks ingests that dir as sirun
+# results and fails on this plain-text list; /tmp survives both runs.
+CANDIDATE_PASSED_FILE="/tmp/candidate-passed-variants.txt"
 if [[ "${TOLERATE_NEW_BENCHMARK_FAILURES:-}" == "1" ]]; then
   if [[ "${BASELINE_OR_CANDIDATE:-}" == "candidate" ]]; then
     RECORD_CANDIDATE_PASS="1"
