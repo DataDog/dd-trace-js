@@ -21,6 +21,7 @@ const {
   isCoverageActive,
   resolveCoverageRoot,
 } = require('../coverage/runtime')
+const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const FakeAgent = require('./fake-agent')
 const { BUN, withBun } = require('./bun')
 
@@ -1179,6 +1180,128 @@ function deepFreeze (value) {
   return value
 }
 
+/**
+ * Wraps Mocha's `it` so that all tests in the same suite start concurrently
+ * when the first body executes (i.e. after `before()` hooks). Each subsequent
+ * body returns its already-in-flight promise, giving Mocha individual named
+ * pass/fail results while the subprocesses run in parallel.
+ *
+ * Tests are grouped by Mocha suite automatically, so a single instance can be
+ * shared across multiple `context()` blocks — each suite's tests run in
+ * parallel with each other while suites themselves remain sequential.
+ *
+ * If Mocha retries a test whose promise already settled, only that scenario's
+ * function is restarted.
+ *
+ * When `withReceiver: true` is set, each test function receives
+ * `(receiver, run)` arguments automatically — see `withReceiver` for details.
+ *
+ * @param {(name: string, fn: () => Promise<void>) => void} mochaIt
+ * @param {{ concurrency?: number, withReceiver?: boolean }} [options]
+ * @returns {(name: string, fn: (...args: unknown[]) => Promise<void>, opts?: { retries?: number }) => void}
+ */
+function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver = false } = {}) {
+  // Keyed by Mocha Suite object; populated lazily on first run within each suite.
+  const suiteStates = new Map()
+  // All registered entries, queued by test title. A queue (array) per title
+  // lets multiple suites with duplicate test names each claim their own entry.
+  const entriesByTitle = new Map()
+
+  function getState (suite) {
+    if (!suiteStates.has(suite)) {
+      suiteStates.set(suite, { launched: false, active: 0, waiting: [] })
+    }
+    return suiteStates.get(suite)
+  }
+
+  function startNow (entry, state, resolve, reject) {
+    entry.done = false
+    entry.rejected = false
+    state.active++
+    Promise.resolve(entry.fn()).then(
+      (val) => { entry.done = true; state.active--; flush(state); resolve(val) },
+      (err) => { entry.done = true; entry.rejected = true; state.active--; flush(state); reject(err) }
+    )
+  }
+
+  function flush (state) {
+    while (state.waiting.length > 0 && state.active < concurrency) {
+      const { entry, resolve, reject } = state.waiting.shift()
+      startNow(entry, state, resolve, reject)
+    }
+  }
+
+  function schedule (entry, state) {
+    entry.promise = new Promise((resolve, reject) => {
+      if (state.active < concurrency) {
+        startNow(entry, state, resolve, reject)
+      } else {
+        state.waiting.push({ entry, resolve, reject })
+      }
+    })
+    // Suppress unhandled-rejection until Mocha attaches its own handler via
+    // `return entry.promise`. The original promise still rejects for Mocha.
+    entry.promise.catch(() => {})
+  }
+
+  return function it (name, fn, opts = {}) {
+    const wrappedFn = useReceiver ? withReceiver(fn) : fn
+    const entry = { name, fn: wrappedFn, promise: null, done: false, rejected: false }
+    if (!entriesByTitle.has(name)) entriesByTitle.set(name, [])
+    entriesByTitle.get(name).push(entry)
+
+    mochaIt(name, function () {
+      if (opts.retries !== undefined) {
+        this.retries(opts.retries)
+      }
+      const suite = this.test.parent
+      const state = getState(suite)
+      if (!state.launched) {
+        state.launched = true
+        for (const test of suite.tests) {
+          const queue = entriesByTitle.get(test.title)
+          const e = queue && queue.shift()
+          if (e) schedule(e, state)
+        }
+      } else if (entry.done && entry.rejected) {
+        // Mocha is retrying a failed test — restart only this scenario
+        schedule(entry, state)
+      }
+      // If done && !rejected: already passed, return resolved promise
+      // If !done: still running or queued, return pending promise
+      return entry.promise
+    })
+  }
+}
+
+/**
+ * Wraps a test body with FakeCiVisIntake lifecycle management. Starts a
+ * receiver before the test, passes it (and an optional `run` exec helper that
+ * auto-kills on cleanup) to `fn`, then stops the receiver in a finally block.
+ *
+ * @param {(
+ *   receiver: FakeCiVisIntake,
+ *   run: (cmd: string, opts?: object) => import('child_process').ChildProcess
+ * ) => Promise<void>} fn
+ * @returns {() => Promise<void>}
+ */
+function withReceiver (fn) {
+  return async () => {
+    const receiver = await new FakeCiVisIntake().start()
+    let lastProc
+    const run = (cmd, opts) => {
+      lastProc = exec(cmd, opts)
+      return lastProc
+    }
+    try {
+      await fn(receiver, run)
+    } finally {
+      lastProc?.kill()
+      await receiver.stop()
+    }
+  }
+}
+
 module.exports = {
   ANY_NUMBER,
   ANY_STRING,
@@ -1209,4 +1332,6 @@ module.exports = {
   useSandbox,
   varySandbox,
   warmCypressBinary,
+  createParallelIt,
+  withReceiver,
 }
