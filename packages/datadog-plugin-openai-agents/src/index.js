@@ -1,8 +1,11 @@
 'use strict'
 
+const { storage } = require('../../datadog-core')
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 const { OpenAIAgentsIntegration } = require('./integration')
 const { DDOpenAIAgentsProcessor } = require('./processor')
+
+const legacyStorage = storage('legacy')
 
 /**
  * Drives the openai-agents integration through agents-core's
@@ -50,6 +53,17 @@ class OpenaiAgentsPlugin extends Plugin {
     this.addSub('tracing:orchestrion:@openai/agents-openai:OAI_getStreamedResponse:start', (ctx) => {
       const baseURL = ctx.self?.client?.baseURL
       if (baseURL && this.#integration.enabled) this.#integration.setClientBaseURL(baseURL)
+    })
+
+    // Activate the current agent's dd-trace span in legacyStorage for the
+    // duration of getResponse (and all its async continuations). This makes the
+    // openai plugin's shimmer see the correct parent when it creates its
+    // openai.request span, so all spans land in the same trace.
+    this.addBind('apm:openai-agents:model:start', ({ agentsCoreSpanId }) => {
+      if (!this.#integration.enabled || !agentsCoreSpanId) return legacyStorage.getStore()
+      const ddSpan = this.#integration.getDDSpan(agentsCoreSpanId)
+      if (!ddSpan) return legacyStorage.getStore()
+      return { ...legacyStorage.getStore(), span: ddSpan }
     })
   }
 

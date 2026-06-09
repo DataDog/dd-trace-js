@@ -21,6 +21,16 @@ const agentsCoreLoadedCh = channel('apm:openai-agents:agents-core:loaded')
 // helpers/rewriter/instrumentations/openai-agents.js).
 const responseClientCh = channel('apm:openai-agents:response:client')
 
+// Plugin uses addBind on this channel so that legacyStorage.run(store, fn) wraps
+// the entire getResponse call — including its async continuations. This ensures
+// the active dd-trace span is visible to the openai plugin when it creates its
+// openai.request span, correctly parenting it under the agent span.
+const modelStartCh = channel('apm:openai-agents:model:start')
+
+// Lazy reference to @openai/agents-core; populated when @openai/agents-openai
+// loads (agents-openai depends on agents-core so it is guaranteed to be present).
+let agentsCore
+
 addHook({ name: '@openai/agents', versions: ['>=0.7.0'] }, (mod) => {
   if (patchedMods.has(mod)) return mod
   if (typeof mod?.addTraceProcessor !== 'function') return mod
@@ -33,7 +43,8 @@ function wrapResponseMethod (original) {
   return function (...args) {
     const baseURL = this?.client?.baseURL
     if (baseURL) responseClientCh.publish({ baseURL })
-    return original.apply(this, args)
+    const agentsCoreSpanId = agentsCore?.getCurrentSpan?.()?.spanId
+    return modelStartCh.runStores({ agentsCoreSpanId }, () => original.apply(this, args))
   }
 }
 
@@ -41,6 +52,8 @@ addHook({ name: '@openai/agents-openai', versions: ['>=0.7.0'] }, (mod) => {
   if (patchedMods.has(mod)) return mod
   const proto = mod?.OpenAIResponsesModel?.prototype
   if (!proto) return mod
+
+  try { agentsCore = require('@openai/agents-core') } catch {}
 
   patchedMods.add(mod)
   shimmer.wrap(proto, 'getResponse', wrapResponseMethod)

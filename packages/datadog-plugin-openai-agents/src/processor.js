@@ -6,7 +6,6 @@ const SPAN_KIND_BY_TYPE = {
   agent: 'agent',
   function: 'tool',
   handoff: 'tool',
-  response: 'llm',
   guardrail: 'task',
   custom: 'task',
 }
