@@ -10,7 +10,7 @@
       "env": { "WITH_TRACER": "1", "WITH_DEPTH": "0", "QUERIES": "1100" }
     },
     "with-depth-on-max": {
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "4", "QUERIES": "1500" }
+      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "4", "QUERIES": "800" }
     },
     "with-depth-and-collapse-off": {
       "env": { "WITH_TRACER": "1", "WITH_DEPTH_AND_COLLAPSE": "4,0", "QUERIES": "200" }
