@@ -44,7 +44,7 @@
     "@grpc/proto-loader": "0.8.1",
     "@hapi/boom": "10.0.1",
     "@hapi/hapi": "21.4.9",
-    "@happy-dom/jest-environment": "20.10.1",
+    "@happy-dom/jest-environment": "20.10.2",
     "@hono/node-server": "2.0.3",
     "@jest/core": "30.4.2",
     "@jest/globals": "30.4.1",

@@ -156,6 +156,50 @@ function extractMetadata (config) {
 }
 
 /**
+ * Extract tool definitions from config
+ * @param {object} config
+ * @returns {Array}
+ */
+function extractToolDefinitions (config) {
+  const toolDefinitions = []
+
+  if (!Array.isArray(config?.tools)) {
+    return toolDefinitions
+  }
+
+  for (const tool of config.tools) {
+    // Only extract tools with valid function declarations
+    if (!Array.isArray(tool?.functionDeclarations)) {
+      continue
+    }
+
+    for (const currDeclaration of tool.functionDeclarations) {
+      // A valid declaration must have a name
+      if (!currDeclaration?.name) {
+        continue
+      }
+
+      const toolDef = { name: currDeclaration.name }
+
+      if (currDeclaration.description !== undefined) {
+        toolDef.description = currDeclaration.description
+      }
+
+      // Parameters can be in two different fields depending on user input
+      if (currDeclaration.parameters !== undefined) {
+        toolDef.schema = currDeclaration.parameters
+      } else if (currDeclaration.parametersJsonSchema !== undefined) {
+        toolDef.schema = currDeclaration.parametersJsonSchema
+      }
+
+      toolDefinitions.push(toolDef)
+    }
+  }
+
+  return toolDefinitions
+}
+
+/**
  * Format function call message
  * @param {Array} parts
  * @param {Array} functionCalls
@@ -498,6 +542,7 @@ module.exports = {
   getOperation,
   extractMetrics,
   extractMetadata,
+  extractToolDefinitions,
   aggregateStreamingChunks,
   formatInputMessages,
   formatEmbeddingInput,

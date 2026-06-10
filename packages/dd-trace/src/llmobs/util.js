@@ -89,6 +89,59 @@ function validateCostTags (span, costTags, source, spanTags) {
   return [...validatedCostTags]
 }
 
+// Validates tool definition entires
+function validateToolDefinitions (toolDefinitions) {
+  if (!Array.isArray(toolDefinitions)) {
+    log.warn('toolDefinitions must be an array.')
+    return []
+  }
+  const validated = []
+
+  for (let i = 0; i < toolDefinitions.length; i++) {
+    const currToolDef = toolDefinitions[i]
+    if (!currToolDef || typeof currToolDef !== 'object') {
+      log.warn('Tool definition at index %d must be an object. Skipping.', i)
+      continue
+    }
+
+    // Name is not optional
+    if (!currToolDef.name || typeof currToolDef.name !== 'string' || currToolDef.name.length <= 0) {
+      log.warn('Tool definition at index %d must have a non empty string "name". Skipping.', i)
+      continue
+    }
+    const validatedToolDef = { name: currToolDef.name }
+
+    // Description, Schema, and Version are optional types
+    if (currToolDef.description !== undefined) {
+      if (typeof currToolDef.description === 'string') {
+        validatedToolDef.description = currToolDef.description
+      } else {
+        log.warn('Tool definition "description" at index %d must be a string. Skipping field.', i)
+      }
+    }
+
+    if (currToolDef.schema !== undefined) {
+      if (currToolDef.schema !== null && typeof currToolDef.schema === 'object' && !Array.isArray(currToolDef.schema)) {
+        validatedToolDef.schema = currToolDef.schema
+      } else {
+        log.warn('Tool definition "schema" at index %d must be a plain object. Skipping field.', i)
+      }
+    }
+
+    if (currToolDef.version !== undefined) {
+      if (typeof currToolDef.version === 'string') {
+        validatedToolDef.version = currToolDef.version
+      } else {
+        log.warn('Tool definition "version" at index %d must be a string. Skipping field.', i)
+      }
+    }
+
+    validated.push(validatedToolDef)
+  }
+
+  return validated
+}
+
 // extracts the argument names from a function string
 function parseArgumentNames (str) {
   const result = []
@@ -318,4 +371,5 @@ module.exports = {
   safeJsonParse,
   spanHasError,
   writeBridgeTags,
+  validateToolDefinitions,
 }
