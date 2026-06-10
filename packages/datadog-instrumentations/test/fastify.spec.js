@@ -170,6 +170,28 @@ describe('fastify instrumentation (unit)', () => {
       assert.strictEqual(errorListener.firstCall.args[0].error, error)
     })
 
+    it('drops the re-entrant publish when an error subscriber re-enters another hook', () => {
+      // A subscriber that drives another hook error while handling the current
+      // one would loop publishError -> errorChannel -> subscriber -> hook ->
+      // publishError until the stack overflows. The guard runs the subscriber once.
+      const { app, registered } = buildWrappedAddHook()
+      const userHook = sinon.stub().callsFake((request, reply, done) => done(new Error('boom')))
+      app.addHook('preHandler', userHook)
+      const wrapper = registered[0].fn
+
+      let depth = 0
+      const errorListener = sinon.stub().callsFake(() => {
+        depth++
+        if (depth > 50) return // safety stop: a regressed guard fails the assert, not the runner
+        wrapper({}, {}, () => {})
+      })
+      subscribe(errorChannel, errorListener)
+
+      wrapper({}, {}, () => {})
+
+      assert.strictEqual(depth, 1)
+    })
+
     it('returns the user value unchanged when the hook is callbackless and returns non-thenable', () => {
       const errorListener = sinon.stub()
       subscribe(errorChannel, errorListener)
@@ -528,6 +550,71 @@ describe('fastify instrumentation (unit)', () => {
       preValidationFn(request, reply, sinon.stub())
 
       sinon.assert.calledOnce(bodyListener)
+    })
+
+    it('forwards done without touching ctx when preParsing left no stored context', () => {
+      // fastify dispatches preValidation even when the preParsing phase never
+      // ran for this request, so `parsingContexts` has no entry. The
+      // missing-context guard must short-circuit before any `ctx` access, even
+      // when a param channel has a subscriber - otherwise processInContext
+      // dereferences the missing ctx (ctx.abortController = ...) and throws.
+      const queryListener = sinon.stub()
+      subscribe(queryParamsReadCh, queryListener)
+
+      const { internalByName } = buildWrappedAddHook()
+      const [preValidationFn] = internalByName('preValidation')
+
+      const request = { query: { q: '1' }, body: { b: '2' }, params: { p: '3' } }
+      const reply = {}
+      const preValidationDone = sinon.stub()
+
+      preValidationFn(request, reply, preValidationDone)
+
+      sinon.assert.calledOnce(preValidationDone)
+      // No ctx means nothing to publish on, so the param channel stays untouched.
+      sinon.assert.notCalled(queryListener)
+    })
+  })
+
+  describe('wrapSend (reply.send error publishing)', () => {
+    const subscriptions = []
+
+    function subscribe (channel, listener) {
+      channel.subscribe(listener)
+      subscriptions.push({ channel, listener })
+    }
+
+    afterEach(() => {
+      while (subscriptions.length > 0) {
+        const { channel, listener } = subscriptions.pop()
+        channel.unsubscribe(listener)
+      }
+    })
+
+    it('publishes through the guarded publishError when reply.send is called with an Error', () => {
+      const errorListener = sinon.stub()
+      subscribe(errorChannel, errorListener)
+
+      const { internalByName } = buildWrappedAddHook()
+      const [preHandlerFn] = internalByName('preHandler')
+
+      // preHandler swaps reply.send for the tracing wrapper (wrapSend).
+      const originalSend = sinon.stub()
+      const reply = { send: originalSend }
+      const preHandlerDone = sinon.stub()
+      preHandlerFn({}, reply, preHandlerDone)
+      sinon.assert.calledOnce(preHandlerDone)
+      assert.notStrictEqual(reply.send, originalSend)
+
+      // Sending an Error routes through publishError, not a bare errorChannel.publish.
+      const error = new Error('send boom')
+      reply.send(error)
+
+      sinon.assert.calledOnce(errorListener)
+      assert.strictEqual(errorListener.firstCall.args[0].error, error)
+      // The original send still runs with the untouched arguments.
+      sinon.assert.calledOnce(originalSend)
+      assert.strictEqual(originalSend.firstCall.args[0], error)
     })
   })
 })

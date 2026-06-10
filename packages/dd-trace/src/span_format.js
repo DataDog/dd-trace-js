@@ -112,26 +112,32 @@ function setSingleSpanIngestionTags (formattedSpan, options) {
  * @param {import('./opentracing/span')} span
  */
 function extractSpanLinks (formattedSpan, span) {
-  if (!span._links?.length) {
+  const links = span._links
+  if (!links?.length) {
     return
   }
-  const links = span._links.map(({ context, attributes }) => {
-    const formattedLink = {
-      trace_id: context.toTraceId(true),
-      span_id: context.toSpanId(true),
+  // Build the `_dd.span_links` JSON directly. The trace / span ids are decimal
+  // strings (no escaping); attributes are pre-sanitized to a string map and
+  // `undefined` when empty, so they only need a presence check. Avoids the
+  // throwaway array of formatted-link objects the previous `map` allocated and
+  // the second walk `JSON.stringify` does over them.
+  let serialized = '['
+  for (let i = 0; i < links.length; i++) {
+    if (i > 0) serialized += ','
+    const { context, attributes } = links[i]
+    serialized += `{"trace_id":"${context.toTraceId(true)}","span_id":"${context.toSpanId(true)}"`
+    if (attributes !== undefined) {
+      serialized += `,"attributes":${JSON.stringify(attributes)}`
     }
-
-    // `_sanitizeAttributes` (addLink) leaves `attributes` undefined when empty,
-    // so a present value always has entries — no emptiness probe here.
-    if (attributes) {
-      formattedLink.attributes = attributes
+    if (context?._sampling?.priority >= 0) {
+      serialized += `,"flags":${context._sampling.priority > 0 ? 1 : 0}`
     }
-    if (context?._sampling?.priority >= 0) formattedLink.flags = context._sampling.priority > 0 ? 1 : 0
-    if (context?._tracestate) formattedLink.tracestate = context._tracestate.toString()
-
-    return formattedLink
-  })
-  let serialized = JSON.stringify(links)
+    if (context?._tracestate) {
+      serialized += `,"tracestate":${JSON.stringify(context._tracestate.toString())}`
+    }
+    serialized += '}'
+  }
+  serialized += ']'
   if (serialized.length > MAX_META_VALUE_LENGTH) {
     serialized = `${serialized.slice(0, MAX_META_VALUE_LENGTH)}...`
   }

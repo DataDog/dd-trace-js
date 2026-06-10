@@ -1,7 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { channel } = require('dc-polyfill')
+const { channel, tracingChannel } = require('dc-polyfill')
 const { before, beforeEach, describe, it } = require('mocha')
 
 const evaluateChannel = channel('dd-trace:ai:aiguard')
@@ -58,8 +58,8 @@ class FakeResponses {
 function subscribeAutoResolve () {
   const calls = []
   const handler = ctx => {
-    calls.push({ messages: ctx.messages })
-    ctx.resolve()
+    calls.push(ctx)
+    ctx.pending.push(Promise.resolve())
   }
   evaluateChannel.subscribe(handler)
   return { calls, unsubscribe: () => evaluateChannel.unsubscribe(handler) }
@@ -72,6 +72,15 @@ function subscribeWithHandler (handler) {
 
 function aiGuardAbortError (message = 'blocked') {
   return Object.assign(new Error(message), { name: 'AIGuardAbortError' })
+}
+
+function allowEvaluation (ctx) {
+  ctx.pending.push(Promise.resolve())
+}
+
+function blockEvaluation (ctx, err) {
+  ctx.abortController.abort(err)
+  ctx.pending.push(Promise.resolve())
 }
 
 /**
@@ -141,6 +150,22 @@ describe('openai AI Guard instrumentation', () => {
         .then(body => assert.strictEqual(body.choices[0].message, assistant))
     })
 
+    it('finishes the span without AI Guard when only APM tracing is active', () => {
+      // APM tracing subscribed (so `ch.start.hasSubscribers`) but no AI Guard subscriber,
+      // so `guard` is null and `handleUnwrappedAPIPromise` takes the no-guard finish path.
+      const apmChannel = tracingChannel('apm:openai:request')
+      const apmHandlers = { start () {} }
+      apmChannel.subscribe(apmHandlers)
+
+      const assistant = { role: 'assistant', content: 'Hello!' }
+      const completions = new Completions()
+      completions._nextApiPromise = new FakeAPIPromise({ choices: [{ message: assistant }] })
+
+      return completions.create({ messages: [{ role: 'user', content: 'Hi' }] }).parse()
+        .then(body => assert.strictEqual(body.choices[0].message, assistant))
+        .finally(() => apmChannel.unsubscribe(apmHandlers))
+    })
+
     it('calls original directly when messages are missing', () => {
       const { calls, unsubscribe } = subscribeAutoResolve()
       const completions = new Completions()
@@ -163,6 +188,10 @@ describe('openai AI Guard instrumentation', () => {
           // Before Model + After Model (assistant responded)
           assert.strictEqual(calls.length, 2)
           assert.deepStrictEqual(calls[0].messages, messages)
+          assert.ok(calls[0].abortController instanceof AbortController)
+          assert.ok(Array.isArray(calls[0].pending))
+          assert.strictEqual(Object.hasOwn(calls[0], 'resolve'), false)
+          assert.strictEqual(Object.hasOwn(calls[0], 'reject'), false)
         })
         .finally(unsubscribe)
     })
@@ -181,6 +210,7 @@ describe('openai AI Guard instrumentation', () => {
             { role: 'user', content: 'Hi' },
             { role: 'assistant', content: 'Hello!' },
           ])
+          assert.strictEqual(calls[1].abortController.signal.aborted, false)
         })
         .finally(unsubscribe)
     })
@@ -212,7 +242,7 @@ describe('openai AI Guard instrumentation', () => {
 
     it('rejects with the AI Guard error when Before Model denies', () => {
       const err = aiGuardAbortError()
-      const unsubscribe = subscribeWithHandler(ctx => ctx.reject(err))
+      const unsubscribe = subscribeWithHandler(ctx => blockEvaluation(ctx, err))
       const completions = new Completions()
       completions._nextApiPromise = new FakeAPIPromise({ choices: [{ message: { role: 'assistant', content: 'x' } }] })
 
@@ -227,7 +257,7 @@ describe('openai AI Guard instrumentation', () => {
       const err = aiGuardAbortError()
       const unsubscribe = subscribeWithHandler(ctx => {
         count++
-        count === 1 ? ctx.resolve() : ctx.reject(err)
+        count === 1 ? allowEvaluation(ctx) : blockEvaluation(ctx, err)
       })
       const completions = new Completions()
       completions._nextApiPromise = new FakeAPIPromise({ choices: [{ message: { role: 'assistant', content: 'x' } }] })
@@ -245,7 +275,7 @@ describe('openai AI Guard instrumentation', () => {
       const observed = { llmCalledBeforeGuard: false }
       const unsubscribe = subscribeWithHandler(ctx => {
         observed.llmCalledBeforeGuard = llmCalled
-        ctx.resolve()
+        allowEvaluation(ctx)
       })
 
       let llmCalled = false
@@ -301,7 +331,7 @@ describe('openai AI Guard instrumentation', () => {
       const unsubscribe = subscribeWithHandler(ctx => {
         count++
         // Before Model passes; first choice passes; second choice rejects
-        count === 3 ? ctx.reject(err) : ctx.resolve()
+        count === 3 ? blockEvaluation(ctx, err) : allowEvaluation(ctx)
       })
       const completions = new Completions()
       completions._nextApiPromise = new FakeAPIPromise({
@@ -319,7 +349,7 @@ describe('openai AI Guard instrumentation', () => {
 
     it('propagates Before Model rejection through asResponse()', () => {
       const err = aiGuardAbortError()
-      const unsubscribe = subscribeWithHandler(ctx => ctx.reject(err))
+      const unsubscribe = subscribeWithHandler(ctx => blockEvaluation(ctx, err))
       const completions = new Completions()
       completions._nextApiPromise = new FakeAPIPromise({ choices: [{ message: { role: 'assistant', content: 'x' } }] })
 
@@ -488,7 +518,7 @@ describe('openai AI Guard instrumentation', () => {
 
     it('does not emit unhandled rejection when apiProm is discarded and Before Model would deny', async () => {
       const err = aiGuardAbortError()
-      const unsubscribe = subscribeWithHandler(ctx => ctx.reject(err))
+      const unsubscribe = subscribeWithHandler(ctx => blockEvaluation(ctx, err))
 
       const observed = []
       const onUnhandled = reason => observed.push(reason)
@@ -590,7 +620,7 @@ describe('openai AI Guard instrumentation', () => {
 
     it('rejects with AI Guard error when Before Model denies on the unwrapped promise', () => {
       const err = aiGuardAbortError()
-      const unsubscribe = subscribeWithHandler(ctx => ctx.reject(err))
+      const unsubscribe = subscribeWithHandler(ctx => blockEvaluation(ctx, err))
       const completions = new Completions()
       const body = { choices: [{ message: { role: 'assistant', content: 'x' } }] }
       completions._nextApiPromise = new FakeUnwrappableAPIPromise(body)
@@ -607,7 +637,7 @@ describe('openai AI Guard instrumentation', () => {
       const err = aiGuardAbortError()
       const unsubscribe = subscribeWithHandler(ctx => {
         count++
-        count === 1 ? ctx.resolve() : ctx.reject(err)
+        count === 1 ? allowEvaluation(ctx) : blockEvaluation(ctx, err)
       })
       const completions = new Completions()
       const body = { choices: [{ message: { role: 'assistant', content: 'leaked pii' } }] }
@@ -720,7 +750,7 @@ describe('openai AI Guard instrumentation', () => {
 
     it('rejects with AI Guard error when Before Model denies', () => {
       const err = aiGuardAbortError()
-      const unsubscribe = subscribeWithHandler(ctx => ctx.reject(err))
+      const unsubscribe = subscribeWithHandler(ctx => blockEvaluation(ctx, err))
       const responses = new Responses()
       responses._nextApiPromise = new FakeAPIPromise({
         output: [{ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'x' }] }],
@@ -737,7 +767,7 @@ describe('openai AI Guard instrumentation', () => {
       const err = aiGuardAbortError()
       const unsubscribe = subscribeWithHandler(ctx => {
         count++
-        count === 1 ? ctx.resolve() : ctx.reject(err)
+        count === 1 ? allowEvaluation(ctx) : blockEvaluation(ctx, err)
       })
       const responses = new Responses()
       responses._nextApiPromise = new FakeAPIPromise({

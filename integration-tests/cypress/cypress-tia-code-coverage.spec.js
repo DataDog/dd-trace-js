@@ -184,9 +184,6 @@ moduleTypes.forEach(({
         }
       )
 
-      childProcess.stdout?.pipe(process.stdout)
-      childProcess.stderr?.pipe(process.stderr)
-
       const eventsPromise = gatherCypressPayloads(receiver, childProcess, '/api/v2/citestcycle', payloads => {
         const events = payloads.flatMap(({ payload }) => payload.events)
         const testSession = events.find(event => event.type === 'test_session_end').content
