@@ -332,7 +332,7 @@ function reportMetrics (metrics, raspRule, req, rootSpan) {
     rootSpan = req && web.root(req)
   }
 
-  if (!rootSpan) return
+  if (!req || !rootSpan) return
 
   if (metrics.rulesVersion) {
     rootSpan.setTag('_dd.appsec.event_rules.version', metrics.rulesVersion)
