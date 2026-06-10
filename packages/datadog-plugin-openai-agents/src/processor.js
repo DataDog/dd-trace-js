@@ -8,6 +8,7 @@ const SPAN_KIND_BY_TYPE = {
   handoff: 'tool',
   guardrail: 'task',
   custom: 'task',
+  response: 'llm',
 }
 
 // Lifecycle methods are awaited by agents-core. Share one resolved Promise
