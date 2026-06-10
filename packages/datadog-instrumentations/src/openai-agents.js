@@ -32,9 +32,32 @@ const modelStartCh = channel('apm:openai-agents:model:start')
 // require (and without triggering n/no-missing-require on agents-core internals).
 let agentsMod
 
+// @openai/agents >=0.8.0 moved addTraceProcessor / getCurrentSpan out of the
+// top-level re-exports.  The new public surface is:
+//   mod.getGlobalTraceProvider().registerProcessor(processor)
+//   mod.getGlobalTraceProvider().getCurrentSpan()
+// Both old and new APIs are tried so a single instrumentation file works across
+// the full supported version range.
+function registerProcessor (mod, processor) {
+  if (typeof mod?.addTraceProcessor === 'function') {
+    mod.addTraceProcessor(processor)
+  } else if (typeof mod?.getGlobalTraceProvider === 'function') {
+    mod.getGlobalTraceProvider().registerProcessor(processor)
+  }
+}
+
+function getCurrentSpanId (mod) {
+  if (typeof mod?.getCurrentSpan === 'function') {
+    return mod.getCurrentSpan()?.spanId
+  }
+  if (typeof mod?.getGlobalTraceProvider === 'function') {
+    return mod.getGlobalTraceProvider().getCurrentSpan()?.spanId
+  }
+}
+
 addHook({ name: '@openai/agents', versions: ['>=0.7.0'] }, (mod) => {
   if (patchedMods.has(mod)) return mod
-  if (typeof mod?.addTraceProcessor !== 'function') return mod
+  if (typeof mod?.addTraceProcessor !== 'function' && typeof mod?.getGlobalTraceProvider !== 'function') return mod
   patchedMods.add(mod)
   agentsMod = mod
   agentsCoreLoadedCh.publish({ mod })
@@ -45,7 +68,7 @@ function wrapResponseMethod (original) {
   return function (...args) {
     const baseURL = this?.client?.baseURL
     if (baseURL) responseClientCh.publish({ baseURL })
-    const agentsCoreSpanId = agentsMod?.getCurrentSpan?.()?.spanId
+    const agentsCoreSpanId = getCurrentSpanId(agentsMod)
     return modelStartCh.runStores({ agentsCoreSpanId }, () => original.apply(this, args))
   }
 }

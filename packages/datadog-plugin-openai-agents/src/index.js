@@ -37,10 +37,14 @@ class OpenaiAgentsPlugin extends Plugin {
     })
 
     this.addSub('apm:openai-agents:agents-core:loaded', ({ mod }) => {
-      if (typeof mod?.addTraceProcessor !== 'function') return
       if (this.#processorRegistered) return
       this.#processorRegistered = true
-      mod.addTraceProcessor(new DDOpenAIAgentsProcessor(() => this.#integration))
+      const processor = new DDOpenAIAgentsProcessor(() => this.#integration)
+      if (typeof mod?.addTraceProcessor === 'function') {
+        mod.addTraceProcessor(processor)
+      } else {
+        mod.getGlobalTraceProvider().registerProcessor(processor)
+      }
     })
 
     this.addSub('apm:openai-agents:response:client', ({ baseURL }) => {
