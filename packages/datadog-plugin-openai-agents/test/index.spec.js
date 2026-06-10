@@ -68,16 +68,19 @@ createIntegrationTestSuite('openai-agents', '@openai/agents', {
       return traceAssertion
     })
 
-    it('emits a response span under the agent span', async () => {
+    it('parents the openai.request span under the agent span', async () => {
       const traceAssertion = agent.assertSomeTraces((traces) => {
-        const responseSpan = findSpan(traces, s => s.name === 'openai_agents.response')
-        assertObjectContains(responseSpan, {
-          name: 'openai_agents.response',
-          meta: {
-            component: 'openai-agents',
-            'span.kind': 'client',
-          },
-        })
+        const flat = traces.flat()
+        const agentSpan = flat.find(s => s.name === 'test_agent')
+        const openaiSpan = flat.find(s => s.name === 'openai.request')
+
+        assert.ok(agentSpan, 'expected an agent span')
+        assert.ok(openaiSpan, 'expected an openai.request span')
+        assert.equal(
+          openaiSpan.parent_id.toString(),
+          agentSpan.span_id.toString(),
+          'openai.request should be a child of the agent span'
+        )
       })
 
       await testSetup.run()
