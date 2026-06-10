@@ -802,6 +802,7 @@ moduleTypes.forEach(({
               assert.strictEqual(tests.length, 5)
 
               const testExecutionOrder = tests.map(test => ({
+                resource: test.resource,
                 name: test.meta[TEST_NAME],
                 isRetry: test.meta[TEST_IS_RETRY] === 'true',
                 isNew: test.meta[TEST_IS_NEW] === 'true',
@@ -815,11 +816,41 @@ moduleTypes.forEach(({
               // 4. "other context fails" (retry 2)
               // 5. "other context fails" (retry 3)
               assert.deepStrictEqual(testExecutionOrder, [
-                { name: 'context passes', isRetry: false, isNew: false, retryReason: undefined },
-                { name: 'other context fails', isRetry: false, isNew: true, retryReason: undefined },
-                { name: 'other context fails', isRetry: true, isNew: true, retryReason: TEST_RETRY_REASON_TYPES.efd },
-                { name: 'other context fails', isRetry: true, isNew: true, retryReason: TEST_RETRY_REASON_TYPES.efd },
-                { name: 'other context fails', isRetry: true, isNew: true, retryReason: TEST_RETRY_REASON_TYPES.efd },
+                {
+                  resource: 'cypress/e2e/spec.cy.js.context passes',
+                  name: 'context passes',
+                  isRetry: false,
+                  isNew: false,
+                  retryReason: undefined,
+                },
+                {
+                  resource: 'cypress/e2e/spec.cy.js.other context fails',
+                  name: 'other context fails',
+                  isRetry: false,
+                  isNew: true,
+                  retryReason: undefined,
+                },
+                {
+                  resource: 'cypress/e2e/spec.cy.js.other context fails',
+                  name: 'other context fails',
+                  isRetry: true,
+                  isNew: true,
+                  retryReason: TEST_RETRY_REASON_TYPES.efd,
+                },
+                {
+                  resource: 'cypress/e2e/spec.cy.js.other context fails',
+                  name: 'other context fails',
+                  isRetry: true,
+                  isNew: true,
+                  retryReason: TEST_RETRY_REASON_TYPES.efd,
+                },
+                {
+                  resource: 'cypress/e2e/spec.cy.js.other context fails',
+                  name: 'other context fails',
+                  isRetry: true,
+                  isNew: true,
+                  retryReason: TEST_RETRY_REASON_TYPES.efd,
+                },
               ])
 
               // Verify TEST_HAS_FAILED_ALL_RETRIES is set correctly

@@ -758,7 +758,7 @@ moduleTypes.forEach(({
           if (isManagingTests) {
             assert.strictEqual(childProcess.exitCode, 0)
           } else {
-            assert.notStrictEqual(childProcess.exitCode, 0)
+            assert.strictEqual(childProcess.exitCode, 2)
           }
         }
 
