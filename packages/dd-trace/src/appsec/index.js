@@ -236,7 +236,7 @@ function incomingHttpEndTranslator ({ req, res }) {
 
   if (config?.appsec?.apiSecurity?.enabled) {
     const rootSpan = web.root(req)
-    if (rootSpan?.context()?.getTag('component') === 'express') {
+    if (rootSpan?.context()?.getTag?.('component') === 'express') {
       const route = web.getContext(req)?.paths?.join('')
       if (route) {
         try {
