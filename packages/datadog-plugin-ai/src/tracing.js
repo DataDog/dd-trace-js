@@ -1,6 +1,5 @@
 'use strict'
 
-// const { storage } = require('../../datadog-core')
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const { getModelProvider, parseModelProvider } = require('./utils')
@@ -41,8 +40,6 @@ class VercelAiTelemetryPlugin extends TracingPlugin {
     const model = event.modelId
     const modelProvider = parseModelProvider(event.provider, model)
 
-    // console.log('parent of', name, 'is', storage('legacy').getStore()?.span._name)
-
     this.startSpan(name, {
       meta: {
         'resource.name': event.functionId ?? name,
@@ -55,9 +52,6 @@ class VercelAiTelemetryPlugin extends TracingPlugin {
   }
 
   asyncEnd (ctx) {
-    if (ctx.type === 'streamText') {
-      // console.log(ctx)
-    }
     const span = ctx.currentStore?.span
     span?.finish()
   }

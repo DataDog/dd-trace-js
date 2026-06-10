@@ -12,7 +12,7 @@ const {
 // TODO: support rerank
 const SPAN_NAME_TO_KIND_MAPPING = {
   // embeddings
-  embed: 'workflow',
+  embed: 'embedding',
   embedMany: 'workflow',
   // object generation
   generateObject: 'workflow',
@@ -23,7 +23,7 @@ const SPAN_NAME_TO_KIND_MAPPING = {
   // llm operations
   languageModelCall: 'llm',
   // steps
-  step: 'step',
+  step: 'step', // TODO: support step spans for manual instrumentation as well
   // tools
   executeTool: 'tool',
 }
@@ -155,12 +155,20 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
     const kind = SPAN_NAME_TO_KIND_MAPPING[operation]
     if (!kind) return
 
-    const modelName = event.modelId
-    const modelProvider = parseModelProvider(event.provider, modelName)
-
     const normalizedName = nameFromOperation(operation, event) || operation
 
-    return { kind, name: getLlmObsSpanName(normalizedName, event.functionId), modelName, modelProvider }
+    const options = {
+      kind, name: getLlmObsSpanName(normalizedName, event.functionId),
+    }
+
+    if (kind === 'llm' || kind === 'embedding') {
+      const modelName = event.modelId
+
+      options.modelName = modelName
+      options.modelProvider = parseModelProvider(event.provider, modelName)
+    }
+
+    return options
   }
 
   /**
@@ -174,7 +182,15 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
     const kind = SPAN_NAME_TO_KIND_MAPPING[operation]
     if (!kind) return
 
+    // console.log(operation)
+    // console.log('event', ctx.event)
+    // console.log('result', ctx.result)
+    // console.log('\n\n')
+
     switch (operation) {
+      case 'embed':
+        this.setEmbeddingTags(span, ctx)
+        break
       case 'generateText':
         this.setTextGenerationTags(span, ctx)
         break
@@ -190,6 +206,20 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
       default:
         break
     }
+  }
+
+  setEmbeddingTags (span, ctx) {
+    const { event, result } = ctx
+
+    const input = event.value
+    const embedding = result?.embedding
+    const embeddingTextResult = `[1 embedding(s) returned with size ${embedding.length}]`
+
+    this._tagger.tagEmbeddingIO(span, input, embeddingTextResult)
+
+    this._tagger.tagMetrics(span, {
+      inputTokens: result?.usage?.tokens,
+    })
   }
 
   setTextGenerationTags (span, ctx) {
