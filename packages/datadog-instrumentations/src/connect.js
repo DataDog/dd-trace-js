@@ -90,7 +90,8 @@ function wrapLayerHandle (layer) {
 }
 
 function wrapNext (req, next) {
-  return shimmer.wrapFunction(next, next => function (error) {
+  // Mirror next's name/arity so wrapCallback skips its per-call identity rewrite.
+  return shimmer.wrapCallback(next, original => function next (error) {
     if (error) {
       errorChannel.publish({ req, error })
     }
@@ -98,7 +99,7 @@ function wrapNext (req, next) {
     nextChannel.publish({ req })
     finishChannel.publish({ req })
 
-    next.apply(this, arguments)
+    original.apply(this, arguments)
   })
 }
 

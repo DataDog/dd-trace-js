@@ -333,7 +333,7 @@ describe('Span', () => {
         'extras.0': '1',
         'extras.1': '2',
       })
-      assert.deepStrictEqual(span._links[1].attributes, {})
+      assert.strictEqual(span._links[1].attributes, undefined)
     })
   })
 
@@ -403,6 +403,63 @@ describe('Span', () => {
       ]
       assert.deepStrictEqual(events, expectedEvents)
     })
+  })
+
+  describe('empty event and link attributes (end to end)', () => {
+    // addEvent / addLink sanitize empty (and all-dropped) attribute sets to
+    // `undefined` at the source, so format() and every 0.4 encoder path omit
+    // the slot instead of emitting `"attributes":{}`. The encoders trust that
+    // contract and skip the per-entry emptiness probe, so this guards the wire.
+    const msgpack = require('@msgpack/msgpack')
+    const format = require('../../src/span_format')
+    // Real id (not the suite's string stub) so span-link contexts serialize.
+    const RealSpan = require('../../src/opentracing/span')
+
+    function buildSpan () {
+      const span = new RealSpan(tracer, processor, prioritySampler, { operationName: 'operation' })
+      span.addEvent('empty', {})
+      span.addEvent('all dropped', { nested: { not: 'allowed' } })
+      span.addEvent('kept', { rating: 9 })
+      span.addLink({ context: span.context(), attributes: {} })
+      span.addLink({ context: span.context(), attributes: { nested: { not: 'allowed' } } })
+      span.addLink({ context: span.context(), attributes: { color: 'blue' } })
+      span.finish()
+      return span
+    }
+
+    it('sanitizes empty and all-dropped attributes to undefined on the span', () => {
+      const span = buildSpan()
+
+      assert.strictEqual(span._events[0].attributes, undefined)
+      assert.strictEqual(span._events[1].attributes, undefined)
+      assert.deepStrictEqual(span._events[2].attributes, { rating: 9 })
+
+      assert.strictEqual(span._links[0].attributes, undefined)
+      assert.strictEqual(span._links[1].attributes, undefined)
+      assert.deepStrictEqual(span._links[2].attributes, { color: 'blue' })
+    })
+
+    for (const nativeSpanEvents of [false, true]) {
+      it(`omits empty attributes through format() + 0.4 encode (native span events: ${nativeSpanEvents})`, () => {
+        const { AgentEncoder } = proxyquire('../../src/encode/0.4', {
+          '../config': () => ({ DD_TRACE_NATIVE_SPAN_EVENTS: nativeSpanEvents }),
+        })
+        const encoder = new AgentEncoder({ flush () {} })
+
+        encoder.encode([format(buildSpan())])
+        const encoded = msgpack.decode(encoder.makePayload(), { useBigInt64: true })[0][0]
+
+        const links = JSON.parse(encoded.meta['_dd.span_links'])
+        assert.ok(!('attributes' in links[0]), 'empty link attributes must be omitted')
+        assert.ok(!('attributes' in links[1]), 'all-dropped link attributes must be omitted')
+        assert.deepStrictEqual(links[2].attributes, { color: 'blue' })
+
+        const events = nativeSpanEvents ? encoded.span_events : JSON.parse(encoded.meta.events)
+        assert.ok(!('attributes' in events[0]), 'empty event attributes must be omitted')
+        assert.ok(!('attributes' in events[1]), 'all-dropped event attributes must be omitted')
+        assert.ok('attributes' in events[2], 'kept event attributes must be present')
+      })
+    }
   })
 
   describe('getBaggageItem', () => {
@@ -613,6 +670,12 @@ describe('Span', () => {
         tracer = { _config: { ...getConfig(), DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: 'restart' } }
         span = new Span(tracer, processor, prioritySampler, { operationName: 'operation', parent })
         assert.deepStrictEqual(span._spanContext._baggageItems, { foo: 'bar' })
+      })
+
+      it('should start with empty baggage on restart when there is no parent to inherit from', () => {
+        tracer = { _config: { ...getConfig(), DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT: 'restart' } }
+        span = new Span(tracer, processor, prioritySampler, { operationName: 'operation' })
+        assert.deepStrictEqual(span._spanContext._baggageItems, {})
       })
     })
   })

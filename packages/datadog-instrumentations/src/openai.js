@@ -240,6 +240,10 @@ for (const extension of extensions) {
           }
 
           return ch.start.runStores(ctx, () => {
+            // Explicit childOf rather than async-context: the _thenUnwrap/parse path
+            // decouples the lazy evaluation from the active scope at call time.
+            if (guard) guard.parentSpan = ctx.currentStore?.span
+
             const apiProm = methodFn.apply(this, args)
 
             if (baseResource === 'chat.completions' && typeof apiProm._thenUnwrap === 'function') {
@@ -300,23 +304,31 @@ function handleUnwrappedAPIPromise (apiProm, ctx, stream, guard) {
         return body
       }
 
-      finish(ctx, {
+      const responseData = {
         headers: response.headers,
         data: body,
         request: {
           path: response.url,
           method: options.method,
         },
+      }
+
+      if (!guard) {
+        finish(ctx, responseData)
+        return body
+      }
+
+      // Finish after evaluation so a block propagates the error to openai.request
+      // and the span wraps its ai_guard child instead of closing before it.
+      return aiGuard.evaluateOutput(guard, body).then(() => {
+        finish(ctx, responseData)
+        return body
       })
-
-      if (!guard) return body
-
-      return aiGuard.evaluateOutput(guard, body).then(() => body)
     })
     .catch(error => {
-      // ctx.result is set inside finish(); if absent, finish never ran (sync throw in
-      // success branch, before-model block, or openai error) — record the error now.
-      // If finish already ran successfully (after-model block), don't double-publish.
+      // ctx.result is set inside finish(); if absent, finish never ran (sync throw in the success
+      // branch, Before Model block, After Model block, or openai error) — record the error now so
+      // the openai.request span is marked errored. If finish already ran, don't double-publish.
       if (!ctx.result) finish(ctx, undefined, error)
       throw error
     })

@@ -1,0 +1,180 @@
+# The microbenchmarks CI image is built in-repo from container/ via the shared
+# benchmarking-platform template (manual `build-benchmark-ci-images` job).
+# @see https://github.com/DataDog/benchmarking-platform-tools/blob/main/images/templates/gitlab/build-ci-images.template.yml
+include:
+  - project: 'DataDog/benchmarking-platform-tools'
+    file: 'images/templates/gitlab/build-ci-images.template.yml'
+
+variables:
+  # Consumed by the benchmark jobs below. After the first `build-benchmark-ci-images`
+  # run, repin this to the registry.ddbuild.io/ci/benchmarking-platform:dd-trace-js-<pipeline-id>
+  # tag it pushes (dd-trace-go pins the same way).
+  # TODO(BridgeAR): repin to the registry.ddbuild.io tag once the in-repo image is built.
+  MICROBENCHMARKS_CI_IMAGE: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/benchmarking-platform:dd-trace-js
+
+  # Image build, consumed by the included build-ci-images template. The per-pipeline
+  # suffix pins each build to a unique tag so a rebuild can't shift what older
+  # pipelines pulled.
+  BASE_CI_IMAGE_SUFFIX: dd-trace-js-${CI_PIPELINE_ID}
+  BASE_CI_IMAGE_CONTAINER_DIR: .gitlab/benchmarks/container
+  # sirun and CPython are x86_64 only; the template defaults to multi-arch, which
+  # would build an arm64 leg with amd64 binaries (exec format error). Pin amd64.
+  BASE_CI_IMAGE_PLATFORM: linux/amd64
+
+  SLS_CI_IMAGE: registry.ddbuild.io/ci/serverless-tools:1
+  SLS_CI_BRANCH: main
+
+  # Benchmark's env variables. Modify to tweak benchmark parameters.
+  UNCONFIDENCE_THRESHOLD: "5.0"
+  MD_REPORT_ONLY_CHANGES: "1"
+
+.benchmarks:
+  stage: benchmarks
+  needs: [ ]
+  tags: ["runner:apm-k8s-m7i-metal"]
+  image: $MICROBENCHMARKS_CI_IMAGE
+  rules:
+    - if: '$CI_COMMIT_REF_NAME =~ /^graphite-base\/.*$/'
+      when: never
+    - if: $CI_COMMIT_BRANCH == 'master'
+      interruptible: false
+    - interruptible: true
+  timeout: 30m  # TODO: Reduce this once GitLab CI runner availability improves
+  script:
+    - cd .gitlab/benchmarks && bp-runner bp-runner.yml --debug
+  artifacts:
+    name: "artifacts"
+    when: always
+    paths:
+      - .gitlab/benchmarks/artifacts/
+    expire_in: 3 months
+  retry:
+    max: 2
+    when:
+      - unknown_failure
+      - data_integrity_failure
+      - runner_system_failure
+      - scheduler_failure
+      - api_failure
+
+benchmarks-pr-comment:
+  stage: benchmarks-pr-comment
+  needs: [ benchmark, benchmark-serverless ]
+  rules:
+    - if: '$CI_COMMIT_REF_NAME =~ /^graphite-base\/.*$/'
+      when: never
+    - when: on_success
+  tags: ["arch:amd64"]
+  image: $MICROBENCHMARKS_CI_IMAGE
+  script:
+    - cd .gitlab/benchmarks && bp-runner bp-runner.pr-comment.yml --debug
+  allow_failure: true
+
+check-big-regressions:
+  stage: benchmarks-pr-comment
+  needs: [ benchmark, benchmark-serverless ]
+  rules:
+    - if: '$CI_COMMIT_REF_NAME =~ /^graphite-base\/.*$/'
+      when: never
+    - if: $CI_COMMIT_BRANCH == 'master'
+      interruptible: false
+    - interruptible: true
+  tags: ["arch:amd64"]
+  image: $MICROBENCHMARKS_CI_IMAGE
+  script:
+    - cd .gitlab/benchmarks && bp-runner bp-runner.fail-on-regression.yml --debug
+
+benchmark:
+  extends: .benchmarks
+  # The number of GROUP rows per MAJOR_VERSION must equal SPLITS. If you change
+  # one, change the other — otherwise variants get silently skipped.
+  parallel:
+    matrix:
+      - MAJOR_VERSION: 20
+        GROUP: 1
+      - MAJOR_VERSION: 20
+        GROUP: 2
+      - MAJOR_VERSION: 20
+        GROUP: 3
+      - MAJOR_VERSION: 20
+        GROUP: 4
+      - MAJOR_VERSION: 20
+        GROUP: 5
+      - MAJOR_VERSION: 20
+        GROUP: 6
+      - MAJOR_VERSION: 24
+        GROUP: 1
+      - MAJOR_VERSION: 24
+        GROUP: 2
+      - MAJOR_VERSION: 24
+        GROUP: 3
+      - MAJOR_VERSION: 24
+        GROUP: 4
+      - MAJOR_VERSION: 24
+        GROUP: 5
+      - MAJOR_VERSION: 24
+        GROUP: 6
+      - MAJOR_VERSION: 26
+        GROUP: 1
+      - MAJOR_VERSION: 26
+        GROUP: 2
+      - MAJOR_VERSION: 26
+        GROUP: 3
+      - MAJOR_VERSION: 26
+        GROUP: 4
+      - MAJOR_VERSION: 26
+        GROUP: 5
+      - MAJOR_VERSION: 26
+        GROUP: 6
+  variables:
+    SPLITS: 6
+
+benchmark-serverless:
+  stage: benchmarks
+  image: $SLS_CI_IMAGE
+  tags: ["arch:amd64"]
+  when: on_success
+  rules:
+    - if: $CI_COMMIT_BRANCH == 'master'
+      interruptible: false
+    - interruptible: true
+  needs:
+    - benchmark-serverless-trigger
+  script:
+    - curl -OL "https://binaries.ddbuild.io/dd-source/authanywhere/LATEST/authanywhere-linux-amd64"
+    - mv "authanywhere-linux-amd64" /bin/authanywhere
+    - chmod +x /bin/authanywhere
+    - BTI_CI_API_TOKEN=$(authanywhere --audience rapid-devex-ci)
+    - >-
+      BTI_RESPONSE=$(curl --silent --request GET \
+        --header "$BTI_CI_API_TOKEN" \  --header "Content-Type: application/vnd.api+json" \
+        "https://bti-ci-api.us1.ddbuild.io/internal/ci/gitlab/token?owner=DataDog&repository=serverless-tools")
+    - GITLAB_TOKEN=$(echo "$BTI_RESPONSE" | jq -r '.token // empty')
+    - git clone https://serverless-tools:${GITLAB_TOKEN}@gitlab.ddbuild.io/DataDog/serverless-tools.git ./serverless-tools && cd ./serverless-tools
+    - ./ci/check_trigger_status.sh
+
+benchmark-serverless-trigger:
+  stage: benchmarks
+  needs: []
+  rules:
+    - if: $CI_COMMIT_BRANCH == 'master'
+      interruptible: false
+    - interruptible: true
+  trigger:
+    project: DataDog/serverless-tools
+    branch: $SLS_CI_BRANCH
+    strategy: depend
+  allow_failure: true
+  variables:
+    UPSTREAM_PIPELINE_ID: $CI_PIPELINE_ID
+    UPSTREAM_PROJECT_URL: $CI_PROJECT_URL
+    UPSTREAM_COMMIT_BRANCH: $CI_COMMIT_BRANCH
+    UPSTREAM_COMMIT_AUTHOR: $CI_COMMIT_AUTHOR
+    UPSTREAM_COMMIT_TITLE: $CI_COMMIT_TITLE
+    UPSTREAM_COMMIT_TAG: $CI_COMMIT_TAG
+    UPSTREAM_PROJECT_NAME: $CI_PROJECT_NAME
+    UPSTREAM_GITLAB_USER_LOGIN: $GITLAB_USER_LOGIN
+    UPSTREAM_GITLAB_USER_EMAIL: $GITLAB_USER_EMAIL
+    # only available on Merge Requests
+    UPSTREAM_MERGE_TARGET_BRANCH: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME
+    DD_TAGS: "SLS_CI_BRANCH:$SLS_CI_BRANCH"

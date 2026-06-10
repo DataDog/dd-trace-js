@@ -1,16 +1,13 @@
 ---
 name: apm-integrations
 description: |
-  This skill should be used when the user asks to "add a new integration",
-  "instrument a library", "add instrumentation for",
-  "create instrumentation", "new dd-trace integration",
-  "add tracing for", "TracingPlugin", "DatabasePlugin", "CachePlugin",
-  "ClientPlugin", "ServerPlugin", "CompositePlugin", "ConsumerPlugin",
-  "ProducerPlugin", "addHook", "shimmer.wrap", "orchestrion",
-  "bindStart", "bindFinish", "startSpan", "diagnostic channel",
-  "runStores", "reference plugin", "example plugin", "similar integration",
-  or needs to build, modify, or debug the instrumentation and plugin layers
-  for a third-party library in dd-trace-js.
+  Use when adding, debugging, fixing, or modifying instrumentation and plugins
+  for third-party libraries in dd-trace-js. Triggers: "add a new integration",
+  "instrument a library", any *Plugin base class (Tracing/Database/Cache/
+  Client/Server/Consumer/Producer/Composite), "addHook", "shimmer.wrap",
+  "orchestrion", "bindStart"/"bindFinish", "diagnostic channel", "runStores",
+  "subscriber cardinality", "channel.publish gate", "read upstream source",
+  "reference plugin".
 ---
 
 # APM Integrations
@@ -77,6 +74,27 @@ Plugin
 
 **Wrong base class = complex workarounds.** Always match the library type to the base class.
 
+## Read Upstream Source First
+
+Touching `packages/datadog-instrumentations/src/<lib>.js`, its plugin counterpart, or any orchestrion config — for any reason — read the upstream library's source first. Memory of an SDK's contract drifts faster than the SDK; comments in the wrap go stale every minor version; cross-version diffs surface contract changes guessing misses (lazy → eager attachment, mode-exclusive APIs, new error paths).
+
+Two ways to fetch the source locally:
+
+1. **Shallow clone** the installed version:
+
+   ```bash
+   git clone --depth 1 --branch v<x.y.z> https://github.com/<org>/<repo>.git /tmp/<lib>-versions/v<x.y.z>
+   ```
+
+2. **`npm pack`** when the published runtime artifact is what matters:
+
+   ```bash
+   cd /tmp/<lib>-versions && npm pack <lib>@<x.y.z>
+   tar -xzf <lib>-<x.y.z>.tgz -C v<x.y.z> --strip-components=1
+   ```
+
+Read the file the wrap hooks, the base classes the hooked methods inherit from, and files the wrap doesn't currently touch — a public method, an internal channel, or a metadata field the current instrumentation skipped often gives a cleaner hook (e.g., kafka `cluster.brokerPool.metadata.clusterId`, couchbase `tracingChannel`).
+
 ## Key Concepts
 
 ### The `ctx` Object
@@ -100,6 +118,15 @@ Context flows from instrumentation to plugin:
 
 ### `bindStart` / `bindFinish`
 Primary plugin methods. Base classes handle most lifecycle; often only `bindStart` is needed to create the span and set tags.
+
+### Subscriber Cardinality (`channel.publish` position)
+
+When relocating a `channel.publish` call behind a dedupe gate, depth filter, cache-hit return, or any short-circuit, the question is not *"is the publish still there?"* but *"what cardinality does each downstream subscriber need?"*. Subscribers split into two camps that look identical from inside the publish site:
+
+- **Once per first occurrence** — tracing plugins that dedupe spans, distinct-path metrics. Safe behind a dedupe gate.
+- **Once per call** — IAST taint-tracking (mutates each call's `args` object by reference), AppSec WAF subscribers that block/log per invocation, anything walking payload identity. Drops data silently when cardinality falls below one-per-call.
+
+Before adding or moving a gate in front of a publish, grep the repo for the channel name, list its subscribers, decide per-subscriber whether the new position preserves the cardinality each needs. When cardinalities diverge, split the publish into a pre-gate (per-call) and a post-gate (per-first-occurrence) call.
 
 ## Reference Integrations
 
@@ -128,7 +155,7 @@ For the complete list by base class, see [Reference Plugins](references/referenc
 
 Follow these steps when creating or modifying an integration:
 
-1. **Investigate** — Read 1-2 reference integrations of the same type (see table above). Understand the instrumentation and plugin patterns before writing code.
+1. **Investigate** — Read the upstream library's source (see [Read Upstream Source First](#read-upstream-source-first)). Read 1-2 reference integrations of the same type (see table above). Understand the instrumentation and plugin patterns before writing code.
 2. **Implement instrumentation** — Create the instrumentation in `packages/datadog-instrumentations/src/`. Use orchestrion for instrumentation. 
 3. **Implement plugin** — Create the plugin in `packages/datadog-plugin-<name>/src/`. Extend the correct base class.
 4. **Register** — Add entries in `packages/dd-trace/src/plugins/index.js`, `index.d.ts`, `docs/test.ts`, `docs/API.md`, and `.github/workflows/apm-integrations.yml`.

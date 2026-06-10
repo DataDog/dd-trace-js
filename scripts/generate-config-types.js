@@ -45,6 +45,7 @@ const TRANSFORM_TYPE_OVERRIDES = {
   sampleRate: 'number',
   setGRPCRange: 'number[]',
   splitJSONPathRules: 'string[]',
+  toURL: 'URL',
 }
 
 function createTreeNode () {

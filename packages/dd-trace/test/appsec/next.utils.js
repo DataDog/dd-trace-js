@@ -20,16 +20,7 @@ function initApp (appName, version, realVersion) {
 
     const pkg = require(`../../../../versions/next@${version}/package.json`)
 
-    if (realVersion.startsWith('10')) {
-      return this.skip() // TODO: Figure out why 10.x tests fail.
-    }
     delete pkg.workspaces
-
-    // builds fail for next.js 9.5 using node 14 due to webpack issues
-    // note that webpack version cannot be set in v9.5 in next.config.js so we do it here instead
-    // the link below highlights the initial support for webpack 5 (used to fix this issue) in next.js 9.5
-    // https://nextjs.org/blog/next-9-5#webpack-5-support-beta
-    if (realVersion.startsWith('9')) pkg.resolutions = { webpack: '^5.0.0' }
 
     writeFileSync(`${appDir}/package.json`, JSON.stringify(pkg, null, 2))
 
