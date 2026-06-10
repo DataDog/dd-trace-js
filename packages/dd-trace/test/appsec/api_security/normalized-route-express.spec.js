@@ -528,4 +528,73 @@ describe('normalizeRouteExpress', () => {
       assert.equal(normalizeRouteExpress('/files/:path*', { path: 'a/b' }), '/files/{path}')
     })
   })
+
+  describe('trailing static text after param in getSegmentRegex (line 177)', () => {
+    it('optional param with trailing static suffix — present via URL extraction', () => {
+      // Segment ':id?.html' has static '.html' after the param — exercises trailing-static branch
+      assert.equal(
+        normalizeRouteExpress('/items/:id?.html', {}, '/items/photo.html'),
+        '/items/{id}'
+      )
+    })
+
+    it('optional param with trailing static suffix — absent via URL extraction', () => {
+      assert.equal(
+        normalizeRouteExpress('/items/:id?.html', {}, '/items'),
+        '/items'
+      )
+    })
+  })
+
+  describe('buildGenericSegmentRegex fallback for invalid constraint regex (lines 196–210)', () => {
+    it('falls back to generic matching when constraint is not a valid regex', () => {
+      // ':id([invalid)?' — constraint '[invalid' is an unclosed bracket, invalid regex.
+      // hasUnsupportedSyntax strips the constraint cleanly so the route is not rejected,
+      // but getSegmentRegex throws on new RegExp and falls back to buildGenericSegmentRegex.
+      assert.equal(
+        normalizeRouteExpress('/:id([invalid)?/users', {}, '/foo/users'),
+        '/{id}/users'
+      )
+    })
+
+    it('fallback: absent optional with invalid constraint', () => {
+      assert.equal(
+        normalizeRouteExpress('/:id([invalid)?/users', {}, '/users'),
+        '/users'
+      )
+    })
+
+    it('fallback: leading static prefix before param with invalid constraint (line 202)', () => {
+      // 'v:id([invalid)?' has static 'v' before the param — exercises the leading-static branch
+      assert.equal(
+        normalizeRouteExpress('/v:id([invalid)?/users', {}, '/v5/users'),
+        '/{id}/users'
+      )
+    })
+
+    it('fallback: trailing static suffix after param with invalid constraint (line 208)', () => {
+      // ':id([invalid)?.html' has static '.html' after the param — exercises trailing-static branch
+      assert.equal(
+        normalizeRouteExpress('/:id([invalid)?.html/users', {}, '/photo.html/users'),
+        '/{id}/users'
+      )
+    })
+  })
+
+  describe('named wildcard (*name) capture in matchSegs via URL extraction (lines 239–241)', () => {
+    it('captures named wildcard value when optional precedes it and is present', () => {
+      // /:id?/*rest — exercises the namedWildcard terminal branch in matchSegs
+      assert.equal(
+        normalizeRouteExpress('/:id?/*rest', {}, '/x/y/z'),
+        '/{id}/{rest}'
+      )
+    })
+
+    it('captures named wildcard value when optional is absent', () => {
+      assert.equal(
+        normalizeRouteExpress('/:id?/*rest', {}, '/y/z'),
+        '/{id}/{rest}'
+      )
+    })
+  })
 })
