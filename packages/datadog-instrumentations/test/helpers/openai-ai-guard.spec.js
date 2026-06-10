@@ -15,8 +15,8 @@ describe('openai-ai-guard helper', () => {
   beforeEach(() => {
     calls = []
     handler = ctx => {
-      calls.push({ messages: ctx.messages, integration: ctx.integration })
-      ctx.resolve()
+      calls.push(ctx)
+      ctx.pending.push(Promise.resolve())
     }
     evaluateChannel.subscribe(handler)
   })
@@ -63,6 +63,21 @@ describe('openai-ai-guard helper', () => {
       assert.strictEqual(typeof guard.handler.getOutputMessages, 'function')
       assert.strictEqual(typeof guard.handler.publishOutputEvaluation, 'function')
       assert.strictEqual(typeof guard.getInputEval, 'function')
+    })
+
+    it('forwards `guard.parentSpan` on Before and After Model publishes', async () => {
+      const span = { fake: 'openai.request span' }
+      const guard = aiGuard.createGuard(
+        'chat.completions',
+        { messages: [{ role: 'user', content: 'hi' }] },
+        false
+      )
+      guard.parentSpan = span
+      await guard.getInputEval()
+      await aiGuard.evaluateOutput(guard, { choices: [{ message: { role: 'assistant', content: 'ok' } }] })
+      assert.strictEqual(calls.length, 2)
+      assert.strictEqual(calls[0].parentSpan, span)
+      assert.strictEqual(calls[1].parentSpan, span)
     })
 
     it('memoizes getInputEval across calls', () => {
@@ -225,6 +240,8 @@ describe('openai-ai-guard helper', () => {
       assert.strictEqual(calls.length, 2)
       assert.deepStrictEqual(calls[0].messages.at(-1), { role: 'assistant', content: 'one' })
       assert.deepStrictEqual(calls[1].messages.at(-1), { role: 'assistant', content: 'two' })
+      assert.strictEqual(calls[0].abortController.signal.aborted, false)
+      assert.strictEqual(calls[1].abortController.signal.aborted, false)
     })
 
     it('publishes one combined evaluation for responses output items', async () => {
@@ -257,7 +274,10 @@ describe('openai-ai-guard helper', () => {
 
     it('rejects when Before Model evaluation rejects', () => {
       evaluateChannel.unsubscribe(handler)
-      const rejectHandler = ctx => ctx.reject(Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' }))
+      const rejectHandler = ctx => {
+        ctx.abortController.abort(Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' }))
+        ctx.pending.push(Promise.resolve())
+      }
       evaluateChannel.subscribe(rejectHandler)
       const guard = aiGuard.createGuard(
         'chat.completions',
@@ -302,7 +322,10 @@ describe('openai-ai-guard helper', () => {
 
     it('propagates Before Model rejection through asResponse', () => {
       evaluateChannel.unsubscribe(handler)
-      const rejectHandler = ctx => ctx.reject(Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' }))
+      const rejectHandler = ctx => {
+        ctx.abortController.abort(Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' }))
+        ctx.pending.push(Promise.resolve())
+      }
       evaluateChannel.subscribe(rejectHandler)
       const guard = aiGuard.createGuard(
         'chat.completions',

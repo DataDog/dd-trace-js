@@ -38,20 +38,26 @@ const tagsUpdateCh = channel('dd-trace:span:tags:update')
 // Module-scope so we don't allocate a fresh recursive closure on every
 // `addLink` / `addEvent`.
 /**
- * @param {Record<string, string>} out
+ * @param {Record<string, string> | undefined} out Accumulator, created lazily
+ * on the first surviving entry so an all-dropped set stays `undefined`.
  * @param {string} key
  * @param {unknown} value
+ * @returns {Record<string, string> | undefined}
  */
 function addArrayOrScalarAttribute (out, key, value) {
   if (Array.isArray(value)) {
     for (let i = 0; i < value.length; i++) {
-      addArrayOrScalarAttribute(out, `${key}.${i}`, value[i])
+      out = addArrayOrScalarAttribute(out, `${key}.${i}`, value[i])
     }
-  } else if (ALLOWED.has(typeof value)) {
-    out[key] = typeof value === 'string' ? value : String(value)
-  } else {
-    log.warn('Dropping span link attribute. It is not of an allowed type')
+    return out
   }
+  if (ALLOWED.has(typeof value)) {
+    out ??= {}
+    out[key] = typeof value === 'string' ? value : String(value)
+    return out
+  }
+  log.warn('Dropping span link attribute. It is not of an allowed type')
+  return out
 }
 
 function getIntegrationCounter (event, integration) {
@@ -79,12 +85,6 @@ class DatadogSpan {
 
     const operationName = fields.operationName
     const parent = fields.parent || null
-    // Stay on `Object.assign({}, src)` for backportability: V8 12+ (Node 22 /
-    // 24) inlines `{ ...src }` and beats `Object.assign` here, but on V8 10.2
-    // / 11.3 (Node 18 / 20) the spread takes a generic runtime path and slows
-    // `spans-finish-*` by ~140%. Revisit once those LTS lines drop.
-    // eslint-disable-next-line prefer-object-spread
-    const tags = Object.assign({}, fields.tags)
     const hostname = fields.hostname
 
     this.#parentTracer = tracer
@@ -106,7 +106,7 @@ class DatadogSpan {
 
     this._spanContext = this._createContext(parent, fields)
     this._spanContext._name = operationName
-    Object.assign(this._spanContext.getTags(), tags)
+    Object.assign(this._spanContext.getTags(), fields.tags)
     this._spanContext._hostname = hostname
 
     this._spanContext._trace.started.push(this)
@@ -348,21 +348,24 @@ class DatadogSpan {
 
   /**
    * @param {Record<string, unknown>} [attributes]
+   * @returns {Record<string, string> | undefined} `undefined` when nothing
+   * survives, so `extractSpanLinks` omits the slot without an emptiness probe.
    */
   _sanitizeAttributes (attributes = {}) {
-    /** @type {Record<string, string>} */
-    const out = {}
+    let out
     for (const key of Object.keys(attributes)) {
-      addArrayOrScalarAttribute(out, key, attributes[key])
+      out = addArrayOrScalarAttribute(out, key, attributes[key])
     }
     return out
   }
 
   /**
    * @param {Record<string, unknown>} [attributes]
+   * @returns {Record<string, unknown> | undefined} `undefined` when nothing
+   * survives, so the encoders skip the slot without an emptiness probe.
    */
   _sanitizeEventAttributes (attributes = {}) {
-    const sanitizedAttributes = {}
+    let sanitizedAttributes
 
     for (const key of Object.keys(attributes)) {
       const value = attributes[key]
@@ -375,8 +378,10 @@ class DatadogSpan {
             log.warn('Dropping span event attribute. It is not of an allowed type')
           }
         }
+        sanitizedAttributes ??= {}
         sanitizedAttributes[key] = newArray
       } else if (ALLOWED.has(typeof value)) {
+        sanitizedAttributes ??= {}
         sanitizedAttributes[key] = value
       } else {
         log.warn('Dropping span event attribute. It is not of an allowed type')
@@ -389,7 +394,7 @@ class DatadogSpan {
     let spanContext
     let startTime
 
-    let baggage = {}
+    let baggage
     const propagationBehavior = this.#parentTracer._config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
     if (parent && parent._isRemote && propagationBehavior !== 'continue') {
       baggage = parent._baggageItems
@@ -431,7 +436,7 @@ class DatadogSpan {
       }
 
       if (propagationBehavior === 'restart') {
-        spanContext._baggageItems = baggage
+        spanContext._baggageItems = baggage ?? {}
       }
     }
 

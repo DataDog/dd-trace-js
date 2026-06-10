@@ -111,7 +111,8 @@
         "aliases": [
           "DATADOG_API_KEY"
         ],
-        "internalPropertyName": "apiKey"
+        "internalPropertyName": "apiKey",
+        "sensitive": true
       }
     ],
     "DD_API_SECURITY_ENABLED": [
@@ -423,7 +424,8 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": null
+        "default": null,
+        "sensitive": true
       }
     ],
     "DD_AZURE_RESOURCE_GROUP": [
@@ -444,6 +446,7 @@
       {
         "implementation": "A",
         "type": "string",
+        "transform": "toURL",
         "default": null
       }
     ],
@@ -3913,7 +3916,8 @@
       {
         "implementation": "B",
         "type": "map",
-        "default": null
+        "default": null,
+        "sensitive": true
       }
     ],
     "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": [
@@ -3930,7 +3934,8 @@
         "default": null,
         "aliases": [
           "OTEL_EXPORTER_OTLP_HEADERS"
-        ]
+        ],
+        "sensitive": true
       }
     ],
     "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL": [
@@ -3968,7 +3973,8 @@
         "default": null,
         "aliases": [
           "OTEL_EXPORTER_OTLP_HEADERS"
-        ]
+        ],
+        "sensitive": true
       }
     ],
     "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": [
@@ -4006,7 +4012,8 @@
         "default": null,
         "aliases": [
           "OTEL_EXPORTER_OTLP_HEADERS"
-        ]
+        ],
+        "sensitive": true
       }
     ],
     "OTEL_EXPORTER_OTLP_METRICS_PROTOCOL": [

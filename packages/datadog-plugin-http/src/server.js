@@ -34,6 +34,11 @@ class HttpServerPlugin extends ServerPlugin {
     if (this.#startConfig === undefined) {
       this.#refreshStartCache()
     }
+    // A fresh request has no span yet; web.startSpan creates and enters one.
+    // A reused context (HTTP/2 stream, serverless re-entry) returns the
+    // existing span without entering, so the explicit enter below is the only
+    // one in that case.
+    const spanCreated = !web.getContext(req)?.span
     const span = web.startSpan(
       this.tracer,
       this.#startConfig,
@@ -57,7 +62,12 @@ class HttpServerPlugin extends ServerPlugin {
       store = withRequest(store, req)
     }
 
-    this.enter(span, store)
+    // Skip the re-enter when web.startSpan already entered { ...store, span }
+    // and AppSec did not rebuild the store with req: the bind would be
+    // identical to the one startSpan just made.
+    if (!spanCreated || appsecActive) {
+      this.enter(span, store)
+    }
 
     if (!context.instrumented) {
       context.res.writeHead = web.wrapWriteHead(context)

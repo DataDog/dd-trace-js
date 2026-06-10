@@ -9,10 +9,6 @@ inputs:
     description: "Coverage report directory (defaults to 'coverage')"
     required: false
     default: coverage
-  dd_api_key:
-    description: "Datadog API key for coverage upload"
-    required: true
-
 runs:
   using: composite
   steps:
@@ -24,7 +20,6 @@ runs:
       with:
         flags: ${{ inputs.flags }}
         report-dir: ${{ inputs.report-dir }}
-        dd_api_key: ${{ inputs.dd_api_key }}
     - if: steps.attempt.outcome == 'failure'
       shell: bash
       run: sleep 60
@@ -33,4 +28,3 @@ runs:
       with:
         flags: ${{ inputs.flags }}
         report-dir: ${{ inputs.report-dir }}
-        dd_api_key: ${{ inputs.dd_api_key }}

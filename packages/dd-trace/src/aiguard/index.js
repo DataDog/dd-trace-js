@@ -44,27 +44,46 @@ function disable () {
 /**
  * Handles channel messages with pre-converted messages.
  *
- * @param {{messages: Array<object>, integration?: string, resolve: Function, reject: Function}} ctx
+ * @param {object} ctx
+ * @param {Array<object>} ctx.messages
+ * @param {string} [ctx.integration]
+ * @param {object} [ctx.parentSpan] - LLM span to parent the `ai_guard` span under.
+ * @param {AbortController} ctx.abortController
+ * @param {Array<Promise<void>>} ctx.pending - Subscribers push only when they evaluate.
  */
 function onEvaluate (ctx) {
+  // Decline to evaluate empty payloads by not pushing to pending.
   if (!ctx.messages?.length) {
-    ctx.resolve()
     return
   }
 
-  const opts = { block, source: SOURCE_AUTO, integration: ctx.integration || INTEGRATION_NONE }
-  aiguard.evaluate(ctx.messages, opts)
-    .then(() => {
-      ctx.resolve()
-    })
-    .catch(err => {
-      if (err.name === 'AIGuardAbortError') {
-        ctx.reject(err)
-      } else {
-        log.error('AIGuard: unexpected error during evaluation: %s', err.message)
-        ctx.resolve()
-      }
-    })
+  const opts = {
+    block,
+    source: SOURCE_AUTO,
+    integration: ctx.integration || INTEGRATION_NONE,
+    childOf: ctx.parentSpan,
+  }
+
+  try {
+    ctx.pending.push(aiguard.evaluate(ctx.messages, opts).catch(handleEvaluationError.bind(null, ctx)))
+  } catch (err) {
+    ctx.pending.push(Promise.resolve().then(() => handleEvaluationError(ctx, err)))
+  }
+}
+
+/**
+ * Handles an AI Guard evaluation failure.
+ *
+ * @param {object} ctx
+ * @param {AbortController} ctx.abortController
+ * @param {Error} err
+ */
+function handleEvaluationError (ctx, err) {
+  if (err.name === 'AIGuardAbortError') {
+    ctx.abortController.abort(err)
+  } else {
+    log.error('AIGuard: unexpected error during evaluation: %s', err.message)
+  }
 }
 
 module.exports = { enable, disable }

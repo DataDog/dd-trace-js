@@ -2,7 +2,6 @@
 
 const assert = require('node:assert')
 const { once } = require('node:events')
-const { exec } = require('child_process')
 const satisfies = require('semifies')
 
 const {
@@ -11,8 +10,8 @@ const {
   installPlaywrightChromium,
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig,
+  createParallelIt,
 } = require('../helpers')
-const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
 const {
   TEST_STATUS,
@@ -40,7 +39,9 @@ versions.forEach((version) => {
   }
 
   describe(`playwright@${version}`, function () {
-    let cwd, receiver, childProcess, webAppPort, webAppServer
+    const it = createParallelIt(global.it, { withReceiver: true })
+
+    let cwd, webAppPort, webAppServer
 
     this.timeout(80000)
 
@@ -69,17 +70,8 @@ versions.forEach((version) => {
       await new Promise(resolve => webAppServer.close(resolve))
     })
 
-    beforeEach(async function () {
-      receiver = await new FakeCiVisIntake().start()
-    })
-
-    afterEach(async () => {
-      childProcess.kill()
-      await receiver.stop()
-    })
-
     context('flaky test retries', () => {
-      it('can automatically retry flaky tests', (done) => {
+      it('can automatically retry flaky tests', async (receiver, run) => {
         receiver.setSettings({
           itr_enabled: false,
           code_coverage: false,
@@ -111,7 +103,7 @@ versions.forEach((version) => {
             assert.strictEqual(passedTests[0].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
           }, 30000)
 
-        childProcess = exec(
+        const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js',
           {
             cwd,
@@ -123,14 +115,10 @@ versions.forEach((version) => {
           }
         )
 
-        childProcess.on('exit', () => {
-          receiverPromise
-            .then(() => done())
-            .catch(done)
-        })
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
-      it('is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false', (done) => {
+      it('is disabled if DD_CIVISIBILITY_FLAKY_RETRY_ENABLED is false', async (receiver, run) => {
         receiver.setSettings({
           itr_enabled: false,
           code_coverage: false,
@@ -152,7 +140,7 @@ versions.forEach((version) => {
             ).length, 0)
           }, 30000)
 
-        childProcess = exec(
+        const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js',
           {
             cwd,
@@ -165,14 +153,10 @@ versions.forEach((version) => {
           }
         )
 
-        childProcess.on('exit', () => {
-          receiverPromise
-            .then(() => done())
-            .catch(done)
-        })
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
-      it('retries DD_CIVISIBILITY_FLAKY_RETRY_COUNT times', (done) => {
+      it('retries DD_CIVISIBILITY_FLAKY_RETRY_COUNT times', async (receiver, run) => {
         receiver.setSettings({
           itr_enabled: false,
           code_coverage: false,
@@ -199,7 +183,7 @@ versions.forEach((version) => {
             assert.strictEqual(failedRetryTests.length, 1)
           }, 30000)
 
-        childProcess = exec(
+        const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js',
           {
             cwd,
@@ -212,14 +196,10 @@ versions.forEach((version) => {
           }
         )
 
-        childProcess.on('exit', () => {
-          receiverPromise
-            .then(() => done())
-            .catch(done)
-        })
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
-      it('sets TEST_HAS_FAILED_ALL_RETRIES when all ATR attempts fail', async () => {
+      it('sets TEST_HAS_FAILED_ALL_RETRIES when all ATR attempts fail', async (receiver, run) => {
         receiver.setSettings({
           itr_enabled: false,
           code_coverage: false,
@@ -243,7 +223,7 @@ versions.forEach((version) => {
             assert.strictEqual(lastFailed.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
           }, 30000)
 
-        childProcess = exec(
+        const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js',
           {
             cwd,
@@ -256,40 +236,40 @@ versions.forEach((version) => {
           }
         )
 
-        await Promise.all([once(childProcess, 'exit'), receiverPromise])
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
+    })
 
-      contextNewVersions('dynamic name detection', () => {
-        it('tags new tests with dynamic names and logs a warning', async () => {
-          receiver.setSettings({
-            early_flake_detection: {
-              enabled: true,
-              slow_test_retries: { '5s': 1 },
-              faulty_session_threshold: 100,
-            },
-            known_tests_enabled: true,
-          })
-          receiver.setKnownTests({ playwright: {} })
-
-          childProcess = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js',
-            {
-              cwd,
-              env: {
-                ...getCiVisEvpProxyConfig(receiver.port),
-                TEST_DIR: './ci-visibility/playwright-tests-dynamic',
-              },
-            }
-          )
-
-          let testOutput = ''
-          childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
-          childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
-
-          await once(childProcess, 'exit')
-
-          assert.match(testOutput, /detected as new but their names contain dynamic data/)
+    contextNewVersions('dynamic name detection', () => {
+      it('tags new tests with dynamic names and logs a warning', async (receiver, run) => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: { '5s': 1 },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
         })
+        receiver.setKnownTests({ playwright: {} })
+
+        const proc = run(
+          './node_modules/.bin/playwright test -c playwright.config.js',
+          {
+            cwd,
+            env: {
+              ...getCiVisEvpProxyConfig(receiver.port),
+              TEST_DIR: './ci-visibility/playwright-tests-dynamic',
+            },
+          }
+        )
+
+        let testOutput = ''
+        proc.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+        proc.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+        await once(proc, 'exit')
+
+        assert.match(testOutput, /detected as new but their names contain dynamic data/)
       })
     })
   })

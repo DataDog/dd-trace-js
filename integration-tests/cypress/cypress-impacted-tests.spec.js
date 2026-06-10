@@ -175,10 +175,6 @@ moduleTypes.forEach(({
               })
             }, { hardTimeout: 25000 })
 
-        // TODO: remove this once we have figured out flakiness
-        childProcess.stdout?.pipe(process.stdout)
-        childProcess.stderr?.pipe(process.stderr)
-
         await Promise.all([
           once(childProcess, 'exit'),
           receiverPromise,
@@ -318,10 +314,6 @@ moduleTypes.forEach(({
         )
 
         const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isNew }, childProcess)
-
-        // TODO: remove this once we have figured out flakiness
-        childProcess.stdout?.pipe(process.stdout)
-        childProcess.stderr?.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -532,9 +524,11 @@ moduleTypes.forEach(({
 
         childProcess.stdout?.on('data', (data) => {
           testOutput += data.toString()
+          process.stdout.write(data)
         })
         childProcess.stderr?.on('data', (data) => {
           testOutput += data.toString()
+          process.stderr.write(data)
         })
 
         await Promise.all([

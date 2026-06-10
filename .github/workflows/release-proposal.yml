@@ -3,7 +3,7 @@ name: "[Release Proposal]"
 on:
   workflow_dispatch:
   schedule:
-    - cron: 0 5 * * *
+    - cron: 0 5 * * 1-5
 
 concurrency:
   group: ${{ github.workflow }}
@@ -34,6 +34,29 @@ jobs:
       - uses: ./.github/actions/install/branch-diff
         with:
           token: ${{ steps.octo-sts.outputs.token }}
-      - run: node scripts/release/proposal ${{ matrix.release-line }} -y ${{ github.event_name == 'workflow_dispatch' && '-f' || '' }}
+      - id: proposal
+        run: node scripts/release/proposal ${{ matrix.release-line }} -y ${{ github.event_name == 'workflow_dispatch' && '-f' || '' }}
         env:
           GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
+      - uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v2.1.0
+        if: >
+          github.event_name == 'schedule' &&
+          steps.proposal.outputs.commit_count != '' &&
+          fromJSON(steps.proposal.outputs.commit_count) >= 50
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          errors: true
+          payload: |
+            channel: ${{ secrets.SLACK_CHANNEL_ID }}
+            blocks:
+              - type: "section"
+                text:
+                  type: "mrkdwn"
+                  text: >-
+                    :warning: *Release proposal
+                    <${{ steps.proposal.outputs.pr_url }}|${{ steps.proposal.outputs.version }}>*
+                    has ${{ steps.proposal.outputs.commit_count }} commits queued.
+                    GitHub's rebase limit is 100 — once reached, commits that don't fit
+                    will be deferred to a subsequent release.
+                    Consider cutting this release soon.
