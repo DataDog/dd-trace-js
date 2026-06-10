@@ -82,8 +82,13 @@ function hasInputAddress (payload) {
 }
 
 function hasAddressesObjectInputAddress (addressesObject) {
-  return addressesObject && Object.keys(addressesObject)
-    .some(address => address.startsWith('server.request') || address.startsWith('graphql.server'))
+  if (!addressesObject) return false
+  for (const address in addressesObject) {
+    if (address.startsWith('server.request') || address.startsWith('graphql.server')) {
+      return true
+    }
+  }
+  return false
 }
 
 function clearQuerySet ({ payload }) {

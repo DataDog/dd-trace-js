@@ -461,7 +461,7 @@ function truncateRequestBody (target, depth = 0) {
 }
 
 function reportRequestBody (rootSpan, requestBody, comesFromRaspAction = false) {
-  if (!requestBody || Object.keys(requestBody).length === 0) return
+  if (!requestBody || isEmpty(requestBody)) return
 
   if (!rootSpan.meta_struct) {
     rootSpan.meta_struct = {}
@@ -590,7 +590,7 @@ function shouldCollectEventHeaders (tags = {}) {
     return true
   }
 
-  for (const tagName of Object.keys(tags)) {
+  for (const tagName in tags) {
     if (tagName.startsWith('appsec.events.')) {
       return true
     }
