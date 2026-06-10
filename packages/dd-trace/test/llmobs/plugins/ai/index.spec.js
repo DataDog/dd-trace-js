@@ -815,6 +815,89 @@ describe('Plugin', () => {
       })
     })
 
+    it('extracts last user message content from messages in generateText', async function () {
+      if (semifies(realVersion, '<5.0.0')) this.skip()
+
+      const OpenAIModule = require(`../../../../../../versions/${getAiSdkOpenAiPackage(realVersion)}`)
+      const { createOpenAI } = OpenAIModule.get()
+      const mockOpenai = createOpenAI({
+        apiKey: 'test-api-key',
+        fetch: () => new Response(JSON.stringify({
+          id: 'chatcmpl-mock',
+          object: 'chat.completion',
+          created: 1234567890,
+          model: 'gpt-4o-mini',
+          choices: [{ index: 0, message: { role: 'assistant', content: 'Hi!' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        compatibility: 'strict',
+      })
+
+      await ai.generateText({
+        model: mockOpenai.chat('gpt-4o-mini'),
+        messages: [
+          { role: 'user', content: 'First user message.' },
+          { role: 'assistant', content: 'First response.' },
+          { role: 'user', content: 'Last user message.' },
+        ],
+        experimental_telemetry: { metadata: MOCK_TELEMETRY_METADATA },
+      })
+
+      const { apmSpans, llmobsSpans } = await getEvents(2)
+
+      assertLlmObsSpanEvent(llmobsSpans[0], {
+        span: apmSpans[0],
+        name: 'generateText',
+        spanKind: 'workflow',
+        inputValue: 'Last user message.',
+        outputValue: MOCK_STRING,
+        metadata: MOCK_OBJECT,
+        tags: { ml_app: 'test', integration: 'ai' },
+      })
+    })
+
+    it('extracts last user message content from messages in generateObject', async function () {
+      if (semifies(realVersion, '<5.0.0')) this.skip()
+
+      const OpenAIModule = require(`../../../../../../versions/${getAiSdkOpenAiPackage(realVersion)}`)
+      const { createOpenAI } = OpenAIModule.get()
+      const mockOpenai = createOpenAI({
+        apiKey: 'test-api-key',
+        fetch: () => new Response(JSON.stringify({
+          id: 'chatcmpl-mock',
+          object: 'chat.completion',
+          created: 1234567890,
+          model: 'gpt-4o-mini',
+          choices: [{ index: 0, message: { role: 'assistant', content: '{"result":"test"}' }, finish_reason: 'stop' }],
+          usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        compatibility: 'strict',
+      })
+
+      await ai.generateObject({
+        model: mockOpenai.chat('gpt-4o-mini'),
+        output: 'no-schema',
+        messages: [
+          { role: 'user', content: 'First user message.' },
+          { role: 'assistant', content: 'First response.' },
+          { role: 'user', content: 'Last user message.' },
+        ],
+        experimental_telemetry: { metadata: MOCK_TELEMETRY_METADATA },
+      })
+
+      const { apmSpans, llmobsSpans } = await getEvents(2)
+
+      assertLlmObsSpanEvent(llmobsSpans[0], {
+        span: apmSpans[0],
+        name: 'generateObject',
+        spanKind: 'workflow',
+        inputValue: 'Last user message.',
+        outputValue: MOCK_STRING,
+        metadata: MOCK_OBJECT,
+        tags: { ml_app: 'test', integration: 'ai' },
+      })
+    })
+
     describe('ToolLoopAgent', function () {
       beforeEach(function () {
         if (semifies(realVersion, '<6.0.0')) {
