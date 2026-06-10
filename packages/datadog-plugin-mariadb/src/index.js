@@ -15,24 +15,10 @@ const [
 ] = connectionPlugins
 
 const [
-  ConnectionCallbackQueryPlugin,
-  ConnectionCallbackExecutePlugin,
-  ConnectionPromiseQueryPlugin,
-  ConnectionPromiseExecutePlugin,
-  PoolCallbackQueryPlugin,
-  PoolCallbackExecutePlugin,
-  PoolPromiseQueryPlugin,
-  PoolPromiseExecutePlugin,
-  V2ConnectionQueryPromisePlugin,
-  V2ConnectionQueryPlugin,
-  V2ConnectionQueryCallbackPlugin,
-  V2PoolBaseQueryPlugin,
-  PreparedStatementCallbackExecutePlugin,
+  MariadbQueryContextPlugin,
   QueryCommandPlugin,
-  ExecuteCommandPlugin,
   V2QueryCommandPlugin,
-  CommandSuccessEndPlugin,
-  CommandThrowErrorPlugin,
+  CommandCompletionPlugin,
 ] = queryPlugins
 
 class MariadbPlugin extends CompositePlugin {
@@ -45,24 +31,10 @@ class MariadbPlugin extends CompositePlugin {
     v2Connection: V2ConnectionPlugin,
     v2PoolBase: V2PoolBasePlugin,
     v2PoolGetConnection: V2PoolBaseGetConnectionPlugin,
-    cbConnQuery: ConnectionCallbackQueryPlugin,
-    cbConnExecute: ConnectionCallbackExecutePlugin,
-    promiseConnQuery: ConnectionPromiseQueryPlugin,
-    promiseConnExecute: ConnectionPromiseExecutePlugin,
-    cbPoolQuery: PoolCallbackQueryPlugin,
-    cbPoolExecute: PoolCallbackExecutePlugin,
-    promisePoolQuery: PoolPromiseQueryPlugin,
-    promisePoolExecute: PoolPromiseExecutePlugin,
-    v2ConnQueryPromise: V2ConnectionQueryPromisePlugin,
-    v2ConnQuery: V2ConnectionQueryPlugin,
-    v2ConnQueryCallback: V2ConnectionQueryCallbackPlugin,
-    v2PoolQuery: V2PoolBaseQueryPlugin,
-    preparedStmtExecute: PreparedStatementCallbackExecutePlugin,
+    queryContext: MariadbQueryContextPlugin,
     queryCommand: QueryCommandPlugin,
-    executeCommand: ExecuteCommandPlugin,
     v2QueryCommand: V2QueryCommandPlugin,
-    commandSuccessEnd: CommandSuccessEndPlugin,
-    commandThrowError: CommandThrowErrorPlugin,
+    commandCompletion: CommandCompletionPlugin,
   }
 }
 
