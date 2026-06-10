@@ -10,7 +10,8 @@
       "env": { "VARIANT": "no-tags", "ITERATIONS": "6000000" }
     },
     "with-tags": {
-      "env": { "VARIANT": "with-tags", "ITERATIONS": "5000000" }
+      "iterations": 8,
+      "env": { "VARIANT": "with-tags", "ITERATIONS": "12500000" }
     },
     "many-tags": {
       "env": { "VARIANT": "many-tags", "ITERATIONS": "3000000" }
