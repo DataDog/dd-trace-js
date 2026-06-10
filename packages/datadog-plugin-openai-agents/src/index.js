@@ -27,7 +27,7 @@ class OpenaiAgentsPlugin extends Plugin {
   static id = 'openai-agents'
 
   #integration
-  #registeredMods = new WeakSet()
+  #processorRegistered = false
 
   constructor (tracer, tracerConfig) {
     super(tracer, tracerConfig)
@@ -38,8 +38,8 @@ class OpenaiAgentsPlugin extends Plugin {
 
     this.addSub('apm:openai-agents:agents-core:loaded', ({ mod }) => {
       if (typeof mod?.addTraceProcessor !== 'function') return
-      if (this.#registeredMods.has(mod)) return
-      this.#registeredMods.add(mod)
+      if (this.#processorRegistered) return
+      this.#processorRegistered = true
       mod.addTraceProcessor(new DDOpenAIAgentsProcessor(() => this.#integration))
     })
 
