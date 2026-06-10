@@ -29,11 +29,13 @@ class GraphQLParsePlugin extends TracingPlugin {
     const span = ctx?.currentStore?.span || this.activeSpan
 
     let docSource
-    if (source && document) {
-      docSource = source.body || source
-      documentSources.set(document, docSource)
-    } else if (document) {
-      docSource = documentSources.get(document)
+    if (document) {
+      if (source) {
+        docSource = source.body || source
+        documentSources.set(document, docSource)
+      } else {
+        docSource = documentSources.get(document)
+      }
     }
 
     if (this.config.source && docSource) {

@@ -4,9 +4,7 @@ const { AsyncLocalStorage } = require('node:async_hooks')
 const dc = require('dc-polyfill')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const GraphQLParsePlugin = require('./parse')
-const { extractErrorIntoSpanEvent } = require('./utils')
-
-let tools
+const { extractErrorIntoSpanEvent, getSignature } = require('./utils')
 
 const types = new Set(['query', 'mutation', 'subscription'])
 
@@ -149,8 +147,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
       }
     }
 
-    setWrappedFieldResolver(ctx.arguments, defaultFieldResolver)
-    ctx.ddArgs = readArgs(ctx.arguments)
+    ctx.ddArgs = setWrappedFieldResolver(ctx.arguments, defaultFieldResolver)
 
     const schema = args.schema
     if (schema) {
@@ -306,7 +303,14 @@ function wrapResolve (resolve) {
   if (typeof resolve !== 'function' || patchedResolvers.has(resolve)) return resolve
 
   function resolveAsync (source, args, contextValue, info) {
-    if (depthDisabled) return resolve.apply(this, arguments)
+    const hasIastSub = iastResolveCh.hasSubscribers
+    const hasResolverSub = resolverStartCh.hasSubscribers
+
+    // Combined fast-path: depth=0 AND no IAST/AppSec subscriber means nothing
+    // to do — skip rootCtx lookup, path walk, publish gates.
+    if (depthDisabled && !hasIastSub && !hasResolverSub) {
+      return resolve.apply(this, arguments)
+    }
 
     const rootCtx = contexts.get(contextValue) ?? primitiveContextAls.getStore()
     if (!rootCtx) return resolve.apply(this, arguments)
@@ -314,42 +318,39 @@ function wrapResolve (resolve) {
     const infoPath = info?.path
     const config = rootCtx.config
 
-    // IAST and AppSec subscribers see EVERY resolver call, regardless of depth
-    // or collapse. The depth knob caps span creation only; channel publishes
-    // are how taint tracking and WAF gates observe args at every level.
-    const hasIastSub = iastResolveCh.hasSubscribers
-    const hasResolverSub = resolverStartCh.hasSubscribers
-    if (hasIastSub || hasResolverSub) {
-      const pathString = config.collapse
-        ? buildCollapsedPathStringFromNode(infoPath)
-        : buildPathStringFromNode(infoPath)
-      if (hasIastSub) {
-        iastResolveCh.publish({ rootCtx, args, info, path: pathToArray(infoPath), pathString })
-      }
-      if (hasResolverSub) {
-        resolverStartCh.publish({
-          abortController: rootCtx.abortController,
-          resolverInfo: getResolverInfo(info, args),
-        })
-      }
-    }
-
-    if (!shouldInstrumentNode(config, infoPath)) return resolve.apply(this, arguments)
-
-    let mapKey = infoPath
+    // Compute pathString once — shared between the IAST publish (when
+    // subscribed) and the field record (when we create one). Collapse-aware:
+    // list indices become '*'.
+    let pathString
     let collapsedKey
     if (config.collapse) {
       collapsedKey = buildCollapsedPathStringFromNode(infoPath)
-      mapKey = collapsedKey
+      pathString = collapsedKey
+    } else {
+      pathString = buildPathStringFromNode(infoPath)
     }
 
+    // IAST and AppSec subscribers see EVERY resolver call, regardless of
+    // depth or collapse. The depth knob caps span creation only.
+    if (hasIastSub) {
+      iastResolveCh.publish({ rootCtx, args, info, path: pathToArray(infoPath), pathString })
+    }
+    if (hasResolverSub) {
+      resolverStartCh.publish({
+        abortController: rootCtx.abortController,
+        resolverInfo: getResolverInfo(info, args),
+      })
+    }
+
+    if (depthDisabled || !shouldInstrumentNode(config, infoPath)) {
+      return resolve.apply(this, arguments)
+    }
+
+    const mapKey = config.collapse ? collapsedKey : infoPath
     let field = rootCtx.fields.get(mapKey)
     const isFirst = !field
 
     if (isFirst) {
-      const pathString = config.collapse ? collapsedKey : buildPathStringFromNode(infoPath)
-      if (!collapsedKey) collapsedKey = pathString
-
       field = {
         fieldNode: info.fieldNodes?.[0],
         fieldName: info.fieldName,
@@ -359,7 +360,7 @@ function wrapResolve (resolve) {
         args,
         infoPath,
         pathString,
-        collapsedKey,
+        collapsedKey: collapsedKey ?? pathString,
         span: null,
       }
       rootCtx.fields.set(mapKey, field)
@@ -498,8 +499,8 @@ function shouldInstrumentNode (config, path) {
 function getParentField (rootCtx, field) {
   if (!rootCtx.config.collapse) {
     for (let curr = field.infoPath?.prev; curr; curr = curr.prev) {
-      const field = rootCtx.fields.get(curr)
-      if (field) return field
+      const innerField = rootCtx.fields.get(curr)
+      if (innerField) return innerField
     }
     return null
   }
@@ -509,8 +510,8 @@ function getParentField (rootCtx, field) {
     const last = current.lastIndexOf('.')
     if (last === -1) break
     current = current.slice(0, last)
-    const field = rootCtx.fields.get(current)
-    if (field) return field
+    const innerField = rootCtx.fields.get(current)
+    if (innerField) return innerField
   }
   return null
 }
@@ -564,20 +565,32 @@ function readArgs (args) {
 
 // No user input may be modified. Object-form clones rawArgs[0]; positional
 // form rewrites its own arguments slots (no caller-observable mutation).
+// Returns the readArgs-shaped view of the (possibly cloned) args so the caller
+// doesn't have to re-readArgs after the swap.
 function setWrappedFieldResolver (rawArgs, defaultFieldResolver) {
-  if (!rawArgs || rawArgs.length === 0) return
+  if (!rawArgs || rawArgs.length === 0) return {}
 
   if (rawArgs.length === 1 && rawArgs[0] && typeof rawArgs[0] === 'object' && !Array.isArray(rawArgs[0])) {
     const original = rawArgs[0]
-    rawArgs[0] = {
+    const clone = {
       ...original,
       fieldResolver: wrapResolve(original.fieldResolver || defaultFieldResolver),
     }
-    return
+    rawArgs[0] = clone
+    return clone
   }
 
   rawArgs[6] = wrapResolve(rawArgs[6] || defaultFieldResolver)
   if (rawArgs.length < 7) rawArgs.length = 7
+  return {
+    schema: rawArgs[0],
+    document: rawArgs[1],
+    rootValue: rawArgs[2],
+    contextValue: rawArgs[3],
+    variableValues: rawArgs[4],
+    operationName: rawArgs[5],
+    fieldResolver: rawArgs[6],
+  }
 }
 
 function isWeakMapKey (value) {
@@ -587,9 +600,9 @@ function isWeakMapKey (value) {
 // Unwrap GraphQL List/NonNull wrappers to get the underlying named type's name.
 // e.g. [Human] → 'Human', [Pet!] → 'Pet', String → 'String'
 function getBaseTypeName (type) {
-  let t = type
-  while (t && t.ofType) t = t.ofType
-  return t?.name
+  let cursor = type
+  while (cursor && cursor.ofType) cursor = cursor.ofType
+  return cursor?.name
 }
 
 // Fallback resolver used when graphql.execute() is called without an explicit
@@ -626,19 +639,6 @@ function addVariableTags (config, span, variableValues) {
   }
 
   span.addTags(tags)
-}
-
-function getSignature (document, operationName, operationType, calculate) {
-  if (calculate !== false && tools !== false) {
-    try {
-      tools ||= require('./tools')
-      return tools.defaultEngineReportingSignature(document, operationName)
-    } catch {
-      tools = false
-    }
-  }
-
-  return [operationType, operationName].filter(Boolean).join(' ')
 }
 
 module.exports = GraphQLExecutePlugin

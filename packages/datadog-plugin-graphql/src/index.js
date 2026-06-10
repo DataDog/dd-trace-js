@@ -69,6 +69,9 @@ function getHooks ({ hooks }) {
     execute: hooks.execute ?? noop,
     parse: hooks.parse ?? noop,
     validate: hooks.validate ?? noop,
+    // No noop fallback: `resolve` runs per-field (hot path); the plugin
+    // gates with `if (this.config.hooks.resolve)` so the absent-hook case
+    // skips both the call and the payload-object allocation.
     resolve: hooks.resolve,
   }
 }
