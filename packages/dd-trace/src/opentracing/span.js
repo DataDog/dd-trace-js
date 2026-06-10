@@ -106,7 +106,7 @@ class DatadogSpan {
 
     this._spanContext = this._createContext(parent, fields)
     this._spanContext._name = operationName
-    Object.assign(this._spanContext.getTags(), fields.tags)
+    if (fields.tags) Object.assign(this._spanContext.getTags(), fields.tags)
     this._spanContext._hostname = hostname
 
     this._spanContext._trace.started.push(this)
