@@ -55,9 +55,7 @@ function sampleRequest (req, res, record = false) {
   const rootSpan = web.root(req)
   if (!rootSpan) return SamplingDecision.SKIP
 
-  if (asmStandaloneEnabled) {
-    keepTrace(rootSpan, ASM)
-  } else {
+  if (!asmStandaloneEnabled) {
     let priority = getSpanPriority(rootSpan)
     if (!priority) {
       rootSpan._prioritySampler?.sample(rootSpan)
@@ -78,6 +76,10 @@ function sampleRequest (req, res, record = false) {
   }
 
   if (sampledRequests.has(resolved.key)) return SamplingDecision.SKIP
+
+  if (asmStandaloneEnabled) {
+    keepTrace(rootSpan, ASM)
+  }
 
   if (record) {
     sampledRequests.set(resolved.key, undefined)
