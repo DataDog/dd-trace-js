@@ -2,7 +2,6 @@
 
 const assert = require('node:assert')
 const { once } = require('node:events')
-const { exec } = require('child_process')
 const satisfies = require('semifies')
 
 const {
@@ -11,8 +10,8 @@ const {
   installPlaywrightChromium,
   getCiVisAgentlessConfig,
   assertObjectContains,
+  createParallelIt,
 } = require('../helpers')
-const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
 const {
   TEST_STATUS,
@@ -48,7 +47,9 @@ versions.forEach((version) => {
   }
 
   describe(`playwright@${version}`, function () {
-    let cwd, receiver, childProcess, webAppPort, webAppServer
+    const it = createParallelIt(global.it, { withReceiver: true })
+
+    let cwd, webAppPort, webAppServer
 
     this.timeout(80000)
 
@@ -77,17 +78,8 @@ versions.forEach((version) => {
       await new Promise(resolve => webAppServer.close(resolve))
     })
 
-    beforeEach(async function () {
-      receiver = await new FakeCiVisIntake().start()
-    })
-
-    afterEach(async () => {
-      childProcess.kill()
-      await receiver.stop()
-    })
-
     contextNewVersions('early flake detection', () => {
-      it('retries new tests', async () => {
+      it('retries new tests', async (receiver, run) => {
         receiver.setSettings({
           early_flake_detection: {
             enabled: true,
@@ -188,7 +180,7 @@ versions.forEach((version) => {
             assert.strictEqual(totalRetriedTests.length, totalNewTests.length - 2)
           }, PLAYWRIGHT_EFD_GATHER_TIMEOUT)
 
-        childProcess = exec(
+        const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js',
           {
             cwd,
@@ -198,13 +190,10 @@ versions.forEach((version) => {
             },
           }
         )
-        await Promise.all([
-          once(childProcess, 'exit'),
-          receiverPromise,
-        ])
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
-      it('uses the retry count from the matching slow_test_retries bucket', async () => {
+      it('uses the retry count from the matching slow_test_retries bucket', async (receiver, run) => {
         receiver.setSettings({
           early_flake_detection: {
             enabled: true,
@@ -236,7 +225,7 @@ versions.forEach((version) => {
             assert.ok(!(TEST_IS_RETRY in slowTests[0].meta))
           }, 45_000)
 
-        childProcess = exec(
+        const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js',
           {
             cwd,
@@ -247,13 +236,10 @@ versions.forEach((version) => {
             },
           }
         )
-        await Promise.all([
-          once(childProcess, 'exit'),
-          receiverPromise,
-        ])
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
-      it('keeps duration retry counts scoped by Playwright project', async () => {
+      it('keeps duration retry counts scoped by Playwright project', async (receiver, run) => {
         receiver.setSettings({
           early_flake_detection: {
             enabled: true,
@@ -291,7 +277,7 @@ versions.forEach((version) => {
             assert.ok(!(TEST_IS_RETRY in slowProjectTests[0].meta))
           }, 60_000)
 
-        childProcess = exec(
+        const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js',
           {
             cwd,
@@ -303,13 +289,10 @@ versions.forEach((version) => {
             },
           }
         )
-        await Promise.all([
-          once(childProcess, 'exit'),
-          receiverPromise,
-        ])
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
-      it('does not treat native repeat-each executions as EFD retries', async () => {
+      it('does not treat native repeat-each executions as EFD retries', async (receiver, run) => {
         receiver.setSettings({
           early_flake_detection: {
             enabled: true,
@@ -341,7 +324,7 @@ versions.forEach((version) => {
             }
           }, 45_000)
 
-        childProcess = exec(
+        const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js --repeat-each=3',
           {
             cwd,
@@ -353,13 +336,10 @@ versions.forEach((version) => {
           }
         )
 
-        await Promise.all([
-          once(childProcess, 'exit'),
-          receiverPromise,
-        ])
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
-      it('keeps duration retry counts scoped by native repeat-each index', async () => {
+      it('keeps duration retry counts scoped by native repeat-each index', async (receiver, run) => {
         receiver.setSettings({
           early_flake_detection: {
             enabled: true,
@@ -407,7 +387,7 @@ versions.forEach((version) => {
             assert.strictEqual(fastOriginalTests.length, 1)
           }, 60_000)
 
-        childProcess = exec(
+        const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js --repeat-each=2',
           {
             cwd,
@@ -419,13 +399,10 @@ versions.forEach((version) => {
           }
         )
 
-        await Promise.all([
-          once(childProcess, 'exit'),
-          receiverPromise,
-        ])
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
-      it('is disabled if DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED is false', (done) => {
+      it('is disabled if DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED is false', async (receiver, run) => {
         receiver.setSettings({
           early_flake_detection: {
             enabled: true,
@@ -476,7 +453,7 @@ versions.forEach((version) => {
             assert.strictEqual(retriedTests.length, 0)
           }, PLAYWRIGHT_EFD_GATHER_TIMEOUT)
 
-        childProcess = exec(
+        const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js',
           {
             cwd,
@@ -488,12 +465,10 @@ versions.forEach((version) => {
           }
         )
 
-        childProcess.on('exit', () => {
-          receiverPromise.then(() => done()).catch(done)
-        })
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
-      it('does not retry tests that are skipped', (done) => {
+      it('does not retry tests that are skipped', async (receiver, run) => {
         receiver.setSettings({
           early_flake_detection: {
             enabled: true,
@@ -548,7 +523,7 @@ versions.forEach((version) => {
             assert.strictEqual(retriedTests.length, 0)
           }, PLAYWRIGHT_EFD_GATHER_TIMEOUT)
 
-        childProcess = exec(
+        const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js',
           {
             cwd,
@@ -559,12 +534,10 @@ versions.forEach((version) => {
           }
         )
 
-        childProcess.on('exit', () => {
-          receiverPromise.then(() => done()).catch(done)
-        })
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
-      it('does not run EFD if the known tests request fails', (done) => {
+      it('does not run EFD if the known tests request fails', async (receiver, run) => {
         receiver.setSettings({
           early_flake_detection: {
             enabled: true,
@@ -599,7 +572,7 @@ versions.forEach((version) => {
             assert.strictEqual(retriedTests.length, 0)
           }, PLAYWRIGHT_EFD_GATHER_TIMEOUT)
 
-        childProcess = exec(
+        const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js',
           {
             cwd,
@@ -610,14 +583,10 @@ versions.forEach((version) => {
           }
         )
 
-        childProcess.on('exit', () => {
-          receiverPromise
-            .then(() => done())
-            .catch(done)
-        })
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
-      it('disables early flake detection if known tests should not be requested', (done) => {
+      it('disables early flake detection if known tests should not be requested', async (receiver, run) => {
         receiver.setSettings({
           early_flake_detection: {
             enabled: true,
@@ -668,7 +637,7 @@ versions.forEach((version) => {
             assert.strictEqual(retriedTests.length, 0)
           }, PLAYWRIGHT_EFD_GATHER_TIMEOUT)
 
-        childProcess = exec(
+        const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js',
           {
             cwd,
@@ -679,12 +648,10 @@ versions.forEach((version) => {
           }
         )
 
-        childProcess.on('exit', () => {
-          receiverPromise.then(() => done()).catch(done)
-        })
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
-      it('does not run EFD if the known tests response is invalid', async () => {
+      it('does not run EFD if the known tests response is invalid', async (receiver, run) => {
         receiver.setSettings({
           early_flake_detection: {
             enabled: true,
@@ -723,7 +690,7 @@ versions.forEach((version) => {
             assert.strictEqual(retriedTests.length, 0)
           }, PLAYWRIGHT_EFD_GATHER_TIMEOUT)
 
-        childProcess = exec(
+        const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js',
           {
             cwd,
@@ -734,13 +701,10 @@ versions.forEach((version) => {
           }
         )
 
-        await Promise.all([
-          once(childProcess, 'exit'),
-          receiverPromise,
-        ])
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
-      it('does not run EFD if the percentage of new tests is too high', async () => {
+      it('does not run EFD if the percentage of new tests is too high', async (receiver, run) => {
         receiver.setSettings({
           early_flake_detection: {
             enabled: true,
@@ -754,7 +718,7 @@ versions.forEach((version) => {
 
         receiver.setKnownTests({ playwright: {} })
 
-        childProcess = exec(
+        const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js',
           {
             cwd,
@@ -766,7 +730,7 @@ versions.forEach((version) => {
         )
 
         await Promise.all([
-          once(childProcess, 'exit'),
+          once(proc, 'exit'),
           receiver
             .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
@@ -786,7 +750,7 @@ versions.forEach((version) => {
         ])
       })
 
-      it('--retries is disabled for tests retried by EFD', async () => {
+      it('--retries is disabled for tests retried by EFD', async (receiver, run) => {
         receiver.setSettings({
           flaky_test_retries_enabled: false,
           known_tests_enabled: true,
@@ -804,7 +768,7 @@ versions.forEach((version) => {
           },
         })
 
-        childProcess = exec(
+        const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js --retries=1',
           {
             cwd,
@@ -817,7 +781,7 @@ versions.forEach((version) => {
         )
 
         await Promise.all([
-          once(childProcess, 'exit'),
+          once(proc, 'exit'),
           receiver
             .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
@@ -863,7 +827,7 @@ versions.forEach((version) => {
         ])
       })
 
-      it('ATR is disabled for tests retried by EFD', async () => {
+      it('ATR is disabled for tests retried by EFD', async (receiver, run) => {
         receiver.setSettings({
           known_tests_enabled: true,
           early_flake_detection: {
@@ -881,7 +845,7 @@ versions.forEach((version) => {
           },
         })
 
-        childProcess = exec(
+        const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js',
           {
             cwd,
@@ -895,7 +859,7 @@ versions.forEach((version) => {
         )
 
         await Promise.all([
-          once(childProcess, 'exit'),
+          once(proc, 'exit'),
           receiver
             .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)

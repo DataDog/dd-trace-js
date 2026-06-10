@@ -120,6 +120,7 @@
 /packages/dd-trace/test/plugins/util/fixtures/runner_empty/ @DataDog/ci-app-libraries
 
 /packages/datadog-instrumentations/src/jest.js @DataDog/ci-app-libraries
+/packages/datadog-instrumentations/src/jest/bail-reporter.js @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/mocha/ @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/cucumber.js @DataDog/ci-app-libraries
 /packages/datadog-instrumentations/src/cypress.js @DataDog/ci-app-libraries
@@ -295,6 +296,8 @@
 /* @DataDog/lang-platform-js
 
 /.github/actions/ @DataDog/lang-platform-js
+
+/.gitlab/benchmarks/ @DataDog/lang-platform-js @DataDog/ecosystems-performance
 
 /benchmark/* @DataDog/lang-platform-js
 /benchmark/sirun/* @DataDog/lang-platform-js

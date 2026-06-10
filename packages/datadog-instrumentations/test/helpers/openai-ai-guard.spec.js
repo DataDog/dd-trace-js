@@ -65,6 +65,21 @@ describe('openai-ai-guard helper', () => {
       assert.strictEqual(typeof guard.getInputEval, 'function')
     })
 
+    it('forwards `guard.parentSpan` on Before and After Model publishes', async () => {
+      const span = { fake: 'openai.request span' }
+      const guard = aiGuard.createGuard(
+        'chat.completions',
+        { messages: [{ role: 'user', content: 'hi' }] },
+        false
+      )
+      guard.parentSpan = span
+      await guard.getInputEval()
+      await aiGuard.evaluateOutput(guard, { choices: [{ message: { role: 'assistant', content: 'ok' } }] })
+      assert.strictEqual(calls.length, 2)
+      assert.strictEqual(calls[0].parentSpan, span)
+      assert.strictEqual(calls[1].parentSpan, span)
+    })
+
     it('memoizes getInputEval across calls', () => {
       const guard = aiGuard.createGuard(
         'chat.completions',

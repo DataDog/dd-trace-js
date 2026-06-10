@@ -4006,6 +4006,14 @@ declare namespace tracer {
       template?: string | Message[]
     }
 
+    interface ToolDefinition {
+      name : string,
+      description? : string,
+      schema? : {[key : string] : any}
+      version? : string
+    }
+
+
     /**
      * Annotation options for LLM Observability spans.
      */
@@ -4052,6 +4060,12 @@ declare namespace tracer {
        * A Prompt object that represents the prompt used for an LLM call. Only used on `llm` spans.
        */
       prompt?: Prompt,
+
+      /**
+       * A list of ToolDefinition object that represents the tools available to the LLM for this span
+       * Each definition requires a `name` and optionally accepts `description`, `schema`, and `version`.
+       * */
+      toolDefinitions?: ToolDefinition[]
     }
 
     interface AnnotationContextOptions {
@@ -4167,7 +4181,6 @@ declare namespace tracer {
        */
       agentlessEnabled?: boolean,
     }
-
     /** @hidden */
     type spanKind = 'agent' | 'workflow' | 'task' | 'tool' | 'retrieval' | 'embedding' | 'llm'
   }
