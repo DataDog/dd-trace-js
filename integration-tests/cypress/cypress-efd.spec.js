@@ -231,6 +231,14 @@ moduleTypes.forEach(({
               )
               assert.strictEqual(instantTests.length, 3)
               assert.strictEqual(
+                instantTests.filter(test => test.meta[TEST_IS_NEW] === 'true').length,
+                3
+              )
+              assert.strictEqual(
+                instantTests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length,
+                2
+              )
+              assert.strictEqual(
                 instantTests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd).length,
                 2
               )
@@ -800,6 +808,12 @@ moduleTypes.forEach(({
                 retryReason: test.meta[TEST_RETRY_REASON],
               }))
 
+              // Expected order:
+              // 1. "context passes" (original, known - not retried)
+              // 2. "other context fails" (original, new)
+              // 3. "other context fails" (retry 1)
+              // 4. "other context fails" (retry 2)
+              // 5. "other context fails" (retry 3)
               assert.deepStrictEqual(testExecutionOrder, [
                 { name: 'context passes', isRetry: false, isNew: false, retryReason: undefined },
                 { name: 'other context fails', isRetry: false, isNew: true, retryReason: undefined },
