@@ -39,7 +39,7 @@ const addresses = require('./addresses')
 const Reporter = require('./reporter')
 const appsecTelemetry = require('./telemetry')
 const apiSecuritySampler = require('./api_security_sampler')
-const { normalizeRouteExpress } = require('./api_security/normalized-route-express')
+const { normalizeRoute } = require('./api_security/normalized-route')
 const { isBlocked, block, callBlockDelegation, setTemplates, getBlockingAction } = require('./blocking')
 const { getActiveRequest } = require('./store')
 const UserTracking = require('./user_tracking')
@@ -236,20 +236,19 @@ function incomingHttpEndTranslator ({ req, res }) {
 
   if (config?.appsec?.apiSecurity?.enabled) {
     const rootSpan = web.root(req)
-    if (rootSpan?.context()?.getTag?.('component') === 'express') {
-      const route = web.getContext(req)?.paths?.join('')
-      if (route) {
-        try {
-          const raw = req.originalUrl || req.url
-          const qIdx = raw ? raw.indexOf('?') : -1
-          const urlPath = qIdx === -1 ? raw : raw.slice(0, qIdx)
-          const normalized = normalizeRouteExpress(route, req.params, urlPath)
-          if (normalized !== null) {
-            rootSpan.setTag('_dd.appsec.normalized_route', normalized)
-          }
-        } catch (e) {
-          log.debug('[ASM] Unable to compute normalized route: %s', e.message)
+    const component = rootSpan?.context()?.getTag?.('component')
+    const route = web.getContext(req)?.paths?.join('')
+    if (route) {
+      try {
+        const raw = req.originalUrl || req.url
+        const qIdx = raw ? raw.indexOf('?') : -1
+        const urlPath = qIdx === -1 ? raw : raw.slice(0, qIdx)
+        const normalized = normalizeRoute(component, route, req.params, urlPath)
+        if (normalized !== null) {
+          rootSpan.setTag('_dd.appsec.normalized_route', normalized)
         }
+      } catch (e) {
+        log.debug('[ASM] Unable to compute normalized route: %s', e.message)
       }
     }
   }
