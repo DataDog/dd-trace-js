@@ -52,6 +52,15 @@ function mergeKnownTests (aggregate, page) {
   return aggregate
 }
 
+function parseJsonResponse (rawJson) {
+  return typeof rawJson === 'string' ? JSON.parse(rawJson) : rawJson
+}
+
+function parseKnownTestsResponse (rawJson) {
+  const { data: { attributes: { tests } } } = parseJsonResponse(rawJson)
+  return tests
+}
+
 function getKnownTests ({
   url,
   isEvpProxy,
@@ -211,8 +220,9 @@ function fetchFromApi ({
       try {
         totalResponseBytes += res.length
 
-        const { data: { attributes } } = JSON.parse(res)
-        const { tests: pageTests, page_info: responsePageInfo } = attributes
+        const parsedResponse = parseJsonResponse(res)
+        const pageTests = parseKnownTestsResponse(parsedResponse)
+        const { page_info: responsePageInfo } = parsedResponse.data.attributes
 
         aggregateTests = mergeKnownTests(aggregateTests, pageTests)
 
@@ -251,4 +261,4 @@ function fetchFromApi ({
   fetchPage(null)
 }
 
-module.exports = { getKnownTests }
+module.exports = { getKnownTests, parseKnownTestsResponse }

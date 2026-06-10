@@ -39,6 +39,15 @@ function getNumFromTestManagementTests (testManagementTests) {
   return totalNumTests
 }
 
+function parseJsonResponse (rawJson) {
+  return typeof rawJson === 'string' ? JSON.parse(rawJson) : rawJson
+}
+
+function parseTestManagementTestsResponse (rawJson) {
+  const { data: { attributes: { modules: testManagementTests } } } = parseJsonResponse(rawJson)
+  return testManagementTests
+}
+
 function getTestManagementTests ({
   url,
   isEvpProxy,
@@ -155,7 +164,7 @@ function fetchFromApi ({
       done(err)
     } else {
       try {
-        const { data: { attributes: { modules: testManagementTests } } } = JSON.parse(res)
+        const testManagementTests = parseTestManagementTestsResponse(res)
 
         const numTests = getNumFromTestManagementTests(testManagementTests)
 
@@ -174,4 +183,8 @@ function fetchFromApi ({
   })
 }
 
-module.exports = { getTestManagementTests }
+module.exports = {
+  getNumFromTestManagementTests, // Exported for later use in the cache
+  getTestManagementTests,
+  parseTestManagementTestsResponse,
+}

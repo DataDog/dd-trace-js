@@ -7,6 +7,8 @@ const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligen
 const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detection/get-known-tests')
 const { getTestManagementTests: getTestManagementTestsRequest } =
   require('../test-management/get-test-management-tests')
+const { writeSettingsToCache } = require('../test-optimization-cache')
+const { CACHE_MISS, TestOptimizationHttpCache } = require('../test-optimization-http-cache')
 const { uploadCoverageReport: uploadCoverageReportRequest } = require('../requests/upload-coverage-report')
 const log = require('../../log')
 const BufferingExporter = require('../../exporters/common/buffering-exporter')
@@ -42,6 +44,7 @@ class CiVisibilityExporter extends BufferingExporter {
     this._coverageTimer = undefined
     this._logsTimer = undefined
     this._coverageBuffer = []
+    this._testOptimizationHttpCache = new TestOptimizationHttpCache()
     // The library can use new features like ITR and test suite level visibility
     // AKA CI Vis Protocol
     this._canUseCiVisProtocol = false
@@ -70,6 +73,10 @@ class CiVisibilityExporter extends BufferingExporter {
         resolve(canUseCiVisProtocol)
       }
     })
+
+    if (this._testOptimizationHttpCache.isAvailable()) {
+      this._resolveGit()
+    }
 
     const flush = () => {
       if (this._writer) {
@@ -133,11 +140,21 @@ class CiVisibilityExporter extends BufferingExporter {
     if (!this.shouldRequestSkippableSuites()) {
       return callback(null, [])
     }
+    const requestConfiguration = this.getRequestConfiguration(testConfiguration)
+    const cachedSkippableSuites = this._testOptimizationHttpCache.readSkippableSuites({
+      testLevel: requestConfiguration.testLevel,
+      isCoverageReportUploadEnabled: requestConfiguration.isCoverageReportUploadEnabled,
+    })
+    if (cachedSkippableSuites !== CACHE_MISS) {
+      const { skippableSuites, correlationId, coverage } = cachedSkippableSuites
+      return callback(null, skippableSuites, correlationId, coverage)
+    }
+
     this._gitUploadPromise.then(gitUploadError => {
       if (gitUploadError) {
         return callback(gitUploadError, [])
       }
-      getSkippableSuitesRequest(this.getRequestConfiguration(testConfiguration), callback)
+      getSkippableSuitesRequest(requestConfiguration, callback)
     })
   }
 
@@ -145,12 +162,20 @@ class CiVisibilityExporter extends BufferingExporter {
     if (!this.shouldRequestKnownTests()) {
       return callback(null)
     }
+    const cachedKnownTests = this._testOptimizationHttpCache.readKnownTests()
+    if (cachedKnownTests !== CACHE_MISS) {
+      return callback(null, cachedKnownTests)
+    }
     getKnownTestsRequest(this.getRequestConfiguration(testConfiguration), callback)
   }
 
   getTestManagementTests (testConfiguration, callback) {
     if (!this.shouldRequestTestManagementTests()) {
       return callback(null)
+    }
+    const cachedTestManagementTests = this._testOptimizationHttpCache.readTestManagementTests()
+    if (cachedTestManagementTests !== CACHE_MISS) {
+      return callback(null, cachedTestManagementTests)
     }
     getTestManagementTestsRequest(this.getRequestConfiguration(testConfiguration), callback)
   }
@@ -167,6 +192,12 @@ class CiVisibilityExporter extends BufferingExporter {
         return callback(null, {})
       }
       const configuration = this.getRequestConfiguration(testConfiguration)
+      const cachedLibraryConfig = this._testOptimizationHttpCache.readSettings()
+      if (cachedLibraryConfig !== CACHE_MISS) {
+        writeSettingsToCache(cachedLibraryConfig)
+        this._libraryConfig = this.filterConfiguration(cachedLibraryConfig)
+        return callback(null, this._libraryConfig)
+      }
 
       getLibraryConfigurationRequest(configuration, (err, libraryConfig) => {
         /**
@@ -241,6 +272,11 @@ class CiVisibilityExporter extends BufferingExporter {
 
   sendGitMetadata (repositoryUrl) {
     if (!this._config.isGitUploadEnabled) {
+      return
+    }
+    if (this._testOptimizationHttpCache.isAvailable()) {
+      log.debug('Test Optimization HTTP cache found, git upload already done, skipping git upload')
+      this._resolveGit()
       return
     }
     this._canUseCiVisProtocolPromise.then((canUseCiVisProtocol) => {

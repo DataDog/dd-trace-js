@@ -10,6 +10,7 @@ require('../../setup/core')
 
 const {
   getTestManagementTests,
+  parseTestManagementTestsResponse,
 } = require('../../../src/ci-visibility/test-management/get-test-management-tests')
 const {
   buildCacheKey,
@@ -122,5 +123,14 @@ describe('get-test-management-tests', () => {
       assert.strictEqual(fs.existsSync(getLockPath(key)), false, 'lock should be cleaned up')
       done()
     })
+  })
+})
+
+describe('parseTestManagementTestsResponse', () => {
+  it('returns modules from a raw backend response', () => {
+    assert.deepStrictEqual(
+      parseTestManagementTestsResponse(JSON.stringify(TEST_MGMT_RESPONSE)),
+      TEST_MGMT_RESPONSE.data.attributes.modules
+    )
   })
 })
