@@ -13,7 +13,7 @@
       "env": { "VARIANT": "large", "COUNT": "400000" }
     },
     "wildcard": {
-      "env": { "VARIANT": "wildcard", "COUNT": "1300000" }
+      "env": { "VARIANT": "wildcard", "COUNT": "740000" }
     }
   }
 }

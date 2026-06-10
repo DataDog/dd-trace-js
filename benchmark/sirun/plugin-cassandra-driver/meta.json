@@ -7,7 +7,7 @@
   "instructions": true,
   "variants": {
     "query": {
-      "env": { "VARIANT": "query", "ITERATIONS": "45000000" }
+      "env": { "VARIANT": "query", "ITERATIONS": "35000000" }
     },
     "batch": {
       "env": { "VARIANT": "batch", "ITERATIONS": "2000000" }

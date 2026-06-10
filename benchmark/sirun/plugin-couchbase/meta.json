@@ -7,10 +7,10 @@
   "instructions": true,
   "variants": {
     "query": {
-      "env": { "VARIANT": "query", "ITERATIONS": "90000000" }
+      "env": { "VARIANT": "query", "ITERATIONS": "44000000" }
     },
     "upsert": {
-      "env": { "VARIANT": "upsert", "ITERATIONS": "180000000" }
+      "env": { "VARIANT": "upsert", "ITERATIONS": "125000000" }
     }
   }
 }

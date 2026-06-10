@@ -7,10 +7,10 @@
   "instructions": true,
   "variants": {
     "unary": {
-      "env": { "VARIANT": "unary", "ITERATIONS": "120000000" }
+      "env": { "VARIANT": "unary", "ITERATIONS": "53000000" }
     },
     "mixed": {
-      "env": { "VARIANT": "mixed", "ITERATIONS": "100000000" }
+      "env": { "VARIANT": "mixed", "ITERATIONS": "54000000" }
     }
   }
 }

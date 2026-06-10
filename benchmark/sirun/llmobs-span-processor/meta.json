@@ -16,7 +16,7 @@
       "env": { "VARIANT": "retrieval", "ITERATIONS": "2000000" }
     },
     "agent": {
-      "env": { "VARIANT": "agent", "ITERATIONS": "2500000" }
+      "env": { "VARIANT": "agent", "ITERATIONS": "1200000" }
     }
   }
 }

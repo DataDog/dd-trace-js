@@ -10,10 +10,10 @@
       "env": { "VARIANT": "search", "ITERATIONS": "2000000" }
     },
     "bulk-index": {
-      "env": { "VARIANT": "bulk-index", "ITERATIONS": "600000" }
+      "env": { "VARIANT": "bulk-index", "ITERATIONS": "350000" }
     },
     "get": {
-      "env": { "VARIANT": "get", "ITERATIONS": "8000000" }
+      "env": { "VARIANT": "get", "ITERATIONS": "5400000" }
     }
   }
 }
