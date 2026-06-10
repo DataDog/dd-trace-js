@@ -27,14 +27,16 @@ const responseClientCh = channel('apm:openai-agents:response:client')
 // openai.request span, correctly parenting it under the agent span.
 const modelStartCh = channel('apm:openai-agents:model:start')
 
-// Lazy reference to @openai/agents-core; populated when @openai/agents-openai
-// loads (agents-openai depends on agents-core so it is guaranteed to be present).
-let agentsCore
+// Reference to the loaded @openai/agents module, captured in the first hook
+// so that wrapResponseMethod can call getCurrentSpan() without an additional
+// require (and without triggering n/no-missing-require on agents-core internals).
+let agentsMod
 
 addHook({ name: '@openai/agents', versions: ['>=0.7.0'] }, (mod) => {
   if (patchedMods.has(mod)) return mod
   if (typeof mod?.addTraceProcessor !== 'function') return mod
   patchedMods.add(mod)
+  agentsMod = mod
   agentsCoreLoadedCh.publish({ mod })
   return mod
 })
@@ -43,7 +45,7 @@ function wrapResponseMethod (original) {
   return function (...args) {
     const baseURL = this?.client?.baseURL
     if (baseURL) responseClientCh.publish({ baseURL })
-    const agentsCoreSpanId = agentsCore?.getCurrentSpan?.()?.spanId
+    const agentsCoreSpanId = agentsMod?.getCurrentSpan?.()?.spanId
     return modelStartCh.runStores({ agentsCoreSpanId }, () => original.apply(this, args))
   }
 }
@@ -52,8 +54,6 @@ addHook({ name: '@openai/agents-openai', versions: ['>=0.7.0'] }, (mod) => {
   if (patchedMods.has(mod)) return mod
   const proto = mod?.OpenAIResponsesModel?.prototype
   if (!proto) return mod
-
-  try { agentsCore = require('@openai/agents-core') } catch {}
 
   patchedMods.add(mod)
   shimmer.wrap(proto, 'getResponse', wrapResponseMethod)

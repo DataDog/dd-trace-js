@@ -23,6 +23,7 @@ function findSpan (traces, predicate) {
  */
 createIntegrationTestSuite('openai-agents', '@openai/agents', {
   category: 'generative-ai',
+  additionalPlugins: ['openai'],
 }, (meta) => {
   const { agent } = meta
 
