@@ -16,11 +16,13 @@ describe('AppSec Lambda handler', () => {
 
   const fakeSpan = () => {
     const tags = {}
+    const spanContext = {
+      getTag (key) { return tags[key] },
+    }
     return {
       addTags: sinon.stub().callsFake((obj) => Object.assign(tags, obj)),
       setTag: sinon.stub().callsFake((k, v) => { tags[k] = v }),
-      context: sinon.stub().returns({ _tags: tags }),
-      _tags: tags,
+      context: sinon.stub().returns(spanContext),
     }
   }
 
@@ -74,7 +76,7 @@ describe('AppSec Lambda handler', () => {
         path: '/test',
       })
 
-      assert.equal(span._tags['_dd.appsec.enabled'], 1)
+      assert.equal(span.context().getTag('_dd.appsec.enabled'), 1)
     })
 
     it('should set HTTP_CLIENT_IP tag when clientIp is provided', () => {
@@ -88,7 +90,7 @@ describe('AppSec Lambda handler', () => {
         clientIp: '1.2.3.4',
       })
 
-      assert.equal(span._tags['http.client_ip'], '1.2.3.4')
+      assert.equal(span.context().getTag('http.client_ip'), '1.2.3.4')
     })
 
     it('should store the invocation key on the span', () => {
@@ -340,18 +342,16 @@ describe('WAF path safety with non-HTTP req', () => {
   const fakeSpan = () => {
     const tags = {}
     const spanContext = {
-      _tags: tags,
-      getTags () { return this._tags },
-      getTag (key) { return this._tags[key] },
-      setTag (key, value) { this._tags[key] = value },
-      hasTag (key) { return key in this._tags },
+      getTags () { return tags },
+      getTag (key) { return tags[key] },
+      setTag (key, value) { tags[key] = value },
+      hasTag (key) { return key in tags },
     }
     return {
       addTags: sinon.stub().callsFake((obj) => Object.assign(tags, obj)),
       setTag: sinon.stub().callsFake((k, v) => { tags[k] = v }),
       context: sinon.stub().returns(spanContext),
       keep: sinon.stub(),
-      _tags: tags,
     }
   }
 
@@ -420,9 +420,9 @@ describe('WAF path safety with non-HTTP req', () => {
       span
     )
 
-    assert.equal(span._tags['appsec.event'], 'true')
-    assert.ok(span._tags['_dd.appsec.json'])
-    assert.equal(span._tags['network.client.ip'], undefined)
+    assert.equal(span.context().getTag('appsec.event'), 'true')
+    assert.ok(span.context().getTag('_dd.appsec.json'))
+    assert.equal(span.context().getTag('network.client.ip'), undefined)
   })
 
   it('should complete WAF run without attack without accessing non-HTTP req properties', () => {
@@ -451,7 +451,7 @@ describe('WAF path safety with non-HTTP req', () => {
     )
 
     sinon.assert.calledOnce(telemetry.updateWafRequestsMetricTags)
-    assert.equal(span._tags['appsec.event'], undefined)
+    assert.equal(span.context().getTag('appsec.event'), undefined)
   })
 
   it('should complete WAF run with attributes without accessing non-HTTP req properties', () => {
@@ -480,7 +480,7 @@ describe('WAF path safety with non-HTTP req', () => {
       span
     )
 
-    assert.ok(span._tags['_dd.appsec.s.req.body'])
+    assert.ok(span.context().getTag('_dd.appsec.s.req.body'))
   })
 
   it('should complete finishRequest with null req without crash', () => {
@@ -496,7 +496,7 @@ describe('WAF path safety with non-HTTP req', () => {
 
     RealReporter.finishRequest(null, null, {}, undefined, span)
 
-    assert.equal(span._tags['_dd.appsec.waf.duration'], 100)
+    assert.equal(span.context().getTag('_dd.appsec.waf.duration'), 100)
     assert.equal(RealReporter.metricsQueue.size, 0)
   })
 
