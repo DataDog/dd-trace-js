@@ -2,7 +2,6 @@
 
 module.exports = {
   // Only list unprefixed node modules. They will automatically be instrumented as prefixed and unprefixed.
-  '@aws/durable-execution-sdk-js': () => require('../aws-durable-execution-sdk-js'),
   child_process: () => require('../child_process'),
   crypto: () => require('../crypto'),
   dns: () => require('../dns'),
@@ -23,6 +22,7 @@ module.exports = {
   '@modelcontextprotocol/sdk': () => require('../modelcontextprotocol-sdk'),
   'apollo-server-core': () => require('../apollo-server-core'),
   '@aws-sdk/smithy-client': () => require('../aws-sdk'),
+  '@aws/durable-execution-sdk-js': () => require('../aws-durable-execution-sdk-js'),
   '@azure/cosmos': { esmFirst: true, fn: () => require('../azure-cosmos') },
   '@azure/event-hubs': () => require('../azure-event-hubs'),
   '@azure/functions': () => require('../azure-functions'),

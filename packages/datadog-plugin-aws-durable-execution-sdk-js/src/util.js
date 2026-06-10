@@ -3,46 +3,41 @@
 const { createHash } = require('node:crypto')
 
 /**
- * Returns true if the op the DurableContextImpl is about to run will be served
- * from the SDK's checkpoint (i.e. the next stepId already has a SUCCEEDED entry).
- * @param {object} [ctxImpl]
- * @returns {boolean}
+ * Populates the replay and operation_id tags for the op the DurableContextImpl is about to
+ * run, deriving both from a single `getNextStepId()` call. `aws.durable.replayed` is always
+ * set ('true' when the next stepId already has a SUCCEEDED checkpoint entry, i.e. the op will
+ * be served from the SDK's checkpoint). `aws.durable.operation_id` — the 16-hex-char MD5 of
+ * the stepId, mirroring the SDK's internal calculation — is only added when a stepId exists.
+ * @param {Record<string, string>} meta - The span meta/tags object to populate.
+ * @param {object} [ctxImpl] - The DurableContextImpl about to run the op.
+ * @returns {void}
  */
-function isReplayedOp (ctxImpl) {
+function addOpMeta (meta, ctxImpl) {
   const stepId = ctxImpl?.getNextStepId?.()
-  if (!stepId) return false
+  if (!stepId) {
+    meta['aws.durable.replayed'] = 'false'
+    return
+  }
   const stepData = ctxImpl?._executionContext?.getStepData?.(stepId)
-  return stepData?.Status === 'SUCCEEDED'
-}
-
-/**
- * Returns the operation_id (16-hex-char MD5 of the next stepId) for the op the
- * DurableContextImpl is about to run, or undefined if unavailable. Mirrors the
- * SDK's internal calculations
- * @param {object} [ctxImpl]
- * @returns {string|undefined}
- */
-function getOperationId (ctxImpl) {
-  const stepId = ctxImpl?.getNextStepId?.()
-  if (!stepId) return
-  return createHash('md5').update(stepId).digest('hex').slice(0, 16)
+  meta['aws.durable.replayed'] = String(stepData?.Status === 'SUCCEEDED')
+  meta['aws.durable.operation_id'] = createHash('md5').update(stepId).digest('hex').slice(0, 16)
 }
 
 /**
  * The SDK wraps user errors in typed classes (StepError, ChildContextError, etc.); we follow the
  * `.cause` chain to recover the user's original Error. SDK wrappers expose a string `errorType`
  * field, so the loop stops once we leave the wrapper hierarchy.
- * @param {{ error?: unknown } | unknown} ctxOrError
- * @returns {{ error?: unknown } | unknown}
+ * @param {{ error?: unknown }} ctx
+ * @returns {unknown} the unwrapped error, or `ctx.error` unchanged when it isn't an Error
  */
-function unwrapDurableError (ctxOrError) {
-  let err = ctxOrError?.error
-  if (!(err instanceof Error)) return ctxOrError
+function unwrapDurableError (ctx) {
+  let err = ctx?.error
+  if (!(err instanceof Error)) return err
 
   while (typeof err.errorType === 'string' && err.cause instanceof Error) {
     err = err.cause
   }
-  return { ...ctxOrError, error: err }
+  return err
 }
 
-module.exports = { isReplayedOp, getOperationId, unwrapDurableError }
+module.exports = { addOpMeta, unwrapDurableError }
