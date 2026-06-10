@@ -73,8 +73,15 @@ describe('DDOpenAIAgentsProcessor', () => {
     })
 
     it('returns without calling startSpan for span types that have no LLMObs kind', async () => {
-      await processor.onSpanStart({ spanData: { type: 'generation' } })
-      sinon.assert.notCalled(integration.startSpan)
+      // 'response' spans are intentionally excluded: the openai plugin creates
+      // its own openai.request span and parents it under the agent span via
+      // context management, so the openai-agents TracingProcessor must not
+      // create a duplicate LLM span.
+      for (const type of ['generation', 'response']) {
+        integration.startSpan.resetHistory()
+        await processor.onSpanStart({ spanData: { type } })
+        sinon.assert.notCalled(integration.startSpan)
+      }
     })
 
     it('maps recognised span types to the expected LLMObs kind', async () => {
@@ -82,7 +89,6 @@ describe('DDOpenAIAgentsProcessor', () => {
         ['agent', 'agent'],
         ['function', 'tool'],
         ['handoff', 'tool'],
-        ['response', 'llm'],
         ['guardrail', 'task'],
         ['custom', 'task'],
       ]
