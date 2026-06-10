@@ -5,6 +5,7 @@ const {
   getOperation,
   extractMetrics,
   extractMetadata,
+  extractToolDefinitions,
   aggregateStreamingChunks,
   formatInputMessages,
   formatEmbeddingInput,
@@ -78,6 +79,9 @@ class GenAiLLMObsPlugin extends LLMObsPlugin {
 
     const metadata = extractMetadata(config)
     this._tagger.tagMetadata(span, metadata)
+
+    const toolDefinitions = extractToolDefinitions(config)
+    if (toolDefinitions.length > 0) this._tagger.tagToolDefinitions(span, toolDefinitions)
 
     if (error) {
       this._tagger.tagLLMIO(span, inputMessages, [{ content: '' }])
