@@ -907,7 +907,7 @@ FakePerformanceObserverForOtlp.instances = []
 
 /**
  * Loads otlp_runtime_metrics with a mock meter for unit tests.
- * @param {{ monitorEventLoopDelay?: () => unknown }} [overrides]
+ * @param {{ monitorEventLoopDelay?: () => unknown, getActiveResourcesInfo?: () => string[] }} [overrides]
  * @returns {{
  *   otlpMetrics: object,
  *   createdInstruments: Record<string, object>,
@@ -977,6 +977,8 @@ function loadOtlpRuntimeMetricsTestModule (overrides = {}) {
   }
 
   const monitorEventLoopDelay = overrides.monitorEventLoopDelay ?? realPerfHooks.monitorEventLoopDelay
+  const processModule = Object.create(process)
+  processModule.getActiveResourcesInfo = overrides.getActiveResourcesInfo ?? process.getActiveResourcesInfo
 
   const otlpMetrics = proxyquire.noCallThru()('../src/runtime_metrics/otlp_runtime_metrics', {
     '@opentelemetry/api': {
@@ -989,6 +991,7 @@ function loadOtlpRuntimeMetricsTestModule (overrides = {}) {
       PerformanceObserver: FakePerformanceObserverForOtlp,
       constants: realPerfHooks.constants,
     },
+    'node:process': processModule,
     './client': {
       createMetricsClient: () => fakeMetricsClient,
     },
@@ -1165,6 +1168,24 @@ describe('otlp_runtime_metrics', () => {
     assert.ok(resourceCounts.length > 0, 'v8js.resource.active should observe at least one resource type')
     assert.ok(resourceCounts.every(e => e.v > 0 && typeof e.type === 'string'),
       'every v8js.resource.active observation should have a positive count and a type attribute')
+  })
+
+  it('normalizes TCPSocketWrap resource types to TCPWrap', () => {
+    const ctx = loadOtlpRuntimeMetricsTestModule({
+      getActiveResourcesInfo: () => ['TCPSocketWrap', 'TCPSocketWrap', 'Timeout']
+    })
+    ctx.otlpMetrics.start({ runtimeMetrics: { eventLoop: true } })
+
+    const resourceCounts = []
+    ctx.callbacks['v8js.resource.active'][0]({
+      observe: (v, a) => resourceCounts.push({ v, type: a?.['v8js.resource.type'] }),
+    })
+
+    assert.deepStrictEqual(resourceCounts, [
+      { v: 2, type: 'TCPWrap' },
+      { v: 1, type: 'Timeout' },
+    ], 'resource type normalization should map only TCPSocketWrap to TCPWrap')
+    ctx.otlpMetrics.stop()
   })
 
   it('event loop delay batch skips when histogram has fewer than 5 samples', () => {
