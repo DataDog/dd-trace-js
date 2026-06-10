@@ -31,7 +31,7 @@ class AwsDurableExecutionSdkJsClientPlugin extends ClientPlugin {
     }
     addOpMeta(meta, ctx.self)
 
-    this.startSpan('aws.durable.invoke', {
+    this.startSpan(this.operationName(), {
       resource: operationName,
       kind: this.constructor.kind,
       meta,
