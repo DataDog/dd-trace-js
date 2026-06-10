@@ -257,7 +257,7 @@ moduleTypes.forEach(({
                 ...envVars,
                 CYPRESS_BASE_URL: webAppBaseUrl,
                 CYPRESS_FLAKY_PASS_ATTEMPT: '1',
-                DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+                DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
                 SPEC_PATTERN: specToRun,
               },
             }
@@ -273,6 +273,7 @@ moduleTypes.forEach(({
 
                 const sortByStart = arr =>
                   arr.slice().sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+                let foundIntermediateRetry = false
 
                 // Eventually-passing and always-failing tests are retried by ATR:
                 // only the last attempt should have TEST_FINAL_STATUS
@@ -287,14 +288,27 @@ moduleTypes.forEach(({
                   ))
                   assert.ok(group.length > 1, `Expected ATR retries for "${name}"`)
                   group.forEach((test, idx) => {
-                    if (idx < group.length - 1) {
-                      assert.ok(!(TEST_FINAL_STATUS in test.meta),
-                      `TEST_FINAL_STATUS should not be set on intermediate run of "${name}"`)
+                    const isFirstAttempt = idx === 0
+                    const isLastAttempt = idx === group.length - 1
+                    if (isFirstAttempt) {
+                      assert.ok(!(TEST_IS_RETRY in test.meta), `First run of "${name}" should not be a retry`)
                     } else {
-                      assert.strictEqual(test.meta[TEST_FINAL_STATUS], finalStatus)
+                      assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
                     }
+                    if (!isLastAttempt) {
+                      if (!isFirstAttempt) {
+                        foundIntermediateRetry = true
+                      }
+                      assert.ok(
+                        !(TEST_FINAL_STATUS in test.meta),
+                        `TEST_FINAL_STATUS should not be set on intermediate run of "${name}"`
+                      )
+                      return
+                    }
+                    assert.strictEqual(test.meta[TEST_FINAL_STATUS], finalStatus)
                   })
                 }
+                assert.ok(foundIntermediateRetry, 'Expected at least one intermediate ATR retry')
 
                 // Always-passing tests have a single execution and get TEST_FINAL_STATUS immediately
                 for (const [suite, name] of [
