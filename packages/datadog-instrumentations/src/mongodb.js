@@ -35,22 +35,22 @@ addHook({ name: 'mongodb', versions: ['>=3.3 <5', '5', '>=6'] }, mongodb => {
     const useTwoArguments = collectionMethodsWithTwoFilters.includes(methodName)
 
     shimmer.wrap(mongodb.Collection.prototype, methodName, method => {
-      return function () {
+      return function (...args) {
         if (!startCh.hasSubscribers) {
-          return method.apply(this, arguments)
+          return method.apply(this, args)
         }
 
         const ctx = {
-          filters: [arguments[0]],
+          filters: [args[0]],
           methodName,
         }
 
         if (useTwoArguments) {
-          ctx.filters.push(arguments[1])
+          ctx.filters.push(args[1])
         }
 
         return startCh.runStores(ctx, () => {
-          return method.apply(this, arguments)
+          return method.apply(this, args)
         })
       }
     })

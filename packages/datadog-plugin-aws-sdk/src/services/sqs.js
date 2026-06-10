@@ -3,7 +3,44 @@
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 const { DsmPathwayCodec, getHeadersSize } = require('../../../dd-trace/src/datastreams')
-const { extractQueueMetadata } = require('../util')
+const { extractQueueMetadata, isEmpty } = require('../util')
+
+/**
+ * @typedef {{
+ *   'detail-type'?: string,
+ *   detail?: { _datadog?: Record<string, string> },
+ *   Type?: string,
+ *   Message?: string
+ * }} ParsedSqsBody
+ */
+
+/**
+ * Resolve the EventBridge `_datadog` text map from a parsed SQS body — for both
+ * EventBridge -> SQS (`body.detail._datadog`) and EventBridge -> SNS -> SQS (the
+ * envelope is the SNS `Notification`'s stringified `Message`). Keyed off
+ * `detail-type`, the marker AWS sets on every PutEvents delivery. Relies on the
+ * default SQS-target shape; a target InputTransformer can drop `detail`.
+ *
+ * @param {ParsedSqsBody} [parsedBody]
+ * @returns {Record<string, string> | undefined}
+ */
+function getEventBridgeContext (parsedBody) {
+  let envelope
+  if (parsedBody?.['detail-type'] !== undefined) {
+    envelope = parsedBody // EventBridge -> SQS
+  } else if (parsedBody?.Type === 'Notification' && typeof parsedBody.Message === 'string') {
+    // EventBridge -> SNS -> SQS
+    try {
+      const innerEnvelope = JSON.parse(parsedBody.Message)
+      if (innerEnvelope?.['detail-type'] !== undefined) {
+        envelope = innerEnvelope
+      }
+    } catch {
+      // SNS `Message` not JSON
+    }
+  }
+  return envelope?.detail?._datadog
+}
 
 class Sqs extends BaseAwsSdkPlugin {
   static id = 'sqs'
@@ -23,25 +60,32 @@ class Sqs extends BaseAwsSdkPlugin {
 
       let store = this._parentMap.get(request)
       let span
-      let parsedMessageAttributes = null
-      if (contextExtraction && contextExtraction.datadogContext) {
-        ctx.needsFinish = true
-        const options = {
-          childOf: contextExtraction.datadogContext,
-          meta: {
-            ...this.requestTags.get(request),
-            'span.kind': 'server',
-          },
-          integrationName: 'aws-sdk',
+      let parsedMessageAttributes
+      let parsedFirstBody
+      let firstBodyChecked = false
+      if (contextExtraction !== undefined) {
+        parsedFirstBody = contextExtraction.parsedBody
+        firstBodyChecked = contextExtraction.bodyChecked === true
+        if (contextExtraction.datadogContext !== undefined) {
+          ctx.needsFinish = true
+          const options = {
+            childOf: contextExtraction.datadogContext,
+            meta: {
+              ...this.requestTags.get(request),
+              'span.kind': 'server',
+            },
+            integrationName: 'aws-sdk',
+          }
+          parsedMessageAttributes = contextExtraction.parsedAttributes
+          span = this.startSpan('aws.response', options, ctx)
+          store = ctx.currentStore
         }
-        parsedMessageAttributes = contextExtraction.parsedAttributes
-        span = this.startSpan('aws.response', options, ctx)
-        store = ctx.currentStore
       }
 
-      // extract DSM context after as we might not have a parent-child but may have a DSM context
+      // Extract DSM context after, as we might not have a parent-child but may have a DSM context.
       this.responseExtractDSMContext(
-        request.operation, request.params, response, span || null, { parsedAttributes: parsedMessageAttributes }
+        request.operation, request.params, response, span ?? null,
+        { parsedAttributes: parsedMessageAttributes, parsedFirstBody, firstBodyChecked }
       )
 
       return store
@@ -92,7 +136,7 @@ class Sqs extends BaseAwsSdkPlugin {
   }
 
   generateTags (params, operation, response) {
-    if (!params || (!params.QueueName && !params.QueueUrl)) return {}
+    if (!params || (!params.QueueName && !params.QueueUrl)) return
 
     const queueMetadata = extractQueueMetadata(params.QueueUrl)
     const queueName = queueMetadata?.queueName || params.QueueName
@@ -128,31 +172,48 @@ class Sqs extends BaseAwsSdkPlugin {
     if (!response || !response.Messages || !response.Messages[0]) return
 
     let message = response.Messages[0]
+    let parsedBody
 
     if (message.Body) {
       try {
-        const body = JSON.parse(message.Body)
-
-        // SNS to SQS
-        if (body.Type === 'Notification') {
-          message = body
-        }
+        parsedBody = JSON.parse(message.Body)
       } catch {
         // SQS to SQS
       }
-    }
-
-    if (!message.MessageAttributes || !message.MessageAttributes._datadog) return
-
-    const datadogAttribute = message.MessageAttributes._datadog
-
-    const parsedAttributes = this.parseDatadogAttributes(datadogAttribute)
-    if (parsedAttributes) {
-      return {
-        datadogContext: this.tracer.extract('text_map', parsedAttributes),
-        parsedAttributes,
+      // SNS to SQS
+      if (parsedBody?.Type === 'Notification') {
+        message = parsedBody
       }
     }
+
+    // Check MessageAttributes first (common direct-SQS/SNS path): avoids parsing
+    // the body (e.g. a large SNS `Message`) just to rule out an EventBridge
+    // envelope. Precedence matches responseExtractDSMContext.
+    const datadogAttribute = message.MessageAttributes?._datadog
+    if (datadogAttribute) {
+      const parsedAttributes = this.parseDatadogAttributes(datadogAttribute)
+      if (parsedAttributes) {
+        return {
+          datadogContext: this.tracer.extract('text_map', parsedAttributes),
+          parsedAttributes,
+          parsedBody,
+          bodyChecked: true,
+        }
+      }
+    }
+
+    // Then the EventBridge envelope (optionally via SNS); see getEventBridgeContext.
+    const eventBridgeContext = getEventBridgeContext(parsedBody)
+    if (eventBridgeContext) {
+      return {
+        datadogContext: this.tracer.extract('text_map', eventBridgeContext),
+        parsedAttributes: eventBridgeContext,
+        parsedBody,
+        bodyChecked: true,
+      }
+    }
+
+    return { parsedBody, bodyChecked: true }
   }
 
   parseDatadogAttributes (attributes) {
@@ -164,45 +225,54 @@ class Sqs extends BaseAwsSdkPlugin {
         const buffer = Buffer.from(attributes.Value ?? attributes.BinaryValue, 'base64')
         return JSON.parse(buffer)
       }
-    } catch (e) {
-      log.error('Sqs error parsing DD attributes', e)
+    } catch (error) {
+      log.error('Sqs error parsing DD attributes', error)
     }
   }
 
   responseExtractDSMContext (operation, params, response, span, kwargs = {}) {
     let { parsedAttributes } = kwargs
+    const { parsedFirstBody, firstBodyChecked } = kwargs
     if (!this.config.dsmEnabled) return
     if (operation !== 'receiveMessage') return
     if (!response || !response.Messages || !response.Messages[0]) return
 
-    // we only want to set the payloadSize on the span if we have one message
+    // Only attribute payloadSize to the span when there is a single message.
     span = response.Messages.length > 1 ? null : span
 
-    for (let message of response.Messages) {
-      // we may have already parsed the message attributes when extracting trace context
-      if (!parsedAttributes) {
-        if (message.Body) {
-          try {
-            const body = JSON.parse(message.Body)
+    // QueueUrl is the same for the whole receive batch.
+    const queue = params.QueueUrl.slice(params.QueueUrl.lastIndexOf('/') + 1)
 
-            // SNS to SQS
-            if (body.Type === 'Notification') {
-              message = body
-            }
+    for (let i = 0; i < response.Messages.length; i++) {
+      let message = response.Messages[i]
+      if (!parsedAttributes) {
+        let body
+        // responseExtract already parsed message[0]; reuse that result instead of re-parsing.
+        if (i === 0 && firstBodyChecked) {
+          body = parsedFirstBody
+        } else if (message.Body) {
+          try {
+            body = JSON.parse(message.Body)
           } catch {
             // SQS to SQS
           }
         }
-        if (!parsedAttributes && message.MessageAttributes && message.MessageAttributes._datadog) {
-          parsedAttributes = this.parseDatadogAttributes(message.MessageAttributes._datadog)
+        // SNS to SQS
+        if (body?.Type === 'Notification') {
+          message = body
         }
+        // MessageAttributes for direct SQS/SNS; else the EventBridge envelope.
+        parsedAttributes = message.MessageAttributes?._datadog
+          ? this.parseDatadogAttributes(message.MessageAttributes._datadog)
+          : getEventBridgeContext(body)
       }
       const payloadSize = getHeadersSize({
         Body: message.Body,
         MessageAttributes: message.MessageAttributes,
       })
-      const queue = params.QueueUrl.split('/').pop()
       if (parsedAttributes) {
+        // Inert for EventBridge until its producer emits a pathway (separate
+        // change) — no `dd-pathway-ctx-base64` to decode yet; SQS/SNS decode now.
         this.tracer.decodeDataStreamsContext(parsedAttributes)
       }
       this.tracer
@@ -253,34 +323,35 @@ class Sqs extends BaseAwsSdkPlugin {
       // TODO: add test when the test suite is fixed
       return
     }
+
     const ddInfo = {}
-    // for now, we only want to inject to the first message, this may change for batches in the future
+    // For now we only inject to the first message; batches may change later.
     if (injectTraceContext) {
       this.tracer.inject(span, 'text_map', ddInfo)
+    }
+
+    if (this.config.dsmEnabled) {
+      // Attach `_datadog` before measuring so the DSM payload size metric
+      // matches the on-wire payload, then update with the encoded context.
       params.MessageAttributes._datadog = {
         DataType: 'String',
         StringValue: JSON.stringify(ddInfo),
       }
-    }
-
-    if (this.config.dsmEnabled) {
-      if (!params.MessageAttributes._datadog) {
-        params.MessageAttributes._datadog = {
-          DataType: 'String',
-          StringValue: JSON.stringify(ddInfo),
-        }
-      }
-
       const dataStreamsContext = this.setDSMCheckpoint(span, params, queueUrl)
       if (dataStreamsContext) {
         DsmPathwayCodec.encode(dataStreamsContext, ddInfo)
         params.MessageAttributes._datadog.StringValue = JSON.stringify(ddInfo)
+      } else if (isEmpty(ddInfo)) {
+        delete params.MessageAttributes._datadog
       }
+      return
     }
 
-    if (params.MessageAttributes._datadog && Object.keys(ddInfo).length === 0) {
-      // let's avoid adding any additional information to payload if we failed to inject
-      delete params.MessageAttributes._datadog
+    if (isEmpty(ddInfo)) return
+
+    params.MessageAttributes._datadog = {
+      DataType: 'String',
+      StringValue: JSON.stringify(ddInfo),
     }
   }
 
@@ -289,10 +360,9 @@ class Sqs extends BaseAwsSdkPlugin {
       Body: params.MessageBody,
       MessageAttributes: params.MessageAttributes,
     })
-    const queue = queueUrl.split('/').pop()
-    const dataStreamsContext = this.tracer
+    const queue = queueUrl.slice(queueUrl.lastIndexOf('/') + 1)
+    return this.tracer
       .setCheckpoint(['direction:out', `topic:${queue}`, 'type:sqs'], span, payloadSize)
-    return dataStreamsContext
   }
 }
 

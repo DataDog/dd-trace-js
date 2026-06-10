@@ -11,6 +11,6 @@ runs:
   steps:
     - name: Get Datadog App key
       id: dd-sts
-      uses: DataDog/dd-sts-action@2e8187910199bd93129520183c093e19aa585c75 # v1.0.0
+      uses: DataDog/dd-sts-action@7d2d231c02fd54a3da912e582ff87cb995d1fd30 # v1.0.4
       with:
         policy: dd-trace-js

@@ -295,12 +295,8 @@ describe('dependencies', () => {
       const nestedDependency =
         [fileURIWithoutNodeModules, 'node_modules', 'dependency', 'node_modules', moduleName, 'index1.js'].join('/')
 
-      requirePackageJson.callsFake(function (dependencyPath) {
-        if (dependencyPath.includes(path.join('node_modules', 'dependency', 'node_modules'))) {
-          return { version: packageVersion }
-        } else {
-          return { version: packageVersion }
-        }
+      requirePackageJson.callsFake(function () {
+        return { version: packageVersion }
       })
 
       moduleLoadStartChannel.publish({ request: moduleName, filename: firstLevelDependency })
@@ -338,8 +334,8 @@ describe('dependencies', () => {
       let atLeastOneTimeout = false
       global.setImmediate = function (callback) {
         atLeastOneTimeout = true
-        const timeout = originalSetImmediate(function () {
-          const cbResult = callback.apply(this, arguments)
+        const timeout = originalSetImmediate(function (...args) {
+          const cbResult = callback.apply(this, args)
           timeouts.splice(timeouts.indexOf(timeout), 1)
           return cbResult
         })

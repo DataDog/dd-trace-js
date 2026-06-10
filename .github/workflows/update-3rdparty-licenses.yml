@@ -157,26 +157,23 @@ jobs:
 
           echo "🤖 Bot-created PR detected. Auto-committing LICENSE-3rdparty.csv changes..."
 
-          contents="$(base64 -w 0 LICENSE-3rdparty.csv)"
-
-          variables="$(jq -c \
+          # gh's `-f variables=<json>` does not parse the value as JSON; build
+          # the `{query, variables}` body with jq and pipe via `--input -`.
+          jq -nc \
             --arg repo "$GITHUB_REPOSITORY" \
             --arg branch "$GITHUB_HEAD_REF" \
             --arg msg "Update LICENSE-3rdparty.csv" \
             --arg expected "$EXPECTED_HEAD_OID" \
             --arg path "LICENSE-3rdparty.csv" \
-            --arg contents "$contents" \
+            --arg contents "$(base64 -w 0 LICENSE-3rdparty.csv)" \
             '{
-              input: {
+              query: "mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid url } } }",
+              variables: { input: {
                 branch: { repositoryNameWithOwner: $repo, branchName: $branch },
                 message: { headline: $msg },
                 expectedHeadOid: $expected,
                 fileChanges: { additions: [{ path: $path, contents: $contents }] }
-              }
-            }'
-          )"
-
-          query='mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid url } } }'
-          gh api graphql -f query="$query" -f variables="$variables" -q '.data.createCommitOnBranch.commit.url' >/dev/null
+              } }
+            }' | gh api graphql --input - -q '.data.createCommitOnBranch.commit.url' >/dev/null
 
           echo "✅ Successfully committed and pushed LICENSE-3rdparty.csv updates"

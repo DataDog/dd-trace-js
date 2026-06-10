@@ -40,7 +40,7 @@ const jsonBuffer = new JSONBuffer({
   onFlush,
 })
 
-function send (message, logger, dd, snapshot) {
+function send (message, logger, dd, snapshot, processTags) {
   const payload = {
     ddsource,
     hostname,
@@ -50,6 +50,7 @@ function send (message, logger, dd, snapshot) {
       : message,
     logger,
     dd,
+    process_tags: processTags,
     debugger: { snapshot },
   }
 

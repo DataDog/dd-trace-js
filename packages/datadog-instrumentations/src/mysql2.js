@@ -145,8 +145,8 @@ function wrapConnection (Connection, version) {
 
     if (cached === onResult) return
 
-    const wrapped = function () {
-      return commandFinishCh.runStores(ctx, onResult, this, ...arguments)
+    const wrapped = function (...args) {
+      return commandFinishCh.runStores(ctx, onResult, this, ...args)
     }
 
     wrappedOnResult.set(cmd, wrapped)
@@ -176,7 +176,7 @@ function wrapConnection (Connection, version) {
         if (typeof this.onResult === 'function') {
           const onResult = this.onResult
 
-          this.onResult = shimmer.wrapFunction(onResult, onResult => function (error) {
+          this.onResult = shimmer.wrapCallback(onResult, onResult => function (error) {
             if (error) {
               ctx.error = error
               errorCh.publish(ctx)
@@ -289,8 +289,8 @@ function wrapPoolCluster (PoolCluster) {
   const startOuterQueryCh = channel('datadog:mysql2:outerquery:start')
   const wrappedPoolNamespaces = new WeakSet()
 
-  shimmer.wrap(PoolCluster.prototype, 'of', of => function () {
-    const poolNamespace = of.apply(this, arguments)
+  shimmer.wrap(PoolCluster.prototype, 'of', of => function (...args) {
+    const poolNamespace = of.apply(this, args)
 
     if (startOuterQueryCh.hasSubscribers && !wrappedPoolNamespaces.has(poolNamespace)) {
       shimmer.wrap(poolNamespace, 'query', query => function (sql, values, cb) {

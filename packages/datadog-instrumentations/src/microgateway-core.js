@@ -14,8 +14,8 @@ const versions = ['>=2.1 <=3.0.0']
 const requestContexts = new WeakMap()
 
 function wrapConfigProxyFactory (configProxyFactory) {
-  return function () {
-    const configProxy = configProxyFactory.apply(this, arguments)
+  return function (...args) {
+    const configProxy = configProxyFactory.apply(this, args)
 
     return function (req, res, next) {
       const ctx = { req, res }

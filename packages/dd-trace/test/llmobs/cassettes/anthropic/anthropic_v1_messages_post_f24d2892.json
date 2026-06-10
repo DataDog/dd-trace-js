@@ -1,0 +1,59 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.anthropic.com/v1/messages",
+    "headers": {
+      "Content-Length": "290",
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+      "User-Agent": "Anthropic/JS 0.14.0",
+      "x-stainless-lang": "js",
+      "x-stainless-package-version": "0.14.0",
+      "x-stainless-os": "MacOS",
+      "x-stainless-arch": "arm64",
+      "x-stainless-runtime": "node",
+      "x-stainless-runtime-version": "v22.17.0",
+      "anthropic-version": "2023-06-01",
+      "x-stainless-helper-method": "stream",
+      "Accept-Encoding": "gzip,deflate",
+      "Connection": "keep-alive"
+    },
+    "body": "{\n  \"model\": \"claude-haiku-4-5-20251001\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"What is the best selling book of all time?\"\n    }\n  ],\n  \"max_tokens\": 16000,\n  \"temperature\": 1,\n  \"thinking\": {\n    \"type\": \"enabled\",\n    \"budget_tokens\": 1024\n  },\n  \"stream\": true\n}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Date": "Mon, 27 Apr 2026 16:41:25 GMT",
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Transfer-Encoding": "chunked",
+      "Connection": "keep-alive",
+      "Cache-Control": "no-cache",
+      "anthropic-ratelimit-input-tokens-limit": "4000000",
+      "anthropic-ratelimit-input-tokens-remaining": "3969000",
+      "anthropic-ratelimit-input-tokens-reset": "2026-04-27T16:41:25Z",
+      "anthropic-ratelimit-output-tokens-limit": "800000",
+      "anthropic-ratelimit-output-tokens-remaining": "800000",
+      "anthropic-ratelimit-output-tokens-reset": "2026-04-27T16:41:24Z",
+      "anthropic-ratelimit-requests-limit": "20000",
+      "anthropic-ratelimit-requests-remaining": "19999",
+      "anthropic-ratelimit-requests-reset": "2026-04-27T16:41:24Z",
+      "anthropic-ratelimit-tokens-limit": "4800000",
+      "anthropic-ratelimit-tokens-remaining": "4769000",
+      "anthropic-ratelimit-tokens-reset": "2026-04-27T16:41:24Z",
+      "request-id": "req_011CaUcFU6kn3nRVbo8Mrq3H",
+      "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+      "anthropic-organization-id": "4257e925-ee99-4ee8-9c62-8e53716d5203",
+      "Server": "cloudflare",
+      "x-envoy-upstream-service-time": "463",
+      "cf-cache-status": "DYNAMIC",
+      "set-cookie": "_cfuvid=T.ahEa3U61VYVmVnykK1EE5UdaiPQPjMAmvax0gEHOA-1777308084.6883118-1.0.1.1-zm1fn.o5P.uGUlr3mI76z3cl7Lg3mXQ7dnOhOyxhnLk; HttpOnly; SameSite=None; Secure; Path=/; Domain=api.anthropic.com",
+      "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+      "X-Robots-Tag": "none",
+      "CF-RAY": "9f2f46494be82f65-EWR"
+    },
+    "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-haiku-4-5-20251001\",\"id\":\"msg_01DDakGBKKrwHtuchcg77hSB\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":46,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":6,\"service_tier\":\"standard\",\"inference_geo\":\"not_available\"}}            }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"\"} }\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"This is a question about the\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" best-selling book of all time. This is a factual question that has some complexity because \\\"\"}        }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"best-selling\\\" can be measured different ways and different sources may have different data.\\n\\nThe\"}    }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" most commonly cited answer is the Bible, which has sold more copies than any other book in history - estimates\"} }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" suggest over 5 billion copies have been sold or distributed. However, some might not\"}           }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" count this since:\\n1. It's often distributed for\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" free or at minimal cost by religious organizations\\n2. Different versions/editions\"}        }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" make counting complex\\n\\nIf we're talking about books sold commercially/\"}            }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"for profit, some other contenders include:\\n- Don Quixote (around 500\"} }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" million copies)\\n- The Quran (around 800 million - 3 billion,\"}        }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" similar distribution issues as Bible)\\n- Harry Potter and the Philosopher's/Sorcerer's Stone (over\"}           }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" 100 million)\\n- The Lord of the Rings (around 150 million)\\n- The Little Prince (around 200 million)\\n\\nThe most\"}     }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" accurate answer is probably the Bible, but I should mention this caveat and perhaps\"}   }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\" give some alternatives.\"}            }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"signature_delta\",\"signature\":\"EugJCmMIDRgCKkC61wVVCCnyXukF4V/ihYYau4lo2FH7rROYe1xKEv5Hgi98sOyBaYCj/rDhowR4W6qPtYWt4grK8t/wGLuPNyWMMhljbGF1ZGUtaGFpa3UtNC01LTIwMjUxMDAxOAASDBCcF6cKKs9XVfyyhBoMo2SZg5w2D4GFXzpbIjBIQBgPGno8lRLJw1o4pJ6x69gMHevU5Tu9Zak2Ec81pR83EFGHO6Lgv0DcAGUfR3YqsghK9hodcPNC1uYJfNz3Q0hKOeIHGQ1rgNanF9stsBJVk5on7Jzs+R6Rv51QFwITNKi+o2QUZAl4An4zZKKtnRVwrOi+4g+MZLSZFy9W9CYSXaUlYn9gDzmKB25TRw+JyIiEXyolgXzg1nH38+wY3QhAgUioV+xkzkDXdiAJzQH2EIo7Jl5d4+qKvHU5ivfwrNrcLploNDWtCz0m1ROgwbBfzPJAXr4Kd98ro0XYiNEw+NoFbiQN/VwxwkOgG85sSMAZQafeeM65raAqktA9DYstp/vl4kKsE4bYvz+FcGjIW28LahZVEszaLys//jdEArsn6RnssvQBO/fB3rF12xvLhwaSh4AfrWPOnS8XLg+wo1YBE81yh6NAOdNFQhuVUIbN9SeEZcvolYcctbzKWgiPdMfktsMClgyGy8JwSbgnBDMeq3yMos9OwHb05GAmz2m+TmtVJ70hIPbris6xWyLVyT4Ft5dh00kuTZ05HoOOHhrgs97BIzm1CmhyzlWOfJAH32HbbrlMWYcUlTmVQ6OBvAxWsA2LiJLfdosbZ0qyU/koYbdH0embF8jRBuieDdkp+m2bqdg/i7yrnPl2HP4mOQVqKyvhhEJZn5aBIofaW0gx7ESszZ25kFpEj79lRH33HGQ3eMSaw4FpP9Kgi6Ls5LkbXppLczy/PPioiwyEnuI/mLLS+mEaboDgXizkLAm1bCwTvO3qSpIkodHz7D03kfWG8takFobV9WooL7F9uIRmQ+sxZhosB+iuIdv2a7KhKLUvxU64+jkju/Za1ehfC9qeOzZXxFGHtVA9aw6mIUxp9mIHPEDmK2g9JbEi1OVT08M0xjsvaZAVqgojOSDHEKNjicZojNjWc+sva2RNqY3DtFC1io094yH2tA2g1plHPmY5Wnpmrdy8UuyfiTXg3MunHEAJguITH/7+tUFcIO6xLiFWm+i500mpWMNnKeyT9l9RurnRZAofUK2I7+VXj0sbkW9b/hlqe5tIMotGorVO/2SvMju4Q9LuDvpSDypGjMHWJF9tPlIkolprI7Cn8f7qjxcT2HvaIuH73SisTIT0egRadguYS6xMhY4SG85FppPrPNogFDcBgQ1Q61DpkluU3cbyGJomLs01EJK4lUjE2z0eozElH8nPSSv8RopamVHcQoXjNV/QMaQe9lbcTW+JK1nuLxIc7+0rhM03KjB6t7DRXBGOn2Nvc5FBabVKAyjOyVwmvV+r+cMJIUv8P2Buo0gY+PvsYk/97qNnlVnm6sFlPJ/oYi5ok+t7zvHjh4hAmGgVErjhcYMay6aSwhjYBTew1zwZwpBapz6RIbhQTligOSXorSP/ZXnQXWxIDf8OpPXXxw3SDsU+69At390KU/lySDMW+nY+wuACXwqzqG9ndDazn2MSPaADjC1Y80KpcJl2dTh1x6HNV0YK1dgYAQ==\"}       }\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0       }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"text\",\"text\":\"\"}    }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"The **Bible** is generally considered the best-selling book of all time, with an estimated 5+\"}        }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\" billion copies sold or distributed worldwide.\\n\\nHowever, this comes with caveats:\\n- Many copies are distributed\"}           }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\" free by religious organizations, not purchased\\n- It exists in countless versions\"}  }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\" and translations, making exact counts difficult\\n\\nIf you're looking for the best-selling book *commercially*, other\"}  }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\" top contenders include:\\n\\n- **Don Quixote** (~500 million copies)\\n- **Harry Potter and the Sorcerer's Stone** (~100+ million copies\"}             }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\")\\n- **The Lord of the Rings** (~150+ million copies)\\n- **The Little Prince** (~200+ million copies)\\n\\nNumbers vary depending on the\"}              }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\" source and how they're measured, but these are consistently among the highest.\"}             }\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":1               }\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null},\"usage\":{\"input_tokens\":46,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":427}  }\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"    }\n\n"
+  }
+}

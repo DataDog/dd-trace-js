@@ -14,7 +14,6 @@ const {
   EVP_SUBDOMAIN_HEADER_NAME,
   EVP_PROXY_AGENT_BASE_PATH,
 } = require('../constants/writers')
-const { getAgentUrl } = require('../../agent/url')
 const { parseResponseAndLog } = require('./util')
 
 class LLMObsBuffer {
@@ -54,7 +53,8 @@ class BaseLLMObsWriter {
 
     this._periodic = setInterval(() => {
       this.flush()
-    }, this._interval).unref()
+    }, this._interval)
+    this._periodic.unref?.()
 
     const destroyer = this.destroy.bind(this)
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(destroyer)
@@ -87,19 +87,25 @@ class BaseLLMObsWriter {
     return buffer
   }
 
+  /**
+   * @returns {boolean} `true` if the event was buffered, `false` if it was dropped
+   * (e.g. the per-routing buffer was full). Callers that depend on the event
+   * actually being submitted should check this value.
+   */
   append (event, routing, byteLength) {
     const buffer = this._getBuffer(routing)
 
     if (buffer.events.length >= buffer.limit) {
       logger.warn(`${this.constructor.name} event buffer full (limit is ${buffer.limit}), dropping event`)
       telemetry.recordDroppedPayload(1, this._eventType, 'buffer_full')
-      return
+      return false
     }
 
     const eventSize = byteLength || Buffer.byteLength(JSON.stringify(event))
 
     buffer.size += eventSize
     buffer.events.push(event)
+    return true
   }
 
   flush () {
@@ -203,7 +209,7 @@ class BaseLLMObsWriter {
 
     const overrideOriginEnv = getEnvironmentVariable('_DD_LLMOBS_OVERRIDE_ORIGIN')
     const overrideOriginUrl = overrideOriginEnv && new URL(overrideOriginEnv)
-    const base = overrideOriginUrl ?? getAgentUrl(this._config)
+    const base = overrideOriginUrl ?? this._config.url
 
     return {
       url: base,

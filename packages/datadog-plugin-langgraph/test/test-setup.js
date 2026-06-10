@@ -70,9 +70,7 @@ class LanggraphTestSetup {
   // --- Operations ---
   async pregelInvoke () {
     const input = { messages: ['hello world'] }
-    const result = await this.app.invoke(input)
-
-    return result
+    return this.app.invoke(input)
   }
 
   async pregelInvokeError () {

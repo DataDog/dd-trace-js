@@ -50,24 +50,21 @@ describe('Plugin', () => {
       }
 
       beforeEach(() => {
-        tracer = require('../../dd-trace')
         appListener = null
       })
 
-      afterEach(() => {
+      afterEach(async () => {
         if (appListener) {
           appListener.close()
         }
-        return agent.close({ ritmReset: false })
+        await agent.close()
       })
 
       describe('without configuration', () => {
-        beforeEach(() => {
-          return agent.load('http', { server: false })
-            .then(() => {
-              http = require(pluginToBeLoaded)
-              express = require('express')
-            })
+        beforeEach(async () => {
+          tracer = await agent.load('http', { server: false })
+          http = require(pluginToBeLoaded)
+          express = require('express')
         })
 
         const spanProducerFn = (done) => {
@@ -946,8 +943,8 @@ describe('Plugin', () => {
 
             agent
               .assertSomeTraces(() => {
-                done(new Error('Noop request was traced.'))
                 clearTimeout(timer)
+                done(new Error('Noop request was traced.'))
               })
 
             appListener = server(app, port => {

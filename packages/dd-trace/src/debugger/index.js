@@ -6,7 +6,6 @@ const { join } = require('path')
 const { Worker, MessageChannel, threadId: parentThreadId } = require('worker_threads')
 const log = require('../log')
 const { fetchAgentInfo } = require('../agent/info')
-const { getAgentUrl } = require('../agent/url')
 const getDebuggerConfig = require('./config')
 const { DEBUGGER_DIAGNOSTICS_V1, DEBUGGER_INPUT_V2 } = require('./constants')
 
@@ -132,13 +131,13 @@ function start (config, rcInstance) {
       cleanup(error) // Be nice, clean up now that the worker thread encountered an issue and we can't continue
     })
 
-    worker.unref()
-    probeChannel.port1.unref()
-    probeChannel.port2.unref()
-    logChannel.port1.unref()
-    logChannel.port2.unref()
-    configChannel.port1.unref()
-    configChannel.port2.unref()
+    worker.unref?.()
+    probeChannel.port1.unref?.()
+    probeChannel.port2.unref?.()
+    logChannel.port1.unref?.()
+    logChannel.port2.unref?.()
+    configChannel.port1.unref?.()
+    configChannel.port2.unref?.()
   })
 }
 
@@ -211,7 +210,7 @@ function cleanup (error) {
 function detectDebuggerEndpoint (config, cb) {
   log.debug('[debugger] Detecting available debugger endpoints...')
 
-  fetchAgentInfo(getAgentUrl(config), (err, agentInfo) => {
+  fetchAgentInfo(config.url, (err, agentInfo) => {
     if (err) {
       log.warn('[debugger] Failed to query agent %s endpoint, falling back to %s',
         DEBUGGER_INPUT_V2,

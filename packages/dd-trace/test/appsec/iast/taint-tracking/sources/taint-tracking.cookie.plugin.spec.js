@@ -42,11 +42,9 @@ describe('Cookies sourcing with cookies', () => {
     function tests (config) {
       beforeEach(() => {
         iast.enable(getConfigFresh({
-          experimental: {
-            iast: {
-              enabled: true,
-              requestSampling: 100,
-            },
+          iast: {
+            enabled: true,
+            requestSampling: 100,
           },
         }))
 

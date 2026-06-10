@@ -15,6 +15,21 @@ const { protoLogsService } = require('../../src/opentelemetry/otlp/protobuf_load
 const { getConfigFresh } = require('../helpers/config')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
+/**
+ * @param {object} type protobufjs Type instance for the OTLP service message
+ * @param {object} message Decoded protobufjs Message
+ * @param {Buffer} originalPayload Raw wire bytes captured from the exporter
+ */
+function assertWireRoundTrip (type, message, originalPayload) {
+  assert(Buffer.isBuffer(originalPayload) && originalPayload.length > 0)
+  const reEncoded = Buffer.from(type.encode(message).finish())
+  const projectOptions = { longs: String, bytes: String, enums: String }
+  assert.deepStrictEqual(
+    type.toObject(type.decode(reEncoded), projectOptions),
+    type.toObject(message, projectOptions),
+  )
+}
+
 describe('OpenTelemetry Logs', () => {
   let originalEnv
 
@@ -24,7 +39,7 @@ describe('OpenTelemetry Logs', () => {
 
     logs.disable()
     const config = getConfigFresh()
-    if (config.otelLogsEnabled) {
+    if (config.DD_LOGS_OTEL_ENABLED) {
       const { initializeOpenTelemetryLogs } =
         proxyquire.noPreserveCache()('../../src/opentelemetry/logs', {})
       initializeOpenTelemetryLogs(config)
@@ -63,9 +78,14 @@ describe('OpenTelemetry Logs', () => {
         const mockReq = {
           write: (data) => { capturedPayload = data },
           end: () => {
-            const decoded = protocol === 'json'
-              ? JSON.parse(capturedPayload.toString())
-              : protoLogsService.decode(capturedPayload)
+            let decoded
+            if (protocol === 'json') {
+              decoded = JSON.parse(capturedPayload.toString())
+            } else {
+              const message = protoLogsService.decode(capturedPayload)
+              assertWireRoundTrip(protoLogsService, message, capturedPayload)
+              decoded = message
+            }
             validator(decoded, capturedHeaders)
             validatorCalled = true
           },
@@ -255,8 +275,11 @@ describe('OpenTelemetry Logs', () => {
       process.env.DD_TRACE_OTEL_ENABLED = 'true'
 
       mockOtlpExport((decoded, capturedHeaders) => {
-        // Validate payload body
-        const actual = JSON.parse(JSON.stringify(decoded.toJSON()))
+        const actual = JSON.parse(JSON.stringify(protoLogsService.toObject(decoded, {
+          longs: String,
+          bytes: String,
+          enums: String,
+        })))
         const attrs = actual.resourceLogs[0].resource.attributes
         const runtimeId = attrs.find(a => a.key === 'runtime-id').value.stringValue
         const clientId = attrs.find(a => a.key === '_dd.rc.client_id').value.stringValue
@@ -272,15 +295,12 @@ describe('OpenTelemetry Logs', () => {
                 { key: 'runtime-id', value: { stringValue: runtimeId } },
                 { key: '_dd.rc.client_id', value: { stringValue: clientId } },
               ],
-              droppedAttributesCount: 0,
             },
             scopeLogs: [{
               scope: {
                 name: 'test-service',
                 version: '1.0.0',
-                droppedAttributesCount: 0,
               },
-              schemaUrl: '',
               logRecords: [{
                 body: { stringValue: 'HTTP test message' },
                 severityText: 'ERROR',
@@ -401,8 +421,11 @@ describe('OpenTelemetry Logs', () => {
         assert.strictEqual(intValue !== null && typeof intValue === 'object' ? intValue.toNumber() : intValue, 42)
 
         // Double/float body
-        assert(logRecords[2].body.doubleValue !== undefined)
-        assert(Math.abs(logRecords[2].body.doubleValue - 3.14159) < 0.00001)
+        assert.notStrictEqual(logRecords[2].body.doubleValue, undefined)
+        assert(
+          Math.abs(logRecords[2].body.doubleValue - 3.14159) < 0.00001,
+          `Expected ${Math.abs(logRecords[2].body.doubleValue - 3.14159)} < 0.00001`
+        )
 
         // Boolean body
         assert.strictEqual(logRecords[3].body.boolValue, true)

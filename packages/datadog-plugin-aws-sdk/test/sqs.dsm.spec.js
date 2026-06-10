@@ -11,9 +11,8 @@ const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 const propagationHash = require('../../dd-trace/src/propagation-hash')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
-const { setup } = require('./spec_helpers')
+const { setup, withAwsSdkVersions } = require('./spec_helpers')
 
 const getQueueParams = (queueName) => {
   return {
@@ -29,7 +28,7 @@ describe('Plugin', () => {
     this.timeout(10000)
     setup()
 
-    withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
+    withAwsSdkVersions((version, moduleName) => {
       let AWS
       let sqs
       let queueNameDSM
@@ -114,7 +113,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         afterEach(() => {
@@ -211,7 +210,7 @@ describe('Plugin', () => {
                 })
               }
             })
-            assert.ok(statsPointsReceived >= 1)
+            assert.ok(statsPointsReceived >= 1, `Expected ${statsPointsReceived} >= 1`)
             assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash), true)
           }).then(done, done)
 
@@ -229,7 +228,7 @@ describe('Plugin', () => {
                 })
               }
             })
-            assert.ok(statsPointsReceived >= 2)
+            assert.ok(statsPointsReceived >= 2, `Expected ${statsPointsReceived} >= 2`)
             assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash), true)
           }, { timeoutMs: 5000 }).then(done, done)
 
@@ -280,7 +279,7 @@ describe('Plugin', () => {
                 })
               }
             })
-            assert.ok(statsPointsReceived >= 3)
+            assert.ok(statsPointsReceived >= 3, `Expected ${statsPointsReceived} >= 3`)
             assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash), true)
           }).then(done, done)
 

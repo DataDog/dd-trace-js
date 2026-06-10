@@ -1,5 +1,7 @@
 'use strict'
 
+const log = require('../log')
+
 let runtimeMetrics
 
 const noop = runtimeMetrics = {
@@ -20,17 +22,25 @@ module.exports = {
   start (config) {
     if (!config?.runtimeMetrics.enabled) return
 
-    runtimeMetrics = require('./runtime_metrics')
+    runtimeMetrics = config.DD_METRICS_OTEL_ENABLED
+      ? require('./otlp_runtime_metrics')
+      : require('./runtime_metrics')
 
     Object.setPrototypeOf(module.exports, runtimeMetrics)
 
-    runtimeMetrics.start(config)
+    try {
+      runtimeMetrics.start(config)
+    } catch (err) {
+      // Unwind whatever managed to register so a partial init doesn't leak into the next start().
+      runtimeMetrics.stop()
+      log.error('Failed to start runtime metrics', err)
+    }
   },
 
   stop () {
     runtimeMetrics.stop()
-
-    Object.setPrototypeOf(module.exports, runtimeMetrics = noop)
+    runtimeMetrics = noop
+    Object.setPrototypeOf(module.exports, noop)
   },
 }
 

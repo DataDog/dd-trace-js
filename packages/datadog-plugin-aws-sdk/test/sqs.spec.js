@@ -2,12 +2,13 @@
 
 const assert = require('node:assert/strict')
 const { randomUUID } = require('node:crypto')
+const { inspect } = require('node:util')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { withNamingSchema, withPeerService } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
-const { setup } = require('./spec_helpers')
+const { setup, withAwsSdkVersions } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sqs-naming')
 
 const getQueueParams = (queueName) => {
@@ -24,7 +25,7 @@ describe('Plugin', () => {
     this.timeout(10000)
     setup()
 
-    withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
+    withAwsSdkVersions((version, moduleName) => {
       let AWS
       let sqs
       let queueName
@@ -72,7 +73,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         withPeerService(
@@ -216,9 +217,15 @@ describe('Plugin', () => {
                 try {
                   for (const message in data.Messages) {
                     const recordData = data.Messages[message].MessageAttributes
-                    assert.ok(Object.hasOwn(recordData, '_datadog'))
+                    assert.ok(
+                      Object.hasOwn(recordData, '_datadog'),
+                      `Available keys: ${inspect(Object.keys(recordData))}`
+                    )
                     const traceContext = JSON.parse(recordData._datadog.StringValue)
-                    assert.ok(Object.hasOwn(traceContext, 'x-datadog-trace-id'))
+                    assert.ok(
+                      Object.hasOwn(traceContext, 'x-datadog-trace-id'),
+                      `Available keys: ${inspect(Object.keys(traceContext))}`
+                    )
                   }
 
                   resolve()
@@ -253,7 +260,7 @@ describe('Plugin', () => {
               const span = tracer.scope().active()
 
               assert.notStrictEqual(span, beforeSpan)
-              assert.strictEqual(span.context()._tags['aws.operation'], 'receiveMessage')
+              assert.strictEqual(span.context().getTag('aws.operation'), 'receiveMessage')
 
               done()
             })
@@ -345,7 +352,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         it('should allow disabling a specific span kind of a service', (done) => {

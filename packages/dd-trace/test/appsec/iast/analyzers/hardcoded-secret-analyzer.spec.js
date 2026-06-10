@@ -95,11 +95,9 @@ describe('Hardcoded Secret Analyzer', () => {
       beforeEach(() => {
         const tracer = require('../../../../')
         const config = getConfigFresh({
-          experimental: {
-            iast: {
-              enabled: true,
-              requestSampling: 100,
-            },
+          iast: {
+            enabled: true,
+            requestSampling: 100,
           },
         })
         iast.enable(config, tracer)
@@ -114,7 +112,7 @@ describe('Hardcoded Secret Analyzer', () => {
       })
 
       afterEach(() => {
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       it('should detect vulnerability', (done) => {

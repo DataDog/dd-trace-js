@@ -133,6 +133,7 @@ class SensitiveHandler {
         }
 
         start = i + (nextTainted.end - nextTainted.start)
+        // eslint-disable-next-line sonarjs/updated-loop-counter -- skip ahead; outer `i++` advances to `start`
         i = start - 1
         nextTainted = ranges.shift()
         nextTaintedIndex++
@@ -159,6 +160,7 @@ class SensitiveHandler {
         this.writeRedactedValuePart(valueParts, _length)
 
         start = i + _length
+        // eslint-disable-next-line sonarjs/updated-loop-counter -- skip ahead; outer `i++` advances to `start`
         i = start - 1
         nextSensitive = sensitive.shift()
       }

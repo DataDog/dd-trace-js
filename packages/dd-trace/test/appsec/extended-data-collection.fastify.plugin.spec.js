@@ -19,7 +19,7 @@ describe('extended data collection', () => {
   })
 
   after(() => {
-    return agent.close({ ritmReset: false })
+    return agent.close()
   })
 
   withVersions('fastify', 'fastify', '>=2', fastifyVersion => {
@@ -203,8 +203,14 @@ describe('extended data collection', () => {
         assert.strictEqual(collectedRequestHeaders, 8)
         assert.strictEqual(collectedResponseHeaders, 8)
 
-        assert.ok(span.metrics['_dd.appsec.request.header_collection.discarded'] > 2)
-        assert.ok(span.metrics['_dd.appsec.response.header_collection.discarded'] > 2)
+        assert.ok(
+          span.metrics['_dd.appsec.request.header_collection.discarded'] > 2,
+          `Expected ${span.metrics['_dd.appsec.request.header_collection.discarded']} > 2`
+        )
+        assert.ok(
+          span.metrics['_dd.appsec.response.header_collection.discarded'] > 2,
+          `Expected ${span.metrics['_dd.appsec.response.header_collection.discarded']} > 2`
+        )
 
         const metaStructBody = msgpack.decode(span.meta_struct['http.request.body'])
         assert.deepEqual(metaStructBody, requestBody)

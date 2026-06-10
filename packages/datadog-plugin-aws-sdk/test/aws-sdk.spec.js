@@ -7,17 +7,41 @@ const semver = require('semver')
 
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
-const { setup, sort } = require('./spec_helpers')
+const { setup, sort, withAwsSdkV2Versions, withAwsSdkVersions } = require('./spec_helpers')
 
 describe('Plugin', () => {
+  // The config singleton is built lazily on the first `agent.load(...)` and is
+  // not rebuilt across describes, so any env var the singleton needs to see
+  // must be set before then. The 'with env variable _BATCH_PROPAGATION_ENABLED'
+  // describe asserts on these specific values; they're harmless to the other
+  // describes (which assert on programmatic config that wins in the `??` chain).
+  const ORIGINAL_BATCH_PROPAGATION_ENV = {
+    GLOBAL: process.env.DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED,
+    KINESIS: process.env.DD_TRACE_AWS_SDK_KINESIS_BATCH_PROPAGATION_ENABLED,
+    SQS: process.env.DD_TRACE_AWS_SDK_SQS_BATCH_PROPAGATION_ENABLED,
+  }
+  before(() => {
+    process.env.DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED = 'true'
+    process.env.DD_TRACE_AWS_SDK_KINESIS_BATCH_PROPAGATION_ENABLED = 'false'
+    process.env.DD_TRACE_AWS_SDK_SQS_BATCH_PROPAGATION_ENABLED = 'true'
+  })
+  after(() => {
+    function restore (name, original) {
+      if (original === undefined) delete process.env[name]
+      else process.env[name] = original
+    }
+    restore('DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED', ORIGINAL_BATCH_PROPAGATION_ENV.GLOBAL)
+    restore('DD_TRACE_AWS_SDK_KINESIS_BATCH_PROPAGATION_ENABLED', ORIGINAL_BATCH_PROPAGATION_ENV.KINESIS)
+    restore('DD_TRACE_AWS_SDK_SQS_BATCH_PROPAGATION_ENABLED', ORIGINAL_BATCH_PROPAGATION_ENV.SQS)
+  })
+
   // TODO: use the Request class directly for generic tests
   // TODO: add test files for every service
   describe('aws-sdk direct import', function () {
     setup()
 
-    withVersions('aws-sdk', ['aws-sdk'], (version) => {
+    withAwsSdkV2Versions((version) => {
       if (semver.intersects(version, '>2.3.0')) {
         const S3 = require(`../../../versions/aws-sdk@${version}`).get('aws-sdk/clients/s3')
         const s3 = new S3({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1', s3ForcePathStyle: true })
@@ -27,7 +51,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false, wipe: true })
+          return agent.close()
         })
 
         it('should instrument service methods with a callback', (done) => {
@@ -74,7 +98,7 @@ describe('Plugin', () => {
   describe('aws-sdk', function () {
     setup()
 
-    withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
+    withAwsSdkVersions((version, moduleName) => {
       let AWS
       let s3
       let sqs
@@ -95,7 +119,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false, wipe: true })
+          return agent.close()
         })
 
         it('should instrument service methods with a callback', (done) => {
@@ -141,7 +165,7 @@ describe('Plugin', () => {
               component: 'aws-sdk',
             })
             if (semver.intersects(version, '>=2.3.4')) {
-              assert.match(span.meta['aws.response.request_id'], /[\w]{8}(-[\w]{4}){3}-[\w]{12}/)
+              assert.match(span.meta['aws.response.request_id'], /\w{8}(-\w{4}){3}-\w{12}/)
             }
           }).then(done, done)
 
@@ -274,7 +298,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         it('should be configured', (done) => {
@@ -316,7 +340,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         it('should allow disabling a specific service', (done) => {
@@ -380,7 +404,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         it('should be configurable on a per-service basis', () => {
@@ -407,7 +431,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         it('should be configurable on a per-service basis', () => {

@@ -34,7 +34,7 @@ describe('Legacy Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -166,7 +166,7 @@ describe('Legacy Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -221,7 +221,7 @@ describe('Legacy Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {

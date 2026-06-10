@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 const sinon = require('sinon')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
@@ -15,7 +16,12 @@ const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { DataStreamsProcessor, ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor')
 const propagationHash = require('../../dd-trace/src/propagation-hash')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
-const gc = global.gc ?? (() => {})
+
+if (typeof global.gc !== 'function') {
+  throw new Error('requires --expose-gc flag')
+}
+
+const gc = global.gc
 
 // The roundtrip to the pubsub emulator takes time. Sometimes a *long* time.
 const TIMEOUT = 30000
@@ -40,7 +46,7 @@ describe('Plugin', () => {
     })
 
     afterEach(() => {
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
     withVersions('google-cloud-pubsub', '@google-cloud/pubsub', version => {
       let pubsub
@@ -229,7 +235,10 @@ describe('Plugin', () => {
               const activeSpan = tracer.scope().active()
               if (activeSpan) {
                 const receiverSpanContext = activeSpan.context()
-                assert.ok(typeof receiverSpanContext._parentId === 'object' && receiverSpanContext._parentId !== null)
+                assert.ok(
+                  typeof receiverSpanContext._parentId === 'object' && receiverSpanContext._parentId !== null,
+                  `Expected non-null object, got ${inspect(receiverSpanContext._parentId)}`
+                )
               }
               msg.ack()
             })
@@ -366,6 +375,54 @@ describe('Plugin', () => {
         })
       })
 
+      // Regression for APMS-19318: DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED
+      // must strip the `-pubsub` suffix from consumer-side spans. With the env var
+      // set, the SchemaManager short-circuits service-name lookups to v1's
+      // identityService so the suffix is dropped without affecting v0 default behavior.
+      describe('with DD_TRACE_REMOVE_INTEGRATION_SERVICE_NAMES_ENABLED', () => {
+        // Pass the schema fields through `tracerConfig`. The shared
+        // `agent.close + agent.load` path rebuilds the tracer when
+        // `tracerConfig` differs from the previous load; that rebuild
+        // re-runs `pluginManager.configure` and therefore
+        // `Nomenclature.configure`, which overwrites any pre-test
+        // `Nomenclature.configure` from a `before` block. Putting the
+        // fields here makes the rebuild materialise them.
+        beforeEach(async () => {
+          tracer = await agent.load(
+            'google-cloud-pubsub',
+            { dsmEnabled: false },
+            {
+              flushMinSpans: 1,
+              spanAttributeSchema: 'v0',
+              spanRemoveIntegrationFromService: true,
+            }
+          )
+          const lib = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
+          project = getProjectId()
+          topicName = getTopic()
+          resource = `projects/${project}/topics/${topicName}`
+          pubsub = new lib.PubSub({ projectId: project })
+        })
+
+        it('uses the host service name (no -pubsub suffix) on consumer spans', async () => {
+          const expectedSpanPromise = expectSpanWithDefaults({
+            name: expectedSchema.receive.opName,
+            service: 'test',
+            type: 'worker',
+            meta: {
+              component: 'google-cloud-pubsub',
+              'span.kind': 'consumer',
+              'pubsub.topic': resource,
+            },
+          })
+          const [topic] = await pubsub.createTopic(topicName)
+          const [sub] = await topic.createSubscription('foo')
+          sub.on('message', msg => msg.ack())
+          await publish(topic, { data: Buffer.from('hello') })
+          return expectedSpanPromise
+        })
+      })
+
       describe('data stream monitoring', () => {
         let dsmTopic
         let sub
@@ -427,7 +484,7 @@ describe('Plugin', () => {
                   })
                 }
               })
-              assert.ok(statsPointsReceived >= 1)
+              assert.ok(statsPointsReceived >= 1, `Expected ${statsPointsReceived} >= 1`)
               assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash.readBigUInt64BE(0).toString()), true)
             }, { timeoutMs: TIMEOUT })
           })
@@ -444,7 +501,7 @@ describe('Plugin', () => {
                     })
                   }
                 })
-                assert.ok(statsPointsReceived >= 2)
+                assert.ok(statsPointsReceived >= 2, `Expected ${statsPointsReceived} >= 2`)
                 assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash.readBigUInt64BE(0).toString()), true)
               }, { timeoutMs: TIMEOUT })
             })
@@ -464,24 +521,25 @@ describe('Plugin', () => {
 
           it('when producing a message', async () => {
             await publish(dsmTopic, { data: Buffer.from('DSM produce payload size') })
-            assert.ok(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+            assert.ok(
+              recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'),
+              `Available keys: ${inspect(Object.keys(recordCheckpointSpy.args[0][0]))}`
+            )
           })
 
           it('when consuming a message', async () => {
             await publish(dsmTopic, { data: Buffer.from('DSM consume payload size') })
 
             await consume(async () => {
-              assert.ok(recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'))
+              assert.ok(
+                recordCheckpointSpy.args[0][0].hasOwnProperty('payloadSize'),
+                `Available keys: ${inspect(Object.keys(recordCheckpointSpy.args[0][0]))}`
+              )
             })
           })
         })
 
         describe('garbage collection and memory leaks', function () {
-          // GC tests need --expose-gc flag
-          if (typeof global.gc !== 'function') {
-            return it.skip('requires --expose-gc flag')
-          }
-
           it('should clean up WeakMap entries when messages are garbage collected', async function () {
             this.timeout(10000)
 
@@ -510,14 +568,14 @@ describe('Plugin', () => {
               await publish(topic, { data: Buffer.from('gc test message') })
 
               // Wait for message to be received
-              await new Promise((resolve) => {
+              await /** @type {Promise<void>} */ (new Promise((resolve) => {
                 const checkInterval = setInterval(() => {
                   if (messageReceived) {
                     clearInterval(checkInterval)
                     resolve()
                   }
                 }, 100)
-              })
+              }))
 
               // Close subscription to release references
               subscription.close()
@@ -562,14 +620,14 @@ describe('Plugin', () => {
             }
 
             // Wait for all messages
-            await new Promise((resolve) => {
+            await /** @type {Promise<void>} */ (new Promise((resolve) => {
               const checkInterval = setInterval(() => {
                 if (messagesReceived >= targetMessages) {
                   clearInterval(checkInterval)
                   resolve()
                 }
               }, 100)
-            })
+            }))
 
             subscription.close()
 

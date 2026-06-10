@@ -77,7 +77,7 @@ async function checkWorkflowRuns (id, page = 1) {
     per_page: LIMIT,
     status: 'success',
     created: `${startDate}..${endDate}`,
-    branch: BRANCH,
+    branch: BRANCH || undefined, // avoid empty string
     workflow_id: id,
   }))
 
@@ -167,19 +167,22 @@ await Promise.all(workflows.map(w => checkWorkflowRuns(w)))
 const dateRange = startDate === endDate ? `on ${endDate}` : `from ${startDate} to ${endDate}`
 const logString = `jobs with at least ${OCCURRENCES} occurrences seen ${dateRange} (UTC)`
 
+const workflowSuccessRate = totalCount > 0
+  ? Number(((1 - flakeCount / totalCount) * 100).toFixed(1))
+  : 100
+const pipelineSuccessRate = Number((((workflowSuccessRate / 100) ** workflows.length) * 100).toFixed(1))
+const pipelineBadge = pipelineSuccessRate >= 85 ? '🟢' : pipelineSuccessRate >= 75 ? '🟡' : '🔴'
+
+let markdown = ''
+let slack = ''
+
+markdown += `**Flaky ${logString}**\n`
+slack += String.raw`*Flaky ${logString}*\n`
+
 if (Object.keys(flaky).length === 0) {
-  console.log(`*No flaky ${logString}`)
+  markdown += 'None found.\n'
+  slack += String.raw`None found.\n`
 } else {
-  const workflowSuccessRate = Number(((1 - flakeCount / totalCount) * 100).toFixed(1))
-  const pipelineSuccessRate = Number((((workflowSuccessRate / 100) ** workflows.length) * 100).toFixed(1))
-  const pipelineBadge = pipelineSuccessRate >= 85 ? '🟢' : pipelineSuccessRate >= 75 ? '🟡' : '🔴'
-
-  let markdown = ''
-  let slack = ''
-
-  markdown += `**Flaky ${logString}**\n`
-  slack += String.raw`*Flaky ${logString}*\n`
-
   for (const [workflow, jobs] of Object.entries(flaky).sort()) {
     if (!reported.has(workflow)) continue
 
@@ -202,33 +205,33 @@ if (Object.keys(flaky).length === 0) {
       markdown += `    * ${job} (${markdownLinks.join(', ')})${runsBadge}\n`
     }
   }
+}
 
-  markdown += '\n'
-  markdown += '**Flakiness stats**\n'
-  markdown += `* Total runs: ${totalCount}\n`
-  markdown += `* Flaky runs: ${flakeCount}\n`
-  markdown += `* Workflow success rate: ${workflowSuccessRate}%\n`
-  markdown += `* Pipeline success rate (approx): ${pipelineSuccessRate}% ${pipelineBadge}`
-
-  if (GITHUB_REPOSITORY && GITHUB_RUN_ID) {
-    const link = `https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}`
-
-    slack += String.raw`\n`
-    slack += `View full report with links to failures on <${link}|GitHub>.`
-  }
+if (GITHUB_REPOSITORY && GITHUB_RUN_ID) {
+  const link = `https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}`
 
   slack += String.raw`\n`
-  slack += String.raw`*Flakiness stats*\n`
-  slack += String.raw`  ●   Total runs: ${totalCount}\n`
-  slack += String.raw`  ●   Flaky runs: ${flakeCount}\n`
-  slack += String.raw`  ●   Workflow success rate: ${workflowSuccessRate}%\n`
-  slack += `  ●   Pipeline success rate (approx): ${pipelineSuccessRate}% ${pipelineBadge}`
+  slack += `View full report with links to failures on <${link}|GitHub>.`
+}
 
-  console.log(markdown)
+slack += String.raw`\n`
+slack += String.raw`*Flakiness stats*\n`
+slack += String.raw`  ●   Total runs: ${totalCount}\n`
+slack += String.raw`  ●   Flaky runs: ${flakeCount}\n`
+slack += String.raw`  ●   Workflow success rate: ${workflowSuccessRate}%\n`
+slack += `  ●   Pipeline success rate (approx): ${pipelineSuccessRate}% ${pipelineBadge}`
 
-  // TODO: Make this an option instead.
-  if (CI) {
-    writeFileSync('flakiness.md', markdown)
-    writeFileSync('flakiness.txt', slack)
-  }
+markdown += '\n'
+markdown += '**Flakiness stats**\n'
+markdown += `* Total runs: ${totalCount}\n`
+markdown += `* Flaky runs: ${flakeCount}\n`
+markdown += `* Workflow success rate: ${workflowSuccessRate}%\n`
+markdown += `* Pipeline success rate (approx): ${pipelineSuccessRate}% ${pipelineBadge}`
+
+console.log(markdown)
+
+// TODO: Make this an option instead.
+if (CI) {
+  writeFileSync('flakiness.md', markdown)
+  writeFileSync('flakiness.txt', slack)
 }

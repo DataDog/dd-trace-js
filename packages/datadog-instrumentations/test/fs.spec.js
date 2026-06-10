@@ -7,20 +7,18 @@ const agent = require('../../dd-trace/test/plugins/agent')
 
 describe('fs instrumentation', () => {
   afterEach(() => {
-    return agent.close({ ritmReset: false })
+    return agent.close()
   })
 
-  it('require node:fs should work', () => {
-    return agent.load('node:fs', undefined, { flushInterval: 1 }).then(() => {
-      const fs = require('node:fs')
-      assert(fs !== undefined)
-    })
+  it('require node:fs should work', async () => {
+    await agent.load('node:fs', undefined, { flushInterval: 1 })
+    const fs = require('node:fs')
+    assert.notStrictEqual(fs, undefined)
   })
 
-  it('require fs should work', () => {
-    return agent.load('fs', undefined, { flushInterval: 1 }).then(() => {
-      const fs = require('fs')
-      assert(fs !== undefined)
-    })
+  it('require fs should work', async () => {
+    await agent.load('fs', undefined, { flushInterval: 1 })
+    const fs = require('fs')
+    assert.notStrictEqual(fs, undefined)
   })
 })

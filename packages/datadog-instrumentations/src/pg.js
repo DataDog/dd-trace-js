@@ -15,6 +15,13 @@ const errorCh = channel('apm:pg:query:error')
 const startPoolQueryCh = channel('datadog:pg:pool:query:start')
 const finishPoolQueryCh = channel('datadog:pg:pool:query:finish')
 
+const poolConnectStartCh = channel('apm:pg:pool:connect:start')
+const poolConnectFinishCh = channel('apm:pg:pool:connect:finish')
+
+// Drivers like pg-promise reuse the same prepared-statement query object across executions; cache
+// the un-injected `text` so the wrap doesn't capture a previous DBM injection as the new original.
+const originalTextCache = new WeakMap()
+
 addHook({ name: 'pg', versions: ['>=8.0.3'], file: 'lib/native/client.js' }, Client => {
   shimmer.wrap(Client.prototype, 'query', query => wrapQuery(query))
   return Client
@@ -26,37 +33,47 @@ addHook({ name: 'pg', versions: ['>=8.0.3'], file: 'lib/client.js' }, Client => 
 })
 
 addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
+  // pg defers a busy pool's connect callback and runs it in the releasing query's async context;
+  // capture the caller's context and restore it around the callback so spans attach to the caller.
+  shimmer.wrap(pg.Pool.prototype, 'connect', connect => function (cb) {
+    if (typeof cb !== 'function' || !poolConnectStartCh.hasSubscribers) {
+      return connect.apply(this, arguments)
+    }
+
+    const ctx = {}
+    arguments[0] = function (...args) {
+      return poolConnectFinishCh.runStores(ctx, cb, this, ...args)
+    }
+
+    poolConnectStartCh.publish(ctx)
+
+    return connect.apply(this, arguments)
+  })
   shimmer.wrap(pg.Pool.prototype, 'query', query => wrapPoolQuery(query))
   return pg
 })
 
 function wrapQuery (query) {
-  return function () {
+  return function (...args) {
     if (!startCh.hasSubscribers) {
-      return query.apply(this, arguments)
+      return query.apply(this, args)
     }
 
     const processId = this.processID
 
-    const pgQuery = arguments[0] !== null && typeof arguments[0] === 'object'
-      ? arguments[0]
-      : { text: arguments[0] }
+    const pgQuery = args[0] !== null && typeof args[0] === 'object'
+      ? args[0]
+      : { text: args[0] }
 
     const textPropObj = pgQuery.cursor ?? pgQuery
-    const textProp = Object.getOwnPropertyDescriptor(textPropObj, 'text')
     const stream = typeof textPropObj.read === 'function'
 
-    // Only alter `text` property if safe to do so. Initially, it's a property, not a getter.
-    let originalText
-    if (!textProp || textProp.configurable) {
+    let originalText = originalTextCache.get(textPropObj)
+    if (originalText === undefined) {
       originalText = textPropObj.text
-
-      Object.defineProperty(textPropObj, 'text', {
-        get () {
-          return this?.__ddInjectableQuery || originalText
-        },
-      })
+      originalTextCache.set(textPropObj, originalText)
     }
+
     const abortController = new AbortController()
     const ctx = {
       params: this.connectionParameters,
@@ -80,7 +97,7 @@ function wrapQuery (query) {
 
         // Based on: https://github.com/brianc/node-postgres/blob/54eb0fa216aaccd727765641e7d1cf5da2bc483d/packages/pg/lib/client.js#L510
         const reusingQuery = typeof pgQuery.submit === 'function'
-        const callback = arguments[arguments.length - 1]
+        const callback = args[args.length - 1]
 
         finish(error)
 
@@ -109,9 +126,25 @@ function wrapQuery (query) {
         return Promise.reject(error)
       }
 
-      arguments[0] = pgQuery
+      const injected = ctx.injected
+      if (injected !== undefined) {
+        // Skip the per-read getter trampoline when `text` is a configurable, writable data
+        // property (the pg / pg-cursor common shape). Accessor descriptors and read-only data
+        // still go through `defineProperty(get)` so `get text ()` query objects keep working.
+        const textProp = Object.getOwnPropertyDescriptor(textPropObj, 'text')
+        if (textProp?.configurable === true && textProp.writable === true) {
+          textPropObj.text = injected
+        } else if (textProp === undefined || textProp.configurable === true) {
+          Object.defineProperty(textPropObj, 'text', {
+            configurable: true,
+            get () { return injected },
+          })
+        }
+      }
 
-      const retval = query.apply(this, arguments)
+      args[0] = pgQuery
+
+      const retval = query.apply(this, args)
 
       const deperecated = Object.hasOwn(this, '_activeQuery')
       const queryQueue = deperecated ? this._queryQueue : this.queryQueue
@@ -153,18 +186,18 @@ const finish = (ctx) => {
   finishPoolQueryCh.publish(ctx)
 }
 function wrapPoolQuery (query) {
-  return function () {
+  return function (...args) {
     if (!startPoolQueryCh.hasSubscribers) {
-      return query.apply(this, arguments)
+      return query.apply(this, args)
     }
 
-    const pgQuery = arguments[0] !== null && typeof arguments[0] === 'object' ? arguments[0] : { text: arguments[0] }
+    const pgQuery = args[0] !== null && typeof args[0] === 'object' ? args[0] : { text: args[0] }
     const abortController = new AbortController()
 
     const ctx = { query: pgQuery, abortController }
 
     return startPoolQueryCh.runStores(ctx, () => {
-      const cb = arguments[arguments.length - 1]
+      const cb = args[args.length - 1]
 
       if (abortController.signal.aborted) {
         const error = abortController.signal.reason || new Error('Aborted')
@@ -179,13 +212,13 @@ function wrapPoolQuery (query) {
       }
 
       if (typeof cb === 'function') {
-        arguments[arguments.length - 1] = shimmer.wrapFunction(cb, cb => function () {
+        args[args.length - 1] = shimmer.wrapCallback(cb, cb => function (...args) {
           finish(ctx)
-          return cb.apply(this, arguments)
+          return cb.apply(this, args)
         })
       }
 
-      const retval = query.apply(this, arguments)
+      const retval = query.apply(this, args)
 
       if (retval?.then) {
         retval.then(() => {

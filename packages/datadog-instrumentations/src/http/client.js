@@ -26,10 +26,27 @@ function hookFn (http) {
   return http
 }
 
+// `inputURL` may be the user's options object (for the `http.request(options)`
+// shape); never write directly into it. The result is later mutated by
+// `normalizeHeaders` and read by `url.format`, so the merged object must be
+// owned by the tracer. `undefined` means "no URL supplied" — Node merges
+// with the options object or its defaults, so build a tracer-owned
+// options-only shape and let tracing proceed. `null`/primitive first args
+// are returned as-is so `normalizeHeaders` throws and the surrounding
+// try/catch in `instrumentRequest` falls through to the native request;
+// spreading a primitive yields `{}`, which would silently turn an invalid
+// `http.request(123)` into a synthesized localhost request.
 function combineOptions (inputURL, inputOptions) {
-  return inputOptions !== null && typeof inputOptions === 'object'
-    ? Object.assign(inputURL || {}, inputOptions)
-    : inputURL
+  if (inputURL === undefined) {
+    return inputOptions !== null && typeof inputOptions === 'object' ? { ...inputOptions } : {}
+  }
+  if (inputURL === null || (typeof inputURL !== 'object' && typeof inputURL !== 'function')) {
+    return inputURL
+  }
+  if (inputOptions !== null && typeof inputOptions === 'object') {
+    return { ...inputURL, ...inputOptions }
+  }
+  return { ...inputURL }
 }
 function normalizeHeaders (options) {
   options.headers ??= {}
@@ -90,8 +107,8 @@ function setupResponseInstrumentation (ctx, res) {
       // For 'readable' events, wrap the read() method
       if (eventName === 'readable' && !originalRead && !dataListenerAdded && typeof res.read === 'function') {
         originalRead = res.read
-        res.read = function () {
-          const chunk = originalRead.apply(this, arguments)
+        res.read = function (...args) {
+          const chunk = originalRead.apply(this, args)
           if (!dataListenerAdded) {
             dataReadStarted = true
             collectChunk(chunk)
@@ -171,10 +188,10 @@ function patch (http, methodName) {
         let finished = false
         let callback = args.callback
 
-        if (callback) {
-          callback = shimmer.wrapFunction(args.callback, cb => function () {
+        if (typeof callback === 'function') {
+          callback = shimmer.wrapCallback(args.callback, cb => function (...args) {
             return asyncStartChannel.runStores(ctx, () => {
-              return cb.apply(this, arguments)
+              return cb.apply(this, args)
             })
           })
         }
@@ -197,12 +214,14 @@ function patch (http, methodName) {
 
           // tracked to accurately discern custom request socket timeout
           let customRequestTimeout = false
-          req.setTimeout = function () {
+          req.setTimeout = function (...args) {
             customRequestTimeout = true
-            return setTimeout.apply(this, arguments)
+            return setTimeout.apply(this, args)
           }
 
-          req.emit = function (eventName, arg) {
+          req.emit = function (...args) {
+            const eventName = args[0]
+            const arg = args[1]
             switch (eventName) {
               case 'response': {
                 const res = arg
@@ -216,7 +235,7 @@ function patch (http, methodName) {
                   break
                 }
 
-                const result = emit.apply(this, arguments)
+                const result = Reflect.apply(emit, this, args)
 
                 instrumentation.finalizeIfNeeded()
 
@@ -237,7 +256,7 @@ function patch (http, methodName) {
                 finish()
             }
 
-            return emit.apply(this, arguments)
+            return Reflect.apply(emit, this, args)
           }
 
           if (abortController.signal.aborted) {
@@ -275,17 +294,12 @@ function patch (http, methodName) {
 
   function normalizeOptions (inputURL) {
     if (typeof inputURL === 'string') {
-      try {
-        return urlToOptions(new url.URL(inputURL))
-      } catch {
-        // eslint-disable-next-line n/no-deprecated-api
-        return url.parse(inputURL)
-      }
-    } else if (inputURL instanceof url.URL) {
-      return urlToOptions(inputURL)
-    } else {
-      return inputURL
+      return urlToOptions(new url.URL(inputURL))
     }
+    if (inputURL instanceof url.URL) {
+      return urlToOptions(inputURL)
+    }
+    return inputURL
   }
 
   function urlToOptions (url) {

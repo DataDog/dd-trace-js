@@ -56,15 +56,8 @@ class KafkajsConsumerPlugin extends ConsumerPlugin {
 
   commit (commitList) {
     if (!this.config.dsmEnabled) return
-    const keys = [
-      'consumer_group',
-      'type',
-      'partition',
-      'offset',
-      'topic',
-    ]
-    for (const commit of commitList.map(this.transformCommit)) {
-      if (keys.some(key => !commit.hasOwnProperty(key))) continue
+    for (const rawCommit of commitList) {
+      const commit = this.transformCommit(rawCommit)
       this.tracer.setOffset(commit)
     }
   }

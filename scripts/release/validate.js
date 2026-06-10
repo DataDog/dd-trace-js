@@ -58,7 +58,7 @@ try {
 
   pass()
 
-  const diffCmd = 'branch-diff --user DataDog --repo dd-trace-js --exclude-label=semver-major'
+  const diffCmd = 'branch-diff --user DataDog --repo dd-trace-js --exclude-label=only-land-on-next'
 
   start('Validate differences between proposal and main branch.')
 

@@ -1,0 +1,48 @@
+name: Electron
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  schedule:
+    - cron: 0 4 * * *
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/node
+        with:
+          version: '24.15'
+      - uses: ./.github/actions/install
+      - run: yarn test:integration:electron
+      - uses: ./.github/actions/upload-junit-artifacts
+        if: "!cancelled()"
+        with:
+          id: ${{ github.job }}
+
+  ubuntu:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/node
+        with:
+          version: '24.15'
+      - uses: ./.github/actions/install
+      # Electron needs a display even for headless (show: false) windows.
+      # xvfb-run provides a virtual framebuffer so the test can run without a physical display.
+      - run: xvfb-run --auto-servernum yarn test:integration:electron
+      - uses: ./.github/actions/upload-junit-artifacts
+        if: "!cancelled()"
+        with:
+          id: ${{ github.job }}

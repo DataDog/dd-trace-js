@@ -37,32 +37,44 @@ addHook({ name: 'https' }, http => {
   return http
 })
 
-function wrapResponseEmit (emit) {
-  return function (eventName, event) {
+function wrapResponseEmit (originalEmit) {
+  // Named `emit` mirrors the response method so the one-time prototype wrap
+  // skips its name rewrite; rest params keep the per-event forwarding
+  // allocation-free.
+  return function emit (...args) {
     if (!finishServerCh.hasSubscribers) {
-      return emit.apply(this, arguments)
+      return Reflect.apply(originalEmit, this, args)
     }
 
-    if (['finish', 'close'].includes(eventName) && !requestFinishedSet.has(this)) {
+    const eventName = args[0]
+    if ((eventName === 'finish' || eventName === 'close') && !requestFinishedSet.has(this)) {
       finishServerCh.publish({ req: this.req })
       requestFinishedSet.add(this)
     }
 
-    return emit.apply(this, arguments)
+    return Reflect.apply(originalEmit, this, args)
   }
 }
-function wrapEmit (emit) {
-  return function (eventName, req, res) {
+
+function wrapEmit (originalEmit) {
+  return function emit (...args) {
     if (!startServerCh.hasSubscribers) {
-      return emit.apply(this, arguments)
+      return Reflect.apply(originalEmit, this, args)
     }
 
+    const eventName = args[0]
     if (eventName === 'request') {
+      const req = args[1]
+      const res = args[2]
       res.req = req
 
       const abortController = new AbortController()
+      // Single ctx shared with `exitServerCh` below and forwarded by the
+      // server plugin to `incomingHttpRequestStart`; existing subscribers
+      // only read the message, so the reuse is safe.
+      const ctx = { req, res, abortController }
 
-      startServerCh.publish({ req, res, abortController })
+      startServerCh.publish(ctx)
 
       try {
         if (abortController.signal.aborted) {
@@ -70,24 +82,31 @@ function wrapEmit (emit) {
           return this.listenerCount(eventName) > 0
         }
 
-        return emit.apply(this, arguments)
+        return Reflect.apply(originalEmit, this, args)
       } catch (err) {
         errorServerCh.publish(err)
 
         throw err
       } finally {
-        exitServerCh.publish({ req })
+        exitServerCh.publish(ctx)
       }
     }
-    return emit.apply(this, arguments)
+    return Reflect.apply(originalEmit, this, args)
   }
 }
 
 function wrapWriteHead (writeHead) {
-  return function wrappedWriteHead (statusCode, reason, obj) {
+  // Rest params + Reflect.apply instead of named formals + `arguments`: naming
+  // params while reading `arguments` makes V8 materialise the mapped arguments
+  // object on every call, including the no-subscriber fast path.
+  return function wrappedWriteHead (...args) {
     if (!startWriteHeadCh.hasSubscribers) {
-      return writeHead.apply(this, arguments)
+      return Reflect.apply(writeHead, this, args)
     }
+
+    const statusCode = args[0]
+    const reason = args[1]
+    let obj = args[2]
 
     const abortController = new AbortController()
 
@@ -107,7 +126,7 @@ function wrapWriteHead (writeHead) {
     }
 
     // this doesn't support explicit duplicate headers, but it's an edge case
-    const responseHeaders = Object.assign(this.getHeaders(), obj)
+    const responseHeaders = obj === undefined ? this.getHeaders() : Object.assign(this.getHeaders(), obj)
 
     startWriteHeadCh.publish({
       req: this.req,
@@ -121,14 +140,14 @@ function wrapWriteHead (writeHead) {
       return this
     }
 
-    return writeHead.apply(this, arguments)
+    return Reflect.apply(writeHead, this, args)
   }
 }
 
 function wrapWrite (write) {
-  return function wrappedWrite () {
+  return function wrappedWrite (...args) {
     if (!startWriteHeadCh.hasSubscribers) {
-      return write.apply(this, arguments)
+      return write.apply(this, args)
     }
 
     const abortController = new AbortController()
@@ -147,14 +166,14 @@ function wrapWrite (write) {
       return true
     }
 
-    return write.apply(this, arguments)
+    return write.apply(this, args)
   }
 }
 
 function wrapSetHeader (setHeader) {
-  return function wrappedSetHeader (name, value) {
+  return function wrappedSetHeader (...args) {
     if (!startSetHeaderCh.hasSubscribers && !finishSetHeaderCh.hasSubscribers) {
-      return setHeader.apply(this, arguments)
+      return Reflect.apply(setHeader, this, args)
     }
 
     if (startSetHeaderCh.hasSubscribers) {
@@ -166,10 +185,10 @@ function wrapSetHeader (setHeader) {
       }
     }
 
-    const setHeaderResult = setHeader.apply(this, arguments)
+    const setHeaderResult = Reflect.apply(setHeader, this, args)
 
     if (finishSetHeaderCh.hasSubscribers) {
-      finishSetHeaderCh.publish({ name, value, res: this })
+      finishSetHeaderCh.publish({ name: args[0], value: args[1], res: this })
     }
 
     return setHeaderResult
@@ -177,9 +196,9 @@ function wrapSetHeader (setHeader) {
 }
 
 function wrapAppendOrRemoveHeader (originalMethod) {
-  return function wrappedAppendOrRemoveHeader () {
+  return function wrappedAppendOrRemoveHeader (...args) {
     if (!startSetHeaderCh.hasSubscribers) {
-      return originalMethod.apply(this, arguments)
+      return originalMethod.apply(this, args)
     }
 
     const abortController = new AbortController()
@@ -189,14 +208,14 @@ function wrapAppendOrRemoveHeader (originalMethod) {
       return this
     }
 
-    return originalMethod.apply(this, arguments)
+    return originalMethod.apply(this, args)
   }
 }
 
 function wrapEnd (end) {
-  return function wrappedEnd () {
+  return function wrappedEnd (...args) {
     if (!startWriteHeadCh.hasSubscribers) {
-      return end.apply(this, arguments)
+      return end.apply(this, args)
     }
 
     const abortController = new AbortController()
@@ -215,6 +234,6 @@ function wrapEnd (end) {
       return this
     }
 
-    return end.apply(this, arguments)
+    return end.apply(this, args)
   }
 }

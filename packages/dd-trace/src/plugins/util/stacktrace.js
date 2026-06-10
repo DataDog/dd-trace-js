@@ -14,7 +14,7 @@ const NODE_MODULES_PATTERN_START = `node_modules${sep}`
  * In production, these frames are already filtered by isNodeModulesFrame.
  */
 const SHOULD_FILTER_DD_TRACE_INSTRUMENTAION = __filename.endsWith(
-  join(sep, 'dd-trace-js', 'packages', 'dd-trace', 'src', 'plugins', 'util', 'stacktrace.js')
+  join('packages', 'dd-trace', 'src', 'plugins', 'util', 'stacktrace.js')
 )
 
 module.exports = {
@@ -46,7 +46,7 @@ function getCallSites (constructorOpt) {
  * Get stack trace of user-land frames.
  *
  * @param {string} stack - The stack trace to parse
- * @param {number} [limit=Infinity] - The maximum number of frames to return
+ * @param {number} [limit] - The maximum number of frames to return
  * @returns {StackFrame[]} - A list of stack frames from user-land code
  */
 function parseUserLandFrames (stack, limit = Infinity) {

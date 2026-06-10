@@ -21,16 +21,16 @@ addHook({ name: 'net' }, (net) => {
   // so that we don't miss the dns calls
   require('node:dns')
 
-  shimmer.wrap(net.Socket.prototype, 'connect', connect => function () {
+  shimmer.wrap(net.Socket.prototype, 'connect', connect => function (...args) {
     if (!startICPCh.hasSubscribers || !startTCPCh.hasSubscribers) {
-      return connect.apply(this, arguments)
+      return connect.apply(this, args)
     }
 
-    const options = getOptions(arguments)
-    const lastIndex = arguments.length - 1
-    const callback = arguments[lastIndex]
+    const options = getOptions(args)
+    const lastIndex = args.length - 1
+    const callback = args[lastIndex]
 
-    if (!options) return connect.apply(this, arguments)
+    if (!options) return connect.apply(this, args)
 
     const protocol = options.path ? 'ipc' : 'tcp'
     const startCh = protocol === 'ipc' ? startICPCh : startTCPCh
@@ -39,7 +39,7 @@ addHook({ name: 'net' }, (net) => {
     const ctx = { options }
 
     if (typeof callback === 'function') {
-      arguments[lastIndex] = function (...args) {
+      args[lastIndex] = function (...args) {
         return finishCh.runStores(ctx, callback, this, ...args)
       }
     }
@@ -48,20 +48,28 @@ addHook({ name: 'net' }, (net) => {
       setupListeners(this, protocol, ctx, finishCh, errorCh)
 
       const emit = this.emit
-      this.emit = shimmer.wrapFunction(emit, emit => function (eventName) {
+      let pendingReadyEvents = 2
+      // Named `emit`/arity-1 mirrors the socket method so the per-socket wrap
+      // skips its name/length rewrite.
+      this.emit = shimmer.wrapFunction(emit, originalEmit => function emit (eventName) {
         switch (eventName) {
           case 'ready':
           case 'connect':
+            if (--pendingReadyEvents === 0) this.emit = originalEmit
             return readyCh.runStores(ctx, () => {
-              return emit.apply(this, arguments)
+              return Reflect.apply(originalEmit, this, arguments)
             })
+          case 'error':
+          case 'close':
+            this.emit = originalEmit
+            return Reflect.apply(originalEmit, this, arguments)
           default:
-            return emit.apply(this, arguments)
+            return Reflect.apply(originalEmit, this, arguments)
         }
       })
 
       try {
-        return connect.apply(this, arguments)
+        return connect.apply(this, args)
       } catch (err) {
         errorCh.publish(err)
 

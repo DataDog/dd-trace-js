@@ -5,19 +5,31 @@ set -e
 DIRS=($(ls -d */ | sed 's:/$::')) # Array of subdirectories
 CWD=$(pwd)
 
+# Background subshells can't share a bash variable, so failed variants
+# write their dir/variant name here and the parent counts lines after `wait`.
+FAILURES_FILE=$(mktemp)
+
 function cleanup {
   for D in "${DIRS[@]}"; do
     rm -f "${CWD}/${D}/meta-temp.json"
   done
+  rm -f "$FAILURES_FILE"
 }
 
 trap cleanup EXIT
 
-# Temporary until merged to master
-wget -O sirun.tar.gz https://github.com/DataDog/sirun/releases/download/v0.1.10/sirun-v0.1.10-x86_64-unknown-linux-musl.tar.gz \
-	&& tar -xzf sirun.tar.gz \
-	&& rm sirun.tar.gz \
-	&& mv sirun /usr/bin/sirun
+# Install the pinned sirun unless the image already baked this exact version.
+# The benchmarking-platform image records what it baked in /opt/baked-sirun-version;
+# a mismatch means .sirun-version was bumped since the last image build, so fetch it
+# here until the image catches up.
+read -r SIRUN_VERSION SIRUN_SHA256 < "${CWD}/.sirun-version"
+if [[ "$(cat /opt/baked-sirun-version 2>/dev/null)" != "${SIRUN_VERSION}" ]]; then
+  wget -O sirun.tar.gz "https://github.com/DataDog/sirun/releases/download/v${SIRUN_VERSION}/sirun-v${SIRUN_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+  echo "${SIRUN_SHA256}  sirun.tar.gz" | sha256sum -c -
+  tar -xzf sirun.tar.gz
+  rm sirun.tar.gz
+  mv sirun /usr/bin/sirun
+fi
 
 if test -f ~/.nvm/nvm.sh; then
   source ~/.nvm/nvm.sh
@@ -29,7 +41,12 @@ fi
   cd ../../ &&
   npm install --global yarn || (sleep 60 && npm install --global yarn) \
     && yarn install --ignore-engines || (sleep 60 && yarn install --ignore-engines) \
-    && PLUGINS="bluebird|q|graphql|express" yarn services
+    && PLUGINS="graphql|express" yarn services
+)
+
+(
+  cd "${CWD}/startup/everything-fixture" &&
+  npm ci --no-audit --no-fund || (sleep 60 && npm ci --no-audit --no-fund)
 )
 
 # run each test in parallel for a given version of Node.js
@@ -51,7 +68,16 @@ echo "  CPUSET_START: ${CPUSET_START}"
 echo "  CPU_AFFINITY start: ${CPU_AFFINITY}"
 echo "  cpuset: $(cat /proc/self/status 2>/dev/null | grep Cpus_allowed_list || echo 'N/A')"
 
-nvm install $MAJOR_VERSION # provided by each benchmark stage
+# MAJOR_VERSION is provided by each benchmark stage. The exact patch is pinned once
+# in the plugin versions manifest (node-<major>); read it so a Node bump there is the
+# single change that moves the benchmark runtime.
+NODE_VERSION=$(sed -n "s/.*\"node-${MAJOR_VERSION}\": *\"npm:node@\([0-9.]*\)\".*/\1/p" \
+  "${CWD}/../../packages/dd-trace/test/plugins/versions/package.json")
+if [[ -z "${NODE_VERSION}" ]]; then
+  echo "No node-${MAJOR_VERSION} pin in packages/dd-trace/test/plugins/versions/package.json" >&2
+  exit 1
+fi
+nvm install "${NODE_VERSION}"
 export VERSION=`nvm current`
 export ENABLE_AFFINITY=true
 echo "using Node.js ${VERSION}"
@@ -67,16 +93,23 @@ for D in "${DIRS[@]}"; do
   cd ..
 done
 
+# Auto-shard from the variant count and available cores: each shard pins one variant
+# per core, so the suite needs ceil(BENCH_COUNT / cores) shards. The CI matrix supplies
+# SPLITS shards; fail with the exact number to configure rather than silently dropping
+# variants once the suite outgrows the matrix.
+SHARDS_NEEDED=$(( (BENCH_COUNT + TOTAL_CPU_CORES - 1) / TOTAL_CPU_CORES ))
+if [[ ${SPLITS} -lt ${SHARDS_NEEDED} ]]; then
+  echo "${BENCH_COUNT} variants on ${TOTAL_CPU_CORES} cores need ${SHARDS_NEEDED} shards, but SPLITS=${SPLITS}." >&2
+  echo "Set SPLITS and the GROUP rows per MAJOR_VERSION in .gitlab/benchmarks/gitlab-ci.yml to ${SHARDS_NEEDED}." >&2
+  exit 1
+fi
+
+# Balance variants evenly across all configured shards; guaranteed <= cores each by the check above.
 GROUP_SIZE=$(($(($BENCH_COUNT+$SPLITS-1))/$SPLITS)) # round up
 
 BENCH_INDEX=0
 BENCH_END=$(($GROUP_SIZE*$GROUP))
 BENCH_START=$(($BENCH_END-$GROUP_SIZE))
-
-if [[ ${GROUP_SIZE} -gt ${TOTAL_CPU_CORES} ]]; then
-  echo "Group size ${GROUP_SIZE} exceeds available CPU cores (${TOTAL_CPU_CORES} from nproc)"
-  exit 1
-fi
 
 for D in "${DIRS[@]}"; do
   cd "${D}"
@@ -90,7 +123,16 @@ for D in "${DIRS[@]}"; do
 
       export SIRUN_VARIANT=$V
 
-      (time node ../run-one-variant.js >> ../results.ndjson && echo "${D}/${V} finished." || echo "${D}/${V} FAILED on core ${CPU_AFFINITY}" >&2) &
+      (
+        if time node ../run-one-variant.js >> ../results.ndjson; then
+          echo "${D}/${V} finished."
+        else
+          echo "${D}/${V} FAILED on core ${CPU_AFFINITY}" >&2
+          # Append-only writes to a single tempfile from parallel subshells are
+          # atomic on Linux below PIPE_BUF (4 KiB); each line here is ~30 bytes.
+          echo "${D}/${V}" >> "$FAILURES_FILE"
+        fi
+      ) &
       ((CPU_AFFINITY=CPU_AFFINITY+1))
     fi
 
@@ -110,3 +152,11 @@ if [ "$DEBUG_RESULTS" == "true" ]; then
 fi
 
 echo "all tests for ${VERSION} have now completed."
+
+FAILED_COUNT=$(wc -l < "$FAILURES_FILE" | tr -d ' ')
+if [[ "${FAILED_COUNT}" -gt 0 ]]; then
+  echo "" >&2
+  echo "${FAILED_COUNT} variant(s) failed:" >&2
+  sed 's/^/  - /' "$FAILURES_FILE" >&2
+  exit 1
+fi

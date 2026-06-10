@@ -1,11 +1,20 @@
-import { describe, test, expect } from 'vitest'
+import { afterEach, describe, test, expect } from 'vitest'
 import { sum } from './sum'
 
 let numAttempt = 0
 let numOtherAttempt = 0
 let numLastAttempt = 0
+let numCurrentErrorAttempt = 0
+let shouldFailCurrentErrorAfterEach = false
 
 describe('early flake detection', () => {
+  afterEach(() => {
+    if (shouldFailCurrentErrorAfterEach) {
+      shouldFailCurrentErrorAfterEach = false
+      throw new Error('afterEach failure')
+    }
+  })
+
   test('can retry tests that eventually pass', { repeats: process.env.SHOULD_REPEAT && 2 }, () => {
     expect(sum(1, 2)).to.equal(numAttempt++ > 1 ? 3 : 4)
   })
@@ -34,6 +43,22 @@ describe('early flake detection', () => {
   if (process.env.SHOULD_ADD_LAST_ATTEMPT_PASS) {
     test('can retry tests that pass only on the last attempt', () => {
       expect(sum(1, 2)).to.equal(numLastAttempt++ === 3 ? 3 : 4)
+    })
+  }
+  if (process.env.SHOULD_ADD_SLOW_DURATION_TEST) {
+    test('slightly slow duration bucket test', async () => {
+      await new Promise(resolve => setTimeout(resolve, 5100))
+      expect(sum(1, 2)).to.equal(3)
+    }, 7000)
+  }
+  if (process.env.SHOULD_ADD_CURRENT_ERROR_TEST) {
+    test('reports the current failed attempt error', () => {
+      const currentAttempt = numCurrentErrorAttempt++
+
+      if (currentAttempt === 0 || currentAttempt === 2 || currentAttempt === 5 || currentAttempt === 8) {
+        shouldFailCurrentErrorAfterEach = true
+        throw new Error(`failure ${currentAttempt}`)
+      }
     })
   }
 })

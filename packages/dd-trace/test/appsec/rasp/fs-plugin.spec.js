@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const path = require('node:path')
+const { inspect } = require('node:util')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -104,7 +105,7 @@ describe('AppsecFsPlugin', () => {
 
       let store = appsecFsPlugin._onFsOperationStart()
 
-      assert.ok(Object.hasOwn(store, 'fs'))
+      assert.ok(Object.hasOwn(store, 'fs'), `Available keys: ${inspect(Object.keys(store))}`)
       assert.strictEqual(store.fs.parentStore, origStore)
       assert.strictEqual(store.fs.root, true)
 
@@ -120,7 +121,7 @@ describe('AppsecFsPlugin', () => {
 
       const rootStore = appsecFsPlugin._onFsOperationStart()
 
-      assert.ok(Object.hasOwn(rootStore, 'fs'))
+      assert.ok(Object.hasOwn(rootStore, 'fs'), `Available keys: ${inspect(Object.keys(rootStore))}`)
       assert.strictEqual(rootStore.fs.parentStore, origStore)
       assert.strictEqual(rootStore.fs.root, true)
 
@@ -158,7 +159,7 @@ describe('AppsecFsPlugin', () => {
 
       let store = appsecFsPlugin._onResponseRenderStart()
 
-      assert.ok(Object.hasOwn(store, 'fs'))
+      assert.ok(Object.hasOwn(store, 'fs'), `Available keys: ${inspect(Object.keys(store))}`)
       assert.strictEqual(store.fs.parentStore, origStore)
       assert.strictEqual(store.fs.opExcluded, true)
 
@@ -175,11 +176,12 @@ describe('AppsecFsPlugin', () => {
     describe('apm:fs:operation', () => {
       let fs
 
-      afterEach(() => agent.close({ ritmReset: false }))
+      afterEach(() => agent.close())
 
-      beforeEach(() => agent.load('fs', undefined, { flushInterval: 1 }).then(() => {
+      beforeEach(async () => {
+        await agent.load('fs', undefined, { flushInterval: 1 })
         fs = require('fs')
-      }))
+      })
 
       it('should mark root operations', () => {
         let count = 0

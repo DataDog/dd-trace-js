@@ -7,12 +7,12 @@ const { before, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const EventBridge = require('../src/services/eventbridge')
-const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const tracer = require('../../dd-trace')
+const { withAwsSdkVersions } = require('./spec_helpers')
 
 describe('EventBridge', () => {
   let span
-  withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
+  withAwsSdkVersions((version, moduleName) => {
     let traceId
     let parentId
     let spanId
@@ -70,7 +70,7 @@ describe('EventBridge', () => {
       const params = {
         foo: 'bar',
       }
-      assert.deepStrictEqual(eventbridge.generateTags(params, 'putEvent', {}), {})
+      assert.strictEqual(eventbridge.generateTags(params, 'putEvent', {}), undefined)
     })
 
     it('injects trace context to Eventbridge putEvents', () => {
@@ -126,17 +126,17 @@ describe('EventBridge', () => {
       assert.deepStrictEqual(request.params, request.params)
     })
 
-    it('returns an empty object when params is null', () => {
+    it('returns undefined when params is null', () => {
       const eventbridge = new EventBridge(tracer)
-      assert.deepStrictEqual(eventbridge.generateTags(null, 'putEvent', {}), {})
+      assert.strictEqual(eventbridge.generateTags(null, 'putEvent', {}), undefined)
     })
 
-    it('returns an empty object when params.source is an empty string', () => {
+    it('returns undefined when params.source is an empty string', () => {
       const eventbridge = new EventBridge(tracer)
       const params = {
         source: '',
       }
-      assert.deepStrictEqual(eventbridge.generateTags(params, 'putEvent', {}), {})
+      assert.strictEqual(eventbridge.generateTags(params, 'putEvent', {}), undefined)
     })
 
     it('sets rulename as an empty string when params.Name is null', () => {

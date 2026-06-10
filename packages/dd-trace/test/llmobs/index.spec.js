@@ -3,12 +3,13 @@
 const assert = require('node:assert/strict')
 
 const { channel } = require('dc-polyfill')
-const { after, afterEach, beforeEach, describe, it } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 const { DD_MAJOR } = require('../../../../version')
 const { INCOMPATIBLE_INITIALIZATION } = require('../../src/llmobs/constants/text')
+const { getConfigFresh } = require('../helpers/config')
 const { removeDestroyHandler } = require('./util')
 
 const spanFinishCh = channel('dd-trace:span:finish')
@@ -106,7 +107,7 @@ describe('module', () => {
       }
       injectCh.publish({ carrier })
 
-      assert.strictEqual(carrier['x-datadog-tags'], ',_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test')
+      assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test')
     })
 
     it('does not inject LLMObs parent ID info when there is no parent LLMObs span', () => {
@@ -116,7 +117,7 @@ describe('module', () => {
         'x-datadog-tags': '',
       }
       injectCh.publish({ carrier })
-      assert.strictEqual(carrier['x-datadog-tags'], ',_dd.p.llmobs_ml_app=test')
+      assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.llmobs_ml_app=test')
     })
 
     it('does not inject LLMOBs info when there is no mlApp configured and no parent LLMObs span', () => {
@@ -127,6 +128,48 @@ describe('module', () => {
       }
       injectCh.publish({ carrier })
       assert.strictEqual(carrier['x-datadog-tags'], '')
+    })
+
+    it('does not produce a literal "undefined" prefix when carrier has no x-datadog-tags', () => {
+      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+
+      const carrier = {}
+      injectCh.publish({ carrier })
+
+      assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.llmobs_ml_app=test')
+    })
+
+    it('appends to an existing non-empty x-datadog-tags with a single comma separator', () => {
+      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+
+      const carrier = {
+        'x-datadog-tags': '_dd.p.tid=69fe014200000000,_dd.p.dm=-0',
+      }
+      injectCh.publish({ carrier })
+
+      assert.strictEqual(
+        carrier['x-datadog-tags'],
+        '_dd.p.tid=69fe014200000000,_dd.p.dm=-0,_dd.p.llmobs_ml_app=test'
+      )
+    })
+
+    describe('with DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH=0', () => {
+      let config
+
+      before(() => {
+        process.env.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH = '0'
+        config = getConfigFresh({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+        delete process.env.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH
+      })
+
+      it('does not write x-datadog-tags', () => {
+        llmobsModule.enable(config)
+
+        const carrier = {}
+        injectCh.publish({ carrier })
+
+        assert.ok(!('x-datadog-tags' in carrier))
+      })
     })
   })
 

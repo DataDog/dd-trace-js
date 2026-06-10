@@ -11,6 +11,7 @@ const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const {
   addIntelligentTestRunnerSpanTags,
   finishAllTraceSpans,
+  getRelativeCoverageFiles,
   getTestEndLine,
   getTestSuiteCommonTags,
   getTestSuitePath,
@@ -71,6 +72,7 @@ class CucumberPlugin extends CiPlugin {
       isSuitesSkipped,
       numSkippedSuites,
       testCodeCoverageLinesTotal,
+      testSessionCoverageFiles,
       hasUnskippableSuites,
       hasForcedToRunSuites,
       isEarlyFlakeDetectionEnabled,
@@ -78,7 +80,12 @@ class CucumberPlugin extends CiPlugin {
       isTestManagementTestsEnabled,
       isParallel,
     }) => {
-      const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.libraryConfig || {}
+      this._exportPendingWorkerTraces()
+      const {
+        isSuitesSkippingEnabled,
+        isCodeCoverageEnabled,
+        isCoverageReportUploadEnabled,
+      } = this.libraryConfig || {}
       addIntelligentTestRunnerSpanTags(
         this.testSessionSpan,
         this.testModuleSpan,
@@ -93,6 +100,12 @@ class CucumberPlugin extends CiPlugin {
           hasForcedToRunSuites,
         }
       )
+      if (testSessionCoverageFiles?.length && isCoverageReportUploadEnabled) {
+        this.tracer._exporter.exportCoverage({
+          sessionId: this.testSessionSpan.context()._traceId,
+          files: testSessionCoverageFiles,
+        })
+      }
       if (isEarlyFlakeDetectionEnabled) {
         this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
       }
@@ -117,7 +130,7 @@ class CucumberPlugin extends CiPlugin {
       finishAllTraceSpans(this.testSessionSpan)
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,
-        autoInjected: this._tracerConfig.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
+        autoInjected: !!this._tracerConfig.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
       })
 
       this.libraryConfig = null
@@ -141,6 +154,7 @@ class CucumberPlugin extends CiPlugin {
           'cucumber'
         ),
         ...this.getSessionRequestErrorTags(),
+        ...this.getSessionItrSkippingEnabledTags(),
       }
       if (isUnskippable) {
         this.telemetry.count(TELEMETRY_ITR_UNSKIPPABLE, { testLevel: 'suite' })
@@ -173,6 +187,7 @@ class CucumberPlugin extends CiPlugin {
         integrationName: this.constructor.id,
       })
       this._testSuiteSpansByTestSuite.set(testSuitePath, testSuiteSpan)
+      this._exportPendingWorkerTracesForTestSuite(testSuitePath)
 
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       if (this.libraryConfig?.isCodeCoverageEnabled) {
@@ -196,8 +211,10 @@ class CucumberPlugin extends CiPlugin {
       }
       const testSuiteSpan = this._testSuiteSpansByTestSuite.get(testSuitePath)
 
-      const relativeCoverageFiles = [...coverageFiles, suiteFile]
-        .map(filename => getTestSuitePath(filename, this.repositoryRoot))
+      const relativeCoverageFiles = [
+        ...getRelativeCoverageFiles(coverageFiles, this.repositoryRoot),
+        getTestSuitePath(suiteFile, this.repositoryRoot),
+      ]
 
       this.telemetry.distribution(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, relativeCoverageFiles.length)
 
@@ -308,6 +325,7 @@ class CucumberPlugin extends CiPlugin {
       isDisabled,
       isQuarantined,
       isModified,
+      earlyFlakeAbortReason,
       finalStatus,
     }) => {
       const statusTag = isStep ? 'step.status' : TEST_STATUS
@@ -316,6 +334,9 @@ class CucumberPlugin extends CiPlugin {
 
       if (finalStatus) {
         span.setTag(TEST_FINAL_STATUS, finalStatus)
+      }
+      if (earlyFlakeAbortReason) {
+        span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
       }
 
       if (isNew) {

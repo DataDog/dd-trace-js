@@ -70,11 +70,12 @@ describe('encode 0.5', () => {
   })
 
   it('should encode span events', () => {
+    // Raw events carry startTime; the encoder derives time_unix_nano = round(startTime * 1e6).
     const topLevelEvents = [
-      { name: 'Something went so wrong', time_unix_nano: 1000000 },
+      { name: 'Something went so wrong', startTime: 1 },
       {
         name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
-        time_unix_nano: 1633023102000000,
+        startTime: 1633023102,
         attributes: { emotion: 'happy', rating: 9.8, other: [1, 9.5, 1], idol: false },
       },
     ]
@@ -219,6 +220,56 @@ describe('encode 0.5', () => {
     assert.strictEqual(payload.length, 12)
     assert.strictEqual(payload[5], 1)
     assert.strictEqual(payload[11], 0)
+  })
+
+  it('should emit span.error as a compact msgpack int on the wire', () => {
+    data[0].error = 1
+    data[0].start = 0
+    data[0].duration = 0
+
+    encoder.encode(data)
+
+    const buffer = encoder.makePayload()
+    const decoded = msgpack.decode(buffer, { useBigInt64: true })
+    const trace = decoded[1][0]
+    assert.strictEqual(trace[0][8], 1)
+
+    // The three uint64 IDs are encoded back-to-back; parent_id is the last
+    // 9-byte `0xCF | <id-bytes>` run. With start = duration = 0 (single-byte
+    // fixints), the next byte after parent_id+2 is `error`. Pin it to
+    // fixint 0x01 — emitting 0xCB (float64) here would mean the override
+    // dropped off the 0.5 wire.
+    const idMarker = Buffer.from([0xCF, 0x12, 0x34, 0xAB, 0xCD, 0x12, 0x34, 0xAB, 0xCD])
+    const parentIdOffset = buffer.lastIndexOf(idMarker)
+    assert.notStrictEqual(parentIdOffset, -1)
+    assert.strictEqual(buffer[parentIdOffset + idMarker.length + 2], 0x01)
+  })
+
+  it('should rewind the fixint speculation in _encodeMap for non-fixint metrics', () => {
+    // Exercise the speculation-miss branch: the speculative value byte
+    // is rewound and the value goes through writeIntOrFloat to pick the
+    // shortest valid encoding. The string entry shares the fused-pair
+    // path; both have to round-trip correctly.
+    data[0].metrics = {
+      smallInt: 1, // fixint, speculation hits
+      bigInt: 65_536, // does not fit a fixint, speculation rewinds to uint32
+      negative: -5, // signed, speculation rewinds to int8
+      float: 1.5, // not an integer, speculation rewinds to float64
+    }
+
+    encoder.encode(data)
+
+    const buffer = encoder.makePayload()
+    const decoded = msgpack.decode(buffer, { useBigInt64: true })
+    const stringMap = decoded[0]
+    const metrics = decoded[1][0][0][10]
+
+    assert.deepStrictEqual(metrics, {
+      [stringMap.indexOf('smallInt')]: 1,
+      [stringMap.indexOf('bigInt')]: 65_536,
+      [stringMap.indexOf('negative')]: -5,
+      [stringMap.indexOf('float')]: 1.5,
+    })
   })
 
   it('should ignore meta_struct property', () => {

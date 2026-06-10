@@ -18,7 +18,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
   LATEST_VERSION: ${{ inputs.latest-version }}
 
 # TODO: upstream jobs
@@ -32,13 +31,26 @@ jobs:
           - name: npm
             install: npm install
           - name: pnpm
-            install: pnpm add
+            install: >-
+              pnpm
+              --allow-build=@datadog/native-appsec
+              --allow-build=@datadog/native-iast-taint-tracking
+              --allow-build=@datadog/native-metrics
+              --allow-build=@datadog/pprof
+              --allow-build=dd-trace
+              add
           - name: yarn
             install: yarn add
           - name: yarn-berry
-            install: (command -v corepack >/dev/null 2>&1 || npm install -g corepack) && yarn set version stable && yarn config set nodeLinker node-modules && yarn add
+            install: >-
+              (command -v corepack >/dev/null 2>&1 || npm install -g corepack)
+              && yarn set version stable
+              && yarn config set nodeLinker node-modules
+              && yarn config set enableScripts true
+              && yarn config set --json npmPreapprovedPackages '["@datadog/*"]'
+              && yarn add
           - name: bun
-            install: bun add
+            install: bun add --linker=hoisted
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -69,19 +81,13 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: yarn test:integration:bun
-      - uses: DataDog/junit-upload-github-action@24449d01fc01e721fa36ccd2caa3caae6922f0e8 # v3.0.0
-        if: always() && github.actor != 'dependabot[bot]'
+      - uses: ./.github/actions/upload-junit-artifacts
+        if: always()
         with:
-          api_key: ${{ steps.dd-sts.outputs.api_key }}
-          # TODO: remove once https://github.com/DataDog/junit-upload-github-action/pull/54 lands
-          # and junit-upload-github-action releases are tied to datadog-ci releases.
-          datadog-ci-version: 5.13.1
-          service: dd-trace-js-tests
+          id: ${{ github.job }}
 
   core:
     runs-on: ubuntu-latest
@@ -89,8 +95,6 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:core:ci
@@ -99,11 +103,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: platform-core
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   dd-trace-api:
     runs-on: ubuntu-latest
@@ -129,20 +132,43 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-      - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
       # Disable core dumps since some integration tests intentionally abort and core dump generation takes around 5-10s
       - uses: ./.github/actions/install
       - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
-      - run: yarn test:integration
-      - uses: ./.github/actions/push_to_test_optimization
+      - run: yarn test:integration:coverage
+      - uses: ./.github/actions/coverage
+        with:
+          flags: platform-integration-${{ matrix.version }}
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}-${{ strategy.job-index }}
+
+  crashtracking:
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [oldest, maintenance, active, latest]
+    name: ${{ github.workflow }} / crashtracking (node-${{ matrix.version }})
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: ./.github/actions/node
+        with:
+          version: ${{ matrix.version }}
+      - uses: ./.github/actions/install
+      # Disable core dumps since crashtracking tests intentionally abort
+      - run: sudo sysctl -w kernel.core_pattern='|/bin/false'
+      - run: yarn test:integration:crashtracking
+      - uses: ./.github/actions/upload-junit-artifacts
+        if: "!cancelled()"
+        with:
+          id: ${{ github.job }}-${{ strategy.job-index }}
 
   unit-guardrails:
     runs-on: ubuntu-latest
@@ -150,19 +176,16 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:trace:guardrails:ci
       - uses: ./.github/actions/coverage
         with:
           flags: platform-unit-guardrails
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   # We'll run these separately for earlier (i.e. unsupported) versions
   integration-guardrails:
@@ -175,20 +198,18 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
-      - run: bun add --ignore-scripts mocha@10 # Use older mocha to support old Node.js versions
-      - run: bun add --ignore-scripts express@4 # Use older express to support old Node.js versions
+      - run: bun add --linker=hoisted --ignore-scripts mocha@10 # Use older mocha to support old Node.js versions
+      - run: bun add --linker=hoisted --ignore-scripts express@4 # Use older express to support old Node.js versions
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
       - run: node node_modules/.bin/mocha --colors --timeout 30000 integration-tests/init.spec.js
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}-${{ strategy.job-index }}
 
   integration-guardrails-unsupported:
     strategy:
@@ -215,8 +236,6 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:shimmer:ci
@@ -225,8 +244,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: platform-shimmer
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}

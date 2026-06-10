@@ -1,8 +1,9 @@
 'use strict'
 
 const { childProcessExecutionTracingChannel } = require('../channels')
-const { storage } = require('../../../../datadog-core')
 const addresses = require('../addresses')
+const web = require('../../plugins/util/web')
+const { getActiveRequest } = require('../store')
 const waf = require('../waf')
 const { RULE_TYPES, handleResult } = require('./utils')
 
@@ -27,8 +28,7 @@ function disable () {
 function analyzeCommandInjection ({ file, fileArgs, shell, abortController }) {
   if (!file) return
 
-  const store = storage('legacy').getStore()
-  const req = store?.req
+  const req = getActiveRequest()
   if (!req) return
 
   const ephemeral = {}
@@ -46,8 +46,7 @@ function analyzeCommandInjection ({ file, fileArgs, shell, abortController }) {
 
   const result = waf.run({ ephemeral }, req, raspRule)
 
-  const res = store?.res
-  handleResult(result, req, res, abortController, config, raspRule)
+  handleResult(result, req, web.getContext(req)?.res, abortController, config, raspRule)
 }
 
 module.exports = {

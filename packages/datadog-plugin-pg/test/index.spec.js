@@ -3,6 +3,7 @@
 const assert = require('node:assert')
 const EventEmitter = require('node:events')
 const net = require('node:net')
+const { inspect } = require('node:util')
 
 const semver = require('semver')
 
@@ -39,7 +40,7 @@ describe('Plugin', () => {
           })
 
           after(() => {
-            return agent.close({ ritmReset: false })
+            return agent.close()
           })
 
           beforeEach(done => {
@@ -87,9 +88,12 @@ describe('Plugin', () => {
               })
 
               if (implementation !== 'pg.native') {
-                assert.ok(Object.hasOwn(traces[0][0].metrics, 'db.pid'))
+                assert.ok(
+                  Object.hasOwn(traces[0][0].metrics, 'db.pid'),
+                  `Available keys: ${inspect(Object.keys(traces[0][0].metrics))}`
+                )
               }
-            })
+            }, { spanResourceMatch: /^SELECT \$1::text as message$/ })
               .then(done)
               .catch(done)
 
@@ -140,7 +144,10 @@ describe('Plugin', () => {
                 })
 
                 if (implementation !== 'pg.native') {
-                  assert.ok(Object.hasOwn(traces[0][0].metrics, 'db.pid'))
+                  assert.ok(
+                    Object.hasOwn(traces[0][0].metrics, 'db.pid'),
+                    `Available keys: ${inspect(Object.keys(traces[0][0].metrics))}`
+                  )
                 }
               })
                 .then(done)
@@ -314,7 +321,7 @@ describe('Plugin', () => {
 
                   const readPromise = (async () => {
                     for await (const row of stream) {
-                      assert.ok(Object.hasOwn(row, 'num'))
+                      assert.ok(Object.hasOwn(row, 'num'), `Available keys: ${inspect(Object.keys(row))}`)
                     }
                   })()
 
@@ -350,7 +357,7 @@ describe('Plugin', () => {
                   const rejectedRead = assert.rejects(async () => {
                     // eslint-disable-next-line no-unreachable-loop
                     for await (const row of stream) {
-                      assert.ok(Object.hasOwn(row, 'num'))
+                      assert.ok(Object.hasOwn(row, 'num'), `Available keys: ${inspect(Object.keys(row))}`)
                       throw new Error('Test error')
                     }
                   }, {
@@ -365,13 +372,103 @@ describe('Plugin', () => {
         })
       })
 
+      describe('when using a connection pool', () => {
+        let pool
+
+        before(() => {
+          return agent.load('pg')
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          pg = require(`../../../versions/pg@${version}`).get()
+
+          pool = new pg.Pool({
+            host: '127.0.0.1',
+            user: 'postgres',
+            password: 'postgres',
+            database: 'postgres',
+            application_name: 'test',
+            max: 1,
+          })
+        })
+
+        afterEach(() => {
+          return pool.end()
+        })
+
+        it('keeps a query that waits for a busy pool parented to its own caller', done => {
+          const root = tracer.startSpan('root')
+          const parent1 = tracer.startSpan('parent1', { childOf: root })
+          const parent2 = tracer.startSpan('parent2', { childOf: root })
+
+          agent.assertSomeTraces(traces => {
+            const spans = traces[0]
+            const first = spans.find(span => span.resource === 'SELECT 1 AS one')
+            const second = spans.find(span => span.resource === 'SELECT 2 AS two')
+
+            assert.ok(first, `missing first query span: ${inspect(spans.map(span => span.resource))}`)
+            assert.ok(second, `missing second query span: ${inspect(spans.map(span => span.resource))}`)
+            assert.strictEqual(first.parent_id.toString(), parent1.context().toSpanId())
+            assert.strictEqual(second.parent_id.toString(), parent2.context().toSpanId())
+          })
+            .then(done)
+            .catch(done)
+
+          let remaining = 2
+          const settle = error => {
+            if (error) {
+              done(error)
+            } else if (--remaining === 0) {
+              parent1.finish()
+              parent2.finish()
+              root.finish()
+            }
+          }
+
+          // Both queries are dispatched in the same tick with `max: 1`, so the second one
+          // waits in the pool's pending queue and its connect callback fires from the first
+          // query's release flow — the async context that drops on master.
+          tracer.scope().activate(parent1, () => {
+            pool.query('SELECT 1 AS one', settle)
+          })
+
+          tracer.scope().activate(parent2, () => {
+            pool.query('SELECT 2 AS two', settle)
+          })
+        })
+
+        it('keeps a promise-acquired pooled query parented to its caller', async () => {
+          const parent = tracer.startSpan('promise-parent')
+
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const span = traces[0].find(query => query.resource === 'SELECT 3 AS three')
+
+            assert.ok(span, `missing query span: ${inspect(traces[0].map(query => query.resource))}`)
+            assert.strictEqual(span.parent_id.toString(), parent.context().toSpanId())
+          })
+
+          await tracer.scope().activate(parent, async () => {
+            const client = await pool.connect()
+            await client.query('SELECT 3 AS three')
+            client.release()
+            parent.finish()
+          })
+
+          await tracePromise
+        })
+      })
+
       describe('with configuration', () => {
         before(() => {
           return agent.load('pg', { service: 'custom', truncate: 12 })
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(done => {
@@ -428,7 +525,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(done => {
@@ -484,7 +581,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(done => {
@@ -551,7 +648,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(done => {
@@ -592,13 +689,13 @@ describe('Plugin', () => {
       })
 
       describe('with DBM propagation enabled with full using tracer configurations', () => {
-        const tracer = require('../../dd-trace')
+        let tracer
         let seenTraceParent
         let seenTraceId
         let seenSpanId
         const originalWrite = net.Socket.prototype.write
 
-        before(() => {
+        before(async () => {
           net.Socket.prototype.write = function (buffer) {
             let strBuf = buffer.toString()
             if (strBuf.includes('traceparent=\'')) {
@@ -609,13 +706,12 @@ describe('Plugin', () => {
             }
             return originalWrite.apply(this, arguments)
           }
-          return agent.load('pg')
+          tracer = await agent.load('pg')
         })
 
         beforeEach(done => {
           pg = require(`../../../versions/pg@${version}`).get()
 
-          tracer.init()
           tracer.use('pg', {
             dbmPropagationMode: 'full',
           })
@@ -685,17 +781,16 @@ describe('Plugin', () => {
       })
 
       describe('DBM propagation enabled with full should handle query config objects', () => {
-        const tracer = require('../../dd-trace')
         let queryQueueName
+        let tracer
 
-        before(() => {
-          return agent.load('pg')
+        before(async () => {
+          tracer = await agent.load('pg')
         })
 
         beforeEach(done => {
           pg = require(`../../../versions/pg@${version}`).get()
 
-          tracer.init()
           tracer.use('pg', {
             dbmPropagationMode: 'full',
             service: 'post',
@@ -716,7 +811,7 @@ describe('Plugin', () => {
         afterEach((done) => {
           client.end(done)
 
-          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
+          global._ddtrace._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
         })
 
         it('query config objects should be handled', async () => {
@@ -741,7 +836,7 @@ describe('Plugin', () => {
         })
 
         it('query text should contain rejected sampling decision in the traceparent', async () => {
-          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
+          global._ddtrace._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
           const query = {
             text: 'SELECT $1::text as message',
           }
@@ -784,6 +879,17 @@ describe('Plugin', () => {
           )
         })
 
+        it('reuses prepared statements across calls without "must be unique" error', async () => {
+          const buildQuery = () => ({
+            name: 'pgRepeatedSelect',
+            text: 'SELECT $1::text as message',
+          })
+
+          await client.query(buildQuery(), ['first'])
+          await client.query(buildQuery(), ['second'])
+          await client.query(buildQuery(), ['third'])
+        })
+
         it('should not fail when using query object with getters', done => {
           const query = {
             name: 'pgSelectQuery',
@@ -796,6 +902,65 @@ describe('Plugin', () => {
           assert.strictEqual(client[queryQueueName][0].text,
             `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
             '*/ SELECT $1::text as message')
+        })
+
+        it('does not accumulate the DBM comment when reusing a prepared-statement query object', done => {
+          const expected =
+            `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
+            '*/ SELECT $1::text as message'
+          const query = {
+            name: 'pgSelectQuery',
+            text: 'SELECT $1::text as message',
+          }
+
+          client.query(query, ['Hello world!'], (err) => {
+            if (err) return done(err)
+
+            client.query(query, ['Hello world!'], (err2) => {
+              if (err2) return done(err2)
+
+              assert.strictEqual(query.text, expected)
+              done()
+            })
+          })
+        })
+
+        it('does not accumulate the DBM comment when reusing a getter-shaped query object', done => {
+          const expected =
+            `/*dddb='postgres',dddbs='post',dde='tester',ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'` +
+            '*/ SELECT $1::text as message'
+          const query = {
+            name: 'pgSelectQuery',
+            get text () { return 'SELECT $1::text as message' },
+          }
+
+          client.query(query, ['Hello world!'], (err) => {
+            if (err) return done(err)
+
+            client.query(query, ['Hello world!'], (err2) => {
+              if (err2) return done(err2)
+
+              assert.strictEqual(query.text, expected)
+              done()
+            })
+          })
+        })
+
+        it('handles a non-configurable text property without crashing', done => {
+          const query = { name: 'pgSelectQuery' }
+          Object.defineProperty(query, 'text', {
+            value: 'SELECT $1::text as message',
+            writable: true,
+            enumerable: true,
+            configurable: false,
+          })
+
+          client.query(query, ['Hello world!'], (err) => {
+            if (err) return done(err)
+
+            assert.strictEqual(query.text, 'SELECT $1::text as message')
+            done()
+          })
         })
 
         it('should not fail when using query object that is an EventEmitter', done => {
@@ -834,7 +999,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach((done) => {
@@ -863,6 +1028,55 @@ describe('Plugin', () => {
 
           await queryPromise
         })
+      })
+    })
+
+    // Lives outside `withVersions` so the global-tracer wipe needed to test
+    // tracer-level config (third `agent.load` arg) does not strand sibling
+    // describe blocks in the next pg-version iteration.
+    describe('with DBM propagation enabled with append comment using tracer configuration', () => {
+      before(async () => {
+        // Tracer-level config (third arg) only takes effect if the global
+        // tracer is wiped first; tracer.init() short-circuits once the
+        // process-wide singleton has been initialized by an earlier load.
+        await agent.load('pg', {
+          appendComment: true,
+          service: () => 'serviced',
+        }, {
+          dbmPropagationMode: 'service',
+        })
+        pg = require('../../../versions/pg').get()
+      })
+
+      after(() => {
+        return agent.close()
+      })
+
+      beforeEach((done) => {
+        client = new pg.Client({
+          host: '127.0.0.1',
+          user: 'postgres',
+          password: 'postgres',
+          database: 'postgres',
+        })
+        client.connect(err => done(err))
+      })
+
+      afterEach((done) => {
+        client.end(done)
+      })
+
+      it('should append service mode comment in query text', async () => {
+        const queryQueueName = Object.hasOwn(client, '_queryQueue') ? '_queryQueue' : 'queryQueue'
+
+        const queryPromise = client.query('SELECT $1::text as message', ['Hello world!'])
+
+        assert.strictEqual(client[queryQueueName][0].text,
+          'SELECT $1::text as message /*dddb=\'postgres\',dddbs=\'serviced\',dde=\'tester\',' +
+            `ddh='127.0.0.1',ddps='test',ddpv='${ddpv}'*/`
+        )
+
+        await queryPromise
       })
     })
   })

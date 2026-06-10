@@ -56,7 +56,7 @@ describe('Plugin', () => {
         })
 
         afterEach(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -95,7 +95,7 @@ describe('Plugin', () => {
                 })
               }
             })
-            assert.ok(statsPointsReceived.length >= 1)
+            assert.ok(statsPointsReceived.length >= 1, `Expected ${statsPointsReceived.length} >= 1`)
             assert.deepStrictEqual(statsPointsReceived[0].EdgeTags, [
               'direction:out',
               'has_routing_key:true',
@@ -123,7 +123,7 @@ describe('Plugin', () => {
                 })
               }
             })
-            assert.ok(statsPointsReceived.length >= 1)
+            assert.ok(statsPointsReceived.length >= 1, `Expected ${statsPointsReceived.length} >= 1`)
             assert.deepStrictEqual(statsPointsReceived[0].EdgeTags, [
               'direction:out',
               'exchange:namedExchange',
@@ -308,11 +308,11 @@ describe('Plugin', () => {
                 assert.ok(produceB?.args[2], 'Process B produce should have a parent DSM context')
                 assert.deepStrictEqual(produceA.args[2].hash, consumeA.returnValue.hash)
                 assert.deepStrictEqual(produceB.args[2].hash, consumeB.returnValue.hash)
+                setCheckpointSpy.restore()
                 done()
               } catch (e) {
-                done(e)
-              } finally {
                 setCheckpointSpy.restore()
+                done(e)
               }
             }
 

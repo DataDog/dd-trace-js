@@ -44,8 +44,7 @@ on:
         type: boolean
 
 permissions:
-  actions: write
-  contents: read
+  id-token: write
 
 env:
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
@@ -53,6 +52,7 @@ env:
 jobs:
   run-nightly:
     strategy:
+      fail-fast: false
       matrix:
         workflow:
           - apm-integrations
@@ -64,8 +64,13 @@ jobs:
           - profiling
     runs-on: ubuntu-latest
     steps:
+      - uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
+        id: octo-sts
+        with:
+          scope: DataDog/dd-trace-js
+          policy: custom-node-version-dispatch
       - name: Trigger ${{matrix.workflow }} workflow
         if: ${{ inputs[matrix.workflow] }}
         run: gh workflow run ${{matrix.workflow}}.yml --repo ${{ github.repository }} --ref ${{ env.BRANCH_NAME }} -f latest-version=${{ inputs.node-version }}
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}

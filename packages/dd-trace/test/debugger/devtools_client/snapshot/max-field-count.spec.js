@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 require('../../../setup/mocha')
@@ -41,7 +42,10 @@ function generateTestCases (config) {
 
     it('should capture expected snapshot', function () {
       assert.strictEqual(Object.keys(state).length, ((Array.isArray(['obj']) ? ['obj'] : [['obj']])).length)
-      assert.ok(((Array.isArray(['obj']) ? ['obj'] : [['obj']])).every(k => Object.hasOwn(state, k)))
+      assert.ok(
+        ((Array.isArray(['obj']) ? ['obj'] : [['obj']])).every(k => Object.hasOwn(state, k)),
+        `Got: ${inspect(Array.isArray(['obj']) ? ['obj'] : [['obj']])}`
+      )
       assert.ok('obj' in state)
       assert.deepStrictEqual(state.obj, {
         type: 'Object',

@@ -3,8 +3,10 @@
 const assert = require('node:assert/strict')
 const os = require('node:os')
 const path = require('node:path')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
+const proxyquire = require('proxyquire')
 const satisfies = require('semifies')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
@@ -15,7 +17,6 @@ const { FileExporter } = require('../../src/profiling/exporters/file')
 const WallProfiler = require('../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../src/profiling/profilers/space')
 const EventsProfiler = require('../../src/profiling/profilers/events')
-const { ConsoleLogger } = require('../../src/profiling/loggers/console')
 const { isACFActive } = require('../../../datadog-core/src/storage')
 
 const samplingContextsAvailable = process.platform !== 'win32'
@@ -46,7 +47,10 @@ describe('config', () => {
 
     const tracerConfig = getConfigFresh(tracerOptions)
 
-    const ProfilingConfig = require('../../src/profiling/config').Config
+    const gitMetadata = proxyquire.noPreserveCache()('../../src/git_metadata', {})
+    const ProfilingConfig = proxyquire.noPreserveCache()('../../src/profiling/config', {
+      '../git_metadata': gitMetadata,
+    }).Config
     const config = /** @type {ProfilerConfig} */ (new ProfilingConfig(tracerConfig))
 
     return {
@@ -70,14 +74,13 @@ describe('config', () => {
       },
     })
     assert.strictEqual(typeof config.service, 'string')
-    assert.ok(config.service.length > 0)
+    assert.ok(config.service.length > 0, `Expected ${config.service.length} > 0`)
     assert.strictEqual(typeof config.version, 'string')
     assertObjectContains(config.tags, {
       service: config.service,
       version: config.version,
     })
     assert.strictEqual(config.tags.host, undefined)
-    assert.ok(config.logger instanceof ConsoleLogger)
     assert.deepStrictEqual(
       config.profilers.slice(0, 2).map(profiler => profiler.constructor),
       [SpaceProfiler, WallProfiler]
@@ -148,7 +151,7 @@ describe('config', () => {
     const { config } = getProfilerConfig({ reportHostname: true })
 
     assert.strictEqual(typeof config.tags.host, 'string')
-    assert.ok(config.tags.host.length > 0)
+    assert.ok(config.tags.host.length > 0, `Expected ${config.tags.host.length} > 0`)
     assert.strictEqual(config.tags.host, os.hostname())
   })
 
@@ -159,22 +162,20 @@ describe('config', () => {
 
     /** @type {string[]} */
     const errors = []
-    const logger = {
-      debug () {},
-      info () {},
-      warn () {},
-      error (message) {
-        errors.push(String(message))
-      },
+    const { errorChannel } = require('../../src/log/channels')
+    const subscriber = err => errors.push(err.message)
+    errorChannel.subscribe(subscriber)
+
+    try {
+      const { config } = getProfilerConfig()
+      assert.deepStrictEqual(config.profilers.map(profiler => profiler.constructor), [])
+      assert.deepStrictEqual(errors, [
+        'Unknown profiler "nope"',
+        'Unknown profiler "also_nope"',
+      ])
+    } finally {
+      errorChannel.unsubscribe(subscriber)
     }
-
-    const { config } = getProfilerConfig({ logger })
-
-    assert.deepStrictEqual(config.profilers.map(profiler => profiler.constructor), [])
-    assert.deepStrictEqual(errors, [
-      'Unknown profiler "nope"',
-      'Unknown profiler "also_nope"',
-    ])
   })
 
   it('should support profiler config with empty DD_PROFILING_PROFILERS', () => {
@@ -185,6 +186,26 @@ describe('config', () => {
     const { config } = getProfilerConfig()
 
     assert.deepStrictEqual(config.profilers.map(profiler => profiler.constructor), [])
+  })
+
+  it('should publish invalid-compression warning to the central log warn channel', () => {
+    process.env = {
+      DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: 'gzip-99',
+    }
+    const warnings = []
+    const { warnChannel } = require('../../src/log/channels')
+    const subscriber = msg => warnings.push(msg)
+    warnChannel.subscribe(subscriber)
+
+    try {
+      getProfilerConfig()
+      assert.ok(
+        warnings.some(m => m.includes('Invalid compression level 99')),
+        `Expected compression warning in: ${inspect(warnings)}`
+      )
+    } finally {
+      warnChannel.unsubscribe(subscriber)
+    }
   })
 
   it('should support profiler config with DD_PROFILING_PROFILERS', () => {
@@ -439,8 +460,14 @@ describe('config', () => {
   })
 
   function assertOomExportCommand (config) {
-    assert.ok(config.oomMonitoring.exportCommand[3].includes(`service:${config.service}`))
-    assert.ok(config.oomMonitoring.exportCommand[3].includes('snapshot:on_oom'))
+    assert.ok(
+      config.oomMonitoring.exportCommand[3].includes(`service:${config.service}`),
+      `Got: ${inspect(config.oomMonitoring.exportCommand[3])}`
+    )
+    assert.ok(
+      config.oomMonitoring.exportCommand[3].includes('snapshot:on_oom'),
+      `Got: ${inspect(config.oomMonitoring.exportCommand[3])}`
+    )
   }
 
   it('should enable OOM heap profiler by default and use process as default strategy', () => {

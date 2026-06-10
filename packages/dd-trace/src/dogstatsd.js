@@ -6,7 +6,6 @@ const isIP = require('net').isIP
 const request = require('./exporters/common/request')
 const log = require('./log')
 const Histogram = require('./histogram')
-const { getAgentUrl } = require('./agent/url')
 const { entityId } = require('./exporters/common/docker')
 
 const MAX_BUFFER_SIZE = 1024 // limit from the agent
@@ -22,6 +21,7 @@ const TYPE_HISTOGRAM = 'h'
  */
 class DogStatsDClient {
   #lookup
+  #tagsPrefix
   constructor (options) {
     this.#lookup = options.lookup
     if (options.metricsProxyUrl) {
@@ -36,6 +36,7 @@ class DogStatsDClient {
     this._family = isIP(this._host)
     this._port = options.port
     this._tags = options.tags
+    this.#tagsPrefix = this._tags?.length ? `|#${this._tags.join(',')}` : ''
     this._queue = []
     this._buffer = ''
     this._offset = 0
@@ -66,9 +67,9 @@ class DogStatsDClient {
   flush () {
     const queue = this._enqueue()
 
-    log.debug('Flushing %s metrics via', queue.length, this._httpOptions ? 'HTTP' : 'UDP')
+    if (queue.length === 0) return
 
-    if (this._queue.length === 0) return
+    log.debug('Flushing %s metrics via %s', queue.length, this._httpOptions ? 'HTTP' : 'UDP')
 
     this._queue = []
 
@@ -119,11 +120,12 @@ class DogStatsDClient {
   _add (stat, value, type, tags) {
     let message = `${stat}:${value}|${type}`
 
-    // Don't manipulate this._tags as it is still used
-    tags = tags ? [...this._tags, ...tags] : this._tags
-
-    if (tags.length > 0) {
-      message += `|#${tags.join(',')}`
+    if (tags?.length) {
+      message += this.#tagsPrefix
+        ? `${this.#tagsPrefix},${tags.join(',')}`
+        : `|#${tags.join(',')}`
+    } else {
+      message += this.#tagsPrefix
     }
 
     if (entityId) {
@@ -158,7 +160,7 @@ class DogStatsDClient {
     const socket = dgram.createSocket(type)
 
     socket.on('error', () => {})
-    socket.unref()
+    socket.unref?.()
 
     return socket
   }
@@ -188,8 +190,8 @@ class DogStatsDClient {
       lookup: config.lookup,
     }
 
-    if (config.url || config.port) {
-      clientConfig.metricsProxyUrl = getAgentUrl(config)
+    if (config.url) {
+      clientConfig.metricsProxyUrl = config.url
     }
 
     return clientConfig
@@ -266,6 +268,8 @@ class MetricsAggregationClient {
     this._captureTree(this._gauges, (node, name, tags) => {
       this._client.gauge(name, node.value, tags)
     })
+
+    this._gauges.clear()
   }
 
   _captureCounters () {
@@ -278,12 +282,7 @@ class MetricsAggregationClient {
 
   _captureHistograms () {
     this._captureTree(this._histograms, (node, name, tags) => {
-      let stats = node.value
-
-      // Stats can contain garbage data when a value was never recorded.
-      if (stats.count === 0) {
-        stats = { max: 0, min: 0, sum: 0, avg: 0, median: 0, p95: 0, count: 0 }
-      }
+      const stats = node.value
 
       this._client.gauge(`${name}.min`, stats.min, tags)
       this._client.gauge(`${name}.max`, stats.max, tags)
@@ -293,9 +292,9 @@ class MetricsAggregationClient {
       this._client.increment(`${name}.count`, stats.count, tags)
       this._client.gauge(`${name}.median`, stats.median, tags)
       this._client.gauge(`${name}.95percentile`, stats.p95, tags)
-
-      node.value.reset()
     })
+
+    this._histograms.clear()
   }
 
   _captureTree (tree, fn) {
@@ -361,7 +360,7 @@ class CustomMetrics {
     const flush = this.flush.bind(this)
 
     // TODO(bengl) this magic number should be configurable
-    setInterval(flush, 10 * 1000).unref()
+    setInterval(flush, 10 * 1000).unref?.()
 
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(flush)
   }

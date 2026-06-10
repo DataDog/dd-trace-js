@@ -20,7 +20,7 @@ const rawExpectedSchema = {
     },
     v1: {
       opName: 'gcp.pubsub.process',
-      serviceName: 'test-pubsub',
+      serviceName: 'test',
     },
   },
   controlPlane: {

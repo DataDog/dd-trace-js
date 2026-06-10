@@ -59,16 +59,16 @@ function wrapLayerHandle (layer) {
 
   const original = layer.handle
 
-  return shimmer.wrapFunction(original, original => function () {
-    if (!enterChannel.hasSubscribers) return original.apply(this, arguments)
+  return shimmer.wrapFunction(original, original => function (...args) {
+    if (!enterChannel.hasSubscribers) return original.apply(this, args)
 
-    const lastIndex = arguments.length - 1
+    const lastIndex = args.length - 1
     const name = original._name || original.name
-    const req = arguments[arguments.length > 3 ? 1 : 0]
-    const next = arguments[lastIndex]
+    const req = args[args.length > 3 ? 1 : 0]
+    const next = args[lastIndex]
 
     if (typeof next === 'function') {
-      arguments[lastIndex] = wrapNext(req, next)
+      args[lastIndex] = wrapNext(req, next)
     }
 
     const route = layer.route
@@ -76,7 +76,7 @@ function wrapLayerHandle (layer) {
     enterChannel.publish({ name, req, route })
 
     try {
-      return original.apply(this, arguments)
+      return original.apply(this, args)
     } catch (error) {
       errorChannel.publish({ req, error })
       nextChannel.publish({ req })
@@ -90,7 +90,8 @@ function wrapLayerHandle (layer) {
 }
 
 function wrapNext (req, next) {
-  return shimmer.wrapFunction(next, next => function (error) {
+  // Mirror next's name/arity so wrapCallback skips its per-call identity rewrite.
+  return shimmer.wrapCallback(next, original => function next (error) {
     if (error) {
       errorChannel.publish({ req, error })
     }
@@ -98,7 +99,7 @@ function wrapNext (req, next) {
     nextChannel.publish({ req })
     finishChannel.publish({ req })
 
-    next.apply(this, arguments)
+    original.apply(this, arguments)
   })
 }
 

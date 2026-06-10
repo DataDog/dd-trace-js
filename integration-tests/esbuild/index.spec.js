@@ -25,7 +25,8 @@ const versionsPackageJson = require('../../packages/dd-trace/test/plugins/versio
 const maximumEsbuildVersion = versionsPackageJson.dependencies.esbuild
 
 // This should switch to our withVersion helper. The order here currently matters.
-const esbuildVersions = ['0.16.12', maximumEsbuildVersion]
+const { ESBUILD_VERSION } = process.env
+const esbuildVersions = ESBUILD_VERSION ? [ESBUILD_VERSION] : ['0.16.12', maximumEsbuildVersion]
 const timeout = 1000 * 45
 
 esbuildVersions.forEach((version) => {
@@ -116,6 +117,18 @@ esbuildVersions.forEach((version) => {
       it('works', () => {
         execSync('npm run build:esm')
         execSync('npm run built:esm', {
+          timeout,
+        })
+      })
+
+      it('runs minified ESM bundles without ReferenceError on arguments', () => {
+        execSync('node ./build-and-test-esm-minify.mjs', {
+          timeout,
+        })
+      })
+
+      it('keeps __filename, __dirname, and relative requires working in a minified instrumented module', () => {
+        execSync('node ./build-and-test-esm-minify-globals.mjs', {
           timeout,
         })
       })
