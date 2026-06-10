@@ -548,7 +548,7 @@ function disable () {
  */
 function copyHeadersOmitting (src, omit) {
   const filtered = {}
-  for (const key in src) {
+  for (const key of Object.keys(src)) {
     if (key !== omit) filtered[key] = src[key]
   }
   return filtered

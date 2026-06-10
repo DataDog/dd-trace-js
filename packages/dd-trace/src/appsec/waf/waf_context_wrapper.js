@@ -65,7 +65,7 @@ class WAFContextWrapper {
       const persistentInputs = {}
 
       let hasPersistentInputs = false
-      for (const key in persistent) {
+      for (const key of Object.keys(persistent)) {
         if (!this.addressesToSkip.has(key) && this.knownAddresses.has(key)) {
           hasPersistentInputs = true
           persistentInputs[key] = persistent[key]
@@ -86,7 +86,7 @@ class WAFContextWrapper {
       const ephemeralInputs = {}
 
       let hasEphemeral = false
-      for (const key in ephemeral) {
+      for (const key of Object.keys(ephemeral)) {
         if (this.knownAddresses.has(key)) {
           hasEphemeral = true
           ephemeralInputs[key] = ephemeral[key]

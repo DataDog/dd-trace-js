@@ -590,7 +590,7 @@ function shouldCollectEventHeaders (tags = {}) {
     return true
   }
 
-  for (const tagName in tags) {
+  for (const tagName of Object.keys(tags)) {
     if (tagName.startsWith('appsec.events.')) {
       return true
     }
