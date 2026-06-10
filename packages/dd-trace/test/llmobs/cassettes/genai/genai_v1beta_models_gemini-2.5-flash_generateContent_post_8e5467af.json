@@ -1,0 +1,39 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+    "headers": {
+      "Connection": "keep-alive",
+      "User-Agent": "google-genai-sdk/1.19.0 gl-node/v26.0.0",
+      "x-goog-api-client": "google-genai-sdk/1.19.0 gl-node/v26.0.0",
+      "Content-Type": "application/json",
+      "Accept": "*/*",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "300"
+    },
+    "body": "{\"contents\":[{\"parts\":[{\"text\":\"Hello, world!\"}],\"role\":\"user\"}],\"tools\":[{\"functionDeclarations\":[{\"description\":\"A simple tool\",\"name\":\"tool1\",\"parameters\":{\"type\":\"OBJECT\",\"properties\":{\"location\":{\"type\":\"STRING\",\"description\":\"The city name\"}},\"required\":[\"location\"]}}]}],\"generationConfig\":{}}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "X-Gemini-Service-Tier": "standard",
+      "Content-Type": "application/json; charset=UTF-8",
+      "Vary": "Origin, X-Origin, Referer",
+      "Content-Encoding": "gzip",
+      "Date": "Wed, 10 Jun 2026 15:36:39 GMT",
+      "Server": "scaffolding on HTTPServer2",
+      "X-XSS-Protection": "0",
+      "X-Frame-Options": "SAMEORIGIN",
+      "X-Content-Type-Options": "nosniff",
+      "Server-Timing": "gfet4t7; dur=421",
+      "Alt-Svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+      "Transfer-Encoding": "chunked"
+    },
+    "body": "{\n  \"candidates\": [\n    {\n      \"content\": {\n        \"parts\": [\n          {\n            \"text\": \"Hello! How can I help you today?\\n\"\n          }\n        ],\n        \"role\": \"model\"\n      },\n      \"finishReason\": \"STOP\",\n      \"index\": 0\n    }\n  ],\n  \"usageMetadata\": {\n    \"promptTokenCount\": 41,\n    \"candidatesTokenCount\": 9,\n    \"totalTokenCount\": 50,\n    \"promptTokensDetails\": [\n      {\n        \"modality\": \"TEXT\",\n        \"tokenCount\": 41\n      }\n    ],\n    \"serviceTier\": \"standard\"\n  },\n  \"modelVersion\": \"gemini-2.5-flash\",\n  \"responseId\": \"h4QpaqGNG8Wu_PUP7JaUmQE\"\n}\n"
+  }
+}
