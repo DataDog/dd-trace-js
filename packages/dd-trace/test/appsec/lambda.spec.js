@@ -339,10 +339,17 @@ describe('WAF path safety with non-HTTP req', () => {
 
   const fakeSpan = () => {
     const tags = {}
+    const spanContext = {
+      _tags: tags,
+      getTags () { return this._tags },
+      getTag (key) { return this._tags[key] },
+      setTag (key, value) { this._tags[key] = value },
+      hasTag (key) { return key in this._tags },
+    }
     return {
       addTags: sinon.stub().callsFake((obj) => Object.assign(tags, obj)),
       setTag: sinon.stub().callsFake((k, v) => { tags[k] = v }),
-      context: sinon.stub().returns({ _tags: tags }),
+      context: sinon.stub().returns(spanContext),
       keep: sinon.stub(),
       _tags: tags,
     }

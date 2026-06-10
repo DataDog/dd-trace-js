@@ -1345,7 +1345,7 @@ describe('reporter', () => {
 
         Reporter.finishRequest(null, null, {}, undefined, span)
 
-        sinon.assert.calledWithExactly(span.addTags, { '_dd.appsec.json': '{"triggers":[]}' })
+        sinon.assert.calledWithExactly(span.setTag, '_dd.appsec.json', '{"triggers":[]}')
         assert.strictEqual(Reporter.metricsQueue.size, 0)
       })
     })
