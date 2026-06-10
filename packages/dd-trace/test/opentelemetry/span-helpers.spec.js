@@ -84,7 +84,7 @@ describe('OTel bridge helpers', () => {
       ])
       addOtelEvent(ddSpan, 'evt', { code: 42 })
       recordException(ddSpan, new Error('boom'))
-      setOtelOperationName(ddSpan, 'GET /users')
+      setOtelOperationName(ddSpan, 'internal')
       setOtelResource(ddSpan, 'GET /users')
 
       assert.deepStrictEqual(ddSpan.tags, {})
@@ -305,9 +305,9 @@ describe('OTel bridge helpers', () => {
   describe('setOtelOperationName vs setOtelResource', () => {
     it('setOtelOperationName routes to setOperationName on the DD span', () => {
       const ddSpan = createMockDdSpan()
-      setOtelOperationName(ddSpan, 'GET /users')
+      setOtelOperationName(ddSpan, 'internal')
 
-      assert.strictEqual(ddSpan.operationName, 'GET /users')
+      assert.strictEqual(ddSpan.operationName, 'internal')
       assert.strictEqual(ddSpan.tags['resource.name'], undefined)
     })
 

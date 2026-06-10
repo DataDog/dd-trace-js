@@ -15,7 +15,7 @@ const kinds = require('../../../../ext/kinds')
 const id = require('../id')
 const BridgeSpanBase = require('./bridge-span-base')
 const SpanContext = require('./span_context')
-const { setOtelOperationName } = require('./span-helpers')
+const { setOtelResource } = require('./span-helpers')
 
 const spanKindNames = {
   [api.SpanKind.INTERNAL]: kinds.INTERNAL,
@@ -223,7 +223,7 @@ class Span extends BridgeSpanBase {
    * @param {string} name
    */
   updateName (name) {
-    setOtelOperationName(this._ddSpan, name)
+    setOtelResource(this._ddSpan, name)
     return this
   }
 
