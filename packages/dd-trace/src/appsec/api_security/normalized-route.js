@@ -537,4 +537,24 @@ function normalizeRouteExpress (route, params, urlPath) {
   return resolveOptional(entry, params, urlPath)
 }
 
-module.exports = { normalizeRouteExpress }
+/**
+ * Normalize an HTTP route to the RFC-1103 _dd.appsec.normalized_route format.
+ * Dispatches to the framework-specific normalizer based on the span component tag.
+ *
+ * @param {string} component - value of the span's 'component' tag (e.g. 'express')
+ * @param {string} route - assembled route string (http.route span tag value)
+ * @param {object|null|undefined} params - req.params from the matched request
+ * @param {string|undefined} urlPath - URL path without query string
+ * @returns {string|null} Normalized route, or null when normalization is not possible
+ */
+function normalizeRoute (component, route, params, urlPath) {
+  // eslint-disable-next-line sonarjs/no-small-switch
+  switch (component) {
+    case 'express':
+      return normalizeRouteExpress(route, params, urlPath)
+    default:
+      return null
+  }
+}
+
+module.exports = { normalizeRoute }
