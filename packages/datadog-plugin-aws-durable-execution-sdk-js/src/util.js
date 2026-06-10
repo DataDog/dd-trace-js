@@ -34,10 +34,18 @@ function getOperationId (ctxImpl) {
  * Defaults to 0 when no checkpoint exists yet (the very first execution before any
  * prior failures, before the START checkpoint).
  *
- * The production AWS Lambda Durable service stores StepDetails.Attempt as "number
- * of prior failed attempts", so passing it through directly yields the correct
- * 0-indexed semantic. The SDK's own internal use also matches this — it computes
- * the current attempt count as `(stepData.StepDetails.Attempt || 0) + 1`.
+ * On a pending/retry checkpoint (the live run of an op), the production AWS Lambda
+ * Durable service stores StepDetails.Attempt as "number of prior failed attempts",
+ * so passing it through directly yields the correct 0-indexed semantic. The SDK's
+ * own internal use also matches this — it computes the current attempt count as
+ * `(stepData.StepDetails.Attempt || 0) + 1`.
+ *
+ * On a SUCCEEDED checkpoint (an op being replayed from its stored result), the same
+ * field instead holds the 1-indexed number of the attempt that ultimately succeeded
+ * (a first-try success reads as 1). We subtract 1 in that case so a replay reports
+ * the same 0-indexed attempt as the original run did. This 1-indexing is server-
+ * maintained observed behavior, not an SDK guarantee, so we floor at 0 to never emit
+ * a negative attempt if a SUCCEEDED checkpoint ever lacks an Attempt field.
  *
  * @param {object} [ctxImpl]
  * @returns {number}
@@ -47,7 +55,8 @@ function getOperationAttempt (ctxImpl) {
   if (!stepId) return 0
   const stepData = ctxImpl?._executionContext?.getStepData?.(stepId)
   const attempt = stepData?.StepDetails?.Attempt
-  return typeof attempt === 'number' ? attempt : 0
+  if (typeof attempt !== 'number') return 0
+  return stepData.Status === 'SUCCEEDED' ? Math.max(0, attempt - 1) : attempt
 }
 
 /**

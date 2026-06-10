@@ -371,6 +371,31 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     return Promise.all([failedAttemptSpan, succeededAttemptSpan, successfulExecuteSpan])
   })
 
+  it('checkpoint plugin: replayed step that succeeded first try reports operation_attempt=0', async () => {
+    const replayedStep = agent.assertSomeTraces(traces => {
+      const span = traces.flat().find(s =>
+        s.name === 'aws.durable.step' &&
+        s.resource === 'first-try-step' &&
+        s.meta?.['aws.durable.replayed'] === 'true'
+      )
+      assert.ok(span, 'expected a replayed first-try-step span')
+      // The step succeeded on its first attempt. On replay the SDK reloads the
+      // SUCCEEDED checkpoint, whose StepDetails.Attempt is the 1-indexed number of
+      // the attempt that succeeded (1), not the "prior failed attempts" count used
+      // on the live run (0). We must normalize back to 0 so the replay agrees with
+      // the original attempt span.
+      assert.equal(span.metrics?.['aws.durable.operation_attempt'], 0,
+        'replayed first-try step should carry aws.durable.operation_attempt=0')
+    }, { timeoutMs: 5000 })
+
+    await invokeHandler(async (event, ctx) => {
+      await ctx.step('first-try-step', async () => 'ok')
+      await ctx.wait('suspend-trigger', { seconds: 1 })
+    })
+
+    return replayedStep
+  })
+
   // Regression coverage for the SDK "safe paths" the trace-checkpoint hook relies on
   // (see packages/datadog-plugin-aws-durable-execution-sdk-js/src/trace-checkpoint.js).
   // These exercise the real @aws/durable-execution-sdk-js + @aws/durable-execution-sdk-js-testing
