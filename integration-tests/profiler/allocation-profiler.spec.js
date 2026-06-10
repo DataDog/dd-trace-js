@@ -13,29 +13,10 @@ const {
   stopProc,
   useSandbox,
 } = require('../helpers')
+const { processExitPromise } = require('./helpers')
 
 const TIMEOUT = 30000
 const isAtLeast26 = satisfies(process.versions.node, '>=26.0.0')
-
-function processExitPromise (proc, timeout) {
-  return new Promise((resolve, reject) => {
-    const timeoutObj = setTimeout(() => {
-      reject(new Error('Process timed out'))
-    }, timeout)
-
-    proc
-      .on('error', reject)
-      .on('exit', code => {
-        clearTimeout(timeoutObj)
-
-        if (code !== 0) {
-          reject(new Error(`Process exited with unexpected status code ${code}.`))
-        } else {
-          resolve()
-        }
-      })
-  })
-}
 
 function getString (strings, value) {
   const index = typeof value?.toNumber === 'function' ? value.toNumber() : Number(value)

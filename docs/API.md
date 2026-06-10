@@ -510,10 +510,6 @@ For complete OTLP exporter configuration options, see the [OpenTelemetry OTLP Ex
 
 Options can be configured as a parameter to the [init()](./interfaces/tracer.html#init) method or as environment variables. These are documented over on [Configuring the Node.js Tracing Library](https://docs.datadoghq.com/tracing/trace_collection/library_config/nodejs).
 
-<h3 id="profiling">Profiling</h3>
-
-Allocation profiling can be enabled with the `DD_PROFILING_EXPERIMENTAL_ALLOCATION_ENABLED=true` environment variable when profiling is enabled.
-
 <h3 id="custom-logging">Custom Logging</h3>
 
 By default, logging from this library is disabled. In order to get debugging information and errors sent to logs, the `DD_TRACE_DEBUG` env var should be set to `true`.
