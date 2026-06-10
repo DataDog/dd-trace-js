@@ -26,7 +26,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:lambda:ci
@@ -103,7 +103,7 @@ jobs:
       SERVICES: localstack localstack-legacy
       DD_DATA_STREAMS_ENABLED: true
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -146,7 +146,7 @@ jobs:
       PLUGINS: azure-event-hubs
       SERVICES: azurite,azureeventhubsemulator
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/plugins/integration-test
 
   azure-functions:
@@ -208,7 +208,7 @@ jobs:
       SERVICES: azuresqledge,azureservicebusemulator,azurite,azureeventhubsemulator,azurecosmosemulator
       SPEC: ${{ matrix.spec }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - name: Wait for Cosmos emulator to be ready
         run: timeout 120 bash -c 'until curl -sf -o /dev/null --max-time 5 http://127.0.0.1:8080/ready; do sleep 3; done'
       - name: Copy emulator config files
@@ -260,7 +260,7 @@ jobs:
       PLUGINS: azure-service-bus
       SERVICES: azureservicebusemulator,azuresqledge
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - name: Wait for Service Bus emulator to be ready
         run: timeout 120 bash -c 'until nc -z localhost 5672; do sleep 3; done'
       - uses: ./.github/actions/plugins/integration-test
@@ -281,7 +281,7 @@ jobs:
       SERVICES: azurite
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/plugins/integration-test-newest-lts
         with:
           flags: serverless-azure-durable-functions
@@ -313,7 +313,7 @@ jobs:
       NODE_OPTIONS: '--experimental-global-webcrypto'
       NODE_TLS_REJECT_UNAUTHORIZED: 0
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - name: Wait for Cosmos emulator to be ready
         run: timeout 120 bash -c 'until curl -sf -o /dev/null --max-time 5 http://127.0.0.1:8080/ready; do sleep 3; done'
       - uses: ./.github/actions/plugins/test
@@ -332,5 +332,5 @@ jobs:
       PLUGINS: google-cloud-pubsub
       SERVICES: gpubsub
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/plugins/test
