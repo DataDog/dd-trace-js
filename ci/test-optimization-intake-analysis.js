@@ -15,15 +15,29 @@ const GIT_METADATA_FIELDS = [
 ]
 const EFD_SETTINGS_MODES = new Set(['debug-all', 'efd'])
 const ATR_SETTINGS_MODES = new Set(['atr', 'debug-all'])
+const TEST_MANAGEMENT_SETTINGS_MODES = new Set([
+  'tm-disabled',
+  'tm-quarantined',
+  'tm-attempt-to-fix',
+  'tm-attempt-to-fix-priority',
+])
 const TEST_FRAMEWORK = 'test.framework'
 const TEST_IS_NEW = 'test.is_new'
 const TEST_IS_RETRY = 'test.is_retry'
+const TEST_FINAL_STATUS = 'test.final_status'
+const TEST_MODULE = 'test.module'
 const TEST_NAME = 'test.name'
+const TEST_PARAMETERS = 'test.parameters'
 const TEST_RETRY_REASON = 'test.retry_reason'
 const TEST_STATUS = 'test.status'
 const TEST_SUITE = 'test.suite'
 const TEST_RETRY_REASON_AUTO_TEST_RETRY = 'auto_test_retry'
 const TEST_RETRY_REASON_EARLY_FLAKE_DETECTION = 'early_flake_detection'
+const TEST_RETRY_REASON_ATTEMPT_TO_FIX = 'attempt_to_fix'
+const TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED = 'test.test_management.attempt_to_fix_passed'
+const TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX = 'test.test_management.is_attempt_to_fix'
+const TEST_MANAGEMENT_IS_DISABLED = 'test.test_management.is_test_disabled'
+const TEST_MANAGEMENT_IS_QUARANTINED = 'test.test_management.is_quarantined'
 
 /**
  * Builds a fixed-rule diagnosis from a fake intake artifact.
@@ -38,6 +52,7 @@ function analyzeIntakeArtifact (artifact) {
   const advancedFeatureChecks = EFD_SETTINGS_MODES.has(settingsMode)
   const efdChecks = EFD_SETTINGS_MODES.has(settingsMode)
   const atrChecks = ATR_SETTINGS_MODES.has(settingsMode)
+  const testManagementChecks = TEST_MANAGEMENT_SETTINGS_MODES.has(settingsMode)
 
   if (!summary.anyRequestReceived) {
     addFinding(findings, 'error', 'Nothing', {
@@ -174,6 +189,10 @@ function analyzeIntakeArtifact (artifact) {
     })
   }
 
+  if (testManagementChecks) {
+    addTestManagementFindings(findings, summary, settingsMode)
+  }
+
   if (advancedFeatureChecks && summary.coverage.expected && summary.coverage.citestcov === 0) {
     addFinding(findings, 'warning', 'Coverage missing', {
       observation: 'ITR or coverage was enabled, but citestcov: 0',
@@ -184,7 +203,11 @@ function analyzeIntakeArtifact (artifact) {
     })
   }
 
-  if (!findings.some(finding => finding.status === 'error') && summary.events.missingLevels.length === 0) {
+  if (
+    !testManagementChecks &&
+    !findings.some(finding => finding.status === 'error') &&
+    summary.events.missingLevels.length === 0
+  ) {
     addFinding(findings, 'ok', 'Reporting complete', {
       observation: 'citestcycle payloads include session, module, suite, and test events.',
       cause: 'The basic Test Optimization reporting path is working for the selected command.',
@@ -252,6 +275,7 @@ function summarizeIntakeArtifact (artifact) {
       retriedNewTestNames: getRetriedNewTests(events).map(test => test.name),
     },
     atr: getAutoTestRetriesSummary(events, settings),
+    tm: getTestManagementSummary(artifact, events, settings, endpointCounts, artifact?.intake?.settingsMode),
     coverage: {
       expected: !!(settings.lastResponse?.itr_enabled || settings.lastResponse?.code_coverage),
       citestcov: endpointCounts.citestcov || 0,
@@ -288,6 +312,53 @@ function buildKnownTestsFromArtifact (artifact) {
 }
 
 /**
+ * Builds a Test Management modules response from a captured baseline test identity.
+ *
+ * @param {object} artifact fake intake artifact
+ * @param {object} properties Test Management properties to return for the selected test
+ * @param {object} [options] selection options
+ * @param {string} [options.testName] expected test name
+ * @returns {{ modules: object, identity: object }} Test Management response modules and selected identity
+ */
+function buildTestManagementTestsFromArtifact (artifact, properties, options = {}) {
+  const events = collectEvents(Array.isArray(artifact?.requests) ? artifact.requests : [])
+  const candidates = []
+
+  for (const event of events) {
+    if (event.type !== 'test') continue
+
+    const test = getTestIdentity(event)
+    if (!test.name) continue
+    if (options.testName && test.name !== options.testName && !test.name.endsWith(` ${options.testName}`)) continue
+
+    candidates.push(test)
+  }
+
+  if (candidates.length === 0) {
+    throw new Error('Could not find a baseline test event for Test Management calibration.')
+  }
+
+  const identity = candidates[0]
+
+  return {
+    identity,
+    modules: {
+      [identity.framework]: {
+        suites: {
+          [identity.suite]: {
+            tests: {
+              [identity.name]: {
+                properties,
+              },
+            },
+          },
+        },
+      },
+    },
+  }
+}
+
+/**
  * Formats an intake analysis as plain text.
  *
  * @param {object} analysis analysis report
@@ -313,6 +384,7 @@ function renderAnalysisText (analysis) {
       `tests=${analysis.summary.events.counts.test}`,
     ...getEfdTextLines(analysis),
     ...getAutoTestRetriesTextLines(analysis),
+    ...getTestManagementTextLines(analysis),
     '',
   ]
 
@@ -344,6 +416,21 @@ function getEfdTextLines (analysis) {
     `known tests received: ${analysis.summary.efd.knownTestsReceived}`,
     `new tests observed: ${analysis.summary.efd.newTests.length}`,
     `retried new tests: ${analysis.summary.efd.retriedNewTests}`,
+    ...getEfdExecutionTextLines(analysis.summary.efd.execution),
+  ]
+}
+
+/**
+ * Gets optional EFD execution diagnosis text lines.
+ *
+ * @param {object|undefined} execution EFD execution diagnosis
+ * @returns {string[]} EFD execution lines
+ */
+function getEfdExecutionTextLines (execution) {
+  if (!execution) return []
+
+  return [
+    `EFD execution diagnosis: ${execution.diagnosis}`,
   ]
 }
 
@@ -362,6 +449,27 @@ function getAutoTestRetriesTextLines (analysis) {
     `Auto Test Retries passed executions: ${analysis.summary.atr.passedExecutions}`,
     `Auto Test Retries passed retry executions: ${analysis.summary.atr.passedRetryTests}`,
     `Auto Test Retries flaky tests reported: ${analysis.summary.atr.failedThenPassedRetryTests}`,
+  ]
+}
+
+/**
+ * Gets optional Test Management text lines.
+ *
+ * @param {object} analysis analysis report
+ * @returns {string[]} Test Management lines
+ */
+function getTestManagementTextLines (analysis) {
+  const tm = analysis.summary.tm
+  if (!tm.settingsEnabled && !tm.propertiesEndpointCalled && tm.managedTests.count === 0) return []
+
+  return [
+    `Test Management settings enabled: ${tm.settingsEnabled}`,
+    `Test Management properties endpoint called: ${tm.propertiesEndpointCalled}`,
+    `Test Management properties returned: ${tm.returnedProperties}`,
+    `Test Management managed tests observed: ${tm.managedTests.count}`,
+    `Test Management disabled status: ${tm.disabled.status}`,
+    `Test Management quarantined status: ${tm.quarantined.status}`,
+    `Test Management attempt-to-fix status: ${tm.attemptToFix.status}`,
   ]
 }
 
@@ -395,6 +503,141 @@ function addFinding (findings, status, stage, details) {
     stage,
     ...details,
   })
+}
+
+/**
+ * Adds Test Management fixed-rule findings.
+ *
+ * @param {Array<object>} findings mutable findings list
+ * @param {object} summary analysis summary
+ * @param {string|undefined} settingsMode fake settings mode
+ */
+function addTestManagementFindings (findings, summary, settingsMode) {
+  if (!summary.tm.settingsEnabled) {
+    addFinding(findings, 'error', 'Test Management settings missing', {
+      observation: 'tm.settingsEnabled: false',
+      cause: 'The fake intake settings response did not enable Test Management.',
+      fix: 'Run the subcheck with --settings-mode tm-disabled, tm-quarantined, or tm-attempt-to-fix.',
+    })
+    return
+  }
+
+  if (!summary.tm.propertiesEndpointCalled) {
+    addFinding(findings, 'error', 'Test Management properties not requested', {
+      observation: 'tm.propertiesEndpointCalled: false',
+      cause: 'The tracer did not fetch Test Management test properties after settings enabled the feature.',
+      fix: 'Check framework support and whether DD_TEST_MANAGEMENT_ENABLED disabled the feature.',
+    })
+    return
+  }
+
+  if (summary.tm.returnedProperties === 0) {
+    addFinding(findings, 'error', 'Test Management properties empty', {
+      observation: 'tm.returnedProperties: 0',
+      cause: 'The fake intake served no calibrated Test Management properties.',
+      fix: 'Run the calibration step and pass --test-management-tests with the generated modules JSON.',
+    })
+    return
+  }
+
+  if (summary.tm.unmatchedPropertyIdentities.length > 0) {
+    addFinding(findings, 'error', 'Test Management identity mismatch', {
+      observation: `tm.unmatchedPropertyIdentities: ${summary.tm.unmatchedPropertyIdentities.join(', ')}`,
+      cause: 'The fake intake returned properties for identities that did not match any managed test span.',
+      fix: 'Rebuild the Test Management response from the baseline intake artifact; do not guess suite or test names.',
+    })
+    return
+  }
+
+  const subcheck = getExpectedTestManagementSubcheck(settingsMode)
+  const subcheckSummary = subcheck && summary.tm[subcheck]
+
+  if (!subcheckSummary) {
+    addFinding(findings, 'info', 'Test Management evidence captured', {
+      observation: `tm.managedTests.count: ${summary.tm.managedTests.count}`,
+      cause: 'Test Management settings and properties were exchanged.',
+      fix: 'Use a tm-disabled, tm-quarantined, or tm-attempt-to-fix settings mode for fixed-rule validation.',
+    })
+    return
+  }
+
+  if (subcheckSummary.status === 'passed') {
+    addFinding(findings, 'ok', getTestManagementPassedStage(subcheck), {
+      observation: getTestManagementObservation(summary.tm, subcheckSummary),
+      cause: subcheckSummary.reason,
+      fix: 'No Test Management fix is needed for this subcheck.',
+    })
+    return
+  }
+
+  addFinding(findings, 'error', getTestManagementFailedStage(subcheck), {
+    observation: getTestManagementObservation(summary.tm, subcheckSummary),
+    cause: subcheckSummary.reason,
+    fix: getTestManagementFix(subcheck),
+  })
+}
+
+/**
+ * Gets the passed finding stage for a Test Management subcheck.
+ *
+ * @param {string} subcheck Test Management subcheck
+ * @returns {string} stage
+ */
+function getTestManagementPassedStage (subcheck) {
+  if (subcheck === 'disabled') return 'Test Management disabled reported'
+  if (subcheck === 'quarantined') return 'Test Management quarantined reported'
+
+  return 'Test Management attempt-to-fix reported'
+}
+
+/**
+ * Gets the failed finding stage for a Test Management subcheck.
+ *
+ * @param {string} subcheck Test Management subcheck
+ * @returns {string} stage
+ */
+function getTestManagementFailedStage (subcheck) {
+  if (subcheck === 'disabled') return 'Test Management disabled missing'
+  if (subcheck === 'quarantined') return 'Test Management quarantined missing'
+
+  return 'Test Management attempt-to-fix missing'
+}
+
+/**
+ * Gets a compact Test Management observation.
+ *
+ * @param {object} tm Test Management summary
+ * @param {object} subcheckSummary subcheck summary
+ * @returns {string} observation
+ */
+function getTestManagementObservation (tm, subcheckSummary) {
+  return [
+    `tm.propertiesEndpointCalled: ${tm.propertiesEndpointCalled}`,
+    `tm.returnedProperties: ${tm.returnedProperties}`,
+    `managedTests: ${subcheckSummary.tests}`,
+    `statuses: ${subcheckSummary.observedStatuses.join(', ') || 'none'}`,
+    `finalStatuses: ${subcheckSummary.observedFinalStatuses.join(', ') || 'none'}`,
+    `retryReasons: ${subcheckSummary.observedRetryReasons.join(', ') || 'none'}`,
+  ].join('; ')
+}
+
+/**
+ * Gets a Test Management fix recommendation.
+ *
+ * @param {string} subcheck Test Management subcheck
+ * @returns {string} fix recommendation
+ */
+function getTestManagementFix (subcheck) {
+  if (subcheck === 'disabled') {
+    return 'Confirm the returned property is disabled:true for the calibrated identity and the framework ' +
+      'supports disabled tests.'
+  }
+
+  if (subcheck === 'quarantined') {
+    return 'Confirm the returned property is quarantined:true and the test actually fails when run normally.'
+  }
+
+  return 'Confirm the returned property is attempt_to_fix:true and retries use test.retry_reason=attempt_to_fix.'
 }
 
 /**
@@ -596,6 +839,356 @@ function getAutoRetryTestGroups (events) {
 }
 
 /**
+ * Gets Test Management summary fields.
+ *
+ * @param {object} artifact fake intake artifact
+ * @param {Array<object>} events decoded events
+ * @param {object} settings settings summary
+ * @param {object} endpointCounts endpoint counts
+ * @param {string|undefined} settingsMode fake settings mode
+ * @returns {object} Test Management summary
+ */
+function getTestManagementSummary (artifact, events, settings, endpointCounts, settingsMode) {
+  const properties = getReturnedTestManagementProperties(artifact)
+  const managedTests = getManagedTestManagementTests(events)
+  const matchedPropertyKeys = getMatchedPropertyKeys(properties, managedTests)
+  const unmatchedPropertyIdentities = properties
+    .filter(property => !matchedPropertyKeys.has(getIdentityKey(property)))
+    .map(formatIdentity)
+
+  return {
+    settingsEnabled: !!settings.lastResponse?.test_management?.enabled,
+    propertiesEndpointCalled: (endpointCounts.test_management || 0) > 0,
+    requested: (endpointCounts.test_management || 0) > 0,
+    requestCount: endpointCounts.test_management || 0,
+    returnedProperties: properties.length,
+    returnedPropertyIdentities: properties.map(formatIdentity),
+    matchedPropertyIdentities: properties
+      .filter(property => matchedPropertyKeys.has(getIdentityKey(property)))
+      .map(formatIdentity)
+      .sort(),
+    unmatchedPropertyIdentities,
+    managedTests: {
+      count: managedTests.length,
+      identities: getSortedValues(managedTests.map(formatIdentity)),
+    },
+    disabled: getDisabledTestManagementSummary(managedTests),
+    quarantined: getQuarantinedTestManagementSummary(managedTests),
+    attemptToFix: getAttemptToFixTestManagementSummary(managedTests),
+    expectedSubcheck: getExpectedTestManagementSubcheck(settingsMode),
+  }
+}
+
+/**
+ * Gets the Test Management subcheck expected for a settings mode.
+ *
+ * @param {string|undefined} settingsMode fake settings mode
+ * @returns {string|undefined} subcheck name
+ */
+function getExpectedTestManagementSubcheck (settingsMode) {
+  if (settingsMode === 'tm-disabled') return 'disabled'
+  if (settingsMode === 'tm-quarantined') return 'quarantined'
+  if (settingsMode === 'tm-attempt-to-fix' || settingsMode === 'tm-attempt-to-fix-priority') {
+    return 'attemptToFix'
+  }
+}
+
+/**
+ * Gets returned Test Management properties from the fake-intake artifact.
+ *
+ * @param {object} artifact fake intake artifact
+ * @returns {Array<object>} returned property entries
+ */
+function getReturnedTestManagementProperties (artifact) {
+  const responses = Array.isArray(artifact?.testManagement?.responses) ? artifact.testManagement.responses : []
+  const properties = []
+
+  for (const item of responses) {
+    const modules = item?.response?.data?.attributes?.modules ||
+      item?.data?.attributes?.modules ||
+      item?.modules
+
+    collectTestManagementProperties(modules, properties)
+  }
+
+  return properties
+}
+
+/**
+ * Flattens Test Management modules into identity/property entries.
+ *
+ * @param {unknown} modules Test Management modules object
+ * @param {Array<object>} properties mutable property list
+ */
+function collectTestManagementProperties (modules, properties) {
+  if (!modules || typeof modules !== 'object') return
+
+  for (const [framework, testModule] of Object.entries(modules)) {
+    const suites = testModule?.suites
+    if (!suites || typeof suites !== 'object') continue
+
+    for (const [suite, suiteValue] of Object.entries(suites)) {
+      const tests = suiteValue?.tests
+      if (!tests || typeof tests !== 'object') continue
+
+      for (const [name, testValue] of Object.entries(tests)) {
+        properties.push({
+          framework,
+          suite,
+          name,
+          properties: testValue?.properties || {},
+        })
+      }
+    }
+  }
+}
+
+/**
+ * Gets decoded test events carrying Test Management tags.
+ *
+ * @param {Array<object>} events decoded events
+ * @returns {Array<object>} managed test observations
+ */
+function getManagedTestManagementTests (events) {
+  const tests = []
+
+  for (const event of events) {
+    if (event.type !== 'test') continue
+
+    const meta = event.content?.meta || {}
+    const isDisabled = meta[TEST_MANAGEMENT_IS_DISABLED] === 'true'
+    const isQuarantined = meta[TEST_MANAGEMENT_IS_QUARANTINED] === 'true'
+    const isAttemptToFix = meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] === 'true'
+
+    if (!isDisabled && !isQuarantined && !isAttemptToFix) continue
+
+    tests.push({
+      ...getTestIdentity(event),
+      status: meta[TEST_STATUS],
+      finalStatus: meta[TEST_FINAL_STATUS],
+      retryReason: meta[TEST_RETRY_REASON],
+      isRetry: meta[TEST_IS_RETRY] === 'true',
+      isDisabled,
+      isQuarantined,
+      isAttemptToFix,
+      attemptToFixPassed: meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED],
+    })
+  }
+
+  return tests
+}
+
+/**
+ * Gets property identities that matched managed test events.
+ *
+ * @param {Array<object>} properties returned Test Management properties
+ * @param {Array<object>} managedTests managed test observations
+ * @returns {Set<string>} matched formatted identities
+ */
+function getMatchedPropertyKeys (properties, managedTests) {
+  const managedKeys = new Set(managedTests.map(getIdentityKey))
+  const matched = new Set()
+
+  for (const property of properties) {
+    const key = getIdentityKey(property)
+    if (managedKeys.has(key)) {
+      matched.add(key)
+    }
+  }
+
+  return matched
+}
+
+/**
+ * Gets disabled-test Test Management evidence.
+ *
+ * @param {Array<object>} managedTests managed test observations
+ * @returns {object} disabled summary
+ */
+function getDisabledTestManagementSummary (managedTests) {
+  const tests = managedTests.filter(test => test.isDisabled)
+  const skipped = tests.filter(test => test.status === 'skip' || test.finalStatus === 'skip').length
+  const failed = tests.filter(test => test.status === 'fail' || test.finalStatus === 'fail').length
+  const passed = tests.length > 0 && skipped > 0 && failed === 0
+
+  return {
+    status: getSubcheckStatus(passed, tests.length),
+    reason: passed
+      ? 'disabled test was reported as skipped and did not report a failing final status'
+      : getMissingManagedTestReason('disabled', tests.length),
+    tests: tests.length,
+    skipped,
+    failed,
+    identities: getSortedValues(tests.map(formatIdentity)),
+    observedStatuses: getSortedValues(tests.map(test => test.status)),
+    observedFinalStatuses: getSortedValues(tests.map(test => test.finalStatus)),
+    observedRetryReasons: getSortedValues(tests.map(test => test.retryReason)),
+  }
+}
+
+/**
+ * Gets quarantined-test Test Management evidence.
+ *
+ * @param {Array<object>} managedTests managed test observations
+ * @returns {object} quarantined summary
+ */
+function getQuarantinedTestManagementSummary (managedTests) {
+  const tests = managedTests.filter(test => test.isQuarantined)
+  const failed = tests.filter(test => test.status === 'fail').length
+  const finalSkipped = tests.filter(test => test.finalStatus === 'skip').length
+  const passed = tests.length > 0 && failed > 0 && finalSkipped > 0
+
+  return {
+    status: getSubcheckStatus(passed, tests.length),
+    reason: passed
+      ? 'quarantined test reported a failing execution with final_status=skip'
+      : getMissingManagedTestReason('quarantined', tests.length),
+    tests: tests.length,
+    failed,
+    finalSkipped,
+    identities: getSortedValues(tests.map(formatIdentity)),
+    observedStatuses: getSortedValues(tests.map(test => test.status)),
+    observedFinalStatuses: getSortedValues(tests.map(test => test.finalStatus)),
+    observedRetryReasons: getSortedValues(tests.map(test => test.retryReason)),
+  }
+}
+
+/**
+ * Gets attempt-to-fix Test Management evidence.
+ *
+ * @param {Array<object>} managedTests managed test observations
+ * @returns {object} attempt-to-fix summary
+ */
+function getAttemptToFixTestManagementSummary (managedTests) {
+  const tests = managedTests.filter(test => test.isAttemptToFix)
+  const retryReasons = tests.map(test => test.retryReason).filter(Boolean)
+  const badRetryReasons = retryReasons.filter(reason =>
+    reason === TEST_RETRY_REASON_AUTO_TEST_RETRY || reason === TEST_RETRY_REASON_EARLY_FLAKE_DETECTION
+  )
+  const attemptToFixRetries = tests.filter(test =>
+    test.isRetry && test.retryReason === TEST_RETRY_REASON_ATTEMPT_TO_FIX
+  ).length
+  const passedExecutions = tests.filter(test => test.status === 'pass').length
+  const failedExecutions = tests.filter(test => test.status === 'fail').length
+  const finalFailed = tests.filter(test => test.finalStatus === 'fail').length
+  const passed = tests.length > 1 &&
+    attemptToFixRetries > 0 &&
+    badRetryReasons.length === 0 &&
+    passedExecutions > 0 &&
+    failedExecutions > 0 &&
+    finalFailed > 0
+
+  return {
+    status: getSubcheckStatus(passed, tests.length),
+    reason: passed
+      ? 'attempt-to-fix test retried with retry_reason=attempt_to_fix and ended with final_status=fail'
+      : getAttemptToFixFailureReason(
+        tests.length,
+        attemptToFixRetries,
+        badRetryReasons,
+        passedExecutions,
+        failedExecutions
+      ),
+    tests: tests.length,
+    retryExecutions: tests.filter(test => test.isRetry).length,
+    attemptToFixRetryExecutions: attemptToFixRetries,
+    badRetryReasons: getSortedValues(badRetryReasons),
+    passedExecutions,
+    failedExecutions,
+    finalFailed,
+    identities: getSortedValues(tests.map(formatIdentity)),
+    observedStatuses: getSortedValues(tests.map(test => test.status)),
+    observedFinalStatuses: getSortedValues(tests.map(test => test.finalStatus)),
+    observedRetryReasons: getSortedValues(retryReasons),
+    attemptToFixPassedValues: getSortedValues(tests.map(test => test.attemptToFixPassed)),
+  }
+}
+
+/**
+ * Gets a normalized subcheck status.
+ *
+ * @param {boolean} passed whether the subcheck passed
+ * @param {number} count number of managed observations
+ * @returns {string} status
+ */
+function getSubcheckStatus (passed, count) {
+  if (passed) return 'passed'
+  if (count === 0) return 'not run'
+
+  return 'failed'
+}
+
+/**
+ * Gets a standard failure reason for missing managed test observations.
+ *
+ * @param {string} kind subcheck kind
+ * @param {number} count observed managed test count
+ * @returns {string} reason
+ */
+function getMissingManagedTestReason (kind, count) {
+  if (count === 0) return `no ${kind} managed test span was observed`
+
+  return `${kind} managed test spans did not match the expected status/final_status evidence`
+}
+
+/**
+ * Gets an attempt-to-fix failure reason.
+ *
+ * @param {number} count observed attempt-to-fix event count
+ * @param {number} attemptToFixRetries attempt-to-fix retry event count
+ * @param {string[]} badRetryReasons retry reasons that should not appear
+ * @param {number} passedExecutions passed execution count
+ * @param {number} failedExecutions failed execution count
+ * @returns {string} reason
+ */
+function getAttemptToFixFailureReason (
+  count,
+  attemptToFixRetries,
+  badRetryReasons,
+  passedExecutions,
+  failedExecutions
+) {
+  if (count === 0) return 'no attempt-to-fix managed test span was observed'
+  if (attemptToFixRetries === 0) return 'no retry span used test.retry_reason=attempt_to_fix'
+  if (badRetryReasons.length > 0) return `unexpected retry reasons were observed: ${badRetryReasons.join(', ')}`
+  if (passedExecutions === 0 || failedExecutions === 0) {
+    return 'attempt-to-fix did not report both a passing and a failing execution'
+  }
+
+  return 'attempt-to-fix managed test spans did not end with final_status=fail'
+}
+
+/**
+ * Gets an identity key for exact property/event matching.
+ *
+ * @param {object} identity test identity
+ * @returns {string} identity key
+ */
+function getIdentityKey (identity) {
+  return `${identity.framework || 'unknown'}\0${identity.suite || 'unknown'}\0${identity.name || ''}`
+}
+
+/**
+ * Formats a test identity for reports.
+ *
+ * @param {object} identity test identity
+ * @returns {string} formatted identity
+ */
+function formatIdentity (identity) {
+  const parts = [
+    identity.framework || 'unknown',
+    identity.suite || 'unknown',
+    identity.name || 'unknown',
+  ]
+
+  if (identity.parameters) {
+    parts.push(`parameters=${identity.parameters}`)
+  }
+
+  return parts.join(' | ')
+}
+
+/**
  * Gets sorted unique string values.
  *
  * @param {string[]} values values to normalize
@@ -609,7 +1202,7 @@ function getSortedValues (values) {
  * Gets stable identifying fields for a test event.
  *
  * @param {object} event decoded test event
- * @returns {{ framework: string, suite: string, name: string|undefined }} test identity
+ * @returns {object} test identity
  */
 function getTestIdentity (event) {
   const content = event.content || {}
@@ -617,6 +1210,8 @@ function getTestIdentity (event) {
 
   return {
     framework: meta[TEST_FRAMEWORK] || 'unknown',
+    module: meta[TEST_MODULE],
+    parameters: meta[TEST_PARAMETERS],
     suite: meta[TEST_SUITE] || meta['test.source.file'] || content.resource || 'unknown',
     name: meta[TEST_NAME] || content.name || content.resource,
   }
@@ -781,6 +1376,7 @@ function getDecodeErrors (requests) {
 module.exports = {
   analyzeIntakeArtifact,
   buildKnownTestsFromArtifact,
+  buildTestManagementTestsFromArtifact,
   renderAnalysisText,
   summarizeIntakeArtifact,
 }

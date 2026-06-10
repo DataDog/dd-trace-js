@@ -56,6 +56,10 @@ function getChecks (input, analysis) {
     checks.push(getAutoTestRetriesCheck(input, analysis))
   }
 
+  if (isTestManagementCheckAttempted(analysis)) {
+    checks.push(getTestManagementCheck(input, analysis))
+  }
+
   return checks
 }
 
@@ -241,6 +245,84 @@ function getAutoTestRetriesCheck (input, analysis) {
 }
 
 /**
+ * Gets the Test Management validation check.
+ *
+ * @param {object} input validation input
+ * @param {object} analysis intake analysis report
+ * @returns {object} Test Management check
+ */
+function getTestManagementCheck (input, analysis) {
+  const summary = analysis.summary
+  const subchecks = [
+    getTestManagementSubcheck(input, summary, 'disabled', 'Disabled tests', '0'),
+    getTestManagementSubcheck(input, summary, 'quarantined', 'Quarantined tests', '0'),
+    getTestManagementSubcheck(input, summary, 'attemptToFix', 'Attempt-to-fix tests', 'non-zero'),
+  ]
+
+  return {
+    id: 'test-management',
+    name: 'Test Management',
+    status: getTestManagementStatus(summary, subchecks),
+    steps: [
+      {
+        id: 'setup-intake',
+        name: 'Set up Test Management intake',
+        status: summary.tm.settingsEnabled && summary.tm.propertiesEndpointCalled ? 'ok' : 'failed',
+        evidence: {
+          settingsEnabled: summary.tm.settingsEnabled,
+          propertiesEndpointCalled: summary.tm.propertiesEndpointCalled,
+          propertiesReturned: summary.tm.returnedProperties,
+          returnedPropertyIdentities: summary.tm.returnedPropertyIdentities,
+          matchedPropertyIdentities: summary.tm.matchedPropertyIdentities,
+          unmatchedPropertyIdentities: summary.tm.unmatchedPropertyIdentities,
+        },
+      },
+      {
+        id: 'run-tests',
+        name: 'Run managed test',
+        status: getTestCommandStatus(input),
+        command: input.testCommand,
+        exitCode: input.testExitCode,
+        result: input.testResult,
+      },
+      ...subchecks,
+    ],
+  }
+}
+
+/**
+ * Gets one Test Management subcheck step.
+ *
+ * @param {object} input validation input
+ * @param {object} summary intake summary
+ * @param {string} id subcheck id
+ * @param {string} name subcheck name
+ * @param {string} expectedExitCode expected command exit code
+ * @returns {object} validation step
+ */
+function getTestManagementSubcheck (input, summary, id, name, expectedExitCode) {
+  const subcheck = summary.tm[id]
+  const expectedSubcheck = summary.tm.expectedSubcheck
+  const skipped = expectedSubcheck && expectedSubcheck !== id
+
+  return {
+    id,
+    name,
+    status: skipped ? 'skipped' : getTestManagementSubcheckStatus(input, subcheck, expectedExitCode),
+    evidence: {
+      expectedExitCode,
+      actualExitCode: input.testExitCode,
+      managedTestIdentities: subcheck.identities,
+      observedStatuses: subcheck.observedStatuses,
+      observedFinalStatuses: subcheck.observedFinalStatuses,
+      observedRetryReasons: subcheck.observedRetryReasons,
+      reason: skipped ? `not run in ${summary.tm.expectedSubcheck} mode` : subcheck.reason,
+      tests: subcheck.tests,
+    },
+  }
+}
+
+/**
  * Checks whether the EFD check was attempted.
  *
  * @param {object} input validation input
@@ -273,6 +355,24 @@ function isAutoTestRetriesCheckAttempted (input, analysis) {
     atr.settingsEnabled ||
     atr.retriedTests > 0 ||
     atr.failedThenPassedRetryTests > 0
+  )
+}
+
+/**
+ * Checks whether the Test Management check was attempted.
+ *
+ * @param {object} analysis intake analysis report
+ * @returns {boolean} true if Test Management evidence is present
+ */
+function isTestManagementCheckAttempted (analysis) {
+  const tm = analysis.summary.tm
+
+  return !!(
+    tm.settingsEnabled ||
+    tm.propertiesEndpointCalled ||
+    tm.returnedProperties > 0 ||
+    tm.managedTests.count > 0 ||
+    tm.expectedSubcheck
   )
 }
 
@@ -319,6 +419,50 @@ function getAutoTestRetriesStatus (summary) {
   if (summary.atr.failedThenPassedRetryTests === 0) return 'failed'
 
   return 'ok'
+}
+
+/**
+ * Gets the aggregate Test Management check status.
+ *
+ * @param {object} summary intake summary
+ * @param {Array<object>} subchecks Test Management subcheck steps
+ * @returns {string} check status
+ */
+function getTestManagementStatus (summary, subchecks) {
+  if (
+    !summary.tm.settingsEnabled ||
+    !summary.tm.propertiesEndpointCalled ||
+    summary.tm.returnedProperties === 0 ||
+    summary.tm.unmatchedPropertyIdentities.length > 0
+  ) {
+    return 'failed'
+  }
+
+  const attempted = subchecks.filter(subcheck => subcheck.status !== 'skipped')
+  if (attempted.length === 0) return 'skipped'
+  if (attempted.some(subcheck => subcheck.status === 'failed')) return 'failed'
+  if (attempted.some(subcheck => subcheck.status === 'unknown')) return 'unknown'
+
+  return 'ok'
+}
+
+/**
+ * Gets a Test Management subcheck status.
+ *
+ * @param {object} input validation input
+ * @param {object} subcheck analyzer subcheck summary
+ * @param {string} expectedExitCode expected command exit code
+ * @returns {string} validation step status
+ */
+function getTestManagementSubcheckStatus (input, subcheck, expectedExitCode) {
+  if (subcheck.status === 'not run') return 'failed'
+  if (subcheck.status !== 'passed') return 'failed'
+  if (input.testExitCode === undefined) return 'unknown'
+
+  const exitCode = String(input.testExitCode)
+  if (expectedExitCode === 'non-zero') return exitCode === '0' ? 'failed' : 'ok'
+
+  return exitCode === expectedExitCode ? 'ok' : 'failed'
 }
 
 /**

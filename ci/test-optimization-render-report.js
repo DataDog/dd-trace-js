@@ -72,6 +72,14 @@ function parseArgs (args) {
       options.testResultFile = args[++i]
     } else if (arg.startsWith('--test-result-file=')) {
       options.testResultFile = arg.slice('--test-result-file='.length)
+    } else if (arg === '--test-output-file') {
+      options.testOutputFile = args[++i]
+    } else if (arg.startsWith('--test-output-file=')) {
+      options.testOutputFile = arg.slice('--test-output-file='.length)
+    } else if (arg === '--new-test-file') {
+      options.newTestFile = args[++i]
+    } else if (arg.startsWith('--new-test-file=')) {
+      options.newTestFile = arg.slice('--new-test-file='.length)
     } else if (arg === '--new-test-snippet') {
       options.newTestSnippet = args[++i]
     } else if (arg.startsWith('--new-test-snippet=')) {
@@ -167,6 +175,8 @@ function getHelpText () {
     '  --test-exit-code-file <file>   Read the selected test command exit code from a file.',
     '  --test-result <text>           Include a short test runner result summary.',
     '  --test-result-file <file>      Read the short test runner result summary from a file.',
+    '  --test-output-file <file>      Read full test runner output for EFD execution diagnostics.',
+    '  --new-test-file <file>          Include the temporary EFD test file path.',
     '  --new-test-snippet <text>       Include the temporary test snippet used for EFD.',
     '  --new-test-snippet-file <file>  Read the temporary test snippet used for EFD.',
     '  --flaky-test-snippet <text>     Include the temporary flaky test snippet used for Auto Test Retries.',
@@ -204,8 +214,19 @@ function renderFinalReport (options) {
   const testCommand = readTextValue(options.testCommand, options.testCommandFile, 'test command')
   const testExitCode = readTextValue(options.testExitCode, options.testExitCodeFile, 'test exit code')
   const testResult = readOptionalTextValue(options.testResult, options.testResultFile)
+  const testOutput = readOptionalTextValue(undefined, options.testOutputFile)
+  const newTestFile = readOptionalTextValue(options.newTestFile)
   const newTestSnippet = readOptionalTextValue(options.newTestSnippet, options.newTestSnippetFile)
   const flakyTestSnippet = readOptionalTextValue(options.flakyTestSnippet, options.flakyTestSnippetFile)
+  const efdExecution = getEfdExecutionDiagnostics(analysis, {
+    newTestFile,
+    newTestSnippet,
+    testCommand,
+    testOutput,
+  })
+
+  if (efdExecution) analysis.summary.efd.execution = efdExecution
+
   const env = getEnvList(options, analysis)
   const htmlPath = getHtmlPath(options, analysis)
   const htmlFileUrl = analysis.summary.artifacts.htmlFileUrl || pathToFileURL(htmlPath).href
@@ -253,7 +274,9 @@ function renderFinalReport (options) {
     `- Intake shutdown: ${intakeArtifact.intake?.stoppedAt ? 'successful' : 'not confirmed'}`,
     `- Final artifact flushed: ${intakeArtifact.intake?.stoppedAt ? 'yes' : 'partial artifact possible'}`,
     ...getEfdSummaryLines(analysis),
+    ...getEfdExecutionSummaryLines(efdExecution),
     ...getAutoTestRetriesSummaryLines(analysis),
+    ...getTestManagementSummaryLines(analysis, testExitCode),
     '',
     'Consistency checks:',
     ...getConsistencyChecks(env, intakeArtifact, analysis),
@@ -318,6 +341,8 @@ function renderFinalReport (options) {
       getIntakeAnswer(analysis),
     '- If data is reported, does it include session, module, suite, and test events? ' +
       getEventLevelsAnswer(analysis),
+    '- Does Test Management apply disabled, quarantined, or attempt-to-fix properties? ' +
+      getTestManagementAnswer(analysis, testExitCode),
     '',
     'Artifacts:',
     `- Final report: ${artifactPaths.finalReportPath}`,
@@ -349,6 +374,18 @@ function renderSummaryReport (options) {
   const testCommand = readTextValue(options.testCommand, options.testCommandFile, 'test command')
   const testExitCode = readTextValue(options.testExitCode, options.testExitCodeFile, 'test exit code')
   const testResult = readOptionalTextValue(options.testResult, options.testResultFile)
+  const testOutput = readOptionalTextValue(undefined, options.testOutputFile)
+  const newTestFile = readOptionalTextValue(options.newTestFile)
+  const newTestSnippet = readOptionalTextValue(options.newTestSnippet, options.newTestSnippetFile)
+  const efdExecution = getEfdExecutionDiagnostics(analysis, {
+    newTestFile,
+    newTestSnippet,
+    testCommand,
+    testOutput,
+  })
+
+  if (efdExecution) analysis.summary.efd.execution = efdExecution
+
   const env = getEnvList(options, analysis)
   const htmlPath = getHtmlPath(options, analysis)
   const htmlFileUrl = analysis.summary.artifacts.htmlFileUrl || pathToFileURL(htmlPath).href
@@ -375,11 +412,28 @@ function renderSummaryReport (options) {
     `EFD known tests received: ${analysis.summary.efd.knownTestsReceived}`,
     `EFD retried new tests: ${analysis.summary.efd.retriedNewTests}`,
     `EFD distinct retried new test names: ${getDistinctCount(analysis.summary.efd.retriedNewTestNames)}`,
+    `EFD execution diagnosis: ${efdExecution?.diagnosis || 'n/a'}`,
     `Auto Test Retries status: ${getAutoTestRetriesStatus(analysis)}`,
     `Auto Test Retries failed executions: ${analysis.summary.atr.failedExecutions}`,
     `Auto Test Retries passed executions: ${analysis.summary.atr.passedExecutions}`,
     `Auto Test Retries passed retry executions: ${analysis.summary.atr.passedRetryTests}`,
     `Auto Test Retries flaky tests reported: ${analysis.summary.atr.failedThenPassedRetryTests}`,
+    `Test Management status: ${getTestManagementStatus(analysis, testExitCode)}`,
+    `Test Management disabled status: ${getTestManagementSubcheckStatus(
+      analysis.summary.tm.disabled,
+      testExitCode,
+      '0'
+    )}`,
+    `Test Management quarantined status: ${getTestManagementSubcheckStatus(
+      analysis.summary.tm.quarantined,
+      testExitCode,
+      '0'
+    )}`,
+    `Test Management attempt-to-fix status: ${getTestManagementSubcheckStatus(
+      analysis.summary.tm.attemptToFix,
+      testExitCode,
+      'non-zero'
+    )}`,
     'Consistency checks:',
     ...getConsistencyChecks(env, intakeArtifact, analysis),
     'Static warnings/errors:',
@@ -413,6 +467,7 @@ function renderFeedbackSummary (options) {
     `suites=${countEvent(basic, 'test_suite_end')}, ` +
     `tests=${countEvent(basic, 'test')}`
   const retriedNewTestNames = advanced.summary?.efd?.retriedNewTestNames || []
+  const efdExecution = advanced.summary?.efd?.execution
   const cleanup = [
     fs.existsSync('dd-test-optimization-efd-temp-test-file.txt')
       ? 'temporary EFD cleanup incomplete'
@@ -431,6 +486,7 @@ function renderFeedbackSummary (options) {
       `known tests=${advanced.summary?.efd?.knownTestsReceived ?? 'n/a'}, ` +
       `retried new tests=${advanced.summary?.efd?.retriedNewTests ?? 'n/a'}, ` +
       `distinct retried names=${getDistinctCount(retriedNewTestNames)}`,
+    `EFD diagnosis: ${efdExecution?.diagnosis || 'n/a'}`,
     `Auto Test Retries: ${getAdvancedStatus(advanced, 'atr')}, ` +
       `failed=${advanced.summary?.atr?.failedExecutions ?? 'n/a'}, ` +
       `passed=${advanced.summary?.atr?.passedExecutions ?? 'n/a'}, ` +
@@ -635,7 +691,13 @@ function getScopeLines (analysis) {
     '- Basic reporting: session, module, suite, and test events.',
   ]
 
-  if (analysis.summary.efd.settingsEnabled) {
+  if (analysis.summary.tm.settingsEnabled || analysis.summary.tm.propertiesEndpointCalled) {
+    lines.push(
+      '- Test Management check: settings, properties, and managed test behavior for one subcheck.',
+      '- Does not validate the full Test Management configuration, ITR, test skipping, coverage, or the ' +
+        'full CI workflow.'
+    )
+  } else if (analysis.summary.efd.settingsEnabled) {
     lines.push(
       '- EFD check: known tests endpoint, new-test detection, and retry evidence for the selected subset.',
       '- Auto Test Retries check: failed and passing retry executions for one known flaky test.',
@@ -668,6 +730,87 @@ function getEfdSummaryLines (analysis) {
 }
 
 /**
+ * Gets optional EFD execution diagnosis lines.
+ *
+ * @param {object|undefined} execution EFD execution diagnosis
+ * @returns {string[]} diagnosis lines
+ */
+function getEfdExecutionSummaryLines (execution) {
+  if (!execution) return []
+
+  const lines = [
+    `- EFD execution diagnosis: ${execution.diagnosis}`,
+  ]
+
+  if (execution.newTestFile) lines.push(`- EFD temporary test file: ${execution.newTestFile}`)
+  if (execution.newTestName) lines.push(`- EFD temporary test name: ${execution.newTestName}`)
+  if (execution.commandIncludesNewTestFile !== undefined) {
+    lines.push(`- EFD command includes temporary file: ${execution.commandIncludesNewTestFile ? 'yes' : 'no'}`)
+  }
+  if (execution.outputMentionsNewTestName !== undefined) {
+    lines.push(`- Test output mentions temporary test name: ${execution.outputMentionsNewTestName ? 'yes' : 'no'}`)
+  }
+
+  return lines
+}
+
+/**
+ * Gets EFD execution diagnostics from runner output and generated test metadata.
+ *
+ * @param {object} analysis intake analysis
+ * @param {object} options execution metadata
+ * @returns {object|undefined} EFD execution diagnostics
+ */
+function getEfdExecutionDiagnostics (analysis, options = {}) {
+  const efd = analysis.summary?.efd || {}
+  if (!efd.settingsEnabled && !efd.requested) return
+  if (efd.retriedNewTests > 0) return
+
+  const testCommand = options.testCommand || ''
+  const testOutput = options.testOutput || ''
+  const newTestFile = options.newTestFile || ''
+  const newTestName = getGeneratedTestName(options.newTestSnippet || '')
+  const commandIncludesNewTestFile = newTestFile ? testCommand.includes(newTestFile) : undefined
+  const outputMentionsNewTestFile = newTestFile ? testOutput.includes(newTestFile) : undefined
+  const outputMentionsNewTestName = newTestName ? testOutput.includes(newTestName) : undefined
+  let diagnosis
+
+  if (efd.knownTestsReceived === 0) {
+    diagnosis = 'known-tests response was empty, so EFD had no baseline for new-test detection.'
+  } else if (Array.isArray(efd.newTests) && efd.newTests.length > 0) {
+    diagnosis = 'a new test was reported, but no EFD retry event was observed for it.'
+  } else if (newTestName && outputMentionsNewTestName === false) {
+    diagnosis = 'temporary EFD test did not execute; test runner output does not include the generated test name.'
+  } else if (newTestFile && commandIncludesNewTestFile === false) {
+    diagnosis = 'temporary EFD test file was not included in the selected EFD command.'
+  } else if (testOutput) {
+    diagnosis = 'no reported test was marked new; compare the generated test identity with the known-tests response.'
+  } else {
+    diagnosis = 'test runner output was unavailable; compare the generated test identity with reported test events.'
+  }
+
+  return {
+    commandIncludesNewTestFile,
+    diagnosis,
+    newTestFile,
+    newTestName,
+    outputMentionsNewTestFile,
+    outputMentionsNewTestName,
+  }
+}
+
+/**
+ * Extracts the generated test name from a temporary test snippet.
+ *
+ * @param {string} snippet generated test snippet
+ * @returns {string} generated test name
+ */
+function getGeneratedTestName (snippet) {
+  const match = snippet.match(/\b(?:it|test)\(\s*(['"`])(.+?)\1/)
+  return match ? match[2] : ''
+}
+
+/**
  * Counts distinct values.
  *
  * @param {string[]} values values to count
@@ -696,12 +839,100 @@ function getAutoTestRetriesSummaryLines (analysis) {
 }
 
 /**
+ * Gets optional Test Management summary lines.
+ *
+ * @param {object} analysis intake analysis
+ * @param {string} testExitCode selected command exit code
+ * @returns {string[]} Test Management summary lines
+ */
+function getTestManagementSummaryLines (analysis, testExitCode) {
+  const tm = analysis.summary.tm
+  if (!tm.settingsEnabled && !tm.propertiesEndpointCalled && tm.managedTests.count === 0) return []
+
+  return [
+    `- Test Management settings enabled: ${tm.settingsEnabled ? 'yes' : 'no'}`,
+    `- Test Management properties endpoint called: ${tm.propertiesEndpointCalled ? 'yes' : 'no'}`,
+    `- Test Management properties returned: ${tm.returnedProperties}`,
+    `- Test Management matched identities: ${tm.matchedPropertyIdentities.length}`,
+    `- Test Management disabled status: ${getTestManagementSubcheckStatus(tm.disabled, testExitCode, '0')}`,
+    `- Test Management quarantined status: ${getTestManagementSubcheckStatus(tm.quarantined, testExitCode, '0')}`,
+    `- Test Management attempt-to-fix status: ${getTestManagementSubcheckStatus(
+      tm.attemptToFix,
+      testExitCode,
+      'non-zero'
+    )}`,
+    `- Test Management managed test identities: ${tm.managedTests.identities.join(', ') || 'none'}`,
+  ]
+}
+
+/**
+ * Gets compact Test Management status text.
+ *
+ * @param {object} analysis intake analysis
+ * @param {string} testExitCode selected command exit code
+ * @returns {string} status text
+ */
+function getTestManagementStatus (analysis, testExitCode) {
+  const tm = analysis.summary.tm
+  if (!tm.settingsEnabled && !tm.propertiesEndpointCalled && tm.managedTests.count === 0) return 'not run'
+
+  const expected = tm.expectedSubcheck
+  if (expected) {
+    const expectedExitCode = expected === 'attemptToFix' ? 'non-zero' : '0'
+    return getTestManagementSubcheckStatus(tm[expected], testExitCode, expectedExitCode)
+  }
+
+  const statuses = [
+    getTestManagementSubcheckStatus(tm.disabled, testExitCode, '0'),
+    getTestManagementSubcheckStatus(tm.quarantined, testExitCode, '0'),
+    getTestManagementSubcheckStatus(tm.attemptToFix, testExitCode, 'non-zero'),
+  ]
+  let hasPassed = false
+  let hasFailed = false
+
+  for (const status of statuses) {
+    if (status === 'passed') hasPassed = true
+    if (status.startsWith('failed')) hasFailed = true
+  }
+
+  if (hasPassed) return 'passed'
+  if (hasFailed) return 'failed'
+
+  return 'not run'
+}
+
+/**
+ * Gets a Test Management subcheck status with command-exit validation.
+ *
+ * @param {object} subcheck analyzer subcheck summary
+ * @param {string} testExitCode selected command exit code
+ * @param {string} expectedExitCode expected command exit code
+ * @returns {string} status text
+ */
+function getTestManagementSubcheckStatus (subcheck, testExitCode, expectedExitCode) {
+  if (!subcheck || subcheck.status === 'not run') return 'not run'
+  if (subcheck.status !== 'passed') return `failed: ${subcheck.reason}`
+  if (testExitCode === undefined) return 'passed; command exit code not recorded'
+
+  const exitCode = String(testExitCode)
+  if (expectedExitCode === 'non-zero') {
+    return exitCode === '0' ? 'failed: expected non-zero command exit code' : 'passed'
+  }
+
+  return exitCode === expectedExitCode ? 'passed' : `failed: expected command exit code ${expectedExitCode}`
+}
+
+/**
  * Gets limitations that remain unproven.
  *
  * @param {object} analysis intake analysis
  * @returns {string[]} limitation lines
  */
 function getNotProvenLines (analysis) {
+  if (analysis.summary.tm.settingsEnabled || analysis.summary.tm.propertiesEndpointCalled) {
+    return ['- EFD, Auto Test Retries, ITR, test skipping, or coverage are working.']
+  }
+
   if (analysis.summary.efd.settingsEnabled || analysis.summary.atr.settingsEnabled) {
     return ['- ITR, test skipping, test management, or coverage are working.']
   }
@@ -1052,6 +1283,10 @@ function getProvesText (analysis, testCommand) {
     return `Auto Test Retries retried a known flaky test for: ${testCommand}`
   }
 
+  if (analysis.primaryStage.startsWith('Test Management ') && analysis.primaryStage.endsWith(' reported')) {
+    return `Test Management applied the expected managed-test behavior for: ${testCommand}`
+  }
+
   return `The selected command reached stage "${analysis.primaryStage}" in the basic reporting funnel.`
 }
 
@@ -1116,6 +1351,22 @@ function getEventLevelsAnswer (analysis) {
   return 'not confirmed; no citestcycle payload was captured.'
 }
 
+/**
+ * Gets Test Management answer text.
+ *
+ * @param {object} analysis intake analysis
+ * @param {string} testExitCode selected command exit code
+ * @returns {string} answer text
+ */
+function getTestManagementAnswer (analysis, testExitCode) {
+  const status = getTestManagementStatus(analysis, testExitCode)
+
+  if (status === 'not run') return 'not run in this report.'
+  if (status === 'passed') return 'yes; the attempted Test Management subcheck passed.'
+
+  return `no; ${status}.`
+}
+
 if (require.main === module) {
   const options = parseArgs(process.argv.slice(2))
 
@@ -1153,6 +1404,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  getEfdExecutionDiagnostics,
   parseArgs,
   renderFeedbackSummary,
   renderFinalReport,

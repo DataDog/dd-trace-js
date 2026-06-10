@@ -15,15 +15,18 @@ const { encode } = require('../../src/msgpack')
 const {
   analyzeIntakeArtifact,
   buildKnownTestsFromArtifact,
+  buildTestManagementTestsFromArtifact,
   renderAnalysisText,
 } = require('../../../../ci/test-optimization-intake-analysis')
 const {
   normalizeKnownTests,
+  normalizeTestManagementTests,
   parseArgs,
   startIntake,
   stopIntake,
 } = require('../../../../ci/test-optimization-intake')
 const {
+  getEfdExecutionDiagnostics,
   renderFeedbackSummary,
   renderFinalReport,
   renderSummaryReport,
@@ -41,6 +44,12 @@ const {
   prepareAdvancedChecks,
   restoreAdvancedChecks,
 } = require('../../../../ci/test-optimization-prepare-advanced')
+const {
+  buildTestManagementResponse,
+  createTestManagementCandidate,
+  getProperties: getTestManagementProperties,
+  restoreTestManagementChecks,
+} = require('../../../../ci/test-optimization-prepare-test-management')
 const {
   buildTestCommand,
   selectTestCommand,
@@ -368,6 +377,177 @@ describe('Test Optimization debug intake', () => {
     assert.ok(hasFinding(analysis, 'Auto test retry reported flaky test'))
   })
 
+  it('builds Test Management modules from captured test events', () => {
+    const result = buildTestManagementTestsFromArtifact({
+      requests: [
+        {
+          category: 'citestcycle',
+          payload: {
+            events: [
+              getTestEvent({
+                framework: 'mocha',
+                name: 'dd trace test management debug dd trace test management disabled candidate',
+                suite: 'test/dd-trace-tm-disabled.spec.js',
+              }),
+            ],
+          },
+        },
+      ],
+    }, {
+      attempt_to_fix: false,
+      disabled: true,
+      quarantined: false,
+    }, {
+      testName: 'dd trace test management disabled candidate',
+    })
+
+    assert.deepStrictEqual(result.modules, {
+      mocha: {
+        suites: {
+          'test/dd-trace-tm-disabled.spec.js': {
+            tests: {
+              'dd trace test management debug dd trace test management disabled candidate': {
+                properties: {
+                  attempt_to_fix: false,
+                  disabled: true,
+                  quarantined: false,
+                },
+              },
+            },
+          },
+        },
+      },
+    })
+    assert.strictEqual(result.identity.framework, 'mocha')
+  })
+
+  it('reports Test Management disabled evidence', () => {
+    const analysis = analyzeIntakeArtifact(getTestManagementArtifact({
+      mode: 'tm-disabled',
+      properties: {
+        attempt_to_fix: false,
+        disabled: true,
+        quarantined: false,
+      },
+      testEvents: [
+        getTestEvent({
+          finalStatus: 'skip',
+          framework: 'mocha',
+          name: 'disabled candidate',
+          status: 'skip',
+          suite: 'test/dd-trace-tm-disabled.spec.js',
+          testManagement: {
+            disabled: true,
+          },
+        }),
+      ],
+    }))
+
+    assert.strictEqual(analysis.primaryStage, 'Test Management disabled reported')
+    assert.strictEqual(analysis.summary.tm.settingsEnabled, true)
+    assert.strictEqual(analysis.summary.tm.propertiesEndpointCalled, true)
+    assert.strictEqual(analysis.summary.tm.returnedProperties, 1)
+    assert.strictEqual(analysis.summary.tm.disabled.status, 'passed')
+    assert.deepStrictEqual(analysis.summary.tm.disabled.observedFinalStatuses, ['skip'])
+    assert.ok(hasFinding(analysis, 'Test Management disabled reported'))
+    assert.match(renderAnalysisText(analysis), /Test Management disabled status: passed/)
+  })
+
+  it('reports Test Management quarantined evidence', () => {
+    const analysis = analyzeIntakeArtifact(getTestManagementArtifact({
+      mode: 'tm-quarantined',
+      properties: {
+        attempt_to_fix: false,
+        disabled: false,
+        quarantined: true,
+      },
+      testEvents: [
+        getTestEvent({
+          finalStatus: 'skip',
+          framework: 'mocha',
+          name: 'quarantined candidate',
+          status: 'fail',
+          suite: 'test/dd-trace-tm-quarantined.spec.js',
+          testManagement: {
+            quarantined: true,
+          },
+        }),
+      ],
+    }))
+
+    assert.strictEqual(analysis.primaryStage, 'Test Management quarantined reported')
+    assert.strictEqual(analysis.summary.tm.quarantined.status, 'passed')
+    assert.deepStrictEqual(analysis.summary.tm.quarantined.observedStatuses, ['fail'])
+  })
+
+  it('reports Test Management attempt-to-fix evidence', () => {
+    const analysis = analyzeIntakeArtifact(getTestManagementArtifact({
+      mode: 'tm-attempt-to-fix',
+      properties: {
+        attempt_to_fix: true,
+        disabled: false,
+        quarantined: false,
+      },
+      testEvents: [
+        getTestEvent({
+          framework: 'mocha',
+          name: 'attempt candidate',
+          status: 'pass',
+          suite: 'test/dd-trace-tm-attempt-to-fix.spec.js',
+          testManagement: {
+            attemptToFix: true,
+          },
+        }),
+        getTestEvent({
+          finalStatus: 'fail',
+          framework: 'mocha',
+          isRetry: true,
+          name: 'attempt candidate',
+          retryReason: 'attempt_to_fix',
+          status: 'fail',
+          suite: 'test/dd-trace-tm-attempt-to-fix.spec.js',
+          testManagement: {
+            attemptToFix: true,
+            attemptToFixPassed: false,
+          },
+        }),
+      ],
+    }))
+
+    assert.strictEqual(analysis.primaryStage, 'Test Management attempt-to-fix reported')
+    assert.strictEqual(analysis.summary.tm.attemptToFix.status, 'passed')
+    assert.strictEqual(analysis.summary.tm.attemptToFix.attemptToFixRetryExecutions, 1)
+    assert.deepStrictEqual(analysis.summary.tm.attemptToFix.badRetryReasons, [])
+    assert.deepStrictEqual(analysis.summary.tm.attemptToFix.observedRetryReasons, ['attempt_to_fix'])
+  })
+
+  it('reports Test Management identity mismatches before subcheck status', () => {
+    const analysis = analyzeIntakeArtifact(getTestManagementArtifact({
+      mode: 'tm-disabled',
+      properties: {
+        attempt_to_fix: false,
+        disabled: true,
+        quarantined: false,
+      },
+      propertyName: 'different candidate',
+      testEvents: [
+        getTestEvent({
+          finalStatus: 'skip',
+          framework: 'mocha',
+          name: 'disabled candidate',
+          status: 'skip',
+          suite: 'test/dd-trace-tm-disabled.spec.js',
+          testManagement: {
+            disabled: true,
+          },
+        }),
+      ],
+    }))
+
+    assert.strictEqual(analysis.primaryStage, 'Test Management identity mismatch')
+    assert.strictEqual(analysis.summary.tm.unmatchedPropertyIdentities.length, 1)
+  })
+
   it('serves configured EFD settings and known tests', (done) => {
     const knownTests = {
       mocha: {
@@ -397,6 +577,59 @@ describe('Test Optimization debug intake', () => {
     })
   })
 
+  it('serves configured Test Management settings and properties', (done) => {
+    const modules = {
+      mocha: {
+        suites: {
+          'test/sum.spec.js': {
+            tests: {
+              'sum adds numbers': {
+                properties: {
+                  attempt_to_fix: false,
+                  disabled: true,
+                  quarantined: false,
+                },
+              },
+            },
+          },
+        },
+      },
+    }
+
+    startIntake({
+      out: path.join(tmpDir, 'intake.json'),
+      settingsMode: 'tm-disabled',
+      testManagementTests: modules,
+    }, (error, startedIntake) => {
+      assert.ifError(error)
+      intake = startedIntake
+
+      postJsonResponse(intake.url, '/api/v2/libraries/tests/services/setting', {}, (settingsError, settings) => {
+        assert.ifError(settingsError)
+        assert.strictEqual(settings.data.attributes.test_management.enabled, true)
+        assert.strictEqual(settings.data.attributes.test_management.attempt_to_fix_retries, 3)
+        assert.strictEqual(settings.data.attributes.early_flake_detection.enabled, false)
+        assert.strictEqual(settings.data.attributes.flaky_test_retries_enabled, false)
+
+        postJsonResponse(
+          intake.url,
+          '/api/v2/test/libraries/test-management/tests',
+          { data: { attributes: { repository_url: 'git@example.com:org/repo.git' } } },
+          (testManagementError, response) => {
+            assert.ifError(testManagementError)
+            assert.deepStrictEqual(response.data.attributes.modules, modules)
+            assert.strictEqual(intake.artifact.testManagement.responses.length, 1)
+            assert.strictEqual(
+              intake.artifact.testManagement.responses[0].request.data.attributes.repository_url,
+              'git@example.com:org/repo.git'
+            )
+            done()
+          }
+        )
+      })
+    })
+  })
+
   it('normalizes known tests endpoint response files', () => {
     assert.deepStrictEqual(normalizeKnownTests({
       data: {
@@ -413,6 +646,34 @@ describe('Test Optimization debug intake', () => {
         'test/sum.spec.js': ['adds numbers'],
       },
     })
+  })
+
+  it('normalizes Test Management endpoint response files', () => {
+    const modules = {
+      mocha: {
+        suites: {
+          'test/sum.spec.js': {
+            tests: {
+              'sum adds numbers': {
+                properties: {
+                  disabled: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    }
+
+    assert.deepStrictEqual(normalizeTestManagementTests({
+      data: {
+        attributes: {
+          modules,
+        },
+      },
+    }), modules)
+    assert.deepStrictEqual(normalizeTestManagementTests({ modules }), modules)
+    assert.deepStrictEqual(normalizeTestManagementTests(modules), modules)
   })
 
   it('records and analyzes decoded citestcycle payloads', (done) => {
@@ -436,19 +697,19 @@ describe('Test Optimization debug intake', () => {
             {
               type: 'test_session_end',
               content: {
-                test_session_id: 123n,
+                test_session_id: '123',
               },
             },
             {
               type: 'test_module_end',
               content: {
-                test_session_id: 123n,
+                test_session_id: '123',
               },
             },
             {
               type: 'test_suite_end',
               content: {
-                test_session_id: 123n,
+                test_session_id: '123',
               },
             },
             {
@@ -568,15 +829,66 @@ describe('Test Optimization debug intake', () => {
     assert.deepStrictEqual(parseArgs(['--html=report.html']).html, 'report.html')
   })
 
+  it('parses standalone intake Test Management arguments', () => {
+    const testManagementTestsPath = path.join(tmpDir, 'test-management-tests.json')
+    const testManagementTests = {
+      mocha: {
+        suites: {
+          'test/sum.spec.js': {
+            tests: {
+              'sum adds numbers': {
+                properties: {
+                  disabled: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    }
+
+    fs.writeFileSync(
+      testManagementTestsPath,
+      JSON.stringify({ data: { attributes: { modules: testManagementTests } } })
+    )
+
+    assert.deepStrictEqual(parseArgs([
+      '--settings-mode',
+      'tm-disabled',
+      '--test-management-tests',
+      testManagementTestsPath,
+    ]).testManagementTests, testManagementTests)
+  })
+
   it('parses debug wrapper arguments', () => {
     const knownTestsPath = path.join(tmpDir, 'known-tests.json')
+    const testManagementTestsPath = path.join(tmpDir, 'test-management-tests.json')
     const knownTests = {
       mocha: {
         'test/sum.spec.js': ['adds numbers'],
       },
     }
+    const testManagementTests = {
+      mocha: {
+        suites: {
+          'test/sum.spec.js': {
+            tests: {
+              'sum adds numbers': {
+                properties: {
+                  disabled: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    }
 
     fs.writeFileSync(knownTestsPath, JSON.stringify({ data: { attributes: { tests: knownTests } } }))
+    fs.writeFileSync(
+      testManagementTestsPath,
+      JSON.stringify({ data: { attributes: { modules: testManagementTests } } })
+    )
 
     assert.deepStrictEqual(parseDebugArgs([
       '--test-command',
@@ -590,6 +902,8 @@ describe('Test Optimization debug intake', () => {
       '--settings-mode=efd',
       '--known-tests',
       knownTestsPath,
+      '--test-management-tests',
+      testManagementTestsPath,
       '--new-test-snippet-file',
       'dd-test-optimization-efd-new-test-snippet.txt',
       '--flaky-test-snippet-file',
@@ -608,6 +922,7 @@ describe('Test Optimization debug intake', () => {
       settingsMode: 'efd',
       testCommand: 'npm test -- test/sum.spec.js',
       testCommandFile: 'dd-test-optimization-test-command.txt',
+      testManagementTests,
     })
   })
 
@@ -727,6 +1042,7 @@ describe('Test Optimization debug intake', () => {
   })
 
   it('builds NODE_OPTIONS for regular and Vitest test processes', () => {
+    const cwd = process.cwd()
     const nodeOptions = process.env.NODE_OPTIONS
     process.env.NODE_OPTIONS = '--loader existing-loader'
 
@@ -753,7 +1069,17 @@ describe('Test Optimization debug intake', () => {
         ),
         '--loader existing-loader --import dd-trace/register.js -r dd-trace/ci/init'
       )
+
+      process.chdir(tmpDir)
+      fs.writeFileSync(path.join(tmpDir, '.pnp.cjs'), '')
+
+      const pnpPath = path.resolve('.pnp.cjs')
+      assert.strictEqual(
+        getNodeOptions({ supportedFrameworks: [{ id: 'mocha' }] }),
+        `--loader existing-loader -r ${pnpPath} -r ${path.join(cwd, 'ci/init.js')}`
+      )
     } finally {
+      process.chdir(cwd)
       if (nodeOptions === undefined) {
         delete process.env.NODE_OPTIONS
       } else {
@@ -918,6 +1244,77 @@ describe('Test Optimization debug intake', () => {
     }
   })
 
+  it('prepares calibrated Test Management candidate files and responses', () => {
+    const cwd = process.cwd()
+    const testFile = path.join(tmpDir, 'test/dd-trace-tm-disabled.spec.js')
+
+    process.chdir(tmpDir)
+
+    try {
+      createTestManagementCandidate({
+        framework: 'mocha',
+        mode: 'disabled',
+        testFile: 'test/dd-trace-tm-disabled.spec.js',
+      })
+
+      assert.ok(fs.existsSync(testFile))
+      assert.match(fs.readFileSync(testFile, 'utf8'), /DD_TEST_OPTIMIZATION_TM_BASELINE/)
+      assert.match(fs.readFileSync(
+        path.join('dd-test-optimization-test-management', 'candidate-snippet.txt'),
+        'utf8'
+      ), /dd trace test management disabled candidate/)
+      assert.deepStrictEqual(getTestManagementProperties('attempt-to-fix'), {
+        attempt_to_fix: true,
+        disabled: false,
+        quarantined: false,
+      })
+
+      fs.writeFileSync('baseline-intake.json', JSON.stringify({
+        requests: [
+          {
+            category: 'citestcycle',
+            payload: {
+              events: [
+                getTestEvent({
+                  framework: 'mocha',
+                  name: 'dd trace test management debug dd trace test management disabled candidate',
+                  suite: 'test/dd-trace-tm-disabled.spec.js',
+                }),
+              ],
+            },
+          },
+        ],
+      }))
+
+      buildTestManagementResponse({
+        baselineIntake: 'baseline-intake.json',
+        mode: 'disabled',
+      })
+
+      const response = JSON.parse(fs.readFileSync(
+        path.join('dd-test-optimization-test-management', 'test-management-tests.json'),
+        'utf8'
+      ))
+
+      assert.deepStrictEqual(
+        response.data.attributes.modules.mocha.suites['test/dd-trace-tm-disabled.spec.js']
+          .tests['dd trace test management debug dd trace test management disabled candidate'].properties,
+        {
+          attempt_to_fix: false,
+          disabled: true,
+          quarantined: false,
+        }
+      )
+
+      restoreTestManagementChecks()
+
+      assert.ok(!fs.existsSync(testFile))
+      assert.ok(!fs.existsSync(path.join('dd-test-optimization-test-management', 'generated-files.txt')))
+    } finally {
+      process.chdir(cwd)
+    }
+  })
+
   it('refuses to prepare advanced checks when the known test file has git changes', () => {
     const cwd = process.cwd()
     const testFile = path.join(tmpDir, 'test/sum.spec.js')
@@ -1061,6 +1458,47 @@ describe('Test Optimization debug intake', () => {
         efdTestName: 'dd trace EFD debug temporary test',
         flakyTestFile: 'packages/plugin-gate/src/__tests__/scope.test.ts',
         flakyTestName: 'scope parses scope',
+        framework: 'jest',
+      })
+    } finally {
+      process.chdir(cwd)
+    }
+  })
+
+  it('preserves selected test file qualifiers for inferred EFD test files', () => {
+    const cwd = process.cwd()
+    const testFile = path.join(tmpDir, 'packages/example-service/test/utils.node.test.ts')
+
+    fs.mkdirSync(path.dirname(testFile), { recursive: true })
+    fs.writeFileSync(testFile, [
+      'describe(\'utils\', () => {',
+      '  test(\'works\', () => {',
+      '    expect(true).toBe(true)',
+      '  })',
+      '})',
+      '',
+    ].join('\n'))
+    process.chdir(tmpDir)
+    fs.writeFileSync(
+      'dd-test-optimization-test-command.txt',
+      'yarn test packages/example-service/test/utils.node.test.ts --runInBand\n'
+    )
+    fs.writeFileSync('dd-test-optimization-known-tests.json', JSON.stringify({
+      jest: {
+        'packages/example-service/test/utils.node.test.ts': ['utils works'],
+      },
+    }))
+
+    try {
+      assert.deepStrictEqual(inferPrepareOptions({ auto: true }), {
+        auto: true,
+        efdCommand:
+          'yarn test packages/example-service/test/utils.node.test.ts ' +
+          'packages/example-service/test/dd-trace-efd-debug.node.test.ts --runInBand',
+        efdTestFile: 'packages/example-service/test/dd-trace-efd-debug.node.test.ts',
+        efdTestName: 'dd trace EFD debug temporary test',
+        flakyTestFile: 'packages/example-service/test/utils.node.test.ts',
+        flakyTestName: 'utils works',
         framework: 'jest',
       })
     } finally {
@@ -1339,6 +1777,62 @@ describe('Test Optimization debug intake', () => {
     assert.match(summary, /Validation path: see the final report Datadog validation line\./)
   })
 
+  it('renders Test Management final report and validation payload', () => {
+    const staticPath = path.join(tmpDir, 'static.json')
+    const intakePath = path.join(tmpDir, 'tm-intake.json')
+    const testCommandPath = path.join(tmpDir, 'test-command.txt')
+    const testExitCodePath = path.join(tmpDir, 'test-exit-code.txt')
+    const artifact = getTestManagementArtifact({
+      mode: 'tm-disabled',
+      properties: {
+        attempt_to_fix: false,
+        disabled: true,
+        quarantined: false,
+      },
+      testEvents: [
+        getTestEvent({
+          finalStatus: 'skip',
+          framework: 'mocha',
+          name: 'disabled candidate',
+          status: 'skip',
+          suite: 'test/dd-trace-tm-disabled.spec.js',
+          testManagement: {
+            disabled: true,
+          },
+        }),
+      ],
+    })
+
+    fs.writeFileSync(staticPath, JSON.stringify(getStaticReport(), null, 2))
+    fs.writeFileSync(intakePath, JSON.stringify(artifact, null, 2))
+    fs.writeFileSync(testCommandPath, 'npm test -- test/dd-trace-tm-disabled.spec.js\n')
+    fs.writeFileSync(testExitCodePath, '0\n')
+
+    const report = renderFinalReport({
+      static: staticPath,
+      intake: intakePath,
+      testCommandFile: testCommandPath,
+      testExitCodeFile: testExitCodePath,
+      testResult: '1 pending',
+    })
+    const validationPayload = getValidationPayload(report)
+    const testManagementCheck = validationPayload.checks.find(check => check.id === 'test-management')
+    const disabledStep = testManagementCheck.steps.find(step => step.id === 'disabled')
+    const attemptToFixStep = testManagementCheck.steps.find(step => step.id === 'attemptToFix')
+
+    assert.match(report, /Primary funnel stage: Test Management disabled reported/)
+    assert.match(report, /- Test Management disabled status: passed/)
+    assert.match(
+      report,
+      /Does Test Management apply disabled, quarantined, or attempt-to-fix properties\? yes;/
+    )
+    assert.strictEqual(testManagementCheck.status, 'ok')
+    assert.strictEqual(disabledStep.status, 'ok')
+    assert.strictEqual(disabledStep.evidence.expectedExitCode, '0')
+    assert.strictEqual(disabledStep.evidence.actualExitCode, '0')
+    assert.strictEqual(attemptToFixStep.status, 'skipped')
+  })
+
   it('renders compact feedback summary from root and advanced reports', () => {
     const basicReportPath = path.join(tmpDir, 'agent-report.json')
     const efdDir = path.join(tmpDir, 'dd-test-optimization-efd')
@@ -1378,6 +1872,44 @@ describe('Test Optimization debug intake', () => {
     assert.match(summary, /Reports: file:\/\/\/tmp\/dd-test-optimization-report\.html/)
     assert.match(summary, /Cleanup: temporary EFD removed\/restored, flaky edit restored/)
     assert.match(summary, /Actionable feedback:\n- No actionable feedback\./)
+  })
+
+  it('diagnoses an EFD generated test that was not executed by the test runner', () => {
+    const diagnosis = getEfdExecutionDiagnostics({
+      summary: {
+        efd: {
+          knownTestsReceived: 4,
+          newTests: [],
+          requested: true,
+          retriedNewTests: 0,
+          settingsEnabled: true,
+        },
+      },
+    }, {
+      newTestFile: 'packages/example-service/test/dd-trace-efd-debug.test.ts',
+      newTestSnippet: [
+        "describe('dd trace EFD debug', () => {",
+        '  test("dd trace EFD debug temporary test", () => {})',
+        '})',
+      ].join('\n'),
+      testCommand:
+        'yarn test packages/example-service/test/utils.node.test.ts ' +
+        'packages/example-service/test/dd-trace-efd-debug.test.ts --runInBand',
+      testOutput: [
+        'PASS node packages/example-service/test/utils.node.test.ts',
+        'Ran all test suites matching ' +
+          'packages/example-service/test/utils.node.test.ts|' +
+          'packages/example-service/test/dd-trace-efd-debug.test.ts.',
+      ].join('\n'),
+    })
+
+    assert.strictEqual(
+      diagnosis.diagnosis,
+      'temporary EFD test did not execute; test runner output does not include the generated test name.'
+    )
+    assert.strictEqual(diagnosis.commandIncludesNewTestFile, true)
+    assert.strictEqual(diagnosis.outputMentionsNewTestFile, true)
+    assert.strictEqual(diagnosis.outputMentionsNewTestName, false)
   })
 
   it('renders feedback summary output with status sections', () => {
@@ -1727,10 +2259,12 @@ function getTestEvent ({
   isNew,
   isRetry,
   name,
+  finalStatus,
   retryReason = 'early_flake_detection',
   sessionId = '123',
   status,
   suite,
+  testManagement,
 }) {
   const meta = {
     'test.framework': framework,
@@ -1742,6 +2276,10 @@ function getTestEvent ({
     meta['test.status'] = status
   }
 
+  if (finalStatus) {
+    meta['test.final_status'] = finalStatus
+  }
+
   if (isNew) {
     meta['test.is_new'] = 'true'
   }
@@ -1751,11 +2289,135 @@ function getTestEvent ({
     meta['test.retry_reason'] = retryReason
   }
 
+  if (testManagement?.disabled) {
+    meta['test.test_management.is_test_disabled'] = 'true'
+  }
+
+  if (testManagement?.quarantined) {
+    meta['test.test_management.is_quarantined'] = 'true'
+  }
+
+  if (testManagement?.attemptToFix) {
+    meta['test.test_management.is_attempt_to_fix'] = 'true'
+  }
+
+  if (testManagement?.attemptToFixPassed !== undefined) {
+    meta['test.test_management.attempt_to_fix_passed'] = String(testManagement.attemptToFixPassed)
+  }
+
   return {
     type: 'test',
     content: {
       test_session_id: sessionId,
       meta,
+    },
+  }
+}
+
+function getTestManagementArtifact ({
+  mode,
+  properties,
+  propertyName,
+  testEvents,
+}) {
+  const firstTest = testEvents[0]
+  const framework = firstTest.content.meta['test.framework']
+  const suite = firstTest.content.meta['test.suite']
+  const name = propertyName || firstTest.content.meta['test.name']
+  const modules = {
+    [framework]: {
+      suites: {
+        [suite]: {
+          tests: {
+            [name]: {
+              properties,
+            },
+          },
+        },
+      },
+    },
+  }
+  const response = {
+    data: {
+      attributes: {
+        modules,
+      },
+    },
+  }
+
+  return {
+    intake: {
+      settingsMode: mode,
+    },
+    requests: [
+      {
+        category: 'settings',
+        payload: {
+          data: {
+            attributes: {
+              repository_url: 'git@example.com:org/repo.git',
+              sha: 'abcdef',
+              branch: 'main',
+            },
+          },
+        },
+      },
+      {
+        category: 'test_management',
+        payload: {
+          data: {
+            attributes: {
+              repository_url: 'git@example.com:org/repo.git',
+              sha: 'abcdef',
+              branch: 'main',
+            },
+          },
+        },
+      },
+      {
+        category: 'citestcycle',
+        payload: {
+          events: [
+            {
+              type: 'test_session_end',
+              content: {
+                test_session_id: '123',
+              },
+            },
+            {
+              type: 'test_module_end',
+              content: {
+                test_session_id: '123',
+              },
+            },
+            {
+              type: 'test_suite_end',
+              content: {
+                test_session_id: '123',
+              },
+            },
+            ...testEvents,
+          ],
+        },
+      },
+    ],
+    settings: {
+      responses: [
+        {
+          test_management: {
+            enabled: true,
+            attempt_to_fix_retries: 3,
+          },
+        },
+      ],
+    },
+    testManagement: {
+      responses: [
+        {
+          request: {},
+          response,
+        },
+      ],
     },
   }
 }

@@ -58,10 +58,26 @@ const ATR_SETTINGS = {
   flaky_test_retries_count: 1,
 }
 
+const TEST_MANAGEMENT_SETTINGS = {
+  ...DEFAULT_SETTINGS,
+  test_management: {
+    enabled: true,
+    attempt_to_fix_retries: 3,
+  },
+}
+
 const DEBUG_ALL_SETTINGS = {
   ...EFD_SETTINGS,
   flaky_test_retries_enabled: true,
   flaky_test_retries_count: 1,
+}
+
+const TEST_MANAGEMENT_PRIORITY_SETTINGS = {
+  ...DEBUG_ALL_SETTINGS,
+  test_management: {
+    enabled: true,
+    attempt_to_fix_retries: 3,
+  },
 }
 
 /**
@@ -92,6 +108,7 @@ function startIntake (options = {}, callback) {
     settings: options.settings || getSettings(options.settingsMode),
     shutdownToken: randomBytes(16).toString('hex'),
     stopped: false,
+    testManagementTests: options.testManagementTests || {},
   }
 
   const server = http.createServer((req, res) => {
@@ -171,6 +188,9 @@ function createArtifact (options = {}) {
       responses: [],
     },
     knownTests: {
+      responses: [],
+    },
+    testManagement: {
       responses: [],
     },
   }
@@ -344,13 +364,19 @@ function handlePostRequest (state, req, res, requestUrl, body) {
   }
 
   if (category === 'test_management') {
-    sendJson(res, 200, {
+    const response = {
       data: {
         attributes: {
-          modules: {},
+          modules: state.testManagementTests,
         },
       },
+    }
+
+    state.artifact.testManagement.responses.push({
+      request: decoded.payload,
+      response,
     })
+    sendJson(res, 200, response)
     return
   }
 
@@ -409,7 +435,7 @@ function decodeRequestBody (category, body) {
       return { payload: decodeMsgpack(body), error: undefined }
     }
 
-    if (category === 'settings' || category === 'skippable') {
+    if (category === 'settings' || category === 'skippable' || category === 'test_management') {
       return { payload: JSON.parse(body.toString('utf8')), error: undefined }
     }
   } catch (error) {
@@ -850,6 +876,12 @@ function parseArgs (args) {
       options.knownTests = normalizeKnownTests(readJsonFile(args[++i]))
     } else if (arg.startsWith('--known-tests=')) {
       options.knownTests = normalizeKnownTests(readJsonFile(arg.slice('--known-tests='.length)))
+    } else if (arg === '--test-management-tests') {
+      options.testManagementTests = normalizeTestManagementTests(readJsonFile(args[++i]))
+    } else if (arg.startsWith('--test-management-tests=')) {
+      options.testManagementTests = normalizeTestManagementTests(
+        readJsonFile(arg.slice('--test-management-tests='.length))
+      )
     } else {
       options.unknown = arg
     }
@@ -875,7 +907,12 @@ function getHelpText () {
     '  --settings-mode atr              Enable Auto Test Retries settings.',
     '  --settings-mode efd              Enable known tests and Early Flake Detection settings.',
     '  --settings-mode debug-all        Enable known tests, EFD, and Auto Test Retries settings.',
+    '  --settings-mode tm-disabled      Enable Test Management settings for disabled-test checks.',
+    '  --settings-mode tm-quarantined   Enable Test Management settings for quarantined-test checks.',
+    '  --settings-mode tm-attempt-to-fix  Enable Test Management settings for attempt-to-fix checks.',
+    '  --settings-mode tm-attempt-to-fix-priority  Enable TM, EFD, and Auto Test Retries for priority checks.',
     '  --known-tests <file>             Known tests JSON to return from /api/v2/ci/libraries/tests.',
+    '  --test-management-tests <file>   Test Management modules JSON for /api/v2/test/libraries/test-management/tests.',
     '',
     'Point tests at it with:',
     '',
@@ -898,6 +935,14 @@ function getSettings (settingsMode) {
   if (settingsMode === 'atr') return ATR_SETTINGS
   if (settingsMode === 'debug-all') return DEBUG_ALL_SETTINGS
   if (settingsMode === 'efd') return EFD_SETTINGS
+  if (
+    settingsMode === 'tm-disabled' ||
+    settingsMode === 'tm-quarantined' ||
+    settingsMode === 'tm-attempt-to-fix'
+  ) {
+    return TEST_MANAGEMENT_SETTINGS
+  }
+  if (settingsMode === 'tm-attempt-to-fix-priority') return TEST_MANAGEMENT_PRIORITY_SETTINGS
   return DEFAULT_SETTINGS
 }
 
@@ -922,6 +967,23 @@ function normalizeKnownTests (value) {
     return value.data.attributes.tests
   }
 
+  if (value && typeof value === 'object') return value
+
+  return {}
+}
+
+/**
+ * Normalizes Test Management input to the endpoint modules object.
+ *
+ * @param {unknown} value parsed Test Management tests JSON
+ * @returns {object} Test Management modules object
+ */
+function normalizeTestManagementTests (value) {
+  if (value?.data?.attributes?.modules && typeof value.data.attributes.modules === 'object') {
+    return value.data.attributes.modules
+  }
+
+  if (value?.modules && typeof value.modules === 'object') return value.modules
   if (value && typeof value === 'object') return value
 
   return {}
@@ -1332,6 +1394,7 @@ module.exports = {
   decodeMsgpack,
   getSettings,
   normalizeKnownTests,
+  normalizeTestManagementTests,
   parseArgs,
   startIntake,
   stopIntake,

@@ -410,8 +410,8 @@ function getFirstKnownTest (knownTests) {
  * @returns {string} temporary EFD test path
  */
 function getTemporaryEfdTestFile (suite) {
-  const suffix = suite.match(/(\.(?:test|spec))(\.[cm]?[jt]sx?)$/)
-  const extension = suffix ? `${suffix[1]}${suffix[2]}` : path.extname(suite)
+  const suffix = path.basename(suite).match(/((?:\.[^.]+)*\.(?:test|spec)\.[cm]?[jt]sx?)$/)
+  const extension = suffix ? suffix[1] : path.extname(suite)
 
   return path.join(path.dirname(suite), `dd-trace-efd-debug${extension || '.test.js'}`)
 }

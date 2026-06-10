@@ -167,10 +167,11 @@ function detectFramework (packageJson) {
 function getCandidateTestFiles (root) {
   const files = listTestFiles(root)
   const candidates = []
+  const dirtyPaths = getDirtyGitPaths()
 
   for (const file of files) {
     if (isIgnoredPath(file)) continue
-    if (isDirtyGitPath(file)) continue
+    if (isDirtyGitPath(file, dirtyPaths)) continue
 
     const source = readFile(file)
     if (!source) continue
@@ -247,12 +248,40 @@ function isIgnoredPath (file) {
 }
 
 /**
+ * Gets tracked git paths with staged or unstaged local changes.
+ *
+ * @returns {Set<string>|undefined} dirty paths, or undefined outside a worktree
+ */
+function getDirtyGitPaths () {
+  const dirtyPaths = new Set()
+  let isGitWorktree = false
+
+  for (const args of [
+    ['diff', '--name-only'],
+    ['diff', '--name-only', '--cached'],
+  ]) {
+    const result = spawnSync('git', args, { encoding: 'utf8' })
+    if (result.status !== 0) continue
+
+    isGitWorktree = true
+    for (const file of result.stdout.split(/\r?\n/)) {
+      if (file) dirtyPaths.add(file)
+    }
+  }
+
+  return isGitWorktree ? dirtyPaths : undefined
+}
+
+/**
  * Checks whether a git path has local changes.
  *
  * @param {string} file repository-relative file
+ * @param {Set<string>|undefined} dirtyPaths cached dirty paths
  * @returns {boolean} whether the file is dirty
  */
-function isDirtyGitPath (file) {
+function isDirtyGitPath (file, dirtyPaths) {
+  if (dirtyPaths) return dirtyPaths.has(file)
+
   const result = spawnSync('git', ['status', '--porcelain', '--', file], { encoding: 'utf8' })
   if (result.status !== 0) return false
 

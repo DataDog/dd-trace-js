@@ -3,6 +3,13 @@
 This runbook is to diagnose Datadog Test Optimization setup problems in a JavaScript repository.
 Use repository-specific judgment to adapt commands.
 
+## Mode Selector
+
+- If the user asks to diagnose Test Optimization in this repository, start at Customer Diagnostic
+  Mode.
+- If the user asks for feedback about this runbook, jump to Runbook Feedback Mode and stop after
+  Feedback Mode Step 4.
+
 ## Customer Diagnostic Mode: Start Here
 
 Use customer diagnostic mode unless the user explicitly asks for feedback about this runbook.
@@ -13,16 +20,17 @@ Customer diagnostic mode uses this path:
 2. Run Step 2 to choose one small test command.
 3. Run the Preferred Wrapper.
 4. If the wrapper reports `Reporting complete`, run Step 7 for EFD and Auto Test Retries.
-5. Run Step 8 and report the diagnostic answers with each question text inline.
+5. If the wrapper reports `Reporting complete`, run Step 8 for Test Management.
+6. Run Step 9 and report the diagnostic answers with each question text inline.
 
 Wrapper result routing:
 
 | Root wrapper result | Next action |
 | --- | --- |
 | `listen EPERM: operation not permitted 127.0.0.1` | Rerun the wrapper with loopback bind/connect approval. Do not diagnose Test Optimization from this result. |
-| `Reporting complete` | Run Step 7 to validate EFD and Auto Test Retries, then Step 8. |
-| `Nothing` | Confirm the selected test ran and `NODE_OPTIONS` reached it. Use the manual fallback/debug path only when those are true and the wrapper still captures no requests. Then run Step 8. |
-| Any other stage | Skip Step 7, consult the matching Decision Tree stage, then run the Step 8 extractor. |
+| `Reporting complete` | Run Step 7 to validate EFD and Auto Test Retries, run Step 8 for Test Management, then Step 9. |
+| `Nothing` | Confirm the selected test ran and `NODE_OPTIONS` reached it. Use the manual fallback/debug path only when those are true and the wrapper still captures no requests. Then run Step 9. |
+| Any other stage | Skip Step 7 and Step 8, consult the matching Decision Tree stage, then run the Step 9 extractor. |
 
 Feedback mode is below and is only for evaluating this runbook, not for customer diagnosis.
 
@@ -30,22 +38,47 @@ Feedback mode is below and is only for evaluating this runbook, not for customer
 
 If the user asks for feedback about this runbook, execute this numbered procedure. Use the
 Feedback Fallback Appendix only when Step 1 routes there. Do not use Customer diagnostic mode,
-Step 7, Step 8, or the Decision Tree unless the fallback path explicitly requires them.
+Step 7, Step 8, Step 9, or the Decision Tree unless the fallback path explicitly requires them.
+Stop after Feedback Mode Step 4.
 
 1. Run the Feedback Driver:
+
+   If `./node_modules/dd-trace` exists, run:
 
    ```bash
    node ./node_modules/dd-trace/ci/test-optimization-feedback-runner.js
    ```
 
-   Expected: `Temporary EFD file absent:`, `Selected source files are clean after feedback-mode
-   wrapper.`, `Root wrapper stage: Reporting complete`, `EFD retried new tests:`, and `Auto Test
-   Retries flaky tests reported:`.
+   If this repository uses Yarn PnP, portal dependencies, or a command guard that rejects bare
+   `node`, resolve the script through Yarn and run it with `yarn node`:
 
-   If the tool supports reusable approval prefixes, use this prefix for loopback approval:
+   ```bash
+   yarn node "$(yarn node -e 'process.stdout.write(require.resolve("dd-trace/ci/test-optimization-feedback-runner.js"))')"
+   ```
+
+   Expected for every completed driver run: `Feedback driver status: {"fresh":true`,
+   `Selected source files are clean after feedback-mode wrapper.`, `Root wrapper stage:`,
+   `Advanced checks:`, and `Wrapper log:`.
+
+   Expected only when the root wrapper stage is `Reporting complete`: `Temporary EFD file absent:`,
+   `EFD retried new tests:`, and `Auto Test Retries flaky tests reported:`.
+
+   Before applying the routing table, verify `dd-test-optimization-agent-report.json` was produced
+   or refreshed by this Step 1 driver attempt. If the driver was denied before execution, Step 0
+   did not run, or the report file predates the current feedback-mode attempt, treat the report as
+   missing. Do not render or rely on stale artifacts from a previous run.
+
+   If the tool supports reusable approval prefixes, use the command form that worked in this
+   repository for loopback approval. For node_modules repositories:
 
    ```text
    node ./node_modules/dd-trace/ci/test-optimization-feedback-runner.js
+   ```
+
+   For Yarn PnP or portal repositories:
+
+   ```text
+   yarn node <resolved path to test-optimization-feedback-runner.js>
    ```
 
    If the command tool accepts structured approval fields, use:
@@ -60,7 +93,11 @@ Step 7, Step 8, or the Decision Tree unless the fallback path explicitly require
    | --- | --- |
    | `listen EPERM: operation not permitted 127.0.0.1` | Rerun the same Feedback Driver command with loopback approval. If the approved rerun succeeds, do not count the initial unapproved EPERM as a failed runbook execution. Continue to Step 2. |
    | Non-EPERM failure and `dd-test-optimization-agent-report.json` is missing | Use the Feedback Fallback Appendix F0a-F7, then resume at Step 2. |
-   | All five Expected strings are present in the output | Continue to Step 2. |
+   | Non-EPERM failure and current-run `dd-test-optimization-agent-report.json` exists, and F9 can render a summary | Do not use the fallback appendix. Continue to Step 2, write `No actionable feedback.` unless the instructions were unclear. A diagnostic failure such as `EFD retry missing` is not runbook feedback by itself. Run F9 and report the F9 output plus the feedback. |
+   | Non-EPERM failure and current-run `dd-test-optimization-agent-report.json` exists, but F9 cannot render a summary | Continue to Step 2, write the runbook-consumability issue that made the path ambiguous or incomplete, and report the failure. |
+   | Driver exits successfully and root stage is not `Reporting complete` | Continue to Step 2, write `No actionable feedback.` unless the instructions were unclear, run F9, and report the F9 diagnostic outcome. Missing EFD/ATR evidence is expected when the root stage is not `Reporting complete`. |
+   | Driver exits successfully, root stage is `Reporting complete`, and the Reporting-complete Expected strings are present | Continue to Step 2. |
+   | Driver exits successfully, root stage is `Reporting complete`, and one or more Reporting-complete Expected strings are missing | Continue to Step 2, write the missing expected evidence or unclear routing as actionable feedback when it reflects runbook friction, run F9, and report the F9 output plus the feedback. |
 
    Feedback-mode happy path: run the driver, write the feedback artifact from runbook execution
    friction only, run F9 in the normal sandbox, respond from F9 output or the caller's constrained
@@ -68,7 +105,8 @@ Step 7, Step 8, or the Decision Tree unless the fallback path explicitly require
 
    Feedback mode only requires these Node commands:
    `node ./node_modules/dd-trace/ci/test-optimization-feedback-runner.js` and
-   `node ./node_modules/dd-trace/ci/test-optimization-feedback-summary.js`.
+   `node ./node_modules/dd-trace/ci/test-optimization-feedback-summary.js`, or their package-manager
+   equivalents such as `yarn node <resolved dd-trace script>` in Yarn PnP repositories.
 
 2. Create or overwrite the feedback artifact now:
 
@@ -108,8 +146,17 @@ Step 7, Step 8, or the Decision Tree unless the fallback path explicitly require
 
 3. Run F9 in the normal sandbox, meaning no loopback or escalated approval:
 
+   If `./node_modules/dd-trace` exists, run:
+
    ```bash
    node ./node_modules/dd-trace/ci/test-optimization-feedback-summary.js
+   ```
+
+   If this repository uses Yarn PnP, portal dependencies, or a command guard that rejects bare
+   `node`, run:
+
+   ```bash
+   yarn node "$(yarn node -e 'process.stdout.write(require.resolve("dd-trace/ci/test-optimization-feedback-summary.js"))')"
    ```
 
    Expected: compact feedback summary, `Pre-existing worktree changes`, and
@@ -156,7 +203,7 @@ Appendix.**
 
 Choose one mode first:
 
-- Customer diagnostic mode: use the Preferred Wrapper, Step 7, and Step 8 final response checklist.
+- Customer diagnostic mode: use the Preferred Wrapper, Step 7, Step 8, and Step 9 final response checklist.
 - Runbook feedback mode: use `Runbook Feedback Mode: Exact Path` above.
 
 Loopback prerequisite: if the first wrapper command returns
@@ -166,9 +213,11 @@ approval immediately.
 
 Commands that need loopback approval: feedback-driver and wrapper commands that run
 `node ./node_modules/dd-trace/ci/test-optimization-feedback-runner.js` or
-`node ./node_modules/dd-trace/ci/test-optimization-debug.js`. Analyzer, prepare, restore, and
-extractor commands read artifacts or edit files; they do not bind the fake intake or run the test
-process against it.
+`node ./node_modules/dd-trace/ci/test-optimization-debug.js`, plus package-manager equivalents
+such as `yarn node <resolved test-optimization-feedback-runner.js>` or
+`yarn node <resolved test-optimization-debug.js>`. Analyzer, prepare, restore, feedback-summary,
+and extractor commands read artifacts or edit files; they do not bind the fake intake or run the
+test process against it.
 
 For Codex, Claude Code, and other sandboxed command runners: request loopback/escalated approval
 only for wrapper commands that bind or connect to `127.0.0.1`. Keep cleanup, discovery, analyzer,
@@ -185,7 +234,7 @@ run reports `Reporting complete`; go directly to Step 7.
 For runbook feedback mode, use only `Runbook Feedback Mode: Exact Path` above unless the feedback
 fallback condition applies.
 
-Customer diagnostic mode, Preferred Wrapper, Step 7, Step 8, and the Decision Tree are out of
+Customer diagnostic mode, Preferred Wrapper, Step 7, Step 8, Step 9, and the Decision Tree are out of
 scope for feedback runs unless the feedback fallback condition applies.
 
 Feedback fallback condition: use F1-F7 only when F-runner is unavailable, fails before producing
@@ -198,7 +247,7 @@ Use generic Step 0 only when recovering manually from an interrupted run with st
 source edits.
 
 In feedback mode, do not use the required final response checklist or the final response template.
-Do not run the Step 8 field extractor unless you need extra local inspection; the feedback-summary
+Do not run the Step 9 field extractor unless you need extra local inspection; the feedback-summary
 renderer in F9 reads the required artifacts directly.
 
 Feedback-mode artifact rule: diagnostic artifacts may remain untracked until the next Step 0
@@ -783,18 +832,18 @@ test ! -f dd-test-optimization-atr-flaky-test-backup.txt
 
 After the fallback path completes, return to Step 2 and Step 3 in
 `Runbook Feedback Mode: Exact Path` to write actionable feedback and render F9. Do not continue
-into customer diagnostic mode, Step 7, Step 8, the Decision Tree, or the customer final response
+into customer diagnostic mode, Step 7, Step 8, Step 9, the Decision Tree, or the customer final response
 checklist unless the fallback path explicitly required those sections.
 
-Customer diagnostic mode uses the Preferred Wrapper, Step 7, and Step 8 sections below. Its wrapper
+Customer diagnostic mode uses the Preferred Wrapper, Step 7, Step 8, and Step 9 sections below. Its wrapper
 result routing is:
 
 | Root wrapper result | Next action |
 | --- | --- |
 | `listen EPERM: operation not permitted 127.0.0.1` | Rerun the wrapper with loopback bind/connect approval. Do not diagnose Test Optimization from this result. |
-| `Reporting complete` | Run Step 7 to validate EFD and Auto Test Retries, then Step 8. |
-| `Nothing` | Confirm the selected test ran and `NODE_OPTIONS` reached it. Use the manual fallback/debug path only when those are true and the wrapper still captures no requests. Then run Step 8. |
-| Any other stage | Skip Step 7, consult the matching Decision Tree stage, then run the Step 8 extractor. |
+| `Reporting complete` | Run Step 7 to validate EFD and Auto Test Retries, run Step 8 to validate Test Management, then Step 9. |
+| `Nothing` | Confirm the selected test ran and `NODE_OPTIONS` reached it. Use the manual fallback/debug path only when those are true and the wrapper still captures no requests. Then run Step 9. |
+| Any other stage | Skip Step 7 and Step 8, consult the matching Decision Tree stage, then run the Step 9 extractor. |
 
 ## Detailed Section Index
 
@@ -805,7 +854,8 @@ the commands and adaptation rules for each referenced step:
 - Step 2: selected test command discovery.
 - Preferred Wrapper: root wrapper command details.
 - Step 7: advanced EFD and Auto Test Retries checks when basic reporting is complete.
-- Step 8: machine-oriented extractor and final response format.
+- Step 8: Test Management disabled, quarantined, and attempt-to-fix checks.
+- Step 9: machine-oriented extractor and final response format.
 
 Feedback-mode fallback condition: use F1-F7 only when F-runner is unavailable, fails before
 producing root artifacts after a non-EPERM error, or reports `Nothing` after the selected test
@@ -825,6 +875,7 @@ The goal is to answer these diagnostic questions:
 4. If data is reported, does it include "all expected test event levels"?
 5. Does EFD fetch known tests, mark a new test, and retry it?
 6. Does Auto Test Retries retry a failing known test and report retry tags?
+7. Does Test Management apply disabled, quarantined, and attempt-to-fix properties?
 
 Diagnostic question map:
 
@@ -834,7 +885,8 @@ Diagnostic question map:
 - If data is reported, does it include session, module, suite, and test events? Step 6.
 - Does EFD fetch known tests, mark a new test, and retry it? Step 7.
 - Does Auto Test Retries retry a failing known test and report retry tags? Step 7.
-- Step 8: synthesize all diagnostic answers.
+- Does Test Management apply disabled, quarantined, and attempt-to-fix properties? Step 8.
+- Step 9: synthesize all diagnostic answers.
 
 Required final response checklist:
 
@@ -844,6 +896,7 @@ Required final response checklist:
 - Selected test command, advanced test command when Step 7 ran, and test result.
 - Basic reporting counts and decode errors.
 - EFD and Auto Test Retries status when Step 7 ran.
+- Test Management disabled, quarantined, and attempt-to-fix status when Step 8 ran.
 - The diagnostic question answers with each question text inline.
 - Static warnings and errors, recommended next actions, and temporary-edit cleanup confirmation.
 
@@ -895,7 +948,7 @@ If the wrapper succeeds and the primary stage is `Reporting complete`, skip manu
 continue to Step 7.
 
 Wrapper success produces the same analysis and final-report artifacts that manual Steps 3-6
-produce. Use these wrapper-generated root artifacts for Step 8:
+produce. Use these wrapper-generated root artifacts for Step 9:
 
 - `dd-test-optimization-agent-report.txt`
 - `dd-test-optimization-agent-report.json`
@@ -950,6 +1003,8 @@ These files are published under the `dd-trace/ci` package directory:
 - `test-optimization-intake.js`: local fake intake and static self-contained HTML report.
 - `test-optimization-analyze-intake.js`: fixed-rule analyzer for saved intake artifacts.
 - `test-optimization-prepare-advanced.js`: optional helper for common Step 7 temporary test edits.
+- `test-optimization-prepare-test-management.js`: helper for Step 8 temporary Test Management tests
+  and calibrated properties files.
 - `test-optimization-render-report.js`: final customer-facing report renderer.
 - `test-optimization-feedback-summary.js`: feedback-mode F9 summary and status renderer.
 - `test-optimization-intake-analysis.js`: shared decision-tree rules.
@@ -964,6 +1019,9 @@ These files are published under the `dd-trace/ci` package directory:
 - Successful EFD reports a retried new test.
 - Successful Auto Test Retries reports one known flaky test with a failed execution, a passing
   execution, and `test.is_retry=true` on the passing retry.
+- Successful Test Management disabled, quarantined, and attempt-to-fix checks each fetch settings,
+  call the Test Management properties endpoint, match a calibrated test identity, and report the
+  expected managed-test behavior.
 - Harmless stdout from `dd-trace/ci/init` can be ignored. Do not ignore warnings about missing
   `DD_API_KEY` or disabled CI Visibility reporting.
 
@@ -1575,7 +1633,7 @@ artifact/state problems before applying funnel-stage fixes.
   stage below.
 
 If the primary stage is anything other than `Reporting complete`, consult `## Decision Tree` below
-Step 8 under the matching stage heading before writing the final response.
+Step 9 under the matching stage heading before writing the final response.
 
 The analyzer text report includes the canonical HTML report `file://` URL, absolute HTML report
 path, suggested open command, and `Datadog validation:` relative path. Copy those lines exactly into the
@@ -1589,6 +1647,8 @@ Diagnostic artifacts may remain untracked until the next Step 0 cleanup:
 - `dd-intake-*`
 - `dd-test-optimization-basic/`
 - `dd-test-optimization-efd/`
+- `dd-test-optimization-tm-*/`
+- `dd-test-optimization-test-management/`
 - `nohup.out` if an agent or shell creates it while running background commands
 
 During Step 7, these temporary source edits may appear:
@@ -1596,8 +1656,15 @@ During Step 7, these temporary source edits may appear:
 - helper-created `dd-trace-efd-debug*.test.*` or `dd-trace-efd-debug*.spec.*` sibling test file
 - helper-edited known test file containing `dd trace auto retry debug flake`
 
+During Step 8, these temporary source files may appear:
+
+- helper-created `dd-trace-tm-disabled*.test.*` or `dd-trace-tm-disabled*.spec.*`
+- helper-created `dd-trace-tm-quarantined*.test.*` or `dd-trace-tm-quarantined*.spec.*`
+- helper-created `dd-trace-tm-attempt-to-fix*.test.*` or `dd-trace-tm-attempt-to-fix*.spec.*`
+
 After Step 7e restore, the temporary EFD test file must be gone and the flaky edit must be gone
 from the known test file. Existing unrelated dirty files in the repository must remain untouched.
+After each Step 8 restore, the generated Test Management test file and marker file must be gone.
 
 After helper restore, these temporary source-edit state files must be absent:
 
@@ -1614,6 +1681,8 @@ These diagnostic artifacts may remain after helper restore:
 - `dd-test-optimization-basic/`
 - `dd-test-optimization-efd/`
 - root `dd-test-optimization-*` report, intake, command, output, and summary files
+- `dd-test-optimization-tm-*/` subcheck report directories
+- `dd-test-optimization-test-management/` response, identity, and snippet files
 
 ### 7. Test Early Flake Detection and Auto Test Retries
 
@@ -1632,7 +1701,7 @@ advanced-check baseline.
 7a. Run the first baseline run in its own artifact directory and extract known tests:
 
 Required: use `--out-dir "$BASIC_DIR"` to avoid overwriting root artifacts. It prevents the
-baseline advanced-check run from overwriting the root wrapper artifacts used for Step 8.
+baseline advanced-check run from overwriting the root wrapper artifacts used for Step 9.
 Use the top-level loopback prerequisite if the wrapper fails with `listen EPERM 127.0.0.1`.
 
 Verbatim:
@@ -2053,7 +2122,7 @@ if (report.summary.efd.knownTestsReceived === 0) {
   process.exit(1)
 }
 if (report.summary.efd.retriedNewTests === 0) {
-  console.error("No new test was retried by EFD.")
+  console.error(`No new test was retried by EFD. ${report.summary.efd.execution?.diagnosis || ""}`.trim())
   process.exit(1)
 }
 const expectedEfdName = readOptional("dd-test-optimization-efd-test-name.txt")
@@ -2087,6 +2156,7 @@ if (!hasExpectedName(report.summary.atr.failedThenPassedRetryTestNames, expected
   process.exit(1)
 }
 console.log(`EFD retried new tests: ${report.summary.efd.retriedNewTests}`)
+console.log(`EFD execution diagnosis: ${report.summary.efd.execution?.diagnosis || "n/a"}`)
 console.log(`Retried new test names: ${report.summary.efd.retriedNewTestNames.join(", ")}`)
 console.log(`Auto Test Retries flaky tests reported: ${report.summary.atr.failedThenPassedRetryTests}`)
 console.log(`Auto Test Retries flaky test names: ${report.summary.atr.failedThenPassedRetryTestNames.join(", ")}`)
@@ -2162,12 +2232,199 @@ fi
 git status --short
 ```
 
-### 8. Report back
+### 8. Test Test Management
+
+Run this step after the basic reporting result is `Reporting complete`. Test Management is three
+independent subchecks. Do not combine them unless every result can be attributed to one calibrated
+test identity.
+
+Subcheck map:
+
+| Subcheck | Helper mode | Wrapper settings mode | Expected selected test behavior |
+| --- | --- | --- | --- |
+| Disabled | `disabled` | `tm-disabled` | test would fail if executed; command exit code recorded by wrapper must be `0` |
+| Quarantined | `quarantined` | `tm-quarantined` | test runs and reports a failed span; command exit code recorded by wrapper must be `0` |
+| Attempt-to-fix | `attempt-to-fix` | `tm-attempt-to-fix` | first execution passes, retry fails with `test.retry_reason=attempt_to_fix`; command exit code recorded by wrapper must be non-zero |
+
+The `tm-disabled`, `tm-quarantined`, and `tm-attempt-to-fix` settings modes keep EFD and Auto Test
+Retries disabled. Use `tm-attempt-to-fix-priority` only for an optional interaction check after the
+base attempt-to-fix subcheck passes.
+
+For each subcheck:
+
+1. Generate one temporary test file in a selected test directory.
+2. Run a baseline command with `DD_TEST_OPTIMIZATION_TM_BASELINE=1` so the generated test passes
+   and the intake captures the exact emitted identity.
+3. Build the Test Management properties response from the baseline artifact.
+4. Run the generated test again with the matching `tm-*` settings mode and the calibrated response.
+5. Restore generated source and marker files before moving to the next subcheck.
+
+8a. Fill one subcheck plan.
+
+Adapt:
+
+```bash
+TM_MODE='FILL_IN' # disabled, quarantined, or attempt-to-fix
+TM_SETTINGS_MODE='FILL_IN' # tm-disabled, tm-quarantined, or tm-attempt-to-fix
+TM_FRAMEWORK='FILL_IN' # mocha, jest, or vitest when using the helper
+TM_TEST_FILE='FILL_IN' # generated file path, for example: test/dd-trace-tm-disabled.spec.js
+TM_TEST_COMMAND='FILL_IN' # command that runs only the generated file
+
+if [ "$TM_MODE" = 'FILL_IN' ] || [ "$TM_SETTINGS_MODE" = 'FILL_IN' ] || \
+  [ "$TM_FRAMEWORK" = 'FILL_IN' ] || [ "$TM_TEST_FILE" = 'FILL_IN' ] || \
+  [ "$TM_TEST_COMMAND" = 'FILL_IN' ]; then
+  echo "Replace every FILL_IN value before continuing." >&2
+  exit 1
+fi
+
+printf '%s\n' "$TM_TEST_COMMAND" > "dd-test-optimization-tm-${TM_MODE}-command.txt"
+printf '%s\n' "$TM_MODE" > dd-test-optimization-tm-mode.txt
+printf '%s\n' "$TM_SETTINGS_MODE" > dd-test-optimization-tm-settings-mode.txt
+printf '%s\n' "$TM_FRAMEWORK" > dd-test-optimization-tm-framework.txt
+printf '%s\n' "$TM_TEST_FILE" > dd-test-optimization-tm-test-file.txt
+printf '%s\n' "$TM_TEST_COMMAND" > dd-test-optimization-tm-test-command.txt
+export TM_MODE TM_SETTINGS_MODE TM_FRAMEWORK TM_TEST_FILE TM_TEST_COMMAND
+```
+
+Command selection rules:
+
+- Prefer a generated sibling test file under the same directory as the selected basic-reporting test.
+- Prefer `npm test -- "$TM_TEST_FILE"` when `scripts.test` is a direct runner command that accepts
+  file arguments.
+- Use `./node_modules/.bin/<runner> "$TM_TEST_FILE"` when `scripts.test` is absent or cannot accept
+  a direct file argument.
+- Do not edit an existing customer test for these subchecks unless generated tests cannot work.
+
+8b. Create, baseline-calibrate, run, validate, and restore one subcheck.
+
+Verbatim:
+
+```bash
+set -e
+
+TM_MODE="$(cat dd-test-optimization-tm-mode.txt)"
+TM_SETTINGS_MODE="$(cat dd-test-optimization-tm-settings-mode.txt)"
+TM_FRAMEWORK="$(cat dd-test-optimization-tm-framework.txt)"
+TM_TEST_FILE="$(cat dd-test-optimization-tm-test-file.txt)"
+TM_TEST_COMMAND="$(cat dd-test-optimization-tm-test-command.txt)"
+
+cleanup_tm () {
+  node ./node_modules/dd-trace/ci/test-optimization-prepare-test-management.js --restore >/dev/null 2>&1 || true
+}
+trap cleanup_tm EXIT
+
+node ./node_modules/dd-trace/ci/test-optimization-prepare-test-management.js \
+  --create \
+  --mode "$TM_MODE" \
+  --framework "$TM_FRAMEWORK" \
+  --test-file "$TM_TEST_FILE"
+
+TM_BASELINE_DIR="dd-test-optimization-tm-${TM_MODE}-baseline"
+TM_RESULT_DIR="dd-test-optimization-tm-${TM_MODE}"
+TM_BASELINE_COMMAND="DD_TEST_OPTIMIZATION_TM_BASELINE=1 $TM_TEST_COMMAND"
+
+node ./node_modules/dd-trace/ci/test-optimization-debug.js \
+  --test-command "$TM_BASELINE_COMMAND" \
+  --settings-mode basic-reporting \
+  --out-dir "$TM_BASELINE_DIR" \
+  --no-open
+
+node ./node_modules/dd-trace/ci/test-optimization-prepare-test-management.js \
+  --response \
+  --mode "$TM_MODE" \
+  --baseline-intake "$TM_BASELINE_DIR/dd-test-optimization-intake.json" \
+  --out "$TM_RESULT_DIR/test-management-tests.json" \
+  --identity-out "$TM_RESULT_DIR/test-management-identity.json"
+
+node ./node_modules/dd-trace/ci/test-optimization-debug.js \
+  --test-command "$TM_TEST_COMMAND" \
+  --settings-mode "$TM_SETTINGS_MODE" \
+  --test-management-tests "$TM_RESULT_DIR/test-management-tests.json" \
+  --out-dir "$TM_RESULT_DIR" \
+  --no-open
+
+export TM_MODE
+
+node -e '
+const fs = require("node:fs")
+
+const mode = process.env.TM_MODE
+const dir = `dd-test-optimization-tm-${mode}`
+const report = JSON.parse(fs.readFileSync(`${dir}/dd-test-optimization-agent-report.json`, "utf8"))
+const exitCode = fs.readFileSync(`${dir}/dd-test-optimization-test-exit-code.txt`, "utf8").trim()
+const tm = report.summary.tm
+const expected = mode === "attempt-to-fix" ? "attemptToFix" : mode
+const subcheck = tm[expected]
+
+function fail (message) {
+  console.error(message)
+  process.exit(1)
+}
+
+if (!tm.settingsEnabled) fail("Test Management settings were not enabled.")
+if (!tm.propertiesEndpointCalled) fail("Test Management properties endpoint was not called.")
+if (tm.returnedProperties === 0) fail("Test Management properties response was empty.")
+if (tm.unmatchedPropertyIdentities.length > 0) {
+  fail(`Test Management properties did not match emitted identities: ${tm.unmatchedPropertyIdentities.join(", ")}`)
+}
+if (!subcheck || subcheck.status !== "passed") {
+  fail(`Test Management ${mode} subcheck failed: ${subcheck?.reason || "missing subcheck"}`)
+}
+if ((mode === "disabled" || mode === "quarantined") && exitCode !== "0") {
+  fail(`Expected ${mode} command exit code 0, got ${exitCode}.`)
+}
+if (mode === "attempt-to-fix" && exitCode === "0") {
+  fail("Expected attempt-to-fix command exit code to be non-zero.")
+}
+if (mode === "attempt-to-fix" && subcheck.badRetryReasons.length > 0) {
+  fail(`Attempt-to-fix used unexpected retry reasons: ${subcheck.badRetryReasons.join(", ")}`)
+}
+
+console.log(`Test Management ${mode}: passed`)
+console.log(`Managed identities: ${subcheck.identities.join(", ") || "none"}`)
+console.log(`Observed statuses: ${subcheck.observedStatuses.join(", ") || "none"}`)
+console.log(`Observed final statuses: ${subcheck.observedFinalStatuses.join(", ") || "none"}`)
+console.log(`Observed retry reasons: ${subcheck.observedRetryReasons.join(", ") || "none"}`)
+console.log(`Command exit code: ${exitCode}`)
+'
+
+node ./node_modules/dd-trace/ci/test-optimization-prepare-test-management.js --restore
+trap - EXIT
+```
+
+Do not hand-write the Test Management identity. The helper reads the framework, suite, and test
+name from the baseline intake artifact and writes the response expected by
+`/api/v2/test/libraries/test-management/tests`.
+
+If baseline calibration, the managed run, or validation fails, the `EXIT` trap still runs the helper
+restore. After any failure, run the restore command again and report whether cleanup succeeded:
+
+```bash
+node ./node_modules/dd-trace/ci/test-optimization-prepare-test-management.js --restore
+git status --short
+```
+
+Repeat Step 8a-8b for `disabled`, `quarantined`, and `attempt-to-fix`. The three result directories
+must be:
+
+- `dd-test-optimization-tm-disabled/`
+- `dd-test-optimization-tm-quarantined/`
+- `dd-test-optimization-tm-attempt-to-fix/`
+
+Optional priority interaction check:
+
+- Reuse the attempt-to-fix candidate flow.
+- Use `TM_SETTINGS_MODE='tm-attempt-to-fix-priority'`.
+- Use a separate result directory if running manually.
+- Verify retry reasons remain exactly `attempt_to_fix`, not `auto_test_retry` or
+  `early_flake_detection`.
+
+### 9. Report back
 
 If the wrapper path was used, read the root `dd-test-optimization-summary.txt` first for the basic
 reporting result and use `dd-test-optimization-final-report.txt` for the required validation paths
 and artifact paths. The root compact summary describes only the root/basic wrapper run. After Step
-7, advanced EFD and Auto Test Retries status must come from the Step 8 extractor or
+7, advanced EFD and Auto Test Retries status must come from the Step 9 extractor or
 `dd-test-optimization-efd/dd-test-optimization-final-report.txt`, not from the root compact
 summary. If manual Steps 3-6 were used, include the Step 6c stdout report or the compact summary,
 then copy the required validation path lines from the final report. Do not `cat`
@@ -2220,6 +2477,9 @@ function readFinalReportLine (prefix) {
 
 const basic = readJson("dd-test-optimization-agent-report.json", {})
 const efd = readJson("dd-test-optimization-efd/dd-test-optimization-agent-report.json", {})
+const tmDisabled = readJson("dd-test-optimization-tm-disabled/dd-test-optimization-agent-report.json", {})
+const tmQuarantined = readJson("dd-test-optimization-tm-quarantined/dd-test-optimization-agent-report.json", {})
+const tmAttemptToFix = readJson("dd-test-optimization-tm-attempt-to-fix/dd-test-optimization-agent-report.json", {})
 const staticReport = readJson("dd-test-optimization-static.json", { results: [] })
 const staticFindings = (staticReport.results || [])
   .filter(result => result.status === "error" || result.status === "warning")
@@ -2233,6 +2493,24 @@ const eventLevels =
   `modules=${countEvent(basic, "test_module_end")}, ` +
   `suites=${countEvent(basic, "test_suite_end")}, ` +
   `tests=${countEvent(basic, "test")}`
+
+function getTmStatus (report, exitCode, key, expectedExitCode) {
+  if (!report.primaryStage) return "not run"
+  const subcheck = report.summary?.tm?.[key]
+  if (!subcheck || subcheck.status !== "passed") return `failed: ${subcheck?.reason || "missing subcheck"}`
+  if (expectedExitCode === "non-zero") return exitCode !== "0" ? "passed" : "failed: expected non-zero exit"
+  return exitCode === expectedExitCode ? "passed" : `failed: expected exit ${expectedExitCode}, got ${exitCode}`
+}
+
+function getTmLine (report, key, field) {
+  const value = report.summary?.tm?.[key]?.[field]
+  if (Array.isArray(value)) return value.join(", ") || "none"
+  return value ?? "n/a"
+}
+
+const tmDisabledExit = readText("dd-test-optimization-tm-disabled/dd-test-optimization-test-exit-code.txt", "n/a")
+const tmQuarantinedExit = readText("dd-test-optimization-tm-quarantined/dd-test-optimization-test-exit-code.txt", "n/a")
+const tmAttemptToFixExit = readText("dd-test-optimization-tm-attempt-to-fix/dd-test-optimization-test-exit-code.txt", "n/a")
 
 console.log(`HTML report: ${readText("dd-intake-html-file-url.txt", readFinalReportLine("HTML report:"))}`)
 console.log(`HTML report path: ${readText("dd-intake-html-path.txt", readFinalReportLine("HTML report path:"))}`)
@@ -2253,12 +2531,26 @@ console.log(`EFD known tests received: ${efd.summary?.efd?.knownTestsReceived ??
 console.log(`EFD retried new tests: ${efd.summary?.efd?.retriedNewTests ?? "n/a"}`)
 console.log(`EFD distinct retried new test names: ${new Set(retriedNewTestNames).size}`)
 console.log(`EFD retried new test names: ${retriedNewTestNames.join(", ") || "none"}`)
+console.log(`EFD execution diagnosis: ${efd.summary?.efd?.execution?.diagnosis || "n/a"}`)
 console.log(`Auto Test Retries status: ${efd.summary?.atr?.failedThenPassedRetryTests > 0 ? "passed" : efd.primaryStage ? "failed" : "not run"}`)
 console.log(`Auto Test Retries failed executions: ${efd.summary?.atr?.failedExecutions ?? "n/a"}`)
 console.log(`Auto Test Retries passed executions: ${efd.summary?.atr?.passedExecutions ?? "n/a"}`)
 console.log(`Auto Test Retries passed retry executions: ${efd.summary?.atr?.passedRetryTests ?? "n/a"}`)
 console.log(`Auto Test Retries flaky tests reported: ${efd.summary?.atr?.failedThenPassedRetryTests ?? "n/a"}`)
 console.log(`Auto Test Retries flaky test names: ${(efd.summary?.atr?.failedThenPassedRetryTestNames || []).join(", ") || "none"}`)
+console.log(`Test Management disabled validation: ${readReportLine("dd-test-optimization-tm-disabled/dd-test-optimization-final-report.txt", "Datadog validation:")}`)
+console.log(`Test Management disabled status: ${getTmStatus(tmDisabled, tmDisabledExit, "disabled", "0")}`)
+console.log(`Test Management disabled identities: ${getTmLine(tmDisabled, "disabled", "identities")}`)
+console.log(`Test Management disabled exit code: ${tmDisabledExit}`)
+console.log(`Test Management quarantined validation: ${readReportLine("dd-test-optimization-tm-quarantined/dd-test-optimization-final-report.txt", "Datadog validation:")}`)
+console.log(`Test Management quarantined status: ${getTmStatus(tmQuarantined, tmQuarantinedExit, "quarantined", "0")}`)
+console.log(`Test Management quarantined identities: ${getTmLine(tmQuarantined, "quarantined", "identities")}`)
+console.log(`Test Management quarantined exit code: ${tmQuarantinedExit}`)
+console.log(`Test Management attempt-to-fix validation: ${readReportLine("dd-test-optimization-tm-attempt-to-fix/dd-test-optimization-final-report.txt", "Datadog validation:")}`)
+console.log(`Test Management attempt-to-fix status: ${getTmStatus(tmAttemptToFix, tmAttemptToFixExit, "attemptToFix", "non-zero")}`)
+console.log(`Test Management attempt-to-fix identities: ${getTmLine(tmAttemptToFix, "attemptToFix", "identities")}`)
+console.log(`Test Management attempt-to-fix retry reasons: ${getTmLine(tmAttemptToFix, "attemptToFix", "observedRetryReasons")}`)
+console.log(`Test Management attempt-to-fix exit code: ${tmAttemptToFixExit}`)
 console.log(`Static warnings/errors: ${staticFindings.join("; ") || "none"}`)
 '
 ```
@@ -2272,13 +2564,15 @@ The final response must include:
 - HTML report `file://` URL and absolute path.
 - Datadog validation relative path.
 - Advanced Datadog validation relative path when Step 7 ran.
+- Test Management validation relative paths when Step 8 ran.
 - Final report path and compact summary path.
 - Feedback summary path when the feedback extractor was run.
 - Selected test command and test result.
 - EFD check result when Step 7 ran, including known tests count, retried new test execution count,
-  and distinct retried new test name count.
+  distinct retried new test name count, and EFD execution diagnosis.
 - Auto Test Retries check result when Step 7 ran, including failing executions, passing
   executions, and passing retry executions.
+- Test Management disabled, quarantined, and attempt-to-fix results when Step 8 ran.
 - The diagnostic question answers with each question text inline.
 - Static warnings and errors.
 - Recommended next actions.
@@ -2286,7 +2580,7 @@ The final response must include:
 
 Reference-only feedback extractor: use Step 2 and Step 3 in `Runbook Feedback Mode: Exact Path`
 for feedback-mode execution. This section is retained only to show the equivalent
-renderer command near the customer-facing Step 8 material. Do not run it after the top-level F9
+renderer command near the customer-facing Step 9 material. Do not run it after the top-level F9
 block has already been run.
 
 Write actionable feedback text before running the extractor. Use `No actionable feedback.` when
@@ -2328,6 +2622,9 @@ HTML report: file:///absolute/path/to/dd-test-optimization-report.html
 HTML report path: /absolute/path/to/dd-test-optimization-report.html
 Datadog validation: ci/test/validation#pako:{payload}
 Advanced Datadog validation: ci/test/validation#pako:{payload}
+Test Management disabled validation: ci/test/validation#pako:{payload}
+Test Management quarantined validation: ci/test/validation#pako:{payload}
+Test Management attempt-to-fix validation: ci/test/validation#pako:{payload}
 Final report path: /absolute/path/to/dd-test-optimization-final-report.txt
 Compact summary path: /absolute/path/to/dd-test-optimization-summary.txt
 Feedback summary path: /absolute/path/to/dd-test-optimization-feedback-summary.txt
@@ -2362,6 +2659,18 @@ Passing retry executions: {count}
 Flaky tests reported: {count}
 Flaky test names: {names or none}
 
+Test Management check:
+Disabled status: {not run | skipped: reason | passed | failed}
+Disabled identities: {identities or none}
+Disabled exit code: {code}
+Quarantined status: {not run | skipped: reason | passed | failed}
+Quarantined identities: {identities or none}
+Quarantined exit code: {code}
+Attempt-to-fix status: {not run | skipped: reason | passed | failed}
+Attempt-to-fix identities: {identities or none}
+Attempt-to-fix retry reasons: {reasons or none}
+Attempt-to-fix exit code: {code}
+
 Diagnostic answers:
 - Is dd-trace installed and statically configured in a supported way? {answer}
 - Does dd-trace/ci/init reach the test process through NODE_OPTIONS? {answer}
@@ -2369,6 +2678,7 @@ Diagnostic answers:
 - If data is reported, does it include session, module, suite, and test events? {answer}
 - Does EFD fetch known tests, mark a new test, and retry it? {answer}
 - Does Auto Test Retries retry a failing known test and report retry tags? {answer}
+- Does Test Management apply disabled, quarantined, and attempt-to-fix properties? {answer}
 
 Static warnings/errors:
 - {finding}
@@ -2382,6 +2692,8 @@ Notable execution cases:
 Cleanup confirmation:
 - Temporary EFD test removed: {yes | not created | no, explain}
 - Temporary Auto Test Retries edit restored: {yes | not created | no, explain}
+- Temporary Test Management tests removed: {yes | not created | no, explain}
+- Temporary Test Management marker files removed: {yes | not created | no, explain}
 ```
 
 ## Decision Tree

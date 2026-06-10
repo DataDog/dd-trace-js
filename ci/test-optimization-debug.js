@@ -25,11 +25,13 @@ const {
   restoreAdvancedChecks,
 } = require('./test-optimization-prepare-advanced')
 const {
+  getEfdExecutionDiagnostics,
   renderFinalReport,
   renderSummaryReport,
 } = require('./test-optimization-render-report')
 const {
   normalizeKnownTests,
+  normalizeTestManagementTests,
   startIntake,
   stopIntake,
 } = require('./test-optimization-intake')
@@ -111,6 +113,12 @@ function parseArgs (args) {
       options.knownTests = normalizeKnownTests(readJsonFile(args[++i]))
     } else if (arg.startsWith('--known-tests=')) {
       options.knownTests = normalizeKnownTests(readJsonFile(arg.slice('--known-tests='.length)))
+    } else if (arg === '--test-management-tests') {
+      options.testManagementTests = normalizeTestManagementTests(readJsonFile(args[++i]))
+    } else if (arg.startsWith('--test-management-tests=')) {
+      options.testManagementTests = normalizeTestManagementTests(
+        readJsonFile(arg.slice('--test-management-tests='.length))
+      )
     } else if (arg === '--new-test-snippet-file') {
       options.newTestSnippetFile = args[++i]
     } else if (arg.startsWith('--new-test-snippet-file=')) {
@@ -154,8 +162,9 @@ function getHelpText () {
     '  --service <name>          DD_SERVICE value for the debug run. Defaults to dd-test-optimization-debug.',
     '  --out-dir <dir>           Artifact directory. Defaults to the current directory.',
     '  --ready-timeout-ms <ms>   Time to wait for the fake intake /health endpoint. Defaults to 5000.',
-    '  --settings-mode <mode>    Fake settings mode: basic-reporting, atr, efd, or debug-all.',
+    '  --settings-mode <mode>    Fake settings mode: basic-reporting, atr, efd, debug-all, or tm-*.',
     '  --known-tests <file>      Known tests JSON to return for EFD/debug runs.',
+    '  --test-management-tests <file>  Test Management modules JSON to return for tm-* runs.',
     '  --new-test-snippet-file <file>  Temporary test snippet used for EFD.',
     '  --flaky-test-snippet-file <file>  Temporary flaky test snippet used for Auto Test Retries.',
     '  --no-clean                Keep prior debug artifacts before running.',
@@ -202,6 +211,7 @@ function runDebug (options, callback) {
     out: artifacts.intake,
     html: artifacts.html,
     settingsMode: options.settingsMode,
+    testManagementTests: options.testManagementTests,
   }, (startError, intake) => {
     if (startError) {
       callback(startError)
@@ -233,6 +243,17 @@ function runDebug (options, callback) {
         stopIntake(intake, () => {
           const intakeArtifact = JSON.parse(fs.readFileSync(artifacts.intake, 'utf8'))
           const analysis = analyzeIntakeArtifact(intakeArtifact)
+          const newTestSnippet = readOptionalTextFile(options.newTestSnippetFile)
+          const newTestFile = readOptionalTextFile('dd-test-optimization-efd-temp-test-file.txt')
+          const efdExecution = getEfdExecutionDiagnostics(analysis, {
+            newTestFile,
+            newTestSnippet,
+            testCommand,
+            testOutput: output,
+          })
+
+          if (efdExecution) analysis.summary.efd.execution = efdExecution
+
           const openAttempt = options.open ? openHtmlReport(analysis) : undefined
           let analyzerText = renderAnalysisText(analysis)
 
@@ -256,8 +277,10 @@ function runDebug (options, callback) {
             static: artifacts.static,
             testCommandFile: artifacts.testCommand,
             testExitCodeFile: artifacts.testExitCode,
+            testOutputFile: artifacts.testOutput,
             testResultFile: artifacts.testResult,
             flakyTestSnippetFile: options.flakyTestSnippetFile,
+            newTestFile,
             newTestSnippetFile: options.newTestSnippetFile,
           }
           const finalReport = renderFinalReport(reportOptions)
@@ -523,7 +546,10 @@ function assertAdvancedFeedbackEvidence () {
   assertFeedbackEvidence(report.summary.efd.settingsEnabled, 'EFD settings were not enabled.')
   assertFeedbackEvidence(report.summary.efd.requested, 'Known tests were not requested.')
   assertFeedbackEvidence(report.summary.efd.knownTestsReceived > 0, 'Known tests response was empty.')
-  assertFeedbackEvidence(report.summary.efd.retriedNewTests > 0, 'No new test was retried by EFD.')
+  assertFeedbackEvidence(
+    report.summary.efd.retriedNewTests > 0,
+    `No new test was retried by EFD. ${report.summary.efd.execution?.diagnosis || ''}`.trim()
+  )
   assertFeedbackEvidence(report.summary.atr.settingsEnabled, 'Auto Test Retries settings were not enabled.')
   assertFeedbackEvidence(report.summary.atr.failedExecutions > 0, 'No failing execution was reported.')
   assertFeedbackEvidence(report.summary.atr.passedExecutions > 0, 'No passing execution was reported.')
@@ -591,6 +617,22 @@ function readTextValue (value, file, name) {
  */
 function readJsonFile (file) {
   return JSON.parse(fs.readFileSync(path.resolve(file), 'utf8'))
+}
+
+/**
+ * Reads an optional text file.
+ *
+ * @param {string|undefined} file text file path
+ * @returns {string} file text or empty string
+ */
+function readOptionalTextFile (file) {
+  if (!file) return ''
+
+  try {
+    return fs.readFileSync(path.resolve(file), 'utf8').trim()
+  } catch {
+    return ''
+  }
 }
 
 /**
@@ -764,12 +806,46 @@ function getTestEnv (options, intake, staticReport) {
  */
 function getNodeOptions (staticReport, testCommand) {
   const existing = process.env.NODE_OPTIONS ? `${process.env.NODE_OPTIONS} ` : ''
+  const usesPnp = hasPnpConfig(existing)
+  const pnpPreload = getPnpPreload(existing)
+  const ciInitPreload = usesPnp ? `-r ${path.resolve(__dirname, 'init.js')}` : '-r dd-trace/ci/init'
 
   if (isVitestRun(staticReport, testCommand)) {
-    return `${existing}--import dd-trace/register.js -r dd-trace/ci/init`
+    const registerImport = usesPnp
+      ? `--import ${path.resolve(__dirname, '..', 'register.js')}`
+      : '--import dd-trace/register.js'
+
+    return `${existing}${pnpPreload}${registerImport} ${ciInitPreload}`
   }
 
-  return `${existing}-r dd-trace/ci/init`
+  return `${existing}${pnpPreload}${ciInitPreload}`
+}
+
+/**
+ * Checks whether the repository uses Yarn PnP.
+ *
+ * @param {string} existing existing NODE_OPTIONS value with trailing space when present
+ * @returns {boolean} whether Yarn PnP appears to be active
+ */
+function hasPnpConfig (existing) {
+  return fs.existsSync(path.resolve('.pnp.cjs')) ||
+    existing.includes('.pnp.cjs') ||
+    existing.includes('.pnp.loader.mjs')
+}
+
+/**
+ * Gets the Yarn PnP preload when the repository uses .pnp.cjs.
+ *
+ * @param {string} existing existing NODE_OPTIONS value with trailing space when present
+ * @returns {string} NODE_OPTIONS fragment
+ */
+function getPnpPreload (existing) {
+  const pnpPath = path.resolve('.pnp.cjs')
+
+  if (!fs.existsSync(pnpPath)) return ''
+  if (existing.includes('.pnp.cjs')) return ''
+
+  return `-r ${pnpPath} `
 }
 
 /**

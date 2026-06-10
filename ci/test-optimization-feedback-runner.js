@@ -129,6 +129,7 @@ function runFeedbackRunner (options, callback) {
     restoreAdvancedChecks()
     capturePreexistingStatus()
     cleanArtifacts()
+    printFreshRunStatus()
     printDiscovery()
     writeSelectedCommand(options)
   } catch (error) {
@@ -152,6 +153,17 @@ function runFeedbackRunner (options, callback) {
 
     callback()
   })
+}
+
+/**
+ * Prints a machine-readable marker after prior diagnostic artifacts are removed.
+ */
+function printFreshRunStatus () {
+  console.log(`Feedback driver status: ${JSON.stringify({
+    fresh: true,
+    artifactsCleaned: true,
+    startedAt: new Date().toISOString(),
+  })}`)
 }
 
 /**
@@ -265,6 +277,8 @@ function getRelevantDependencies (dependencies) {
  * @param {object} options runner options
  */
 function writeSelectedCommand (options) {
+  console.log('Selecting clean test command...')
+
   const selection = selectTestCommand({ framework: options.framework })
 
   writeSelection({
@@ -380,14 +394,14 @@ function verifyPostRunCleanup () {
  */
 function printCompactStatus () {
   const root = readJson('dd-test-optimization-agent-report.json')
-  const advanced = readJson(path.join('dd-test-optimization-efd', 'dd-test-optimization-agent-report.json'))
+  const advanced = readOptionalJson(path.join('dd-test-optimization-efd', 'dd-test-optimization-agent-report.json'))
 
   console.log(`Root wrapper stage: ${root.primaryStage || 'unknown'}`)
   console.log(`Root requests: ${root.summary?.requestCount ?? 'unknown'}`)
-  console.log(`Advanced checks: ${advanced.primaryStage || 'unknown'}`)
-  console.log(`EFD retried new tests: ${advanced.summary?.efd?.retriedNewTests ?? 'unknown'}`)
+  console.log(`Advanced checks: ${advanced?.primaryStage || 'not run'}`)
+  console.log(`EFD retried new tests: ${advanced?.summary?.efd?.retriedNewTests ?? 'n/a'}`)
   console.log(
-    `Auto Test Retries flaky tests reported: ${advanced.summary?.atr?.failedThenPassedRetryTests ?? 'unknown'}`
+    `Auto Test Retries flaky tests reported: ${advanced?.summary?.atr?.failedThenPassedRetryTests ?? 'n/a'}`
   )
   console.log(`Wrapper log: ${path.resolve(FEEDBACK_WRAPPER_LOG)}`)
   console.log('Write dd-test-optimization-actionable-feedback.txt, then run F9.')
@@ -457,6 +471,18 @@ function readOptionalText (file) {
  */
 function readJson (file) {
   return JSON.parse(fs.readFileSync(path.resolve(file), 'utf8'))
+}
+
+/**
+ * Reads optional JSON.
+ *
+ * @param {string} file file path
+ * @returns {object|undefined} parsed JSON when present
+ */
+function readOptionalJson (file) {
+  try {
+    return readJson(file)
+  } catch {}
 }
 
 if (require.main === module) {
