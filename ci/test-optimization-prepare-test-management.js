@@ -8,15 +8,32 @@ const path = require('node:path')
 const {
   buildTestManagementTestsFromArtifact,
 } = require('./test-optimization-intake-analysis')
+const {
+  addTestFileToCommand,
+} = require('./test-optimization-prepare-advanced')
 
 const DEFAULT_ARTIFACT_DIR = 'dd-test-optimization-test-management'
 const DEFAULT_IDENTITY_FILE = path.join(DEFAULT_ARTIFACT_DIR, 'identity.json')
+const DEFAULT_KNOWN_TESTS_FILE = 'dd-test-optimization-known-tests.json'
 const DEFAULT_MARKER_FILE = path.join(DEFAULT_ARTIFACT_DIR, 'attempt-to-fix-marker')
 const DEFAULT_RESPONSE_FILE = path.join(DEFAULT_ARTIFACT_DIR, 'test-management-tests.json')
 const DEFAULT_SNIPPET_FILE = path.join(DEFAULT_ARTIFACT_DIR, 'candidate-snippet.txt')
+const DEFAULT_TEST_COMMAND_FILE = 'dd-test-optimization-test-command.txt'
 const GENERATED_FILES_STATE = path.join(DEFAULT_ARTIFACT_DIR, 'generated-files.txt')
 const MARKER_FILES_STATE = path.join(DEFAULT_ARTIFACT_DIR, 'marker-files.txt')
 const MODES = new Set(['disabled', 'quarantined', 'attempt-to-fix'])
+const SETTINGS_MODES = {
+  'attempt-to-fix': 'tm-attempt-to-fix',
+  disabled: 'tm-disabled',
+  quarantined: 'tm-quarantined',
+}
+const STATE_FILES = {
+  framework: 'dd-test-optimization-tm-framework.txt',
+  mode: 'dd-test-optimization-tm-mode.txt',
+  settingsMode: 'dd-test-optimization-tm-settings-mode.txt',
+  testCommand: 'dd-test-optimization-tm-test-command.txt',
+  testFile: 'dd-test-optimization-tm-test-file.txt',
+}
 const TEST_NAMES = {
   disabled: 'dd trace test management disabled candidate',
   quarantined: 'dd trace test management quarantined candidate',
@@ -47,14 +64,20 @@ function parseArgs (args) {
       options.response = true
     } else if (arg === '--restore') {
       options.restore = true
+    } else if (arg === '--auto') {
+      options.auto = true
+    } else if (arg === '--dry-run') {
+      options.dryRun = true
     } else if (arg === '--mode') {
       options.mode = args[++i]
     } else if (arg.startsWith('--mode=')) {
       options.mode = arg.slice('--mode='.length)
     } else if (arg === '--framework') {
       options.framework = args[++i]
+      options.frameworkExplicit = true
     } else if (arg.startsWith('--framework=')) {
       options.framework = arg.slice('--framework='.length)
+      options.frameworkExplicit = true
     } else if (arg === '--test-file') {
       options.testFile = args[++i]
     } else if (arg.startsWith('--test-file=')) {
@@ -63,6 +86,22 @@ function parseArgs (args) {
       options.testName = args[++i]
     } else if (arg.startsWith('--test-name=')) {
       options.testName = arg.slice('--test-name='.length)
+    } else if (arg === '--test-command') {
+      options.testCommand = args[++i]
+    } else if (arg.startsWith('--test-command=')) {
+      options.testCommand = arg.slice('--test-command='.length)
+    } else if (arg === '--test-command-file') {
+      options.testCommandFile = args[++i]
+    } else if (arg.startsWith('--test-command-file=')) {
+      options.testCommandFile = arg.slice('--test-command-file='.length)
+    } else if (arg === '--known-tests-file') {
+      options.knownTestsFile = args[++i]
+    } else if (arg.startsWith('--known-tests-file=')) {
+      options.knownTestsFile = arg.slice('--known-tests-file='.length)
+    } else if (arg === '--settings-mode') {
+      options.settingsMode = args[++i]
+    } else if (arg.startsWith('--settings-mode=')) {
+      options.settingsMode = arg.slice('--settings-mode='.length)
     } else if (arg === '--baseline-intake') {
       options.baselineIntake = args[++i]
     } else if (arg.startsWith('--baseline-intake=')) {
@@ -101,6 +140,7 @@ function parseArgs (args) {
 function getHelpText () {
   return [
     'Usage:',
+    '  dd-trace TM helper --auto --mode <disabled|quarantined|attempt-to-fix>',
     '  dd-trace TM helper --create --mode <disabled|quarantined|attempt-to-fix> ' +
       '--framework <mocha|jest|vitest> --test-file <file>',
     '  dd-trace TM helper --response --mode <disabled|quarantined|attempt-to-fix> ' +
@@ -108,6 +148,9 @@ function getHelpText () {
     '  dd-trace TM helper --restore',
     '',
     'Creates temporary Test Management candidate tests and builds calibrated modules JSON from a baseline run.',
+    '',
+    'Use --auto to infer state files from dd-test-optimization-known-tests.json and the selected command.',
+    'Use --dry-run with --auto to print the inferred state without writing files.',
     '',
     'Run generated tests once with DD_TEST_OPTIMIZATION_TM_BASELINE=1 before building the response.',
   ].join('\n')
@@ -186,6 +229,68 @@ function buildTestManagementResponse (options) {
 }
 
 /**
+ * Writes inferred state files for one Test Management subcheck.
+ *
+ * @param {object} options helper options
+ */
+function writeAutoTestManagementPlan (options) {
+  const plan = inferTestManagementPlan(options)
+
+  fs.writeFileSync(getModeCommandFile(plan.mode), `${plan.testCommand}\n`)
+  fs.writeFileSync(STATE_FILES.mode, `${plan.mode}\n`)
+  fs.writeFileSync(STATE_FILES.settingsMode, `${plan.settingsMode}\n`)
+  fs.writeFileSync(STATE_FILES.framework, `${plan.framework}\n`)
+  fs.writeFileSync(STATE_FILES.testFile, `${plan.testFile}\n`)
+  fs.writeFileSync(STATE_FILES.testCommand, `${plan.testCommand}\n`)
+
+  printAutoTestManagementPlan(plan)
+  console.log('Test Management helper state files written.')
+}
+
+/**
+ * Prints inferred state files for one Test Management subcheck without writing files.
+ *
+ * @param {object} options helper options
+ */
+function dryRunAutoTestManagementPlan (options) {
+  const plan = inferTestManagementPlan(options)
+
+  printAutoTestManagementPlan(plan)
+  console.log('No files written.')
+}
+
+/**
+ * Infers the state needed by Step 8 from prior runbook artifacts.
+ *
+ * @param {object} options helper options
+ * @returns {object} inferred plan
+ */
+function inferTestManagementPlan (options) {
+  validateMode(options.mode)
+
+  const knownTestsFile = options.knownTestsFile || DEFAULT_KNOWN_TESTS_FILE
+  const testCommandFile = options.testCommandFile || DEFAULT_TEST_COMMAND_FILE
+  const knownTests = readJsonFile(knownTestsFile)
+  const selectedCommand = fs.readFileSync(path.resolve(testCommandFile), 'utf8').trim()
+  const inferred = getFirstKnownTest(knownTests, knownTestsFile)
+  const testFile = options.testFile || getTemporaryTestManagementFile(inferred.suite, options.mode)
+  const testCommand = options.testCommand || addTestFileToCommand(selectedCommand, inferred.suite, testFile)
+  const settingsMode = options.settingsMode || SETTINGS_MODES[options.mode]
+
+  if (fs.existsSync(testFile)) {
+    throw new Error(`Temporary Test Management test already exists: ${testFile}`)
+  }
+
+  return {
+    ...options,
+    framework: options.frameworkExplicit ? options.framework : inferred.framework,
+    settingsMode,
+    testCommand,
+    testFile,
+  }
+}
+
+/**
  * Removes generated Test Management source and marker files.
  */
 function restoreTestManagementChecks () {
@@ -201,6 +306,12 @@ function restoreTestManagementChecks () {
   fs.rmSync(path.resolve(DEFAULT_MARKER_FILE), { force: true })
   fs.rmSync(GENERATED_FILES_STATE, { force: true })
   fs.rmSync(MARKER_FILES_STATE, { force: true })
+  for (const file of Object.values(STATE_FILES)) {
+    fs.rmSync(file, { force: true })
+  }
+  for (const mode of MODES) {
+    fs.rmSync(getModeCommandFile(mode), { force: true })
+  }
   removeEmptyDiagnosticDirectory()
 }
 
@@ -358,6 +469,67 @@ function readJsonFile (file) {
 }
 
 /**
+ * Gets the first known test from a known-tests map.
+ *
+ * @param {object} knownTests known-tests map
+ * @param {string} knownTestsFile known-tests file name for errors
+ * @returns {{framework: string, suite: string, testName: string}} first known test
+ */
+function getFirstKnownTest (knownTests, knownTestsFile) {
+  for (const [framework, suites] of Object.entries(knownTests || {})) {
+    for (const [suite, tests] of Object.entries(suites || {})) {
+      if (Array.isArray(tests) && tests.length > 0) {
+        return {
+          framework,
+          suite,
+          testName: tests[0],
+        }
+      }
+    }
+  }
+
+  throw new Error(`Could not infer Test Management helper arguments from ${knownTestsFile}.`)
+}
+
+/**
+ * Gets a temporary Test Management sibling test path for a mode.
+ *
+ * @param {string} suite selected known test suite path
+ * @param {string} mode Test Management mode
+ * @returns {string} temporary Test Management test file
+ */
+function getTemporaryTestManagementFile (suite, mode) {
+  const suffix = path.basename(suite).match(/((?:\.[^.]+)*\.(?:test|spec)\.[cm]?[jt]sx?)$/)
+  const extension = suffix ? suffix[1] : path.extname(suite)
+
+  return path.join(path.dirname(suite), `dd-trace-tm-${mode}${extension || '.test.js'}`)
+}
+
+/**
+ * Gets the mode-specific command state file.
+ *
+ * @param {string} mode Test Management mode
+ * @returns {string} command state file
+ */
+function getModeCommandFile (mode) {
+  return `dd-test-optimization-tm-${mode}-command.txt`
+}
+
+/**
+ * Prints an inferred Test Management plan.
+ *
+ * @param {object} plan inferred plan
+ */
+function printAutoTestManagementPlan (plan) {
+  console.log('Test Management helper plan:')
+  console.log(`Mode: ${plan.mode}`)
+  console.log(`Settings mode: ${plan.settingsMode}`)
+  console.log(`Framework: ${plan.framework}`)
+  console.log(`Temporary Test Management test file: ${plan.testFile}`)
+  console.log(`Test Management command: ${plan.testCommand}`)
+}
+
+/**
  * Formats a test identity for console output.
  *
  * @param {object} identity test identity
@@ -390,6 +562,10 @@ if (require.main === module) {
       process.exitCode = 1
     } else if (options.restore) {
       restoreTestManagementChecks()
+    } else if (options.auto && options.dryRun) {
+      dryRunAutoTestManagementPlan(options)
+    } else if (options.auto) {
+      writeAutoTestManagementPlan(options)
     } else if (options.create) {
       createTestManagementCandidate(options)
     } else if (options.response) {
@@ -407,8 +583,11 @@ if (require.main === module) {
 module.exports = {
   buildTestManagementResponse,
   createTestManagementCandidate,
+  dryRunAutoTestManagementPlan,
   getProperties,
   getTemporaryTestSource,
+  inferTestManagementPlan,
   parseArgs,
   restoreTestManagementChecks,
+  writeAutoTestManagementPlan,
 }

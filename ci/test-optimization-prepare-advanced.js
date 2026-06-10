@@ -274,8 +274,20 @@ function inferPrepareOptions (options) {
  * @returns {string} command with the temporary EFD test file
  */
 function addEfdTestFileToCommand (command, selectedTestFile, efdTestFile) {
+  return addTestFileToCommand(command, selectedTestFile, efdTestFile)
+}
+
+/**
+ * Adds a test file next to the selected known test file in a command.
+ *
+ * @param {string} command selected test command
+ * @param {string} selectedTestFile known test file selected by the command
+ * @param {string} testFile test file to add
+ * @returns {string} command with the test file
+ */
+function addTestFileToCommand (command, selectedTestFile, testFile) {
   const tokens = tokenizeCommand(command)
-  const insertion = ` ${quoteShellArg(efdTestFile)}`
+  const insertion = ` ${quoteShellArg(testFile)}`
 
   for (let i = tokens.length - 1; i >= 0; i--) {
     if (isSamePathToken(tokens[i].value, selectedTestFile)) {
@@ -719,6 +731,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  addTestFileToCommand,
   assertCleanGitFileForEdit,
   dryRunPrepareAdvancedChecks,
   findTestCallback,

@@ -32,6 +32,9 @@ const {
   renderSummaryReport,
 } = require('../../../../ci/test-optimization-render-report')
 const {
+  buildCombinedValidationPayload,
+} = require('../../../../ci/test-optimization-validation-link')
+const {
   assertAdvancedPlanMatchesSelectedFiles,
   getNodeOptions,
   getTestResult,
@@ -48,7 +51,9 @@ const {
   buildTestManagementResponse,
   createTestManagementCandidate,
   getProperties: getTestManagementProperties,
+  inferTestManagementPlan,
   restoreTestManagementChecks,
+  writeAutoTestManagementPlan,
 } = require('../../../../ci/test-optimization-prepare-test-management')
 const {
   buildTestCommand,
@@ -1315,6 +1320,76 @@ describe('Test Optimization debug intake', () => {
     }
   })
 
+  it('infers Test Management helper state from known-tests and selected-command artifacts', () => {
+    const cwd = process.cwd()
+    const selectedTestFile = path.join(tmpDir, 'packages/foo/test/scope.node.test.ts')
+    const generatedTestFile = path.join(tmpDir, 'packages/foo/test/dd-trace-tm-quarantined.node.test.ts')
+
+    fs.mkdirSync(path.dirname(selectedTestFile), { recursive: true })
+    fs.writeFileSync(selectedTestFile, [
+      'describe(\'scope\', () => {',
+      '  test(\'works\', () => {',
+      '    expect(true).toBe(true)',
+      '  })',
+      '})',
+      '',
+    ].join('\n'))
+
+    process.chdir(tmpDir)
+    fs.writeFileSync(
+      'dd-test-optimization-test-command.txt',
+      'yarn test packages/foo/test/scope.node.test.ts --runInBand\n'
+    )
+    fs.writeFileSync('dd-test-optimization-known-tests.json', JSON.stringify({
+      jest: {
+        'packages/foo/test/scope.node.test.ts': ['scope works'],
+      },
+    }))
+
+    try {
+      assert.deepStrictEqual(inferTestManagementPlan({
+        auto: true,
+        mode: 'quarantined',
+      }), {
+        auto: true,
+        framework: 'jest',
+        mode: 'quarantined',
+        settingsMode: 'tm-quarantined',
+        testCommand:
+          'yarn test packages/foo/test/scope.node.test.ts ' +
+          'packages/foo/test/dd-trace-tm-quarantined.node.test.ts --runInBand',
+        testFile: 'packages/foo/test/dd-trace-tm-quarantined.node.test.ts',
+      })
+
+      writeAutoTestManagementPlan({ auto: true, mode: 'quarantined' })
+
+      assert.strictEqual(
+        fs.readFileSync('dd-test-optimization-tm-quarantined-command.txt', 'utf8'),
+        'yarn test packages/foo/test/scope.node.test.ts ' +
+          'packages/foo/test/dd-trace-tm-quarantined.node.test.ts --runInBand\n'
+      )
+      assert.strictEqual(fs.readFileSync('dd-test-optimization-tm-mode.txt', 'utf8'), 'quarantined\n')
+      assert.strictEqual(fs.readFileSync('dd-test-optimization-tm-settings-mode.txt', 'utf8'), 'tm-quarantined\n')
+      assert.strictEqual(fs.readFileSync('dd-test-optimization-tm-framework.txt', 'utf8'), 'jest\n')
+      assert.strictEqual(
+        fs.readFileSync('dd-test-optimization-tm-test-file.txt', 'utf8'),
+        'packages/foo/test/dd-trace-tm-quarantined.node.test.ts\n'
+      )
+      assert.ok(!fs.existsSync(generatedTestFile))
+
+      restoreTestManagementChecks()
+
+      assert.ok(!fs.existsSync('dd-test-optimization-tm-quarantined-command.txt'))
+      assert.ok(!fs.existsSync('dd-test-optimization-tm-mode.txt'))
+      assert.ok(!fs.existsSync('dd-test-optimization-tm-settings-mode.txt'))
+      assert.ok(!fs.existsSync('dd-test-optimization-tm-framework.txt'))
+      assert.ok(!fs.existsSync('dd-test-optimization-tm-test-file.txt'))
+      assert.ok(!fs.existsSync('dd-test-optimization-tm-test-command.txt'))
+    } finally {
+      process.chdir(cwd)
+    }
+  })
+
   it('refuses to prepare advanced checks when the known test file has git changes', () => {
     const cwd = process.cwd()
     const testFile = path.join(tmpDir, 'test/sum.spec.js')
@@ -1764,6 +1839,12 @@ describe('Test Optimization debug intake', () => {
     assert.strictEqual(eventsStep.evidence.events.modules, 1)
     assert.strictEqual(eventsStep.evidence.events.suites, 1)
     assert.strictEqual(eventsStep.evidence.events.tests, 1)
+    assert.deepStrictEqual(eventsStep.evidence.samples, [
+      { level: 'test session', 'test.command': 'npm test -- test/sum.spec.js' },
+      { level: 'test module', 'test.command': 'npm test -- test/sum.spec.js' },
+      { level: 'test suite', 'test.suite': 'test/sum.spec.js' },
+      { level: 'test', 'test.name': 'sum adds positive numbers' },
+    ])
     assert.strictEqual(validationPayload.artifacts.htmlFileUrl, pathToFileURL(htmlPath).href)
     assert.strictEqual(validationPayload.summary, undefined)
     assert.strictEqual(validationPayload.env, undefined)
@@ -1830,6 +1911,14 @@ describe('Test Optimization debug intake', () => {
     assert.strictEqual(disabledStep.status, 'ok')
     assert.strictEqual(disabledStep.evidence.expectedExitCode, '0')
     assert.strictEqual(disabledStep.evidence.actualExitCode, '0')
+    assert.deepStrictEqual(disabledStep.evidence.samples, [
+      {
+        'test.name': 'disabled candidate',
+        'test.status': 'skip',
+        'test.final_status': 'skip',
+        'test.test_management.is_test_disabled': true,
+      },
+    ])
     assert.strictEqual(attemptToFixStep.status, 'skipped')
   })
 
@@ -1910,6 +1999,49 @@ describe('Test Optimization debug intake', () => {
     assert.strictEqual(diagnosis.commandIncludesNewTestFile, true)
     assert.strictEqual(diagnosis.outputMentionsNewTestFile, true)
     assert.strictEqual(diagnosis.outputMentionsNewTestName, false)
+  })
+
+  it('combines runbook validation payloads into one validation payload', () => {
+    const combined = buildCombinedValidationPayload([
+      {
+        status: 'ok',
+        artifacts: { htmlFileUrl: 'file:///tmp/report.html' },
+        checks: [
+          { id: 'basic-reporting', name: 'Basic reporting', status: 'ok', steps: [] },
+        ],
+      },
+      {
+        status: 'ok',
+        checks: [
+          { id: 'basic-reporting', name: 'Basic reporting', status: 'ok', steps: [] },
+          { id: 'efd-new-test-detection-and-retry', name: 'EFD', status: 'ok', steps: [] },
+          { id: 'auto-test-retries', name: 'Auto test retries', status: 'ok', steps: [] },
+        ],
+      },
+      getTestManagementValidationPayload('disabled'),
+      getTestManagementValidationPayload('quarantined'),
+      getTestManagementValidationPayload('attemptToFix'),
+    ])
+
+    assert.strictEqual(combined.status, 'ok')
+    assert.deepStrictEqual(combined.checks.map(check => check.id), [
+      'basic-reporting',
+      'efd-new-test-detection-and-retry',
+      'auto-test-retries',
+      'test-management',
+    ])
+
+    const testManagementCheck = combined.checks.find(check => check.id === 'test-management')
+    assert.strictEqual(testManagementCheck.status, 'ok')
+    assert.deepStrictEqual(testManagementCheck.steps.map(step => step.id), [
+      'setup-intake',
+      'run-tests-disabled',
+      'disabled',
+      'run-tests-quarantined',
+      'quarantined',
+      'run-tests-attemptToFix',
+      'attemptToFix',
+    ])
   })
 
   it('renders feedback summary output with status sections', () => {
@@ -2000,6 +2132,14 @@ describe('Test Optimization debug intake', () => {
     assert.strictEqual(efdCheck.status, 'ok')
     assert.strictEqual(addNewTestStep.snippet, newTestSnippet)
     assert.strictEqual(retryStep.evidence.retriedNewTests, 1)
+    assert.deepStrictEqual(retryStep.evidence.samples, [
+      {
+        'test.name': 'sum dd trace EFD debug temporary test',
+        'test.is_new': true,
+        'test.is_retry': true,
+        'test.retry_reason': 'early_flake_detection',
+      },
+    ])
   })
 
   it('renders Auto Test Retries evidence in the final runbook report', () => {
@@ -2059,6 +2199,18 @@ describe('Test Optimization debug intake', () => {
     assert.strictEqual(executionsStep.evidence.failedExecutions, 1)
     assert.strictEqual(executionsStep.evidence.passedExecutions, 1)
     assert.deepStrictEqual(executionsStep.evidence.failedThenPassedRetryTestNames, ['sum adds positive numbers'])
+    assert.deepStrictEqual(executionsStep.evidence.samples, [
+      {
+        'test.name': 'sum adds positive numbers',
+        'test.status': 'fail',
+      },
+      {
+        'test.name': 'sum adds positive numbers',
+        'test.status': 'pass',
+        'test.is_retry': true,
+        'test.retry_reason': 'auto_test_retry',
+      },
+    ])
     assert.strictEqual(retryStep.evidence.passedRetryTests, 1)
     assert.deepStrictEqual(retryStep.evidence.passedRetryTestNames, ['sum adds positive numbers'])
   })
@@ -2080,6 +2232,48 @@ describe('Test Optimization debug intake', () => {
     }, /Missing --test-command or --test-command-file/)
   })
 })
+
+function getTestManagementValidationPayload (subcheckId) {
+  return {
+    status: 'ok',
+    checks: [
+      {
+        id: 'test-management',
+        name: 'Test Management',
+        status: 'ok',
+        steps: [
+          {
+            id: 'setup-intake',
+            name: 'Set up Test Management intake',
+            status: 'ok',
+            evidence: {
+              matchedPropertyIdentities: [`identity:${subcheckId}`],
+              propertiesEndpointCalled: true,
+              propertiesReturned: 1,
+              returnedPropertyIdentities: [`identity:${subcheckId}`],
+              settingsEnabled: true,
+              unmatchedPropertyIdentities: [],
+            },
+          },
+          {
+            id: 'run-tests',
+            name: 'Run managed test',
+            status: 'ok',
+            command: `npm test -- ${subcheckId}.spec.js`,
+            exitCode: subcheckId === 'attemptToFix' ? '1' : '0',
+          },
+          { id: 'disabled', name: 'Disabled tests', status: subcheckId === 'disabled' ? 'ok' : 'skipped' },
+          { id: 'quarantined', name: 'Quarantined tests', status: subcheckId === 'quarantined' ? 'ok' : 'skipped' },
+          {
+            id: 'attemptToFix',
+            name: 'Attempt-to-fix tests',
+            status: subcheckId === 'attemptToFix' ? 'ok' : 'skipped',
+          },
+        ],
+      },
+    ],
+  }
+}
 
 function hasFinding (analysis, stage) {
   return analysis.findings.some(finding => finding.stage === stage)
@@ -2141,11 +2335,39 @@ function getCompleteIntakeArtifact (intakePath, htmlPath) {
       {
         category: 'citestcycle',
         payload: {
+          metadata: {
+            '*': {
+              'test.command': 'npm test -- test/sum.spec.js',
+            },
+          },
           events: [
-            { type: 'test_session_end', content: { test_session_id: '1' } },
-            { type: 'test_module_end', content: { test_session_id: '1' } },
-            { type: 'test_suite_end', content: { test_session_id: '1' } },
-            { type: 'test', content: { test_session_id: '1' } },
+            {
+              type: 'test_session_end',
+              content: {
+                test_session_id: '1',
+              },
+            },
+            {
+              type: 'test_module_end',
+              content: {
+                test_session_id: '1',
+              },
+            },
+            {
+              type: 'test_suite_end',
+              content: {
+                meta: {
+                  'test.suite': 'test/sum.spec.js',
+                },
+                test_session_id: '1',
+              },
+            },
+            getTestEvent({
+              framework: 'mocha',
+              name: 'sum adds positive numbers',
+              sessionId: '1',
+              suite: 'test/sum.spec.js',
+            }),
           ],
         },
       },
@@ -2179,10 +2401,23 @@ function getEfdIntakeArtifact (intakePath, htmlPath) {
       {
         category: 'citestcycle',
         payload: {
+          metadata: {
+            '*': {
+              'test.command': 'npm test -- test/sum.spec.js test/dd-trace-efd-debug.spec.js',
+            },
+          },
           events: [
             { type: 'test_session_end', content: { test_session_id: '1' } },
             { type: 'test_module_end', content: { test_session_id: '1' } },
-            { type: 'test_suite_end', content: { test_session_id: '1' } },
+            {
+              type: 'test_suite_end',
+              content: {
+                meta: {
+                  'test.suite': 'test/sum.spec.js',
+                },
+                test_session_id: '1',
+              },
+            },
             getTestEvent({
               framework: 'mocha',
               isNew: true,

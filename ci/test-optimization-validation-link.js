@@ -1,8 +1,52 @@
 'use strict'
 
+/* eslint-disable no-console */
+
+const fs = require('node:fs')
 const zlib = require('node:zlib')
 
 const VALIDATION_APP_PATH = 'ci/test/validation'
+
+/**
+ * Parses CLI arguments.
+ *
+ * @param {string[]} args command-line arguments
+ * @returns {object} parsed options
+ */
+function parseArgs (args) {
+  const options = {
+    fromReports: [],
+  }
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]
+
+    if (arg === '--from-report') {
+      options.fromReports.push(args[++i])
+    } else if (arg.startsWith('--from-report=')) {
+      options.fromReports.push(arg.slice('--from-report='.length))
+    } else if (arg === '--help' || arg === '-h') {
+      options.help = true
+    } else {
+      options.unknown = arg
+    }
+  }
+
+  return options
+}
+
+/**
+ * Gets CLI help text.
+ *
+ * @returns {string} help text
+ */
+function getHelpText () {
+  return [
+    'Usage: dd-trace-ci-validation-link --from-report <final-report.txt> [--from-report <file> ...]',
+    '',
+    'Reads Datadog validation payloads from final reports and prints one combined validation path.',
+  ].join('\n')
+}
 
 /**
  * Builds the payload rendered by the local Test Optimization validation web app.
@@ -36,6 +80,242 @@ function buildValidationPayload (input) {
     },
     framework: getFramework(input.staticReport),
   }
+}
+
+/**
+ * Builds one validation payload from several run-specific validation payloads.
+ *
+ * @param {Array<object>} payloads validation payloads
+ * @returns {object} combined validation payload
+ */
+function buildCombinedValidationPayload (payloads) {
+  const compactPayloads = payloads.filter(Boolean)
+  const checks = getCombinedChecks(compactPayloads)
+
+  return {
+    version: 2,
+    source: 'dd-trace-js',
+    type: 'test-optimization-validation',
+    status: getChecksStatus(checks),
+    checks,
+    artifacts: getFirstValue(compactPayloads, 'artifacts') || {},
+    framework: getFirstValue(compactPayloads, 'framework'),
+  }
+}
+
+/**
+ * Gets combined validation checks.
+ *
+ * @param {Array<object>} payloads validation payloads
+ * @returns {Array<object>} combined checks
+ */
+function getCombinedChecks (payloads) {
+  const checks = []
+  const testManagementChecks = []
+  const seen = new Set()
+
+  for (const payload of payloads) {
+    for (const check of payload.checks || []) {
+      if (check.id === 'test-management') {
+        testManagementChecks.push(check)
+      } else if (!seen.has(check.id)) {
+        checks.push(check)
+        seen.add(check.id)
+      }
+    }
+  }
+
+  if (testManagementChecks.length > 0) {
+    checks.push(getCombinedTestManagementCheck(testManagementChecks))
+  }
+
+  return checks
+}
+
+/**
+ * Gets one combined Test Management check from independent subcheck payloads.
+ *
+ * @param {Array<object>} checks Test Management checks
+ * @returns {object} combined Test Management check
+ */
+function getCombinedTestManagementCheck (checks) {
+  const steps = [getCombinedTestManagementSetupStep(checks)]
+
+  for (const check of checks) {
+    const runStep = findStep(check, 'run-tests')
+    const subcheckSteps = (check.steps || []).filter(step => (
+      step.id !== 'setup-intake' &&
+      step.id !== 'run-tests' &&
+      step.status !== 'skipped'
+    ))
+
+    for (const subcheckStep of subcheckSteps) {
+      if (runStep) {
+        steps.push({
+          ...runStep,
+          id: `run-tests-${subcheckStep.id}`,
+          name: `${subcheckStep.name}: run test`,
+          status: subcheckStep.status === 'ok' ? 'ok' : runStep.status,
+        })
+      }
+      steps.push(subcheckStep)
+    }
+  }
+
+  return {
+    id: 'test-management',
+    name: 'Test Management',
+    status: getChecksStatusFromSteps(steps),
+    steps,
+  }
+}
+
+/**
+ * Gets one combined Test Management setup step.
+ *
+ * @param {Array<object>} checks Test Management checks
+ * @returns {object} setup step
+ */
+function getCombinedTestManagementSetupStep (checks) {
+  const setupSteps = checks.map(check => findStep(check, 'setup-intake')).filter(Boolean)
+  const returnedPropertyIdentities = []
+  const matchedPropertyIdentities = []
+  const unmatchedPropertyIdentities = []
+  const samples = []
+  let settingsEnabled = false
+  let propertiesEndpointCalled = false
+  let propertiesReturned = 0
+
+  for (const step of setupSteps) {
+    settingsEnabled = settingsEnabled || !!step.evidence?.settingsEnabled
+    propertiesEndpointCalled = propertiesEndpointCalled || !!step.evidence?.propertiesEndpointCalled
+    propertiesReturned += step.evidence?.propertiesReturned || 0
+    pushAll(returnedPropertyIdentities, step.evidence?.returnedPropertyIdentities)
+    pushAll(matchedPropertyIdentities, step.evidence?.matchedPropertyIdentities)
+    pushAll(unmatchedPropertyIdentities, step.evidence?.unmatchedPropertyIdentities)
+    pushAll(samples, step.evidence?.samples)
+  }
+
+  return {
+    id: 'setup-intake',
+    name: 'Set up Test Management intake',
+    status: setupSteps.every(step => step.status === 'ok') ? 'ok' : 'failed',
+    evidence: withSamples({
+      settingsEnabled,
+      propertiesEndpointCalled,
+      propertiesReturned,
+      returnedPropertyIdentities,
+      matchedPropertyIdentities,
+      unmatchedPropertyIdentities,
+    }, samples),
+  }
+}
+
+/**
+ * Gets a check status from child steps.
+ *
+ * @param {Array<object>} steps validation steps
+ * @returns {string} check status
+ */
+function getChecksStatusFromSteps (steps) {
+  if (steps.some(step => step.status === 'failed')) return 'failed'
+  if (steps.some(step => step.status === 'unknown')) return 'unknown'
+  if (steps.every(step => step.status === 'skipped')) return 'skipped'
+
+  return 'ok'
+}
+
+/**
+ * Finds a validation step by id.
+ *
+ * @param {object} check validation check
+ * @param {string} id step id
+ * @returns {object|undefined} validation step
+ */
+function findStep (check, id) {
+  return (check.steps || []).find(step => step.id === id)
+}
+
+/**
+ * Appends array values.
+ *
+ * @param {Array<unknown>} target target array
+ * @param {Array<unknown>|undefined} values values to append
+ */
+function pushAll (target, values) {
+  if (!Array.isArray(values)) return
+
+  for (const value of values) {
+    target.push(value)
+  }
+}
+
+/**
+ * Adds compact event samples to an evidence object when present.
+ *
+ * @param {object} evidence validation evidence
+ * @param {Array<object>|undefined} samples compact samples
+ * @param {number} [limit] maximum samples to include
+ * @returns {object} evidence with samples when available
+ */
+function withSamples (evidence, samples, limit) {
+  const sampleSlice = getSampleSlice(samples, limit)
+  if (sampleSlice.length === 0) return evidence
+
+  return {
+    ...evidence,
+    samples: sampleSlice,
+  }
+}
+
+/**
+ * Gets a bounded list of compact samples.
+ *
+ * @param {Array<object>|undefined} samples compact samples
+ * @param {number} [limit] maximum samples to include
+ * @returns {Array<object>} bounded samples
+ */
+function getSampleSlice (samples, limit = 3) {
+  if (!Array.isArray(samples)) return []
+
+  return samples.slice(0, limit)
+}
+
+/**
+ * Gets basic event samples with the selected command as fallback for command-bearing levels.
+ *
+ * @param {Array<object>|undefined} samples basic event samples
+ * @param {string|undefined} testCommand selected test command
+ * @returns {Array<object>} compact basic samples
+ */
+function getBasicSamples (samples, testCommand) {
+  if (!Array.isArray(samples)) return []
+
+  return samples.map(sample => {
+    if (
+      testCommand &&
+      !sample['test.command'] &&
+      (sample.level === 'test session' || sample.level === 'test module')
+    ) {
+      return {
+        ...sample,
+        'test.command': testCommand,
+      }
+    }
+
+    return sample
+  })
+}
+
+/**
+ * Gets the first present payload field.
+ *
+ * @param {Array<object>} payloads validation payloads
+ * @param {string} key field key
+ * @returns {unknown} field value
+ */
+function getFirstValue (payloads, key) {
+  return payloads.find(payload => payload[key])?.[key]
 }
 
 /**
@@ -107,13 +387,13 @@ function getBasicReportingCheck (input, analysis) {
         id: 'check-events',
         name: 'Check that events show up',
         status,
-        evidence: {
+        evidence: withSamples({
           requestCount: summary.requestCount,
           citestcyclePayloads: summary.citestcycle.payloadCount,
           events,
           missingLevels: summary.events.missingLevels,
           decodeErrors: summary.decodeErrors.length,
-        },
+        }, getBasicSamples(summary.events.samples, input.testCommand), 4),
       },
     ],
   }
@@ -167,10 +447,10 @@ function getEfdCheck (input, analysis) {
         id: 'check-new-test-retried',
         name: 'Check that new test is retried',
         status,
-        evidence: {
+        evidence: withSamples({
           retriedNewTests: summary.efd.retriedNewTests,
           retriedNewTestNames: summary.efd.retriedNewTestNames,
-        },
+        }, summary.efd.samples),
       },
     ],
   }
@@ -222,12 +502,12 @@ function getAutoTestRetriesCheck (input, analysis) {
         id: 'check-failing-and-passing-executions',
         name: 'Check that failing and passing executions were reported',
         status: summary.atr.failedExecutions > 0 && summary.atr.passedExecutions > 0 ? 'ok' : 'failed',
-        evidence: {
+        evidence: withSamples({
           failedExecutions: summary.atr.failedExecutions,
           passedExecutions: summary.atr.passedExecutions,
           failedThenPassedRetryTests: summary.atr.failedThenPassedRetryTests,
           failedThenPassedRetryTestNames: summary.atr.failedThenPassedRetryTestNames,
-        },
+        }, summary.atr.samples),
       },
       {
         id: 'check-passing-execution-marked-retry',
@@ -268,19 +548,19 @@ function getTestManagementCheck (input, analysis) {
         id: 'setup-intake',
         name: 'Set up Test Management intake',
         status: summary.tm.settingsEnabled && summary.tm.propertiesEndpointCalled ? 'ok' : 'failed',
-        evidence: {
+        evidence: withSamples({
           settingsEnabled: summary.tm.settingsEnabled,
           propertiesEndpointCalled: summary.tm.propertiesEndpointCalled,
           propertiesReturned: summary.tm.returnedProperties,
           returnedPropertyIdentities: summary.tm.returnedPropertyIdentities,
           matchedPropertyIdentities: summary.tm.matchedPropertyIdentities,
           unmatchedPropertyIdentities: summary.tm.unmatchedPropertyIdentities,
-        },
+        }, summary.tm.managedTests.samples),
       },
       {
         id: 'run-tests',
         name: 'Run managed test',
-        status: getTestCommandStatus(input),
+        status: getTestManagementRunTestStatus(input, summary),
         command: input.testCommand,
         exitCode: input.testExitCode,
         result: input.testResult,
@@ -309,7 +589,7 @@ function getTestManagementSubcheck (input, summary, id, name, expectedExitCode) 
     id,
     name,
     status: skipped ? 'skipped' : getTestManagementSubcheckStatus(input, subcheck, expectedExitCode),
-    evidence: {
+    evidence: withSamples({
       expectedExitCode,
       actualExitCode: input.testExitCode,
       managedTestIdentities: subcheck.identities,
@@ -318,7 +598,7 @@ function getTestManagementSubcheck (input, summary, id, name, expectedExitCode) 
       observedRetryReasons: subcheck.observedRetryReasons,
       reason: skipped ? `not run in ${summary.tm.expectedSubcheck} mode` : subcheck.reason,
       tests: subcheck.tests,
-    },
+    }, subcheck.samples),
   }
 }
 
@@ -466,6 +746,23 @@ function getTestManagementSubcheckStatus (input, subcheck, expectedExitCode) {
 }
 
 /**
+ * Gets the Test Management run-test step status.
+ *
+ * @param {object} input validation input
+ * @param {object} summary intake summary
+ * @returns {string} step status
+ */
+function getTestManagementRunTestStatus (input, summary) {
+  if (summary.tm.expectedSubcheck === 'attemptToFix') {
+    if (input.testExitCode === undefined && !input.testCommand && !input.testResult) return 'unknown'
+
+    return String(input.testExitCode) === '0' ? 'failed' : 'ok'
+  }
+
+  return getTestCommandStatus(input)
+}
+
+/**
  * Gets test command step status.
  *
  * @param {object} input validation input
@@ -500,6 +797,63 @@ function getEventCounts (summary) {
  */
 function encodeValidationPayload (payload) {
   return zlib.deflateSync(Buffer.from(JSON.stringify(payload))).toString('base64url')
+}
+
+/**
+ * Decodes a validation payload.
+ *
+ * @param {string} encoded encoded payload
+ * @returns {object} validation payload
+ */
+function decodeValidationPayload (encoded) {
+  return JSON.parse(zlib.inflateSync(Buffer.from(encoded, 'base64url')).toString('utf8'))
+}
+
+/**
+ * Gets one combined validation web app path from final reports.
+ *
+ * @param {string[]} reports final report paths
+ * @returns {string} combined validation web app path
+ */
+function getCombinedValidationAppUrlFromReports (reports) {
+  const payloads = []
+
+  for (const report of reports) {
+    const payload = getValidationPayloadFromReport(report)
+    if (payload) payloads.push(payload)
+  }
+
+  if (payloads.length === 0) {
+    throw new Error('No Datadog validation payloads found in the provided reports.')
+  }
+
+  return getValidationAppUrl(buildCombinedValidationPayload(payloads))
+}
+
+/**
+ * Gets a validation payload from a final report.
+ *
+ * @param {string} report final report path
+ * @returns {object|undefined} validation payload
+ */
+function getValidationPayloadFromReport (report) {
+  let text
+
+  try {
+    text = fs.readFileSync(report, 'utf8')
+  } catch {
+    return
+  }
+
+  const line = text.split(/\r?\n/).find(line => line.startsWith('Datadog validation: '))
+  if (!line) return
+
+  const url = line.slice('Datadog validation: '.length).trim()
+  const marker = '#pako:'
+  const markerIndex = url.indexOf(marker)
+  if (markerIndex === -1) return
+
+  return decodeValidationPayload(url.slice(markerIndex + marker.length))
 }
 
 /**
@@ -543,8 +897,32 @@ function getFrameworkVersion (framework) {
   return detections[0]?.version || detections[0]?.rawVersion
 }
 
+if (require.main === module) {
+  const options = parseArgs(process.argv.slice(2))
+
+  if (options.help) {
+    console.log(getHelpText())
+  } else if (options.unknown) {
+    console.error(`Unknown argument: ${options.unknown}`)
+    console.error(getHelpText())
+    process.exitCode = 1
+  } else {
+    try {
+      console.log(`Datadog validation: ${getCombinedValidationAppUrlFromReports(options.fromReports)}`)
+    } catch (error) {
+      console.error(error.message)
+      process.exitCode = 1
+    }
+  }
+}
+
 module.exports = {
+  buildCombinedValidationPayload,
   buildValidationPayload,
+  decodeValidationPayload,
   encodeValidationPayload,
+  getCombinedValidationAppUrlFromReports,
   getValidationAppUrl,
+  getValidationPayloadFromReport,
+  parseArgs,
 }

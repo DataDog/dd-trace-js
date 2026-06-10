@@ -25,6 +25,7 @@ const TEST_FRAMEWORK = 'test.framework'
 const TEST_IS_NEW = 'test.is_new'
 const TEST_IS_RETRY = 'test.is_retry'
 const TEST_FINAL_STATUS = 'test.final_status'
+const TEST_COMMAND = 'test.command'
 const TEST_MODULE = 'test.module'
 const TEST_NAME = 'test.name'
 const TEST_PARAMETERS = 'test.parameters'
@@ -38,6 +39,13 @@ const TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED = 'test.test_management.attempt_to_f
 const TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX = 'test.test_management.is_attempt_to_fix'
 const TEST_MANAGEMENT_IS_DISABLED = 'test.test_management.is_test_disabled'
 const TEST_MANAGEMENT_IS_QUARANTINED = 'test.test_management.is_quarantined'
+const BASIC_EVENT_LEVELS = {
+  test_session_end: 'test session',
+  test_module_end: 'test module',
+  test_suite_end: 'test suite',
+  test: 'test',
+}
+const FEATURE_SAMPLE_LIMIT = 3
 
 /**
  * Builds a fixed-rule diagnosis from a fake intake artifact.
@@ -263,6 +271,7 @@ function summarizeIntakeArtifact (artifact) {
         span: eventCounts.span || 0,
       },
       missingLevels: getMissingEventLevels(eventCounts),
+      samples: getBasicEventSamples(events),
       total: events.length,
       unlinkedTestSpans: countUnlinkedTestSpans(events),
     },
@@ -273,6 +282,7 @@ function summarizeIntakeArtifact (artifact) {
       newTests: getNewTests(events),
       retriedNewTests: getRetriedNewTests(events).length,
       retriedNewTestNames: getRetriedNewTests(events).map(test => test.name),
+      samples: getEfdSamples(events),
     },
     atr: getAutoTestRetriesSummary(events, settings),
     tm: getTestManagementSummary(artifact, events, settings, endpointCounts, artifact?.intake?.settingsMode),
@@ -690,12 +700,276 @@ function collectEvents (requests) {
     const requestEvents = request.payload?.events
     if (!Array.isArray(requestEvents)) continue
 
+    const metadata = getMetadata(request.payload?.metadata)
+
     for (const event of requestEvents) {
-      events.push(event)
+      events.push(mergeEventMetadata(event, metadata))
     }
   }
 
   return events
+}
+
+/**
+ * Gets metadata groups from a citestcycle payload.
+ *
+ * @param {unknown} metadata payload metadata
+ * @returns {object} metadata groups
+ */
+function getMetadata (metadata) {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return {}
+
+  return metadata
+}
+
+/**
+ * Merges request-level metadata onto an event while preserving event-specific tags.
+ *
+ * @param {object} event decoded event
+ * @param {object} metadata payload metadata groups
+ * @returns {object} event with merged metadata
+ */
+function mergeEventMetadata (event, metadata) {
+  const wildcardMetadata = getMetadataGroup(metadata['*'])
+  const eventMetadata = getMetadataGroup(metadata[event.type])
+
+  if (Object.keys(wildcardMetadata).length === 0 && Object.keys(eventMetadata).length === 0) {
+    return event
+  }
+
+  const content = event.content || {}
+  const contentMetadata = getMetadataGroup(content.meta)
+
+  return {
+    ...event,
+    content: {
+      ...content,
+      meta: {
+        ...wildcardMetadata,
+        ...eventMetadata,
+        ...contentMetadata,
+      },
+    },
+  }
+}
+
+/**
+ * Gets one payload metadata group.
+ *
+ * @param {unknown} value metadata group
+ * @returns {object} metadata tags
+ */
+function getMetadataGroup (value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+
+  return value
+}
+
+/**
+ * Gets one compact sample for each basic Test Optimization event level.
+ *
+ * @param {Array<object>} events decoded events
+ * @returns {Array<object>} event samples
+ */
+function getBasicEventSamples (events) {
+  const samples = []
+  const seen = new Set()
+
+  for (const event of events) {
+    if (!BASIC_EVENT_LEVELS[event.type] || seen.has(event.type)) continue
+
+    samples.push(getBasicEventSample(event))
+    seen.add(event.type)
+
+    if (seen.size === Object.keys(BASIC_EVENT_LEVELS).length) break
+  }
+
+  return samples
+}
+
+/**
+ * Gets a compact sample for one basic event level.
+ *
+ * @param {object} event decoded event
+ * @returns {object} compact event sample
+ */
+function getBasicEventSample (event) {
+  const content = event.content || {}
+  const meta = content.meta || {}
+  const sample = {
+    level: BASIC_EVENT_LEVELS[event.type],
+  }
+
+  if (event.type === 'test_session_end' || event.type === 'test_module_end') {
+    addSampleField(sample, TEST_COMMAND, meta[TEST_COMMAND])
+  } else if (event.type === 'test_suite_end') {
+    addSampleField(sample, TEST_SUITE, meta[TEST_SUITE] || content.resource || content.name)
+  } else if (event.type === 'test') {
+    addSampleField(sample, TEST_NAME, meta[TEST_NAME] || content.name || content.resource)
+  }
+
+  return sample
+}
+
+/**
+ * Gets compact samples that prove Early Flake Detection marked and retried new tests.
+ *
+ * @param {Array<object>} events decoded events
+ * @returns {Array<object>} EFD samples
+ */
+function getEfdSamples (events) {
+  const samples = []
+  const seen = new Set()
+
+  for (const event of events) {
+    if (event.type !== 'test') continue
+
+    const meta = event.content?.meta || {}
+    if (meta[TEST_IS_NEW] !== 'true') continue
+
+    const sample = getTestFeatureSample(event)
+    sample[TEST_IS_NEW] = true
+
+    if (meta[TEST_IS_RETRY] === 'true') {
+      sample[TEST_IS_RETRY] = true
+      addSampleField(sample, TEST_RETRY_REASON, meta[TEST_RETRY_REASON])
+    }
+
+    addUniqueSample(samples, seen, sample)
+    if (samples.length >= FEATURE_SAMPLE_LIMIT) break
+  }
+
+  return samples
+}
+
+/**
+ * Gets compact samples that prove Auto Test Retries observed a failure and retry.
+ *
+ * @param {Array<object>} events decoded events
+ * @returns {Array<object>} Auto Test Retries samples
+ */
+function getAutoTestRetriesSamples (events) {
+  const samples = []
+  const seen = new Set()
+
+  for (const event of events) {
+    if (event.type !== 'test') continue
+
+    const meta = event.content?.meta || {}
+    const isAutoRetry = meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_AUTO_TEST_RETRY
+    if (meta[TEST_STATUS] !== 'fail' && !isAutoRetry) continue
+    if (meta[TEST_IS_NEW] === 'true') continue
+
+    const sample = getTestFeatureSample(event)
+    addSampleField(sample, TEST_STATUS, meta[TEST_STATUS])
+
+    if (meta[TEST_IS_RETRY] === 'true') {
+      sample[TEST_IS_RETRY] = true
+    }
+
+    addSampleField(sample, TEST_RETRY_REASON, meta[TEST_RETRY_REASON])
+    addUniqueSample(samples, seen, sample)
+    if (samples.length >= FEATURE_SAMPLE_LIMIT) break
+  }
+
+  return samples
+}
+
+/**
+ * Gets compact samples that prove Test Management tags reached test events.
+ *
+ * @param {Array<object>} tests managed test observations
+ * @returns {Array<object>} Test Management samples
+ */
+function getTestManagementSamples (tests) {
+  const samples = []
+  const seen = new Set()
+
+  for (const test of tests) {
+    const sample = {}
+
+    addSampleField(sample, TEST_NAME, test.name)
+    addSampleField(sample, TEST_STATUS, test.status)
+    addSampleField(sample, TEST_FINAL_STATUS, test.finalStatus)
+
+    if (test.isRetry) {
+      sample[TEST_IS_RETRY] = true
+    }
+
+    addSampleField(sample, TEST_RETRY_REASON, test.retryReason)
+
+    if (test.isDisabled) {
+      sample[TEST_MANAGEMENT_IS_DISABLED] = true
+    }
+
+    if (test.isQuarantined) {
+      sample[TEST_MANAGEMENT_IS_QUARANTINED] = true
+    }
+
+    if (test.isAttemptToFix) {
+      sample[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX] = true
+    }
+
+    addSampleField(sample, TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, getBooleanTag(test.attemptToFixPassed))
+    addUniqueSample(samples, seen, sample)
+    if (samples.length >= FEATURE_SAMPLE_LIMIT) break
+  }
+
+  return samples
+}
+
+/**
+ * Gets identifying fields shared by feature samples.
+ *
+ * @param {object} event decoded test event
+ * @returns {object} compact test sample
+ */
+function getTestFeatureSample (event) {
+  const sample = {}
+  const test = getTestIdentity(event)
+
+  addSampleField(sample, TEST_NAME, test.name)
+
+  return sample
+}
+
+/**
+ * Adds a field to a compact sample if it has a meaningful value.
+ *
+ * @param {object} sample sample to mutate
+ * @param {string} key field name
+ * @param {unknown} value field value
+ */
+function addSampleField (sample, key, value) {
+  if (value === undefined || value === null || value === '') return
+
+  sample[key] = value
+}
+
+/**
+ * Adds a unique sample to a bounded list.
+ *
+ * @param {Array<object>} samples collected samples
+ * @param {Set<string>} seen serialized sample keys
+ * @param {object} sample sample to append
+ */
+function addUniqueSample (samples, seen, sample) {
+  const key = JSON.stringify(sample)
+  if (seen.has(key)) return
+
+  seen.add(key)
+  samples.push(sample)
+}
+
+/**
+ * Converts string boolean tags into booleans for validation UI samples.
+ *
+ * @param {unknown} value tag value
+ * @returns {boolean|undefined} boolean value
+ */
+function getBooleanTag (value) {
+  if (value === 'true') return true
+  if (value === 'false') return false
 }
 
 /**
@@ -784,6 +1058,7 @@ function getAutoTestRetriesSummary (events, settings) {
     passedRetryTestNames: getSortedValues(passedRetryNames),
     failedThenPassedRetryTests: failedThenPassedRetryNames.length,
     failedThenPassedRetryTestNames: getSortedValues(failedThenPassedRetryNames),
+    samples: getAutoTestRetriesSamples(events),
   }
 }
 
@@ -871,6 +1146,7 @@ function getTestManagementSummary (artifact, events, settings, endpointCounts, s
     managedTests: {
       count: managedTests.length,
       identities: getSortedValues(managedTests.map(formatIdentity)),
+      samples: getTestManagementSamples(managedTests),
     },
     disabled: getDisabledTestManagementSummary(managedTests),
     quarantined: getQuarantinedTestManagementSummary(managedTests),
@@ -1023,6 +1299,7 @@ function getDisabledTestManagementSummary (managedTests) {
     observedStatuses: getSortedValues(tests.map(test => test.status)),
     observedFinalStatuses: getSortedValues(tests.map(test => test.finalStatus)),
     observedRetryReasons: getSortedValues(tests.map(test => test.retryReason)),
+    samples: getTestManagementSamples(tests),
   }
 }
 
@@ -1050,6 +1327,7 @@ function getQuarantinedTestManagementSummary (managedTests) {
     observedStatuses: getSortedValues(tests.map(test => test.status)),
     observedFinalStatuses: getSortedValues(tests.map(test => test.finalStatus)),
     observedRetryReasons: getSortedValues(tests.map(test => test.retryReason)),
+    samples: getTestManagementSamples(tests),
   }
 }
 
@@ -1101,6 +1379,7 @@ function getAttemptToFixTestManagementSummary (managedTests) {
     observedFinalStatuses: getSortedValues(tests.map(test => test.finalStatus)),
     observedRetryReasons: getSortedValues(retryReasons),
     attemptToFixPassedValues: getSortedValues(tests.map(test => test.attemptToFixPassed)),
+    samples: getTestManagementSamples(tests),
   }
 }
 
