@@ -15,6 +15,38 @@ const {
 } = require('../../ci-visibility/telemetry')
 const { buildCacheKey, writeToCache, withCache } = require('../requests/fs-cache')
 
+function parseJsonResponse (rawJson) {
+  return typeof rawJson === 'string' ? JSON.parse(rawJson) : rawJson
+}
+
+function parseSkippableSuitesResponse (
+  rawJson,
+  { testLevel = 'suite', isCoverageReportUploadEnabled = false } = {}
+) {
+  const parsedResponse = parseJsonResponse(rawJson)
+  const coverage = parsedResponse.meta?.coverage || {}
+
+  const skippableItems = parsedResponse
+    .data
+    .filter(({ type }) => type === testLevel)
+  const skippableSuites = []
+  for (const {
+    attributes: {
+      suite,
+      name,
+      _is_missing_line_code_coverage: isMissingLineCodeCoverage,
+    },
+  } of skippableItems) {
+    // Only reject candidates without backend line coverage when we need that coverage to backfill reports.
+    if (isCoverageReportUploadEnabled && isMissingLineCodeCoverage) continue
+
+    skippableSuites.push(testLevel === 'suite' ? suite : { suite, name })
+  }
+  const correlationId = parsedResponse.meta?.correlation_id
+
+  return { skippableSuites, correlationId, coverage }
+}
+
 function getSkippableSuites ({
   url,
   isEvpProxy,
@@ -163,26 +195,12 @@ function fetchFromApi ({
       done(err)
     } else {
       try {
-        const parsedResponse = JSON.parse(res)
-        const coverage = parsedResponse.meta?.coverage || {}
-
-        const skippableItems = parsedResponse
-          .data
-          .filter(({ type }) => type === testLevel)
-        const skippableSuites = []
-        for (const {
-          attributes: {
-            suite,
-            name,
-            _is_missing_line_code_coverage: isMissingLineCodeCoverage,
-          },
-        } of skippableItems) {
-          // Only reject candidates without backend line coverage when we need that coverage to backfill reports.
-          if (isCoverageReportUploadEnabled && isMissingLineCodeCoverage) continue
-
-          skippableSuites.push(testLevel === 'suite' ? suite : { suite, name })
-        }
-        const correlationId = parsedResponse.meta?.correlation_id
+        const parsedResponse = parseJsonResponse(res)
+        const result = parseSkippableSuitesResponse(parsedResponse, {
+          testLevel,
+          isCoverageReportUploadEnabled,
+        })
+        const skippableItems = parsedResponse.data.filter(({ type }) => type === testLevel)
         incrementCountMetric(
           testLevel === 'test'
             ? TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_TESTS
@@ -191,9 +209,8 @@ function fetchFromApi ({
           skippableItems.length
         )
         distributionMetric(TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_BYTES, {}, res.length)
-        log.debug('Number of received skippable %ss:', testLevel, skippableSuites.length)
+        log.debug('Number of received skippable %ss:', testLevel, result.skippableSuites.length)
 
-        const result = { skippableSuites, correlationId, coverage }
         writeToCache(cacheKey, result)
 
         done(null, result)
@@ -204,4 +221,4 @@ function fetchFromApi ({
   })
 }
 
-module.exports = { getSkippableSuites }
+module.exports = { getSkippableSuites, parseSkippableSuitesResponse }

@@ -8,7 +8,10 @@ const nock = require('nock')
 
 require('../../setup/core')
 
-const { getKnownTests } = require('../../../src/ci-visibility/early-flake-detection/get-known-tests')
+const {
+  getKnownTests,
+  parseKnownTestsResponse,
+} = require('../../../src/ci-visibility/early-flake-detection/get-known-tests')
 const {
   buildCacheKey,
   getCachePath,
@@ -327,5 +330,18 @@ describe('get-known-tests', () => {
       assert.strictEqual(fs.existsSync(getLockPath(key)), false, 'lock should be cleaned up on error')
       done()
     })
+  })
+})
+
+describe('parseKnownTestsResponse', () => {
+  it('returns tests from a raw backend response', () => {
+    assert.deepStrictEqual(
+      parseKnownTestsResponse(JSON.stringify(KNOWN_TESTS_RESPONSE)),
+      KNOWN_TESTS_RESPONSE.data.attributes.tests
+    )
+  })
+
+  it('preserves null tests from a raw backend response', () => {
+    assert.strictEqual(parseKnownTestsResponse(JSON.stringify(EMPTY_KNOWN_TESTS_RESPONSE)), null)
   })
 })
