@@ -758,7 +758,7 @@ moduleTypes.forEach(({
           if (isManagingTests) {
             assert.strictEqual(childProcess.exitCode, 0)
           } else {
-            assert.strictEqual(childProcess.exitCode, 2)
+            assert.strictEqual(childProcess.exitCode, type === 'esm' ? 1 : 2)
           }
         }
 
