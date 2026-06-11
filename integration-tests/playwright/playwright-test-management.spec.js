@@ -3,16 +3,17 @@
 const assert = require('node:assert')
 const { once } = require('node:events')
 const { inspect } = require('node:util')
-const { exec, execSync } = require('child_process')
+const { exec } = require('child_process')
 const satisfies = require('semifies')
 
 const {
   sandboxCwd,
   useSandbox,
+  installPlaywrightChromium,
   getCiVisAgentlessConfig,
   assertObjectContains,
+  createParallelIt,
 } = require('../helpers')
-const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
 const {
   TEST_STATUS,
@@ -30,15 +31,76 @@ const {
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_RETRY_REASON_TYPES,
 } = require('../../packages/dd-trace/src/plugins/util/test')
-const { DD_MAJOR } = require('../../version')
 
 const { PLAYWRIGHT_VERSION } = process.env
 
 const PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT = 60000
 
 const latest = 'latest'
-const oldest = DD_MAJOR >= 6 ? '1.38.0' : '1.18.0'
+const { oldest } = require('./versions')
 const versions = [oldest, latest]
+
+const ATF_MANAGEMENT_TESTS = {
+  playwright: {
+    suites: {
+      'attempt-to-fix-test.js': {
+        tests: {
+          'attempt to fix should attempt to fix failed test': {
+            properties: {
+              attempt_to_fix: true,
+            },
+          },
+          'attempt to fix should attempt to fix passed test': {
+            properties: {
+              attempt_to_fix: true,
+            },
+          },
+        },
+      },
+    },
+  },
+}
+
+const DISABLED_MANAGEMENT_TESTS = {
+  playwright: {
+    suites: {
+      'disabled-test.js': {
+        tests: {
+          'disable should disable test': {
+            properties: {
+              disabled: true,
+            },
+          },
+        },
+      },
+      'disabled-2-test.js': {
+        tests: {
+          'disable should disable test': {
+            properties: {
+              disabled: true,
+            },
+          },
+        },
+      },
+    },
+  },
+}
+
+const QUARANTINE_MANAGEMENT_TESTS = {
+  playwright: {
+    suites: {
+      'quarantine-test.js': {
+        tests: {
+          'quarantine should quarantine failed test': {
+            properties: {
+              quarantined: true,
+            },
+          },
+        },
+      },
+    },
+  },
+}
 
 versions.forEach((version) => {
   if (PLAYWRIGHT_VERSION === 'oldest' && version !== oldest) return
@@ -52,9 +114,11 @@ versions.forEach((version) => {
   }
 
   describe(`playwright@${version}`, function () {
-    let cwd, receiver, childProcess, webAppPort, webAppServer
+    const it = createParallelIt(global.it, { withReceiver: true })
 
-    this.timeout(80000)
+    let cwd, webAppPort, webAppServer
+
+    this.timeout(120000)
 
     useSandbox([`@playwright/test@${version}`, '@types/node', 'typescript'], true)
 
@@ -63,11 +127,7 @@ versions.forEach((version) => {
       this.timeout(120000)
 
       cwd = sandboxCwd()
-      const { NODE_OPTIONS, ...restOfEnv } = process.env
-      // Install chromium (configured in integration-tests/playwright.config.js)
-      // *Be advised*: this means that we'll only be using chromium for this test suite
-      // This will use cached browsers if available, otherwise download
-      execSync('npx playwright install chromium', { cwd, env: restOfEnv, stdio: 'inherit' })
+      installPlaywrightChromium(cwd)
 
       // Create fresh server instance to avoid issues with retries
       webAppServer = createWebAppServer()
@@ -85,17 +145,8 @@ versions.forEach((version) => {
       await new Promise(resolve => webAppServer.close(resolve))
     })
 
-    beforeEach(async function () {
-      receiver = await new FakeCiVisIntake().start()
-    })
-
-    afterEach(async () => {
-      childProcess.kill()
-      await receiver.stop()
-    })
-
     contextNewVersions('known tests without early flake detection', () => {
-      it('detects new tests without retrying them', (done) => {
+      it('detects new tests without retrying them', async (receiver, run) => {
         receiver.setSettings({
           known_tests_enabled: true,
         })
@@ -143,7 +194,7 @@ versions.forEach((version) => {
             assert.strictEqual(retriedTests.length, 0)
           })
 
-        childProcess = exec(
+        const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js',
           {
             cwd,
@@ -154,39 +205,15 @@ versions.forEach((version) => {
           }
         )
 
-        childProcess.on('exit', () => {
-          receiverPromise.then(() => done()).catch(done)
-        })
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
     })
 
     contextNewVersions('test management', () => {
       const ATTEMPT_TO_FIX_NUM_RETRIES = 3
-      context('attempt to fix', () => {
-        beforeEach(() => {
-          receiver.setTestManagementTests({
-            playwright: {
-              suites: {
-                'attempt-to-fix-test.js': {
-                  tests: {
-                    'attempt to fix should attempt to fix failed test': {
-                      properties: {
-                        attempt_to_fix: true,
-                      },
-                    },
-                    'attempt to fix should attempt to fix passed test': {
-                      properties: {
-                        attempt_to_fix: true,
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          })
-        })
 
-        const getTestAssertions = ({
+      context('attempt to fix', () => {
+        const getTestAssertions = (receiver, {
           isAttemptingToFix,
           shouldAlwaysPass,
           shouldFailSometimes,
@@ -346,6 +373,7 @@ versions.forEach((version) => {
             }, PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT)
 
         /**
+         * @param {import('../ci-visibility-intake').FakeCiVisIntake} receiver
          * @param {{
          *   isAttemptingToFix?: boolean,
          *   isQuarantined?: boolean,
@@ -357,7 +385,7 @@ versions.forEach((version) => {
          *   cliArgs?: string
          * }} [options]
          */
-        const runAttemptToFixTest = async ({
+        const runAttemptToFixTest = async (receiver, {
           isAttemptingToFix,
           isQuarantined,
           extraEnvVars,
@@ -367,7 +395,7 @@ versions.forEach((version) => {
           shouldIncludeFlakyTest,
           cliArgs = 'attempt-to-fix-test.js',
         } = {}) => {
-          const testAssertionsPromise = getTestAssertions({
+          const testAssertionsPromise = getTestAssertions(receiver, {
             isAttemptingToFix,
             shouldAlwaysPass,
             shouldFailSometimes,
@@ -376,104 +404,104 @@ versions.forEach((version) => {
             shouldIncludeFlakyTest,
           })
           let stdout = ''
-
-          childProcess = exec(
-            `./node_modules/.bin/playwright test -c playwright.config.js ${cliArgs}`,
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                PW_BASE_URL: `http://localhost:${webAppPort}`,
-                TEST_DIR: './ci-visibility/playwright-tests-test-management',
-                ...(shouldAlwaysPass ? { SHOULD_ALWAYS_PASS: '1' } : {}),
-                ...(shouldFailSometimes ? { SHOULD_FAIL_SOMETIMES: '1' } : {}),
-                ...(shouldIncludeFlakyTest ? { SHOULD_INCLUDE_FLAKY_TEST: '1' } : {}),
-                ...extraEnvVars,
-              },
-            }
-          )
-
-          childProcess.stdout?.on('data', data => {
-            stdout += data
-          })
-
-          childProcess.stderr?.on('data', data => {
-            stdout += data
-          })
-
-          const [[exitCode]] = await Promise.all([
-            once(childProcess, 'exit'),
-            testAssertionsPromise,
-          ])
-
-          if (isAttemptingToFix) {
-            assert.match(stdout, /Datadog Test Optimization: attempting to fix .*should attempt to fix failed test/)
-            assert.strictEqual(
-              (stdout.match(
-                /Datadog Test Optimization: attempting to fix .*should attempt to fix failed test/g
-              ) || []).length,
-              1
+          let proc
+          try {
+            proc = exec(
+              `./node_modules/.bin/playwright test -c playwright.config.js ${cliArgs}`,
+              {
+                cwd,
+                env: {
+                  ...getCiVisAgentlessConfig(receiver.port),
+                  PW_BASE_URL: `http://localhost:${webAppPort}`,
+                  TEST_DIR: './ci-visibility/playwright-tests-test-management',
+                  ...(shouldAlwaysPass ? { SHOULD_ALWAYS_PASS: '1' } : {}),
+                  ...(shouldFailSometimes ? { SHOULD_FAIL_SOMETIMES: '1' } : {}),
+                  ...(shouldIncludeFlakyTest ? { SHOULD_INCLUDE_FLAKY_TEST: '1' } : {}),
+                  ...extraEnvVars,
+                },
+              }
             )
-            assert.match(stdout, /Datadog Test Optimization/)
-            if (shouldAlwaysPass) {
-              assert.match(stdout, /Attempt to fix passed/)
-            } else {
-              assert.match(stdout, /Attempt to fix failed/)
-              assert.doesNotMatch(stdout, /execution(?:s)? [\d, -]+:/)
-            }
-            if (isQuarantined || isDisabled) {
-              assert.doesNotMatch(stdout, /Errors are suppressed because this test is/)
-            }
-          }
 
-          if (shouldAlwaysPass) {
-            assert.strictEqual(exitCode, 0)
-          } else {
-            assert.strictEqual(exitCode, 1)
+            proc.stdout?.on('data', data => { stdout += data })
+            proc.stderr?.on('data', data => { stdout += data })
+
+            const [[exitCode]] = await Promise.all([
+              once(proc, 'exit'),
+              testAssertionsPromise,
+            ])
+
+            if (isAttemptingToFix) {
+              assert.match(stdout, /Datadog Test Optimization: attempting to fix .*should attempt to fix failed test/)
+              assert.strictEqual(
+                (stdout.match(
+                  /Datadog Test Optimization: attempting to fix .*should attempt to fix failed test/g
+                ) || []).length,
+                1
+              )
+              assert.match(stdout, /Datadog Test Optimization/)
+              if (shouldAlwaysPass) {
+                assert.match(stdout, /Attempt to fix passed/)
+              } else {
+                assert.match(stdout, /Attempt to fix failed/)
+                assert.doesNotMatch(stdout, /execution(?:s)? [\d, -]+:/)
+              }
+              if (isQuarantined || isDisabled) {
+                assert.doesNotMatch(stdout, /Errors are suppressed because this test is/)
+              }
+            }
+
+            if (shouldAlwaysPass) {
+              assert.strictEqual(exitCode, 0)
+            } else {
+              assert.strictEqual(exitCode, 1)
+            }
+          } finally {
+            proc?.kill()
           }
         }
 
-        it('can attempt to fix and mark last attempt as failed if every attempt fails', async () => {
+        it('can attempt to fix and mark last attempt as failed if every attempt fails', async (receiver) => {
+          receiver.setTestManagementTests(ATF_MANAGEMENT_TESTS)
           receiver.setSettings({
             test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
           })
-
-          await runAttemptToFixTest({ isAttemptingToFix: true })
+          await runAttemptToFixTest(receiver, { isAttemptingToFix: true })
         })
 
-        it('can attempt to fix and mark last attempt as passed if every attempt passes', async () => {
+        it('can attempt to fix and mark last attempt as passed if every attempt passes', async (receiver) => {
+          receiver.setTestManagementTests(ATF_MANAGEMENT_TESTS)
           receiver.setSettings({
             test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
           })
-
-          await runAttemptToFixTest({ isAttemptingToFix: true, shouldAlwaysPass: true })
+          await runAttemptToFixTest(receiver, { isAttemptingToFix: true, shouldAlwaysPass: true })
         })
 
-        it('can attempt to fix and not mark last attempt if attempts both pass and fail', async () => {
+        it('can attempt to fix and not mark last attempt if attempts both pass and fail', async (receiver) => {
+          receiver.setTestManagementTests(ATF_MANAGEMENT_TESTS)
           receiver.setSettings({
             test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
           })
-
-          await runAttemptToFixTest({ isAttemptingToFix: true, shouldFailSometimes: true })
+          await runAttemptToFixTest(receiver, { isAttemptingToFix: true, shouldFailSometimes: true })
         })
 
-        it('does not attempt to fix tests if test management is not enabled', async () => {
+        it('does not attempt to fix tests if test management is not enabled', async (receiver) => {
+          receiver.setTestManagementTests(ATF_MANAGEMENT_TESTS)
           receiver.setSettings({
             test_management: { enabled: false, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
           })
-
-          await runAttemptToFixTest()
+          await runAttemptToFixTest(receiver)
         })
 
-        it('does not enable attempt to fix tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async () => {
+        it('does not enable attempt to fix tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async (receiver) => {
+          receiver.setTestManagementTests(ATF_MANAGEMENT_TESTS)
           receiver.setSettings({
             test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
           })
-
-          await runAttemptToFixTest({ extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
+          await runAttemptToFixTest(receiver, { extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
         })
 
-        it('does not tag known attempt to fix tests as new', async () => {
+        it('does not tag known attempt to fix tests as new', async (receiver, run) => {
+          receiver.setTestManagementTests(ATF_MANAGEMENT_TESTS)
           receiver.setKnownTests({
             playwright: {
               'attempt-to-fix-test.js': [
@@ -508,7 +536,7 @@ versions.forEach((version) => {
               }
             }, PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT)
 
-          childProcess = exec(
+          const proc = run(
             './node_modules/.bin/playwright test -c playwright.config.js attempt-to-fix-test.js',
             {
               cwd,
@@ -520,16 +548,10 @@ versions.forEach((version) => {
             }
           )
 
-          await Promise.all([
-            once(childProcess, 'exit'),
-            eventsPromise,
-          ])
+          await Promise.all([once(proc, 'exit'), eventsPromise])
         })
 
-        it('ignores quarantine when attempting to fix a test', async () => {
-          receiver.setSettings({
-            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
-          })
+        it('ignores quarantine when attempting to fix a test', async (receiver) => {
           receiver.setTestManagementTests({
             playwright: {
               suites: {
@@ -552,14 +574,13 @@ versions.forEach((version) => {
               },
             },
           })
-
-          await runAttemptToFixTest({ isAttemptingToFix: true, isQuarantined: true })
-        })
-
-        it('ignores disabled when attempting to fix a test', async () => {
           receiver.setSettings({
             test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
           })
+          await runAttemptToFixTest(receiver, { isAttemptingToFix: true, isQuarantined: true })
+        })
+
+        it('ignores disabled when attempting to fix a test', async (receiver) => {
           receiver.setTestManagementTests({
             playwright: {
               suites: {
@@ -582,16 +603,18 @@ versions.forEach((version) => {
               },
             },
           })
-
-          await runAttemptToFixTest({ isAttemptingToFix: true, isDisabled: true })
-        })
-
-        it('--retries is disabled for an attempt to fix test', async () => {
           receiver.setSettings({
             test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
           })
+          await runAttemptToFixTest(receiver, { isAttemptingToFix: true, isDisabled: true })
+        })
 
-          await runAttemptToFixTest({
+        it('--retries is disabled for an attempt to fix test', async (receiver) => {
+          receiver.setTestManagementTests(ATF_MANAGEMENT_TESTS)
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
+          })
+          await runAttemptToFixTest(receiver, {
             isAttemptingToFix: true,
             shouldFailSometimes: true,
             // passing retries has no effect
@@ -600,13 +623,13 @@ versions.forEach((version) => {
           })
         })
 
-        it('ATR is disabled for an attempt to fix test', async () => {
+        it('ATR is disabled for an attempt to fix test', async (receiver) => {
+          receiver.setTestManagementTests(ATF_MANAGEMENT_TESTS)
           receiver.setSettings({
             test_management: { enabled: true, attempt_to_fix_retries: ATTEMPT_TO_FIX_NUM_RETRIES },
             flaky_test_retries_enabled: true,
           })
-
-          await runAttemptToFixTest({
+          await runAttemptToFixTest(receiver, {
             isAttemptingToFix: true,
             shouldFailSometimes: true,
             extraEnvVars: { DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '20' },
@@ -616,36 +639,7 @@ versions.forEach((version) => {
       })
 
       context('disabled', () => {
-        let testOutput = ''
-        beforeEach(() => {
-          testOutput = ''
-          receiver.setTestManagementTests({
-            playwright: {
-              suites: {
-                'disabled-test.js': {
-                  tests: {
-                    'disable should disable test': {
-                      properties: {
-                        disabled: true,
-                      },
-                    },
-                  },
-                },
-                'disabled-2-test.js': {
-                  tests: {
-                    'disable should disable test': {
-                      properties: {
-                        disabled: true,
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          })
-        })
-
-        const getTestAssertions = (isDisabling) =>
+        const getTestAssertions = (receiver, isDisabling) =>
           receiver
             .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
@@ -690,91 +684,78 @@ versions.forEach((version) => {
               })
             }, PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT)
 
-        const runDisableTest = async (isDisabling, extraEnvVars) => {
-          const testAssertionsPromise = getTestAssertions(isDisabling)
+        const runDisableTest = async (receiver, isDisabling, extraEnvVars) => {
+          const testAssertionsPromise = getTestAssertions(receiver, isDisabling)
+          let testOutput = ''
+          let proc
+          try {
+            proc = exec(
+              './node_modules/.bin/playwright test -c playwright.config.js disabled-test.js disabled-2-test.js',
+              {
+                cwd,
+                env: {
+                  ...getCiVisAgentlessConfig(receiver.port),
+                  PW_BASE_URL: `http://localhost:${webAppPort}`,
+                  TEST_DIR: './ci-visibility/playwright-tests-test-management',
+                  ...extraEnvVars,
+                },
+              }
+            )
 
-          childProcess = exec(
-            './node_modules/.bin/playwright test -c playwright.config.js disabled-test.js disabled-2-test.js',
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                PW_BASE_URL: `http://localhost:${webAppPort}`,
-                TEST_DIR: './ci-visibility/playwright-tests-test-management',
-                ...extraEnvVars,
-              },
+            proc.stdout?.on('data', (chunk) => {
+              testOutput += chunk.toString()
+            })
+            proc.stderr?.on('data', (chunk) => {
+              testOutput += chunk.toString()
+            })
+
+            const [[exitCode]] = await Promise.all([
+              once(proc, 'exit'),
+              once(proc.stdout, 'end'),
+              once(proc.stderr, 'end'),
+              testAssertionsPromise,
+            ])
+
+            // the testOutput checks whether the test is actually skipped
+            if (isDisabling) {
+              assert.doesNotMatch(testOutput, /SHOULD NOT BE EXECUTED/)
+              assert.strictEqual(exitCode, 0)
+            } else {
+              assert.match(testOutput, /SHOULD NOT BE EXECUTED/)
+              assert.strictEqual(exitCode, 1)
             }
-          )
-
-          childProcess.stdout?.on('data', (chunk) => {
-            testOutput += chunk.toString()
-          })
-          childProcess.stderr?.on('data', (chunk) => {
-            testOutput += chunk.toString()
-          })
-
-          const [[exitCode]] = await Promise.all([
-            once(childProcess, 'exit'),
-            once(childProcess.stdout, 'end'),
-            once(childProcess.stderr, 'end'),
-            testAssertionsPromise,
-          ])
-
-          // the testOutput checks whether the test is actually skipped
-          if (isDisabling) {
-            assert.doesNotMatch(testOutput, /SHOULD NOT BE EXECUTED/)
-            assert.strictEqual(exitCode, 0)
-          } else {
-            assert.match(testOutput, /SHOULD NOT BE EXECUTED/)
-            assert.strictEqual(exitCode, 1)
+          } finally {
+            proc?.kill()
           }
         }
 
-        it('can disable tests', async () => {
+        it('can disable tests', async (receiver) => {
+          receiver.setTestManagementTests(DISABLED_MANAGEMENT_TESTS)
           receiver.setSettings({ test_management: { enabled: true } })
-
-          await runDisableTest(true)
+          await runDisableTest(receiver, true)
         })
 
-        it('can disable tests in fullyParallel mode', async () => {
+        it('can disable tests in fullyParallel mode', async (receiver) => {
+          receiver.setTestManagementTests(DISABLED_MANAGEMENT_TESTS)
           receiver.setSettings({ test_management: { enabled: true } })
-
-          await runDisableTest(true, { FULLY_PARALLEL: true, PLAYWRIGHT_WORKERS: '3' })
+          await runDisableTest(receiver, true, { FULLY_PARALLEL: true, PLAYWRIGHT_WORKERS: '3' })
         })
 
-        it('fails if disable is not enabled', async () => {
+        it('fails if disable is not enabled', async (receiver) => {
+          receiver.setTestManagementTests(DISABLED_MANAGEMENT_TESTS)
           receiver.setSettings({ test_management: { enabled: false } })
-
-          await runDisableTest(false)
+          await runDisableTest(receiver, false)
         })
 
-        it('does not enable disable tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async () => {
+        it('does not enable disable tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async (receiver) => {
+          receiver.setTestManagementTests(DISABLED_MANAGEMENT_TESTS)
           receiver.setSettings({ test_management: { enabled: true } })
-
-          await runDisableTest(false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+          await runDisableTest(receiver, false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
         })
       })
 
       context('quarantine', () => {
-        beforeEach(() => {
-          receiver.setTestManagementTests({
-            playwright: {
-              suites: {
-                'quarantine-test.js': {
-                  tests: {
-                    'quarantine should quarantine failed test': {
-                      properties: {
-                        quarantined: true,
-                      },
-                    },
-                  },
-                },
-              },
-            },
-          })
-        })
-
-        const getTestAssertions = ({ isQuarantining, hasFlakyTests }) =>
+        const getTestAssertions = (receiver, { isQuarantining, hasFlakyTests }) =>
           receiver
             .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
@@ -825,6 +806,7 @@ versions.forEach((version) => {
             }, PLAYWRIGHT_TEST_MANAGEMENT_GATHER_TIMEOUT)
 
         /**
+         * @param {import('../ci-visibility-intake').FakeCiVisIntake} receiver
          * @param {{
          *   isQuarantining?: boolean,
          *   extraEnvVars?: Record<string, string>,
@@ -832,62 +814,66 @@ versions.forEach((version) => {
          *   hasFlakyTests?: boolean
          * }} options
          */
-        const runQuarantineTest = async ({
+        const runQuarantineTest = async (receiver, {
           isQuarantining,
           extraEnvVars,
           cliArgs = 'quarantine-test.js',
           hasFlakyTests = false,
         }) => {
-          const testAssertionsPromise = getTestAssertions({ isQuarantining, hasFlakyTests })
+          const testAssertionsPromise = getTestAssertions(receiver, { isQuarantining, hasFlakyTests })
+          let proc
+          try {
+            proc = exec(
+              `./node_modules/.bin/playwright test -c playwright.config.js ${cliArgs}`,
+              {
+                cwd,
+                env: {
+                  ...getCiVisAgentlessConfig(receiver.port),
+                  PW_BASE_URL: `http://localhost:${webAppPort}`,
+                  TEST_DIR: './ci-visibility/playwright-tests-test-management',
+                  ...extraEnvVars,
+                },
+              }
+            )
 
-          childProcess = exec(
-            `./node_modules/.bin/playwright test -c playwright.config.js ${cliArgs}`,
-            {
-              cwd,
-              env: {
-                ...getCiVisAgentlessConfig(receiver.port),
-                PW_BASE_URL: `http://localhost:${webAppPort}`,
-                TEST_DIR: './ci-visibility/playwright-tests-test-management',
-                ...extraEnvVars,
-              },
+            const [[exitCode]] = await Promise.all([
+              once(proc, 'exit'),
+              testAssertionsPromise,
+            ])
+
+            if (isQuarantining) {
+              assert.strictEqual(exitCode, 0)
+            } else {
+              assert.strictEqual(exitCode, 1)
             }
-          )
-
-          const [[exitCode]] = await Promise.all([
-            once(childProcess, 'exit'),
-            testAssertionsPromise,
-          ])
-
-          if (isQuarantining) {
-            assert.strictEqual(exitCode, 0)
-          } else {
-            assert.strictEqual(exitCode, 1)
+          } finally {
+            proc?.kill()
           }
         }
 
-        it('can quarantine tests', async () => {
+        it('can quarantine tests', async (receiver) => {
+          receiver.setTestManagementTests(QUARANTINE_MANAGEMENT_TESTS)
           receiver.setSettings({ test_management: { enabled: true } })
-
-          await runQuarantineTest({ isQuarantining: true })
+          await runQuarantineTest(receiver, { isQuarantining: true })
         })
 
-        it('can quarantine tests when there are other flaky tests retried with --retries', async () => {
+        it('can quarantine tests when there are other flaky tests retried with --retries', async (receiver) => {
+          receiver.setTestManagementTests(QUARANTINE_MANAGEMENT_TESTS)
           receiver.setSettings({ test_management: { enabled: true } })
-
-          await runQuarantineTest({
+          await runQuarantineTest(receiver, {
             isQuarantining: true,
             cliArgs: 'quarantine-test.js quarantine-2-test.js --retries=1',
             hasFlakyTests: true,
           })
         })
 
-        it('can quarantine tests when there are other flaky tests retried with ATR', async () => {
+        it('can quarantine tests when there are other flaky tests retried with ATR', async (receiver) => {
+          receiver.setTestManagementTests(QUARANTINE_MANAGEMENT_TESTS)
           receiver.setSettings({
             test_management: { enabled: true },
             flaky_test_retries_enabled: true,
           })
-
-          await runQuarantineTest({
+          await runQuarantineTest(receiver, {
             isQuarantining: true,
             cliArgs: 'quarantine-test.js quarantine-2-test.js',
             hasFlakyTests: true,
@@ -895,20 +881,23 @@ versions.forEach((version) => {
           })
         })
 
-        it('fails if quarantine is not enabled', async () => {
+        it('fails if quarantine is not enabled', async (receiver) => {
+          receiver.setTestManagementTests(QUARANTINE_MANAGEMENT_TESTS)
           receiver.setSettings({ test_management: { enabled: false } })
-
-          await runQuarantineTest({ isQuarantining: false })
+          await runQuarantineTest(receiver, { isQuarantining: false })
         })
 
-        it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async () => {
+        it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async (receiver) => {
+          receiver.setTestManagementTests(QUARANTINE_MANAGEMENT_TESTS)
           receiver.setSettings({ test_management: { enabled: true } })
-
-          await runQuarantineTest({ isQuarantining: false, extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
+          await runQuarantineTest(
+            receiver,
+            { isQuarantining: false, extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } }
+          )
         })
       })
 
-      it('does not crash if the request to get test management tests fails', async () => {
+      it('does not crash if the request to get test management tests fails', async (receiver, run) => {
         let testOutput = ''
         receiver.setSettings({
           test_management: { enabled: true },
@@ -935,7 +924,7 @@ versions.forEach((version) => {
             120000
           )
 
-        childProcess = exec(
+        const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js attempt-to-fix-test.js',
           {
             cwd,
@@ -948,17 +937,17 @@ versions.forEach((version) => {
           }
         )
 
-        childProcess.stdout?.on('data', (chunk) => {
+        proc.stdout?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
-        childProcess.stderr?.on('data', (chunk) => {
+        proc.stderr?.on('data', (chunk) => {
           testOutput += chunk.toString()
         })
 
         await Promise.all([
-          once(childProcess, 'exit'),
-          once(childProcess.stdout, 'end'),
-          once(childProcess.stderr, 'end'),
+          once(proc, 'exit'),
+          once(proc.stdout, 'end'),
+          once(proc.stderr, 'end'),
           eventsPromise,
         ])
         assert.match(testOutput, /Test management tests could not be fetched/)

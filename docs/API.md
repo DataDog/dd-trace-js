@@ -32,6 +32,7 @@ tracer.use('pg', {
 <h5 id="apollo"></h5>
 <h5 id="avsc"></h5>
 <h5 id="aws-sdk"></h5>
+<h5 id="azure-cosmos"></h5>
 <h5 id="azure-event-hubs"></h5>
 <h5 id="azure-functions"></h5>
 <h5 id="azure-service-bus"></h5>
@@ -81,6 +82,7 @@ tracer.use('pg', {
 <h5 id="mongoose"></h5>
 <h5 id="mysql"></h5>
 <h5 id="mysql2"></h5>
+<h5 id="nats"></h5>
 <h5 id="net"></h5>
 <h5 id="next"></h5>
 <h5 id="nyc"></h5>
@@ -115,6 +117,7 @@ tracer.use('pg', {
 * [apollo](./interfaces/export_.plugins.apollo.html)
 * [avsc](./interfaces/export_.plugins.avsc.html)
 * [aws-sdk](./interfaces/export_.plugins.aws_sdk.html)
+* [azure-cosmos](./interfaces/export_.plugins.azure_cosmos.html)
 * [azure-event-hubs](./interfaces/export_.plugins.azure_event_hubs.html)
 * [azure-functions](./interfaces/export_.plugins.azure_functions.html)
 * [azure-service-bus](./interfaces/export_.plugins.azure_service_bus.html)
@@ -164,6 +167,7 @@ tracer.use('pg', {
 * [mongoose](./interfaces/export_.plugins.mongoose.html)
 * [mysql](./interfaces/export_.plugins.mysql.html)
 * [mysql2](./interfaces/export_.plugins.mysql2.html)
+* [nats](./interfaces/export_.plugins.nats.html)
 * [net](./interfaces/export_.plugins.net.html)
 * [next](./interfaces/export_.plugins.next.html)
 * [nyc](./interfaces/export_.plugins.nyc.html)

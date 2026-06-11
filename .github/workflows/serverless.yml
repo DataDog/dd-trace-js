@@ -26,9 +26,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:lambda:ci
@@ -41,11 +39,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: serverless-lambda
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   aws-sdk:
     strategy:
@@ -106,9 +103,7 @@ jobs:
       SERVICES: localstack localstack-legacy
       DD_DATA_STREAMS_ENABLED: true
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -122,11 +117,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: serverless-aws-sdk-${{ matrix.node-version }}-${{ matrix.spec }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}-${{ strategy.job-index }}
 
   azure-event-hubs:
     runs-on: ubuntu-latest
@@ -152,7 +146,7 @@ jobs:
       PLUGINS: azure-event-hubs
       SERVICES: azurite,azureeventhubsemulator
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/plugins/integration-test
 
   azure-functions:
@@ -163,6 +157,7 @@ jobs:
           - eventhubs
           - client
           - servicebus
+          - cosmosdb
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -198,12 +193,24 @@ jobs:
           ACCEPT_EULA: "Y"
           MSSQL_SA_PASSWORD: "Localtestpass1!"
           SQL_SERVER: azuresqledge
+      azurecosmosemulator:
+        image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator@sha256:bf3bd3cbe3fae2005a0745f77b01d1fc8cd04112193f3ee32289ee15ee9ae5fa # vnext-preview
+        ports:
+          - "127.0.0.1:8081:8081"
+          - "127.0.0.1:8080:8080"
+          - "127.0.0.1:1234:1234"
+        env:
+          ACCEPT_EULA: "Y"
+          BLOB_SERVER: azurite
+          METADATA_SERVER: azurite
     env:
       PLUGINS: azure-functions
-      SERVICES: azuresqledge,azureservicebusemulator,azurite,azureeventhubsemulator
+      SERVICES: azuresqledge,azureservicebusemulator,azurite,azureeventhubsemulator,azurecosmosemulator
       SPEC: ${{ matrix.spec }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: Wait for Cosmos emulator to be ready
+        run: timeout 120 bash -c 'until curl -sf -o /dev/null --max-time 5 http://127.0.0.1:8080/ready; do sleep 3; done'
       - name: Copy emulator config files
         run: |
           docker cp \
@@ -220,6 +227,7 @@ jobs:
       - uses: ./.github/actions/plugins/integration-test-newest-lts
         with:
           flags: serverless-azure-functions-${{ matrix.spec }}
+          suffix: ${{ strategy.job-index }}
 
   azure-service-bus:
     runs-on: ubuntu-latest
@@ -252,7 +260,7 @@ jobs:
       PLUGINS: azure-service-bus
       SERVICES: azureservicebusemulator,azuresqledge
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - name: Wait for Service Bus emulator to be ready
         run: timeout 120 bash -c 'until nc -z localhost 5672; do sleep 3; done'
       - uses: ./.github/actions/plugins/integration-test
@@ -273,10 +281,43 @@ jobs:
       SERVICES: azurite
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/plugins/integration-test-newest-lts
         with:
           flags: serverless-azure-durable-functions
+
+  azure-cosmos:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    services:
+      azurite:
+        image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/azure-storage/azurite@sha256:647c63a91102a9d8e8000aab803436e1fc85fbb285e7ce830a82ee5d6661cf37 # 3.35.0
+        ports:
+          - "127.0.0.1:10000:10000"
+          - "127.0.0.1:10001:10001"
+          - "127.0.0.1:10002:10002"
+      azurecosmosemulator:
+        image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator@sha256:bf3bd3cbe3fae2005a0745f77b01d1fc8cd04112193f3ee32289ee15ee9ae5fa # vnext-preview
+        ports:
+          - "127.0.0.1:8081:8081"
+          - "127.0.0.1:8080:8080"
+          - "127.0.0.1:1234:1234"
+        env:
+          ACCEPT_EULA: "Y"
+          BLOB_SERVER: azurite
+          METADATA_SERVER: azurite
+    env:
+      PLUGINS: azure-cosmos
+      SERVICES: azurite,azurecosmosemulator
+      NODE_OPTIONS: '--experimental-global-webcrypto'
+      NODE_TLS_REJECT_UNAUTHORIZED: 0
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: Wait for Cosmos emulator to be ready
+        run: timeout 120 bash -c 'until curl -sf -o /dev/null --max-time 5 http://127.0.0.1:8080/ready; do sleep 3; done'
+      - uses: ./.github/actions/plugins/test
+
 
   google-cloud-pubsub:
     runs-on: ubuntu-latest
@@ -291,5 +332,5 @@ jobs:
       PLUGINS: google-cloud-pubsub
       SERVICES: gpubsub
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/plugins/test

@@ -2,8 +2,8 @@
 
 const { channel, tracingChannel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
-const { addHook, getHooks } = require('./helpers/instrument')
 const { convertVercelPromptToMessages, buildOutputMessages } = require('./helpers/ai-messages')
+const { addHook, getHooks } = require('./helpers/instrument')
 
 const vercelAiTracingChannel = tracingChannel('dd-trace:vercel-ai')
 const vercelAiSpanSetAttributesChannel = channel('dd-trace:vercel-ai:span:setAttributes')
@@ -13,14 +13,23 @@ const tracers = new WeakSet()
 const wrappedModels = new WeakSet()
 
 /**
- * Publishes already-converted AI guard style messages to the AIGuard channel.
+ * Publishes already-converted AI-style messages to the AI Guard evaluation channel.
  *
- * @param {Array<object>} messages - AI guard style messages to evaluate
+ * Subscribers push async work into `pending` and abort `abortController` to block.
+ *
+ * @param {Array<object>} messages - AI-style messages to evaluate.
  * @returns {Promise<void>}
  */
-function publishToAIGuard (messages) {
-  return new Promise((resolve, reject) => {
-    aiguardChannel.publish({ messages, integration: 'ai', resolve, reject })
+function publishEvaluation (messages) {
+  const abortController = new AbortController()
+  const ctx = { messages, integration: 'ai', abortController, pending: [] }
+
+  aiguardChannel.publish(ctx)
+
+  return Promise.all(ctx.pending).then(() => {
+    if (abortController.signal.aborted) {
+      throw abortController.signal.reason
+    }
   })
 }
 
@@ -47,10 +56,11 @@ function wrapModelWithAIGuard (model) {
 
         // Run AI Guard input evaluation and LLM call in parallel.
         // The LLM has no side effects so it is safe to discard its result if AI Guard blocks.
-        return Promise.all([publishToAIGuard(inputMessages), originalResult])
+        return Promise.all([publishEvaluation(inputMessages), originalResult])
           .then(([, result]) => {
             if (!result.content?.length) return result
-            return publishToAIGuard(buildOutputMessages(inputMessages, result.content))
+            const outputMessages = buildOutputMessages(inputMessages, result.content)
+            return publishEvaluation(outputMessages)
               .then(() => result)
           })
       }
@@ -70,7 +80,7 @@ function wrapModelWithAIGuard (model) {
 
         // Run AI Guard input evaluation and LLM call in parallel.
         // The LLM has no side effects so it is safe to discard its result if AI Guard blocks.
-        return Promise.all([publishToAIGuard(inputMessages), originalResult])
+        return Promise.all([publishEvaluation(inputMessages), originalResult])
           .then(([, result]) => {
             const chunks = []
             const reader = result.stream.getReader()
@@ -89,7 +99,7 @@ function wrapModelWithAIGuard (model) {
               const content = toolCalls.length ? toolCalls : text ? [{ type: 'text', text }] : []
 
               const evaluate = content.length
-                ? publishToAIGuard(buildOutputMessages(inputMessages, content))
+                ? publishEvaluation(buildOutputMessages(inputMessages, content))
                 : Promise.resolve()
 
               return evaluate.then(() => {

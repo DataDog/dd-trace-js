@@ -7,7 +7,7 @@ const sinon = require('sinon')
 
 const { wrapModelWithAIGuard } = require('../src/ai')
 
-const aiguardChannel = channel('dd-trace:ai:aiguard')
+const evaluateChannel = channel('dd-trace:ai:aiguard')
 
 const prompt = [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }]
 
@@ -36,18 +36,32 @@ function readStream (stream) {
 function subscribeAutoResolve () {
   const calls = []
   const handler = ctx => {
-    calls.push({ messages: ctx.messages })
-    ctx.resolve()
+    calls.push(ctx)
+    ctx.pending.push(Promise.resolve())
   }
-  aiguardChannel.subscribe(handler)
-  return { calls, unsubscribe: () => aiguardChannel.unsubscribe(handler) }
+  evaluateChannel.subscribe(handler)
+  return { calls, unsubscribe: () => evaluateChannel.unsubscribe(handler) }
 }
 
 function subscribeAutoReject () {
   const err = Object.assign(new Error(), { name: 'AIGuardAbortError', reason: 'blocked' })
-  const handler = ctx => ctx.reject(err)
-  aiguardChannel.subscribe(handler)
-  return { err, unsubscribe: () => aiguardChannel.unsubscribe(handler) }
+  const handler = ctx => {
+    ctx.abortController.abort(err)
+    ctx.pending.push(Promise.resolve())
+  }
+  evaluateChannel.subscribe(handler)
+  return { err, unsubscribe: () => evaluateChannel.unsubscribe(handler) }
+}
+
+function subscribeAbortOnCall (abortOnCall, err) {
+  let callCount = 0
+  const handler = ctx => {
+    callCount++
+    if (callCount === abortOnCall) ctx.abortController.abort(err)
+    ctx.pending.push(Promise.resolve())
+  }
+  evaluateChannel.subscribe(handler)
+  return () => evaluateChannel.unsubscribe(handler)
 }
 
 describe('wrapModelWithAIGuard', () => {
@@ -110,6 +124,10 @@ describe('wrapModelWithAIGuard', () => {
         .then(() => {
           assert.strictEqual(calls.length, 1)
           assert.deepStrictEqual(calls[0].messages, [{ role: 'user', content: 'Hello' }])
+          assert.ok(calls[0].abortController instanceof AbortController)
+          assert.ok(Array.isArray(calls[0].pending))
+          assert.strictEqual(Object.hasOwn(calls[0], 'resolve'), false)
+          assert.strictEqual(Object.hasOwn(calls[0], 'reject'), false)
           assert.strictEqual(llmCalledBeforeGuardResolves, true)
           sinon.assert.calledOnce(original)
         })
@@ -139,6 +157,7 @@ describe('wrapModelWithAIGuard', () => {
             { role: 'user', content: 'Hello' },
             { role: 'assistant', content: 'Hello!' },
           ])
+          assert.strictEqual(calls[1].abortController.signal.aborted, false)
         })
         .finally(unsubscribe)
     })
@@ -199,18 +218,13 @@ describe('wrapModelWithAIGuard', () => {
     })
 
     it('rejects when output evaluation rejects', () => {
-      let callCount = 0
       const err = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
-      const handler = ctx => {
-        callCount++
-        callCount === 1 ? ctx.resolve() : ctx.reject(err)
-      }
-      aiguardChannel.subscribe(handler)
+      const unsubscribe = subscribeAbortOnCall(2, err)
       model.doGenerate = sinon.stub().resolves({ content: [{ type: 'text', text: 'bad' }] })
       wrapModelWithAIGuard(model)
 
       return assert.rejects(() => model.doGenerate({ prompt }), e => e === err)
-        .finally(() => aiguardChannel.unsubscribe(handler))
+        .finally(unsubscribe)
     })
 
     it('does not wrap already wrapped model', () => {
@@ -358,19 +372,14 @@ describe('wrapModelWithAIGuard', () => {
     })
 
     it('rejects when output evaluation rejects', () => {
-      let callCount = 0
       const err = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
-      const handler = ctx => {
-        callCount++
-        callCount === 1 ? ctx.resolve() : ctx.reject(err)
-      }
-      aiguardChannel.subscribe(handler)
+      const unsubscribe = subscribeAbortOnCall(2, err)
       const chunks = [{ type: 'text-delta', textDelta: 'bad response' }, { type: 'finish' }]
       model.doStream = sinon.stub().resolves({ stream: makeStream(chunks) })
       wrapModelWithAIGuard(model)
 
       return assert.rejects(() => model.doStream({ prompt }), e => e === err)
-        .finally(() => aiguardChannel.unsubscribe(handler))
+        .finally(unsubscribe)
     })
   })
 })

@@ -7,7 +7,6 @@ const libdatadog = require('@datadog/libdatadog')
 const binding = libdatadog.load('crashtracker')
 
 const log = require('../log')
-const { getAgentUrl } = require('../agent/url')
 const pkg = require('../../../../package.json')
 const processTags = require('../process-tags')
 
@@ -68,7 +67,7 @@ class Crashtracker {
    * @param {import('../config/config-base')} config - Tracer configuration
    */
   #getConfig (config) {
-    const url = getAgentUrl(config)
+    const url = config.url
 
     // Out-of-process symbolication currently works on
     // Linux only, does not work on Mac.
@@ -78,6 +77,7 @@ class Crashtracker {
 
     return {
       additional_files: [],
+      collect_all_threads: true,
       create_alt_stack: true,
       use_alt_stack: true,
       endpoint: {

@@ -125,7 +125,7 @@ class PrioritySampler {
 
     log.trace(span, auto)
 
-    const tag = this._getPriorityFromTags(context._tags, context)
+    const tag = this._getPriorityFromTags(context.getTags(), context)
 
     if (this.validate(tag)) {
       context._sampling.priority = tag
@@ -300,7 +300,7 @@ class PrioritySampler {
    * @returns {SamplingPriority}
    */
   #getPriorityByAgent (context) {
-    const key = `service:${context._tags[SERVICE_NAME]},env:${this._env}`
+    const key = `service:${context.getTag(SERVICE_NAME)},env:${this._env}`
     // TODO: Change underscored properties to private ones.
     const sampler = this._samplers[key] || this._samplers[DEFAULT_KEY]
 
@@ -333,11 +333,12 @@ class PrioritySampler {
       if (!trace.tags[DECISION_MAKER_KEY]) {
         trace.tags[DECISION_MAKER_KEY] = `-${mechanism}`
       }
-    } else if (DECISION_MAKER_KEY in trace.tags) {
-      // Guard the `delete` so the common drop path doesn't pay the V8
-      // dictionary-mode transition unless a prior keep decision actually
-      // set the tag.
-      delete trace.tags[DECISION_MAKER_KEY]
+    } else if (trace.tags[DECISION_MAKER_KEY] !== undefined) {
+      // Clear by assigning undefined rather than deleting: `delete` drops
+      // trace.tags into V8 dictionary (slow) mode for the per-trace extract
+      // and propagation scans that follow. Both skip undefined values, so the
+      // emitted meta and injected headers are unchanged.
+      trace.tags[DECISION_MAKER_KEY] = undefined
     }
   }
 

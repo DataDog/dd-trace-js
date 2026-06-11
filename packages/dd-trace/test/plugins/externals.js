@@ -19,6 +19,18 @@ module.exports = {
       versions: ['^1.3.23', '^2.0.0', '>=3.0.0'],
     },
     {
+      name: '@ai-sdk/amazon-bedrock',
+      versions: ['^3.0.0', '>=4.0.0'],
+    },
+    {
+      name: '@ai-sdk/anthropic',
+      versions: ['^1.0.0', '^2.0.0', '>=3.0.0'],
+    },
+    {
+      name: '@ai-sdk/google',
+      versions: ['^1.0.0', '^2.0.0', '>=3.0.0'],
+    },
+    {
       name: 'zod',
       versions: ['>=3.25.75'],
     },
@@ -571,6 +583,7 @@ module.exports = {
       name: 'mongodb',
       dep: true,
       forced: true,
+      node: '>=20.19.0',
     },
     {
       name: 'mongodb-core',

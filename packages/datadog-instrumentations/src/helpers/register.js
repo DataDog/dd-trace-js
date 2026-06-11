@@ -133,7 +133,7 @@ for (const name of names) {
         try {
           loadChannel.publish({ name })
 
-          moduleExports = hook(moduleExports, moduleVersion, isIitm) ?? moduleExports
+          moduleExports = hook(moduleExports, moduleVersion, isIitm, { moduleBaseDir, moduleName }) ?? moduleExports
         } catch (error) {
           log.info('Error during ddtrace instrumentation of application, aborting.', error)
           telemetry('error', [

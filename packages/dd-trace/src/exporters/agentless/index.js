@@ -19,24 +19,20 @@ class AgentlessExporter {
   /**
    * @param {object} config - Configuration object
    * @param {string} [config.site] - The Datadog site. Defaults to 'datadoghq.com'.
-   * @param {string} [config.url] - Override intake URL
    * @param {number} [config.flushInterval] - Batch flush interval in ms
    * @param {string} [config.env] - Environment name
    * @param {object} [config.tags] - Tags including runtime-id
    */
   constructor (config) {
     this._config = config
-    const { site = 'datadoghq.com', url } = config
+    const site = config.site ?? 'datadoghq.com'
 
     try {
-      this._url = url ? new URL(url) : new URL(`https://public-trace-http-intake.logs.${site}`)
+      // Agentless traffic carries the Datadog API key, so the intake is always the public https
+      // endpoint; never derive it from config.url (the agent's cleartext http) or the key leaks.
+      this._url = new URL(`https://public-trace-http-intake.logs.${site}`)
     } catch (err) {
-      log.error(
-        'Invalid URL configuration for agentless exporter. url=%s, site=%s. Error: %s',
-        url || 'not set',
-        site,
-        err.message
-      )
+      log.error('Invalid site for agentless exporter. site=%s. Error: %s', site, err.message)
       this._url = null
     }
 

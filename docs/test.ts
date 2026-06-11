@@ -289,6 +289,7 @@ tracer.use('claude-agent-sdk');
 tracer.use('avsc');
 tracer.use('aws-sdk');
 tracer.use('aws-sdk', awsSdkOptions);
+tracer.use('azure-cosmos');
 tracer.use('azure-event-hubs')
 tracer.use('azure-functions');
 tracer.use('bullmq');
@@ -374,6 +375,7 @@ tracer.use('mysql');
 tracer.use('mysql', { service: () => `my-custom-mysql` });
 tracer.use('mysql2');
 tracer.use('mysql2', { service: () => `my-custom-mysql2` });
+tracer.use('nats');
 tracer.use('net');
 tracer.use('next');
 tracer.use('next', nextOptions);

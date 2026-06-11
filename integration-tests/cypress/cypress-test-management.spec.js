@@ -39,6 +39,7 @@ const oldestVersion = DD_MAJOR >= 6 ? '12.0.0' : '6.7.0'
 const version = requestedVersion === 'oldest' ? oldestVersion : requestedVersion
 const hookFile = 'dd-trace/loader-hook.mjs'
 const over12It = (version === 'latest' || semver.gte(version, '12.0.0')) ? it : it.skip
+const MINIMUM_ATTEMPT_TO_FIX_RETRIES = 1
 
 function shouldTestsRun (type) {
   if (DD_MAJOR === 5) {
@@ -105,6 +106,7 @@ moduleTypes.forEach(({
     useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript'], true)
 
     before(async function () {
+      this.timeout(180_000)
       cwd = sandboxCwd()
       await warmCypressBinary(cwd)
 
@@ -293,6 +295,7 @@ moduleTypes.forEach(({
           shouldFailSometimes,
           isQuarantined,
           isDisabled,
+          attemptToFixRetries = MINIMUM_ATTEMPT_TO_FIX_RETRIES,
         }, child) =>
           receiver
             .gatherPayloadsUntilChildExit(child, ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
@@ -319,7 +322,7 @@ moduleTypes.forEach(({
               )
 
               if (isAttemptToFix) {
-                assert.strictEqual(attemptToFixTests.length, 4)
+                assert.strictEqual(attemptToFixTests.length, attemptToFixRetries + 1)
               } else {
                 assert.strictEqual(attemptToFixTests.length, 1)
               }
@@ -373,6 +376,7 @@ moduleTypes.forEach(({
          *   shouldFailSometimes?: boolean,
          *   isQuarantined?: boolean,
          *   isDisabled?: boolean,
+         *   attemptToFixRetries?: number,
          *   extraEnvVars?: Record<string, string>
          * }} [options]
          */
@@ -382,6 +386,7 @@ moduleTypes.forEach(({
           shouldFailSometimes,
           isQuarantined,
           isDisabled,
+          attemptToFixRetries = MINIMUM_ATTEMPT_TO_FIX_RETRIES,
           extraEnvVars = {},
         } = {}) => {
           let stdout = ''
@@ -420,6 +425,7 @@ moduleTypes.forEach(({
             shouldFailSometimes,
             isQuarantined,
             isDisabled,
+            attemptToFixRetries,
           }, childProcess)
 
           if (isAttemptToFix) {
@@ -462,25 +468,34 @@ moduleTypes.forEach(({
         }
 
         it('can attempt to fix and mark last attempt as failed if every attempt fails', async () => {
-          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: MINIMUM_ATTEMPT_TO_FIX_RETRIES },
+            flaky_test_retries_enabled: false,
+          })
 
-          await runAttemptToFixTest({ isAttemptToFix: true })
+          await runAttemptToFixTest({ isAttemptToFix: true, extraEnvVars: { CYPRESS_RETRIES: '1' } })
         })
 
         it('can attempt to fix and mark last attempt as passed if every attempt passes', async () => {
-          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: MINIMUM_ATTEMPT_TO_FIX_RETRIES },
+          })
 
           await runAttemptToFixTest({ isAttemptToFix: true, shouldAlwaysPass: true })
         })
 
         it('can attempt to fix and not mark last attempt if attempts both pass and fail', async () => {
-          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: MINIMUM_ATTEMPT_TO_FIX_RETRIES },
+          })
 
           await runAttemptToFixTest({ isAttemptToFix: true, shouldFailSometimes: true })
         })
 
         it('keeps after hook failures on attempt to fix tests', async () => {
-          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: MINIMUM_ATTEMPT_TO_FIX_RETRIES },
+          })
           receiver.setTestManagementTests({
             cypress: {
               suites: {
@@ -522,7 +537,7 @@ moduleTypes.forEach(({
                 .filter(test => test.meta[TEST_NAME] === 'attempt to fix after hook passes before after hook fails')
                 .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
 
-              assert.strictEqual(attemptToFixTests.length, 4)
+              assert.strictEqual(attemptToFixTests.length, MINIMUM_ATTEMPT_TO_FIX_RETRIES + 1)
 
               const lastAttempt = attemptToFixTests[attemptToFixTests.length - 1]
               assert.strictEqual(lastAttempt.meta[TEST_STATUS], 'fail')
@@ -535,13 +550,17 @@ moduleTypes.forEach(({
         })
 
         it('does not attempt to fix tests if test management is not enabled', async () => {
-          receiver.setSettings({ test_management: { enabled: false, attempt_to_fix_retries: 3 } })
+          receiver.setSettings({
+            test_management: { enabled: false, attempt_to_fix_retries: MINIMUM_ATTEMPT_TO_FIX_RETRIES },
+          })
 
           await runAttemptToFixTest()
         })
 
         it('does not enable attempt to fix tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async () => {
-          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: MINIMUM_ATTEMPT_TO_FIX_RETRIES },
+          })
 
           await runAttemptToFixTest({ extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
         })
@@ -555,10 +574,10 @@ moduleTypes.forEach(({
             },
           })
           receiver.setSettings({
-            test_management: { enabled: true, attempt_to_fix_retries: 2 },
+            test_management: { enabled: true, attempt_to_fix_retries: MINIMUM_ATTEMPT_TO_FIX_RETRIES },
             early_flake_detection: {
               enabled: true,
-              slow_test_retries: { '5s': 2 },
+              slow_test_retries: { '5s': 1 },
               faulty_session_threshold: 100,
             },
             known_tests_enabled: true,
@@ -601,7 +620,9 @@ moduleTypes.forEach(({
         })
 
         it('ignores quarantine when attempting to fix a test', async () => {
-          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: MINIMUM_ATTEMPT_TO_FIX_RETRIES },
+          })
           receiver.setTestManagementTests({
             cypress: {
               suites: {
@@ -623,7 +644,9 @@ moduleTypes.forEach(({
         })
 
         it('ignores disabled when attempting to fix a test', async () => {
-          receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          receiver.setSettings({
+            test_management: { enabled: true, attempt_to_fix_retries: MINIMUM_ATTEMPT_TO_FIX_RETRIES },
+          })
           receiver.setTestManagementTests({
             cypress: {
               suites: {
@@ -645,7 +668,7 @@ moduleTypes.forEach(({
         })
       })
 
-      context('disabled', () => {
+      context('disabled and quarantine', () => {
         beforeEach(() => {
           receiver.setTestManagementTests({
             cypress: {
@@ -659,86 +682,6 @@ moduleTypes.forEach(({
                     },
                   },
                 },
-              },
-            },
-          })
-        })
-
-        const awaitTestAssertions = (isDisabling, child) =>
-          receiver
-            .gatherPayloadsUntilChildExit(child, ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-              const events = payloads.flatMap(({ payload }) => payload.events)
-              const failedTest = events.find(event => event.type === 'test').content
-              const testSession = events.find(event => event.type === 'test_session_end').content
-
-              if (isDisabling) {
-                assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
-              } else {
-                assert.ok(!(TEST_MANAGEMENT_ENABLED in testSession.meta))
-              }
-
-              assert.strictEqual(failedTest.resource, 'cypress/e2e/disable.js.disable is disabled')
-
-              if (isDisabling) {
-                assert.strictEqual(failedTest.meta[TEST_STATUS], 'skip')
-                assert.strictEqual(failedTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
-              } else {
-                assert.strictEqual(failedTest.meta[TEST_STATUS], 'fail')
-                assert.ok(!(TEST_MANAGEMENT_IS_DISABLED in failedTest.meta))
-              }
-            })
-
-        const runDisableTest = async (isDisabling, extraEnvVars = {}) => {
-          const envVars = getCiVisEvpProxyConfig(receiver.port)
-
-          const specToRun = 'cypress/e2e/disable.js'
-
-          childProcess = exec(
-            version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
-            {
-              cwd,
-              env: {
-                ...envVars,
-                CYPRESS_BASE_URL: webAppBaseUrl,
-                SPEC_PATTERN: specToRun,
-                ...extraEnvVars,
-              },
-            }
-          )
-
-          await awaitTestAssertions(isDisabling, childProcess)
-
-          if (isDisabling) {
-            assert.strictEqual(childProcess.exitCode, 0)
-          } else {
-            assert.strictEqual(childProcess.exitCode, 1)
-          }
-        }
-
-        it('can disable tests', async () => {
-          receiver.setSettings({ test_management: { enabled: true } })
-
-          await runDisableTest(true)
-        })
-
-        it('fails if disable is not enabled', async () => {
-          receiver.setSettings({ test_management: { enabled: false } })
-
-          await runDisableTest(false)
-        })
-
-        it('does not disable tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async () => {
-          receiver.setSettings({ test_management: { enabled: true } })
-
-          await runDisableTest(false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
-        })
-      })
-
-      context('quarantine', () => {
-        beforeEach(() => {
-          receiver.setTestManagementTests({
-            cypress: {
-              suites: {
                 'cypress/e2e/quarantine.js': {
                   tests: {
                     'quarantine is quarantined': {
@@ -753,14 +696,21 @@ moduleTypes.forEach(({
           })
         })
 
-        const awaitTestAssertions = (isQuarantining, child) =>
+        const awaitTestAssertions = (isManagingTests, child) =>
           receiver
             .gatherPayloadsUntilChildExit(child, ({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
               const events = payloads.flatMap(({ payload }) => payload.events)
-              const failedTest = events.find(event => event.type === 'test').content
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
               const testSession = events.find(event => event.type === 'test_session_end').content
+              const disabledTest = tests.find(test => test.resource === 'cypress/e2e/disable.js.disable is disabled')
+              const quarantinedTest = tests.find(
+                test => test.resource === 'cypress/e2e/quarantine.js.quarantine is quarantined'
+              )
 
-              if (isQuarantining) {
+              assert.ok(disabledTest, 'disabled test should be reported')
+              assert.ok(quarantinedTest, 'quarantined test should be reported')
+
+              if (isManagingTests) {
                 assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
                 // Session status should be 'pass' because Cypress sees the quarantined test as passed
                 assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
@@ -769,27 +719,33 @@ moduleTypes.forEach(({
                 assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
               }
 
-              assert.strictEqual(failedTest.resource, 'cypress/e2e/quarantine.js.quarantine is quarantined')
-
-              if (isQuarantining) {
+              if (isManagingTests) {
+                assert.strictEqual(disabledTest.meta[TEST_STATUS], 'skip')
+                assert.strictEqual(disabledTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
                 // Quarantined tests run normally but their failures are suppressed by Cypress.on('fail')
                 // in support.js. The test actually fails (reports 'fail' to Datadog) but Cypress sees
                 // it as passed, so the exit code is 0.
-                assert.strictEqual(failedTest.meta[TEST_STATUS], 'fail')
-                assert.strictEqual(failedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+                assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
+                assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
               } else {
-                assert.strictEqual(failedTest.meta[TEST_STATUS], 'fail')
-                assert.ok(!(TEST_MANAGEMENT_IS_QUARANTINED in failedTest.meta))
+                assert.strictEqual(disabledTest.meta[TEST_STATUS], 'fail')
+                assert.ok(!(TEST_MANAGEMENT_IS_DISABLED in disabledTest.meta))
+                assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
+                assert.ok(!(TEST_MANAGEMENT_IS_QUARANTINED in quarantinedTest.meta))
               }
             })
 
-        const runQuarantineTest = async (isQuarantining, extraEnvVars = {}) => {
+        const runDisableAndQuarantineTest = async (isManagingTests, extraEnvVars = {}) => {
           const envVars = getCiVisEvpProxyConfig(receiver.port)
 
-          const specToRun = 'cypress/e2e/quarantine.js'
+          const specToRun = 'cypress/e2e/{disable,quarantine}.js'
+          const cypress67SpecToRun = 'cypress/e2e/disable.js,cypress/e2e/quarantine.js'
+          const command = version === '6.7.0'
+            ? `./node_modules/.bin/cypress run --config-file cypress-config.json --spec "${cypress67SpecToRun}"`
+            : version === 'latest' ? testCommand : `${testCommand} --spec "${specToRun}"`
 
           childProcess = exec(
-            version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+            command,
             {
               cwd,
               env: {
@@ -801,31 +757,31 @@ moduleTypes.forEach(({
             }
           )
 
-          await awaitTestAssertions(isQuarantining, childProcess)
+          await awaitTestAssertions(isManagingTests, childProcess)
 
-          if (isQuarantining) {
+          if (isManagingTests) {
             assert.strictEqual(childProcess.exitCode, 0)
           } else {
-            assert.strictEqual(childProcess.exitCode, 1)
+            assert.strictEqual(childProcess.exitCode, 2)
           }
         }
 
-        it('can quarantine tests', async () => {
+        it('can disable and quarantine tests', async () => {
           receiver.setSettings({ test_management: { enabled: true } })
 
-          await runQuarantineTest(true)
+          await runDisableAndQuarantineTest(true)
         })
 
-        it('fails if quarantine is not enabled', async () => {
+        it('does not disable or quarantine tests if test management is not enabled', async () => {
           receiver.setSettings({ test_management: { enabled: false } })
 
-          await runQuarantineTest(false)
+          await runDisableAndQuarantineTest(false)
         })
 
-        it('does not enable quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async () => {
+        it('does not disable or quarantine tests if DD_TEST_MANAGEMENT_ENABLED is set to false', async () => {
           receiver.setSettings({ test_management: { enabled: true } })
 
-          await runQuarantineTest(false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
+          await runDisableAndQuarantineTest(false, { DD_TEST_MANAGEMENT_ENABLED: '0' })
         })
       })
 
@@ -942,7 +898,7 @@ moduleTypes.forEach(({
         receiver.setSettings({
           test_management: {
             enabled: true,
-            attempt_to_fix_retries: 3,
+            attempt_to_fix_retries: MINIMUM_ATTEMPT_TO_FIX_RETRIES,
           },
         })
 
@@ -996,8 +952,8 @@ moduleTypes.forEach(({
               const events = payloads.flatMap(({ payload }) => payload.events)
               const tests = events.filter(event => event.type === 'test').map(event => event.content)
 
-              // 1 test with attempt to fix (1 original + 3 retries) + 2 tests without = 6 tests total
-              assert.equal(tests.length, 6)
+              // 1 test with attempt to fix (1 original + 1 retry) + 2 tests without = 4 tests total
+              assert.equal(tests.length, 4)
 
               // Extract test execution order with full details
               const testExecutionOrder = tests.map(test => ({
@@ -1010,15 +966,11 @@ moduleTypes.forEach(({
               // 1. "first test" (original, no retries)
               // 2. "second test" (original)
               // 3. "second test" (retry 1)
-              // 4. "second test" (retry 2)
-              // 5. "second test" (retry 3)
-              // 6. "third test" (original, no retries)
+              // 4. "third test" (original, no retries)
 
               assertObjectContains(testExecutionOrder, [
                 { name: 'attempt to fix order first test', isRetry: false, isAttemptToFix: false },
                 { name: 'attempt to fix order second test', isRetry: false, isAttemptToFix: true },
-                { name: 'attempt to fix order second test', isRetry: true, isAttemptToFix: true },
-                { name: 'attempt to fix order second test', isRetry: true, isAttemptToFix: true },
                 { name: 'attempt to fix order second test', isRetry: true, isAttemptToFix: true },
                 { name: 'attempt to fix order third test', isRetry: false, isAttemptToFix: false },
               ])

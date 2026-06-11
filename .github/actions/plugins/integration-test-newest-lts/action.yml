@@ -5,11 +5,13 @@ inputs:
     description: 'Coverage flag identifier'
     required: false
     default: serverless-${{ github.job }}
+  suffix:
+    description: 'Unique suffix for artifact naming — required when called from a matrix job.'
+    required: false
+    default: ''
 runs:
   using: composite
   steps:
-    - uses: ./.github/actions/dd-sts-api-key
-      id: dd-sts
     - uses: ./.github/actions/node/newest-maintenance-lts
     - uses: ./.github/actions/install
     - run: yarn test:integration:plugins:coverage
@@ -17,8 +19,7 @@ runs:
     - uses: ./.github/actions/coverage
       with:
         flags: ${{ inputs.flags }}
-        dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-    - uses: ./.github/actions/push_to_test_optimization
+    - uses: ./.github/actions/upload-junit-artifacts
       if: "!cancelled()"
       with:
-        dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+        id: ${{ github.job }}-integration-newest-lts${{ inputs.suffix != '' && format('-{0}', inputs.suffix) || '' }}

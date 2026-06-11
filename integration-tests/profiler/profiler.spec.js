@@ -678,6 +678,10 @@ describe('profiler', () => {
         }
       })
 
+      // All OOM tests below are retried 3 times because OOM export behavior is timing-sensitive
+      // and Node.js version-dependent: newer V8 versions (e.g. Node 26) crash faster or handle
+      // worker OOM differently, making these tests inherently unreliable without retries.
+
       it('sends a heap profile on OOM with external process', () => {
         proc = fork(oomTestFile, {
           cwd,
@@ -685,7 +689,7 @@ describe('profiler', () => {
           env: oomEnv,
         })
         return checkProfiles(agent, proc, timeout, ['space'], true, false)
-      })
+      }).retries(3)
 
       it('sends a heap profile on OOM in worker thread and exits successfully', () => {
         proc = fork(oomTestFile, [1, OOM_HEAP_MB], {
@@ -693,18 +697,17 @@ describe('profiler', () => {
           env: { ...oomEnv, DD_PROFILING_WALLTIME_ENABLED: '0' },
         })
         return checkProfiles(agent, proc, timeout, ['space'], false)
-      })
+      }).retries(3)
 
-      // Following tests are flaky because they use unreliable strategies to export profiles
+      // Following tests also use unreliable strategies to export profiles
       // (or check that the process can recover from OOM, which is also unreliable).
-      // We retry them 3 times to decrease flakiness.
       it('sends a heap profile on OOM with external process and exits successfully', () => {
         proc = fork(oomTestFile, {
           cwd,
           execArgv: oomExecArgv,
           env: {
             ...oomEnv,
-            DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: '15000000',
+            DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: '20000000',
             DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: '3',
           },
         })

@@ -27,7 +27,7 @@ jobs:
         with:
           scope: DataDog/test-environment
           policy: dd-trace-js
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           token: ${{ steps.octo-sts.outputs.token }}
       - uses: ./.github/actions/node/oldest-maintenance-lts
@@ -48,9 +48,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -70,9 +68,60 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-testopt-${{ matrix.version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+
+  playwright-image:
+    strategy:
+      fail-fast: false
+      matrix:
+        playwright-version: [oldest, latest]
+    name: Ensure Playwright Docker image (${{ matrix.playwright-version }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      # Both matrix jobs set this to the same value, so the last-writer-wins
+      # behaviour of matrix outputs is safe here.
+      images: ${{ steps.versions.outputs.images }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: Determine versions
+        id: versions
+        run: |
+          LATEST=$(node -p "require('./integration-tests/playwright/versions').latest")
+          OLDEST=$(node -p "require('./integration-tests/playwright/versions').oldest")
+          DOCKER_HASH=$(sha256sum .github/playwright/Dockerfile | cut -c1-8)
+          LATEST_TAG="${LATEST}-${DOCKER_HASH}"
+          OLDEST_TAG="${OLDEST}-${DOCKER_HASH}"
+          BASE="ghcr.io/datadog/dd-trace-js/playwright-tools"
+          IMAGES=$(printf '{"latest":"%s:%s","oldest":"%s:%s"}' "$BASE" "$LATEST_TAG" "$BASE" "$OLDEST_TAG")
+          PW_VERSION=$([ "${{ matrix.playwright-version }}" = "latest" ] && echo "$LATEST" || echo "$OLDEST")
+          IMAGE_TAG=$([ "${{ matrix.playwright-version }}" = "latest" ] && echo "$LATEST_TAG" || echo "$OLDEST_TAG")
+          echo "images=$IMAGES" >> $GITHUB_OUTPUT
+          echo "pw-version=$PW_VERSION" >> $GITHUB_OUTPUT
+          echo "image-tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+      - name: Log in to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Ensure image
+        env:
+          PW_VERSION: ${{ steps.versions.outputs.pw-version }}
+          IMAGE_TAG: ${{ steps.versions.outputs.image-tag }}
+        run: |
+          IMAGE="ghcr.io/datadog/dd-trace-js/playwright-tools:${IMAGE_TAG}"
+          if docker manifest inspect "${IMAGE}" > /dev/null 2>&1; then
+            echo "Image ${IMAGE} already exists, skipping build"
+          else
+            docker build --build-arg PLAYWRIGHT_VERSION="${PW_VERSION}" \
+              -t "${IMAGE}" .github/playwright
+            docker push "${IMAGE}"
+          fi
 
   integration-playwright:
+    needs: playwright-image
     strategy:
       fail-fast: false
       matrix:
@@ -91,39 +140,23 @@ jobs:
     permissions:
       id-token: write
     container:
-      image: ghcr.io/rochdev/playwright-tools@sha256:65b8161e23ede2354d04c8a242032d9ee8ca275359eac1764c027f073d38217c # 1.54.1-5
+      image: ${{ fromJson(needs.playwright-image.outputs.images)[matrix.playwright-version] }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     env:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
       OPTIONS_OVERRIDE: 1
       PLAYWRIGHT_VERSION: ${{ matrix.playwright-version }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.node-version }}
       - uses: ./.github/actions/install
-      # We need this because the "oldest" playwright version depends on the major version of dd-trace
-      # For v5 it's 1.18.0 and for v6 it's 1.38.0
-      # We don't cache "latest" because it changes based on playwright releases.
-      # We could do it, but we'd have to request GitHub API to get the latest version,
-      # and the cache hit rate would be way lower than for "oldest", which should be 100%.
-      - name: Get dd-trace major version
-        if: matrix.playwright-version == 'oldest'
-        id: dd-version
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          MAJOR=$(echo $VERSION | cut -d. -f1)
-          echo "major=$MAJOR" >> $GITHUB_OUTPUT
-          echo "dd-trace major version: $MAJOR"
-      - name: Cache Playwright browsers
-        if: matrix.playwright-version == 'oldest'
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: /github/home/.cache/ms-playwright
-          key: playwright-browsers-oldest-dd${{ steps.dd-version.outputs.major }}
       - name: Configure Git safe directory
         # The Playwright job runs in a container where the checkout can be owned by a different UID.
         # Git rejects metadata commands in that checkout unless the workspace is marked as safe.
@@ -136,7 +169,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-playwright-${{ matrix.node-version }}-${{ matrix.playwright-version }}-${{ matrix.spec }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-mocha:
     strategy:
@@ -152,7 +184,7 @@ jobs:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node
@@ -167,7 +199,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-mocha-${{ matrix.version }}-${{ matrix.mocha-version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-jest:
     strategy:
@@ -178,7 +209,7 @@ jobs:
         jest-version: [oldest, latest]
         spec:
           - jest.core
-          - jest.itr-efd
+          - jest.tia-efd
           - jest.test-management
     name: integration-jest (${{ matrix.jest-version }}, node-${{ matrix.version }}, ${{ matrix.spec }})
     runs-on: ubuntu-latest
@@ -188,7 +219,7 @@ jobs:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node
@@ -204,7 +235,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-jest-${{ matrix.version }}-${{ matrix.jest-version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   # Unit tests for `packages/datadog-plugin-jest`. The `integration-jest` matrix above only runs
   # `integration-tests/jest/*.spec.js`, so this is the only CI invocation whose glob expands to
@@ -216,7 +246,7 @@ jobs:
     env:
       PLUGINS: jest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/plugins/test
 
   integration-cucumber:
@@ -232,7 +262,7 @@ jobs:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node
@@ -247,9 +277,42 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-cucumber-${{ matrix.version }}-${{ matrix.cucumber-version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+
+  selenium-image:
+    name: Ensure Selenium Docker image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: Determine image tag
+        id: image
+        run: |
+          DOCKER_HASH=$(sha256sum .github/selenium/Dockerfile | cut -c1-8)
+          IMAGE="ghcr.io/datadog/dd-trace-js/selenium-tools:${DOCKER_HASH}"
+          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+      - name: Log in to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Ensure image
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+        run: |
+          if docker manifest inspect "${IMAGE}" > /dev/null 2>&1; then
+            echo "Image ${IMAGE} already exists, skipping build"
+          else
+            docker build -t "${IMAGE}" .github/selenium
+            docker push "${IMAGE}"
+          fi
 
   integration-selenium:
+    needs: selenium-image
     strategy:
       fail-fast: false
       matrix:
@@ -257,35 +320,27 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
+    container:
+      image: ${{ needs.selenium-image.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     env:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
       OPTIONS_OVERRIDE: 1
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
-      - name: Install Google Chrome
-        run: |
-          sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
-          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
-          if [ $? -ne 0 ]; then echo "Failed to add Google key"; exit 1; fi
-          sudo apt-get update
-          sudo apt-get install -y google-chrome-stable
-          if [ $? -ne 0 ]; then echo "Failed to install Google Chrome"; exit 1; fi
-      - name: Install ChromeDriver
-        run: |
-          export CHROME_VERSION=$(google-chrome --version)
-          CHROME_DRIVER_DOWNLOAD_URL=$(node --experimental-fetch scripts/get-chrome-driver-download-url.js)
-          wget -q "$CHROME_DRIVER_DOWNLOAD_URL"
-          if [ $? -ne 0 ]; then echo "Failed to download ChromeDriver"; exit 1; fi
-          unzip chromedriver-linux64.zip
-          sudo mv chromedriver-linux64/chromedriver /usr/bin/chromedriver
-          sudo chmod +x /usr/bin/chromedriver
       - uses: ./.github/actions/install
+      - name: Configure Git safe directory
+        # The Selenium job runs in a container where the checkout can be owned by a different UID.
+        # Git rejects metadata commands in that checkout unless the workspace is marked as safe.
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - run: yarn test:integration:selenium:coverage
         env:
           NODE_OPTIONS: "-r ./ci/init"
@@ -293,7 +348,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-selenium-${{ matrix.version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-cypress:
     strategy:
@@ -308,12 +362,13 @@ jobs:
         module-type: ["commonJS", "esm"]
         spec:
           - cypress-reporting
+          - cypress-reporting-instrumentation
           - cypress-itr
+          - cypress-tia-code-coverage
           - cypress-efd
           - cypress-atr
           - cypress-test-management
-          - cypress-impacted-tests
-          - cypress-final-status
+          - cypress-final-status-impacted-tests
         exclude:
           # 6.7.0 only runs on DD_MAJOR <= 5 with Node 16/commonJS.
           # On DD_MAJOR >= 6, shouldTestsRun() skips this remaining matrix entry.
@@ -341,21 +396,27 @@ jobs:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
       - uses: ./.github/actions/install
-      # We cache Cypress binaries for fixed versions (6.7.0, 12.0.0, 14.5.4) but not for "latest"
-      # as that changes frequently and would have a low cache hit rate
+      - name: Resolve Cypress version
+        id: cypress-version
+        run: |
+          if [ "${{ matrix.cypress-version }}" = "latest" ]; then
+            RESOLVED=$(node -p "require('./packages/dd-trace/test/plugins/versions/package.json').dependencies.cypress")
+          else
+            RESOLVED="${{ matrix.cypress-version }}"
+          fi
+          echo "resolved=$RESOLVED" >> $GITHUB_OUTPUT
       - name: Cache Cypress binary
-        if: matrix.cypress-version != 'latest'
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ~/.cache/Cypress
-          key: cypress-binary-${{ matrix.cypress-version }}
+          key: cypress-binary-${{ steps.cypress-version.outputs.resolved }}
       - run: yarn config set ignore-engines true
       - run: yarn test:integration:cypress:coverage --ignore-engines
         env:
@@ -368,7 +429,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-cypress-${{ matrix.version }}-${{ matrix.cypress-version }}-${{ matrix.module-type }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-vitest:
     runs-on: ubuntu-latest
@@ -388,7 +448,7 @@ jobs:
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
       OPTIONS_OVERRIDE: 1
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node
@@ -403,4 +463,3 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-vitest-${{ matrix.version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}

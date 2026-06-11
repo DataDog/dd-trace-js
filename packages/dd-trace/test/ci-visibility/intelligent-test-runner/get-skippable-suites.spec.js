@@ -9,6 +9,7 @@ const nock = require('nock')
 require('../../setup/core')
 
 const { getSkippableSuites } = require('../../../src/ci-visibility/intelligent-test-runner/get-skippable-suites')
+const getConfig = require('../../../src/config')
 const {
   buildCacheKey,
   getCachePath,
@@ -43,11 +44,61 @@ const SKIPPABLE_RESPONSE = {
   meta: { correlation_id: 'corr-123' },
 }
 
+const SKIPPABLE_RESPONSE_WITH_COVERAGE = {
+  data: [
+    {
+      type: 'suite',
+      attributes: {
+        suite: 'suite1.spec.js',
+      },
+    },
+    {
+      type: 'suite',
+      attributes: {
+        suite: 'suite2.spec.js',
+      },
+    },
+  ],
+  meta: {
+    correlation_id: 'corr-123',
+    coverage: {
+      'src/file1.js': 'gA==',
+      'src/file2.js': 'IA==',
+    },
+  },
+}
+
+const SKIPPABLE_RESPONSE_WITH_MISSING_LINE_COVERAGE = {
+  data: [
+    {
+      type: 'suite',
+      attributes: {
+        suite: 'suite1.spec.js',
+        _is_missing_line_code_coverage: true,
+      },
+    },
+    {
+      type: 'suite',
+      attributes: {
+        suite: 'suite2.spec.js',
+        _is_missing_line_code_coverage: false,
+      },
+    },
+  ],
+  meta: {
+    correlation_id: 'corr-123',
+    coverage: {
+      'src/file1.js': 'gA==',
+    },
+  },
+}
+
 function cacheKeyForParams (params) {
   return buildCacheKey('skippable', [
     params.sha, params.service, params.env, params.repositoryUrl,
     params.osPlatform, params.osVersion, params.osArchitecture,
     params.runtimeName, params.runtimeVersion, params.testLevel, params.custom,
+    params.isCoverageReportUploadEnabled || false,
   ])
 }
 
@@ -60,14 +111,20 @@ function cleanup (params) {
 describe('get-skippable-suites', () => {
   beforeEach(() => {
     process.env.DD_API_KEY = 'test-api-key'
+    getConfig().apiKey = 'test-api-key'
     process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE = 'true'
+    getConfig().DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE = true
     cleanup(DEFAULT_PARAMS)
+    cleanup({ ...DEFAULT_PARAMS, isCoverageReportUploadEnabled: true })
   })
 
   afterEach(() => {
     delete process.env.DD_API_KEY
+    getConfig().apiKey = undefined
     delete process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE
+    getConfig().DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE = false
     cleanup(DEFAULT_PARAMS)
+    cleanup({ ...DEFAULT_PARAMS, isCoverageReportUploadEnabled: true })
     nock.cleanAll()
   })
 
@@ -77,6 +134,82 @@ describe('get-skippable-suites', () => {
       .reply(200, JSON.stringify(SKIPPABLE_RESPONSE))
 
     getSkippableSuites(DEFAULT_PARAMS, (err, skippableSuites, correlationId) => {
+      assert.strictEqual(err, null)
+      assert.deepStrictEqual(skippableSuites, ['suite1.spec.js', 'suite2.spec.js'])
+      assert.strictEqual(correlationId, 'corr-123')
+      done()
+    })
+  })
+
+  it('should return skippable suite coverage from response metadata', (done) => {
+    nock(BASE_URL)
+      .post('/api/v2/ci/tests/skippable')
+      .reply(200, JSON.stringify(SKIPPABLE_RESPONSE_WITH_COVERAGE))
+
+    getSkippableSuites(DEFAULT_PARAMS, (err, skippableSuites, correlationId, coverage) => {
+      assert.strictEqual(err, null)
+      assert.deepStrictEqual(skippableSuites, ['suite1.spec.js', 'suite2.spec.js'])
+      assert.strictEqual(correlationId, 'corr-123')
+      assert.deepStrictEqual(coverage, {
+        'src/file1.js': 'gA==',
+        'src/file2.js': 'IA==',
+      })
+      done()
+    })
+  })
+
+  it('should skip suites with response metadata coverage when coverage report upload is enabled', (done) => {
+    const params = { ...DEFAULT_PARAMS, isCoverageReportUploadEnabled: true }
+    nock(BASE_URL)
+      .post('/api/v2/ci/tests/skippable')
+      .reply(200, JSON.stringify(SKIPPABLE_RESPONSE_WITH_COVERAGE))
+
+    getSkippableSuites(params, (err, skippableSuites, correlationId, coverage) => {
+      assert.strictEqual(err, null)
+      assert.deepStrictEqual(skippableSuites, ['suite1.spec.js', 'suite2.spec.js'])
+      assert.strictEqual(correlationId, 'corr-123')
+      assert.deepStrictEqual(coverage, {
+        'src/file1.js': 'gA==',
+        'src/file2.js': 'IA==',
+      })
+      done()
+    })
+  })
+
+  it('should not skip suites with missing line coverage when coverage report upload is enabled', (done) => {
+    const params = { ...DEFAULT_PARAMS, isCoverageReportUploadEnabled: true }
+    nock(BASE_URL)
+      .post('/api/v2/ci/tests/skippable')
+      .reply(200, JSON.stringify(SKIPPABLE_RESPONSE_WITH_MISSING_LINE_COVERAGE))
+
+    getSkippableSuites(params, (err, skippableSuites, correlationId) => {
+      assert.strictEqual(err, null)
+      assert.deepStrictEqual(skippableSuites, ['suite2.spec.js'])
+      assert.strictEqual(correlationId, 'corr-123')
+      done()
+    })
+  })
+
+  it('should keep suites with missing line coverage when coverage report upload is disabled', (done) => {
+    nock(BASE_URL)
+      .post('/api/v2/ci/tests/skippable')
+      .reply(200, JSON.stringify(SKIPPABLE_RESPONSE_WITH_MISSING_LINE_COVERAGE))
+
+    getSkippableSuites(DEFAULT_PARAMS, (err, skippableSuites, correlationId) => {
+      assert.strictEqual(err, null)
+      assert.deepStrictEqual(skippableSuites, ['suite1.spec.js', 'suite2.spec.js'])
+      assert.strictEqual(correlationId, 'corr-123')
+      done()
+    })
+  })
+
+  it('should return suites without coverage when coverage report upload is enabled', (done) => {
+    const params = { ...DEFAULT_PARAMS, isCoverageReportUploadEnabled: true }
+    nock(BASE_URL)
+      .post('/api/v2/ci/tests/skippable')
+      .reply(200, JSON.stringify(SKIPPABLE_RESPONSE))
+
+    getSkippableSuites(params, (err, skippableSuites, correlationId) => {
       assert.strictEqual(err, null)
       assert.deepStrictEqual(skippableSuites, ['suite1.spec.js', 'suite2.spec.js'])
       assert.strictEqual(correlationId, 'corr-123')

@@ -56,6 +56,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' }, // should not use this
             toSpanId () { return '456' },
           }
@@ -130,6 +133,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -160,6 +166,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -195,6 +204,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -229,6 +241,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -254,6 +269,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -286,6 +304,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -313,6 +334,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -340,6 +364,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -366,6 +393,9 @@ describe('span processor', () => {
               'error.type': 'error type',
               'error.stack': 'error stack',
             },
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -397,6 +427,9 @@ describe('span processor', () => {
             _tags: {
               error: new Error('error message'),
             },
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -424,6 +457,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -446,6 +482,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -469,6 +508,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -486,12 +528,97 @@ describe('span processor', () => {
       assertObjectContains(payload.tags, ['source:mySource', 'hostname:localhost', 'foo:bar'])
     })
 
+    it('fans out array-valued user tags into one wire entry per element', () => {
+      // Regression for https://github.com/DataDog/dd-trace-js/issues/8662 — a single
+      // `"key:v1,v2"` entry on the wire gets comma-split at intake, leaving every
+      // value after the first orphaned (UI shows a bare `v2` token, `@key:v2` filter
+      // does not match). One `key:value` per element preserves each value as its
+      // own facet. Empty arrays still emit `key:` so `_dd.cost_tags` references
+      // keep finding a wire entry.
+      span = {
+        context () {
+          return {
+            _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'llm',
+        '_ml_obs.tags': {
+          'tool.shell.bin': ['grep', 'head'],
+          'tool.shell.cmd': ['git log'],
+          'tool.shell.argv': [],
+          'tool.shell.flags': [null, 'verbose'],
+          'tool.shell.name': 'bash',
+        },
+      })
+
+      processor.process(span)
+      const payload = writer.append.getCall(0).firstArg
+
+      assertObjectContains(payload.tags, [
+        'tool.shell.bin:grep',
+        'tool.shell.bin:head',
+        'tool.shell.cmd:git log',
+        'tool.shell.argv:',
+        'tool.shell.flags:',
+        'tool.shell.flags:verbose',
+        'tool.shell.name:bash',
+      ])
+      assert.ok(
+        !payload.tags.includes('tool.shell.bin:grep,head'),
+        'array values must not collapse into a single comma-joined entry',
+      )
+    })
+
+    it('keeps cost-tag references and their wire entries consistent for empty arrays', () => {
+      // The cost-tag validator only checks that the referenced key is present in the
+      // tag object, not that it produces a wire entry. Dropping empty arrays from
+      // the wire would leave `_dd.cost_tags: ['team']` pointing at a key with no
+      // matching `team:*` tag, so dd-go would drop or misattribute the cost
+      // dimension. Empty arrays therefore stay on the wire as `key:`, matching the
+      // pre-fan-out shape.
+      span = {
+        context () {
+          return {
+            _tags: {},
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'llm',
+        '_ml_obs.tags': { team: [] },
+        '_ml_obs.meta.metadata._dd.cost_tags': ['team'],
+      })
+
+      processor.process(span)
+      const payload = writer.append.getCall(0).firstArg
+
+      assertObjectContains(payload.tags, ['team:'])
+      assert.deepStrictEqual(payload.meta.metadata._dd.cost_tags, ['team'])
+    })
+
     it('marks the apm span with _dd.llmobs.submitted=1 for sdk-tagged spans', () => {
       const apmTags = {}
       span = {
         context () {
           return {
             _tags: apmTags,
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -514,6 +641,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: apmTags,
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -533,6 +663,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: apmTags,
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -558,6 +691,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: apmTags,
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -581,6 +717,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: apmTags,
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
@@ -604,6 +743,9 @@ describe('span processor', () => {
         context () {
           return {
             _tags: apmTags,
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
             toTraceId () { return '123' },
             toSpanId () { return '456' },
           }
