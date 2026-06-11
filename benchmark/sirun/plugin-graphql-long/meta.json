@@ -8,10 +8,10 @@
   "variants": {
     "with-depth-off": {
       "iterations": 7,
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "0", "QUERIES": "869" }
+      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "0", "QUERIES": "1150" }
     },
     "with-depth-on-max": {
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "4", "QUERIES": "407" }
+      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "4", "QUERIES": "530" }
     },
     "with-depth-and-collapse-off": {
       "iterations": 7,
