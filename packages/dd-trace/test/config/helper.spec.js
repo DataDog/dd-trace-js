@@ -83,6 +83,16 @@ describe('applyPm2ClusterEnv', () => {
     applyPm2ClusterEnv()
     assert.deepStrictEqual(Object.keys(process.env), ['pm2_env'])
   })
+
+  it('populates process.env before module exports are first accessed (early-read scenario)', () => {
+    // Simulates the PM2 cluster mode timing: pm2_env is present in process.env
+    // when helper.js is first required, so the module-level call runs before
+    // index.js reads DD_TRACE_ENABLED / OTEL_TRACES_EXPORTER.
+    process.env.pm2_env = JSON.stringify({ DD_TRACE_ENABLED: 'false', DD_SERVICE: 'early-service' })
+    const { getValueFromEnvSources } = proxyquire.noPreserveCache()('../../src/config/helper', {})
+    assert.strictEqual(getValueFromEnvSources('DD_TRACE_ENABLED'), 'false')
+    assert.strictEqual(getValueFromEnvSources('DD_SERVICE'), 'early-service')
+  })
 })
 
 describe('config-helper stable config sources', () => {

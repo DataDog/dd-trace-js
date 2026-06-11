@@ -177,6 +177,10 @@ function applyPm2ClusterEnv () {
   }
 }
 
+// Run at module load so that early reads in index.js (DD_TRACE_ENABLED,
+// OTEL_TRACES_EXPORTER) see the correct values before getConfig() is called.
+applyPm2ClusterEnv()
+
 module.exports = {
   /**
    * Expose raw stable config maps and warnings for consumers that need
