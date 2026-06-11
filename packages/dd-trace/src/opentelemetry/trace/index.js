@@ -59,7 +59,8 @@ function createOtlpTraceExporter (config) {
     config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
     config.OTEL_EXPORTER_OTLP_TRACES_HEADERS,
     config.OTEL_EXPORTER_OTLP_TRACES_TIMEOUT,
-    buildResourceAttributes(config)
+    buildResourceAttributes(config),
+    config.otelCompatibilityEnabled ?? false
   )
 }
 

@@ -161,6 +161,8 @@ class Span extends BridgeSpanBase {
 
     super(ddSpan)
 
+    this._otelCompatibility = _tracer._config?.otelCompatibilityEnabled ?? false
+
     if (attributes) {
       this.setAttributes(attributes)
     }

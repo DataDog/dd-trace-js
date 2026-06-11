@@ -509,6 +509,7 @@ export interface GeneratedConfig {
   OTEL_TRACES_EXPORTER: "none" | "otlp" | undefined;
   OTEL_TRACES_SAMPLER: "always_on" | "always_off" | "traceidratio" | "parentbased_always_on" | "parentbased_always_off" | "parentbased_traceidratio";
   OTEL_TRACES_SAMPLER_ARG: number | undefined;
+  otelCompatibilityEnabled: boolean;
   peerServiceMapping: Record<string, string>;
   port: string | number;
   profiling: {

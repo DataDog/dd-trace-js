@@ -36,10 +36,11 @@ class OtlpHttpTraceExporter extends OtlpHttpExporterBase {
    *   corresponding `OTEL_EXPORTER_OTLP_*_HEADERS` env by the MAP parser.
    * @param {number} timeout - Request timeout in milliseconds
    * @param {import('@opentelemetry/api').Attributes} resourceAttributes - Resource attributes
+   * @param {boolean} [otelCompatibilityEnabled] - When true, omit Datadog-only attributes
    */
-  constructor (url, headers, timeout, resourceAttributes) {
+  constructor (url, headers, timeout, resourceAttributes, otelCompatibilityEnabled = false) {
     super(url, headers, timeout, 'http/json', 'traces')
-    this.#transformer = new OtlpTraceTransformer(resourceAttributes)
+    this.#transformer = new OtlpTraceTransformer(resourceAttributes, otelCompatibilityEnabled)
   }
 
   /**

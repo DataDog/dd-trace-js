@@ -511,6 +511,17 @@ declare namespace tracer {
     startupLogs?: boolean,
 
     /**
+     * Whether to enable OpenTelemetry compatibility mode. When enabled, Datadog-only span
+     * attributes (`service.name`, `resource.name`, `span.kind`, `operation.name`,
+     * `error.message`, `error.type`, `error.stack`) are omitted from OTel-bridge spans so
+     * the produced spans conform to pure OpenTelemetry semantics.
+     * @default false
+     * @env DD_TRACE_OTEL_COMPATIBILITY_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    otelCompatibilityEnabled?: boolean,
+
+    /**
      * The service name to be used for this program. If not set, the service name
      * will attempted to be inferred from package.json
      * @env DD_SERVICE, OTEL_SERVICE_NAME

@@ -50,6 +50,7 @@ function createMockDdSpan ({ ended = false } = {}) {
         getTag: (key) => tags[key],
         getTags: () => tags,
         setTag: (key, value) => { tags[key] = value },
+        deleteTag: (key) => { delete tags[key] },
       }
     },
 
@@ -109,6 +110,22 @@ describe('OTel bridge helpers', () => {
 
       assert.deepStrictEqual(ddSpan.tags, { 'service.name': 'svc' })
     })
+
+    describe('otelCompatibility mode', () => {
+      it('does not mirror http.response.status_code to http.status_code', () => {
+        const ddSpan = createMockDdSpan()
+        setOtelAttribute(ddSpan, 'http.response.status_code', 200, true)
+
+        assert.deepStrictEqual(ddSpan.tags, { 'http.response.status_code': 200 })
+      })
+
+      it('writes non-DD attributes normally', () => {
+        const ddSpan = createMockDdSpan()
+        setOtelAttribute(ddSpan, 'db.system', 'postgresql', true)
+
+        assert.deepStrictEqual(ddSpan.tags, { 'db.system': 'postgresql' })
+      })
+    })
   })
 
   describe('setOtelAttributes', () => {
@@ -120,6 +137,25 @@ describe('OTel bridge helpers', () => {
         'http.response.status_code': 404,
         'http.status_code': '404',
         foo: 'bar',
+      })
+    })
+
+    describe('otelCompatibility mode', () => {
+      it('does not mirror http.response.status_code to http.status_code', () => {
+        const ddSpan = createMockDdSpan()
+        setOtelAttributes(ddSpan, { 'http.response.status_code': 404, foo: 'bar' }, true)
+
+        assert.deepStrictEqual(ddSpan.tags, {
+          'http.response.status_code': 404,
+          foo: 'bar',
+        })
+      })
+
+      it('writes non-DD attributes normally', () => {
+        const ddSpan = createMockDdSpan()
+        setOtelAttributes(ddSpan, { 'db.system': 'postgresql', foo: 'bar' }, true)
+
+        assert.deepStrictEqual(ddSpan.tags, { 'db.system': 'postgresql', foo: 'bar' })
       })
     })
   })
@@ -247,6 +283,28 @@ describe('OTel bridge helpers', () => {
 
       assert.strictEqual(ddSpan.tags[IGNORE_OTEL_ERROR], false)
     })
+
+    describe('otelCompatibility mode', () => {
+      it('does not write error tags but still adds the exception event', () => {
+        const ddSpan = createMockDdSpan()
+        const error = new Error('boom')
+        const now = Date.now()
+        recordException(ddSpan, error, now, true)
+
+        assert.strictEqual(ddSpan.tags[ERROR_TYPE], undefined)
+        assert.strictEqual(ddSpan.tags[ERROR_MESSAGE], undefined)
+        assert.strictEqual(ddSpan.tags[ERROR_STACK], undefined)
+        assert.strictEqual(ddSpan.tags[IGNORE_OTEL_ERROR], undefined)
+        assert.deepStrictEqual(ddSpan.events, [{
+          name: 'Error',
+          attributes: {
+            'exception.message': 'boom',
+            'exception.stacktrace': error.stack,
+          },
+          startTime: now,
+        }])
+      })
+    })
   })
 
   describe('applyOtelStatus precedence', () => {
@@ -297,6 +355,41 @@ describe('OTel bridge helpers', () => {
       assert.strictEqual(stillOk, 1)
       // The first ERROR's message stays. Tag clearing on OK override is out of scope.
       assert.strictEqual(ddSpan.tags[ERROR_MESSAGE], 'first')
+    })
+
+    describe('otelCompatibility mode', () => {
+      it('writes ERROR tags on transition to ERROR', () => {
+        const ddSpan = createMockDdSpan()
+        const after = applyOtelStatus(ddSpan, 0, { code: 2, message: 'boom' }, true)
+
+        assert.strictEqual(after, 2)
+        assert.strictEqual(ddSpan.tags[ERROR_MESSAGE], 'boom')
+        assert.strictEqual(ddSpan.tags[IGNORE_OTEL_ERROR], false)
+      })
+
+      it('OK still locks against subsequent ERROR calls', () => {
+        const ddSpan = createMockDdSpan()
+        applyOtelStatus(ddSpan, 0, { code: 1 }, true)
+        const after = applyOtelStatus(ddSpan, 1, { code: 2, message: 'late error' }, true)
+
+        assert.strictEqual(after, 1)
+        assert.strictEqual(ddSpan.tags[ERROR_MESSAGE], undefined)
+        assert.strictEqual(ddSpan.tags[IGNORE_OTEL_ERROR], undefined)
+      })
+
+      it('clears error tags when a subsequent call is blocked by OK', () => {
+        const ddSpan = createMockDdSpan()
+        applyOtelStatus(ddSpan, 0, { code: 2, message: 'first' }, true)
+        const afterOk = applyOtelStatus(ddSpan, 2, { code: 1 }, true)
+        assert.strictEqual(afterOk, 1)
+
+        const stillOk = applyOtelStatus(ddSpan, 1, { code: 2, message: 'should be ignored' }, true)
+        assert.strictEqual(stillOk, 1)
+
+        // In compat mode, when OK blocks a later ERROR, the error marker is cleaned up.
+        assert.strictEqual(ddSpan.tags[ERROR_MESSAGE], undefined)
+        assert.strictEqual(ddSpan.tags[IGNORE_OTEL_ERROR], undefined)
+      })
     })
   })
 

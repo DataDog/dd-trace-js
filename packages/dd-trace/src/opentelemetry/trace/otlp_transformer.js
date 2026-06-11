@@ -87,13 +87,17 @@ const EXCLUDED_META_KEYS = new Set([
  * @augments OtlpTransformerBase
  */
 class OtlpTraceTransformer extends OtlpTransformerBase {
+  #otelCompatibilityEnabled
+
   /**
    * Creates a new OtlpTraceTransformer instance.
    *
    * @param {import('@opentelemetry/api').Attributes} resourceAttributes - Resource attributes
+   * @param {boolean} [otelCompatibilityEnabled] - When true, omit Datadog-only attributes
    */
-  constructor (resourceAttributes) {
+  constructor (resourceAttributes, otelCompatibilityEnabled = false) {
     super(resourceAttributes, 'http/json', 'traces')
+    this.#otelCompatibilityEnabled = otelCompatibilityEnabled
   }
 
   /**
@@ -184,18 +188,22 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
   #buildAttributes (span) {
     const attributes = []
 
-    // Add top-level DD span fields as OTLP attributes
-    if (span.service) {
-      attributes.push({ key: 'service.name', value: { stringValue: span.service } })
-    }
-    if (span.name) {
-      attributes.push({ key: 'operation.name', value: { stringValue: span.name } })
-    }
-    if (span.resource) {
-      attributes.push({ key: 'resource.name', value: { stringValue: span.resource } })
-    }
-    if (span.type) {
-      attributes.push({ key: 'span.type', value: { stringValue: span.type } })
+    // Add top-level DD span fields as OTLP attributes.
+    // In OTel compatibility mode these are Datadog-only concepts with no OTel equivalent
+    // and are omitted so the output conforms to pure OpenTelemetry semantics.
+    if (!this.#otelCompatibilityEnabled) {
+      if (span.service) {
+        attributes.push({ key: 'service.name', value: { stringValue: span.service } })
+      }
+      if (span.name) {
+        attributes.push({ key: 'operation.name', value: { stringValue: span.name } })
+      }
+      if (span.resource) {
+        attributes.push({ key: 'resource.name', value: { stringValue: span.resource } })
+      }
+      if (span.type) {
+        attributes.push({ key: 'span.type', value: { stringValue: span.type } })
+      }
     }
 
     // Add meta string tags, skipping keys that map to dedicated OTLP fields
