@@ -16,6 +16,7 @@ const { computeIntakeUrl } = require('./intake')
  */
 class AgentlessExporter {
   #timer
+  #config
 
   /**
    * @param {object} config - Configuration object
@@ -25,7 +26,7 @@ class AgentlessExporter {
    * @param {object} [config.tags] - Tags including runtime-id
    */
   constructor (config) {
-    this._config = config
+    this.#config = config
     const site = config.site ?? 'datadoghq.com'
 
     try {
@@ -90,7 +91,7 @@ class AgentlessExporter {
   export (spans) {
     this._writer.append(spans)
 
-    const { flushInterval } = this._config
+    const { flushInterval } = this.#config
 
     if (flushInterval === 0) {
       try {

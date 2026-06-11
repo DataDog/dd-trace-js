@@ -141,7 +141,7 @@ class AgentlessWriter extends BaseWriter {
 
     request(data, options, (err, res, statusCode) => {
       if (err) {
-        this._logRequestError(err, statusCode, count)
+        this.#logRequestError(err, statusCode, count)
         done()
         return
       }
@@ -157,7 +157,7 @@ class AgentlessWriter extends BaseWriter {
    * @param {number} statusCode - HTTP status code (if available)
    * @param {number} count - Number of traces that were being sent
    */
-  _logRequestError (err, statusCode, count) {
+  #logRequestError (err, statusCode, count) {
     if (statusCode === 401 || statusCode === 403) {
       log.error(
         'Authentication failed sending %d trace(s) (status %s). Verify DD_API_KEY is valid.',
