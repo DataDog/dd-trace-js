@@ -1,6 +1,7 @@
 'use strict'
 
 const plugins = {
+  get '@anthropic-ai/claude-agent-sdk' () { return require('../../../datadog-plugin-claude-agent-sdk/src') },
   get '@anthropic-ai/sdk' () { return require('../../../datadog-plugin-anthropic/src') },
   get '@apollo/gateway' () { return require('../../../datadog-plugin-apollo/src') },
   get '@aws-sdk/smithy-client' () { return require('../../../datadog-plugin-aws-sdk/src') },
@@ -45,6 +46,7 @@ const plugins = {
   get bunyan () { return require('../../../datadog-plugin-bunyan/src') },
   get 'cassandra-driver' () { return require('../../../datadog-plugin-cassandra-driver/src') },
   get child_process () { return require('../../../datadog-plugin-child_process/src') },
+  get 'claude-agent-sdk' () { return require('../../../datadog-plugin-claude-agent-sdk/src') },
   get connect () { return require('../../../datadog-plugin-connect/src') },
   get couchbase () { return require('../../../datadog-plugin-couchbase/src') },
   get cypress () { return require('../../../datadog-plugin-cypress/src') },
