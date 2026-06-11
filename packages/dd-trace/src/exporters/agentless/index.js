@@ -7,6 +7,7 @@ const log = require('../../log')
 const { entityId } = require('../common/docker')
 const tracerVersion = require('../../../../../package.json').version
 const Writer = require('./writer')
+const { computeIntakeUrl } = require('./intake')
 
 /**
  * Agentless exporter for APM trace intake.
@@ -28,9 +29,9 @@ class AgentlessExporter {
     const site = config.site ?? 'datadoghq.com'
 
     try {
-      // Agentless traffic carries the Datadog API key, so the intake is always the public https
-      // endpoint; never derive it from config.url (the agent's cleartext http) or the key leaks.
-      this._url = new URL(`https://public-trace-http-intake.logs.${site}`)
+      // Agentless traffic carries the Datadog API key, so the intake is always an https endpoint
+      // derived from the site; never config.url (the agent's cleartext http) or the key leaks.
+      this._url = new URL(computeIntakeUrl(site))
     } catch (err) {
       log.error('Invalid site for agentless exporter. site=%s. Error: %s', site, err.message)
       this._url = null

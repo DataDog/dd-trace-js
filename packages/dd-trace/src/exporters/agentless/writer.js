@@ -7,6 +7,7 @@ const tracerVersion = require('../../../../../package.json').version
 
 const BaseWriter = require('../common/writer')
 const { AgentlessJSONEncoder } = require('../../encode/agentless-json')
+const { computeIntakeUrl, INTAKE_PATH } = require('./intake')
 
 /**
  * Writer for agentless APM trace intake.
@@ -28,7 +29,7 @@ class AgentlessWriter extends BaseWriter {
 
     if (!url) {
       try {
-        this._url = new URL(`https://public-trace-http-intake.logs.${site}`)
+        this._url = new URL(computeIntakeUrl(site))
       } catch (err) {
         log.error(
           'Invalid site value for agentless intake: %s. Cannot construct URL. Error: %s',
@@ -121,7 +122,7 @@ class AgentlessWriter extends BaseWriter {
     this.#apiKeyMissing = false
 
     const options = {
-      path: '/v1/input',
+      path: INTAKE_PATH,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
