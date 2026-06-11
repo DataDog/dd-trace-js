@@ -170,7 +170,7 @@ if (NODE_MAJOR >= 22) {
 
           const tracesPromise = agent.assertSomeTraces(traces => {
             const spans = traces[0]
-            const turnSpan = spans.find(s => s.name === 'turn')
+            const turnSpan = spans.find(s => s.name === 'claude_agent_sdk.query')
             assert.ok(turnSpan, 'should have a turn span')
           })
 
@@ -208,7 +208,7 @@ if (NODE_MAJOR >= 22) {
 
           const reqs = agent.getLlmObsSpanEventsRequests()
           const spans = reqs.flatMap(r => r).map(r => r.spans[0]).filter(Boolean)
-          const turnSpan = spans.find(s => s.name === 'turn')
+          const turnSpan = spans.find(s => s.name === 'claude_agent_sdk.query')
 
           assert.ok(turnSpan, 'should have an LLM Obs turn span event')
           assert.equal(turnSpan.meta['span.kind'], 'agent', 'should be an agent span')
@@ -261,7 +261,7 @@ if (NODE_MAJOR >= 22) {
           const spans = reqs.flatMap(r => r).map(r => r.spans[0]).filter(Boolean)
           const successfulToolSpan = spans.find(s => s.name === 'Read')
           const failedToolSpan = spans.find(s => s.name === 'Write')
-          const subagentSpan = spans.find(s => s.name === 'subagent-search')
+          const subagentSpan = spans.find(s => s.name === 'search')
 
           assert.ok(successfulToolSpan, 'should have an LLM Obs successful tool span event')
           assert.equal(successfulToolSpan.meta['span.kind'], 'tool', 'should be a tool span')
