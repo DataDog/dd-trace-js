@@ -112,6 +112,7 @@ PLUGINS="<name>" npm run test:plugins
 
 **Philosophy:**
 
+- On a bug fix or new feature, scope `--include` to the changed paths and confirm those lines are covered before declaring the work done. Whole-package coverage passing is not the same as coverage on the lines you just touched.
 - Integration tests (running in sandboxes) don't count towards nyc coverage metrics
 - Don't add redundant unit tests solely to improve coverage numbers
 - Focus on covering important production code paths with whichever test type makes sense
@@ -120,7 +121,11 @@ PLUGINS="<name>" npm run test:plugins
 
 Use `node:assert/strict` for standard assertions. For partial deep object checks, use `assertObjectContains` from `integration-tests/helpers/index.js`.
 
-Favor fewer `assert.deepStrictEqual`/`assertObjectContains` calls over many `assert.strictEqual` calls. Combine existing calls, when touching test files.
+- Favor `assert.deepStrictEqual` for the data shape under test; use `assert.strictEqual` for unrelated scalars. Don't manufacture wrapper objects (`{ a, b, c }`) to compress assertion count — they hide which assertion broke and allocate two literals per run for no gain.
+- Use `assert.throws(fn, expected)` / `assert.rejects(fn, expected)` instead of `try { … ; assert.fail() } catch (error) { … }`. Pin the relevant error fields in the second argument (`{ code, message: /…/ }`).
+- For two awaits that should both settle, use `Promise.all([a, b])`. `await a; await b` leaves `b` unawaited until `a` settles; if `b` rejects in that window Node raises an unhandled rejection.
+- For limits / caps / thresholds / windows: pin the last accepted value AND the first rejected value (32-entry cap → cases for 32 and 33). Comfortable distances (10 / 50) miss off-by-one bugs.
+- A bug fix ships with cases for the failure AND its siblings sharing the fixed code path. Read the existing spec first so you don't duplicate a permutation already there.
 
 ### Time-Based Testing
 
@@ -131,12 +136,14 @@ Favor fewer `assert.deepStrictEqual`/`assertObjectContains` calls over many `ass
 ### Style
 
 - Prefer optional chaining
-- Prefer `#private` class fields for new/internal-only code (no cross-module access needed).
-- If other modules need access, prefer a small explicit method API over accessing internal fields.
+- Prefer `#private` class fields when state doesn't cross the class boundary; when it does, expose it as a plain property (`this.foo`). Internal cross-module reads and npm-exposed values both fall here — the distinction is documentation, not access pattern.
+- Avoid `get foo()` / `set foo()` accessors. They hide a function call behind property syntax and usually signal an undesigned boundary. Reach for one only for lazy first-read computation or a value that must recompute per access; both are rare. For behavior, use a plain method, not a setter / getter.
 - Avoid large refactors of existing `_underscore` fields unless you can prove they are not accessed externally (excluding tests).
 - Files shall end with a single new line at the end
 - Use destructuring for better code readability
 - Line length is capped at 120 characters
+- Avoid abbreviations. Use short expressive variable, method, and function names
+- Comments only for non-obvious intent, trade-offs, or constraints the code can't carry. Don't narrate what the diff already shows.
 
 ### Linting & Naming
 
@@ -195,6 +202,13 @@ Separate groups with empty line, sort alphabetically within each:
 - Do NOT use `async/await` or promises in production code (npm package)
   - Allowed ONLY in: test files, worker threads (e.g., `packages/dd-trace/src/debugger/devtools_client/`)
   - Use callbacks or synchronous patterns instead
+- Don't use `Object.keys(obj).length` as an emptiness probe — it allocates the keys array. Track presence with a boolean at the assignment site, probe a known key (`obj.knownField !== undefined`), or return `undefined` when there's nothing to report.
+- Fold gate + payload into one pass when the gate's question and the work share a computation. Stringify once and gate on `result.length` beats `Object.keys(dd).length === 0` then later `JSON.stringify(dd)`.
+- Cache compiled regexes and parsed values at module load; never compile per-call.
+- Prefer one-time data transformations (e.g., at file load time) over call-site transformations later.
+- Order short-circuit chains by `frequency × cheapness`: the cheap common case first, the expensive rare case last. A `value === null` check outside an enclosing `typeof === 'object'` arm pays the null comparison on every primitive — move it inside.
+
+**Verifying perf-motivated changes.** A rewrite justified by speed (`for` replacing `.map()`, hand-inlined helper, `new Array(n)` + indexed assignment over `.map()`) needs a one-file microbenchmark before it lands. Warm up for ~1 s, time ≥5 trials of each implementation, then re-run in a fresh shell to confirm the numbers reproduce. Decide: **equal** (within ~±2 %) → keep the more readable one; **marginal** (~5 %) → justify the trade-off in the commit body; **real** (≥10 %, reproducible) → keep, and put the numbers in the commit body. Throw the benchmark file away once the decision lands, or graduate it to `benchmark/sirun/` if it has lasting value.
 
 ### Debugging and Logging
 
@@ -214,11 +228,26 @@ Avoid try/catch in hot paths - validate inputs early
 
 - **Search first**: Check for existing utilities/patterns before creating new code
 - **Avoid diverging implementations**: If behavior already exists elsewhere, reuse it or extract a shared helper instead of reimplementing it in a second place.
+- **Minimal public surface**: Don't add new programmatic public APIs without an explicit case — removing them later is painful. If an internal caller needs reach, add a narrow internal method on the producer, not a public one.
 - **Small PRs**: Break large efforts into incremental, reviewable changes
 - **Descriptive code**: Self-documenting with verbs in function names; comment when needed
 - **Readable formatting**: Empty lines for grouping, split complex objects, extract variables
 - **Avoid large refactors**: Iterative changes, gradual pattern introduction
+- **Production code doesn't bend for tests**: Don't add a method, getter, export, or `_underscore` field purely to make a test work. If the public surface can't reach the behavior, the architecture needs the change, not test scaffolding.
 - **Test changes**: Test logic (not mocks), failure cases, edge cases - always update tests. Write blackbox tests instead of testing internal exports directly
+
+### Architecture Decisions
+
+When a change introduces a class hierarchy, a new module boundary, a shared helper layer, or duplication across two or more types, score it against six dimensions before committing. Bar: 8/10 on at least five.
+
+1. **Drift prevention** — behaviour duplicated across types lives in one place; a new precondition or branch touches one site, not N.
+2. **Module coupling** — cross-module reach goes through a public API the team has committed to, never by reaching into another class's internals. Adding to the surface of an npm-exported class (`Span`, `Tracer`, OTel-bridge spans) is a forever commitment, so design the boundary so cross-module access doesn't need internal reach (callback in, diagnostic channel, restructured module boundary). If none of those fit, the architecture isn't done.
+3. **Explicit contracts** — invariants enforced by constructor signatures, typed params, abstract methods, `#private` fields; not by convention.
+4. **Testability at boundaries** — each boundary with multiple consumers or a spec/protocol contract has tests that pin its contract directly.
+5. **Extensibility** — adding a third type or method requires the smallest possible change.
+6. **Hot-path fitness** — per-call overhead at the architecture's edges, not its interior. The hot call path looks the same it would without the architecture.
+
+Composition is the default; inheritance only when ≤2 sibling types share a complete interface contract. Score the *baseline* alongside the proposal (`baseline → proposal` per dimension) so a 7 → 7 refactor doesn't dress up as progress. Score *test exports* the same way as class hierarchies — exposing internal state so a spec can reach in almost always fails dimension 2.
 
 ### Implementation and Testing Workflow
 
@@ -282,6 +311,12 @@ cp packages/datadog-plugin-kafkajs/src/index.js packages/datadog-plugin-<name>/s
 
 Edit `src/index.js`, create `test/index.spec.js`, then register in:
 `packages/dd-trace/src/plugins/index.js`, `index.d.ts`, `docs/test.ts`, `docs/API.md`, `.github/workflows/apm-integrations.yml`
+
+Validate basic plugin structure with:
+
+```bash
+./node_modules/.bin/mocha packages/dd-trace/test/plugins/plugin-structure.spec.js
+```
 
 ## Pull Requests and CI
 

@@ -8,6 +8,10 @@ async function runCypress () {
   const results = await cypress.run({
     config: {
       defaultCommandTimeout: 1000,
+      retries: {
+        runMode: Number(process.env.CYPRESS_RETRIES || 0),
+        openMode: 0,
+      },
       e2e: {
         testIsolation: process.env.CYPRESS_TEST_ISOLATION !== 'false',
         setupNodeEvents (on, config) {
@@ -24,8 +28,9 @@ async function runCypress () {
     },
   })
 
-  if (results.totalFailed !== 0) {
-    process.exit(1)
+  const failures = results.totalFailed ?? results.failures ?? 0
+  if (failures !== 0) {
+    process.exit(failures)
   }
 }
 

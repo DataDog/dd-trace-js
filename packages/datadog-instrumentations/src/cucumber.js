@@ -1252,6 +1252,11 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
         numRetriesByPickleId.set(pickle.id, 0)
       }
     }
+    const originalRetry = this.options.retry
+    const isManagedRetry = isAttemptToFix || (isEarlyFlakeDetectionEnabled && (isNew || isModified))
+    if (isManagedRetry) {
+      this.options.retry = 0
+    }
     // TODO: for >=11 we could use `runTestCaseResult` instead of accumulating results in `lastStatusByPickleId`
     const firstExecutionStart = performance.now()
     let runTestCaseResult = await runTestCaseFunction.apply(this, arguments)
@@ -1350,6 +1355,8 @@ function getWrappedRunTestCase (runTestCaseFunction, isNewerCucumberVersion = fa
 
       testSuiteFinishCh.publish({ status: testSuiteStatus, testSuitePath })
     }
+
+    this.options.retry = originalRetry
 
     if (isNewerCucumberVersion && isEarlyFlakeDetectionEnabled && (isNew || isModified)) {
       return shouldBePassedByEFD
