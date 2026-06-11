@@ -17,7 +17,6 @@ require('../../setup/core')
 const tracer = require('../../../../../init')
 const WallProfiler = require('../../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../../src/profiling/profilers/space')
-const logger = require('../../../src/log')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 const version = require('../../../../../package.json').version
 const processTags = require('../../../src/process-tags')
@@ -34,9 +33,28 @@ function wait (ms) {
   })
 }
 
+// This exporter test only needs working profilers that emit a profile, not any
+// particular sampling behaviour, so feed them the production-default config.
+const profilerConfig = {
+  DD_PROFILING_CODEHOTSPOTS_ENABLED: false,
+  DD_PROFILING_CPU_ENABLED: false,
+  DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: false,
+  DD_PROFILING_TIMELINE_ENABLED: false,
+  DD_PROFILING_V8_PROFILER_BUG_WORKAROUND: false,
+  DD_PROFILING_ALLOCATION_ENABLED: false,
+  DD_PROFILING_HEAP_SAMPLING_INTERVAL: 512 * 1024,
+  telemetry: { heartbeatInterval: 60 * 1e3 },
+}
+
 async function createProfile (periodType) {
   const [type] = periodType
-  const profiler = type === 'wall' ? new WallProfiler() : new SpaceProfiler()
+  const profiler = type === 'wall'
+    ? new WallProfiler(profilerConfig, {
+      asyncContextFrameEnabled: false,
+      flushInterval: 60 * 1e3,
+      samplingInterval: 1e3 / 99,
+    })
+    : new SpaceProfiler(profilerConfig)
   profiler.start({
     // Throw errors in test rather than logging them
     logger: {
@@ -186,15 +204,15 @@ describe('exporters/agent', function () {
     app = express()
   })
 
-  function newAgentExporter ({ url, logger, uploadTimeout = 100 }) {
+  function newAgentExporter ({ url, uploadTimeout = 100 }) {
     return new AgentExporter({
       url,
-      logger,
-      uploadTimeout,
+      DD_PROFILING_UPLOAD_TIMEOUT: uploadTimeout,
       env: ENV,
       service: SERVICE,
       version: APP_VERSION,
-      host: HOST,
+      hostname: HOST,
+      reportHostname: true,
     })
   }
 
@@ -216,7 +234,7 @@ describe('exporters/agent', function () {
     })
 
     it('should send profiles as pprof to the intake', async () => {
-      const exporter = newAgentExporter({ url, logger })
+      const exporter = newAgentExporter({ url })
       const start = new Date()
       const end = new Date()
       const tags = {
@@ -250,7 +268,7 @@ describe('exporters/agent', function () {
 
     it('should backoff up to the uploadTimeout', async () => {
       const uploadTimeout = 100
-      const exporter = newAgentExporter({ url, logger, uploadTimeout })
+      const exporter = newAgentExporter({ url, uploadTimeout })
 
       const start = new Date()
       const end = new Date()
@@ -333,7 +351,13 @@ describe('exporters/agent', function () {
         { '../../exporters/common/docker': docker, http, '../../log': logStub }
       )
       const exporter = new AgentExporterStubbed({
-        url, uploadTimeout: 100, env: ENV, service: SERVICE, version: APP_VERSION, host: HOST,
+        url,
+        DD_PROFILING_UPLOAD_TIMEOUT: 100,
+        env: ENV,
+        service: SERVICE,
+        version: APP_VERSION,
+        hostname: HOST,
+        reportHostname: true,
       })
       const start = new Date()
       const end = new Date()
@@ -410,7 +434,7 @@ describe('exporters/agent', function () {
     })
 
     it('should support ipv6 urls', async () => {
-      const exporter = newAgentExporter({ url, logger })
+      const exporter = newAgentExporter({ url })
       const start = new Date()
       const end = new Date()
       const tags = {
@@ -453,7 +477,7 @@ describe('exporters/agent', function () {
     })
 
     it('should support Unix domain sockets', async () => {
-      const exporter = newAgentExporter({ url: new URL(`unix://${url}`), logger })
+      const exporter = newAgentExporter({ url: new URL(`unix://${url}`) })
       const start = new Date()
       const end = new Date()
       const tags = {

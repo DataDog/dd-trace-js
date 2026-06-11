@@ -21,149 +21,152 @@ const EventsProfiler = require('./profilers/events')
 const { oomExportStrategies, snapshotKinds } = require('./constants')
 const { tagger } = require('./tagger')
 
-class Config {
-  constructor (options) {
-    const AWS_LAMBDA_FUNCTION_NAME = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME')
+/** @typedef {import('../config/config-base')} TracerConfig */
+/** @typedef {AgentExporter | FileExporter} ProfilingExporter */
+/** @typedef {WallProfiler | SpaceProfiler | EventsProfiler} ProfilingProfiler */
 
-    this.version = options.version
-    this.service = options.service
-    this.env = options.env
-    this.functionname = AWS_LAMBDA_FUNCTION_NAME
+// 99hz in milliseconds.
+const SAMPLING_INTERVAL = 1e3 / 99
 
-    this.tags = {
-      ...options.tags,
-      ...tagger.parse({
-        host: options.reportHostname ? require('os').hostname() : undefined,
-        functionname: AWS_LAMBDA_FUNCTION_NAME,
-      }),
-      ...getAzureTagsFromMetadata(getIsAzureFunction() ? getAzureFunctionMetadata() : getAzureAppMetadata()),
-    }
+/** @param {TracerConfig} config */
+function getProfilingTags (config) {
+  const functionName = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME')
 
-    const { commitSHA, repositoryUrl } = getGitMetadata(options)
-    if (repositoryUrl && commitSHA) {
-      this.tags[GIT_REPOSITORY_URL] = repositoryUrl
-      this.tags[GIT_COMMIT_SHA] = commitSHA
-    }
-
-    // Normalize from seconds to milliseconds. Default must be longer than a minute.
-    this.flushInterval = options.DD_PROFILING_UPLOAD_PERIOD * 1000
-    this.uploadTimeout = options.DD_PROFILING_UPLOAD_TIMEOUT
-    this.sourceMap = options.DD_PROFILING_SOURCE_MAP
-    this.debugSourceMaps = options.DD_PROFILING_DEBUG_SOURCE_MAPS
-    this.endpointCollectionEnabled = options.DD_PROFILING_ENDPOINT_COLLECTION_ENABLED
-    this.pprofPrefix = options.DD_PROFILING_PPROF_PREFIX
-    this.v8ProfilerBugWorkaroundEnabled = options.DD_PROFILING_V8_PROFILER_BUG_WORKAROUND
-
-    this.url = options.url
-
-    this.libraryInjected = !!options.DD_INJECTION_ENABLED
-
-    let activation
-    if (options.profiling.enabled === 'auto') {
-      activation = 'auto'
-    } else if (options.profiling.enabled === 'true') {
-      activation = 'manual'
-    } // else activation = undefined
-
-    this.activation = activation
-    this.exporters = ensureExporters(options.DD_PROFILING_EXPORTERS, this)
-
-    const oomMonitoringEnabled = options.DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED
-    const heapLimitExtensionSize = options.DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE
-    const maxHeapExtensionCount = options.DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT
-    const exportStrategies = oomMonitoringEnabled
-      ? ensureOOMExportStrategies(options.DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES)
-      : []
-    const exportCommand = oomMonitoringEnabled ? buildExportCommand(this) : undefined
-    this.oomMonitoring = {
-      enabled: oomMonitoringEnabled,
-      heapLimitExtensionSize,
-      maxHeapExtensionCount,
-      exportStrategies,
-      exportCommand,
-    }
-
-    const profilers = getProfilers(options)
-
-    this.timelineEnabled = options.DD_PROFILING_TIMELINE_ENABLED
-    this.timelineSamplingEnabled = options.DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED
-    this.allocationProfilingEnabled = isAllocationProfilingEnabled(options.DD_PROFILING_ALLOCATION_ENABLED)
-    this.codeHotspotsEnabled = options.DD_PROFILING_CODEHOTSPOTS_ENABLED
-    this.cpuProfilingEnabled = options.DD_PROFILING_CPU_ENABLED
-    this.heapSamplingInterval = options.DD_PROFILING_HEAP_SAMPLING_INTERVAL
-
-    this.samplingInterval = 1e3 / 99 // 99hz in milliseconds
-
-    const isAtLeast24 = satisfies(process.versions.node, '>=24.0.0')
-
-    const uploadCompression0 = options.DD_PROFILING_DEBUG_UPLOAD_COMPRESSION
-    let [uploadCompression, level0] = uploadCompression0.split('-')
-    let level = level0 ? Number.parseInt(level0, 10) : undefined
-    if (level !== undefined) {
-      const maxLevel = { gzip: 9, zstd: 22 }[uploadCompression]
-      if (level > maxLevel) {
-        log.warn('Invalid compression level %d. Will use %d.', level, maxLevel)
-        level = maxLevel
-      }
-    }
-
-    // Default to either zstd (on Node.js 24+) or gzip (earlier Node.js). We could default to ztsd
-    // everywhere as we ship a Rust zstd compressor for older Node.js versions, but on 24+ we use
-    // the built-in one that runs asynchronously on libuv worker threads, just as gzip does. This is
-    // the least disruptive choice.
-    if (uploadCompression === 'on') {
-      uploadCompression = isAtLeast24 ? 'zstd' : 'gzip'
-    }
-
-    this.uploadCompression = { method: uploadCompression, level }
-
-    const that = this
-    function turnOffAsyncContextFrame (msg) {
-      log.warn('DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED was set %s, it will have no effect.', msg)
-      that.asyncContextFrameEnabled = false
-    }
-
-    this.asyncContextFrameEnabled = options.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED ?? isACFActive
-    if (this.asyncContextFrameEnabled && !isACFActive) {
-      if (isAtLeast24) {
-        turnOffAsyncContextFrame('with --no-async-context-frame')
-      } else if (satisfies(process.versions.node, '>=22.9.0')) {
-        turnOffAsyncContextFrame('without --experimental-async-context-frame')
-      } else {
-        turnOffAsyncContextFrame('but it requires at least Node.js 22.9.0')
-      }
-    }
-
-    this.heartbeatInterval = options.telemetry.heartbeatInterval
-
-    this.profilers = ensureProfilers(profilers, this)
+  const tags = {
+    ...config.tags,
+    ...tagger.parse({
+      host: config.reportHostname ? require('os').hostname() : undefined,
+      functionname: functionName,
+    }),
+    ...getAzureTagsFromMetadata(getIsAzureFunction() ? getAzureFunctionMetadata() : getAzureAppMetadata()),
   }
 
-  get systemInfoReport () {
-    const report = {
-      allocationProfilingEnabled: this.allocationProfilingEnabled,
-      asyncContextFrameEnabled: this.asyncContextFrameEnabled,
-      codeHotspotsEnabled: this.codeHotspotsEnabled,
-      cpuProfilingEnabled: this.cpuProfilingEnabled,
-      debugSourceMaps: this.debugSourceMaps,
-      endpointCollectionEnabled: this.endpointCollectionEnabled,
-      heapSamplingInterval: this.heapSamplingInterval,
-      oomMonitoring: { ...this.oomMonitoring },
-      profilerTypes: this.profilers.map(profiler => profiler.type),
-      sourceMap: this.sourceMap,
-      timelineEnabled: this.timelineEnabled,
-      timelineSamplingEnabled: this.timelineSamplingEnabled,
-      uploadCompression: { ...this.uploadCompression },
-      v8ProfilerBugWorkaroundEnabled: this.v8ProfilerBugWorkaroundEnabled,
+  const { commitSHA, repositoryUrl } = getGitMetadata(config)
+  if (repositoryUrl && commitSHA) {
+    tags[GIT_REPOSITORY_URL] = repositoryUrl
+    tags[GIT_COMMIT_SHA] = commitSHA
+  }
+
+  return tags
+}
+
+/** @param {TracerConfig} config */
+function getUploadCompression (config) {
+  let [method, level0] = config.DD_PROFILING_DEBUG_UPLOAD_COMPRESSION.split('-')
+  let level = level0 ? Number.parseInt(level0, 10) : undefined
+  if (level !== undefined) {
+    const maxLevel = { gzip: 9, zstd: 22 }[method]
+    if (level > maxLevel) {
+      log.warn('Invalid compression level %d. Will use %d.', level, maxLevel)
+      level = maxLevel
     }
-    delete report.oomMonitoring.exportCommand
-    return report
+  }
+
+  // Default to either zstd (on Node.js 24+) or gzip (earlier Node.js). We could default to ztsd
+  // everywhere as we ship a Rust zstd compressor for older Node.js versions, but on 24+ we use
+  // the built-in one that runs asynchronously on libuv worker threads, just as gzip does. This is
+  // the least disruptive choice.
+  if (method === 'on') {
+    method = satisfies(process.versions.node, '>=24.0.0') ? 'zstd' : 'gzip'
+  }
+
+  return { method, level }
+}
+
+/** @param {TracerConfig} config */
+function getAsyncContextFrameEnabled (config) {
+  const enabled = config.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED ?? isACFActive
+  if (enabled && !isACFActive) {
+    let reason
+    if (satisfies(process.versions.node, '>=24.0.0')) {
+      reason = 'with --no-async-context-frame'
+    } else if (satisfies(process.versions.node, '>=22.9.0')) {
+      reason = 'without --experimental-async-context-frame'
+    } else {
+      reason = 'but it requires at least Node.js 22.9.0'
+    }
+    log.warn('DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED was set %s, it will have no effect.', reason)
+    return false
+  }
+  return enabled
+}
+
+// Allocation profiling requires a sampling hook only available on Node.js 26+.
+/** @param {TracerConfig} config */
+function getAllocationProfilingEnabled (config) {
+  return NODE_MAJOR >= 26 && config.DD_PROFILING_ALLOCATION_ENABLED
+}
+
+/** @param {TracerConfig} config */
+function createExporters (config) {
+  return config.DD_PROFILING_EXPORTERS.map((exporter) => getExporter(exporter, config))
+}
+
+/**
+ * @param {TracerConfig} config
+ * @param {ProfilingExporter[]} exporters
+ * @param {Record<string, string>} tags
+ */
+function getOomMonitoring (config, exporters, tags) {
+  const enabled = config.DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED
+  return {
+    enabled,
+    heapLimitExtensionSize: config.DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE,
+    maxHeapExtensionCount: config.DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT,
+    exportStrategies: enabled ? ensureOOMExportStrategies(config.DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES) : [],
+    exportCommand: enabled ? buildExportCommand(config, exporters, tags) : undefined,
   }
 }
 
-module.exports = { Config }
+/**
+ * Leaves read the canonical DD_PROFILING_* fields straight off the tracer config; only the values
+ * that genuinely need a translation (ACF resolution, allocation gating, period→millis, the sampling
+ * constant, OOM monitoring) are computed here and passed through.
+ *
+ * @param {TracerConfig} config
+ * @param {{
+ *   oomMonitoring: ReturnType<typeof getOomMonitoring>,
+ *   asyncContextFrameEnabled: boolean,
+ *   allocationProfilingEnabled: boolean,
+ *   flushInterval: number,
+ * }} derived
+ */
+function createProfilers (config, {
+  oomMonitoring,
+  asyncContextFrameEnabled,
+  allocationProfilingEnabled,
+  flushInterval,
+}) {
+  const profilers = []
+  for (const name of selectProfilerTypes(config)) {
+    switch (name) {
+      case 'cpu':
+      case 'wall':
+        profilers.push(new WallProfiler(config, {
+          asyncContextFrameEnabled,
+          flushInterval,
+          samplingInterval: SAMPLING_INTERVAL,
+        }))
+        break
+      case 'space':
+        profilers.push(new SpaceProfiler(config, { oomMonitoring, allocationProfilingEnabled }))
+        break
+      default:
+        log.error('Unknown profiler "%s"', name)
+    }
+  }
 
-function getProfilers ({
+  // The events profiler produces timeline events. It is only added if timeline
+  // is enabled and there's a wall profiler.
+  if (config.DD_PROFILING_TIMELINE_ENABLED && profilers.some(profiler => profiler instanceof WallProfiler)) {
+    profilers.push(new EventsProfiler(config, { flushInterval, samplingInterval: SAMPLING_INTERVAL }))
+  }
+
+  return profilers
+}
+
+/** @param {TracerConfig} config */
+function selectProfilerTypes ({
   DD_PROFILING_HEAP_ENABLED,
   DD_PROFILING_WALLTIME_ENABLED,
   DD_PROFILING_PROFILERS,
@@ -215,6 +218,7 @@ function getProfilers ({
   return profilersArray
 }
 
+/** @param {string} name */
 function getExportStrategy (name) {
   const strategy = Object.values(oomExportStrategies).find(value => value === name)
   if (strategy === undefined) {
@@ -223,6 +227,7 @@ function getExportStrategy (name) {
   return strategy
 }
 
+/** @param {string[]} strategies */
 function ensureOOMExportStrategies (strategies) {
   const set = new Set()
   for (const strategy of strategies) {
@@ -232,68 +237,49 @@ function ensureOOMExportStrategies (strategies) {
   return [...set]
 }
 
-function getExporter (name, options) {
+/**
+ * @param {string} name
+ * @param {TracerConfig} config
+ */
+function getExporter (name, config) {
   switch (name) {
     case 'agent':
-      return new AgentExporter(options)
+      return new AgentExporter(config)
     case 'file':
-      return new FileExporter(options)
+      return new FileExporter(config)
     default:
       log.error('Unknown exporter "%s"', name)
   }
 }
 
-function ensureExporters (exporters, options) {
-  return exporters.map((exporter) => getExporter(exporter, options))
-}
-
-function getProfiler (name, options) {
-  switch (name) {
-    case 'cpu':
-    case 'wall':
-      return new WallProfiler(options)
-    case 'space':
-      return new SpaceProfiler(options)
-    default:
-      log.error('Unknown profiler "%s"', name)
-  }
-}
-
-function ensureProfilers (profilers, options) {
-  const filteredProfilers = []
-
-  for (let i = 0; i < profilers.length; i++) {
-    const profiler = getProfiler(profilers[i], options)
-    if (profiler !== undefined) {
-      filteredProfilers.push(profiler)
-    }
-  }
-
-  // Events profiler is a profiler that produces timeline events. It is only
-  // added if timeline is enabled and there's a wall profiler.
-  if (options.timelineEnabled && filteredProfilers.some(profiler => profiler instanceof WallProfiler)) {
-    filteredProfilers.push(new EventsProfiler(options))
-  }
-
-  return filteredProfilers
-}
-
-function isAllocationProfilingEnabled (enabled) {
-  return NODE_MAJOR >= 26 && enabled
-}
-
-function buildExportCommand (options) {
-  const tags = [...Object.entries(options.tags),
+/**
+ * @param {TracerConfig} config
+ * @param {ProfilingExporter[]} exporters
+ * @param {Record<string, string>} tags
+ */
+function buildExportCommand (config, exporters, tags) {
+  const tagString = [...Object.entries(tags),
     ['snapshot', snapshotKinds.ON_OUT_OF_MEMORY]].map(([key, value]) => `${key}:${value}`).join(',')
   const urls = []
-  for (const exporter of options.exporters) {
+  for (const exporter of exporters) {
     if (exporter instanceof AgentExporter) {
-      urls.push(options.url.toString())
+      urls.push(config.url.toString())
     } else if (exporter instanceof FileExporter) {
-      urls.push(pathToFileURL(options.pprofPrefix).toString())
+      urls.push(pathToFileURL(config.DD_PROFILING_PPROF_PREFIX).toString())
     }
   }
   return [process.execPath,
     path.join(__dirname, 'exporter_cli.js'),
-    urls.join(','), tags, 'space']
+    urls.join(','), tagString, 'space']
+}
+
+module.exports = {
+  SAMPLING_INTERVAL,
+  createExporters,
+  createProfilers,
+  getAllocationProfilingEnabled,
+  getAsyncContextFrameEnabled,
+  getOomMonitoring,
+  getProfilingTags,
+  getUploadCompression,
 }

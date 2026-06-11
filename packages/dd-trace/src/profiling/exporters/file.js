@@ -16,10 +16,10 @@ function formatDateTime (t) {
 class FileExporter extends EventSerializer {
   #pprofPrefix
 
-  constructor (config = {}) {
+  /** @param {import('./event_serializer').TracerConfig} config */
+  constructor (config) {
     super(config)
-    const { pprofPrefix } = config
-    this.#pprofPrefix = pprofPrefix || ''
+    this.#pprofPrefix = config.DD_PROFILING_PPROF_PREFIX
   }
 
   export (exportSpec) {

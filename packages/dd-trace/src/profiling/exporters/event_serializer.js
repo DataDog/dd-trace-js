@@ -8,6 +8,21 @@ const version = require('../../../../../package.json').version
 const { availableParallelism, libuvThreadPoolSize } = require('../libuv-size')
 const processTags = require('../../process-tags')
 
+/** @typedef {import('../../config/config-base')} TracerConfig */
+
+/**
+ * Maps the canonical profiling.enabled value to the activation reported in the
+ * profile event.
+ *
+ * @param {string} [enabled] - config.profiling.enabled ('true' | 'false' | 'auto')
+ * @returns {string}
+ */
+function getActivation (enabled) {
+  if (enabled === 'auto') return 'auto'
+  if (enabled === 'true') return 'manual'
+  return 'unknown'
+}
+
 class EventSerializer {
   #activation
   #appVersion
@@ -16,13 +31,14 @@ class EventSerializer {
   #libraryInjected
   #service
 
-  constructor ({ env, host, service, version, libraryInjected, activation } = {}) {
-    this.#env = env
-    this.#host = host
-    this.#service = service
-    this.#appVersion = version
-    this.#libraryInjected = libraryInjected
-    this.#activation = activation || 'unknown'
+  /** @param {TracerConfig} config */
+  constructor (config) {
+    this.#env = config.env
+    this.#host = config.reportHostname ? config.hostname : undefined
+    this.#service = config.service
+    this.#appVersion = config.version
+    this.#libraryInjected = !!config.DD_INJECTION_ENABLED
+    this.#activation = getActivation(config.profiling?.enabled)
   }
 
   typeToFile (type) {
@@ -99,4 +115,4 @@ class EventSerializer {
   }
 }
 
-module.exports = { EventSerializer }
+module.exports = { EventSerializer, getActivation }

@@ -14,6 +14,7 @@ require('../setup/core')
 const { getConfigFresh } = require('../helpers/config')
 const { AgentExporter } = require('../../src/profiling/exporters/agent')
 const { FileExporter } = require('../../src/profiling/exporters/file')
+const { getActivation } = require('../../src/profiling/exporters/event_serializer')
 const WallProfiler = require('../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../src/profiling/profilers/space')
 const EventsProfiler = require('../../src/profiling/profilers/events')
@@ -24,8 +25,6 @@ const oomMonitoringSupported = process.platform !== 'win32'
 const isAtLeast24 = satisfies(process.versions.node, '>=24.0.0')
 const isAtLeast26 = satisfies(process.versions.node, '>=26.0.0')
 const zstdOrGzip = isAtLeast24 ? 'zstd' : 'gzip'
-
-/** @typedef {InstanceType<(typeof import('../../src/profiling/config'))['Config']>} ProfilerConfig */
 
 describe('config', () => {
   let env
@@ -40,9 +39,13 @@ describe('config', () => {
   })
 
   /**
+   * Assembles the profiling runtime from the tracer config the same way
+   * {@link import('../../src/profiling/profiler').Profiler#start} does, so the
+   * assertions exercise the real derivation functions through their composition.
+   *
    * @param {Record<string, unknown>} [tracerOptions]
    * @param {Record<string, unknown>} [moduleStubs]
-   * @returns {{config: ProfilerConfig, warnings: string[], errors: string[]}}
+   * @returns {{config: Record<string, unknown>, warnings: string[], errors: string[]}}
    */
   function getProfilerConfig (tracerOptions, moduleStubs = {}) {
     process.env.DD_PROFILING_ENABLED = '1'
@@ -50,11 +53,49 @@ describe('config', () => {
     const tracerConfig = getConfigFresh(tracerOptions)
 
     const gitMetadata = proxyquire.noPreserveCache()('../../src/git_metadata', {})
-    const ProfilingConfig = proxyquire.noPreserveCache()('../../src/profiling/config', {
+    const profilingConfig = proxyquire.noPreserveCache()('../../src/profiling/config', {
       '../git_metadata': gitMetadata,
       ...moduleStubs,
-    }).Config
-    const config = /** @type {ProfilerConfig} */ (new ProfilingConfig(tracerConfig))
+    })
+
+    const tags = profilingConfig.getProfilingTags(tracerConfig)
+    const activation = getActivation(tracerConfig.profiling.enabled)
+    const exporters = profilingConfig.createExporters(tracerConfig)
+    const oomMonitoring = profilingConfig.getOomMonitoring(tracerConfig, exporters, tags)
+    const asyncContextFrameEnabled = profilingConfig.getAsyncContextFrameEnabled(tracerConfig)
+    const allocationProfilingEnabled = profilingConfig.getAllocationProfilingEnabled(tracerConfig)
+    const flushInterval = tracerConfig.DD_PROFILING_UPLOAD_PERIOD * 1000
+    const profilers = profilingConfig.createProfilers(tracerConfig, {
+      oomMonitoring,
+      asyncContextFrameEnabled,
+      allocationProfilingEnabled,
+      flushInterval,
+    })
+    const uploadCompression = profilingConfig.getUploadCompression(tracerConfig)
+
+    const config = {
+      service: tracerConfig.service,
+      version: tracerConfig.version,
+      env: tracerConfig.env,
+      tags,
+      activation,
+      exporters,
+      profilers,
+      oomMonitoring,
+      asyncContextFrameEnabled,
+      uploadCompression,
+      flushInterval,
+      uploadTimeout: tracerConfig.DD_PROFILING_UPLOAD_TIMEOUT,
+      allocationProfilingEnabled,
+      codeHotspotsEnabled: tracerConfig.DD_PROFILING_CODEHOTSPOTS_ENABLED,
+      cpuProfilingEnabled: tracerConfig.DD_PROFILING_CPU_ENABLED,
+      debugSourceMaps: tracerConfig.DD_PROFILING_DEBUG_SOURCE_MAPS,
+      endpointCollectionEnabled: tracerConfig.DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
+      heapSamplingInterval: tracerConfig.DD_PROFILING_HEAP_SAMPLING_INTERVAL,
+      pprofPrefix: tracerConfig.DD_PROFILING_PPROF_PREFIX,
+      timelineEnabled: tracerConfig.DD_PROFILING_TIMELINE_ENABLED,
+      v8ProfilerBugWorkaroundEnabled: tracerConfig.DD_PROFILING_V8_PROFILER_BUG_WORKAROUND,
+    }
 
     return {
       config,

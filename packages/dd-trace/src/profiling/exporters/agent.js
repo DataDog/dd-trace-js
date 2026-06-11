@@ -91,12 +91,12 @@ class AgentExporter extends EventSerializer {
   #backoffTime
   #backoffTries
 
-  constructor (config = {}) {
+  /** @param {import('./event_serializer').TracerConfig} config */
+  constructor (config) {
     super(config)
-    const { url, uploadTimeout } = config
-    this._url = url
+    this._url = config.url
 
-    const [backoffTries, backoffTime] = computeRetries(uploadTimeout)
+    const [backoffTries, backoffTime] = computeRetries(config.DD_PROFILING_UPLOAD_TIMEOUT)
 
     this.#backoffTime = backoffTime
     this.#backoffTries = backoffTries
