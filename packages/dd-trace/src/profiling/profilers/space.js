@@ -20,7 +20,7 @@ class NativeSpaceProfiler {
   constructor (options = {}) {
     // TODO: Remove default value. It is only used in testing.
     this.#samplingInterval = options.heapSamplingInterval || 512 * 1024
-    this.#allocationProfilingEnabled = options.allocationProfilingEnabled
+    this.#allocationProfilingEnabled = options.allocationProfilingEnabled ?? false
     this.#oomMonitoring = options.oomMonitoring || {}
   }
 
