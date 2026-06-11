@@ -165,6 +165,7 @@ class Span extends BridgeSpanBase {
 
     this._parentTracer = parentTracer
     this._context = context
+    this._otelName = spanName || this._ddSpan.context()._name
 
     // NOTE: Need to grab the value before setting it on the span because the
     // math for computing opentracing timestamps is apparently lossy...
@@ -192,7 +193,7 @@ class Span extends BridgeSpanBase {
   }
 
   get name () {
-    return this._ddSpan.context()._name
+    return this._otelName
   }
 
   spanContext () {
@@ -223,6 +224,7 @@ class Span extends BridgeSpanBase {
    * @param {string} name
    */
   updateName (name) {
+    this._otelName = name
     setOtelResource(this._ddSpan, name)
     return this
   }
