@@ -31,6 +31,5 @@ function runAllocations (ms) {
 }
 
 runAllocations(durationMs).catch(err => {
-  console.error(err)
   process.exitCode = 1
 })
