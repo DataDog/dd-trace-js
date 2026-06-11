@@ -14,7 +14,9 @@ const { FINISH, SHAPE = 'plain' } = process.env
 
 // Total spans created per process. The fixed tracer load (~75 ms) must be a small
 // fraction of the run so the bench measures span construction, not startup; at
-// 2M it is well under 10%. COUNT keeps it tunable per variant.
+// 2M it is well under 10%. COUNT keeps it tunable per variant: finish-later (the
+// noisiest variant) runs a heavier 3M over more sirun iterations (meta.json) so its
+// deferred-finish GC jitter averages out run-to-run, within the one-minute budget.
 const COUNT = Number(process.env.COUNT) || 2_000_000
 
 // finish-later defers the finish so it runs off the active-span path. Holding all
