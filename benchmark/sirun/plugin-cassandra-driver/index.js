@@ -33,31 +33,42 @@ const plugin = new BenchedCassandraPlugin(tracer, { spanComputePeerService: fals
 plugin.configure({ enabled: true, service: 'cassandra-prod' })
 
 const CONTACT_POINTS = ['10.0.0.1', '10.0.0.2', '10.0.0.3']
-const SINGLE = 'SELECT id, name, email FROM users WHERE id = ? AND tenant = ? ALLOW FILTERING'
-const BATCH = []
-for (let i = 0; i < 12; i++) BATCH.push({ query: `INSERT INTO events (id, payload) VALUES (?, ?) -- ${i}` })
-const LONG = 'SELECT * FROM events WHERE ' + Array.from({ length: 400 }, (_, i) => `col_${i} = ?`).join(' OR ')
 
+const SINGLE_QUERIES = [
+  'SELECT id, name, email FROM users WHERE id = ? AND tenant = ? ALLOW FILTERING',
+  'INSERT INTO events (id, payload, ts) VALUES (?, ?, ?)',
+  'SELECT * FROM orders WHERE customer_id = ? LIMIT 100',
+  'UPDATE sessions SET last_seen = ? WHERE id = ?',
+]
+
+function buildBatch (count, table) {
+  const batch = []
+  for (let i = 0; i < count; i++) batch.push({ query: `INSERT INTO ${table} (id, payload) VALUES (?, ?) -- ${i}` })
+  return batch
+}
+
+function buildLong (cols) {
+  return 'SELECT * FROM events WHERE ' + Array.from({ length: cols }, (_, i) => `col_${i} = ?`).join(' OR ')
+}
+
+// Each variant rotates a small corpus of that shape so the resource/meta build
+// runs over varied query lengths (and batch sizes) rather than one fixed query.
+// bindStart only reads ctx (combine reads the batch array without draining it),
+// so the pre-built ctxs are safe to reuse across iterations.
 const VARIANTS = {
-  query: { keyspace: 'app', query: SINGLE, contactPoints: CONTACT_POINTS },
-  batch: { keyspace: 'app', query: BATCH, contactPoints: CONTACT_POINTS },
-  'long-query': { keyspace: 'app', query: LONG, contactPoints: CONTACT_POINTS },
+  query: SINGLE_QUERIES.map((query) => ({ keyspace: 'app', query, contactPoints: CONTACT_POINTS })),
+  batch: [buildBatch(12, 'events'), buildBatch(8, 'audit'), buildBatch(16, 'metrics')]
+    .map((query) => ({ keyspace: 'app', query, contactPoints: CONTACT_POINTS })),
+  'long-query': [buildLong(400), buildLong(520)]
+    .map((query) => ({ keyspace: 'app', query, contactPoints: CONTACT_POINTS })),
 }
 
-const v = VARIANTS[VARIANT]
-assert.ok(v, `unknown VARIANT: ${VARIANT}`)
+const ctxs = VARIANTS[VARIANT]
+assert.ok(ctxs, `unknown VARIANT: ${VARIANT}`)
+const len = ctxs.length
 
-function makeCtx () {
-  // query is reassigned inside bindStart for batches (combine), and arrays would
-  // otherwise be consumed across calls; a fresh ctx per preflight keeps inputs
-  // stable. The hot loop reuses one ctx (startSpan is stubbed, so ctx is not
-  // mutated and the batch array is read, not drained).
-  return { keyspace: v.keyspace, query: v.query, contactPoints: v.contactPoints }
-}
-
-const ctx = makeCtx()
 lastMeta = undefined
-plugin.bindStart(ctx)
+plugin.bindStart(ctxs[0])
 assert.ok(lastMeta && typeof lastResource === 'string', 'bindStart did not build the resource/meta')
 if (VARIANT === 'long-query') {
   assert.ok(lastResource.endsWith('...'), 'long-query should hit the 5000-char trim')
@@ -65,7 +76,7 @@ if (VARIANT === 'long-query') {
 
 guard.loopStart()
 for (let i = 0; i < ITERATIONS; i++) {
-  plugin.bindStart(ctx)
+  plugin.bindStart(ctxs[i % len])
 }
 guard.done()
 

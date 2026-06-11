@@ -42,33 +42,43 @@ const hashringClient = {
   },
 }
 
+// Each variant fixes the client/server topology and rotates a corpus of queries
+// with varied key/command lengths. In the hashring variant the differing key
+// lengths also land on different servers (HashRing.get keys on key.length), so
+// the multi-server resolution branch runs over changing inputs, not one key.
+const GET_QUERIES = [
+  { type: 'get', command: 'get user:1234567', key: 'user:1234567' },
+  { type: 'set', command: 'set session:abcdef0123 0 0 64', key: 'session:abcdef0123' },
+  { type: 'get', command: 'get cart:99887766', key: 'cart:99887766' },
+  { type: 'delete', command: 'delete token:aabbccddeeff', key: 'token:aabbccddeeff' },
+]
+const HASHRING_QUERIES = [
+  { type: 'get', command: 'get session:abcdef', key: 'session:abcdef', redundancyEnabled: false },
+  { type: 'get', command: 'get user:1234567:profile', key: 'user:1234567:profile', redundancyEnabled: false },
+  { type: 'get', command: 'get f', key: 'f', redundancyEnabled: false },
+  { type: 'get', command: 'get inventory:sku-5566', key: 'inventory:sku-5566', redundancyEnabled: false },
+]
+
 const VARIANTS = {
-  get: {
-    client: { servers: ['cache-1.internal:11211'] },
-    server: 'cache-1.internal:11211',
-    query: { type: 'get', command: 'get user:1234567', key: 'user:1234567' },
-  },
-  hashring: {
-    client: hashringClient,
-    server: undefined,
-    query: { type: 'get', command: 'get session:abcdef', key: 'session:abcdef', redundancyEnabled: false },
-  },
+  get: { client: { servers: ['cache-1.internal:11211'] }, server: 'cache-1.internal:11211', queries: GET_QUERIES },
+  hashring: { client: hashringClient, server: undefined, queries: HASHRING_QUERIES },
 }
 
-const v = VARIANTS[VARIANT]
-assert.ok(v, `unknown VARIANT: ${VARIANT}`)
+const topology = VARIANTS[VARIANT]
+assert.ok(topology, `unknown VARIANT: ${VARIANT}`)
 
-// startSpan is stubbed, so bindStart never writes ctx.currentStore; one ctx can
-// be reused across iterations without per-iteration allocation skewing the loop.
-const ctx = { client: v.client, server: v.server, query: v.query }
+// startSpan is stubbed, so bindStart never writes ctx.currentStore; the corpus of
+// ctxs is pre-built once and rotated, so the loop allocates nothing per iteration.
+const ctxs = topology.queries.map((query) => ({ client: topology.client, server: topology.server, query }))
+const len = ctxs.length
 
 lastMeta = undefined
-plugin.bindStart(ctx)
+plugin.bindStart(ctxs[0])
 assert.ok(lastMeta && typeof lastMeta['out.host'] === 'string', 'bindStart did not resolve the server address')
 
 guard.loopStart()
 for (let i = 0; i < ITERATIONS; i++) {
-  plugin.bindStart(ctx)
+  plugin.bindStart(ctxs[i % len])
 }
 guard.done()
 

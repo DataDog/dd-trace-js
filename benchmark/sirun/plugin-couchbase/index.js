@@ -33,37 +33,65 @@ const plugin = new BenchedCouchbasePlugin(tracer, { spanComputePeerService: fals
 plugin.configure({ enabled: true, service: 'couchbase-prod' })
 
 const SEED_NODES = '10.0.0.1,10.0.0.2,10.0.0.3'
-const BUCKET = { name: 'app-data' }
-const COLLECTION = { name: 'orders' }
 
-const VARIANTS = {
-  query: {
-    operation: 'query',
-    customTags: {
-      'span.type': 'sql',
-      'resource.name': 'SELECT * FROM `app-data` WHERE type = $1',
-      'span.kind': 'client',
-    },
-    locator: { bucket: BUCKET, seedNodes: SEED_NODES },
-  },
-  upsert: {
-    operation: 'upsert',
-    customTags: {},
-    locator: { bucket: BUCKET, collection: COLLECTION, seedNodes: SEED_NODES },
-  },
+function sqlTags (resource) {
+  return { 'span.type': 'sql', 'resource.name': resource, 'span.kind': 'client' }
 }
 
-const v = VARIANTS[VARIANT]
-assert.ok(v, `unknown VARIANT: ${VARIANT}`)
+// Each variant rotates a small corpus so the tag assembly runs over varied
+// resource names, buckets and collections. The upsert corpus also covers the
+// sibling insert/replace operations, which share the same span starter.
+const QUERY_OPS = [
+  {
+    operation: 'query',
+    customTags: sqlTags('SELECT * FROM `app-data` WHERE type = $1'),
+    locator: { bucket: { name: 'app-data' }, seedNodes: SEED_NODES },
+  },
+  {
+    operation: 'query',
+    customTags: sqlTags('SELECT id, total FROM `orders` WHERE status = $1 LIMIT 50'),
+    locator: { bucket: { name: 'orders' }, seedNodes: SEED_NODES },
+  },
+  {
+    operation: 'query',
+    customTags: sqlTags('UPDATE `sessions` SET active = true WHERE id = $1'),
+    locator: { bucket: { name: 'sessions' }, seedNodes: SEED_NODES },
+  },
+]
+
+const MUTATE_OPS = [
+  {
+    operation: 'upsert',
+    customTags: {},
+    locator: { bucket: { name: 'app-data' }, collection: { name: 'orders' }, seedNodes: SEED_NODES },
+  },
+  {
+    operation: 'insert',
+    customTags: {},
+    locator: { bucket: { name: 'users' }, collection: { name: 'profiles' }, seedNodes: SEED_NODES },
+  },
+  {
+    operation: 'replace',
+    customTags: {},
+    locator: { bucket: { name: 'events' }, collection: { name: 'audit' }, seedNodes: SEED_NODES },
+  },
+]
+
+const VARIANTS = { query: QUERY_OPS, upsert: MUTATE_OPS }
+
+const ops = VARIANTS[VARIANT]
+assert.ok(ops, `unknown VARIANT: ${VARIANT}`)
+const len = ops.length
 const ctx = {}
 
 lastMeta = undefined
-plugin.startSpan(v.operation, v.customTags, v.locator, ctx)
+plugin.startSpan(ops[0].operation, ops[0].customTags, ops[0].locator, ctx)
 assert.ok(lastMeta && lastMeta['db.type'] === 'couchbase', 'startSpan did not build the couchbase tags')
 
 guard.loopStart()
 for (let i = 0; i < ITERATIONS; i++) {
-  plugin.startSpan(v.operation, v.customTags, v.locator, ctx)
+  const entry = ops[i % len]
+  plugin.startSpan(entry.operation, entry.customTags, entry.locator, ctx)
 }
 guard.done()
 

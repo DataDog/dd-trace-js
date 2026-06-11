@@ -31,38 +31,74 @@ const tracerConfig = { spanComputePeerService: false }
 const plugin = new BenchedElasticsearchPlugin(tracer, tracerConfig)
 plugin.configure({ enabled: true, service: 'elasticsearch-prod' })
 
-const SEARCH_BODY = {
-  query: {
-    bool: {
-      must: [{ match: { title: 'observability' } }, { term: { status: 'published' } }],
-      filter: [{ range: { created_at: { gte: '2024-01-01' } } }],
+// Each variant is a small corpus of realistic requests of that shape. Rotating
+// over it (rather than one reused request) keeps the bindStart call site
+// polymorphic and varies the path / body / querystring lengths quantizePath and
+// the JSON.stringify calls see, closer to real traffic than a single fixture.
+const SEARCH = [
+  {
+    method: 'POST',
+    path: '/products/_search',
+    body: {
+      query: {
+        bool: {
+          must: [{ match: { title: 'observability' } }, { term: { status: 'published' } }],
+          filter: [{ range: { created_at: { gte: '2024-01-01' } } }],
+        },
+      },
+      sort: [{ created_at: 'desc' }],
+      size: 20,
     },
+    querystring: { timeout: '5s' },
   },
-  sort: [{ created_at: 'desc' }],
-  size: 20,
-}
-const BULK_BODY = []
-for (let i = 0; i < 40; i++) {
-  BULK_BODY.push({ index: { _index: 'logs', _id: `id-${i}` } }, { message: `log line ${i}`, level: 'info', n: i })
+  {
+    method: 'POST',
+    path: '/orders-2024/_search',
+    body: { query: { match: { customer_id: 'c-7788' } }, from: 40, size: 50 },
+    querystring: { routing: 'shard-3' },
+  },
+  {
+    method: 'POST',
+    path: '/users/_search',
+    body: { query: { term: { active: true } } },
+    querystring: { _source: 'id,email' },
+  },
+]
+
+function buildBulkBody (count, index) {
+  const body = []
+  for (let i = 0; i < count; i++) {
+    body.push({ index: { _index: index, _id: `id-${i}` } }, { message: `log line ${i}`, level: 'info', n: i })
+  }
+  return body
 }
 
-const VARIANTS = {
-  search: { method: 'POST', path: '/products/_search', body: SEARCH_BODY, querystring: { timeout: '5s' } },
-  'bulk-index': { method: 'POST', path: '/logs/_bulk', bulkBody: BULK_BODY },
-  get: { method: 'GET', path: '/products/_doc/123456', querystring: { _source: 'title,status' } },
-}
+const BULK = [
+  { method: 'POST', path: '/logs/_bulk', bulkBody: buildBulkBody(40, 'logs') },
+  { method: 'POST', path: '/events/_bulk', bulkBody: buildBulkBody(20, 'events') },
+  { method: 'POST', path: '/metrics-2024/_bulk', bulkBody: buildBulkBody(60, 'metrics') },
+]
 
-const params = VARIANTS[VARIANT]
-assert.ok(params, `unknown VARIANT: ${VARIANT}`)
-const ctx = { params }
+const GET = [
+  { method: 'GET', path: '/products/_doc/123456', querystring: { _source: 'title,status' } },
+  { method: 'GET', path: '/users/_doc/u-998877', querystring: {} },
+  { method: 'GET', path: '/orders-2024/_doc/55', querystring: { _source_excludes: 'payload' } },
+]
+
+const VARIANTS = { search: SEARCH, 'bulk-index': BULK, get: GET }
+
+const corpus = VARIANTS[VARIANT]
+assert.ok(corpus, `unknown VARIANT: ${VARIANT}`)
+const ctxs = corpus.map((params) => ({ params }))
+const len = ctxs.length
 
 lastMeta = undefined
-plugin.bindStart(ctx)
+plugin.bindStart(ctxs[0])
 assert.ok(lastMeta && typeof lastMeta['elasticsearch.url'] === 'string', 'bindStart did not build meta')
 
 guard.loopStart()
 for (let i = 0; i < ITERATIONS; i++) {
-  plugin.bindStart(ctx)
+  plugin.bindStart(ctxs[i % len])
 }
 guard.done()
 
