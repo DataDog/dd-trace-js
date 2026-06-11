@@ -40,7 +40,7 @@
         "BREAKPOINT_LINE": "37",
         "CAPTURE_SNAPSHOT": "true",
         "MAX_SNAPSHOTS_PER_SECOND_GLOBALLY": "1000000",
-        "ITERATIONS": "3500"
+        "ITERATIONS": "2450"
       }
     },
     "line-probe-with-snapshot-minimal": {
