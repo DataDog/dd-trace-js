@@ -152,9 +152,8 @@ function validateAccess (name) {
  * In PM2 cluster mode, per-app env vars (DD_SERVICE, DD_ENV, etc.) are not
  * passed as individual environment variables. Instead PM2 serializes the entire
  * process config into a single `pm2_env` JSON string and passes only that to
- * `cluster.fork()`. A pm2 wrapper (ProcessContainer.js) later unpacks it into
- * process.env — but that happens inside the main module, after NODE_OPTIONS
- * `--require dd-trace/init` has already run.
+ * `cluster.fork()`. pm2 later unpacks it into process.env, but that happens
+ * inside the main module, after --require dd-trace/init` has already run.
  *
  * This function copies only DD_* and OTEL_* keys out of the pm2_env blob into
  * process.env before config is read, so the tracer sees them at init time.
