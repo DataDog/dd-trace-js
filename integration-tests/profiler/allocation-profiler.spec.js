@@ -38,7 +38,7 @@ function startProfiler ({ cwd, allocationProfilingEnabled, agent }) {
   const env = {
     DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: 'off',
     DD_PROFILING_ENABLED: '1',
-    DD_PROFILING_ALLOCATION_ENABLED: allocationProfilingEnabled ? '1' : '0',
+    DD_PROFILING_ALLOCATION_ENABLED: allocationProfilingEnabled ? 'true' : 'false',
     DD_PROFILING_EXPORTERS: agent ? 'agent' : 'file',
     DD_PROFILING_PROFILERS: 'space',
     DD_PROFILING_SOURCE_MAP: '0',
