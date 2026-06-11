@@ -1,7 +1,8 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { fork } = require('node:child_process')
+const childProcess = require('node:child_process')
+const { fork } = childProcess
 const path = require('node:path')
 
 const satisfies = require('semifies')
@@ -34,37 +35,7 @@ function findFile (files, originalname) {
   return file
 }
 
-function startProfiler ({ cwd, allocationProfilingEnabled, agent }) {
-  const env = {
-    DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: 'off',
-    DD_PROFILING_ENABLED: '1',
-    DD_PROFILING_ALLOCATION_ENABLED: allocationProfilingEnabled ? 'true' : 'false',
-    DD_PROFILING_EXPORTERS: agent ? 'agent' : 'file',
-    DD_PROFILING_PROFILERS: 'space',
-    DD_PROFILING_SOURCE_MAP: '0',
-    DD_PROFILING_UPLOAD_PERIOD: '1',
-    TEST_DURATION_MS: '5000',
-  }
-
-  if (agent) {
-    env.DD_TRACE_AGENT_PORT = agent.port
-  }
-
-  return fork(path.join(cwd, 'profiler/index.js'), { cwd, env })
-}
-
-async function runProfiler ({ cwd, allocationProfilingEnabled }) {
-  const proc = startProfiler({ cwd, allocationProfilingEnabled })
-
-  try {
-    await processExitPromise(proc, TIMEOUT)
-  } finally {
-    await stopProc(proc)
-  }
-}
-
-async function runProfilerAndGetUpload ({ cwd, allocationProfilingEnabled }) {
-  const agent = await new FakeAgent().start()
+function expectProfileUpload (agent) {
   let upload
 
   const messagePromise = agent.assertMessageReceived(({ files }) => {
@@ -76,27 +47,29 @@ async function runProfilerAndGetUpload ({ cwd, allocationProfilingEnabled }) {
     }
   }, TIMEOUT)
 
-  const proc = startProfiler({ cwd, allocationProfilingEnabled, agent })
-
-  try {
-    await Promise.all([
-      messagePromise,
-      processExitPromise(proc, TIMEOUT),
-    ])
-    return upload
-  } finally {
-    await stopProc(proc)
-    await agent.stop()
-  }
+  return messagePromise.then(() => upload)
 }
 
 describe('allocation profiler', () => {
+  let agent
   let cwd
+  let proc
+  let profilerTestFile
 
   useSandbox()
 
   before(() => {
     cwd = sandboxCwd()
+    profilerTestFile = path.join(cwd, 'profiler/allocation.js')
+  })
+
+  beforeEach(async () => {
+    agent = await new FakeAgent().start()
+  })
+
+  afterEach(async () => {
+    await stopProc(proc)
+    await agent.stop()
   })
 
   it('sends heap profiles with the expected sample types on Node.js 26+', async function () {
@@ -117,11 +90,33 @@ describe('allocation profiler', () => {
     ]
 
     for (const { allocationProfilingEnabled, sampleTypes } of cases) {
-      const { event, spaceProfile } = await runProfilerAndGetUpload({ cwd, allocationProfilingEnabled })
+      proc = fork(profilerTestFile, {
+        cwd,
+        env: {
+          DD_TRACE_AGENT_PORT: agent.port,
+          DD_PROFILING_ALLOCATION_ENABLED: allocationProfilingEnabled ? '1' : '0',
+          DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: 'off',
+          DD_PROFILING_EXPORTERS: 'agent',
+          DD_PROFILING_PROFILERS: 'space',
+          DD_PROFILING_SOURCE_MAP: '0',
+          DD_PROFILING_UPLOAD_PERIOD: '1',
+          TEST_DURATION_MS: '5000',
+        },
+      })
+
+      const [
+        { event, spaceProfile },
+      ] = await Promise.all([
+        expectProfileUpload(agent),
+        processExitPromise(proc, TIMEOUT),
+      ])
 
       assert.deepStrictEqual(event.attachments, ['space.pprof'])
       assert.strictEqual(event.info.profiler.settings.allocationProfilingEnabled, allocationProfilingEnabled)
       assert.deepStrictEqual(getSampleTypeNames(spaceProfile), sampleTypes)
+
+      await stopProc(proc)
+      proc = undefined
     }
   })
 
@@ -131,9 +126,19 @@ describe('allocation profiler', () => {
       return
     }
 
-    await runProfiler({
+    proc = fork(profilerTestFile, {
       cwd,
-      allocationProfilingEnabled: true,
+      env: {
+        DD_PROFILING_ALLOCATION_ENABLED: '1',
+        DD_PROFILING_DEBUG_UPLOAD_COMPRESSION: 'off',
+        DD_PROFILING_EXPORTERS: 'file',
+        DD_PROFILING_PROFILERS: 'space',
+        DD_PROFILING_SOURCE_MAP: '0',
+        DD_PROFILING_UPLOAD_PERIOD: '1',
+        TEST_DURATION_MS: '5000',
+      },
     })
+
+    await processExitPromise(proc, TIMEOUT)
   })
 })
