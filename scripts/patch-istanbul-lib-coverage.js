@@ -11,10 +11,11 @@
  * records straight from that map, so Codecov's patch view marks those lines
  * as missing on every PR until upstream lands the fix.
  *
- * Idempotent — applies the change once, then no-ops while the sentinel
- * comment is present in the file. Fails loudly if the locked upstream code
- * shape changes so a future yarn upgrade can't silently leave the patch
- * unapplied.
+ * Idempotent — no-ops while the current sentinel is present. When the patch
+ * body changes, the bumped sentinel makes it replace a stale dd-trace-js patch
+ * in place, so existing installs self-heal on the next `prepare` instead of
+ * keeping the old body. Fails loudly only if the upstream `getLineCoverage()`
+ * shape changes, so a future yarn upgrade can't silently leave it unapplied.
  *
  * Wired to the `prepare` lifecycle so the script never fires on consumer
  * installs of the published tarball — the script itself is not in the
@@ -30,7 +31,12 @@ const path = require('node:path')
 
 // Inline marker so the script can detect a previous run without parsing the
 // whole replacement body. Bump the version suffix when the patch body changes.
-const SENTINEL = '// dd-trace-js patch v1: fold fnMap/branchMap into getLineCoverage'
+const SENTINEL = '// dd-trace-js patch v2: fold fnMap/branchMap into getLineCoverage'
+
+// Version-agnostic prefix shared by every SENTINEL. Lets the script recognise a
+// stale patch from an earlier version and replace it, rather than mistaking it
+// for an upstream shape change.
+const PATCH_MARKER = '// dd-trace-js patch'
 
 const ORIGINAL = `    getLineCoverage() {
         const statementMap = this.data.statementMap;
@@ -85,8 +91,10 @@ const REPLACEMENT = `    getLineCoverage() {
             /* istanbul ignore if: is this even possible? */
             if (!entry || !Array.isArray(entry.locations)) return;
             entry.locations.forEach((branchLoc, i) => {
-                /* istanbul ignore else: is this even possible? */
-                if (branchLoc && branchLoc.start) {
+                // An \`if\` without an \`else\` still records a location for the
+                // implicit else; istanbul leaves its start.line undefined, which
+                // would otherwise land as a NaN line in the lcov report.
+                if (typeof branchLoc?.start?.line === 'number') {
                     record(branchLoc.start.line, counts[i] | 0);
                 }
             });
@@ -94,6 +102,11 @@ const REPLACEMENT = `    getLineCoverage() {
 
         return lineMap;
     }`
+
+// Matches the whole `getLineCoverage()` method, pristine or already patched, so
+// a body change can be swapped in place. The closing `}` is the only one at the
+// method's 4-space indentation; inner blocks close deeper.
+const GET_LINE_COVERAGE_RE = /^ {4}getLineCoverage\(\) \{\n[\s\S]*?\n {4}\}/m
 
 /**
  * @param {string} message
@@ -144,7 +157,20 @@ if (source.includes(SENTINEL)) {
   return
 }
 
-if (!source.includes(ORIGINAL)) {
+const existing = source.match(GET_LINE_COVERAGE_RE)
+if (existing === null) {
+  fail(
+    `refusing to patch ${relativeTarget}: could not locate getLineCoverage(). ` +
+    'Re-verify the patch against the new upstream code before bumping istanbul-lib-coverage.'
+  )
+  return
+}
+
+// Pristine upstream must match byte-for-byte; anything else without our marker
+// means the upstream shape changed and the patch needs re-verifying. A body
+// carrying the marker is an earlier patch version and is replaced in place.
+const current = existing[0]
+if (current !== ORIGINAL && !current.includes(PATCH_MARKER)) {
   fail(
     `refusing to patch ${relativeTarget}: upstream getLineCoverage() shape has changed. ` +
     'Re-verify the patch against the new upstream code before bumping istanbul-lib-coverage.'
@@ -152,5 +178,5 @@ if (!source.includes(ORIGINAL)) {
   return
 }
 
-fs.writeFileSync(targetFile, source.replace(ORIGINAL, REPLACEMENT))
+fs.writeFileSync(targetFile, source.replace(current, REPLACEMENT))
 log(`patched ${relativeTarget}`)

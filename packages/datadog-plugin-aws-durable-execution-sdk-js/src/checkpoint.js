@@ -8,7 +8,7 @@ class AwsDurableExecutionSdkJsCheckpointPlugin extends TracingPlugin {
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:CheckpointManager_checkpoint'
 
   start (ctx) {
-    const data = ctx?.arguments?.[1]
+    const data = ctx.arguments?.[1]
     if (data?.Action !== 'RETRY' || !data.Error) return
 
     const span = this.activeSpan

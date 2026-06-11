@@ -692,23 +692,91 @@ describe('OpenTelemetry Meter Provider', () => {
     })
   })
 
-  describe('Unimplemented Features', () => {
-    it('logs warning for meter batch callbacks', () => {
-      const log = require('../../src/log')
-      const warnSpy = sinon.spy(log, 'warn')
+  describe('Batch Observable Callbacks', () => {
+    it('emits values for every observable in the registered set on each collection', (done) => {
+      const validator = mockOtlpExport((decoded) => {
+        const exported = {}
+        for (const m of decoded.resourceMetrics[0].scopeMetrics[0].metrics) {
+          exported[m.name] = m
+        }
+        const memDp = exported.memory.gauge.dataPoints[0]
+        const cpuDp = exported.cpu.gauge.dataPoints[0]
+        assert.strictEqual(memDp.asInt, 1024)
+        assert.strictEqual(cpuDp.asDouble ?? cpuDp.asInt, 0.42)
+      })
 
       setupMetrics()
       const meter = metrics.getMeter('app')
-      meter.addBatchObservableCallback(() => {}, [])
-      meter.removeBatchObservableCallback(() => {}, [])
+      const memory = meter.createObservableGauge('memory')
+      const cpu = meter.createObservableGauge('cpu')
 
-      assert.strictEqual(warnSpy.callCount, 2)
+      meter.addBatchObservableCallback((result) => {
+        result.observe(memory, 1024)
+        result.observe(cpu, 0.42)
+      }, [memory, cpu])
 
-      assert.deepStrictEqual(
-        warnSpy.getCalls().map(call => format(...call.args)),
-        ['addBatchObservableCallback is not implemented', 'removeBatchObservableCallback is not implemented']
-      )
-      warnSpy.restore()
+      setTimeout(() => { validator(); done() }, 150)
+    })
+
+    it('drops writes to instruments not in the registered set', (done) => {
+      const validator = mockOtlpExport((decoded) => {
+        const names = decoded.resourceMetrics[0].scopeMetrics[0].metrics.map(m => m.name)
+        assert.ok(names.includes('inset'), `expected 'inset' in exported metrics, got: ${names.join(', ')}`)
+        assert.ok(!names.includes('notinset'),
+          `expected 'notinset' to be dropped (writes to unregistered instruments), got: ${names.join(', ')}`)
+      })
+
+      setupMetrics()
+      const meter = metrics.getMeter('app')
+      const inSet = meter.createObservableGauge('inset')
+      const notInSet = meter.createObservableGauge('notinset')
+
+      meter.addBatchObservableCallback((result) => {
+        result.observe(inSet, 1)
+        result.observe(notInSet, 99)
+      }, [inSet])
+
+      setTimeout(() => { validator(); done() }, 150)
+    })
+
+    it('stops invoking the callback after removeBatchObservableCallback', (done) => {
+      let memSeen = false
+
+      setupMetrics()
+      const meter = metrics.getMeter('app')
+      const mem = meter.createObservableGauge('mem')
+      // Untouched second instrument; without it, the per-instrument loop has nothing
+      // and the empty-export early-return in #collectAndExport prevents any HTTP call.
+      const sentinel = meter.createCounter('sentinel')
+
+      mockOtlpExport((decoded) => {
+        for (const m of decoded.resourceMetrics?.[0]?.scopeMetrics?.[0]?.metrics ?? []) {
+          if (m.name === 'mem') memSeen = true
+        }
+      })
+
+      const cb = (result) => result.observe(mem, 42)
+      meter.addBatchObservableCallback(cb, [mem])
+      meter.removeBatchObservableCallback(cb, [mem])
+      sentinel.add(1) // forces an export
+
+      setTimeout(() => { assert.strictEqual(memSeen, false); done() }, 150)
+    })
+
+    it('ignores non-observable instruments and dedupes identical registrations', () => {
+      setupMetrics()
+      const meter = metrics.getMeter('app')
+      const observable = meter.createObservableGauge('observable')
+      const synchronous = meter.createCounter('sync')
+
+      const cb = () => {}
+      // No-op cases per OTel spec — these should not throw or register anything that matters.
+      meter.addBatchObservableCallback(cb, [])
+      meter.addBatchObservableCallback(cb, [synchronous])
+      // Real registration, then a duplicate add — should be deduped.
+      meter.addBatchObservableCallback(cb, [observable])
+      meter.addBatchObservableCallback(cb, [observable])
+      meter.removeBatchObservableCallback(cb, [observable])
     })
   })
 

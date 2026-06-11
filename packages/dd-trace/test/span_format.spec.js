@@ -69,6 +69,7 @@ describe('spanFormat', () => {
       context: sinon.stub().returns(spanContext),
       tracer: sinon.stub().returns({
         _service: 'test',
+        serviceLower: 'test',
       }),
       setTag: sinon.stub(),
       _startTime: 1500000000000.123,
@@ -98,7 +99,10 @@ describe('spanFormat', () => {
   })
 
   describe('spanFormat', () => {
-    it('should format span events', () => {
+    it('should pass span events through to the encoder as the raw _events array', () => {
+      // The formatter no longer reshapes events; each encoder derives
+      // time_unix_nano from startTime via eventTimeNano. extractSpanEvents
+      // must hand the raw array straight through without copying.
       span._events = [
         { name: 'Something went so wrong', startTime: 1 },
         {
@@ -109,16 +113,8 @@ describe('spanFormat', () => {
       ]
 
       trace = spanFormat(span)
-      const spanEvents = trace.span_events
-      assert.deepStrictEqual(spanEvents, [{
-        name: 'Something went so wrong',
-        time_unix_nano: 1000000,
-        attributes: undefined,
-      }, {
-        name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
-        time_unix_nano: 1633023102000000,
-        attributes: { emotion: 'happy', rating: 9.8, other: [1, 9.5, 1], idol: false },
-      }])
+
+      assert.strictEqual(trace.span_events, span._events)
     })
 
     it('should convert a span to the correct trace format', () => {
@@ -200,7 +196,6 @@ describe('spanFormat', () => {
         },
         start: Math.round(1_500_000_000_000.123 * 1e6),
         duration: Math.round(1.234 * 1e6),
-        links: [],
         span_events: undefined,
       })
     })
@@ -344,6 +339,14 @@ describe('spanFormat', () => {
 
       it('should infer the tag when no changes occur', () => {
         span.context()._tags['service.name'] = 'test'
+
+        trace = spanFormat(span)
+
+        sinon.assert.notCalled(span.setTag)
+      })
+
+      it('should treat a case-only service difference as no change', () => {
+        span.context()._tags['service.name'] = 'TEST'
 
         trace = spanFormat(span)
 
@@ -622,6 +625,18 @@ describe('spanFormat', () => {
       assert.ok(!Object.hasOwn(trace.meta, 'service.name'), `Available keys: ${inspect(Object.keys(trace.meta))}`)
       assert.ok(!Object.hasOwn(trace.meta, 'span.type'), `Available keys: ${inspect(Object.keys(trace.meta))}`)
       assert.ok(!Object.hasOwn(trace.meta, 'resource.name'), `Available keys: ${inspect(Object.keys(trace.meta))}`)
+    })
+
+    it('omits tags whose value is undefined from meta and metrics', () => {
+      // resolveServiceSource clears a speculative tag by assigning undefined
+      // (rather than deleting, which would push _tags into dictionary mode);
+      // a cleared key stays in Object.keys but must not be emitted.
+      spanContext._tags['foo.bar'] = undefined
+
+      trace = spanFormat(span)
+
+      assert.ok(!Object.hasOwn(trace.meta, 'foo.bar'), `Available keys: ${inspect(Object.keys(trace.meta))}`)
+      assert.ok(!Object.hasOwn(trace.metrics, 'foo.bar'), `Available keys: ${inspect(Object.keys(trace.metrics))}`)
     })
 
     it('should extract numeric tags as metrics', () => {

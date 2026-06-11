@@ -1,0 +1,56 @@
+global_setup:
+  - name: Cleanup artifacts directory
+    run: shell
+    script: rm -rf "$ARTIFACTS_DIR"/*
+
+  - name: Hardware and software info
+    run: collect_hardware_software_info
+
+experiments:
+  - name: Microbenchmarks
+    steps:
+      - name: Run benchmarks
+        run: run_microbenchmarks
+        repo: Datadog/dd-trace-js
+        # Run the candidate's benchmark suite on the baseline checkout too, so a PR
+        # that adds or renames benchmarks still compares scenario-for-scenario.
+        # Benchmarks that fail on the older baseline source are tolerated unless the
+        # PR also changes non-benchmark source (enforced in runall.sh).
+        env:
+          BENCHMARKS_FROM: candidate
+          BENCHMARKS_PATH: benchmark/sirun
+          TOLERATE_NEW_BENCHMARK_FAILURES: "1"
+        how_to_run_benchmarks: |
+          cd ./benchmark/sirun
+          ./runall.sh
+          cp results.ndjson "$ARTIFACTS_DIR/$BASELINE_OR_CANDIDATE-v$MAJOR_VERSION-$GROUP.ndjson"
+
+      - name: Analyze results
+        run: analyze_microbenchmarks
+        framework: Sirun
+
+global_teardown:
+  - name: Upload to S3
+    run: shell
+    script: ./upload-results-to-s3.sh
+
+  - name: Upload to BP API
+    run: upload_to_bp_api
+    retries_on_failure: 2
+    project: dd-trace-js
+
+docker_config_for_local_runs:
+  image_name: bp_microbenchmarks_js
+  build_script: ./build-local-image.sh
+  volumes:
+    - upload-results-to-s3.sh:/app/upload-results-to-s3.sh:ro
+    - bp-runner.pr-comment.yml:/app/bp-runner.pr-comment.yml:ro
+    - bp-runner.fail-on-regression.yml:/app/bp-runner.fail-on-regression.yml:ro
+  env:
+    CPU_START_ID: 0
+    MAJOR_VERSION: 16
+    GROUP: 1
+    SPLITS: 10
+    CI_COMMIT_REF_NAME: master # Branch to use during local run
+    CI_COMMIT_SHA: master # A commit to use during local run, specifying a branch name will checkout the latest commit from that branch
+  command: bp-runner bp-runner.yml --debug

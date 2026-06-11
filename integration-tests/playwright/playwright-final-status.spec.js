@@ -2,7 +2,6 @@
 
 const assert = require('node:assert')
 const { once } = require('node:events')
-const { exec } = require('child_process')
 const satisfies = require('semifies')
 
 const {
@@ -10,8 +9,8 @@ const {
   useSandbox,
   installPlaywrightChromium,
   getCiVisAgentlessConfig,
+  createParallelIt,
 } = require('../helpers')
-const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
 const {
   TEST_STATUS,
@@ -43,7 +42,9 @@ versions.forEach((version) => {
   }
 
   describe(`playwright@${version}`, function () {
-    let cwd, receiver, childProcess, webAppPort, webAppServer
+    const it = createParallelIt(global.it, { withReceiver: true })
+
+    let cwd, webAppPort, webAppServer
 
     // eslint-disable-next-line sonarjs/stable-tests -- chromium download is flaky in CI
     this.retries(2)
@@ -75,17 +76,8 @@ versions.forEach((version) => {
       await new Promise(resolve => webAppServer.close(resolve))
     })
 
-    beforeEach(async function () {
-      receiver = await new FakeCiVisIntake().start()
-    })
-
-    afterEach(async () => {
-      childProcess?.kill()
-      await receiver.stop()
-    })
-
     contextNewVersions('final status tag', () => {
-      it('sets final_status tag to test status on regular tests without retry features', async () => {
+      it('sets final_status tag to test status on regular tests without retry features', async (receiver, run) => {
         receiver.setSettings({
           itr_enabled: false,
           code_coverage: false,
@@ -109,7 +101,7 @@ versions.forEach((version) => {
             })
           })
 
-        childProcess = exec(
+        const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js',
           {
             cwd,
@@ -120,13 +112,10 @@ versions.forEach((version) => {
           }
         )
 
-        await Promise.all([
-          once(childProcess, 'exit'),
-          receiverPromise,
-        ])
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
-      it('sets final_status tag to test status on last retry (ATR active only)', async () => {
+      it('sets final_status tag to test status on last retry (ATR active only)', async (receiver, run) => {
         receiver.setSettings({
           itr_enabled: false,
           code_coverage: false,
@@ -160,7 +149,7 @@ versions.forEach((version) => {
 
         // --retries=2 is passed via CLI so test.info().retry increments correctly across all playwright versions.
         // dd-trace won't override it since its guard is `if (project.retries === 0)`.
-        childProcess = exec(
+        const proc = run(
           './node_modules/.bin/playwright test --retries=2 -c playwright.config.js',
           {
             cwd,
@@ -172,13 +161,10 @@ versions.forEach((version) => {
           }
         )
 
-        await Promise.all([
-          once(childProcess, 'exit'),
-          receiverPromise,
-        ])
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
-      it('sets final_status tag only on last EFD retry (EFD active only)', async () => {
+      it('sets final_status tag only on last EFD retry (EFD active only)', async (receiver, run) => {
         receiver.setKnownTests({
           playwright: {
             'landing-page-test.js': [
@@ -242,7 +228,7 @@ versions.forEach((version) => {
             )
           }, RETRY_FINAL_STATUS_TIMEOUT)
 
-        childProcess = exec(
+        const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js',
           {
             cwd,
@@ -253,14 +239,11 @@ versions.forEach((version) => {
           }
         )
 
-        await Promise.all([
-          once(childProcess, 'exit'),
-          receiverPromise,
-        ])
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
       it('sets final_status tag only on last ATR retry when EFD is enabled but not active and ATR is active',
-        async () => {
+        async (receiver, run) => {
           receiver.setKnownTests({
             playwright: {
               'automatic-retry-test.js': [
@@ -301,7 +284,7 @@ versions.forEach((version) => {
 
           // --retries=2 is passed via CLI so test.retries is correctly set at startup.
           // dd-trace won't override it since its guard is `if (project.retries === 0)`.
-          childProcess = exec(
+          const proc = run(
             './node_modules/.bin/playwright test --retries=2 -c playwright.config.js',
             {
               cwd,
@@ -313,13 +296,10 @@ versions.forEach((version) => {
             }
           )
 
-          await Promise.all([
-            once(childProcess, 'exit'),
-            receiverPromise,
-          ])
+          await Promise.all([once(proc, 'exit'), receiverPromise])
         })
 
-      it('sets final_status tag to skip for disabled tests', async () => {
+      it('sets final_status tag to skip for disabled tests', async (receiver, run) => {
         receiver.setSettings({ test_management: { enabled: true } })
         receiver.setTestManagementTests({
           playwright: {
@@ -353,7 +333,7 @@ versions.forEach((version) => {
             assert.strictEqual(passingTest.meta[TEST_FINAL_STATUS], 'pass')
           }, 25000)
 
-        childProcess = exec(
+        const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js disabled-test.js',
           {
             cwd,
@@ -365,13 +345,10 @@ versions.forEach((version) => {
           }
         )
 
-        await Promise.all([
-          once(childProcess, 'exit'),
-          receiverPromise,
-        ])
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
-      it('sets final_status tag to skip for quarantined tests', async () => {
+      it('sets final_status tag to skip for quarantined tests', async (receiver, run) => {
         receiver.setSettings({ test_management: { enabled: true } })
         receiver.setTestManagementTests({
           playwright: {
@@ -427,7 +404,7 @@ versions.forEach((version) => {
             assert.strictEqual(passingTest.meta[TEST_FINAL_STATUS], 'pass')
           }, 25000)
 
-        childProcess = exec(
+        const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js ' +
           'quarantine-test.js quarantine-failing-after-each-test.js',
           {
@@ -440,13 +417,10 @@ versions.forEach((version) => {
           }
         )
 
-        await Promise.all([
-          once(childProcess, 'exit'),
-          receiverPromise,
-        ])
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
-      it('does not set final_status on intermediate skipped executions in serial mode', async () => {
+      it('does not set final_status on intermediate skipped executions in serial mode', async (receiver, run) => {
         if (version === 'latest') return
         receiver.setSettings({
           itr_enabled: false,
@@ -475,7 +449,7 @@ versions.forEach((version) => {
 
         // --retries=1 is Playwright's native retry — no dd-trace retry features needed.
         // dd-trace won't override it since its guard is `if (project.retries === 0)`.
-        childProcess = exec(
+        const proc = run(
           './node_modules/.bin/playwright test --retries=1 -c playwright.config.js',
           {
             cwd,
@@ -487,14 +461,12 @@ versions.forEach((version) => {
           }
         )
 
-        await Promise.all([
-          once(childProcess, 'exit'),
-          receiverPromise,
-        ])
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
       it(
-        'does not emit duplicate events for serial tests abandoned by fail-fast with retries enabled', async () => {
+        'does not emit duplicate events for serial tests abandoned by fail-fast with retries enabled',
+        async (receiver, run) => {
           receiver.setSettings({
             itr_enabled: false,
             code_coverage: false,
@@ -513,7 +485,7 @@ versions.forEach((version) => {
               // loop at the end of the run must not re-emit them as duplicates.
               const abandonedTests = tests.filter(t =>
                 t.meta[TEST_NAME] === 'playwright serial should fail on first attempt' ||
-              t.meta[TEST_NAME] === 'playwright serial should be skipped when previous test fails'
+                t.meta[TEST_NAME] === 'playwright serial should be skipped when previous test fails'
               )
               assert.strictEqual(abandonedTests.length, 2)
               abandonedTests.forEach(t => assert.strictEqual(t.meta[TEST_STATUS], 'skip'))
@@ -526,7 +498,7 @@ versions.forEach((version) => {
           // --retries=1: `should eventually pass after retrying` needs retry>=2 to pass, so it exhausts
           // both attempts and fails. MAX_FAILURES=1 then cuts the run, abandoning the serial suite.
           // PLAYWRIGHT_WORKERS=1 ensures the non-serial test always runs (and fails) before the serial suite.
-          childProcess = exec(
+          const proc = run(
             './node_modules/.bin/playwright test --retries=1 -c playwright.config.js',
             {
               cwd,
@@ -540,10 +512,7 @@ versions.forEach((version) => {
             }
           )
 
-          await Promise.all([
-            once(childProcess, 'exit'),
-            receiverPromise,
-          ])
+          await Promise.all([once(proc, 'exit'), receiverPromise])
         })
     })
   })

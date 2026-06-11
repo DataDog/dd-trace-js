@@ -43,7 +43,7 @@ const {
   INSTRUMENTATION_METHOD_ANNOTATED,
 } = require('./constants/tags')
 const { storage } = require('./storage')
-const { findGenAIAncestorSpanId, validateCostTags, writeBridgeTags } = require('./util')
+const { findGenAIAncestorSpanId, validateCostTags, writeBridgeTags, validateToolDefinitions } = require('./util')
 
 // global registry of LLMObs spans
 // maps LLMObs spans to their annotations
@@ -176,8 +176,10 @@ class LLMObsTagger {
   }
 
   tagToolDefinitions (span, toolDefinitions) {
-    if (Array.isArray(toolDefinitions) && toolDefinitions.length > 0) {
-      this._setTag(span, TOOL_DEFINITIONS, toolDefinitions)
+    const validatedToolDefinitions = validateToolDefinitions(toolDefinitions)
+
+    if (validatedToolDefinitions.length > 0) {
+      this._setTag(span, TOOL_DEFINITIONS, validatedToolDefinitions)
     } else {
       this.#handleFailure('Tool definitions must be a non-empty array.', 'invalid_tool_definitions')
     }

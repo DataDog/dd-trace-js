@@ -2,7 +2,7 @@
 
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const { getOperationId, isReplayedOp, unwrapDurableError } = require('./util')
+const { addOpMeta, unwrapDurableError } = require('./util')
 
 // Span names whose direct children must keep the default resource.
 // These can have very high cardinality which is undesireable in the resource.
@@ -37,14 +37,11 @@ class BaseContextPlugin extends TracingPlugin {
     const operationName = this.getOperationName(ctx)
     const resource = HIGH_CARDINALITY_PARENT_SPAN_NAMES.has(parentName) ? undefined : operationName
 
-    const meta = { 'aws.durable.replayed': String(isReplayedOp(ctx.self)) }
+    const meta = {}
     if (operationName) {
       meta['aws.durable.operation_name'] = operationName
     }
-    const operationId = getOperationId(ctx.self)
-    if (operationId) {
-      meta['aws.durable.operation_id'] = operationId
-    }
+    addOpMeta(meta, ctx.self)
 
     this.startSpan(spanName, {
       resource,
@@ -64,8 +61,7 @@ class BaseContextPlugin extends TracingPlugin {
   settle (ctx) {
     if (ctx.suppressed) return
     if (ctx.error !== undefined) {
-      const errCtx = unwrapDurableError(ctx)
-      ctx.currentStore?.span?.setTag('error', errCtx.error)
+      ctx.currentStore?.span?.setTag('error', unwrapDurableError(ctx))
     }
     this.finish(ctx)
   }

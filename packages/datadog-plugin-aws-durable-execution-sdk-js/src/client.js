@@ -1,7 +1,7 @@
 'use strict'
 
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
-const { getOperationId, isReplayedOp, unwrapDurableError } = require('./util')
+const { addOpMeta, unwrapDurableError } = require('./util')
 
 class AwsDurableExecutionSdkJsClientPlugin extends ClientPlugin {
   static id = 'aws-durable-execution-sdk-js'
@@ -22,21 +22,16 @@ class AwsDurableExecutionSdkJsClientPlugin extends ClientPlugin {
     const operationName = isNamed ? args[0] : undefined
     const functionName = isNamed ? args[1] : args[0]
 
-    const meta = {
-      'aws.durable.replayed': String(isReplayedOp(ctx.self)),
-    }
+    const meta = {}
     if (functionName) {
       meta['aws.durable.invoke.function_name'] = functionName
     }
     if (operationName) {
       meta['aws.durable.operation_name'] = operationName
     }
-    const operationId = getOperationId(ctx.self)
-    if (operationId) {
-      meta['aws.durable.operation_id'] = operationId
-    }
+    addOpMeta(meta, ctx.self)
 
-    this.startSpan('aws.durable.invoke', {
+    this.startSpan(this.operationName(), {
       resource: operationName,
       kind: this.constructor.kind,
       meta,
@@ -47,8 +42,7 @@ class AwsDurableExecutionSdkJsClientPlugin extends ClientPlugin {
 
   settle (ctx) {
     if (ctx.error !== undefined) {
-      const errCtx = unwrapDurableError(ctx)
-      ctx.currentStore?.span?.setTag('error', errCtx.error)
+      ctx.currentStore?.span?.setTag('error', unwrapDurableError(ctx))
     }
     this.finish(ctx)
   }

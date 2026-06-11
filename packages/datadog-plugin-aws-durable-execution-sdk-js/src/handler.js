@@ -36,7 +36,7 @@ class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
       meta['aws.durable.execution_arn'] = arn
     }
 
-    this.startSpan('aws.durable.execute', {
+    this.startSpan(this.operationName(), {
       resource: handler?.name,
       kind: this.constructor.kind,
       meta,

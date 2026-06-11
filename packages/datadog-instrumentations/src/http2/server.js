@@ -26,21 +26,28 @@ function wrapCreateServer (createServer) {
   }
 }
 
-function wrapResponseEmit (emit, ctx) {
-  return function (eventName, event) {
+function wrapResponseEmit (originalEmit, ctx) {
+  // Named `emit`/arity-1 mirrors the response method so the per-response wrap
+  // skips its name/length rewrite.
+  return function emit (eventName) {
     ctx.req = this.req
     ctx.eventName = eventName
-    return emitCh.runStores(ctx, emit, this, ...arguments)
+    return emitCh.runStores(ctx, originalEmit, this, ...arguments)
   }
 }
 
-function wrapEmit (emit) {
-  return function (eventName, req, res) {
+function wrapEmit (originalEmit) {
+  // Named `emit` mirrors the server method so the one-time wrap skips its name
+  // rewrite; rest params keep the per-event forwarding allocation-free.
+  return function emit (...args) {
     if (!startServerCh.hasSubscribers) {
-      return emit.apply(this, arguments)
+      return Reflect.apply(originalEmit, this, args)
     }
 
+    const eventName = args[0]
     if (eventName === 'request') {
+      const req = args[1]
+      const res = args[2]
       res.req = req
 
       const ctx = { req, res }
@@ -48,7 +55,7 @@ function wrapEmit (emit) {
         shimmer.wrap(res, 'emit', emit => wrapResponseEmit(emit, ctx))
 
         try {
-          return emit.apply(this, arguments)
+          return Reflect.apply(originalEmit, this, args)
         } catch (error) {
           ctx.error = error
           errorServerCh.publish(ctx)
@@ -57,6 +64,6 @@ function wrapEmit (emit) {
         }
       })
     }
-    return emit.apply(this, arguments)
+    return Reflect.apply(originalEmit, this, args)
   }
 }
