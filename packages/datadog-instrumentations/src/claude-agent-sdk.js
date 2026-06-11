@@ -13,7 +13,7 @@ const mergeHooks = function mergeHooks (userHooks, tracerHooks) {
   const merged = {}
 
   for (const event of Object.keys(tracerHooks)) {
-    const userMatchers = (userHooks && userHooks[event]) || []
+    const userMatchers = userHooks?.[event] || []
     const tracerMatchers = tracerHooks[event]
     merged[event] = [...userMatchers, ...tracerMatchers]
   }
