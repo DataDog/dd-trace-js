@@ -235,17 +235,13 @@ function incomingHttpEndTranslator ({ req, res }) {
   web.setRouteOrEndpointTag(req)
 
   if (config?.appsec?.apiSecurity?.enabled) {
-    const route = web.getContext(req)?.paths?.join('')
-    if (route) {
-      try {
-        const rootSpan = web.root(req)
-        const normalized = normalizeRoute(req)
-        if (normalized !== null) {
-          rootSpan?.setTag('_dd.appsec.normalized_route', normalized)
-        }
-      } catch (e) {
-        log.debug('[ASM] Unable to compute normalized route: %s', e.message)
+    try {
+      const normalized = normalizeRoute(req)
+      if (normalized !== null) {
+        web.root(req)?.setTag('_dd.appsec.normalized_route', normalized)
       }
+    } catch (e) {
+      log.debug('[ASM] Unable to compute normalized route: %s', e.message)
     }
   }
 
