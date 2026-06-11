@@ -1,5 +1,6 @@
 'use strict'
 
+const { storage } = require('../../datadog-core')
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
 
@@ -8,10 +9,19 @@ class PGPlugin extends DatabasePlugin {
   static operation = 'query'
   static system = 'postgres'
 
+  constructor () {
+    super(...arguments)
+
+    this.addSub('apm:pg:pool:connect:start', ctx => {
+      ctx.parentStore = storage('legacy').getStore()
+    })
+    this.addBind('apm:pg:pool:connect:finish', ctx => ctx.parentStore)
+  }
+
   bindStart (ctx) {
-    const { params = {}, query, processId, stream } = ctx
+    const { params = {}, query, originalText, processId, stream } = ctx
     const service = this.serviceName({ pluginConfig: this.config, params })
-    const originalStatement = this.maybeTruncate(query.text)
+    const originalStatement = this.maybeTruncate(originalText)
 
     const span = this.startSpan(this.operationName(), {
       service,
@@ -32,7 +42,7 @@ class PGPlugin extends DatabasePlugin {
       span.setTag('db.stream', 1)
     }
 
-    query.__ddInjectableQuery = this.injectDbmQuery(span, query.text, service.name, !!query.name)
+    ctx.injected = this.injectDbmQuery(span, originalText, service.name, !!query.name)
 
     return ctx.currentStore
   }

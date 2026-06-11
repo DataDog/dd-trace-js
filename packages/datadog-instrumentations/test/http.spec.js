@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
+const { inspect } = require('node:util')
 const dc = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -89,7 +90,7 @@ describe('client', () => {
 
           sinon.assert.called(startChannelCb)
           const ctx = getContextFromStubByUrl(url, startChannelCb)
-          assert(ctx !== null)
+          assert.notStrictEqual(ctx, null)
           assert(ctx.abortController instanceof AbortController)
         })
 
@@ -181,7 +182,7 @@ describe('client', () => {
               // Necessary because the tracer makes extra requests to the agent
               if (asyncStartChannelCb.called) {
                 const ctx = getContextFromStubByUrl(url, asyncStartChannelCb)
-                assert(ctx === null)
+                assert.strictEqual(ctx, null)
               }
 
               done()
@@ -262,10 +263,10 @@ describe('client', () => {
             res.on('end', () => {
               try {
                 const payload = getResponseFinishPayload(url, responseFinishChannelCb)
-                assert(Buffer.isBuffer(payload.body))
+                assert(Buffer.isBuffer(payload.body), `Expected Buffer, got ${inspect(payload.body)}`)
 
                 const expectedBody = Buffer.concat(chunks)
-                assert(payload.body.equals(expectedBody))
+                assert(payload.body.equals(expectedBody), `Got: ${inspect(payload.body)}`)
 
                 done()
               } catch (e) {
@@ -292,7 +293,7 @@ describe('client', () => {
             res.on('end', () => {
               try {
                 const payload = getResponseFinishPayload(url, responseFinishChannelCb)
-                assert(typeof payload.body === 'string')
+                assert.strictEqual(typeof payload.body, 'string')
 
                 const expectedBody = chunks.join('')
                 assert.strictEqual(payload.body, expectedBody)
@@ -311,6 +312,7 @@ describe('client', () => {
           const chunks = []
           http.get(url, (res) => {
             res.setEncoding('utf8')
+            // eslint-disable-next-line sonarjs/no-identical-functions -- per-test chunks buffer
             const consume = () => {
               let chunk
               while ((chunk = res.read()) !== null) {
@@ -323,7 +325,7 @@ describe('client', () => {
             res.on('end', () => {
               try {
                 const payload = getResponseFinishPayload(url, responseFinishChannelCb)
-                assert(typeof payload.body === 'string')
+                assert.strictEqual(typeof payload.body, 'string')
 
                 const expectedBody = chunks.join('')
                 assert.strictEqual(payload.body, expectedBody)
@@ -357,7 +359,7 @@ describe('client', () => {
             res.on('end', () => {
               try {
                 const payload = getResponseFinishPayload(url, responseFinishChannelCb)
-                assert(typeof payload.body === 'string')
+                assert.strictEqual(typeof payload.body, 'string')
                 const expectedBody = chunks.join('')
                 assert.strictEqual(payload.body, expectedBody)
 

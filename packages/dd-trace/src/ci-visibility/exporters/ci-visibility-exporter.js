@@ -48,11 +48,13 @@ class CiVisibilityExporter extends BufferingExporter {
 
     const gitUploadTimeoutId = setTimeout(() => {
       this._resolveGit(new Error('Timeout while uploading git metadata'))
-    }, GIT_UPLOAD_TIMEOUT).unref()
+    }, GIT_UPLOAD_TIMEOUT)
+    gitUploadTimeoutId.unref?.()
 
     const canUseCiVisProtocolTimeoutId = setTimeout(() => {
       this._resolveCanUseCiVisProtocol(false)
-    }, CAN_USE_CI_VIS_PROTOCOL_TIMEOUT).unref()
+    }, CAN_USE_CI_VIS_PROTOCOL_TIMEOUT)
+    canUseCiVisProtocolTimeoutId.unref?.()
 
     this._gitUploadPromise = new Promise(resolve => {
       this._resolveGit = (err) => {
@@ -234,7 +236,6 @@ class CiVisibilityExporter extends BufferingExporter {
         testManagementAttemptToFixRetries ?? this._config.testManagementAttemptToFixRetries,
       isImpactedTestsEnabled: isImpactedTestsEnabled && this._config.isImpactedTestsEnabled,
       isCoverageReportUploadEnabled,
-      isKeepingCoverageConfiguration: this._config.isKeepingCoverageConfiguration,
     }
   }
 

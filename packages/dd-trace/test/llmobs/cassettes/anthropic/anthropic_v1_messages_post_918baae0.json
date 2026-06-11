@@ -1,0 +1,60 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.anthropic.com/v1/messages",
+    "headers": {
+      "Content-Length": "272",
+      "Accept": "application/json",
+      "Content-Type": "application/json",
+      "User-Agent": "Anthropic/JS 0.14.0",
+      "x-stainless-lang": "js",
+      "x-stainless-package-version": "0.14.0",
+      "x-stainless-os": "MacOS",
+      "x-stainless-arch": "arm64",
+      "x-stainless-runtime": "node",
+      "x-stainless-runtime-version": "v22.17.0",
+      "anthropic-version": "2023-06-01",
+      "Accept-Encoding": "gzip,deflate",
+      "Connection": "keep-alive"
+    },
+    "body": "{\n  \"model\": \"claude-haiku-4-5-20251001\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"What is the best selling book of all time?\"\n    }\n  ],\n  \"max_tokens\": 16000,\n  \"temperature\": 1,\n  \"thinking\": {\n    \"type\": \"enabled\",\n    \"budget_tokens\": 1024\n  }\n}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Date": "Mon, 27 Apr 2026 16:41:24 GMT",
+      "Content-Type": "application/json",
+      "Transfer-Encoding": "chunked",
+      "Connection": "keep-alive",
+      "anthropic-ratelimit-input-tokens-limit": "4000000",
+      "anthropic-ratelimit-input-tokens-remaining": "4000000",
+      "anthropic-ratelimit-input-tokens-reset": "2026-04-27T16:41:20Z",
+      "anthropic-ratelimit-output-tokens-limit": "800000",
+      "anthropic-ratelimit-output-tokens-remaining": "800000",
+      "anthropic-ratelimit-output-tokens-reset": "2026-04-27T16:41:24Z",
+      "anthropic-ratelimit-requests-limit": "20000",
+      "anthropic-ratelimit-requests-remaining": "19999",
+      "anthropic-ratelimit-requests-reset": "2026-04-27T16:41:20Z",
+      "anthropic-ratelimit-tokens-limit": "4800000",
+      "anthropic-ratelimit-tokens-remaining": "4800000",
+      "anthropic-ratelimit-tokens-reset": "2026-04-27T16:41:20Z",
+      "request-id": "req_011CaUcF9LtQKgcEbyzPGJAD",
+      "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+      "anthropic-organization-id": "4257e925-ee99-4ee8-9c62-8e53716d5203",
+      "Server": "cloudflare",
+      "x-envoy-upstream-service-time": "4209",
+      "Content-Encoding": "gzip",
+      "vary": "Accept-Encoding",
+      "server-timing": "x-originResponse;dur=4212",
+      "cf-cache-status": "DYNAMIC",
+      "set-cookie": "_cfuvid=6sbwstMC46X8e3R27W_wXO8TgFv.QxFy6CwTVdxp2dA-1777308080.3187025-1.0.1.1-.yjvWOI3wDST_HiHPUNGw681SdtxbQ2nnx_FKFVAxJ8; HttpOnly; SameSite=None; Secure; Path=/; Domain=api.anthropic.com",
+      "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+      "X-Robots-Tag": "none",
+      "CF-RAY": "9f2f462dfcd24384-EWR"
+    },
+    "body": "{\"model\":\"claude-haiku-4-5-20251001\",\"id\":\"msg_01J6j8H8qxo1DQo2vHri87o6\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"thinking\",\"thinking\":\"This is a factual question about the best-selling book of all time. The answer depends on how you measure it and what sources you consult, but generally:\\n\\nThe Bible is often cited as the best-selling book of all time, with estimates of over 5 billion copies distributed over time.\\n\\nHowever, if we're talking about a single modern book, \\\"Quran\\\" is also extremely widely distributed.\\n\\nFor secular modern books, some of the top contenders include:\\n- Don Quixote by Miguel de Cervantes\\n- A Tale of Two Cities by Charles Dickens\\n- The Little Prince by Antoine de Saint-Exup\u00e9ry\\n- Harry Potter and the Sorcerer's Stone (or series as a whole)\\n\\nThe exact answer can vary depending on:\\n1. How you count (individual books vs. series)\\n2. What time period you're considering\\n3. Whether you include religious texts\\n4. How copies are counted (printed, digital, etc.)\\n\\nThe most commonly cited answer is the Bible, followed by the Quran. Among secular books, Don Quixote or Harry Potter are frequently mentioned.\\n\\nI should provide a comprehensive answer that acknowledges this complexity.\",\"signature\":\"EvYJCmMIDRgCKkCG6opJE8H+H2ClZogEsjWkxyRReEhdTuZ+XVdYPLDPb9fpczGlit2uUfdbWmKpQy3zJ+92l+5rG7nT/wNkl3OgMhljbGF1ZGUtaGFpa3UtNC01LTIwMjUxMDAxOAASDP5wAxYFGYijOoRtghoMWRqj97iw727gPgMkIjBwu4IUJidpnTZhyb7bkT9fdVws56KJ9ZzHBh26ok/Y9cOlCXwHFKzTucLnkwIjdD0qwAjjgtnt96GCaDdVah1OEFxNQof3+x9V+rzb15tyA42fqBo/rqUouuwRquw0n327UJ5LE9VycrxAYm6q7PsM4dLE7wmAt2nQ12vjvPhE9hLDtObjYV+BBcZhJXKNMpQi7Knnw2jJMiPkj7yAsmALSAfqc0e1PTVKXtWdNDOkHyHljvmUx4eifALlBnd0CFD3k0xktXDxFelpOE4J6zCFP8UIxfrqpaRqsJoB+nlef2CS2RJ7/K6TGdqeFLZ1mLljhj1kdN8YpFdhJ1Dmi1xx5VhwpeDBZWQoKHRRQqFjIn/bvX5YhGwNK5mG5QZ/zTVaYJkaYye8eg8uGOoWaHMMEv5NUTEvOUqZru71JdsgGlujeM3IPun9z5bqH9O179PsaEGgGHbqWHIR02PHScL9HG4I4bvM/wihtAhhKgvTnlsWgyztz4zkrkw5Wr/VZlwUFxXOdPIWYI/oXFgga8/VNhwP2oyjseKEpqFJMzUzYUbkA6FaJ7SdPdYfv7hGSxqohn7USs2rLJ1r5ekvaVAHcbiDF/SvyndlPC6FjOWJKAit5vG0IAZhhjSJDDElK9YNFxlve5oYhcdd6HsysYq/R0I5EkzwZazbjeaqPU7GVDbogRCEyHCGQD/mIDrx+BdYLZRzd0rSre+Z1CjV/hFC7QBjnWtOQuBkdIDY/2xiKLXmWQ+LYuPwEsBvfiSWpTRvG0ADMKP9OD2p/qqUKzfHuWo5nv2gM1iyWJe1spEo3YgxbUR6SBz8BqF1XCteAfYWz3lNEQMDT8n5bulrc2L32r/X1zNxTXKDfp9tgRdzwZ12IH+BYUL5PgkM5FyDIcCIfPxInmCtfTu6EdkwbjBR6JKuR4pwarPF1EkB4rxgXyh6WY2orPockMFqjkFL5eanc5TKZCgDSHK+l0PCymqlMk3ykp9QnmRnY0GtiUED2uZ0EFoHT2WT+zSL9tptWRqPgDST6Y5Jfz8W9lGd8OLi9cNkpvzS7WfxhLvCp0XC8yPE2ntauSxQCc4A2I9+TvynqeZx0nJ4QxtyjraZvLSMeDuR8KAiCR1tmgMq2OZZ5PuS44IWnACVBHscICOFWz6BH8A8kaq27jhBJe6jHPxMtzrtYZ70cJXYwOrGjzKsvUaONh59e6j8+9tBTnyPMnJrTRRBzT8SGhiNCFaYdGibmndtUoXOup/1eSDc0lNZR0+CNN5L1mj4YINF60OOMlRnVYCbuaxtJ3jcatnpBts2xb+L0g+kaVronBNjAtoPNCha/xjHwus2uL++5bGd19AO7iEPstRWTcGjdkm9kAIDNFFxqFQ9VIzlZNZld8JMSNnOOw0b37WtkQW6767eJoi20cmSjAR3dFUV0amatsRR4VIZXIfA+VzI/CrxBnUGIEGgUYoElwe4bOLhohp2tNqJm+TBKsV7qhRGg4soCsdhlj7XYjLdbc8ug0xQeyoJ3AlL7xgB\"},{\"type\":\"text\",\"text\":\"The **Bible** is generally considered the best-selling book of all time, with estimates of over 5 billion copies distributed.\\n\\nIf you're asking about secular modern books, **\\\"Don Quixote\\\"** by Miguel de Cervantes (published in 1605) is often cited as the top seller, with hundreds of millions of copies sold.\\n\\nThe **Harry Potter** series is the best-selling book series in modern times, with over 500 million copies sold across all seven books.\\n\\nThe exact answer depends on how you count (individual books vs. series, different formats, historical estimates), but these are the most commonly cited answers.\"}],\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":46,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":407,\"service_tier\":\"standard\",\"inference_geo\":\"not_available\"}}"
+  }
+}

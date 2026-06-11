@@ -19,10 +19,9 @@ class DataStreamsCheckpointer {
     if (!this.config.dsmEnabled) return
 
     const ctx = this.dsmProcessor.setCheckpoint(
-      ['type:' + type, 'topic:' + target, 'direction:out', 'manual_checkpoint:true'],
+      ['direction:out', 'type:' + type, 'topic:' + target, 'manual_checkpoint:true'],
       null,
-      DataStreamsContext.getDataStreamsContext(),
-      null
+      DataStreamsContext.getDataStreamsContext()
     )
     DataStreamsContext.setDataStreamsContext(ctx)
 
@@ -34,7 +33,7 @@ class DataStreamsCheckpointer {
    *                       Examples include kafka, kinesis, sns etc.
    * @param {string} source - The source of data. This can be a topic, exchange or stream name.
    * @param {object} carrier - The carrier object to extract context from.
-   * @param {boolean} [manualCheckpoint=true] - Whether this checkpoint was manually set. Keep true if manually
+   * @param {boolean} [manualCheckpoint] - Whether this checkpoint was manually set. Keep true if manually
    *                                           instrumenting. Manual instrumentation always overrides automatic
    *                                           instrumentation in the case a call is both manually and automatically
    *                                           instrumented.
@@ -45,17 +44,12 @@ class DataStreamsCheckpointer {
     const parentCtx = this.tracer.extract('text_map_dsm', carrier)
     DataStreamsContext.setDataStreamsContext(parentCtx)
 
-    const tags = ['type:' + type, 'topic:' + source, 'direction:in']
+    const tags = ['direction:in', 'type:' + type, 'topic:' + source]
     if (manualCheckpoint) {
       tags.push('manual_checkpoint:true')
     }
 
-    const ctx = this.dsmProcessor.setCheckpoint(
-      tags,
-      null,
-      parentCtx,
-      null
-    )
+    const ctx = this.dsmProcessor.setCheckpoint(tags, null, parentCtx)
     DataStreamsContext.setDataStreamsContext(ctx)
 
     return ctx
@@ -66,7 +60,7 @@ class DataStreamsCheckpointer {
    * Tags the active span (or the provided span) with the transaction ID and checkpoint name.
    * @param {string} transactionId - The transaction identifier to track.
    * @param {string} checkpointName - The logical checkpoint name.
-   * @param {object|null} [span=null] - Span to tag. Defaults to the currently active span.
+   * @param {object|null} [span] - Span to tag. Defaults to the currently active span.
    */
   trackTransaction (transactionId, checkpointName, span = null) {
     if (!this.config.dsmEnabled) return

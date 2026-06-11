@@ -2,6 +2,7 @@
 
 const fs = require('fs')
 
+const { DD_MAJOR } = require('../../../../version')
 const tagger = require('../tagger')
 
 let warnInvalidValue
@@ -9,9 +10,19 @@ function setWarnInvalidValue (fn) {
   warnInvalidValue = fn
 }
 
+// `'b3 single header'` is the legacy spelling of `'b3'`; on v6 it is normalised below.
 const VALID_PROPAGATION_STYLES = new Set([
   'datadog', 'tracecontext', 'b3', 'b3 single header', 'b3multi', 'baggage', 'none',
 ])
+
+const RENAMED_OTEL_TAGS = new Map(
+  [
+    ['deployment.environment.name', 'env'],
+    ['deployment.environment', 'env'],
+    ['service.name', 'service'],
+    ['service.version', 'version'],
+  ]
+)
 
 function toCase (value, methodName) {
   if (Array.isArray(value)) {
@@ -66,12 +77,12 @@ const transformers = {
     }
     return value
   },
-  parseOtelTags (value, optionName) {
-    return parsers.MAP(value
-      ?.replace(/(^|,)deployment\.environment=/, '$1env:')
-      .replace(/(^|,)service\.name=/, '$1service:')
-      .replace(/(^|,)service\.version=/, '$1version:')
-      .replaceAll('=', ':'), optionName)
+  parseOtelTags (object) {
+    const tags = {}
+    for (const [key, value] of Object.entries(object)) {
+      tags[RENAMED_OTEL_TAGS.get(key) ?? key] = value
+    }
+    return tags
   },
   normalizeProfilingEnabled (configValue) {
     if (configValue == null) {
@@ -134,12 +145,24 @@ const transformers = {
     }
     return value.replaceAll(/\s*:\s*/g, ':')
   },
+  /**
+   * @param {string} value
+   */
+  toURL (value) {
+    try {
+      return new URL(value)
+    } catch {}
+  },
   validatePropagationStyles (value, optionName) {
     value = transformers.toLowerCase(value)
-    for (const propagator of value) {
+    for (let index = 0; index < value.length; index++) {
+      const propagator = value[index]
       if (!VALID_PROPAGATION_STYLES.has(propagator)) {
         warnInvalidValue(propagator, optionName, optionName, 'Invalid propagator')
         return
+      }
+      if (DD_MAJOR >= 6 && propagator === 'b3 single header') {
+        value[index] = 'b3'
       }
     }
     return value
@@ -225,11 +248,19 @@ const parsers = {
     if (!raw) {
       return entries
     }
-    // DD_TAGS is a special case. It may be a map of key-value pairs separated by spaces.
-    if (optionName === 'DD_TAGS' && !raw.includes(',')) {
+    let valueSeparator = ':'
+    if (optionName.startsWith('OTEL_')) {
+      // OTEL spec uses `key=value,key=value`
+      // (https://opentelemetry.io/docs/specs/otel/protocol/exporter/#specifying-headers-via-environment-variables),
+      // while DD uses `key:value,key:value`. Parse OTEL-prefixed options with `=` so downstream code
+      // receives a proper map and telemetry reports the parsed entries. The char-by-char loop
+      // avoids the allocations that `split(',')` + `indexOf('=')` do per pair.
+      valueSeparator = '='
+    } else if (optionName === 'DD_TAGS' && !raw.includes(',')) {
+      // DD_TAGS is a special case. It may be a map of key-value pairs separated by spaces.
       raw = raw.replaceAll(/\s+/g, ',')
     }
-    tagger.add(entries, raw)
+    tagger.add(entries, raw, valueSeparator)
     return entries
   },
   JSON (raw) {

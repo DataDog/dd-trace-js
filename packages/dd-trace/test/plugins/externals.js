@@ -1,6 +1,14 @@
 'use strict'
 
+const { DD_MAJOR } = require('../../../../version')
+
 module.exports = {
+  aerospike: [
+    {
+      name: 'aerospike',
+      versions: ['4', '5', '>=6'],
+    },
+  ],
   ai: [
     {
       name: 'ai',
@@ -9,6 +17,18 @@ module.exports = {
     {
       name: '@ai-sdk/openai',
       versions: ['^1.3.23', '^2.0.0', '>=3.0.0'],
+    },
+    {
+      name: '@ai-sdk/amazon-bedrock',
+      versions: ['^3.0.0', '>=4.0.0'],
+    },
+    {
+      name: '@ai-sdk/anthropic',
+      versions: ['^1.0.0', '^2.0.0', '>=3.0.0'],
+    },
+    {
+      name: '@ai-sdk/google',
+      versions: ['^1.0.0', '^2.0.0', '>=3.0.0'],
     },
     {
       name: 'zod',
@@ -391,6 +411,12 @@ module.exports = {
       versions: ['>=2'],
     },
   ],
+  'light-my-request': [
+    {
+      name: 'fastify',
+      versions: ['>=3'],
+    },
+  ],
   lodash: [
     {
       name: 'lodash',
@@ -406,11 +432,17 @@ module.exports = {
   mocha: [
     {
       name: 'mocha',
-      versions: ['>=5.2.0', '>=8.0.0'],
+      versions: DD_MAJOR >= 6 ? ['>=8.0.0'] : ['>=5.2.0', '>=8.0.0'],
     },
     {
       name: 'mocha-each',
       versions: ['>=2.0.1'],
+    },
+  ],
+  modelcontextprotocol_sdk: [
+    {
+      name: '@modelcontextprotocol/sdk',
+      versions: ['>=1.27.1'],
     },
   ],
   moleculer: [
@@ -551,6 +583,7 @@ module.exports = {
       name: 'mongodb',
       dep: true,
       forced: true,
+      node: '>=20.19.0',
     },
     {
       name: 'mongodb-core',
@@ -600,6 +633,10 @@ module.exports = {
     },
   ],
   stripe: [
+    {
+      name: 'stripe',
+      versions: ['9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '>=20.0.0 <22'],
+    },
     {
       name: 'express',
       versions: ['^4'],

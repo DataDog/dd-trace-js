@@ -31,7 +31,7 @@ describe('Plugin', () => {
       describe('without configuration', () => {
         beforeEach(() => agent.load(['ioredis']))
 
-        afterEach(() => agent.close({ ritmReset: false }))
+        afterEach(() => agent.close())
 
         it('should do automatic instrumentation when using callbacks', async () => {
           await redis.get('foo')
@@ -52,7 +52,23 @@ describe('Plugin', () => {
             metrics: {
               'network.destination.port': 6379,
             },
-          })
+          }, { spanResourceMatch: /^get$/ })
+        })
+
+        it('formats numeric args without coercing to ?', async () => {
+          await redis.expire('foo', 60)
+
+          await agent.assertFirstTraceSpan({
+            meta: { 'redis.raw_command': 'EXPIRE foo 60' },
+          }, { spanResourceMatch: /^expire$/ })
+        })
+
+        it('redacts non-string non-number args as ?', async () => {
+          await redis.set('foo', Buffer.from('binary-value'))
+
+          await agent.assertFirstTraceSpan({
+            meta: { 'redis.raw_command': 'SET foo ?' },
+          }, { spanResourceMatch: /^set$/ })
         })
 
         it('should run the callback in the parent context', () => {
@@ -105,7 +121,7 @@ describe('Plugin', () => {
             metrics: {
               'network.destination.port': 6379,
             },
-          })
+          }, { spanResourceMatch: /^get$/ })
         })
 
         withNamingSchema(
@@ -121,7 +137,7 @@ describe('Plugin', () => {
           allowlist: ['get'],
         }))
 
-        after(() => agent.close({ ritmReset: false }))
+        after(() => agent.close())
 
         it('should be configured with the correct values', async () => {
           await redis.get('foo')
@@ -159,7 +175,7 @@ describe('Plugin', () => {
           whitelist: ['get'],
         }))
 
-        after(() => agent.close({ ritmReset: false }))
+        after(() => agent.close())
 
         it('should be able to filter commands', async () => {
           await redis.get('foo')

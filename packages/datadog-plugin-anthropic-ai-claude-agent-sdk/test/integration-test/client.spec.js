@@ -1,0 +1,42 @@
+'use strict'
+
+const assert = require('node:assert/strict')
+const {
+  FakeAgent,
+  sandboxCwd,
+  useSandbox,
+  checkSpansForServiceName,
+  spawnPluginIntegrationTestProcAndExpectExit
+} = require('../../../../integration-tests/helpers')
+const { withVersions } = require('../../../dd-trace/test/setup/mocha')
+
+describe('esm', () => {
+  let agent
+
+  withVersions('anthropic-ai-claude-agent-sdk', '@anthropic-ai/claude-agent-sdk', version => {
+    useSandbox([`@anthropic-ai/claude-agent-sdk@${version}`], false, [
+      './packages/datadog-plugin-anthropic-ai-claude-agent-sdk/test/integration-test/*'
+    ])
+
+    beforeEach(async () => {
+      agent = await new FakeAgent().start()
+    })
+
+    afterEach(async () => {
+      await agent.stop()
+    })
+
+    it('is instrumented', async () => {
+      const res = agent.assertMessageReceived(({ headers, payload }) => {
+        assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+        assert.ok(Array.isArray(payload))
+        assert.strictEqual(checkSpansForServiceName(payload, 'claude_agent_sdk.query'), true)
+      })
+
+      // Spawn short-lived ESM subprocess and wait for it to exit cleanly.
+      await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), 'server.mjs', agent.port)
+
+      await res
+    }).timeout(30000)
+  })
+})

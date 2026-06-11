@@ -7,7 +7,9 @@ class Test {
   runChain (input: string) {
     llmobs.annotate({
       inputData: 'this is a',
-      outputData: 'test'
+      outputData: 'test',
+      tags: { team: 'ml' },
+      costTags: ['team']
     })
 
     return 'world'

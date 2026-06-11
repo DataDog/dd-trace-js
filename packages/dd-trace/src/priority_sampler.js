@@ -110,7 +110,7 @@ class PrioritySampler {
    * Assigns a sampling priority to a span if not already set.
    *
    * @param {DatadogSpan} span
-   * @param {boolean} [auto=true] - Whether to use automatic sampling if no manual tags are present.
+   * @param {boolean} [auto] - Whether to use automatic sampling if no manual tags are present.
    * @returns {void}
    */
   sample (span, auto = true) {
@@ -125,7 +125,7 @@ class PrioritySampler {
 
     log.trace(span, auto)
 
-    const tag = this._getPriorityFromTags(context._tags, context)
+    const tag = this._getPriorityFromTags(context.getTags(), context)
 
     if (this.validate(tag)) {
       context._sampling.priority = tag
@@ -148,9 +148,8 @@ class PrioritySampler {
   update (rates) {
     const samplers = {}
 
-    for (const key in rates) {
-      const rate = rates[key]
-      samplers[key] = new Sampler(rate)
+    for (const key of Object.keys(rates)) {
+      samplers[key] = new Sampler(rates[key])
     }
 
     samplers[DEFAULT_KEY] = samplers[DEFAULT_KEY] || defaultSampler
@@ -301,7 +300,7 @@ class PrioritySampler {
    * @returns {SamplingPriority}
    */
   #getPriorityByAgent (context) {
-    const key = `service:${context._tags[SERVICE_NAME]},env:${this._env}`
+    const key = `service:${context.getTag(SERVICE_NAME)},env:${this._env}`
     // TODO: Change underscored properties to private ones.
     const sampler = this._samplers[key] || this._samplers[DEFAULT_KEY]
 
@@ -334,8 +333,12 @@ class PrioritySampler {
       if (!trace.tags[DECISION_MAKER_KEY]) {
         trace.tags[DECISION_MAKER_KEY] = `-${mechanism}`
       }
-    } else {
-      delete trace.tags[DECISION_MAKER_KEY]
+    } else if (trace.tags[DECISION_MAKER_KEY] !== undefined) {
+      // Clear by assigning undefined rather than deleting: `delete` drops
+      // trace.tags into V8 dictionary (slow) mode for the per-trace extract
+      // and propagation scans that follow. Both skip undefined values, so the
+      // emitted meta and injected headers are unchanged.
+      trace.tags[DECISION_MAKER_KEY] = undefined
     }
   }
 

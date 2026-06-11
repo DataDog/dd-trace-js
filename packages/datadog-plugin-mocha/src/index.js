@@ -5,13 +5,13 @@ const realDateNow = Date.now.bind(Date)
 
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
-const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 
 const {
   TEST_STATUS,
   TEST_PARAMETERS,
   finishAllTraceSpans,
   getTestSuitePath,
+  getRelativeCoverageFiles,
   getTestParametersString,
   getTestSuiteCommonTags,
   addIntelligentTestRunnerSpanTags,
@@ -74,8 +74,10 @@ class MochaPlugin extends CiPlugin {
         this.telemetry.count(TELEMETRY_CODE_COVERAGE_EMPTY)
       }
 
-      const relativeCoverageFiles = [...coverageFiles, suiteFile]
-        .map(filename => getTestSuitePath(filename, this.repositoryRoot || this.sourceRoot))
+      const relativeCoverageFiles = [
+        ...getRelativeCoverageFiles(coverageFiles, this.repositoryRoot || this.sourceRoot),
+        getTestSuitePath(suiteFile, this.repositoryRoot || this.sourceRoot),
+      ]
 
       const { _traceId, _spanId } = testSuiteSpan.context()
 
@@ -106,6 +108,7 @@ class MochaPlugin extends CiPlugin {
           'mocha'
         ),
         ...this.getSessionRequestErrorTags(),
+        ...this.getSessionItrSkippingEnabledTags(),
       }
       if (isUnskippable) {
         testSuiteMetadata[TEST_ITR_UNSKIPPABLE] = 'true'
@@ -147,12 +150,13 @@ class MochaPlugin extends CiPlugin {
       ctx.parentStore = store
       ctx.currentStore = { ...store, testSuiteSpan }
       this._testSuiteSpansByTestSuite.set(testSuite, testSuiteSpan)
+      this._exportPendingWorkerTracesForTestSuite(testSuite)
     })
 
     this.addSub('ci:mocha:test-suite:finish', ({ testSuiteSpan, status }) => {
       if (testSuiteSpan) {
         // the test status of the suite may have been set in ci:mocha:test-suite:error already
-        if (!testSuiteSpan.context()._tags[TEST_STATUS]) {
+        if (!testSuiteSpan.context().getTag(TEST_STATUS)) {
           testSuiteSpan.setTag(TEST_STATUS, status)
         }
         testSuiteSpan.finish()
@@ -219,11 +223,15 @@ class MochaPlugin extends CiPlugin {
       isAttemptToFixRetry,
       isAtrRetry,
       finalStatus,
+      earlyFlakeAbortReason,
     }) => {
       if (span) {
         span.setTag(TEST_STATUS, status)
         if (finalStatus) {
           span.setTag(TEST_FINAL_STATUS, finalStatus)
+        }
+        if (earlyFlakeAbortReason) {
+          span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
         }
         if (hasBeenRetried) {
           span.setTag(TEST_IS_RETRY, 'true')
@@ -348,6 +356,7 @@ class MochaPlugin extends CiPlugin {
       status,
       isSuitesSkipped,
       testCodeCoverageLinesTotal,
+      testSessionCoverageFiles,
       numSkippedSuites,
       hasForcedToRunSuites,
       hasUnskippableSuites,
@@ -357,8 +366,13 @@ class MochaPlugin extends CiPlugin {
       isTestManagementEnabled,
       isParallel,
     }) => {
+      this._exportPendingWorkerTraces()
       if (this.testSessionSpan) {
-        const { isSuitesSkippingEnabled, isCodeCoverageEnabled } = this.libraryConfig || {}
+        const {
+          isSuitesSkippingEnabled,
+          isCodeCoverageEnabled,
+          isCoverageReportUploadEnabled,
+        } = this.libraryConfig || {}
         this.testSessionSpan.setTag(TEST_STATUS, status)
         this.testModuleSpan.setTag(TEST_STATUS, status)
 
@@ -390,6 +404,13 @@ class MochaPlugin extends CiPlugin {
           }
         )
 
+        if (testSessionCoverageFiles?.length && isCoverageReportUploadEnabled) {
+          this.tracer._exporter.exportCoverage({
+            sessionId: this.testSessionSpan.context()._traceId,
+            files: testSessionCoverageFiles,
+          })
+        }
+
         if (isEarlyFlakeDetectionEnabled) {
           this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ENABLED, 'true')
         }
@@ -406,7 +427,7 @@ class MochaPlugin extends CiPlugin {
         finishAllTraceSpans(this.testSessionSpan)
         this.telemetry.count(TELEMETRY_TEST_SESSION, {
           provider: this.ciProviderName,
-          autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER'),
+          autoInjected: !!this._tracerConfig.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
         })
       }
       this.libraryConfig = null

@@ -7,6 +7,8 @@ const constants = require('./constants')
 
 module.exports = function getExporter (name) {
   switch (name) {
+    case exporters.ELECTRON:
+      return require('./exporters/electron')
     case exporters.LOG:
       return require('./exporters/log')
     case exporters.AGENT:
@@ -29,7 +31,7 @@ module.exports = function getExporter (name) {
         fs.existsSync(constants.DATADOG_LAMBDA_EXTENSION_PATH) ||
         fs.existsSync(constants.DATADOG_MINI_AGENT_PATH)
       )
-      return require(inAWSLambda && !usingAgent ? './exporters/log' : './exporters/agent')
+      return inAWSLambda && !usingAgent ? require('./exporters/log') : require('./exporters/agent')
     }
   }
 }

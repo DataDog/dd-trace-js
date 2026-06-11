@@ -3,7 +3,6 @@
 const { storage } = require('../../datadog-core')
 const id = require('../../dd-trace/src/id')
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
-const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 
 const {
   finishAllTraceSpans,
@@ -13,9 +12,9 @@ const {
   TEST_BROWSER_NAME,
   TEST_BROWSER_VERSION,
   TEST_CODE_OWNERS,
-  TEST_COMMAND,
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_EARLY_FLAKE_ENABLED,
+  TEST_FRAMEWORK_VERSION,
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_IS_MODIFIED,
   TEST_IS_NEW,
@@ -40,6 +39,7 @@ const {
   TEST_SUITE,
   TEST_HAS_DYNAMIC_NAME,
   DYNAMIC_NAME_RE,
+  TEST_FINAL_STATUS,
 } = require('../../dd-trace/src/plugins/util/test')
 const { RESOURCE_NAME } = require('../../../ext/tags')
 const { COMPONENT } = require('../../dd-trace/src/constants')
@@ -108,7 +108,7 @@ class PlaywrightPlugin extends CiPlugin {
       finishAllTraceSpans(this.testSessionSpan)
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,
-        autoInjected: !!getValueFromEnvSources('DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER'),
+        autoInjected: !!this._tracerConfig.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
       })
       appClosingTelemetry()
       this.tracer._exporter.flush(onDone)
@@ -234,7 +234,7 @@ class PlaywrightPlugin extends CiPlugin {
             formattedSpan.meta[TEST_SESSION_ID] = this.testSessionSpan.context().toTraceId()
             formattedSpan.meta[TEST_MODULE_ID] = this.testModuleSpan.context().toSpanId()
             Object.assign(formattedSpan.meta, this.getSessionRequestErrorTags())
-            formattedSpan.meta[TEST_COMMAND] = this.command
+            formattedSpan.meta[TEST_FRAMEWORK_VERSION] = this.frameworkVersion
             formattedSpan.meta[TEST_MODULE] = this.constructor.id
             // MISSING _trace.startTime and _trace.ticks - because by now the suite is already serialized
             const testSuite = this._testSuiteSpansByTestSuiteAbsolutePath.get(
@@ -320,11 +320,13 @@ class PlaywrightPlugin extends CiPlugin {
       hasFailedAttemptToFixRetries,
       isAtrRetry,
       isModified,
+      finalStatus,
+      earlyFlakeAbortReason,
       onDone,
     }) => {
       if (!span) return
 
-      const isRUMActive = span.context()._tags[TEST_IS_RUM_ACTIVE]
+      const isRUMActive = span.context().getTag(TEST_IS_RUM_ACTIVE)
 
       span.setTag(TEST_STATUS, testStatus)
 
@@ -380,6 +382,12 @@ class PlaywrightPlugin extends CiPlugin {
           span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.efd)
         }
       }
+      if (finalStatus) {
+        span.setTag(TEST_FINAL_STATUS, finalStatus)
+      }
+      if (earlyFlakeAbortReason) {
+        span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
+      }
       for (const step of steps) {
         const stepStartTime = step.startTime.getTime()
         const stepSpan = this.tracer.startSpan('playwright.step', {
@@ -408,7 +416,7 @@ class PlaywrightPlugin extends CiPlugin {
         TELEMETRY_EVENT_FINISHED,
         'test',
         {
-          hasCodeOwners: !!span.context()._tags[TEST_CODE_OWNERS],
+          hasCodeOwners: !!span.context().getTag(TEST_CODE_OWNERS),
           isNew,
           isRum: isRUMActive,
           browserDriver: 'playwright',
@@ -420,7 +428,7 @@ class PlaywrightPlugin extends CiPlugin {
       span.finish()
 
       finishAllTraceSpans(span)
-      if (getValueFromEnvSources('DD_PLAYWRIGHT_WORKER')) {
+      if (this._tracerConfig.DD_PLAYWRIGHT_WORKER) {
         this.tracer._exporter.flush(onDone)
       }
     })
@@ -452,6 +460,7 @@ class PlaywrightPlugin extends CiPlugin {
       )
 
       span.setTag(TEST_STATUS, 'skip')
+      span.setTag(TEST_FINAL_STATUS, 'skip')
 
       if (isNew) {
         span.setTag(TEST_IS_NEW, 'true')
@@ -486,7 +495,7 @@ class PlaywrightPlugin extends CiPlugin {
       [TEST_SOURCE_START]: testSourceLine,
     }
     if (testSourceFile) {
-      extraTags[TEST_SOURCE_FILE] = testSourceFile || testSuite
+      extraTags[TEST_SOURCE_FILE] = testSourceFile
     }
     if (browserName) {
       // Added as parameter too because it should affect the test fingerprint

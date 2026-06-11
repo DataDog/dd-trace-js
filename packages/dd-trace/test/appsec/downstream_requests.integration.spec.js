@@ -66,60 +66,66 @@ describe('RASP - downstream request integration', () => {
     let appsecTelemetryReceived = false
     let responseVariant = false
     let requestVariant = false
-    await agent.assertTelemetryReceived(({ payload }) => {
-      const namespace = payload.payload.namespace
+    await agent.assertTelemetryReceived({
+      fn: ({ payload }) => {
+        const namespace = payload.payload.namespace
 
-      if (namespace === 'appsec') {
-        let error = null
-        appsecTelemetryReceived = true
-        const series = payload.payload.series
-        const hasTag = (serie, tag) => Array.isArray(serie.tags) && serie.tags.includes(tag)
+        if (namespace === 'appsec') {
+          let error = null
+          appsecTelemetryReceived = true
+          const series = payload.payload.series
+          const hasTag = (serie, tag) => Array.isArray(serie.tags) && serie.tags.includes(tag)
 
-        const evalSeries = series.filter(s => s.metric === 'rasp.rule.eval')
-        assert.ok(evalSeries, 'Rasp rule eval series should exist')
+          const evalSeries = series.filter(s => s.metric === 'rasp.rule.eval')
+          assert.ok(evalSeries, 'Rasp rule eval series should exist')
 
-        const evalVariants = new Set()
-        for (const s of evalSeries) {
-          if (hasTag(s, 'rule_variant:request')) evalVariants.add('request')
-          if (hasTag(s, 'rule_variant:response')) evalVariants.add('response')
-        }
-
-        const matchSeries = series.filter(s => s.metric === 'rasp.rule.match')
-        assert.ok(matchSeries, 'Rasp rule match series should exist')
-
-        const matchVariants = new Set()
-        for (const s of matchSeries) {
-          if (hasTag(s, 'rule_variant:request')) matchVariants.add('request')
-          if (hasTag(s, 'rule_variant:response')) matchVariants.add('response')
-        }
-
-        try {
-          assert.strictEqual(evalVariants.has('request'), true, 'rasp.rule.eval should include request variant')
-          assert.strictEqual(matchVariants.has('request'), true, 'rasp.rule.match should include request variant')
-          requestVariant = true
-        } catch (e) {
-          if (!error) {
-            error = e
+          const evalVariants = new Set()
+          for (const s of evalSeries) {
+            if (hasTag(s, 'rule_variant:request')) evalVariants.add('request')
+            if (hasTag(s, 'rule_variant:response')) evalVariants.add('response')
           }
-        }
 
-        try {
-          assert.strictEqual(evalVariants.has('response'), true, 'rasp.rule.eval should include response variant')
-          assert.strictEqual(matchVariants.has('response'), true, 'rasp.rule.match should include response variant')
-          responseVariant = true
-        } catch (e) {
-          if (!error) {
-            error = e
+          const matchSeries = series.filter(s => s.metric === 'rasp.rule.match')
+          assert.ok(matchSeries, 'Rasp rule match series should exist')
+
+          const matchVariants = new Set()
+          for (const s of matchSeries) {
+            if (hasTag(s, 'rule_variant:request')) matchVariants.add('request')
+            if (hasTag(s, 'rule_variant:response')) matchVariants.add('response')
           }
-        }
 
-        if (!(responseVariant && requestVariant)) {
-          throw error
+          try {
+            assert.strictEqual(evalVariants.has('request'), true, 'rasp.rule.eval should include request variant')
+            assert.strictEqual(matchVariants.has('request'), true, 'rasp.rule.match should include request variant')
+            requestVariant = true
+          } catch (e) {
+            if (!error) {
+              error = e
+            }
+          }
+
+          try {
+            assert.strictEqual(evalVariants.has('response'), true, 'rasp.rule.eval should include response variant')
+            assert.strictEqual(matchVariants.has('response'), true, 'rasp.rule.match should include response variant')
+            responseVariant = true
+          } catch (e) {
+            if (!error) {
+              error = e
+            }
+          }
+
+          if (!(responseVariant && requestVariant)) {
+            throw error
+          }
+        } else {
+          throw new Error('Telemetry namespace is not appsec')
         }
-      } else {
-        throw new Error('Telemetry namespace is not appsec')
-      }
-    }, 'generate-metrics', 4_000, 3, true).then(
+      },
+      requestType: 'generate-metrics',
+      timeout: 4_000,
+      expectedMessageCount: 3,
+      resolveAtFirstSuccess: true,
+    }).then(
       () => {
         assert.strictEqual(appsecTelemetryReceived, true)
       })

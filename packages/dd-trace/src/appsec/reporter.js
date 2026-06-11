@@ -3,11 +3,13 @@
 const zlib = require('zlib')
 const dc = require('dc-polyfill')
 
-const { storage } = require('../../../datadog-core')
+const { NETWORK_CLIENT_IP } = require('../../../../ext/tags')
 const web = require('../plugins/util/web')
 const { ipHeaderList } = require('../plugins/util/ip_extractor')
 const { keepTrace } = require('../priority_sampler')
 const { ASM } = require('../standalone/product')
+const { isEmpty } = require('../util')
+const { getActiveRequest } = require('./store')
 const {
   incrementWafInitMetric,
   incrementWafUpdatesMetric,
@@ -46,6 +48,11 @@ const contentHeaderList = [
   'content-length',
   'content-encoding',
   'content-language',
+]
+
+const mandatoryResponseHeaderList = [
+  'content-type',
+  'content-length',
 ]
 
 const responseHeaderList = [
@@ -99,6 +106,8 @@ const REQUEST_HEADERS_MAP = mapHeaderAndTags(requestHeadersList, REQUEST_HEADER_
 const EVENT_HEADERS_MAP = mapHeaderAndTags(eventHeadersList, REQUEST_HEADER_TAG_PREFIX)
 
 const RESPONSE_HEADERS_MAP = mapHeaderAndTags(responseHeaderList, RESPONSE_HEADER_TAG_PREFIX)
+
+const MANDATORY_RESPONSE_HEADERS_MAP = mapHeaderAndTags(mandatoryResponseHeaderList, RESPONSE_HEADER_TAG_PREFIX)
 
 const NON_EXTENDED_REQUEST_HEADERS = new Set([...requestHeadersList, ...eventHeadersList])
 const NON_EXTENDED_RESPONSE_HEADERS = new Set(responseHeaderList)
@@ -166,12 +175,21 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedRespons
   // Mandatory
   const mandatoryCollectedHeaders = filterHeaders(req.headers, REQUEST_HEADERS_MAP)
 
-  // Basic collection
-  if (!shouldCollectEventHeaders) return mandatoryCollectedHeaders
+  // Skip the spread when the stored side is empty -- common during the early
+  // request lifecycle when no upstream response headers have been captured.
+  const liveResponseHeaders = res?.getHeaders?.()
+  const responseHeaders = isEmpty(storedResponseHeaders)
+    ? (liveResponseHeaders ?? {})
+    : (liveResponseHeaders ? { ...storedResponseHeaders, ...liveResponseHeaders } : storedResponseHeaders)
 
-  const responseHeaders = Object.keys(storedResponseHeaders).length === 0
-    ? res.getHeaders()
-    : { ...storedResponseHeaders, ...res.getHeaders() }
+  // content-type and content-length are always reported when appsec is enabled,
+  // even without a security event.
+  if (!shouldCollectEventHeaders) {
+    return Object.assign(
+      mandatoryCollectedHeaders,
+      filterHeaders(responseHeaders, MANDATORY_RESPONSE_HEADERS_MAP)
+    )
+  }
 
   const requestEventCollectedHeaders = filterHeaders(req.headers, EVENT_HEADERS_MAP)
   const responseEventCollectedHeaders = filterHeaders(responseHeaders, RESPONSE_HEADERS_MAP)
@@ -302,7 +320,7 @@ function reportWafConfigUpdate (product, rcConfigId, diagnostics, wafVersion) {
 
 function reportMetrics (metrics, raspRule, req) {
   if (!req) {
-    req = storage('legacy').getStore()?.req
+    req = getActiveRequest()
   }
   const rootSpan = req && web.root(req)
 
@@ -337,24 +355,24 @@ function reportTruncationMetrics (rootSpan, metrics) {
 
 function reportAttack ({ events: attackData, actions }, req) {
   if (!req) {
-    req = storage('legacy').getStore()?.req
+    req = getActiveRequest()
   }
 
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
-  const currentTags = rootSpan.context()._tags
+  const spanContext = rootSpan.context()
 
   const newTags = {
     'appsec.event': 'true',
   }
 
   // TODO: maybe add this to format.js later (to take decision as late as possible)
-  if (!currentTags['_dd.origin']) {
+  if (!spanContext.getTag('_dd.origin')) {
     newTags['_dd.origin'] = 'appsec'
   }
 
-  const currentJson = currentTags['_dd.appsec.json']
+  const currentJson = spanContext.getTag('_dd.appsec.json')
 
   // merge JSON arrays without parsing them
   const attackDataStr = JSON.stringify(attackData)
@@ -363,7 +381,7 @@ function reportAttack ({ events: attackData, actions }, req) {
     : '{"triggers":' + attackDataStr + '}'
 
   if (req.socket) {
-    newTags['network.client.ip'] = req.socket.remoteAddress
+    newTags[NETWORK_CLIENT_IP] = req.socket.remoteAddress
   }
 
   rootSpan.addTags(newTags)
@@ -451,8 +469,7 @@ function reportRequestBody (rootSpan, requestBody, comesFromRaspAction = false) 
 
   if (rootSpan.meta_struct['http.request.body']) {
     // If the rasp.exceed metric exists, set also the same for the new tag
-    const currentTags = rootSpan.context()._tags
-    const sizeExceedTagValue = currentTags['_dd.appsec.rasp.request_body_size.exceeded']
+    const sizeExceedTagValue = rootSpan.context().getTag('_dd.appsec.rasp.request_body_size.exceeded')
 
     if (sizeExceedTagValue) {
       rootSpan.setTag('_dd.appsec.request_body_size.exceeded', sizeExceedTagValue)
@@ -481,7 +498,7 @@ function reportAttributes (attributes, req) {
   if (!attributes) return
 
   if (!req) {
-    req = storage('legacy').getStore()?.req
+    req = getActiveRequest()
   }
 
   const rootSpan = web.root(req)
@@ -505,7 +522,9 @@ function finishRequest (req, res, storedResponseHeaders, requestBody) {
   if (!rootSpan) return
 
   if (metricsQueue.size) {
-    rootSpan.addTags(Object.fromEntries(metricsQueue))
+    for (const [key, value] of metricsQueue) {
+      rootSpan.setTag(key, value)
+    }
 
     keepTrace(rootSpan, ASM)
 
@@ -552,7 +571,7 @@ function finishRequest (req, res, storedResponseHeaders, requestBody) {
 
   incrementWafRequestsMetric(req)
 
-  const tags = rootSpan.context()._tags
+  const tags = rootSpan.context().getTags()
 
   const extendedDataCollection = extendedDataCollectionRequest.get(req)
   const newTags = getCollectedHeaders(

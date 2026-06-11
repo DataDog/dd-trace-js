@@ -46,11 +46,13 @@ class WSProducerPlugin extends TracingPlugin {
   }
 
   bindAsyncStart (ctx) {
+    if (!ctx.span) return ctx.parentStore
     ctx.span.finish()
     return ctx.parentStore
   }
 
   asyncStart (ctx) {
+    if (!ctx.span) return
     ctx.span.finish()
   }
 

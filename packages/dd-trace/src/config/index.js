@@ -2,8 +2,7 @@
 
 const fs = require('node:fs')
 const os = require('node:os')
-const { URL } = require('node:url')
-const path = require('node:path')
+const { URL, format } = require('node:url')
 
 const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
 const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
@@ -12,7 +11,6 @@ const { DD_MAJOR } = require('../../../../version')
 const log = require('../log')
 const pkg = require('../pkg')
 const { isTrue } = require('../util')
-const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const telemetry = require('../telemetry')
 const telemetryMetrics = require('../telemetry/metrics')
 const {
@@ -22,14 +20,11 @@ const {
 } = require('../serverless')
 const { ORIGIN_KEY, DATADOG_MINI_AGENT_PATH } = require('../constants')
 const { appendRules } = require('../payload-tagging/config')
-const { getGitMetadataFromGitProperties, removeUserSensitiveInfo, getRemoteOriginURL, resolveGitHeadSHA } =
-  require('./git_properties')
 const ConfigBase = require('./config-base')
 const {
   getEnvironmentVariable,
   getEnvironmentVariables,
   getStableConfigSources,
-  getValueFromEnvSources,
 } = require('./helper')
 const {
   defaults,
@@ -40,6 +35,7 @@ const {
   parseErrors,
   generateTelemetry,
 } = require('./defaults')
+const { normalizeService } = require('./normalize-service')
 const { transformers } = require('./parsers')
 
 const RUNTIME_ID = uuid()
@@ -132,7 +128,13 @@ function setAndTrack (config, name, value, rawValue = value, source = 'calculate
     }
     changeTracker[source].add(name)
   } else {
-    const copy = typeof value === 'object' && value !== null ? rfdc(value) : value
+    // Programmatic-only options (e.g. logger, lookup, plugins) have no row in
+    // `configurationsTable` and hold opaque user-supplied references that may
+    // carry cycles or non-plain prototypes — for example a winston Logger
+    // extends a Transform stream. Use a reference for these instead of cloning.
+    const copy = typeof value === 'object' && value !== null && name in configurationsTable
+      ? rfdc(value)
+      : value
     changeTracker.baseValuesByPath[name] = { value: copy, source }
   }
   set(config, name, value)
@@ -163,7 +165,7 @@ class Config extends ConfigBase {
   }
 
   /**
-   * @param {TracerOptions} [options={}]
+   * @param {TracerOptions} [options]
    */
   constructor (options = {}) {
     super()
@@ -209,10 +211,6 @@ class Config extends ConfigBase {
 
     warnWrongOtelSettings()
 
-    if (this.gitMetadataEnabled) {
-      this.#loadGitMetadata()
-    }
-
     parseErrors.clear()
   }
 
@@ -229,22 +227,6 @@ class Config extends ConfigBase {
   #applyEnvs (envs, source) {
     for (const [name, value] of Object.entries(envs)) {
       const entry = configurationsTable[name]
-      // TracePropagationStyle is a special case. It is a single option that is used to set both inject and extract.
-      // TODO: Consider what to do with this later
-      if (name === 'DD_TRACE_PROPAGATION_STYLE') {
-        if (
-          getValueFromEnvSources('DD_TRACE_PROPAGATION_STYLE_INJECT') !== undefined ||
-          getValueFromEnvSources('DD_TRACE_PROPAGATION_STYLE_EXTRACT') !== undefined
-        ) {
-          log.warn(
-            // eslint-disable-next-line @stylistic/max-len
-            'Use either DD_TRACE_PROPAGATION_STYLE or separate DD_TRACE_PROPAGATION_STYLE_INJECT and DD_TRACE_PROPAGATION_STYLE_EXTRACT environment variables'
-          )
-          continue
-        }
-        this.#applyEnvs({ DD_TRACE_PROPAGATION_STYLE_INJECT: value, DD_TRACE_PROPAGATION_STYLE_EXTRACT: value }, source)
-        continue
-      }
       const parsed = entry.parser(value, name, source)
       const transformed = parsed !== undefined && entry.transformer ? entry.transformer(parsed, name, source) : parsed
       const rawValue = transformed !== null && typeof transformed === 'object' ? value : parsed
@@ -293,6 +275,7 @@ class Config extends ConfigBase {
         } else {
           if (fullName === 'tracePropagationStyle') {
             // TracePropagationStyle is special. It is a single option that is used to set both inject and extract.
+            // TODO: Consider what to do with this later
             // @ts-expect-error - Difficult to type this correctly.
             this.#applyOptions({ inject: value, extract: value }, source, 'tracePropagationStyle')
           } else {
@@ -339,18 +322,14 @@ class Config extends ConfigBase {
   #applyCalculated () {
     undo(this, 'calculated')
 
-    if (this.DD_CIVISIBILITY_AGENTLESS_URL ||
-        this.url ||
+    if (this.url ||
         os.type() !== 'Windows_NT' &&
         !trackedConfigOrigins.has('hostname') &&
         !trackedConfigOrigins.has('port') &&
-        !this.DD_CIVISIBILITY_AGENTLESS_ENABLED &&
         fs.existsSync('/var/run/datadog/apm.socket')) {
-      setAndTrack(
-        this,
-        'url',
-        new URL(this.DD_CIVISIBILITY_AGENTLESS_URL || this.url || 'unix:///var/run/datadog/apm.socket')
-      )
+      setAndTrack(this, 'url', new URL(this.url || 'unix:///var/run/datadog/apm.socket'))
+    } else {
+      setAndTrack(this, 'url', new URL(format({ protocol: 'http:', hostname: this.hostname, port: this.port })))
     }
 
     if (this.isCiVisibility) {
@@ -365,13 +344,18 @@ class Config extends ConfigBase {
     }
     // Disable log injection when OTEL logs are enabled
     // OTEL logs and DD log injection are mutually exclusive
-    if (this.otelLogsEnabled) {
+    if (this.DD_LOGS_OTEL_ENABLED) {
       setAndTrack(this, 'logInjection', false)
     }
-    if (this.otelMetricsEnabled &&
+    if (this.DD_METRICS_OTEL_ENABLED &&
         trackedConfigOrigins.has('OTEL_METRICS_EXPORTER') &&
         this.OTEL_METRICS_EXPORTER === 'none') {
-      setAndTrack(this, 'otelMetricsEnabled', false)
+      setAndTrack(this, 'DD_METRICS_OTEL_ENABLED', false)
+    }
+
+    if (this.OTEL_TRACES_EXPORTER === 'otlp' && trackedConfigOrigins.has('protocolVersion')) {
+      log.warn('DD_TRACE_AGENT_PROTOCOL_VERSION is set, disabling OTLP traces export')
+      setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'none')
     }
 
     if (this.telemetry.heartbeatInterval) {
@@ -432,7 +416,7 @@ class Config extends ConfigBase {
       ))
     }
 
-    if (this.injectionEnabled) {
+    if (this.DD_INJECTION_ENABLED) {
       setAndTrack(this, 'instrumentationSource', 'ssi')
     }
 
@@ -440,8 +424,13 @@ class Config extends ConfigBase {
       setAndTrack(this, 'runtimeMetrics.enabled', false)
     }
 
-    if (!trackedConfigOrigins.has('sampleRate') && trackedConfigOrigins.has('OTEL_TRACES_SAMPLER')) {
-      setAndTrack(this, 'sampleRate', getFromOtelSamplerMap(this.OTEL_TRACES_SAMPLER, this.OTEL_TRACES_SAMPLER_ARG))
+    // Apply the OTel sampler when the user opted into OTel traces or explicitly set the sampler.
+    // OTEL_TRACES_SAMPLER has `default: parentbased_always_on` (per OTel spec), so opt-in users
+    // that don't set the sampler still get parent-based sampling.
+    if (!trackedConfigOrigins.has('sampleRate') &&
+        (trackedConfigOrigins.has('OTEL_TRACES_SAMPLER') || this.OTEL_TRACES_EXPORTER === 'otlp')) {
+      setAndTrack(this, 'sampleRate',
+        getFromOtelSamplerMap(this.OTEL_TRACES_SAMPLER, this.OTEL_TRACES_SAMPLER_ARG))
     }
 
     if (this.DD_SPAN_SAMPLING_RULES_FILE) {
@@ -512,8 +501,8 @@ class Config extends ConfigBase {
       } else {
         const NX_TASK_TARGET_PROJECT = getEnvironmentVariable('NX_TASK_TARGET_PROJECT')
         if (NX_TASK_TARGET_PROJECT) {
-          if (this.DD_ENABLE_NX_SERVICE_NAME) {
-            setAndTrack(this, 'service', NX_TASK_TARGET_PROJECT)
+          if (DD_MAJOR >= 6 || this.DD_ENABLE_NX_SERVICE_NAME) {
+            setAndTrack(this, 'service', normalizeService(NX_TASK_TARGET_PROJECT) || 'node')
             isServiceNameInferred = true
           } else if (DD_MAJOR < 6) {
             log.warn(
@@ -536,12 +525,15 @@ class Config extends ConfigBase {
             )
           : undefined
 
-        setAndTrack(this, 'service', serverlessName || pkg.name || 'node')
+        setAndTrack(this, 'service', normalizeService(serverlessName) || normalizeService(pkg.name) || 'node')
         this.tags.service ??= /** @type {string} */ (this.service)
         isServiceNameInferred = true
       }
     }
-    setAndTrack(this, 'isServiceNameInferred', isServiceNameInferred)
+
+    // This should not be tracked.
+    // TODO: Consider moving this outside of the config.
+    set(this, 'isServiceNameInferred', isServiceNameInferred)
 
     // Add missing tags, in case they are defined otherwise.
     if (this.service) {
@@ -557,7 +549,7 @@ class Config extends ConfigBase {
 
     if (IS_SERVERLESS) {
       setAndTrack(this, 'telemetry.enabled', false)
-      setAndTrack(this, 'crashtracking.enabled', false)
+      setAndTrack(this, 'DD_CRASHTRACKING_ENABLED', false)
       setAndTrack(this, 'remoteConfig.enabled', false)
     }
 
@@ -593,12 +585,18 @@ class Config extends ConfigBase {
       }
     }
 
-    const DEFAULT_OTLP_PORT = '4318'
-    if (!this.otelLogsUrl) {
-      setAndTrack(this, 'otelLogsUrl', `http://${agentHostname}:${DEFAULT_OTLP_PORT}`)
+    // TODO: This could likely be moved to the base class and allow easier GRPC handling
+    // Default OTLP endpoints follow the configured agent host so users who point DD at a custom
+    // agent (DD_AGENT_HOST / DD_TRACE_AGENT_URL) also reach OTLP on that host.
+    const defaultOtlpBase = this.OTEL_EXPORTER_OTLP_ENDPOINT?.replace(/\/$/, '') ?? `http://${agentHostname}:4318`
+    if (!this.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT) {
+      setAndTrack(this, 'OTEL_EXPORTER_OTLP_LOGS_ENDPOINT', `${defaultOtlpBase}/v1/logs`)
     }
-    if (!this.otelMetricsUrl) {
-      setAndTrack(this, 'otelMetricsUrl', `http://${agentHostname}:${DEFAULT_OTLP_PORT}/v1/metrics`)
+    if (!this.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT) {
+      setAndTrack(this, 'OTEL_EXPORTER_OTLP_METRICS_ENDPOINT', `${defaultOtlpBase}/v1/metrics`)
+    }
+    if (!this.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) {
+      setAndTrack(this, 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', `${defaultOtlpBase}/v1/traces`)
     }
 
     if (process.platform === 'win32') {
@@ -617,52 +615,6 @@ class Config extends ConfigBase {
     setAndTrack(this, 'tags', this.tags)
 
     telemetry.updateConfig([...configWithOrigin.values()], this)
-  }
-
-  // TODO: Move outside of config. This is unrelated to the config system.
-  #loadGitMetadata () {
-    // Try to read Git metadata from the environment variables
-    this.repositoryUrl = removeUserSensitiveInfo(this.DD_GIT_REPOSITORY_URL ?? this.tags[GIT_REPOSITORY_URL])
-    this.commitSHA = this.DD_GIT_COMMIT_SHA ?? this.tags[GIT_COMMIT_SHA]
-
-    // Otherwise, try to read Git metadata from the git.properties file
-    if (!this.repositoryUrl || !this.commitSHA) {
-      const DD_GIT_PROPERTIES_FILE = this.DD_GIT_PROPERTIES_FILE
-      const gitPropertiesFile = DD_GIT_PROPERTIES_FILE ?? `${process.cwd()}/git.properties`
-      try {
-        const gitPropertiesString = fs.readFileSync(gitPropertiesFile, 'utf8')
-        const { commitSHA, repositoryUrl } = getGitMetadataFromGitProperties(gitPropertiesString)
-        this.commitSHA ??= commitSHA
-        this.repositoryUrl ??= repositoryUrl
-      } catch (error) {
-        // Only log error if the user has set a git.properties path
-        if (DD_GIT_PROPERTIES_FILE) {
-          log.error('Error reading DD_GIT_PROPERTIES_FILE: %s', gitPropertiesFile, error)
-        }
-      }
-    }
-
-    // Otherwise, try to read Git metadata from the .git/ folder
-    const DD_GIT_FOLDER_PATH = this.DD_GIT_FOLDER_PATH
-    const gitFolderPath = DD_GIT_FOLDER_PATH ?? path.join(process.cwd(), '.git')
-
-    if (!this.repositoryUrl) {
-      // Try to read git config (repository URL)
-      const gitConfigPath = path.join(gitFolderPath, 'config')
-      try {
-        const gitConfigContent = fs.readFileSync(gitConfigPath, 'utf8')
-        if (gitConfigContent) {
-          this.repositoryUrl = getRemoteOriginURL(gitConfigContent)
-        }
-      } catch (error) {
-        // Only log error if the user has set a .git/ path
-        if (DD_GIT_FOLDER_PATH) {
-          log.error('Error reading git config: %s', gitConfigPath, error)
-        }
-      }
-    }
-    // Try to read git HEAD (commit SHA)
-    this.commitSHA ??= resolveGitHeadSHA(gitFolderPath)
   }
 }
 
@@ -691,11 +643,23 @@ function increaseCounter (event, ddVar, otelVar) {
 }
 
 function getFromOtelSamplerMap (otelTracesSampler, otelTracesSamplerArg) {
+  const NON_PARENTBASED_TO_PARENTBASED = {
+    always_on: 'parentbased_always_on',
+    always_off: 'parentbased_always_off',
+    traceidratio: 'parentbased_traceidratio',
+  }
   const OTEL_TRACES_SAMPLER_MAPPING = {
-    always_on: 1,
-    always_off: 0,
     parentbased_always_on: 1,
     parentbased_always_off: 0,
+  }
+
+  const parentBasedEquivalent = NON_PARENTBASED_TO_PARENTBASED[otelTracesSampler]
+  if (parentBasedEquivalent) {
+    log.info(
+      'OTEL_TRACES_SAMPLER=%s does not respect upstream sampling decisions; using parent-based equivalent %s instead',
+      otelTracesSampler, parentBasedEquivalent
+    )
+    otelTracesSampler = parentBasedEquivalent
   }
 
   const result = OTEL_TRACES_SAMPLER_MAPPING[otelTracesSampler] ?? otelTracesSamplerArg
@@ -712,7 +676,7 @@ function warnWrongOtelSettings () {
     // eslint-disable-next-line eslint-rules/eslint-env-aliases
     ['OTEL_LOG_LEVEL', 'DD_TRACE_LOG_LEVEL', 'logLevel'],
     // eslint-disable-next-line eslint-rules/eslint-env-aliases
-    ['OTEL_PROPAGATORS', 'DD_TRACE_PROPAGATION_STYLE'],
+    ['OTEL_PROPAGATORS', 'DD_TRACE_PROPAGATION_STYLE', 'DD_TRACE_PROPAGATION_STYLE'],
     // eslint-disable-next-line eslint-rules/eslint-env-aliases
     ['OTEL_SERVICE_NAME', 'DD_SERVICE', 'service'],
     ['OTEL_TRACES_SAMPLER', 'DD_TRACE_SAMPLE_RATE'],
@@ -733,11 +697,7 @@ function warnWrongOtelSettings () {
         increaseCounter('otel.env.hiding', ddEnvVar, otelEnvVar)
       }
 
-      // eslint-disable-next-line eslint-rules/eslint-env-aliases
-      const invalidOtelValue = otelEnvVar === 'OTEL_PROPAGATORS'
-        ? trackedConfigOrigins.get(/** @type {ConfigPath} */ ('tracePropagationStyle.inject')) !== otelSource &&
-          !envs[ddEnvVar]
-        : !otelSource
+      const invalidOtelValue = !otelSource
       if (invalidOtelValue) {
         increaseCounter('otel.env.invalid', ddEnvVar, otelEnvVar)
       }

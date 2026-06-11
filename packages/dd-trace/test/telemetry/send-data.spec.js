@@ -158,11 +158,10 @@ describe('sendData', () => {
   })
 
   it('uses the CI Visibility agentless intake when agentless mode is enabled', () => {
-    process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED = '1'
-
     sendDataModule.sendData(
       {
         isCiVisibility: true,
+        DD_CIVISIBILITY_AGENTLESS_ENABLED: true,
         tags: { 'runtime-id': '123' },
         site: 'datadoghq.eu',
       },
@@ -179,6 +178,25 @@ describe('sendData', () => {
     })
     const { url } = options
     assert.deepStrictEqual(url, new URL('https://instrumentation-telemetry-intake.datadoghq.eu'))
-    delete process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED
+  })
+
+  it('uses DD_CIVISIBILITY_AGENTLESS_URL for telemetry when the agentless intake is overridden', () => {
+    sendDataModule.sendData(
+      {
+        isCiVisibility: true,
+        DD_CIVISIBILITY_AGENTLESS_ENABLED: true,
+        DD_CIVISIBILITY_AGENTLESS_URL: new URL('https://my-intake.example/'),
+        tags: { 'runtime-id': '123' },
+        site: 'datadoghq.eu',
+      },
+      application,
+      host,
+      'req-type'
+    )
+
+    sinon.assert.calledOnce(request)
+    const options = request.getCall(0).args[1]
+    const { url } = options
+    assert.deepStrictEqual(url, new URL('https://my-intake.example/'))
   })
 })

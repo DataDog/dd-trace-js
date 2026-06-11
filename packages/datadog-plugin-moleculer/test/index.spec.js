@@ -1,27 +1,14 @@
 'use strict'
 
 const assert = require('node:assert')
-const net = require('node:net')
 const os = require('node:os')
+const { inspect } = require('node:util')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 const sort = trace => trace.sort((a, b) => Number(a.start - b.start))
-
-// The returned port could already be in use by another test that was running at
-// the same time. This race condition is not prevented by this function.
-function getPort () {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer()
-    server.once('error', reject)
-    server.listen(0, '127.0.0.1', () => {
-      const { port } = server.address()
-      server.close(() => resolve(port))
-    })
-  })
-}
 
 describe('Plugin', () => {
   let broker
@@ -32,13 +19,13 @@ describe('Plugin', () => {
       const startBroker = async () => {
         const { ServiceBroker } = require(`../../../versions/moleculer@${version}`).get()
 
-        port = await getPort()
-
         broker = new ServiceBroker({
           namespace: 'multi',
           nodeID: `server-${process.pid}`,
           logger: false,
-          transporter: `tcp://127.0.0.1:${port}/server-${process.pid}`,
+          // Port `0` tells the TCP transporter to ask the kernel for a free
+          // port; the actual port is read back from the broker after start.
+          transporter: `tcp://127.0.0.1:0/server-${process.pid}`,
         })
 
         broker.createService({
@@ -65,7 +52,8 @@ describe('Plugin', () => {
           },
         })
 
-        return broker.start()
+        await broker.start()
+        port = broker.transit.tx.opts.port
       }
 
       describe('server', () => {
@@ -76,7 +64,7 @@ describe('Plugin', () => {
 
           after(() => broker.stop())
 
-          after(() => agent.close({ ritmReset: false }))
+          after(() => agent.close())
 
           it('should do automatic instrumentation', done => {
             agent.assertSomeTraces(traces => {
@@ -89,7 +77,10 @@ describe('Plugin', () => {
               assert.strictEqual(spans[0].meta['span.kind'], 'server')
               assert.strictEqual(spans[0].meta['moleculer.context.action'], 'math.add')
               assert.strictEqual(spans[0].meta['moleculer.context.node_id'], `server-${process.pid}`)
-              assert.ok(Object.hasOwn(spans[0].meta, 'moleculer.context.request_id'))
+              assert.ok(
+                Object.hasOwn(spans[0].meta, 'moleculer.context.request_id'),
+                `Available keys: ${inspect(Object.keys(spans[0].meta))}`
+              )
               assert.strictEqual(spans[0].meta['moleculer.context.service'], 'math')
               assert.strictEqual(spans[0].meta['moleculer.namespace'], 'multi')
               assert.strictEqual(spans[0].meta['moleculer.node_id'], `server-${process.pid}`)
@@ -103,7 +94,10 @@ describe('Plugin', () => {
               assert.strictEqual(spans[1].meta['span.kind'], 'server')
               assert.strictEqual(spans[1].meta['moleculer.context.action'], 'math.numerify')
               assert.strictEqual(spans[1].meta['moleculer.context.node_id'], `server-${process.pid}`)
-              assert.ok(Object.hasOwn(spans[1].meta, 'moleculer.context.request_id'))
+              assert.ok(
+                Object.hasOwn(spans[1].meta, 'moleculer.context.request_id'),
+                `Available keys: ${inspect(Object.keys(spans[1].meta))}`
+              )
               assert.strictEqual(spans[1].meta['moleculer.context.service'], 'math')
               assert.strictEqual(spans[1].meta['moleculer.namespace'], 'multi')
               assert.strictEqual(spans[1].meta['moleculer.node_id'], `server-${process.pid}`)
@@ -130,7 +124,7 @@ describe('Plugin', () => {
 
           after(() => broker.stop())
 
-          after(() => agent.close({ ritmReset: false }))
+          after(() => agent.close())
 
           it('should have the configured service name', done => {
             agent.assertSomeTraces(traces => {
@@ -172,7 +166,7 @@ describe('Plugin', () => {
               .catch(done)
           })
 
-          afterEach(() => agent.close({ ritmReset: false }))
+          afterEach(() => agent.close())
 
           withPeerService(
             () => tracer,
@@ -257,7 +251,7 @@ describe('Plugin', () => {
 
           after(() => broker.stop())
 
-          after(() => agent.close({ ritmReset: false }))
+          after(() => agent.close())
 
           it('should have the configured service name', done => {
             agent.assertSomeTraces(traces => {
@@ -290,7 +284,7 @@ describe('Plugin', () => {
 
         after(() => broker.stop())
 
-        after(() => agent.close({ ritmReset: false }))
+        after(() => agent.close())
 
         it('should propagate context', async () => {
           let spanId
@@ -358,7 +352,7 @@ describe('Plugin', () => {
 
         after(() => broker.stop())
 
-        after(() => agent.close({ ritmReset: false }))
+        after(() => agent.close())
 
         it('should propagate context', async () => {
           let spanId
@@ -424,7 +418,7 @@ describe('Plugin', () => {
 
         after(() => broker.stop())
 
-        after(() => agent.close({ ritmReset: false }))
+        after(() => agent.close())
 
         it('should propagate meta from child to parent', async () => {
           const result = await broker.call('test.first')

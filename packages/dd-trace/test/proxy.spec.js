@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -9,7 +10,7 @@ const proxyquire = require('proxyquire')
 require('./setup/core')
 
 describe('TracerProxy', () => {
-  let Proxy
+  let ProxyClass
   let proxy
   let DatadogTracer
   let NoopTracer
@@ -151,13 +152,13 @@ describe('TracerProxy', () => {
           enabled: true,
         },
       },
-      injectionEnabled: undefined,
+      DD_INJECTION_ENABLED: undefined,
       logger: 'logger',
       profiling: {},
       apmTracingEnabled: false,
       appsec: {},
       iast: {},
-      crashtracking: {},
+      DD_CRASHTRACKING_ENABLED: false,
       dynamicInstrumentation: {},
       remoteConfig: {
         enabled: true,
@@ -167,7 +168,6 @@ describe('TracerProxy', () => {
       },
       setRemoteConfig: sinon.spy(),
       llmobs: {},
-      heapSnapshot: {},
     }
     Config = sinon.stub().returns(config)
 
@@ -236,7 +236,7 @@ describe('TracerProxy', () => {
       './dogstatsd': NoopDogStatsDClient,
     })
 
-    Proxy = proxyquire('../src/proxy', {
+    ProxyClass = proxyquire('../src/proxy', {
       './tracer': DatadogTracer,
       './noop/proxy': NoopProxy,
       './config': Config,
@@ -257,7 +257,7 @@ describe('TracerProxy', () => {
       './openfeature/flagging_provider': OpenFeatureProvider,
     })
 
-    proxy = new Proxy()
+    proxy = new ProxyClass()
   })
 
   describe('uninitialized', () => {
@@ -766,6 +766,15 @@ describe('TracerProxy', () => {
           const baggage = proxy.removeBaggageItem('missing')
           assert.deepStrictEqual(baggage, { key: 'value' })
         })
+
+        it('should not replace the store on invalid keys', () => {
+          proxy.setBaggageItem('key', 'value')
+          const before = proxy.getAllBaggageItems()
+          proxy.removeBaggageItem(null)
+          proxy.removeBaggageItem(123)
+          proxy.removeBaggageItem('')
+          assert.strictEqual(proxy.getAllBaggageItems(), before)
+        })
       })
 
       describe('removeAllBaggageItems', () => {
@@ -774,6 +783,26 @@ describe('TracerProxy', () => {
           proxy.setBaggageItem('key2', 'value2')
           const baggage = proxy.removeAllBaggageItems()
           assert.deepStrictEqual(baggage, {})
+        })
+      })
+
+      describe('immutability', () => {
+        it('should freeze every store handed out', () => {
+          const allItems = proxy.getAllBaggageItems()
+          assert.ok(Object.isFrozen(allItems), `Expected frozen, got ${inspect(allItems)}`)
+          const setItem = proxy.setBaggageItem('key', 'value')
+          assert.ok(Object.isFrozen(setItem), `Expected frozen, got ${inspect(setItem)}`)
+          const removeItem = proxy.removeBaggageItem('key')
+          assert.ok(Object.isFrozen(removeItem), `Expected frozen, got ${inspect(removeItem)}`)
+          const removeAll = proxy.removeAllBaggageItems()
+          assert.ok(Object.isFrozen(removeAll), `Expected frozen, got ${inspect(removeAll)}`)
+        })
+
+        it('should refuse mutation through the returned reference', () => {
+          const baggage = proxy.setBaggageItem('key', 'value')
+          assert.throws(() => { baggage.key = 'tampered' }, TypeError)
+          assert.throws(() => { baggage.added = 'value' }, TypeError)
+          assert.deepStrictEqual(proxy.getAllBaggageItems(), { key: 'value' })
         })
       })
     })

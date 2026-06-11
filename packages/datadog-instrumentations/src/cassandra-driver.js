@@ -29,8 +29,11 @@ addHook({ name: 'cassandra-driver', versions: ['>=3.0.0'] }, cassandra => {
 
       try {
         const res = batch.apply(this, arguments)
-        if (typeof res === 'function' || !res) {
+        if (typeof res === 'function') {
           return wrapCallback(finishCh, errorCh, startCtx, res)
+        }
+        if (!res) {
+          return res
         }
         return res.then(
           () => finish(finishCh, errorCh, startCtx),
@@ -100,13 +103,13 @@ addHook({ name: 'cassandra-driver', versions: ['3 - 4.3'], patchDefault: false }
 })
 
 addHook({ name: 'cassandra-driver', versions: ['>=3.3'], file: 'lib/request-execution.js' }, RequestExecution => {
-  shimmer.wrap(RequestExecution.prototype, '_sendOnConnection', _sendOnConnection => function () {
+  shimmer.wrap(RequestExecution.prototype, '_sendOnConnection', _sendOnConnection => function (...args) {
     if (!startCh.hasSubscribers) {
-      return _sendOnConnection.apply(this, arguments)
+      return _sendOnConnection.apply(this, args)
     }
     startCtx = { hostname: this._connection.address, port: this._connection.port, ...startCtx }
     connectCh.publish(startCtx)
-    return _sendOnConnection.apply(this, arguments)
+    return _sendOnConnection.apply(this, args)
   })
   return RequestExecution
 })
@@ -122,9 +125,9 @@ addHook({ name: 'cassandra-driver', versions: ['3.3 - 4.3'], file: 'lib/request-
       return start.apply(this, arguments)
     }
 
-    arguments[0] = function () {
+    arguments[0] = function (...args) {
       startCtx = { hostname: execution._connection.address, port: execution._connection.port, ...startCtx }
-      return connectCh.runStores(startCtx, getHostCallback, this, ...arguments)
+      return connectCh.runStores(startCtx, getHostCallback, this, ...args)
     }
 
     return start.apply(this, arguments)
@@ -143,9 +146,9 @@ addHook({ name: 'cassandra-driver', versions: ['3 - 3.2'], file: 'lib/request-ha
       return send.apply(this, arguments)
     }
 
-    arguments[2] = function () {
+    arguments[2] = function (...args) {
       startCtx = { hostname: handler.connection.address, port: handler.connection.port, ...startCtx }
-      return connectCh.runStores(startCtx, callback, this, ...arguments)
+      return connectCh.runStores(startCtx, callback, this, ...args)
     }
 
     return send.apply(this, arguments)
@@ -162,7 +165,7 @@ function finish (finishCh, errorCh, ctx, error) {
 }
 
 function wrapCallback (finishCh, errorCh, ctx, callback) {
-  return shimmer.wrapFunction(callback, callback => function (err) {
+  return shimmer.wrapCallback(callback, callback => function (err) {
     if (err) {
       ctx.error = err
       errorCh.publish(ctx)

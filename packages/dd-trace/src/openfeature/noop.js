@@ -3,6 +3,18 @@
 const { NOOP_REASON } = require('./constants/constants')
 
 /**
+ * @template T
+ * @param {T} defaultValue
+ * @returns {Promise<{value: T, reason: string}>}
+ */
+function resolveDefault (defaultValue) {
+  return Promise.resolve({
+    value: defaultValue,
+    reason: NOOP_REASON,
+  })
+}
+
+/**
  * No-op implementation of OpenFeature provider that always returns default values.
  * Used when the OpenFeature provider is not initialized or disabled.
  * https://openfeature.dev/docs/reference/concepts/provider/
@@ -20,59 +32,51 @@ class NoopFlaggingProvider {
   }
 
   /**
-   * @param {string} flagKey - Flag key
-   * @param {boolean} defaultValue - Default value to return
-   * @param {object} context - Evaluation context
-   * @param {object} logger - Logger instance
-   * @returns {Promise<{value: boolean, reason: string}>} Resolution details
+   * @template T
+   * @param {string} flagKey
+   * @param {T} defaultValue
+   * @param {object} context
+   * @param {object} logger
+   * @returns {Promise<{value: T, reason: string}>}
    */
   resolveBooleanEvaluation (flagKey, defaultValue, context, logger) {
-    return Promise.resolve({
-      value: defaultValue,
-      reason: NOOP_REASON,
-    })
+    return resolveDefault(defaultValue)
   }
 
   /**
-   * @param {string} flagKey - Flag key
-   * @param {string} defaultValue - Default value to return
-   * @param {object} context - Evaluation context
-   * @param {object} logger - Logger instance
-   * @returns {Promise<{value: string, reason: string}>} Resolution details
+   * @template T
+   * @param {string} flagKey
+   * @param {T} defaultValue
+   * @param {object} context
+   * @param {object} logger
+   * @returns {Promise<{value: T, reason: string}>}
    */
   resolveStringEvaluation (flagKey, defaultValue, context, logger) {
-    return Promise.resolve({
-      value: defaultValue,
-      reason: NOOP_REASON,
-    })
+    return resolveDefault(defaultValue)
   }
 
   /**
-   * @param {string} flagKey - Flag key
-   * @param {number} defaultValue - Default value to return
-   * @param {object} context - Evaluation context
-   * @param {object} logger - Logger instance
-   * @returns {Promise<{value: number, reason: string}>} Resolution details
+   * @template T
+   * @param {string} flagKey
+   * @param {T} defaultValue
+   * @param {object} context
+   * @param {object} logger
+   * @returns {Promise<{value: T, reason: string}>}
    */
   resolveNumberEvaluation (flagKey, defaultValue, context, logger) {
-    return Promise.resolve({
-      value: defaultValue,
-      reason: NOOP_REASON,
-    })
+    return resolveDefault(defaultValue)
   }
 
   /**
-   * @param {string} flagKey - Flag key
-   * @param {object} defaultValue - Default value to return
-   * @param {object} context - Evaluation context
-   * @param {object} logger - Logger instance
-   * @returns {Promise<{value: object, reason: string}>} Resolution details
+   * @template T
+   * @param {string} flagKey
+   * @param {T} defaultValue
+   * @param {object} context
+   * @param {object} logger
+   * @returns {Promise<{value: T, reason: string}>}
    */
   resolveObjectEvaluation (flagKey, defaultValue, context, logger) {
-    return Promise.resolve({
-      value: defaultValue,
-      reason: NOOP_REASON,
-    })
+    return resolveDefault(defaultValue)
   }
 
   /**

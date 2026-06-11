@@ -153,7 +153,15 @@ function normalizeScriptGlob (raw, opts = {}) {
 
   // For global analysis we treat env vars as wildcards, but when evaluating a specific CI run
   // we need to preserve them so they can be expanded with the provided env.
-  if (!preserveEnv) {
+  if (preserveEnv) {
+    // Unwrap extglob constructs that wrap a single env var so the env-aware expansion
+    // below still sees the variable. Without this, every glob of the form
+    // `@(${PLUGINS}).spec.js` would degrade to `*.spec.js` and a single-plugin CI job
+    // (e.g. `PLUGINS=bluebird`) would falsely appear to exercise every spec in the
+    // same directory.
+    p = p.replaceAll(/@\((\$\{[^}]+\})\)/g, '$1')
+    p = p.replaceAll(/@\((\$[A-Za-z_][A-Za-z0-9_]*)\)/g, '$1')
+  } else {
     // Replace shell variable expansion with a wildcard for our analysis.
     // Examples:
     // - ${PLUGINS} -> *
@@ -163,8 +171,8 @@ function normalizeScriptGlob (raw, opts = {}) {
     p = p.replaceAll(/\$[A-Za-z_][A-Za-z0-9_]*/g, '*')
   }
 
-  // Replace bash extglob constructs with a conservative wildcard to avoid parsing issues.
-  // Examples: @(...), +(...), ?(...), !(...)
+  // Replace remaining bash extglob constructs with a conservative wildcard to avoid
+  // parsing issues. Examples: @(...), +(...), ?(...), !(...).
   p = p.replaceAll(/[@+?!]\([^)]*\)/g, '*')
 
   // Normalize leading './' which appears sometimes in scripts.
@@ -262,6 +270,56 @@ function parseInlineAssignments (prefix) {
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) continue
     out[name] = stripOuterQuotes(value)
   }
+  return out
+}
+
+/**
+ * Find `**` occurrences in a script string that are NOT inside quotes.
+ *
+ * POSIX sh (which is what `npm run`/`yarn run` invokes) does NOT support globstar, so an
+ * unquoted `**` collapses to `*` (single directory level). For recursive glob matching to
+ * reach mocha/glob intact, the pattern must be quoted so the shell passes it through as a
+ * literal string. This analyzer cannot rely on `globSync` alone for the check because it
+ * expands `**` recursively regardless of quoting — hiding the bug that the shell actually
+ * breaks unquoted patterns.
+ *
+ * @param {string} script
+ * @returns {{ column: number, context: string }[]}
+ */
+function findUnquotedGlobstar (script) {
+  /** @type {{ column: number, context: string }[]} */
+  const out = []
+  /** @type {'"'|"'"|null} */
+  let quote = null
+
+  for (let i = 0; i < script.length; i++) {
+    const ch = script[i]
+
+    if (quote) {
+      // In double-quoted strings, `\` escapes the next character.
+      if (quote === '"' && ch === '\\' && i + 1 < script.length) {
+        i++
+        continue
+      }
+      if (ch === quote) quote = null
+      continue
+    }
+
+    if (ch === '"' || ch === "'") {
+      quote = ch
+      continue
+    }
+
+    if (ch === '*' && script[i + 1] === '*') {
+      // Capture a short context window so the error message points to the offending token.
+      const start = Math.max(0, i - 20)
+      const end = Math.min(script.length, i + 25)
+      out.push({ column: i, context: script.slice(start, end) })
+      // Skip the second `*` to avoid double-reporting.
+      i++
+    }
+  }
+
   return out
 }
 
@@ -560,7 +618,10 @@ function expandLocalCompositeActionRuns (repoRoot, uses, env, visiting) {
 
       const idxYarn = s.run.indexOf('yarn ')
       const idxNpm = s.run.indexOf('npm ')
-      const idx = idxYarn === -1 ? idxNpm : (idxNpm === -1 ? idxYarn : Math.min(idxYarn, idxNpm))
+      let idx = idxNpm
+      if (idxYarn !== -1) {
+        idx = idxNpm === -1 ? idxYarn : Math.min(idxYarn, idxNpm)
+      }
       if (idx > 0) {
         const prefix = s.run.slice(0, idx)
         const assigns = parseInlineAssignments(prefix)
@@ -588,6 +649,43 @@ function expandLocalCompositeActionRuns (repoRoot, uses, env, visiting) {
 }
 
 /**
+ * Returns all combinations of matrix scalar/array values (ignores include/exclude).
+ * @param {Record<string, unknown>} matrix
+ * @returns {Record<string, string>[]}
+ */
+function getMatrixCombinations (matrix) {
+  const keys = Object.keys(matrix).filter(k => Array.isArray(matrix[k]))
+  if (keys.length === 0) return [{}]
+
+  /** @type {Record<string, string>[]} */
+  let combinations = [{}]
+  for (const key of keys) {
+    const values = /** @type {unknown[]} */ (matrix[key])
+    /** @type {Record<string, string>[]} */
+    const next = []
+    for (const combo of combinations) {
+      for (const val of values) {
+        next.push({ ...combo, [key]: String(val) })
+      }
+    }
+    combinations = next
+  }
+  return combinations
+}
+
+/**
+ * Expands `${{ matrix.X }}` expressions in a string using the given matrix values.
+ * @param {string} s
+ * @param {Record<string, string>} matrixValues
+ * @returns {string}
+ */
+function expandMatrixExpressions (s, matrixValues) {
+  return s.replaceAll(/\$\{\{\s*matrix\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}/g, (_m, name) => {
+    return Object.hasOwn(matrixValues, name) ? matrixValues[name] : _m
+  })
+}
+
+/**
  * @param {string} repoRoot
  * @returns {{ workflowFile: string, jobId: string, run: string, env: Record<string, string|undefined> }[]}
  */
@@ -608,6 +706,11 @@ function collectWorkflowRuns (repoRoot) {
       const jobEnv = isPlainObject(job.env) ? job.env : {}
       const steps = Array.isArray(job.steps) ? job.steps : []
 
+      const matrixData = isPlainObject(job.strategy) && isPlainObject(job.strategy.matrix)
+        ? /** @type {Record<string, unknown>} */ (job.strategy.matrix)
+        : {}
+      const matrixCombinations = getMatrixCombinations(matrixData)
+
       for (const stepVal of steps) {
         const step = isPlainObject(stepVal) ? stepVal : {}
 
@@ -621,20 +724,30 @@ function collectWorkflowRuns (repoRoot) {
         }
 
         if (typeof step.run === 'string') {
-          // Inline env in `run:` (export lines and prefix assignments before yarn/npm).
-          const exports = parseExportAssignments(step.run)
-          for (const [k, v] of Object.entries(exports)) env[k] = v
+          // Expand matrix expressions and emit one entry per combination.
+          const seenRuns = new Set()
+          for (const combo of matrixCombinations) {
+            const run = expandMatrixExpressions(step.run, combo)
+            if (seenRuns.has(run)) continue
+            seenRuns.add(run)
 
-          const idxYarn = step.run.indexOf('yarn ')
-          const idxNpm = step.run.indexOf('npm ')
-          const idx = idxYarn === -1 ? idxNpm : (idxNpm === -1 ? idxYarn : Math.min(idxYarn, idxNpm))
-          if (idx > 0) {
-            const prefix = step.run.slice(0, idx)
-            const assigns = parseInlineAssignments(prefix)
-            for (const [k, v] of Object.entries(assigns)) env[k] = v
+            const stepEnv = { ...env }
+
+            // Inline env in `run:` (export lines and prefix assignments before yarn/npm).
+            const exports = parseExportAssignments(run)
+            for (const [k, v] of Object.entries(exports)) stepEnv[k] = v
+
+            const idxYarn = run.indexOf('yarn ')
+            const idxNpm = run.indexOf('npm ')
+            const idx = idxYarn === -1 ? idxNpm : (idxNpm === -1 ? idxYarn : Math.min(idxYarn, idxNpm))
+            if (idx > 0) {
+              const prefix = run.slice(0, idx)
+              const assigns = parseInlineAssignments(prefix)
+              for (const [k, v] of Object.entries(assigns)) stepEnv[k] = v
+            }
+
+            out.push({ workflowFile: wf, jobId, run, env: stepEnv })
           }
-
-          out.push({ workflowFile: wf, jobId, run: step.run, env })
           continue
         }
 
@@ -642,6 +755,28 @@ function collectWorkflowRuns (repoRoot) {
           const expanded = expandLocalCompositeActionRuns(repoRoot, step.uses, env, new Set())
           for (const e of expanded) {
             out.push({ workflowFile: wf, jobId, run: e.run, env: e.env })
+          }
+        }
+
+        // Third-party retry wrappers run their `with.command` like an inline `run:`.
+        // Without unwrapping it, the joint check below cannot see that `instrumentation-http`
+        // exercises `test:instrumentations:ci` with `PLUGINS=http`.
+        if (typeof step.uses === 'string' && /^nick-fields\/retry@/.test(step.uses)) {
+          const command = isPlainObject(step.with) && typeof step.with.command === 'string'
+            ? step.with.command
+            : null
+          if (command) {
+            const stepEnv = { ...env }
+            const exports = parseExportAssignments(command)
+            for (const [k, v] of Object.entries(exports)) stepEnv[k] = v
+            const idxYarn = command.indexOf('yarn ')
+            const idxNpm = command.indexOf('npm ')
+            const idx = idxYarn === -1 ? idxNpm : (idxNpm === -1 ? idxYarn : Math.min(idxYarn, idxNpm))
+            if (idx > 0) {
+              const assigns = parseInlineAssignments(command.slice(0, idx))
+              for (const [k, v] of Object.entries(assigns)) stepEnv[k] = v
+            }
+            out.push({ workflowFile: wf, jobId, run: command, env: stepEnv })
           }
         }
       }
@@ -875,6 +1010,31 @@ function main () {
   const knownScripts = new Set(Object.keys(scripts))
   const scriptPrefixes = buildScriptPrefixSet(scripts)
 
+  // Detect `**` globs in scripts that are not wrapped in quotes. POSIX sh drops globstar, so
+  // unquoted `**` degrades to `*` and only a single directory level is passed through to
+  // mocha/globSync — silently missing any spec file deeper than one subdirectory.
+  /** @type {string[]} */
+  const unquotedGlobstar = []
+  for (const scriptName of Object.keys(scripts).sort((a, b) => a.localeCompare(b, 'en'))) {
+    const cmd = scripts[scriptName]
+    if (typeof cmd !== 'string') continue
+
+    for (const hit of findUnquotedGlobstar(cmd)) {
+      unquotedGlobstar.push(
+        `package.json: script "${scriptName}" contains an unquoted "**" at column ${hit.column} ` +
+        `(near "${hit.context.trim()}"). Wrap the glob in double quotes so POSIX sh passes ` +
+        'it through to mocha/glob as a literal; otherwise `**` collapses to `*` and specs ' +
+        'deeper than one subdirectory are silently skipped.'
+      )
+    }
+  }
+
+  if (unquotedGlobstar.length) {
+    process.stderr.write('Unquoted `**` globs detected in package.json scripts:\n')
+    for (const msg of unquotedGlobstar) process.stderr.write(`- ${msg}\n`)
+    process.exit(1)
+  }
+
   const testFiles = findTestFiles(repoRoot)
   const { globs, matchedFiles } = expandScriptGlobs(repoRoot, scripts)
 
@@ -910,7 +1070,40 @@ function main () {
     if (!uniqueErrors.has(msg)) uniqueErrors.add(msg)
   }
 
+  // Transitive closure: a script counts as "invoked" when CI either runs it directly or runs
+  // another script that calls it via `npm run X` / `yarn X`. Without this, chaining a `:ci`
+  // script into the body of a parent script (e.g. `lint` -> `npm run lint:codeowners:ci`)
+  // looks orphaned to the coverage check below even though the parent's CI step exercises it.
   const invokedScripts = new Set(invoked.map(i => i.script))
+  const closureQueue = [...invokedScripts]
+  while (closureQueue.length) {
+    const name = closureQueue.shift()
+    if (name === undefined) continue
+    const cmd = scripts[name]
+    if (typeof cmd !== 'string') continue
+    for (const inv of extractScriptInvocations(cmd, knownScripts)) {
+      if (!invokedScripts.has(inv.script)) {
+        invokedScripts.add(inv.script)
+        closureQueue.push(inv.script)
+      }
+    }
+  }
+
+  /**
+   * A script counts as "invoked" when either itself or its `:coverage` sibling (or base, if the
+   * script is the `:coverage` variant) is referenced by CI. Pair-matching keeps duplicate
+   * coverage/non-coverage definitions from each forcing their own CI step.
+   *
+   * @param {string} scriptName
+   * @returns {boolean}
+   */
+  const isInvokedOrCoverageSibling = (scriptName) => {
+    if (invokedScripts.has(scriptName)) return true
+    if (scriptName.endsWith(':coverage')) {
+      return invokedScripts.has(scriptName.slice(0, -':coverage'.length))
+    }
+    return invokedScripts.has(`${scriptName}:coverage`)
+  }
 
   // CI must not invoke missing scripts.
   for (const i of invoked) {
@@ -923,7 +1116,7 @@ function main () {
   // All :ci scripts should be referenced by CI.
   for (const name of Object.keys(scripts).sort((a, b) => a.localeCompare(b, 'en'))) {
     if (!name.endsWith(':ci')) continue
-    if (!invokedScripts.has(name)) {
+    if (!isInvokedOrCoverageSibling(name)) {
       pushError(`package.json: script "${name}" is not invoked by any GitHub Actions workflow`)
     }
   }
@@ -931,11 +1124,11 @@ function main () {
   // All test:integration* scripts should be referenced by CI (except test:integration:plugins).
   for (const name of Object.keys(scripts).sort((a, b) => a.localeCompare(b, 'en'))) {
     if (!name.startsWith('test:integration')) continue
-    // Skip test:integration:plugins - it's a convenience script for running only plugin integration
-    // tests locally, but in CI these are already covered by test:plugins:ci (which runs all plugin
-    // tests including integration tests).
-    if (name === 'test:integration:plugins') continue
-    if (!invokedScripts.has(name)) {
+    // Skip test:integration:plugins (and its coverage sibling) - it's a convenience script for
+    // running only plugin integration tests locally, but in CI these are already covered by
+    // test:plugins:ci (which runs all plugin tests including integration tests).
+    if (name === 'test:integration:plugins' || name === 'test:integration:plugins:coverage') continue
+    if (!isInvokedOrCoverageSibling(name)) {
       pushError(`package.json: script "${name}" is not invoked by any GitHub Actions workflow`)
     }
   }
@@ -953,6 +1146,13 @@ function main () {
 
   // Detect CI steps that will match no tests due to env/script mismatches.
   const testFileSet = new Set(testFiles)
+  // Spec files reached by at least one CI invocation. Paired with the per-step
+  // `matchedTestCount` check below to flag the inverse failure: a spec that is matched
+  // by some script glob but no workflow ever sets the env (typically PLUGINS) that
+  // would expand the glob to reach it. Without this, a new `<name>.spec.js` under
+  // `packages/datadog-instrumentations/test/` looks covered by `test:instrumentations`'
+  // glob and slips into the tree with no CI job actually running it.
+  const ciExercisedFiles = new Set()
   for (const i of invoked) {
     if (!i.script.startsWith('test:')) continue
 
@@ -970,7 +1170,10 @@ function main () {
     if (invokedGlobs.length) {
       let matchedTestCount = 0
       for (const f of files) {
-        if (testFileSet.has(f)) matchedTestCount++
+        if (testFileSet.has(f)) {
+          matchedTestCount++
+          ciExercisedFiles.add(f)
+        }
       }
 
       if (matchedTestCount === 0) {
@@ -1039,7 +1242,6 @@ function main () {
             pushError(
               `${i.workflowFile}#${i.jobId}: PLUGINS includes "${p}" but packages/datadog-plugin-${p} does not exist`
             )
-            continue
           }
         }
       }
@@ -1059,6 +1261,21 @@ function main () {
             `which is single-plugin; use "${i.script}:multi" instead`
         )
       }
+    }
+  }
+
+  // Spec files that pass the "matched by some script glob" check but no CI invocation
+  // actually expands to reach them. Common cause: a `<name>.spec.js` added under
+  // `packages/datadog-instrumentations/test/` (or any other PLUGINS-templated location)
+  // without a matching `PLUGINS=<name>` job in the corresponding workflow.
+  /** @type {string[]} */
+  const ciOrphans = []
+  for (const file of testFiles) {
+    if (!ciExercisedFiles.has(file)) ciOrphans.push(file)
+  }
+  if (ciOrphans.length) {
+    for (const file of ciOrphans) {
+      pushError(`No CI workflow invocation expands a glob to exercise ${file}`)
     }
   }
 

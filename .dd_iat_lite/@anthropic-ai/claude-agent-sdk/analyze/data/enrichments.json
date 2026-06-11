@@ -1,0 +1,32 @@
+{
+  "targets": {
+    "query": {
+      "file_path": "node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs",
+      "line_number": 116,
+      "module_name": "@anthropic-ai/claude-agent-sdk",
+      "kind": "async_iterator",
+      "export_type": "method",
+      "file_paths": [
+        {
+          "path": "node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs",
+          "line": 116,
+          "module_type": "esm"
+        }
+      ]
+    },
+    "WarmQuery.query": {
+      "file_path": "node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs",
+      "line_number": 116,
+      "module_name": "@anthropic-ai/claude-agent-sdk",
+      "kind": "async_iterator",
+      "export_type": "method",
+      "file_paths": [
+        {
+          "path": "node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs",
+          "line": 116,
+          "module_type": "esm"
+        }
+      ]
+    }
+  }
+}

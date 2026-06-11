@@ -9,6 +9,8 @@ const MAX_RESOURCE_NAME_LENGTH = 5000
 const MAX_META_KEY_LENGTH = 200
 // MAX_META_VALUE_LENGTH the maximum length of metadata value
 const MAX_META_VALUE_LENGTH = 25_000
+// MAX_META_VALUE_LENGTH_TEST_OPTIMIZATION the maximum length of metadata value for Test Optimization
+const MAX_META_VALUE_LENGTH_TEST_OPTIMIZATION = 5000
 // MAX_METRIC_KEY_LENGTH the maximum length of a metric name key
 const MAX_METRIC_KEY_LENGTH = MAX_META_KEY_LENGTH
 
@@ -25,36 +27,36 @@ const MAX_SERVICE_LENGTH = 100
 // MAX_TYPE_LENGTH the maximum length a span type can have
 const MAX_TYPE_LENGTH = 100
 
-// TODO (bengl) Pretty much everything in this file should happen in
-// `format.js`, so that we're not iterating over all the spans and modifying
-// them yet again.
-
-// normally the agent truncates the resource and parses it in certain scenarios (e.g. SQL Queries)
-function truncateSpan (span, shouldTruncateResourceName = true) {
-  if (shouldTruncateResourceName && span.resource && span.resource.length > MAX_RESOURCE_NAME_LENGTH) {
+function truncateSpan (span) {
+  if (span.resource && span.resource.length > MAX_RESOURCE_NAME_LENGTH) {
     span.resource = `${span.resource.slice(0, MAX_RESOURCE_NAME_LENGTH)}...`
   }
-  for (let metaKey in span.meta) {
-    const val = span.meta[metaKey]
-    if (metaKey.length > MAX_META_KEY_LENGTH) {
-      delete span.meta[metaKey]
-      metaKey = `${metaKey.slice(0, MAX_META_KEY_LENGTH)}...`
-      span.metrics[metaKey] = val
-    }
-    if (val && val.length > MAX_META_VALUE_LENGTH) {
-      span.meta[metaKey] = `${val.slice(0, MAX_META_VALUE_LENGTH)}...`
-    }
-  }
-  for (let metricsKey in span.metrics) {
-    const val = span.metrics[metricsKey]
-    if (metricsKey.length > MAX_METRIC_KEY_LENGTH) {
-      delete span.metrics[metricsKey]
-      metricsKey = `${metricsKey.slice(0, MAX_METRIC_KEY_LENGTH)}...`
-      span.metrics[metricsKey] = val
-    }
-  }
-
   return span
+}
+
+function truncateSpanTestOpt (span) {
+  truncateSpan(span)
+  if (span.meta) {
+    for (const key of Object.keys(span.meta)) {
+      if (span.meta[key].length > MAX_META_VALUE_LENGTH_TEST_OPTIMIZATION) {
+        span.meta[key] = `${span.meta[key].slice(0, MAX_META_VALUE_LENGTH_TEST_OPTIMIZATION)}...`
+      }
+    }
+  }
+  return span
+}
+
+/**
+ * Convert a raw span event's `startTime` (milliseconds, sub-millisecond
+ * precision) to the wire `time_unix_nano`. Single source of truth for the
+ * formula so the four encoders that consume `span_events` stay in lockstep;
+ * the formatter no longer reshapes events, it hands the raw array through.
+ *
+ * @param {{ startTime: number }} event
+ * @returns {number}
+ */
+function eventTimeNano (event) {
+  return Math.round(event.startTime * 1e6)
 }
 
 function normalizeSpan (span) {
@@ -78,9 +80,12 @@ function normalizeSpan (span) {
 
 module.exports = {
   truncateSpan,
+  truncateSpanTestOpt,
   normalizeSpan,
+  eventTimeNano,
   MAX_META_KEY_LENGTH,
   MAX_META_VALUE_LENGTH,
+  MAX_META_VALUE_LENGTH_TEST_OPTIMIZATION,
   MAX_METRIC_KEY_LENGTH,
   MAX_NAME_LENGTH,
   MAX_SERVICE_LENGTH,

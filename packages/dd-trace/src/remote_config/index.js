@@ -5,9 +5,9 @@ const tracerVersion = require('../../../../package.json').version
 const request = require('../exporters/common/request')
 const log = require('../log')
 const { getExtraServices } = require('../service-naming/extra-services')
+const getGitMetadata = require('../git_metadata')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const tagger = require('../tagger')
-const { getAgentUrl } = require('../agent/url')
 const processTags = require('../process-tags')
 const Scheduler = require('./scheduler')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('./apply_states')
@@ -31,17 +31,18 @@ class RemoteConfig {
   constructor (config) {
     const pollInterval = Math.floor(config.remoteConfig.pollInterval * 1000)
 
-    this.url = getAgentUrl(config)
+    this.url = config.url
 
     tagger.add(config.tags, {
       '_dd.rc.client_id': clientId,
     })
 
-    const tags = config.repositoryUrl
+    const { commitSHA, repositoryUrl } = getGitMetadata(config)
+    const tags = repositoryUrl
       ? {
           ...config.tags,
-          [GIT_REPOSITORY_URL]: config.repositoryUrl,
-          [GIT_COMMIT_SHA]: config.commitSHA,
+          [GIT_REPOSITORY_URL]: repositoryUrl,
+          [GIT_COMMIT_SHA]: commitSHA,
         }
       : config.tags
 

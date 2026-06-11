@@ -6,304 +6,214 @@ const path = require('node:path')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 
 const agent = require('../plugins/agent')
+const Hook = require('../../src/ritm')
+
 const oldEnv = process.env
-/**
- * Sets up the minimum environment variables to make sure
- * the tracer works as expected for an AWS Lambda function.
- */
-const setup = () => {
-  const newEnv = {
+
+function setupEnv () {
+  process.env = {
+    ...oldEnv,
     LAMBDA_TASK_ROOT: './packages/dd-trace/test/lambda/fixtures',
     AWS_LAMBDA_FUNCTION_NAME: 'mock-function-name',
     DD_TRACE_ENABLED: 'true',
     DD_LOG_LEVEL: 'debug',
   }
-  process.env = { ...oldEnv, ...newEnv }
 }
 
-const restoreEnv = () => {
-  process.env = oldEnv
-}
-
-/**
- * Loads the test agent and makes sure the hook for the
- * AWS Lambda function patch is re-registered.
- *
- * @returns a promise of the agent to load.
- */
-const loadAgent = () => {
-  // Make sure the hook is re-registered
+function loadAgent () {
   require('../../src/lambda')
-  return agent.load([], [], {
-    experimental: {
-      exporter: 'agent',
-    },
-  })
+  return agent.load([], [], { experimental: { exporter: 'agent' } })
 }
 
-/**
- * Closes the test agent, resets the ritm modules and ensures
- * the cache for the AWS Lambda function patch is deleted so the hook
- * is re-registered once the ritm calls it.
- */
-const closeAgent = () => {
-  // In testing, the patch needs to be deleted from the require cache,
-  // in order to allow multiple handlers being patched properly.
-  delete require.cache[require.resolve('../../src/lambda/runtime/patch.js')]
+async function closeAgent () {
+  // `Hook.reset` clears RITM's per-module cache and registered hooks
+  // so the next test re-evaluates `src/lambda`'s `registerLambdaHook`
+  // against the new env and re-patches the freshly-loaded fixture.
+  // Safe in `test:lambda` because no test in this process loads other
+  // integrations.
+  Hook.reset()
   delete require.cache[require.resolve('../../src/lambda')]
-
-  agent.close({ ritmReset: true })
+  delete require.cache[require.resolve('../../src/lambda/runtime/patch.js')]
+  delete require.cache[require.resolve('./fixtures/handler')]
+  delete require.cache[require.resolve('./fixtures/datadog-lambda')]
+  await agent.close()
 }
 
 describe('lambda', () => {
   let datadog
 
   describe('patch', () => {
-    beforeEach(setup)
+    beforeEach(setupEnv)
 
     afterEach(() => {
-      restoreEnv()
+      process.env = oldEnv
       return closeAgent()
     })
 
     it('patches lambda function correctly', async () => {
-      // Set the desired handler to patch
       process.env.DD_LAMBDA_HANDLER = 'handler.handler'
-      // Load the agent and re-register hook for patching.
       await loadAgent()
 
-      const _context = {
-        getRemainingTimeInMillis: () => 150,
-      }
+      const _context = { getRemainingTimeInMillis: () => 150 }
       const _event = {}
 
-      // Mock `datadog-lambda` handler resolve and import.
       const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
       const app = require(_handlerPath)
       datadog = require('./fixtures/datadog-lambda')
 
-      // Run the function.
       const result = await datadog(app.handler)(_event, _context)
+      assert.deepStrictEqual(JSON.parse(result.body), { message: 'hello!' })
 
-      assert.notStrictEqual(result, undefined)
-      const body = JSON.parse(result.body)
-      assert.strictEqual(body.message, 'hello!')
-
-      // Expect traces to be correct.
-      const checkTraces = agent.assertSomeTraces((_traces) => {
-        const traces = _traces[0]
-        assert.strictEqual(traces.length, 1)
-        traces.forEach((trace) => {
+      await agent.assertSomeTraces(traces => {
+        assert.strictEqual(traces[0].length, 1)
+        for (const trace of traces[0]) {
           assert.strictEqual(trace.error, 0)
-        })
+        }
       })
-      await checkTraces
     })
 
     it('patches lambda function with callback correctly', async () => {
-      // Set the desired handler to patch
       process.env.DD_LAMBDA_HANDLER = 'handler.callbackHandler'
-      // Load the agent and re-register hook for patching.
       await loadAgent()
 
-      const _context = {
-        getRemainingTimeInMillis: () => 150,
-      }
+      const _context = { getRemainingTimeInMillis: () => 150 }
       const _event = {}
 
-      // Mock `datadog-lambda` handler resolve and import.
       const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
       const app = require(_handlerPath)
       datadog = require('./fixtures/datadog-lambda')
       let result
-      const callback = (_error, res) => {
-        result = res
-      }
-      // Run the function.
-      datadog(app.callbackHandler)(_event, _context, callback)
-
-      assert.notStrictEqual(result, undefined)
-      const body = JSON.parse(result.body)
-      assert.strictEqual(body.message, 'hello!')
-
-      // Expect traces to be correct.
-      const checkTraces = agent.assertSomeTraces((_traces) => {
-        const traces = _traces[0]
-        assert.strictEqual(traces.length, 1)
-        traces.forEach((trace) => {
-          assert.strictEqual(trace.error, 0)
-        })
+      datadog(app.callbackHandler)(_event, _context, (_error, response) => {
+        result = response
       })
-      await checkTraces
+
+      assert.deepStrictEqual(JSON.parse(result.body), { message: 'hello!' })
+
+      await agent.assertSomeTraces(traces => {
+        assert.strictEqual(traces[0].length, 1)
+        for (const trace of traces[0]) {
+          assert.strictEqual(trace.error, 0)
+        }
+      })
     })
 
     it('does wrap handler causing unhandled promise rejections', async () => {
-      // Set the desired handler to patch
       process.env.DD_LAMBDA_HANDLER = 'handler.handler'
-      // Load the agent and re-register hook for patching.
       await loadAgent()
 
-      const _context = {
-        getRemainingTimeInMillis: () => 150,
-      }
+      const _context = { getRemainingTimeInMillis: () => 150 }
       const _event = {}
 
-      // Mock `datadog-lambda` handler resolve and import.
       const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
       const app = require(_handlerPath)
       datadog = require('./fixtures/datadog-lambda')
 
-      // Run the function.
-      try {
-        await datadog(app.errorHandler)(_event, _context)
-      } catch (e) {
-        assert.strictEqual(e.name, 'CustomError')
-      }
+      await assert.rejects(datadog(app.errorHandler)(_event, _context), { name: 'CustomError' })
 
-      // Expect traces to be correct.
-      const checkTraces = agent.assertSomeTraces((_traces) => {
-        const traces = _traces[0]
-        assert.strictEqual(traces.length, 1)
-        traces.forEach((trace) => {
+      await agent.assertSomeTraces(traces => {
+        assert.strictEqual(traces[0].length, 1)
+        for (const trace of traces[0]) {
           assert.strictEqual(trace.error, 1)
-        })
+        }
       })
-      await checkTraces
     })
 
     it('correctly patch handler where context is the third argument', async () => {
       process.env.DD_LAMBDA_HANDLER = 'handler.swappedArgsHandler'
-
       await loadAgent()
 
-      const _context = {
-        getRemainingTimeInMillis: () => 150,
-      }
+      const _context = { getRemainingTimeInMillis: () => 150 }
       const _event = {}
-      const _ = {}
 
       const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
       const app = require(_handlerPath)
       datadog = require('./fixtures/datadog-lambda')
 
-      const result = await datadog(app.swappedArgsHandler)(_event, _, _context)
+      const result = await datadog(app.swappedArgsHandler)(_event, {}, _context)
+      assert.deepStrictEqual(JSON.parse(result.body), { message: 'hello!' })
 
-      assert.notStrictEqual(result, undefined)
-      const body = JSON.parse(result.body)
-      assert.strictEqual(body.message, 'hello!')
-
-      const checkTraces = agent.assertSomeTraces((_traces) => {
-        const traces = _traces[0]
-        assert.strictEqual(traces.length, 1)
-        traces.forEach((trace) => {
+      await agent.assertSomeTraces(traces => {
+        assert.strictEqual(traces[0].length, 1)
+        for (const trace of traces[0]) {
           assert.strictEqual(trace.error, 0)
-        })
+        }
       })
-      await checkTraces
     })
 
     it('doesnt patch lambda when instrumentation is disabled', async () => {
       const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
       const handlerBefore = require(_handlerPath).handler
 
-      // Set the desired handler to patch
       process.env.DD_TRACE_DISABLED_INSTRUMENTATIONS = 'lambda'
       process.env.DD_LAMBDA_HANDLER = 'handler.handler'
-      // Register hook for patching
       await loadAgent()
 
-      // Mock `datadog-lambda` handler resolve and import.
       const handlerAfter = require(_handlerPath).handler
       assert.strictEqual(handlerBefore, handlerAfter)
     })
   })
 
   describe('lambda authorizers (no context)', () => {
-    beforeEach(setup)
+    beforeEach(setupEnv)
 
     afterEach(() => {
-      restoreEnv()
+      process.env = oldEnv
       return closeAgent()
     })
 
     it('patches async lambda authorizer correctly (event only, no context)', async () => {
-      // Set the desired handler to patch
       process.env.DD_LAMBDA_HANDLER = 'handler.authorizerHandler'
-      // Load the agent and re-register hook for patching.
       await loadAgent()
 
-      // Lambda Authorizers only receive an event, no context
       const _event = {
         type: 'REQUEST',
         methodArn: 'arn:aws:execute-api:us-east-1:123456789012:api-id/stage/GET/resource',
-        headers: {
-          Authorization: 'Bearer token123',
-        },
+        headers: { Authorization: 'Bearer token123' },
       }
 
-      // Mock `datadog-lambda` handler resolve and import.
       const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
       const app = require(_handlerPath)
       datadog = require('./fixtures/datadog-lambda')
 
-      // Run the function without context - this should NOT throw
       const result = await datadog(app.authorizerHandler)(_event)
-
-      assert.notStrictEqual(result, undefined)
       assert.strictEqual(result.principalId, 'user123')
       assert.strictEqual(result.policyDocument.Statement[0].Effect, 'Allow')
 
-      // Expect traces to be correct.
-      const checkTraces = agent.assertSomeTraces((_traces) => {
-        const traces = _traces[0]
-        assert.strictEqual(traces.length, 1)
-        traces.forEach((trace) => {
+      await agent.assertSomeTraces(traces => {
+        assert.strictEqual(traces[0].length, 1)
+        for (const trace of traces[0]) {
           assert.strictEqual(trace.error, 0)
-        })
+        }
       })
-      await checkTraces
     })
 
     it('patches sync lambda authorizer correctly (event only, no context)', async () => {
-      // Set the desired handler to patch
       process.env.DD_LAMBDA_HANDLER = 'handler.authorizerHandlerSync'
-      // Load the agent and re-register hook for patching.
       await loadAgent()
 
-      // Lambda Authorizers only receive an event, no context
       const _event = {
         type: 'REQUEST',
         methodArn: 'arn:aws:execute-api:us-east-1:123456789012:api-id/stage/GET/resource',
       }
 
-      // Mock `datadog-lambda` handler resolve and import.
       const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
       const app = require(_handlerPath)
       datadog = require('./fixtures/datadog-lambda')
 
-      // Run the function without context - this should NOT throw
-      // Note: datadog-lambda mock wraps in async, so we need to await
       const result = await datadog(app.authorizerHandlerSync)(_event)
-
-      assert.notStrictEqual(result, undefined)
       assert.strictEqual(result.principalId, 'user123')
       assert.strictEqual(result.policyDocument.Statement[0].Effect, 'Allow')
 
-      // Expect traces to be correct.
-      const checkTraces = agent.assertSomeTraces((_traces) => {
-        const traces = _traces[0]
-        assert.strictEqual(traces.length, 1)
-        traces.forEach((trace) => {
+      await agent.assertSomeTraces(traces => {
+        assert.strictEqual(traces[0].length, 1)
+        for (const trace of traces[0]) {
           assert.strictEqual(trace.error, 0)
-        })
+        }
       })
-      await checkTraces
     })
 
     it('handles errors in lambda authorizer correctly (event only, no context)', async () => {
-      // Set the desired handler to patch
       process.env.DD_LAMBDA_HANDLER = 'handler.authorizerErrorHandler'
-      // Load the agent and re-register hook for patching.
       await loadAgent()
 
       const _event = {
@@ -311,37 +221,29 @@ describe('lambda', () => {
         methodArn: 'arn:aws:execute-api:us-east-1:123456789012:api-id/stage/GET/resource',
       }
 
-      // Mock `datadog-lambda` handler resolve and import.
       const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
       const app = require(_handlerPath)
       datadog = require('./fixtures/datadog-lambda')
 
-      // Run the function - should throw but not because of missing context
-      try {
-        await datadog(app.authorizerErrorHandler)(_event)
-        assert.fail('Expected error to be thrown')
-      } catch (e) {
-        assert.strictEqual(e.name, 'AuthorizationError')
-        assert.strictEqual(e.message, 'Unauthorized')
-      }
+      await assert.rejects(
+        datadog(app.authorizerErrorHandler)(_event),
+        { name: 'AuthorizationError', message: 'Unauthorized' }
+      )
 
-      // Expect traces to be correct with error.
-      const checkTraces = agent.assertSomeTraces((_traces) => {
-        const traces = _traces[0]
-        assert.strictEqual(traces.length, 1)
-        traces.forEach((trace) => {
+      await agent.assertSomeTraces(traces => {
+        assert.strictEqual(traces[0].length, 1)
+        for (const trace of traces[0]) {
           assert.strictEqual(trace.error, 1)
-        })
+        }
       })
-      await checkTraces
     })
   })
 
   describe('timeout spans', () => {
-    beforeEach(setup)
+    beforeEach(setupEnv)
 
     afterEach(() => {
-      restoreEnv()
+      process.env = oldEnv
       return closeAgent()
     })
 
@@ -349,9 +251,7 @@ describe('lambda', () => {
       process.env.DD_LAMBDA_HANDLER = 'handler.finishSpansEarlyTimeoutHandler'
       await loadAgent()
 
-      const _context = {
-        getRemainingTimeInMillis: () => 25,
-      }
+      const _context = { getRemainingTimeInMillis: () => 25 }
       const _event = {}
 
       const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
@@ -359,66 +259,48 @@ describe('lambda', () => {
       datadog = require('./fixtures/datadog-lambda')
       const result = datadog(app.finishSpansEarlyTimeoutHandler)(_event, _context)
 
-      const checkTraces = agent.assertSomeTraces((_traces) => {
-        const traces = _traces[0]
-        traces.forEach((trace) => {
+      const checkTraces = agent.assertSomeTraces(traces => {
+        for (const trace of traces[0]) {
           assert.strictEqual(trace.error, 0)
-        })
+        }
       })
-
-      return result.then(_ => {}).then(() => checkTraces)
+      // `Promise.all` so a `checkTraces` rejection between `result`
+      // settling and its own `await` doesn't surface as an unhandled
+      // rejection.
+      await Promise.all([result, checkTraces])
     })
 
     const deadlines = [
-      {
-        envVar: 'default',
-        // will use default remaining time
-      },
-      {
-        envVar: 'DD_APM_FLUSH_DEADLINE_MILLISECONDS',
-        value: '-100', // will default to 0
-      },
-      {
-        envVar: 'DD_APM_FLUSH_DEADLINE_MILLISECONDS',
-        value: '10', // subtract 10 from the remaining time
-      },
+      { envVar: 'default' },
+      { envVar: 'DD_APM_FLUSH_DEADLINE_MILLISECONDS', value: '-100' }, // clamps to 100
+      { envVar: 'DD_APM_FLUSH_DEADLINE_MILLISECONDS', value: '10' },
     ]
 
     deadlines.forEach(deadline => {
       const flushDeadlineEnvVar = deadline.envVar
-      const customDeadline = deadline.value ? deadline.value : ''
+      const customDeadline = deadline.value ?? ''
 
-      it(`traces error on impending timeout using ${flushDeadlineEnvVar} ${customDeadline} deadline`, () => {
+      it(`traces error on impending timeout using ${flushDeadlineEnvVar} ${customDeadline} deadline`, async () => {
         process.env[flushDeadlineEnvVar] = customDeadline
         process.env.DD_LAMBDA_HANDLER = 'handler.timeoutHandler'
 
-        const _context = {
-          getRemainingTimeInMillis: () => 25,
-        }
+        const _context = { getRemainingTimeInMillis: () => 25 }
         const _event = {}
 
         const _handlerPath = path.resolve(__dirname, './fixtures/handler.js')
 
-        // Load agent and patch handler.
-        return loadAgent().then(_ => {
-          const app = require(_handlerPath)
-          datadog = require('./fixtures/datadog-lambda')
+        await loadAgent()
+        const app = require(_handlerPath)
+        datadog = require('./fixtures/datadog-lambda')
 
-          const result = datadog(app.timeoutHandler)(_event, _context)
+        const result = datadog(app.timeoutHandler)(_event, _context)
 
-          const checkTraces = agent.assertSomeTraces(_traces => {
-            // First trace, since errors are tagged at root span level.
-            const trace = _traces[0][0]
-            assert.strictEqual(trace.error, 1)
-            assert.strictEqual(trace.meta['error.type'], 'Impending Timeout')
-            // Ensure that once this finish, an error was tagged.
-          })
-
-          // Since these are expected to timeout and one can't kill the
-          // environment, one has to wait for the result to come in so
-          // the traces are verified above.
-          return result.then(_ => {}).then(() => checkTraces)
+        const checkTraces = agent.assertSomeTraces(traces => {
+          const trace = traces[0][0]
+          assert.strictEqual(trace.error, 1)
+          assert.strictEqual(trace.meta['error.type'], 'Impending Timeout')
         })
+        await Promise.all([result, checkTraces])
       })
     })
   })

@@ -106,7 +106,7 @@ describe('Bun runtime smoke tests', function () {
   })
 
   it('should emit app-started telemetry under Bun', async () => {
-    const telemetryPromise = agent.assertTelemetryReceived('app-started', 20_000, 1)
+    const telemetryPromise = agent.assertTelemetryReceived({ requestType: 'app-started', timeout: 20_000 })
 
     const [bunResult] = await Promise.all([
       runBun('bun/init-telemetry.js', {

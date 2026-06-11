@@ -24,18 +24,29 @@ class OracledbPlugin extends DatabasePlugin {
       dbInstance ??= dbInfo.dbInstance
     }
 
-    this.startSpan(this.operationName(), {
+    // oracledb >= 6.4 accepts `execute({ statement, values })` (sql-template-tag form)
+    // in addition to a plain SQL string. Extract the SQL text either way so we can tag
+    // the resource and inject DBM into the statement, then re-wrap if needed to keep
+    // the caller's binds.
+    const sql = query?.statement ?? query
+
+    const span = this.startSpan(this.operationName(), {
       service,
-      resource: query,
+      resource: sql,
       type: 'sql',
       kind: 'client',
       meta: {
         'db.user': this.config.user,
         'db.instance': dbInstance,
+        'db.name': dbInstance,
         'db.hostname': hostname,
+        'out.host': hostname,
         [CLIENT_PORT_KEY]: port,
       },
     }, ctx)
+
+    const injected = this.injectDbmQuery(span, sql, service.name)
+    ctx.injected = query?.statement ? { ...query, statement: injected } : injected
 
     return ctx.currentStore
   }

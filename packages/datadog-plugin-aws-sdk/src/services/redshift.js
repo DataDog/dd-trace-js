@@ -6,11 +6,12 @@ class Redshift extends BaseAwsSdkPlugin {
   static id = 'redshift'
 
   generateTags (params, operation, response) {
-    if (!params?.ClusterIdentifier) return {}
+    if (!params?.ClusterIdentifier) return
 
     return {
       'resource.name': `${operation} ${params.ClusterIdentifier}`,
       'aws.redshift.cluster_identifier': params.ClusterIdentifier,
+      'db.system': 'aws.redshift',
       clusteridentifier: params.ClusterIdentifier,
     }
   }

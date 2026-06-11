@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const axios = require('axios')
 const sinon = require('sinon')
@@ -46,17 +47,16 @@ describe('Plugin', () => {
       ])
     )
 
-    const gateway = new ApolloGateway({
+    return new ApolloGateway({
       localServiceList: fixtures,
       buildService (service) {
         return localDataSources[service.name]
       },
     })
-    return gateway
   }
 
   async function execute (executor, source, variables, operationName) {
-    const resp = await executor({
+    return executor({
       source,
       document: gql(source),
       request: {
@@ -67,7 +67,6 @@ describe('Plugin', () => {
       context: null,
       cache: {},
     })
-    return resp
   }
 
   function gateway () {
@@ -77,7 +76,7 @@ describe('Plugin', () => {
   describe('@apollo/gateway', () => {
     withVersions('apollo', '@apollo/gateway', version => {
       after(() => {
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       describe('@apollo/server', () => {
@@ -630,7 +629,7 @@ describe('Plugin', () => {
                 const validateCtx = config.hooks.validate.firstCall.args[1]
 
                 assert.strictEqual(validateSpan.context()._name, 'apollo.gateway.validate')
-                assert.ok(Array.isArray(validateCtx.result))
+                assert.ok(Array.isArray(validateCtx.result), `Expected array, got ${inspect(validateCtx.result)}`)
                 assert.strictEqual(validateCtx.result.at(-1).message, error.message)
 
                 assertObjectContains(traces[0][1], {

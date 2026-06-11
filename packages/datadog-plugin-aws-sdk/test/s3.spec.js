@@ -7,10 +7,10 @@ const { after, before, describe, it } = require('mocha')
 
 const { S3_PTR_KIND, SPAN_POINTER_DIRECTION } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
+const { withNamingSchema, withPeerService } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { rawExpectedSchema } = require('./s3-naming')
-const { setup } = require('./spec_helpers')
+const { setup, withAwsSdkVersions } = require('./spec_helpers')
 
 const bucketName = 's3-bucket-name-test'
 
@@ -28,7 +28,7 @@ describe('Plugin', () => {
   describe('aws-sdk (s3)', function () {
     setup()
 
-    withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
+    withAwsSdkVersions((version, moduleName) => {
       let AWS
       let s3
       let tracer
@@ -40,7 +40,8 @@ describe('Plugin', () => {
           return agent.load('aws-sdk')
         })
 
-        before(done => {
+        before(function (done) {
+          this.timeout(10_000)
           AWS = require(`../../../versions/${s3ClientName}@${version}`).get()
           s3 = new AWS.S3({ endpoint: 'http://127.0.0.1:4566', s3ForcePathStyle: true, region: 'us-east-1' })
 
@@ -57,7 +58,7 @@ describe('Plugin', () => {
 
         after(async () => {
           await resetLocalStackS3()
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         withPeerService(
@@ -83,7 +84,8 @@ describe('Plugin', () => {
           it('should add span pointer for putObject operation', (done) => {
             agent.assertSomeTraces(traces => {
               try {
-                const span = traces[0][0]
+                const span = traces[0].find(s => s.meta?.['aws.operation'] === 'putObject')
+                assert.ok(span)
                 const links = JSON.parse(span.meta?.['_dd.span_links'] || '[]')
 
                 assert.strictEqual(links.length, 1)
@@ -113,7 +115,8 @@ describe('Plugin', () => {
           it('should add span pointer for copyObject operation', (done) => {
             agent.assertSomeTraces(traces => {
               try {
-                const span = traces[0][0]
+                const span = traces[0].find(s => s.meta?.['aws.operation'] === 'copyObject')
+                assert.ok(span)
                 const links = JSON.parse(span.meta?.['_dd.span_links'] || '[]')
 
                 assert.strictEqual(links.length, 1)
@@ -187,9 +190,8 @@ describe('Plugin', () => {
                 s3.completeMultipartUpload(completeParams, (err) => {
                   if (err) done(err)
                   agent.assertSomeTraces(traces => {
-                    const span = traces[0][0]
-                    const operation = span.meta?.['aws.operation']
-                    if (operation === 'completeMultipartUpload') {
+                    const span = traces[0].find(s => s.meta?.['aws.operation'] === 'completeMultipartUpload')
+                    if (span) {
                       try {
                         const links = JSON.parse(span.meta?.['_dd.span_links'] || '[]')
                         assert.strictEqual(links.length, 1)

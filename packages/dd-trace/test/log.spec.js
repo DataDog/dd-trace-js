@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -302,10 +303,12 @@ describe('log', () => {
         log.trace('argument', { hello: 'world' }, new Foo())
 
         sinon.assert.calledOnce(console.debug)
-        assert.match(console.debug.firstCall.args[0],
+        const debugMessage = console.debug.firstCall.args[0]
+        assert.match(debugMessage,
           /^Trace: Context.foo\('argument', { hello: 'world' }, Foo { bar: 'baz' }\)/
         )
-        assert.ok(console.debug.firstCall.args[0].split('\n').length >= 3)
+        const lineCount = debugMessage.split('\n').length
+        assert.ok(lineCount >= 3, `Expected at least 3 lines in trace, got ${lineCount}: ${inspect(debugMessage)}`)
       })
     })
 
@@ -510,24 +513,6 @@ describe('log', () => {
 
         sinon.assert.calledWith(console.debug, 'debug')
         sinon.assert.calledWith(console.error, error)
-      })
-    })
-
-    describe('deprecate', () => {
-      it('should log a deprecation warning', () => {
-        log.deprecate('test', 'message')
-
-        sinon.assert.calledOnce(console.error)
-        const consoleErrorArg = console.error.getCall(0).args[0]
-        assert.strictEqual(typeof consoleErrorArg, 'string')
-        assert.strictEqual(consoleErrorArg, 'message')
-      })
-
-      it('should only log once for a given code', () => {
-        log.deprecate('test', 'message')
-        log.deprecate('test', 'message')
-
-        sinon.assert.calledOnce(console.error)
       })
     })
 

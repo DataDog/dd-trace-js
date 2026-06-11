@@ -29,11 +29,35 @@ updates:
       - github_actions
       - semver-patch
 
+  # Docker base images in our Dockerfiles. Already digest-pinned references
+  # (image:tag@sha256:...) get both the tag and the digest bumped on each
+  # release; bare tags would only have the tag bumped, so every FROM here is
+  # pinned by digest. docker-compose.yml is handled separately (GHCR mirror).
+  - package-ecosystem: "docker"
+    directories:
+      - "/.github/playwright"
+      - "/.github/selenium"
+      - "/benchmark/sirun"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 5
+    labels:
+      - dependabot
+      - dependencies
+      - docker
+      - semver-patch
+    groups:
+      docker-images:
+        patterns:
+          - "*"
+
   # Regular npm packages that fall into our supported ranges besides OTEL
   - package-ecosystem: "npm"
     directories:
       - "/"
       - "/docs"
+      - "/.github/actions/datadog-ci"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 100
@@ -107,8 +131,6 @@ updates:
       - dependency-name: "jest-docblock"
         # 30.0.0 onwards only supports Node.js 18.14.x and above
         update-types: ["version-update:semver-major"]
-        # The path-to-regexp version has to be the same as used in express v4.
-      - dependency-name: "path-to-regexp"
       - dependency-name: "lru-cache"
         # 11.0.0 onwards only supports Node.js 20 and above
         update-types: ["version-update:semver-major"]
@@ -126,6 +148,9 @@ updates:
       - dependency-name: "meriyah"
         # 7.0.0 onwards only supports Node.js 20 and above
         update-types: ["version-update:semver-major"]
+      - dependency-name: "@rspack/*"
+        # 2.0.0 onwards only supports Node.js 20 and above
+        update-types: ["version-update:semver-major"]
     groups:
       vendor-minor-and-patch-dependencies:
         dependency-type: "production"
@@ -141,7 +166,9 @@ updates:
       - "/packages/dd-trace/test/plugins/versions"
     schedule:
       interval: "daily"
-    open-pull-requests-limit: 1
+    # One slot per cohort group below plus headroom; with the cohort design a
+    # single blocked group otherwise stalls every other group.
+    open-pull-requests-limit: 10
     cooldown:
       default-days: 3
       exclude:
@@ -155,7 +182,68 @@ updates:
       - dependency-name: "office-addin-mock"
         # Pinned to 2.x due to compatibility issues with newer major versions
         update-types: ["version-update:semver-major"]
+    # Cohort-based groups so a single breaking bump only blocks its own PR.
     groups:
+      ai-and-llm:
+        patterns:
+          - "@ai-sdk/*"
+          - "@anthropic-ai/sdk"
+          - "@google-cloud/vertexai"
+          - "@google/genai"
+          - "@langchain/*"
+          - "@modelcontextprotocol/sdk"
+          - "@openai/*"
+          - "ai"
+          - "langchain"
+          - "openai"
+      serverless:
+        patterns:
+          - "@aws-sdk/*"
+          - "@azure/*"
+          - "@smithy/*"
+          - "aws-sdk"
+          - "azure-functions-core-tools"
+          - "durable-functions"
+      opentelemetry:
+        patterns:
+          - "@opentelemetry/*"
+          - "opentracing"
+      test-optimization:
+        patterns:
+          - "@fast-check/jest"
+          - "@happy-dom/jest-environment"
+          - "@jest/*"
+          - "@playwright/test"
+          - "@vitest/*"
+          - "babel-jest"
+          - "jest-*"
+          - "jest"
+          - "mocha-each"
+          - "mocha"
+          - "nyc"
+          - "playwright-core"
+          - "playwright"
+          - "tinypool"
+          - "vitest"
+      databases:
+        patterns:
+          - "@node-redis/client"
+          - "@prisma/*"
+          - "@redis/client"
+          - "ioredis"
+          - "mongodb-core"
+          - "mongodb"
+          - "mongoose"
+          - "mysql"
+          - "mysql2"
+          - "pg-cursor"
+          - "pg-native"
+          - "pg-query-stream"
+          - "pg"
+          - "prisma"
+          - "redis"
+          - "sqlite3"
+          - "tedious"
       test-versions:
         patterns:
           - "*"

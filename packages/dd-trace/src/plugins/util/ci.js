@@ -2,7 +2,8 @@
 
 const { readFileSync, readdirSync, existsSync } = require('fs')
 const path = require('path')
-const { getEnvironmentVariable, getEnvironmentVariables, getValueFromEnvSources } = require('../../config/helper')
+const getConfig = require('../../config')
+const { getEnvironmentVariable, getEnvironmentVariables } = require('../../config/helper')
 const {
   GIT_BRANCH,
   GIT_COMMIT_SHA,
@@ -103,42 +104,129 @@ function getGitHubEventPayload () {
   return JSON.parse(readFileSync(path, 'utf8'))
 }
 
-function getJobIDFromDiagFile (runnerTemp) {
-  if (!runnerTemp || !existsSync(runnerTemp)) { return null }
+const uniq = (items) => [...new Set(items)]
 
-  // RUNNER_TEMP usually looks like:
-  // Linux/mac hosted:   /home/runner/work/_temp
-  // Windows hosted:     C:\actions-runner\_work\_temp
-  // Self-hosted (unix): /opt/actions-runner/_work/_temp
+/**
+ * GitHub runner diagnostic logs live under the runner installation directory in `_diag`.
+ * On many runners, we can derive the installation directory from RUNNER_TEMP:
+ *   <runnerRoot>/_work/_temp  ->  <runnerRoot>/_diag
+ *
+ * This is much more robust than relying on hardcoded paths, especially on self-hosted runners
+ * and GHES environments where the runner may be installed under arbitrary directories/users.
+ */
+function getGithubDiagnosticDirsFromEnv (runnerTemp) {
+  const dirs = []
 
-  const workDir = path.dirname(runnerTemp) // .../work or .../_work
-  const runnerRoot = path.dirname(workDir) // /home/runner/ (runner root)
-
-  const dirs = [
-    path.join(runnerRoot, 'cached', '_diag'),
-    path.join(runnerRoot, '_diag'),
-    path.join(runnerRoot, 'actions-runner', 'cached', '_diag'),
-    path.join(runnerRoot, 'actions-runner', '_diag'),
-  ]
-
-  const isWin = process.platform === 'win32'
-
-  // Hardcoded fallbacks
-  if (isWin) {
+  if (runnerTemp) {
+    // RUNNER_TEMP is typically: <runnerRoot>/_work/_temp
+    const runnerRoot = path.resolve(runnerTemp, '..', '..').replaceAll(path.sep, '/')
+    // Bounded-depth patterns cover every runner layout we've observed
+    // (including cached/<version>/_diag) without assuming a `cached` wrapper
+    // and without walking the whole tree.
     dirs.push(
-      'C:/actions-runner/cached/_diag',
-      'C:/actions-runner/_diag',
-    )
-  } else {
-    dirs.push(
-      '/home/runner/actions-runner/cached/_diag',
-      '/home/runner/actions-runner/_diag',
-      '/opt/actions-runner/_diag',
+      path.posix.join(runnerRoot, 'actions-runner', '_diag'),
+      `${runnerRoot}/actions-runner/*/_diag`,
+      `${runnerRoot}/actions-runner/*/*/_diag`,
+      path.posix.join(runnerRoot, '_diag'),
+      `${runnerRoot}/*/_diag`,
+      `${runnerRoot}/*/*/_diag`
     )
   }
 
-  // Remove duplicates
-  const possibleDiagsPaths = [...new Set(dirs)]
+  return uniq(dirs.filter(Boolean))
+}
+
+function hasMagicChars (str) {
+  return str.includes('*') || str.includes('?')
+}
+
+// Expands a glob pattern with only `*`/`?` at path-segment boundaries (no `**`)
+// into matching concrete paths using readdirSync — no external dependency needed.
+function expandGlobPattern (pattern) {
+  const parts = pattern.split(/[/\\]/)
+  const wildcardIdx = parts.findIndex(p => hasMagicChars(p))
+  if (wildcardIdx === -1) return [pattern]
+
+  const prefix = parts.slice(0, wildcardIdx).join('/')
+  const results = []
+
+  function walk (dir, segIdx) {
+    if (segIdx === parts.length) {
+      results.push(dir)
+      return
+    }
+    const seg = parts[segIdx]
+    if (!hasMagicChars(seg)) {
+      walk(`${dir}/${seg}`, segIdx + 1)
+      return
+    }
+    try {
+      const re = new RegExp(
+        '^' + seg.replaceAll(/[.+^${}()|[\]\\]/g, String.raw`\$&`).replaceAll('*', String.raw`[^/\\]*`).replaceAll('?', String.raw`[^/\\]`) + '$'
+      )
+      for (const entry of readdirSync(dir)) {
+        if (re.test(entry)) {
+          walk(`${dir}/${entry}`, segIdx + 1)
+        }
+      }
+    } catch {
+      // directory doesn't exist or isn't accessible
+    }
+  }
+
+  walk(prefix, wildcardIdx)
+  return results
+}
+
+/**
+ * Expands a mixed list of literal directories and glob patterns into concrete
+ * directories. Literals pass through unchanged (existence is checked later).
+ */
+function expandDiagnosticDirCandidates (candidates) {
+  const expanded = []
+  for (const candidate of candidates) {
+    if (hasMagicChars(candidate)) {
+      expanded.push(...expandGlobPattern(candidate))
+    } else {
+      expanded.push(candidate)
+    }
+  }
+
+  return uniq(expanded)
+}
+
+const githubWellKnownDiagnosticDirsUnix = [
+  '/home/runner/actions-runner/_diag',
+  '/opt/actions-runner/_diag',
+]
+const githubWellKnownDiagnosticDirsWin = [
+  'C:/actions-runner/_diag',
+]
+
+// Glob patterns covering layouts that namespace `_diag` under one or two
+// intermediate directories. This includes both observed SaaS layouts
+// (<runnerRoot>/cached/_diag pre-2.334.0, <runnerRoot>/cached/<version>/_diag
+// since v2.334.0) and hypothetical future layouts that follow the same shape
+// without a `cached` wrapper (e.g. <runnerRoot>/<version>/_diag). Depth is
+// bounded on purpose: `*` matches a single segment, so no filesystem walk.
+const githubWellKnownDiagnosticDirPatternsUnix = [
+  '/home/runner/actions-runner/*/_diag',
+  '/home/runner/actions-runner/*/*/_diag',
+]
+const githubWellKnownDiagnosticDirPatternsWin = ['C:/actions-runner/*/_diag', 'C:/actions-runner/*/*/_diag']
+
+const githubJobIDRegex = /"job":\s*{[\s\S]*?"v"\s*:\s*(\d+)(?:\.0)?/
+
+function getJobIDFromDiagFile () {
+  const runnerTemp = getEnvironmentVariable('RUNNER_TEMP')
+  if (!runnerTemp || !existsSync(runnerTemp)) { return null }
+
+  const isWin = process.platform === 'win32'
+  const patterns = isWin ? githubWellKnownDiagnosticDirPatternsWin : githubWellKnownDiagnosticDirPatternsUnix
+  const literals = isWin ? githubWellKnownDiagnosticDirsWin : githubWellKnownDiagnosticDirsUnix
+  const possibleDiagsPaths = expandDiagnosticDirCandidates([
+    ...getGithubDiagnosticDirsFromEnv(runnerTemp), ...patterns, ...literals,
+  ])
 
   // This will hold the names of the worker log files that (potentially) contain the Job ID
   let workerLogFiles = []
@@ -177,7 +265,7 @@ function getJobIDFromDiagFile (runnerTemp) {
     const filePath = path.posix.join(chosenDiagPath, logFile)
     const content = readFileSync(filePath, 'utf8')
 
-    const match = content.match(/"job":\s*{[\s\S]*?"v"\s*:\s*(\d+)(?:\.0)?/)
+    const match = content.match(githubJobIDRegex)
 
     // match[1] is the captured group with the display name
     if (match && match[1]) { return match[1] }
@@ -188,6 +276,7 @@ function getJobIDFromDiagFile (runnerTemp) {
 
 module.exports = {
   normalizeRef,
+  expandGlobPattern,
   getJobIDFromDiagFile,
   getCIMetadata () {
     const env = getEnvironmentVariables()
@@ -210,7 +299,7 @@ module.exports = {
         CHANGE_ID,
         CHANGE_TARGET,
       } = env
-      const DD_CUSTOM_TRACE_ID = getValueFromEnvSources('DD_CUSTOM_TRACE_ID')
+      const { DD_CUSTOM_TRACE_ID, DD_CUSTOM_PARENT_ID } = getConfig()
 
       tags = {
         [CI_PIPELINE_ID]: BUILD_TAG,
@@ -220,7 +309,7 @@ module.exports = {
         [GIT_COMMIT_SHA]: JENKINS_GIT_COMMIT,
         [GIT_REPOSITORY_URL]: JENKINS_GIT_REPOSITORY_URL || JENKINS_GIT_REPOSITORY_URL_1,
         [CI_WORKSPACE_PATH]: WORKSPACE,
-        [CI_ENV_VARS]: JSON.stringify({ DD_CUSTOM_TRACE_ID }),
+        [CI_ENV_VARS]: JSON.stringify({ DD_CUSTOM_TRACE_ID, DD_CUSTOM_PARENT_ID }),
         [CI_NODE_NAME]: NODE_NAME,
         [PR_NUMBER]: CHANGE_ID,
         [GIT_PULL_REQUEST_BASE_BRANCH]: CHANGE_TARGET,
@@ -366,7 +455,6 @@ module.exports = {
         GITHUB_RUN_ATTEMPT,
         GITHUB_JOB,
         GITHUB_BASE_REF,
-        RUNNER_TEMP,
         JOB_CHECK_RUN_ID,
       } = env
 
@@ -378,7 +466,7 @@ module.exports = {
       }
 
       // Build the job url extracting the job ID. If extraction fails, job url is constructed as a generalized url
-      const GITHUB_JOB_ID = JOB_CHECK_RUN_ID ?? getJobIDFromDiagFile(RUNNER_TEMP)
+      const GITHUB_JOB_ID = JOB_CHECK_RUN_ID ?? getJobIDFromDiagFile()
       const jobUrl =
         GITHUB_JOB_ID === null
           ? `${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}/checks`
@@ -563,7 +651,7 @@ module.exports = {
         [GIT_TAG]: BITBUCKET_TAG,
         [GIT_REPOSITORY_URL]: BITBUCKET_GIT_SSH_ORIGIN || BITBUCKET_GIT_HTTP_ORIGIN,
         [CI_WORKSPACE_PATH]: BITBUCKET_CLONE_DIR,
-        [CI_PIPELINE_ID]: BITBUCKET_PIPELINE_UUID && BITBUCKET_PIPELINE_UUID.replaceAll(/{|}/gm, ''),
+        [CI_PIPELINE_ID]: BITBUCKET_PIPELINE_UUID && BITBUCKET_PIPELINE_UUID.replaceAll(/[{}]/gm, ''),
         [GIT_PULL_REQUEST_BASE_BRANCH]: BITBUCKET_PR_DESTINATION_BRANCH,
         [PR_NUMBER]: BITBUCKET_PR_ID,
       }
@@ -651,11 +739,11 @@ module.exports = {
         }),
         [CI_NODE_NAME]: BUILDKITE_AGENT_ID,
         [CI_NODE_LABELS]: JSON.stringify(extraTags),
-        [PR_NUMBER]: BUILDKITE_PULL_REQUEST,
         [CI_JOB_ID]: BUILDKITE_JOB_ID,
       }
 
-      if (BUILDKITE_PULL_REQUEST) {
+      if (BUILDKITE_PULL_REQUEST && BUILDKITE_PULL_REQUEST !== 'false') {
+        tags[PR_NUMBER] = BUILDKITE_PULL_REQUEST
         tags[GIT_PULL_REQUEST_BASE_BRANCH] = BUILDKITE_PULL_REQUEST_BASE_BRANCH
       }
     }
@@ -781,8 +869,7 @@ module.exports = {
     }
 
     if (env.CODEBUILD_INITIATOR?.startsWith('codepipeline/')) {
-      const DD_ACTION_EXECUTION_ID = getValueFromEnvSources('DD_ACTION_EXECUTION_ID')
-      const DD_PIPELINE_EXECUTION_ID = getValueFromEnvSources('DD_PIPELINE_EXECUTION_ID')
+      const { DD_ACTION_EXECUTION_ID, DD_PIPELINE_EXECUTION_ID } = getConfig()
       tags = {
         [CI_PROVIDER_NAME]: 'awscodepipeline',
         [CI_PIPELINE_ID]: DD_PIPELINE_EXECUTION_ID,

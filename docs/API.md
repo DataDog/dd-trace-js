@@ -28,9 +28,11 @@ tracer.use('pg', {
 <h5 id="ai"></h5>
 <h5 id="amqp10"></h5>
 <h5 id="anthropic"></h5>
+<h5 id="anthropic-ai-claude-agent-sdk"></h5>
 <h5 id="apollo"></h5>
 <h5 id="avsc"></h5>
 <h5 id="aws-sdk"></h5>
+<h5 id="azure-cosmos"></h5>
 <h5 id="azure-event-hubs"></h5>
 <h5 id="azure-functions"></h5>
 <h5 id="azure-service-bus"></h5>
@@ -46,6 +48,7 @@ tracer.use('pg', {
 <h5 id="cypress"></h5>
 <h5 id="dns"></h5>
 <h5 id="elasticsearch"></h5>
+<h5 id="electron"></h5>
 <h5 id="express"></h5>
 <h5 id="fastify"></h5>
 <h5 id="fetch"></h5>
@@ -73,11 +76,13 @@ tracer.use('pg', {
 <h5 id="memcached"></h5>
 <h5 id="microgateway-core"></h5>
 <h5 id="mocha"></h5>
+<h5 id="modelcontextprotocol-sdk"></h5>
 <h5 id="moleculer"></h5>
 <h5 id="mongodb-core"></h5>
 <h5 id="mongoose"></h5>
 <h5 id="mysql"></h5>
 <h5 id="mysql2"></h5>
+<h5 id="nats"></h5>
 <h5 id="net"></h5>
 <h5 id="next"></h5>
 <h5 id="nyc"></h5>
@@ -108,9 +113,11 @@ tracer.use('pg', {
 * [amqp10](./interfaces/export_.plugins.amqp10.html)
 * [amqplib](./interfaces/export_.plugins.amqplib.html)
 * [anthropic](./interfaces/export_.plugins.anthropic.html)
+* [anthropic-ai-claude-agent-sdk](./interfaces/export_.plugins.anthropic_ai_claude_agent_sdk.html)
 * [apollo](./interfaces/export_.plugins.apollo.html)
 * [avsc](./interfaces/export_.plugins.avsc.html)
 * [aws-sdk](./interfaces/export_.plugins.aws_sdk.html)
+* [azure-cosmos](./interfaces/export_.plugins.azure_cosmos.html)
 * [azure-event-hubs](./interfaces/export_.plugins.azure_event_hubs.html)
 * [azure-functions](./interfaces/export_.plugins.azure_functions.html)
 * [azure-service-bus](./interfaces/export_.plugins.azure_service_bus.html)
@@ -126,6 +133,7 @@ tracer.use('pg', {
 * [cypress](./interfaces/export_.plugins.cypress.html)
 * [dns](./interfaces/export_.plugins.dns.html)
 * [elasticsearch](./interfaces/export_.plugins.elasticsearch.html)
+* [electron](./interfaces/export_.plugins.electron.html)
 * [express](./interfaces/export_.plugins.express.html)
 * [fastify](./interfaces/export_.plugins.fastify.html)
 * [fetch](./interfaces/export_.plugins.fetch.html)
@@ -153,11 +161,13 @@ tracer.use('pg', {
 * [memcached](./interfaces/export_.plugins.memcached.html)
 * [microgateway-core](./interfaces/export_.plugins.microgateway_core.html)
 * [mocha](./interfaces/export_.plugins.mocha.html)
+* [modelcontextprotocol-sdk](./interfaces/export_.plugins.modelcontextprotocol_sdk.html)
 * [moleculer](./interfaces/export_.plugins.moleculer.html)
 * [mongodb-core](./interfaces/export_.plugins.mongodb_core.html)
 * [mongoose](./interfaces/export_.plugins.mongoose.html)
 * [mysql](./interfaces/export_.plugins.mysql.html)
 * [mysql2](./interfaces/export_.plugins.mysql2.html)
+* [nats](./interfaces/export_.plugins.nats.html)
 * [net](./interfaces/export_.plugins.net.html)
 * [next](./interfaces/export_.plugins.next.html)
 * [nyc](./interfaces/export_.plugins.nyc.html)

@@ -6,16 +6,9 @@ const v8 = require('v8')
 const os = require('os')
 const process = require('process')
 const { performance, PerformanceObserver, monitorEventLoopDelay } = require('perf_hooks')
-const { DogStatsDClient, MetricsAggregationClient } = require('../dogstatsd')
 const log = require('../log')
-const { getValueFromEnvSources } = require('../config/helper')
-
 const { NODE_MAJOR } = require('../../../../version')
-const processTags = require('../process-tags')
-// TODO: This environment variable may not be changed, since the agent expects a flush every ten seconds.
-// It is only a variable for testing. Think about alternatives.
-const DD_RUNTIME_METRICS_FLUSH_INTERVAL = getValueFromEnvSources('DD_RUNTIME_METRICS_FLUSH_INTERVAL') ?? '10000'
-const INTERVAL = Number.parseInt(DD_RUNTIME_METRICS_FLUSH_INTERVAL, 10)
+const { createMetricsClient } = require('./client')
 
 const eventLoopDelayResolution = 4
 
@@ -40,16 +33,13 @@ module.exports = {
    */
   start (config) {
     this.stop()
-    const clientConfig = DogStatsDClient.generateClientConfig(config)
-
-    if (config.propagateProcessTags?.enabled) {
-      for (const tag of processTags.tagsArray) {
-        clientConfig.tags.push(tag)
-      }
-    }
+    // The agent expects a flush every ten seconds, so this is for tests only.
+    const flushIntervalMs = config.DD_RUNTIME_METRICS_FLUSH_INTERVAL
 
     const trackEventLoop = config.runtimeMetrics.eventLoop !== false
     const trackGc = config.runtimeMetrics.gc !== false
+
+    client = createMetricsClient(config)
 
     if (trackGc) {
       startGCObserver()
@@ -72,8 +62,6 @@ module.exports = {
       }
     }
 
-    client = new MetricsAggregationClient(new DogStatsDClient(clientConfig))
-
     lastTime = performance.now()
 
     if (nativeMetrics) {
@@ -81,7 +69,7 @@ module.exports = {
         captureNativeMetrics(trackEventLoop, trackGc)
         captureCommonMetrics(trackEventLoop)
         client.flush()
-      }, INTERVAL)
+      }, flushIntervalMs)
     } else {
       lastCpuUsage = process.cpuUsage()
 
@@ -103,10 +91,10 @@ module.exports = {
           captureEventLoopDelay()
         }
         client.flush()
-      }, INTERVAL)
+      }, flushIntervalMs)
     }
 
-    interval.unref()
+    interval.unref?.()
   },
 
   stop () {

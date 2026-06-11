@@ -1,13 +1,13 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 
 const agent = require('../../dd-trace/test/plugins/agent')
-const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const { setup } = require('./spec_helpers')
+const { setup, withAwsSdkVersions } = require('./spec_helpers')
 const helloWorldSMD = {
   Comment: 'A Hello World example of the Amazon States Language using a Pass state',
   StartAt: 'HelloWorld',
@@ -23,7 +23,7 @@ const helloWorldSMD = {
 describe('Sfn', () => {
   let tracer
 
-  withVersions('aws-sdk', ['aws-sdk', '@aws-sdk/smithy-client'], (version, moduleName) => {
+  withAwsSdkVersions((version, moduleName) => {
     let stateMachineArn
     let client
 
@@ -40,20 +40,20 @@ describe('Sfn', () => {
         const client = new lib.SFNClient(params)
         return {
           client,
-          createStateMachine: function () {
-            const req = new lib.CreateStateMachineCommand(...arguments)
+          createStateMachine: function (...args) {
+            const req = new lib.CreateStateMachineCommand(...args)
             return client.send(req)
           },
-          deleteStateMachine: function () {
-            const req = new lib.DeleteStateMachineCommand(...arguments)
+          deleteStateMachine: function (...args) {
+            const req = new lib.DeleteStateMachineCommand(...args)
             return client.send(req)
           },
-          startExecution: function () {
-            const req = new lib.StartExecutionCommand(...arguments)
+          startExecution: function (...args) {
+            const req = new lib.StartExecutionCommand(...args)
             return client.send(req)
           },
-          describeExecution: function () {
-            const req = new lib.DescribeExecutionCommand(...arguments)
+          describeExecution: function (...args) {
+            const req = new lib.DescribeExecutionCommand(...args)
             return client.send(req)
           },
         }
@@ -62,12 +62,12 @@ describe('Sfn', () => {
         const client = new StepFunctions(params)
         return {
           client,
-          createStateMachine: function () { return client.createStateMachine(...arguments).promise() },
-          deleteStateMachine: function () {
-            return client.deleteStateMachine(...arguments).promise()
+          createStateMachine: function (...args) { return client.createStateMachine(...args).promise() },
+          deleteStateMachine: function (...args) {
+            return client.deleteStateMachine(...args).promise()
           },
-          startExecution: function () { return client.startExecution(...arguments).promise() },
-          describeExecution: function () { return client.describeExecution(...arguments).promise() },
+          startExecution: function (...args) { return client.startExecution(...args).promise() },
+          describeExecution: function (...args) { return client.describeExecution(...args).promise() },
         }
       }
     }
@@ -99,7 +99,7 @@ describe('Sfn', () => {
           stateMachineArn = data.stateMachineArn
         })
 
-        afterEach(() => { return agent.close({ ritmReset: false }) })
+        afterEach(() => { return agent.close() })
 
         afterEach(async () => {
           await deleteStateMachine(stateMachineArn)
@@ -111,18 +111,25 @@ describe('Sfn', () => {
             input: JSON.stringify({ moduleName }),
           }
           const expectSpanPromise = agent.assertSomeTraces(traces => {
-            const span = traces[0][0]
+            const span = traces.flat().find(s => s.resource === 'startExecution')
+            assert.ok(span, 'expected startExecution span')
             assert.strictEqual(span.resource, 'startExecution')
             assert.strictEqual(span.meta.statemachinearn, stateMachineArn)
-          })
+          }, { spanResourceMatch: /startExecution/ })
 
           const resp = await client.startExecution(startExecInput)
 
           const result = await client.describeExecution({ executionArn: resp.executionArn })
           const sfInput = JSON.parse(result.input)
-          assert.ok(Object.hasOwn(sfInput, '_datadog'))
-          assert.ok(Object.hasOwn(sfInput._datadog, 'x-datadog-trace-id'))
-          assert.ok(Object.hasOwn(sfInput._datadog, 'x-datadog-parent-id'))
+          assert.ok(Object.hasOwn(sfInput, '_datadog'), `Available keys: ${inspect(Object.keys(sfInput))}`)
+          assert.ok(
+            Object.hasOwn(sfInput._datadog, 'x-datadog-trace-id'),
+            `Available keys: ${inspect(Object.keys(sfInput._datadog))}`
+          )
+          assert.ok(
+            Object.hasOwn(sfInput._datadog, 'x-datadog-parent-id'),
+            `Available keys: ${inspect(Object.keys(sfInput._datadog))}`
+          )
           return expectSpanPromise.then(() => {})
         })
       }

@@ -1,6 +1,6 @@
 'use strict'
 
-const { getValueFromEnvSources } = require('../../config/helper')
+const getConfig = require('../../config')
 const log = require('../../log')
 const request = require('../common/request')
 const tracerVersion = require('../../../../../package.json').version
@@ -19,8 +19,8 @@ class AgentlessWriter extends BaseWriter {
   /**
    * @param {object} options - Writer options
    * @param {URL} [options.url] - The intake URL. If not provided, constructed from site.
-   * @param {string} [options.site='datadoghq.com'] - The Datadog site
-   * @param {object} [options.metadata={}] - Metadata to pass to the encoder (hostname, env, etc.)
+   * @param {string} [options.site] - The Datadog site
+   * @param {object} [options.metadata] - Metadata to pass to the encoder (hostname, env, etc.)
    */
   constructor ({ url, site = 'datadoghq.com', metadata = {} }) {
     super({ url })
@@ -39,7 +39,7 @@ class AgentlessWriter extends BaseWriter {
       }
     }
 
-    if (!getValueFromEnvSources('DD_API_KEY')) {
+    if (!getConfig().apiKey) {
       this.#apiKeyMissing = true
       log.error('DD_API_KEY is required for agentless trace intake. Set DD_API_KEY. Traces will not be sent.')
     }
@@ -108,7 +108,7 @@ class AgentlessWriter extends BaseWriter {
       return
     }
 
-    const apiKey = getValueFromEnvSources('DD_API_KEY')
+    const apiKey = getConfig().apiKey
     if (!apiKey) {
       if (!this.#apiKeyMissing) {
         this.#apiKeyMissing = true

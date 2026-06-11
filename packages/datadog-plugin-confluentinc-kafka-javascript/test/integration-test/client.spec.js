@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const {
   FakeAgent,
@@ -19,7 +20,8 @@ describe('esm', () => {
 
   withVersions('confluentinc-kafka-javascript', '@confluentinc/kafka-javascript', version => {
     useSandbox([`'@confluentinc/kafka-javascript@${version}'`], false, [
-      './packages/datadog-plugin-confluentinc-kafka-javascript/test/integration-test/*'])
+      './packages/datadog-plugin-confluentinc-kafka-javascript/test/integration-test/*',
+      './packages/datadog-plugin-confluentinc-kafka-javascript/test/helpers.js'])
 
     beforeEach(async () => {
       agent = await new FakeAgent().start()
@@ -38,7 +40,7 @@ describe('esm', () => {
       it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-          assert.ok(Array.isArray(payload))
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
           assert.strictEqual(checkSpansForServiceName(payload, 'kafka.produce'), true)
         })
 

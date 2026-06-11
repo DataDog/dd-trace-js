@@ -1,0 +1,149 @@
+{
+  "package_name": "@anthropic-ai/claude-agent-sdk",
+  "package_version": "0.3.143",
+  "category": "generative-ai",
+  "subcategory": "ai-agent",
+  "module_type": "esm",
+  "analysis": {
+    "summary": "The @anthropic-ai/claude-agent-sdk is an AI agent SDK that enables programmatic interaction with Claude Code's capabilities. The primary API is the module-level `query()` function, which launches an autonomous Claude agent session and streams back `SDKMessage` events as an async generator. The function accepts a prompt and options (including model selection), and the returned `Query` object is an `AsyncGenerator<SDKMessage, void>` that emits messages of various types during execution, culminating in a `SDKResultMessage` (type='result') containing full usage telemetry (input/output tokens, cache tokens, total cost, number of turns, duration). A pre-warm variant is available via `startup()` + `WarmQuery.query()`. The package ships ESM-only (single bundled sdk.mjs, no CJS), making it ESM-only instrumentation territory.",
+    "main_classes": [
+      "query (module-level exported function)",
+      "WarmQuery (returned by startup())",
+      "Query (AsyncGenerator<SDKMessage, void>, returned by query() and WarmQuery.query())"
+    ],
+    "instrumentation_targets": [
+      {
+        "method": "query",
+        "full_signature": "function query({ prompt, options }: { prompt: string | AsyncIterable<SDKUserMessage>, options?: Options }): Query",
+        "module_name": "@anthropic-ai/claude-agent-sdk",
+        "location": "query",
+        "file_path": "node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs",
+        "line_number": 116,
+        "operation_type": "llm",
+        "operation": "query",
+        "span_kind": "client",
+        "span_name": "anthropic.agent.query",
+        "span_type": "llm",
+        "reason": "Primary user-facing API for running an AI agent session with Claude. This is the main instrumentation target — it launches the Claude subprocess, streams messages, and completes with a result message containing full token usage, cost, and session metadata. Capturing this span gives operators visibility into latency, token costs, error rates, and model usage for all agent invocations.",
+        "priority": "critical",
+        "span_tags": {
+          "ai.request.model": "options.model (at start, if provided); else from SDKSystemMessage.model",
+          "ai.request.model_provider": "anthropic",
+          "anthropic.agent.session_id": "SDKResultMessage.session_id",
+          "anthropic.agent.num_turns": "SDKResultMessage.num_turns",
+          "anthropic.agent.duration_ms": "SDKResultMessage.duration_ms",
+          "anthropic.agent.duration_api_ms": "SDKResultMessage.duration_api_ms",
+          "anthropic.agent.total_cost_usd": "SDKResultMessage.total_cost_usd",
+          "anthropic.agent.is_error": "SDKResultMessage.is_error",
+          "anthropic.agent.terminal_reason": "SDKResultMessage.terminal_reason",
+          "anthropic.agent.stop_reason": "SDKResultMessage.stop_reason",
+          "anthropic.response.input_tokens": "SDKResultMessage.usage.input_tokens",
+          "anthropic.response.output_tokens": "SDKResultMessage.usage.output_tokens",
+          "anthropic.response.cache_read_input_tokens": "SDKResultMessage.usage.cache_read_input_tokens",
+          "anthropic.response.cache_creation_input_tokens": "SDKResultMessage.usage.cache_creation_input_tokens"
+        },
+        "async_pattern": "async_iterator",
+        "error_handling": "If SDKResultMessage.is_error is true or subtype is 'error_during_execution' / 'error_max_turns' / 'error_max_budget_usd', mark span as error. Also handle generator throw() cases for hard aborts.",
+        "code_example_reference": "Type definitions: sdk.d.ts lines 2281-2284 (query function), 3356-3378 (SDKResultSuccess), 3334-3352 (SDKResultError), 3468-3501 (SDKSystemMessage for model name). Implementation: sdk.mjs line 116 (minified as Sj$).",
+        "file_paths": [
+          {
+            "path": "node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs",
+            "line": 116,
+            "module_type": "esm"
+          }
+        ]
+      },
+      {
+        "method": "WarmQuery.query",
+        "full_signature": "query(prompt: string | AsyncIterable<SDKUserMessage>): Query",
+        "module_name": "@anthropic-ai/claude-agent-sdk",
+        "location": "WarmQuery.query",
+        "file_path": "node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs",
+        "line_number": 116,
+        "operation_type": "llm",
+        "operation": "query",
+        "span_kind": "client",
+        "span_name": "anthropic.agent.query",
+        "span_type": "llm",
+        "reason": "Pre-warmed variant of the agent query. Users call startup() first to pre-warm the Claude subprocess, then call WarmQuery.query() to submit a prompt. The returned Query is identical to the one from the module-level query() — same SDKMessage stream, same SDKResultMessage at completion. Needs independent instrumentation because users may use startup()+WarmQuery.query() for latency optimization.",
+        "priority": "important",
+        "span_tags": {
+          "ai.request.model_provider": "anthropic",
+          "anthropic.agent.session_id": "SDKResultMessage.session_id",
+          "anthropic.agent.num_turns": "SDKResultMessage.num_turns",
+          "anthropic.agent.duration_ms": "SDKResultMessage.duration_ms",
+          "anthropic.agent.total_cost_usd": "SDKResultMessage.total_cost_usd",
+          "anthropic.agent.is_error": "SDKResultMessage.is_error",
+          "anthropic.response.input_tokens": "SDKResultMessage.usage.input_tokens",
+          "anthropic.response.output_tokens": "SDKResultMessage.usage.output_tokens",
+          "anthropic.response.cache_read_input_tokens": "SDKResultMessage.usage.cache_read_input_tokens",
+          "anthropic.response.cache_creation_input_tokens": "SDKResultMessage.usage.cache_creation_input_tokens"
+        },
+        "async_pattern": "async_iterator",
+        "error_handling": "Same as query() — check SDKResultMessage.is_error and handle generator abort/throw.",
+        "code_example_reference": "sdk.d.ts lines 5691-5702 (WarmQuery interface). startup() is at lines 5450-5453.",
+        "file_paths": [
+          {
+            "path": "node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs",
+            "line": 116,
+            "module_type": "esm"
+          }
+        ]
+      }
+    ],
+    "skipped_methods": [
+      {
+        "method": "startup",
+        "reason": "Pre-warms the Claude subprocess but does not itself perform the agent work. The actual agent invocation and token consumption happen inside WarmQuery.query(), which is instrumented separately."
+      },
+      {
+        "method": "deleteSession",
+        "reason": "Administrative session management operation with no LLM I/O — not meaningful for APM tracing."
+      },
+      {
+        "method": "listSessions / getSessionInfo / getSessionMessages / listSubagents",
+        "reason": "Read-only session metadata operations. No model calls or token usage."
+      },
+      {
+        "method": "renameSession / tagSession / forkSession / importSessionToStore",
+        "reason": "Administrative session mutation operations with no LLM I/O."
+      },
+      {
+        "method": "Query.interrupt / Query.setPermissionMode / Query.setModel / Query.setMcpServers / Query.streamInput / Query.close",
+        "reason": "Control operations on a running query session. These are management calls, not independent LLM operations, and are already covered by the outer query() span."
+      },
+      {
+        "method": "createSdkMcpServer / tool",
+        "reason": "Configuration/setup helpers that register MCP tools. No I/O at call time."
+      },
+      {
+        "method": "resolveSettings / filterEscalatingDefaultMode",
+        "reason": "Settings resolution utilities — pure computation, no network I/O."
+      },
+      {
+        "method": "foldSessionSummary / deleteSession",
+        "reason": "Utility/admin operations with no observability value for APM."
+      }
+    ],
+    "special_considerations": [
+      "ESM-only package: The SDK ships exclusively as sdk.mjs (no CJS variant). The instrumenter must use ESM-compatible hooking (Orchestrion preferred, or addHook with esmFirst:true for shimmer).",
+      "Minified bundle: The package is a single bundled minified file (~850KB). The query function is internally named 'Sj$' but exported as 'query'. Shimmer-based wrapping targets the exported module property name 'query', not the internal minified name.",
+      "Async generator lifecycle: The query() function returns synchronously (returns the Query object immediately), but the actual agent work happens when the caller iterates the generator. The span must remain open for the entire generator consumption, not just the initial function call.",
+      "Model name timing: options.model may be undefined at call time (the SDK reads model from CLI config). The authoritative model name appears later in SDKSystemMessage (type='system', subtype='init') as the first event emitted by the generator. The instrumentation should update the span tag when this message is seen.",
+      "SDKResultMessage identification: The terminal message has type='result'. Both success (subtype='success') and error subtypes ('error_during_execution', 'error_max_turns', 'error_max_budget_usd', 'error_max_structured_output_retries') carry full usage data in the 'usage' field.",
+      "dd-trace-py parity: dd-trace-py instruments @anthropic-ai/sdk (Messages.create), not the claude-agent-sdk. The relevant parity is with the anthropic plugin already in dd-trace-js (packages/datadog-plugin-anthropic). The claude-agent-sdk is a higher-level orchestration layer — its spans should be parent spans above the underlying @anthropic-ai/sdk spans created by the existing anthropic instrumentation.",
+      "Existing anthropic plugin: dd-trace-js already has packages/datadog-plugin-anthropic instrumenting @anthropic-ai/sdk Messages.create. The claude-agent-sdk plugin should create agent-level spans that become parents of the individual API call spans.",
+      "No CJS path to add: Unlike packages with dual CJS/ESM exports, file_paths only contains the single sdk.mjs ESM entry since there is no CJS variant."
+    ],
+    "implementation_notes": {
+      "wrapping_strategy": "Use shimmer addHook on the '@anthropic-ai/claude-agent-sdk' package targeting 'sdk.mjs' (the ESM main entry). In the hook callback, wrap the exported 'query' function to: (1) start a span on invocation capturing options.model and cwd, (2) wrap the returned async generator's Symbol.asyncIterator to intercept messages — update the model tag from SDKSystemMessage, capture usage from SDKResultMessage and finish the span. For WarmQuery.query, hook the return value of startup() and wrap its .query method similarly. Given the ESM-only nature, esmFirst:true must be set in addHook, or Orchestrion config should be used with kind:'AsyncIterator'.",
+      "challenges": [
+        "ESM-only: shimmer wrapping of ESM module exports is more complex than CJS — requires esmFirst:true on addHook, and the module may not be re-exportable via shimmer.wrap on the exported binding in all Node.js versions.",
+        "Single bundled file: cannot target an internal class method path (e.g., messages/messages.js) since everything is bundled into sdk.mjs. The only hook point is the exported 'query' binding.",
+        "Generator wrapping overhead: wrapping Symbol.asyncIterator to inspect every yielded SDKMessage adds a thin layer to every message. Most messages are not the result message, so a fast type-check guard is needed.",
+        "Session-level vs turn-level spans: Each query() call represents a multi-turn agent session. The @anthropic-ai/sdk instrumentation creates one span per Messages.create call (per turn). Care must be taken so that the agent-level span from this plugin is the parent of the Messages.create spans from the existing anthropic plugin, requiring proper async context propagation.",
+        "Abort/close handling: If the consumer calls query.close() or aborts via AbortController, the generator may throw or return early without emitting a SDKResultMessage. The span must be finished in the finally block of the generator wrapper."
+      ]
+    }
+  }
+}

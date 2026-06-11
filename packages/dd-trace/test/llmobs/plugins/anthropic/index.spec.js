@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
+const { inspect } = require('node:util')
 const { describe, before, it } = require('mocha')
 const semifies = require('semifies')
 const { withVersions } = require('../../../setup/mocha')
@@ -67,6 +68,14 @@ describe('Plugin', () => {
 
         const { apmSpans, llmobsSpans } = await getEvents()
         assertLLMObsSpan(apmSpans, llmobsSpans)
+
+        // MLOS-591 regression: the default `LLMObsPlugin.start` registration
+        // path must emit OTel bridge tags onto the local trace so dd-go can
+        // correlate manual OTel `gen_ai.*` spans with this LLMObs span.
+        const apmMeta = apmSpans[0].meta
+        assert.match(apmMeta.llmobs_trace_id, /^[0-9a-f]{32}$/)
+        assert.ok(apmMeta.llmobs_parent_id)
+        assert.strictEqual(apmMeta['_dd.llmobs.submitted'], '1')
       })
 
       it('sets model_provider to unknown for unrecognized base URLs', async () => {
@@ -106,6 +115,29 @@ describe('Plugin', () => {
           const { apmSpans, llmobsSpans } = await getEvents()
           assertLLMObsSpan(apmSpans, llmobsSpans)
         })
+      })
+
+      it('does not modify the `system` property', async () => {
+        const params = Object.freeze({
+          model: 'claude-haiku-4-5-20251001',
+          messages: Object.freeze([Object.freeze({ role: 'user', content: 'Hello, world!' })]),
+          max_tokens: 100,
+          temperature: 0.5,
+          system: 'talk like a pirate',
+        })
+
+        const response = await client.messages.create(params)
+
+        assert.deepEqual(params.messages, [{ role: 'user', content: 'Hello, world!' }])
+        assert.ok(response)
+
+        const { llmobsSpans } = await getEvents()
+        assert.equal(llmobsSpans.length, 1)
+
+        assert.deepEqual(llmobsSpans[0].meta.input.messages, [
+          { role: 'system', content: 'talk like a pirate' },
+          { role: 'user', content: 'Hello, world!' },
+        ])
       })
     })
 
@@ -155,6 +187,244 @@ describe('Plugin', () => {
 
           const { apmSpans, llmobsSpans } = await getEvents()
           assertLLMObsSpan(apmSpans, llmobsSpans)
+        })
+      })
+    })
+
+    describe('extended thinking', () => {
+      const WEATHER_PROMPT = 'What is the weather in San Francisco, CA?'
+      const tools = [{
+        name: 'get_weather',
+        description: 'Get the weather for a specific location',
+        input_schema: {
+          type: 'object',
+          properties: { location: { type: 'string' } },
+        },
+      }]
+
+      it('captures thinking blocks as reasoning messages (non-streaming)', async () => {
+        const response = await client.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          messages: [{ role: 'user', content: 'What is the best selling book of all time?' }],
+          max_tokens: 16000,
+          temperature: 1,
+          thinking: { type: 'enabled', budget_tokens: 1024 },
+        })
+
+        assert.ok(response)
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assert.ok(
+          !llmobsSpans[0].meta.output.messages[0].content.includes('signature'),
+          `Got: ${inspect(llmobsSpans[0].meta.output.messages[0].content)}`
+        )
+
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'anthropic.request',
+          modelName: 'claude-haiku-4-5-20251001',
+          modelProvider: 'anthropic',
+          inputMessages: [{ role: 'user', content: 'What is the best selling book of all time?' }],
+          outputMessages: [
+            { role: 'reasoning', content: MOCK_STRING },
+            { role: 'assistant', content: MOCK_STRING },
+          ],
+          metadata: {
+            max_tokens: 16000,
+            temperature: 1,
+          },
+          metrics: {
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+            cache_write_input_tokens: MOCK_NUMBER,
+            cache_read_input_tokens: MOCK_NUMBER,
+            ephemeral_5m_input_tokens: MOCK_NUMBER,
+            ephemeral_1h_input_tokens: MOCK_NUMBER,
+          },
+          tags: { ml_app: 'test', integration: 'anthropic' },
+        })
+      })
+
+      it('captures thinking blocks as reasoning messages (streaming)', async () => {
+        const stream = client.messages.stream({
+          model: 'claude-haiku-4-5-20251001',
+          messages: [{ role: 'user', content: 'What is the best selling book of all time?' }],
+          max_tokens: 16000,
+          temperature: 1,
+          thinking: { type: 'enabled', budget_tokens: 1024 },
+        })
+
+        for await (const chunk of stream) {
+          assert.ok(chunk)
+        }
+
+        const message = await stream.finalMessage()
+        assert.ok(message)
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'anthropic.request',
+          modelName: 'claude-haiku-4-5-20251001',
+          modelProvider: 'anthropic',
+          inputMessages: [{ role: 'user', content: 'What is the best selling book of all time?' }],
+          outputMessages: [
+            { role: 'reasoning', content: MOCK_STRING },
+            { role: 'assistant', content: MOCK_STRING },
+          ],
+          metadata: {
+            max_tokens: 16000,
+            temperature: 1,
+          },
+          metrics: {
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+            cache_write_input_tokens: MOCK_NUMBER,
+            cache_read_input_tokens: MOCK_NUMBER,
+            ephemeral_5m_input_tokens: MOCK_NUMBER,
+            ephemeral_1h_input_tokens: MOCK_NUMBER,
+          },
+          tags: { ml_app: 'test', integration: 'anthropic' },
+        })
+      })
+
+      it('captures thinking + tool_use blocks correctly', async () => {
+        await client.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          messages: [{ role: 'user', content: WEATHER_PROMPT }],
+          max_tokens: 16000,
+          temperature: 1,
+          thinking: { type: 'enabled', budget_tokens: 1024 },
+          tools,
+        })
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'anthropic.request',
+          modelName: 'claude-haiku-4-5-20251001',
+          modelProvider: 'anthropic',
+          inputMessages: [{ role: 'user', content: WEATHER_PROMPT }],
+          outputMessages: [
+            { role: 'reasoning', content: MOCK_STRING },
+            {
+              role: 'assistant',
+              content: '',
+              tool_calls: [{
+                name: 'get_weather',
+                arguments: { location: MOCK_STRING },
+                tool_id: MOCK_STRING,
+                type: 'tool_use',
+              }],
+            },
+          ],
+          metadata: {
+            max_tokens: 16000,
+            temperature: 1,
+          },
+          metrics: {
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+            cache_write_input_tokens: MOCK_NUMBER,
+            cache_read_input_tokens: MOCK_NUMBER,
+            ephemeral_5m_input_tokens: MOCK_NUMBER,
+            ephemeral_1h_input_tokens: MOCK_NUMBER,
+          },
+          tags: { ml_app: 'test', integration: 'anthropic' },
+        })
+      })
+
+      it('captures thinking blocks in input messages (tool use continuation)', async function () {
+        // The Anthropic API rejects fake `signature` values on thinking blocks, so we
+        // must first make a real call to obtain a valid thinking block + signature,
+        // then echo it back in a continuation request.
+        const firstResponse = await client.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          messages: [{ role: 'user', content: WEATHER_PROMPT }],
+          max_tokens: 16000,
+          temperature: 1,
+          thinking: { type: 'enabled', budget_tokens: 1024 },
+          tools,
+        })
+
+        const thinkingBlock = firstResponse.content.find(b => b.type === 'thinking')
+        const toolUseBlock = firstResponse.content.find(b => b.type === 'tool_use')
+
+        // Discard the first call's events so we only assert against the continuation span.
+        await getEvents()
+
+        await client.messages.create({
+          model: 'claude-haiku-4-5-20251001',
+          messages: [
+            { role: 'user', content: WEATHER_PROMPT },
+            { role: 'assistant', content: [thinkingBlock, toolUseBlock] },
+            {
+              role: 'user',
+              content: [{
+                type: 'tool_result',
+                tool_use_id: toolUseBlock.id,
+                content: [{ type: 'text', text: 'The weather is 73f' }],
+              }],
+            },
+          ],
+          max_tokens: 16000,
+          temperature: 1,
+          thinking: { type: 'enabled', budget_tokens: 1024 },
+          tools,
+        })
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'anthropic.request',
+          modelName: 'claude-haiku-4-5-20251001',
+          modelProvider: 'anthropic',
+          inputMessages: [
+            { role: 'user', content: WEATHER_PROMPT },
+            { role: 'reasoning', content: thinkingBlock.thinking },
+            {
+              role: 'assistant',
+              content: '',
+              tool_calls: [{
+                name: 'get_weather',
+                arguments: toolUseBlock.input,
+                tool_id: toolUseBlock.id,
+                type: 'tool_use',
+              }],
+            },
+            {
+              role: 'user',
+              content: '',
+              tool_results: [{
+                name: '',
+                result: 'The weather is 73f',
+                tool_id: toolUseBlock.id,
+                type: 'tool_result',
+              }],
+            },
+          ],
+          outputMessages: [{ role: 'assistant', content: MOCK_STRING }],
+          metadata: {
+            max_tokens: 16000,
+            temperature: 1,
+          },
+          metrics: {
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+            cache_write_input_tokens: MOCK_NUMBER,
+            cache_read_input_tokens: MOCK_NUMBER,
+            ephemeral_5m_input_tokens: MOCK_NUMBER,
+            ephemeral_1h_input_tokens: MOCK_NUMBER,
+          },
+          tags: { ml_app: 'test', integration: 'anthropic' },
         })
       })
     })

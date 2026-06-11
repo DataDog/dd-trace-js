@@ -1,11 +1,13 @@
 stages:
+  - ci-image
   - shared-pipeline
   - benchmarks
   - benchmarks-pr-comment
   - single-step-instrumentation-tests
-  - macrobenchmarks
-  - macrobenchmarks-gate
-  - macrobenchmarks-notify
+  - node-express-realworld-parallel
+  - node-express-realworld-parallel-slo
+  - node-hapi-redis-parallel
+  - node-hapi-redis-parallel-slo
 
 # Config Registry CI jobs
 validate_supported_configurations_v2_local_file:
@@ -24,8 +26,13 @@ update_central_configurations_version_range_v2:
 
 include:
   - local: ".gitlab/one-pipeline.locked.yml"
-  - local: ".gitlab/benchmarks.yml"
-  - local: ".gitlab/macrobenchmarks.yml"
+  - local: ".gitlab/benchmarks/gitlab-ci.yml"
+  - project: "DataDog/apm-reliability/apm-sdks-benchmarks"
+    file: ".gitlab/ci-node-express-realworld-parallel.yml"
+    ref: "main"
+  - project: "DataDog/apm-reliability/apm-sdks-benchmarks"
+    file: ".gitlab/ci-node-hapi-redis-parallel.yml"
+    ref: "main"
 
 workflow:
   auto_cancel:
@@ -49,6 +56,24 @@ variables:
 configure_system_tests:
   variables:
     SYSTEM_TESTS_SCENARIOS_GROUPS: "simple_onboarding,simple_onboarding_profiling,simple_onboarding_appsec,docker-ssi,lib-injection"
+  rules:
+    - if: $SKIP_SHARED_PIPELINE == "true"
+      when: never
+    - if: $DANGEROUSLY_SKIP_SHARED_PIPELINE_TESTS == "true"
+      when: never
+    - if: $CI_COMMIT_BRANCH == "master" || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^v\d+\.\d+\.\d+-proposal$/ || $CI_MERGE_REQUEST_LABELS =~ /run-ssi-tests/
+      when: on_success
+    - when: never
+
+system_tests:
+  rules:
+    - if: $SKIP_SHARED_PIPELINE == "true"
+      when: never
+    - if: $DANGEROUSLY_SKIP_SHARED_PIPELINE_TESTS == "true"
+      when: never
+    - if: $CI_COMMIT_BRANCH == "master" || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^v\d+\.\d+\.\d+-proposal$/ || $CI_MERGE_REQUEST_LABELS =~ /run-ssi-tests/
+      when: on_success
+    - when: never
 
 requirements_json_test:
   rules:
@@ -56,4 +81,3 @@ requirements_json_test:
   variables:
     REQUIREMENTS_BLOCK_JSON_PATH: ".gitlab/requirements_block.json"
     REQUIREMENTS_ALLOW_JSON_PATH: ".gitlab/requirements_allow.json"
-

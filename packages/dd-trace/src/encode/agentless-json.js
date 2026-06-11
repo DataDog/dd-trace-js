@@ -2,7 +2,8 @@
 
 const log = require('../log')
 const { TOP_LEVEL_KEY } = require('../constants')
-const { truncateSpan, normalizeSpan } = require('./tags-processors')
+const { normalizeSpan } = require('./tags-processors')
+const { stringifySpanEvents } = require('./0.4')
 
 // Soft limit for estimated payload size. Triggers an early flush to stay under intake request size limits.
 const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
@@ -14,13 +15,16 @@ const SOFT_LIMIT = 8 * 1024 * 1024 // 8MB
  * @returns {object} The formatted span
  */
 function formatSpan (span, isFirstSpan) {
-  span = normalizeSpan(truncateSpan(span, false))
+  span = normalizeSpan(span)
 
   // Remove _dd.p.tid (the upper 64 bits of a 128-bit trace ID) since trace_id is truncated to lower 64 bits
   delete span.meta['_dd.p.tid']
 
   if (span.span_events) {
-    span.meta.events = JSON.stringify(span.span_events)
+    // Events arrive raw (`{ name, startTime, attributes? }`); stringifySpanEvents
+    // derives `time_unix_nano` and drops empty attributes, matching the JSON the
+    // reshaped array used to produce.
+    span.meta.events = stringifySpanEvents(span.span_events)
     delete span.span_events
   }
 
@@ -85,11 +89,13 @@ function spanToJSON (span) {
 class AgentlessJSONEncoder {
   /**
    * @param {object} writer - Writer instance with a flush() method, called when the buffer exceeds the soft limit
-   * @param {object} [metadata={}] - Shared metadata spread into each trace object (hostname, env, tracerVersion, etc.)
+   * @param {object} [metadata] - Shared metadata spread into each trace object (hostname, env, tracerVersion, etc.)
+   * @param {number} [softLimit] - Estimated payload-size threshold that triggers an early flush. Defaults to 8 MiB.
    */
-  constructor (writer, metadata = {}) {
+  constructor (writer, metadata = {}, softLimit = SOFT_LIMIT) {
     this._writer = writer
     this._metadata = metadata
+    this._softLimit = softLimit
     this._reset()
   }
 
@@ -134,7 +140,7 @@ class AgentlessJSONEncoder {
       log.error('All %d span(s) in trace failed to encode. Entire trace dropped.', trace.length)
     }
 
-    if (this._estimatedSize > SOFT_LIMIT) {
+    if (this._estimatedSize > this._softLimit) {
       log.debug('Buffer went over soft limit, flushing')
       try {
         this._writer.flush()

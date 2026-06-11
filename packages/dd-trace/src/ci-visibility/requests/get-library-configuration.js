@@ -1,8 +1,8 @@
 'use strict'
 
+const getConfig = require('../../config')
 const id = require('../../id')
 const log = require('../../log')
-const { getValueFromEnvSources } = require('../../config/helper')
 const {
   incrementCountMetric,
   distributionMetric,
@@ -36,6 +36,7 @@ function getLibraryConfiguration ({
   custom,
   tag,
 }, done) {
+  const config = getConfig()
   const options = {
     path: '/api/v2/libraries/tests/services/setting',
     method: 'POST',
@@ -50,11 +51,10 @@ function getLibraryConfiguration ({
     options.path = `${evpProxyPrefix}/api/v2/libraries/tests/services/setting`
     options.headers['X-Datadog-EVP-Subdomain'] = 'api'
   } else {
-    const apiKey = getValueFromEnvSources('DD_API_KEY')
-    if (!apiKey) {
+    if (!config.apiKey) {
       return done(new Error('Request to settings endpoint was not done because Datadog API key is not defined.'))
     }
-    options.headers['dd-api-key'] = apiKey
+    options.headers['dd-api-key'] = config.apiKey
   }
 
   const data = JSON.stringify({
@@ -132,11 +132,11 @@ function getLibraryConfiguration ({
 
         log.debug('Remote settings: %j', settings)
 
-        if (getValueFromEnvSources('DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE')) {
+        if (config.DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE) {
           settings.isCodeCoverageEnabled = true
           log.debug('Dangerously set code coverage to true')
         }
-        if (getValueFromEnvSources('DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING')) {
+        if (config.DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING) {
           settings.isSuitesSkippingEnabled = true
           log.debug('Dangerously set test skipping to true')
         }

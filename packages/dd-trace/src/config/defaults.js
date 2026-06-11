@@ -5,28 +5,17 @@ const util = require('util')
 
 const { DD_MAJOR } = require('../../../../version')
 const { parsers, transformers, telemetryTransformers, setWarnInvalidValue } = require('./parsers')
+const applyMajorOverrides = require('./major-overrides')
 const {
   supportedConfigurations,
 } = /** @type {import('./helper').SupportedConfigurationsJson} */ (require('./supported-configurations.json'))
+
+applyMajorOverrides(supportedConfigurations, DD_MAJOR)
 
 let log
 let seqId = 0
 const configWithOrigin = new Map()
 const parseErrors = new Map()
-
-if (DD_MAJOR >= 6) {
-  // Programmatic configuration of DD_IAST_SECURITY_CONTROLS_CONFIGURATION is not supported
-  // in newer major versions. This is special handled here until a better solution is found.
-  // TODO: Remove the programmatic configuration from supported-configurations.json once v5 is not supported anymore.
-  supportedConfigurations.DD_IAST_SECURITY_CONTROLS_CONFIGURATION[0].internalPropertyName =
-    supportedConfigurations.DD_IAST_SECURITY_CONTROLS_CONFIGURATION[0].configurationNames?.[0]
-  delete supportedConfigurations.DD_IAST_SECURITY_CONTROLS_CONFIGURATION[0].configurationNames
-} else {
-  // Default value for DD_TRACE_STARTUP_LOGS is 'false' in older major versions.
-  // This is special handled here until a better solution is found.
-  // TODO: Remove this here once v5 is not supported anymore.
-  supportedConfigurations.DD_TRACE_STARTUP_LOGS[0].default = 'false'
-}
 
 /**
  * Warns about an invalid value for an option and adds the error to the last telemetry entry if it is not already set.
@@ -60,7 +49,6 @@ setWarnInvalidValue(warnInvalidValue)
 const defaults = {
   instrumentationSource: 'manual',
   isServiceUserProvided: false,
-  isServiceNameInferred: true,
   plugins: true,
   isCiVisibility: false,
   lookup: dns.lookup,
@@ -82,10 +70,13 @@ for (const [name, value] of Object.entries(defaults)) {
  * @param {string} optionName
  */
 function generateTelemetry (value = null, origin, optionName) {
-  const { type, canonicalName = optionName } = configurationsTable[optionName] ?? { type: typeof value }
-  // TODO: Consider adding a preParser hook to the parsers object.
-  if (canonicalName === 'OTEL_RESOURCE_ATTRIBUTES') {
-    value = telemetryTransformers.MAP(value)
+  const tableEntry = configurationsTable[optionName]
+  const { type, canonicalName = optionName } = tableEntry ?? { type: typeof value }
+  // Sensitive configurations are excluded from configuration telemetry: their
+  // entry is never added to `configWithOrigin`, the single source for every
+  // telemetry path (app-started and app-client-configuration-change).
+  if (sensitiveConfigurations.has(canonicalName)) {
+    return
   }
   // TODO: Should we not send defaults to telemetry to reduce size?
   // TODO: How to handle aliases/actual names in the future? Optional fields? Normalize the name at intake?
@@ -95,9 +86,12 @@ function generateTelemetry (value = null, origin, optionName) {
     if (telemetryTransformers[type]) {
       value = telemetryTransformers[type](value)
     } else if (typeof value === 'object' && value !== null) {
-      value = value instanceof URL
-        ? String(value)
-        : JSON.stringify(value)
+      // Custom optionsTable entries (no `configurationsTable` row, e.g. `logger`)
+      // hold opaque user-supplied references that may carry cycles, so avoid
+      // traversing them via JSON.stringify.
+      value = tableEntry === undefined
+        ? util.inspect(value, { depth: -1 })
+        : value instanceof URL ? String(value) : JSON.stringify(value)
     } else if (typeof value === 'function') {
       value = value.name || 'function'
     }
@@ -208,6 +202,11 @@ const fallbackConfigurations = new Map()
 
 const regExps = {}
 
+// Canonical names of configurations whose value is excluded from configuration
+// telemetry. Driven by the `sensitive: true` attribute in
+// `supported-configurations.json` so new entries opt in without code changes.
+const sensitiveConfigurations = new Set()
+
 for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) {
   if (entries.length !== 1) {
     // TODO: Determine if we really want to support multiple entries for a canonical name.
@@ -219,6 +218,9 @@ for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) 
     )
   }
   for (const entry of entries) {
+    if (entry.sensitive) {
+      sensitiveConfigurations.add(canonicalName)
+    }
     const configurationNames = entry.internalPropertyName ? [entry.internalPropertyName] : entry.configurationNames
     const fullPropertyName = configurationNames?.[0] ?? canonicalName
     const type = entry.type.toUpperCase()
@@ -251,7 +253,7 @@ for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) 
       option.transformer = transformer
     }
     if (entry.configurationNames) {
-      addOption(option, type, entry.configurationNames)
+      addOption(option, entry.configurationNames)
     }
     configurationsTable[canonicalName] = option
 
@@ -288,7 +290,7 @@ for (const [fullPropertyName, alias] of fallbackConfigurations) {
   }
 }
 
-function addOption (option, type, configurationNames) {
+function addOption (option, configurationNames) {
   for (const name of configurationNames) {
     let index = -1
     let lastNestedProperties

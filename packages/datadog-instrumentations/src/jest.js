@@ -3,14 +3,21 @@
 // Capture real timers at module load time, before any test can install fake timers.
 const realSetTimeout = setTimeout
 
+const { readFileSync } = require('node:fs')
+const { builtinModules, createRequire } = require('node:module')
 const path = require('path')
+const satisfies = require('../../../vendor/dist/semifies')
+const { DD_MAJOR } = require('../../../version')
 const shimmer = require('../../datadog-shimmer')
+const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
 const {
-  getCoveredFilenamesFromCoverage,
+  getCoveredFilesFromCoverage,
+  getExecutableFilesFromCoverage,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
   JEST_WORKER_COVERAGE_PAYLOAD_CODE,
   JEST_WORKER_TELEMETRY_PAYLOAD_CODE,
+  JEST_WORKER_QUARANTINE_PAYLOAD_CODE,
   getTestLineStart,
   getTestSuitePath,
   getTestParametersString,
@@ -20,14 +27,25 @@ const {
   isModifiedTest,
   DYNAMIC_NAME_RE,
   collectDynamicNamesFromTraces,
+  recordAttemptToFixExecution,
+  logAttemptToFixTestExecution,
+  logTestOptimizationSummary,
+  getEfdRetryCount,
+  getTestCoverageLinesPercentage,
+  applySkippedCoverageToCoverage,
+  getTestOptimizationRequestResults,
 } = require('../../dd-trace/src/plugins/util/test')
 const {
-  SEED_SUFFIX_RE,
   getFormattedJestTestParameters,
   getJestTestName,
+  getRawJestTestName,
   getJestSuitesToRun,
-  getEfdRetryCount,
+  removeSeedSuffixFromTestName,
 } = require('../../datadog-plugin-jest/src/util')
+const {
+  addCoverageBackfillUntestedFiles,
+  getCoverageBackfillFiles,
+} = require('./jest/coverage-backfill')
 const { addHook, channel } = require('./helpers/instrument')
 
 const testSessionStartCh = channel('ci:jest:session:start')
@@ -68,16 +86,22 @@ const CHILD_MESSAGE_CALL = 1
 
 // Maximum time we'll wait for the tracer to flush
 const FLUSH_TIMEOUT = 10_000
+const JEST_SESSION_STATE = Symbol.for('dd-trace:jest:session')
+const JEST_BAIL_REPORTER_PATH = require.resolve('./jest/bail-reporter')
+const isJestWorker = !!getEnvironmentVariable('JEST_WORKER_ID')
+const jestSessionState = globalThis[JEST_SESSION_STATE] || (globalThis[JEST_SESSION_STATE] = {})
 
 // https://github.com/jestjs/jest/blob/41f842a46bb2691f828c3a5f27fc1d6290495b82/packages/jest-circus/src/types.ts#L9C8-L9C54
 const RETRY_TIMES = Symbol.for('RETRY_TIMES')
 
 let skippableSuites = []
+let skippableSuitesCoverage = {}
+let skippedSuitesCoverage = {}
 let knownTests = {}
 let isCodeCoverageEnabled = false
-let isCodeCoverageEnabledBecauseOfUs = false
+let isCoverageReportUploadEnabled = false
+let isItrEnabled = false
 let isSuitesSkippingEnabled = false
-let isKeepingCoverageConfiguration = false
 let isUserCodeCoverageEnabled = false
 let isSuitesSkipped = false
 let numSkippedSuites = 0
@@ -95,6 +119,15 @@ let testManagementTests = {}
 let testManagementAttemptToFixRetries = 0
 let isImpactedTestsEnabled = false
 let modifiedFiles = {}
+let repositoryRoot
+let lastCoverageMap
+let lastCoverageMapRootDir
+let coverageBackfillContexts
+let coverageBackfillFiles
+let coverageReporterClass
+let coverageReporterRequire
+let activeTestSuiteAbsolutePath
+let isConsoleErrorWrapped = false
 
 const testContexts = new WeakMap()
 const originalTestFns = new WeakMap()
@@ -106,6 +139,7 @@ const wrappedWorkerChannels = new WeakMap()
 // New tests whose names contain likely dynamic data (timestamps, UUIDs, etc.)
 // Populated in-process for runInBand, and via worker-report:trace for parallel mode.
 const newTestsWithDynamicNames = new Set()
+const loggedAttemptToFixTests = new Set()
 const testSuiteMockedFiles = new Map()
 const testsToBeRetried = new Set()
 // Per-test: how many EFD retries were determined after the first execution.
@@ -116,12 +150,66 @@ const efdSlowAbortedTests = new Set()
 const efdNewTestCandidates = new Set()
 // Tests that are genuinely new (not in known tests list).
 const newTests = new Set()
-const testSuiteAbsolutePathsWithFastCheck = new Set()
 const testSuiteJestObjects = new Map()
+const wrappedJestGlobals = new WeakSet()
+const wrappedJestObjects = new WeakSet()
+const wrappedWorkerInitializers = new WeakSet()
+const publishedRuntimeReferenceErrors = new WeakMap()
+const wrappedCoverageReporters = new WeakSet()
+const coverageReporterRequires = new WeakMap()
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 const ATR_RETRY_SUPPRESSION_FLAG = '_ddDisableAtrRetry'
+const MINIMUM_JEST_VERSION = DD_MAJOR >= 6 ? '>=28.0.0' : '>=24.8.0'
+const MINIMUM_JEST_VERSION_BEFORE_30 = DD_MAJOR >= 6 ? '>=28.0.0 <30.0.0' : '>=24.8.0 <30.0.0'
+const MINIMUM_JEST_WORKER_VERSION_BEFORE_30 = DD_MAJOR >= 6 ? '>=28.0.0 <30.0.0' : '>=24.9.0 <30.0.0'
+const MINIMUM_JEST_CONFIG_ASYNC_VERSION = DD_MAJOR >= 6 ? '>=28.0.0' : '>=25.1.0'
+const MINIMUM_JEST_TEST_SCHEDULER_VERSION = DD_MAJOR >= 6 ? '>=28.0.0' : '>=27.0.0'
+const MINIMUM_JEST_COVERAGE_BACKFILL_VERSION = '>=28.0.0'
 const atrSuppressedErrors = new Map()
+let hasWarnedDeprecatedJestVersion = false
+let isJestCoverageBackfillSupported = false
+let hasFinishedTestSession = false
+
+// Track quarantined tests whose errors were suppressed, keyed by "suite › testName"
+const quarantinedFailingTests = new Set()
+
+function getJestRepositoryRoot (readConfigsResult) {
+  const configuredRepositoryRoot = readConfigsResult.configs
+    ?.find(config => config.testEnvironmentOptions?._ddRepositoryRoot)
+    ?.testEnvironmentOptions._ddRepositoryRoot
+
+  return configuredRepositoryRoot || process.cwd()
+}
+
+/**
+ * Sends suppressed quarantine test names from a worker process to the main process.
+ * Supports both child_process (process.send) and worker_threads (parentPort.postMessage).
+ * Returns true if the data was sent (worker mode), false if in main process (runInBand).
+ *
+ * @param {string[]} testNames
+ * @returns {boolean}
+ */
+function sendQuarantineInfoToMainProcess (testNames) {
+  const payload = [JEST_WORKER_QUARANTINE_PAYLOAD_CODE, JSON.stringify(testNames)]
+
+  if (process.send) {
+    process.send(payload)
+    return true
+  }
+
+  try {
+    const { isMainThread, parentPort } = require('node:worker_threads')
+    if (!isMainThread && parentPort) {
+      parentPort.postMessage(payload)
+      return true
+    }
+  } catch {
+    // Not in a worker context
+  }
+
+  return false
+}
 
 // based on https://github.com/facebook/jest/blob/main/packages/jest-circus/src/formatNodeAssertErrors.ts#L41
 function formatJestError (errors) {
@@ -138,6 +226,20 @@ function formatJestError (errors) {
     error = errors
   }
   return error
+}
+
+function warnDeprecatedJestVersion (frameworkVersion) {
+  if (DD_MAJOR >= 6 || hasWarnedDeprecatedJestVersion || !frameworkVersion ||
+      !satisfies(frameworkVersion, '<28.0.0')) {
+    return
+  }
+
+  hasWarnedDeprecatedJestVersion = true
+  // eslint-disable-next-line no-console
+  console.warn(
+    'dd-trace support for Jest<28.0.0 is deprecated and will be removed in dd-trace v6. ' +
+      'Please upgrade Jest to >=28.0.0.'
+  )
 }
 
 function getTestEnvironmentOptions (config) {
@@ -160,64 +262,106 @@ function getTestStats (testStatuses) {
 }
 
 /**
- * @param {string[]} efdNames
- * @param {string[]} quarantineNames
- * @param {number} totalCount
- */
-/**
- * Renders a truncated bullet list from an array of items.
+ * Formats the ignored-failure section for the Test Optimization summary.
  *
- * @param {Array<{ text: string, suffix?: string }>} items
+ * @param {{ efdNames: string[], quarantineNames: string[], totalCount: number } | undefined} ignoredFailures
  * @returns {string}
  */
-function formatList (items) {
+function formatIgnoredFailuresSummary (ignoredFailures) {
+  if (!ignoredFailures) return ''
+
+  const items = []
+
+  for (const n of ignoredFailures.efdNames) {
+    items.push({ text: n, suffix: 'Early Flake Detection' })
+  }
+  for (const n of ignoredFailures.quarantineNames) {
+    items.push({ text: n, suffix: 'Quarantine' })
+  }
+
+  if (items.length === 0 || ignoredFailures.totalCount <= 0) return ''
+
   const shown = items.slice(0, MAX_IGNORED_TEST_NAMES)
   const more = items.length - shown.length
   const moreSuffix = more > 0 ? `\n  ... and ${more} more` : ''
-  return shown.map(({ text, suffix }) => `  • ${text}${suffix ? ` (${suffix})` : ''}`).join('\n') + moreSuffix
+  const formattedItems = shown
+    .map(({ text, suffix }) => `  • ${text}${suffix ? ` (${suffix})` : ''}`)
+    .join('\n') + moreSuffix
+
+  return `${ignoredFailures.totalCount} test failure(s) were ignored. Exit code set to 0.\n\n${formattedItems}`
 }
 
 /**
- * Logs a single "Datadog Test Optimization" summary at session end,
- * combining all relevant sections (ignored failures, dynamic names).
+ * Logs a single "Datadog Test Optimization" summary at session end.
  *
  * @param {{ efdNames: string[], quarantineNames: string[], totalCount: number } | undefined} ignoredFailures
  */
-function logSessionSummary (ignoredFailures) {
-  const sections = []
+function logSessionSummary (ignoredFailures, attemptToFixExecutions) {
+  logTestOptimizationSummary({
+    attemptToFixExecutions,
+    extraSections: [formatIgnoredFailuresSummary(ignoredFailures)],
+    newTestsWithDynamicNames,
+  })
+  loggedAttemptToFixTests.clear()
+}
 
-  if (ignoredFailures) {
-    const items = []
-    for (const n of ignoredFailures.efdNames) {
-      items.push({ text: n, suffix: 'Early Flake Detection' })
+function getTestStatusFromJestResult (status) {
+  if (status === 'failed') return 'fail'
+  if (status === 'passed') return 'pass'
+}
+
+function getAttemptToFixExecutionsFromJestResults (result) {
+  const executions = new Map()
+  const rootDir = result.globalConfig?.rootDir || process.cwd()
+
+  for (const { testResults, testFilePath } of result.results.testResults) {
+    const testSuite = getTestSuitePath(testFilePath, rootDir)
+    const testManagementTestsForSuite = testManagementTests
+      ?.jest
+      ?.suites
+      ?.[testSuite]
+      ?.tests
+    if (!testManagementTestsForSuite) continue
+
+    for (const { fullName, status } of testResults) {
+      const testName = removeSeedSuffixFromTestName(fullName)
+      const testStatus = getTestStatusFromJestResult(status)
+      if (!testStatus) continue
+
+      const testManagementTest = testManagementTestsForSuite[testName]?.properties
+      if (!testManagementTest?.attempt_to_fix) continue
+
+      recordAttemptToFixExecution(executions, {
+        testSuite,
+        testName,
+        status: testStatus,
+        isDisabled: testManagementTest.disabled,
+        isQuarantined: testManagementTest.quarantined,
+      })
     }
-    for (const n of ignoredFailures.quarantineNames) {
-      items.push({ text: n, suffix: 'Quarantine' })
-    }
-    sections.push(
-      `${ignoredFailures.totalCount} test failure(s) were ignored. Exit code set to 0.\n\n` +
-      formatList(items)
-    )
   }
 
-  if (newTestsWithDynamicNames.size > 0) {
-    const items = [...newTestsWithDynamicNames].map(name => ({ text: name }))
-    sections.push(
-      `${newTestsWithDynamicNames.size} test(s) detected as new but their names contain ` +
-      'dynamic data (timestamps, UUIDs, etc.).\n' +
-      'Tests with changing names are always treated as new on every run, ' +
-      'causing unnecessary Early Flake Detection retries and preventing correct new test detection.\n' +
-      'Consider using stable, deterministic test names.\n\n' +
-      formatList(items)
-    )
-    newTestsWithDynamicNames.clear()
+  return executions
+}
+
+function wrapConsoleErrorForJestReferenceErrors () {
+  if (isConsoleErrorWrapped) return
+
+  isConsoleErrorWrapped = true
+  // eslint-disable-next-line no-console
+  const originalConsoleError = console.error
+  // eslint-disable-next-line no-console
+  console.error = function () {
+    const [message] = arguments
+    if (
+      typeof message === 'string' &&
+      message.includes('Jest environment has been torn down') &&
+      activeTestSuiteAbsolutePath
+    ) {
+      publishRuntimeReferenceError({ _testPath: activeTestSuiteAbsolutePath }, message)
+    }
+    return originalConsoleError.apply(this, arguments)
   }
-
-  if (sections.length === 0) return
-
-  const line = '-'.repeat(50)
-  // eslint-disable-next-line no-console -- Intentional user-facing session summary
-  console.warn(`\n${line}\nDatadog Test Optimization\n${line}\n${sections.join('\n\n')}\n`)
 }
 
 function getWrappedEnvironment (BaseEnvironment, jestVersion) {
@@ -226,16 +370,19 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       super(config, context)
       const rootDir = config.globalConfig ? config.globalConfig.rootDir : config.rootDir
       this.rootDir = rootDir
-      this.testSuite = getTestSuitePath(context.testPath, rootDir)
       this.nameToParams = {}
       this.global._ddtrace = global._ddtrace
       this.hasSnapshotTests = undefined
       this.testSuiteAbsolutePath = context.testPath
+      activeTestSuiteAbsolutePath = this.testSuiteAbsolutePath
+      wrapConsoleErrorForJestReferenceErrors()
+      this.globalConfig = config.globalConfig
 
       this.displayName = config.projectConfig?.displayName?.name || config.displayName
       this.testEnvironmentOptions = getTestEnvironmentOptions(config)
 
       const repositoryRoot = this.testEnvironmentOptions._ddRepositoryRoot
+      this.testSuite = getTestSuitePath(context.testPath, rootDir)
 
       // TODO: could we grab testPath from `this.getVmContext().expect.getState()` instead?
       // so we don't rely on context being passed (some custom test environment do not pass it)
@@ -340,6 +487,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      */
     resetMockState () {
       try {
+        if (this.moduleMocker?.clearAllMocks) {
+          this.moduleMocker.clearAllMocks()
+          return
+        }
         const jestObject = testSuiteJestObjects.get(this.testSuiteAbsolutePath)
         if (jestObject?.clearAllMocks) {
           jestObject.clearAllMocks()
@@ -420,14 +571,11 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
     }
 
-    getShouldStripSeedFromTestName () {
-      return testSuiteAbsolutePathsWithFastCheck.has(this.testSuiteAbsolutePath)
-    }
-
     // At the `add_test` event we don't have the test object yet, so we can't use it
     getTestNameFromAddTestEvent (event, state) {
-      const describeSuffix = getJestTestName(state.currentDescribeBlock, this.getShouldStripSeedFromTestName())
-      return describeSuffix ? `${describeSuffix} ${event.testName}` : event.testName
+      const describeSuffix = getRawJestTestName(state.currentDescribeBlock)
+      const testName = describeSuffix ? `${describeSuffix} ${event.testName}` : event.testName
+      return removeSeedSuffixFromTestName(testName)
     }
 
     async handleTestEvent (event, state) {
@@ -438,18 +586,18 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       const setNameToParams = (name, params) => { this.nameToParams[name] = [...params] }
 
       if (event.name === 'setup' && this.global.test) {
-        shimmer.wrap(this.global.test, 'each', each => function () {
-          const testParameters = getFormattedJestTestParameters(arguments)
-          const eachBind = each.apply(this, arguments)
-          return function () {
-            const [testName] = arguments
+        shimmer.wrap(this.global.test, 'each', each => function (...args) {
+          const testParameters = getFormattedJestTestParameters(args)
+          const eachBind = each.apply(this, args)
+          return function (...args) {
+            const [testName] = args
             setNameToParams(testName, testParameters)
-            return eachBind.apply(this, arguments)
+            return eachBind.apply(this, args)
           }
         })
       }
       if (event.name === 'test_start') {
-        const testName = getJestTestName(event.test, this.getShouldStripSeedFromTestName())
+        const testName = getJestTestName(event.test)
         if (testsToBeRetried.has(testName)) {
           // This is needed because we're retrying tests with the same name
           this.resetSnapshotState()
@@ -523,6 +671,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
         testContexts.set(event.test, ctx)
 
+        if (isAttemptToFix) {
+          logAttemptToFixTestExecution(this.testSuite, testName, loggedAttemptToFixTests)
+        }
+
         testStartCh.runStores(ctx, () => {
           let p = event.test.parent
           const hooks = []
@@ -537,16 +689,16 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             } else {
               originalHookFns.set(hook, hookFn)
             }
-            const newHookFn = shimmer.wrapFunction(hookFn, hookFn => function () {
-              return testFnCh.runStores(ctx, () => hookFn.apply(this, arguments))
+            const newHookFn = shimmer.wrapFunction(hookFn, hookFn => function (...args) {
+              return testFnCh.runStores(ctx, () => hookFn.apply(this, args))
             })
             hook.fn = newHookFn
           }
           const originalFn = event.test.fn
           originalTestFns.set(event.test, originalFn)
 
-          const newFn = shimmer.wrapFunction(event.test.fn, testFn => function () {
-            return testFnCh.runStores(ctx, () => testFn.apply(this, arguments))
+          const newFn = shimmer.wrapFunction(event.test.fn, testFn => function (...args) {
+            return testFnCh.runStores(ctx, () => testFn.apply(this, args))
           })
 
           event.test.fn = newFn
@@ -561,8 +713,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         } else {
           originalHookFns.set(event.hook, hookFn)
         }
-        event.hook.fn = shimmer.wrapFunction(hookFn, hookFn => function () {
-          return testSuiteHookFnCh.runStores(ctx, () => hookFn.apply(this, arguments))
+        event.hook.fn = shimmer.wrapFunction(hookFn, hookFn => function (...args) {
+          return testSuiteHookFnCh.runStores(ctx, () => hookFn.apply(this, args))
         })
       }
 
@@ -649,7 +801,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         let attemptToFixFailed = false
         let failedAllTests = false
         let isAttemptToFix = false
-        const testName = getJestTestName(event.test, this.getShouldStripSeedFromTestName())
+        const testName = getJestTestName(event.test)
         if (this.isTestManagementTestsEnabled) {
           isAttemptToFix = this.testManagementTestsForThisSuite?.attemptToFix?.includes(testName)
           if (isAttemptToFix) {
@@ -756,6 +908,18 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const willBeRetriedByFailedTestReplay = numRetries > 0 && numTestExecutions - 1 < numRetries
         const mightHitBreakpoint = this.isDiEnabled && numTestExecutions >= 2
 
+        // For quarantined tests, track failures so the session can be marked as passing later,
+        // and suppress errors so Jest does not mark the test suite as failing.
+        // The actual status ('fail') is already captured above for dd-trace reporting.
+        // Only suppress on the final execution — not when ATR/EFD/ATF will retry the test.
+        if (!event.test?.[ATR_RETRY_SUPPRESSION_FLAG] && !willBeRetriedByFailedTestReplay) {
+          const quarantineCtx = testContexts.get(event.test)
+          if (quarantineCtx?.isQuarantined && !quarantineCtx.isAttemptToFix && event.test.errors?.length) {
+            quarantinedFailingTests.add(`${quarantineCtx.suite} › ${quarantineCtx.name}`)
+            event.test.errors = []
+          }
+        }
+
         const ctx = testContexts.get(event.test)
         if (!ctx) {
           log.warn('"ci:jest:test_done": no context found for test "%s"', testName)
@@ -813,9 +977,25 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
       if (event.name === 'run_finish') {
         for (const [test, errors] of atrSuppressedErrors) {
-          test.errors = errors
+          // Do not restore errors for non-ATF quarantined tests — they should stay suppressed
+          // so Jest doesn't see the failure (prevents --bail from stopping the run).
+          const ctx = testContexts.get(test)
+          if (ctx?.isQuarantined && !ctx.isAttemptToFix) {
+            const testName = getJestTestName(test)
+            quarantinedFailingTests.add(`${ctx.suite} › ${testName}`)
+          } else {
+            test.errors = errors
+          }
         }
         atrSuppressedErrors.clear()
+
+        // In parallel mode, send suppressed quarantine info to the main process
+        // so it can include them in the session summary.
+        // In runInBand mode, keep the set — it will be consumed by the session-level code directly.
+        if (quarantinedFailingTests.size > 0 && sendQuarantineInfoToMainProcess([...quarantinedFailingTests])) {
+          quarantinedFailingTests.clear()
+        }
+
         efdDeterminedRetries.clear()
         efdSlowAbortedTests.clear()
         efdNewTestCandidates.clear()
@@ -825,7 +1005,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         testsToBeRetried.clear()
       }
       if (event.name === 'test_skip' || event.name === 'test_todo') {
-        const testName = getJestTestName(event.test, this.getShouldStripSeedFromTestName())
+        const testName = getJestTestName(event.test)
         testSkippedCh.publish({
           test: {
             name: testName,
@@ -923,7 +1103,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       // If the test is quarantined, regardless of its actual execution result,
       // the final status of its last execution should be reported as 'skip'.
-      if (this.isTestManagementTestsEnabled &&
+      if (!attemptToFixResult.isAttemptToFixEnabled &&
+        this.isTestManagementTestsEnabled &&
         this.testManagementTestsForThisSuite?.quarantined?.includes(testName)) {
         return 'skip'
       }
@@ -939,7 +1120,19 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           }
         }
       }
-      return super.teardown()
+      const clearActiveTestSuite = () => {
+        realSetTimeout(() => {
+          if (activeTestSuiteAbsolutePath === this.testSuiteAbsolutePath) {
+            activeTestSuiteAbsolutePath = undefined
+          }
+        }, 0)
+      }
+      const result = super.teardown()
+      if (result?.then) {
+        return result.finally(clearActiveTestSuite)
+      }
+      clearActiveTestSuite()
+      return result
     }
   }
 }
@@ -962,8 +1155,126 @@ function getTestEnvironment (pkg, jestVersion) {
   return getWrappedEnvironment(pkg, jestVersion)
 }
 
+function getRepositoryRootFromConfig (config, fallbackRootDir) {
+  return config?.testEnvironmentOptions?._ddRepositoryRoot || repositoryRoot || fallbackRootDir || process.cwd()
+}
+
+function getRepositoryRootFromContexts (contexts, fallbackRootDir) {
+  const [firstContext] = contexts || []
+  return getRepositoryRootFromConfig(firstContext?.config, fallbackRootDir)
+}
+
+function getRepositoryRootFromTest (test, fallbackRootDir) {
+  return getRepositoryRootFromConfig(test?.context?.config, fallbackRootDir)
+}
+
+function hasSkippableSuitesCoverage () {
+  return skippableSuitesCoverage &&
+    typeof skippableSuitesCoverage === 'object' &&
+    Object.keys(skippableSuitesCoverage).length > 0
+}
+
+function shouldCollectJestCoverageForTia () {
+  return shouldReportJestSuiteCoverageForTia() ||
+    (isJestCoverageBackfillSupported && isItrEnabled && isCoverageReportUploadEnabled)
+}
+
+function shouldReportJestSuiteCoverageForTia () {
+  return isItrEnabled && isCodeCoverageEnabled
+}
+
+function hasJestCoverageMap () {
+  return isUserCodeCoverageEnabled || shouldCollectJestCoverageForTia()
+}
+
+// TIA coverage backfill is part of Datadog Code Coverage, not the per-suite TIA coverage upload.
+function isTiaCoverageBackfillEnabled () {
+  return isJestCoverageBackfillSupported && isItrEnabled && isCoverageReportUploadEnabled && hasJestCoverageMap()
+}
+
+// Non-TIA Jest coverage keeps the legacy metric. TIA only reports it when Datadog Code Coverage is enabled and
+// either the run is complete locally or the skipped suites can be backfilled.
+function shouldReportCodeCoverageLinesPct () {
+  if (!hasJestCoverageMap()) return false
+  if (!isItrEnabled) return true
+  if (!isCoverageReportUploadEnabled) return false
+
+  // If no suites were actually skipped, the local Jest coverage map is complete and does not need backfill.
+  return !isSuitesSkipped || isTiaCoverageBackfillEnabled()
+}
+
+function getHookRequire (hookMeta) {
+  if (!hookMeta?.moduleBaseDir) return
+
+  return createRequire(path.join(hookMeta.moduleBaseDir, 'package.json'))
+}
+
+function getCoverageBackfillRequire (CoverageReporter) {
+  const hookedCoverageReporterRequire = CoverageReporter && coverageReporterRequires.get(CoverageReporter)
+  if (hookedCoverageReporterRequire) return hookedCoverageReporterRequire
+  if (coverageReporterRequire) return coverageReporterRequire
+
+  const coverageReporterFilename = CoverageReporter?.filename || coverageReporterClass?.filename
+  if (coverageReporterFilename) {
+    return createRequire(`${path.join(path.dirname(coverageReporterFilename), 'CoverageWorker')}.js`)
+  }
+
+  return require
+}
+
+function addDatadogBailReporter (globalConfig) {
+  if (!globalConfig.bail) return globalConfig
+
+  const reporters = globalConfig.reporters || [['default', {}]]
+  for (const [reporter] of reporters) {
+    if (reporter === JEST_BAIL_REPORTER_PATH) {
+      return globalConfig
+    }
+  }
+
+  return {
+    ...globalConfig,
+    reporters: [
+      ...reporters,
+      [JEST_BAIL_REPORTER_PATH, {}],
+    ],
+  }
+}
+
+function getTestContexts (tests) {
+  if (!tests?.length) return
+
+  const contexts = new Set()
+  for (const test of tests) {
+    if (test.context) {
+      contexts.add(test.context)
+    }
+  }
+  return contexts.size ? contexts : undefined
+}
+
+function getCoverageBackfillContexts (contexts) {
+  return contexts?.size ? contexts : coverageBackfillContexts || contexts
+}
+
+function resetSuiteSkippingRunState () {
+  isSuitesSkipped = false
+  numSkippedSuites = 0
+  hasUnskippableSuites = false
+  hasForcedToRunSuites = false
+  hasFilteredSkippableSuites = false
+  skippedSuitesCoverage = {}
+  lastCoverageMap = undefined
+  lastCoverageMapRootDir = undefined
+  coverageBackfillContexts = undefined
+  coverageBackfillFiles = undefined
+}
+
 function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
-  const jestSuitesToRun = getJestSuitesToRun(skippableSuites, originalTests, rootDir || process.cwd())
+  if (!isItrEnabled || !isSuitesSkippingEnabled) return originalTests
+
+  const suitePathRoot = getRepositoryRootFromTest(originalTests[0], rootDir)
+  const jestSuitesToRun = getJestSuitesToRun(skippableSuites, originalTests, suitePathRoot)
   hasFilteredSkippableSuites = true
   log.debug('%d out of %d suites are going to run.', jestSuitesToRun.suitesToRun.length, originalTests.length)
   hasUnskippableSuites = jestSuitesToRun.hasUnskippableSuites
@@ -971,20 +1282,233 @@ function applySuiteSkipping (originalTests, rootDir, frameworkVersion) {
 
   isSuitesSkipped = jestSuitesToRun.suitesToRun.length !== originalTests.length
   numSkippedSuites = jestSuitesToRun.skippedSuites.length
+  skippedSuitesCoverage = isSuitesSkipped && isTiaCoverageBackfillEnabled() && hasSkippableSuitesCoverage()
+    ? skippableSuitesCoverage
+    : {}
+  coverageBackfillContexts = isSuitesSkipped && isTiaCoverageBackfillEnabled()
+    ? getTestContexts(originalTests)
+    : undefined
+  coverageBackfillFiles = isSuitesSkipped && isTiaCoverageBackfillEnabled() && hasSkippableSuitesCoverage()
+    ? getCoverageBackfillFiles(skippableSuitesCoverage, suitePathRoot, getTestSuitePath)
+    : undefined
 
   itrSkippedSuitesCh.publish({ skippedSuites: jestSuitesToRun.skippedSuites, frameworkVersion })
 
   return jestSuitesToRun.suitesToRun
 }
 
+function applySkippedCoverageToJestCoverageMap (coverageMap, rootDir) {
+  if (!coverageMap || !isSuitesSkipped || !isTiaCoverageBackfillEnabled()) return
+  applySkippedCoverageToCoverage(
+    coverageMap,
+    skippedSuitesCoverage,
+    rootDir || process.cwd()
+  )
+}
+
+function getSessionFinishError (results) {
+  const numFailedTestSuites = results?.numFailedTestSuites || 0
+  const numFailedTests = results?.numFailedTests || 0
+
+  return new Error(`Failed test suites: ${numFailedTestSuites}. Failed tests: ${numFailedTests}`)
+}
+
+function getTestSessionCoveragePayload (results, fallbackRootDir) {
+  const payload = {}
+  if (!shouldReportCodeCoverageLinesPct()) return payload
+
+  try {
+    const coverageMap = results?.coverageMap || lastCoverageMap
+    const coverageRootDir = lastCoverageMapRootDir ||
+      repositoryRoot ||
+      fallbackRootDir ||
+      process.cwd()
+    if (isSuitesSkipped) {
+      applySkippedCoverageToJestCoverageMap(coverageMap, coverageRootDir)
+    }
+    payload.testCodeCoverageLinesTotal = getTestCoverageLinesPercentage(
+      coverageMap,
+      undefined,
+      coverageRootDir
+    )
+    if (isTiaCoverageBackfillEnabled()) {
+      payload.testSessionCoverageFiles = getExecutableFilesFromCoverage(coverageMap).map(({ filename, bitmap }) => ({
+        filename: getTestSuitePath(filename, coverageRootDir),
+        bitmap,
+      }))
+    }
+  } catch {
+    // ignore errors
+  }
+
+  return payload
+}
+
+function getNumBailFailures (results) {
+  const numFailedTests = results?.numFailedTests || 0
+  const numFailedSuites = results?.numRuntimeErrorTestSuites === undefined
+    ? (numFailedTests === 0 ? results?.numFailedTestSuites || 0 : 0)
+    : results.numRuntimeErrorTestSuites
+
+  return numFailedTests + numFailedSuites
+}
+
+function shouldFinishBailTestSession (globalConfig, results) {
+  return !!globalConfig?.bail && getNumBailFailures(results) >= globalConfig.bail
+}
+
+async function waitForTestSessionFinish (payload) {
+  if (!testSessionFinishCh.hasSubscribers || hasFinishedTestSession) return
+
+  hasFinishedTestSession = true
+
+  let timeoutId
+
+  const flushPromise = new Promise((resolve) => {
+    payload.onDone = () => {
+      clearTimeout(timeoutId)
+      resolve()
+    }
+  })
+
+  const timeoutPromise = new Promise((resolve) => {
+    timeoutId = realSetTimeout(() => {
+      resolve('timeout')
+    }, FLUSH_TIMEOUT)
+    timeoutId.unref?.()
+  })
+
+  testSessionFinishCh.publish(payload)
+
+  const waitingResult = await Promise.race([flushPromise, timeoutPromise])
+
+  if (waitingResult === 'timeout') {
+    log.error('Timeout waiting for the tracer to flush')
+  }
+}
+
+function getTestSessionFinishPayload (status, error, extra = {}) {
+  return {
+    status,
+    isSuitesSkipped,
+    isSuitesSkippingEnabled,
+    isCodeCoverageEnabled,
+    isCoverageReportUploadEnabled,
+    numSkippedSuites,
+    hasUnskippableSuites,
+    hasForcedToRunSuites,
+    error,
+    isEarlyFlakeDetectionEnabled,
+    isEarlyFlakeDetectionFaulty,
+    isTestManagementTestsEnabled,
+    ...extra,
+  }
+}
+
+async function finishBailTestSession (results, fallbackRootDir) {
+  await waitForTestSessionFinish(getTestSessionFinishPayload(
+    'fail',
+    getSessionFinishError(results),
+    getTestSessionCoveragePayload(results, fallbackRootDir)
+  ))
+}
+
+jestSessionState.finishBailTestSession = finishBailTestSession
+
+function reporterDispatcherWrapper (reporterDispatcherPackage) {
+  const ReporterDispatcher = reporterDispatcherPackage.default ?? reporterDispatcherPackage
+  if (ReporterDispatcher?.prototype?.onRunComplete) {
+    shimmer.wrap(ReporterDispatcher.prototype, 'onRunComplete', onRunComplete => function (contexts, results) {
+      if (isSuitesSkipped && isTiaCoverageBackfillEnabled()) {
+        applySkippedCoverageToJestCoverageMap(results?.coverageMap, getRepositoryRootFromContexts(contexts))
+      }
+      return onRunComplete.apply(this, arguments)
+    })
+  }
+
+  return reporterDispatcherPackage
+}
+
+function wrapCoverageReporter (CoverageReporter, hookMeta) {
+  if (!CoverageReporter?.prototype?.onRunComplete || wrappedCoverageReporters.has(CoverageReporter)) {
+    return
+  }
+
+  coverageReporterRequire = getHookRequire(hookMeta) || coverageReporterRequire
+  if (coverageReporterRequire) {
+    coverageReporterRequires.set(CoverageReporter, coverageReporterRequire)
+  }
+  coverageReporterClass = CoverageReporter
+  wrappedCoverageReporters.add(CoverageReporter)
+  if (CoverageReporter.prototype._addUntestedFiles) {
+    shimmer.wrap(CoverageReporter.prototype, '_addUntestedFiles', addUntestedFiles => function (...args) {
+      const rootDir = repositoryRoot || this._globalConfig?.rootDir || process.cwd()
+      args[0] = getCoverageBackfillContexts(args[0])
+      const result = addUntestedFiles.apply(this, args)
+      if (!isSuitesSkipped || !isTiaCoverageBackfillEnabled()) return result
+
+      const addBackfillAndApplyCoverage = () => {
+        return addCoverageBackfillUntestedFiles({
+          coverageMap: this._coverageMap,
+          testContexts: args[0],
+          rootDir,
+          CoverageReporter,
+          coverageBackfillFiles,
+          getCoverageBackfillRequire,
+        }).then(() => {
+          applySkippedCoverageToJestCoverageMap(this._coverageMap, rootDir)
+        })
+      }
+
+      return Promise.resolve(result).then(value => {
+        return addBackfillAndApplyCoverage().then(() => value)
+      })
+    })
+  }
+
+  shimmer.wrap(CoverageReporter.prototype, 'onRunComplete', onRunComplete => async function (contexts, results) {
+    const coverageContexts = getCoverageBackfillContexts(contexts)
+    const rootDir = getRepositoryRootFromContexts(coverageContexts, this._globalConfig?.rootDir)
+    const coverageMap = results?.coverageMap || this._coverageMap
+    if (isSuitesSkipped && isTiaCoverageBackfillEnabled()) {
+      await addCoverageBackfillUntestedFiles({
+        coverageMap,
+        testContexts: coverageContexts,
+        rootDir,
+        CoverageReporter,
+        coverageBackfillFiles,
+        getCoverageBackfillRequire,
+      })
+      applySkippedCoverageToJestCoverageMap(coverageMap, rootDir)
+    }
+    lastCoverageMap = coverageMap
+    lastCoverageMapRootDir = rootDir
+    const result = await onRunComplete.call(this, coverageContexts, results)
+    if (shouldFinishBailTestSession(this._globalConfig, results)) {
+      await finishBailTestSession(results, rootDir)
+    }
+    return result
+  })
+}
+
+function reportersWrapper (reportersPackage, _version, _isIitm, hookMeta) {
+  wrapCoverageReporter(reportersPackage.CoverageReporter, hookMeta)
+  return reportersPackage
+}
+
+function coverageReporterWrapper (coverageReporterPackage, _version, _isIitm, hookMeta) {
+  wrapCoverageReporter(coverageReporterPackage.default ?? coverageReporterPackage, hookMeta)
+  return coverageReporterPackage
+}
+
 addHook({
   name: 'jest-environment-node',
-  versions: ['>=24.8.0'],
+  versions: [MINIMUM_JEST_VERSION],
 }, getTestEnvironment)
 
 addHook({
   name: 'jest-environment-jsdom',
-  versions: ['>=24.8.0'],
+  versions: [MINIMUM_JEST_VERSION],
 }, getTestEnvironment)
 
 addHook({
@@ -1007,6 +1531,12 @@ function getWrappedScheduleTests (scheduleTests, frameworkVersion) {
   }
 }
 
+function getChannelPromise (channelToPublishTo, payload = {}) {
+  return new Promise(resolve => {
+    channelToPublishTo.publish({ ...payload, onDone: resolve })
+  })
+}
+
 function searchSourceWrapper (searchSourcePackage, frameworkVersion) {
   const SearchSource = searchSourcePackage.default ?? searchSourcePackage
 
@@ -1015,7 +1545,9 @@ function searchSourceWrapper (searchSourcePackage, frameworkVersion) {
     const [{ rootDir, shard }] = arguments
 
     if (isKnownTestsEnabled) {
-      const projectSuites = testPaths.tests.map(test => getTestSuitePath(test.path, test.context.config.rootDir))
+      const projectSuites = testPaths.tests.map(test => {
+        return getTestSuitePath(test.path, getRepositoryRootFromTest(test, test.context.config.rootDir))
+      })
 
       // If the `jest` key does not exist in the known tests response, we consider the Early Flake detection faulty.
       const isFaulty = !knownTests?.jest ||
@@ -1035,14 +1567,11 @@ function searchSourceWrapper (searchSourcePackage, frameworkVersion) {
       }
     }
 
+    // When Jest sharding is enabled, filter after Jest picks this process's shard. Different shards usually run in
+    // different CI jobs, so their skippable requests can happen at different times and receive different responses.
+    // Filtering before Jest shards would make each job shard a different base test list, which can cause duplicate
+    // suite execution across shards.
     if (shard?.shardCount > 1 || !isSuitesSkippingEnabled || !skippableSuites.length) {
-      // If the user is using jest sharding, we want to apply the filtering of tests in the shard process.
-      // The reason for this is the following:
-      // The tests for different shards are likely being run in different CI jobs so
-      // the requests to the skippable endpoint might be done at different times and their responses might be different.
-      // If the skippable endpoint is returning different suites and we filter the list of tests here,
-      // the base list of tests that is used for sharding might be different,
-      // causing the shards to potentially run the same suite.
       return testPaths
     }
     const { tests } = testPaths
@@ -1056,6 +1585,10 @@ function searchSourceWrapper (searchSourcePackage, frameworkVersion) {
 
 function getCliWrapper (isNewJestVersion) {
   return function cliWrapper (cli, jestVersion) {
+    warnDeprecatedJestVersion(jestVersion)
+    isJestCoverageBackfillSupported = !!jestVersion &&
+      satisfies(jestVersion, MINIMUM_JEST_COVERAGE_BACKFILL_VERSION)
+
     if (isNewJestVersion) {
       cli = shimmer.wrap(
         cli,
@@ -1065,23 +1598,22 @@ function getCliWrapper (isNewJestVersion) {
       )
     }
     return shimmer.wrap(cli, 'runCLI', runCLI => async function () {
-      let onDone
-      const configurationPromise = new Promise((resolve) => {
-        onDone = resolve
-      })
       if (!libraryConfigurationCh.hasSubscribers) {
         return runCLI.apply(this, arguments)
       }
 
-      libraryConfigurationCh.publish({ onDone, frameworkVersion: jestVersion })
+      resetSuiteSkippingRunState()
+      hasFinishedTestSession = false
 
       try {
-        const { err, libraryConfig } = await configurationPromise
+        const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh, {
+          frameworkVersion: jestVersion,
+        })
         if (!err) {
           isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
-          isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
-          isKeepingCoverageConfiguration =
-            libraryConfig.isKeepingCoverageConfiguration ?? isKeepingCoverageConfiguration
+          isCoverageReportUploadEnabled = libraryConfig.isCoverageReportUploadEnabled
+          isItrEnabled = libraryConfig.isItrEnabled
+          isSuitesSkippingEnabled = isItrEnabled && libraryConfig.isSuitesSkippingEnabled
           isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
           earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
           earlyFlakeDetectionSlowTestRetries = libraryConfig.earlyFlakeDetectionSlowTestRetries ?? {}
@@ -1095,15 +1627,22 @@ function getCliWrapper (isNewJestVersion) {
         log.error('Jest library configuration error', err)
       }
 
+      const {
+        knownTestsResponse,
+        testManagementTestsResponse,
+        skippableSuitesResponse,
+      } = await getTestOptimizationRequestResults({
+        isKnownTestsEnabled,
+        isTestManagementTestsEnabled,
+        isSuitesSkippingEnabled,
+        getKnownTests: () => getChannelPromise(knownTestsCh),
+        getTestManagementTests: () => getChannelPromise(testManagementTestsCh),
+        getSkippableSuites: () => getChannelPromise(skippableSuitesCh),
+      })
+
       if (isKnownTestsEnabled) {
-        const knownTestsPromise = new Promise((resolve) => {
-          onDone = resolve
-        })
-
-        knownTestsCh.publish({ onDone })
-
         try {
-          const { err, knownTests: receivedKnownTests } = await knownTestsPromise
+          const { err, knownTests: receivedKnownTests } = knownTestsResponse || await getChannelPromise(knownTestsCh)
           if (err) {
             // We disable EFD if there has been an error in the known tests request
             isEarlyFlakeDetectionEnabled = false
@@ -1117,16 +1656,19 @@ function getCliWrapper (isNewJestVersion) {
       }
 
       if (isSuitesSkippingEnabled) {
-        const skippableSuitesPromise = new Promise((resolve) => {
-          onDone = resolve
-        })
-
-        skippableSuitesCh.publish({ onDone })
-
         try {
-          const { err, skippableSuites: receivedSkippableSuites } = await skippableSuitesPromise
-          if (!err) {
+          const {
+            err,
+            skippableSuites: receivedSkippableSuites,
+            skippableSuitesCoverage: receivedSkippableSuitesCoverage,
+          } = skippableSuitesResponse || await getChannelPromise(skippableSuitesCh)
+          if (err) {
+            skippableSuitesCoverage = {}
+            skippedSuitesCoverage = {}
+          } else {
             skippableSuites = receivedSkippableSuites
+            skippableSuitesCoverage = receivedSkippableSuitesCoverage || {}
+            skippedSuitesCoverage = {}
           }
         } catch (err) {
           log.error('Jest test-suite skippable error', err)
@@ -1134,14 +1676,9 @@ function getCliWrapper (isNewJestVersion) {
       }
 
       if (isTestManagementTestsEnabled) {
-        const testManagementTestsPromise = new Promise((resolve) => {
-          onDone = resolve
-        })
-
-        testManagementTestsCh.publish({ onDone })
-
         try {
-          const { err, testManagementTests: receivedTestManagementTests } = await testManagementTestsPromise
+          const { err, testManagementTests: receivedTestManagementTests } =
+            testManagementTestsResponse || await getChannelPromise(testManagementTestsCh)
           if (err) {
             isTestManagementTestsEnabled = false
             testManagementTests = {}
@@ -1155,14 +1692,8 @@ function getCliWrapper (isNewJestVersion) {
       }
 
       if (isImpactedTestsEnabled) {
-        const impactedTestsPromise = new Promise((resolve) => {
-          onDone = resolve
-        })
-
-        modifiedFilesCh.publish({ onDone })
-
         try {
-          const { err, modifiedFiles: receivedModifiedFiles } = await impactedTestsPromise
+          const { err, modifiedFiles: receivedModifiedFiles } = await getChannelPromise(modifiedFilesCh)
           if (!err) {
             modifiedFiles = receivedModifiedFiles
           }
@@ -1172,13 +1703,15 @@ function getCliWrapper (isNewJestVersion) {
       }
 
       const processArgv = process.argv.slice(2).join(' ')
-      testSessionStartCh.publish({ command: `jest ${processArgv}`, frameworkVersion: jestVersion })
+      testSessionStartCh.publish({
+        command: `jest ${processArgv}`,
+        frameworkVersion: jestVersion,
+      })
 
       const result = await runCLI.apply(this, arguments)
 
       const {
         results: {
-          coverageMap,
           numFailedTestSuites,
           numFailedTests,
           numRuntimeErrorTestSuites = 0,
@@ -1192,17 +1725,6 @@ function getCliWrapper (isNewJestVersion) {
       const hasSuiteLevelFailures = numRuntimeErrorTestSuites > 0
       const hasRunLevelFailure = runExecError != null || wasInterrupted === true
       const mustNotFlipSuccess = hasSuiteLevelFailures || hasRunLevelFailure
-
-      let testCodeCoverageLinesTotal
-
-      if (isUserCodeCoverageEnabled) {
-        try {
-          const { pct, total } = coverageMap.getCoverageSummary().lines
-          testCodeCoverageLinesTotal = total === 0 ? 0 : pct
-        } catch {
-          // ignore errors
-        }
-      }
 
       /**
        * If Early Flake Detection (EFD) is enabled the logic is as follows:
@@ -1220,9 +1742,7 @@ function getCliWrapper (isNewJestVersion) {
       for (const { testResults, testFilePath } of result.results.testResults) {
         const suite = getTestSuitePath(testFilePath, result.globalConfig.rootDir)
         for (const { fullName } of testResults) {
-          const name = testSuiteAbsolutePathsWithFastCheck.has(testFilePath)
-            ? fullName.replace(SEED_SUFFIX_RE, '')
-            : fullName
+          const name = removeSeedSuffixFromTestName(fullName)
           fullNameToSuite.set(name, suite)
         }
       }
@@ -1254,17 +1774,15 @@ function getCliWrapper (isNewJestVersion) {
       }
 
       let numFailedQuarantinedTests = 0
-      let numFailedQuarantinedOrDisabledAttemptedToFixTests = 0
+      let numSuppressedQuarantinedTests = 0
       if (isTestManagementTestsEnabled) {
         const failedTests = result
           .results
           .testResults.flatMap(({ testResults, testFilePath: testSuiteAbsolutePath }) => (
             testResults.map(({ fullName: testName, status }) => (
               {
-                // Strip @fast-check/jest seed suffix so the name matches what was reported via TEST_NAME
-                testName: testSuiteAbsolutePathsWithFastCheck.has(testSuiteAbsolutePath)
-                  ? testName.replace(SEED_SUFFIX_RE, '')
-                  : testName,
+                // Strip seed suffix so the name matches what was reported via TEST_NAME.
+                testName: removeSeedSuffixFromTestName(testName),
                 testSuiteAbsolutePath,
                 status,
               }
@@ -1281,55 +1799,73 @@ function getCliWrapper (isNewJestVersion) {
             ?.tests
             ?.[testName]
             ?.properties
-          // This uses `attempt_to_fix` because this is always the main process and it's not formatted in camelCase
-          if (testManagementTest?.attempt_to_fix && (testManagementTest?.quarantined || testManagementTest?.disabled)) {
-            numFailedQuarantinedOrDisabledAttemptedToFixTests++
-            quarantineIgnoredNames.push(`${testSuite} › ${testName}`)
-          } else if (testManagementTest?.quarantined) {
+          if (testManagementTest?.quarantined && !testManagementTest?.attempt_to_fix) {
             numFailedQuarantinedTests++
             quarantineIgnoredNames.push(`${testSuite} › ${testName}`)
           }
         }
 
+        // Include quarantined tests whose errors were suppressed at test_done time.
+        // These tests don't appear as failed in Jest's results because their errors were cleared
+        // to prevent --bail from stopping the run, but they should still be counted for the summary.
+        for (const name of quarantinedFailingTests) {
+          if (!quarantineIgnoredNames.includes(name)) {
+            numSuppressedQuarantinedTests++
+            quarantineIgnoredNames.push(name)
+          }
+        }
+        quarantinedFailingTests.clear()
+
         // If every test that failed was quarantined, we'll consider the suite passed
-        // Note that if a test is attempted to fix,
-        // it's considered quarantined both if it's disabled and if it's quarantined
-        // (it'll run but its status is ignored)
+        // Attempt-to-fix tests ignore quarantine/disabled suppression and keep their framework result.
         // Skip if EFD block already flipped (to avoid logging twice)
+        // Only use visible failures (from Jest results) for the flip check.
+        // Suppressed quarantine failures are not in numFailedTests.
+        const visibleQuarantineFailures = numFailedQuarantinedTests
         if (
           !result.results.success &&
           !mustNotFlipSuccess &&
-          (numFailedQuarantinedOrDisabledAttemptedToFixTests !== 0 || numFailedQuarantinedTests !== 0) &&
-          result.results.numFailedTests ===
-            numFailedQuarantinedTests + numFailedQuarantinedOrDisabledAttemptedToFixTests
+          visibleQuarantineFailures !== 0 &&
+          result.results.numFailedTests === visibleQuarantineFailures
         ) {
           result.results.success = true
-          ignoredFailuresSummary = {
-            efdNames: [],
-            quarantineNames: quarantineIgnoredNames,
-            totalCount: numFailedQuarantinedTests + numFailedQuarantinedOrDisabledAttemptedToFixTests,
+        }
+
+        const totalQuarantineFailures = visibleQuarantineFailures + numSuppressedQuarantinedTests
+        if (totalQuarantineFailures > 0) {
+          if (ignoredFailuresSummary) {
+            ignoredFailuresSummary.quarantineNames = quarantineIgnoredNames
+            ignoredFailuresSummary.totalCount += totalQuarantineFailures
+          } else {
+            ignoredFailuresSummary = {
+              efdNames: [],
+              quarantineNames: quarantineIgnoredNames,
+              totalCount: totalQuarantineFailures,
+            }
           }
         }
       }
 
       // Combined check: if all failed tests are accounted for by EFD (flaky retries) and/or quarantine,
       // we should consider the suite passed even when neither check alone covers all failures.
+      // Only visible failures (in Jest results) are compared — suppressed quarantine failures
+      // are already removed from numFailedTests at test_done time.
       if (
         !result.results.success &&
         !mustNotFlipSuccess &&
         (isEarlyFlakeDetectionEnabled || isTestManagementTestsEnabled)
       ) {
-        const totalIgnoredFailures =
-          numEfdFailedTestsToIgnore + numFailedQuarantinedTests + numFailedQuarantinedOrDisabledAttemptedToFixTests
+        const visibleIgnoredFailures =
+          numEfdFailedTestsToIgnore + numFailedQuarantinedTests
         if (
-          totalIgnoredFailures !== 0 &&
-          result.results.numFailedTests === totalIgnoredFailures
+          visibleIgnoredFailures !== 0 &&
+          result.results.numFailedTests === visibleIgnoredFailures
         ) {
           result.results.success = true
           ignoredFailuresSummary = {
             efdNames: efdIgnoredNames,
             quarantineNames: quarantineIgnoredNames,
-            totalCount: totalIgnoredFailures,
+            totalCount: visibleIgnoredFailures + numSuppressedQuarantinedTests,
           }
         }
       }
@@ -1343,43 +1879,9 @@ function getCliWrapper (isNewJestVersion) {
         error = new Error(`Failed test suites: ${numFailedTestSuites}. Failed tests: ${numFailedTests}`)
       }
 
-      let timeoutId
-
-      // Pass the resolve callback to defer it to DC listener
-      const flushPromise = new Promise((resolve) => {
-        onDone = () => {
-          clearTimeout(timeoutId)
-          resolve()
-        }
-      })
-
-      const timeoutPromise = new Promise((resolve) => {
-        timeoutId = realSetTimeout(() => {
-          resolve('timeout')
-        }, FLUSH_TIMEOUT).unref()
-      })
-
-      testSessionFinishCh.publish({
-        status,
-        isSuitesSkipped,
-        isSuitesSkippingEnabled,
-        isCodeCoverageEnabled,
-        testCodeCoverageLinesTotal,
-        numSkippedSuites,
-        hasUnskippableSuites,
-        hasForcedToRunSuites,
-        error,
-        isEarlyFlakeDetectionEnabled,
-        isEarlyFlakeDetectionFaulty,
-        isTestManagementTestsEnabled,
-        onDone,
-      })
-
-      const waitingResult = await Promise.race([flushPromise, timeoutPromise])
-
-      if (waitingResult === 'timeout') {
-        log.error('Timeout waiting for the tracer to flush')
-      }
+      await waitForTestSessionFinish(getTestSessionFinishPayload(status, error, {
+        ...getTestSessionCoveragePayload(result.results, result.globalConfig?.rootDir),
+      }))
 
       if (codeCoverageReportCh.hasSubscribers) {
         const rootDir = result.globalConfig?.rootDir || process.cwd()
@@ -1388,9 +1890,9 @@ function getCliWrapper (isNewJestVersion) {
         })
       }
 
-      logSessionSummary(ignoredFailuresSummary)
+      logSessionSummary(ignoredFailuresSummary, getAttemptToFixExecutionsFromJestResults(result))
 
-      numSkippedSuites = 0
+      resetSuiteSkippingRunState()
 
       return result
     }, {
@@ -1399,32 +1901,36 @@ function getCliWrapper (isNewJestVersion) {
   }
 }
 
-function coverageReporterWrapper (coverageReporter) {
-  const CoverageReporter = coverageReporter.default ?? coverageReporter
+function shouldWaitForTestSuiteFinish (environment) {
+  return isJestWorker && environment.globalConfig?.workerIdleMemoryLimit !== undefined
+}
 
-  /**
-   * If ITR is active, we're running fewer tests, so of course the total code coverage is reduced.
-   * This calculation adds no value, so we'll skip it, as long as the user has not manually opted in to code coverage,
-   * in which case we'll leave it.
-   */
-  // `_addUntestedFiles` is an async function
-  shimmer.wrap(CoverageReporter.prototype, '_addUntestedFiles', addUntestedFiles => function () {
-    if (isKeepingCoverageConfiguration) {
-      return addUntestedFiles.apply(this, arguments)
-    }
-    if (isCodeCoverageEnabledBecauseOfUs) {
-      return Promise.resolve()
-    }
-    return addUntestedFiles.apply(this, arguments)
+function publishTestSuiteFinish (payload, waitForFinish) {
+  if (!testSuiteFinishCh.hasSubscribers) return
+
+  if (!waitForFinish) {
+    testSuiteFinishCh.publish(payload)
+    return
+  }
+
+  return new Promise(resolve => {
+    testSuiteFinishCh.publish({
+      ...payload,
+      waitForFinish,
+      onDone: resolve,
+    })
   })
+}
 
-  return coverageReporter
+function cleanupTestSuiteState (testSuiteAbsolutePath) {
+  testSuiteMockedFiles.delete(testSuiteAbsolutePath)
+  testSuiteJestObjects.delete(testSuiteAbsolutePath)
 }
 
 addHook({
   name: '@jest/core',
   file: 'build/TestScheduler.js',
-  versions: ['>=27.0.0'],
+  versions: [MINIMUM_JEST_TEST_SCHEDULER_VERSION],
 }, (testSchedulerPackage, frameworkVersion) => {
   const oldCreateTestScheduler = testSchedulerPackage.createTestScheduler
   const newCreateTestScheduler = async function () {
@@ -1440,24 +1946,26 @@ addHook({
   return testSchedulerPackage
 })
 
-addHook({
-  name: '@jest/core',
-  file: 'build/TestScheduler.js',
-  versions: ['>=24.8.0 <27.0.0'],
-}, (testSchedulerPackage, frameworkVersion) => {
-  shimmer.wrap(
-    testSchedulerPackage.default.prototype,
-    'scheduleTests', scheduleTests => getWrappedScheduleTests(scheduleTests, frameworkVersion)
-  )
-  return testSchedulerPackage
-})
+if (DD_MAJOR < 6) {
+  addHook({
+    name: '@jest/core',
+    file: 'build/TestScheduler.js',
+    versions: ['>=24.8.0 <27.0.0'],
+  }, (testSchedulerPackage, frameworkVersion) => {
+    shimmer.wrap(
+      testSchedulerPackage.default.prototype,
+      'scheduleTests', scheduleTests => getWrappedScheduleTests(scheduleTests, frameworkVersion)
+    )
+    return testSchedulerPackage
+  })
+}
 
 addHook({
   name: '@jest/test-sequencer',
   versions: ['>=28'],
 }, (sequencerPackage, frameworkVersion) => {
-  shimmer.wrap(sequencerPackage.default.prototype, 'shard', shard => function () {
-    const shardedTests = shard.apply(this, arguments)
+  shimmer.wrap(sequencerPackage.default.prototype, 'shard', shard => function (...args) {
+    const shardedTests = shard.apply(this, args)
 
     if (!shardedTests.length || !isSuitesSkippingEnabled || !skippableSuites.length) {
       return shardedTests
@@ -1471,28 +1979,9 @@ addHook({
 })
 
 addHook({
-  name: '@jest/reporters',
-  file: 'build/coverage_reporter.js',
-  versions: ['>=24.8.0 <26.6.2'],
-}, coverageReporterWrapper)
-
-addHook({
-  name: '@jest/reporters',
-  file: 'build/CoverageReporter.js',
-  versions: ['>=26.6.2'],
-}, coverageReporterWrapper)
-
-addHook({
-  name: '@jest/reporters',
-  versions: ['>=30.0.0'],
-}, (reporters) => {
-  return shimmer.wrap(reporters, 'CoverageReporter', coverageReporterWrapper, { replaceGetter: true })
-})
-
-addHook({
   name: '@jest/core',
   file: 'build/cli/index.js',
-  versions: ['>=24.8.0 <30.0.0'],
+  versions: [MINIMUM_JEST_VERSION_BEFORE_30],
 }, getCliWrapper(false))
 
 addHook({
@@ -1500,12 +1989,37 @@ addHook({
   versions: ['>=30.0.0'],
 }, getCliWrapper(true))
 
+addHook({
+  name: '@jest/core',
+  file: 'build/ReporterDispatcher.js',
+  versions: [MINIMUM_JEST_VERSION],
+}, reporterDispatcherWrapper)
+
+if (DD_MAJOR < 6) {
+  addHook({
+    name: '@jest/reporters',
+    file: 'build/coverage_reporter.js',
+    versions: ['>=24.8.0 <26.6.2'],
+  }, coverageReporterWrapper)
+}
+
+addHook({
+  name: '@jest/reporters',
+  versions: ['>=30.0.0'],
+}, reportersWrapper)
+
+addHook({
+  name: '@jest/reporters',
+  file: 'build/CoverageReporter.js',
+  versions: [DD_MAJOR >= 6 ? '>=28.0.0' : '>=26.6.2'],
+}, coverageReporterWrapper)
+
 function jestAdapterWrapper (jestAdapter, jestVersion) {
   const adapter = jestAdapter.default ?? jestAdapter
-  const newAdapter = shimmer.wrapFunction(adapter, adapter => function () {
-    const environment = arguments[2]
+  const newAdapter = shimmer.wrapFunction(adapter, adapter => function (...args) {
+    const environment = args[2]
     if (!environment || !environment.testEnvironmentOptions) {
-      return adapter.apply(this, arguments)
+      return adapter.apply(this, args)
     }
     testSuiteStartCh.publish({
       testSuite: environment.testSuite,
@@ -1515,7 +2029,7 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
       frameworkVersion: jestVersion,
       testSuiteAbsolutePath: environment.testSuiteAbsolutePath,
     })
-    return adapter.apply(this, arguments).then(suiteResults => {
+    return adapter.apply(this, args).then(suiteResults => {
       const { numFailingTests, skipped, failureMessage: errorMessage } = suiteResults
       let status = 'pass'
       if (skipped) {
@@ -1532,10 +2046,13 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
       if (environment.testEnvironmentOptions?._ddTestCodeCoverageEnabled) {
         const root = environment.repositoryRoot || environment.rootDir
 
-        const getFilesWithPath = (files) => files.map(file => getTestSuitePath(file, root))
-
-        const coverageFiles = getFilesWithPath(getCoveredFilenamesFromCoverage(environment.global.__coverage__))
-        const mockedFiles = getFilesWithPath(testSuiteMockedFiles.get(environment.testSuiteAbsolutePath) || [])
+        const coverageFiles = getCoveredFilesFromCoverage(environment.global.__coverage__)
+          .map(file => ({
+            ...file,
+            filename: getTestSuitePath(file.filename, root),
+          }))
+        const mockedFiles = getMockedFiles(environment.testSuiteAbsolutePath)
+          .map(file => getTestSuitePath(file, root))
 
         testSuiteCodeCoverageCh.publish({
           coverageFiles,
@@ -1544,19 +2061,51 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
           testSuiteAbsolutePath: environment.testSuiteAbsolutePath,
         })
       }
-      testSuiteFinishCh.publish({ status, errorMessage, testSuiteAbsolutePath: environment.testSuiteAbsolutePath })
+      const waitForFinish = shouldWaitForTestSuiteFinish(environment)
+      const finishPayload = {
+        status,
+        errorMessage,
+        testSuiteAbsolutePath: environment.testSuiteAbsolutePath,
+      }
+      if (waitForFinish) {
+        const finishPromise = publishTestSuiteFinish(finishPayload, waitForFinish)
+        if (finishPromise) {
+          return finishPromise.then(() => {
+            // Cleanup per-suite state to avoid memory leaks
+            cleanupTestSuiteState(environment.testSuiteAbsolutePath)
+
+            return suiteResults
+          })
+        }
+      }
+      publishTestSuiteFinish(finishPayload, waitForFinish)
 
       // Cleanup per-suite state to avoid memory leaks
-      testSuiteMockedFiles.delete(environment.testSuiteAbsolutePath)
-      testSuiteJestObjects.delete(environment.testSuiteAbsolutePath)
+      cleanupTestSuiteState(environment.testSuiteAbsolutePath)
 
       return suiteResults
     }).catch(error => {
-      testSuiteFinishCh.publish({ status: 'fail', error, testSuiteAbsolutePath: environment.testSuiteAbsolutePath })
+      const waitForFinish = shouldWaitForTestSuiteFinish(environment)
+      const finishPayload = {
+        status: 'fail',
+        error,
+        testSuiteAbsolutePath: environment.testSuiteAbsolutePath,
+      }
+      if (waitForFinish) {
+        const finishPromise = publishTestSuiteFinish(finishPayload, waitForFinish)
+        if (finishPromise) {
+          return finishPromise.then(() => {
+            // Cleanup per-suite state to avoid memory leaks
+            cleanupTestSuiteState(environment.testSuiteAbsolutePath)
+
+            throw error
+          })
+        }
+      }
+      publishTestSuiteFinish(finishPayload, waitForFinish)
 
       // Cleanup per-suite state to avoid memory leaks
-      testSuiteMockedFiles.delete(environment.testSuiteAbsolutePath)
-      testSuiteJestObjects.delete(environment.testSuiteAbsolutePath)
+      cleanupTestSuiteState(environment.testSuiteAbsolutePath)
 
       throw error
     })
@@ -1579,44 +2128,53 @@ addHook({
 addHook({
   name: 'jest-circus',
   file: 'build/legacy-code-todo-rewrite/jestAdapter.js',
-  versions: ['>=24.8.0'],
+  versions: [MINIMUM_JEST_VERSION],
 }, jestAdapterWrapper)
 
 function configureTestEnvironment (readConfigsResult) {
-  const { configs } = readConfigsResult
-  testSessionConfigurationCh.publish(configs.map(config => config.testEnvironmentOptions))
-  // We can't directly use isCodeCoverageEnabled when reporting coverage in `jestAdapterWrapper`
-  // because `jestAdapterWrapper` runs in a different process. We have to go through `testEnvironmentOptions`
-  for (const config of configs) {
-    config.testEnvironmentOptions._ddTestCodeCoverageEnabled = isCodeCoverageEnabled
+  repositoryRoot = getJestRepositoryRoot(readConfigsResult)
+  isUserCodeCoverageEnabled = !!readConfigsResult.globalConfig.collectCoverage
+  const isCodeCoverageEnabledBecauseOfUs = shouldCollectJestCoverageForTia() && !isUserCodeCoverageEnabled
+
+  if (isCodeCoverageEnabledBecauseOfUs) {
+    readConfigsResult.globalConfig = {
+      ...readConfigsResult.globalConfig,
+      collectCoverage: true,
+      coverageReporters: ['none'],
+    }
+    readConfigsResult.configs = readConfigsResult.configs.map(config => ({
+      ...config,
+      coverageReporters: ['none'],
+    }))
   }
 
-  isUserCodeCoverageEnabled = !!readConfigsResult.globalConfig.collectCoverage
-  isCodeCoverageEnabledBecauseOfUs = isCodeCoverageEnabled && !isUserCodeCoverageEnabled
+  // We can't directly use the parent process flags when reporting suite coverage in `jestAdapterWrapper`
+  // because `jestAdapterWrapper` runs in a different process. We have to go through `testEnvironmentOptions`.
+  const configs = readConfigsResult.configs.map(config => {
+    const testEnvironmentOptions = config.testEnvironmentOptions || {}
+    testEnvironmentOptions._ddRepositoryRoot = repositoryRoot
+    testEnvironmentOptions._ddTestCodeCoverageEnabled = shouldReportJestSuiteCoverageForTia()
+
+    return {
+      ...config,
+      testEnvironmentOptions,
+    }
+  })
+  readConfigsResult.configs = configs
+  testSessionConfigurationCh.publish(readConfigsResult.configs.map(config => config.testEnvironmentOptions))
+  repositoryRoot = getJestRepositoryRoot(readConfigsResult)
 
   if (readConfigsResult.globalConfig.forceExit) {
     log.warn("Jest's '--forceExit' flag has been passed. This may cause loss of data.")
   }
 
-  if (isCodeCoverageEnabledBecauseOfUs) {
-    const globalConfig = {
-      ...readConfigsResult.globalConfig,
-      collectCoverage: true,
-    }
-    readConfigsResult.globalConfig = globalConfig
-  }
+  readConfigsResult.globalConfig = addDatadogBailReporter(readConfigsResult.globalConfig)
+
   if (isSuitesSkippingEnabled) {
     // If suite skipping is enabled, we pass `passWithNoTests` in case every test gets skipped.
     const globalConfig = {
       ...readConfigsResult.globalConfig,
       passWithNoTests: true,
-    }
-    if (isCodeCoverageEnabledBecauseOfUs && !isKeepingCoverageConfiguration) {
-      globalConfig.coverageReporters = ['none']
-      readConfigsResult.configs = configs.map(config => ({
-        ...config,
-        coverageReporters: ['none'],
-      }))
     }
     readConfigsResult.globalConfig = globalConfig
   }
@@ -1633,8 +2191,8 @@ function jestConfigAsyncWrapper (jestConfig) {
 }
 
 function jestConfigSyncWrapper (jestConfig) {
-  return shimmer.wrap(jestConfig, 'readConfigs', readConfigs => function () {
-    const readConfigsResult = readConfigs.apply(this, arguments)
+  return shimmer.wrap(jestConfig, 'readConfigs', readConfigs => function (...args) {
+    const readConfigsResult = readConfigs.apply(this, args)
     configureTestEnvironment(readConfigsResult)
     return readConfigsResult
   })
@@ -1652,8 +2210,10 @@ const DD_TEST_ENVIRONMENT_OPTION_KEYS = [
   '_ddIsEarlyFlakeDetectionEnabled',
   '_ddEarlyFlakeDetectionSlowTestRetries',
   '_ddRepositoryRoot',
+  '_ddTestCodeCoverageEnabled',
   '_ddIsFlakyTestRetriesEnabled',
   '_ddFlakyTestRetriesCount',
+  '_ddItrSkippingEnabledTags',
   '_ddIsDiEnabled',
   '_ddIsKnownTestsEnabled',
   '_ddIsTestManagementTestsEnabled',
@@ -1716,7 +2276,7 @@ function wrapCreateScriptTransformer (createScriptTransformer) {
 
 addHook({
   name: '@jest/transform',
-  versions: ['>=24.8.0 <30.0.0'],
+  versions: [MINIMUM_JEST_VERSION_BEFORE_30],
   file: 'build/ScriptTransformer.js',
 }, transformPackage => {
   transformPackage.createScriptTransformer = wrapCreateScriptTransformer(transformPackage.createScriptTransformer)
@@ -1736,20 +2296,22 @@ addHook({
  */
 addHook({
   name: '@jest/core',
-  versions: ['>=24.8.0 <30.0.0'],
+  versions: [MINIMUM_JEST_VERSION_BEFORE_30],
   file: 'build/SearchSource.js',
 }, searchSourceWrapper)
 
 // from 25.1.0 on, readConfigs becomes async
 addHook({
   name: 'jest-config',
-  versions: ['>=25.1.0'],
+  versions: [MINIMUM_JEST_CONFIG_ASYNC_VERSION],
 }, jestConfigAsyncWrapper)
 
-addHook({
-  name: 'jest-config',
-  versions: ['24.8.0 - 24.9.0'],
-}, jestConfigSyncWrapper)
+if (DD_MAJOR < 6) {
+  addHook({
+    name: 'jest-config',
+    versions: ['24.8.0 - 24.9.0'],
+  }, jestConfigSyncWrapper)
+}
 
 const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
   'selenium-webdriver',
@@ -1762,39 +2324,165 @@ const LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE = new Set([
   'winston',
 ])
 
+function recordMockedFile (suiteFilePath, moduleName) {
+  if (!suiteFilePath || typeof moduleName !== 'string') return
+
+  const existingMockedFiles = testSuiteMockedFiles.get(suiteFilePath) || []
+  const suiteDir = path.dirname(suiteFilePath)
+  const mockPath = path.resolve(suiteDir, moduleName)
+  existingMockedFiles.push(mockPath)
+  testSuiteMockedFiles.set(suiteFilePath, existingMockedFiles)
+}
+
+const JEST_STATIC_MOCK_CALL_RE = /\bjest\.(?:mock|doMock|unstable_mockModule)\(\s*(['"`])([^'"`]+)\1/g
+
+function getStaticMockedFiles (suiteFilePath) {
+  if (!suiteFilePath) return []
+
+  const mockedFiles = []
+  try {
+    const source = readFileSync(suiteFilePath, 'utf8')
+    let match
+    JEST_STATIC_MOCK_CALL_RE.lastIndex = 0
+    while ((match = JEST_STATIC_MOCK_CALL_RE.exec(source)) !== null) {
+      mockedFiles.push(path.resolve(path.dirname(suiteFilePath), match[2]))
+    }
+  } catch {
+    // ignore errors
+  }
+
+  return mockedFiles
+}
+
+function getMockedFiles (suiteFilePath) {
+  const mockedFiles = testSuiteMockedFiles.get(suiteFilePath)
+  const staticMockedFiles = getStaticMockedFiles(suiteFilePath)
+
+  if (mockedFiles?.length) {
+    return [...new Set([...mockedFiles, ...staticMockedFiles])]
+  }
+  return staticMockedFiles
+}
+
+function wrapJestObject (jestObject, suiteFilePath) {
+  if (!jestObject || !suiteFilePath || wrappedJestObjects.has(jestObject)) return
+
+  testSuiteJestObjects.set(suiteFilePath, jestObject)
+  wrappedJestObjects.add(jestObject)
+
+  shimmer.wrap(jestObject, 'mock', mock => function (moduleName) {
+    // If the library is mocked with `jest.mock`, we don't want to bypass jest's own require engine
+    if (LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) {
+      LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.delete(moduleName)
+    }
+    recordMockedFile(suiteFilePath, moduleName)
+    return mock.apply(this, arguments)
+  })
+}
+
+function wrapJestGlobalsForRuntime (runtime) {
+  const jestGlobals = runtime?.jestGlobals
+  if (!jestGlobals || wrappedJestGlobals.has(jestGlobals) || typeof jestGlobals.jestObjectFor !== 'function') {
+    return
+  }
+
+  wrappedJestGlobals.add(jestGlobals)
+  shimmer.wrap(jestGlobals, 'jestObjectFor', jestObjectFor => function (from) {
+    const jestObject = jestObjectFor.apply(this, arguments)
+    wrapJestObject(jestObject, from)
+    return jestObject
+  })
+}
+
+function getLastLoggedReferenceError (runtime) {
+  const loggedReferenceErrors = runtime?.loggedReferenceErrors
+  if (!loggedReferenceErrors?.size) return
+  return [...loggedReferenceErrors].pop()
+}
+
+function publishRuntimeReferenceError (runtime, errorMessage) {
+  if (!errorMessage || !runtime?._testPath) return
+
+  let publishedErrors = publishedRuntimeReferenceErrors.get(runtime)
+  if (!publishedErrors) {
+    publishedErrors = new Set()
+    publishedRuntimeReferenceErrors.set(runtime, publishedErrors)
+  }
+  if (publishedErrors.has(errorMessage)) return
+
+  publishedErrors.add(errorMessage)
+  testSuiteErrorCh.publish({
+    errorMessage,
+    testSuiteAbsolutePath: runtime._testPath,
+  })
+}
+
+function isBetweenTestsReferenceError (error) {
+  return error?.name === 'ReferenceError' &&
+    typeof error.message === 'string' &&
+    error.message.includes('outside of the scope of the test code')
+}
+
+function reportBetweenTestsReferenceError (runtime, moduleName, originalErrorMessage) {
+  if (typeof moduleName !== 'string') return false
+
+  const fallbackErrorMessage = moduleName.startsWith('node:') || builtinModules.includes(moduleName)
+    ? 'You are trying to access a Node.js module outside of the scope of the test code.'
+    : 'You are trying to `require` a file after the Jest environment has been torn down.'
+  const errorMessage = originalErrorMessage || fallbackErrorMessage
+
+  if (typeof runtime._logFormattedReferenceError === 'function') {
+    runtime._logFormattedReferenceError(errorMessage)
+  }
+  publishRuntimeReferenceError(runtime, getLastLoggedReferenceError(runtime) || errorMessage)
+  process.exitCode = 1
+  return true
+}
+
+function requireOutsideJestRequireEngine (runtime, moduleName) {
+  if (typeof runtime._requireCoreModule === 'function') {
+    return runtime._requireCoreModule(moduleName)
+  }
+  return require(moduleName)
+}
+
+function formatDefaultStackTrace (error, structuredStackTrace) {
+  const errorString = Error.prototype.toString.call(error)
+  if (structuredStackTrace.length === 0) return errorString
+
+  return `${errorString}\n    at ${structuredStackTrace.join('\n    at ')}`
+}
+
 addHook({
   name: 'jest-runtime',
-  versions: ['>=24.8.0'],
+  versions: [MINIMUM_JEST_VERSION],
 }, (runtimePackage) => {
   const Runtime = runtimePackage.default ?? runtimePackage
 
-  shimmer.wrap(Runtime.prototype, '_createJestObjectFor', _createJestObjectFor => function (from) {
-    const result = _createJestObjectFor.apply(this, arguments)
-    const suiteFilePath = this._testPath || from
+  if (typeof Runtime.prototype._createJestObjectFor === 'function') {
+    shimmer.wrap(Runtime.prototype, '_createJestObjectFor', _createJestObjectFor => function (from) {
+      const result = _createJestObjectFor.apply(this, arguments)
+      const suiteFilePath = this._testPath || from
 
-    // Store the jest object so we can access it later for resetting mock state
-    if (suiteFilePath) {
-      testSuiteJestObjects.set(suiteFilePath, result)
-    }
-
-    shimmer.wrap(result, 'mock', mock => function (moduleName) {
-      // If the library is mocked with `jest.mock`, we don't want to bypass jest's own require engine
-      if (LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) {
-        LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.delete(moduleName)
-      }
-      if (suiteFilePath) {
-        const existingMockedFiles = testSuiteMockedFiles.get(suiteFilePath) || []
-        const suiteDir = path.dirname(suiteFilePath)
-        const mockPath = path.resolve(suiteDir, moduleName)
-        existingMockedFiles.push(mockPath)
-        testSuiteMockedFiles.set(suiteFilePath, existingMockedFiles)
-      }
-      return mock.apply(this, arguments)
+      wrapJestObject(result, suiteFilePath)
+      return result
     })
-    return result
+  }
+
+  shimmer.wrap(Runtime.prototype, 'requireModule', requireModule => function (from, moduleName) {
+    wrapJestGlobalsForRuntime(this)
+    try {
+      return requireModule.apply(this, arguments)
+    } catch (error) {
+      if (isBetweenTestsReferenceError(error)) {
+        reportBetweenTestsReferenceError(this, moduleName, error.message)
+      }
+      throw error
+    }
   })
 
   shimmer.wrap(Runtime.prototype, 'requireModuleOrMock', requireModuleOrMock => function (from, moduleName) {
+    wrapJestGlobalsForRuntime(this)
     // `requireModuleOrMock` may log errors to the console. If we don't remove ourselves
     // from the stack trace, the user might see a useless stack trace rather than the error
     // that `jest` tries to show.
@@ -1803,32 +2491,31 @@ addHook({
       const filteredStackTrace = structuredStackTrace
         .filter(callSite => !callSite.getFileName()?.includes('datadog-instrumentations/src/jest.js'))
 
-      return originalPrepareStackTrace(error, filteredStackTrace)
+      if (typeof originalPrepareStackTrace === 'function') {
+        return originalPrepareStackTrace(error, filteredStackTrace)
+      }
+      return formatDefaultStackTrace(error, filteredStackTrace)
     }
     try {
       // TODO: do this for every library that we instrument
       if (LIBRARIES_BYPASSING_JEST_REQUIRE_ENGINE.has(moduleName)) {
         // To bypass jest's own require engine
-        return this._requireCoreModule(moduleName)
+        return requireOutsideJestRequireEngine(this, moduleName)
       }
-      // This means that `@fast-check/jest` is used in the test file.
-      if (moduleName === '@fast-check/jest') {
-        testSuiteAbsolutePathsWithFastCheck.add(this._testPath)
-      }
-      const returnedValue = requireModuleOrMock.apply(this, arguments)
-      if (process.exitCode === 1) {
-        if (this.loggedReferenceErrors?.size > 0) {
-          const errorMessage = [...this.loggedReferenceErrors][0]
-          testSuiteErrorCh.publish({
-            errorMessage,
-            testSuiteAbsolutePath: this._testPath,
-          })
-        } else {
-          testSuiteErrorCh.publish({
-            errorMessage: 'An error occurred while importing a module',
-            testSuiteAbsolutePath: this._testPath,
-          })
+      let returnedValue
+      try {
+        returnedValue = requireModuleOrMock.apply(this, arguments)
+      } catch (error) {
+        if (isBetweenTestsReferenceError(error)) {
+          reportBetweenTestsReferenceError(this, moduleName, error.message)
         }
+        throw error
+      }
+      if (process.exitCode === 1) {
+        publishRuntimeReferenceError(
+          this,
+          getLastLoggedReferenceError(this) || 'An error occurred while importing a module'
+        )
       }
       return returnedValue
     } finally {
@@ -1837,14 +2524,35 @@ addHook({
     }
   })
 
+  if (Runtime.prototype._logFormattedReferenceError) {
+    shimmer.wrap(Runtime.prototype, '_logFormattedReferenceError', logFormattedReferenceError => function () {
+      // eslint-disable-next-line no-console
+      const originalConsoleError = console.error
+      let loggedReferenceError
+      // eslint-disable-next-line no-console
+      console.error = function () {
+        loggedReferenceError = arguments[0]
+        return originalConsoleError.apply(this, arguments)
+      }
+      try {
+        const result = logFormattedReferenceError.apply(this, arguments)
+        publishRuntimeReferenceError(this, getLastLoggedReferenceError(this) || loggedReferenceError)
+        return result
+      } finally {
+        // eslint-disable-next-line no-console
+        console.error = originalConsoleError
+      }
+    })
+  }
+
   return runtimePackage
 })
 
 function onMessageWrapper (onMessage) {
-  return function () {
-    const response = arguments[0]
+  return function (...args) {
+    const response = args[0]
     if (!Array.isArray(response)) {
-      return onMessage.apply(this, arguments)
+      return onMessage.apply(this, args)
     }
 
     const [code, data] = response
@@ -1865,7 +2573,13 @@ function onMessageWrapper (onMessage) {
       workerReportTelemetryCh.publish(data)
       return
     }
-    return onMessage.apply(this, arguments)
+    if (code === JEST_WORKER_QUARANTINE_PAYLOAD_CODE) { // quarantined test failures suppressed in worker
+      for (const name of JSON.parse(data)) {
+        quarantinedFailingTests.add(name)
+      }
+      return
+    }
+    return onMessage.apply(this, args)
   }
 }
 
@@ -1917,11 +2631,23 @@ function wrapWorkerChannel (worker) {
   shimmer.wrap(workerChannel, worker._child ? 'send' : 'postMessage', sendWrapper)
 }
 
+function wrapWorkerInitializer (worker) {
+  if (wrappedWorkerInitializers.has(worker) || typeof worker.initialize !== 'function') return
+
+  wrappedWorkerInitializers.add(worker)
+  shimmer.wrap(worker, 'initialize', initialize => function () {
+    const result = initialize.apply(this, arguments)
+    wrapWorkerChannel(this)
+    return result
+  })
+}
+
 function wrapWorker (worker) {
   // ChildProcessWorker uses _child (child_process), ExperimentalWorker uses _worker (worker_threads)
   const workerChannel = worker._child || worker._worker
   if (!workerChannel) return
 
+  wrapWorkerInitializer(worker)
   wrapWorkerChannel(worker)
   shimmer.wrap(worker, '_onMessage', onMessageWrapper)
   workerChannel.removeAllListeners('message')
@@ -1929,8 +2655,8 @@ function wrapWorker (worker) {
 }
 
 function enqueueWrapper (enqueue) {
-  return function () {
-    shimmer.wrap(arguments[0], 'onStart', onStart => function (worker) {
+  return function (...args) {
+    shimmer.wrap(args[0], 'onStart', onStart => function (worker) {
       if (worker) {
         const currentChannel = worker._child || worker._worker
         const previousChannel = wrappedWorkerChannels.get(worker)
@@ -1947,7 +2673,7 @@ function enqueueWrapper (enqueue) {
       }
       return onStart.apply(this, arguments)
     })
-    return enqueue.apply(this, arguments)
+    return enqueue.apply(this, args)
   }
 }
 
@@ -1959,7 +2685,7 @@ function enqueueWrapper (enqueue) {
 */
 addHook({
   name: 'jest-worker',
-  versions: ['>=24.9.0 <30.0.0'],
+  versions: [MINIMUM_JEST_WORKER_VERSION_BEFORE_30],
   file: 'build/workers/ChildProcessWorker.js',
 }, (childProcessWorker) => {
   const ChildProcessWorker = childProcessWorker.default
@@ -1974,7 +2700,7 @@ addHook({
 
 addHook({
   name: 'jest-worker',
-  versions: ['>=24.9.0 <30.0.0'],
+  versions: [MINIMUM_JEST_WORKER_VERSION_BEFORE_30],
   file: 'build/workers/NodeThreadsWorker.js',
 }, (nodeThreadsWorker) => {
   const ExperimentalWorker = nodeThreadsWorker.default

@@ -28,7 +28,7 @@ describe('Plugin', () => {
 
         afterEach((done) => {
           connection.end(() => {
-            agent.close({ ritmReset: false }).then(done)
+            agent.close().then(done)
           })
         })
 
@@ -93,7 +93,10 @@ describe('Plugin', () => {
                 component: 'mysql',
                 '_dd.integration': 'mysql',
               },
-            })
+              metrics: {
+                'network.destination.port': 3306,
+              },
+            }, { spanResourceMatch: /SELECT 1 \+ 1 AS solution/ })
             .then(done)
             .catch(done)
 
@@ -138,7 +141,7 @@ describe('Plugin', () => {
 
         afterEach((done) => {
           connection.end(() => {
-            agent.close({ ritmReset: false }).then(done)
+            agent.close().then(done)
           })
         })
 
@@ -187,7 +190,7 @@ describe('Plugin', () => {
 
         afterEach((done) => {
           connection.end(() => {
-            agent.close({ ritmReset: false }).then(done)
+            agent.close().then(done)
           })
         })
 
@@ -238,7 +241,7 @@ describe('Plugin', () => {
 
         afterEach((done) => {
           pool.end(() => {
-            agent.close({ ritmReset: false }).then(done)
+            agent.close().then(done)
           })
         })
 
@@ -304,6 +307,40 @@ describe('Plugin', () => {
                   })
                 })
               })
+            })
+          })
+        })
+
+        it('runs a queued pool query callback in its own caller context', done => {
+          const span1 = tracer.startSpan('test1')
+          const span2 = tracer.startSpan('test2')
+          let pending = 2
+
+          const check = expected => error => {
+            if (error) {
+              done(error)
+              return
+            }
+            try {
+              assert.strictEqual(tracer.scope().active(), expected)
+            } catch (assertionError) {
+              done(assertionError)
+              return
+            }
+            if (--pending === 0) {
+              done()
+            }
+          }
+
+          // Both queries are dispatched in the same tick with `connectionLimit: 1`, so the second
+          // waits in the pool's connection queue and its callback fires from the first query's
+          // release flow — the async context that drops without the getConnection wrap.
+          tracer.trace('test', () => {
+            tracer.scope().activate(span1, () => {
+              pool.query('SELECT 1 AS one', check(span1))
+            })
+            tracer.scope().activate(span2, () => {
+              pool.query('SELECT 2 AS two', check(span2))
             })
           })
         })
@@ -427,12 +464,51 @@ describe('Plugin', () => {
           })
         })
       })
+
+      describe('with DBM propagation enabled with service using tracer configurations', () => {
+        let connection
+
+        before(async () => {
+          // Tracer-level config (third arg) only takes effect if the global
+          // tracer is wiped first; tracer.init() short-circuits once the
+          // process-wide singleton has been initialized by an earlier load.
+          await agent.load('mysql', { service: 'serviced' }, { dbmPropagationMode: 'service' })
+          mysql = proxyquire(`../../../versions/mysql@${version}`, {}).get()
+
+          connection = mysql.createConnection({
+            host: '127.0.0.1',
+            user: 'root',
+            database: 'db',
+          })
+          connection.connect()
+        })
+
+        after((done) => {
+          connection.end(() => {
+            agent.close().then(done)
+          })
+        })
+
+        it('should contain service mode comment in query text', done => {
+          connection.query('SELECT 1 + 1 AS solution', () => {
+            try {
+              assert.strictEqual(connection._protocol._queue[0].sql,
+                '/*dddb=\'db\',dddbs=\'serviced\',dde=\'tester\',ddh=\'127.0.0.1\',ddps=\'test\',' +
+                `ddpv='${ddpv}'*/ SELECT 1 + 1 AS solution`)
+            } catch (e) {
+              done(e)
+            }
+            done()
+          })
+        })
+      })
+
       describe('DBM propagation should handle special characters', () => {
         let connection
 
         afterEach((done) => {
           connection.end(() => {
-            agent.close({ ritmReset: false }).then(done)
+            agent.close().then(done)
           })
         })
 
@@ -466,10 +542,10 @@ describe('Plugin', () => {
 
         afterEach((done) => {
           connection.end(() => {
-            agent.close({ ritmReset: false }).then(done)
+            agent.close().then(done)
           })
 
-          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
+          global._ddtrace._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
         })
 
         beforeEach(async () => {
@@ -501,7 +577,7 @@ describe('Plugin', () => {
         })
 
         it('query text should contain rejected sampling decision in the traceparent', done => {
-          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
+          global._ddtrace._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
           let queryText = ''
 
           agent.assertSomeTraces(traces => {
@@ -527,7 +603,7 @@ describe('Plugin', () => {
 
         afterEach((done) => {
           pool.end(() => {
-            agent.close({ ritmReset: false }).then(done)
+            agent.close().then(done)
           })
         })
 
@@ -561,10 +637,10 @@ describe('Plugin', () => {
 
         afterEach((done) => {
           pool.end(() => {
-            agent.close({ ritmReset: false }).then(done)
+            agent.close().then(done)
           })
 
-          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
+          global._ddtrace._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
         })
 
         beforeEach(async () => {
@@ -596,7 +672,7 @@ describe('Plugin', () => {
         })
 
         it('query text should contain rejected sampling decision in the traceparent', done => {
-          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
+          global._ddtrace._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
           let queryText = ''
 
           agent.assertSomeTraces(() => {

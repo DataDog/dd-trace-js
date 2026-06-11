@@ -2,7 +2,6 @@
 
 const { URL } = require('url')
 const log = require('../../log')
-const { getAgentUrl } = require('../../agent/url')
 const Writer = require('./writer')
 
 class AgentExporter {
@@ -11,7 +10,7 @@ class AgentExporter {
   constructor (config, prioritySampler) {
     this._config = config
     const { lookup, protocolVersion, stats = {}, apmTracingEnabled } = config
-    this._url = getAgentUrl(config)
+    this._url = config.url
 
     const headers = {}
     if (stats.enabled || apmTracingEnabled === false) {
@@ -24,7 +23,6 @@ class AgentExporter {
       lookup,
       protocolVersion,
       headers,
-      config,
     })
 
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.flush.bind(this))
@@ -51,7 +49,8 @@ class AgentExporter {
       this.#timer = setTimeout(() => {
         this._writer.flush()
         this.#timer = undefined
-      }, flushInterval).unref()
+      }, flushInterval)
+      this.#timer.unref?.()
     }
   }
 

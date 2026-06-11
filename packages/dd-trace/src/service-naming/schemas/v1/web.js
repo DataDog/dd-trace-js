@@ -22,6 +22,10 @@ const web = {
       serviceName: ({ pluginConfig, tracerService }) => pluginConfig.service || tracerService,
       serviceSource: optionServiceSource,
     },
+    'modelcontextprotocol-sdk': {
+      opName: () => 'mcp.tool.call',
+      serviceName: identityService,
+    },
     fetch: {
       opName: () => 'http.client.request',
       serviceName: httpPluginClientService,
@@ -42,6 +46,10 @@ const web = {
     },
     undici: {
       opName: () => 'undici.request',
+      serviceName: httpPluginClientService,
+    },
+    'electron:net:request': {
+      opName: () => 'http.client.request',
       serviceName: httpPluginClientService,
     },
   },

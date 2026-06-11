@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const { once } = require('node:events')
 const { exec } = require('child_process')
+const { inspect } = require('node:util')
 const {
   sandboxCwd,
   useSandbox,
@@ -24,6 +25,7 @@ const { NODE_MAJOR } = require('../../version')
 const webAppServer = require('../ci-visibility/web-app-server')
 
 const versionRange = ['4.11.0', 'latest']
+const isLatestCucumberSupported = NODE_MAJOR === 22 || NODE_MAJOR === 24 || NODE_MAJOR >= 26
 
 versionRange.forEach(version => {
   describe(`selenium ${version}`, () => {
@@ -35,7 +37,7 @@ versionRange.forEach(version => {
     useSandbox([
       'mocha',
       'jest',
-      '@cucumber/cucumber',
+      ...(isLatestCucumberSupported ? ['@cucumber/cucumber'] : []),
       `selenium-webdriver@${version}`,
     ])
 
@@ -80,7 +82,7 @@ versionRange.forEach(version => {
       },
     ]
     testFrameworks.forEach(({ name, command }) => {
-      if ((NODE_MAJOR === 18 || NODE_MAJOR === 23) && name === 'cucumber') return
+      if (!isLatestCucumberSupported && name === 'cucumber') return
 
       context(`with ${name}`, () => {
         it('identifies tests using selenium as browser tests', async () => {
@@ -98,8 +100,14 @@ versionRange.forEach(version => {
                 },
               })
 
-              assert.ok(Object.hasOwn(seleniumTest.meta, TEST_BROWSER_VERSION))
-              assert.ok(Object.hasOwn(seleniumTest.meta, TEST_BROWSER_DRIVER_VERSION))
+              assert.ok(
+                Object.hasOwn(seleniumTest.meta, TEST_BROWSER_VERSION),
+                `Available keys: ${inspect(Object.keys(seleniumTest.meta))}`
+              )
+              assert.ok(
+                Object.hasOwn(seleniumTest.meta, TEST_BROWSER_DRIVER_VERSION),
+                `Available keys: ${inspect(Object.keys(seleniumTest.meta))}`
+              )
             })
 
           const telemetryPromise = receiver
@@ -115,8 +123,8 @@ versionRange.forEach(version => {
                 .filter(({ metric, tags }) => metric === 'event_finished' && tags.includes('event_type:test'))
 
               eventFinishedTestEvents.forEach(({ tags }) => {
-                assert.ok(tags.includes('is_rum'))
-                assert.ok(tags.includes('browser_driver:selenium'))
+                assert.ok(tags.includes('is_rum'), `Got: ${inspect(tags)}`)
+                assert.ok(tags.includes('browser_driver:selenium'), `Got: ${inspect(tags)}`)
               })
             })
 

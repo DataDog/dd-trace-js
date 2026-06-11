@@ -31,7 +31,8 @@ function extractURL (req) {
 }
 
 function getProtocol (req) {
-  return (req.socket?.encrypted || req.connection?.encrypted) ? 'https' : 'http'
+  // Do not check deprecated `req.connection` property.
+  return req.socket?.encrypted ? 'https' : 'http'
 }
 
 /**
@@ -107,11 +108,9 @@ function calculateHttpEndpoint (url) {
     return element
   })
 
-  const endpoint = normalizedElements.length > 0
+  return normalizedElements.length > 0
     ? '/' + normalizedElements.join('/')
     : '/'
-
-  return endpoint
 }
 
 function filterSensitiveInfoFromRepository (repositoryUrl) {

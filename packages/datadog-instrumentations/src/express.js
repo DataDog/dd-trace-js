@@ -3,6 +3,7 @@
 const shimmer = require('../../datadog-shimmer')
 const { createWrapRouterMethod } = require('./router')
 const { addHook, channel, tracingChannel } = require('./helpers/instrument')
+const { getCompileToRegexp } = require('./path-to-regexp')
 const {
   setRouterMountPath,
   markAppMounted,
@@ -17,60 +18,60 @@ const handleChannel = channel('apm:express:request:handle')
 const routeAddedChannel = channel('apm:express:route:added')
 
 function wrapHandle (handle) {
-  return function handleWithTrace (req, res) {
+  return function handleWithTrace (...args) {
     if (handleChannel.hasSubscribers) {
-      handleChannel.publish({ req })
+      handleChannel.publish({ req: args[0] })
     }
 
-    return handle.apply(this, arguments)
+    return Reflect.apply(handle, this, args)
   }
 }
-
-const wrapRouterMethod = createWrapRouterMethod('express')
 
 const responseJsonChannel = channel('datadog:express:response:json:start')
 
 function wrapResponseJson (json) {
-  return function wrappedJson (obj) {
+  return function wrappedJson (...args) {
     if (responseJsonChannel.hasSubscribers) {
-      // backward compat as express 4.x supports deprecated 3.x signature
-      if (arguments.length === 2 && typeof arguments[1] !== 'number') {
-        obj = arguments[1]
+      let obj = args[0]
+      // Deprecated express 3.x res.json(status, body) form, still honored by 4.x but not
+      // exercised by any suite (the unit harness can't drive res.json's freshness path).
+      /* istanbul ignore if */
+      if (args.length === 2 && typeof args[1] !== 'number') {
+        obj = args[1]
       }
 
       responseJsonChannel.publish({ req: this.req, res: this, body: obj })
     }
 
-    return json.apply(this, arguments)
+    return Reflect.apply(json, this, args)
   }
 }
 
 const responseRenderChannel = tracingChannel('datadog:express:response:render')
 
 function wrapResponseRender (render) {
-  return function wrappedRender (view, options, callback) {
+  return function wrappedRender (...args) {
     if (!responseRenderChannel.start.hasSubscribers) {
-      return render.apply(this, arguments)
+      return Reflect.apply(render, this, args)
     }
 
     const abortController = new AbortController()
     return responseRenderChannel.traceSync(
-      function () {
+      function (...renderArgs) {
         if (abortController.signal.aborted) {
-          const error = abortController.signal.reason || new Error('Aborted')
-          throw error
+          throw abortController.signal.reason || new Error('Aborted')
         }
 
-        return render.apply(this, arguments)
+        return Reflect.apply(render, this, renderArgs)
       },
       {
         req: this.req,
-        view,
-        options,
+        view: args[0],
+        options: args[1],
         abortController,
       },
       this,
-      ...arguments
+      ...args
     )
   }
 }
@@ -163,6 +164,8 @@ addHook({ name: 'express', versions: ['>=4'], file: 'lib/express.js' }, express 
 // It would otherwise produce spans for router and express, and so duplicating them.
 // We now fall back to router instrumentation
 addHook({ name: 'express', versions: ['4'], file: 'lib/express.js' }, express => {
+  const wrapRouterMethod = createWrapRouterMethod('express', getCompileToRegexp())
+
   shimmer.wrap(express.Router, 'use', wrapRouterMethod)
   shimmer.wrap(express.Router, 'route', wrapRouterMethod)
 
@@ -172,7 +175,8 @@ addHook({ name: 'express', versions: ['4'], file: 'lib/express.js' }, express =>
 const queryParserReadCh = channel('datadog:query:read:finish')
 
 function publishQueryParsedAndNext (req, res, next) {
-  return shimmer.wrapFunction(next, next => function () {
+  // Mirror next's name/arity so wrapCallback skips its per-call identity rewrite.
+  return shimmer.wrapCallback(next, original => function next (_error) {
     if (queryParserReadCh.hasSubscribers && req) {
       const abortController = new AbortController()
       const query = req.query
@@ -182,7 +186,7 @@ function publishQueryParsedAndNext (req, res, next) {
       if (abortController.signal.aborted) return
     }
 
-    return next.apply(this, arguments)
+    return original.apply(this, arguments)
   })
 }
 
@@ -191,12 +195,12 @@ addHook({
   versions: ['4'],
   file: 'lib/middleware/query.js',
 }, query => {
-  return shimmer.wrapFunction(query, query => function () {
-    const queryMiddleware = query.apply(this, arguments)
+  return shimmer.wrapFunction(query, query => function (...args) {
+    const queryMiddleware = query.apply(this, args)
 
-    return shimmer.wrapFunction(queryMiddleware, queryMiddleware => function (req, res, next) {
-      arguments[2] = publishQueryParsedAndNext(req, res, next)
-      return queryMiddleware.apply(this, arguments)
+    return shimmer.wrapFunction(queryMiddleware, queryMiddleware => function (...args) {
+      args[2] = publishQueryParsedAndNext(args[0], args[1], args[2])
+      return Reflect.apply(queryMiddleware, this, args)
     })
   })
 })
@@ -204,9 +208,9 @@ addHook({
 const processParamsStartCh = channel('datadog:express:process_params:start')
 function wrapProcessParamsMethod (requestPositionInArguments) {
   return function wrapProcessParams (original) {
-    return function wrappedProcessParams () {
+    return function wrappedProcessParams (...args) {
       if (processParamsStartCh.hasSubscribers) {
-        const req = arguments[requestPositionInArguments]
+        const req = args[requestPositionInArguments]
         const abortController = new AbortController()
 
         processParamsStartCh.publish({
@@ -219,7 +223,7 @@ function wrapProcessParamsMethod (requestPositionInArguments) {
         if (abortController.signal.aborted) return
       }
 
-      return original.apply(this, arguments)
+      return original.apply(this, args)
     }
   }
 }

@@ -23,6 +23,15 @@ if (process.env.ADD_EXTRA_PLAYWRIGHT_PROJECT) {
   })
 }
 
+if (process.env.ADD_DUPLICATE_PLAYWRIGHT_PROJECT) {
+  projects.push({
+    name: 'second-chromium',
+    use: {
+      ...devices['Desktop Chrome'],
+    },
+  })
+}
+
 const config = {
   baseURL: process.env.PW_BASE_URL,
   testDir: process.env.TEST_DIR || './ci-visibility/playwright-tests',

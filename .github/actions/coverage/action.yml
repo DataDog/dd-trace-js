@@ -9,27 +9,22 @@ inputs:
     description: "Coverage report directory (defaults to 'coverage')"
     required: false
     default: coverage
-  dd_api_key:
-    description: "Datadog API key for coverage upload"
-    required: true
-
 runs:
   using: composite
   steps:
-    - name: Verify coverage output
-      shell: bash
-      run: node scripts/verify-coverage.js --flags "${{ inputs.flags }}"
-
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2 # v6.0.0
-      with:
-        flags: ${{ inputs.flags }}
-
-    - name: Upload coverage to Datadog
-      if: always()
+    # Retry once on failure to work around transient issues (e.g. flaky
+    # Codecov upload network calls).
+    - id: attempt
+      uses: ./.github/actions/coverage/upload
       continue-on-error: true
-      uses: DataDog/coverage-upload-github-action@6c4bd935248daa6f0ef94e3e6ba71ad5ad079998 # v1
       with:
-        api_key: ${{ inputs.dd_api_key }}
-        files: .
         flags: ${{ inputs.flags }}
+        report-dir: ${{ inputs.report-dir }}
+    - if: steps.attempt.outcome == 'failure'
+      shell: bash
+      run: sleep 60
+    - if: steps.attempt.outcome == 'failure'
+      uses: ./.github/actions/coverage/upload
+      with:
+        flags: ${{ inputs.flags }}
+        report-dir: ${{ inputs.report-dir }}

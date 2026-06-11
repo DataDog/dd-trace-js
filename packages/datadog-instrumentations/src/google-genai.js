@@ -46,10 +46,10 @@ function wrapGenerateContent (method) {
 }
 
 function wrapStreamIterator (iterator, ctx) {
-  return function () {
-    const itr = iterator.apply(this, arguments)
-    shimmer.wrap(itr, 'next', next => function () {
-      return next.apply(this, arguments)
+  return function (...args) {
+    const itr = iterator.apply(this, args)
+    shimmer.wrap(itr, 'next', next => function (...args) {
+      return next.apply(this, args)
         .then(res => {
           const { done, value: chunk } = res
           onStreamedChunkCh.publish({ ctx, chunk, done })

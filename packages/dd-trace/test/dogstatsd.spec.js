@@ -15,6 +15,7 @@ describe('dogstatsd', () => {
   let client
   let DogStatsDClient
   let CustomMetrics
+  let MetricsAggregationClient
   let dgram
   let udp4
   let udp6
@@ -28,6 +29,7 @@ describe('dogstatsd', () => {
   let sockets
   let assertData
   let docker
+  let log
 
   beforeEach((done) => {
     udp6 = {
@@ -69,13 +71,16 @@ describe('dogstatsd', () => {
     })
 
     docker = {}
+    log = { debug: sinon.stub(), error: sinon.stub() }
 
     const dogstatsd = proxyquire.noPreserveCache().noCallThru()('../src/dogstatsd', {
       dgram,
       './exporters/common/docker': docker,
+      './log': log,
     })
     DogStatsDClient = dogstatsd.DogStatsDClient
     CustomMetrics = dogstatsd.CustomMetrics
+    MetricsAggregationClient = dogstatsd.MetricsAggregationClient
 
     httpData = []
     statusCode = 200
@@ -226,6 +231,27 @@ describe('dogstatsd', () => {
     sinon.assert.notCalled(udp4.send)
     sinon.assert.notCalled(udp6.send)
     sinon.assert.notCalled(dns.lookup)
+    sinon.assert.notCalled(log.debug)
+  })
+
+  it('logs the metric count and the UDP transport on a non-empty flush', () => {
+    client = createDogStatsDClient()
+
+    client.gauge('test.avg', 1)
+    client.flush()
+
+    assert.deepStrictEqual(log.debug.firstCall.args, ['Flushing %s metrics via %s', 1, 'UDP'])
+  })
+
+  it('logs the metric count and the HTTP transport on a non-empty flush', () => {
+    client = createDogStatsDClient({
+      metricsProxyUrl: `http://localhost:${httpPort}`,
+    })
+
+    client.gauge('test.avg', 1)
+    client.flush()
+
+    assert.deepStrictEqual(log.debug.firstCall.args, ['Flushing %s metrics via %s', 1, 'HTTP'])
   })
 
   it('should not flush if the dns lookup fails', () => {
@@ -657,6 +683,80 @@ describe('dogstatsd', () => {
 
       sinon.assert.called(udp4.send)
       assert.strictEqual(udp4.send.firstCall.args[0].toString(), 'test.avg:10|g|#foo:bar|c:ci-1234\n')
+    })
+  })
+
+  describe('MetricsAggregationClient', () => {
+    let aggregator
+    let gaugeCalls
+    let incrementCalls
+
+    beforeEach(() => {
+      gaugeCalls = []
+      incrementCalls = []
+      const inner = {
+        gauge: (name, value, tags) => gaugeCalls.push([name, value, tags?.slice()]),
+        increment: (name, value, tags) => incrementCalls.push([name, value, tags?.slice()]),
+        distribution: () => {},
+        histogram: () => {},
+        flush: () => {},
+      }
+      aggregator = new MetricsAggregationClient(inner)
+    })
+
+    it('emits a gauge once and then stays silent until it is set again', () => {
+      aggregator.gauge('test.avg', 5)
+      aggregator.flush()
+
+      assert.deepStrictEqual(gaugeCalls, [['test.avg', 5, []]])
+
+      gaugeCalls.length = 0
+      aggregator.flush()
+      aggregator.flush()
+
+      assert.deepStrictEqual(gaugeCalls, [])
+    })
+
+    it('re-emits a gauge on every flush when it is updated each cycle', () => {
+      for (let i = 1; i <= 3; i++) {
+        aggregator.gauge('test.avg', i)
+        aggregator.flush()
+      }
+
+      assert.deepStrictEqual(gaugeCalls, [
+        ['test.avg', 1, []],
+        ['test.avg', 2, []],
+        ['test.avg', 3, []],
+      ])
+    })
+
+    it('does not re-emit a histogram once observations stop', () => {
+      aggregator.histogram('test.hist', 10)
+      aggregator.flush()
+
+      assert(
+        gaugeCalls.length > 0 && incrementCalls.length > 0,
+        `Got gauge=${gaugeCalls.length}, increment=${incrementCalls.length}`
+      )
+
+      gaugeCalls.length = 0
+      incrementCalls.length = 0
+      aggregator.flush()
+      aggregator.flush()
+
+      assert.deepStrictEqual(gaugeCalls, [])
+      assert.deepStrictEqual(incrementCalls, [])
+    })
+
+    it('drains all metric trees on flush so cardinality is bounded', () => {
+      aggregator.gauge('test.avg', 5, ['t:1'])
+      aggregator.histogram('test.hist', 10, ['t:1'])
+      aggregator.increment('test.count', 1, ['t:1'])
+      aggregator.flush()
+
+      assert.strictEqual(aggregator._gauges.size, 0)
+      assert.strictEqual(aggregator._histograms.size, 0)
+      assert.strictEqual(aggregator._counters.size, 0)
     })
   })
 })

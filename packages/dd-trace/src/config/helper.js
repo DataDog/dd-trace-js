@@ -13,6 +13,7 @@
  * @property {string} [transform]
  * @property {string} [allowed]
  * @property {string|boolean} [deprecated]
+ * @property {boolean} [sensitive] Excludes the configuration value from configuration telemetry.
  */
 
 /**
@@ -21,9 +22,13 @@
  */
 
 const { deprecate } = require('util')
+const { DD_MAJOR } = require('../../../../version')
+const applyMajorOverrides = require('./major-overrides')
 const {
   supportedConfigurations,
 } = /** @type {SupportedConfigurationsJson} */ (require('./supported-configurations.json'))
+
+applyMajorOverrides(supportedConfigurations, DD_MAJOR)
 
 /**
  * Types for environment variable handling.

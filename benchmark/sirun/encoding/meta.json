@@ -4,9 +4,60 @@
   "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
   "cachegrind": false,
   "instructions": true,
-  "iterations": 22,
+  "iterations": 20,
   "variants": {
-    "0.4": { "env": { "ENCODER_VERSION": "0.4" } },
-    "0.5": { "env": { "ENCODER_VERSION": "0.5" } }
+    "0.4": {
+      "env": {
+        "ENCODER_VERSION": "0.4",
+        "WITH_SPAN_EVENTS": "none",
+        "ENCODE_COUNT": "31000"
+      }
+    },
+    "0.5": {
+      "env": {
+        "ENCODER_VERSION": "0.5",
+        "WITH_SPAN_EVENTS": "none",
+        "ENCODE_COUNT": "60000"
+      }
+    },
+    "0.4-events-native": {
+      "env": {
+        "ENCODER_VERSION": "0.4",
+        "WITH_SPAN_EVENTS": "native",
+        "DD_TRACE_NATIVE_SPAN_EVENTS": "true",
+        "ENCODE_COUNT": "13000"
+      }
+    },
+    "0.4-events-legacy": {
+      "env": {
+        "ENCODER_VERSION": "0.4",
+        "WITH_SPAN_EVENTS": "legacy",
+        "DD_TRACE_NATIVE_SPAN_EVENTS": "false",
+        "ENCODE_COUNT": "10500"
+      }
+    },
+    "0.5-events-legacy": {
+      "env": {
+        "ENCODER_VERSION": "0.5",
+        "WITH_SPAN_EVENTS": "legacy",
+        "ENCODE_COUNT": "15000"
+      }
+    },
+    "0.4-wide-tags": {
+      "env": {
+        "ENCODER_VERSION": "0.4",
+        "WITH_SPAN_EVENTS": "none",
+        "WIDE_TAGS": "40",
+        "ENCODE_COUNT": "11000"
+      }
+    },
+    "0.5-wide-tags": {
+      "env": {
+        "ENCODER_VERSION": "0.5",
+        "WITH_SPAN_EVENTS": "none",
+        "WIDE_TAGS": "40",
+        "ENCODE_COUNT": "19000"
+      }
+    }
   }
 }

@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { AsyncLocalStorage } = require('node:async_hooks')
+const { inspect } = require('node:util')
 
 const axios = require('axios')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
@@ -39,7 +40,7 @@ describe('Plugin', () => {
       })
 
       after(() => {
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       before(() => {
@@ -105,12 +106,16 @@ describe('Plugin', () => {
             assert.strictEqual(traces[0][0].meta['span.kind'], 'server')
             assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/user/123`)
             assert.strictEqual(traces[0][0].meta['http.method'], 'GET')
-            assert.ok(Object.hasOwn(traces[0][0].meta, 'http.status_code'))
+            assert.ok(
+              Object.hasOwn(traces[0][0].meta, 'http.status_code'),
+              `Available keys: ${inspect(Object.keys(traces[0][0].meta))}`
+            )
             assert.strictEqual(traces[0][0].meta.component, 'hapi')
             assert.strictEqual(traces[0][0].meta['_dd.integration'], 'hapi')
+            const statusCode = Number(traces[0][0].meta['http.status_code'])
             assert.ok(
-              Number(traces[0][0].meta['http.status_code']) >= 200 &&
-              Number(traces[0][0].meta['http.status_code']) <= 299
+              statusCode >= 200 && statusCode <= 299,
+              `Expected 2xx status code, got ${statusCode}`
             )
           })
           .then(done)

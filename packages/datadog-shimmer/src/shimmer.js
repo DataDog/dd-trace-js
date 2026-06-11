@@ -13,11 +13,16 @@ const skipMethodSize = skipMethods.size
 
 const nonConfigurableModuleExports = new WeakMap()
 
+// Reused descriptor scratch space for the `name` and `length` slots that
+// `copyProperties` and `wrapCallback` rewrite per wrap. `Object.defineProperty`
+// reads the descriptor's slots synchronously and does not retain the object,
+// so mutating `value` between calls is safe.
+const lengthDescriptor = { value: 0, configurable: true }
+const nameDescriptor = { value: '', configurable: true }
+
 /**
- * Copies properties from the original function to the wrapped function.
- *
- * @param {Function} original - The original function.
- * @param {Function} wrapped - The wrapped function.
+ * @param {Function} original
+ * @param {Function} wrapped
  */
 function copyProperties (original, wrapped) {
   if (original.constructor !== wrapped.constructor) {
@@ -26,11 +31,15 @@ function copyProperties (original, wrapped) {
   }
 
   const ownKeys = Reflect.ownKeys(original)
-  if (original.length !== wrapped.length) {
-    Object.defineProperty(wrapped, 'length', { value: original.length, configurable: true })
+  const originalLength = original.length
+  if (originalLength !== wrapped.length) {
+    lengthDescriptor.value = originalLength
+    Object.defineProperty(wrapped, 'length', lengthDescriptor)
   }
-  if (original.name !== wrapped.name) {
-    Object.defineProperty(wrapped, 'name', { value: original.name, configurable: true })
+  const originalName = original.name
+  if (originalName !== wrapped.name) {
+    nameDescriptor.value = originalName
+    Object.defineProperty(wrapped, 'name', nameDescriptor)
   }
   if (ownKeys.length !== 2) {
     for (const key of ownKeys) {
@@ -46,11 +55,9 @@ function copyProperties (original, wrapped) {
 }
 
 /**
- * Copies properties from the original object to the wrapped object, skipping a specific key.
- *
- * @param {Record<string | symbol, unknown>} original - The original object.
- * @param {Record<string | symbol, unknown>} wrapped - The wrapped object.
- * @param {string | symbol} skipKey - The key to skip during copying.
+ * @param {Record<string | symbol, unknown>} original
+ * @param {Record<string | symbol, unknown>} wrapped
+ * @param {string | symbol} skipKey
  */
 function copyObjectProperties (original, wrapped, skipKey) {
   const ownKeys = Reflect.ownKeys(original)
@@ -66,11 +73,8 @@ function copyObjectProperties (original, wrapped, skipKey) {
 }
 
 /**
- * Wraps a function with a wrapper function.
- *
- * @param {Function} original - The original function to wrap.
- * @param {(original: Function) => Function} wrapper - The wrapper function.
- * @returns {Function} The wrapped function.
+ * @param {Function} original
+ * @param {(original: Function) => Function} wrapper
  */
 function wrapFunction (original, wrapper) {
   if (typeof original !== 'function') return original
@@ -79,6 +83,32 @@ function wrapFunction (original, wrapper) {
   assertNotClass(original)
   copyProperties(original, wrapped)
 
+  return wrapped
+}
+
+/**
+ * Lean variant of `wrapFunction` for tracer-owned closures wrapping a
+ * user-supplied callback. Preserves `name` and `length` only; skips the
+ * prototype copy, `assertNotClass`, and the `Reflect.ownKeys` descriptor
+ * walk. Use `wrapFunction` instead when the wrapped value needs its
+ * prototype, has own properties the caller may read, or is `new`-ed.
+ *
+ * @param {Function} original
+ * @param {(original: Function) => Function} wrapper
+ */
+function wrapCallback (original, wrapper) {
+  if (typeof original !== 'function') {
+    return original
+  }
+  const wrapped = wrapper(original)
+  if (wrapped.name !== original.name) {
+    nameDescriptor.value = original.name
+    Object.defineProperty(wrapped, 'name', nameDescriptor)
+  }
+  if (wrapped.length !== original.length) {
+    lengthDescriptor.value = original.length
+    Object.defineProperty(wrapped, 'length', lengthDescriptor)
+  }
   return wrapped
 }
 
@@ -140,7 +170,6 @@ function wrap (target, name, wrapper, options) {
   copyProperties(original, wrapped)
 
   if (descriptor.writable) {
-    // Fast path for assigned properties.
     if (descriptor.configurable && descriptor.enumerable) {
       target[name] = wrapped
       return target
@@ -175,8 +204,6 @@ function wrap (target, name, wrapper, options) {
       // with this code. That way it would be possible to directly pass through
       // the entries.
 
-      // In case more than a single property is not configurable and writable,
-      // Just reuse the already created object.
       let moduleExports = nonConfigurableModuleExports.get(target)
       if (!moduleExports) {
         if (typeof target === 'function') {
@@ -267,13 +294,20 @@ function assertMethod (target, name, method) {
  * @throws {Error} If the target is a class constructor.
  */
 function assertNotClass (target) {
-  if (Function.prototype.toString.call(target).startsWith('class')) {
+  // Class constructors have a non-writable `prototype` property; functions have a
+  // writable one and arrows / async / method-shorthand have none at all. The
+  // `'prototype' in target` gate skips the descriptor lookup for the no-prototype
+  // shapes; the `in` operator is cheaper than reading `target.prototype` since
+  // it returns a boolean instead of materialising the prototype reference.
+  if ('prototype' in target &&
+      Object.getOwnPropertyDescriptor(target, 'prototype').writable === false) {
     throw new TypeError('Target is a native class constructor and cannot be wrapped.')
   }
 }
 
 module.exports = {
   wrap,
+  wrapCallback,
   wrapFunction,
   massWrap,
 }

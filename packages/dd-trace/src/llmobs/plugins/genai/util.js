@@ -156,6 +156,50 @@ function extractMetadata (config) {
 }
 
 /**
+ * Extract tool definitions from config
+ * @param {object} config
+ * @returns {Array}
+ */
+function extractToolDefinitions (config) {
+  const toolDefinitions = []
+
+  if (!Array.isArray(config?.tools)) {
+    return toolDefinitions
+  }
+
+  for (const tool of config.tools) {
+    // Only extract tools with valid function declarations
+    if (!Array.isArray(tool?.functionDeclarations)) {
+      continue
+    }
+
+    for (const currDeclaration of tool.functionDeclarations) {
+      // A valid declaration must have a name
+      if (!currDeclaration?.name) {
+        continue
+      }
+
+      const toolDef = { name: currDeclaration.name }
+
+      if (currDeclaration.description !== undefined) {
+        toolDef.description = currDeclaration.description
+      }
+
+      // Parameters can be in two different fields depending on user input
+      if (currDeclaration.parameters !== undefined) {
+        toolDef.schema = currDeclaration.parameters
+      } else if (currDeclaration.parametersJsonSchema !== undefined) {
+        toolDef.schema = currDeclaration.parametersJsonSchema
+      }
+
+      toolDefinitions.push(toolDef)
+    }
+  }
+
+  return toolDefinitions
+}
+
+/**
  * Format function call message
  * @param {Array} parts
  * @param {Array} functionCalls
@@ -237,15 +281,25 @@ function formatContentObject (content) {
     }
   }
 
-  // Check for function calls
-  const functionCalls = parts.filter(part => part.functionCall)
-  if (functionCalls.length > 0) {
+  // Two filter passes over `parts` collapse to a single walk. Most parts are
+  // text-only so neither bucket is allocated unless a matching part appears.
+  let functionCalls
+  let functionResponses
+  for (const part of parts) {
+    if (part.functionCall) {
+      functionCalls ??= []
+      functionCalls.push(part)
+    } else if (part.functionResponse) {
+      functionResponses ??= []
+      functionResponses.push(part)
+    }
+  }
+
+  if (functionCalls) {
     return formatFunctionCallMessage(parts, functionCalls, role)
   }
 
-  // Check for function responses
-  const functionResponses = parts.filter(part => part.functionResponse)
-  if (functionResponses.length > 0) {
+  if (functionResponses) {
     return formatFunctionResponseMessage(functionResponses, role)
   }
 
@@ -326,15 +380,27 @@ function formatNonStreamingCandidate (candidate) {
 
   const { parts } = content
 
-  // Check for function calls
-  const functionCalls = parts.filter(part => part.functionCall)
-  if (functionCalls.length > 0) {
+  // One walk replaces three (`filter` + two `find`); priority order is
+  // functionCall > executableCode > codeExecutionResult, same as before.
+  let functionCalls
+  let executableCode
+  let codeExecutionResult
+  for (const part of parts) {
+    if (part.functionCall) {
+      functionCalls ??= []
+      functionCalls.push(part)
+    } else if (!executableCode && part.executableCode) {
+      executableCode = part
+    } else if (!codeExecutionResult && part.codeExecutionResult) {
+      codeExecutionResult = part
+    }
+  }
+
+  if (functionCalls) {
     messages.push(formatFunctionCallMessage(parts, functionCalls, ROLES.ASSISTANT))
     return messages
   }
 
-  // Check for executable code
-  const executableCode = parts.find(part => part.executableCode)
   if (executableCode) {
     messages.push({
       role: ROLES.ASSISTANT,
@@ -346,8 +412,6 @@ function formatNonStreamingCandidate (candidate) {
     return messages
   }
 
-  // Check for code execution result
-  const codeExecutionResult = parts.find(part => part.codeExecutionResult)
   if (codeExecutionResult) {
     messages.push({
       role: ROLES.ASSISTANT,
@@ -478,6 +542,7 @@ module.exports = {
   getOperation,
   extractMetrics,
   extractMetadata,
+  extractToolDefinitions,
   aggregateStreamingChunks,
   formatInputMessages,
   formatEmbeddingInput,

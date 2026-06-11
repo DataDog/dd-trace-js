@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach } = require('mocha')
 const msgpack = require('@msgpack/msgpack')
@@ -28,8 +29,10 @@ describe('encode', () => {
       logger = {
         debug: sinon.stub(),
       }
+      const getConfig = () => ({ DD_TRACE_NATIVE_SPAN_EVENTS: false })
       const { AgentEncoder } = proxyquire('../../src/encode/0.4', {
         '../log': logger,
+        '../config': getConfig,
       })
       writer = { flush: sinon.spy() }
       encoder = new AgentEncoder(writer)
@@ -61,13 +64,13 @@ describe('encode', () => {
       const decoded = msgpack.decode(buffer, { useBigInt64: true })
       const trace = decoded[0]
 
-      assert.ok(Array.isArray(trace))
+      assert.ok(Array.isArray(trace), `Expected array, got ${inspect(trace)}`)
       assert.ok(trace[0] instanceof Object)
       assert.strictEqual(trace[0].trace_id.toString(16), data[0].trace_id.toString())
       assert.strictEqual(trace[0].span_id.toString(16), data[0].span_id.toString())
       assert.strictEqual(trace[0].parent_id.toString(16), data[0].parent_id.toString())
-      assert.strictEqual(trace[0].start, 123n)
-      assert.strictEqual(trace[0].duration, 456n)
+      assert.strictEqual(trace[0].start, 123)
+      assert.strictEqual(trace[0].duration, 456)
       assert.strictEqual(trace[0].name, data[0].name)
       assert.deepStrictEqual(trace[0].meta, { bar: 'baz' })
       assert.deepStrictEqual(trace[0].metrics, { example: 1 })
@@ -128,10 +131,16 @@ describe('encode', () => {
     })
 
     it('should log adding an encoded trace to the buffer if enabled', () => {
-      encoder._debugEncoding = true
-      encoder.encode(data)
+      const debugConfig = () => ({ DD_TRACE_NATIVE_SPAN_EVENTS: false, DD_TRACE_ENCODING_DEBUG: true })
+      const { AgentEncoder } = proxyquire('../../src/encode/0.4', {
+        '../log': logger,
+        '../config': debugConfig,
+      })
+      const debugEncoder = new AgentEncoder(writer)
+      debugEncoder.encode(data)
 
-      const message = logger.debug.firstCall.args[0]()
+      const [formatter, ...args] = logger.debug.firstCall.args
+      const message = formatter(...args)
 
       assert.match(message, /^Adding encoded trace to buffer:(\s[a-f\d]{2})+$/)
     })
@@ -175,8 +184,8 @@ describe('encode', () => {
           type: 'foo',
           error: 0,
         })
-        assert.strictEqual(decodedData.start, 123n)
-        assert.strictEqual(decodedData.duration, 456n)
+        assert.strictEqual(decodedData.start, 123)
+        assert.strictEqual(decodedData.duration, 456)
         assert.deepStrictEqual(decodedData.meta, {
           bar: 'baz',
         })
@@ -190,12 +199,49 @@ describe('encode', () => {
       })
     })
 
+    it('should not pin previous _stringBytes buffers in the cache after a resize', () => {
+      // Force enough unique strings to overflow the 1 MiB initial chunk so
+      // _stringBytes resizes mid-encode. Probes _stringMap to make sure no
+      // entry is left pointing at a now-orphaned ArrayBuffer; the public
+      // surface does not expose this retention directly.
+      const longSuffix = 'x'.repeat(80)
+      const dataToEncode = []
+      for (let i = 0; i < 30000; i++) {
+        dataToEncode.push({
+          trace_id: id('1234abcd1234abcd'),
+          span_id: id('1234abcd1234abcd'),
+          parent_id: id('1234abcd1234abcd'),
+          name: 'name',
+          resource: 'resource',
+          service: 'service',
+          type: 'foo',
+          error: 0,
+          meta: { [`k_${i}_${longSuffix}`]: `v_${i}_${longSuffix}` },
+          metrics: {},
+          start: 0,
+          duration: 1,
+        })
+      }
+      const initialBuffer = encoder._stringBytes.buffer
+
+      encoder.encode(dataToEncode)
+
+      const finalBuffer = encoder._stringBytes.buffer
+      assert.notStrictEqual(initialBuffer, finalBuffer, '_stringBytes must have resized for this test to be meaningful')
+      let staleEntries = 0
+      for (const key of Object.keys(encoder._stringMap)) {
+        if (encoder._stringMap[key].buffer !== finalBuffer.buffer) staleEntries++
+      }
+      assert.strictEqual(staleEntries, 0)
+    })
+
     it('should encode span events within tags as a fallback to encoding as a top level field', () => {
+      // Events arrive raw: the encoder derives time_unix_nano = round(startTime * 1e6).
       const topLevelEvents = [
-        { name: 'Something went so wrong', time_unix_nano: 1000000 },
+        { name: 'Something went so wrong', startTime: 1 },
         {
           name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
-          time_unix_nano: 1633023102000000,
+          startTime: 1633023102,
           attributes: { emotion: 'happy', rating: 9.8, other: [1, 9.5, 1], idol: false },
         },
       ]
@@ -212,6 +258,42 @@ describe('encode', () => {
       const decoded = msgpack.decode(buffer, { useBigInt64: true })
       const trace = decoded[0]
       assert.deepStrictEqual(trace[0].meta.events, encodedLink)
+    })
+
+    it('should encode span events whose name is not a string without throwing', () => {
+      // `addEvent` does not type-check `name`. The legacy stringifier must
+      // tolerate the same inputs `JSON.stringify` did before the rewrite.
+      const events = [
+        { name: undefined, startTime: 1 },
+        { name: null, startTime: 2, attributes: { ok: true } },
+        { name: 42, startTime: 3 },
+        { name: true, startTime: 4 },
+        { name: ['array', 'name'], startTime: 5 },
+        { name: { nested: 'object' }, startTime: 6 },
+        { name: Symbol('event'), startTime: 7 },
+        { name: 'plain', startTime: 8 },
+      ]
+
+      // The wire shape uses time_unix_nano = round(startTime * 1e6) and drops
+      // undefined attributes, matching the old formatter output.
+      const expected = JSON.stringify([
+        { name: undefined, time_unix_nano: 1000000 },
+        { name: null, time_unix_nano: 2000000, attributes: { ok: true } },
+        { name: 42, time_unix_nano: 3000000 },
+        { name: true, time_unix_nano: 4000000 },
+        { name: ['array', 'name'], time_unix_nano: 5000000 },
+        { name: { nested: 'object' }, time_unix_nano: 6000000 },
+        { name: Symbol('event'), time_unix_nano: 7000000 },
+        { name: 'plain', time_unix_nano: 8000000 },
+      ])
+
+      data[0].span_events = events
+
+      encoder.encode(data)
+
+      const buffer = encoder.makePayload()
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
+      assert.strictEqual(decoded[0][0].meta.events, expected)
     })
 
     it('should encode spanLinks', () => {
@@ -231,13 +313,13 @@ describe('encode', () => {
       const buffer = encoder.makePayload()
       const decoded = msgpack.decode(buffer, { useBigInt64: true })
       const trace = decoded[0]
-      assert.ok(Array.isArray(trace))
+      assert.ok(Array.isArray(trace), `Expected array, got ${inspect(trace)}`)
       assert.ok(trace[0] instanceof Object)
       assert.strictEqual(trace[0].trace_id.toString(16), data[0].trace_id.toString())
       assert.strictEqual(trace[0].span_id.toString(16), data[0].span_id.toString())
       assert.strictEqual(trace[0].parent_id.toString(16), data[0].parent_id.toString())
-      assert.strictEqual(trace[0].start, 123n)
-      assert.strictEqual(trace[0].duration, 456n)
+      assert.strictEqual(trace[0].start, 123)
+      assert.strictEqual(trace[0].duration, 456)
       assert.strictEqual(trace[0].name, data[0].name)
       assert.deepStrictEqual(trace[0].meta, { bar: 'baz', '_dd.span_links': encodedLink })
       assert.deepStrictEqual(trace[0].metrics, { example: 1 })
@@ -253,16 +335,45 @@ describe('encode', () => {
       const buffer = encoder.makePayload()
       const decoded = msgpack.decode(buffer, { useBigInt64: true })
       const trace = decoded[0]
-      assert.ok(Array.isArray(trace))
+      assert.ok(Array.isArray(trace), `Expected array, got ${inspect(trace)}`)
       assert.ok(trace[0] instanceof Object)
       assert.strictEqual(trace[0].trace_id.toString(16), data[0].trace_id.toString())
       assert.strictEqual(trace[0].span_id.toString(16), data[0].span_id.toString())
       assert.strictEqual(trace[0].parent_id.toString(16), data[0].parent_id.toString())
-      assert.strictEqual(trace[0].start, 123n)
-      assert.strictEqual(trace[0].duration, 456n)
+      assert.strictEqual(trace[0].start, 123)
+      assert.strictEqual(trace[0].duration, 456)
       assert.strictEqual(trace[0].name, data[0].name)
       assert.deepStrictEqual(trace[0].meta, { bar: 'baz', '_dd.span_links': encodedLink })
       assert.deepStrictEqual(trace[0].metrics, { example: 1 })
+    })
+
+    it('emits error: 1 via the fallback when start does not fit u64', () => {
+      // The fused per-span block only fires for the steady-state shape
+      // (`error: 0/1` AND a nanosecond `start` ≥ 2³²). Synthetic test
+      // inputs with small starts fall back to the per-field emit chain;
+      // pin both the `error === 1` arm and the `error: 0` arm in one
+      // place so a future refactor can't drop either silently.
+      data[0].error = 1
+
+      encoder.encode(data)
+
+      const trace = msgpack.decode(encoder.makePayload(), { useBigInt64: true })[0]
+      assert.strictEqual(trace[0].error, 1)
+      assert.strictEqual(trace[0].start, 123)
+      assert.strictEqual(trace[0].duration, 456)
+    })
+
+    it('emits unusual error flags via writeIntOrFloat in the fallback', () => {
+      // OTel-bridge spans and a handful of plugins push non-binary error
+      // values. The pre-fused `[KEY_ERROR, 0x00/0x01]` constants would
+      // miscode them; the fallback routes through `writeIntOrFloat` so
+      // each value picks the shortest msgpack encoding.
+      data[0].error = 42
+
+      encoder.encode(data)
+
+      const trace = msgpack.decode(encoder.makePayload(), { useBigInt64: true })[0]
+      assert.strictEqual(trace[0].error, 42)
     })
 
     describe('meta_struct', () => {
@@ -487,19 +598,22 @@ describe('encode', () => {
         debug: sinon.spy(),
       }
 
+      const getConfig = () => ({ DD_TRACE_NATIVE_SPAN_EVENTS: true })
       const { AgentEncoder } = proxyquire('../../src/encode/0.4', {
         '../log': logger,
+        '../config': getConfig,
       })
-      writer = { flush: sinon.spy(), _config: { trace: { nativeSpanEvents: true } } }
+      writer = { flush: sinon.spy() }
       encoder = new AgentEncoder(writer)
     })
 
     it('should encode span events as a top-level field when the agent version supports this', () => {
+      // Raw events carry startTime; the encoder derives time_unix_nano = round(startTime * 1e6).
       const topLevelEvents = [
-        { name: 'Something went so wrong', time_unix_nano: 1000000 },
+        { name: 'Something went so wrong', startTime: 1 },
         {
           name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
-          time_unix_nano: 1633023102000000,
+          startTime: 1633023102,
           attributes: { emotion: 'happy', happiness: 10, rating: 9.8, other: ['hi', false, 1, 1.2], idol: false },
         },
       ]
@@ -546,12 +660,12 @@ describe('encode', () => {
       const topLevelEvents = [
         {
           name: 'I can sing!!! acbdefggnmdfsdv k 2e2ev;!|=xxx',
-          time_unix_nano: 1633023102000000,
+          startTime: 1633023102,
           attributes: { emotion: { unsupportedNestedObject: 'happiness' }, array: [['nested_array']] },
         },
         {
           name: 'I can sing!!!',
-          time_unix_nano: 1633023102000000,
+          startTime: 1633023102,
           attributes: { emotion: { unsupportedNestedObject: 'happiness' }, array: [['nested_array'], 'valid_value'] },
         },
       ]
@@ -584,22 +698,22 @@ describe('encode', () => {
       const topLevelEvents = [
         {
           name: 'Event 1',
-          time_unix_nano: 1000000,
+          startTime: 1,
           attributes: { unsupported_key: { some: 'object' }, other_key: 'valid' },
         },
         {
           name: 'Event 2',
-          time_unix_nano: 2000000,
+          startTime: 2,
           attributes: { unsupported_key: { another: 'object' } },
         },
         {
           name: 'Event 3',
-          time_unix_nano: 3000000,
+          startTime: 3,
           attributes: { unsupported_key: { yet: 'another object' } },
         },
         {
           name: 'Event 4',
-          time_unix_nano: 4000000,
+          startTime: 4,
           attributes: { unsupported_key: { different: 'structure' } },
         },
       ]
@@ -608,11 +722,11 @@ describe('encode', () => {
 
       encoder.encode(data)
 
-      // Assert that log.debug was called only once for 'unsupported_key'
       sinon.assert.calledOnce(logger.debug)
       sinon.assert.calledWith(
         logger.debug,
-        sinon.match(/Encountered unsupported data type for span event v0\.4 encoding, key: unsupported_key/)
+        sinon.match(/Encountered unsupported data type for span event v0\.4 encoding, key: %s/),
+        'unsupported_key'
       )
     })
 
@@ -620,17 +734,17 @@ describe('encode', () => {
       const topLevelEvents = [
         {
           name: 'Event 1',
-          time_unix_nano: 1000000,
+          startTime: 1,
           attributes: { unsupported_key1: { some: 'object' }, unsupported_key2: { another: 'object' } },
         },
         {
           name: 'Event 2',
-          time_unix_nano: 2000000,
+          startTime: 2,
           attributes: { unsupported_key1: { different: 'structure' }, unsupported_key3: { more: 'objects' } },
         },
         {
           name: 'Event 3',
-          time_unix_nano: 3000000,
+          startTime: 3,
           attributes: { unsupported_key2: { yet: 'another object' }, unsupported_key3: { extra: 'data' } },
         },
       ]
@@ -639,11 +753,41 @@ describe('encode', () => {
 
       encoder.encode(data)
 
-      // Assert that log.debug was called once for each unique unsupported key
       assert.strictEqual(logger.debug.callCount, 3)
-      assert.match(logger.debug.getCall(0).args[0], /unsupported_key1/)
-      assert.match(logger.debug.getCall(1).args[0], /unsupported_key2/)
-      assert.match(logger.debug.getCall(2).args[0], /unsupported_key3/)
+      assert.strictEqual(logger.debug.getCall(0).args[1], 'unsupported_key1')
+      assert.strictEqual(logger.debug.getCall(1).args[1], 'unsupported_key2')
+      assert.strictEqual(logger.debug.getCall(2).args[1], 'unsupported_key3')
+    })
+
+    it('should skip events whose name is not a string without throwing', () => {
+      // `addEvent` and the OTel bridge do not type-check `name`. The native
+      // path used to hand `name` straight to `_encodeString`, which throws
+      // for `Symbol` / `null` / non-coercible values via `Buffer.byteLength`
+      // and would have aborted the entire trace. Bad entries are dropped
+      // silently; the rest of the trace must still encode.
+      const topLevelEvents = [
+        { name: null, startTime: 1, attributes: { ok: true } },
+        { name: 42, startTime: 2 },
+        { name: Symbol('event'), startTime: 3 },
+        { name: undefined, startTime: 4 },
+        { name: 'kept', startTime: 5, attributes: { mood: 'happy' } },
+      ]
+
+      data[0].span_events = topLevelEvents
+
+      encoder.encode(data)
+
+      const buffer = encoder.makePayload()
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
+      const trace = decoded[0]
+
+      assert.deepStrictEqual(trace[0].span_events, [
+        {
+          name: 'kept',
+          time_unix_nano: 5000000,
+          attributes: { mood: { type: 0, string_value: 'happy' } },
+        },
+      ])
     })
   })
 })

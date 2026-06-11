@@ -34,6 +34,7 @@ const agent = require('../plugins/agent')
 const { storage } = require('../../../datadog-core')
 const telemetryMetrics = require('../../src/telemetry/metrics')
 const addresses = require('../../src/appsec/addresses')
+const { withRequest } = require('../../src/appsec/store')
 const { getConfigFresh } = require('../helpers/config')
 const { blockedTemplateHtml, blockedTemplateJson, setTestBlockingTemplates } = require('./utils')
 
@@ -728,6 +729,47 @@ describe('AppSec Index', function () {
 
       sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, storedHeaders, undefined)
     })
+
+    it('should normalize response header names to lowercase before storing', () => {
+      const req = {
+        url: '/path',
+        headers: {
+          'user-agent': 'Arachni',
+          host: 'localhost',
+        },
+        method: 'GET',
+        socket: {
+          remoteAddress: '127.0.0.1',
+          remotePort: 8080,
+        },
+      }
+      const res = { getHeaders: () => ({}), statusCode: 200 }
+
+      const mixedCaseHeaders = {
+        'Content-Type': 'application/json',
+        'Content-Length': 137,
+      }
+
+      web.patch(req)
+
+      sinon.stub(Reporter, 'finishRequest')
+      sinon.stub(waf, 'disposeContext')
+
+      responseWriteHead.publish({
+        req,
+        res,
+        abortController: { abort: sinon.stub() },
+        statusCode: 200,
+        responseHeaders: mixedCaseHeaders,
+      })
+
+      AppSec.incomingHttpEndTranslator({ req, res })
+
+      sinon.assert.calledOnceWithExactly(Reporter.finishRequest, req, res, {
+        'content-type': 'application/json',
+        'content-length': 137,
+      }, undefined)
+    })
   })
 
   describe('Api Security', () => {
@@ -904,10 +946,17 @@ describe('AppSec Index', function () {
     beforeEach(() => {
       sinon.stub(waf, 'run')
 
+      const rootSpanTags = {}
       rootSpan = {
         setTag: sinon.stub(),
-        _tags: {},
-        context: () => ({ _tags: rootSpan._tags }),
+        _tags: rootSpanTags,
+        context: () => ({
+          _tags: rootSpanTags,
+          getTags () { return rootSpanTags },
+          getTag (key) { return rootSpanTags[key] },
+          setTag (key, value) { rootSpanTags[key] = value },
+          hasTag (key) { return key in rootSpanTags },
+        }),
       }
       web.root.returns(rootSpan)
 
@@ -1107,7 +1156,8 @@ describe('AppSec Index', function () {
 
     describe('onPassportVerify', () => {
       beforeEach(() => {
-        sinon.stub(storage('legacy'), 'getStore').returns({ req })
+        web.getContext.withArgs(req).returns({ res })
+        sinon.stub(storage('legacy'), 'getStore').returns(withRequest(undefined, req))
       })
 
       it('should block when UserTracking.trackLogin() returns action', () => {
@@ -1188,7 +1238,8 @@ describe('AppSec Index', function () {
 
     describe('onPassportDeserializeUser', () => {
       beforeEach(() => {
-        sinon.stub(storage('legacy'), 'getStore').returns({ req })
+        web.getContext.withArgs(req).returns({ res })
+        sinon.stub(storage('legacy'), 'getStore').returns(withRequest(undefined, req))
       })
 
       it('should block when UserTracking.trackUser() returns action', () => {
@@ -1655,7 +1706,7 @@ describe('IP blocking', function () {
 
   after(() => {
     appListener && appListener.close()
-    return agent.close({ ritmReset: false })
+    return agent.close()
   })
 
   describe('do not block the request', () => {
