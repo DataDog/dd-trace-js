@@ -9,8 +9,8 @@ class TurnTracingPlugin extends TracingPlugin {
   static prefix = 'tracing:apm:claude-agent-sdk:turn'
 
   bindStart (ctx) {
-    this.startSpan('turn', {
-      meta: { 'resource.name': 'turn' },
+    this.startSpan('claude_agent_sdk.query', {
+      meta: { 'resource.name': 'claude_agent_sdk.query' },
     }, ctx)
     return ctx.currentStore
   }
@@ -29,7 +29,7 @@ class ToolTracingPlugin extends TracingPlugin {
   bindStart (ctx) {
     const name = ctx.toolName || 'tool'
     this.startSpan(name, {
-      meta: { 'resource.name': name },
+      meta: { 'resource.name': 'claude_agent_sdk.tool' },
     }, ctx)
     return ctx.currentStore
   }
@@ -46,9 +46,9 @@ class SubagentTracingPlugin extends TracingPlugin {
   static prefix = 'tracing:apm:claude-agent-sdk:subagent'
 
   bindStart (ctx) {
-    const name = ctx.agentType ? `subagent-${ctx.agentType}` : 'subagent'
+    const name = ctx.agentType || 'subagent'
     this.startSpan(name, {
-      meta: { 'resource.name': name },
+      meta: { 'resource.name': 'claude_agent_sdk.subagent' },
     }, ctx)
     return ctx.currentStore
   }

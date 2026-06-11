@@ -1,6 +1,7 @@
 'use strict'
 
 const { tracingChannel } = require('dc-polyfill')
+const { storage } = require('../../datadog-core/')
 const { addHook, getHooks } = require('./helpers/instrument')
 const queryChannel = tracingChannel('orchestrion:@anthropic-ai/claude-agent-sdk:query')
 
@@ -29,8 +30,8 @@ const mergeHooks = function mergeHooks (userHooks, tracerHooks) {
   return merged
 }
 
-const buildTracerHooks = function buildTracerHooks (sessionCtx) {
-  const onSessionStart = function onSessionStart (input) {
+function buildTracerHooks (sessionCtx) {
+  const onSessionStart = function (input) {
     sessionCtx.sessionId = input.session_id
     sessionCtx.source = input.source
     sessionCtx.cwd = input.cwd
@@ -40,13 +41,13 @@ const buildTracerHooks = function buildTracerHooks (sessionCtx) {
     return {}
   }
 
-  const onSessionEnd = function onSessionEnd (input) {
+  const onSessionEnd = function (input) {
     sessionCtx.endReason = input.reason
     finishSession(sessionCtx)
     return {}
   }
 
-  const onUserPromptSubmit = function onUserPromptSubmit (input) {
+  const onUserPromptSubmit = function (input) {
     if (!sessionCtx.sessionId && input.session_id) {
       sessionCtx.sessionId = input.session_id
     }
@@ -64,17 +65,16 @@ const buildTracerHooks = function buildTracerHooks (sessionCtx) {
     }
 
     sessionCtx.currentTurn = turnCtx
-    turnCh.start.runStores(turnCtx, () => {
-      turnCh.end.publish(turnCtx)
-    })
+    turnCh.start.runStores(turnCtx, () => {})
     return {}
   }
 
-  const onStop = function onStop (input) {
+  const onStop = function (input) {
     const turnCtx = sessionCtx.currentTurn
     if (turnCtx) {
       turnCtx.stopReason = input.stop_reason
       turnCtx.lastAssistantMessage = input.last_assistant_message
+      turnCh.end.publish(turnCtx)
       turnCh.asyncEnd.publish(turnCtx)
       sessionCtx.currentTurn = null
     }
@@ -82,9 +82,12 @@ const buildTracerHooks = function buildTracerHooks (sessionCtx) {
     return {}
   }
 
-  const onPreToolUse = function onPreToolUse (input, toolUseId) {
+  const onPreToolUse = function (input, toolUseId) {
     const id = toolUseId || input.tool_use_id
     if (!id) return {}
+
+    const isSubAgentTool = input.tool_input?.subagent_type
+    if (isSubAgentTool != null) return {} // do not trace tools as subagents, we trace the actual subagent instead
 
     const toolCtx = {
       sessionId: input.session_id,
@@ -94,25 +97,37 @@ const buildTracerHooks = function buildTracerHooks (sessionCtx) {
     }
 
     sessionCtx.pendingTools.set(id, toolCtx)
-    toolCh.start.runStores(toolCtx, () => {
-      toolCh.end.publish(toolCtx)
-    })
+
+    const turnStore = sessionCtx.currentTurn?.currentStore
+    if (turnStore) {
+      storage('legacy').run(turnStore, () => toolCh.start.runStores(toolCtx, () => {}))
+    } else {
+      toolCh.start.runStores(toolCtx, () => {})
+    }
+
     return {}
   }
 
-  const onPostToolUse = function onPostToolUse (input, toolUseId) {
+  const onPostToolUse = function (input, toolUseId) {
+    const isSubAgentTool = input.tool_input?.subagent_type
+    if (isSubAgentTool != null) return {}
+
     const id = toolUseId || input.tool_use_id
     const toolCtx = sessionCtx.pendingTools.get(id)
     if (toolCtx) {
       toolCtx.toolResponse = input.tool_response
       toolCtx.toolName = toolCtx.toolName || input.tool_name
       sessionCtx.pendingTools.delete(id)
+      toolCh.end.publish(toolCtx)
       toolCh.asyncEnd.publish(toolCtx)
     }
     return {}
   }
 
-  const onPostToolUseFailure = function onPostToolUseFailure (input, toolUseId) {
+  const onPostToolUseFailure = function (input, toolUseId) {
+    const isSubAgentTool = input.tool_input?.subagent_type
+    if (isSubAgentTool != null) return {}
+
     const id = toolUseId || input.tool_use_id
     const toolCtx = sessionCtx.pendingTools.get(id)
     if (toolCtx) {
@@ -125,7 +140,7 @@ const buildTracerHooks = function buildTracerHooks (sessionCtx) {
     return {}
   }
 
-  const onSubagentStart = function onSubagentStart (input) {
+  const onSubagentStart = function (input) {
     const agentId = input.agent_id
     if (!agentId) return {}
 
@@ -136,13 +151,18 @@ const buildTracerHooks = function buildTracerHooks (sessionCtx) {
     }
 
     sessionCtx.pendingSubagents.set(agentId, subagentCtx)
-    subagentCh.start.runStores(subagentCtx, () => {
-      subagentCh.end.publish(subagentCtx)
-    })
+
+    const turnStore = sessionCtx.currentTurn?.currentStore
+    if (turnStore) {
+      storage('legacy').run(turnStore, () => subagentCh.start.runStores(subagentCtx, () => {}))
+    } else {
+      subagentCh.start.runStores(subagentCtx, () => {})
+    }
+
     return {}
   }
 
-  const onSubagentStop = function onSubagentStop (input) {
+  const onSubagentStop = function (input) {
     const agentId = input.agent_id
     const subagentCtx = sessionCtx.pendingSubagents.get(agentId)
     if (subagentCtx) {
@@ -150,6 +170,7 @@ const buildTracerHooks = function buildTracerHooks (sessionCtx) {
       subagentCtx.lastAssistantMessage = input.last_assistant_message
       subagentCtx.agentType = subagentCtx.agentType || input.agent_type
       sessionCtx.pendingSubagents.delete(agentId)
+      subagentCh.end.publish(subagentCtx)
       subagentCh.asyncEnd.publish(subagentCtx)
     }
     return {}
@@ -195,25 +216,28 @@ const buildTracerHooks = function buildTracerHooks (sessionCtx) {
 }
 
 // Close any pending spans when the session ends (iterator exhaustion or abort).
-const finishSession = function finishSession (sessionCtx) {
+function finishSession (sessionCtx) {
   if (sessionCtx._finished) return
   sessionCtx._finished = true
 
   if (sessionCtx.currentTurn) {
+    turnCh.end.publish(sessionCtx.currentTurn)
     turnCh.asyncEnd.publish(sessionCtx.currentTurn)
     sessionCtx.currentTurn = null
   }
   for (const toolCtx of sessionCtx.pendingTools.values()) {
+    toolCh.end.publish(toolCtx)
     toolCh.asyncEnd.publish(toolCtx)
   }
   sessionCtx.pendingTools.clear()
   for (const subCtx of sessionCtx.pendingSubagents.values()) {
+    subagentCh.end.publish(subCtx)
     subagentCh.asyncEnd.publish(subCtx)
   }
   sessionCtx.pendingSubagents.clear()
 }
 
-const onQueryStart = function onQueryStart (ctx) {
+function onQueryStart (ctx) {
   const { arguments: args } = ctx
 
   const queryArg = args[0]
@@ -246,10 +270,6 @@ const onQueryStart = function onQueryStart (ctx) {
 
   ctx._sessionCtx = sessionCtx
 }
-
-// --- Orchestrion path (primary) ---
-// Subscribe to the orchestrion channel via getHooks/addHook. The rewriter
-// transforms the SDK at compile time, which works on Node 22 for ESM-via-require.
 
 queryChannel.subscribe({
   start: onQueryStart,

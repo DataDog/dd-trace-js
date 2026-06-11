@@ -14,7 +14,8 @@ class TurnLLMObsPlugin extends LLMObsPlugin {
       kind: 'agent',
       modelName,
       modelProvider,
-      name: 'turn',
+      name: 'claude_agent_sdk.query',
+      sessionId: ctx.sessionId,
     }
   }
 
@@ -27,7 +28,6 @@ class TurnLLMObsPlugin extends LLMObsPlugin {
     this._tagger.tagTextIO(span, input, output)
 
     const metadata = {}
-    if (ctx.sessionId) metadata.session_id = ctx.sessionId
     if (ctx.model) {
       const { modelName, modelProvider } = splitModel(ctx.model)
       if (modelName) metadata.model_name = modelName
@@ -53,6 +53,7 @@ class ToolLLMObsPlugin extends LLMObsPlugin {
       kind: 'tool',
       modelProvider: 'anthropic',
       name: ctx.toolName || 'tool',
+      sessionId: ctx.sessionId,
     }
   }
 
@@ -70,7 +71,6 @@ class ToolLLMObsPlugin extends LLMObsPlugin {
     const metadata = {}
     if (ctx.toolName) metadata.tool_name = ctx.toolName
     if (ctx.toolUseId) metadata.tool_use_id = ctx.toolUseId
-    if (ctx.sessionId) metadata.session_id = ctx.sessionId
     if (ctx.isInterrupt) metadata.is_interrupt = true
 
     this._tagger.tagMetadata(span, metadata)
@@ -86,7 +86,8 @@ class SubagentLLMObsPlugin extends LLMObsPlugin {
     return {
       kind: 'agent',
       modelProvider: 'anthropic',
-      name: ctx.agentType ? `subagent-${ctx.agentType}` : 'subagent',
+      name: ctx.agentType || 'subagent',
+      sessionId: ctx.sessionId,
     }
   }
 
@@ -101,7 +102,6 @@ class SubagentLLMObsPlugin extends LLMObsPlugin {
     const metadata = {}
     if (ctx.agentId) metadata.agent_id = ctx.agentId
     if (ctx.agentType) metadata.agent_type = ctx.agentType
-    if (ctx.sessionId) metadata.session_id = ctx.sessionId
     if (ctx.transcriptPath) metadata.agent_transcript_path = ctx.transcriptPath
 
     this._tagger.tagMetadata(span, metadata)
