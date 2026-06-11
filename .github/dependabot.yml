@@ -60,6 +60,12 @@ updates:
         patterns:
           - "*"
 
+  # NOTE: package.electron.json is intentionally NOT listed here. It is a
+  # generated file derived from package.json via scripts/generate-electron-package.js.
+  # When Dependabot bumps a dep in package.json the `verify:electron-package`
+  # lint check will fail on that PR, signalling that regeneration is needed.
+  # Run `npm run generate:electron-package` and add a commit to the Dependabot PR.
+
   # Regular npm packages that fall into our supported ranges besides OTEL
   - package-ecosystem: "npm"
     directories:
