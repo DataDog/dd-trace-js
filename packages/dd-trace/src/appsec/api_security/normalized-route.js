@@ -32,6 +32,12 @@ const NAMED_PARAM_PATTERN = /:([A-Za-z0-9_]+)(?:\([^)]*\))?([?*+])?/g
 // Matches Express 5 named wildcards: *name — hoisted to avoid per-iteration allocation
 const NAMED_WILDCARD_RE = /^\*([A-Za-z0-9_]+)$/
 
+// Matches Express 5 optional-group syntax: {content}
+const V5_OPTIONAL_GROUP_RE = /\{([^}]*)\}/g
+
+// Matches named params for rewriting inside optional groups
+const NAMED_PARAM_BARE_RE = /:([A-Za-z0-9_]+)(?:\([^)]*\))?/g
+
 // Per-segment regex cache: segment string → compiled RegExp
 const segmentRegexCache = new Map()
 
@@ -58,12 +64,38 @@ const routeCache = new Map()
 // ---------------------------------------------------------------------------
 
 /**
+ * Expand Express 5 optional-group syntax {/:param} into equivalent :param? form,
+ * so the existing normalizer (designed for Express 4 :param? syntax) handles them.
+ *
+ * Each named param inside a {…} group becomes :param? (optional). The braces and
+ * their surrounding structure are stripped. Groups containing only static text (no
+ * params) are left in place and rejected later by hasUnsupportedSyntax.
+ *
+ * Examples:
+ *   /items{/:id}          → /items/:id?
+ *   /api{/:version}/users → /api/:version?/users
+ *   /photos/:id{.:format} → /photos/:id.:format?
+ *   /posts{/:id.:format}  → /posts/:id?.:format?
+ *
+ * @param {string} route
+ * @returns {string}
+ */
+function expandV5OptionalGroups (route) {
+  return route.replaceAll(V5_OPTIONAL_GROUP_RE, (match, content) => {
+    if (!content.includes(':')) return match // static group — leave for hasUnsupportedSyntax
+    return content.replaceAll(NAMED_PARAM_BARE_RE, ':$1?')
+  })
+}
+
+/**
  * Return true if the route contains syntax we cannot safely normalize:
- *   - {/...} optional-group syntax (path-to-regexp v8 / Express 5)
+ *   - {/...} optional-group syntax with only static text (no params)
  *   - Standalone parentheses not part of :name(regex) inline constraints
  *   - Inline constraints that contain '/' (would corrupt route.split('/'))
  *
  * Short-circuits immediately for the common case (no '(' or '{' in route).
+ * Must be called after expandV5OptionalGroups so that {/:param} groups are
+ * already converted and only unsupported {static} groups remain.
  */
 function hasUnsupportedSyntax (route) {
   if (!route.includes('(') && !route.includes('{')) return false
@@ -519,10 +551,14 @@ function normalizeRouteExpress (route, params, urlPath) {
   if (typeof route !== 'string' || !route) return null
   if (route.charAt(0) === '(') return null
 
-  let entry = routeCache.get(route)
+  // Expand Express 5 {/:param} optional groups to :param? before processing.
+  // The expanded form is used as the cache key so equivalent route declarations share entries.
+  const canonicalRoute = route.includes('{') ? expandV5OptionalGroups(route) : route
+
+  let entry = routeCache.get(canonicalRoute)
   if (entry === undefined) {
-    entry = buildRouteEntry(route)
-    routeCache.set(route, entry)
+    entry = buildRouteEntry(canonicalRoute)
+    routeCache.set(canonicalRoute, entry)
   }
 
   // null  → unsupported route or route that always returns null (e.g. non-terminal catch-all)
