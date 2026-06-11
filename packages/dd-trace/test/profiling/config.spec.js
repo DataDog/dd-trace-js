@@ -67,6 +67,7 @@ describe('config', () => {
       flushInterval: 65 * 1000,
       activation: 'manual',
       v8ProfilerBugWorkaroundEnabled: true,
+      allocationProfilingEnabled: false,
       cpuProfilingEnabled: samplingContextsAvailable,
       uploadCompression: {
         method: zstdOrGzip,
@@ -280,6 +281,7 @@ describe('config', () => {
     process.env = {
       DD_PROFILING_DEBUG_SOURCE_MAPS: '1',
       DD_PROFILING_HEAP_SAMPLING_INTERVAL: '1000',
+      DD_PROFILING_ALLOCATION_ENABLED: 'true',
       DD_PROFILING_PPROF_PREFIX: 'test-prefix',
       DD_PROFILING_UPLOAD_TIMEOUT: '10000',
       DD_PROFILING_TIMELINE_ENABLED: '0',
@@ -289,6 +291,7 @@ describe('config', () => {
 
     assertObjectContains(config, {
       debugSourceMaps: true,
+      allocationProfilingEnabled: true,
       heapSamplingInterval: 1000,
       pprofPrefix: 'test-prefix',
       uploadTimeout: 10000,
