@@ -31,7 +31,7 @@ describe('profilers/native/space', () => {
   })
 
   it('should start the internal space profiler', () => {
-    const profiler = new NativeSpaceProfiler()
+    const profiler = new NativeSpaceProfiler({ allocationProfilingEnabled: false })
 
     profiler.start()
 
@@ -40,7 +40,7 @@ describe('profilers/native/space', () => {
 
   it('should use the provided configuration options', () => {
     const heapSamplingInterval = 1024
-    const profiler = new NativeSpaceProfiler({ heapSamplingInterval })
+    const profiler = new NativeSpaceProfiler({ heapSamplingInterval, allocationProfilingEnabled: false })
 
     profiler.start()
 
