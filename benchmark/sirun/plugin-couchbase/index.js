@@ -39,7 +39,11 @@ const COLLECTION = { name: 'orders' }
 const VARIANTS = {
   query: {
     operation: 'query',
-    customTags: { 'span.type': 'sql', 'resource.name': 'SELECT * FROM `app-data` WHERE type = $1', 'span.kind': 'client' },
+    customTags: {
+      'span.type': 'sql',
+      'resource.name': 'SELECT * FROM `app-data` WHERE type = $1',
+      'span.kind': 'client',
+    },
     locator: { bucket: BUCKET, seedNodes: SEED_NODES },
   },
   upsert: {
