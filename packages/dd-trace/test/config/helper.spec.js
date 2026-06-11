@@ -7,6 +7,84 @@ const proxyquire = require('proxyquire')
 
 require('../setup/core')
 
+const { applyPm2ClusterEnv } = require('../../src/config/helper')
+
+describe('applyPm2ClusterEnv', () => {
+  let originalEnv
+
+  beforeEach(() => {
+    originalEnv = process.env
+    process.env = {}
+  })
+
+  afterEach(() => {
+    process.env = originalEnv
+  })
+
+  it('copies DD_* keys from pm2_env blob into process.env', () => {
+    process.env.pm2_env = JSON.stringify({ DD_SERVICE: 'pm2-service', DD_ENV: 'pm2-env' })
+    applyPm2ClusterEnv()
+    assert.strictEqual(process.env.DD_SERVICE, 'pm2-service')
+    assert.strictEqual(process.env.DD_ENV, 'pm2-env')
+  })
+
+  it('copies OTEL_* keys from pm2_env blob into process.env', () => {
+    process.env.pm2_env = JSON.stringify({ OTEL_SERVICE_NAME: 'pm2-otel-service' })
+    applyPm2ClusterEnv()
+    assert.strictEqual(process.env.OTEL_SERVICE_NAME, 'pm2-otel-service')
+  })
+
+  it('does not overwrite DD_* keys already present in process.env', () => {
+    process.env.DD_SERVICE = 'host-service'
+    process.env.pm2_env = JSON.stringify({ DD_SERVICE: 'pm2-service' })
+    applyPm2ClusterEnv()
+    assert.strictEqual(process.env.DD_SERVICE, 'host-service')
+  })
+
+  it('does not overwrite OTEL_* keys already present in process.env', () => {
+    process.env.OTEL_SERVICE_NAME = 'host-otel'
+    process.env.pm2_env = JSON.stringify({ OTEL_SERVICE_NAME: 'pm2-otel' })
+    applyPm2ClusterEnv()
+    assert.strictEqual(process.env.OTEL_SERVICE_NAME, 'host-otel')
+  })
+
+  it('does not copy non-DD/OTEL keys', () => {
+    process.env.pm2_env = JSON.stringify({ NODE_ENV: 'production', pm_id: 0 })
+    applyPm2ClusterEnv()
+    assert.strictEqual(process.env.NODE_ENV, undefined)
+    assert.strictEqual(process.env.pm_id, undefined)
+  })
+
+  it('skips keys with null values', () => {
+    process.env.pm2_env = JSON.stringify({ DD_SERVICE: null })
+    applyPm2ClusterEnv()
+    assert.strictEqual(process.env.DD_SERVICE, undefined)
+  })
+
+  it('coerces non-string values to string', () => {
+    process.env.pm2_env = JSON.stringify({ DD_TRACE_SAMPLE_RATE: 0.5 })
+    applyPm2ClusterEnv()
+    assert.strictEqual(process.env.DD_TRACE_SAMPLE_RATE, '0.5')
+  })
+
+  it('does nothing when pm2_env is absent', () => {
+    applyPm2ClusterEnv()
+    assert.deepStrictEqual(Object.keys(process.env), [])
+  })
+
+  it('does nothing when pm2_env is not a string', () => {
+    process.env.pm2_env = 42
+    applyPm2ClusterEnv()
+    assert.deepStrictEqual(Object.keys(process.env), ['pm2_env'])
+  })
+
+  it('does nothing when pm2_env is malformed JSON', () => {
+    process.env.pm2_env = 'not-valid-json'
+    applyPm2ClusterEnv()
+    assert.deepStrictEqual(Object.keys(process.env), ['pm2_env'])
+  })
+})
+
 describe('config-helper stable config sources', () => {
   let StableConfigStub
 
