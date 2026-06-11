@@ -1,5 +1,7 @@
 'use strict'
 
+const web = require('../../plugins/util/web')
+
 /**
  * Normalize an Express route string to RFC-1103 _dd.appsec.normalized_route format.
  *
@@ -500,10 +502,6 @@ function resolveOptional (info, params, urlPath) {
   return result
 }
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
 /**
  * Normalize an Express route string to the RFC-1103 _dd.appsec.normalized_route format.
  *
@@ -539,22 +537,26 @@ function normalizeRouteExpress (route, params, urlPath) {
 
 /**
  * Normalize an HTTP route to the RFC-1103 _dd.appsec.normalized_route format.
- * Dispatches to the framework-specific normalizer based on the span component tag.
+ * Extracts the component, route, params, and URL path from the request and
+ * dispatches to the framework-specific normalizer based on the span component tag.
  *
- * @param {string} component - value of the span's 'component' tag (e.g. 'express')
- * @param {string} route - assembled route string (http.route span tag value)
- * @param {object|null|undefined} params - req.params from the matched request
- * @param {string|undefined} urlPath - URL path without query string
+ * @param {object} req - the incoming request object
  * @returns {string|null} Normalized route, or null when normalization is not possible
  */
-function normalizeRoute (component, route, params, urlPath) {
+function normalizeRoute (req) {
+  const component = web.root(req)?.context()?.getTag?.('component')
+  const route = web.getContext(req)?.paths?.join('')
+  const raw = req.originalUrl || req.url
+  const qIdx = raw ? raw.indexOf('?') : -1
+  const urlPath = qIdx === -1 ? raw : raw.slice(0, qIdx)
+
   // eslint-disable-next-line sonarjs/no-small-switch
   switch (component) {
     case 'express':
-      return normalizeRouteExpress(route, params, urlPath)
+      return normalizeRouteExpress(route, req.params, urlPath)
     default:
       return null
   }
 }
 
-module.exports = { normalizeRoute }
+module.exports = { normalizeRoute, normalizeRouteExpress }
