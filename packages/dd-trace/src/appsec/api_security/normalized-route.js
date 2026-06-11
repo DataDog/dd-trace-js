@@ -545,15 +545,16 @@ function normalizeRouteExpress (route, params, urlPath) {
  */
 function normalizeRoute (req) {
   const component = web.root(req)?.context()?.getTag?.('component')
-  const route = web.getContext(req)?.paths?.join('')
-  const raw = req.originalUrl || req.url
-  const qIdx = raw ? raw.indexOf('?') : -1
-  const urlPath = qIdx === -1 ? raw : raw.slice(0, qIdx)
 
   // eslint-disable-next-line sonarjs/no-small-switch
   switch (component) {
-    case 'express':
+    case 'express': {
+      const route = web.getContext(req)?.paths?.join('')
+      const raw = req.originalUrl || req.url
+      const qIdx = raw ? raw.indexOf('?') : -1
+      const urlPath = qIdx === -1 ? raw : raw.slice(0, qIdx)
       return normalizeRouteExpress(route, req.params, urlPath)
+    }
     default:
       return null
   }
