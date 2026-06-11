@@ -1308,6 +1308,13 @@
         "default": null
       }
     ],
+    "DD_PROFILING_ALLOCATION_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false"
+      }
+    ],
     "DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED": [
       {
         "implementation": "A",
@@ -1398,13 +1405,6 @@
         "aliases": [
           "DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED"
         ]
-      }
-    ],
-    "DD_PROFILING_EXPERIMENTAL_ALLOCATION_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "default": "false"
       }
     ],
     "DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED": [
