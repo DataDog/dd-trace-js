@@ -17,6 +17,9 @@
     },
     "mixed": {
       "env": { "VARIANT": "mixed", "ITERATIONS": "11500000" }
+    },
+    "churn": {
+      "env": { "VARIANT": "churn", "ITERATIONS": "5000000" }
     }
   }
 }
