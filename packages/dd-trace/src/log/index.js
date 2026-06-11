@@ -3,7 +3,6 @@
 const { inspect } = require('util')
 
 const { defaults } = require('../config/defaults')
-const { isTrue } = require('../util')
 const { getValueFromEnvSources } = require('../config/helper')
 const { traceChannel, debugChannel, infoChannel, warnChannel, errorChannel } = require('./channels')
 const logWriter = require('./writer')
@@ -81,12 +80,10 @@ const log = {
     config.logLevel = options.logLevel ??
         getValueFromEnvSources('DD_TRACE_LOG_LEVEL') ??
         config.logLevel
-    config.enabled = isTrue(
-      getValueFromEnvSources('DD_TRACE_DEBUG') ??
+    config.enabled = getValueFromEnvSources('DD_TRACE_DEBUG') ??
       // TODO: Handle this by adding a log buffer so that configure may be called with the actual configurations.
       // eslint-disable-next-line eslint-rules/eslint-process-env
       (process.env.OTEL_LOG_LEVEL === 'debug' || config.enabled)
-    )
     logWriter.configure(config.enabled, config.logLevel, options.logger)
 
     return config.enabled

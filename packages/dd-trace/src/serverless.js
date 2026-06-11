@@ -1,7 +1,6 @@
 'use strict'
 
 const { getEnvironmentVariable, getValueFromEnvSources } = require('./config/helper')
-const { isFalse } = require('./util')
 
 function getIsGCPFunction () {
   const isDeprecatedGCPFunction =
@@ -23,7 +22,7 @@ function getIsGCPFunction () {
  */
 function enableGCPPubSubPushSubscription () {
   return getEnvironmentVariable('K_SERVICE') !== undefined &&
-    !isFalse(getValueFromEnvSources('DD_TRACE_GCP_PUBSUB_PUSH_ENABLED'))
+    getValueFromEnvSources('DD_TRACE_GCP_PUBSUB_PUSH_ENABLED') !== false
 }
 
 function getIsAzureFunction () {

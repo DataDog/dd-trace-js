@@ -2,7 +2,7 @@
 
 const { channel } = require('dc-polyfill')
 
-const { isError, isTrue } = require('../util')
+const { isError } = require('../util')
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
 const { getValueFromEnvSources } = require('../config/helper')
@@ -67,7 +67,7 @@ class LLMObs extends NoopLLMObs {
 
     const DD_LLMOBS_ENABLED = getValueFromEnvSources('DD_LLMOBS_ENABLED')
 
-    if (DD_LLMOBS_ENABLED != null && !isTrue(DD_LLMOBS_ENABLED)) {
+    if (DD_LLMOBS_ENABLED === false) {
       logger.debug('LLMObs.enable() called when DD_LLMOBS_ENABLED is false. No action taken.')
       return
     }
