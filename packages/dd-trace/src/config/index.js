@@ -22,7 +22,6 @@ const { ORIGIN_KEY, DATADOG_MINI_AGENT_PATH } = require('../constants')
 const { appendRules } = require('../payload-tagging/config')
 const ConfigBase = require('./config-base')
 const {
-  applyPm2ClusterEnv,
   getEnvironmentVariable,
   getEnvironmentVariables,
   getStableConfigSources,
@@ -711,7 +710,6 @@ function warnWrongOtelSettings () {
  */
 function getConfig (options) {
   if (!configInstance) {
-    applyPm2ClusterEnv()
     configInstance = new Config(options)
   }
   return configInstance
