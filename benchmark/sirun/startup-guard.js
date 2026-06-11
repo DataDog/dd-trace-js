@@ -11,7 +11,7 @@
 //   // ...requires, setup...
 //   guard.loopStart()
 //   for (...) { ... }
-//   guard.done()            // default 10% ceiling
+//   guard.done()            // default 7% ceiling
 //   guard.done(0.15)        // relaxed ceiling when the loop legitimately can't dominate further
 
 const assert = require('node:assert/strict')
@@ -23,7 +23,7 @@ function loopStart () {
   loopStartedAt = process.hrtime.bigint()
 }
 
-function done (maxShare = 0.10) {
+function done (maxShare = 0.07) {
   const end = process.hrtime.bigint()
   assert.ok(loopStartedAt !== undefined, 'startup-guard: loopStart() was never called')
   const total = Number(end - START)
