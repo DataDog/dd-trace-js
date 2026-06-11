@@ -7,13 +7,22 @@ const fs = require('node:fs')
 const path = require('node:path')
 
 const BACKUP_DIR = path.join('dd-test-optimization-efd', 'backups')
+const DEFAULT_ATR_SUITE_NAME = 'dd trace Auto Test Retries debug'
+const DEFAULT_ATR_TEST_NAME = 'dd trace Auto Test Retries debug temporary test'
+const DEFAULT_EFD_SUITE_NAME = 'dd trace EFD debug'
 const DEFAULT_EFD_TEST_NAME = 'dd trace EFD debug temporary test'
 const DEFAULT_KNOWN_TESTS_FILE = 'dd-test-optimization-known-tests.json'
+const DEFAULT_SELECTED_TEST_FILES_FILE = 'dd-test-optimization-selected-test-files.txt'
+const DEFAULT_STATIC_REPORT_FILE = 'dd-test-optimization-static.json'
 const DEFAULT_TEST_COMMAND_FILE = 'dd-test-optimization-test-command.txt'
 const FLAKE_MESSAGE = 'dd trace auto retry debug flake'
+const CLEANUP_RESULT_FILE = 'dd-test-optimization-advanced-cleanup.json'
 const STATE_FILES = {
+  atrBaselineCommand: 'dd-test-optimization-atr-baseline-command.txt',
+  atrBaselineSnippet: 'dd-test-optimization-atr-baseline-snippet.txt',
   atrBackup: 'dd-test-optimization-atr-flaky-test-backup.txt',
   atrFile: 'dd-test-optimization-atr-flaky-test-file.txt',
+  atrGenerated: 'dd-test-optimization-atr-generated-test-file.txt',
   atrName: 'dd-test-optimization-atr-flaky-test-name.txt',
   atrSnippet: 'dd-test-optimization-atr-flaky-test-snippet.txt',
   efdCommand: 'dd-test-optimization-efd-command.txt',
@@ -21,6 +30,15 @@ const STATE_FILES = {
   efdSnippet: 'dd-test-optimization-efd-new-test-snippet.txt',
   efdTempFile: 'dd-test-optimization-efd-temp-test-file.txt',
 }
+const SOURCE_EDIT_STATE_FILES = [
+  STATE_FILES.atrBackup,
+  STATE_FILES.atrBaselineCommand,
+  STATE_FILES.atrFile,
+  STATE_FILES.atrGenerated,
+  STATE_FILES.atrName,
+  STATE_FILES.efdName,
+  STATE_FILES.efdTempFile,
+]
 
 /**
  * Parses CLI arguments.
@@ -43,16 +61,32 @@ function parseArgs (args) {
     } else if (arg.startsWith('--framework=')) {
       options.framework = arg.slice('--framework='.length)
       options.frameworkExplicit = true
+    } else if (arg === '--force-run-in-band') {
+      options.forceRunInBand = true
     } else if (arg === '--auto') {
       options.auto = true
+    } else if (arg === '--baseline-candidate') {
+      options.baselineCandidate = true
     } else if (arg === '--known-tests-file') {
       options.knownTestsFile = args[++i]
     } else if (arg.startsWith('--known-tests-file=')) {
       options.knownTestsFile = arg.slice('--known-tests-file='.length)
+    } else if (arg === '--selected-test-files-file') {
+      options.selectedTestFilesFile = args[++i]
+    } else if (arg.startsWith('--selected-test-files-file=')) {
+      options.selectedTestFilesFile = arg.slice('--selected-test-files-file='.length)
     } else if (arg === '--test-command-file') {
       options.testCommandFile = args[++i]
     } else if (arg.startsWith('--test-command-file=')) {
       options.testCommandFile = arg.slice('--test-command-file='.length)
+    } else if (arg === '--atr-test-file') {
+      options.atrTestFile = args[++i]
+    } else if (arg.startsWith('--atr-test-file=')) {
+      options.atrTestFile = arg.slice('--atr-test-file='.length)
+    } else if (arg === '--atr-test-name') {
+      options.atrTestName = args[++i]
+    } else if (arg.startsWith('--atr-test-name=')) {
+      options.atrTestName = arg.slice('--atr-test-name='.length)
     } else if (arg === '--efd-test-file') {
       options.efdTestFile = args[++i]
     } else if (arg.startsWith('--efd-test-file=')) {
@@ -95,16 +129,22 @@ function parseArgs (args) {
 function getHelpText () {
   return [
     'Usage: dd-trace-ci-prepare-advanced --auto',
+    '       dd-trace-ci-prepare-advanced --auto --baseline-candidate',
     '       dd-trace-ci-prepare-advanced --efd-test-file <file> --flaky-test-file <file> ' +
       '--flaky-test-name <name> --efd-command <command>',
     '',
     'Prepares common Step 7 EFD and Auto Test Retries temporary edits, or restores them.',
     '',
     'Options:',
-    '  --auto                      Infer arguments from known-tests JSON and the selected command.',
-    '  --framework <name>          jest, mocha, or vitest. Defaults to jest.',
+    '  --auto                      Infer arguments from runbook state files.',
+    '  --baseline-candidate        Create a generated Auto Test Retries candidate before known-tests baseline.',
+    '  --force-run-in-band         Append --runInBand when forcing that behavior for an inferred command.',
+    '  --framework <name>          jest, mocha, vitest, or cypress. Defaults to jest.',
     '  --known-tests-file <file>   Known-tests JSON for --auto. Defaults to dd-test-optimization-known-tests.json.',
+    '  --selected-test-files-file <file>  Selected test files for --baseline-candidate.',
     '  --test-command-file <file>  Selected command file for --auto. Defaults to the runbook command file.',
+    '  --atr-test-file <file>      Generated Auto Test Retries baseline candidate file.',
+    '  --atr-test-name <name>      Generated Auto Test Retries baseline candidate test name.',
     '  --efd-test-file <file>      Temporary sibling test file to create.',
     '  --efd-test-name <name>      Temporary EFD test name. Defaults to the runbook name.',
     '  --flaky-test-file <file>    Existing known test file to edit.',
@@ -112,6 +152,8 @@ function getHelpText () {
     '  --efd-command <command>     Second command that runs known tests plus the new EFD test.',
     '  --dry-run                   Print inferred edit targets and verify the edit without writing files.',
     '  --restore                   Restore from recorded state files and remove the temp EFD test.',
+    '',
+    'Inferred Jest generated multi-file commands append --runInBand automatically.',
   ].join('\n')
 }
 
@@ -122,8 +164,8 @@ function getHelpText () {
  */
 function prepareAdvancedChecks (options) {
   const plan = getPreparePlan(options)
-  const { prepareOptions, efdSource, flakyTestFile, snippet, source } = plan
-  const backup = createBackup(flakyTestFile)
+  const { generatedAtrCandidate, prepareOptions, efdSource, flakyTestFile, snippet, source } = plan
+  const backup = generatedAtrCandidate ? '' : createBackup(flakyTestFile)
 
   fs.mkdirSync(path.dirname(plan.efdTestFile), { recursive: true })
   fs.writeFileSync(plan.efdTestFile, efdSource)
@@ -133,14 +175,61 @@ function prepareAdvancedChecks (options) {
   fs.writeFileSync(STATE_FILES.efdSnippet, efdSource)
   fs.writeFileSync(STATE_FILES.atrFile, `${prepareOptions.flakyTestFile}\n`)
   fs.writeFileSync(STATE_FILES.atrName, `${prepareOptions.flakyTestName}\n`)
-  fs.writeFileSync(STATE_FILES.atrBackup, `${backup}\n`)
+  if (generatedAtrCandidate) {
+    fs.writeFileSync(STATE_FILES.atrGenerated, `${prepareOptions.flakyTestFile}\n`)
+    fs.rmSync(STATE_FILES.atrBackup, { force: true })
+  } else {
+    fs.writeFileSync(STATE_FILES.atrBackup, `${backup}\n`)
+  }
   fs.writeFileSync(STATE_FILES.atrSnippet, `${snippet}\n`)
   fs.writeFileSync(STATE_FILES.efdCommand, `${prepareOptions.efdCommand}\n`)
 
   console.log(`Temporary EFD test file: ${prepareOptions.efdTestFile}`)
   console.log(`Auto Test Retries flaky test file: ${prepareOptions.flakyTestFile}`)
-  console.log(`Auto Test Retries backup: ${backup}`)
+  if (backup) {
+    console.log(`Auto Test Retries backup: ${backup}`)
+  } else {
+    console.log('Auto Test Retries backup: not needed; flaky test file is generated')
+  }
   console.log(`EFD test command: ${prepareOptions.efdCommand}`)
+}
+
+/**
+ * Creates a generated passing Auto Test Retries candidate for the known-tests baseline.
+ *
+ * @param {object} options prepare options
+ */
+function prepareAtrBaselineCandidate (options) {
+  const plan = getAtrBaselinePlan(options)
+
+  fs.mkdirSync(path.dirname(path.resolve(plan.atrTestFile)), { recursive: true })
+  fs.writeFileSync(plan.atrTestFile, plan.source)
+  fs.writeFileSync(STATE_FILES.atrGenerated, `${plan.atrTestFile}\n`)
+  fs.writeFileSync(STATE_FILES.atrFile, `${plan.atrTestFile}\n`)
+  fs.writeFileSync(STATE_FILES.atrName, `${plan.atrTestName}\n`)
+  fs.writeFileSync(STATE_FILES.atrBaselineSnippet, plan.source)
+  fs.writeFileSync(STATE_FILES.atrBaselineCommand, `${plan.atrCommand}\n`)
+  fs.rmSync(STATE_FILES.atrBackup, { force: true })
+
+  console.log(`Auto Test Retries baseline candidate file: ${plan.atrTestFile}`)
+  console.log(`Auto Test Retries baseline candidate test name: ${plan.atrTestName}`)
+  console.log(`Auto Test Retries baseline command: ${plan.atrCommand}`)
+}
+
+/**
+ * Prints the generated Auto Test Retries candidate plan without writing files.
+ *
+ * @param {object} options prepare options
+ */
+function dryRunPrepareAtrBaselineCandidate (options) {
+  const plan = getAtrBaselinePlan(options)
+
+  console.log('Advanced baseline candidate dry run:')
+  console.log(`Auto Test Retries baseline candidate file: ${plan.atrTestFile}`)
+  console.log(`Auto Test Retries baseline candidate test name: ${plan.atrTestName}`)
+  console.log(`Framework: ${plan.framework}`)
+  console.log(`Auto Test Retries baseline command: ${plan.atrCommand}`)
+  console.log('No files written.')
 }
 
 /**
@@ -174,7 +263,10 @@ function getPreparePlan (options) {
 
   const efdTestFile = path.resolve(prepareOptions.efdTestFile)
   const flakyTestFile = path.resolve(prepareOptions.flakyTestFile)
-  assertCleanGitFileForEdit(flakyTestFile)
+  const generatedAtrCandidate = isGeneratedAtrCandidate(prepareOptions.flakyTestFile)
+  if (!generatedAtrCandidate) {
+    assertCleanGitFileForEdit(flakyTestFile)
+  }
 
   const efdSource = getTemporaryTestSource(prepareOptions.framework, prepareOptions.efdTestName)
   const flakySource = fs.readFileSync(flakyTestFile, 'utf8')
@@ -184,6 +276,7 @@ function getPreparePlan (options) {
     efdSource,
     efdTestFile,
     flakyTestFile,
+    generatedAtrCandidate,
     prepareOptions,
     snippet,
     source,
@@ -191,14 +284,55 @@ function getPreparePlan (options) {
 }
 
 /**
+ * Builds the generated Auto Test Retries baseline candidate plan.
+ *
+ * @param {object} options prepare options
+ * @returns {object} generated candidate plan
+ */
+function getAtrBaselinePlan (options) {
+  const testCommandFile = options.testCommandFile || DEFAULT_TEST_COMMAND_FILE
+  const selectedCommand = fs.readFileSync(path.resolve(testCommandFile), 'utf8').trim()
+  const selectedTestFile = getSelectedTestFile(options)
+  const framework = options.frameworkExplicit
+    ? options.framework
+    : inferFrameworkFromCommand(selectedCommand, inferFrameworkFromStaticReport() || options.framework)
+  const atrTestFile = options.atrTestFile || getTemporaryAtrTestFile(selectedTestFile)
+  const atrTestName = options.atrTestName || DEFAULT_ATR_TEST_NAME
+  const atrCommand = maybeForceRunInBand(
+    options.efdCommand || addTestFileToCommand(selectedCommand, selectedTestFile, atrTestFile),
+    options,
+    framework
+  )
+
+  validateGeneratedTestFramework(framework)
+  if (fs.existsSync(atrTestFile)) {
+    throw new Error(`Auto Test Retries baseline candidate already exists: ${atrTestFile}`)
+  }
+
+  return {
+    atrCommand,
+    atrTestFile,
+    atrTestName,
+    framework,
+    source: getTemporaryTestSource(framework, atrTestName, DEFAULT_ATR_SUITE_NAME),
+  }
+}
+
+/**
  * Restores temporary EFD and Auto Test Retries edits.
  */
 function restoreAdvancedChecks () {
+  const cleanup = {
+    paths: [],
+    stateFiles: SOURCE_EDIT_STATE_FILES,
+  }
+
   if (fs.existsSync(STATE_FILES.efdTempFile)) {
     const efdTestFile = fs.readFileSync(STATE_FILES.efdTempFile, 'utf8').trim()
 
     if (efdTestFile) {
       fs.rmSync(efdTestFile, { force: true })
+      cleanup.paths.push({ action: 'remove', path: efdTestFile, remaining: fs.existsSync(efdTestFile) })
       console.log(`Temporary EFD test removed: ${efdTestFile}`)
     }
 
@@ -208,22 +342,56 @@ function restoreAdvancedChecks () {
 
   if (fs.existsSync(STATE_FILES.atrFile)) {
     const flakyTestFile = fs.readFileSync(STATE_FILES.atrFile, 'utf8').trim()
+    const generatedAtrFile = readStateValue(STATE_FILES.atrGenerated)
     const backup = fs.existsSync(STATE_FILES.atrBackup)
       ? fs.readFileSync(STATE_FILES.atrBackup, 'utf8').trim()
       : ''
+
+    if (generatedAtrFile) {
+      fs.rmSync(generatedAtrFile, { force: true })
+      cleanup.paths.push({ action: 'remove', path: generatedAtrFile, remaining: fs.existsSync(generatedAtrFile) })
+      fs.rmSync(STATE_FILES.atrGenerated, { force: true })
+      fs.rmSync(STATE_FILES.atrFile, { force: true })
+      fs.rmSync(STATE_FILES.atrBackup, { force: true })
+      fs.rmSync(STATE_FILES.atrName, { force: true })
+      fs.rmSync(STATE_FILES.atrBaselineCommand, { force: true })
+      console.log(`Temporary Auto Test Retries generated test removed: ${generatedAtrFile}`)
+      writeCleanupResult(cleanup)
+      return
+    }
 
     if (!backup || !fs.existsSync(backup)) {
       throw new Error('Auto Test Retries backup file is missing.')
     }
 
     fs.copyFileSync(backup, flakyTestFile)
+    cleanup.paths.push({ action: 'restore', path: flakyTestFile, remaining: !fs.existsSync(flakyTestFile) })
     fs.rmSync(backup, { force: true })
+    cleanup.paths.push({ action: 'remove', path: backup, remaining: fs.existsSync(backup) })
     fs.rmSync(STATE_FILES.atrFile, { force: true })
     fs.rmSync(STATE_FILES.atrBackup, { force: true })
     fs.rmSync(STATE_FILES.atrName, { force: true })
     removeEmptyBackupDirectory()
     console.log(`Temporary Auto Test Retries edit restored: ${flakyTestFile}`)
   }
+
+  writeCleanupResult(cleanup)
+}
+
+/**
+ * Writes cleanup verification state.
+ *
+ * @param {object} cleanup cleanup result
+ */
+function writeCleanupResult (cleanup) {
+  const result = {
+    ...cleanup,
+    ok: cleanup.paths.every(entry => !entry.remaining) &&
+      cleanup.stateFiles.every(file => !fs.existsSync(file)),
+    stateFilesRemaining: cleanup.stateFiles.filter(file => fs.existsSync(file)),
+  }
+
+  fs.writeFileSync(CLEANUP_RESULT_FILE, `${JSON.stringify(result, null, 2)}\n`)
 }
 
 /**
@@ -236,6 +404,7 @@ function validatePrepareOptions (options) {
   if (!options.flakyTestFile) throw new Error('Missing --flaky-test-file.')
   if (!options.flakyTestName) throw new Error('Missing --flaky-test-name.')
   if (!options.efdCommand) throw new Error('Missing --efd-command.')
+  validateGeneratedTestFramework(options.framework)
   if (fs.existsSync(options.efdTestFile)) throw new Error(`Temporary EFD test already exists: ${options.efdTestFile}`)
   if (!fs.existsSync(options.flakyTestFile)) throw new Error(`Flaky test file does not exist: ${options.flakyTestFile}`)
 }
@@ -250,19 +419,55 @@ function inferPrepareOptions (options) {
   const knownTestsFile = options.knownTestsFile || DEFAULT_KNOWN_TESTS_FILE
   const testCommandFile = options.testCommandFile || DEFAULT_TEST_COMMAND_FILE
   const knownTests = readJsonFile(knownTestsFile)
-  const selectedCommand = fs.readFileSync(path.resolve(testCommandFile), 'utf8').trim()
-  const inferred = getFirstKnownTest(knownTests)
+  const selectedCommand = readStateValue(STATE_FILES.atrBaselineCommand) ||
+    fs.readFileSync(path.resolve(testCommandFile), 'utf8').trim()
+  const generatedAtrFile = readStateValue(STATE_FILES.atrGenerated)
+  const inferred = generatedAtrFile
+    ? getKnownTestForSuite(knownTests, generatedAtrFile)
+    : getFirstKnownTest(knownTests)
   const efdTestFile = options.efdTestFile || getTemporaryEfdTestFile(inferred.suite)
+
+  const framework = options.frameworkExplicit ? options.framework : inferred.framework
 
   return {
     ...options,
-    efdCommand: options.efdCommand || addEfdTestFileToCommand(selectedCommand, inferred.suite, efdTestFile),
+    efdCommand: maybeForceRunInBand(
+      options.efdCommand || addEfdTestFileToCommand(selectedCommand, inferred.suite, efdTestFile),
+      options,
+      framework
+    ),
     efdTestFile,
     efdTestName: options.efdTestName || DEFAULT_EFD_TEST_NAME,
-    flakyTestFile: options.flakyTestFile || inferred.suite,
+    flakyTestFile: options.flakyTestFile || generatedAtrFile || inferred.suite,
     flakyTestName: options.flakyTestName || inferred.testName,
-    framework: options.frameworkExplicit ? options.framework : inferred.framework,
+    framework,
   }
+}
+
+/**
+ * Appends --runInBand for generated Jest multi-file commands.
+ *
+ * @param {string} command selected test command
+ * @param {object} options prepare options
+ * @param {string} framework inferred test framework
+ * @returns {string} command with --runInBand when needed
+ */
+function maybeForceRunInBand (command, options, framework) {
+  if (!options.forceRunInBand && framework !== 'jest') return command
+
+  return addRunInBandToCommand(command)
+}
+
+/**
+ * Appends --runInBand when absent.
+ *
+ * @param {string} command selected test command
+ * @returns {string} command with --runInBand
+ */
+function addRunInBandToCommand (command) {
+  if (/(?:^|\s)--runInBand(?:\s|$)/.test(command)) return command
+
+  return `${command} --runInBand`
 }
 
 /**
@@ -416,6 +621,95 @@ function getFirstKnownTest (knownTests) {
 }
 
 /**
+ * Gets the known test emitted by a specific generated suite.
+ *
+ * @param {object} knownTests known-tests map
+ * @param {string} suite selected suite path
+ * @returns {{framework: string, suite: string, testName: string}} generated known test
+ */
+function getKnownTestForSuite (knownTests, suite) {
+  const expectedSuite = normalizeCommandPath(suite)
+
+  for (const [framework, suites] of Object.entries(knownTests || {})) {
+    for (const [knownSuite, tests] of Object.entries(suites || {})) {
+      if (normalizeCommandPath(knownSuite) !== expectedSuite) continue
+      if (Array.isArray(tests) && tests.length > 0) {
+        return {
+          framework,
+          suite: knownSuite,
+          testName: tests[0],
+        }
+      }
+    }
+  }
+
+  throw new Error(
+    `Could not find generated Auto Test Retries candidate in ${DEFAULT_KNOWN_TESTS_FILE}: ${suite}`
+  )
+}
+
+/**
+ * Gets the first selected test file recorded by Step 2.
+ *
+ * @param {object} options prepare options
+ * @returns {string} selected test file
+ */
+function getSelectedTestFile (options) {
+  const selectedTestFilesFile = options.selectedTestFilesFile || DEFAULT_SELECTED_TEST_FILES_FILE
+  const selectedFiles = readStateFile(selectedTestFilesFile)
+
+  if (selectedFiles[0]) return selectedFiles[0]
+
+  throw new Error(`Could not infer selected test file from ${selectedTestFilesFile}.`)
+}
+
+/**
+ * Infers a generated-test framework from the selected command.
+ *
+ * @param {string} selectedCommand selected test command
+ * @param {string} fallback fallback framework
+ * @returns {string} inferred framework
+ */
+function inferFrameworkFromCommand (selectedCommand, fallback) {
+  if (/\bvitest\b/.test(selectedCommand)) return 'vitest'
+  if (/\bjest\b/.test(selectedCommand)) return 'jest'
+  if (/\bmocha\b/.test(selectedCommand)) return 'mocha'
+  if (/\bcypress\b/.test(selectedCommand)) return 'cypress'
+  if (/\bplaywright\b/.test(selectedCommand)) return 'playwright'
+
+  return fallback || 'jest'
+}
+
+/**
+ * Infers the first supported framework from the static diagnosis report.
+ *
+ * @returns {string|undefined} framework id
+ */
+function inferFrameworkFromStaticReport () {
+  try {
+    const staticReport = readJsonFile(DEFAULT_STATIC_REPORT_FILE)
+    const framework = staticReport.supportedFrameworks?.find(framework =>
+      framework.id === 'jest' || framework.id === 'mocha' || framework.id === 'vitest' || framework.id === 'cypress'
+    )
+
+    return framework?.id
+  } catch {}
+}
+
+/**
+ * Validates generated-test framework support.
+ *
+ * @param {string} framework framework name
+ */
+function validateGeneratedTestFramework (framework) {
+  if (framework === 'jest' || framework === 'mocha' || framework === 'vitest' || framework === 'cypress') return
+
+  throw new Error(
+    `Unsupported generated advanced-check framework: ${framework}. Use manual Step 7 for this repository.`
+  )
+}
+
+/**
  * Gets the default temporary EFD sibling test file.
  *
  * @param {string} suite selected known test suite path
@@ -423,6 +717,16 @@ function getFirstKnownTest (knownTests) {
  */
 function getTemporaryEfdTestFile (suite) {
   return path.join(path.dirname(suite), `dd-trace-efd-debug${getTestFileSuffix(suite)}`)
+}
+
+/**
+ * Gets the default temporary Auto Test Retries sibling test file.
+ *
+ * @param {string} suite selected test suite path
+ * @returns {string} temporary Auto Test Retries test path
+ */
+function getTemporaryAtrTestFile (suite) {
+  return path.join(path.dirname(suite), `dd-trace-atr-debug${getTestFileSuffix(suite)}`)
 }
 
 /**
@@ -480,6 +784,49 @@ function removeEmptyBackupDirectory () {
     fs.rmdirSync(path.dirname(BACKUP_DIR))
   } catch {
     // Leave non-empty diagnostic artifact directories in place.
+  }
+}
+
+/**
+ * Checks whether a file is the generated Auto Test Retries candidate.
+ *
+ * @param {string} file file path
+ * @returns {boolean} whether the file is generated by this helper
+ */
+function isGeneratedAtrCandidate (file) {
+  const generatedAtrFile = readStateValue(STATE_FILES.atrGenerated)
+
+  return generatedAtrFile && normalizeCommandPath(generatedAtrFile) === normalizeCommandPath(file)
+}
+
+/**
+ * Reads a single-value state file.
+ *
+ * @param {string} file state file
+ * @returns {string} trimmed value, or an empty string
+ */
+function readStateValue (file) {
+  try {
+    return fs.readFileSync(file, 'utf8').trim()
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * Reads a newline-delimited state file.
+ *
+ * @param {string} file state file
+ * @returns {string[]} state values
+ */
+function readStateFile (file) {
+  try {
+    return fs.readFileSync(file, 'utf8')
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(Boolean)
+  } catch {
+    return []
   }
 }
 
@@ -554,14 +901,15 @@ function assertGitDiffClean (args, file) {
  *
  * @param {string} framework test framework name
  * @param {string} testName test name
+ * @param {string} [suiteName] suite name
  * @returns {string} test source
  */
-function getTemporaryTestSource (framework, testName) {
+function getTemporaryTestSource (framework, testName, suiteName = DEFAULT_EFD_SUITE_NAME) {
   if (framework === 'vitest') {
     return [
       'import { describe, expect, it } from \'vitest\'',
       '',
-      'describe(\'dd trace EFD debug\', () => {',
+      `describe(${JSON.stringify(suiteName)}, () => {`,
       `  it(${JSON.stringify(testName)}, () => {`,
       '    expect(1 + 1).toBe(2)',
       '  })',
@@ -576,7 +924,7 @@ function getTemporaryTestSource (framework, testName) {
       '',
       'const assert = require(\'node:assert/strict\')',
       '',
-      'describe(\'dd trace EFD debug\', () => {',
+      `describe(${JSON.stringify(suiteName)}, () => {`,
       `  it(${JSON.stringify(testName)}, () => {`,
       '    assert.strictEqual(1 + 1, 2)',
       '  })',
@@ -586,7 +934,7 @@ function getTemporaryTestSource (framework, testName) {
   }
 
   return [
-    'describe(\'dd trace EFD debug\', () => {',
+    `describe(${JSON.stringify(suiteName)}, () => {`,
     `  test(${JSON.stringify(testName)}, () => {`,
     '    expect(1 + 1).toBe(2)',
     '  })',
@@ -789,6 +1137,10 @@ if (require.main === module) {
       throw new Error(`Unknown argument: ${options.unknown}`)
     } else if (options.restore) {
       restoreAdvancedChecks()
+    } else if (options.baselineCandidate && options.dryRun) {
+      dryRunPrepareAtrBaselineCandidate(options)
+    } else if (options.baselineCandidate) {
+      prepareAtrBaselineCandidate(options)
     } else if (options.dryRun) {
       dryRunPrepareAdvancedChecks(options)
     } else {
@@ -801,17 +1153,22 @@ if (require.main === module) {
 }
 
 module.exports = {
+  addRunInBandToCommand,
   addTestFileToCommand,
   assertCleanGitFileForEdit,
+  dryRunPrepareAtrBaselineCandidate,
   dryRunPrepareAdvancedChecks,
   findTestCallback,
+  getAtrBaselinePlan,
   getPreparePlan,
   getTestFileSuffix,
+  getTemporaryAtrTestFile,
   getTemporaryEfdTestFile,
   getTemporaryTestSource,
   inferPrepareOptions,
   insertFlakyFailure,
   parseArgs,
+  prepareAtrBaselineCandidate,
   prepareAdvancedChecks,
   restoreAdvancedChecks,
 }

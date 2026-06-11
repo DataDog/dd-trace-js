@@ -42,9 +42,12 @@ const {
   runDebug,
 } = require('../../../../ci/test-optimization-debug')
 const {
+  addRunInBandToCommand,
+  getAtrBaselinePlan,
   getTemporaryEfdTestFile,
   inferPrepareOptions,
   insertFlakyFailure,
+  prepareAtrBaselineCandidate,
   prepareAdvancedChecks,
   restoreAdvancedChecks,
 } = require('../../../../ci/test-optimization-prepare-advanced')
@@ -1171,7 +1174,11 @@ describe('Test Optimization debug intake', () => {
           envFile,
           /DD_API_KEY=debug\nDD_SERVICE=ci-debug\n/
         )
+        assert.match(envFile, /DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED=true\n/)
+        assert.match(envFile, /DD_CIVISIBILITY_ENABLED=true\n/)
+        assert.match(envFile, /DD_CIVISIBILITY_FLAKY_RETRY_ENABLED=true\n/)
         assert.match(envFile, /DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE=false\n/)
+        assert.match(envFile, /DD_TEST_MANAGEMENT_ENABLED=true\n/)
         assert.match(
           envFile,
           /NODE_OPTIONS=-r dd-trace\/ci\/init\n/
@@ -1241,6 +1248,18 @@ describe('Test Optimization debug intake', () => {
 
       restoreAdvancedChecks()
 
+      const cleanup = JSON.parse(fs.readFileSync('dd-test-optimization-advanced-cleanup.json', 'utf8'))
+      assert.strictEqual(cleanup.ok, true)
+      assert.deepStrictEqual(cleanup.stateFilesRemaining, [])
+      assert.ok(cleanup.paths.some(entry =>
+        entry.path === 'test/dd-trace-efd-debug.spec.js' && entry.remaining === false
+      ))
+      assert.ok(cleanup.paths.some(entry =>
+        entry.path === 'test/sum.spec.js' && entry.remaining === false
+      ))
+      assert.ok(cleanup.paths.some(entry =>
+        entry.path === backup && entry.remaining === false
+      ))
       assert.ok(!fs.existsSync(efdTestFile))
       assert.strictEqual(fs.readFileSync(testFile, 'utf8'), original)
       assert.ok(!fs.existsSync('dd-test-optimization-atr-flaky-test-file.txt'))
@@ -1317,6 +1336,12 @@ describe('Test Optimization debug intake', () => {
 
       restoreTestManagementChecks()
 
+      const cleanup = JSON.parse(fs.readFileSync('dd-test-optimization-test-management-cleanup.json', 'utf8'))
+      assert.strictEqual(cleanup.ok, true)
+      assert.deepStrictEqual(cleanup.stateFilesRemaining, [])
+      assert.ok(cleanup.paths.some(entry =>
+        entry.path.endsWith('/test/dd-trace-tm-disabled.spec.js') && entry.remaining === false
+      ))
       assert.ok(!fs.existsSync(testFile))
       assert.ok(!fs.existsSync(path.join('dd-test-optimization-test-management', 'generated-files.txt')))
     } finally {
@@ -1427,6 +1452,64 @@ describe('Test Optimization debug intake', () => {
     }
   })
 
+  it('defaults generated Test Management Jest commands to run in band', () => {
+    const cwd = process.cwd()
+    const selectedTestFile = path.join(tmpDir, 'packages/foo/test/scope.node.test.ts')
+
+    fs.mkdirSync(path.dirname(selectedTestFile), { recursive: true })
+    fs.writeFileSync(selectedTestFile, getSimpleJestTestSource('works'))
+
+    process.chdir(tmpDir)
+    fs.writeFileSync(
+      'dd-test-optimization-test-command.txt',
+      './node_modules/.bin/jest packages/foo/test/scope.node.test.ts\n'
+    )
+    fs.writeFileSync('dd-test-optimization-selected-test-files.txt', 'packages/foo/test/scope.node.test.ts\n')
+
+    try {
+      assert.strictEqual(
+        inferTestManagementPlan({
+          auto: true,
+          mode: 'disabled',
+        }).testCommand,
+        './node_modules/.bin/jest packages/foo/test/scope.node.test.ts ' +
+          'packages/foo/test/dd-trace-tm-disabled.node.test.ts --runInBand'
+      )
+    } finally {
+      process.chdir(cwd)
+    }
+  })
+
+  it('defaults generated advanced Jest commands to run in band', () => {
+    const cwd = process.cwd()
+    const selectedTestFile = path.join(tmpDir, 'packages/foo/test/scope.node.test.ts')
+
+    fs.mkdirSync(path.dirname(selectedTestFile), { recursive: true })
+    fs.writeFileSync(selectedTestFile, getSimpleJestTestSource('works'))
+
+    process.chdir(tmpDir)
+    fs.writeFileSync(
+      'dd-test-optimization-test-command.txt',
+      './node_modules/.bin/jest packages/foo/test/scope.node.test.ts\n'
+    )
+    fs.writeFileSync('dd-test-optimization-selected-test-files.txt', 'packages/foo/test/scope.node.test.ts\n')
+
+    try {
+      assert.strictEqual(
+        getAtrBaselinePlan({
+          auto: true,
+          baselineCandidate: true,
+          framework: 'jest',
+          frameworkExplicit: true,
+        }).atrCommand,
+        './node_modules/.bin/jest packages/foo/test/scope.node.test.ts ' +
+          'packages/foo/test/dd-trace-atr-debug.node.test.ts --runInBand'
+      )
+    } finally {
+      process.chdir(cwd)
+    }
+  })
+
   it('preserves custom test file suffixes in generated advanced and Test Management files', () => {
     const cwd = process.cwd()
     const selectedTestFile = path.join(tmpDir, 'plugins/foo/src/helpers/error.unit.ts')
@@ -1466,6 +1549,103 @@ describe('Test Optimization debug intake', () => {
         inferTestManagementPlan({ auto: true, mode: 'attempt-to-fix' }).testFile,
         'plugins/foo/src/helpers/dd-trace-tm-attempt-to-fix.unit.ts'
       )
+    } finally {
+      process.chdir(cwd)
+    }
+  })
+
+  it('prepares source-safe generated Auto Test Retries candidates for advanced checks', () => {
+    const cwd = process.cwd()
+    const selectedTestFile = path.join(tmpDir, 'test/sum.spec.js')
+    const generatedAtrFile = path.join(tmpDir, 'test/dd-trace-atr-debug.spec.js')
+    const generatedEfdFile = path.join(tmpDir, 'test/dd-trace-efd-debug.spec.js')
+
+    fs.mkdirSync(path.dirname(selectedTestFile), { recursive: true })
+    fs.writeFileSync(selectedTestFile, [
+      'const assert = require(\'node:assert/strict\')',
+      '',
+      'describe(\'sum\', () => {',
+      '  it(\'adds numbers\', () => {',
+      '    assert.strictEqual(1 + 1, 2)',
+      '  })',
+      '})',
+      '',
+    ].join('\n'))
+
+    process.chdir(tmpDir)
+    fs.writeFileSync('dd-test-optimization-test-command.txt', 'npm test -- test/sum.spec.js\n')
+    fs.writeFileSync('dd-test-optimization-selected-test-files.txt', 'test/sum.spec.js\n')
+    fs.writeFileSync('dd-test-optimization-static.json', JSON.stringify(getStaticReport()))
+
+    try {
+      assert.deepStrictEqual(getAtrBaselinePlan({ auto: true, baselineCandidate: true }), {
+        atrCommand: 'npm test -- test/sum.spec.js test/dd-trace-atr-debug.spec.js',
+        atrTestFile: 'test/dd-trace-atr-debug.spec.js',
+        atrTestName: 'dd trace Auto Test Retries debug temporary test',
+        framework: 'mocha',
+        source: [
+          '\'use strict\'',
+          '',
+          'const assert = require(\'node:assert/strict\')',
+          '',
+          'describe("dd trace Auto Test Retries debug", () => {',
+          '  it("dd trace Auto Test Retries debug temporary test", () => {',
+          '    assert.strictEqual(1 + 1, 2)',
+          '  })',
+          '})',
+          '',
+        ].join('\n'),
+      })
+
+      prepareAtrBaselineCandidate({ auto: true, baselineCandidate: true })
+
+      assert.ok(fs.existsSync(generatedAtrFile))
+      assert.match(fs.readFileSync(generatedAtrFile, 'utf8'), /dd trace Auto Test Retries debug/)
+      assert.strictEqual(
+        fs.readFileSync('dd-test-optimization-atr-baseline-command.txt', 'utf8'),
+        'npm test -- test/sum.spec.js test/dd-trace-atr-debug.spec.js\n'
+      )
+
+      fs.writeFileSync('dd-test-optimization-known-tests.json', JSON.stringify({
+        mocha: {
+          'test/sum.spec.js': ['sum adds numbers'],
+          'test/dd-trace-atr-debug.spec.js': [
+            'dd trace Auto Test Retries debug dd trace Auto Test Retries debug temporary test',
+          ],
+        },
+      }))
+
+      assert.deepStrictEqual(inferPrepareOptions({ auto: true }), {
+        auto: true,
+        efdCommand:
+          'npm test -- test/sum.spec.js test/dd-trace-atr-debug.spec.js test/dd-trace-efd-debug.spec.js',
+        efdTestFile: 'test/dd-trace-efd-debug.spec.js',
+        efdTestName: 'dd trace EFD debug temporary test',
+        flakyTestFile: 'test/dd-trace-atr-debug.spec.js',
+        flakyTestName: 'dd trace Auto Test Retries debug dd trace Auto Test Retries debug temporary test',
+        framework: 'mocha',
+      })
+
+      prepareAdvancedChecks({ auto: true })
+
+      assert.ok(fs.existsSync(generatedEfdFile))
+      assert.match(fs.readFileSync(generatedAtrFile, 'utf8'), /dd trace auto retry debug flake/)
+      assert.ok(!fs.existsSync('dd-test-optimization-atr-flaky-test-backup.txt'))
+
+      restoreAdvancedChecks()
+
+      const cleanup = JSON.parse(fs.readFileSync('dd-test-optimization-advanced-cleanup.json', 'utf8'))
+      assert.strictEqual(cleanup.ok, true)
+      assert.deepStrictEqual(cleanup.stateFilesRemaining, [])
+      assert.ok(cleanup.paths.some(entry =>
+        entry.path === 'test/dd-trace-atr-debug.spec.js' && entry.remaining === false
+      ))
+      assert.ok(cleanup.paths.some(entry =>
+        entry.path === 'test/dd-trace-efd-debug.spec.js' && entry.remaining === false
+      ))
+      assert.ok(!fs.existsSync(generatedAtrFile))
+      assert.ok(!fs.existsSync(generatedEfdFile))
+      assert.strictEqual(fs.readFileSync(selectedTestFile, 'utf8').includes('dd trace auto retry debug flake'), false)
     } finally {
       process.chdir(cwd)
     }
@@ -1573,6 +1753,9 @@ describe('Test Optimization debug intake', () => {
 
       restoreAdvancedChecks()
 
+      const cleanup = JSON.parse(fs.readFileSync('dd-test-optimization-advanced-cleanup.json', 'utf8'))
+      assert.strictEqual(cleanup.ok, true)
+      assert.deepStrictEqual(cleanup.stateFilesRemaining, [])
       assert.ok(!fs.existsSync(efdTestFile))
       assert.strictEqual(fs.readFileSync(testFile, 'utf8'), original)
     } finally {
@@ -1663,6 +1846,14 @@ describe('Test Optimization debug intake', () => {
   })
 
   it('builds selected test commands for common package managers', () => {
+    assert.strictEqual(
+      addRunInBandToCommand('yarn test packages/foo/src/__tests__/scope.test.ts'),
+      'yarn test packages/foo/src/__tests__/scope.test.ts --runInBand'
+    )
+    assert.strictEqual(
+      addRunInBandToCommand('yarn test packages/foo/src/__tests__/scope.test.ts --runInBand'),
+      'yarn test packages/foo/src/__tests__/scope.test.ts --runInBand'
+    )
     assert.strictEqual(
       buildTestCommand({
         scripts: {

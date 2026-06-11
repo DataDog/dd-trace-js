@@ -9,6 +9,7 @@ const {
   buildTestManagementTestsFromArtifact,
 } = require('./test-optimization-intake-analysis')
 const {
+  addRunInBandToCommand,
   addTestFileToCommand,
   getTestFileSuffix,
 } = require('./test-optimization-prepare-advanced')
@@ -20,7 +21,9 @@ const DEFAULT_MARKER_FILE = path.join(DEFAULT_ARTIFACT_DIR, 'attempt-to-fix-mark
 const DEFAULT_RESPONSE_FILE = path.join(DEFAULT_ARTIFACT_DIR, 'test-management-tests.json')
 const DEFAULT_SELECTED_TEST_FILES_FILE = 'dd-test-optimization-selected-test-files.txt'
 const DEFAULT_SNIPPET_FILE = path.join(DEFAULT_ARTIFACT_DIR, 'candidate-snippet.txt')
+const DEFAULT_STATIC_REPORT_FILE = 'dd-test-optimization-static.json'
 const DEFAULT_TEST_COMMAND_FILE = 'dd-test-optimization-test-command.txt'
+const CLEANUP_RESULT_FILE = 'dd-test-optimization-test-management-cleanup.json'
 const GENERATED_FILES_STATE = path.join(DEFAULT_ARTIFACT_DIR, 'generated-files.txt')
 const MARKER_FILES_STATE = path.join(DEFAULT_ARTIFACT_DIR, 'marker-files.txt')
 const MODES = new Set(['disabled', 'quarantined', 'attempt-to-fix'])
@@ -80,6 +83,8 @@ function parseArgs (args) {
     } else if (arg.startsWith('--framework=')) {
       options.framework = arg.slice('--framework='.length)
       options.frameworkExplicit = true
+    } else if (arg === '--force-run-in-band') {
+      options.forceRunInBand = true
     } else if (arg === '--test-file') {
       options.testFile = args[++i]
     } else if (arg.startsWith('--test-file=')) {
@@ -158,6 +163,8 @@ function getHelpText () {
     'Use --auto to infer state files from the selected command and selected test files.',
     'When dd-test-optimization-known-tests.json exists, --auto prefers its framework and suite identity.',
     'Use --dry-run with --auto to print the inferred state without writing files.',
+    'Inferred Jest generated multi-file commands append --runInBand automatically.',
+    'Use --force-run-in-band to append --runInBand when forcing that behavior for another inferred command.',
     '',
     'Run generated tests once with DD_TEST_OPTIMIZATION_TM_BASELINE=1 before building the response.',
   ].join('\n')
@@ -175,9 +182,10 @@ function createTestManagementCandidate (options) {
   const testFile = path.resolve(options.testFile)
   const testName = options.testName || TEST_NAMES[options.mode]
   const framework = options.framework || 'mocha'
+  validateGeneratedTestFramework(framework)
   const markerFile = options.markerFile || DEFAULT_MARKER_FILE
   const snippetOut = options.snippetOut || DEFAULT_SNIPPET_FILE
-  const source = getTemporaryTestSource(framework, options.mode, testName, markerFile)
+  const source = getTemporaryTestSource(framework, options.mode, testName)
 
   fs.mkdirSync(path.dirname(testFile), { recursive: true })
   fs.writeFileSync(testFile, source)
@@ -280,7 +288,11 @@ function inferTestManagementPlan (options) {
   const selectedCommand = fs.readFileSync(path.resolve(testCommandFile), 'utf8').trim()
   const inferred = getTestManagementInference(options, knownTestsFile, selectedCommand)
   const testFile = options.testFile || getTemporaryTestManagementFile(inferred.suite, options.mode)
-  const testCommand = options.testCommand || addTestFileToCommand(selectedCommand, inferred.suite, testFile)
+  const inferredTestCommand = options.testCommand || addTestFileToCommand(selectedCommand, inferred.suite, testFile)
+  const framework = options.frameworkExplicit ? options.framework : inferred.framework
+  const testCommand = options.forceRunInBand || framework === 'jest'
+    ? addRunInBandToCommand(inferredTestCommand)
+    : inferredTestCommand
   const settingsMode = options.settingsMode || SETTINGS_MODES[options.mode]
 
   if (fs.existsSync(testFile)) {
@@ -289,7 +301,7 @@ function inferTestManagementPlan (options) {
 
   return {
     ...options,
-    framework: options.frameworkExplicit ? options.framework : inferred.framework,
+    framework,
     settingsMode,
     testCommand,
     testFile,
@@ -320,7 +332,7 @@ function getTestManagementInference (options, knownTestsFile, selectedCommand) {
   }
 
   return {
-    framework: inferFrameworkFromCommand(selectedCommand, options.framework),
+    framework: inferFrameworkFromCommand(selectedCommand, inferFrameworkFromStaticReport() || options.framework),
     suite: selectedFile,
   }
 }
@@ -336,24 +348,62 @@ function inferFrameworkFromCommand (selectedCommand, fallback) {
   if (/\bvitest\b/.test(selectedCommand)) return 'vitest'
   if (/\bjest\b/.test(selectedCommand)) return 'jest'
   if (/\bmocha\b/.test(selectedCommand)) return 'mocha'
+  if (/\bcypress\b/.test(selectedCommand)) return 'cypress'
+  if (/\bplaywright\b/.test(selectedCommand)) return 'playwright'
 
   return fallback || 'mocha'
+}
+
+/**
+ * Infers the first supported generated-test framework from the static diagnosis report.
+ *
+ * @returns {string|undefined} framework id
+ */
+function inferFrameworkFromStaticReport () {
+  try {
+    const staticReport = readJsonFile(DEFAULT_STATIC_REPORT_FILE)
+    const framework = staticReport.supportedFrameworks?.find(framework =>
+      framework.id === 'jest' || framework.id === 'mocha' || framework.id === 'vitest' || framework.id === 'cypress'
+    )
+
+    return framework?.id
+  } catch {}
 }
 
 /**
  * Removes generated Test Management source and marker files.
  */
 function restoreTestManagementChecks () {
-  for (const file of readStateFile(GENERATED_FILES_STATE)) {
+  const generatedFiles = readStateFile(GENERATED_FILES_STATE)
+  const markerFiles = readStateFile(MARKER_FILES_STATE)
+  const stateFiles = [
+    GENERATED_FILES_STATE,
+    MARKER_FILES_STATE,
+    ...Object.values(STATE_FILES),
+    ...[...MODES].map(getModeCommandFile),
+  ]
+  const cleanup = {
+    paths: [],
+    stateFiles,
+  }
+
+  for (const file of generatedFiles) {
     fs.rmSync(file, { force: true })
+    cleanup.paths.push({ action: 'remove', path: file, remaining: fs.existsSync(file) })
     console.log(`Temporary Test Management test removed: ${file}`)
   }
 
-  for (const file of readStateFile(MARKER_FILES_STATE)) {
+  for (const file of markerFiles) {
     fs.rmSync(file, { force: true })
+    cleanup.paths.push({ action: 'remove', path: file, remaining: fs.existsSync(file) })
   }
 
   fs.rmSync(path.resolve(DEFAULT_MARKER_FILE), { force: true })
+  cleanup.paths.push({
+    action: 'remove',
+    path: path.resolve(DEFAULT_MARKER_FILE),
+    remaining: fs.existsSync(path.resolve(DEFAULT_MARKER_FILE)),
+  })
   fs.rmSync(GENERATED_FILES_STATE, { force: true })
   fs.rmSync(MARKER_FILES_STATE, { force: true })
   for (const file of Object.values(STATE_FILES)) {
@@ -363,6 +413,23 @@ function restoreTestManagementChecks () {
     fs.rmSync(getModeCommandFile(mode), { force: true })
   }
   removeEmptyDiagnosticDirectory()
+  writeCleanupResult(cleanup)
+}
+
+/**
+ * Writes cleanup verification state.
+ *
+ * @param {object} cleanup cleanup result
+ */
+function writeCleanupResult (cleanup) {
+  const result = {
+    ...cleanup,
+    ok: cleanup.paths.every(entry => !entry.remaining) &&
+      cleanup.stateFiles.every(file => !fs.existsSync(file)),
+    stateFilesRemaining: cleanup.stateFiles.filter(file => fs.existsSync(file)),
+  }
+
+  fs.writeFileSync(CLEANUP_RESULT_FILE, `${JSON.stringify(result, null, 2)}\n`)
 }
 
 /**
@@ -408,17 +475,14 @@ function getProperties (mode) {
  * @param {string} framework test framework
  * @param {string} mode Test Management mode
  * @param {string} testName test name
- * @param {string} markerFile marker file path
  * @returns {string} source
  */
-function getTemporaryTestSource (framework, mode, testName, markerFile) {
+function getTemporaryTestSource (framework, mode, testName) {
   if (framework === 'vitest') {
     return [
-      'import fs from \'node:fs\'',
-      'import path from \'node:path\'',
       'import { describe, it } from \'vitest\'',
       '',
-      getBehaviorFunctionSource(mode, markerFile),
+      getBehaviorFunctionSource(mode, testName),
       '',
       'describe(\'dd trace test management debug\', () => {',
       `  it(${JSON.stringify(testName)}, () => {`,
@@ -429,15 +493,12 @@ function getTemporaryTestSource (framework, mode, testName, markerFile) {
     ].join('\n')
   }
 
+  validateGeneratedTestFramework(framework)
+
   const testFunction = framework === 'jest' ? 'test' : 'it'
 
   return [
-    '\'use strict\'',
-    '',
-    'const fs = require(\'node:fs\')',
-    'const path = require(\'node:path\')',
-    '',
-    getBehaviorFunctionSource(mode, markerFile),
+    getBehaviorFunctionSource(mode, testName),
     '',
     'describe(\'dd trace test management debug\', () => {',
     `  ${testFunction}(${JSON.stringify(testName)}, () => {`,
@@ -452,23 +513,25 @@ function getTemporaryTestSource (framework, mode, testName, markerFile) {
  * Gets the deterministic candidate behavior function.
  *
  * @param {string} mode Test Management mode
- * @param {string} markerFile marker file path
+ * @param {string} testName test name
  * @returns {string} source
  */
-function getBehaviorFunctionSource (mode, markerFile) {
+function getBehaviorFunctionSource (mode, testName) {
   const lines = [
+    'const ddTraceTestManagementState = globalThis.__ddTraceTestManagementState || ' +
+      '(globalThis.__ddTraceTestManagementState = {})',
+    `const ddTraceTestManagementKey = ${JSON.stringify(testName)}`,
+    '',
     'function runManagedCandidate () {',
     '  if (process.env.DD_TEST_OPTIMIZATION_TM_BASELINE === \'1\') return',
   ]
 
   if (mode === 'attempt-to-fix') {
     lines.push(
-      `  const markerFile = path.resolve(${JSON.stringify(markerFile)})`,
-      '  fs.mkdirSync(path.dirname(markerFile), { recursive: true })',
-      '  if (fs.existsSync(markerFile)) {',
+      '  if (ddTraceTestManagementState[ddTraceTestManagementKey]) {',
       '    throw new Error(\'dd trace test management attempt-to-fix retry failure\')',
       '  }',
-      String.raw`  fs.writeFileSync(markerFile, 'first attempt\n')`
+      '  ddTraceTestManagementState[ddTraceTestManagementKey] = true'
     )
   } else {
     lines.push(`  throw new Error(${JSON.stringify(`dd trace test management ${mode} candidate executed`)})`)
@@ -477,6 +540,19 @@ function getBehaviorFunctionSource (mode, markerFile) {
   lines.push('}')
 
   return lines.join('\n')
+}
+
+/**
+ * Validates generated Test Management framework support.
+ *
+ * @param {string} framework framework name
+ */
+function validateGeneratedTestFramework (framework) {
+  if (framework === 'jest' || framework === 'mocha' || framework === 'vitest' || framework === 'cypress') return
+
+  throw new Error(
+    `Unsupported generated Test Management framework: ${framework}. Use manual Step 8 or skip with this reason.`
+  )
 }
 
 /**
