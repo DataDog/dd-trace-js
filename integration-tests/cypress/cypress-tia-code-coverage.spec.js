@@ -2,16 +2,19 @@
 
 const assert = require('node:assert/strict')
 const { exec } = require('node:child_process')
+const { inspect } = require('node:util')
 
 const {
   sandboxCwd,
   useSandbox,
+  assertObjectContains,
   getCiVisAgentlessConfig,
   stopCiVisTestEnv,
   warmCypressBinary,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { startWebAppServer, stopWebAppServer } = require('../ci-visibility/web-app-server')
+const coverageFixture = require('../ci-visibility/fixtures/istanbul-map-fixture.json')
 const {
   TEST_CODE_COVERAGE_LINES_PCT,
   TEST_ITR_SKIPPING_COUNT,
@@ -318,6 +321,40 @@ moduleTypes.forEach(({
       assert.strictEqual(result.skippedTests.length, 1)
       assert.strictEqual(result.skippedTests[0].meta[TEST_STATUS], 'skip')
       assert.strictEqual(result.codeCoverageLinesPct, undefined)
+    })
+
+    it('reports code coverage if it is available', async () => {
+      const result = await runCypress({
+        settings: {
+          itr_enabled: true,
+          code_coverage: true,
+          coverage_report_upload_enabled: true,
+          tests_skipping: false,
+        },
+        specPattern: 'cypress/e2e/spec.cy.js',
+      })
+      const testCoverages = result.coverages.filter(coverage => coverage.test_suite_id)
+      const sessionCoverage = result.coverages.find(coverage => !coverage.test_suite_id)
+
+      testCoverages.forEach(coverage => {
+        assert.ok(Object.hasOwn(coverage, 'test_session_id'), `Available keys: ${inspect(Object.keys(coverage))}`)
+        assert.ok(Object.hasOwn(coverage, 'test_suite_id'), `Available keys: ${inspect(Object.keys(coverage))}`)
+        assert.ok(Object.hasOwn(coverage, 'span_id'), `Available keys: ${inspect(Object.keys(coverage))}`)
+        assert.ok(Object.hasOwn(coverage, 'files'), `Available keys: ${inspect(Object.keys(coverage))}`)
+      })
+      assert.ok(sessionCoverage, 'session executable-line coverage should be reported')
+      assert.ok(
+        sessionCoverage.files.every(file => file.bitmap),
+        'session executable-line coverage should include line coverage bitmaps'
+      )
+
+      const fileNames = testCoverages
+        .flatMap(coverageAttachment => coverageAttachment.files)
+        .map(file => file.filename)
+      const sessionFileNames = sessionCoverage.files.map(file => file.filename)
+
+      assertObjectContains(fileNames, Object.keys(coverageFixture))
+      assertObjectContains(sessionFileNames, Object.keys(coverageFixture))
     })
 
     it('does not upload citestcov payloads when TIA code coverage is disabled', async () => {
