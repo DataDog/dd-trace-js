@@ -7,7 +7,7 @@
   "instructions": true,
   "variants": {
     "agent": {
-      "env": { "VARIANT": "agent", "ITERATIONS": "3000000" }
+      "env": { "VARIANT": "agent", "ITERATIONS": "12000000" }
     },
     "rule-match": {
       "env": { "VARIANT": "rule-match", "ITERATIONS": "3000000" }
