@@ -1,8 +1,7 @@
 'use strict'
 
 const { join } = require('path')
-const { wrap } = require('../../datadog-shimmer')
-const { addHook, channel, tracingChannel } = require('./helpers/instrument')
+const { tracingChannel, channel } = require('dc-polyfill')
 
 const requestCh = tracingChannel('apm:electron:net:request')
 const mainReceiveCh = tracingChannel('apm:electron:ipc:main:receive')
@@ -14,6 +13,10 @@ const rendererSendCh = tracingChannel('apm:electron:ipc:renderer:send')
 
 const listeners = {}
 const handlers = {}
+
+function wrap (obj, method, wrapper) {
+  obj[method] = wrapper(obj[method].bind(obj))
+}
 
 function createWrapRequest (ch) {
   return function wrapRequest (request) {
@@ -66,51 +69,51 @@ function createWrapRequest (ch) {
 
 function createWrapAddListener (ch, mappings) {
   return function wrapAddListener (addListener) {
-    return function (channel, listener) {
+    return function (ipcChannel, listener) {
       const wrappedListener = (event, ...args) => {
-        const ctx = { args, channel, event }
+        const ctx = { args, channel: ipcChannel, event }
 
         return ch.tracePromise(() => listener.call(this, event, ...args), ctx)
       }
 
-      const mapping = mappings[channel] || new WeakMap()
+      const mapping = mappings[ipcChannel] || new WeakMap()
       const wrapper = mapping.get(listener) || wrappedListener
 
       mapping.set(listener, wrapper)
 
-      return addListener.call(this, channel, wrappedListener)
+      return addListener.call(this, ipcChannel, wrappedListener)
     }
   }
 }
 
 function createWrapRemoveListener (mappings) {
   return function wrapRemoveListener (removeListener) {
-    return function (channel, listener) {
-      const mapping = mappings[channel]
+    return function (ipcChannel, listener) {
+      const mapping = mappings[ipcChannel]
 
       if (mapping) {
         const wrapper = mapping.get(listener)
 
         if (wrapper) {
-          return removeListener.call(this, channel, wrapper)
+          return removeListener.call(this, ipcChannel, wrapper)
         }
       }
 
-      return removeListener.call(this, channel, listener)
+      return removeListener.call(this, ipcChannel, listener)
     }
   }
 }
 
 function createWrapRemoveAllListeners (mappings) {
   return function wrapRemoveAllListeners (removeAllListeners) {
-    return function (channel) {
-      if (channel) {
-        delete mappings[channel]
+    return function (ipcChannel) {
+      if (ipcChannel) {
+        delete mappings[ipcChannel]
       } else {
         for (const key of Object.keys(mappings)) delete mappings[key]
       }
 
-      return removeAllListeners.call(this, channel)
+      return removeAllListeners.call(this, ipcChannel)
     }
   }
 }
@@ -119,32 +122,32 @@ function createWrapSend (ch, promise = false) {
   const trace = (promise ? ch.tracePromise : ch.traceSync).bind(ch)
 
   return function wrapSend (send) {
-    return function (channel, ...args) {
-      const ctx = { args, channel, self: this }
+    return function (ipcChannel, ...args) {
+      const ctx = { args, channel: ipcChannel, self: this }
 
-      return trace(() => send.call(this, channel, ...args), ctx)
+      return trace(() => send.call(this, ipcChannel, ...args), ctx)
     }
   }
 }
 
 function wrapSendToFrame (send) {
-  return function (frameId, channel, ...args) {
-    const ctx = { args, channel, frameId, self: this }
+  return function (frameId, ipcChannel, ...args) {
+    const ctx = { args, channel: ipcChannel, frameId, self: this }
 
-    return mainSendCh.traceSync(() => send.call(this, frameId, channel, ...args), ctx)
+    return mainSendCh.traceSync(() => send.call(this, frameId, ipcChannel, ...args), ctx)
   }
 }
 
-function wrapBrowserWindow (electron) {
-  const moduleExports = {}
+function patchBrowserWindow (electron) {
+  const OriginalBrowserWindow = electron.BrowserWindow
 
-  class DatadogBrowserWindow extends electron.BrowserWindow {
+  class DatadogBrowserWindow extends OriginalBrowserWindow {
     constructor (options = {}) {
       const win = super(options)
 
       win.webContents.session.registerPreloadScript({
-        type: 'frame', // TODO: service-worker
-        filePath: join(__dirname, 'electron', 'preload.js'),
+        type: 'frame',
+        filePath: join(__dirname, 'preload.js'),
       })
 
       // BrowserWindow doesn't support subclassing because it's all native code
@@ -153,36 +156,19 @@ function wrapBrowserWindow (electron) {
     }
   }
 
-  Object.defineProperty(moduleExports, 'BrowserWindow', {
-    enumerable: true,
-    get: () => DatadogBrowserWindow,
-    configurable: false,
-  })
+  electron.BrowserWindow = DatadogBrowserWindow
 
-  for (const key of Reflect.ownKeys(electron)) {
-    const descriptor = Reflect.getOwnPropertyDescriptor(electron, key)
-
-    if (key === 'BrowserWindow') continue
-
-    Object.defineProperty(moduleExports, key, descriptor)
-  }
-
-  return moduleExports
-}
-
-function wrapWebContents (proto) {
-  const descriptor = Object.getOwnPropertyDescriptor(proto, 'webContents')
+  const descriptor = Object.getOwnPropertyDescriptor(OriginalBrowserWindow.prototype, 'webContents')
   const wrapped = new WeakSet()
   const wrapSend = createWrapSend(mainSendCh)
 
-  Object.defineProperty(proto, 'webContents', {
+  Object.defineProperty(OriginalBrowserWindow.prototype, 'webContents', {
     get () {
       const webContents = descriptor.get.apply(this)
 
       if (!wrapped.has(webContents)) {
-        // wrap(webContents, 'postMessage', wrapSend)
         wrap(webContents, 'send', wrapSend)
-        wrap(webContents, 'sendToFrame', wrapSendToFrame)
+        wrap(webContents, 'sendToFrame', () => wrapSendToFrame)
 
         wrapped.add(webContents)
       }
@@ -192,20 +178,19 @@ function wrapWebContents (proto) {
   })
 }
 
-addHook({ name: 'electron', versions: ['>=37.0.0'] }, electron => {
-  // Electron exports a string in Node and an object in Electron.
-  if (typeof electron === 'string') return electron
+// eslint-disable-next-line n/no-missing-require
+const electron = require('electron')
 
-  const { BrowserWindow, ipcMain, ipcRenderer, net } = electron
+// Electron exports a string (the binary path) in plain Node, an object in Electron.
+if (typeof electron !== 'string') {
+  const { ipcMain, ipcRenderer, net } = electron
 
   if (net) {
-    // This also covers `fetch` as it uses `request` under the hood.
     wrap(net, 'request', createWrapRequest(requestCh))
   }
 
   if (ipcRenderer) {
     wrap(ipcRenderer, 'invoke', createWrapSend(rendererSendCh, true))
-    // wrap(ipcRenderer, 'postMessage', createWrapSend(rendererSendCh))
     wrap(ipcRenderer, 'send', createWrapSend(rendererSendCh))
     wrap(ipcRenderer, 'sendSync', createWrapSend(rendererSendCh))
     wrap(ipcRenderer, 'sendToHost', createWrapSend(rendererSendCh))
@@ -231,10 +216,6 @@ addHook({ name: 'electron', versions: ['>=37.0.0'] }, electron => {
 
     ipcMain.once('datadog:apm:renderer:patched', event => rendererPatchedCh.publish(event))
 
-    wrapWebContents(BrowserWindow.prototype)
-
-    electron = wrapBrowserWindow(electron)
+    patchBrowserWindow(electron)
   }
-
-  return electron
-})
+}

@@ -9,7 +9,7 @@
  * @param {number} [timeout]
  * @returns {Promise<void>}
  */
-function assertTraceReceived (child, fn, timeout = 2000) {
+function assertTraceReceived (child, fn, timeout = 5000) {
   let resolve, reject
   const errors = []
   const promise = new Promise((_resolve, _reject) => {

@@ -1,10 +1,10 @@
 'use strict'
 
+// eslint-disable-next-line n/no-missing-require
 const { ipcRenderer } = require('electron/renderer')
 
-// Receive the ping from the main process.
-// The electron instrumentation wraps ipcRenderer.on so this creates an
-// electron.renderer.receive span.
+// Receive ping from the main process.
+// The instrumentation wraps ipcRenderer.on so this creates a renderer.receive span.
 ipcRenderer.on('ping', () => {})
 
 // Check that DatadogEventBridge was injected by the Datadog preload script.
