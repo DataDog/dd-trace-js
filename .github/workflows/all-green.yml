@@ -46,7 +46,7 @@ jobs:
       - if: "!cancelled()"
         uses: ./.github/actions/datadog-ci
       - if: "!cancelled()"
-        run: datadog-ci junit upload --service dd-trace-js-tests junit-results
+        run: datadog-ci junit upload --service dd-trace-js-tests --auto-discovery junit-results
         env:
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
       - if: "!cancelled()"
