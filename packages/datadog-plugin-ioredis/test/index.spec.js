@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const semver = require('semver')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
@@ -9,6 +10,9 @@ const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
+
+// ioredis >= 5.11.0 uses built-in TracingChannel (dc-polyfill ensures it's always available),
+// which does not expose the connection name, so splitByInstance has no effect for those versions.
 
 describe('Plugin', () => {
   let Redis
@@ -142,8 +146,15 @@ describe('Plugin', () => {
         it('should be configured with the correct values', async () => {
           await redis.get('foo')
 
+          // ioredis >= 5.11.0 on Node.js >= 20.2 uses built-in TracingChannel which does not
+          // expose connectionName, so splitByInstance has no effect and the service is 'custom'.
+          // `version` may be a range string like '>=5.11.0', so coerce before comparing.
+          const expectedService = semver.satisfies(semver.coerce(version), '>=5.11.0')
+            ? 'custom'
+            : 'custom-test'
+
           await agent.assertFirstTraceSpan({
-            service: 'custom-test',
+            service: expectedService,
           })
         })
 
@@ -160,7 +171,12 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'redis.command',
-              serviceName: 'custom-test',
+              // ioredis >= 5.11.0 uses built-in TracingChannel which does not expose connectionName,
+              // so splitByInstance has no effect and the service is 'custom'.
+              // `version` may be a range string like '>=5.11.0', so coerce before comparing.
+              serviceName: semver.satisfies(semver.coerce(version), '>=5.11.0')
+                ? 'custom'
+                : 'custom-test',
             },
             v1: {
               opName: 'redis.command',
@@ -184,6 +200,47 @@ describe('Plugin', () => {
             resource: 'get',
           })
         })
+      })
+    })
+
+    // Covers the ioredis >=5.11.0 shimmer fallback branch that only runs on Node 18,
+    // where diagnostics_channel.tracingChannel is absent. We simulate that here by temporarily
+    // removing tracingChannel so the conditional shimmer-wrap path executes on all Node versions.
+    describe('ioredis >=5.11.0 Node 18 shimmer fallback', () => {
+      let dc, origTracingChannel
+
+      before(() => {
+        // Load the instrumentation to register hooks in the global instrumentations map.
+        require('../../datadog-instrumentations/src/ioredis')
+        dc = require('node:diagnostics_channel')
+        // eslint-disable-next-line n/no-unsupported-features/node-builtins
+        origTracingChannel = dc.tracingChannel
+        // eslint-disable-next-line n/no-unsupported-features/node-builtins
+        delete dc.tracingChannel
+      })
+
+      after(() => {
+        if (origTracingChannel !== undefined) {
+          // eslint-disable-next-line n/no-unsupported-features/node-builtins
+          dc.tracingChannel = origTracingChannel
+        }
+      })
+
+      it('shimmer-wraps sendCommand when tracingChannel is absent', () => {
+        const instrumentations = globalThis[Symbol.for('_ddtrace_instrumentations')]
+        const hooks = instrumentations.ioredis
+        const ioredisHook = hooks.find(h => h.versions && h.versions.includes('>=5.11.0') && !h.file)
+
+        assert(ioredisHook, 'should find hook for ioredis >=5.11.0')
+
+        class MockRedis {
+          sendCommand (command, stream) { return command }
+        }
+        const origSendCommand = MockRedis.prototype.sendCommand
+        const result = ioredisHook.hook(MockRedis)
+
+        assert.strictEqual(result, MockRedis)
+        assert.notStrictEqual(MockRedis.prototype.sendCommand, origSendCommand)
       })
     })
   })

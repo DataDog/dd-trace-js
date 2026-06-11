@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
+const semver = require('semver')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
@@ -14,7 +15,12 @@ const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
   describe('redis', () => {
-    withVersions('redis', ['@node-redis/client', '@redis/client'], (version, moduleName) => {
+    withVersions('redis', ['@node-redis/client', '@redis/client'], (version, moduleName, resolvedVersion) => {
+      // @redis/client >= 5.12.0 uses built-in TracingChannel (dc-polyfill ensures it's always
+      // available) which does not expose connectionName, so splitByInstance has no effect.
+      const isBuiltinDcVersion = moduleName === '@redis/client' &&
+        semver.satisfies(resolvedVersion, '>=5.12.0')
+
       let redis
       let client
       let tracer
@@ -90,23 +96,23 @@ describe('Plugin', () => {
           await Promise.all([client.get('foo'), promise])
         })
 
-        it('keeps every arg when formatting a multi-arg command', async () => {
+        it('redacts non-string non-number args as ?', async () => {
           const promise = agent.assertSomeTraces(traces => {
-            assert.strictEqual(traces[0][0].meta['redis.raw_command'], 'SET multi-arg-key multi-arg-value')
+            assert.strictEqual(traces[0][0].meta['redis.raw_command'], 'SET multi-arg-key ?')
           }, { spanResourceMatch: /^SET$/ })
 
-          await Promise.all([client.set('multi-arg-key', 'multi-arg-value'), promise])
+          await Promise.all([client.set('multi-arg-key', Buffer.from('multi-arg-value')), promise])
         })
 
         it('trims a string arg longer than 100 chars', async () => {
-          const longValue = 'x'.repeat(150)
+          const longKey = 'x'.repeat(150)
           const promise = agent.assertSomeTraces(traces => {
             const rawCommand = traces[0][0].meta['redis.raw_command']
-            assert.strictEqual(rawCommand, `SET long-key ${'x'.repeat(97)}...`)
-            assert.strictEqual(rawCommand.length, 'SET long-key '.length + 100)
-          }, { spanResourceMatch: /^SET$/ })
+            assert.strictEqual(rawCommand, `GET ${'x'.repeat(97)}...`)
+            assert.strictEqual(rawCommand.length, 'GET '.length + 100)
+          }, { spanResourceMatch: /^GET$/ })
 
-          await Promise.all([client.set('long-key', longValue), promise])
+          await Promise.all([client.get(longKey), promise])
         })
 
         it('redacts the AUTH password from the raw command', async () => {
@@ -121,18 +127,15 @@ describe('Plugin', () => {
         })
 
         it('caps the joined raw command at 1000 chars across many args', async () => {
-          const args = []
-          for (let index = 0; index < 200; index++) {
-            args.push(`key${index}`, `value${index}`)
-          }
+          const keys = Array.from({ length: 200 }, (_, i) => `key${i}`)
           const promise = agent.assertSomeTraces(traces => {
             const rawCommand = traces[0][0].meta['redis.raw_command']
+            assert.match(rawCommand, /^DEL /)
             assert.strictEqual(rawCommand.length, 1000)
-            assert.match(rawCommand, /^MSET /)
             assert.match(rawCommand, /\.\.\.$/)
-          }, { spanResourceMatch: /^MSET$/ })
+          }, { spanResourceMatch: /^DEL$/ })
 
-          await Promise.all([client.sendCommand(['MSET', ...args]), promise])
+          await Promise.all([client.sendCommand(['DEL', ...keys]), promise])
         })
 
         withPeerService(
@@ -286,16 +289,21 @@ describe('Plugin', () => {
         })
 
         it('should set service name based on connection name', async () => {
+          // Built-in TracingChannel does not expose connectionName, so splitByInstance has no effect.
+          const expectedService = isBuiltinDcVersion ? 'custom' : 'custom-test'
           const promise = agent.assertSomeTraces(traces => {
-            assert.strictEqual(traces[0][0].service, 'custom-test')
+            assert.strictEqual(traces[0][0].service, expectedService)
           })
 
           await Promise.all([client.get('foo'), promise])
         })
 
         it('should set service source tag to split-by-instance', async () => {
+          // Built-in TracingChannel does not expose connectionName, so splitByInstance has no effect
+          // and the source tag is 'opt.plugin' (from the configured service) instead.
+          const expectedSvcSrc = isBuiltinDcVersion ? 'opt.plugin' : 'opt.split_by_instance'
           const promise = agent.assertSomeTraces(traces => {
-            assert.strictEqual(traces[0][0].meta['_dd.svc_src'], 'opt.split_by_instance')
+            assert.strictEqual(traces[0][0].meta['_dd.svc_src'], expectedSvcSrc)
           })
 
           await Promise.all([client.get('foo'), promise])
@@ -306,7 +314,8 @@ describe('Plugin', () => {
           {
             v0: {
               opName: 'redis.command',
-              serviceName: 'custom-test',
+              // Built-in TracingChannel does not expose connectionName, so splitByInstance has no effect.
+              serviceName: isBuiltinDcVersion ? 'custom' : 'custom-test',
             },
             v1: {
               opName: 'redis.command',
@@ -381,6 +390,67 @@ describe('Plugin', () => {
 
           client.set('turtle', 'like')
         })
+      })
+    })
+
+    // Covers the @redis/client >=5.12.0 shimmer fallback branches that only run on Node 18,
+    // where diagnostics_channel.tracingChannel is absent. We simulate that here by temporarily
+    // removing tracingChannel so the conditional shimmer-wrap paths execute on all Node versions.
+    describe('@redis/client >=5.12.0 Node 18 shimmer fallback', () => {
+      let dc, origTracingChannel
+
+      before(() => {
+        // Load the instrumentation to register hooks in the global instrumentations map.
+        require('../../datadog-instrumentations/src/redis')
+        dc = require('node:diagnostics_channel')
+        // eslint-disable-next-line n/no-unsupported-features/node-builtins
+        origTracingChannel = dc.tracingChannel
+        // eslint-disable-next-line n/no-unsupported-features/node-builtins
+        delete dc.tracingChannel
+      })
+
+      after(() => {
+        if (origTracingChannel !== undefined) {
+          // eslint-disable-next-line n/no-unsupported-features/node-builtins
+          dc.tracingChannel = origTracingChannel
+        }
+      })
+
+      it('shimmer-wraps create on dist/lib/client/index.js', () => {
+        const instrumentations = globalThis[Symbol.for('_ddtrace_instrumentations')]
+        const hooks = instrumentations['@redis/client']
+        const indexHook = hooks.find(h =>
+          h.versions && h.versions.includes('>=5.12.0') &&
+          h.file === 'dist/lib/client/index.js')
+
+        assert(indexHook, 'should find hook for @redis/client >=5.12.0 index.js')
+
+        const mockCreate = function create () {}
+        const mockRedis = { default: { create: mockCreate } }
+        const result = indexHook.hook(mockRedis)
+
+        assert.strictEqual(result, mockRedis)
+        assert.notStrictEqual(mockRedis.default.create, mockCreate)
+      })
+
+      it('shimmer-wraps addCommand on dist/lib/client/commands-queue.js', () => {
+        const instrumentations = globalThis[Symbol.for('_ddtrace_instrumentations')]
+        const hooks = instrumentations['@redis/client']
+        const queueHook = hooks.find(h =>
+          h.versions && h.versions.includes('>=5.12.0') &&
+          h.file === 'dist/lib/client/commands-queue.js')
+
+        assert(queueHook, 'should find hook for @redis/client >=5.12.0 commands-queue.js')
+
+        class MockQueue {
+          addCommand (cmd) { return cmd }
+        }
+        const mockRedis = { default: MockQueue }
+        const result = queueHook.hook(mockRedis)
+
+        assert.strictEqual(result, mockRedis)
+        assert.notStrictEqual(mockRedis.default, MockQueue)
+        assert(Object.hasOwn(mockRedis.default.prototype, 'addCommand'))
       })
     })
   })

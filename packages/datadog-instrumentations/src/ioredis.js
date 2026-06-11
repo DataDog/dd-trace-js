@@ -50,7 +50,18 @@ addHook({ name: 'ioredis', versions: ['>=4.11.0 <5'], file: 'built/redis/index.j
   return exports
 })
 
-addHook({ name: 'ioredis', versions: ['>=5'] }, wrapRedis)
+addHook({ name: 'ioredis', versions: ['>=5 <5.11.0'] }, wrapRedis)
+
+// ioredis >= 5.11.0 exposes a built-in TracingChannel (tracing:ioredis:command).
+// On Node.js >= 19.9 / 20.2 the plugin subscribes directly; on Node.js 18 the native
+// diagnostics_channel lacks tracingChannel so ioredis skips it — fall back to the shimmer.
+addHook({ name: 'ioredis', versions: ['>=5.11.0'] }, (Redis) => {
+  // eslint-disable-next-line n/no-unsupported-features/node-builtins
+  if (typeof require('node:diagnostics_channel').tracingChannel !== 'function') {
+    return wrapRedis(Redis)
+  }
+  return Redis
+})
 
 function finish (finishCh, errorCh, ctx, error) {
   if (error) {
