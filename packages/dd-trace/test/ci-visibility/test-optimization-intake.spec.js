@@ -42,6 +42,7 @@ const {
   runDebug,
 } = require('../../../../ci/test-optimization-debug')
 const {
+  getTemporaryEfdTestFile,
   inferPrepareOptions,
   insertFlakyFailure,
   prepareAdvancedChecks,
@@ -1164,12 +1165,15 @@ describe('Test Optimization debug intake', () => {
           JSON.parse(fs.readFileSync(path.join(tmpDir, 'dd-test-optimization-intake.json'), 'utf8')).requests.length,
           1
         )
+        const envFile = fs.readFileSync(path.join(tmpDir, 'dd-test-optimization-env.txt'), 'utf8')
+
         assert.match(
-          fs.readFileSync(path.join(tmpDir, 'dd-test-optimization-env.txt'), 'utf8'),
+          envFile,
           /DD_API_KEY=debug\nDD_SERVICE=ci-debug\n/
         )
+        assert.match(envFile, /DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE=false\n/)
         assert.match(
-          fs.readFileSync(path.join(tmpDir, 'dd-test-optimization-env.txt'), 'utf8'),
+          envFile,
           /NODE_OPTIONS=-r dd-trace\/ci\/init\n/
         )
         assert.ok(fs.existsSync(path.join(tmpDir, 'dd-test-optimization-final-report.txt')))
@@ -1385,6 +1389,83 @@ describe('Test Optimization debug intake', () => {
       assert.ok(!fs.existsSync('dd-test-optimization-tm-framework.txt'))
       assert.ok(!fs.existsSync('dd-test-optimization-tm-test-file.txt'))
       assert.ok(!fs.existsSync('dd-test-optimization-tm-test-command.txt'))
+    } finally {
+      process.chdir(cwd)
+    }
+  })
+
+  it('infers Test Management helper state from selected test files without known-tests', () => {
+    const cwd = process.cwd()
+    const selectedTestFile = path.join(tmpDir, 'packages/foo/test/scope.node.test.ts')
+
+    fs.mkdirSync(path.dirname(selectedTestFile), { recursive: true })
+    fs.writeFileSync(selectedTestFile, getSimpleJestTestSource('works'))
+
+    process.chdir(tmpDir)
+    fs.writeFileSync(
+      'dd-test-optimization-test-command.txt',
+      './node_modules/.bin/jest packages/foo/test/scope.node.test.ts --runInBand\n'
+    )
+    fs.writeFileSync('dd-test-optimization-selected-test-files.txt', 'packages/foo/test/scope.node.test.ts\n')
+
+    try {
+      assert.deepStrictEqual(inferTestManagementPlan({
+        auto: true,
+        mode: 'disabled',
+      }), {
+        auto: true,
+        framework: 'jest',
+        mode: 'disabled',
+        settingsMode: 'tm-disabled',
+        testCommand:
+          './node_modules/.bin/jest packages/foo/test/scope.node.test.ts ' +
+          'packages/foo/test/dd-trace-tm-disabled.node.test.ts --runInBand',
+        testFile: 'packages/foo/test/dd-trace-tm-disabled.node.test.ts',
+      })
+    } finally {
+      process.chdir(cwd)
+    }
+  })
+
+  it('preserves custom test file suffixes in generated advanced and Test Management files', () => {
+    const cwd = process.cwd()
+    const selectedTestFile = path.join(tmpDir, 'plugins/foo/src/helpers/error.unit.ts')
+
+    fs.mkdirSync(path.dirname(selectedTestFile), { recursive: true })
+    fs.writeFileSync(selectedTestFile, getSimpleJestTestSource('works'))
+
+    process.chdir(tmpDir)
+    fs.writeFileSync(
+      'dd-test-optimization-test-command.txt',
+      'yarn test:unit plugins/foo/src/helpers/error.unit.ts --runInBand\n'
+    )
+    fs.writeFileSync('dd-test-optimization-selected-test-files.txt', 'plugins/foo/src/helpers/error.unit.ts\n')
+    fs.writeFileSync('dd-test-optimization-known-tests.json', JSON.stringify({
+      jest: {
+        'plugins/foo/src/helpers/error.unit.ts': ['error works'],
+      },
+    }))
+
+    try {
+      assert.strictEqual(
+        getTemporaryEfdTestFile('plugins/foo/src/helpers/error.unit.ts'),
+        'plugins/foo/src/helpers/dd-trace-efd-debug.unit.ts'
+      )
+      assert.deepStrictEqual(inferPrepareOptions({ auto: true }), {
+        auto: true,
+        efdCommand:
+          'yarn test:unit plugins/foo/src/helpers/error.unit.ts ' +
+          'plugins/foo/src/helpers/dd-trace-efd-debug.unit.ts --runInBand',
+        efdTestFile: 'plugins/foo/src/helpers/dd-trace-efd-debug.unit.ts',
+        efdTestName: 'dd trace EFD debug temporary test',
+        flakyTestFile: 'plugins/foo/src/helpers/error.unit.ts',
+        flakyTestName: 'error works',
+        framework: 'jest',
+      })
+      assert.strictEqual(
+        inferTestManagementPlan({ auto: true, mode: 'attempt-to-fix' }).testFile,
+        'plugins/foo/src/helpers/dd-trace-tm-attempt-to-fix.unit.ts'
+      )
     } finally {
       process.chdir(cwd)
     }
@@ -1736,6 +1817,26 @@ describe('Test Optimization debug intake', () => {
     assert.match(result.snippet, /test\('falls back'/)
   })
 
+  it('inserts one-time flaky failure after multi-line imports', () => {
+    const source = [
+      'import {',
+      '  parseScope,',
+      '} from \'../utils\'',
+      '',
+      'describe(\'parseScope\', () => {',
+      '  test(\'falls back\', () => {',
+      '    expect(parseScope([\'\'])).toEqual({})',
+      '  })',
+      '})',
+      '',
+    ].join('\n')
+    const result = insertFlakyFailure(source, 'falls back')
+
+    assert.match(result.source, /} from '\.\.\/utils'\nlet ddTraceAutoRetryCounter = 0/)
+    assert.doesNotMatch(result.source, /import \{\nlet ddTraceAutoRetryCounter = 0/)
+    assert.match(result.source, /throw new Error\('dd trace auto retry debug flake'\)/)
+  })
+
   it('matches suite-qualified names when preparing flaky known tests', () => {
     const source = [
       'import {parseScope} from \'../utils\'',
@@ -2021,7 +2122,9 @@ describe('Test Optimization debug intake', () => {
       getTestManagementValidationPayload('disabled'),
       getTestManagementValidationPayload('quarantined'),
       getTestManagementValidationPayload('attemptToFix'),
-    ])
+    ], {
+      strictTestManagement: true,
+    })
 
     assert.strictEqual(combined.status, 'ok')
     assert.deepStrictEqual(combined.checks.map(check => check.id), [
@@ -2042,6 +2145,26 @@ describe('Test Optimization debug intake', () => {
       'run-tests-attemptToFix',
       'attemptToFix',
     ])
+  })
+
+  it('marks strict combined Test Management validation failed when subchecks are missing', () => {
+    const combined = buildCombinedValidationPayload([
+      getTestManagementValidationPayload('disabled'),
+    ], {
+      strictTestManagement: true,
+    })
+    const testManagementCheck = combined.checks.find(check => check.id === 'test-management')
+    const quarantinedStep = testManagementCheck.steps.find(step => step.id === 'quarantined')
+    const attemptToFixStep = testManagementCheck.steps.find(step => step.id === 'attemptToFix')
+
+    assert.strictEqual(combined.status, 'failed')
+    assert.strictEqual(testManagementCheck.status, 'failed')
+    assert.strictEqual(quarantinedStep.status, 'failed')
+    assert.strictEqual(attemptToFixStep.status, 'failed')
+    assert.strictEqual(
+      quarantinedStep.evidence.reason,
+      'missing required Test Management subcheck in strict mode'
+    )
   })
 
   it('renders feedback summary output with status sections', () => {

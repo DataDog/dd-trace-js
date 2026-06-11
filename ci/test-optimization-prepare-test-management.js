@@ -10,6 +10,7 @@ const {
 } = require('./test-optimization-intake-analysis')
 const {
   addTestFileToCommand,
+  getTestFileSuffix,
 } = require('./test-optimization-prepare-advanced')
 
 const DEFAULT_ARTIFACT_DIR = 'dd-test-optimization-test-management'
@@ -17,6 +18,7 @@ const DEFAULT_IDENTITY_FILE = path.join(DEFAULT_ARTIFACT_DIR, 'identity.json')
 const DEFAULT_KNOWN_TESTS_FILE = 'dd-test-optimization-known-tests.json'
 const DEFAULT_MARKER_FILE = path.join(DEFAULT_ARTIFACT_DIR, 'attempt-to-fix-marker')
 const DEFAULT_RESPONSE_FILE = path.join(DEFAULT_ARTIFACT_DIR, 'test-management-tests.json')
+const DEFAULT_SELECTED_TEST_FILES_FILE = 'dd-test-optimization-selected-test-files.txt'
 const DEFAULT_SNIPPET_FILE = path.join(DEFAULT_ARTIFACT_DIR, 'candidate-snippet.txt')
 const DEFAULT_TEST_COMMAND_FILE = 'dd-test-optimization-test-command.txt'
 const GENERATED_FILES_STATE = path.join(DEFAULT_ARTIFACT_DIR, 'generated-files.txt')
@@ -98,6 +100,10 @@ function parseArgs (args) {
       options.knownTestsFile = args[++i]
     } else if (arg.startsWith('--known-tests-file=')) {
       options.knownTestsFile = arg.slice('--known-tests-file='.length)
+    } else if (arg === '--selected-test-files-file') {
+      options.selectedTestFilesFile = args[++i]
+    } else if (arg.startsWith('--selected-test-files-file=')) {
+      options.selectedTestFilesFile = arg.slice('--selected-test-files-file='.length)
     } else if (arg === '--settings-mode') {
       options.settingsMode = args[++i]
     } else if (arg.startsWith('--settings-mode=')) {
@@ -149,7 +155,8 @@ function getHelpText () {
     '',
     'Creates temporary Test Management candidate tests and builds calibrated modules JSON from a baseline run.',
     '',
-    'Use --auto to infer state files from dd-test-optimization-known-tests.json and the selected command.',
+    'Use --auto to infer state files from the selected command and selected test files.',
+    'When dd-test-optimization-known-tests.json exists, --auto prefers its framework and suite identity.',
     'Use --dry-run with --auto to print the inferred state without writing files.',
     '',
     'Run generated tests once with DD_TEST_OPTIMIZATION_TM_BASELINE=1 before building the response.',
@@ -270,9 +277,8 @@ function inferTestManagementPlan (options) {
 
   const knownTestsFile = options.knownTestsFile || DEFAULT_KNOWN_TESTS_FILE
   const testCommandFile = options.testCommandFile || DEFAULT_TEST_COMMAND_FILE
-  const knownTests = readJsonFile(knownTestsFile)
   const selectedCommand = fs.readFileSync(path.resolve(testCommandFile), 'utf8').trim()
-  const inferred = getFirstKnownTest(knownTests, knownTestsFile)
+  const inferred = getTestManagementInference(options, knownTestsFile, selectedCommand)
   const testFile = options.testFile || getTemporaryTestManagementFile(inferred.suite, options.mode)
   const testCommand = options.testCommand || addTestFileToCommand(selectedCommand, inferred.suite, testFile)
   const settingsMode = options.settingsMode || SETTINGS_MODES[options.mode]
@@ -288,6 +294,50 @@ function inferTestManagementPlan (options) {
     testCommand,
     testFile,
   }
+}
+
+/**
+ * Infers the selected suite and framework for a generated Test Management test.
+ *
+ * @param {object} options helper options
+ * @param {string} knownTestsFile known-tests file path
+ * @param {string} selectedCommand selected test command
+ * @returns {{framework: string, suite: string, testName: string|undefined}} inferred identity
+ */
+function getTestManagementInference (options, knownTestsFile, selectedCommand) {
+  if (fs.existsSync(path.resolve(knownTestsFile))) {
+    return getFirstKnownTest(readJsonFile(knownTestsFile), knownTestsFile)
+  }
+
+  const selectedTestFilesFile = options.selectedTestFilesFile || DEFAULT_SELECTED_TEST_FILES_FILE
+  const selectedFiles = readStateFile(selectedTestFilesFile)
+  const selectedFile = selectedFiles[0]
+
+  if (!selectedFile) {
+    throw new Error(
+      `Could not infer Test Management helper arguments from ${knownTestsFile} or ${selectedTestFilesFile}.`
+    )
+  }
+
+  return {
+    framework: inferFrameworkFromCommand(selectedCommand, options.framework),
+    suite: selectedFile,
+  }
+}
+
+/**
+ * Infers a framework from the selected command when possible.
+ *
+ * @param {string} selectedCommand selected test command
+ * @param {string} fallback fallback framework
+ * @returns {string} inferred framework
+ */
+function inferFrameworkFromCommand (selectedCommand, fallback) {
+  if (/\bvitest\b/.test(selectedCommand)) return 'vitest'
+  if (/\bjest\b/.test(selectedCommand)) return 'jest'
+  if (/\bmocha\b/.test(selectedCommand)) return 'mocha'
+
+  return fallback || 'mocha'
 }
 
 /**
@@ -499,10 +549,7 @@ function getFirstKnownTest (knownTests, knownTestsFile) {
  * @returns {string} temporary Test Management test file
  */
 function getTemporaryTestManagementFile (suite, mode) {
-  const suffix = path.basename(suite).match(/((?:\.[^.]+)*\.(?:test|spec)\.[cm]?[jt]sx?)$/)
-  const extension = suffix ? suffix[1] : path.extname(suite)
-
-  return path.join(path.dirname(suite), `dd-trace-tm-${mode}${extension || '.test.js'}`)
+  return path.join(path.dirname(suite), `dd-trace-tm-${mode}${getTestFileSuffix(suite)}`)
 }
 
 /**

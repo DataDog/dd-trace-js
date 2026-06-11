@@ -422,10 +422,22 @@ function getFirstKnownTest (knownTests) {
  * @returns {string} temporary EFD test path
  */
 function getTemporaryEfdTestFile (suite) {
-  const suffix = path.basename(suite).match(/((?:\.[^.]+)*\.(?:test|spec)\.[cm]?[jt]sx?)$/)
-  const extension = suffix ? suffix[1] : path.extname(suite)
+  return path.join(path.dirname(suite), `dd-trace-efd-debug${getTestFileSuffix(suite)}`)
+}
 
-  return path.join(path.dirname(suite), `dd-trace-efd-debug${extension || '.test.js'}`)
+/**
+ * Gets the suffix to reuse for a generated sibling test file.
+ *
+ * @param {string} suite selected known test suite path
+ * @returns {string} test file suffix
+ */
+function getTestFileSuffix (suite) {
+  const basename = path.basename(suite)
+  const firstDot = basename.indexOf('.')
+
+  if (firstDot !== -1) return basename.slice(firstDot)
+
+  return '.test.js'
 }
 
 /**
@@ -684,10 +696,10 @@ function isSuiteQualifiedMatch (maybeSuiteQualifiedName, sourceLevelName) {
  * @returns {string} source with counter
  */
 function insertCounter (source, counter) {
-  const importMatch = source.match(/^((?:import[^\n]*\n)+\n?)/)
+  const importEnd = getLeadingImportEnd(source)
 
-  if (importMatch) {
-    return source.replace(importMatch[1], `${importMatch[1]}${counter}\n\n`)
+  if (importEnd > 0) {
+    return `${source.slice(0, importEnd)}${counter}\n\n${source.slice(importEnd)}`
   }
 
   const strictMatch = source.match(/^('use strict'\n\n?)/)
@@ -697,6 +709,64 @@ function insertCounter (source, counter) {
   }
 
   return `${counter}\n\n${source}`
+}
+
+/**
+ * Finds the end offset of the leading static import block.
+ *
+ * @param {string} source original source
+ * @returns {number} end offset, or 0 when the file does not start with imports
+ */
+function getLeadingImportEnd (source) {
+  const lines = source.match(/^.*(?:\r?\n|$)/gm) || []
+  let offset = 0
+  let importEnd = 0
+  let inImport = false
+  let sawImport = false
+
+  for (const line of lines) {
+    if (line === '') break
+
+    const trimmed = line.trim()
+
+    if (!inImport && trimmed === '') break
+    if (!inImport && !isStaticImportStart(trimmed)) break
+
+    sawImport = true
+    inImport = !isStaticImportEnd(trimmed)
+    offset += line.length
+    importEnd = offset
+
+    if (!inImport) continue
+  }
+
+  if (!sawImport || inImport) return 0
+
+  return importEnd
+}
+
+/**
+ * Checks whether a line starts a static import statement.
+ *
+ * @param {string} line trimmed source line
+ * @returns {boolean} whether the line starts a static import
+ */
+function isStaticImportStart (line) {
+  return /^import(?:\s|['"{*])/.test(line)
+}
+
+/**
+ * Checks whether a trimmed import line completes a static import statement.
+ *
+ * @param {string} line trimmed source line
+ * @returns {boolean} whether the import statement is complete
+ */
+function isStaticImportEnd (line) {
+  return (
+    /^import\s+['"][^'"]+['"]\s*;?\s*$/.test(line) ||
+    /\bfrom\s+['"][^'"]+['"]\s*;?\s*$/.test(line) ||
+    /;\s*$/.test(line)
+  )
 }
 
 /**
@@ -736,6 +806,7 @@ module.exports = {
   dryRunPrepareAdvancedChecks,
   findTestCallback,
   getPreparePlan,
+  getTestFileSuffix,
   getTemporaryEfdTestFile,
   getTemporaryTestSource,
   inferPrepareOptions,

@@ -270,6 +270,20 @@ Intentionally overwrite or remove any prior run artifacts:
 Verbatim:
 
 ```bash
+set -e
+
+if [ -f dd-test-optimization-efd-temp-test-file.txt ] || [ -f dd-test-optimization-atr-flaky-test-file.txt ]; then
+  $(cat dd-test-optimization-node-command.txt) \
+    "$(cat dd-test-optimization-ci-dir.txt)/test-optimization-prepare-advanced.js" \
+    --restore
+fi
+
+if [ -d dd-test-optimization-test-management ]; then
+  $(cat dd-test-optimization-node-command.txt) \
+    "$(cat dd-test-optimization-ci-dir.txt)/test-optimization-prepare-test-management.js" \
+    --restore
+fi
+
 if [ -f dd-intake-log-path.txt ]; then
   INTAKE_LOG="$(cat dd-intake-log-path.txt)"
   rm -f "$INTAKE_LOG"
@@ -421,6 +435,14 @@ The static diagnosis does not prove the live debug command has an API key. The l
 set `DD_API_KEY=debug`; without an API key, `dd-trace/ci/init` can warn and skip reporting while
 the selected tests still pass.
 
+In Yarn PnP, `portal:`/`link:` dependency, and large-monorepo layouts, the static analyzer may not
+resolve `dd-trace` or detect the framework even when both are present and working. Treat
+`dd-trace dependency not found`, `No supported test framework detected`, and `No root package.json
+found` as likely false positives in these layouts. When static diagnosis and the live intake
+disagree, trust the live intake: a `Reporting complete` run with session/module/suite/test events
+proves the integration regardless of static warnings. Report such warnings as
+`static-analyzer false positive in PnP/portal/monorepo`, not as a missing-dependency finding.
+
 ### 2. Choose a test command (wrapper path entry point)
 
 Inspect `package.json`, framework config files, and the static diagnosis output.
@@ -486,6 +508,14 @@ Selection guardrails:
 - Avoid full suites, watch mode, update snapshots, browser UI mode, or destructive scripts.
 - If `scripts.test` already contains runner flags, verify the file argument reaches the runner as intended.
 - Never write a bare runner binary command such as `mocha test/sum.spec.js`.
+
+Detect the runner's test-file naming convention before selecting or generating any test file. A
+custom `testRegex`/`testMatch`, or a CLI wrapper such as `yarn cli test-unit` instead of a bare
+runner, can require a specific suffix such as `.unit.ts`; a generic `.test.js` or `.spec.ts`
+sibling may then be silently ignored. Inspect the framework config and one existing passing test
+file, and reuse that exact suffix and module style for every temporary file created in Step 7 and
+Step 8. Confirm the convention by running the selected command once, without instrumentation, and
+checking that it collects and runs tests with a non-zero test count.
 
 Set `SELECTED_TEST_COMMAND` to the selected command, then write it:
 
@@ -727,6 +757,7 @@ DD_API_KEY=debug
 DD_SERVICE=dd-test-optimization-debug
 DD_CIVISIBILITY_AGENTLESS_ENABLED=1
 DD_CIVISIBILITY_AGENTLESS_URL=$INTAKE_URL
+DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE=false
 DD_INSTRUMENTATION_TELEMETRY_ENABLED=false
 NODE_OPTIONS=$NODE_OPTIONS_VALUE
 EOF
@@ -736,6 +767,7 @@ DD_API_KEY=debug \
 DD_SERVICE=dd-test-optimization-debug \
 DD_CIVISIBILITY_AGENTLESS_ENABLED=1 \
 DD_CIVISIBILITY_AGENTLESS_URL="$INTAKE_URL" \
+DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE=false \
 DD_INSTRUMENTATION_TELEMETRY_ENABLED=false \
 NODE_OPTIONS="$NODE_OPTIONS_VALUE" \
 sh -c "$TEST_COMMAND" > "$TEST_OUTPUT" 2>&1
@@ -939,7 +971,9 @@ The advanced checks require two runs:
   known test fail once and then pass, and verify that both EFD and Auto Test Retries worked.
 
 Step 7 always runs the wrapper again with `--out-dir`; do not reuse the root wrapper artifact as the
-advanced-check baseline.
+advanced-check baseline. Keeping the advanced baseline in `dd-test-optimization-basic/` prevents
+later Step 7 runs from overwriting the root basic-reporting artifacts and gives the known-tests
+file, root report, and advanced report distinct provenance for Step 9.
 
 7a. Run the first baseline run in its own artifact directory and extract known tests:
 
@@ -997,6 +1031,13 @@ The next command intentionally modifies repository source temporarily:
 The helper refuses to edit a dirty or untracked known test file in a git worktree. If it fails with
 `Refusing to edit`, choose a clean selected test file, restore/stash the local change, or use the
 manual Step 7b and Step 7c path with an explicit clean file.
+
+The `--auto` helper can exit 0 and still produce a broken edit: it may create a temporary test file
+whose suffix does not match the runner's test pattern, or fail to handle a source shape it inferred
+too optimistically. Do not trust the exit code alone. The Step 7d pre-flight verifies that the edit
+compiles and is collected. If it fails, run `--restore`, then redo manually: place
+`let ddTraceAutoRetryCounter = 0` after the final import line, put the one-time `throw` inside the
+chosen test body, and give the temporary EFD file the runner's required suffix.
 
 Verbatim:
 
@@ -1128,7 +1169,9 @@ describe('dd trace EFD debug', () => {
 })
 ```
 
-After creating a temporary sibling test file, write and verify its path:
+After creating a temporary sibling test file, write and verify its path. The
+`dd-test-optimization-efd-temp-test-file.txt` marker is required for Step 0 to remove the file
+during cleanup after an interrupted manual run:
 
 Adapt:
 
@@ -1180,7 +1223,10 @@ it('already known test', () => {
 The real edit must preserve the existing known test name. Add the counter near the test in the
 same file and keep or restore any original assertions after the one-time failure branch.
 
-Record the file and backup path before editing:
+Record the file and backup path before editing. The
+`dd-test-optimization-atr-flaky-test-file.txt` and
+`dd-test-optimization-atr-flaky-test-backup.txt` markers are required for Step 0 to restore the
+file during cleanup after an interrupted manual run:
 
 Adapt:
 
@@ -1236,6 +1282,72 @@ if [ "$EFD_TEST_COMMAND" = 'FILL_IN' ] || [ -z "$EFD_TEST_COMMAND" ]; then
 fi
 printf 'EFD test command: %s\n' "$EFD_TEST_COMMAND"
 printf '%s\n' "$EFD_TEST_COMMAND" > dd-test-optimization-efd-command.txt
+```
+
+Pre-flight before the instrumented advanced run. After preparation, either `--auto` or the manual
+Step 7b/7c edits, confirm the edits compile and are collected before spending a full wrapper run.
+
+Verbatim:
+
+```bash
+set +e
+
+EFD_COMMAND="$(cat dd-test-optimization-efd-command.txt)"
+sh -c "$EFD_COMMAND" > dd-test-optimization-efd-preflight.txt 2>&1
+EFD_PREFLIGHT_EXIT_CODE=$?
+cat dd-test-optimization-efd-preflight.txt
+
+node -e '
+const fs = require("node:fs")
+function read (file) {
+  try {
+    return fs.readFileSync(file, "utf8")
+  } catch (_) {
+    return ""
+  }
+}
+function getCount (text) {
+  const jest = text.match(/Tests:\s+.*?(\d+)\s+total/)
+  if (jest) return Number(jest[1])
+  const vitest = text.match(/\bTests\s+.*?\((\d+)\)/)
+  if (vitest) return Number(vitest[1])
+  const mochaPassing = text.match(/(\d+)\s+passing/)
+  const mochaFailing = text.match(/(\d+)\s+failing/)
+  if (mochaPassing || mochaFailing) {
+    return Number(mochaPassing?.[1] || 0) + Number(mochaFailing?.[1] || 0)
+  }
+}
+const baselineCount = getCount(read("dd-test-optimization-test-output.txt"))
+const preflightCount = getCount(read("dd-test-optimization-efd-preflight.txt"))
+if (baselineCount !== undefined && preflightCount !== undefined && preflightCount <= baselineCount) {
+  console.error(`Pre-flight: advanced command did not increase the observed test count (${baselineCount} -> ${preflightCount}).`)
+  console.error("Fix the temporary test file suffix/location to match the runner before Step 7d.")
+  process.exit(1)
+}
+if (baselineCount !== undefined && preflightCount !== undefined) {
+  console.log(`Pre-flight test count increased: ${baselineCount} -> ${preflightCount}`)
+} else {
+  console.log("Pre-flight test count comparison unavailable; continuing with flaky-marker checks.")
+}
+'
+EFD_PREFLIGHT_COUNT_STATUS=$?
+if [ "$EFD_PREFLIGHT_COUNT_STATUS" -ne 0 ]; then
+  exit "$EFD_PREFLIGHT_COUNT_STATUS"
+fi
+
+if ! grep -q 'dd trace auto retry debug flake' dd-test-optimization-efd-preflight.txt; then
+  echo "Pre-flight: flaky known test did not fail; the temporary flaky edit may be misplaced" >&2
+  echo "(for example inserted inside an import block). Confirm it before Step 7d." >&2
+  tail -20 dd-test-optimization-efd-preflight.txt >&2
+  exit 1
+fi
+
+if [ "$EFD_PREFLIGHT_EXIT_CODE" -eq 0 ]; then
+  echo "Pre-flight: command exited 0 even though the flaky known test should fail once." >&2
+  exit 1
+fi
+
+echo "Pre-flight ok: temporary EFD test collected and flaky known test failed once."
 ```
 
 7d. Run the second advanced run with known tests from the first run:
@@ -1427,10 +1539,13 @@ fi
 ```
 
 If this validation-and-restore block passes, report that EFD and Auto Test Retries work for the
-selected subset. The restore command removes the helper-created EFD test file and restores the
-helper-edited flaky test file even when validation fails. After helper restore succeeds, the manual
-cleanup blocks below should be no-ops. Run them only to verify no recorded temporary state remains,
-or when Step 7b/7c used manual edits instead of the helper.
+selected subset. When reporting EFD retried new test names, note that frameworks often prepend the
+suite or `describe` text to the test name, so a value like
+`dd trace EFD debug dd trace EFD debug temporary test` is the expected suite-plus-test
+concatenation, not a malformed name. The restore command removes the helper-created EFD test file
+and restores the helper-edited flaky test file even when validation fails. After helper restore
+succeeds, the manual cleanup blocks below should be no-ops. Run them only to verify no recorded
+temporary state remains, or when Step 7b/7c used manual edits instead of the helper.
 
 Remove and verify a temporary sibling test file. Remove the file recorded in
 `dd-test-optimization-efd-temp-test-file.txt`.
@@ -1483,7 +1598,9 @@ git status --short
 
 Run this step after the basic reporting result is `Reporting complete`. Test Management is three
 independent subchecks. Do not combine them unless every result can be attributed to one calibrated
-test identity.
+test identity. This is the slowest section of the runbook because each subcheck does a baseline
+calibration run and a managed run. In a time-boxed diagnosis, Step 8 is the first optional section
+to defer after basic reporting, EFD, and Auto Test Retries are already understood.
 
 Subcheck map:
 
@@ -1509,9 +1626,11 @@ For each subcheck:
 8a. Infer one subcheck plan.
 
 Run Step 8a and Step 8b once for each `TM_MODE`: `disabled`, `quarantined`, and
-`attempt-to-fix`. The helper reads `dd-test-optimization-known-tests.json` and
-`dd-test-optimization-test-command.txt`, creates a generated sibling test path, and writes the
-state files consumed by Step 8b.
+`attempt-to-fix`. The helper reads `dd-test-optimization-test-command.txt` and
+`dd-test-optimization-selected-test-files.txt` to create a generated sibling test path. If
+`dd-test-optimization-known-tests.json` exists, the helper prefers its framework and suite identity;
+otherwise Step 8 remains independent from Step 7. The helper writes the state files consumed by
+Step 8b.
 
 Adapt only `TM_MODE`:
 
@@ -1536,6 +1655,11 @@ Fallback command selection rules when auto inference cannot pick a safe generate
 - Use `./node_modules/.bin/<runner> "$TM_TEST_FILE"` when `scripts.test` is absent or cannot accept
   a direct file argument.
 - Do not edit an existing customer test for these subchecks unless generated tests cannot work.
+- Ensure the generated `TM_TEST_FILE` uses the suffix the runner actually collects; use the naming
+  detection in Step 2. A non-matching extension such as `.ts` where the runner requires `.unit.ts`
+  is silently not collected: the baseline run reports zero test events and the calibrated identity
+  cannot be built. After `--create`, run the Test Management command once without instrumentation
+  and confirm the generated candidate is collected before the baseline-calibration wrapper run.
 
 8b. Create, baseline-calibrate, run, validate, and restore one subcheck.
 
@@ -1683,10 +1807,17 @@ Use this extractor to assemble the required fields from the root, advanced-check
 Management artifacts. It prints one combined `Datadog validation:` path for the whole runbook
 execution.
 
+The `--strict-test-management` flag requires all three Test Management subchecks to be present in
+the combined result: disabled, quarantined, and attempt-to-fix. If strict validation fails, inspect
+the Test Management subcheck reasons in the final reports and any `unmatchedPropertyIdentities`
+evidence before rerunning. Treat missing subchecks or identity mismatches as setup/artifact issues
+until the individual Step 8 result explains a product behavior failure.
+
 Verbatim:
 
 ```bash
 $(cat dd-test-optimization-node-command.txt) "$(cat dd-test-optimization-ci-dir.txt)/test-optimization-validation-link.js" \
+  --strict-test-management \
   --from-report dd-test-optimization-final-report.txt \
   --from-report dd-test-optimization-efd/dd-test-optimization-final-report.txt \
   --from-report dd-test-optimization-tm-disabled/dd-test-optimization-final-report.txt \
@@ -1927,6 +2058,7 @@ DD_API_KEY=debug \
 DD_SERVICE="${DD_SERVICE:-dd-test-optimization-debug}" \
 DD_CIVISIBILITY_AGENTLESS_ENABLED=1 \
 DD_CIVISIBILITY_AGENTLESS_URL="$INTAKE_URL" \
+DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE=false \
 DD_INSTRUMENTATION_TELEMETRY_ENABLED=false \
 NODE_OPTIONS="-r dd-trace/ci/init" \
 sh -c "$TEST_COMMAND"

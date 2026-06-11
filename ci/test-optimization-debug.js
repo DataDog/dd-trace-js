@@ -792,6 +792,7 @@ function getTestEnv (options, intake, staticReport) {
     DD_SERVICE: options.service,
     DD_CIVISIBILITY_AGENTLESS_ENABLED: '1',
     DD_CIVISIBILITY_AGENTLESS_URL: intake.url,
+    DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE: 'false',
     DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
     NODE_OPTIONS: getNodeOptions(staticReport, options.testCommand),
   }

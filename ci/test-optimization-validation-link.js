@@ -6,6 +6,11 @@ const fs = require('node:fs')
 const zlib = require('node:zlib')
 
 const VALIDATION_APP_PATH = 'ci/test/validation'
+const TEST_MANAGEMENT_REQUIRED_SUBCHECKS = [
+  ['disabled', 'Disabled tests'],
+  ['quarantined', 'Quarantined tests'],
+  ['attemptToFix', 'Attempt-to-fix tests'],
+]
 
 /**
  * Parses CLI arguments.
@@ -16,6 +21,7 @@ const VALIDATION_APP_PATH = 'ci/test/validation'
 function parseArgs (args) {
   const options = {
     fromReports: [],
+    strictTestManagement: false,
   }
 
   for (let i = 0; i < args.length; i++) {
@@ -25,6 +31,8 @@ function parseArgs (args) {
       options.fromReports.push(args[++i])
     } else if (arg.startsWith('--from-report=')) {
       options.fromReports.push(arg.slice('--from-report='.length))
+    } else if (arg === '--strict-test-management') {
+      options.strictTestManagement = true
     } else if (arg === '--help' || arg === '-h') {
       options.help = true
     } else {
@@ -42,9 +50,11 @@ function parseArgs (args) {
  */
 function getHelpText () {
   return [
-    'Usage: dd-trace-ci-validation-link --from-report <final-report.txt> [--from-report <file> ...]',
+    'Usage: dd-trace-ci-validation-link [--strict-test-management] ' +
+      '--from-report <final-report.txt> [--from-report <file> ...]',
     '',
     'Reads Datadog validation payloads from final reports and prints one combined validation path.',
+    'Use --strict-test-management for full runbook results that must include all three Test Management subchecks.',
   ].join('\n')
 }
 
@@ -86,11 +96,13 @@ function buildValidationPayload (input) {
  * Builds one validation payload from several run-specific validation payloads.
  *
  * @param {Array<object>} payloads validation payloads
+ * @param {object} [options] combination options
+ * @param {boolean} [options.strictTestManagement] require all Test Management subchecks
  * @returns {object} combined validation payload
  */
-function buildCombinedValidationPayload (payloads) {
+function buildCombinedValidationPayload (payloads, options = {}) {
   const compactPayloads = payloads.filter(Boolean)
-  const checks = getCombinedChecks(compactPayloads)
+  const checks = getCombinedChecks(compactPayloads, options)
 
   return {
     version: 2,
@@ -107,9 +119,10 @@ function buildCombinedValidationPayload (payloads) {
  * Gets combined validation checks.
  *
  * @param {Array<object>} payloads validation payloads
+ * @param {object} options combination options
  * @returns {Array<object>} combined checks
  */
-function getCombinedChecks (payloads) {
+function getCombinedChecks (payloads, options) {
   const checks = []
   const testManagementChecks = []
   const seen = new Set()
@@ -126,7 +139,7 @@ function getCombinedChecks (payloads) {
   }
 
   if (testManagementChecks.length > 0) {
-    checks.push(getCombinedTestManagementCheck(testManagementChecks))
+    checks.push(getCombinedTestManagementCheck(testManagementChecks, options))
   }
 
   return checks
@@ -136,9 +149,10 @@ function getCombinedChecks (payloads) {
  * Gets one combined Test Management check from independent subcheck payloads.
  *
  * @param {Array<object>} checks Test Management checks
+ * @param {object} options combination options
  * @returns {object} combined Test Management check
  */
-function getCombinedTestManagementCheck (checks) {
+function getCombinedTestManagementCheck (checks, options) {
   const steps = [getCombinedTestManagementSetupStep(checks)]
 
   for (const check of checks) {
@@ -162,11 +176,38 @@ function getCombinedTestManagementCheck (checks) {
     }
   }
 
+  if (options.strictTestManagement) {
+    pushMissingTestManagementSubchecks(steps)
+  }
+
   return {
     id: 'test-management',
     name: 'Test Management',
     status: getChecksStatusFromSteps(steps),
     steps,
+  }
+}
+
+/**
+ * Adds failed placeholders for required Test Management subchecks missing from a strict full result.
+ *
+ * @param {Array<object>} steps combined Test Management steps
+ */
+function pushMissingTestManagementSubchecks (steps) {
+  const present = new Set(steps.map(step => step.id))
+
+  for (const [id, name] of TEST_MANAGEMENT_REQUIRED_SUBCHECKS) {
+    if (present.has(id)) continue
+
+    steps.push({
+      id,
+      name,
+      status: 'failed',
+      evidence: {
+        reason: 'missing required Test Management subcheck in strict mode',
+        tests: 0,
+      },
+    })
   }
 }
 
@@ -815,7 +856,7 @@ function decodeValidationPayload (encoded) {
  * @param {string[]} reports final report paths
  * @returns {string} combined validation web app path
  */
-function getCombinedValidationAppUrlFromReports (reports) {
+function getCombinedValidationAppUrlFromReports (reports, options = {}) {
   const payloads = []
 
   for (const report of reports) {
@@ -827,7 +868,7 @@ function getCombinedValidationAppUrlFromReports (reports) {
     throw new Error('No Datadog validation payloads found in the provided reports.')
   }
 
-  return getValidationAppUrl(buildCombinedValidationPayload(payloads))
+  return getValidationAppUrl(buildCombinedValidationPayload(payloads, options))
 }
 
 /**
@@ -908,7 +949,7 @@ if (require.main === module) {
     process.exitCode = 1
   } else {
     try {
-      console.log(`Datadog validation: ${getCombinedValidationAppUrlFromReports(options.fromReports)}`)
+      console.log(`Datadog validation: ${getCombinedValidationAppUrlFromReports(options.fromReports, options)}`)
     } catch (error) {
       console.error(error.message)
       process.exitCode = 1
