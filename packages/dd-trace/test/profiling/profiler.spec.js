@@ -30,26 +30,21 @@ describe('profiler', function () {
   let interval
   let flushInterval
 
-  class ConfigStub {
-    constructor (options) {
+  // Stubs the profiling config translation module so the lifecycle tests run
+  // against the test's profiler/exporter doubles instead of real native
+  // profilers, while still exercising the compression and tag derivation.
+  const configStub = {
+    getProfilingTags: (options) => ({ ...options.tags }),
+    createExporters: () => exporters,
+    getOomMonitoring: () => ({ enabled: false }),
+    getAsyncContextFrameEnabled: () => false,
+    createProfilers: () => profilers,
+    getUploadCompression: () => {
       const compression = process.env.DD_PROFILING_DEBUG_UPLOAD_COMPRESSION ?? 'off'
       const [method, level0] = compression.split('-')
       const level = level0 ? Number.parseInt(level0, 10) : undefined
-
-      this.endpointCollectionEnabled = false
-      this.debugSourceMaps = false
-      this.exporters = options.exporters ?? exporters
-      this.flushInterval = options.flushInterval ?? flushInterval
-      this.logger = options.logger ?? logger
-      this.profilers = options.profilers ?? profilers
-      this.sourceMap = options.sourceMap ?? false
-      this.systemInfoReport = {}
-      this.tags = { ...options.tags }
-      this.uploadCompression = {
-        method,
-        level: Number.isNaN(level) ? undefined : level,
-      }
-    }
+      return { method, level: Number.isNaN(level) ? undefined : level }
+    },
   }
 
   function waitForExport () {
@@ -117,6 +112,7 @@ describe('profiler', function () {
       profilers,
       exporters,
       url: 'http://127.0.0.1:8126',
+      DD_PROFILING_UPLOAD_PERIOD: flushInterval / 1000,
       ...overrides,
     }
   }
@@ -125,9 +121,7 @@ describe('profiler', function () {
     function initProfiler () {
       Profiler = proxyquire('../../src/profiling/profiler', {
         '../log': consoleLogger,
-        './config': {
-          Config: ConfigStub,
-        },
+        './config': configStub,
         '@datadog/pprof': {
           SourceMapper: SourceMapperStub,
           setLogger: sinon.stub(),
@@ -349,7 +343,7 @@ describe('profiler', function () {
       // Re-proxyquire without stubbing ../log so log.debug actually publishes
       // to the real debugChannel.
       const RealLogProfiler = proxyquire('../../src/profiling/profiler', {
-        './config': { Config: ConfigStub },
+        './config': configStub,
         '@datadog/pprof': { SourceMapper: SourceMapperStub, setLogger: sinon.stub() },
       }).Profiler
       const realProfiler = new RealLogProfiler()
@@ -403,14 +397,14 @@ describe('profiler', function () {
     })
 
     it('should not pass source mapper to profilers when disabled', async () => {
-      await profiler.start(makeStartOptions({ sourceMap: false }))
+      await profiler.start(makeStartOptions({ DD_PROFILING_SOURCE_MAP: false }))
 
       const options = profilers[0].start.args[0][0]
       assert.strictEqual(options.mapper, undefined)
     })
 
     it('should pass source mapper to profilers when enabled', async () => {
-      profiler.start(makeStartOptions({ sourceMap: true }))
+      profiler.start(makeStartOptions({ DD_PROFILING_SOURCE_MAP: true }))
 
       const options = profilers[0].start.args[0][0]
       assert.ok(Object.hasOwn(options, 'mapper'), `Available keys: ${inspect(Object.keys(options))}`)
@@ -420,7 +414,7 @@ describe('profiler', function () {
     it('should work with a root working dir and source maps on', async () => {
       const error = new Error('fail')
       mapperInstance.loadDirectory.rejects(error)
-      profiler.start(makeStartOptions({ logger, sourceMap: true }))
+      profiler.start(makeStartOptions({ logger, DD_PROFILING_SOURCE_MAP: true }))
       await Promise.resolve() // let .then() propagate the rejection
       await Promise.resolve() // let .catch() callback run
       assert.strictEqual(consoleLogger.error.args[0][0], error)
@@ -495,9 +489,7 @@ describe('profiler', function () {
     function initServerlessProfiler () {
       Profiler = proxyquire('../../src/profiling/profiler', {
         '../log': consoleLogger,
-        './config': {
-          Config: ConfigStub,
-        },
+        './config': configStub,
         '@datadog/pprof': {
           SourceMapper: SourceMapperStub,
           setLogger: sinon.stub(),

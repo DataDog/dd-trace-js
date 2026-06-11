@@ -4,7 +4,14 @@ const { EventEmitter } = require('events')
 const dc = require('dc-polyfill')
 const crashtracker = require('../crashtracking')
 const log = require('../log')
-const { Config } = require('./config')
+const {
+  createExporters,
+  createProfilers,
+  getAsyncContextFrameEnabled,
+  getOomMonitoring,
+  getProfilingTags,
+  getUploadCompression,
+} = require('./config')
 const { snapshotKinds } = require('./constants')
 const { threadNamePrefix } = require('./profilers/shared')
 const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('./webspan-utils')
@@ -54,14 +61,19 @@ class Profiler extends EventEmitter {
   #compressionFn
   #compressionFnInitialized = false
   #compressionOptions
-  #config
   #customLabelKeys = new Set()
   #enabled = false
   #endpointCounts = new Map()
+  #exporters
+  #flushInterval
   #lastStart
   #profileSeq = 0
+  #profilers
   #spanFinishListener
+  #systemInfoReport
+  #tags
   #timer
+  #uploadCompression
 
   constructor () {
     super()
@@ -71,7 +83,7 @@ class Profiler extends EventEmitter {
   get serverless () { return false }
 
   get flushInterval () {
-    return this.#config?.flushInterval
+    return this.#flushInterval
   }
 
   get enabled () {
@@ -90,8 +102,8 @@ class Profiler extends EventEmitter {
     for (const key of keys) {
       this.#customLabelKeys.add(key)
     }
-    if (this.#config) {
-      for (const profiler of this.#config.profilers) {
+    if (this.#profilers) {
+      for (const profiler of this.#profilers) {
         profiler.setCustomLabelKeys?.(this.#customLabelKeys)
       }
     }
@@ -106,10 +118,10 @@ class Profiler extends EventEmitter {
    * @template T
    */
   runWithLabels (labels, fn) {
-    if (!this.#enabled || !this.#config) {
+    if (!this.#enabled || !this.#profilers) {
       return fn()
     }
-    for (const profiler of this.#config.profilers) {
+    for (const profiler of this.#profilers) {
       if (profiler.runWithLabels) {
         return profiler.runWithLabels(labels, fn)
       }
@@ -123,7 +135,7 @@ class Profiler extends EventEmitter {
       try {
         const { promisify } = require('util')
         const zlib = require('zlib')
-        const { method, level: clevel } = this.#config.uploadCompression
+        const { method, level: clevel } = this.#uploadCompression
         switch (method) {
           case 'gzip':
             this.#compressionFn = promisify(zlib.gzip)
@@ -161,13 +173,40 @@ class Profiler extends EventEmitter {
   }
 
   /**
-   * @param {import('../config/config-base')} options - Tracer configuration
+   * @param {import('../config/config-base')} config - Tracer configuration
    */
-  start (options) {
+  start (config) {
     if (this.enabled) return true
     this.#enabled = true
 
-    const config = this.#config = new Config(options)
+    const tags = this.#tags = getProfilingTags(config)
+    const exporters = this.#exporters = createExporters(config)
+    const oomMonitoring = getOomMonitoring(config, exporters, tags)
+    const asyncContextFrameEnabled = getAsyncContextFrameEnabled(config)
+    const flushInterval = this.#flushInterval = config.DD_PROFILING_UPLOAD_PERIOD * 1000
+    const profilers = this.#profilers = createProfilers(config, {
+      oomMonitoring,
+      asyncContextFrameEnabled,
+      flushInterval,
+    })
+    const uploadCompression = this.#uploadCompression = getUploadCompression(config)
+    this.#systemInfoReport = {
+      allocationProfilingEnabled: config.DD_PROFILING_ALLOCATION_ENABLED,
+      asyncContextFrameEnabled,
+      codeHotspotsEnabled: config.DD_PROFILING_CODEHOTSPOTS_ENABLED,
+      cpuProfilingEnabled: config.DD_PROFILING_CPU_ENABLED,
+      debugSourceMaps: config.DD_PROFILING_DEBUG_SOURCE_MAPS,
+      endpointCollectionEnabled: config.DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
+      heapSamplingInterval: config.DD_PROFILING_HEAP_SAMPLING_INTERVAL,
+      oomMonitoring: { ...oomMonitoring },
+      profilerTypes: profilers.map(profiler => profiler.type),
+      sourceMap: config.DD_PROFILING_SOURCE_MAP,
+      timelineEnabled: config.DD_PROFILING_TIMELINE_ENABLED,
+      timelineSamplingEnabled: config.DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED,
+      uploadCompression: { ...uploadCompression },
+      v8ProfilerBugWorkaroundEnabled: config.DD_PROFILING_V8_PROFILER_BUG_WORKAROUND,
+    }
+    delete this.#systemInfoReport.oomMonitoring.exportCommand
 
     this._setInterval()
     // Log errors if the source map finder fails, but don't prevent the rest
@@ -176,11 +215,11 @@ class Profiler extends EventEmitter {
     const { setLogger, SourceMapper } = require('@datadog/pprof')
     setLogger(pprofLogger)
 
-    if (config.sourceMap) {
-      mapper = new SourceMapper(config.debugSourceMaps)
+    if (config.DD_PROFILING_SOURCE_MAP) {
+      mapper = new SourceMapper(config.DD_PROFILING_DEBUG_SOURCE_MAPS)
       mapper.loadDirectory(process.cwd())
         .then(() => {
-          if (config.debugSourceMaps) {
+          if (config.DD_PROFILING_DEBUG_SOURCE_MAPS) {
             const count = mapper.infoMap.size
             // eslint-disable-next-line eslint-rules/eslint-log-printf-style
             log.debug(() => {
@@ -198,7 +237,7 @@ class Profiler extends EventEmitter {
     try {
       const start = new Date()
       const nearOOMCallback = this.#nearOOMExport.bind(this)
-      for (const profiler of config.profilers) {
+      for (const profiler of profilers) {
         // TODO: move this out of Profiler when restoring sourcemap support
         profiler.start({
           mapper,
@@ -207,7 +246,7 @@ class Profiler extends EventEmitter {
         log.debug('Started %s profiler in %s thread', profiler.type, threadNamePrefix)
       }
 
-      if (config.endpointCollectionEnabled) {
+      if (config.DD_PROFILING_ENDPOINT_COLLECTION_ENABLED) {
         this.#spanFinishListener = this.#onSpanFinish.bind(this)
         spanFinishedChannel.subscribe(this.#spanFinishListener)
       }
@@ -233,7 +272,7 @@ class Profiler extends EventEmitter {
   }
 
   _setInterval () {
-    this._timeoutInterval = this.#config.flushInterval
+    this._timeoutInterval = this.#flushInterval
   }
 
   stop () {
@@ -255,7 +294,7 @@ class Profiler extends EventEmitter {
       this.#spanFinishListener = undefined
     }
 
-    for (const profiler of this.#config.profilers) {
+    for (const profiler of this.#profilers) {
       profiler.stop()
       log.debug('Stopped %s profiler in %s thread', profiler.type, threadNamePrefix)
     }
@@ -298,7 +337,7 @@ class Profiler extends EventEmitter {
   #createInitialInfos () {
     return {
       serverless: this.serverless,
-      settings: this.#config.systemInfoReport,
+      settings: this.#systemInfoReport,
       hasMissingSourceMaps: false,
     }
   }
@@ -307,7 +346,7 @@ class Profiler extends EventEmitter {
     if (!this.enabled) return
 
     try {
-      if (this.#config.profilers.length === 0) {
+      if (this.#profilers.length === 0) {
         throw new Error('No profile types configured.')
       }
 
@@ -317,7 +356,7 @@ class Profiler extends EventEmitter {
 
       crashtracker.withProfilerSerializing(() => {
         // collect profiles synchronously so that profilers can be safely stopped asynchronously
-        for (const profiler of this.#config.profilers) {
+        for (const profiler of this.#profilers) {
           const info = profiler.getInfo()
           const profile = profiler.profile(restart, startDate, endDate)
           if (!restart) {
@@ -377,7 +416,7 @@ class Profiler extends EventEmitter {
   }
 
   #submit (profiles, infos, start, end, snapshotKind) {
-    const { tags } = this.#config
+    const tags = this.#tags
 
     // Flatten endpoint counts
     const endpointCounts = {}
@@ -392,7 +431,7 @@ class Profiler extends EventEmitter {
       ? [...this.#customLabelKeys]
       : undefined
     const exportSpec = { profiles, infos, start, end, tags, endpointCounts, customAttributes }
-    const tasks = this.#config.exporters.map(exporter =>
+    const tasks = this.#exporters.map(exporter =>
       exporter.export(exportSpec).catch(error => {
         log.warn(error)
       })

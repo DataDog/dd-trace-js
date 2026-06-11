@@ -3,6 +3,8 @@
 const { oomExportStrategies } = require('../constants')
 const { encodeProfileAsync, getThreadLabels } = require('./shared')
 
+/** @typedef {import('../../config/config-base')} TracerConfig */
+
 function strategiesToCallbackMode (strategies, callbackMode) {
   return strategies.includes(oomExportStrategies.ASYNC_CALLBACK) ? callbackMode.Async : 0
 }
@@ -14,14 +16,17 @@ class NativeSpaceProfiler {
   #oomMonitoring
   #pprof
   #allocationProfilingEnabled = false
-  #samplingInterval = 512 * 1024
+  #samplingInterval
   #started = false
 
-  constructor (options = {}) {
-    // TODO: Remove default value. It is only used in testing.
-    this.#samplingInterval = options.heapSamplingInterval || 512 * 1024
-    this.#allocationProfilingEnabled = options.allocationProfilingEnabled
-    this.#oomMonitoring = options.oomMonitoring || {}
+  /**
+   * @param {TracerConfig} config
+   * @param {{ oomMonitoring?: object }} [derived]
+   */
+  constructor (config, { oomMonitoring } = {}) {
+    this.#samplingInterval = config.DD_PROFILING_HEAP_SAMPLING_INTERVAL
+    this.#allocationProfilingEnabled = config.DD_PROFILING_ALLOCATION_ENABLED
+    this.#oomMonitoring = oomMonitoring || {}
   }
 
   get type () {
