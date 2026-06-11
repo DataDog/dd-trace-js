@@ -23,7 +23,11 @@ experiments:
         how_to_run_benchmarks: |
           cd ./benchmark/sirun
           ./runall.sh
-          cp results.ndjson "$ARTIFACTS_DIR/$BASELINE_OR_CANDIDATE-v$MAJOR_VERSION-$GROUP.ndjson"
+          # analyze_microbenchmarks' default input_filter_pattern only matches
+          # "$ARTIFACTS_DIR/$BASELINE_OR_CANDIDATE*.json", so the result must end
+          # in .json (not .ndjson) or it is never converted and the downstream
+          # check-big-regressions job finds no baseline*/candidate*.converted.json.
+          cp results.ndjson "$ARTIFACTS_DIR/$BASELINE_OR_CANDIDATE-v$MAJOR_VERSION-$GROUP.json"
 
       - name: Analyze results
         run: analyze_microbenchmarks
