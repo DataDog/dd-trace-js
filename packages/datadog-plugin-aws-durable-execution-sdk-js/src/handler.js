@@ -42,28 +42,33 @@ class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
       meta,
     }, ctx)
 
-    this.#installTerminationCheckpointHook(ctx, event)
+    if (this.#shouldInstallTerminationHook(ctx)) {
+      this.#installTerminationCheckpointHook(ctx, event)
+    }
 
     return ctx.currentStore
+  }
+
+  // Gate for the cross-invocation checkpoint hook: the feature must be enabled
+  // and every input the hook wraps (user handler, termination manager, execute
+  // span) must be present.
+  #shouldInstallTerminationHook (ctx) {
+    const args = ctx.arguments || []
+    return this._tracerConfig.DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED &&
+      typeof args[5] === 'function' &&
+      typeof args[2]?.terminationManager?.terminate === 'function' &&
+      ctx.currentStore?.span !== undefined
   }
 
   // Wrap the user handler so we can capture the SDK's DurableContext, and
   // install a hook on the termination manager so that when the execution
   // suspends (PENDING) we persist the current trace context as a `_datadog`
   // checkpoint, which subsequent invocations consume to extract the parent
-  // trace context.
+  // trace context. Preconditions are enforced by #shouldInstallTerminationHook.
   #installTerminationCheckpointHook (ctx, event) {
-    if (!this._tracerConfig.DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED) return
-
-    const args = ctx.arguments || []
-    if (args.length < 6 || typeof args[5] !== 'function') return
-
-    const executionContext = args[2]
-    const terminationManager = executionContext?.terminationManager
-    if (typeof terminationManager?.terminate !== 'function') return
-
-    const span = ctx.currentStore?.span
-    if (!span) return
+    const args = ctx.arguments
+    const span = ctx.currentStore.span
+    const terminationManager = args[2].terminationManager
 
     const state = {
       durableContext: undefined,

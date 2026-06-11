@@ -48,6 +48,9 @@ function buildPlugin (Plugin, tracer) {
       process.env.DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED !== 'false',
   }
   const plugin = new Plugin(tracer, tracerConfig)
+  // operationName() reaches into the tracer's nomenclature, which the bare `tracer`
+  // stub above doesn't provide; the resolved name is irrelevant to these tests.
+  plugin.operationName = () => 'aws.durable.execute'
   plugin.startSpan = (_name, _options, ctx) => {
     const span = {
       context () {
