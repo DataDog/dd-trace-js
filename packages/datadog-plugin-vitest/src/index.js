@@ -63,6 +63,7 @@ class VitestPlugin extends CiPlugin {
         testSessionId: testSessionSpanContext?.toTraceId(),
         testModuleId: testModuleSpanContext?.toSpanId(),
         testCommand: this.command,
+        repositoryRoot: this.repositoryRoot,
       })
     })
 
@@ -307,10 +308,11 @@ class VitestPlugin extends CiPlugin {
     })
 
     this.addBind('ci:vitest:test-suite:start', (ctx) => {
-      const { testSuiteAbsolutePath, frameworkVersion } = ctx
+      const { repositoryRoot, testSuiteAbsolutePath, frameworkVersion } = ctx
 
       const testCommand = ctx.testCommand || 'vitest run'
       const { testSessionId, testModuleId } = ctx
+      this._setRepositoryRoot(repositoryRoot)
       this.command = testCommand
       this.frameworkVersion = frameworkVersion
       const testSessionSpanContext = testSessionId && testModuleId

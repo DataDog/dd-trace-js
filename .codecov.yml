@@ -1,3 +1,7 @@
+ignore:
+  - "ci/vitest-worker-loader.mjs"
+  - "loader-hook.mjs"
+
 coverage:
   range: 90..100
   round: down

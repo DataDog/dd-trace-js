@@ -1,13 +1,15 @@
-import { initialize as origInitialize, load as origLoad, resolve } from 'import-in-the-middle/hook.mjs'
+import { initialize as origInitialize, load as origLoad, resolve as origResolve } from 'import-in-the-middle/hook.mjs'
 import regexpEscapeModule from './vendor/dist/escape-string-regexp/index.js'
 import hooks from './packages/datadog-instrumentations/src/helpers/hooks.js'
 import configHelper from './packages/dd-trace/src/config/helper.js'
 import * as rewriterLoader from './packages/datadog-instrumentations/src/helpers/rewriter/loader.mjs'
 import { isRelativeRequire } from './packages/datadog-instrumentations/src/helpers/shared-utils.js'
+import { getVitestWorkerLoader } from './ci/vitest-worker-loader.mjs'
 
 // This file must support Node.js 12.0.0 syntax
 
 const regexpEscape = regexpEscapeModule.default
+const workerLoader = getVitestWorkerLoader()
 
 // For some reason `getEnvironmentVariable` is not otherwise available to ESM.
 const env = configHelper.getEnvironmentVariable
@@ -24,10 +26,25 @@ function initialize (data = {}) {
 }
 
 function load (url, context, nextLoad) {
+  if (workerLoader) {
+    return workerLoader.load(url, context, nextLoad)
+  }
   return rewriterLoader.load(url, context, (url, context) => origLoad(url, context, nextLoad))
 }
 
+function ddResolve (specifier, context, nextResolve) {
+  if (workerLoader) {
+    return workerLoader.resolve(specifier, context, nextResolve)
+  }
+  return origResolve(specifier, context, nextResolve)
+}
+
 function addInstrumentations (data) {
+  if (workerLoader) {
+    workerLoader.addInstrumentations(data)
+    return
+  }
+
   const instrumentations = Object.keys(hooks)
 
   for (const moduleName of instrumentations) {
@@ -74,4 +91,4 @@ export const iitmExclusions = [
   /@anthropic-ai\/sdk\/_shims/,
 ]
 
-export { initialize, load, resolve }
+export { initialize, load, ddResolve as resolve }

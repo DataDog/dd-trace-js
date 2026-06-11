@@ -95,6 +95,7 @@
 /packages/dd-trace/test/encode/coverage-ci-visibility.spec.js @DataDog/ci-app-libraries
 /packages/dd-trace/test/git_metadata.spec.js @DataDog/ci-app-libraries
 /packages/dd-trace/test/git_metadata_tagger.spec.js @DataDog/ci-app-libraries
+/packages/dd-trace/test/loader-hook.spec.js @DataDog/ci-app-libraries
 /packages/dd-trace/test/plugins/util/git.spec.js @DataDog/ci-app-libraries
 /packages/dd-trace/test/plugins/util/ci-env/ @DataDog/ci-app-libraries
 /packages/dd-trace/test/plugins/util/test.spec.js @DataDog/ci-app-libraries

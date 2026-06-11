@@ -424,6 +424,20 @@ module.exports = class CiPlugin extends Plugin {
   }
 
   /**
+   * Updates repository-root-dependent state when a worker receives the root from
+   * the coordinator process after plugin configuration.
+   *
+   * @param {string|undefined} repositoryRoot - Repository root discovered by the coordinator process.
+   * @returns {void}
+   */
+  _setRepositoryRoot (repositoryRoot) {
+    if (!repositoryRoot || repositoryRoot === this.repositoryRoot) return
+
+    this.repositoryRoot = repositoryRoot
+    this.codeOwnersEntries = getCodeOwnersFileEntries(this.repositoryRoot)
+  }
+
+  /**
    * Adds a hidden _dd tag to the test session span when a test-optimization request fails.
    * If the session span does not exist yet (e.g. library-configuration failed before session:start),
    * the tag is queued and applied when the span is created.
@@ -495,7 +509,7 @@ module.exports = class CiPlugin extends Plugin {
   }
 
   /**
-   * Adds suite-level CI Visibility tags to worker test spans when their suite span is available.
+   * Adds suite-level Test Optimization tags to worker test spans when their suite span is available.
    *
    * @param {object[]} trace - Worker trace spans.
    * @returns {string|undefined} Missing test suite name, if the trace cannot be exported yet.
@@ -635,7 +649,8 @@ module.exports = class CiPlugin extends Plugin {
       [GIT_COMMIT_HEAD_MESSAGE]: commitHeadMessage,
     } = this.testEnvironmentMetadata
 
-    this.repositoryRoot = repositoryRoot || getRepositoryRoot() || process.cwd()
+    this.repositoryRoot = repositoryRoot ||
+      (this.shouldSkipGitMetadataExtraction ? process.cwd() : getRepositoryRoot() || process.cwd())
 
     this.codeOwnersEntries = getCodeOwnersFileEntries(this.repositoryRoot)
 
