@@ -22,6 +22,7 @@ const { ORIGIN_KEY, DATADOG_MINI_AGENT_PATH } = require('../constants')
 const { appendRules } = require('../payload-tagging/config')
 const ConfigBase = require('./config-base')
 const {
+  applyPm2ClusterEnv,
   getEnvironmentVariable,
   getEnvironmentVariables,
   getStableConfigSources,
@@ -701,36 +702,6 @@ function warnWrongOtelSettings () {
       if (invalidOtelValue) {
         increaseCounter('otel.env.invalid', ddEnvVar, otelEnvVar)
       }
-    }
-  }
-}
-
-/**
- * In PM2 cluster mode, per-app env vars (DD_SERVICE, DD_ENV, etc.) are not
- * passed as individual environment variables. Instead PM2 serializes the entire
- * process config into a single `pm2_env` JSON string and passes only that to
- * `cluster.fork()`. A pm2 wrapper (ProcessContainer.js) later unpacks it into
- * process.env — but that happens inside the main module, after NODE_OPTIONS
- * `--require dd-trace/init` has already run.
- *
- * This function copies only DD_* and OTEL_* keys out of the pm2_env blob into
- * process.env before config is read, so the tracer sees them at init time.
- * Keys already present in process.env are not overwritten, so any host-level
- * or explicit env var still takes precedence.
- */
-function applyPm2ClusterEnv () {
-  if (typeof process.env.pm2_env !== 'string') return
-
-  let pm2Config
-  try {
-    pm2Config = JSON.parse(process.env.pm2_env)
-  } catch {
-    return
-  }
-
-  for (const [key, value] of Object.entries(pm2Config)) {
-    if ((key.startsWith('DD_') || key.startsWith('OTEL_')) && !(key in process.env) && value != null) {
-      process.env[key] = String(value)
     }
   }
 }

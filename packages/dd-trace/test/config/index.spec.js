@@ -4668,7 +4668,7 @@ rules:
 
     it('should silently skip malformed pm2_env JSON', () => {
       process.env.pm2_env = 'not-valid-json'
-      assert.doesNotThrow(() => getConfig())
+      getConfig()
     })
 
     it('should skip keys with null values in pm2_env', () => {
@@ -4685,7 +4685,7 @@ rules:
 
     it('should do nothing when pm2_env is not a string', () => {
       process.env.pm2_env = 42
-      assert.doesNotThrow(() => getConfig())
+      getConfig()
     })
 
     it('should coerce non-string values to strings when copying into process.env', () => {
