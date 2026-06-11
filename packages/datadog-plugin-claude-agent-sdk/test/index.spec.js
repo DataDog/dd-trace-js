@@ -136,7 +136,7 @@ if (NODE_MAJOR >= 22) {
 
           const tracesPromises = [
             agent.assertSomeTraces(traces => {
-              assertTraceIncludesSpan(traces, 'turn', 'should have a turn span')
+              assertTraceIncludesSpan(traces, 'claude_agent_sdk.query', 'should have a turn span')
             }),
             agent.assertSomeTraces(traces => {
               assertTraceIncludesSpan(traces, 'Read', 'should have a successful tool span')
@@ -145,7 +145,7 @@ if (NODE_MAJOR >= 22) {
               assertTraceIncludesSpan(traces, 'Write', 'should have a failed tool span')
             }),
             agent.assertSomeTraces(traces => {
-              assertTraceIncludesSpan(traces, 'subagent-search', 'should have a subagent span')
+              assertTraceIncludesSpan(traces, 'search', 'should have a subagent span')
             }),
           ]
 
@@ -178,13 +178,13 @@ if (NODE_MAJOR >= 22) {
 
           const tracesPromises = [
             agent.assertSomeTraces(traces => {
-              assertTraceIncludesSpan(traces, 'turn', 'should have a turn span')
+              assertTraceIncludesSpan(traces, 'claude_agent_sdk.query', 'should have a turn span')
             }),
             agent.assertSomeTraces(traces => {
               assertTraceIncludesSpan(traces, 'Read', 'should have a pending tool span')
             }),
             agent.assertSomeTraces(traces => {
-              assertTraceIncludesSpan(traces, 'subagent-search', 'should have a pending subagent span')
+              assertTraceIncludesSpan(traces, 'search', 'should have a pending subagent span')
             }),
           ]
 
