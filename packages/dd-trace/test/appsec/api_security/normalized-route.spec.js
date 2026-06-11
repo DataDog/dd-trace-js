@@ -30,8 +30,8 @@ describe('normalizeRouteExpress', () => {
       assert.equal(normalizeRoute('/path(\\.ext)?', {}), null)
     })
 
-    it('returns null for route with Express 5 {/...} optional group syntax', () => {
-      assert.equal(normalizeRoute('/users{/:id}', {}), null)
+    it('still rejects Express 5 {/...} optional group with only static text', () => {
+      assert.equal(normalizeRoute('/posts{/draft}', {}), null)
     })
   })
 
@@ -411,9 +411,38 @@ describe('normalizeRouteExpress', () => {
       assert.equal(normalizeRoute('/:id(\\d{2})?', { id: '12' }), '/{id}')
       assert.equal(normalizeRoute('/:id(\\d{2})?', {}), '/')
     })
+  })
 
-    it('still rejects Express 5 {/:id} optional-group syntax', () => {
-      assert.equal(normalizeRoute('/users{/:id}', {}), null)
+  describe('Express 5 {/:param} optional-group syntax', () => {
+    it('normalizes {/:id} — param present via URL extraction', () => {
+      assert.equal(normalizeRoute('/items{/:id}', {}, '/items/42'), '/items/{id}')
+    })
+
+    it('normalizes {/:id} — param absent via URL extraction', () => {
+      assert.equal(normalizeRoute('/items{/:id}', {}, '/items'), '/items')
+    })
+
+    it('normalizes {/:id} with param in req.params', () => {
+      assert.equal(normalizeRoute('/items{/:id}', { id: '42' }), '/items/{id}')
+    })
+
+    it('normalizes middle optional segment {/:version}', () => {
+      assert.equal(normalizeRoute('/api{/:version}/users', {}, '/api/v1/users'), '/api/{version}/users')
+      assert.equal(normalizeRoute('/api{/:version}/users', {}, '/api/users'), '/api/users')
+    })
+
+    it('normalizes {.:format} extension optional in same segment', () => {
+      assert.equal(normalizeRoute('/photos/:id{.:format}', { id: '1', format: 'jpg' }), '/photos/{id+format}')
+      assert.equal(normalizeRoute('/photos/:id{.:format}', { id: '1' }), '/photos/{id}')
+    })
+
+    it('normalizes {/:id.:format} multi-param optional segment', () => {
+      assert.equal(normalizeRoute('/posts{/:id.:format}', {}, '/posts/1.json'), '/posts/{id+format}')
+      assert.equal(normalizeRoute('/posts{/:id.:format}', {}, '/posts'), '/posts')
+    })
+
+    it('still rejects {/static} group (no params, not supported)', () => {
+      assert.equal(normalizeRoute('/posts{/draft}', {}), null)
     })
   })
 

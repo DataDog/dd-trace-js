@@ -155,14 +155,23 @@ withVersions('express', 'express', version => {
         })
       })
     } else {
-      // Express 5 {/:id} optional-segment has { in route string — normalizer returns null (omit-rather-than-guess)
-      it('does NOT set normalized route for Express 5 {/:id} optional-segment syntax', async () => {
+      it('sets normalized route for Express 5 {/:id} optional-segment — param present', async () => {
         enableAppsecWithApiSecurity()
         await axios.get('/items/7')
 
         await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
-          assert.ok(!Object.hasOwn(span.meta, '_dd.appsec.normalized_route'))
+          assert.equal(span.meta['_dd.appsec.normalized_route'], '/items/{id}')
+        })
+      })
+
+      it('sets normalized route for Express 5 {/:id} optional-segment — param absent', async () => {
+        enableAppsecWithApiSecurity()
+        await axios.get('/items')
+
+        await agent.assertSomeTraces((traces) => {
+          const span = traces[0][0]
+          assert.equal(span.meta['_dd.appsec.normalized_route'], '/items')
         })
       })
     }
