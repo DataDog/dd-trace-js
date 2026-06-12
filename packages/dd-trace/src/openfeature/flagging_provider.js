@@ -34,7 +34,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     this._tracer = tracer
     this._config = config
 
-    // OTel feature_flag.evaluations hook — ALWAYS registered; untouched (PRES-01)
+    // OTel feature_flag.evaluations hook — ALWAYS registered; untouched
     this.hooks.push(new EvalMetricsHook(config))
 
     // EVP flagevaluation hook — gated by killswitch DD_FLAGGING_EVALUATION_COUNTS_ENABLED

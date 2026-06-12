@@ -7,10 +7,10 @@
  * It MUST NOT perform inline aggregation, JSON.stringify, map lookups, or any
  * other work beyond the cheap capture described below — the eval hot path runs
  * synchronously for the caller, so every nanosecond here is charged directly
- * to the user's flag evaluation (frozen contract, reviewer concern #7).
+ * to the user's flag evaluation.
  *
  * The existing EvalMetricsHook (OTel feature_flag.evaluations) is untouched —
- * this hook is registered IN ADDITION to it, not as a replacement (PRES-01).
+ * this hook is registered IN ADDITION to it, not as a replacement.
  */
 class FlagEvalEVPHook {
   /** @type {import('./flag_evaluations')} */
@@ -25,8 +25,7 @@ class FlagEvalEVPHook {
 
   /**
    * Called by the OpenFeature SDK after every flag evaluation (success, error, or default).
-   * Using the `finally` stage (not `after`) ensures error and default paths are covered
-   * (frozen contract, reviewer concern #7, source_comment_id 3385309423).
+   * Using the `finally` stage (not `after`) ensures error and default paths are covered.
    *
    * Cheap capture only — no aggregation, no stringify, no blocking:
    *   - Scalar field extraction from hookContext + evaluationDetails
@@ -44,7 +43,7 @@ class FlagEvalEVPHook {
     // Cheap scalar extraction — no JSON.stringify, no map lookup, no aggregation
     const flagKey = hookContext.flagKey
 
-    // Absent variant (undefined/null/empty) means runtime_default (reviewer concern #5)
+    // Absent variant (undefined/null/empty) means runtime_default
     const rawValue = evaluationDetails.value
     const variant = rawValue !== undefined && rawValue !== null ? String(rawValue) : ''
 
@@ -55,7 +54,7 @@ class FlagEvalEVPHook {
 
     const targetingKey = hookContext.context?.targetingKey ?? ''
 
-    // Prefer eval-time stamped by the provider at eval entry (reviewer concern #4).
+    // Prefer eval-time stamped by the provider at eval entry.
     // Falls back to hook-fire time when absent (non-Datadog provider, or old provider version).
     const evalTimeMs = hookContext.flagMetadata?.['dd.eval.timestamp_ms'] ?? Date.now()
 

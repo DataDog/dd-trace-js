@@ -192,17 +192,16 @@ describe('FlaggingProvider', () => {
     it('should not register FlagEvalEVPHook when DD_FLAGGING_EVALUATION_COUNTS_ENABLED=false', () => {
       mockConfig.experimental.flaggingProvider.evaluationCountsEnabled = false
       const provider = new FlaggingProvider(mockTracer, mockConfig)
-      // OTel hook always registered (PRES-01); SpanEnrichment also
       assert.ok(!provider.hooks.includes(mockFlagEvalEVPHook),
         'EVP hook must not be registered when killswitch is false')
       sinon.assert.notCalled(mockFlagEvalWriterClass)
     })
 
-    it('OTel EvalMetricsHook is always registered regardless of killswitch (PRES-01)', () => {
+    it('OTel EvalMetricsHook is always registered regardless of killswitch', () => {
       mockConfig.experimental.flaggingProvider.evaluationCountsEnabled = false
       const provider = new FlaggingProvider(mockTracer, mockConfig)
       assert.ok(provider.hooks.includes(mockEvalMetricsHook),
-        'OTel EvalMetricsHook must always be registered (PRES-01)')
+        'OTel EvalMetricsHook must always be registered')
     })
 
     it('should log info message when span enrichment is enabled', () => {

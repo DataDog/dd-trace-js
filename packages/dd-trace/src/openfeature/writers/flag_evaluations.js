@@ -10,7 +10,7 @@ const {
 } = require('../constants/constants')
 const BaseFFEWriter = require('./base')
 
-// Frozen-contract aggregation caps (FANOUT-CONTRACT.md §1)
+// Aggregation caps
 const GLOBAL_CAP = 131_072
 const PER_FLAG_CAP = 10_000
 const DEGRADED_CAP = 32_768
@@ -73,7 +73,7 @@ function encodeField (key, value) {
  * Builds the canonical, comparable context key for a pruned context map.
  * Keys are sorted for determinism; each field is type-tagged and length-delimited
  * so distinct types and values always produce distinct keys (no collision).
- * Uses exact comparable string, not a hash digest (frozen contract, reviewer concern #3).
+ * Uses exact comparable string, not a hash digest (no collision).
  *
  * @param {Record<string, unknown>} attrs - Pruned context attributes
  * @returns {string}
@@ -189,7 +189,7 @@ const FLUSH_SENTINEL = Object.freeze({ _sentinel: true })
 /**
  * FlagEvaluationsWriter extends BaseFFEWriter to aggregate EVP flagevaluation events
  * using two-tier (full → degraded → drop-counted) aggregation with a comparable
- * canonical-context key (no hash digest). Conforms to the frozen FANOUT-CONTRACT.
+ * canonical-context key (no hash digest).
  *
  * Aggregation caps: globalCap=131072 / perFlagCap=10000 / degradedCap=32768
  * Context bounds: 256 fields / 256 chars (pruned before keying).
