@@ -226,6 +226,7 @@ class Span extends BridgeSpanBase {
    * @param {string} name
    */
   updateName (name) {
+    if (this.ended) return this
     this.#otelName = name
     setOtelResource(this._ddSpan, name)
     return this
