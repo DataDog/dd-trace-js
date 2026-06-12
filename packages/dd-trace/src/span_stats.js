@@ -10,13 +10,17 @@ const {
   HTTP_ENDPOINT,
   HTTP_ROUTE,
   HTTP_METHOD,
+  SPAN_KIND,
 } = require('../../../ext/tags')
 const { ORIGIN_KEY, TOP_LEVEL_KEY, SVC_SRC_KEY } = require('./constants')
 const { version } = require('./pkg')
 const processTags = require('./process-tags')
 
 const { SpanStatsExporter } = require('./exporters/span-stats')
-const { getEnvironmentVariable } = require('./config/helper')
+
+// Datadog gRPC instrumentation tags translated to OTel rpc.* semantic-convention attributes.
+const GRPC_METHOD_NAME = 'grpc.method.name'
+const GRPC_STATUS_CODE = 'grpc.status.code'
 
 const {
   DEFAULT_SPAN_NAME,
@@ -141,8 +145,14 @@ class SpanAggKey {
     this.type = span.type || ''
     this.statusCode = span.meta[HTTP_STATUS_CODE] || 0
     this.synthetics = span.meta[ORIGIN_KEY] === 'synthetics'
+    this.origin = span.meta[ORIGIN_KEY] || ''
     this.endpoint = span.meta[HTTP_ROUTE] || span.meta[HTTP_ENDPOINT] || ''
     this.method = span.meta[HTTP_METHOD] || ''
+    this.spanKind = span.meta[SPAN_KIND] || ''
+    this.rpcMethod = span.meta[GRPC_METHOD_NAME] || ''
+    // The gRPC plugin records the status code as a numeric tag, which span formatting routes into
+    // metrics rather than meta; fall back to meta for string-valued tags (e.g. manual instrumentation).
+    this.rpcStatusCode = span.metrics?.[GRPC_STATUS_CODE] ?? span.meta[GRPC_STATUS_CODE] ?? ''
     this.srvSrc = span.meta[SVC_SRC_KEY] || ''
   }
 
@@ -157,6 +167,10 @@ class SpanAggKey {
       this.method,
       this.endpoint,
       this.srvSrc,
+      this.origin,
+      this.spanKind,
+      this.rpcMethod,
+      this.rpcStatusCode,
     ].join(',')
   }
 }
@@ -200,6 +214,8 @@ class SpanStatsProcessor {
     otlpTraceMetricsEnabled,
     otelMetricsUrl,
     otelMetricsProtocol,
+    otelMetricsExportInterval,
+    otelSemanticsEnabled,
     reportHostname,
   } = {}) {
     this.exporter = new SpanStatsExporter({
@@ -208,14 +224,16 @@ class SpanStatsProcessor {
       tags,
       url,
     })
-    // Allow the flush interval to be overridden for testing (e.g. system tests force a short
-    // interval so client-computed stats are exported within the test window).
-    const intervalOverride = Number(getEnvironmentVariable('_DD_TRACE_STATS_WRITER_INTERVAL'))
-    if (Number.isFinite(intervalOverride) && intervalOverride > 0) {
-      interval = intervalOverride
+    // The native /v0.6/stats path uses the configured stats interval (seconds). When OTLP trace
+    // metrics are enabled, the flush/export cadence is driven by OTel config (OTEL_METRIC_EXPORT_INTERVAL,
+    // milliseconds) instead, so metrics are exported on the OTel reader interval rather than a
+    // Datadog-specific one.
+    let intervalMs = interval * 1e3
+    if (otlpTraceMetricsEnabled && Number.isFinite(otelMetricsExportInterval) && otelMetricsExportInterval > 0) {
+      intervalMs = otelMetricsExportInterval
     }
-    this.interval = interval
-    this.bucketSizeNs = interval * 1e9
+    this.interval = intervalMs / 1e3
+    this.bucketSizeNs = intervalMs * 1e6
     this.buckets = new TimeBuckets()
     this.hostname = os.hostname()
     this.enabled = enabled
@@ -227,13 +245,16 @@ class SpanStatsProcessor {
     if (otlpTraceMetricsEnabled) {
       const { OtlpStatsExporter } = require('./exporters/otlp-span-stats')
       const protocol = otelMetricsProtocol || 'http/json'
-      const resourceAttributes = buildResourceAttributes(service, env, appVersion, this.tags, reportHostname)
-      this.otlpExporter = new OtlpStatsExporter(otelMetricsUrl, protocol, resourceAttributes)
+      const resourceAttributes = buildResourceAttributes(service, env, appVersion, this.tags, {
+        reportHostname,
+        otelSemanticsEnabled,
+      })
+      this.otlpExporter = new OtlpStatsExporter(otelMetricsUrl, protocol, resourceAttributes, otelSemanticsEnabled)
     }
 
     if (this.enabled || this.otlpExporter) {
-      this.timer = setInterval(this.onInterval.bind(this), interval * 1e3)
-      this.timer.unref?.()
+      this.timer = setInterval(this.onInterval.bind(this), intervalMs)
+      this.timer.unref()
     }
   }
 
@@ -304,18 +325,35 @@ class SpanStatsProcessor {
  * @param {string|undefined} env
  * @param {string|undefined} appVersion
  * @param {object} tags
- * @param {boolean|undefined} reportHostname Whether DD_TRACE_REPORT_HOSTNAME is enabled.
+ * @param {{ reportHostname?: boolean, otelSemanticsEnabled?: boolean }} [options]
+ *   reportHostname: whether DD_TRACE_REPORT_HOSTNAME is enabled.
+ *   otelSemanticsEnabled: when true, only OTel attributes are emitted (no dd.*).
  * @returns {import('@opentelemetry/api').Attributes}
  */
-function buildResourceAttributes (service, env, appVersion, tags, reportHostname) {
+function buildResourceAttributes (service, env, appVersion, tags, { reportHostname, otelSemanticsEnabled } = {}) {
   const attrs = {}
   if (service) attrs['service.name'] = service
   if (env) attrs['deployment.environment.name'] = env
   if (appVersion) attrs['service.version'] = appVersion
-  if (tags?.['runtime-id']) attrs['dd.runtime_id'] = tags['runtime-id']
+  // Identify the emitter as the Datadog SDK so the backend can attribute these metrics separately.
+  attrs['telemetry.sdk.name'] = 'datadog'
+  attrs['telemetry.sdk.language'] = 'nodejs'
+  attrs['telemetry.sdk.version'] = version
   // Only report host.name when DD_TRACE_REPORT_HOSTNAME is enabled, matching the other OTLP
   // signals (metrics/logs). DD_HOSTNAME is not supported in dd-trace-js, so use os.hostname().
   if (reportHostname) attrs['host.name'] = os.hostname()
+
+  // Datadog-specific resource attributes are emitted only in default mode.
+  if (!otelSemanticsEnabled) {
+    if (tags?.['runtime-id']) attrs['dd.runtime_id'] = tags['runtime-id']
+    // Emit each process tag (key:value) as an individual dd.<key> resource attribute.
+    const processTagsObject = processTags.tagsObject
+    if (processTagsObject) {
+      for (const key of Object.keys(processTagsObject)) {
+        attrs[`dd.${key}`] = processTagsObject[key]
+      }
+    }
+  }
   return attrs
 }
 

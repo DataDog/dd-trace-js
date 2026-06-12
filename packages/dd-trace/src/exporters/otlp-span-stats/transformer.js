@@ -19,31 +19,34 @@ function getDeltaTemporality () {
   return _deltaTemporality
 }
 
+// OTel span status code denoting an error (StatusCode.ERROR == 2). Emitted on error data points so the
+// backend can derive error counts from status.code; ok/unset data points carry no status.code.
+const STATUS_CODE_ERROR = 2
+
 /**
  * Transforms span stats bucket data into an OTLP ExportMetricsServiceRequest.
  *
  * Emits a single histogram metric (delta temporality):
- *   - dd.trace.span.duration (Histogram, split by dd.top_level and error=true)
+ *   - traces.span.sdk.metrics.duration (Histogram)
  *
- * Each aggregation key emits up to 4 data points covering the (ok/error) × (not-top-level/top-level) matrix:
- *   { dd.top_level: false }                      — ok, not top-level
- *   { dd.top_level: true  }                      — ok, top-level
- *   { error: true, dd.top_level: false }          — error, not top-level
- *   { error: true, dd.top_level: true  }          — error, top-level
- *
- * The `error` attribute is only added when error=true; ok data points carry no error attribute.
- * Data points with count=0 are omitted.
+ * Each aggregation key emits up to 4 data points covering the (ok/error) × (not-top-level/top-level)
+ * matrix. Errors carry status.code=ERROR; top-level is conveyed via the dd.span.top_level attribute,
+ * which (like all dd.* attributes) is omitted in OTel-semantics mode. Data points with count=0 are omitted.
  *
  * @class OtlpStatsTransformer
  * @augments OtlpTransformerBase
  */
 class OtlpStatsTransformer extends OtlpTransformerBase {
+  #otelSemanticsEnabled
+
   /**
    * @param {import('@opentelemetry/api').Attributes} resourceAttributes - Resource attributes
    * @param {string} protocol - OTLP protocol (http/protobuf or http/json)
+   * @param {boolean} [otelSemanticsEnabled] - When true, only OTel attributes are emitted (no dd.*)
    */
-  constructor (resourceAttributes, protocol) {
+  constructor (resourceAttributes, protocol, otelSemanticsEnabled = false) {
     super(resourceAttributes, protocol, 'span-stats')
+    this.#otelSemanticsEnabled = otelSemanticsEnabled
   }
 
   /**
@@ -110,19 +113,17 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
       for (const aggStats of bucket.values()) {
         const { aggKey, cells } = aggStats
         const baseAttrs = this.#buildAttributes(aggKey)
+        const dd = !this.#otelSemanticsEnabled
+        const error = this.#errorStatus()
 
-        this.#pushPoint(durationPoints, cells.okNotTopLevel, startNano, endNano, [
-          ...baseAttrs, this.#boolAttr('dd.top_level', false),
-        ])
-        this.#pushPoint(durationPoints, cells.okTopLevel, startNano, endNano, [
-          ...baseAttrs, this.#boolAttr('dd.top_level', true),
-        ])
-        this.#pushPoint(durationPoints, cells.errNotTopLevel, startNano, endNano, [
-          ...baseAttrs, this.#boolAttr('error', true), this.#boolAttr('dd.top_level', false),
-        ])
-        this.#pushPoint(durationPoints, cells.errTopLevel, startNano, endNano, [
-          ...baseAttrs, this.#boolAttr('error', true), this.#boolAttr('dd.top_level', true),
-        ])
+        this.#pushPoint(durationPoints, cells.okNotTopLevel, startNano, endNano,
+          dd ? [...baseAttrs, this.#boolAttr('dd.span.top_level', false)] : baseAttrs)
+        this.#pushPoint(durationPoints, cells.okTopLevel, startNano, endNano,
+          dd ? [...baseAttrs, this.#boolAttr('dd.span.top_level', true)] : baseAttrs)
+        this.#pushPoint(durationPoints, cells.errNotTopLevel, startNano, endNano,
+          dd ? [...baseAttrs, error, this.#boolAttr('dd.span.top_level', false)] : [...baseAttrs, error])
+        this.#pushPoint(durationPoints, cells.errTopLevel, startNano, endNano,
+          dd ? [...baseAttrs, error, this.#boolAttr('dd.span.top_level', true)] : [...baseAttrs, error])
       }
     }
 
@@ -131,7 +132,7 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
       schemaUrl: '',
       metrics: [
         {
-          name: 'dd.trace.span.duration',
+          name: 'traces.span.sdk.metrics.duration',
           description: '',
           unit: 's',
           histogram: { dataPoints: durationPoints, aggregationTemporality: temporality },
@@ -167,25 +168,40 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
   }
 
   /**
-   * Builds OTLP data point attributes from an aggregation key. Values are emitted with their
-   * native OTLP types (e.g. the HTTP status code as an int, synthetics as a bool).
+   * Builds the shared OTLP data point attributes for an aggregation key. OTel semantic-convention
+   * attributes are emitted in both modes; Datadog dd.* attributes are added only in default mode.
+   * Values are emitted with their native OTLP types (e.g. the HTTP status code as an int).
    *
    * @param {import('../../span_stats').SpanAggKey} aggKey
    * @returns {object[]}
    */
   #buildAttributes (aggKey) {
-    const raw = {
-      'span.name': aggKey.resource,
-      'dd.operation.name': aggKey.name,
-      'dd.span.type': aggKey.type,
-      'dd.synthetics': aggKey.synthetics,
-    }
+    const raw = { 'span.name': aggKey.resource }
 
+    if (aggKey.spanKind) raw['span.kind'] = aggKey.spanKind
     if (aggKey.statusCode) raw['http.response.status_code'] = Number(aggKey.statusCode)
     if (aggKey.method) raw['http.request.method'] = aggKey.method
     if (aggKey.endpoint) raw['http.route'] = aggKey.endpoint
+    if (aggKey.rpcMethod) raw['rpc.method'] = aggKey.rpcMethod
+    if (aggKey.rpcStatusCode !== undefined && aggKey.rpcStatusCode !== '') {
+      const code = Number(aggKey.rpcStatusCode)
+      raw['rpc.response.status_code'] = Number.isNaN(code) ? aggKey.rpcStatusCode : code
+    }
+
+    if (!this.#otelSemanticsEnabled) {
+      raw['dd.operation.name'] = aggKey.name
+      if (aggKey.type) raw['dd.span.type'] = aggKey.type
+      if (aggKey.origin) raw['dd.origin'] = aggKey.origin
+    }
 
     return this.transformAttributes(raw)
+  }
+
+  /**
+   * @returns {object} status.code attribute denoting an error span status.
+   */
+  #errorStatus () {
+    return { key: 'status.code', value: { intValue: STATUS_CODE_ERROR } }
   }
 
   /**

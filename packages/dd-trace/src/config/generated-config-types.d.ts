@@ -525,6 +525,7 @@ export interface GeneratedConfig {
   otelMetricsTimeout: number;
   otelMetricsUrl: string;
   otelProtocol: string;
+  otelSemanticsEnabled: boolean;
   otelTimeout: number;
   otlpTraceMetricsEnabled: boolean | undefined;
   peerServiceMapping: Record<string, string>;

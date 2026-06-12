@@ -599,7 +599,7 @@ class Config extends ConfigBase {
       setAndTrack(this, 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', `${defaultOtlpBase}/v1/traces`)
     }
 
-    // Auto-enabled (when DD_TRACE_OTEL_STATS_COMPUTATION_ENABLED is unset) only when both OTLP
+    // Auto-enabled (when OTEL_CLIENT_STATS_COMPUTATION_ENABLED is unset) only when both OTLP
     // trace export (OTEL_TRACES_EXPORTER=otlp) and OTel metrics export (DD_METRICS_OTEL_ENABLED)
     // are enabled.
     const autoTraceMetrics = this.OTEL_TRACES_EXPORTER === 'otlp' && this.otelMetricsEnabled === true

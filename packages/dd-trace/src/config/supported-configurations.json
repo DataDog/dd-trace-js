@@ -3305,15 +3305,15 @@
         "default": "false"
       }
     ],
-    "DD_TRACE_OTEL_STATS_COMPUTATION_ENABLED": [
+    "DD_TRACE_OTEL_SEMANTICS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
         "configurationNames": [
-          "otlpTraceMetricsEnabled"
+          "otelSemanticsEnabled"
         ],
-        "default": null,
-        "internalPropertyName": "otlpTraceMetricsEnabled"
+        "default": "false",
+        "internalPropertyName": "otelSemanticsEnabled"
       }
     ],
     "DD_TRACE_PARTIAL_FLUSH_MIN_SPANS": [
@@ -3921,6 +3921,17 @@
         "type": "int",
         "default": "5000",
         "allowed": "[1-9]\\d*"
+      }
+    ],
+    "OTEL_CLIENT_STATS_COMPUTATION_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "otlpTraceMetricsEnabled"
+        ],
+        "default": null,
+        "internalPropertyName": "otlpTraceMetricsEnabled"
       }
     ],
     "OTEL_EXPORTER_OTLP_ENDPOINT": [

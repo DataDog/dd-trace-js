@@ -106,22 +106,23 @@ const {
 describe('SpanAggKey', () => {
   it('should make aggregation key for a basic span', () => {
     const key = new SpanAggKey(basicSpan)
-    assert.strictEqual(key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,integration')
+    assert.strictEqual(key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,integration,,,,')
   })
 
   it('should make aggregation key for a synthetic span', () => {
     const key = new SpanAggKey(syntheticSpan)
-    assert.strictEqual(key.toString(), 'synthetic-span,service-name,resource-name,span-type,200,true,,,integration')
+    assert.strictEqual(
+      key.toString(), 'synthetic-span,service-name,resource-name,span-type,200,true,,,integration,synthetics,,,')
   })
 
   it('should make aggregation key for an error span', () => {
     const key = new SpanAggKey(errorSpan)
-    assert.strictEqual(key.toString(), 'error-span,service-name,resource-name,span-type,500,false,,,integration')
+    assert.strictEqual(key.toString(), 'error-span,service-name,resource-name,span-type,500,false,,,integration,,,,')
   })
 
   it('should use sensible defaults', () => {
     const key = new SpanAggKey({ meta: {}, metrics: {} })
-    assert.strictEqual(key.toString(), `${DEFAULT_SPAN_NAME},${DEFAULT_SERVICE_NAME},,,0,false,,,`)
+    assert.strictEqual(key.toString(), `${DEFAULT_SPAN_NAME},${DEFAULT_SERVICE_NAME},,,0,false,,,,,,,`)
   })
 
   it('should include HTTP method and route in aggregation key', () => {
@@ -135,7 +136,7 @@ describe('SpanAggKey', () => {
     }
     const key = new SpanAggKey(span)
     assert.strictEqual(
-      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,GET,/users/:id,integration')
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,GET,/users/:id,integration,,,,')
   })
 
   it('should include HTTP method and endpoint in aggregation key', () => {
@@ -149,7 +150,8 @@ describe('SpanAggKey', () => {
     }
     const key = new SpanAggKey(span)
     assert.strictEqual(
-      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,POST,/users/{param:int},integration')
+      key.toString(),
+      'basic-span,service-name,resource-name,span-type,200,false,POST,/users/{param:int},integration,,,,')
   })
 
   it('should prioritize http.route over http.endpoint', () => {
@@ -164,7 +166,7 @@ describe('SpanAggKey', () => {
     }
     const key = new SpanAggKey(span)
     assert.strictEqual(
-      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,GET,/users/:id,integration')
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,GET,/users/:id,integration,,,,')
   })
 
   it('should include service source in aggregation key', () => {
@@ -177,7 +179,7 @@ describe('SpanAggKey', () => {
     }
     const key = new SpanAggKey(span)
     assert.strictEqual(
-      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,opt.plugin')
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,opt.plugin,,,,')
   })
 })
 
@@ -500,7 +502,9 @@ describe('SpanStatsProcessor', () => {
     OtlpStatsExporter.resetHistory()
     const p = new SpanStatsProcessor({
       ...config,
-      traceMetrics: { enabled: true, url: 'http://localhost:4318/v1/metrics', protocol: 'http/json' },
+      otlpTraceMetricsEnabled: true,
+      otelMetricsUrl: 'http://localhost:4318/v1/metrics',
+      otelMetricsProtocol: 'http/json',
     })
     clearTimeout(p.timer)
 
@@ -512,7 +516,9 @@ describe('SpanStatsProcessor', () => {
     otlpExporter.export.resetHistory()
     const p = new SpanStatsProcessor({
       ...config,
-      traceMetrics: { enabled: true, url: 'http://localhost:4318/v1/metrics', protocol: 'http/json' },
+      otlpTraceMetricsEnabled: true,
+      otelMetricsUrl: 'http://localhost:4318/v1/metrics',
+      otelMetricsProtocol: 'http/json',
     })
     clearTimeout(p.timer)
     p.onSpanFinished(topLevelSpan)
@@ -528,7 +534,9 @@ describe('SpanStatsProcessor', () => {
     otlpExporter.export.resetHistory()
     const p = new SpanStatsProcessor({
       ...config,
-      traceMetrics: { enabled: true, url: 'http://localhost:4318/v1/metrics', protocol: 'http/json' },
+      otlpTraceMetricsEnabled: true,
+      otelMetricsUrl: 'http://localhost:4318/v1/metrics',
+      otelMetricsProtocol: 'http/json',
     })
     clearTimeout(p.timer)
     p.onInterval()
@@ -536,18 +544,20 @@ describe('SpanStatsProcessor', () => {
     assert.ok(otlpExporter.export.notCalled)
   })
 
-  it('should still call legacy exporter when both are enabled', () => {
+  it('should not call the legacy /v0.6/stats exporter when OTLP is enabled (mutual exclusion)', () => {
     exporter.export.resetHistory()
     otlpExporter.export.resetHistory()
     const p = new SpanStatsProcessor({
       ...config,
-      traceMetrics: { enabled: true, url: 'http://localhost:4318/v1/metrics', protocol: 'http/json' },
+      otlpTraceMetricsEnabled: true,
+      otelMetricsUrl: 'http://localhost:4318/v1/metrics',
+      otelMetricsProtocol: 'http/json',
     })
     clearTimeout(p.timer)
     p.onSpanFinished(topLevelSpan)
     p.onInterval()
 
-    assert.ok(exporter.export.calledOnce)
+    assert.ok(exporter.export.notCalled)
     assert.ok(otlpExporter.export.calledOnce)
   })
 
@@ -560,7 +570,9 @@ describe('SpanStatsProcessor', () => {
       url: new URL('http://127.0.0.1:8126'),
       env: 'test',
       tags: {},
-      traceMetrics: { enabled: true, url: 'http://localhost:4318/v1/metrics', protocol: 'http/json' },
+      otlpTraceMetricsEnabled: true,
+      otelMetricsUrl: 'http://localhost:4318/v1/metrics',
+      otelMetricsProtocol: 'http/json',
     })
     clearTimeout(p.timer)
 
