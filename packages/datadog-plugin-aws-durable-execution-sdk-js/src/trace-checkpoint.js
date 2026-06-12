@@ -54,7 +54,7 @@ function injectHeaders (tracer, span) {
  */
 function overrideParentId (headers, parentId) {
   if (!parentId) return
-  if ('x-datadog-trace-id' in headers) {
+  if (headers['x-datadog-trace-id']) {
     headers['x-datadog-parent-id'] = String(parentId)
   }
 }
