@@ -156,3 +156,94 @@ describe('id', () => {
     assert.strictEqual(spanId.toString(10), '43981')
   })
 })
+
+describe('AWS_LAMBDA_MICROVM_IMAGE_ARN activation', () => {
+  const microVmArn = 'arn:aws:lambda:us-east-2:123456789012:microvm:my-app'
+
+  function loadWithMock (arn) {
+    let secureCalls = 0
+    let batchCalls = 0
+    const mockCrypto = {
+      randomFillSync (buf) {
+        if (buf.length === 8) {
+          secureCalls++
+        } else {
+          batchCalls++
+        }
+        for (let i = 0; i < buf.length; i++) buf[i] = 0xAB
+      },
+    }
+    if (arn !== undefined) {
+      process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN = arn
+    } else {
+      delete process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
+    }
+    const mod = proxyquire('../src/id', { crypto: mockCrypto })
+    delete process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
+    return { mod, secureCalls: () => secureCalls, batchCalls: () => batchCalls }
+  }
+
+  it('should use per-call randomFillSync when AWS_LAMBDA_MICROVM_IMAGE_ARN is set', () => {
+    const { mod, secureCalls } = loadWithMock(microVmArn)
+    mod()
+    assert.ok(secureCalls() > 0, 'expected 8-byte randomFillSync call when ARN is set')
+  })
+
+  it('should use batch randomFillSync when AWS_LAMBDA_MICROVM_IMAGE_ARN is unset', () => {
+    const { mod, batchCalls } = loadWithMock(undefined)
+    mod()
+    assert.ok(batchCalls() > 0, 'expected batch randomFillSync call when ARN is unset')
+  })
+
+  it('should use batch randomFillSync when AWS_LAMBDA_MICROVM_IMAGE_ARN is empty string', () => {
+    const { mod, batchCalls } = loadWithMock('')
+    mod()
+    assert.ok(batchCalls() > 0, 'expected batch randomFillSync call when ARN is empty')
+  })
+})
+
+describe('id in Lambda MicroVM environment', () => {
+  let id
+
+  beforeEach(() => {
+    process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN = 'arn:aws:lambda:us-east-2:123456789012:microvm:my-app'
+    delete require.cache[require.resolve('../src/id')]
+    id = require('../src/id')
+  })
+
+  afterEach(() => {
+    delete process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
+    delete require.cache[require.resolve('../src/id')]
+  })
+
+  it('should generate non-zero IDs', () => {
+    for (let i = 0; i < 10; i++) {
+      const spanId = id()
+      assert.notStrictEqual(spanId.toString(), '0000000000000000')
+    }
+  })
+
+  it('should generate varied IDs', () => {
+    const seen = new Set()
+    for (let i = 0; i < 100; i++) {
+      seen.add(id().toString())
+    }
+    assert.ok(seen.size > 90, `expected >90 unique IDs, got ${seen.size}`)
+  })
+
+  it('should generate IDs with the high bit of the first byte clear', () => {
+    for (let i = 0; i < 100; i++) {
+      const spanId = id()
+      const hex = spanId.toString()
+      const firstByte = Number.parseInt(hex.slice(0, 2), 16)
+      assert.strictEqual(firstByte & 0x80, 0, `expected high bit clear, got 0x${firstByte.toString(16)}`)
+    }
+  })
+
+  it('should generate IDs with hex length of 16 characters', () => {
+    for (let i = 0; i < 10; i++) {
+      const spanId = id()
+      assert.strictEqual(spanId.toString().length, 16)
+    }
+  })
+})

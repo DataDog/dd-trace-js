@@ -9,6 +9,19 @@ const zeroId = new Uint8Array(8)
 
 let batch = 0
 
+// When running in a Lambda MicroVM environment (AWS_LAMBDA_MICROVM_IMAGE_ARN is
+// set by the platform), bypass the batch buffer and call randomFillSync on a
+// fresh 8-byte buffer per ID. The batch buffer is heap state serialised into
+// the Firecracker snapshot; all resumed clones would share identical contents
+// and produce duplicate IDs. Per-call kernel reads have no buffered state and
+// guarantee uniqueness regardless of when the snapshot was taken.
+// id.js is a foundational module loaded before config initialises, so we read
+// the env var directly. We cannot import siblings here because id.js is copied
+// standalone into sandbox environments (useSandbox in integration tests).
+// eslint-disable-next-line eslint-rules/eslint-process-env
+const _secureRandom = !!process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
+const _secureBuf = _secureRandom ? new Uint8Array(8) : null
+
 // Internal representation of a trace or span ID.
 class Identifier {
   /** @type {number[] | Uint8Array} */
@@ -205,6 +218,14 @@ function toNumberString (buffer, radix) {
  * @returns {number[] | Uint8Array}
  */
 function pseudoRandom () {
+  if (_secureBuf) {
+    randomFillSync(_secureBuf)
+    return [
+      _secureBuf[0] & 0x7F,
+      _secureBuf[1], _secureBuf[2], _secureBuf[3],
+      _secureBuf[4], _secureBuf[5], _secureBuf[6], _secureBuf[7],
+    ]
+  }
   if (batch === 0) {
     randomFillSync(data)
   }
