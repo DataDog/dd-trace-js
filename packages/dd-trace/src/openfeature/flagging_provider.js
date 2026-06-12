@@ -38,8 +38,8 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     this.hooks.push(new EvalMetricsHook(config))
 
     // EVP flagevaluation hook — gated by killswitch DD_FLAGGING_EVALUATION_COUNTS_ENABLED
-    // Default: enabled (process.env undefined → enabled; only 'false' disables)
-    if (process.env.DD_FLAGGING_EVALUATION_COUNTS_ENABLED !== 'false') {
+    // Default: enabled (only explicit false disables); routed through config system.
+    if (config.experimental.flaggingProvider.evaluationCountsEnabled) {
       this.#flagEvalWriter = new FlagEvaluationsWriter(config)
       this.hooks.push(new FlagEvalEVPHook(this.#flagEvalWriter))
       log.debug('%s EVP flagevaluation writer enabled', this.constructor.name)

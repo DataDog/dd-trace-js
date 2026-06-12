@@ -429,6 +429,7 @@ export interface GeneratedConfig {
     exporter: string;
     flaggingProvider: {
       enabled: boolean;
+      evaluationCountsEnabled: boolean;
       initializationTimeoutMs: number;
       spanEnrichment: {
         enabled: boolean;

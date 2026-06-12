@@ -23,7 +23,7 @@ const MAX_FIELD_LENGTH = 256
 // Distinct per JS type so that, e.g., int 1 and string "1" cannot alias.
 const TAG_STRING = 's'
 const TAG_BOOL = 'b'
-const TAG_NUMBER = 'n'   // all JS numbers (float64 under the hood)
+const TAG_NUMBER = 'n' // all JS numbers (float64 under the hood)
 const TAG_OTHER = 'o'
 
 /**
@@ -230,7 +230,7 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
     super({
       config,
       endpoint: fullEndpoint,
-      interval: 10000,
+      interval: 10_000,
       payloadSizeLimit: EVP_PAYLOAD_SIZE_LIMIT,
       eventSizeLimit: EVP_EVENT_SIZE_LIMIT,
       headers: {
