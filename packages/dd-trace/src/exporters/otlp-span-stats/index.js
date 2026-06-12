@@ -8,7 +8,7 @@ const OtlpStatsTransformer = require('./transformer')
  * Exports span stats as OTLP metrics to a /v1/metrics endpoint.
  *
  * Mutually exclusive with the Datadog /v0.6/stats exporter: it is used when
- * DD_TRACE_OTEL_STATS_COMPUTATION_ENABLED=true (or auto-enabled when both
+ * OTEL_CLIENT_STATS_COMPUTATION_ENABLED=true (or auto-enabled when both
  * OTEL_TRACES_EXPORTER=otlp and DD_METRICS_OTEL_ENABLED=true are set).
  *
  * @class OtlpStatsExporter
@@ -19,10 +19,11 @@ class OtlpStatsExporter extends OtlpHttpExporterBase {
    * @param {string} url - Full OTLP metrics endpoint URL (e.g. http://localhost:4318/v1/metrics)
    * @param {string} protocol - OTLP protocol (http/protobuf or http/json)
    * @param {import('@opentelemetry/api').Attributes} resourceAttributes - Resource attributes
+   * @param {boolean} [otelSemanticsEnabled] - When true, only OTel attributes are emitted (no dd.*)
    */
-  constructor (url, protocol, resourceAttributes) {
+  constructor (url, protocol, resourceAttributes, otelSemanticsEnabled = false) {
     super(url, undefined, 10_000, protocol, 'span-stats')
-    this.transformer = new OtlpStatsTransformer(resourceAttributes, protocol)
+    this.transformer = new OtlpStatsTransformer(resourceAttributes, protocol, otelSemanticsEnabled)
   }
 
   /**

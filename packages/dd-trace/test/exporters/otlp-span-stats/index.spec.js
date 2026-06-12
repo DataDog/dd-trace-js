@@ -87,7 +87,7 @@ describe('OtlpStatsExporter', () => {
     const payload = JSON.parse(mockReq.write.firstCall.args[0].toString())
     const { metrics } = payload.resourceMetrics[0].scopeMetrics[0]
     assert.strictEqual(metrics.length, 1)
-    assert.strictEqual(metrics[0].name, 'dd.trace.span.duration')
+    assert.strictEqual(metrics[0].name, 'traces.span.sdk.metrics.duration')
   })
 
   it('returns early when drained is empty', () => {
