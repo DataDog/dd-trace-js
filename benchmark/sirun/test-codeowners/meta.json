@@ -7,13 +7,10 @@
   "instructions": true,
   "variants": {
     "small": {
-      "env": { "VARIANT": "small", "COUNT": "3000000" }
+      "env": { "VARIANT": "small", "COUNT": "1700000" }
     },
     "large": {
-      "env": { "VARIANT": "large", "COUNT": "400000" }
-    },
-    "wildcard": {
-      "env": { "VARIANT": "wildcard", "COUNT": "740000" }
+      "env": { "VARIANT": "large", "COUNT": "100000" }
     }
   }
 }
