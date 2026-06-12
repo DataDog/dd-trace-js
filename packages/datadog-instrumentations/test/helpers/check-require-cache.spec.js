@@ -97,6 +97,17 @@ describe('check-require-cache', () => {
       }
     })
 
+    it('detects a curated framework when the cache key uses Windows separators', () => {
+      // Literal backslash key reproduces a Windows require.cache entry on any OS.
+      const restore = cacheModule('C:\\app\\node_modules\\next\\dist\\server\\next-server.js')
+      try {
+        checkForRequiredModules(false)
+        assert.ok(drainFrameworkWarnings().some(message => message.includes("'next' was loaded before dd-trace")))
+      } finally {
+        restore()
+      }
+    })
+
     it('ignores non-server files of a curated framework', () => {
       const nextWarnings = messages => messages.filter(message => message.includes("'next'")).length
 

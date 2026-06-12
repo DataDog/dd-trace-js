@@ -76,7 +76,9 @@ module.exports.checkForRequiredModules = function (debug) {
   let didWarn = false
 
   for (const pathToModule of Object.keys(require.cache)) {
-    const { pkg, path } = extractPackageAndModulePath(pathToModule)
+    // require.cache keys use the platform separator; normalize so the
+    // `node_modules/<pkg>` parsing works on Windows (backslash paths).
+    const { pkg, path } = extractPackageAndModulePath(pathToModule.replaceAll('\\', '/'))
 
     if (pkg === null) continue
 

@@ -246,21 +246,19 @@ describe('logLateLoadedFrameworks', () => {
   }
 
   afterEach(() => {
+    sinon.restore()
     delete require.cache[nextServer]
     flushFrameworkWarnings(() => {})
   })
 
   it('warns when a curated framework was loaded before the tracer', () => {
-    sinon.stub(console, 'warn')
+    const warnStub = sinon.stub(console, 'warn')
     delete require.cache[require.resolve('../src/startup-log')]
     const { setStartupLogConfig, logLateLoadedFrameworks } = require('../src/startup-log')
     collectNextWarning()
     setStartupLogConfig({ startupLogs: true })
     logLateLoadedFrameworks()
-    /* eslint-disable-next-line no-console */
-    const warnStub = /** @type {sinon.SinonStub} */ (console.warn)
     const message = warnStub.firstCall.args[0]
-    warnStub.restore()
     assert.match(message, /'next' was loaded before dd-trace/)
     assert.match(message, /--require dd-trace\/init/)
     assert.match(message, /--import dd-trace\/initialize\.mjs/)
@@ -268,30 +266,24 @@ describe('logLateLoadedFrameworks', () => {
   })
 
   it('does not warn when startupLogs is false', () => {
-    sinon.stub(console, 'warn')
+    const warnStub = sinon.stub(console, 'warn')
     delete require.cache[require.resolve('../src/startup-log')]
     const { setStartupLogConfig, logLateLoadedFrameworks } = require('../src/startup-log')
     collectNextWarning()
     setStartupLogConfig({ startupLogs: false })
     logLateLoadedFrameworks()
-    /* eslint-disable-next-line no-console */
-    const warnStub = /** @type {sinon.SinonStub} */ (console.warn)
     assert.strictEqual(warnStub.callCount, 0)
-    warnStub.restore()
   })
 
   it('drains so a second call does not repeat the warning', () => {
-    sinon.stub(console, 'warn')
+    const warnStub = sinon.stub(console, 'warn')
     delete require.cache[require.resolve('../src/startup-log')]
     const { setStartupLogConfig, logLateLoadedFrameworks } = require('../src/startup-log')
     collectNextWarning()
     setStartupLogConfig({ startupLogs: true })
     logLateLoadedFrameworks()
     logLateLoadedFrameworks()
-    /* eslint-disable-next-line no-console */
-    const warnStub = /** @type {sinon.SinonStub} */ (console.warn)
     assert.strictEqual(warnStub.callCount, 1)
-    warnStub.restore()
   })
 })
 
