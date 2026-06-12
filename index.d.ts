@@ -289,6 +289,7 @@ interface Plugins {
   "nats": tracer.plugins.nats;
   "net": tracer.plugins.net;
   "next": tracer.plugins.next;
+  "nitro": tracer.plugins.nitro;
   "nyc": tracer.plugins.nyc;
   "openai": tracer.plugins.openai;
   "opensearch": tracer.plugins.opensearch;
@@ -2562,6 +2563,12 @@ declare namespace tracer {
      * [hono](https://hono.dev/) module.
      */
     interface hono extends HttpServer {}
+
+    /**
+     * This plugin automatically instruments the
+     * [nitro](https://nitro.build/) web framework (h3 v2 based).
+     */
+    interface nitro extends HttpServer {}
 
     /**
      * This plugin automatically instruments the

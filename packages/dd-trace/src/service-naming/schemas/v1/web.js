@@ -104,6 +104,10 @@ const web = {
       opName: () => 'http.server.request',
       serviceName: identityService,
     },
+    nitro: {
+      opName: () => 'http.server.request',
+      serviceName: identityService,
+    },
   },
 }
 

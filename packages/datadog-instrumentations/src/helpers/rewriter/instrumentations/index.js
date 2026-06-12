@@ -4,6 +4,7 @@ module.exports = [
   ...require('./ai'),
   ...require('./azure-cosmos'),
   ...require('./bullmq'),
+  ...require('./h3'),
   ...require('./langchain'),
   ...require('./langgraph'),
   ...require('./modelcontextprotocol-sdk'),
