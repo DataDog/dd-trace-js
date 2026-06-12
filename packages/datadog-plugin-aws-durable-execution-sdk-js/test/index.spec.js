@@ -53,17 +53,26 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
 }, (meta) => {
   const { agent } = meta
 
-  // Run with the cross-invocation trace-context checkpoint feature (default-on) disabled,
-  // restoring the previous value afterwards.
+  // Run with the cross-invocation trace-context checkpoint feature (default-on) disabled.
+  // The feature is gated at plugin-construction time: the handler plugin subscribes to the
+  // terminate channel only when enabled, and the instrumentation wraps terminate() only while
+  // that channel has subscribers. So we disable for a single invocation by unsubscribing that
+  // one subscription, then restore it.
   // TODO: Remove this once the bug is fixed upstream in aws/aws-durable-execution-sdk-js#544.
+  const TERMINATE_CHANNEL = 'apm:aws-durable-execution-sdk-js:terminate'
+
+  function terminateSubscription () {
+    const composite = meta.tracer._pluginManager?._pluginsByName?.['aws-durable-execution-sdk-js']
+    return composite?.handler?._subscriptions?.find(sub => sub._channel?.name === TERMINATE_CHANNEL)
+  }
+
   async function withCrossInvocationTracingDisabled (fn) {
-    const config = meta.tracer._tracer._config
-    const previous = config.DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED
-    config.DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED = false
+    const subscription = terminateSubscription()
+    subscription?.disable()
     try {
       return await fn()
     } finally {
-      config.DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED = previous
+      subscription?.enable()
     }
   }
 

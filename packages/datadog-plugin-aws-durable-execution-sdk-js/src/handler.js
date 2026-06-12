@@ -16,11 +16,24 @@ const PENDING_TERMINATION_REASONS = new Set([
 
 const DEFAULT_TERMINATION_REASON = 'OPERATION_TERMINATED'
 
+// Published by the instrumentation when the SDK's terminationManager.terminate() is called.
+// The instrumentation owns the wrapping; this plugin only reacts.
+const TERMINATE_CHANNEL = 'apm:aws-durable-execution-sdk-js:terminate'
+
 class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
   static id = 'aws-durable-execution-sdk-js'
   static type = 'serverless'
   static kind = 'internal'
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:withDurableExecution'
+
+  constructor (...args) {
+    super(...args)
+    // Gate the subscription on the feature flag: the instrumentation only wraps terminate() while
+    // this channel has subscribers, so not subscribing keeps the wrapping off entirely.
+    if (this._tracerConfig.DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED) {
+      this.addSub(TERMINATE_CHANNEL, ctx => this.#onTerminate(ctx))
+    }
+  }
 
   bindStart (ctx) {
     const args = ctx.arguments || []
@@ -42,59 +55,18 @@ class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
       meta,
     }, ctx)
 
-    if (this.#shouldInstallTerminationHook(ctx)) {
-      this.#installTerminationCheckpointHook(ctx, event)
-    }
-
     return ctx.currentStore
   }
 
-  // Gate for the cross-invocation checkpoint hook: the feature must be enabled
-  // and every input the hook wraps (user handler, termination manager, execute
-  // span) must be present.
-  #shouldInstallTerminationHook (ctx) {
-    const args = ctx.arguments || []
-    return this._tracerConfig.DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED &&
-      typeof args[5] === 'function' &&
-      typeof args[2]?.terminationManager?.terminate === 'function' &&
-      ctx.currentStore?.span !== undefined
-  }
-
-  // Wrap the user handler so we can capture the SDK's DurableContext, and
-  // install a hook on the termination manager so that when the execution
-  // suspends (PENDING) we persist the current trace context as a `_datadog`
-  // checkpoint, which subsequent invocations consume to extract the parent
-  // trace context. Preconditions are enforced by #shouldInstallTerminationHook.
-  #installTerminationCheckpointHook (ctx, event) {
-    const args = ctx.arguments
-    const span = ctx.currentStore.span
-    const terminationManager = args[2].terminationManager
-
-    const state = {
-      durableContext: undefined,
-      firstExecutionSpanId: span.context?.()?.toSpanId?.(),
-      invocationEvent: event,
-      savePromise: undefined,
-      saved: false,
-      span,
-      tracer: this.tracer,
-    }
-
-    const originalHandler = args[5]
-    args[5] = function (...handlerArgs) {
-      state.durableContext = handlerArgs[1]
-      return originalHandler.apply(this, handlerArgs)
-    }
-
-    const originalTerminate = terminationManager.terminate
-    terminationManager.terminate = function (...terminateArgs) {
-      const reason = terminateArgs[0]?.reason ?? DEFAULT_TERMINATION_REASON
-      if (PENDING_TERMINATION_REASONS.has(reason)) {
-        // Must enqueue checkpoint updates before the checkpoint manager flips to terminating.
-        void maybeSaveCheckpoint(state)
-      }
-      return originalTerminate.apply(this, terminateArgs)
-    }
+  // Fired (synchronously, before the SDK's terminate() runs) when the execution suspends. On a
+  // PENDING reason we persist the current trace context as a `_datadog` checkpoint, which
+  // subsequent invocations consume to extract the parent trace context. `ctx` is the shared
+  // withDurableExecution context: bindStart put the execute span on it, and the instrumentation
+  // put the captured durableContext and termination reason on it.
+  #onTerminate (ctx) {
+    const reason = ctx.terminationReason ?? DEFAULT_TERMINATION_REASON
+    if (!PENDING_TERMINATION_REASONS.has(reason)) return
+    void maybeSaveCheckpoint(this.tracer, ctx)
   }
 
   asyncEnd (ctx) {
@@ -124,26 +96,32 @@ function finishOpenChildSpans (executeSpan) {
   }
 }
 
-function maybeSaveCheckpoint (state) {
-  if (state.saved || state.savePromise) return state.savePromise
-  if (!state.tracer || !state.span || !state.durableContext) return
+// Save state is kept on the shared `ctx` so repeated terminate() calls within one execution
+// save at most once. The execute span is also the anchor we propagate, so its span id is the
+// `firstExecutionSpanId` passed downstream.
+function maybeSaveCheckpoint (tracer, ctx) {
+  if (ctx.checkpointSaved || ctx.checkpointSavePromise) return ctx.checkpointSavePromise
 
-  state.savePromise = saveTraceContextCheckpointIfUpdated(
-    state.tracer,
-    state.span,
-    state.durableContext,
-    state.firstExecutionSpanId,
-    state.invocationEvent,
+  const span = ctx.currentStore?.span
+  const durableContext = ctx.durableContext
+  if (!span || !durableContext) return
+
+  ctx.checkpointSavePromise = saveTraceContextCheckpointIfUpdated(
+    tracer,
+    span,
+    durableContext,
+    span.context?.()?.toSpanId?.(),
+    ctx.arguments?.[0],
     /* istanbul ignore next: defense-in-depth — saveTraceContextCheckpointIfUpdated catches
        internally and never rejects, so this handler is unreachable in practice */
   ).catch(() => {
     // Best-effort — never break customer workloads.
   }).finally(() => {
-    state.saved = true
-    state.savePromise = undefined
+    ctx.checkpointSaved = true
+    ctx.checkpointSavePromise = undefined
   })
 
-  return state.savePromise
+  return ctx.checkpointSavePromise
 }
 
 module.exports = AwsDurableExecutionSdkJsHandlerPlugin
