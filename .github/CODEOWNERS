@@ -303,6 +303,7 @@
 /benchmark/sirun/* @DataDog/lang-platform-js
 /benchmark/stubs/ @DataDog/lang-platform-js
 /benchmark/sirun/async_hooks/ @DataDog/lang-platform-js
+/benchmark/sirun/dogstatsd/ @DataDog/lang-platform-js
 /benchmark/sirun/encoding/ @DataDog/lang-platform-js
 /benchmark/sirun/exporting-pipeline/ @DataDog/lang-platform-js
 /benchmark/sirun/id/ @DataDog/lang-platform-js
