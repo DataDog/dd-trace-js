@@ -19,6 +19,10 @@ describe('FlaggingProvider', () => {
   let mockEvalMetricsHookClass
   let mockSpanEnrichmentHook
   let mockSpanEnrichmentHookClass
+  let mockFlagEvalWriter
+  let mockFlagEvalWriterClass
+  let mockFlagEvalEVPHook
+  let mockFlagEvalEVPHookClass
 
   beforeEach(() => {
     mockTracer = {
@@ -63,6 +67,17 @@ describe('FlaggingProvider', () => {
     }
     mockSpanEnrichmentHookClass = sinon.stub().returns(mockSpanEnrichmentHook)
 
+    mockFlagEvalWriter = {
+      destroy: sinon.spy(),
+    }
+    mockFlagEvalWriterClass = sinon.stub().returns(mockFlagEvalWriter)
+
+    mockFlagEvalEVPHook = {}
+    mockFlagEvalEVPHookClass = sinon.stub().returns(mockFlagEvalEVPHook)
+
+    // Ensure killswitch is not set (default = enabled) for each test
+    delete process.env.DD_FLAGGING_EVALUATION_COUNTS_ENABLED
+
     FlaggingProvider = proxyquire('../../src/openfeature/flagging_provider', {
       'dc-polyfill': {
         channel: channelStub,
@@ -70,6 +85,8 @@ describe('FlaggingProvider', () => {
       '../log': log,
       './eval-metrics-hook': mockEvalMetricsHookClass,
       './span-enrichment-hook': mockSpanEnrichmentHookClass,
+      './writers/flag_evaluations': mockFlagEvalWriterClass,
+      './writers/flag_eval_hook': mockFlagEvalEVPHookClass,
     })
   })
 
@@ -153,20 +170,46 @@ describe('FlaggingProvider', () => {
       sinon.assert.notCalled(mockSpanEnrichmentHookClass)
     })
 
-    it('should register EvalMetricsHook and SpanEnrichmentHook as hooks when enabled', () => {
+    it('should register EvalMetricsHook, FlagEvalEVPHook and SpanEnrichmentHook when all enabled', () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+      assert.strictEqual(provider.hooks.length, 3)
+      assert.strictEqual(provider.hooks[0], mockEvalMetricsHook)
+      assert.strictEqual(provider.hooks[1], mockFlagEvalEVPHook)
+      assert.strictEqual(provider.hooks[2], mockSpanEnrichmentHook)
+    })
+
+    it('should only register EvalMetricsHook + FlagEvalEVPHook when span enrichment is disabled', () => {
+      mockConfig.experimental.flaggingProvider.spanEnrichment.enabled = false
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
       assert.strictEqual(provider.hooks.length, 2)
       assert.strictEqual(provider.hooks[0], mockEvalMetricsHook)
-      assert.strictEqual(provider.hooks[1], mockSpanEnrichmentHook)
+      assert.strictEqual(provider.hooks[1], mockFlagEvalEVPHook)
     })
 
-    it('should only register EvalMetricsHook when span enrichment is disabled', () => {
-      mockConfig.experimental.flaggingProvider.spanEnrichment.enabled = false
-      const provider = new FlaggingProvider(mockTracer, mockConfig)
+    it('should not register FlagEvalEVPHook when DD_FLAGGING_EVALUATION_COUNTS_ENABLED=false', () => {
+      process.env.DD_FLAGGING_EVALUATION_COUNTS_ENABLED = 'false'
+      try {
+        const provider = new FlaggingProvider(mockTracer, mockConfig)
+        // OTel hook always registered (PRES-01); SpanEnrichment also
+        assert.ok(!provider.hooks.includes(mockFlagEvalEVPHook),
+          'EVP hook must not be registered when killswitch is false')
+        sinon.assert.notCalled(mockFlagEvalWriterClass)
+      } finally {
+        delete process.env.DD_FLAGGING_EVALUATION_COUNTS_ENABLED
+      }
+    })
 
-      assert.strictEqual(provider.hooks.length, 1)
-      assert.strictEqual(provider.hooks[0], mockEvalMetricsHook)
+    it('OTel EvalMetricsHook is always registered regardless of killswitch (PRES-01)', () => {
+      process.env.DD_FLAGGING_EVALUATION_COUNTS_ENABLED = 'false'
+      try {
+        const provider = new FlaggingProvider(mockTracer, mockConfig)
+        assert.ok(provider.hooks.includes(mockEvalMetricsHook),
+          'OTel EvalMetricsHook must always be registered (PRES-01)')
+      } finally {
+        delete process.env.DD_FLAGGING_EVALUATION_COUNTS_ENABLED
+      }
     })
 
     it('should log info message when span enrichment is enabled', () => {
@@ -190,6 +233,14 @@ describe('FlaggingProvider', () => {
       provider.onClose()
 
       sinon.assert.calledOnce(mockSpanEnrichmentHook.destroy)
+    })
+
+    it('should call destroy on FlagEvaluationsWriter when EVP enabled', () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+      provider.onClose()
+
+      sinon.assert.calledOnce(mockFlagEvalWriter.destroy)
     })
 
     it('should not throw when span enrichment is disabled', () => {
