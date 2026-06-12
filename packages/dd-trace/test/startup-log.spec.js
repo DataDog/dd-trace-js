@@ -226,6 +226,75 @@ describe('startup log guards', () => {
   })
 })
 
+describe('logLateLoadedFrameworks', () => {
+  const Module = require('node:module')
+  const path = require('node:path')
+  const {
+    checkForRequiredModules,
+    flushFrameworkWarnings,
+  } = require('../../datadog-instrumentations/src/helpers/check-require-cache')
+  const nextServer = path.join('/app', 'node_modules', 'next', 'dist', 'server', 'next-server.js')
+
+  // Reproduce the detection step: cache next's server module, then run the scan
+  // that collects the warning logLateLoadedFrameworks later surfaces.
+  function collectNextWarning () {
+    const fakeModule = new Module(nextServer)
+    fakeModule.exports = {}
+    fakeModule.loaded = true
+    require.cache[nextServer] = fakeModule
+    checkForRequiredModules(false)
+  }
+
+  afterEach(() => {
+    delete require.cache[nextServer]
+    flushFrameworkWarnings(() => {})
+  })
+
+  it('warns when a curated framework was loaded before the tracer', () => {
+    sinon.stub(console, 'warn')
+    delete require.cache[require.resolve('../src/startup-log')]
+    const { setStartupLogConfig, logLateLoadedFrameworks } = require('../src/startup-log')
+    collectNextWarning()
+    setStartupLogConfig({ startupLogs: true })
+    logLateLoadedFrameworks()
+    /* eslint-disable-next-line no-console */
+    const warnStub = /** @type {sinon.SinonStub} */ (console.warn)
+    const message = warnStub.firstCall.args[0]
+    warnStub.restore()
+    assert.match(message, /'next' was loaded before dd-trace/)
+    assert.match(message, /--require dd-trace\/init/)
+    assert.match(message, /--import dd-trace\/initialize\.mjs/)
+    assert.match(message, /serverExternalPackages/)
+  })
+
+  it('does not warn when startupLogs is false', () => {
+    sinon.stub(console, 'warn')
+    delete require.cache[require.resolve('../src/startup-log')]
+    const { setStartupLogConfig, logLateLoadedFrameworks } = require('../src/startup-log')
+    collectNextWarning()
+    setStartupLogConfig({ startupLogs: false })
+    logLateLoadedFrameworks()
+    /* eslint-disable-next-line no-console */
+    const warnStub = /** @type {sinon.SinonStub} */ (console.warn)
+    assert.strictEqual(warnStub.callCount, 0)
+    warnStub.restore()
+  })
+
+  it('drains so a second call does not repeat the warning', () => {
+    sinon.stub(console, 'warn')
+    delete require.cache[require.resolve('../src/startup-log')]
+    const { setStartupLogConfig, logLateLoadedFrameworks } = require('../src/startup-log')
+    collectNextWarning()
+    setStartupLogConfig({ startupLogs: true })
+    logLateLoadedFrameworks()
+    logLateLoadedFrameworks()
+    /* eslint-disable-next-line no-console */
+    const warnStub = /** @type {sinon.SinonStub} */ (console.warn)
+    assert.strictEqual(warnStub.callCount, 1)
+    warnStub.restore()
+  })
+})
+
 describe('data_streams_enabled', () => {
   afterEach(() => {
     delete process.env.DD_DATA_STREAMS_ENABLED
