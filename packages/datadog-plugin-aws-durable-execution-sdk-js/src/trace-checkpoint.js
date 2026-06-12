@@ -60,6 +60,19 @@ function overrideParentId (headers, parentId) {
 }
 
 /**
+ * Whether the current trace context warrants a new checkpoint over the previously-saved one.
+ * @param {Record<string, string>} currentHeaders
+ * @param {Record<string, string>} previousHeaders
+ * @returns {boolean}
+ */
+function needsCheckpointUpdate (currentHeaders, previousHeaders) {
+  for (const key of Object.keys(currentHeaders)) {
+    if (currentHeaders[key] !== previousHeaders[key]) return true
+  }
+  return false
+}
+
+/**
  * Find the checkpoint with the highest N for _datadog_{N} in the event's operations.
  * @param {unknown} event
  * @returns {{ checkpointNumber: number, operation: object } | undefined}
@@ -186,16 +199,15 @@ async function saveTraceContextCheckpointIfUpdated (
 
     let newNumber
     if (latest) {
-      const latestHeaders = parseCheckpointPayload(latest.operation)
-      if (!latestHeaders) return
+      const previousHeaders = parseCheckpointPayload(latest.operation)
+      if (!previousHeaders) return
 
-      // Compare trace contexts ignoring x-datadog-parent-id, which always changes
-      // since it reflects the active span at save time. The propagator emits keys
-      // in a deterministic order, so JSON.stringify is a stable equality check.
-      const anchoredSpanId = latestHeaders['x-datadog-parent-id']
+      // x-datadog-parent-id reflects the active span at save time and always differs, so exclude it
+      // from the comparison. Capture the previous anchor first to carry it forward on a real update.
+      // needsCheckpointUpdate only reads currentHeaders' keys, so deleting it from there is enough.
+      const anchoredSpanId = previousHeaders['x-datadog-parent-id']
       delete currentHeaders['x-datadog-parent-id']
-      delete latestHeaders['x-datadog-parent-id']
-      if (JSON.stringify(currentHeaders) === JSON.stringify(latestHeaders)) return
+      if (!needsCheckpointUpdate(currentHeaders, previousHeaders)) return
 
       newNumber = latest.checkpointNumber + 1
       overrideParentId(currentHeaders, anchoredSpanId)
