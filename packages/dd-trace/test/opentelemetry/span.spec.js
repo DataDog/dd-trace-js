@@ -284,11 +284,12 @@ describe('OTel Span', () => {
     })
   })
 
-  it('should update span name', () => {
-    const span = makeSpan('name')
-    span.updateName('new name')
+  it('updateName should set the DD resource name and keep span.name in sync', () => {
+    const span = makeSpan('original name')
+    span.updateName('updated name')
 
-    assert.strictEqual(span.name, 'new name')
+    assert.strictEqual(span._ddSpan.context().getTag(RESOURCE_NAME), 'updated name')
+    assert.strictEqual(span.name, 'updated name')
   })
 
   it('updateName is a no-op after end()', () => {

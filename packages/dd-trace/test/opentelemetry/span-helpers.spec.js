@@ -17,7 +17,6 @@ const {
   recordException,
   setOtelAttribute,
   setOtelAttributes,
-  setOtelOperationName,
   setOtelResource,
 } = require('../../src/opentelemetry/span-helpers')
 
@@ -84,7 +83,6 @@ describe('OTel bridge helpers', () => {
       ])
       addOtelEvent(ddSpan, 'evt', { code: 42 })
       recordException(ddSpan, new Error('boom'))
-      setOtelOperationName(ddSpan, 'GET /users')
       setOtelResource(ddSpan, 'GET /users')
 
       assert.deepStrictEqual(ddSpan.tags, {})
@@ -302,15 +300,7 @@ describe('OTel bridge helpers', () => {
     })
   })
 
-  describe('setOtelOperationName vs setOtelResource', () => {
-    it('setOtelOperationName routes to setOperationName on the DD span', () => {
-      const ddSpan = createMockDdSpan()
-      setOtelOperationName(ddSpan, 'GET /users')
-
-      assert.strictEqual(ddSpan.operationName, 'GET /users')
-      assert.strictEqual(ddSpan.tags['resource.name'], undefined)
-    })
-
+  describe('setOtelResource', () => {
     it('setOtelResource routes to the resource.name tag, not the operation name', () => {
       const ddSpan = createMockDdSpan()
       setOtelResource(ddSpan, 'GET /users')

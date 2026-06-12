@@ -15,7 +15,7 @@ const kinds = require('../../../../ext/kinds')
 const id = require('../id')
 const BridgeSpanBase = require('./bridge-span-base')
 const SpanContext = require('./span_context')
-const { setOtelOperationName } = require('./span-helpers')
+const { setOtelResource } = require('./span-helpers')
 
 const spanKindNames = {
   [api.SpanKind.INTERNAL]: kinds.INTERNAL,
@@ -118,6 +118,8 @@ function spanNameMapper (spanName, kind, attributes) {
  * surface; the underlying DD span carries the lifecycle.
  */
 class Span extends BridgeSpanBase {
+  #otelName
+
   /**
    * @param {import('./tracer')} parentTracer
    * @param {import('@opentelemetry/api').Context} context
@@ -165,6 +167,7 @@ class Span extends BridgeSpanBase {
 
     this._parentTracer = parentTracer
     this._context = context
+    this.#otelName = spanName || this._ddSpan.context()._name
 
     // NOTE: Need to grab the value before setting it on the span because the
     // math for computing opentracing timestamps is apparently lossy...
@@ -192,7 +195,7 @@ class Span extends BridgeSpanBase {
   }
 
   get name () {
-    return this._ddSpan.context()._name
+    return this.#otelName
   }
 
   spanContext () {
@@ -223,7 +226,9 @@ class Span extends BridgeSpanBase {
    * @param {string} name
    */
   updateName (name) {
-    setOtelOperationName(this._ddSpan, name)
+    if (this.ended) return this
+    this.#otelName = name
+    setOtelResource(this._ddSpan, name)
     return this
   }
 
