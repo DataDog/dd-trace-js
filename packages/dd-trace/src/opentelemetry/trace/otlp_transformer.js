@@ -87,13 +87,17 @@ const EXCLUDED_META_KEYS = new Set([
  * @augments OtlpTransformerBase
  */
 class OtlpTraceTransformer extends OtlpTransformerBase {
+  #otelTraceSemanticsEnabled
+
   /**
    * Creates a new OtlpTraceTransformer instance.
    *
    * @param {import('@opentelemetry/api').Attributes} resourceAttributes - Resource attributes
+   * @param {boolean} [otelTraceSemanticsEnabled] - When true, do not emit Datadog-only attributes as span attributes
    */
-  constructor (resourceAttributes) {
+  constructor (resourceAttributes, otelTraceSemanticsEnabled = false) {
     super(resourceAttributes, 'http/json', 'traces')
+    this.#otelTraceSemanticsEnabled = otelTraceSemanticsEnabled
   }
 
   /**
@@ -184,18 +188,23 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
   #buildAttributes (span) {
     const attributes = []
 
-    // Add top-level DD span fields as OTLP attributes
-    if (span.service) {
-      attributes.push({ key: 'service.name', value: { stringValue: span.service } })
-    }
-    if (span.name) {
-      attributes.push({ key: 'operation.name', value: { stringValue: span.name } })
-    }
-    if (span.resource) {
-      attributes.push({ key: 'resource.name', value: { stringValue: span.resource } })
-    }
-    if (span.type) {
-      attributes.push({ key: 'span.type', value: { stringValue: span.type } })
+    // Add top-level DD span fields as OTLP attributes.
+    // When OTel trace semantics are enabled, these Datadog-only concepts
+    // are not added to the span attributes so the output conforms to pure
+    // OpenTelemetry semantics.
+    if (!this.#otelTraceSemanticsEnabled) {
+      if (span.service) {
+        attributes.push({ key: 'service.name', value: { stringValue: span.service } })
+      }
+      if (span.name) {
+        attributes.push({ key: 'operation.name', value: { stringValue: span.name } })
+      }
+      if (span.resource) {
+        attributes.push({ key: 'resource.name', value: { stringValue: span.resource } })
+      }
+      if (span.type) {
+        attributes.push({ key: 'span.type', value: { stringValue: span.type } })
+      }
     }
 
     // Add meta string tags, skipping keys that map to dedicated OTLP fields

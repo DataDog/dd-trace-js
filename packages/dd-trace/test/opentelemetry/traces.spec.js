@@ -556,6 +556,40 @@ describe('OpenTelemetry Traces', () => {
         assert.strictEqual(otlpSpan.traceId, '1234567890abcdef1234567890abcdef')
       })
     })
+
+    describe('otelTraceSemanticsEnabled', () => {
+      it('omits service.name, operation.name, resource.name, span.type, and span.kind from attributes', () => {
+        const transformer = new OtlpTraceTransformer({}, true)
+        const span = createMockSpan({ type: 'web', meta: { 'span.kind': 'server' } })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]
+        const attrs = extractAttrs(otlpSpan.attributes)
+
+        assert.strictEqual(attrs['service.name'], undefined)
+        assert.strictEqual(attrs['operation.name'], undefined)
+        assert.strictEqual(attrs['resource.name'], undefined)
+        assert.strictEqual(attrs['span.type'], undefined)
+        assert.strictEqual(attrs['span.kind'], undefined)
+
+        assert.strictEqual(otlpSpan.kind, 2) // SPAN_KIND_SERVER — kind field still set
+      })
+
+      it('still emits non-DD meta tags and metrics as attributes', () => {
+        const transformer = new OtlpTraceTransformer({}, true)
+        const span = createMockSpan({
+          meta: { 'span.kind': 'server', 'http.method': 'GET', 'http.url': 'http://localhost/api' },
+          metrics: { 'http.status_code': 200 },
+        })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const attrs = extractAttrs(decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes)
+
+        assert.strictEqual(attrs['http.method'], 'GET')
+        assert.strictEqual(attrs['http.url'], 'http://localhost/api')
+        assert.strictEqual(attrs['http.status_code'], 200)
+      })
+    })
   })
 
   describe('Exporter', () => {
