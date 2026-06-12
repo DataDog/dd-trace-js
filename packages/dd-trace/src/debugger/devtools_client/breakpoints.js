@@ -269,6 +269,8 @@ async function reEvaluateProbe (probe) {
     if (probeToLocation.has(probe.id)) {
       await removeBreakpoint(probe)
     }
+    // TODO: Revisit diagnostic status handling for probes that recover during re-evaluation. A probe can initially
+    // report ERROR because no script matched, then attach successfully here without reporting INSTALLED.
     await addBreakpoint(probe)
   }
 }
