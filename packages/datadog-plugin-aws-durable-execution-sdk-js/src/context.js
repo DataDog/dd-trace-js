@@ -2,7 +2,7 @@
 
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const { addOpMeta, unwrapDurableError } = require('./util')
+const { addOpMeta, getOperationAttempt, unwrapDurableError } = require('./util')
 
 // Span names whose direct children must keep the default resource.
 // These can have very high cardinality which is undesireable in the resource.
@@ -43,10 +43,15 @@ class BaseContextPlugin extends TracingPlugin {
     }
     addOpMeta(meta, ctx.self)
 
+    const metrics = this.constructor.retryable
+      ? { 'aws.durable.operation_attempt': getOperationAttempt(ctx.self) }
+      : undefined
+
     this.startSpan(spanName, {
       resource,
       kind: this.constructor.kind,
       meta,
+      metrics,
     }, ctx)
 
     return ctx.currentStore
@@ -71,11 +76,12 @@ class BaseContextPlugin extends TracingPlugin {
   }
 }
 
-function makeContextPlugin (method, spanName) {
+function makeContextPlugin (method, spanName, { retryable = false } = {}) {
   return class extends BaseContextPlugin {
     static prefix = `tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_${method}`
     static settleChannel = `apm:aws-durable-execution-sdk-js:${method}:settle`
     static spanName = spanName
+    static retryable = retryable
   }
 }
 
@@ -103,9 +109,9 @@ function getRunInChildContextSubType (ctx) {
 }
 
 module.exports = {
-  step: makeContextPlugin('step', 'aws.durable.step'),
+  step: makeContextPlugin('step', 'aws.durable.step', { retryable: true }),
   wait: makeContextPlugin('wait', 'aws.durable.wait'),
-  waitForCondition: makeContextPlugin('waitForCondition', 'aws.durable.wait_for_condition'),
+  waitForCondition: makeContextPlugin('waitForCondition', 'aws.durable.wait_for_condition', { retryable: true }),
   waitForCallback: makeContextPlugin('waitForCallback', 'aws.durable.wait_for_callback'),
   createCallback: makeContextPlugin('createCallback', 'aws.durable.create_callback'),
   map: makeContextPlugin('map', 'aws.durable.map'),

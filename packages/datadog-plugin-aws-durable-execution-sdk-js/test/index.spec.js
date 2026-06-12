@@ -125,6 +125,12 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     })
   })
 
+  // Derived from the plugin's static retryable property — stays in sync automatically.
+  const contextPlugins = require('../src/context')
+  const RETRYABLE_SPAN_NAMES = new Set(
+    Object.values(contextPlugins).filter(cls => cls.retryable).map(cls => cls.spanName)
+  )
+
   for (const { span, operationName, run, opts, disableCrossInvocationTracing } of [
     {
       span: 'aws.durable.step',
@@ -183,6 +189,14 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
         })
         assert.match(matched.meta?.['aws.durable.operation_id'] ?? '', OPERATION_ID_RE)
         assert.notEqual(matched.error, 1, `${span} happy path should not be errored`)
+        if (RETRYABLE_SPAN_NAMES.has(span)) {
+          // 0-indexed: original attempt has 0 prior failures.
+          assert.equal(matched.metrics?.['aws.durable.operation_attempt'], 0,
+            `${span} should carry aws.durable.operation_attempt`)
+        } else {
+          assert.equal(matched.metrics?.['aws.durable.operation_attempt'], undefined,
+            `${span} must not carry aws.durable.operation_attempt`)
+        }
       })
       const invoke = () => invokeHandler(async (event, ctx) => run(ctx), opts)
       await (disableCrossInvocationTracing ? withCrossInvocationTracingDisabled(invoke) : invoke())
@@ -341,18 +355,25 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
   })
 
   it('checkpoint plugin: fail-then-succeed retry produces a span per attempt', async () => {
-    const failedAttemptSpan = agent.assertSomeTraces(traces => assertSpanByName(traces, {
-      name: 'aws.durable.step',
-      resource: 'retry-step',
-      meta: { 'error.type': 'Error', 'error.message': 'transient failure' },
-      error: 1,
-    }))
+    const failedAttemptSpan = agent.assertSomeTraces(traces => {
+      const span = assertSpanByName(traces, {
+        name: 'aws.durable.step',
+        resource: 'retry-step',
+        meta: { 'error.type': 'Error', 'error.message': 'transient failure' },
+        error: 1,
+      })
+      // Original attempt: 0 prior failed attempts.
+      assert.equal(span.metrics?.['aws.durable.operation_attempt'], 0,
+        'failed original attempt should carry aws.durable.operation_attempt=0')
+    })
     const succeededAttemptSpan = agent.assertSomeTraces(traces => {
       const span = traces.flat().find(s =>
-        s.name === 'aws.durable.step' && s.resource === 'retry-step'
+        s.name === 'aws.durable.step' && s.resource === 'retry-step' && s.error !== 1
       )
-      assert.ok(span, 'expected step span')
-      assert.notEqual(span.error, 1, 'successful retry attempt must not be tagged as errored')
+      assert.ok(span, 'expected successful step span')
+      // First retry: 1 prior failed attempt.
+      assert.equal(span.metrics?.['aws.durable.operation_attempt'], 1,
+        'successful retry attempt should carry aws.durable.operation_attempt=1')
     }, { timeoutMs: 5000 })
     const successfulExecuteSpan = agent.assertSomeTraces(traces => assertSpanByName(traces, {
       name: 'aws.durable.execute',
@@ -371,6 +392,58 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     assert.equal(attempts, 2, 'expected the step body to be called twice (initial + retry)')
 
     return Promise.all([failedAttemptSpan, succeededAttemptSpan, successfulExecuteSpan])
+  })
+
+  it('checkpoint plugin: replayed step that succeeded first try reports operation_attempt=0', async () => {
+    const replayedStep = agent.assertSomeTraces(traces => {
+      const span = traces.flat().find(s =>
+        s.name === 'aws.durable.step' &&
+        s.resource === 'first-try-step' &&
+        s.meta?.['aws.durable.replayed'] === 'true'
+      )
+      assert.ok(span, 'expected a replayed first-try-step span')
+      // The step succeeded on its first attempt. On replay the SDK reloads the
+      // SUCCEEDED checkpoint, whose StepDetails.Attempt is the 1-indexed number of
+      // the attempt that succeeded (1), not the "prior failed attempts" count used
+      // on the live run (0). We must normalize back to 0 so the replay agrees with
+      // the original attempt span.
+      assert.equal(span.metrics?.['aws.durable.operation_attempt'], 0,
+        'replayed first-try step should carry aws.durable.operation_attempt=0')
+    }, { timeoutMs: 5000 })
+
+    await invokeHandler(async (event, ctx) => {
+      await ctx.step('first-try-step', async () => 'ok')
+      await ctx.wait('suspend-trigger', { seconds: 1 })
+    })
+
+    return replayedStep
+  })
+
+  // waitForCondition is the other retryable op. Its StepDetails.Attempt follows the
+  // same convention as step (live: prior-attempt count; SUCCEEDED replay: 1-indexed
+  // attempt that succeeded), so it must get the same replay normalization. This guards
+  // against the SDK diverging the two operations' attempt semantics in the future.
+  it('checkpoint plugin: replayed waitForCondition that passed first check reports operation_attempt=0', async () => {
+    const replayedCondition = agent.assertSomeTraces(traces => {
+      const span = traces.flat().find(s =>
+        s.name === 'aws.durable.wait_for_condition' &&
+        s.resource === 'first-check-condition' &&
+        s.meta?.['aws.durable.replayed'] === 'true'
+      )
+      assert.ok(span, 'expected a replayed first-check-condition span')
+      assert.equal(span.metrics?.['aws.durable.operation_attempt'], 0,
+        'replayed first-check waitForCondition should carry aws.durable.operation_attempt=0')
+    }, { timeoutMs: 5000 })
+
+    await invokeHandler(async (event, ctx) => {
+      await ctx.waitForCondition('first-check-condition', async () => 'done', {
+        initialState: 'pending',
+        waitStrategy: () => ({ shouldContinue: false }),
+      })
+      await ctx.wait('suspend-trigger', { seconds: 1 })
+    })
+
+    return replayedCondition
   })
 
   // Regression coverage for the SDK "safe paths" the trace-checkpoint hook relies on
