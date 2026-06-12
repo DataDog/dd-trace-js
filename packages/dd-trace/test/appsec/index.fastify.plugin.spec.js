@@ -643,7 +643,7 @@ describe('Api Security - Fastify', () => {
     let config, server, axios
 
     before(() => {
-      return agent.load(['fastify', 'http'], { client: false })
+      return agent.load(['fastify', 'http'], { client: false }, { appsec: { enabled: true } })
     })
 
     before((done) => {
