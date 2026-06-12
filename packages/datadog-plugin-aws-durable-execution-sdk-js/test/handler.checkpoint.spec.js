@@ -18,12 +18,12 @@ const terminateCh = channel(TERMINATE_CHANNEL)
 // one test never reaches a plugin left subscribed by another.
 const enabledPlugins = []
 
-function loadHandlerPlugin (checkpointSaveCalls) {
+function loadHandlerPlugin (checkpointSaveCalls, impl) {
   return proxyquire('../src/handler', {
     './trace-checkpoint': {
-      saveTraceContextCheckpointIfUpdated: async (...args) => {
+      saveTraceContextCheckpointIfUpdated: impl ?? (async (...args) => {
         checkpointSaveCalls.push(args)
-      },
+      }),
     },
   })
 }
@@ -174,6 +174,21 @@ describe('handler checkpoint hook', () => {
     await setImmediate()
 
     assert.equal(checkpointSaveCalls.length, 0)
+  })
+
+  it('swallows a rejected save at the fire-and-forget boundary', async () => {
+    const Plugin = loadHandlerPlugin([], async () => { throw new Error('SDK checkpoint failure') })
+    const plugin = buildPlugin(Plugin, {})
+
+    const { ctx } = buildCtx(async () => new Promise(() => {}))
+    runToTermination(plugin, ctx, {
+      durableContext: { checkpoint: { checkpoint: async () => {} } },
+      reason: 'CALLBACK_PENDING',
+    })
+
+    // The boundary must turn the rejection into a resolved promise — otherwise `void`-invoking it
+    // in #onTerminate would surface as an unhandled rejection in customer code.
+    await assert.doesNotReject(ctx.checkpointSavePromise)
   })
 
   describe('DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED', () => {

@@ -1,5 +1,6 @@
 'use strict'
 
+const log = require('../../dd-trace/src/log')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const { saveTraceContextCheckpointIfUpdated } = require('./trace-checkpoint')
 
@@ -106,13 +107,17 @@ function maybeSaveCheckpoint (tracer, ctx) {
   const durableContext = ctx.durableContext
   if (!span || !durableContext) return
 
+  // Fire-and-forget boundary (#onTerminate calls us with `void`): swallow every failure here so a
+  // rejected checkpoint-manager call can never surface as an unhandled rejection in customer code.
   ctx.checkpointSavePromise = saveTraceContextCheckpointIfUpdated(
     tracer,
     span,
     durableContext,
     span.context?.()?.toSpanId?.(),
     ctx.arguments?.[0],
-  ).finally(() => {
+  ).catch(error => {
+    log.debug('Failed to save trace context checkpoint', error)
+  }).finally(() => {
     ctx.checkpointSaved = true
     ctx.checkpointSavePromise = undefined
   })
