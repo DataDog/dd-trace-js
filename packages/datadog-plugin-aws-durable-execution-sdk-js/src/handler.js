@@ -112,8 +112,6 @@ function maybeSaveCheckpoint (tracer, ctx) {
     durableContext,
     span.context?.()?.toSpanId?.(),
     ctx.arguments?.[0],
-    /* istanbul ignore next: defense-in-depth — saveTraceContextCheckpointIfUpdated catches
-       internally and never rejects, so this handler is unreachable in practice */
   ).finally(() => {
     ctx.checkpointSaved = true
     ctx.checkpointSavePromise = undefined
