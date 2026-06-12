@@ -396,6 +396,33 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     return replayedStep
   })
 
+  // waitForCondition is the other retryable op. Its StepDetails.Attempt follows the
+  // same convention as step (live: prior-attempt count; SUCCEEDED replay: 1-indexed
+  // attempt that succeeded), so it must get the same replay normalization. This guards
+  // against the SDK diverging the two operations' attempt semantics in the future.
+  it('checkpoint plugin: replayed waitForCondition that passed first check reports operation_attempt=0', async () => {
+    const replayedCondition = agent.assertSomeTraces(traces => {
+      const span = traces.flat().find(s =>
+        s.name === 'aws.durable.wait_for_condition' &&
+        s.resource === 'first-check-condition' &&
+        s.meta?.['aws.durable.replayed'] === 'true'
+      )
+      assert.ok(span, 'expected a replayed first-check-condition span')
+      assert.equal(span.metrics?.['aws.durable.operation_attempt'], 0,
+        'replayed first-check waitForCondition should carry aws.durable.operation_attempt=0')
+    }, { timeoutMs: 5000 })
+
+    await invokeHandler(async (event, ctx) => {
+      await ctx.waitForCondition('first-check-condition', async () => 'done', {
+        initialState: 'pending',
+        waitStrategy: () => ({ shouldContinue: false }),
+      })
+      await ctx.wait('suspend-trigger', { seconds: 1 })
+    })
+
+    return replayedCondition
+  })
+
   // Regression coverage for the SDK "safe paths" the trace-checkpoint hook relies on
   // (see packages/datadog-plugin-aws-durable-execution-sdk-js/src/trace-checkpoint.js).
   // These exercise the real @aws/durable-execution-sdk-js + @aws/durable-execution-sdk-js-testing
