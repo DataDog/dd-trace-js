@@ -6,29 +6,26 @@ const TextMapPropagator = require('../../dd-trace/src/opentracing/propagation/te
 
 const CHECKPOINT_NAME_PREFIX = '_datadog_'
 
-// Per-tracer-config cache for a propagator that injects only Datadog-style
-// headers (`x-datadog-*`) regardless of the user's `DD_TRACE_PROPAGATION_STYLE_INJECT`.
-// Checkpoints are written and read entirely by Datadog code, so honoring user
-// style preferences would only complicate the payload contract.
-const datadogOnlyPropagatorCache = new WeakMap()
+// Propagator that injects only Datadog-style headers (`x-datadog-*`) regardless of the user's
+// `DD_TRACE_PROPAGATION_STYLE_INJECT`. Checkpoints are written and read entirely by Datadog code,
+// so honoring user style preferences would only complicate the payload contract. AWS runs a single
+// tracer, so one lazily-built propagator suffices.
+let datadogOnlyPropagator
 
 function getDatadogOnlyPropagator (tracer) {
+  if (datadogOnlyPropagator) return datadogOnlyPropagator
   const config = tracer._config
-  const cached = datadogOnlyPropagatorCache.get(config)
-  if (cached) return cached
-  // Shadow `tracePropagationStyle.inject` while inheriting every other field
-  // (x-datadog-tags length cap, etc.) from the live config. Force-disable
-  // `legacyBaggageEnabled` too: it injects `ot-baggage-*` headers independently
-  // of the inject style, which would leak baggage into the checkpoint payload.
+  // Shadow `tracePropagationStyle.inject` while inheriting every other field (x-datadog-tags length
+  // cap, etc.) from the live config. Disable `legacyBaggageEnabled` only to keep `ot-baggage-*` out
+  // of the checkpoint payload we persist (sensitive-data concern) — not a serverless-wide change.
   const shadowConfig = Object.create(config)
   shadowConfig.tracePropagationStyle = {
     ...config.tracePropagationStyle,
     inject: ['datadog'],
-    legacyBaggageEnabled: false,
   }
-  const propagator = new TextMapPropagator(shadowConfig)
-  datadogOnlyPropagatorCache.set(config, propagator)
-  return propagator
+  shadowConfig.legacyBaggageEnabled = false
+  datadogOnlyPropagator = new TextMapPropagator(shadowConfig)
+  return datadogOnlyPropagator
 }
 
 /**
