@@ -8,7 +8,7 @@ const MYSQL_STRING_LITERAL = String.raw`"(?:\\"|[^"])*"|'(?:\\'|[^'])*'`
 const LINE_COMMENT = '--.*$'
 const BLOCK_COMMENT = String.raw`/\*[\s\S]*\*/`
 const EXPONENT = String.raw`(?:E[-+]?\d+[fd]?)?`
-const INTEGER_NUMBER = String.raw`(?<!\w)\d+`
+const INTEGER_NUMBER = String.raw`\b\d+`
 const DECIMAL_NUMBER = String.raw`\d*\.\d+`
 const HEX_NUMBER = 'x\'[0-9a-f]+\'|0x[0-9a-f]+'
 const BIN_NUMBER = 'b\'[0-9a-f]+\'|0b[0-9a-f]+'
@@ -23,6 +23,9 @@ const NUMERIC_LITERAL =
   })`
 const ORACLE_ESCAPED_LITERAL = String.raw`q'<.*?>'|q'\(.*?\)'|q'\{.*?\}'|q'\[.*?\]'|q'(?<ESCAPE>.).*?\k<ESCAPE>'`
 
+/* eslint-disable regexp/no-super-linear-move, regexp/optimal-quantifier-concatenation --
+   IAST SQL-evidence tokenizer; opt-in, bounded evidence per detected vuln. The ESCAPE
+   named group is consumed by the caller, so the quantifiers cannot be merged away. */
 const patterns = {
   ANSI: new RegExp( // Default
     [
@@ -61,6 +64,7 @@ const patterns = {
   ].join('|'),
   'gmi'),
 }
+/* eslint-enable regexp/no-super-linear-move, regexp/optimal-quantifier-concatenation */
 patterns.SQLITE = patterns.MYSQL
 patterns.MARIADB = patterns.MYSQL
 

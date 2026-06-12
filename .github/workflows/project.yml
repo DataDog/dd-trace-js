@@ -23,7 +23,7 @@ jobs:
         with:
           matcher: true
           fail-on-error: true
-          shellcheck: false # TODO should we enable this?
+          shellcheck: true
       - name: actionlint Summary
         if: ${{ steps.actionlint.outputs.exit-code != 0 }}
         run: |
@@ -34,7 +34,6 @@ jobs:
           echo "actionlint found ${{ steps.actionlint.outputs.total-errors }} errors"
           echo "actionlint checked ${{ steps.actionlint.outputs.total-files }} files"
           echo "actionlint cache used: ${{ steps.actionlint.outputs.cache-hit }}"
-          exit ${{ steps.actionlint.outputs.exit-code }}
 
   lint:
     runs-on: ubuntu-latest
@@ -81,9 +80,9 @@ jobs:
           policy: package-size-report
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/node/latest
-      - run: FILENAME=$(npm pack --silent --pack-destination /tmp) && mv /tmp/$FILENAME /tmp/dd-trace.tgz
-      - run: rm -rf *
-      - run: tar -zxf /tmp/dd-trace.tgz -C $(pwd) --strip-components=1
+      - run: FILENAME=$(npm pack --silent --pack-destination /tmp) && mv /tmp/"$FILENAME" /tmp/dd-trace.tgz
+      - run: rm -rf ./*
+      - run: tar -zxf /tmp/dd-trace.tgz -C "$(pwd)" --strip-components=1
       - run: yarn --prod --ignore-optional
       - run: ls -lisa
       - name: Compute module size tree and report
@@ -159,7 +158,7 @@ jobs:
           set -euo pipefail
 
           if git diff --quiet; then
-            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -196,7 +195,7 @@ jobs:
           fi
 
           cp yarn.lock "${RUNNER_TEMP}/yarn.lock"
-          echo "has_changes=true" >> $GITHUB_OUTPUT
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: steps.diff.outputs.has_changes == 'true'

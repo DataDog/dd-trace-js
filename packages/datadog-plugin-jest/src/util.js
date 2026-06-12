@@ -43,6 +43,7 @@ function getFormattedJestTestParameters (testParameters) {
 
 // @fast-check/jest appends a random seed to the reported test name. A test name that keeps changing
 // breaks some Test Optimization features, so normalize this narrow suffix regardless of import style.
+// eslint-disable-next-line regexp/no-super-linear-move -- jest test name suffix, trusted test metadata.
 const SEED_SUFFIX_RE = /\s*\(with seed=-?\d+\)\s*$/i
 
 function removeSeedSuffixFromTestName (testName) {

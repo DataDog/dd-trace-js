@@ -63,6 +63,7 @@ class ExposuresWriter extends BaseFFEWriter {
    * @param {import('../../config/config-base')} config - Tracer configuration object
    */
   constructor (config) {
+    // eslint-disable-next-line regexp/no-super-linear-move -- normalizes a constant path.
     const basePath = EVP_PROXY_AGENT_BASE_PATH.replace(/\/+$/, '')
     const endpoint = EXPOSURES_ENDPOINT.replace(/^\/+/, '')
     const fullEndpoint = `${basePath}/${endpoint}`

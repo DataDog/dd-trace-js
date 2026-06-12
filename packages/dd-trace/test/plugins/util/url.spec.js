@@ -283,6 +283,12 @@ describe('plugins/util/url', () => {
         )
       })
 
+      it('should treat 20 chars as the {param:str} length boundary', () => {
+        // 19 plain chars (no digit, no special) stay verbatim; 20 cross into {param:str}.
+        assert.strictEqual(url.calculateHttpEndpoint('/x/abcdefghijklmnopqrs'), '/x/abcdefghijklmnopqrs')
+        assert.strictEqual(url.calculateHttpEndpoint('/x/abcdefghijklmnopqrst'), '/x/{param:str}')
+      })
+
       it('should replace strings with special characters as {param:str}', () => {
         assert.strictEqual(url.calculateHttpEndpoint('/search/hello%20world'), '/search/{param:str}')
         assert.strictEqual(url.calculateHttpEndpoint('/filter/foo&bar'), '/filter/{param:str}')

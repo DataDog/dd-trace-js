@@ -143,6 +143,7 @@ const transformers = {
         return transformers.stripColonWhitespace(item)
       })
     }
+    // eslint-disable-next-line regexp/no-super-linear-move -- DD_TAGS-style config value, trusted env/config.
     return value.replaceAll(/\s*:\s*/g, ':')
   },
   /**

@@ -4,7 +4,8 @@ const log = require('../../../../../log')
 
 const AUTHORITY = '^(?:[^:]+:)?//([^@]+)@'
 const QUERY_FRAGMENT = '[?#&]([^=&;]+)=([^?#&]+)'
-const pattern = new RegExp([AUTHORITY, QUERY_FRAGMENT].join('|'), 'gmi')
+// eslint-disable-next-line regexp/no-super-linear-move -- IAST evidence redaction; opt-in, bounded input.
+const pattern = new RegExp([AUTHORITY, QUERY_FRAGMENT].join('|'), 'gm')
 
 module.exports = function extractSensitiveRanges (evidence) {
   try {

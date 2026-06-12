@@ -712,6 +712,7 @@ function wrapRun (pl, isLatestVersion, version) {
 
             // ATR: record this attempt as failed so when run().finally runs (after retry) we have all statuses
             if (isFlakyTestRetriesEnabled) {
+              // eslint-disable-next-line regexp/no-super-linear-move -- cucumber scenario name, trusted test metadata.
               const nameForKey = this.pickle.name.replace(/\s*\(attempt \d+(?:, retried)?\)\s*$/, '')
               const atrKey = `${this.pickle.uri}:${nameForKey}`
               if (atrStatusesByScenarioKey.has(atrKey)) {
@@ -835,6 +836,7 @@ function wrapRun (pl, isLatestVersion, version) {
         // ATR: accumulate statuses by stable scenario key (uri:name) so retries are grouped.
         // Cucumber appends " (attempt N)" or " (attempt N, retried)" to the scenario name; normalize for keying.
         if (isFlakyTestRetriesEnabled && !isAttemptToFix && !isEfdRetry && numTestRetries > 0) {
+          // eslint-disable-next-line regexp/no-super-linear-move -- cucumber scenario name, trusted test metadata.
           const nameForKey = this.pickle.name.replace(/\s*\(attempt \d+(?:, retried)?\)\s*$/, '')
           const atrKey = `${this.pickle.uri}:${nameForKey}`
           if (atrStatusesByScenarioKey.has(atrKey)) {

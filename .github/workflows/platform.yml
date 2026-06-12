@@ -56,7 +56,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
-      - run: FILENAME=$(npm pack --silent --pack-destination /tmp) && mv /tmp/$FILENAME /tmp/dd-trace.tgz
+      - run: FILENAME=$(npm pack --silent --pack-destination /tmp) && mv "/tmp/$FILENAME" /tmp/dd-trace.tgz
       - run: mkdir -p /tmp/app
       - run: npm i -g pnpm
         if: matrix.manager.name == 'pnpm'
@@ -71,7 +71,7 @@ jobs:
       - uses: ./.github/actions/node/active-lts
       - uses: ./.github/actions/install
       - run: mkdir npm bun
-      - run: FILENAME=$(npm pack --silent) && tar -zxf $FILENAME -C npm
+      - run: FILENAME=$(npm pack --silent) && tar -zxf "$FILENAME" -C npm
       - run: ./node_modules/.bin/bun pm pack --gzip-level 0 --filename bun.tgz && tar -zxf bun.tgz -C bun
       - run: diff -r npm bun
 

@@ -57,7 +57,7 @@ jobs:
         id: playwright-version
         run: |
           PLAYWRIGHT_VERSION=$(node -p "require('./packages/dd-trace/test/plugins/versions/package.json').dependencies['@playwright/test']")
-          echo "version=$PLAYWRIGHT_VERSION" >> $GITHUB_OUTPUT
+          echo "version=$PLAYWRIGHT_VERSION" >> "$GITHUB_OUTPUT"
           echo "Playwright version: $PLAYWRIGHT_VERSION"
       - name: Cache Playwright browsers
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
@@ -97,9 +97,11 @@ jobs:
           IMAGES=$(printf '{"latest":"%s:%s","oldest":"%s:%s"}' "$BASE" "$LATEST_TAG" "$BASE" "$OLDEST_TAG")
           PW_VERSION=$([ "${{ matrix.playwright-version }}" = "latest" ] && echo "$LATEST" || echo "$OLDEST")
           IMAGE_TAG=$([ "${{ matrix.playwright-version }}" = "latest" ] && echo "$LATEST_TAG" || echo "$OLDEST_TAG")
-          echo "images=$IMAGES" >> $GITHUB_OUTPUT
-          echo "pw-version=$PW_VERSION" >> $GITHUB_OUTPUT
-          echo "image-tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
+          {
+            echo "images=$IMAGES"
+            echo "pw-version=$PW_VERSION"
+            echo "image-tag=$IMAGE_TAG"
+          } >> "$GITHUB_OUTPUT"
       - name: Log in to GHCR
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
@@ -293,7 +295,7 @@ jobs:
         run: |
           DOCKER_HASH=$(sha256sum .github/selenium/Dockerfile | cut -c1-8)
           IMAGE="ghcr.io/datadog/dd-trace-js/selenium-tools:${DOCKER_HASH}"
-          echo "image=$IMAGE" >> $GITHUB_OUTPUT
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
       - name: Log in to GHCR
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
@@ -411,7 +413,7 @@ jobs:
           else
             RESOLVED="${{ matrix.cypress-version }}"
           fi
-          echo "resolved=$RESOLVED" >> $GITHUB_OUTPUT
+          echo "resolved=$RESOLVED" >> "$GITHUB_OUTPUT"
       - name: Cache Cypress binary
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
