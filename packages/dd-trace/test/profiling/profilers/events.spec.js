@@ -14,6 +14,15 @@ const EventsProfiler = require('../../../src/profiling/profilers/events')
 const startCh = dc.channel('apm:dns:lookup:start')
 const finishCh = dc.channel('apm:dns:lookup:finish')
 
+// Test adapter: the constructor now reads canonical DD_PROFILING_* names off the tracer
+// config plus the derived flush/sampling intervals. Map the legacy flat option names here.
+function makeEvents (Cls, { codeHotspotsEnabled, flushInterval, samplingInterval, timelineSamplingEnabled } = {}) {
+  return new Cls({
+    DD_PROFILING_CODEHOTSPOTS_ENABLED: codeHotspotsEnabled,
+    DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED: timelineSamplingEnabled,
+  }, { flushInterval, samplingInterval })
+}
+
 function collectLabels (sample, stringTable) {
   const labels = {}
   for (const label of sample.label) {
@@ -24,7 +33,7 @@ function collectLabels (sample, stringTable) {
 }
 
 function runOnceAndProfile (startChannel, finishChannel, ctx) {
-  const profiler = new EventsProfiler({
+  const profiler = makeEvents(EventsProfiler, {
     samplingInterval: 10_000,
     flushInterval: 65_000,
     timelineSamplingEnabled: false,
@@ -43,11 +52,13 @@ function runOnceAndProfile (startChannel, finishChannel, ctx) {
 
 function getProfilerConfig (tracerOptions) {
   const tracerConfig = getConfigFresh(tracerOptions)
-  const ProfilingConfig = require('../../../src/profiling/config').Config
-  return new ProfilingConfig({
-    url: 'http://127.0.0.1:8126',
-    ...tracerConfig,
-  })
+  const { SAMPLING_INTERVAL } = require('../../../src/profiling/config')
+  return {
+    codeHotspotsEnabled: tracerConfig.DD_PROFILING_CODEHOTSPOTS_ENABLED,
+    flushInterval: tracerConfig.DD_PROFILING_UPLOAD_PERIOD * 1000,
+    samplingInterval: SAMPLING_INTERVAL,
+    timelineSamplingEnabled: tracerConfig.DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED,
+  }
 }
 
 describe('profilers/events', () => {
@@ -56,7 +67,7 @@ describe('profilers/events', () => {
   })
 
   it('should provide info', () => {
-    const info = new EventsProfiler(getProfilerConfig()).getInfo()
+    const info = makeEvents(EventsProfiler, getProfilerConfig()).getInfo()
     assert(info.maxSamples > 0, `Expected ${info.maxSamples} > 0`)
   })
 
@@ -74,7 +85,7 @@ describe('profilers/events', () => {
     }
     storage('legacy').enterWith({ span })
 
-    const profiler = new EventsProfiler({
+    const profiler = makeEvents(EventsProfiler, {
       samplingInterval,
       flushInterval,
       timelineSamplingEnabled: false, // don't discard any events

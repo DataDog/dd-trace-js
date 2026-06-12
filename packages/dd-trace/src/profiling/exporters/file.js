@@ -14,10 +14,10 @@ function formatDateTime (t) {
 }
 
 class FileExporter extends EventSerializer {
-  constructor (config = {}) {
+  /** @param {import('./event_serializer').TracerConfig} config */
+  constructor (config) {
     super(config)
-    const { pprofPrefix } = config
-    this._pprofPrefix = pprofPrefix || ''
+    this._pprofPrefix = config.DD_PROFILING_PPROF_PREFIX
   }
 
   export (exportSpec) {

@@ -18,6 +18,8 @@ const {
 } = require('./shared')
 const TRACE_ENDPOINT_LABEL = 'trace endpoint'
 
+/** @typedef {import('../../config/config-base')} TracerConfig */
+
 let beforeCh
 const enterCh = dc.channel('dd-trace:storage:enter')
 const spanFinishCh = dc.channel('dd-trace:span:finish')
@@ -130,17 +132,20 @@ class NativeWallProfiler {
 
   get type () { return 'wall' }
 
-  constructor (options = {}) {
-    this.#asyncContextFrameEnabled = !!options.asyncContextFrameEnabled
-    this.#codeHotspotsEnabled = !!options.codeHotspotsEnabled
-    this.#cpuProfilingEnabled = !!options.cpuProfilingEnabled
-    this.#endpointCollectionEnabled = !!options.endpointCollectionEnabled
-    this.#flushIntervalMillis = options.flushInterval || 60 * 1e3 // 60 seconds
-    // TODO: Remove default value. It is only used in testing.
-    this.#samplingIntervalMicros = (options.samplingInterval || 1e3 / 99) * 1000
-    this.#telemetryHeartbeatIntervalMillis = options.heartbeatInterval || 60 * 1e3 // 60 seconds
-    this.#timelineEnabled = !!options.timelineEnabled
-    this.#v8ProfilerBugWorkaroundEnabled = !!options.v8ProfilerBugWorkaroundEnabled
+  /**
+   * @param {TracerConfig} config
+   * @param {{ asyncContextFrameEnabled: boolean, flushInterval: number, samplingInterval: number }} derived
+   */
+  constructor (config, { asyncContextFrameEnabled, flushInterval, samplingInterval }) {
+    this.#asyncContextFrameEnabled = asyncContextFrameEnabled
+    this.#codeHotspotsEnabled = config.DD_PROFILING_CODEHOTSPOTS_ENABLED
+    this.#cpuProfilingEnabled = config.DD_PROFILING_CPU_ENABLED
+    this.#endpointCollectionEnabled = config.DD_PROFILING_ENDPOINT_COLLECTION_ENABLED
+    this.#flushIntervalMillis = flushInterval
+    this.#samplingIntervalMicros = samplingInterval * 1000
+    this.#telemetryHeartbeatIntervalMillis = config.telemetry.heartbeatInterval
+    this.#timelineEnabled = config.DD_PROFILING_TIMELINE_ENABLED
+    this.#v8ProfilerBugWorkaroundEnabled = config.DD_PROFILING_V8_PROFILER_BUG_WORKAROUND
 
     // We need to capture span data into the sample context for either code hotspots
     // or endpoint collection.
