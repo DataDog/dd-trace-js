@@ -1,7 +1,7 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
-const { addHook, channel } = require('./helpers/instrument')
+const { addHook, channel, publishError } = require('./helpers/instrument')
 const handlers = ['use', 'pre']
 const methods = ['del', 'get', 'head', 'opts', 'post', 'put', 'patch']
 
@@ -53,7 +53,7 @@ function wrapFn (fn) {
           finishChannel.publish({ req })
           return result
         }).catch(function (error) {
-          errorChannel.publish({ req, error })
+          publishError(errorChannel, { req, error })
           nextChannel.publish({ req })
           finishChannel.publish({ req })
           throw error
@@ -61,7 +61,7 @@ function wrapFn (fn) {
       }
       return result
     } catch (error) {
-      errorChannel.publish({ req, error })
+      publishError(errorChannel, { req, error })
       nextChannel.publish({ req })
       finishChannel.publish({ req })
       throw error

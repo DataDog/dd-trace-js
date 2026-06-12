@@ -1,7 +1,7 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
-const { addHook, channel } = require('./helpers/instrument')
+const { addHook, channel, publishError: publishErrorChannel } = require('./helpers/instrument')
 
 const errorChannel = channel('apm:fastify:middleware:error')
 const handleChannel = channel('apm:fastify:request:handle')
@@ -303,18 +303,9 @@ function getRouteConfig (request) {
   return request?.routeOptions?.config
 }
 
-let publishingError = false
-
 function publishError (ctx) {
-  // `errorChannel` is public: a subscriber that re-enters the hook pipeline while
-  // handling the error republishes here and recurses until the stack overflows.
-  if (ctx.error && !publishingError) {
-    publishingError = true
-    try {
-      errorChannel.publish(ctx)
-    } finally {
-      publishingError = false
-    }
+  if (ctx.error) {
+    publishErrorChannel(errorChannel, ctx)
   }
 
   return ctx.error
