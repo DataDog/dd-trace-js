@@ -180,7 +180,7 @@ async function saveTraceContextCheckpointIfUpdated (
     if (typeof checkpointManager?.checkpoint !== 'function') return
 
     const currentHeaders = injectHeaders(tracer, span)
-    if (!currentHeaders || Object.keys(currentHeaders).length === 0) return
+    if (currentHeaders['x-datadog-trace-id'] === undefined) return
 
     const latest = findLastCheckpoint(event)
 
