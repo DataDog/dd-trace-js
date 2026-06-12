@@ -33,7 +33,7 @@ describe('electron/preload', () => {
 
   function loadPreload (config = null) {
     ipcRenderer.sendSync.returns(config)
-    proxyquire('../../src/electron/preload', {
+    proxyquire('../src/preload', {
       electron: { contextBridge, ipcRenderer, '@noCallThru': true },
     })
     return global.window.DatadogEventBridge

@@ -1,0 +1,23 @@
+{
+  "name": "@datadog/electron",
+  "version": "0.1.0",
+  "description": "Datadog tracing instrumentation for Electron",
+  "main": "src/index.js",
+  "license": "Apache-2.0",
+  "scripts": {
+    "test": "mocha test/*.spec.js --timeout 30000"
+  },
+  "peerDependencies": {
+    "dd-trace": "*",
+    "electron": ">=37.0.0"
+  },
+  "dependencies": {
+    "dc-polyfill": "*"
+  },
+  "devDependencies": {
+    "electron": ">=37.0.0 <=39.2.4",
+    "mocha": "*",
+    "proxyquire": "*",
+    "sinon": "*"
+  }
+}

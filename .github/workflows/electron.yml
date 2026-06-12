@@ -23,7 +23,7 @@ jobs:
         with:
           version: '24.15'
       - uses: ./.github/actions/install
-      - run: yarn test:integration:electron
+      - run: cd electron && npm install && npm test
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
@@ -41,7 +41,7 @@ jobs:
       - uses: ./.github/actions/install
       # Electron needs a display even for headless (show: false) windows.
       # xvfb-run provides a virtual framebuffer so the test can run without a physical display.
-      - run: xvfb-run --auto-servernum yarn test:integration:electron
+      - run: cd electron && npm install && xvfb-run --auto-servernum npm test
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
