@@ -1,8 +1,4 @@
-This benchmarks HTTP requests from client to server.
-
-The variants are:
-- control tracer without appsec
-- tracer with appsec but no attacks
-- control tracer without appsec but with attacks
-- tracer with appsec and attacks
+Drives real HTTP client/server traffic with the full tracer loaded, measuring the
+AppSec WAF's per-request overhead -- AppSec off vs on, and on with attack payloads
+(Arachni UA, path traversal, XSS query string) that exercise the WAF's rule paths.
 

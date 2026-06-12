@@ -1,0 +1,22 @@
+{
+  "name": "span-format",
+  "run": "node index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "cachegrind": false,
+  "iterations": 12,
+  "instructions": true,
+  "variants": {
+    "flat-tags": {
+      "env": { "VARIANT": "flat-tags", "ITERATIONS": "3000000" }
+    },
+    "many-tags": {
+      "env": { "VARIANT": "many-tags", "ITERATIONS": "900000" }
+    },
+    "error": {
+      "env": { "VARIANT": "error", "ITERATIONS": "2000000" }
+    },
+    "http-server": {
+      "env": { "VARIANT": "http-server", "ITERATIONS": "3000000" }
+    }
+  }
+}

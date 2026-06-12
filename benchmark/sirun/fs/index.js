@@ -79,6 +79,15 @@ if (VARIANT === 'subscribed') {
 assert.equal(VARIANT === 'subscribed', startChannel.hasSubscribers,
   'subscriber state does not match variant')
 
+// Drift guard: getMessage + the wrapper body mirror fs.js (neither is exported), so
+// assert the mirror still produces the production per-call message shape -- otherwise
+// a refactor on either side diverges silently while the loop keeps "passing".
+assert.deepEqual(
+  getMessage('statSync', PARAMS, ARGS),
+  { operation: 'statSync', path: '/var/app/data/file.txt', options: { encoding: 'utf8' } },
+  'getMessage mirror drifted from the fs.js per-call message shape'
+)
+
 guard.loopStart()
 let sink = 0
 for (let i = 0; i < ITERATIONS; i++) {

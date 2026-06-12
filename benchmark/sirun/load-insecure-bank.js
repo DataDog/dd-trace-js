@@ -2,6 +2,22 @@
 
 const url = require('url')
 
+// This fixture deliberately exercises the legacy `url.parse()`, whose one-time
+// DEP0169 deprecation warning is just noise in the benchmark output. Suppress
+// that single code; forward every other warning untouched.
+const originalEmitWarning = process.emitWarning
+/**
+ * @param {string | Error} warning
+ * @param {...unknown} args
+ */
+process.emitWarning = function patchedEmitWarning (warning, ...args) {
+  const code = typeof args[0] === 'object' && args[0] !== null
+    ? /** @type {{ code?: string }} */ (args[0]).code
+    : args[1]
+  if (code === 'DEP0169') return
+  return originalEmitWarning.call(this, warning, ...args)
+}
+
 /**
  * @returns {import('http').RequestListener}
  */
