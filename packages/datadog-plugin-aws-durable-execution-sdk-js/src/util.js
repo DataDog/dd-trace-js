@@ -43,9 +43,9 @@ function getOperationId (ctxImpl) {
  * On a SUCCEEDED checkpoint (an op being replayed from its stored result), the same
  * field instead holds the 1-indexed number of the attempt that ultimately succeeded
  * (a first-try success reads as 1). We subtract 1 in that case so a replay reports
- * the same 0-indexed attempt as the original run did. This 1-indexing is server-
- * maintained observed behavior, not an SDK guarantee, so we floor at 0 to never emit
- * a negative attempt if a SUCCEEDED checkpoint ever lacks an Attempt field.
+ * the same 0-indexed attempt as the original run did. This 1-indexing is
+ * server-maintained observed behavior, not an SDK guarantee, so we floor at 0 to
+ * never emit a negative attempt if a SUCCEEDED checkpoint ever lacks an Attempt field.
  *
  * @param {object} [ctxImpl]
  * @returns {number}
