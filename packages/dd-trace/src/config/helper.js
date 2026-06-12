@@ -164,8 +164,16 @@ let configurationsTable
  */
 function parseConfigurationValue (name, value, source) {
   // Lazy require to keep the `config -> helper` import direction acyclic.
-  // `configurationsTable` is already built eagerly via `log -> config/defaults`.
+  // `config/defaults` participates in a require cycle with `log` (it lazily
+  // requires `log` to warn about invalid values, and `log` reads its fallback
+  // defaults from there). When an early caller reaches this before
+  // `config/defaults` has finished loading, the table is not yet populated; in
+  // that window we return the raw value and the next call parses it once the
+  // module is fully initialized.
   configurationsTable ??= require('./defaults').configurationsTable
+  if (configurationsTable === undefined) {
+    return value
+  }
   const canonical = aliasToCanonical[name] ?? name
   const entry = configurationsTable[canonical]
   if (entry === undefined) {
