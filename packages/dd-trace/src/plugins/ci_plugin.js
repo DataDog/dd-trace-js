@@ -428,13 +428,21 @@ module.exports = class CiPlugin extends Plugin {
    * the coordinator process after plugin configuration.
    *
    * @param {string|undefined} repositoryRoot - Repository root discovered by the coordinator process.
+   * @param {Array<{ pattern: string, owners: string[] }>|null|undefined} codeOwnersEntries
+   * Parsed CODEOWNERS entries discovered by the coordinator process.
    * @returns {void}
    */
-  _setRepositoryRoot (repositoryRoot) {
+  _setRepositoryRoot (repositoryRoot, codeOwnersEntries) {
+    if (codeOwnersEntries !== undefined) {
+      this.codeOwnersEntries = codeOwnersEntries
+    }
+
     if (!repositoryRoot || repositoryRoot === this.repositoryRoot) return
 
     this.repositoryRoot = repositoryRoot
-    this.codeOwnersEntries = getCodeOwnersFileEntries(this.repositoryRoot)
+    if (codeOwnersEntries === undefined) {
+      this.codeOwnersEntries = getCodeOwnersFileEntries(this.repositoryRoot)
+    }
   }
 
   /**
@@ -624,6 +632,7 @@ module.exports = class CiPlugin extends Plugin {
     const workerTestFramework = WORKER_EXPORTER_TO_TEST_FRAMEWORK[exporter]
     this.shouldSkipGitMetadataExtraction = workerTestFramework &&
       TEST_FRAMEWORKS_TO_SKIP_GIT_METADATA_EXTRACTION.has(workerTestFramework)
+    const shouldDeferCodeOwnersEntries = workerTestFramework === 'vitest'
 
     this.testEnvironmentMetadata = getTestEnvironmentMetadata(
       this.constructor.id,
@@ -652,7 +661,7 @@ module.exports = class CiPlugin extends Plugin {
     this.repositoryRoot = repositoryRoot ||
       (this.shouldSkipGitMetadataExtraction ? process.cwd() : getRepositoryRoot() || process.cwd())
 
-    this.codeOwnersEntries = getCodeOwnersFileEntries(this.repositoryRoot)
+    this.codeOwnersEntries = shouldDeferCodeOwnersEntries ? null : getCodeOwnersFileEntries(this.repositoryRoot)
 
     this.ciProviderName = ciProviderName
 

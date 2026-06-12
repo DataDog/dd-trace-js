@@ -144,6 +144,7 @@ function getProvidedContext () {
       _ddTestModuleId: testModuleId,
       _ddTestCommand: testCommand,
       _ddRepositoryRoot: repositoryRoot,
+      _ddCodeOwnersEntries: codeOwnersEntries,
     } = globalThis.__vitest_worker__.providedContext
 
     return {
@@ -164,6 +165,7 @@ function getProvidedContext () {
       testModuleId,
       testCommand,
       repositoryRoot,
+      codeOwnersEntries,
     }
   } catch {
     log.error('Vitest workers could not parse provided context, so some features will not work.')
@@ -185,6 +187,7 @@ function getProvidedContext () {
       testModuleId: undefined,
       testCommand: undefined,
       repositoryRoot: undefined,
+      codeOwnersEntries: undefined,
     }
   }
 }
@@ -475,7 +478,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
   }
 
   if (testSessionConfigurationCh.hasSubscribers) {
-    const { testSessionId, testModuleId, testCommand, repositoryRoot } = await getChannelPromise(
+    const { testSessionId, testModuleId, testCommand, repositoryRoot, codeOwnersEntries } = await getChannelPromise(
       testSessionConfigurationCh,
       frameworkVersion
     )
@@ -484,6 +487,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
       _ddTestModuleId: testModuleId,
       _ddTestCommand: testCommand,
       _ddRepositoryRoot: repositoryRoot,
+      _ddCodeOwnersEntries: codeOwnersEntries,
     }, 'Could not send test session configuration to workers.')
   }
 
@@ -1416,6 +1420,7 @@ addHook({
       testModuleId: providedContext.testModuleId,
       testCommand: providedContext.testCommand,
       repositoryRoot: providedContext.repositoryRoot,
+      codeOwnersEntries: providedContext.codeOwnersEntries,
     }
     testSuiteStartCh.runStores(testSuiteCtx, () => {})
     const startTestsResponse = await startTests.apply(this, arguments)
