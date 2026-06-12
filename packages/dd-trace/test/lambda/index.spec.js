@@ -4,9 +4,12 @@ const assert = require('node:assert/strict')
 const path = require('node:path')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
+const sinon = require('sinon')
 
 const agent = require('../plugins/agent')
 const Hook = require('../../src/ritm')
+const id = require('../../src/id')
+const { datadog } = require('../../src/lambda/handler')
 
 const oldEnv = process.env
 
@@ -303,5 +306,26 @@ describe('lambda', () => {
         await Promise.all([result, checkTraces])
       })
     })
+  })
+})
+
+describe('lambda snapshot reseed', () => {
+  let reseed
+
+  beforeEach(() => {
+    reseed = sinon.spy(id, 'reseed')
+  })
+
+  afterEach(() => {
+    reseed.restore()
+  })
+
+  it('reseeds the id generator at the start of every invocation', () => {
+    const wrapped = datadog(() => ({ statusCode: 200 }))
+
+    wrapped()
+    wrapped()
+
+    assert.strictEqual(reseed.callCount, 2)
   })
 })

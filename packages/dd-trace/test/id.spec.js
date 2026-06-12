@@ -156,3 +156,114 @@ describe('id', () => {
     assert.strictEqual(spanId.toString(10), '43981')
   })
 })
+
+describe('id reseed (MicroVM snapshot restore)', () => {
+  const BATCH_BYTES = 8 * 8192
+  let id
+  let randomFillSync
+  let kernelReads
+  let nextByte
+
+  // Distinct big-endian counter per 8-byte slot: keeps generated ids unique and
+  // their sign bit clear (counter << 2^56), so tests can assert distinctness.
+  function fillCounter (buffer, base, length) {
+    for (let slot = 0; slot < length; slot += 8) {
+      let value = nextByte++
+      for (let byteIndex = 7; byteIndex >= 0; byteIndex--) {
+        buffer[base + slot + byteIndex] = value & 0xFF
+        value = Math.floor(value / 256)
+      }
+    }
+  }
+
+  function loadId ({ openThrows = false } = {}) {
+    kernelReads = []
+    nextByte = 1
+
+    const fs = {
+      openSync () {
+        if (openThrows) throw new Error('ENOENT: no /dev/urandom')
+        return 7
+      },
+      readSync (fd, buffer, offset, length) {
+        kernelReads.push(length)
+        fillCounter(buffer, offset, length)
+        return length
+      },
+    }
+
+    randomFillSync = sinon.spy(buffer => fillCounter(buffer, 0, buffer.length))
+
+    return proxyquire('../src/id', { fs, crypto: { randomFillSync } })
+  }
+
+  beforeEach(() => {
+    id = loadId()
+  })
+
+  it('uses the OpenSSL batch fill until reseed runs', () => {
+    id()
+    id()
+
+    assert.strictEqual(randomFillSync.callCount, 1)
+    assert.deepStrictEqual(kernelReads, [])
+  })
+
+  it('draws the first post-reseed id from one batched kernel read', () => {
+    id()
+    const fillsBeforeReseed = randomFillSync.callCount
+
+    id.reseed()
+    id()
+
+    assert.deepStrictEqual(kernelReads, [BATCH_BYTES])
+    assert.strictEqual(randomFillSync.callCount, fillsBeforeReseed)
+
+    for (let i = 0; i < 100; i++) id()
+
+    assert.deepStrictEqual(kernelReads, [BATCH_BYTES])
+  })
+
+  it('reseeds only once: a later reseed does not re-read the kernel', () => {
+    id.reseed()
+    id()
+    id.reseed()
+    id()
+
+    assert.deepStrictEqual(kernelReads, [BATCH_BYTES])
+  })
+
+  it('refills from the kernel when the batch wraps at 8192', () => {
+    id.reseed()
+
+    for (let i = 0; i < 8192; i++) id()
+    assert.deepStrictEqual(kernelReads, [BATCH_BYTES])
+
+    id()
+    assert.deepStrictEqual(kernelReads, [BATCH_BYTES, BATCH_BYTES])
+  })
+
+  it('generates unique positive 63-bit ids from the kernel', () => {
+    id.reseed()
+    const seen = new Set()
+
+    for (let i = 0; i < 50; i++) {
+      const hex = id().toString()
+      assert.strictEqual(hex.length, 16)
+      assert.strictEqual(Number.parseInt(hex.slice(0, 2), 16) & 0x80, 0)
+      seen.add(hex)
+    }
+
+    assert.strictEqual(seen.size, 50)
+  })
+
+  it('falls back to randomFillSync when /dev/urandom cannot be opened', () => {
+    id = loadId({ openThrows: true })
+
+    id.reseed()
+    id()
+
+    assert.deepStrictEqual(kernelReads, [])
+    assert.ok(randomFillSync.callCount >= 1)
+  })
+})
