@@ -66,11 +66,10 @@ class GCDecorator {
   constructor (stringTable) {
     this.stringTable = stringTable
     this.reasonLabelKey = stringTable.dedup('gc reason')
+    this.kindLabelKey = stringTable.dedup('gc type')
     this.kindLabels = []
     this.reasonLabels = []
     this.flagObj = {}
-
-    const kindLabelKey = stringTable.dedup('gc type')
 
     // Create labels for all GC performance flags and kinds of GC
     for (const [key, value] of Object.entries(constants)) {
@@ -79,18 +78,41 @@ class GCDecorator {
       } else if (key.startsWith('NODE_PERFORMANCE_GC_')) {
         // It's a constant for a kind of GC
         const kind = key.slice(20).toLowerCase()
-        this.kindLabels[value] = labelFromStr(stringTable, kindLabelKey, kind)
+        this.kindLabels[value] = labelFromStr(stringTable, this.kindLabelKey, kind)
       }
+    }
+
+    // V8's young-generation collector emits GC events with kind 2, but Node.js
+    // doesn't expose a matching NODE_PERFORMANCE_GC_* constant for it, so we map it
+    // explicitly. The collector was renamed from Minor Mark-Compact to Minor
+    // Mark-Sweep in the V8 version that shipped with Node 22. See equivalent
+    // mapping in runtime_metrics.js.
+    const minorMarkGCKind = 2
+    if (this.kindLabels[minorMarkGCKind] === undefined) {
+      const { NODE_MAJOR } = require('../../../../../version')
+      const minorGCLabel = NODE_MAJOR >= 22 ? 'minor_mark_sweep' : 'minor_mark_compact'
+      this.kindLabels[minorMarkGCKind] = labelFromStr(stringTable, this.kindLabelKey, minorGCLabel)
     }
   }
 
   decorateSample (sampleInput, item) {
     const { kind, flags } = item.detail
-    sampleInput.label.push(this.kindLabels[kind])
+    sampleInput.label.push(this.getKindLabel(kind))
     const reasonLabel = this.getReasonLabel(flags)
     if (reasonLabel) {
       sampleInput.label.push(reasonLabel)
     }
+  }
+
+  getKindLabel (kind) {
+    let kindLabel = this.kindLabels[kind]
+    if (kindLabel === undefined) {
+      // Gracefully handle GC kinds we don't have a label for (e.g. a value
+      // introduced by a future Node.js/V8 version).
+      kindLabel = labelFromStr(this.stringTable, this.kindLabelKey, `unknown_${kind}`)
+      this.kindLabels[kind] = kindLabel
+    }
+    return kindLabel
   }
 
   getReasonLabel (flags) {
