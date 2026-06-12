@@ -18,6 +18,44 @@ for (const method of LAZY_DURABLE_PROMISE_METHODS) {
   })
 }
 
+// runHandler(event, context, executionContext, mode, checkpointToken, handler) creates the
+// DurableContext internally and passes it to the user handler, and drives suspension through
+// executionContext.terminationManager.terminate(). The cross-invocation checkpoint plugin needs
+// both: the DurableContext (to reach the checkpoint manager) and a signal that the execution is
+// suspending. Capture the former off the handler call and surface the latter on a channel.
+const HANDLER_ARG_INDEX = 5
+const EXECUTION_CONTEXT_ARG_INDEX = 2
+
+const withDurableExecutionCh = tracingChannel('orchestrion:@aws/durable-execution-sdk-js:withDurableExecution')
+const terminateCh = channel('apm:aws-durable-execution-sdk-js:terminate')
+
+withDurableExecutionCh.start.subscribe(ctx => {
+  // Only wrap while the plugin is listening (cross-invocation tracing enabled).
+  if (!terminateCh.hasSubscribers) return
+
+  // ctx.arguments is an array-like `arguments` object, not a true Array.
+  const args = ctx.arguments
+  if (!args) return
+
+  if (typeof args[HANDLER_ARG_INDEX] === 'function') {
+    shimmer.wrap(args, HANDLER_ARG_INDEX, handler => function (event, durableContext) {
+      ctx.durableContext = durableContext
+      return handler.apply(this, arguments)
+    })
+  }
+
+  const terminationManager = args[EXECUTION_CONTEXT_ARG_INDEX]?.terminationManager
+  if (typeof terminationManager?.terminate === 'function') {
+    shimmer.wrap(terminationManager, 'terminate', terminate => function (options) {
+      // Publish before the original runs so the plugin can enqueue the checkpoint while the
+      // checkpoint manager is still accepting writes (it flips to "terminating" inside terminate()).
+      ctx.terminationReason = options?.reason
+      terminateCh.publish(ctx)
+      return terminate.apply(this, arguments)
+    })
+  }
+})
+
 // Per-instance settle callback read by the shared prototype wrappers installed by
 // `instrumentDurablePromiseProto`. Stored on the DurablePromise instance so the prototype
 // wrappers stay allocation-free and the promise carries its own observer.
