@@ -185,6 +185,33 @@ describe('config-helper env resolution', () => {
     assert.strictEqual(value, 'production')
   })
 
+  it('parses boolean configuration values', () => {
+    process.env.DD_TRACE_ENABLED = 'false'
+    assert.strictEqual(getValueFromEnvSources('DD_TRACE_ENABLED'), false)
+
+    process.env.DD_TRACE_ENABLED = 'true'
+    assert.strictEqual(getValueFromEnvSources('DD_TRACE_ENABLED'), true)
+  })
+
+  it('returns undefined for values the parser rejects', () => {
+    process.env.DD_TRACE_ENABLED = 'maybe'
+
+    assert.strictEqual(getValueFromEnvSources('DD_TRACE_ENABLED'), undefined)
+  })
+
+  it('parses numeric configuration values', () => {
+    process.env.DD_TRACE_SAMPLE_RATE = '0.5'
+
+    assert.strictEqual(getValueFromEnvSources('DD_TRACE_SAMPLE_RATE'), 0.5)
+  })
+
+  it('parses and validates values resolved through an alias', () => {
+    process.env.OTEL_LOG_LEVEL = 'debug'
+
+    assert.strictEqual(getValueFromEnvSources('OTEL_LOG_LEVEL'), 'debug')
+    assert.strictEqual(getValueFromEnvSources('DD_TRACE_LOG_LEVEL'), 'debug')
+  })
+
   describe('with stable config and env vars', () => {
     beforeEach(() => {
       // Re-load module with stable config enabled (non-serverless)
@@ -238,9 +265,9 @@ describe('config-helper env resolution', () => {
 
       getValueFromEnvSources = mod.getValueFromEnvSources
 
-      assert.strictEqual(getValueFromEnvSources('DD_TRACE_SAMPLE_RATE'), '0.9')
+      assert.strictEqual(getValueFromEnvSources('DD_TRACE_SAMPLE_RATE'), 0.9)
       assert.strictEqual(getValueFromEnvSources('DD_SERVICE'), 'fleet')
-      assert.strictEqual(getValueFromEnvSources('DD_TRACE_ENABLED'), 'true')
+      assert.strictEqual(getValueFromEnvSources('DD_TRACE_ENABLED'), true)
     })
 
     it('does not override defined values with undefined', () => {

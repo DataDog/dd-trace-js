@@ -149,6 +149,40 @@ function validateAccess (name) {
   }
 }
 
+let configurationsTable
+
+/**
+ * Parses and transforms a raw environment value with the same parser and
+ * transformer Config applies when it reads environment sources, so callers
+ * receive the typed value instead of the raw string. Names without a
+ * configuration entry (any non DD_/OTEL_ variable) are returned unparsed.
+ *
+ * @param {string} name Canonical or alias environment variable name.
+ * @param {string} value Raw value read from an environment source.
+ * @param {'env_var'|'fleet_stable_config'|'local_stable_config'} source Source the value was read from.
+ * @returns {string | number | boolean | object | undefined}
+ */
+function parseConfigurationValue (name, value, source) {
+  // Lazy require to keep the `config -> helper` import direction acyclic.
+  // `config/defaults` participates in a require cycle with `log` (it lazily
+  // requires `log` to warn about invalid values, and `log` reads its fallback
+  // defaults from there). When an early caller reaches this before
+  // `config/defaults` has finished loading, the table is not yet populated; in
+  // that window we return the raw value and the next call parses it once the
+  // module is fully initialized.
+  configurationsTable ??= require('./defaults').configurationsTable
+  if (configurationsTable === undefined) {
+    return value
+  }
+  const canonical = aliasToCanonical[name] ?? name
+  const entry = configurationsTable[canonical]
+  if (entry === undefined) {
+    return value
+  }
+  const parsed = entry.parser(value, canonical, source)
+  return parsed !== undefined && entry.transformer ? entry.transformer(parsed, canonical, source) : parsed
+}
+
 module.exports = {
   /**
    * Expose raw stable config maps and warnings for consumers that need
@@ -214,8 +248,12 @@ module.exports = {
    * from the supported env sources (process.env, local stable config, fleet stable config).
    * Falls back to aliases if the canonical name is not set.
    *
+   * The raw value is parsed and transformed exactly as Config does when it reads environment
+   * sources, so the returned value is typed (boolean, number, array, map, ...) rather than the
+   * raw string. Non DD_/OTEL_ variables have no configuration entry and are returned unparsed.
+   *
    * @param {string} name Environment variable name
-   * @returns {string|undefined}
+   * @returns {string | number | boolean | object | undefined}
    * @throws {Error} if the configuration is not supported
    */
   getValueFromEnvSources (name) {
@@ -225,20 +263,24 @@ module.exports = {
       loadStableConfig()
     }
 
+    let rawValue
+    /** @type {'env_var' | 'fleet_stable_config' | 'local_stable_config'} */
+    let source = 'env_var'
     if (fleetStableConfig !== undefined) {
-      const fromFleet = getValueFromSource(name, fleetStableConfig)
-      if (fromFleet !== undefined) {
-        return fromFleet
-      }
+      rawValue = getValueFromSource(name, fleetStableConfig)
+      source = 'fleet_stable_config'
+    }
+    if (rawValue === undefined) {
+      rawValue = getValueFromSource(name, process.env)
+      source = 'env_var'
+    }
+    if (rawValue === undefined && localStableConfig !== undefined) {
+      rawValue = getValueFromSource(name, localStableConfig)
+      source = 'local_stable_config'
     }
 
-    const fromEnv = getValueFromSource(name, process.env)
-    if (fromEnv !== undefined) {
-      return fromEnv
-    }
-
-    if (localStableConfig !== undefined) {
-      return getValueFromSource(name, localStableConfig)
+    if (rawValue !== undefined) {
+      return parseConfigurationValue(name, rawValue, source)
     }
   },
 

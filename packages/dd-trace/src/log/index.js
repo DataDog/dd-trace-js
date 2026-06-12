@@ -2,17 +2,23 @@
 
 const { inspect } = require('util')
 
-const { defaults } = require('../config/defaults')
-const { isTrue } = require('../util')
 const { getValueFromEnvSources } = require('../config/helper')
 const { traceChannel, debugChannel, infoChannel, warnChannel, errorChannel } = require('./channels')
 const logWriter = require('./writer')
 const { Log, LogConfig, NoTransmitError } = require('./log')
 
+// `config/defaults` is required lazily inside `configure()` rather than at load
+// time. It only provides the `DD_TRACE_DEBUG`/`logLevel` fallback values, while
+// `config/defaults` itself lazily requires this module to warn about invalid
+// values. Requiring it here at load time lets one module observe the other
+// half-initialized under some require orderings (e.g. when an early
+// `getValueFromEnvSources` caller loads `config/defaults` before `log`).
+let configDefaults
+
 const config = {
-  enabled: defaults.DD_TRACE_DEBUG,
+  enabled: undefined,
   logger: undefined,
-  logLevel: defaults.logLevel,
+  logLevel: undefined,
 }
 
 // In most places where we know we want to mute a log we use log.error() directly
@@ -77,16 +83,16 @@ const log = {
   },
 
   configure (options) {
+    configDefaults ??= require('../config/defaults').defaults
     config.logger = options.logger
     config.logLevel = options.logLevel ??
         getValueFromEnvSources('DD_TRACE_LOG_LEVEL') ??
-        config.logLevel
-    config.enabled = isTrue(
-      getValueFromEnvSources('DD_TRACE_DEBUG') ??
+        config.logLevel ??
+        configDefaults?.logLevel
+    config.enabled = getValueFromEnvSources('DD_TRACE_DEBUG') ??
       // TODO: Handle this by adding a log buffer so that configure may be called with the actual configurations.
       // eslint-disable-next-line eslint-rules/eslint-process-env
-      (process.env.OTEL_LOG_LEVEL === 'debug' || config.enabled)
-    )
+      (process.env.OTEL_LOG_LEVEL === 'debug' || (config.enabled ?? configDefaults?.DD_TRACE_DEBUG))
     logWriter.configure(config.enabled, config.logLevel, options.logger)
 
     return config.enabled
