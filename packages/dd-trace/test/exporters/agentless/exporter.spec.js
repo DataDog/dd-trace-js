@@ -66,6 +66,12 @@ describe('AgentlessExporter', () => {
       sinon.assert.match(exporter._url.hostname, 'public-trace-http-intake.logs.datadoghq.com')
     })
 
+    it('should map a regional site to its data-center intake host', () => {
+      exporter = new Exporter({ site: 'us3.datadoghq.com' })
+
+      assert.strictEqual(exporter._url.hostname, 'trace.browser-intake-us3-datadoghq.com')
+    })
+
     it('should register beforeExit handler', () => {
       exporter = new Exporter({})
 
