@@ -39,6 +39,7 @@ const addresses = require('./addresses')
 const Reporter = require('./reporter')
 const appsecTelemetry = require('./telemetry')
 const apiSecuritySampler = require('./api_security_sampler')
+const { normalizeRoute } = require('./api_security/normalized-route')
 const { isBlocked, block, callBlockDelegation, setTemplates, getBlockingAction } = require('./blocking')
 const { getActiveRequest } = require('./store')
 const UserTracking = require('./user_tracking')
@@ -232,6 +233,17 @@ function incomingHttpEndTranslator ({ req, res }) {
 
   // This hook runs before span finish, so ensure route/endpoint tags are available before API Security sampling runs.
   web.setRouteOrEndpointTag(req)
+
+  if (config?.appsec?.apiSecurity?.enabled) {
+    try {
+      const normalized = normalizeRoute(req)
+      if (normalized !== null) {
+        web.root(req)?.setTag('_dd.appsec.normalized_route', normalized)
+      }
+    } catch (e) {
+      log.debug('[ASM] Unable to compute normalized route: %s', e.message)
+    }
+  }
 
   if (apiSecuritySampler.sampleRequest(req, res, true)) {
     persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
