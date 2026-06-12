@@ -22,8 +22,8 @@ function getDatadogOnlyPropagator (tracer) {
   shadowConfig.tracePropagationStyle = {
     ...config.tracePropagationStyle,
     inject: ['datadog'],
+    legacyBaggageEnabled: false,
   }
-  shadowConfig.legacyBaggageEnabled = false
   datadogOnlyPropagator = new TextMapPropagator(shadowConfig)
   return datadogOnlyPropagator
 }
