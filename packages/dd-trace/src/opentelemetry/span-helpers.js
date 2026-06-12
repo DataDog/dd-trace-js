@@ -137,17 +137,17 @@ function normalizeLinkContext (context) {
  * Mirrors `http.response.status_code` onto `http.status_code` (DD's special tag used by APM
  * trace metrics and client-side stats); both names end up on the span.
  *
- * In OTel compatibility mode, the behavior is disabled.
+ * When OTel trace semantics are enabled, the behavior is disabled.
  *
  * @param {import('../opentracing/span')} ddSpan
  * @param {string} key
  * @param {unknown} value
- * @param {boolean} [otelCompatibility]
+ * @param {boolean} [otelTraceSemanticsEnabled]
  */
-function setOtelAttribute(ddSpan, key, value, otelCompatibility = false) {
+function setOtelAttribute (ddSpan, key, value, otelTraceSemanticsEnabled = false) {
   if (!isWritable(ddSpan)) return
 
-  if (!otelCompatibility && key === 'http.response.status_code') {
+  if (!otelTraceSemanticsEnabled && key === 'http.response.status_code') {
     ddSpan.setTag('http.status_code', String(value))
   }
 
@@ -158,17 +158,17 @@ function setOtelAttribute(ddSpan, key, value, otelCompatibility = false) {
  * Same `http.status_code` mirror as `setOtelAttribute`; does not mutate the caller's
  * `attributes` object.
  *
- * In OTel compatibility mode, the behavior is disabled.
+ * When OTel trace semantics are enabled, the behavior is disabled.
  *
  * @param {import('../opentracing/span')} ddSpan
  * @param {Record<string, unknown>} attributes
- * @param {boolean} [otelCompatibility]
+ * @param {boolean} [otelTraceSemanticsEnabled]
  */
-function setOtelAttributes(ddSpan, attributes, otelCompatibility = false) {
+function setOtelAttributes (ddSpan, attributes, otelTraceSemanticsEnabled = false) {
   if (!isWritable(ddSpan)) return
 
   ddSpan.addTags(attributes)
-  if (!otelCompatibility && 'http.response.status_code' in attributes) {
+  if (!otelTraceSemanticsEnabled && 'http.response.status_code' in attributes) {
     ddSpan.setTag('http.status_code', String(attributes['http.response.status_code']))
   }
 }
@@ -229,12 +229,12 @@ function addOtelEvent (ddSpan, name, attributesOrStartTime, startTime) {
  * @param {import('../opentracing/span')} ddSpan
  * @param {ExceptionLike} exception
  * @param {TimeInput} [timeInput]
- * @param {boolean} [otelCompatibility]
+ * @param {boolean} [otelTraceSemanticsEnabled]
  */
-function recordException(ddSpan, exception, timeInput, otelCompatibility = false) {
+function recordException (ddSpan, exception, timeInput, otelTraceSemanticsEnabled = false) {
   if (!isWritable(ddSpan)) return
 
-  if (!otelCompatibility) {
+  if (!otelTraceSemanticsEnabled) {
     ddSpan.addTags({
       [ERROR_TYPE]: exception.name,
       [ERROR_MESSAGE]: exception.message,
@@ -260,15 +260,15 @@ function recordException(ddSpan, exception, timeInput, otelCompatibility = false
  * @param {import('../opentracing/span')} ddSpan
  * @param {number} currentCode 0 = UNSET, 1 = OK, 2 = ERROR.
  * @param {{ code?: number, message?: string }} [status]
- * @param {boolean} [otelCompatibility]
+ * @param {boolean} [otelTraceSemanticsEnabled]
  * @returns {number} The new status code to track on the caller.
  */
-function applyOtelStatus(ddSpan, currentCode, status, otelCompatibility = false) {
+function applyOtelStatus (ddSpan, currentCode, status, otelTraceSemanticsEnabled = false) {
   if (!isWritable(ddSpan)) return currentCode
 
   const code = status?.code
   if (!code || currentCode === 1) {
-    if (otelCompatibility) {
+    if (otelTraceSemanticsEnabled) {
       ddSpan.context().deleteTag(ERROR_MESSAGE)
       ddSpan.context().deleteTag(IGNORE_OTEL_ERROR)
     }

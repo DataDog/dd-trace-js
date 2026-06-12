@@ -653,13 +653,13 @@ describe('OTel Span', () => {
     ])
   })
 
-  describe('OTel compatibility mode (otelCompatibilityEnabled)', () => {
+  describe('OTel compatibility mode (otelTraceSemanticsEnabled)', () => {
     beforeEach(() => {
-      tracer._tracer._config.otelCompatibilityEnabled = true
+      tracer._tracer._config.DD_TRACE_OTEL_SEMANTICS_ENABLED = true
     })
 
     afterEach(() => {
-      tracer._tracer._config.otelCompatibilityEnabled = false
+      tracer._tracer._config.DD_TRACE_OTEL_SEMANTICS_ENABLED = false
     })
 
     it('does not mirror http.response.status_code to http.status_code', () => {

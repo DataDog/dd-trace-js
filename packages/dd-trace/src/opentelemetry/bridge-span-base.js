@@ -30,7 +30,7 @@ class BridgeSpanBase {
    */
   constructor (ddSpan) {
     this._ddSpan = ddSpan
-    this._otelCompatibility = false
+    this._otelTraceSemanticsEnabled = false
   }
 
   get ended () {
@@ -46,7 +46,7 @@ class BridgeSpanBase {
    * @param {import('@opentelemetry/api').AttributeValue} value
    */
   setAttribute (key, value) {
-    setOtelAttribute(this._ddSpan, key, value, this._otelCompatibility)
+    setOtelAttribute(this._ddSpan, key, value, this._otelTraceSemanticsEnabled)
     return this
   }
 
@@ -54,7 +54,7 @@ class BridgeSpanBase {
    * @param {import('@opentelemetry/api').Attributes} attributes
    */
   setAttributes (attributes) {
-    setOtelAttributes(this._ddSpan, attributes, this._otelCompatibility)
+    setOtelAttributes(this._ddSpan, attributes, this._otelTraceSemanticsEnabled)
     return this
   }
 
@@ -92,14 +92,14 @@ class BridgeSpanBase {
    * @param {import('@opentelemetry/api').TimeInput} [timeInput]
    */
   recordException (exception, timeInput) {
-    recordException(this._ddSpan, exception, timeInput, this._otelCompatibility)
+    recordException(this._ddSpan, exception, timeInput, this._otelTraceSemanticsEnabled)
   }
 
   /**
    * @param {import('@opentelemetry/api').SpanStatus} status
    */
   setStatus (status) {
-    this.#statusCode = applyOtelStatus(this._ddSpan, this.#statusCode, status, this._otelCompatibility)
+    this.#statusCode = applyOtelStatus(this._ddSpan, this.#statusCode, status, this._otelTraceSemanticsEnabled)
     return this
   }
 }

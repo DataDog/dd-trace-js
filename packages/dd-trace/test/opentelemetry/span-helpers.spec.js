@@ -111,7 +111,7 @@ describe('OTel bridge helpers', () => {
       assert.deepStrictEqual(ddSpan.tags, { 'service.name': 'svc' })
     })
 
-    describe('otelCompatibility mode', () => {
+    describe('otelTraceSemanticsEnabled', () => {
       it('does not mirror http.response.status_code to http.status_code', () => {
         const ddSpan = createMockDdSpan()
         setOtelAttribute(ddSpan, 'http.response.status_code', 200, true)
@@ -140,7 +140,7 @@ describe('OTel bridge helpers', () => {
       })
     })
 
-    describe('otelCompatibility mode', () => {
+    describe('otelTraceSemanticsEnabled', () => {
       it('does not mirror http.response.status_code to http.status_code', () => {
         const ddSpan = createMockDdSpan()
         setOtelAttributes(ddSpan, { 'http.response.status_code': 404, foo: 'bar' }, true)
@@ -284,7 +284,7 @@ describe('OTel bridge helpers', () => {
       assert.strictEqual(ddSpan.tags[IGNORE_OTEL_ERROR], false)
     })
 
-    describe('otelCompatibility mode', () => {
+    describe('otelTraceSemanticsEnabled', () => {
       it('does not write error tags but still adds the exception event', () => {
         const ddSpan = createMockDdSpan()
         const error = new Error('boom')
@@ -357,7 +357,7 @@ describe('OTel bridge helpers', () => {
       assert.strictEqual(ddSpan.tags[ERROR_MESSAGE], 'first')
     })
 
-    describe('otelCompatibility mode', () => {
+    describe('otelTraceSemanticsEnabled', () => {
       it('writes ERROR tags on transition to ERROR', () => {
         const ddSpan = createMockDdSpan()
         const after = applyOtelStatus(ddSpan, 0, { code: 2, message: 'boom' }, true)

@@ -557,7 +557,7 @@ describe('OpenTelemetry Traces', () => {
       })
     })
 
-    describe('otelCompatibilityEnabled', () => {
+    describe('otelTraceSemanticsEnabled', () => {
       it('omits service.name, operation.name, resource.name, span.type, and span.kind from attributes', () => {
         const transformer = new OtlpTraceTransformer({}, true)
         const span = createMockSpan({ type: 'web', meta: { 'span.kind': 'server' } })

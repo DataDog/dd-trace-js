@@ -87,17 +87,17 @@ const EXCLUDED_META_KEYS = new Set([
  * @augments OtlpTransformerBase
  */
 class OtlpTraceTransformer extends OtlpTransformerBase {
-  #otelCompatibilityEnabled
+  #otelTraceSemanticsEnabled
 
   /**
    * Creates a new OtlpTraceTransformer instance.
    *
    * @param {import('@opentelemetry/api').Attributes} resourceAttributes - Resource attributes
-   * @param {boolean} [otelCompatibilityEnabled] - When true, omit Datadog-only attributes
+   * @param {boolean} [otelTraceSemanticsEnabled] - When true, do not emit Datadog-only attributes as span attributes
    */
-  constructor (resourceAttributes, otelCompatibilityEnabled = false) {
+  constructor (resourceAttributes, otelTraceSemanticsEnabled = false) {
     super(resourceAttributes, 'http/json', 'traces')
-    this.#otelCompatibilityEnabled = otelCompatibilityEnabled
+    this.#otelTraceSemanticsEnabled = otelTraceSemanticsEnabled
   }
 
   /**
@@ -189,9 +189,10 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
     const attributes = []
 
     // Add top-level DD span fields as OTLP attributes.
-    // In OTel compatibility mode these are Datadog-only concepts with no OTel equivalent
-    // and are omitted so the output conforms to pure OpenTelemetry semantics.
-    if (!this.#otelCompatibilityEnabled) {
+    // When OTel trace semantics are enabled, these Datadog-only concepts
+    // are not added to the span attributes so the output conforms to pure
+    // OpenTelemetry semantics.
+    if (!this.#otelTraceSemanticsEnabled) {
       if (span.service) {
         attributes.push({ key: 'service.name', value: { stringValue: span.service } })
       }
