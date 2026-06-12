@@ -3,6 +3,7 @@
 const log = require('../log')
 const { channel } = require('../../../datadog-instrumentations/src/helpers/instrument')
 const { ERROR_MESSAGE, ERROR_TYPE } = require('../constants')
+const id = require('../id')
 const { ImpendingTimeout } = require('./runtime/errors')
 const { extractContext } = require('./context')
 
@@ -64,6 +65,11 @@ function crashFlush () {
  */
 exports.datadog = function datadog (lambdaHandler) {
   return (...args) => {
+    // A snapshot-resumed MicroVM clone re-enters here on every invocation; tell
+    // the ID generator a time shift may have happened so it draws fresh kernel
+    // entropy instead of replaying the snapshot's cached randomness.
+    id.reseed()
+
     const context = extractContext(args)
 
     if (context) {

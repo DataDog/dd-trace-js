@@ -1,6 +1,7 @@
 'use strict'
 
 const { randomFillSync } = require('crypto')
+const { openSync, readSync } = require('fs')
 
 const UINT_MAX = 4_294_967_296
 
@@ -8,6 +9,12 @@ const data = new Uint8Array(8 * 8192)
 const zeroId = new Uint8Array(8)
 
 let batch = 0
+
+// `data` is batch-filled 8192 ids at a time from `fill`. The default source is
+// OpenSSL's DRBG (randomFillSync); reseed() swaps it for the kernel CSPRNG when
+// running in a MicroVM. See reseed() for why.
+let fill = randomFillSync
+let urandomFd = -1
 
 // Internal representation of a trace or span ID.
 class Identifier {
@@ -200,13 +207,13 @@ function toNumberString (buffer, radix) {
   return str
 }
 
-// Simple pseudo-random 64-bit ID generator.
+// Simple pseudo-random 64-bit ID generator (non-MicroVM batch path).
 /**
- * @returns {number[] | Uint8Array}
+ * @returns {number[]}
  */
 function pseudoRandom () {
   if (batch === 0) {
-    randomFillSync(data)
+    fill(data)
   }
 
   batch = (batch + 1) % 8192
@@ -223,6 +230,24 @@ function pseudoRandom () {
     data[offset + 6],
     data[offset + 7],
   ]
+}
+
+// Fill `buffer` from the kernel CSPRNG, which Firecracker reseeds per clone on
+// snapshot resume (VMGenID). Falls back to randomFillSync only when /dev/urandom
+// can't be opened (non-Linux, locked-down sandbox) -- no worse than the default.
+/**
+ * @param {Uint8Array} buffer
+ */
+function fillFromKernel (buffer) {
+  if (urandomFd === -1) {
+    randomFillSync(buffer)
+    return
+  }
+
+  let offset = 0
+  while (offset < buffer.length) {
+    offset += readSync(urandomFd, buffer, offset, buffer.length - offset, null)
+  }
 }
 
 // Read a buffer to unsigned integer bytes.
@@ -264,3 +289,25 @@ module.exports = function createIdentifier (value, radix) {
 }
 
 module.exports.Identifier = Identifier
+
+// A Firecracker/Lambda MicroVM resumes many clones from one memory snapshot.
+// The snapshot freezes OpenSSL's DRBG state and the pre-filled `data` buffer, so
+// every clone would otherwise replay the same trace/span IDs. Only the guest
+// kernel CSPRNG is reseeded per clone, so on the first invocation after a
+// possible restore we switch batch fills to /dev/urandom and discard the
+// snapshot's pre-fill. The Lambda handler calls this per invocation; it's a
+// no-op after the first, since a clone only has to switch once.
+module.exports.reseed = function reseed () {
+  if (fill === fillFromKernel) {
+    return
+  }
+
+  try {
+    urandomFd = openSync('/dev/urandom', 'r')
+  } catch {
+    // Keep urandomFd = -1; fillFromKernel falls back to randomFillSync.
+  }
+
+  fill = fillFromKernel
+  batch = 0
+}
