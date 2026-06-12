@@ -114,9 +114,7 @@ function maybeSaveCheckpoint (tracer, ctx) {
     ctx.arguments?.[0],
     /* istanbul ignore next: defense-in-depth — saveTraceContextCheckpointIfUpdated catches
        internally and never rejects, so this handler is unreachable in practice */
-  ).catch(() => {
-    // Best-effort — never break customer workloads.
-  }).finally(() => {
+  ).finally(() => {
     ctx.checkpointSaved = true
     ctx.checkpointSavePromise = undefined
   })
