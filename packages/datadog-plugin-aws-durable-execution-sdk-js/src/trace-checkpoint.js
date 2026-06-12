@@ -6,30 +6,26 @@ const TextMapPropagator = require('../../dd-trace/src/opentracing/propagation/te
 
 const CHECKPOINT_NAME_PREFIX = '_datadog_'
 
-// Per-tracer-config cache for a propagator that injects only Datadog-style
-// headers (`x-datadog-*`) regardless of the user's `DD_TRACE_PROPAGATION_STYLE_INJECT`.
-// Checkpoints are written and read entirely by Datadog code, so honoring user
-// style preferences would only complicate the payload contract.
-const datadogOnlyPropagatorCache = new WeakMap()
+// Propagator that injects only Datadog-style headers (`x-datadog-*`) regardless of the user's
+// `DD_TRACE_PROPAGATION_STYLE_INJECT`. Checkpoints are written and read entirely by Datadog code,
+// so honoring user style preferences would only complicate the payload contract. AWS runs a single
+// tracer, so one lazily-built propagator suffices.
+let datadogOnlyPropagator
 
 function getDatadogOnlyPropagator (tracer) {
-  const config = tracer?._tracer?._config ?? tracer?._config
-  if (!config) return null
-  const cached = datadogOnlyPropagatorCache.get(config)
-  if (cached) return cached
-  // Shadow `tracePropagationStyle.inject` while inheriting every other field
-  // (x-datadog-tags length cap, etc.) from the live config. Force-disable
-  // `legacyBaggageEnabled` too: it injects `ot-baggage-*` headers independently
-  // of the inject style, which would leak baggage into the checkpoint payload.
+  if (datadogOnlyPropagator) return datadogOnlyPropagator
+  const config = tracer._config
+  // Shadow `tracePropagationStyle.inject` while inheriting every other field (x-datadog-tags length
+  // cap, etc.) from the live config. Disable `legacyBaggageEnabled` only to keep `ot-baggage-*` out
+  // of the checkpoint payload we persist (sensitive-data concern) — not a serverless-wide change.
   const shadowConfig = Object.create(config)
   shadowConfig.tracePropagationStyle = {
     ...config.tracePropagationStyle,
     inject: ['datadog'],
   }
   shadowConfig.legacyBaggageEnabled = false
-  const propagator = new TextMapPropagator(shadowConfig)
-  datadogOnlyPropagatorCache.set(config, propagator)
-  return propagator
+  datadogOnlyPropagator = new TextMapPropagator(shadowConfig)
+  return datadogOnlyPropagator
 }
 
 /**
@@ -42,19 +38,9 @@ function getDatadogOnlyPropagator (tracer) {
  */
 function injectHeaders (tracer, span) {
   const headers = {}
-  try {
-    const propagator = getDatadogOnlyPropagator(tracer)
-    if (propagator) {
-      const ctx = typeof span?.context === 'function' ? span.context() : span
-      propagator.inject(ctx, headers)
-    } else {
-      // Test environments pass a tracer mock without `_config`. Fall back to
-      // its own `inject` so unit tests can assert on the shape they control.
-      tracer.inject?.(span, 'http_headers', headers)
-    }
-  } catch (e) {
-    log.debug('Failed to inject trace context', e)
-  }
+  const propagator = getDatadogOnlyPropagator(tracer)
+  const ctx = typeof span?.context === 'function' ? span.context() : span
+  propagator.inject(ctx, headers)
   return headers
 }
 
@@ -64,55 +50,65 @@ function injectHeaders (tracer, span) {
  * @param {string | number | undefined} parentId
  */
 function overrideParentId (headers, parentId) {
-  if (parentId === undefined || parentId === null) return
-  if ('x-datadog-trace-id' in headers) {
+  if (!parentId) return
+  if (headers['x-datadog-trace-id']) {
     headers['x-datadog-parent-id'] = String(parentId)
   }
 }
 
 /**
+ * Whether the current trace context warrants a new checkpoint over the previously-saved one.
+ * @param {Record<string, string>} currentHeaders
+ * @param {Record<string, string>} previousHeaders
+ * @returns {boolean}
+ */
+function needsCheckpointUpdate (currentHeaders, previousHeaders) {
+  for (const key of Object.keys(currentHeaders)) {
+    if (currentHeaders[key] !== previousHeaders[key]) return true
+  }
+  return false
+}
+
+/**
  * Find the checkpoint with the highest N for _datadog_{N} in the event's operations.
  * @param {unknown} event
- * @returns {{ number: number, operation: object } | null}
+ * @returns {{ checkpointNumber: number, operation: object } | undefined}
  */
-function findLastCheckpointOrNull (event) {
-  if (!event || typeof event !== 'object') return null
+function findLastCheckpoint (event) {
+  if (!event || typeof event !== 'object') return
 
   const operations = event.InitialExecutionState?.Operations
-  if (!Array.isArray(operations)) return null
+  if (!Array.isArray(operations)) return
 
-  let best = null
+  let highest
   for (const op of operations) {
     const name = op?.Name
-    if (typeof name !== 'string') continue
-
-    if (!name.startsWith(CHECKPOINT_NAME_PREFIX)) continue
+    if (typeof name !== 'string' || !name.startsWith(CHECKPOINT_NAME_PREFIX)) continue
     const suffix = name.slice(CHECKPOINT_NAME_PREFIX.length)
-    const n = Number.parseInt(suffix, 10)
-    if (Number.isNaN(n) || String(n) !== suffix) continue
+    const checkpointNumber = Number.parseInt(suffix, 10)
+    if (Number.isNaN(checkpointNumber) || String(checkpointNumber) !== suffix) continue
 
-    if (!best || n > best.number) {
-      best = { number: n, operation: op }
+    if (!highest || checkpointNumber > highest.checkpointNumber) {
+      highest = { checkpointNumber, operation: op }
     }
   }
 
-  return best
+  return highest
 }
 
 /**
  * Parse the JSON payload from a checkpoint STEP operation's Payload or StepDetails.Result.
  * @param {object} op
- * @returns {Record<string, string> | null}
+ * @returns {Record<string, string> | undefined}
  */
 function parseCheckpointPayload (op) {
   try {
     const raw = op?.Payload ?? op?.StepDetails?.Result
-    if (!raw || typeof raw !== 'string') return null
+    if (!raw || typeof raw !== 'string') return
     const parsed = JSON.parse(raw)
-    return parsed && typeof parsed === 'object' ? parsed : null
+    return parsed && typeof parsed === 'object' ? parsed : undefined
   } catch {
     log.debug('Failed to parse checkpoint payload')
-    return null
   }
 }
 
@@ -152,8 +148,10 @@ async function saveCheckpoint (checkpointManager, executionArn, number, headers)
     Name: name,
     Payload: payload,
   })
-  await startPromise
-  await succeedPromise
+  await Promise.all([
+    startPromise,
+    succeedPromise,
+  ])
   log.debug('Saved trace context checkpoint %s', name)
 }
 
@@ -192,24 +190,23 @@ async function saveTraceContextCheckpointIfUpdated (
     if (typeof checkpointManager?.checkpoint !== 'function') return
 
     const currentHeaders = injectHeaders(tracer, span)
-    if (!currentHeaders || Object.keys(currentHeaders).length === 0) return
+    if (currentHeaders['x-datadog-trace-id'] === undefined) return
 
-    const latest = findLastCheckpointOrNull(event)
+    const latest = findLastCheckpoint(event)
 
     let newNumber
     if (latest) {
-      const latestHeaders = parseCheckpointPayload(latest.operation)
-      if (!latestHeaders) return
+      const previousHeaders = parseCheckpointPayload(latest.operation)
+      if (!previousHeaders) return
 
-      // Compare trace contexts ignoring x-datadog-parent-id, which always changes
-      // since it reflects the active span at save time. The propagator emits keys
-      // in a deterministic order, so JSON.stringify is a stable equality check.
-      const anchoredSpanId = latestHeaders['x-datadog-parent-id']
+      // x-datadog-parent-id reflects the active span at save time and always differs, so exclude it
+      // from the comparison. Capture the previous anchor first to carry it forward on a real update.
+      // needsCheckpointUpdate only reads currentHeaders' keys, so deleting it from there is enough.
+      const anchoredSpanId = previousHeaders['x-datadog-parent-id']
       delete currentHeaders['x-datadog-parent-id']
-      delete latestHeaders['x-datadog-parent-id']
-      if (JSON.stringify(currentHeaders) === JSON.stringify(latestHeaders)) return
+      if (!needsCheckpointUpdate(currentHeaders, previousHeaders)) return
 
-      newNumber = latest.number + 1
+      newNumber = latest.checkpointNumber + 1
       overrideParentId(currentHeaders, anchoredSpanId)
     } else {
       newNumber = 0
@@ -224,6 +221,5 @@ async function saveTraceContextCheckpointIfUpdated (
 }
 
 module.exports = {
-  CHECKPOINT_NAME_PREFIX,
   saveTraceContextCheckpointIfUpdated,
 }

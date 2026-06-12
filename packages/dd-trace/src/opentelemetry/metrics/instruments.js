@@ -50,7 +50,7 @@ class Instrument {
    * Creates a measurement object for recording metric values.
    * @param {string} type - Metric type from METRIC_TYPES
    * @param {number} value - Numeric value to record
-   * @param {Attributes} attributes - Key-value pairs for metric dimensions
+   * @param {Attributes} [attributes] - Key-value pairs for metric dimensions
    * @returns {Measurement} Measurement object with metadata and timestamp
    */
   createMeasurement (type, value, attributes) {
@@ -73,9 +73,9 @@ class Instrument {
  * @class Counter
  */
 class Counter extends Instrument {
-  add (value, attributes = {}) {
+  add (value, attributes) {
     if (value < 0) return
-    this.reader?.record(this.createMeasurement(METRIC_TYPES.COUNTER, value, attributes))
+    this.reader.record(this.createMeasurement(METRIC_TYPES.COUNTER, value, attributes))
   }
 }
 
@@ -85,8 +85,8 @@ class Counter extends Instrument {
  * @class UpDownCounter
  */
 class UpDownCounter extends Instrument {
-  add (value, attributes = {}) {
-    this.reader?.record(this.createMeasurement(METRIC_TYPES.UPDOWNCOUNTER, value, attributes))
+  add (value, attributes) {
+    this.reader.record(this.createMeasurement(METRIC_TYPES.UPDOWNCOUNTER, value, attributes))
   }
 }
 
@@ -96,9 +96,9 @@ class UpDownCounter extends Instrument {
  * @class Histogram
  */
 class Histogram extends Instrument {
-  record (value, attributes = {}) {
+  record (value, attributes) {
     if (value < 0) return
-    this.reader?.record(this.createMeasurement(METRIC_TYPES.HISTOGRAM, value, attributes))
+    this.reader.record(this.createMeasurement(METRIC_TYPES.HISTOGRAM, value, attributes))
   }
 }
 
@@ -108,8 +108,8 @@ class Histogram extends Instrument {
  * @class Gauge
  */
 class Gauge extends Instrument {
-  record (value, attributes = {}) {
-    this.reader?.record(this.createMeasurement(METRIC_TYPES.GAUGE, value, attributes))
+  record (value, attributes) {
+    this.reader.record(this.createMeasurement(METRIC_TYPES.GAUGE, value, attributes))
   }
 }
 
@@ -136,7 +136,7 @@ class ObservableInstrument extends Instrument {
   addCallback (callback) {
     if (typeof callback !== 'function') return
     this.#callbacks.push(callback)
-    this.reader?.observableInstruments.add(this)
+    this.reader.observableInstruments.add(this)
   }
 
   /**
@@ -150,7 +150,7 @@ class ObservableInstrument extends Instrument {
       this.#callbacks.splice(index, 1)
       if (this.#callbacks.length === 0) {
         // Remove instrument from collection when no callbacks remain
-        this.reader?.observableInstruments.delete(this)
+        this.reader.observableInstruments.delete(this)
       }
     }
   }
@@ -163,8 +163,8 @@ class ObservableInstrument extends Instrument {
   collect () {
     const observations = []
     const observableResult = {
-      observe: (value, attributes = {}) => {
-        observations.push(this.createMeasurement(this.#type, value, attributes))
+      observe: (value, attributes) => {
+        observations.push(this.createObservation(value, attributes))
       },
     }
 
@@ -178,6 +178,18 @@ class ObservableInstrument extends Instrument {
     }
 
     return observations
+  }
+
+  /**
+   * Builds a measurement for this instrument's metric type. Keeps the type
+   * encapsulated so callers (e.g. batch observable callbacks) don't read it.
+   *
+   * @param {number} value
+   * @param {Attributes} attributes
+   * @returns {Measurement}
+   */
+  createObservation (value, attributes) {
+    return this.createMeasurement(this.#type, value, attributes)
   }
 }
 
@@ -219,6 +231,7 @@ module.exports = {
   UpDownCounter,
   Histogram,
   Gauge,
+  ObservableInstrument,
   ObservableGauge,
   ObservableCounter,
   ObservableUpDownCounter,

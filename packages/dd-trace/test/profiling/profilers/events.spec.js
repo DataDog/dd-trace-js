@@ -57,7 +57,7 @@ describe('profilers/events', () => {
 
   it('should provide info', () => {
     const info = new EventsProfiler(getProfilerConfig()).getInfo()
-    assert(info.maxSamples > 0)
+    assert(info.maxSamples > 0, `Expected ${info.maxSamples} > 0`)
   })
 
   it('should limit the number of events', async () => {

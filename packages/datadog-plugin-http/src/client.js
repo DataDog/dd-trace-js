@@ -5,7 +5,6 @@ const { URL } = require('url')
 const ClientPlugin = require('../../dd-trace/src/plugins/client')
 const { storage } = require('../../datadog-core')
 const tags = require('../../../ext/tags')
-const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const formats = require('../../../ext/formats')
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
@@ -68,8 +67,6 @@ class HttpClientPlugin extends ClientPlugin {
       options.headers = { ...options.headers }
       this.tracer.inject(span, HTTP_HEADERS, options.headers)
     }
-
-    analyticsSampler.sample(span, this.config.measured)
 
     message.span = span
     message.parentStore = store

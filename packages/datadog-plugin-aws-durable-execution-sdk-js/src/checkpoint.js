@@ -8,11 +8,11 @@ class AwsDurableExecutionSdkJsCheckpointPlugin extends TracingPlugin {
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:CheckpointManager_checkpoint'
 
   start (ctx) {
-    const data = ctx?.arguments?.[1]
+    const data = ctx.arguments?.[1]
     if (data?.Action !== 'RETRY' || !data.Error) return
 
     const span = this.activeSpan
-    if (!span || span._spanContext?._tags?.error) return
+    if (!span || span.context().getTag('error')) return
 
     const { ErrorMessage, ErrorType, StackTrace } = data.Error
     span.setTag('error', 1)
@@ -20,11 +20,11 @@ class AwsDurableExecutionSdkJsCheckpointPlugin extends TracingPlugin {
     if (ErrorType) span.setTag('error.type', ErrorType)
     if (Array.isArray(StackTrace)) span.setTag('error.stack', StackTrace.join('\n'))
 
-    ctx._ddRetryStepSpan = span
+    ctx.retryStepSpan = span
   }
 
   asyncEnd (ctx) {
-    ctx._ddRetryStepSpan?.finish()
+    ctx.retryStepSpan?.finish()
   }
 }
 

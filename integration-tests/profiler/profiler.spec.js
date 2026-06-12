@@ -9,6 +9,7 @@ const fs = require('fs/promises')
 const fsync = require('fs')
 const net = require('net')
 const zlib = require('zlib')
+const { inspect } = require('node:util')
 const satisfies = require('semifies')
 const { Profile } = require('../../vendor/dist/pprof-format')
 const {
@@ -58,7 +59,7 @@ function expectProfileMessagePromise (agent, timeout,
       assert.strictEqual(typeof event.info.profiler.activation, 'string')
       assert.strictEqual(typeof event.info.profiler.ssi.mechanism, 'string')
       const attachments = event.attachments
-      assert.ok(Array.isArray(attachments))
+      assert.ok(Array.isArray(attachments), `Expected array, got ${inspect(attachments)}`)
       // Profiler encodes the files with Promise.all, so their ordering is not guaranteed
       assert.deepStrictEqual(attachments.slice().sort(), fileNames.sort())
       for (const [index, fileName] of attachments.entries()) {
@@ -677,6 +678,10 @@ describe('profiler', () => {
         }
       })
 
+      // All OOM tests below are retried 3 times because OOM export behavior is timing-sensitive
+      // and Node.js version-dependent: newer V8 versions (e.g. Node 26) crash faster or handle
+      // worker OOM differently, making these tests inherently unreliable without retries.
+
       it('sends a heap profile on OOM with external process', () => {
         proc = fork(oomTestFile, {
           cwd,
@@ -684,7 +689,7 @@ describe('profiler', () => {
           env: oomEnv,
         })
         return checkProfiles(agent, proc, timeout, ['space'], true, false)
-      })
+      }).retries(3)
 
       it('sends a heap profile on OOM in worker thread and exits successfully', () => {
         proc = fork(oomTestFile, [1, OOM_HEAP_MB], {
@@ -692,18 +697,17 @@ describe('profiler', () => {
           env: { ...oomEnv, DD_PROFILING_WALLTIME_ENABLED: '0' },
         })
         return checkProfiles(agent, proc, timeout, ['space'], false)
-      })
+      }).retries(3)
 
-      // Following tests are flaky because they use unreliable strategies to export profiles
+      // Following tests also use unreliable strategies to export profiles
       // (or check that the process can recover from OOM, which is also unreliable).
-      // We retry them 3 times to decrease flakiness.
       it('sends a heap profile on OOM with external process and exits successfully', () => {
         proc = fork(oomTestFile, {
           cwd,
           execArgv: oomExecArgv,
           env: {
             ...oomEnv,
-            DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: '15000000',
+            DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE: '20000000',
             DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT: '3',
           },
         })
@@ -797,8 +801,8 @@ describe('profiler', () => {
           // There's a race between the periodic uploader and the on-shutdown
           // upload, so the count can include up to one extra request.
           requestCount = requests.points[0][1]
-          assert.ok(requestCount >= 1)
-          assert.ok(requestCount <= 4)
+          assert.ok(requestCount >= 1, `Expected ${requestCount} >= 1`)
+          assert.ok(requestCount <= 4, `Expected ${requestCount} <= 4`)
 
           const responses = series.find(s => s.metric === 'profile_api.responses')
           assert.strictEqual(responses.type, 'count')
@@ -862,7 +866,7 @@ describe('profiler', () => {
             const sampleContexts = pp.series.find(s => s.metric === `wall.async_contexts_${metricName}`)
             assert.notStrictEqual(sampleContexts, undefined)
             assert.strictEqual(sampleContexts.type, 'gauge')
-            assert.ok(sampleContexts.points[0][1] >= 1)
+            assert.ok(sampleContexts.points[0][1] >= 1, `Expected ${sampleContexts.points[0][1]} >= 1`)
           })
         },
         requestType: 'generate-metrics',

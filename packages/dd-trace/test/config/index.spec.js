@@ -6,6 +6,7 @@ const dns = require('node:dns')
 const { once } = require('node:events')
 const path = require('node:path')
 const os = require('node:os')
+const { inspect } = require('node:util')
 
 const sinon = require('sinon')
 const { it, describe, beforeEach, afterEach } = require('mocha')
@@ -216,7 +217,10 @@ describe('Config', () => {
       assert.strictEqual('DD_TRACE_EXPERIMENTAL_B3_ENABLED' in supported, false)
       assert.strictEqual('DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED' in supported, false)
       const cpuEntry = supported.DD_PROFILING_CPU_ENABLED[0]
-      assert.ok(!cpuEntry.aliases?.some((alias) => alias.startsWith('DD_PROFILING_EXPERIMENTAL_')))
+      assert.ok(
+        !cpuEntry.aliases?.some((alias) => alias.startsWith('DD_PROFILING_EXPERIMENTAL_')),
+        `Got: ${inspect(cpuEntry.aliases)}`
+      )
       assert.deepStrictEqual(cpuEntry.aliases, ['DD_PROFILING_TEST_ALIAS'])
       const runtimeIdEntry = supported.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED[0]
       assert.strictEqual(runtimeIdEntry.aliases, undefined)
@@ -492,6 +496,107 @@ describe('Config', () => {
       OTEL_EXPORTER_OTLP_TIMEOUT: 1234,
       OTEL_EXPORTER_OTLP_LOGS_TIMEOUT: 1234,
       OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: 1234,
+    })
+  })
+
+  describe('sensitive configurations excluded from telemetry', () => {
+    const SENTINELS = {
+      DD_API_KEY: 'SENTINEL_DD_API_KEY',
+      DD_APP_KEY: 'SENTINEL_DD_APP_KEY',
+      OTEL_EXPORTER_OTLP_HEADERS: 'dd-api-key=SENTINEL_OTLP_BASE',
+      OTEL_EXPORTER_OTLP_TRACES_HEADERS: 'dd-api-key=SENTINEL_OTLP_TRACES',
+      OTEL_EXPORTER_OTLP_METRICS_HEADERS: 'dd-api-key=SENTINEL_OTLP_METRICS',
+      OTEL_EXPORTER_OTLP_LOGS_HEADERS: 'dd-api-key=SENTINEL_OTLP_LOGS',
+    }
+
+    function telemetryEntries () {
+      sinon.assert.calledOnce(updateConfig)
+      return updateConfig.getCall(0).args[0]
+    }
+
+    it('should not report any sensitive value in the telemetry configuration array', () => {
+      Object.assign(process.env, SENTINELS)
+
+      getConfig()
+
+      const entries = telemetryEntries()
+      const sentinelValues = Object.values(SENTINELS).map(value => value.split('=').pop())
+      for (const entry of entries) {
+        const value = typeof entry.value === 'string' ? entry.value : JSON.stringify(entry.value)
+        if (value == null) continue
+        for (const sentinel of sentinelValues) {
+          assert.ok(
+            !value.includes(sentinel),
+            `Expected telemetry entry ${entry.name} (${entry.origin}) not to contain ${sentinel}, got ${value}`
+          )
+        }
+      }
+    })
+
+    it('should omit sensitive configuration names entirely from telemetry', () => {
+      Object.assign(process.env, SENTINELS)
+
+      getConfig()
+
+      const reportedNames = new Set(telemetryEntries().map(entry => entry.name))
+      for (const name of Object.keys(SENTINELS)) {
+        assert.ok(!reportedNames.has(name), `Expected ${name} to be omitted from telemetry`)
+      }
+    })
+
+    it('should still report non-sensitive exporter configurations', () => {
+      process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://collector:4318'
+      process.env.OTEL_EXPORTER_OTLP_HEADERS = SENTINELS.OTEL_EXPORTER_OTLP_HEADERS
+      process.env.OTEL_EXPORTER_OTLP_PROTOCOL = 'grpc'
+      process.env.OTEL_EXPORTER_OTLP_TIMEOUT = '1234'
+
+      getConfig()
+
+      assertConfigUpdateContains(telemetryEntries(), [
+        { name: 'OTEL_EXPORTER_OTLP_ENDPOINT', value: 'http://collector:4318', origin: 'env_var' },
+        { name: 'OTEL_EXPORTER_OTLP_TIMEOUT', value: 1234, origin: 'env_var' },
+        { name: 'OTEL_EXPORTER_OTLP_LOGS_TIMEOUT', value: 1234, origin: 'calculated' },
+        { name: 'OTEL_EXPORTER_OTLP_METRICS_TIMEOUT', value: 1234, origin: 'calculated' },
+      ])
+    })
+
+    it('should omit OTLP header values inherited via the OTEL_EXPORTER_OTLP_HEADERS fallback', () => {
+      process.env.OTEL_EXPORTER_OTLP_HEADERS = 'dd-api-key=SENTINEL_FALLBACK'
+
+      getConfig()
+
+      const reportedNames = new Set(telemetryEntries().map(entry => entry.name))
+      const inheritedNames = [
+        'OTEL_EXPORTER_OTLP_TRACES_HEADERS',
+        'OTEL_EXPORTER_OTLP_METRICS_HEADERS',
+        'OTEL_EXPORTER_OTLP_LOGS_HEADERS',
+      ]
+      for (const name of inheritedNames) {
+        assert.ok(!reportedNames.has(name), `Expected ${name} to be omitted from telemetry`)
+      }
+
+      for (const entry of telemetryEntries()) {
+        const value = typeof entry.value === 'string' ? entry.value : JSON.stringify(entry.value)
+        assert.ok(
+          value == null || !value.includes('SENTINEL_FALLBACK'),
+          `Expected inherited value to be excluded from telemetry, got ${entry.name}=${value}`
+        )
+      }
+    })
+
+    it('should not report DD_API_KEY supplied via the DATADOG_API_KEY alias', () => {
+      process.env.DATADOG_API_KEY = 'SENTINEL_DATADOG_API_KEY'
+
+      const config = getConfig()
+
+      assert.strictEqual(config.apiKey, 'SENTINEL_DATADOG_API_KEY')
+      for (const entry of telemetryEntries()) {
+        const value = typeof entry.value === 'string' ? entry.value : JSON.stringify(entry.value)
+        assert.ok(
+          value == null || !value.includes('SENTINEL_DATADOG_API_KEY'),
+          `Expected alias value to be excluded from telemetry, got ${entry.name}=${value}`
+        )
+      }
     })
   })
 
@@ -1802,7 +1907,7 @@ describe('Config', () => {
       ],
     })
     assert.deepStrictEqual(config.serviceMapping, { a: 'aa', b: 'bb' })
-    assert.ok(Object.hasOwn(config.tags, 'runtime-id'))
+    assert.ok(Object.hasOwn(config.tags, 'runtime-id'), `Available keys: ${inspect(Object.keys(config.tags))}`)
     assert.match(config.tags['runtime-id'], /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/)
     if (DD_MAJOR < 6) {
       assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'b3', 'b3 single header'])
@@ -1979,10 +2084,12 @@ describe('Config', () => {
       { name: 'DD_TRACE_PROPAGATION_STYLE_INJECT', value: 'datadog', origin: 'calculated' },
     ].sort(comparator))
 
+    const configEntries = updateConfig.getCall(0).args[0]
     assert.ok(
-      !updateConfig.getCall(0).args[0].some(entry => {
+      !configEntries.some(entry => {
         return entry.name === 'DD_TRACE_PROPAGATION_STYLE_EXTRACT' && entry.origin === 'calculated'
-      })
+      }),
+      `Got: ${inspect(configEntries)}`
     )
   })
 
@@ -3097,10 +3204,36 @@ describe('Config', () => {
 
   context('auto configuration w/ unix domain sockets', () => {
     context('socket does not exist', () => {
-      it('should not be used', () => {
+      it('should fall back to an HTTP URL built from hostname and port', () => {
         const config = getConfig()
 
-        assert.strictEqual(config.url, '')
+        assert.strictEqual(config.url.toString(), 'http://127.0.0.1:8126/')
+      })
+
+      it('should bracket an IPv6 hostname when building the HTTP URL', () => {
+        const config = getConfig({ hostname: '::1' })
+
+        assert.strictEqual(config.url.toString(), 'http://[::1]:8126/')
+        assert.strictEqual(config.url.hostname, '[::1]')
+      })
+
+      it('should build an HTTP URL in CI Visibility agentless mode', () => {
+        process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED = 'true'
+
+        const config = getConfig()
+
+        assert.strictEqual(config.url.toString(), 'http://127.0.0.1:8126/')
+        assert.strictEqual(config.DD_CIVISIBILITY_AGENTLESS_URL, undefined)
+      })
+
+      it('should resolve url to the agent and expose DD_CIVISIBILITY_AGENTLESS_URL as the intake override', () => {
+        process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED = 'true'
+        process.env.DD_CIVISIBILITY_AGENTLESS_URL = 'https://my-intake.example:443'
+
+        const config = getConfig()
+
+        assert.strictEqual(config.url.toString(), 'http://127.0.0.1:8126/')
+        assert.strictEqual(config.DD_CIVISIBILITY_AGENTLESS_URL.toString(), 'https://my-intake.example/')
       })
     })
 
@@ -3114,7 +3247,7 @@ describe('Config', () => {
 
         if (os.type() === 'Windows_NT') {
           assert.strictEqual(existsSyncParam, undefined)
-          assert.strictEqual(config.url, '')
+          assert.strictEqual(config.url.toString(), 'http://127.0.0.1:8126/')
         } else {
           assert.strictEqual(existsSyncParam, '/var/run/datadog/apm.socket')
           assert.strictEqual(config.url.toString(), 'unix:///var/run/datadog/apm.socket')
@@ -3148,13 +3281,13 @@ describe('Config', () => {
 
         const config = getConfig()
 
-        assert.strictEqual(config.url, '')
+        assert.strictEqual(config.url.toString(), 'http://127.0.0.1:12345/')
       })
 
       it('should not be used when options.port provided', () => {
         const config = getConfig({ port: 12345 })
 
-        assert.strictEqual(config.url, '')
+        assert.strictEqual(config.url.toString(), 'http://127.0.0.1:12345/')
       })
 
       it('should not be used when DD_TRACE_AGENT_HOSTNAME provided', () => {
@@ -3162,7 +3295,7 @@ describe('Config', () => {
 
         const config = getConfig()
 
-        assert.strictEqual(config.url, '')
+        assert.strictEqual(config.url.toString(), 'http://example.com:8126/')
       })
 
       it('should not be used when DD_AGENT_HOST provided', () => {
@@ -3170,21 +3303,26 @@ describe('Config', () => {
 
         const config = getConfig()
 
-        assert.strictEqual(config.url, '')
+        assert.strictEqual(config.url.toString(), 'http://example.com:8126/')
       })
 
       it('should not be used when options.hostname provided', () => {
         const config = getConfig({ hostname: 'example.com' })
 
-        assert.strictEqual(config.url, '')
+        assert.strictEqual(config.url.toString(), 'http://example.com:8126/')
       })
 
-      it('should not be used when DD_CIVISIBILITY_AGENTLESS_ENABLED provided', () => {
+      it('should resolve to the agent socket in CI Visibility agentless mode', () => {
         process.env.DD_CIVISIBILITY_AGENTLESS_ENABLED = 'true'
 
         const config = getConfig()
 
-        assert.strictEqual(config.url, '')
+        if (os.type() === 'Windows_NT') {
+          assert.strictEqual(config.url.toString(), 'http://127.0.0.1:8126/')
+        } else {
+          assert.strictEqual(config.url.toString(), 'unix:///var/run/datadog/apm.socket')
+        }
+        assert.strictEqual(config.DD_CIVISIBILITY_AGENTLESS_URL, undefined)
       })
     })
   })
@@ -3517,7 +3655,10 @@ describe('Config', () => {
         request: undefined,
         response: undefined,
       })
-      assert.ok(!(Object.hasOwn(cloudPayloadTagging, 'rules')))
+      assert.ok(
+        !(Object.hasOwn(cloudPayloadTagging, 'rules')),
+        `Available keys: ${inspect(Object.keys(cloudPayloadTagging))}`
+      )
     })
   })
 

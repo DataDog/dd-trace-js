@@ -2,7 +2,7 @@
 
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const { getOperationAttempt, getOperationId, isReplayedOp, unwrapDurableError } = require('./util')
+const { addOpMeta, getOperationAttempt, unwrapDurableError } = require('./util')
 
 // Span names whose direct children must keep the default resource.
 // These can have very high cardinality which is undesireable in the resource.
@@ -37,14 +37,11 @@ class BaseContextPlugin extends TracingPlugin {
     const operationName = this.getOperationName(ctx)
     const resource = HIGH_CARDINALITY_PARENT_SPAN_NAMES.has(parentName) ? undefined : operationName
 
-    const meta = { 'aws.durable.replayed': String(isReplayedOp(ctx.self)) }
+    const meta = {}
     if (operationName) {
       meta['aws.durable.operation_name'] = operationName
     }
-    const operationId = getOperationId(ctx.self)
-    if (operationId) {
-      meta['aws.durable.operation_id'] = operationId
-    }
+    addOpMeta(meta, ctx.self)
 
     const metrics = this.constructor.retryable
       ? { 'aws.durable.operation_attempt': getOperationAttempt(ctx.self) }
@@ -67,10 +64,9 @@ class BaseContextPlugin extends TracingPlugin {
   }
 
   settle (ctx) {
-    if (ctx._ddSuppressed) return
+    if (ctx.suppressed) return
     if (ctx.error !== undefined) {
-      const errCtx = unwrapDurableError(ctx)
-      ctx.currentStore?.span?.setTag('error', errCtx.error)
+      ctx.currentStore?.span?.setTag('error', unwrapDurableError(ctx))
     }
     this.finish(ctx)
   }
@@ -98,7 +94,7 @@ class RunInChildContextPlugin extends BaseContextPlugin {
     if (SUPPRESSED_CHILD_CONTEXT_SUBTYPES.has(getRunInChildContextSubType(ctx))) {
       // Pass the active store through unchanged so any nested spans
       // remain parented to the surrounding map/parallel span
-      ctx._ddSuppressed = true
+      ctx.suppressed = true
       return storage('legacy').getStore()
     }
     return super.bindStart(ctx)

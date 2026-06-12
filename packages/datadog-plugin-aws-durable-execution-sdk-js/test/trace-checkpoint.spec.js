@@ -22,16 +22,16 @@ describe('trace-checkpoint', () => {
       },
     }
 
-    const tracer = {
-      inject (_span, _format, headers) {
-        headers['x-datadog-trace-id'] = '123'
-        headers['x-datadog-parent-id'] = '456'
-      },
-    }
+    const spanContext = new SpanContext({
+      traceId: id('123', 10),
+      spanId: id('456', 10),
+      isRemote: false,
+      trace: { started: [], finished: [], tags: {} },
+    })
 
     const savePromise = saveTraceContextCheckpointIfUpdated(
-      tracer,
-      { context: () => ({}) },
+      { _config: getConfigFresh() },
+      { context: () => spanContext },
       { checkpoint: checkpointManager },
       '999',
       {
@@ -65,13 +65,9 @@ describe('trace-checkpoint', () => {
       },
     }
 
-    const currentHeaders = {
-      'x-datadog-trace-id': '123',
-      'x-datadog-parent-id': '999',
-      'x-datadog-sampling-priority': '1',
-      'x-datadog-tags': '_dd.p.tid=5d89697714596e3',
-    }
-
+    // Previous checkpoint: same non-parent-id fields the propagator will emit
+    // below; only parent-id differs. Key order matches the propagator's
+    // emission order (trace-id, parent-id, sampling-priority, tags).
     const previousCheckpointHeaders = {
       'x-datadog-trace-id': '123',
       'x-datadog-parent-id': '111',
@@ -79,15 +75,117 @@ describe('trace-checkpoint', () => {
       'x-datadog-tags': '_dd.p.tid=5d89697714596e3',
     }
 
-    const tracer = {
-      inject (_span, _format, headers) {
-        Object.assign(headers, currentHeaders)
+    const spanContext = new SpanContext({
+      traceId: id('123', 10),
+      spanId: id('456', 10),
+      isRemote: false,
+      sampling: { priority: 1 },
+      trace: { started: [], finished: [], tags: { '_dd.p.tid': '5d89697714596e3' } },
+    })
+
+    await saveTraceContextCheckpointIfUpdated(
+      { _config: getConfigFresh() },
+      { context: () => spanContext },
+      { checkpoint: checkpointManager },
+      '999',
+      {
+        DurableExecutionArn: 'arn:aws:lambda:us-east-1:123456789012:durable-execution/test-exec',
+        InitialExecutionState: {
+          Operations: [
+            {
+              Id: 'trace-checkpoint-0',
+              Name: '_datadog_0',
+              Status: 'SUCCEEDED',
+              Payload: JSON.stringify(previousCheckpointHeaders),
+            },
+          ],
+        },
+      },
+    )
+
+    assert.deepEqual(recordedActions, [])
+  })
+
+  it('saves when the current context adds a field the prior checkpoint lacked', async () => {
+    const recordedUpdates = []
+    const checkpointManager = {
+      checkpoint (_stepId, update) {
+        recordedUpdates.push(update)
+        return Promise.resolve()
       },
     }
 
+    // Prior checkpoint shares every field the current span emits EXCEPT x-datadog-tags, which the
+    // current span introduces. A current key absent from the previous payload is a new value to
+    // propagate, so a new checkpoint must be written.
+    const previousCheckpointHeaders = {
+      'x-datadog-trace-id': '123',
+      'x-datadog-parent-id': '111',
+      'x-datadog-sampling-priority': '1',
+    }
+
+    const spanContext = new SpanContext({
+      traceId: id('123', 10),
+      spanId: id('456', 10),
+      isRemote: false,
+      sampling: { priority: 1 },
+      trace: { started: [], finished: [], tags: { '_dd.p.tid': '5d89697714596e3' } },
+    })
+
     await saveTraceContextCheckpointIfUpdated(
-      tracer,
-      { context: () => ({}) },
+      { _config: getConfigFresh() },
+      { context: () => spanContext },
+      { checkpoint: checkpointManager },
+      '999',
+      {
+        DurableExecutionArn: 'arn:aws:lambda:us-east-1:123456789012:durable-execution/test-exec',
+        InitialExecutionState: {
+          Operations: [
+            {
+              Id: 'trace-checkpoint-0',
+              Name: '_datadog_0',
+              Status: 'SUCCEEDED',
+              Payload: JSON.stringify(previousCheckpointHeaders),
+            },
+          ],
+        },
+      },
+    )
+
+    const succeed = recordedUpdates.find(update => update.Action === 'SUCCEED')
+    assert.equal(succeed?.Name, '_datadog_1', 'a new x-datadog-tags field must write a new checkpoint')
+  })
+
+  it('does not save when keys are missing and no new fields are added', async () => {
+    const recordedActions = []
+    const checkpointManager = {
+      checkpoint (_stepId, update) {
+        recordedActions.push(update.Action)
+        return Promise.resolve()
+      },
+    }
+
+    // Prior checkpoint carries an extra x-datadog-tags the current span no longer emits; every
+    // value the current span DOES emit still matches. Re-saving would only drop the tags the
+    // previous checkpoint already holds, so we must skip.
+    const previousCheckpointHeaders = {
+      'x-datadog-trace-id': '123',
+      'x-datadog-parent-id': '111',
+      'x-datadog-sampling-priority': '1',
+      'x-datadog-tags': '_dd.p.tid=5d89697714596e3',
+    }
+
+    const spanContext = new SpanContext({
+      traceId: id('123', 10),
+      spanId: id('456', 10),
+      isRemote: false,
+      sampling: { priority: 1 },
+      trace: { started: [], finished: [], tags: {} },
+    })
+
+    await saveTraceContextCheckpointIfUpdated(
+      { _config: getConfigFresh() },
+      { context: () => spanContext },
       { checkpoint: checkpointManager },
       '999',
       {
@@ -146,5 +244,119 @@ describe('trace-checkpoint', () => {
       assert.doesNotMatch(key, /^ot-baggage-/, `unexpected baggage header in checkpoint payload: ${key}`)
     }
     assert.equal(payload['x-datadog-trace-id'], '123')
+  })
+
+  it('writes an incrementing _datadog_1 that carries the prior anchor when context changed', async () => {
+    const recordedUpdates = []
+    const checkpointManager = {
+      checkpoint (_stepId, update) {
+        recordedUpdates.push(update)
+        return Promise.resolve()
+      },
+    }
+
+    // Prior checkpoint anchored parent-id 111 on a *different* trace (999). The non-parent-id
+    // fields differ from what the current span emits, so a brand-new checkpoint must be written —
+    // numbered _datadog_1 and reusing the prior anchor rather than the current span id (456).
+    const previousCheckpointHeaders = {
+      'x-datadog-trace-id': '999',
+      'x-datadog-parent-id': '111',
+      'x-datadog-sampling-priority': '1',
+    }
+
+    const spanContext = new SpanContext({
+      traceId: id('123', 10),
+      spanId: id('456', 10),
+      isRemote: false,
+      sampling: { priority: 1 },
+      trace: { started: [], finished: [], tags: {} },
+    })
+
+    await saveTraceContextCheckpointIfUpdated(
+      { _config: getConfigFresh() },
+      { context: () => spanContext },
+      { checkpoint: checkpointManager },
+      '999',
+      {
+        DurableExecutionArn: 'arn:aws:lambda:us-east-1:123456789012:durable-execution/test-exec',
+        InitialExecutionState: {
+          Operations: [
+            {
+              Id: 'trace-checkpoint-0',
+              Name: '_datadog_0',
+              Status: 'SUCCEEDED',
+              Payload: JSON.stringify(previousCheckpointHeaders),
+            },
+          ],
+        },
+      },
+    )
+
+    const succeed = recordedUpdates.find(update => update.Action === 'SUCCEED')
+    assert.equal(succeed?.Name, '_datadog_1')
+    const payload = JSON.parse(succeed.Payload)
+    assert.deepEqual(
+      { traceId: payload['x-datadog-trace-id'], parentId: payload['x-datadog-parent-id'] },
+      { traceId: '123', parentId: '111' }
+    )
+  })
+
+  it('skips the save when the prior checkpoint payload is not valid JSON', async () => {
+    const recordedActions = []
+    const checkpointManager = {
+      checkpoint (_stepId, update) {
+        recordedActions.push(update.Action)
+        return Promise.resolve()
+      },
+    }
+
+    const spanContext = new SpanContext({
+      traceId: id('123', 10),
+      spanId: id('456', 10),
+      isRemote: false,
+      trace: { started: [], finished: [], tags: {} },
+    })
+
+    await saveTraceContextCheckpointIfUpdated(
+      { _config: getConfigFresh() },
+      { context: () => spanContext },
+      { checkpoint: checkpointManager },
+      '999',
+      {
+        DurableExecutionArn: 'arn:aws:lambda:us-east-1:123456789012:durable-execution/test-exec',
+        InitialExecutionState: {
+          Operations: [
+            { Id: 'trace-checkpoint-0', Name: '_datadog_0', Status: 'SUCCEEDED', Payload: '{not valid json' },
+          ],
+        },
+      },
+    )
+
+    assert.deepEqual(recordedActions, [])
+  })
+
+  it('swallows checkpoint-manager errors instead of propagating them to customer code', async () => {
+    const checkpointManager = {
+      checkpoint () { throw new Error('SDK checkpoint failure') },
+    }
+
+    const spanContext = new SpanContext({
+      traceId: id('123', 10),
+      spanId: id('456', 10),
+      isRemote: false,
+      trace: { started: [], finished: [], tags: {} },
+    })
+
+    // Must resolve, never reject — the contract is "never break customer workloads".
+    await saveTraceContextCheckpointIfUpdated(
+      { _config: getConfigFresh() },
+      { context: () => spanContext },
+      { checkpoint: checkpointManager },
+      '999',
+      {
+        DurableExecutionArn: 'arn:aws:lambda:us-east-1:123456789012:durable-execution/test-exec',
+        InitialExecutionState: { Operations: [] },
+      },
+    )
   })
 })

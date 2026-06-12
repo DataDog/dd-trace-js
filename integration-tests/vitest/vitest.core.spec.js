@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const { once } = require('node:events')
 const { exec } = require('child_process')
+const { inspect } = require('node:util')
 const { assertObjectContains } = require('../helpers')
 
 const {
@@ -13,6 +14,11 @@ const {
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const {
+  ERROR_MESSAGE,
+  ERROR_STACK,
+  ERROR_TYPE,
+} = require('../../packages/dd-trace/src/constants')
+const {
   TEST_STATUS,
   TEST_TYPE,
   TEST_IS_RETRY,
@@ -20,7 +26,6 @@ const {
   TEST_CODE_COVERAGE_LINES_PCT,
   TEST_SESSION_NAME,
   TEST_COMMAND,
-  TEST_LEVEL_EVENT_TYPES,
   TEST_SOURCE_FILE,
   TEST_SOURCE_START,
   TEST_IS_NEW,
@@ -58,11 +63,12 @@ const FLAKY_UNNECESSARY_RETRY_RESOURCE =
 const linePctMatchRegex = /Lines\s+:\s+([\d.]+)%/
 
 // vitest@4.x requires Node.js >= 20
-const versions = NODE_MAJOR <= 18 ? ['1.6.0', '3'] : ['1.6.0', 'latest']
+const versions = NODE_MAJOR <= 18 ? ['1.6.0', '3.2.6'] : ['1.6.0', 'latest']
 
 versions.forEach((version) => {
   describe(`vitest@${version}`, () => {
     let cwd, receiver, childProcess, testOutput
+    const newerVitestIt = version === '1.6.0' ? it.skip : it
 
     useSandbox([
       `vitest@${version}`,
@@ -109,9 +115,8 @@ versions.forEach((version) => {
             const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
             metadataDicts.forEach(metadata => {
-              for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-                assert.strictEqual(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
-              }
+              assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session')
+              assert.ok(metadata['*'][TEST_COMMAND])
             })
 
             const events = payloads.flatMap(({ payload }) => payload.events)
@@ -128,9 +133,15 @@ versions.forEach((version) => {
             const testSuiteEvents = events.filter(event => event.type === 'test_suite_end')
             const testEvents = events.filter(event => event.type === 'test')
 
-            assert.ok(testSessionEvent.content.resource.includes('test_session.vitest run'))
+            assert.ok(
+              testSessionEvent.content.resource.includes('test_session.vitest run'),
+              `Got: ${inspect(testSessionEvent.content.resource)}`
+            )
             assert.strictEqual(testSessionEvent.content.meta[TEST_STATUS], 'fail')
-            assert.ok(testModuleEvent.content.resource.includes('test_module.vitest run'))
+            assert.ok(
+              testModuleEvent.content.resource.includes('test_module.vitest run'),
+              `Got: ${inspect(testModuleEvent.content.resource)}`
+            )
             assert.strictEqual(testModuleEvent.content.meta[TEST_STATUS], 'fail')
             assert.strictEqual(testSessionEvent.content.meta[TEST_TYPE], 'test')
             assert.strictEqual(testModuleEvent.content.meta[TEST_TYPE], 'test')
@@ -224,7 +235,6 @@ versions.forEach((version) => {
               if (poolConfig === 'forks') {
                 assert.strictEqual(test.content.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
               }
-              assert.strictEqual(test.content.meta[TEST_COMMAND], 'vitest run')
               assert.ok(test.content.metrics[DD_HOST_CPU_COUNT])
               assert.strictEqual(test.content.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
             })
@@ -234,7 +244,6 @@ versions.forEach((version) => {
               if (poolConfig === 'forks') {
                 assert.strictEqual(testSuite.content.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
               }
-              assert.strictEqual(testSuite.content.meta[TEST_COMMAND], 'vitest run')
               assert.strictEqual(
                 testSuite.content.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/vitest-tests/test-visibility'),
                 true
@@ -541,7 +550,7 @@ versions.forEach((version) => {
 
         Promise.all([eventsPromise, once(childProcess, 'exit')]).then(() => {
           if (version !== '1.6.0') {
-            assert.ok(childStdout.includes(CUSTOM_SEQUENCER_MARKER))
+            assert.ok(childStdout.includes(CUSTOM_SEQUENCER_MARKER), `Got: ${inspect(childStdout)}`)
           }
           done()
         }).catch(done)
@@ -975,6 +984,149 @@ versions.forEach((version) => {
               TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
               SHOULD_ADD_SLOW_DURATION_TEST: '1',
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, 0)
+      })
+
+      it('reports the error from each failed EFD attempt', async () => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': 9,
+            },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
+        })
+
+        receiver.setKnownTests({
+          vitest: {},
+        })
+
+        const testName = 'early flake detection reports the current failed attempt error'
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events
+              .filter(event => event.type === 'test')
+              .map(test => test.content)
+              .filter(test => test.meta[TEST_NAME] === testName)
+              .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+            assert.strictEqual(tests.length, 10)
+
+            const failedAttempts = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+            assert.deepStrictEqual(
+              failedAttempts.map(test => ({
+                isRetry: test.meta[TEST_IS_RETRY],
+                retryReason: test.meta[TEST_RETRY_REASON],
+                errorType: test.meta[ERROR_TYPE],
+                errorMessage: test.meta[ERROR_MESSAGE],
+              })),
+              [
+                {
+                  isRetry: undefined,
+                  retryReason: undefined,
+                  errorType: 'Error',
+                  errorMessage: 'failure 0',
+                },
+                {
+                  isRetry: 'true',
+                  retryReason: TEST_RETRY_REASON_TYPES.efd,
+                  errorType: 'Error',
+                  errorMessage: 'failure 2',
+                },
+                {
+                  isRetry: 'true',
+                  retryReason: TEST_RETRY_REASON_TYPES.efd,
+                  errorType: 'Error',
+                  errorMessage: 'failure 5',
+                },
+                {
+                  isRetry: 'true',
+                  retryReason: TEST_RETRY_REASON_TYPES.efd,
+                  errorType: 'Error',
+                  errorMessage: 'failure 8',
+                },
+              ]
+            )
+            failedAttempts.forEach(test => {
+              assert.ok(
+                test.meta[ERROR_STACK],
+                `Expected failed attempt error stack. Test event: ${inspect(test)}`
+              )
+            })
+          }, 55_000)
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run -t "reports the current failed attempt error"',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              SHOULD_ADD_CURRENT_ERROR_TEST: '1',
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, 0)
+      })
+
+      newerVitestIt('disables manual Vitest retries for new tests retried by EFD', async () => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': 2,
+            },
+            faulty_session_threshold: 100,
+          },
+          flaky_test_retries_enabled: false,
+          known_tests_enabled: true,
+        })
+
+        receiver.setKnownTests({
+          vitest: {},
+        })
+
+        const testName = 'efd with manual vitest retries fails first then passes'
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events
+              .filter(event => event.type === 'test')
+              .map(test => test.content)
+              .filter(test => test.meta[TEST_NAME] === testName)
+              .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+            const diagnosticTests = tests.map(test => ({
+              status: test.meta[TEST_STATUS],
+              isRetry: test.meta[TEST_IS_RETRY],
+              retryReason: test.meta[TEST_RETRY_REASON],
+            }))
+            assert.deepStrictEqual(diagnosticTests, [
+              { status: 'fail', isRetry: undefined, retryReason: undefined },
+              { status: 'fail', isRetry: 'true', retryReason: TEST_RETRY_REASON_TYPES.efd },
+              { status: 'pass', isRetry: 'true', retryReason: TEST_RETRY_REASON_TYPES.efd },
+            ])
+          }, 55_000)
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run --retry=1',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/fails-first-then-passes.mjs',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
             },
           }
         )

@@ -1,7 +1,22 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { setImmediate } = require('node:timers/promises')
+
+const { channel } = require('dc-polyfill')
 const proxyquire = require('proxyquire').noCallThru()
+
+const { assertObjectContains } = require('../../../integration-tests/helpers')
+
+// The instrumentation wraps terminate() and publishes here; the plugin reacts. These unit tests
+// drive the plugin directly off the channel. The wrapping itself is covered end-to-end against the
+// real SDK in index.spec.js ('trace-checkpoint propagation').
+const TERMINATE_CHANNEL = 'apm:aws-durable-execution-sdk-js:terminate'
+const terminateCh = channel(TERMINATE_CHANNEL)
+
+// Plugins subscribe to the channel only while enabled; disable them between tests so a publish in
+// one test never reaches a plugin left subscribed by another.
+const enabledPlugins = []
 
 function loadHandlerPlugin (checkpointSaveCalls) {
   return proxyquire('../src/handler', {
@@ -13,7 +28,7 @@ function loadHandlerPlugin (checkpointSaveCalls) {
   })
 }
 
-function buildCtx (executionContext, handler) {
+function buildCtx (handler) {
   const invocationEvent = {
     DurableExecutionArn: 'arn:aws:lambda:us-east-1:123456789012:durable-execution/test-exec',
     CheckpointToken: 'test-token',
@@ -22,20 +37,24 @@ function buildCtx (executionContext, handler) {
   return {
     invocationEvent,
     ctx: {
-      arguments: [
-        invocationEvent,
-        {},
-        executionContext,
-        'mode',
-        'test-token',
-        handler,
-      ],
+      arguments: [invocationEvent, {}, {}, 'mode', 'test-token', handler],
     },
   }
 }
 
 function buildPlugin (Plugin, tracer) {
-  const plugin = new Plugin(tracer, {})
+  // Mirror Config's handling of DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED (default-on, disabled
+  // only when explicitly "false") so the channel subscription installs the same way it does in
+  // production. The real value is read off `_tracerConfig`, not `process.env`, so the env-driven
+  // tests below must bridge it here.
+  const tracerConfig = {
+    DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED:
+      process.env.DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED !== 'false',
+  }
+  const plugin = new Plugin(tracer, tracerConfig)
+  // operationName() reaches into the tracer's nomenclature, which the bare `tracer`
+  // stub above doesn't provide; the resolved name is irrelevant to these tests.
+  plugin.operationName = () => 'aws.durable.execute'
   plugin.startSpan = (_name, _options, ctx) => {
     const span = {
       context () {
@@ -47,41 +66,41 @@ function buildPlugin (Plugin, tracer) {
     }
     return span
   }
+  // Activate channel subscriptions registered in the constructor. TracingPlugin.configure spreads
+  // its argument, so an object (not a bare boolean) is required for `enabled` to survive.
+  plugin.configure({ enabled: true })
+  enabledPlugins.push(plugin)
   return plugin
 }
 
+// Drive the lifecycle the instrumentation + bindStart produce: bindStart opens the execute span,
+// the handler wrapper captures the durableContext, then terminate() publishes with its reason.
+function runToTermination (plugin, ctx, { durableContext, reason } = {}) {
+  plugin.bindStart(ctx)
+  if (durableContext !== undefined) ctx.durableContext = durableContext
+  ctx.terminationReason = reason
+  terminateCh.publish(ctx)
+}
+
 describe('handler checkpoint hook', () => {
-  it('saves a checkpoint on pending termination even when the handler never settles', async () => {
+  afterEach(() => {
+    while (enabledPlugins.length > 0) enabledPlugins.pop().configure({ enabled: false })
+  })
+
+  it('saves a checkpoint on pending termination', async () => {
     const checkpointSaveCalls = []
     const Plugin = loadHandlerPlugin(checkpointSaveCalls)
     const tracer = {}
     const plugin = buildPlugin(Plugin, tracer)
 
-    let terminateCalls = 0
-    const executionContext = {
-      terminationManager: {
-        terminate () { terminateCalls++ },
-      },
-    }
-    const unresolvedHandler = async () => new Promise(() => {})
-    const { invocationEvent, ctx } = buildCtx(executionContext, unresolvedHandler)
-
-    plugin.bindStart(ctx)
-
-    const wrappedHandler = ctx.arguments[5]
+    const { invocationEvent, ctx } = buildCtx(async () => new Promise(() => {}))
     const durableContext = { checkpoint: { checkpoint: async () => {} } }
+    runToTermination(plugin, ctx, { durableContext, reason: 'CALLBACK_PENDING' })
+    await setImmediate()
 
-    void wrappedHandler({}, durableContext)
-    executionContext.terminationManager.terminate({ reason: 'CALLBACK_PENDING' })
-    await new Promise(resolve => setImmediate(resolve))
-
-    assert.equal(terminateCalls, 1)
     assert.equal(checkpointSaveCalls.length, 1)
     assert.equal(checkpointSaveCalls[0].length, 5, 'expected 5 positional args (no trailing status)')
-    assert.equal(checkpointSaveCalls[0][0], tracer)
-    assert.equal(checkpointSaveCalls[0][2], durableContext)
-    assert.equal(checkpointSaveCalls[0][3], '123')
-    assert.equal(checkpointSaveCalls[0][4], invocationEvent)
+    assertObjectContains(checkpointSaveCalls, [[tracer, durableContext, '123', invocationEvent]])
   })
 
   it('does not save a checkpoint for non-pending termination reasons', async () => {
@@ -89,17 +108,12 @@ describe('handler checkpoint hook', () => {
     const Plugin = loadHandlerPlugin(checkpointSaveCalls)
     const plugin = buildPlugin(Plugin, {})
 
-    const executionContext = {
-      terminationManager: { terminate () {} },
-    }
-    const unresolvedHandler = async () => new Promise(() => {})
-    const { ctx } = buildCtx(executionContext, unresolvedHandler)
-
-    plugin.bindStart(ctx)
-    const wrappedHandler = ctx.arguments[5]
-    void wrappedHandler({}, { checkpoint: { checkpoint: async () => {} } })
-    executionContext.terminationManager.terminate({ reason: 'CHECKPOINT_FAILED' })
-    await new Promise(resolve => setImmediate(resolve))
+    const { ctx } = buildCtx(async () => new Promise(() => {}))
+    runToTermination(plugin, ctx, {
+      durableContext: { checkpoint: { checkpoint: async () => {} } },
+      reason: 'CHECKPOINT_FAILED',
+    })
+    await setImmediate()
 
     assert.equal(checkpointSaveCalls.length, 0)
   })
@@ -109,14 +123,12 @@ describe('handler checkpoint hook', () => {
     const Plugin = loadHandlerPlugin(checkpointSaveCalls)
     const plugin = buildPlugin(Plugin, {})
 
-    const executionContext = { terminationManager: { terminate () {} } }
-    const { ctx } = buildCtx(executionContext, async () => new Promise(() => {}))
-
-    plugin.bindStart(ctx)
-    const wrappedHandler = ctx.arguments[5]
-    void wrappedHandler({}, { checkpoint: { checkpoint: async () => {} } })
-    executionContext.terminationManager.terminate({ reason: 'A_REASON_THE_SDK_HAS_NOT_TAUGHT_US_ABOUT' })
-    await new Promise(resolve => setImmediate(resolve))
+    const { ctx } = buildCtx(async () => new Promise(() => {}))
+    runToTermination(plugin, ctx, {
+      durableContext: { checkpoint: { checkpoint: async () => {} } },
+      reason: 'A_REASON_THE_SDK_HAS_NOT_TAUGHT_US_ABOUT',
+    })
+    await setImmediate()
 
     assert.equal(checkpointSaveCalls.length, 0)
   })
@@ -126,16 +138,42 @@ describe('handler checkpoint hook', () => {
     const Plugin = loadHandlerPlugin(checkpointSaveCalls)
     const plugin = buildPlugin(Plugin, {})
 
-    const executionContext = { terminationManager: { terminate () {} } }
-    const { ctx } = buildCtx(executionContext, async () => new Promise(() => {}))
-
-    plugin.bindStart(ctx)
-    const wrappedHandler = ctx.arguments[5]
-    void wrappedHandler({}, { checkpoint: { checkpoint: async () => {} } })
-    executionContext.terminationManager.terminate()
-    await new Promise(resolve => setImmediate(resolve))
+    const { ctx } = buildCtx(async () => new Promise(() => {}))
+    runToTermination(plugin, ctx, {
+      durableContext: { checkpoint: { checkpoint: async () => {} } },
+      reason: undefined,
+    })
+    await setImmediate()
 
     assert.equal(checkpointSaveCalls.length, 1)
+  })
+
+  it('saves at most once across repeated terminate() calls', async () => {
+    const checkpointSaveCalls = []
+    const Plugin = loadHandlerPlugin(checkpointSaveCalls)
+    const plugin = buildPlugin(Plugin, {})
+
+    const { ctx } = buildCtx(async () => new Promise(() => {}))
+    runToTermination(plugin, ctx, {
+      durableContext: { checkpoint: { checkpoint: async () => {} } },
+      reason: 'CALLBACK_PENDING',
+    })
+    terminateCh.publish(ctx)
+    await setImmediate()
+
+    assert.equal(checkpointSaveCalls.length, 1)
+  })
+
+  it('does not save when the durableContext was never captured', async () => {
+    const checkpointSaveCalls = []
+    const Plugin = loadHandlerPlugin(checkpointSaveCalls)
+    const plugin = buildPlugin(Plugin, {})
+
+    const { ctx } = buildCtx(async () => new Promise(() => {}))
+    runToTermination(plugin, ctx, { reason: 'CALLBACK_PENDING' })
+    await setImmediate()
+
+    assert.equal(checkpointSaveCalls.length, 0)
   })
 
   describe('DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED', () => {
@@ -148,41 +186,39 @@ describe('handler checkpoint hook', () => {
       else process.env[ENV_KEY] = originalEnv
     })
 
-    it('skips installing the termination hook when set to "false"', async () => {
+    it('does not subscribe (so never saves) when set to "false"', async () => {
       process.env[ENV_KEY] = 'false'
 
       const checkpointSaveCalls = []
       const Plugin = loadHandlerPlugin(checkpointSaveCalls)
       const plugin = buildPlugin(Plugin, {})
 
-      const originalTerminate = () => {}
-      const executionContext = { terminationManager: { terminate: originalTerminate } }
-      const { ctx } = buildCtx(executionContext, async () => {})
+      const { ctx } = buildCtx(async () => {})
+      runToTermination(plugin, ctx, {
+        durableContext: { checkpoint: { checkpoint: async () => {} } },
+        reason: 'CALLBACK_PENDING',
+      })
+      await setImmediate()
 
-      plugin.bindStart(ctx)
-
-      assert.strictEqual(executionContext.terminationManager.terminate, originalTerminate,
-        'terminate must not be wrapped when cross-invocation tracing is disabled')
-      // The handler arg must also remain untouched so the user code runs unaltered.
-      assert.strictEqual(typeof ctx.arguments[5], 'function')
-      executionContext.terminationManager.terminate({ reason: 'CALLBACK_PENDING' })
-      await new Promise(resolve => setImmediate(resolve))
       assert.equal(checkpointSaveCalls.length, 0)
+      assert.strictEqual(terminateCh.hasSubscribers, false, 'must not subscribe when disabled')
     })
 
-    it('still installs the hook when set to a truthy value (default-on)', () => {
+    it('subscribes and saves when set to a truthy value (default-on)', async () => {
       process.env[ENV_KEY] = 'true'
 
-      const Plugin = loadHandlerPlugin([])
+      const checkpointSaveCalls = []
+      const Plugin = loadHandlerPlugin(checkpointSaveCalls)
       const plugin = buildPlugin(Plugin, {})
 
-      const originalTerminate = () => {}
-      const executionContext = { terminationManager: { terminate: originalTerminate } }
-      const { ctx } = buildCtx(executionContext, async () => {})
+      const { ctx } = buildCtx(async () => {})
+      runToTermination(plugin, ctx, {
+        durableContext: { checkpoint: { checkpoint: async () => {} } },
+        reason: 'CALLBACK_PENDING',
+      })
+      await setImmediate()
 
-      plugin.bindStart(ctx)
-      assert.notStrictEqual(executionContext.terminationManager.terminate, originalTerminate,
-        'terminate must be wrapped when cross-invocation tracing is enabled')
+      assert.equal(checkpointSaveCalls.length, 1)
     })
   })
 })

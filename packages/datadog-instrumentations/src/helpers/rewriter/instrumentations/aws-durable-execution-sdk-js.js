@@ -1,18 +1,8 @@
 'use strict'
 
-const baseModule = { name: '@aws/durable-execution-sdk-js', versionRange: '>=1.1.0' }
+const contextMethods = require('../../../aws-durable-execution-sdk-js-context-methods')
 
-const contextMethods = [
-  'step',
-  'invoke',
-  'runInChildContext',
-  'wait',
-  'waitForCondition',
-  'waitForCallback',
-  'createCallback',
-  'map',
-  'parallel',
-]
+const baseModule = { name: '@aws/durable-execution-sdk-js', versionRange: '>=1.1.0' }
 
 const buildEntries = filePath => {
   const module = { ...baseModule, filePath }

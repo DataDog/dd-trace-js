@@ -22,6 +22,10 @@ describe('extended data collection', () => {
       return
     }
 
+    if (satisfies(realVersion, '>=12 <13') && NODE_MAJOR >= 26) {
+      return // next 12.x fails to build on Node.js 26
+    }
+
     if (satisfies(realVersion, '>=16') && NODE_MAJOR < 20) {
       return
     }
@@ -167,8 +171,14 @@ describe('extended data collection', () => {
             assert.strictEqual(collectedRequestHeaders, 8)
             assert.strictEqual(collectedResponseHeaders, 8)
 
-            assert.ok(span.metrics['_dd.appsec.request.header_collection.discarded'] >= 2)
-            assert.ok(span.metrics['_dd.appsec.response.header_collection.discarded'] >= 2)
+            assert.ok(
+              span.metrics['_dd.appsec.request.header_collection.discarded'] >= 2,
+              `Expected ${span.metrics['_dd.appsec.request.header_collection.discarded']} >= 2`
+            )
+            assert.ok(
+              span.metrics['_dd.appsec.response.header_collection.discarded'] >= 2,
+              `Expected ${span.metrics['_dd.appsec.response.header_collection.discarded']} >= 2`
+            )
 
             const metaStructBody = msgpack.decode(span.meta_struct['http.request.body'])
             assert.deepEqual(metaStructBody, requestBody)

@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const { exec } = require('node:child_process')
 const { once } = require('node:events')
+const { inspect } = require('node:util')
 
 const semver = require('semver')
 const {
@@ -102,6 +103,7 @@ moduleTypes.forEach(({
     useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript'], true)
 
     before(async function () {
+      this.timeout(180_000)
       cwd = sandboxCwd()
       await warmCypressBinary(cwd)
 
@@ -225,10 +227,6 @@ moduleTypes.forEach(({
               assert.equal(testExecutionOrder[9].isRetry, false)
             }, { hardTimeout: 30000 })
 
-        // TODO: remove this once we have figured out flakiness
-        childProcess.stdout?.pipe(process.stdout)
-        childProcess.stderr?.pipe(process.stderr)
-
         await Promise.all([
           once(childProcess, 'exit'),
           receiverPromise,
@@ -281,7 +279,10 @@ moduleTypes.forEach(({
                 'cypress/e2e/flaky-test-retries.js.flaky test retry never passes',
                 'cypress/e2e/flaky-test-retries.js.flaky test retry always passes',
               ])
-              assert.ok(!tests.some(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr))
+              assert.ok(
+                !tests.some(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr),
+                `Got: ${inspect(tests)}`
+              )
             }, { hardTimeout: 25000 })
 
         await Promise.all([

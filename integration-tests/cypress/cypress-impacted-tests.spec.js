@@ -110,6 +110,7 @@ moduleTypes.forEach(({
     useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript'], true)
 
     before(async function () {
+      this.timeout(180_000)
       cwd = sandboxCwd()
       await warmCypressBinary(cwd)
 
@@ -159,7 +160,7 @@ moduleTypes.forEach(({
                 .filter(({ payload }) => payload.metadata?.test)
                 .flatMap(({ payload }) => payload.metadata)
 
-              assert.ok(metadataDicts.length > 0)
+              assert.ok(metadataDicts.length > 0, `Expected ${metadataDicts.length} > 0`)
               metadataDicts.forEach(metadata => {
                 assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS], '1')
                 assert.strictEqual(metadata.test[DD_CAPABILITIES_EARLY_FLAKE_DETECTION], '1')
@@ -170,13 +171,9 @@ moduleTypes.forEach(({
                 assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
                 assert.strictEqual(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
                 // capabilities logic does not overwrite test session name
-                assert.strictEqual(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
+                assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session-name')
               })
             }, { hardTimeout: 25000 })
-
-        // TODO: remove this once we have figured out flakiness
-        childProcess.stdout?.pipe(process.stdout)
-        childProcess.stderr?.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -317,10 +314,6 @@ moduleTypes.forEach(({
         )
 
         const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isNew }, childProcess)
-
-        // TODO: remove this once we have figured out flakiness
-        childProcess.stdout?.pipe(process.stdout)
-        childProcess.stderr?.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -531,9 +524,11 @@ moduleTypes.forEach(({
 
         childProcess.stdout?.on('data', (data) => {
           testOutput += data.toString()
+          process.stdout.write(data)
         })
         childProcess.stderr?.on('data', (data) => {
           testOutput += data.toString()
+          process.stderr.write(data)
         })
 
         await Promise.all([

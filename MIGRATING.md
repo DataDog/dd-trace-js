@@ -19,6 +19,24 @@ The deprecated `whitelist` / `blacklist` plugin options on the `http`, `ioredis`
 surface. Use `allowlist` / `blocklist` instead — both have been the canonical
 names for several majors.
 
+### `Span.addTags` only accepts plain objects
+
+`Span.addTags` historically dispatched on a `'key:val,key:val'` string
+or an array (of strings, arrays, or objects, recursively) on top of the
+documented `{ [key]: value }` form. Neither shape ever appeared in the
+public TypeScript surface and no v6 caller passes one. v6 drops both
+paths: `addTags` is now a thin `Object.assign` onto the span's tag map.
+Convert string or array inputs to plain objects at the call site before
+calling `addTags`.
+
+```js
+// Before (still works on v5)
+span.addTags('env:prod,version:1.2.3')
+
+// After
+span.addTags({ env: 'prod', version: '1.2.3' })
+```
+
 ### `Span.addLink(spanContext, attributes)` legacy overload removed
 
 `Span.addLink` (both the OpenTracing-style API and the OpenTelemetry bridge)

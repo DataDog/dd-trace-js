@@ -1,8 +1,6 @@
 'use strict'
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
-const { isFalse } = require('../../dd-trace/src/util')
 const { saveTraceContextCheckpointIfUpdated } = require('./trace-checkpoint')
 
 // Termination reasons that indicate the execution is suspending rather than exiting permanently.
@@ -18,16 +16,24 @@ const PENDING_TERMINATION_REASONS = new Set([
 
 const DEFAULT_TERMINATION_REASON = 'OPERATION_TERMINATED'
 
-// Default on; users opt out by setting to false.
-function isCrossInvocationTracingEnabled () {
-  return !isFalse(getEnvironmentVariable('DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED'))
-}
+// Published by the instrumentation when the SDK's terminationManager.terminate() is called.
+// The instrumentation owns the wrapping; this plugin only reacts.
+const TERMINATE_CHANNEL = 'apm:aws-durable-execution-sdk-js:terminate'
 
 class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
   static id = 'aws-durable-execution-sdk-js'
   static type = 'serverless'
   static kind = 'internal'
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:withDurableExecution'
+
+  constructor (...args) {
+    super(...args)
+    // Gate the subscription on the feature flag: the instrumentation only wraps terminate() while
+    // this channel has subscribers, so not subscribing keeps the wrapping off entirely.
+    if (this._tracerConfig.DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED) {
+      this.addSub(TERMINATE_CHANNEL, ctx => this.#onTerminate(ctx))
+    }
+  }
 
   bindStart (ctx) {
     const args = ctx.arguments || []
@@ -36,67 +42,31 @@ class AwsDurableExecutionSdkJsHandlerPlugin extends TracingPlugin {
     const handler = args[5]
 
     const meta = {
-      'aws.durable.replayed': String(durableExecutionMode === 'ReplayMode'),
+      'aws.durable.replayed': durableExecutionMode === 'ReplayMode' ? 'true' : 'false',
     }
     const arn = event?.DurableExecutionArn
     if (arn) {
       meta['aws.durable.execution_arn'] = arn
     }
 
-    this.startSpan('aws.durable.execute', {
+    this.startSpan(this.operationName(), {
       resource: handler?.name,
       kind: this.constructor.kind,
       meta,
     }, ctx)
 
-    this._installTerminationCheckpointHook(ctx, event)
-
     return ctx.currentStore
   }
 
-  // Wrap the user handler so we can capture the SDK's DurableContext, and
-  // install a hook on the termination manager so that when the execution
-  // suspends (PENDING) we persist the current trace context as a `_datadog`
-  // checkpoint, which subsequent invocations consume to extract the parent
-  // trace context.
-  _installTerminationCheckpointHook (ctx, event) {
-    if (!isCrossInvocationTracingEnabled()) return
-
-    const args = ctx.arguments || []
-    if (args.length < 6 || typeof args[5] !== 'function') return
-
-    const executionContext = args[2]
-    const terminationManager = executionContext?.terminationManager
-    if (!terminationManager || typeof terminationManager.terminate !== 'function') return
-
-    const span = ctx.currentStore?.span
-    if (!span) return
-
-    const state = {
-      durableContext: undefined,
-      firstExecutionSpanId: span.context?.()?.toSpanId?.(),
-      invocationEvent: event,
-      savePromise: null,
-      saved: false,
-      span,
-      tracer: this._tracer,
-    }
-
-    const originalHandler = args[5]
-    args[5] = function (...handlerArgs) {
-      state.durableContext = handlerArgs[1]
-      return originalHandler.apply(this, handlerArgs)
-    }
-
-    const originalTerminate = terminationManager.terminate
-    terminationManager.terminate = function (...terminateArgs) {
-      const reason = terminateArgs[0]?.reason ?? DEFAULT_TERMINATION_REASON
-      if (PENDING_TERMINATION_REASONS.has(reason)) {
-        // Must enqueue checkpoint updates before the checkpoint manager flips to terminating.
-        void maybeSaveCheckpoint(state)
-      }
-      return originalTerminate.apply(this, terminateArgs)
-    }
+  // Fired (synchronously, before the SDK's terminate() runs) when the execution suspends. On a
+  // PENDING reason we persist the current trace context as a `_datadog` checkpoint, which
+  // subsequent invocations consume to extract the parent trace context. `ctx` is the shared
+  // withDurableExecution context: bindStart put the execute span on it, and the instrumentation
+  // put the captured durableContext and termination reason on it.
+  #onTerminate (ctx) {
+    const reason = ctx.terminationReason ?? DEFAULT_TERMINATION_REASON
+    if (!PENDING_TERMINATION_REASONS.has(reason)) return
+    void maybeSaveCheckpoint(this.tracer, ctx)
   }
 
   asyncEnd (ctx) {
@@ -126,24 +96,28 @@ function finishOpenChildSpans (executeSpan) {
   }
 }
 
-function maybeSaveCheckpoint (state) {
-  if (!state || state.saved || state.savePromise) return state.savePromise
-  if (!state.tracer || !state.span || !state.durableContext) return null
+// Save state is kept on the shared `ctx` so repeated terminate() calls within one execution
+// save at most once. The execute span is also the anchor we propagate, so its span id is the
+// `firstExecutionSpanId` passed downstream.
+function maybeSaveCheckpoint (tracer, ctx) {
+  if (ctx.checkpointSaved || ctx.checkpointSavePromise) return ctx.checkpointSavePromise
 
-  state.savePromise = saveTraceContextCheckpointIfUpdated(
-    state.tracer,
-    state.span,
-    state.durableContext,
-    state.firstExecutionSpanId,
-    state.invocationEvent,
-  ).catch(() => {
-    // Best-effort — never break customer workloads.
-  }).finally(() => {
-    state.saved = true
-    state.savePromise = null
+  const span = ctx.currentStore?.span
+  const durableContext = ctx.durableContext
+  if (!span || !durableContext) return
+
+  ctx.checkpointSavePromise = saveTraceContextCheckpointIfUpdated(
+    tracer,
+    span,
+    durableContext,
+    span.context?.()?.toSpanId?.(),
+    ctx.arguments?.[0],
+  ).finally(() => {
+    ctx.checkpointSaved = true
+    ctx.checkpointSavePromise = undefined
   })
 
-  return state.savePromise
+  return ctx.checkpointSavePromise
 }
 
 module.exports = AwsDurableExecutionSdkJsHandlerPlugin

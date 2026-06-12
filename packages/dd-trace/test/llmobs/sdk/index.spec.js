@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
+const { inspect } = require('node:util')
 
 const { channel } = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
@@ -179,7 +180,8 @@ describe('sdk', () => {
           tracer._tracer._config.llmobs.enabled = false
 
           llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, (span, cb) => {
-            assert.ok(LLMObsTagger.tagMap.get(span) == null)
+            const tag = LLMObsTagger.tagMap.get(span)
+            assert.ok(tag == null, `Expected no LLMObs tag for span, got ${inspect(tag)}`)
             span.setTag('k', 'v')
             cb()
           })
@@ -311,11 +313,11 @@ describe('sdk', () => {
           tracer.trace('apmRootSpan', apmRootSpan => {
             apmTraceId = apmRootSpan.context().toTraceId(true)
             llmobs.trace('workflow', llmobsSpan1 => {
-              traceId1 = llmobsSpan1.context()._tags['_ml_obs.trace_id']
+              traceId1 = llmobsSpan1.context().getTag('_ml_obs.trace_id')
             })
 
             llmobs.trace('workflow', llmobsSpan2 => {
-              traceId2 = llmobsSpan2.context()._tags['_ml_obs.trace_id']
+              traceId2 = llmobsSpan2.context().getTag('_ml_obs.trace_id')
             })
           })
 
@@ -426,7 +428,8 @@ describe('sdk', () => {
 
           const fn = llmobs.wrap({ kind: 'workflow' }, (a) => {
             assert.strictEqual(a, 1)
-            assert.ok(LLMObsTagger.tagMap.get(llmobs._active()) == null)
+            const tag = LLMObsTagger.tagMap.get(llmobs._active())
+            assert.ok(tag == null, `Expected no LLMObs tag for active span, got ${inspect(tag)}`)
           })
 
           fn(1)
@@ -604,7 +607,7 @@ describe('sdk', () => {
 
           const wrappedMyWorkflow = llmobs.wrap({ kind: 'workflow' }, myWorkflow)
           wrappedMyWorkflow('input', (err, res) => {
-            assert.ok(err == null)
+            assert.ok(err == null, `Expected ${err} == null`)
             assert.strictEqual(res, 'output')
           })
 
@@ -686,7 +689,7 @@ describe('sdk', () => {
             workflowSpan = _workflow
             tracer.trace('apmOperation', () => {
               myWrappedLlm('input', (err, res) => {
-                assert.ok(err == null)
+                assert.ok(err == null, `Expected ${err} == null`)
                 assert.strictEqual(res, 'output')
                 llmobs.trace({ kind: 'task', name: 'afterLlmTask' }, _task => {
                   taskSpan = _task
@@ -721,7 +724,7 @@ describe('sdk', () => {
           const fn = llmobs.wrap('workflow', { name: 'test' }, () => {
             const span = llmobs._active()
 
-            const traceId = span.context()._tags['_ml_obs.trace_id']
+            const traceId = span.context().getTag('_ml_obs.trace_id')
             assert.ok(traceId)
             assert.notStrictEqual(traceId, span.context().toTraceId(true))
           })
@@ -909,8 +912,8 @@ describe('sdk', () => {
       tracer.trace('test', span => {
         assert.throws(() => llmobs.annotate(span, {}))
 
-        // no span in registry, should not throw
-        assert.ok(LLMObsTagger.tagMap.get(span) == null)
+        const tag = LLMObsTagger.tagMap.get(span)
+        assert.ok(tag == null, `Expected no LLMObs tag for span, got ${inspect(tag)}`)
       })
     })
 
@@ -1153,6 +1156,77 @@ describe('sdk', () => {
         })
       })
     })
+
+    it('annotates toolDefinitions if present', () => {
+      const toolDefinitions = [
+        { name: 'get_weather', description: 'Gets the weather', schema: { type: 'object' }, version: '1.0' },
+        { name: 'get_time' },
+      ]
+
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ toolDefinitions })
+
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.meta.tool_definitions': toolDefinitions,
+        })
+      })
+    })
+
+    it('strips invalid optional fields from toolDefinitions items', () => {
+      const toolDefinitions = [
+        { name: 'get_weather', description: 123, schema: 'not-an-object', version: 456 },
+      ]
+
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ toolDefinitions })
+
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.meta.tool_definitions': [{ name: 'get_weather' }],
+        })
+      })
+    })
+
+    it('skips toolDefinitions items missing a name', () => {
+      const toolDefinitions = [
+        { description: 'no name here' },
+        { name: 'valid_tool' },
+      ]
+
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ toolDefinitions })
+
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.meta.tool_definitions': [{ name: 'valid_tool' }],
+        })
+      })
+    })
+
+    it('rejects non array toolDefinitions', () => {
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        assert.throws(() => llmobs.annotate({ toolDefinitions: 'not an array' }))
+      })
+    })
+
+    it('rejects empty toolDefinitions array', () => {
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        assert.throws(() => llmobs.annotate({ toolDefinitions: [] }))
+      })
+    })
+
+    it('rejects toolDefinitions where all items are invalid', () => {
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        assert.throws(() => llmobs.annotate({ toolDefinitions: [{ description: 'no name' }, 'not an object'] }))
+      })
+    })
   })
 
   describe('annotationContext', () => {
@@ -1183,6 +1257,35 @@ describe('sdk', () => {
           })
         })
       })
+    })
+  })
+
+  it('annotates toolDefinitions if present', () => {
+    const toolDefinitions = [
+      { name: 'get_weather', description: 'Gets the weather', schema: { type: 'object' }, version: '1.0' },
+      { name: 'get_time' },
+    ]
+
+    llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+      llmobs.annotate({ toolDefinitions })
+      assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+        '_ml_obs.meta.span.kind': 'llm',
+        '_ml_obs.meta.ml_app': 'mlApp',
+        '_ml_obs.llmobs_parent_id': 'undefined',
+        '_ml_obs.meta.tool_definitions': toolDefinitions,
+      })
+    })
+  })
+
+  it('rejects non array toolDefinitions', () => {
+    llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+      assert.throws(() => llmobs.annotate({ toolDefinitions: 'not an array' }))
+    })
+  })
+
+  it('rejects empty toolDefinitions array', () => {
+    llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+      assert.throws(() => llmobs.annotate({ toolDefinitions: [] }))
     })
   })
 

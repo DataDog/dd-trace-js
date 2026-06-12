@@ -3,6 +3,7 @@
 const dc = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const { addHook } = require('./helpers/instrument')
+const aiGuard = require('./helpers/openai-ai-guard')
 
 const ch = dc.tracingChannel('apm:openai:request')
 const onStreamedChunkCh = dc.channel('apm:openai:request:chunk')
@@ -216,14 +217,19 @@ for (const extension of extensions) {
 
       for (const methodName of methods) {
         shimmer.wrap(targetPrototype, methodName, methodFn => function (...args) {
-          if (!ch.start.hasSubscribers) {
+          if (!ch.start.hasSubscribers && !aiGuard.hasSubscribers()) {
             return methodFn.apply(this, args)
           }
-
           // The OpenAI library lets you set `stream: true` on the options arg to any method
           // However, we only want to handle streamed responses in specific cases
           // chat.completions and completions
           const stream = streamedResponse && getOption(args, 'stream', false)
+
+          const guard = aiGuard.createGuard(baseResource, args[0], stream)
+
+          if (!ch.start.hasSubscribers && !guard) {
+            return methodFn.apply(this, args)
+          }
 
           const client = this._client || this.client
 
@@ -234,6 +240,10 @@ for (const extension of extensions) {
           }
 
           return ch.start.runStores(ctx, () => {
+            // Explicit childOf rather than async-context: the _thenUnwrap/parse path
+            // decouples the lazy evaluation from the active scope at call time.
+            if (guard) guard.parentSpan = ctx.currentStore?.span
+
             const apiProm = methodFn.apply(this, args)
 
             if (baseResource === 'chat.completions' && typeof apiProm._thenUnwrap === 'function') {
@@ -249,7 +259,7 @@ for (const extension of extensions) {
                   const parsedPromise = origApiPromParse.apply(this, args)
                     .then(body => Promise.all([this.responsePromise, body]))
 
-                  return handleUnwrappedAPIPromise(parsedPromise, ctx, stream)
+                  return handleUnwrappedAPIPromise(parsedPromise, ctx, stream, guard)
                 })
 
                 return unwrappedPromise
@@ -262,8 +272,10 @@ for (const extension of extensions) {
               const parsedPromise = origApiPromParse.apply(this, args)
                 .then(body => Promise.all([this.responsePromise, body]))
 
-              return handleUnwrappedAPIPromise(parsedPromise, ctx, stream)
+              return handleUnwrappedAPIPromise(parsedPromise, ctx, stream, guard)
             })
+
+            if (guard) aiGuard.wrapAsResponse(apiProm, guard)
 
             ch.end.publish(ctx)
 
@@ -276,8 +288,10 @@ for (const extension of extensions) {
   }
 }
 
-function handleUnwrappedAPIPromise (apiProm, ctx, stream) {
-  return apiProm
+function handleUnwrappedAPIPromise (apiProm, ctx, stream, guard) {
+  const guardedApiProm = guard ? aiGuard.gateParse(apiProm, guard) : apiProm
+
+  return guardedApiProm
     .then(([{ response, options }, body]) => {
       if (stream) {
         if (body.iterator) {
@@ -287,22 +301,35 @@ function handleUnwrappedAPIPromise (apiProm, ctx, stream) {
             body.response.body, Symbol.asyncIterator, wrapStreamIterator(response, options, ctx)
           )
         }
-      } else {
-        finish(ctx, {
-          headers: response.headers,
-          data: body,
-          request: {
-            path: response.url,
-            method: options.method,
-          },
-        })
+        return body
       }
 
-      return body
+      const responseData = {
+        headers: response.headers,
+        data: body,
+        request: {
+          path: response.url,
+          method: options.method,
+        },
+      }
+
+      if (!guard) {
+        finish(ctx, responseData)
+        return body
+      }
+
+      // Finish after evaluation so a block propagates the error to openai.request
+      // and the span wraps its ai_guard child instead of closing before it.
+      return aiGuard.evaluateOutput(guard, body).then(() => {
+        finish(ctx, responseData)
+        return body
+      })
     })
     .catch(error => {
-      finish(ctx, undefined, error)
-
+      // ctx.result is set inside finish(); if absent, finish never ran (sync throw in the success
+      // branch, Before Model block, After Model block, or openai error) — record the error now so
+      // the openai.request span is marked errored. If finish already ran, don't double-publish.
+      if (!ctx.result) finish(ctx, undefined, error)
       throw error
     })
 }
