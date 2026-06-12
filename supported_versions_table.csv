@@ -7,7 +7,7 @@ dependency,integration,minimum_tracer_supported,max_tracer_supported,auto-instru
 @azure/functions,azure-functions,4.0.0,4.16.0,True
 @azure/service-bus,azure-service-bus,7.9.2,7.9.5,True
 @confluentinc/kafka-javascript,confluentinc-kafka-javascript,1.0.0,1.9.0,True
-@cucumber/cucumber,cucumber,7.0.0,12.9.0,True
+@cucumber/cucumber,cucumber,7.0.0,13.0.0,True
 @elastic/elasticsearch,elasticsearch,5.6.16,9.4.0,True
 @elastic/transport,elasticsearch,8.0.0,9.3.5,True
 @google-cloud/pubsub,google-cloud-pubsub,1.2.0,5.3.0,True
@@ -26,6 +26,7 @@ dependency,integration,minimum_tracer_supported,max_tracer_supported,auto-instru
 @nats-io/nats-core,nats,3.0.0,3.4.0,True
 @nats-io/transport-node,nats,3.0.0,3.4.0,True
 @node-redis/client,redis,1.0.0,1.0.6,True
+@openai/agents,openai-agents,0.7.0,0.11.6,True
 @opensearch-project/opensearch,opensearch,1.0.0,3.6.0,True
 @prisma/client,prisma,6.1.0,7.8.0,True
 @redis/client,redis,1.1.0,5.12.1,True

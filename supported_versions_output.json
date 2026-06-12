@@ -59,7 +59,7 @@
     "dependency": "@cucumber/cucumber",
     "integration": "cucumber",
     "minimum_tracer_supported": "7.0.0",
-    "max_tracer_supported": "12.9.0",
+    "max_tracer_supported": "13.0.0",
     "auto-instrumented": "True"
   },
   {
@@ -186,6 +186,13 @@
     "integration": "redis",
     "minimum_tracer_supported": "1.0.0",
     "max_tracer_supported": "1.0.6",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@openai/agents",
+    "integration": "openai-agents",
+    "minimum_tracer_supported": "0.7.0",
+    "max_tracer_supported": "0.11.6",
     "auto-instrumented": "True"
   },
   {
