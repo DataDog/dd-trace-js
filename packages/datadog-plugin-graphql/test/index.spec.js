@@ -12,6 +12,7 @@ const semver = require('semver')
 const sinon = require('sinon')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { DD_MAJOR } = require('../../../version')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
@@ -1906,34 +1907,65 @@ describe('Plugin', () => {
           buildSchema()
         })
 
-        it('should only instrument up to the specified depth', done => {
-          const source = `
-            {
-              human {
-                name
-                address {
-                  civicNumber
-                  street
-                }
-              }
-              friends {
-                name
+        const source = `
+          {
+            human {
+              name
+              address {
+                civicNumber
+                street
               }
             }
-          `
+            friends {
+              name
+            }
+          }
+        `
 
+        const v6DepthTest = DD_MAJOR >= 6 ? it : it.skip
+        v6DepthTest('counts selection-set depth only, so a collapsed list field resolves at its field depth', done => {
+          // friends.*.name sits two fields deep (friends -> name); the list index
+          // between them is an execution artifact, not a query level, so depth: 2
+          // reaches it. address.civicNumber / address.street sit three fields deep
+          // and stay gated.
           agent
             .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
-              const ignored = spans.filter(span => {
-                return [
-                  'human.address.civicNumber',
-                  'human.address.street',
-                ].indexOf(span.resource) !== -1
-              })
+              const paths = sort(traces[0])
+                .filter(span => span.name === 'graphql.resolve')
+                .map(span => span.meta['graphql.field.path'])
+                .sort()
 
-              assert.strictEqual(spans.length, 5)
-              assert.strictEqual(ignored.length, 0)
+              assert.deepStrictEqual(paths, [
+                'friends',
+                'friends.*.name',
+                'human',
+                'human.address',
+                'human.name',
+              ])
+            })
+            .then(done)
+            .catch(done)
+
+          graphql.graphql({ schema, source }).catch(done)
+        })
+
+        // v5 counted the collapsed list index toward depth, so friends.*.name sat
+        // three segments deep and was gated. Pin that contract on the v5 line.
+        const legacyDepthTest = DD_MAJOR < 6 ? it : it.skip
+        legacyDepthTest('counts collapsed list indices toward depth on v5', done => {
+          agent
+            .assertSomeTraces(traces => {
+              const paths = sort(traces[0])
+                .filter(span => span.name === 'graphql.resolve')
+                .map(span => span.meta['graphql.field.path'])
+                .sort()
+
+              assert.deepStrictEqual(paths, [
+                'friends',
+                'human',
+                'human.address',
+                'human.name',
+              ])
             })
             .then(done)
             .catch(done)

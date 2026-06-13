@@ -1,6 +1,7 @@
 'use strict'
 
 const pick = require('../../datadog-core/src/utils/src/pick')
+const { DD_MAJOR } = require('../../../version')
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 const log = require('../../dd-trace/src/log')
 const GraphQLExecutePlugin = require('./execute')
@@ -30,11 +31,15 @@ class GraphQLPlugin extends CompositePlugin {
 // config validator helpers
 
 function validateConfig (config) {
+  const collapse = config.collapse === undefined || !!config.collapse
   return {
     ...config,
     depth: getDepth(config),
     variables: getVariablesFilter(config),
-    collapse: config.collapse === undefined || !!config.collapse,
+    collapse,
+    // v5 counted collapsed list indices toward `depth`, so the same query reached a
+    // different depth depending on `collapse`. v6 counts selection-set depth only.
+    countListIndices: DD_MAJOR < 6 && collapse,
     hooks: getHooks(config),
   }
 }
