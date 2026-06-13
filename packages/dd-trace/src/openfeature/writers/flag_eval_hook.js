@@ -29,11 +29,16 @@ class FlagEvalEVPHook {
    *
    * Cheap capture only — no aggregation, no stringify, no blocking:
    *   - Scalar field extraction from hookContext + evaluationDetails
-   *   - Read flagMetadata for allocationKey and eval-time stamp
+   *   - Read evaluationDetails.flagMetadata for allocationKey and eval-time stamp
    *   - Non-blocking enqueue to the writer's aggregation loop
    *
-   * @param {{ flagKey: string, flagMetadata?: object, context?: object }} hookContext
-   * @param {{ value?: unknown, reason?: string, errorCode?: string, flagMetadata?: object }} evaluationDetails
+   * Field sources mirror eval-metrics-hook.js (the OTel hook) exactly:
+   * variant and flagMetadata both come from evaluationDetails, not hookContext.
+   * The OpenFeature HookContext carries no flagMetadata; only EvaluationDetails does.
+   *
+   * @param {{ flagKey: string, context?: { targetingKey?: string } }} hookContext
+   * @param {{ variant?: string, reason?: string, errorCode?: string,
+   *   flagMetadata?: Record<string, string | number | boolean> }} evaluationDetails
    * @returns {void}
    */
   finally (hookContext, evaluationDetails) {
@@ -43,20 +48,23 @@ class FlagEvalEVPHook {
     // Cheap scalar extraction — no JSON.stringify, no map lookup, no aggregation
     const flagKey = hookContext.flagKey
 
-    // Absent variant (undefined/null/empty) means runtime_default
-    const rawValue = evaluationDetails.value
-    const variant = rawValue !== undefined && rawValue !== null ? String(rawValue) : ''
+    // Variant = the OpenFeature variant (NOT the evaluated value). Absent variant
+    // (no matched allocation) signals runtime_default. Matches the OTel hook.
+    const variant = evaluationDetails.variant ?? ''
 
     const reason = (evaluationDetails.reason ?? 'unknown').toLowerCase()
 
-    // allocationKey from flagMetadata (camelCase per eval-metrics-hook.js convention)
-    const allocationKey = hookContext.flagMetadata?.allocationKey ?? ''
+    // allocationKey from evaluationDetails.flagMetadata (camelCase), the same source
+    // eval-metrics-hook.js reads for feature_flag.result.allocation_key.
+    const flagMetadata = evaluationDetails.flagMetadata
+    const allocationKey = flagMetadata?.allocationKey ?? ''
 
     const targetingKey = hookContext.context?.targetingKey ?? ''
 
-    // Prefer eval-time stamped by the provider at eval entry.
-    // Falls back to hook-fire time when absent (non-Datadog provider, or old provider version).
-    const evalTimeMs = hookContext.flagMetadata?.['dd.eval.timestamp_ms'] ?? Date.now()
+    // Prefer an eval-time stamp from flag metadata when a provider supplies one;
+    // the Datadog Node evaluator does not currently stamp it, so this falls back to
+    // hook-fire time, which still populates first/last_evaluation bounds correctly.
+    const evalTimeMs = flagMetadata?.['dd.eval.timestamp_ms'] ?? Date.now()
 
     // Shallow reference to the context attrs — owned by the SDK; safe to read off hot path
     const attrs = hookContext.context ?? {}

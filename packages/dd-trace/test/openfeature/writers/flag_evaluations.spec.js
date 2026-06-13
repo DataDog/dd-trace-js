@@ -8,6 +8,54 @@ const proxyquire = require('proxyquire')
 
 require('../../setup/core')
 
+// Structural validator for the EVP flageval-worker batched payload contract. Required
+// event fields and the {key} object shape for variant/allocation mirror the dd-trace-go
+// reference (openfeature/flagevaluation.go) and the flageval-worker ingestion contract.
+// Returns an array of contract violations (empty array == valid). Mechanical: it inspects
+// actual runtime types/shapes, it does not substring-match serialized text.
+const KEY_OBJECT_FIELDS = ['variant', 'allocation']
+const REQUIRED_EVENT_FIELDS = ['timestamp', 'flag', 'first_evaluation', 'last_evaluation', 'evaluation_count']
+
+function validateFlagEvaluationPayload (payload) {
+  const errors = []
+  const isObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value)
+
+  if (!isObject(payload)) return ['payload is not an object']
+  if (!isObject(payload.context)) errors.push('context must be an object')
+  else if (typeof payload.context.service !== 'string') errors.push('context.service must be a string')
+  if (!Array.isArray(payload.flagEvaluations)) return [...errors, 'flagEvaluations must be an array']
+
+  for (const [index, event] of payload.flagEvaluations.entries()) {
+    if (!isObject(event)) { errors.push(`event[${index}] is not an object`); continue }
+
+    for (const field of REQUIRED_EVENT_FIELDS) {
+      if (!Object.hasOwn(event, field)) errors.push(`event[${index}] missing required field "${field}"`)
+    }
+    if (!isObject(event.flag) || typeof event.flag.key !== 'string') {
+      errors.push(`event[${index}].flag must be { key: string }`)
+    }
+    for (const numericField of ['timestamp', 'first_evaluation', 'last_evaluation', 'evaluation_count']) {
+      if (Object.hasOwn(event, numericField) && !Number.isInteger(event[numericField])) {
+        errors.push(`event[${index}].${numericField} must be an integer`)
+      }
+    }
+    // variant and allocation MUST be { key: string } OBJECTS, never bare strings.
+    for (const field of KEY_OBJECT_FIELDS) {
+      if (!Object.hasOwn(event, field)) continue
+      if (!isObject(event[field]) || typeof event[field].key !== 'string') {
+        errors.push(`event[${index}].${field} must be { key: string }, got ${JSON.stringify(event[field])}`)
+      }
+    }
+    if (Object.hasOwn(event, 'targeting_key') && typeof event.targeting_key !== 'string') {
+      errors.push(`event[${index}].targeting_key must be a string`)
+    }
+    if (Object.hasOwn(event, 'context') && !isObject(event.context)) {
+      errors.push(`event[${index}].context must be an object`)
+    }
+  }
+  return errors
+}
+
 describe('FlagEvaluationsWriter', () => {
   let FlagEvaluationsWriter
   let writer
@@ -121,7 +169,7 @@ describe('FlagEvaluationsWriter', () => {
       assert.ok(Object.hasOwn(ev, 'first_evaluation'))
       assert.ok(Object.hasOwn(ev, 'last_evaluation'))
       assert.ok(Object.hasOwn(ev, 'evaluation_count'))
-      assert.ok(typeof ev.timestamp === 'number')
+      assert.strictEqual(typeof ev.timestamp, 'number')
     })
   })
 
@@ -144,8 +192,8 @@ describe('FlagEvaluationsWriter', () => {
     })
 
     it('two evaluations differing only by context attr value type (int vs string) produce TWO distinct buckets', () => {
-      const ev1 = makeEvent({ attrs: { count: 1 } })         // int 1
-      const ev2 = makeEvent({ attrs: { count: '1' } })       // string "1"
+      const ev1 = makeEvent({ attrs: { count: 1 } }) // int 1
+      const ev2 = makeEvent({ attrs: { count: '1' } }) // string "1"
 
       writer.enqueue(ev1)
       writer.enqueue(ev2)
@@ -179,7 +227,7 @@ describe('FlagEvaluationsWriter', () => {
       // Enqueue 3 evaluations all for same flag but different contexts → 3 distinct full-tier keys
       writer.enqueue(makeEvent({ attrs: { user: 'a' } }))
       writer.enqueue(makeEvent({ attrs: { user: 'b' } }))
-      writer.enqueue(makeEvent({ attrs: { user: 'c' } }))  // should overflow to degraded
+      writer.enqueue(makeEvent({ attrs: { user: 'c' } })) // should overflow to degraded
       writer.flush()
 
       const payload = JSON.parse(request.getCall(0).args[0])
@@ -191,7 +239,7 @@ describe('FlagEvaluationsWriter', () => {
     it('when degradedCap is exceeded, droppedDegradedOverflow is incremented (observable)', () => {
       writer._globalCap = 1
       writer._perFlagCap = 1
-      writer._degradedCap = 0  // degraded immediately full
+      writer._degradedCap = 0 // degraded immediately full
 
       writer.enqueue(makeEvent({ flagKey: 'flag-a', attrs: { x: 1 } }))
       // Second enqueue: full-tier full → degraded → degraded full → drop+count
@@ -224,7 +272,7 @@ describe('FlagEvaluationsWriter', () => {
 
   describe('degraded tier omits targeting_key and context', () => {
     it('degraded-tier event omits targeting_key and context (schema omitempty)', () => {
-      writer._globalCap = 0  // force everything to degraded immediately
+      writer._globalCap = 0 // force everything to degraded immediately
       writer._degradedCap = 100000
 
       writer.enqueue(makeEvent({ targetingKey: 'user-x', attrs: { plan: 'pro' } }))
@@ -291,7 +339,167 @@ describe('FlagEvaluationsWriter', () => {
         require.resolve('../../../src/openfeature/writers/flag_evaluations'),
         'utf8'
       )
-      assert.ok(!/md5/i.test(src), 'writer must NOT reference md5 (frozen contract)')
+      assert.doesNotMatch(src, /md5/i, 'writer must NOT reference md5 (frozen contract)')
+    })
+  })
+
+  describe('JSON schema validation (G3)', () => {
+    const validatePayload = () => {
+      const payload = JSON.parse(request.getCall(0).args[0])
+      const errors = validateFlagEvaluationPayload(payload)
+      assert.deepStrictEqual(errors, [], 'payload must satisfy the flageval-worker contract')
+      return payload
+    }
+
+    it('full-tier payload validates against the worker schema', () => {
+      writer.enqueue(makeEvent())
+      writer.flush()
+      validatePayload()
+    })
+
+    it('serializes variant and allocation as {key} OBJECTS, not bare strings', () => {
+      writer.enqueue(makeEvent({ variant: 'on', allocationKey: 'alloc-1' }))
+      writer.flush()
+
+      const payload = validatePayload()
+      const ev = payload.flagEvaluations[0]
+      assert.deepStrictEqual(ev.variant, { key: 'on' })
+      assert.deepStrictEqual(ev.allocation, { key: 'alloc-1' })
+    })
+
+    it('degraded-tier payload validates against the worker schema', () => {
+      writer._globalCap = 0 // force degraded
+      writer._degradedCap = 100000
+      writer.enqueue(makeEvent())
+      writer.flush()
+      validatePayload()
+    })
+
+    it('a bare-string variant FAILS the schema check (proves the validator is mechanical, not prose)', () => {
+      const bad = {
+        context: { service: 's' },
+        flagEvaluations: [{
+          timestamp: 1,
+          flag: { key: 'f' },
+          first_evaluation: 1,
+          last_evaluation: 1,
+          evaluation_count: 1,
+          variant: 'on', // bare string — must be rejected
+        }],
+      }
+      const errors = validateFlagEvaluationPayload(bad)
+      assert.ok(errors.some(e => /variant must be \{ key: string \}/.test(e)),
+        `validator must reject a bare-string variant; got errors: ${JSON.stringify(errors)}`)
+    })
+  })
+
+  describe('async boundary — enqueue does NOT aggregate inline', () => {
+    it('enqueue does not invoke the aggregator on the hot path; the scheduled drain does', () => {
+      const aggregateSpy = sinon.spy(writer, '_aggregate')
+
+      writer.enqueue(makeEvent())
+
+      sinon.assert.notCalled(aggregateSpy)
+      assert.strictEqual(writer._rawQueue.length, 1,
+        'enqueue must only push the raw event; aggregation is deferred')
+      assert.strictEqual(writer._full.size, 0,
+        'no full-tier bucket may exist before the drain runs')
+
+      // The drain (off the hot path) is what aggregates.
+      writer._drainQueue()
+
+      sinon.assert.calledOnce(aggregateSpy)
+      assert.strictEqual(writer._rawQueue.length, 0)
+      assert.strictEqual(writer._full.size, 1)
+    })
+
+    it('schedules exactly one drain for a burst of enqueues (microtask coalescing)', () => {
+      const setImmediateSpy = sinon.spy(global, 'setImmediate')
+      try {
+        writer.enqueue(makeEvent({ attrs: { user: 'a' } }))
+        writer.enqueue(makeEvent({ attrs: { user: 'b' } }))
+        writer.enqueue(makeEvent({ attrs: { user: 'c' } }))
+
+        sinon.assert.calledOnce(setImmediateSpy)
+        assert.strictEqual(writer._rawQueue.length, 3)
+      } finally {
+        setImmediateSpy.restore()
+      }
+    })
+
+    it('the scheduled drain (setImmediate callback) aggregates queued events', () => {
+      // With fake timers, drive the scheduled drain explicitly.
+      writer.enqueue(makeEvent())
+      assert.strictEqual(writer._full.size, 0)
+
+      clock.tick(0) // fire the setImmediate-scheduled drain (not the 10s interval)
+
+      assert.strictEqual(writer._full.size, 1, 'queued event must aggregate when the drain fires')
+    })
+  })
+
+  describe('backpressure — bounded hand-off queue (G4)', () => {
+    it('enqueue returns true when accepted, false when the queue is full', () => {
+      writer._rawQueueCap = 2
+
+      assert.strictEqual(writer.enqueue(makeEvent()), true)
+      assert.strictEqual(writer.enqueue(makeEvent()), true)
+      assert.strictEqual(writer.enqueue(makeEvent()), false, 'third enqueue overflows the 2-slot queue')
+    })
+
+    it('increments an observable drop counter on queue overflow', () => {
+      writer._rawQueueCap = 1
+
+      writer.enqueue(makeEvent()) // accepted
+      writer.enqueue(makeEvent()) // dropped
+      writer.enqueue(makeEvent()) // dropped
+
+      assert.strictEqual(writer._droppedQueueOverflow, 2,
+        'each overflowed enqueue must increment the observable drop counter')
+      assert.strictEqual(writer._rawQueue.length, 1, 'only the accepted event is queued')
+    })
+
+    it('emits a warning when dropped counts are non-zero at flush', () => {
+      writer._rawQueueCap = 1
+      writer.enqueue(makeEvent()) // accepted
+      writer.enqueue(makeEvent()) // dropped → _droppedQueueOverflow = 1
+
+      writer.flush()
+
+      sinon.assert.calledWithMatch(log.warn, sinon.match(/dropped evaluations/))
+    })
+
+    it('degraded-overflow drop count is reset only AFTER a flush emits it', () => {
+      writer._globalCap = 0 // everything routes to degraded
+      writer._degradedCap = 0 // degraded immediately full → drop+count
+
+      writer.enqueue(makeEvent({ flagKey: 'flag-a' }))
+      writer._drainQueue()
+
+      assert.strictEqual(writer._droppedDegradedOverflow, 1)
+
+      writer.flush() // emits the warning, then resets
+      assert.strictEqual(writer._droppedDegradedOverflow, 0, 'reset only after emission')
+      // printf args: (template, writerName, queueDrops, degradedDrops)
+      const warnCall = log.warn.getCalls().find(c => /dropped evaluations/.test(c.args[0]))
+      assert.ok(warnCall, 'a drop warning must be emitted')
+      assert.strictEqual(warnCall.args[3], 1, 'degraded-overflow count of 1 must be emitted')
+    })
+  })
+
+  describe('shutdown drains + flushes (G5)', () => {
+    it('destroy() drains pending queued events and flushes them (not just interrupts)', () => {
+      // Event is only queued, never aggregated — destroy must drain it.
+      writer.enqueue(makeEvent({ flagKey: 'drain-me' }))
+      assert.strictEqual(writer._full.size, 0, 'precondition: event is queued, not yet aggregated')
+
+      writer.destroy()
+
+      sinon.assert.calledOnce(request)
+      const payload = JSON.parse(request.getCall(0).args[0])
+      assert.strictEqual(payload.flagEvaluations.length, 1)
+      assert.strictEqual(payload.flagEvaluations[0].flag.key, 'drain-me',
+        'the queued-but-unaggregated event must reach the transport on shutdown')
     })
   })
 

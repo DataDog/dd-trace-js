@@ -8,12 +8,17 @@ const {
   EVP_PAYLOAD_SIZE_LIMIT,
   EVP_EVENT_SIZE_LIMIT,
 } = require('../constants/constants')
+const log = require('../../log')
 const BaseFFEWriter = require('./base')
 
 // Aggregation caps
 const GLOBAL_CAP = 131_072
 const PER_FLAG_CAP = 10_000
 const DEGRADED_CAP = 32_768
+
+// Bounded hand-off queue between the eval hot path (enqueue) and the aggregator (drain).
+// On overflow we drop-and-count rather than block the user's evaluation.
+const RAW_QUEUE_CAP = 4096
 
 // Context pruning bounds — mirrors flageval-worker limits
 const MAX_CONTEXT_FIELDS = 256
@@ -79,9 +84,10 @@ function encodeField (key, value) {
  * @returns {string}
  */
 function canonicalContextKey (attrs) {
-  if (!attrs || Object.keys(attrs).length === 0) return ''
+  const keys = Object.keys(attrs)
+  if (keys.length === 0) return ''
 
-  const keys = Object.keys(attrs).sort()
+  keys.sort()
   let out = ''
   for (const k of keys) {
     out += encodeField(k, attrs[k])
@@ -191,6 +197,13 @@ const FLUSH_SENTINEL = Object.freeze({ _sentinel: true })
  * using two-tier (full → degraded → drop-counted) aggregation with a comparable
  * canonical-context key (no hash digest).
  *
+ * The eval hot path (enqueue) does ONLY a cheap scalar capture + a bounded push to a
+ * raw queue. All aggregation cost — prune, canonical key, two-tier map updates — runs
+ * off the eval call stack on a microtask-scheduled drain (and on flush). OpenFeature
+ * hooks run synchronously on the caller's evaluation, so charging aggregation to the
+ * hook would charge it to the user's flag evaluation; this design keeps that off the
+ * hot path, mirroring the dd-trace-go background-worker reference.
+ *
  * Aggregation caps: globalCap=131072 / perFlagCap=10000 / degradedCap=32768
  * Context bounds: 256 fields / 256 chars (pruned before keying).
  * Killswitch: DD_FLAGGING_EVALUATION_COUNTS_ENABLED (checked by the provider).
@@ -198,6 +211,18 @@ const FLUSH_SENTINEL = Object.freeze({ _sentinel: true })
 class FlagEvaluationsWriter extends BaseFFEWriter {
   /** @type {Record<string, unknown>} */
   _context
+
+  /** @type {Array<FlagEvalRawEvent>} bounded hand-off queue, drained by the aggregator */
+  _rawQueue
+
+  /** @type {boolean} whether a drain is already scheduled (microtask coalescing) */
+  _drainScheduled
+
+  /** @type {(() => void) | undefined} cached drain callback to avoid per-enqueue closure allocation */
+  _boundDrain
+
+  /** @type {number} count of raw events dropped because the hand-off queue was full */
+  _droppedQueueOverflow
 
   /** @type {Map<string, FullEntry>} */
   _full
@@ -211,8 +236,11 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
   /** @type {number} */
   _globalCount
 
-  /** @type {number} */
+  /** @type {number} count of evaluations dropped because the degraded tier was full */
   _droppedDegradedOverflow
+
+  // Hand-off queue cap — overridable in tests
+  _rawQueueCap = RAW_QUEUE_CAP
 
   // Aggregation caps — overridable in tests
   _globalCap = GLOBAL_CAP
@@ -243,6 +271,10 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
     if (config.env !== undefined) context.env = config.env
     this._context = context
 
+    this._rawQueue = []
+    this._drainScheduled = false
+    this._droppedQueueOverflow = 0
+
     this._full = new Map()
     this._degraded = new Map()
     this._perFlagFullCount = new Map()
@@ -251,12 +283,56 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
   }
 
   /**
-   * Enqueues a raw evaluation for aggregation. Non-blocking; called from the Finally hook.
-   * Performs prune + canonical key + two-tier aggregate inline.
+   * Hot-path capture. Called synchronously from the OpenFeature Finally hook on the
+   * caller's evaluation. Does ONLY a bounded push to the raw queue + a microtask
+   * schedule — NO prune, NO canonical-key, NO map aggregation (that runs in the
+   * drain, off the eval call stack). On overflow, drop-and-count (observable) rather
+   * than block the user's evaluation.
    *
    * @param {FlagEvalRawEvent} event
+   * @returns {boolean} true if enqueued, false if dropped due to backpressure
    */
   enqueue (event) {
+    if (this._rawQueue.length >= this._rawQueueCap) {
+      this._droppedQueueOverflow++
+      return false
+    }
+
+    this._rawQueue.push(event)
+
+    if (!this._drainScheduled) {
+      this._drainScheduled = true
+      if (this._boundDrain === undefined) {
+        this._boundDrain = () => this._drainQueue()
+      }
+      setImmediate(this._boundDrain)
+    }
+    return true
+  }
+
+  /**
+   * Aggregator. Drains every queued raw event through prune → canonical key →
+   * two-tier aggregation. Runs off the eval hot path (microtask or flush), never
+   * synchronously from enqueue().
+   */
+  _drainQueue () {
+    this._drainScheduled = false
+    const queue = this._rawQueue
+    if (queue.length === 0) return
+    this._rawQueue = []
+
+    for (const event of queue) {
+      this._aggregate(event)
+    }
+  }
+
+  /**
+   * Aggregates one raw event into the two-tier maps. Worker-path only.
+   *
+   * @private
+   * @param {FlagEvalRawEvent} event
+   */
+  _aggregate (event) {
     const { flagKey, reason, evalTimeMs } = event
     const variant = event.variant ?? ''
     const allocationKey = event.allocationKey ?? ''
@@ -362,6 +438,23 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
   }
 
   /**
+   * Flushes aggregated buckets. Drains any pending raw events first so a flush never
+   * races ahead of the microtask-scheduled drain and loses queued evaluations.
+   */
+  flush () {
+    this._drainQueue()
+
+    // Ensure drop counts are emitted (and reset) even when every event overflowed and
+    // produced no bucket — without a sentinel BaseFFEWriter.flush() would short-circuit.
+    if (this._buffer.length === 0 && (this._droppedQueueOverflow > 0 || this._droppedDegradedOverflow > 0)) {
+      this._buffer.push(FLUSH_SENTINEL)
+      this._bufferSize = 1
+    }
+
+    super.flush()
+  }
+
+  /**
    * Drains aggregation maps and returns the EVP flagevaluation payload.
    * Called by BaseFFEWriter.flush() with whatever is in _buffer (ignored here).
    *
@@ -410,12 +503,20 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
       flagEvaluations.push(ev)
     }
 
+    if (this._droppedQueueOverflow > 0 || this._droppedDegradedOverflow > 0) {
+      log.warn(
+        '%s dropped evaluations (queue overflow: %d, degraded overflow: %d)',
+        this.constructor.name, this._droppedQueueOverflow, this._droppedDegradedOverflow
+      )
+    }
+
     // Reset aggregation state
     this._full = new Map()
     this._degraded = new Map()
     this._perFlagFullCount = new Map()
     this._globalCount = 0
     this._droppedDegradedOverflow = 0
+    this._droppedQueueOverflow = 0
 
     return { context: this._context, flagEvaluations }
   }
