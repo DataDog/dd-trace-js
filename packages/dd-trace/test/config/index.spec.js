@@ -4731,4 +4731,69 @@ rules:
       assert.strictEqual(config.service, 'node')
     })
   })
+
+  describe('PM2 cluster mode', () => {
+    it('should apply DD_* vars from pm2_env blob when not already set', () => {
+      process.env.pm2_env = JSON.stringify({ DD_SERVICE: 'pm2-service', DD_ENV: 'pm2-env' })
+      const config = getConfig()
+      assert.strictEqual(config.service, 'pm2-service')
+      assert.strictEqual(config.env, 'pm2-env')
+    })
+
+    it('should apply OTEL_* vars from pm2_env blob when not already set', () => {
+      process.env.pm2_env = JSON.stringify({ OTEL_SERVICE_NAME: 'pm2-otel-service' })
+      const config = getConfig()
+      assert.strictEqual(config.service, 'pm2-otel-service')
+    })
+
+    it('should not overwrite DD_* vars already present in process.env', () => {
+      process.env.DD_SERVICE = 'host-service'
+      process.env.pm2_env = JSON.stringify({ DD_SERVICE: 'pm2-service' })
+      const config = getConfig()
+      assert.strictEqual(config.service, 'host-service')
+    })
+
+    it('should not overwrite OTEL_* vars already present in process.env', () => {
+      process.env.OTEL_SERVICE_NAME = 'host-otel-service'
+      process.env.pm2_env = JSON.stringify({ OTEL_SERVICE_NAME: 'pm2-otel-service' })
+      const config = getConfig()
+      assert.strictEqual(config.service, 'host-otel-service')
+    })
+
+    it('should not copy non-DD/OTEL keys from pm2_env into process.env', () => {
+      process.env.pm2_env = JSON.stringify({ NODE_ENV: 'production', pm_id: 0, name: 'my-app' })
+      getConfig()
+      assert.strictEqual(process.env.NODE_ENV, undefined)
+      assert.strictEqual(process.env.pm_id, undefined)
+      assert.strictEqual(process.env.name, undefined)
+    })
+
+    it('should silently skip malformed pm2_env JSON', () => {
+      process.env.pm2_env = 'not-valid-json'
+      getConfig()
+    })
+
+    it('should skip keys with null values in pm2_env', () => {
+      process.env.pm2_env = JSON.stringify({ DD_SERVICE: null })
+      const config = getConfig()
+      assert.strictEqual(process.env.DD_SERVICE, undefined)
+      assert.strictEqual(config.service, 'node')
+    })
+
+    it('should do nothing when pm2_env is absent', () => {
+      const config = getConfig()
+      assert.strictEqual(config.service, 'node')
+    })
+
+    it('should do nothing when pm2_env is not a string', () => {
+      process.env.pm2_env = 42
+      getConfig()
+    })
+
+    it('should coerce non-string values to strings when copying into process.env', () => {
+      process.env.pm2_env = JSON.stringify({ DD_TRACE_SAMPLE_RATE: 0.5 })
+      getConfig()
+      assert.strictEqual(process.env.DD_TRACE_SAMPLE_RATE, '0.5')
+    })
+  })
 })
