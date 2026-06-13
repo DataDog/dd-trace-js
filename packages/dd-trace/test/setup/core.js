@@ -2,6 +2,8 @@
 
 require('./mocha-hooks')
 
+if (process.env.DD_TEST_CHANNEL_DEBUG) require('../debug/channel-patch')
+
 if (process.env.CI) {
   const fs = require('fs')
   const os = require('os')
