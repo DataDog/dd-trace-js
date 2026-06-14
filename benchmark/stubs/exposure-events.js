@@ -28,7 +28,32 @@ function createExposureEventArray (count = 10) {
   }))
 }
 
+// OpenFeature Finally-hook arguments for the EVP flagevaluation hot path.
+// Mirrors what the @openfeature/server-sdk passes to a `finally` hook after an
+// evaluation: hookContext (flagKey + evaluation context) and evaluationDetails
+// (variant + reason + flagMetadata).
+function createFlagEvalHookArgs () {
+  const hookContext = {
+    flagKey: 'test-flag',
+    context: {
+      targetingKey: 'user-123',
+      plan: 'premium',
+      country: 'US',
+      betaTester: true,
+      seatCount: 42,
+    },
+  }
+  const evaluationDetails = {
+    variant: 'variant-a',
+    reason: 'TARGETING_MATCH',
+    value: true,
+    flagMetadata: { allocationKey: 'allocation-123' },
+  }
+  return { hookContext, evaluationDetails }
+}
+
 module.exports = {
   createSingleExposureEvent,
   createExposureEventArray,
+  createFlagEvalHookArgs,
 }

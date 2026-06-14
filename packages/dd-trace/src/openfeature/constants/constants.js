@@ -27,6 +27,12 @@ module.exports = {
 
   /**
    * @constant
+   * @type {string} API endpoint for flag evaluation events EVP track
+   */
+  FLAGEVALUATIONS_ENDPOINT: '/api/v2/flagevaluations',
+
+  /**
+   * @constant
    * @type {number} Maximum payload size for EVP intake (5MB, actual limit is 5.1MB)
    */
   EVP_PAYLOAD_SIZE_LIMIT: 5 << 20,
