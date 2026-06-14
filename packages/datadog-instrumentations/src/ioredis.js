@@ -26,7 +26,6 @@ function wrapRedis (Redis) {
     }
 
     const ctx = {
-      db: options.db,
       command: command.name,
       args: command.args,
       connectionOptions,
