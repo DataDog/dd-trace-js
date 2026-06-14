@@ -58,7 +58,7 @@ function globSyncCached (pattern, opts) {
 function stripOuterQuotes (s) {
   if (s.length < 2) return s
   const first = s[0]
-  const last = s[s.length - 1]
+  const last = s.at(-1)
   if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
     return s.slice(1, -1)
   }

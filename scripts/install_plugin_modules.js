@@ -183,7 +183,7 @@ async function assertPeerDependencies (rootFolder, parent = '') {
       continue
     }
 
-    const externalName = join(parent, entry.split('@')[0])
+    const externalName = join(parent, entry.split('@', 1)[0])
 
     if (!externalDeps.has(externalName)) continue
 
@@ -209,7 +209,7 @@ async function assertPeerDependencies (rootFolder, parent = '') {
           } else {
             versionPkgJson.dependencies[name] = pkgJson[section][name].includes('||')
               // Use the first version in the list (as npm does by default)
-              ? pkgJson[section][name].split('||')[0].trim()
+              ? pkgJson[section][name].split('||', 1)[0].trim()
               // Only one version available so use that.
               : pkgJson[section][name]
           }

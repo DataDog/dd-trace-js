@@ -97,7 +97,7 @@ function wrapQuery (query) {
 
         // Based on: https://github.com/brianc/node-postgres/blob/54eb0fa216aaccd727765641e7d1cf5da2bc483d/packages/pg/lib/client.js#L510
         const reusingQuery = typeof pgQuery.submit === 'function'
-        const callback = args[args.length - 1]
+        const callback = args.at(-1)
 
         finish(error)
 
@@ -197,7 +197,7 @@ function wrapPoolQuery (query) {
     const ctx = { query: pgQuery, abortController }
 
     return startPoolQueryCh.runStores(ctx, () => {
-      const cb = args[args.length - 1]
+      const cb = args.at(-1)
 
       if (abortController.signal.aborted) {
         const error = abortController.signal.reason || new Error('Aborted')

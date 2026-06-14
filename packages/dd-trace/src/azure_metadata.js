@@ -6,10 +6,11 @@ const os = require('os')
 const getConfig = require('./config')
 const { getEnvironmentVariable } = require('./config/helper')
 const { getIsAzureFunction } = require('./serverless')
+const { getSegment } = require('./util')
 
 function extractSubscriptionID (ownerName) {
   if (ownerName !== undefined) {
-    const subId = ownerName.split('+')[0].trim()
+    const subId = getSegment(ownerName, '+', 0).trim()
     if (subId.length > 0) {
       return subId
     }

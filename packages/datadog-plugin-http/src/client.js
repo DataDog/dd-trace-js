@@ -28,7 +28,7 @@ class HttpClientPlugin extends ClientPlugin {
     const hostname = options.hostname || options.host || 'localhost'
     const host = options.port ? `${hostname}:${options.port}` : hostname
     const pathname = options.path || options.pathname
-    const path = pathname ? pathname.split(/[?#]/)[0] : '/'
+    const path = pathname ? pathname.split(/[?#]/, 1)[0] : '/'
     const uri = `${protocol}//${host}${path}`
 
     const allowed = this.config.filter(uri)

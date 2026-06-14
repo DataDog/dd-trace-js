@@ -135,7 +135,7 @@ function wrapPoolMethod (createConnection) {
 
 function wrapPoolGetConnectionMethod (getConnection) {
   return function wrappedGetConnection (...args) {
-    const cb = args[args.length - 1]
+    const cb = args.at(-1)
     if (typeof cb !== 'function') return getConnection.apply(this, args)
 
     const ctx = {}

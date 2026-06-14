@@ -60,7 +60,7 @@ class UndiciPlugin extends HttpClientPlugin {
     }
 
     const host = port ? `${hostname}:${port}` : hostname
-    const pathname = path.split(/[?#]/)[0]
+    const pathname = path.split(/[?#]/, 1)[0]
     const uri = `${protocol}//${host}${pathname}`
 
     const allowed = this.config.filter(uri)

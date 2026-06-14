@@ -218,7 +218,7 @@ class AIGuard extends NoopAIGuard {
     // still applies for SDK callers that don't supply an explicit parent.
     const traceOpts = childOf ? { childOf } : {}
     return this.#tracer.trace(TAGS.RESOURCE, traceOpts, async (span) => {
-      const last = messages[messages.length - 1]
+      const last = messages.at(-1)
       const target = this.#isToolCall(last) ? 'tool' : 'prompt'
       span.setTag(TAGS.TARGET_TAG_KEY, target)
       if (target === 'tool') {

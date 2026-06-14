@@ -1,5 +1,7 @@
 'use strict'
 
+const { getSegment } = require('../../../util')
+
 function addMetricsToSpan (rootSpan, metrics, tagPrefix) {
   if (!rootSpan?.addTags || !metrics) return
 
@@ -44,7 +46,7 @@ function filterTags (tags) {
 }
 
 function processTagValue (tags) {
-  return tags.map(tag => tag.includes(':') ? tag.split(':')[1] : tag)
+  return tags.map(tag => tag.includes(':') ? getSegment(tag, ':', 1) : tag)
     .join('_').replaceAll('.', '_')
 }
 

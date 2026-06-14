@@ -447,7 +447,7 @@ class CucumberPlugin extends CiPlugin {
         const isModified = isModifiedTest(
           testScenarioPath,
           scenario.location.line,
-          scenario.steps[scenario.steps.length - 1].location.line,
+          scenario.steps.at(-1).location.line,
           modifiedFiles,
           'cucumber'
         )
