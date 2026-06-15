@@ -144,7 +144,7 @@ function normalizeLinkContext (context) {
  * @param {unknown} value
  * @param {boolean} [otelTraceSemanticsEnabled]
  */
-function setOtelAttribute (ddSpan, key, value, otelTraceSemanticsEnabled = false) {
+function setOtelAttribute (ddSpan, key, value, otelTraceSemanticsEnabled) {
   if (!isWritable(ddSpan)) return
 
   if (!otelTraceSemanticsEnabled && key === 'http.response.status_code') {
@@ -164,7 +164,7 @@ function setOtelAttribute (ddSpan, key, value, otelTraceSemanticsEnabled = false
  * @param {Record<string, unknown>} attributes
  * @param {boolean} [otelTraceSemanticsEnabled]
  */
-function setOtelAttributes (ddSpan, attributes, otelTraceSemanticsEnabled = false) {
+function setOtelAttributes (ddSpan, attributes, otelTraceSemanticsEnabled) {
   if (!isWritable(ddSpan)) return
 
   ddSpan.addTags(attributes)

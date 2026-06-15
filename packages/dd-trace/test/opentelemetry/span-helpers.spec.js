@@ -67,7 +67,7 @@ describe('OTel bridge helpers', () => {
   describe('writable-span gate', () => {
     it('writes when the underlying span is recording', () => {
       const ddSpan = createMockDdSpan()
-      setOtelAttribute(ddSpan, 'foo', 'bar')
+      setOtelAttribute(ddSpan, 'foo', 'bar', false)
 
       assert.strictEqual(ddSpan.tags.foo, 'bar')
     })
@@ -75,8 +75,8 @@ describe('OTel bridge helpers', () => {
     it('skips every helper when the underlying span has finished', () => {
       const ddSpan = createMockDdSpan({ ended: true })
 
-      setOtelAttribute(ddSpan, 'foo', 'bar')
-      setOtelAttributes(ddSpan, { baz: 'buz' })
+      setOtelAttribute(ddSpan, 'foo', 'bar', false)
+      setOtelAttributes(ddSpan, { baz: 'buz' }, false)
       addOtelLink(ddSpan, {
         context: { traceId: 'a'.repeat(32), spanId: 'b'.repeat(16), traceFlags: 1 },
       })
@@ -98,7 +98,7 @@ describe('OTel bridge helpers', () => {
   describe('setOtelAttribute', () => {
     it('mirrors http.response.status_code onto the special http.status_code DD tag', () => {
       const ddSpan = createMockDdSpan()
-      setOtelAttribute(ddSpan, 'http.response.status_code', 200)
+      setOtelAttribute(ddSpan, 'http.response.status_code', 200, false)
 
       assert.deepStrictEqual(ddSpan.tags, {
         'http.response.status_code': 200,
@@ -108,7 +108,7 @@ describe('OTel bridge helpers', () => {
 
     it('writes a single tag for non-status keys', () => {
       const ddSpan = createMockDdSpan()
-      setOtelAttribute(ddSpan, 'service.name', 'svc')
+      setOtelAttribute(ddSpan, 'service.name', 'svc', false)
 
       assert.deepStrictEqual(ddSpan.tags, { 'service.name': 'svc' })
     })
@@ -133,7 +133,7 @@ describe('OTel bridge helpers', () => {
   describe('setOtelAttributes', () => {
     it('applies all attributes and mirrors http.response.status_code', () => {
       const ddSpan = createMockDdSpan()
-      setOtelAttributes(ddSpan, { 'http.response.status_code': 404, foo: 'bar' })
+      setOtelAttributes(ddSpan, { 'http.response.status_code': 404, foo: 'bar' }, false)
 
       assert.deepStrictEqual(ddSpan.tags, {
         'http.response.status_code': 404,
