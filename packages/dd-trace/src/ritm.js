@@ -8,7 +8,7 @@ const dc = require('dc-polyfill')
 
 const parse = require('../../../vendor/dist/module-details-from-path')
 const { isRelativeRequire } = require('../../datadog-instrumentations/src/helpers/shared-utils')
-const { getEnvironmentVariable } = require('./config/helper')
+const { getConfiguredEnvName, getEnvironmentVariable } = require('./config/helper')
 
 const origRequire = Module.prototype.require
 // derived from require-in-the-middle@3 with tweaks
@@ -143,7 +143,9 @@ function Hook (modules, options, onrequire) {
       name = moduleId
     } else {
       const inAWSLambda = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined
-      const hasLambdaHandler = getEnvironmentVariable('DD_LAMBDA_HANDLER') !== undefined
+      // Presence check over all sources (incl. stable config) without parsing —
+      // parsing here would re-enter this require hook via config/defaults.
+      const hasLambdaHandler = getConfiguredEnvName('DD_LAMBDA_HANDLER') !== undefined
       const segments = filename.split(path.sep)
       const filenameFromNodeModule = segments.includes('node_modules')
       // decide how to assign the stat

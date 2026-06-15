@@ -86,10 +86,10 @@ const log = {
     configDefaults ??= require('../config/defaults').defaults
     config.logger = options.logger
     config.logLevel = options.logLevel ??
-        getValueFromEnvSources('DD_TRACE_LOG_LEVEL') ??
+        getValueFromEnvSources('DD_TRACE_LOG_LEVEL', true) ??
         config.logLevel ??
         configDefaults?.logLevel
-    config.enabled = getValueFromEnvSources('DD_TRACE_DEBUG') ??
+    config.enabled = getValueFromEnvSources('DD_TRACE_DEBUG', true) ??
       // TODO: Handle this by adding a log buffer so that configure may be called with the actual configurations.
       // eslint-disable-next-line eslint-rules/eslint-process-env
       (process.env.OTEL_LOG_LEVEL === 'debug' || (config.enabled ?? configDefaults?.DD_TRACE_DEBUG))

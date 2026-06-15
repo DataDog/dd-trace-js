@@ -150,6 +150,22 @@ function validateAccess (name) {
 }
 
 let configurationsTable
+let configDefaults
+
+// Lazy require to keep the `config -> helper` import direction acyclic.
+// `config/defaults` participates in a require cycle with `log` (it lazily
+// requires `log` to warn about invalid values, and `log` reads its fallback
+// defaults from there). When an early caller reaches this before
+// `config/defaults` has finished loading, the table is not yet populated; in
+// that window callers fall back to the raw value / no default and the next call
+// resolves it once the module is fully initialized.
+function loadConfigurationsTable () {
+  if (configurationsTable === undefined) {
+    const defaultsModule = require('./defaults')
+    configurationsTable = defaultsModule.configurationsTable
+    configDefaults = defaultsModule.defaults
+  }
+}
 
 /**
  * Parses and transforms a raw environment value with the same parser and
@@ -163,14 +179,7 @@ let configurationsTable
  * @returns {string | number | boolean | object | undefined}
  */
 function parseConfigurationValue (name, value, source) {
-  // Lazy require to keep the `config -> helper` import direction acyclic.
-  // `config/defaults` participates in a require cycle with `log` (it lazily
-  // requires `log` to warn about invalid values, and `log` reads its fallback
-  // defaults from there). When an early caller reaches this before
-  // `config/defaults` has finished loading, the table is not yet populated; in
-  // that window we return the raw value and the next call parses it once the
-  // module is fully initialized.
-  configurationsTable ??= require('./defaults').configurationsTable
+  loadConfigurationsTable()
   if (configurationsTable === undefined) {
     return value
   }
@@ -181,6 +190,27 @@ function parseConfigurationValue (name, value, source) {
   }
   const parsed = entry.parser(value, canonical, source)
   return parsed !== undefined && entry.transformer ? entry.transformer(parsed, canonical, source) : parsed
+}
+
+/**
+ * Returns the registered default for a configuration — the same value Config
+ * resolves when no environment source sets it. Names without a configuration
+ * entry (any non DD_/OTEL_ variable) have no default and return `undefined`.
+ *
+ * @param {string} name Canonical or alias environment variable name.
+ * @returns {string | number | boolean | object | undefined}
+ */
+function getRegisteredDefault (name) {
+  loadConfigurationsTable()
+  if (configurationsTable === undefined) {
+    return
+  }
+  const canonical = aliasToCanonical[name] ?? name
+  const entry = configurationsTable[canonical]
+  if (entry === undefined) {
+    return
+  }
+  return configDefaults[entry.property ?? canonical]
 }
 
 module.exports = {
@@ -252,11 +282,18 @@ module.exports = {
    * sources, so the returned value is typed (boolean, number, array, map, ...) rather than the
    * raw string. Non DD_/OTEL_ variables have no configuration entry and are returned unparsed.
    *
+   * When the name is not set in any source, the registered default is returned, so callers can
+   * use the value directly. Callers that must distinguish an explicitly configured value from the
+   * default (e.g. an OTel fallback that only applies when the option is unset) pass `skipDefault`
+   * to receive `undefined` for an unset value instead. All sources (process.env, local and fleet
+   * stable config) are read in both modes.
+   *
    * @param {string} name Environment variable name
+   * @param {boolean} [skipDefault] Return `undefined` instead of the registered default when unset.
    * @returns {string | number | boolean | object | undefined}
    * @throws {Error} if the configuration is not supported
    */
-  getValueFromEnvSources (name) {
+  getValueFromEnvSources (name, skipDefault) {
     validateAccess(name)
 
     if (!stableConfigLoaded) {
@@ -281,6 +318,8 @@ module.exports = {
         return parseConfigurationValue(name, fromLocal, 'local_stable_config')
       }
     }
+
+    return skipDefault ? undefined : getRegisteredDefault(name)
   },
 
   /**

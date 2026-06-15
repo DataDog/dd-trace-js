@@ -14,7 +14,7 @@ const { isRelativeRequire } = require('./shared-utils')
 const rewriter = require('./rewriter')
 
 const DD_TRACE_DISABLED_INSTRUMENTATIONS =
-  /** @type {string | undefined} */ (getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')) || ''
+  /** @type {string | undefined} */ (getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS'))
 const DD_TRACE_DEBUG = getValueFromEnvSources('DD_TRACE_DEBUG')
 
 const hooks = require('./hooks')

@@ -137,6 +137,47 @@ describe('config-helper env resolution', () => {
     assert.strictEqual(value, undefined)
   })
 
+  it('applies the registered default when the value is unset', () => {
+    delete process.env.DD_TRACE_ENABLED
+
+    // DD_TRACE_ENABLED's registered default is true.
+    assert.strictEqual(getValueFromEnvSources('DD_TRACE_ENABLED'), true)
+  })
+
+  it('returns undefined for an unset value when skipDefault is set', () => {
+    delete process.env.DD_TRACE_ENABLED
+
+    assert.strictEqual(getValueFromEnvSources('DD_TRACE_ENABLED', true), undefined)
+  })
+
+  it('returns the configured value rather than the default when set', () => {
+    process.env.DD_TRACE_ENABLED = 'false'
+
+    assert.strictEqual(getValueFromEnvSources('DD_TRACE_ENABLED'), false)
+    assert.strictEqual(getValueFromEnvSources('DD_TRACE_ENABLED', true), false)
+  })
+
+  it('returns undefined for an unset variable without a configuration entry', () => {
+    delete process.env.SOME_UNREGISTERED_VAR
+
+    assert.strictEqual(getValueFromEnvSources('SOME_UNREGISTERED_VAR'), undefined)
+  })
+
+  it('falls back to the raw value and no default while config/defaults is still loading', () => {
+    // Simulate the require-cycle window where config/defaults has not finished
+    // exporting yet: the configuration table is not populated.
+    const mod = proxyquire('../../src/config/helper', {
+      '../serverless': { IS_SERVERLESS: true },
+      './defaults': { '@noCallThru': true },
+    })
+
+    process.env.DD_TRACE_ENABLED = 'true'
+    assert.strictEqual(mod.getValueFromEnvSources('DD_TRACE_ENABLED'), 'true')
+
+    delete process.env.DD_TRACE_ENABLED
+    assert.strictEqual(mod.getValueFromEnvSources('DD_TRACE_ENABLED'), undefined)
+  })
+
   it('prefers canonical name over alias', () => {
     process.env.DD_AGENT_HOST = 'canonical-hostname'
     process.env.DD_TRACE_AGENT_HOSTNAME = 'alias-hostname'

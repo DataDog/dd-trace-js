@@ -22,7 +22,7 @@ function getIsGCPFunction () {
  */
 function enableGCPPubSubPushSubscription () {
   return getEnvironmentVariable('K_SERVICE') !== undefined &&
-    getValueFromEnvSources('DD_TRACE_GCP_PUBSUB_PUSH_ENABLED') !== false
+    getValueFromEnvSources('DD_TRACE_GCP_PUBSUB_PUSH_ENABLED')
 }
 
 function getIsAzureFunction () {
