@@ -3,10 +3,13 @@
 const dgram = require('dgram')
 const isIP = require('net').isIP
 
+const { storage } = require('../../datadog-core')
 const request = require('./exporters/common/request')
 const log = require('./log')
 const Histogram = require('./histogram')
 const { entityId } = require('./exporters/common/docker')
+
+const legacyStorage = storage('legacy')
 
 const MAX_BUFFER_SIZE = 1024 // limit from the agent
 
@@ -98,14 +101,18 @@ class DogStatsDClient {
   }
 
   _sendUdp (queue) {
-    if (this._family === 0) {
-      this.#lookup(this._host, (err, address, family) => {
-        if (err) return log.error('DogStatsDClient: Host not found', err)
-        this._sendUdpFromQueue(queue, address, family)
-      })
-    } else {
-      this._sendUdpFromQueue(queue, this._host, this._family)
-    }
+    // dgram resolves the local address via the instrumented dns.lookup when it
+    // binds on first send; the noop store keeps that self-traffic off the trace.
+    legacyStorage.run({ noop: true }, () => {
+      if (this._family === 0) {
+        this.#lookup(this._host, (error, address, family) => {
+          if (error) return log.error('DogStatsDClient: Host not found', error)
+          this._sendUdpFromQueue(queue, address, family)
+        })
+      } else {
+        this._sendUdpFromQueue(queue, this._host, this._family)
+      }
+    })
   }
 
   _sendUdpFromQueue (queue, address, family) {
