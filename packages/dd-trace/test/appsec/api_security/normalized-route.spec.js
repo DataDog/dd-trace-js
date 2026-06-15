@@ -736,4 +736,48 @@ describe('normalizeRouteExpress', () => {
       assert.equal(compileRoute('/').precomputed, '/')
     })
   })
+
+  describe('review-finding regressions', () => {
+    it('capturing group inside an inline constraint does not corrupt optional detection', () => {
+      // The (o) capture inside the constraint must not shift the optional-group presence marker.
+      assert.equal(normalizeRouteExpress('/:id(fo(o)).:format?', {}, '/foo'), '/{id}')
+      assert.equal(normalizeRouteExpress('/:id(fo(o)).:format?', {}, '/foo.json'), '/{id+format}')
+    })
+
+    it('combines a named param with a catch-all in the same segment', () => {
+      assert.equal(normalizeRouteExpress('/x/:a-*', {}, '/x/y-z/w'), '/x/{a+param1}')
+    })
+
+    it('enforces name uniqueness on encoded names (no post-encode collision)', () => {
+      // ':"a/b"' and ':"a%2Fb"' both encode to a%2Fb → first must be shadowed to paramN.
+      assert.equal(normalizeRouteExpress('/:"a/b"/:"a%2Fb"', {}, '/x/y'), '/{param1}/{a%2Fb}')
+    })
+
+    it('treats backslash-escaped reserved chars as static (Express 5)', () => {
+      assert.equal(normalizeRouteExpress('/file/\\{id\\}', {}, '/file/{id}'), '/file/%7Bid%7D')
+      assert.equal(normalizeRouteExpress('/foo/\\(bar\\)', {}, '/foo/(bar)'), '/foo/%28bar%29')
+    })
+
+    it('returns null for a non-terminal param whose constraint can consume "/"', () => {
+      assert.equal(normalizeRouteExpress('/:id(.+)/tail', { id: 'a/b' }, '/a/b/tail'), null)
+    })
+
+    it('allows a terminal param whose constraint can consume "/"', () => {
+      assert.equal(normalizeRouteExpress('/files/:id(.+)', { id: 'a/b' }, '/files/a/b'), '/files/{id}')
+    })
+
+    it('returns null when a route has too many optional groups (bitmask/backtracking guard)', () => {
+      const route = '/r' + Array.from({ length: 33 }, (_, i) => `{/s${i + 1}}`).join('')
+      assert.equal(normalizeRouteExpress(route, {}, '/r/s33'), null)
+    })
+
+    it('does not blow up on many optional params against a non-matching URL', () => {
+      const route = '/' + Array.from({ length: 24 }, (_, i) => `:p${i}?`).join('/') + '/zzz'
+      const url = '/' + Array.from({ length: 24 }, () => 'x').join('/') + '/nomatch'
+      const start = process.hrtime.bigint()
+      normalizeRouteExpress(route, {}, url) // must return quickly (step-budget bounded)
+      const ms = Number(process.hrtime.bigint() - start) / 1e6
+      assert.ok(ms < 100, `expected < 100ms, got ${ms.toFixed(1)}ms`)
+    })
+  })
 })

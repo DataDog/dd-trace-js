@@ -30,6 +30,14 @@ const web = require('../../plugins/util/web')
 // Unquoted param/wildcard name: one or more [A-Za-z0-9_]
 const NAME_RE = /^[A-Za-z0-9_]+/
 
+// Cap on optional groups per route. Keeps the presence bitmask within 32 bits and bounds the
+// backtracking matcher; routes beyond this are omitted (return null) rather than mis-normalized.
+const MAX_OPTIONAL_GROUPS = 24
+
+// Upper bound on matcher steps per presence resolution; protects the request hot path from
+// pathological backtracking. On exceedance the URL match aborts and we fall back to req.params.
+const MAX_MATCH_STEPS = 10_000
+
 // Per-route compiled-entry cache, keyed on the raw route string.
 const routeCache = new Map()
 
@@ -52,7 +60,8 @@ const segmentRegexCache = new Map()
  *   groupParent: Map<number, number>,
  *   optionalGroups: number[],
  *   trailingSlash: boolean,
- *   precomputed: string | null
+ *   precomputed: string | null,
+ *   variants?: Map<number, string | null>
  * }} CompiledRoute
  */
 
@@ -121,7 +130,16 @@ function parseRoute (route) {
 
   while (i < route.length) {
     const c = route[i]
-    if (c === '{') {
+    if (c === '\\') {
+      // Express 5 backslash-escape: the next char is a literal static char (incl. reserved {}()).
+      if (i + 1 < route.length) {
+        staticBuf += route[i + 1]
+        i += 2
+      } else {
+        staticBuf += '\\'
+        i++
+      }
+    } else if (c === '{') {
       flush()
       nextGroupId++
       groupParent.set(nextGroupId, groupStack[groupStack.length - 1])
@@ -247,9 +265,25 @@ function compileRoute (route) {
   // Drop empty (collapsed `//`) segments.
   const cleaned = segments.filter(s => s.tokens.length > 0)
 
+  // A param whose inline constraint can match a '/' spans multiple URL segments. That only has a
+  // single-element representation when it is the route's tail (a catch-all); anywhere else it
+  // breaks the one-segment-one-element rule, so omit rather than guess.
+  for (let s = 0; s < cleaned.length; s++) {
+    for (const t of cleaned[s].tokens) {
+      if (t.type === 'param' && constraintMatchesSlash(t.constraint) && s !== cleaned.length - 1) {
+        return null
+      }
+    }
+  }
+
   const optionalGroups = []
   for (const [id] of groupParent) optionalGroups.push(id)
   optionalGroups.sort((a, b) => a - b)
+
+  // Guard against pathological routes: too many optional groups makes the presence bitmask
+  // (1 << i) overflow 32 bits and the backtracking matcher blow up. Omit rather than risk a
+  // wrong (aliased) cached result or an event-loop stall.
+  if (optionalGroups.length > MAX_OPTIONAL_GROUPS) return null
 
   const compiled = { segments: cleaned, groupParent, optionalGroups, trailingSlash, precomputed: null }
 
@@ -275,10 +309,27 @@ const EMPTY_SET = new Set()
  */
 function groupActive (g, groupParent, present) {
   while (g !== 0) {
-    if (!present.has(g)) return false
+    if (g === undefined || !present.has(g)) return false
     g = groupParent.get(g)
   }
   return true
+}
+
+/**
+ * True when group `g` is a strict descendant of `ancestor` (i.e. nested more deeply inside it).
+ * @param {number} g
+ * @param {number} ancestor
+ * @param {Map<number, number>} groupParent
+ * @returns {boolean}
+ */
+function isStrictDescendant (g, ancestor, groupParent) {
+  let p = groupParent.get(g)
+  while (p !== undefined) {
+    if (p === ancestor) return true
+    if (p === 0) return false
+    p = groupParent.get(p)
+  }
+  return false
 }
 
 // ---------------------------------------------------------------------------
@@ -335,24 +386,30 @@ function renderRoute (compiled, present) {
     }
   }
 
-  // Pass 2: resolve names. A named token keeps its name iff it is the LAST present occurrence
-  // of that name (the value Express keeps in req.params); earlier duplicates and unnamed
-  // wildcards become paramN placeholders, skipping any N equal to a surviving name.
+  // Pass 2: resolve names. Uniqueness is computed on ENCODED names (the form that appears in the
+  // output), so two distinct raw names that encode identically don't collide. A token keeps its
+  // name iff it is the LAST present occurrence of that encoded name (the value Express keeps in
+  // req.params); earlier duplicates and unnamed wildcards become paramN placeholders, skipping
+  // any N equal to a surviving name.
+  const encodedNames = new Array(dyn.length)
   const lastIndexByName = new Map()
   for (let idx = 0; idx < dyn.length; idx++) {
-    if (dyn[idx].name != null) lastIndexByName.set(dyn[idx].name, idx)
+    if (dyn[idx].name != null) {
+      encodedNames[idx] = encodeParamName(dyn[idx].name)
+      lastIndexByName.set(encodedNames[idx], idx)
+    }
   }
   const used = new Set()
   for (let idx = 0; idx < dyn.length; idx++) {
-    const t = dyn[idx]
-    if (t.name != null && lastIndexByName.get(t.name) === idx) used.add(t.name)
+    if (encodedNames[idx] != null && lastIndexByName.get(encodedNames[idx]) === idx) {
+      used.add(encodedNames[idx])
+    }
   }
   const resolvedNames = new Array(dyn.length)
   let counter = 1
   for (let idx = 0; idx < dyn.length; idx++) {
-    const t = dyn[idx]
-    if (t.name != null && lastIndexByName.get(t.name) === idx) {
-      resolvedNames[idx] = encodeParamName(t.name)
+    if (encodedNames[idx] != null && lastIndexByName.get(encodedNames[idx]) === idx) {
+      resolvedNames[idx] = encodedNames[idx]
     } else {
       while (used.has(`param${counter}`)) counter++
       resolvedNames[idx] = `param${counter}`
@@ -385,8 +442,9 @@ function renderRoute (compiled, present) {
     }
 
     if (isCatchAll) {
-      // Catch-all (with any static prefix) is a single terminal dynamic element (rule 5).
-      out.push(`{${paramNames[0]}}`)
+      // Catch-all is terminal (rule 5). A static prefix is subsumed into the single element, but
+      // any preceding dynamic params in the same segment are combined with it via '+'.
+      out.push(`{${paramNames.join('+')}}`)
       catchAllSeen = true
     } else if (paramNames.length === 0) {
       if (staticText !== '') out.push(encodeStaticSegment(staticText))
@@ -406,37 +464,41 @@ function renderRoute (compiled, present) {
 // ---------------------------------------------------------------------------
 
 /**
- * Build (and cache) a regex that matches a single URL segment against a route segment, plus a
- * map from each intra-segment optional group id to the capture index that signals its presence.
+ * Build (and cache) a regex that matches a single URL segment against a route segment, plus the
+ * list of intra-segment optional group ids (each has a named marker capture in the regex).
  *
  * Tokens at the segment's base group are mandatory; tokens in a deeper (optional) group are
- * wrapped in an optional non-capturing group with a leading marker capture so we can detect
- * whether that group matched.
+ * wrapped in an optional non-capturing group with a named marker capture (?<_ddgN>) so we can
+ * detect whether that group matched by name (robust to capture-index shifts from constraints).
  *
  * @param {RouteSegment} seg
- * @returns {{ regex: RegExp, presence: Array<[number, number]> }}
+ * @param {Map<number, number>} groupParent
+ * @returns {{ regex: RegExp, presence: number[] }}
  */
-function getSegmentMatcher (seg) {
+function getSegmentMatcher (seg, groupParent) {
   const cached = segmentRegexCache.get(seg)
   if (cached !== undefined) return cached
 
   let pattern = ''
-  let captureIdx = 0
   const presence = []
   let openGroup = 0 // currently-open intra-optional group id (0 = none)
 
   for (const t of seg.tokens) {
+    // A token is an intra-segment optional only when its group is nested strictly deeper than
+    // the segment's group; same-group or ancestor-group tokens are mandatory within the segment.
+    const intraOptional = isStrictDescendant(t.group, seg.group, groupParent)
+
     // Close an open intra-optional group when we leave it.
     if (openGroup !== 0 && t.group !== openGroup) {
       pattern += ')?'
       openGroup = 0
     }
-    // Open an intra-optional group (deeper than the segment base) with a marker capture.
-    if (t.group !== seg.group && openGroup === 0) {
-      pattern += '(?:'
-      captureIdx++
-      pattern += '()' // empty marker capture: defined iff this optional group matched
-      presence.push([t.group, captureIdx])
+    // Open an intra-optional group with a NAMED marker capture. A named group is read by name
+    // (m.groups), so it is immune to capture-index shifts from capturing groups inside an inline
+    // constraint (e.g. ':id(fo(o)).:format?').
+    if (intraOptional && openGroup === 0) {
+      pattern += `(?:(?<${markerName(t.group)}>)` // empty marker: defined iff this group matched
+      presence.push(t.group)
       openGroup = t.group
     }
 
@@ -453,19 +515,30 @@ function getSegmentMatcher (seg) {
   }
   if (openGroup !== 0) pattern += ')?'
 
-  let regex
+  let result
   try {
-    regex = new RegExp('^' + pattern + '$')
+    result = { regex: new RegExp('^' + pattern + '$'), presence }
   } catch {
-    regex = /^[^/]+$/ // last-resort fallback (should not happen: each fragment is pre-validated)
+    // Last-resort fallback (should not happen: fragments are pre-validated). Use a generic
+    // single-segment match with no presence markers so the read side never dereferences a
+    // missing named group.
+    result = { regex: /^[^/]+$/, presence: [] }
   }
-  const result = { regex, presence }
   segmentRegexCache.set(seg, result)
   return result
 }
 
 function escapeRegex (str) {
   return str.replaceAll(/[-[\]{}()*+?.,\\^$|#\s]/g, String.raw`\$&`)
+}
+
+/**
+ * Regex named-group identifier for an optional group's presence marker.
+ * @param {number} groupId
+ * @returns {string}
+ */
+function markerName (groupId) {
+  return `_ddg${groupId}`
 }
 
 /**
@@ -477,6 +550,21 @@ function isValidRegex (src) {
   try {
     new RegExp(src) // eslint-disable-line no-new
     return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * True when an inline constraint can match a string containing '/', i.e. the param may span
+ * multiple URL segments (e.g. `(.+)`, `(.*)`, `([^x]+)`).
+ * @param {string|undefined} src
+ * @returns {boolean}
+ */
+function constraintMatchesSlash (src) {
+  if (!isValidRegex(src)) return false
+  try {
+    return new RegExp(`^(?:${src})$`).test('a/b')
   } catch {
     return false
   }
@@ -507,8 +595,13 @@ function segmentWildcard (seg) {
  */
 function resolvePresenceFromUrl (compiled, urlSegs) {
   const present = new Set()
+  matchStepsRemaining = MAX_MATCH_STEPS
   return matchSegments(compiled, 0, urlSegs, 0, present) ? present : null
 }
+
+// Step budget for the current matchSegments traversal. Safe as module state because presence
+// resolution is synchronous and non-reentrant (each request resolves fully before the next).
+let matchStepsRemaining = MAX_MATCH_STEPS
 
 /**
  * Backtracking matcher: try to match segments[si..] against urlSegs[ui..], recording present
@@ -521,6 +614,7 @@ function resolvePresenceFromUrl (compiled, urlSegs) {
  * @returns {boolean}
  */
 function matchSegments (compiled, si, urlSegs, ui, present) {
+  if (--matchStepsRemaining < 0) return false // budget exhausted → abort (caller falls back to params)
   const { segments, groupParent } = compiled
   if (si === segments.length) return ui === urlSegs.length
 
@@ -567,13 +661,13 @@ function matchSegmentHere (compiled, si, urlSegs, ui, present) {
   }
 
   if (ui >= urlSegs.length) return false
-  const { regex, presence } = getSegmentMatcher(seg)
+  const { regex, presence } = getSegmentMatcher(seg, compiled.groupParent)
   const m = regex.exec(urlSegs[ui])
   if (!m) return false
 
   const added = []
-  for (const [groupId, captureIdx] of presence) {
-    if (m[captureIdx] !== undefined) {
+  for (const groupId of presence) {
+    if (m.groups?.[markerName(groupId)] !== undefined) {
       present.add(groupId)
       added.push(groupId)
     }
