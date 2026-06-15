@@ -6,6 +6,7 @@ const { describe, it, beforeEach } = require('mocha')
 
 require('../setup/core')
 const id = require('../../src/id')
+const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../ext/priority')
 
 describe('SpanContext', () => {
   let SpanContext
@@ -165,6 +166,50 @@ describe('SpanContext', () => {
 
       assert.strictEqual(spanContext.toTraceparent(), '00-00000000000007890000000000000123-0000000000000456-00')
     })
+
+    it('materializes the lazy sampling decision so the sampled flag is set before finish', () => {
+      const spanContext = withRootSampler(AUTO_KEEP)
+
+      assert.match(spanContext.toTraceparent(), /-01$/)
+    })
+
+    it('reflects a drop decision rather than defaulting the flag to keep', () => {
+      const spanContext = withRootSampler(AUTO_REJECT)
+
+      assert.match(spanContext.toTraceparent(), /-00$/)
+      assert.strictEqual(spanContext._sampling.priority, AUTO_REJECT)
+    })
+
+    it('does not re-sample once a priority is already decided', () => {
+      const spanContext = new SpanContext({ traceId: id('123', 16), spanId: id('456', 16) })
+      spanContext._sampling.priority = USER_KEEP
+      spanContext._trace.started.push({
+        context: () => spanContext,
+        _prioritySampler: { sample () { throw new Error('should not re-sample a decided trace') } },
+      })
+
+      assert.match(spanContext.toTraceparent(), /-01$/)
+    })
+
+    /**
+     * Builds a context whose root span carries a priority sampler that records
+     * the given decision, mirroring the lazy auto-sampling path.
+     *
+     * @param {import('../../src/priority_sampler').SamplingPriority} priority
+     * @returns {SpanContext}
+     */
+    function withRootSampler (priority) {
+      const spanContext = new SpanContext({ traceId: id('123', 16), spanId: id('456', 16) })
+      spanContext._trace.started.push({
+        context: () => spanContext,
+        _prioritySampler: {
+          sample (span) {
+            span.context()._sampling.priority = priority
+          },
+        },
+      })
+      return spanContext
+    }
   })
 
   describe('tag accessor API', () => {

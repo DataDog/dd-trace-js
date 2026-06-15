@@ -63,11 +63,25 @@ class DatadogSpanContext {
   }
 
   toTraceparent () {
+    this._ensureSamplingPriority()
     const flags = this._sampling.priority >= AUTO_KEEP ? '01' : '00'
     const traceId = this.toTraceId(true)
     const spanId = this.toSpanId(true)
     const version = (this._traceparent && this._traceparent.version) || '00'
     return `${version}-${traceId}-${spanId}-${flags}`
+  }
+
+  /**
+   * Materialize the lazy priority-sampling decision for this trace, the same
+   * way {@link DatadogTracer#inject} does before propagation. The auto priority
+   * is otherwise computed at flush time, so the W3C sampled flag reads "drop"
+   * for a freshly started, not-yet-flushed span — see
+   * https://github.com/DataDog/dd-trace-js/issues/2547.
+   */
+  _ensureSamplingPriority () {
+    if (this._sampling.priority !== undefined) return
+    const root = this._trace.started[0]
+    root?._prioritySampler?.sample(root)
   }
 
   /**
