@@ -95,7 +95,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
    * @param {import('@opentelemetry/api').Attributes} resourceAttributes - Resource attributes
    * @param {boolean} [otelTraceSemanticsEnabled] - When true, do not emit Datadog-only attributes as span attributes
    */
-  constructor (resourceAttributes, otelTraceSemanticsEnabled = false) {
+  constructor (resourceAttributes, otelTraceSemanticsEnabled) {
     super(resourceAttributes, 'http/json', 'traces')
     this.#otelTraceSemanticsEnabled = otelTraceSemanticsEnabled
   }

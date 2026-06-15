@@ -38,7 +38,7 @@ class OtlpHttpTraceExporter extends OtlpHttpExporterBase {
    * @param {import('@opentelemetry/api').Attributes} resourceAttributes - Resource attributes
    * @param {boolean} [otelTraceSemanticsEnabled] - When true, do not emit Datadog-only attributes as span attributes
    */
-  constructor (url, headers, timeout, resourceAttributes, otelTraceSemanticsEnabled = false) {
+  constructor (url, headers, timeout, resourceAttributes, otelTraceSemanticsEnabled) {
     super(url, headers, timeout, 'http/json', 'traces')
     this.#transformer = new OtlpTraceTransformer(resourceAttributes, otelTraceSemanticsEnabled)
   }
