@@ -169,6 +169,7 @@ class SpanStatsProcessor {
     hostname,
     port,
     url,
+    service,
     env,
     tags,
     version: appVersion,
@@ -209,10 +210,12 @@ class SpanStatsProcessor {
       const resourceAttributes = buildResourceAttributes(this.tags, {
         reportHostname,
         otelSemanticsEnabled,
+        service,
+        env,
+        serviceVersion: appVersion,
       })
-      const scopeIdentity = { env, serviceVersion: appVersion }
       this.otlpExporter = new OtlpStatsExporter(
-        otelMetricsUrl, protocol, resourceAttributes, otelSemanticsEnabled, scopeIdentity
+        otelMetricsUrl, protocol, resourceAttributes, otelSemanticsEnabled, service
       )
     }
 
@@ -285,22 +288,29 @@ class SpanStatsProcessor {
 }
 
 /**
- * service.name, service.version and deployment.environment.name are reported as scope attributes,
- * so the resource only carries SDK identity, host.name and Datadog-specific dd.* attributes.
+ * Builds the OTLP resource attributes. Service identity (service.name / service.version /
+ * deployment.environment.name) is reported here, as the configured default service of the producing
+ * process; spans with a custom service additionally carry service.name on their data point.
  *
  * @param {object} tags
- * @param {{ reportHostname?: boolean, otelSemanticsEnabled?: boolean }} [options]
+ * @param {{ reportHostname?: boolean, otelSemanticsEnabled?: boolean, service?: string, env?: string,
+ *   serviceVersion?: string }} [options]
  *   reportHostname: whether DD_TRACE_REPORT_HOSTNAME is enabled.
  *   otelSemanticsEnabled: when true, only OTel attributes are emitted (no dd.*).
+ *   service/env/serviceVersion: the configured default service identity.
  * @returns {import('@opentelemetry/api').Attributes}
  */
-function buildResourceAttributes (tags, { reportHostname, otelSemanticsEnabled } = {}) {
+function buildResourceAttributes (tags, { reportHostname, otelSemanticsEnabled, service, env, serviceVersion } = {}) {
   // Identify the emitter as the Datadog SDK so the backend can attribute these metrics separately.
   const attrs = {
     'telemetry.sdk.name': 'datadog',
     'telemetry.sdk.language': 'nodejs',
     'telemetry.sdk.version': version,
   }
+  // Service identity (OTel attributes, emitted in both modes).
+  if (service) attrs['service.name'] = service
+  if (serviceVersion) attrs['service.version'] = serviceVersion
+  if (env) attrs['deployment.environment.name'] = env
   // Only report host.name when DD_TRACE_REPORT_HOSTNAME is enabled, matching the other OTLP
   // signals (metrics/logs). DD_HOSTNAME is not supported in dd-trace-js, so use os.hostname().
   if (reportHostname) attrs['host.name'] = os.hostname()

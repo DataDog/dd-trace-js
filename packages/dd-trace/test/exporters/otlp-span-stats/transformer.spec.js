@@ -13,8 +13,14 @@ const { HTTP_STATUS_CODE, HTTP_METHOD, HTTP_ROUTE, SPAN_KIND } = require('../../
 const { ORIGIN_KEY, TOP_LEVEL_KEY } = require('../../../src/constants')
 
 const METRIC_NAME = 'traces.span.sdk.metrics.duration'
-const RESOURCE_ATTRS = { 'telemetry.sdk.name': 'datadog', 'telemetry.sdk.language': 'nodejs' }
-const SCOPE_IDENTITY = { env: 'test', serviceVersion: '1.2.3' }
+const RESOURCE_ATTRS = {
+  'telemetry.sdk.name': 'datadog',
+  'telemetry.sdk.language': 'nodejs',
+  'service.name': 'svc',
+  'service.version': '1.2.3',
+  'deployment.environment.name': 'test',
+}
+const DEFAULT_SERVICE = 'svc'
 const BUCKET_SIZE_NS = 10 * 1e9
 
 function makeSpan (overrides = {}) {
@@ -75,7 +81,7 @@ describe('OtlpStatsTransformer', () => {
     let transformer
 
     before(() => {
-      transformer = new OtlpStatsTransformer(RESOURCE_ATTRS, 'http/json', false, SCOPE_IDENTITY)
+      transformer = new OtlpStatsTransformer(RESOURCE_ATTRS, 'http/json', false, DEFAULT_SERVICE)
     })
 
     it('emits a single histogram metric with the correct name, unit and temporality', () => {
@@ -197,40 +203,35 @@ describe('OtlpStatsTransformer', () => {
       assert.strictEqual(dataPointsOf(payload).length, 1)
     })
 
-    it('reports service identity on the dd-trace scope, not the resource', () => {
+    it('reports service identity on the resource, not the dd-trace scope', () => {
       const payload = JSON.parse(transformer.transform(makeDrained(12340000000000, [makeSpan()]), BUCKET_SIZE_NS))
       const resourceAttrs = Object.fromEntries(
         payload.resourceMetrics[0].resource.attributes.map(a => [a.key, a.value.stringValue])
       )
       const scope = payload.resourceMetrics[0].scopeMetrics[0].scope
-      const scopeAttrs = Object.fromEntries(scope.attributes.map(a => [a.key, a.value.stringValue]))
 
       assert.strictEqual(scope.name, 'dd-trace')
-      assert.deepStrictEqual(scopeAttrs, {
-        'service.name': 'svc',
-        'service.version': '1.2.3',
-        'deployment.environment.name': 'test',
-      })
-      assert.ok(!('service.name' in resourceAttrs), 'service.name should not be a resource attribute')
-      assert.ok(!('deployment.environment.name' in resourceAttrs), 'env should not be a resource attribute')
+      assert.deepStrictEqual(scope.attributes, [], 'scope carries no service identity attributes')
+      assert.strictEqual(resourceAttrs['service.name'], 'svc')
+      assert.strictEqual(resourceAttrs['service.version'], '1.2.3')
+      assert.strictEqual(resourceAttrs['deployment.environment.name'], 'test')
     })
 
-    it('partitions data points into one scope per service', () => {
+    it('emits a single scope and tags data points whose service differs from the default', () => {
       const drained = makeDrained(12340000000000, [
-        makeSpan({ service: 'svc-a' }),
-        makeSpan({ service: 'svc-b' }),
+        makeSpan({ service: 'svc', resource: 'GET /foo' }), // default service -> service.name omitted
+        makeSpan({ service: 'svc-other', resource: 'GET /bar' }), // custom service -> service.name emitted
       ])
       const payload = JSON.parse(transformer.transform(drained, BUCKET_SIZE_NS))
       const scopes = payload.resourceMetrics[0].scopeMetrics
-      const servicesByScope = scopes.map(sm =>
-        sm.scope.attributes.find(a => a.key === 'service.name').value.stringValue
-      )
 
-      assert.strictEqual(scopes.length, 2)
-      assert.deepStrictEqual(servicesByScope.sort(), ['svc-a', 'svc-b'])
-      for (const sm of scopes) {
-        assert.strictEqual(sm.metrics[0].histogram.dataPoints.length, 1)
-      }
+      assert.strictEqual(scopes.length, 1)
+      assert.deepStrictEqual(scopes[0].scope.attributes, [])
+      const serviceByResource = Object.fromEntries(
+        dataPointsOf(payload).map(dp => [attrMapOf(dp)['span.name'], attrMapOf(dp)['service.name']])
+      )
+      assert.strictEqual(serviceByResource['GET /foo'], undefined)
+      assert.strictEqual(serviceByResource['GET /bar'], 'svc-other')
     })
 
     it('sets timestamps from the bucket time and size', () => {
@@ -257,7 +258,7 @@ describe('OtlpStatsTransformer', () => {
     let transformer
 
     before(() => {
-      transformer = new OtlpStatsTransformer(RESOURCE_ATTRS, 'http/json', true)
+      transformer = new OtlpStatsTransformer(RESOURCE_ATTRS, 'http/json', true, DEFAULT_SERVICE)
     })
 
     it('emits only OTel attributes (no dd.*) while keeping status.code on errors', () => {
@@ -280,7 +281,7 @@ describe('OtlpStatsTransformer', () => {
     let transformer
 
     before(() => {
-      transformer = new OtlpStatsTransformer(RESOURCE_ATTRS, 'http/protobuf')
+      transformer = new OtlpStatsTransformer(RESOURCE_ATTRS, 'http/protobuf', false, DEFAULT_SERVICE)
     })
 
     it('emits a valid ExportMetricsServiceRequest with a single duration metric', () => {

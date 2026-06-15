@@ -20,11 +20,12 @@ class OtlpStatsExporter extends OtlpHttpExporterBase {
    * @param {string} protocol - OTLP protocol (http/protobuf or http/json)
    * @param {import('@opentelemetry/api').Attributes} resourceAttributes - Resource attributes
    * @param {boolean} [otelSemanticsEnabled] - When true, only OTel attributes are emitted (no dd.*)
-   * @param {{ env?: string, serviceVersion?: string }} [scopeIdentity] - Scope-level identity attributes
+   * @param {string} [defaultService] - The configured default service (DD_SERVICE), reported on the
+   *   resource; a data point carries service.name only when its span's service differs from this.
    */
-  constructor (url, protocol, resourceAttributes, otelSemanticsEnabled = false, scopeIdentity = {}) {
+  constructor (url, protocol, resourceAttributes, otelSemanticsEnabled = false, defaultService = '') {
     super(url, undefined, 10_000, protocol, 'span-stats')
-    this.transformer = new OtlpStatsTransformer(resourceAttributes, protocol, otelSemanticsEnabled, scopeIdentity)
+    this.transformer = new OtlpStatsTransformer(resourceAttributes, protocol, otelSemanticsEnabled, defaultService)
   }
 
   /**
