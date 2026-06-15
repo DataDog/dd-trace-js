@@ -12,7 +12,8 @@ const { HTTP_STATUS_CODE, HTTP_METHOD, HTTP_ROUTE, SPAN_KIND } = require('../../
 const { ORIGIN_KEY, TOP_LEVEL_KEY } = require('../../../src/constants')
 
 const METRIC_NAME = 'traces.span.sdk.metrics.duration'
-const RESOURCE_ATTRS = { 'service.name': 'test-service', 'deployment.environment.name': 'test' }
+const RESOURCE_ATTRS = { 'telemetry.sdk.name': 'datadog', 'telemetry.sdk.language': 'nodejs' }
+const SCOPE_IDENTITY = { env: 'test', serviceVersion: '1.2.3' }
 const BUCKET_SIZE_NS = 10 * 1e9
 
 function makeSpan (overrides = {}) {
@@ -73,7 +74,7 @@ describe('OtlpStatsTransformer', () => {
     let transformer
 
     before(() => {
-      transformer = new OtlpStatsTransformer(RESOURCE_ATTRS, 'http/json')
+      transformer = new OtlpStatsTransformer(RESOURCE_ATTRS, 'http/json', false, SCOPE_IDENTITY)
     })
 
     it('emits a single histogram metric with the correct name, unit and temporality', () => {
@@ -187,17 +188,40 @@ describe('OtlpStatsTransformer', () => {
       assert.strictEqual(dataPointsOf(payload).length, 1)
     })
 
-    it('includes resource attributes and the dd-trace scope', () => {
+    it('reports service identity on the dd-trace scope, not the resource', () => {
       const payload = JSON.parse(transformer.transform(makeDrained(12340000000000, [makeSpan()]), BUCKET_SIZE_NS))
       const resourceAttrs = Object.fromEntries(
         payload.resourceMetrics[0].resource.attributes.map(a => [a.key, a.value.stringValue])
       )
+      const scope = payload.resourceMetrics[0].scopeMetrics[0].scope
+      const scopeAttrs = Object.fromEntries(scope.attributes.map(a => [a.key, a.value.stringValue]))
 
-      assert.strictEqual(payload.resourceMetrics[0].scopeMetrics[0].scope.name, 'dd-trace')
-      assert.deepStrictEqual(
-        { svc: resourceAttrs['service.name'], env: resourceAttrs['deployment.environment.name'] },
-        { svc: 'test-service', env: 'test' }
+      assert.strictEqual(scope.name, 'dd-trace')
+      assert.deepStrictEqual(scopeAttrs, {
+        'service.name': 'svc',
+        'service.version': '1.2.3',
+        'deployment.environment.name': 'test',
+      })
+      assert.ok(!('service.name' in resourceAttrs), 'service.name should not be a resource attribute')
+      assert.ok(!('deployment.environment.name' in resourceAttrs), 'env should not be a resource attribute')
+    })
+
+    it('partitions data points into one scope per service', () => {
+      const drained = makeDrained(12340000000000, [
+        makeSpan({ service: 'svc-a' }),
+        makeSpan({ service: 'svc-b' }),
+      ])
+      const payload = JSON.parse(transformer.transform(drained, BUCKET_SIZE_NS))
+      const scopes = payload.resourceMetrics[0].scopeMetrics
+      const servicesByScope = scopes.map(sm =>
+        sm.scope.attributes.find(a => a.key === 'service.name').value.stringValue
       )
+
+      assert.strictEqual(scopes.length, 2)
+      assert.deepStrictEqual(servicesByScope.sort(), ['svc-a', 'svc-b'])
+      for (const sm of scopes) {
+        assert.strictEqual(sm.metrics[0].histogram.dataPoints.length, 1)
+      }
     })
 
     it('sets timestamps from the bucket time and size', () => {

@@ -3073,6 +3073,16 @@
         "default": "true"
       }
     ],
+    "_DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "default": null,
+        "allowed": "[1-9]\\d*",
+        "internalPropertyName": "ddTraceMetricsOtelFlushInterval",
+        "description": "Internal/testing only: overrides the fixed 10s OTLP trace-metrics flush interval (ms)."
+      }
+    ],
     "DD_TRACE_MICROGATEWAY_CORE_ENABLED": [
       {
         "implementation": "A",

@@ -208,13 +208,12 @@ class SpanStatsProcessor {
     port,
     url,
     env,
-    service,
     tags,
     version: appVersion,
     otlpTraceMetricsEnabled,
     otelMetricsUrl,
     otelMetricsProtocol,
-    otelMetricsExportInterval,
+    ddTraceMetricsOtelFlushInterval,
     otelSemanticsEnabled,
     reportHostname,
   } = {}) {
@@ -224,13 +223,13 @@ class SpanStatsProcessor {
       tags,
       url,
     })
-    // The native /v0.6/stats path uses the configured stats interval (seconds). When OTLP trace
-    // metrics are enabled, the flush/export cadence is driven by OTel config (OTEL_METRIC_EXPORT_INTERVAL,
-    // milliseconds) instead, so metrics are exported on the OTel reader interval rather than a
-    // Datadog-specific one.
+    // OTLP trace metrics flush on a fixed 10s cadence (not driven by OTEL_METRIC_EXPORT_INTERVAL).
+    // _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL is internal and only overrides the cadence in tests.
     let intervalMs = interval * 1e3
-    if (otlpTraceMetricsEnabled && Number.isFinite(otelMetricsExportInterval) && otelMetricsExportInterval > 0) {
-      intervalMs = otelMetricsExportInterval
+    if (otlpTraceMetricsEnabled) {
+      intervalMs = Number.isFinite(ddTraceMetricsOtelFlushInterval) && ddTraceMetricsOtelFlushInterval > 0
+        ? ddTraceMetricsOtelFlushInterval
+        : 10_000
     }
     this.interval = intervalMs / 1e3
     this.bucketSizeNs = intervalMs * 1e6
@@ -245,11 +244,14 @@ class SpanStatsProcessor {
     if (otlpTraceMetricsEnabled) {
       const { OtlpStatsExporter } = require('./exporters/otlp-span-stats')
       const protocol = otelMetricsProtocol || 'http/json'
-      const resourceAttributes = buildResourceAttributes(service, env, appVersion, this.tags, {
+      const resourceAttributes = buildResourceAttributes(this.tags, {
         reportHostname,
         otelSemanticsEnabled,
       })
-      this.otlpExporter = new OtlpStatsExporter(otelMetricsUrl, protocol, resourceAttributes, otelSemanticsEnabled)
+      const scopeIdentity = { env, serviceVersion: appVersion }
+      this.otlpExporter = new OtlpStatsExporter(
+        otelMetricsUrl, protocol, resourceAttributes, otelSemanticsEnabled, scopeIdentity
+      )
     }
 
     if (this.enabled || this.otlpExporter) {
@@ -321,24 +323,22 @@ class SpanStatsProcessor {
 }
 
 /**
- * @param {string|undefined} service
- * @param {string|undefined} env
- * @param {string|undefined} appVersion
+ * service.name, service.version and deployment.environment.name are reported as scope attributes,
+ * so the resource only carries SDK identity, host.name and Datadog-specific dd.* attributes.
+ *
  * @param {object} tags
  * @param {{ reportHostname?: boolean, otelSemanticsEnabled?: boolean }} [options]
  *   reportHostname: whether DD_TRACE_REPORT_HOSTNAME is enabled.
  *   otelSemanticsEnabled: when true, only OTel attributes are emitted (no dd.*).
  * @returns {import('@opentelemetry/api').Attributes}
  */
-function buildResourceAttributes (service, env, appVersion, tags, { reportHostname, otelSemanticsEnabled } = {}) {
-  const attrs = {}
-  if (service) attrs['service.name'] = service
-  if (env) attrs['deployment.environment.name'] = env
-  if (appVersion) attrs['service.version'] = appVersion
+function buildResourceAttributes (tags, { reportHostname, otelSemanticsEnabled } = {}) {
   // Identify the emitter as the Datadog SDK so the backend can attribute these metrics separately.
-  attrs['telemetry.sdk.name'] = 'datadog'
-  attrs['telemetry.sdk.language'] = 'nodejs'
-  attrs['telemetry.sdk.version'] = version
+  const attrs = {
+    'telemetry.sdk.name': 'datadog',
+    'telemetry.sdk.language': 'nodejs',
+    'telemetry.sdk.version': version,
+  }
   // Only report host.name when DD_TRACE_REPORT_HOSTNAME is enabled, matching the other OTLP
   // signals (metrics/logs). DD_HOSTNAME is not supported in dd-trace-js, so use os.hostname().
   if (reportHostname) attrs['host.name'] = os.hostname()

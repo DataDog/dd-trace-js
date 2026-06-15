@@ -38,15 +38,19 @@ const STATUS_CODE_ERROR = 2
  */
 class OtlpStatsTransformer extends OtlpTransformerBase {
   #otelSemanticsEnabled
+  #scopeIdentity
 
   /**
    * @param {import('@opentelemetry/api').Attributes} resourceAttributes - Resource attributes
    * @param {string} protocol - OTLP protocol (http/protobuf or http/json)
    * @param {boolean} [otelSemanticsEnabled] - When true, only OTel attributes are emitted (no dd.*)
+   * @param {{ env?: string, serviceVersion?: string }} [scopeIdentity] - Scope-level identity
+   *   attributes shared across services (service.name comes from each aggregation key)
    */
-  constructor (resourceAttributes, protocol, otelSemanticsEnabled = false) {
+  constructor (resourceAttributes, protocol, otelSemanticsEnabled = false, scopeIdentity = {}) {
     super(resourceAttributes, protocol, 'span-stats')
     this.#otelSemanticsEnabled = otelSemanticsEnabled
+    this.#scopeIdentity = scopeIdentity
   }
 
   /**
@@ -73,7 +77,7 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
     const data = {
       resourceMetrics: [{
         resource: this.transformResource(),
-        scopeMetrics: [this.#buildScopeMetrics(drained, bucketSizeNs, false)],
+        scopeMetrics: this.#buildScopeMetrics(drained, bucketSizeNs, false),
       }],
     }
     return this.serializeToProtobuf(protoMetricsService, data)
@@ -88,7 +92,7 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
     const data = {
       resourceMetrics: [{
         resource: this.transformResource(),
-        scopeMetrics: [this.#buildScopeMetrics(drained, bucketSizeNs, true)],
+        scopeMetrics: this.#buildScopeMetrics(drained, bucketSizeNs, true),
       }],
     }
     return this.serializeToJson(data)
@@ -101,9 +105,11 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
    * @returns {object}
    */
   #buildScopeMetrics (drained, bucketSizeNs, isJson) {
-    const durationPoints = []
-
     const temporality = isJson ? 'AGGREGATION_TEMPORALITY_DELTA' : getDeltaTemporality()
+
+    // Partition data points by service so each service maps to its own InstrumentationScope,
+    // letting a single payload carry multiple services.
+    const pointsByService = new Map()
 
     for (const { timeNs, bucket } of drained) {
       const endTimeNs = timeNs + bucketSizeNs
@@ -112,33 +118,58 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
 
       for (const aggStats of bucket.values()) {
         const { aggKey, cells } = aggStats
+        let points = pointsByService.get(aggKey.service)
+        if (points === undefined) {
+          points = []
+          pointsByService.set(aggKey.service, points)
+        }
         const baseAttrs = this.#buildAttributes(aggKey)
         const dd = !this.#otelSemanticsEnabled
         const error = this.#errorStatus()
 
-        this.#pushPoint(durationPoints, cells.okNotTopLevel, startNano, endNano,
+        this.#pushPoint(points, cells.okNotTopLevel, startNano, endNano,
           dd ? [...baseAttrs, this.#boolAttr('dd.span.top_level', false)] : baseAttrs)
-        this.#pushPoint(durationPoints, cells.okTopLevel, startNano, endNano,
+        this.#pushPoint(points, cells.okTopLevel, startNano, endNano,
           dd ? [...baseAttrs, this.#boolAttr('dd.span.top_level', true)] : baseAttrs)
-        this.#pushPoint(durationPoints, cells.errNotTopLevel, startNano, endNano,
+        this.#pushPoint(points, cells.errNotTopLevel, startNano, endNano,
           dd ? [...baseAttrs, error, this.#boolAttr('dd.span.top_level', false)] : [...baseAttrs, error])
-        this.#pushPoint(durationPoints, cells.errTopLevel, startNano, endNano,
+        this.#pushPoint(points, cells.errTopLevel, startNano, endNano,
           dd ? [...baseAttrs, error, this.#boolAttr('dd.span.top_level', true)] : [...baseAttrs, error])
       }
     }
 
-    return {
-      scope: SCOPE,
-      schemaUrl: '',
-      metrics: [
-        {
-          name: 'traces.span.sdk.metrics.duration',
-          description: '',
-          unit: 's',
-          histogram: { dataPoints: durationPoints, aggregationTemporality: temporality },
-        },
-      ],
+    const scopeMetrics = []
+    for (const [service, dataPoints] of pointsByService) {
+      if (dataPoints.length === 0) continue
+      scopeMetrics.push({
+        scope: this.#buildScope(service),
+        schemaUrl: '',
+        metrics: [
+          {
+            name: 'traces.span.sdk.metrics.duration',
+            description: '',
+            unit: 's',
+            histogram: { dataPoints, aggregationTemporality: temporality },
+          },
+        ],
+      })
     }
+    return scopeMetrics
+  }
+
+  /**
+   * Builds an InstrumentationScope carrying the service identity. service.name partitions the
+   * scope; service.version and deployment.environment.name are global. All are OTel attributes.
+   *
+   * @param {string} service
+   * @returns {object}
+   */
+  #buildScope (service) {
+    const raw = { 'service.name': service }
+    const { serviceVersion, env } = this.#scopeIdentity
+    if (serviceVersion) raw['service.version'] = serviceVersion
+    if (env) raw['deployment.environment.name'] = env
+    return { name: SCOPE.name, version: SCOPE.version, attributes: this.transformAttributes(raw) }
   }
 
   /**
