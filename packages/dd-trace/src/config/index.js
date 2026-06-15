@@ -605,6 +605,13 @@ class Config extends ConfigBase {
     const autoTraceMetrics = this.OTEL_TRACES_EXPORTER === 'otlp' && this.otelMetricsEnabled === true
     setAndTrack(this, 'otlpTraceMetricsEnabled', this.otlpTraceMetricsEnabled ?? autoTraceMetrics)
 
+    // Internal `_DD_*` vars are skipped by the generic env applier (it only reads DD_/OTEL_ prefixes),
+    // so read the test-only flush interval override explicitly.
+    const otelFlushInterval = Number(getEnvironmentVariable('_DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL'))
+    if (Number.isFinite(otelFlushInterval) && otelFlushInterval > 0) {
+      setAndTrack(this, 'ddTraceMetricsOtelFlushInterval', otelFlushInterval)
+    }
+
     if (process.platform === 'win32') {
       // OOM monitoring does not work properly on Windows, so it will be disabled.
       deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED')
