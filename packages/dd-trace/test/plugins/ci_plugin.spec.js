@@ -55,6 +55,28 @@ describe('CiPlugin', () => {
     sinon.assert.calledWith(getTestEnvironmentMetadata, 'vitest', sinon.match.object, undefined)
   })
 
+  it('uses git repository root discovery for non-Vitest worker exporters', () => {
+    const {
+      TestCiPlugin,
+      getCodeOwnersFileEntries,
+      getRepositoryRoot,
+      getTestEnvironmentMetadata,
+    } = getCiPlugin()
+
+    plugin = new TestCiPlugin({ _exporter: {} }, {})
+    plugin.configure({
+      enabled: true,
+      experimental: {
+        exporter: 'jest_worker',
+      },
+    })
+
+    assert.strictEqual(plugin.repositoryRoot, '/repository-root')
+    sinon.assert.calledOnce(getRepositoryRoot)
+    sinon.assert.calledWith(getCodeOwnersFileEntries, '/repository-root')
+    sinon.assert.calledWith(getTestEnvironmentMetadata, 'vitest', sinon.match.object, true)
+  })
+
   it('uses provided CODEOWNERS entries when a worker receives the repository root', () => {
     const { TestCiPlugin, getCodeOwnersFileEntries } = getCiPlugin()
     const codeOwnersEntries = [{ pattern: 'test/*', owners: ['@datadog/test-optimization'] }]

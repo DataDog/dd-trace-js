@@ -633,6 +633,7 @@ module.exports = class CiPlugin extends Plugin {
     this.shouldSkipGitMetadataExtraction = workerTestFramework &&
       TEST_FRAMEWORKS_TO_SKIP_GIT_METADATA_EXTRACTION.has(workerTestFramework)
     const shouldDeferCodeOwnersEntries = workerTestFramework === 'vitest'
+    const shouldDeferRepositoryRoot = workerTestFramework === 'vitest'
 
     this.testEnvironmentMetadata = getTestEnvironmentMetadata(
       this.constructor.id,
@@ -659,7 +660,7 @@ module.exports = class CiPlugin extends Plugin {
     } = this.testEnvironmentMetadata
 
     this.repositoryRoot = repositoryRoot ||
-      (this.shouldSkipGitMetadataExtraction ? process.cwd() : getRepositoryRoot() || process.cwd())
+      (shouldDeferRepositoryRoot ? process.cwd() : getRepositoryRoot() || process.cwd())
 
     this.codeOwnersEntries = shouldDeferCodeOwnersEntries ? null : getCodeOwnersFileEntries(this.repositoryRoot)
 
