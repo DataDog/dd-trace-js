@@ -142,7 +142,7 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
   static prefix = 'tracing:ai:telemetry'
 
   /** @type {Map<string, Array<Record<string, unknown>>>} */
-  #outputContentsByCallId = new Map()
+  #lastOutputContentByCallId = new Map()
 
   constructor () {
     super(...arguments)
@@ -175,13 +175,7 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
       const content = Object.values(contentById)
       ctx.result.content = content
 
-      const { callId } = ctx.event
-      const outputContentForCallId = this.#outputContentsByCallId.get(callId)
-      if (outputContentForCallId) {
-        outputContentForCallId.push(content)
-      } else {
-        this.#outputContentsByCallId.set(callId, [content])
-      }
+      this.#lastOutputContentByCallId.set(ctx.event.callId, content)
     })
   }
 
@@ -276,30 +270,25 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
     const lastUserPrompt = event.messages.reverse().find(message => message.role === 'user').content
     const input = Array.isArray(lastUserPrompt) ? lastUserPrompt.map(part => part.text ?? '').join('') : lastUserPrompt
 
-    let output
-    if (ctx.isStream) {
-      const outputContents = this.#outputContentsByCallId.get(event.callId)
-      output = outputContents[outputContents.length - 1].find(part => part.type === 'text').text
-    } else {
-      output = result._output
-    }
+    const output =
+      ctx.isStream
+        ? this.#lastOutputContentByCallId.get(event.callId).find(part => part.type === 'text').text
+        : result._output
 
     this._tagger.tagTextIO(span, input, output)
 
     const metadata = getGenerationMetadataFromEvent(event)
     this._tagger.tagMetadata(span, metadata)
+
+    if (ctx.isStream) {
+      this.#lastOutputContentByCallId.delete(event.callId)
+    }
   }
 
   setStepTags (span, ctx) {
     const { result, event } = ctx
 
-    let content
-    if (ctx.isStream) {
-      const outputContents = this.#outputContentsByCallId.get(event.callId)
-      content = outputContents?.[outputContents.length - 1]
-    } else {
-      content = result?.content
-    }
+    const content = ctx.isStream ? this.#lastOutputContentByCallId.get(event.callId) : result?.content
 
     // capture reasoning if applicable
     const reasoning = content?.find(part => part.type === 'reasoning')?.text
