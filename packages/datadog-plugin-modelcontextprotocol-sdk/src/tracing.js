@@ -55,25 +55,17 @@ class McpListToolsPlugin extends TracingPlugin {
 
 class McpServerRequestPlugin extends TracingPlugin {
   static id = 'modelcontextprotocol_server'
-  // Channel prefix for the shimmer-based lifecycle (not orchestrion).
-  // The instrumentation publishes:
-  //   apm:mcp:server:request:start  — when _onrequest is entered (sync, via runStores)
-  //   apm:mcp:server:request:finish — when the internal Promise chain's .finally() fires
   static prefix = 'apm:mcp:server:request'
 
   bindStart (ctx) {
     const { request, extra } = ctx
-    const method = request?.method
     const headers = extra?.requestInfo?.headers
-
-    // Extract distributed trace context from HTTP transport headers when available.
-    // When no headers are present (e.g. InMemoryTransport), omit childOf so async
-    // context propagation naturally carries the parent span from the current store.
+    // Extract trace context from HTTP transport headers; omit for in-process transports.
     const childOf = headers ? this.tracer.extract('http_headers', headers) : undefined
 
     this.startSpan('mcp.server.request', {
       childOf,
-      resource: method,
+      resource: request?.method,
       type: 'mcp',
       kind: 'server',
     }, ctx)
@@ -81,7 +73,6 @@ class McpServerRequestPlugin extends TracingPlugin {
     return ctx.currentStore
   }
 
-  // Finish the span when the full async Promise chain completes (.finally in _onrequest).
   finish (ctx) {
     super.finish(ctx)
   }
@@ -93,8 +84,7 @@ class McpServerToolCallPlugin extends TracingPlugin {
 
   bindStart (ctx) {
     const [tool] = ctx.arguments || []
-    // RegisteredTool objects do not carry a .name property — the name is the key
-    // in McpServer._registeredTools. Look up by reference using ctx.self (the McpServer).
+    // Tool name is the map key in _registeredTools, not a property on the tool object.
     const registeredTools = ctx.self?._registeredTools
     const toolName = registeredTools
       ? Object.keys(registeredTools).find(k => registeredTools[k] === tool)
