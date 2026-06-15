@@ -7,17 +7,8 @@ const { traceChannel, debugChannel, infoChannel, warnChannel, errorChannel } = r
 const logWriter = require('./writer')
 const { Log, LogConfig, NoTransmitError } = require('./log')
 
-// `config/defaults` is required lazily inside `configure()` rather than at load
-// time. It only provides the `DD_TRACE_DEBUG`/`logLevel` fallback values, while
-// `config/defaults` itself lazily requires this module to warn about invalid
-// values. Requiring it here at load time lets one module observe the other
-// half-initialized under some require orderings (e.g. when an early
-// `getValueFromEnvSources` caller loads `config/defaults` before `log`).
-let configDefaults
-
 const config = {
   enabled: undefined,
-  logger: undefined,
   logLevel: undefined,
 }
 
@@ -83,19 +74,22 @@ const log = {
   },
 
   configure (options) {
-    configDefaults ??= require('../config/defaults').defaults
-    config.logger = options.logger
-    config.logLevel = options.logLevel ??
+    // Lazy require to avoid a config/defaults <-> log require cycle at load time.
+    const { defaults } = require('../config/defaults')
+    const logger = options.logger
+    const logLevel = options.logLevel ??
         getValueFromEnvSources('DD_TRACE_LOG_LEVEL', true) ??
         config.logLevel ??
-        configDefaults?.logLevel
-    config.enabled = getValueFromEnvSources('DD_TRACE_DEBUG', true) ??
+        defaults?.logLevel
+    const enabled = getValueFromEnvSources('DD_TRACE_DEBUG', true) ??
       // TODO: Handle this by adding a log buffer so that configure may be called with the actual configurations.
       // eslint-disable-next-line eslint-rules/eslint-process-env
-      (process.env.OTEL_LOG_LEVEL === 'debug' || (config.enabled ?? configDefaults?.DD_TRACE_DEBUG))
-    logWriter.configure(config.enabled, config.logLevel, options.logger)
+      (process.env.OTEL_LOG_LEVEL === 'debug' || (config.enabled ?? defaults?.DD_TRACE_DEBUG))
+    config.logLevel = logLevel
+    config.enabled = enabled
+    logWriter.configure(enabled, logLevel, logger)
 
-    return config.enabled
+    return enabled
   },
 }
 

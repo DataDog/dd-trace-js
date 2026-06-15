@@ -152,13 +152,10 @@ function validateAccess (name) {
 let configurationsTable
 let configDefaults
 
-// Lazy require to keep the `config -> helper` import direction acyclic.
-// `config/defaults` participates in a require cycle with `log` (it lazily
-// requires `log` to warn about invalid values, and `log` reads its fallback
-// defaults from there). When an early caller reaches this before
-// `config/defaults` has finished loading, the table is not yet populated; in
-// that window callers fall back to the raw value / no default and the next call
-// resolves it once the module is fully initialized.
+// Lazy require to keep the `config -> helper` import direction acyclic: helper
+// must not pull `config/defaults` at module load. `config/defaults` defers its
+// own instrumented `dns` require until after it exports, so by the time any
+// caller resolves a value the table is fully populated.
 function loadConfigurationsTable () {
   if (configurationsTable === undefined) {
     const defaultsModule = require('./defaults')
@@ -180,9 +177,6 @@ function loadConfigurationsTable () {
  */
 function parseConfigurationValue (name, value, source) {
   loadConfigurationsTable()
-  if (configurationsTable === undefined) {
-    return value
-  }
   const canonical = aliasToCanonical[name] ?? name
   const entry = configurationsTable[canonical]
   if (entry === undefined) {
@@ -202,9 +196,6 @@ function parseConfigurationValue (name, value, source) {
  */
 function getRegisteredDefault (name) {
   loadConfigurationsTable()
-  if (configurationsTable === undefined) {
-    return
-  }
   const canonical = aliasToCanonical[name] ?? name
   const entry = configurationsTable[canonical]
   if (entry === undefined) {

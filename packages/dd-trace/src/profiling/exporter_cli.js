@@ -18,7 +18,7 @@ function exporterFromURL (url) {
     return new FileExporter({ pprofPrefix: fileURLToPath(url) })
   }
   const profilingEnabled =
-    (/** @type {string | undefined} */ (getValueFromEnvSources('DD_PROFILING_ENABLED')) ?? '').toLowerCase()
+    /** @type {string} */ (getValueFromEnvSources('DD_PROFILING_ENABLED'))
   const activation = ['true', '1'].includes(profilingEnabled)
     ? 'manual'
     : profilingEnabled === 'auto'

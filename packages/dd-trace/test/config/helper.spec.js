@@ -163,21 +163,6 @@ describe('config-helper env resolution', () => {
     assert.strictEqual(getValueFromEnvSources('SOME_UNREGISTERED_VAR'), undefined)
   })
 
-  it('falls back to the raw value and no default while config/defaults is still loading', () => {
-    // Simulate the require-cycle window where config/defaults has not finished
-    // exporting yet: the configuration table is not populated.
-    const mod = proxyquire('../../src/config/helper', {
-      '../serverless': { IS_SERVERLESS: true },
-      './defaults': { '@noCallThru': true },
-    })
-
-    process.env.DD_TRACE_ENABLED = 'true'
-    assert.strictEqual(mod.getValueFromEnvSources('DD_TRACE_ENABLED'), 'true')
-
-    delete process.env.DD_TRACE_ENABLED
-    assert.strictEqual(mod.getValueFromEnvSources('DD_TRACE_ENABLED'), undefined)
-  })
-
   it('prefers canonical name over alias', () => {
     process.env.DD_AGENT_HOST = 'canonical-hostname'
     process.env.DD_TRACE_AGENT_HOSTNAME = 'alias-hostname'
