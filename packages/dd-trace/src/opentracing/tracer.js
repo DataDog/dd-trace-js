@@ -66,27 +66,29 @@ class DatadogTracer {
       ? getContext(options.childOf)
       : getParent(options.references)
 
-    // as per spec, allow the setting of service name through options
-    const tags = {
-      'service.name': options?.tags?.service ? String(options.tags.service) : this._service,
-    }
-
-    // As per unified service tagging spec if a span is created with a service name different from the global
-    // service name it will not inherit the global version value
-    if (options?.tags?.service && options.tags.service !== this._service) {
-      options.tags.version = undefined
-    }
-
     const span = new Span(this, this._processor, this._prioritySampler, {
       operationName: options.operationName || name,
       parent,
-      tags,
       startTime: options.startTime,
       hostname: this._hostname,
       traceId128BitGenerationEnabled: this._traceId128BitGenerationEnabled,
       integrationName: options.integrationName,
       links: options.links,
     }, this._debug)
+
+    // As per unified service tagging spec if a span is created with a service name different from the global
+    // service name it will not inherit the global version value
+    const ctx = span.context()
+    if (options.tags?.service) {
+      if (options.tags.service !== this._service) options.tags.version = undefined
+      // as per spec, allow the setting of service name through options; set it
+      // after all tags are merged so config/options values take precedence
+      // eslint-disable-next-line eslint-rules/eslint-prefer-set-service-name
+      ctx.setTag('service.name', String(options.tags.service))
+    } else {
+      // eslint-disable-next-line eslint-rules/eslint-prefer-set-service-name
+      ctx.setTag('service.name', this._service)
+    }
 
     span.addTags(this._config.tags)
     span.addTags(options.tags)

@@ -73,7 +73,7 @@ export interface GeneratedConfig {
   DD_APP_KEY: string | undefined;
   DD_AZURE_RESOURCE_GROUP: string | undefined;
   DD_CIVISIBILITY_AGENTLESS_ENABLED: boolean;
-  DD_CIVISIBILITY_AGENTLESS_URL: string | undefined;
+  DD_CIVISIBILITY_AGENTLESS_URL: URL | undefined;
   DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER: string | undefined;
   DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE: boolean;
   DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING: boolean;
@@ -130,6 +130,7 @@ export interface GeneratedConfig {
   DD_MINI_AGENT_PATH: string | undefined;
   DD_PIPELINE_EXECUTION_ID: string | undefined;
   DD_PLAYWRIGHT_WORKER: string | undefined;
+  DD_PROFILING_ALLOCATION_ENABLED: boolean;
   DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED: boolean;
   DD_PROFILING_CODEHOTSPOTS_ENABLED: boolean;
   DD_PROFILING_CPU_ENABLED: boolean;

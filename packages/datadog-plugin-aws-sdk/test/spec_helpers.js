@@ -9,7 +9,7 @@ const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toStrin
 
 /**
  * @param {object} client AWS client (v2 service instance or v3 aggregated client).
- * @param {string} method Operation name, e.g. `getRecords`.
+ * @param {string} method Operation name, e.g. `getRecords` or `sendMessage`.
  * @param {object} params Operation parameters.
  * @returns {Promise<object>} Resolves with the operation result.
  */

@@ -13,7 +13,7 @@ git add package.json package-lock.json
 ```
 
 Do not commit `node_modules/`; `runall.sh` re-installs via `npm ci`. The bench
-runs across the Node majors in `.gitlab/benchmarks.yml`, so every pinned version
+runs across the Node majors in `.gitlab/benchmarks/gitlab-ci.yml`, so every pinned version
 must have an `engines.node` range including the matrix floor (transitive deps
 included) and be loadable through CJS `require` — pin a CJS-era release for
 ESM-only packages (e.g. `got@11`, `uuid@9`), or add an `overrides` entry for a
