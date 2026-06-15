@@ -23,12 +23,16 @@ function wrapProtocol (Protocol) {
         return original.call(this, request, extra)
       }
 
-      // Wrap _requestHandlerAbortControllers.delete once per instance to detect completion.
+      // Wrap _requestHandlerAbortControllers.delete and .clear once per instance to detect
+      // completion. .delete() fires in .finally() when a request chain completes normally.
+      // .clear() fires from _onclose() when the transport disconnects with requests in flight.
       const abortControllersMap = this._requestHandlerAbortControllers
       if (abortControllersMap && !abortControllersMap._ddWrapped) {
         abortControllersMap._ddWrapped = true
         const originalDelete = Map.prototype.delete.bind(abortControllersMap)
+        const originalClear = Map.prototype.clear.bind(abortControllersMap)
         const instance = this
+
         abortControllersMap.delete = function (id) {
           const pending = pendingRequests.get(instance)
           const ctx = pending?.get(id)
@@ -37,6 +41,18 @@ function wrapProtocol (Protocol) {
             serverRequestFinishCh.publish(ctx)
           }
           return originalDelete(id)
+        }
+
+        // Called by _onclose() when the transport disconnects — finish all in-flight spans.
+        abortControllersMap.clear = function () {
+          const pending = pendingRequests.get(instance)
+          if (pending) {
+            for (const ctx of pending.values()) {
+              serverRequestFinishCh.publish(ctx)
+            }
+            pending.clear()
+          }
+          originalClear()
         }
       }
 
@@ -48,7 +64,20 @@ function wrapProtocol (Protocol) {
       pendingRequests.get(this).set(request.id, ctx)
 
       return serverRequestStartCh.runStores(ctx, () => {
-        return original.call(this, request, extra)
+        const result = original.call(this, request, extra)
+
+        // If the SDK found no handler for this method, it returns without registering an
+        // AbortController. The span will never be finished via .delete()/.clear(), so finish
+        // it immediately here.
+        if (!abortControllersMap?.has(request.id)) {
+          const pending = pendingRequests.get(this)
+          if (pending?.has(request.id)) {
+            pending.delete(request.id)
+            serverRequestFinishCh.publish(ctx)
+          }
+        }
+
+        return result
       })
     }
   })

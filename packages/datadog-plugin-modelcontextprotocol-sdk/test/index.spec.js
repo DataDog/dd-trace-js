@@ -145,6 +145,81 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
     })
   })
 
+  describe('Protocol._onrequest - transport disconnect (connection closed)', () => {
+    it('should finish in-flight server request spans when the transport closes', async () => {
+      // Regression: _onclose() calls _requestHandlerAbortControllers.clear() which bypasses
+      // the wrapped delete(). The instrumentation must also wrap clear() to finish pending spans.
+      const { McpServer } = meta.versionMod.get('@modelcontextprotocol/sdk/server/mcp.js')
+      const { InMemoryTransport } = meta.versionMod.get('@modelcontextprotocol/sdk/inMemory.js')
+      const { Client } = meta.mod
+
+      const disconnectServer = new McpServer({ name: 'disconnect-server', version: '1.0.0' })
+
+      let resumeSlowTool
+      const holdPromise = new Promise(resolve => { resumeSlowTool = resolve })
+
+      disconnectServer.registerTool(
+        'slow-tool',
+        { description: 'Slow tool', inputSchema: {} },
+        async () => {
+          await holdPromise
+          return { content: [{ type: 'text', text: 'done' }] }
+        }
+      )
+
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+      await disconnectServer.connect(serverTransport)
+
+      const disconnectClient = new Client({ name: 'disconnect-client', version: '1.0.0' })
+      await disconnectClient.connect(clientTransport)
+
+      const traceAssertion = expectSomeSpan(agent, {
+        name: 'mcp.server.request',
+        type: 'mcp',
+        resource: 'tools/call',
+        meta: {
+          component: 'modelcontextprotocol_server',
+          '_dd.integration': 'modelcontextprotocol_server',
+          'span.kind': 'server',
+        },
+      })
+
+      // Fire the request without awaiting — it will block until holdPromise resolves.
+      const callPromise = disconnectClient.callTool({ name: 'slow-tool', arguments: {} }).catch(() => {})
+
+      // Give time for the request to reach the server and register an AbortController.
+      await new Promise(resolve => setTimeout(resolve, 50))
+
+      // Close the server, triggering _onclose() -> _requestHandlerAbortControllers.clear().
+      await disconnectServer.close()
+      resumeSlowTool()
+      await callPromise
+
+      return traceAssertion
+    })
+  })
+
+  describe('Protocol._onrequest - unsupported method (MethodNotFound)', () => {
+    it('should generate and immediately finish server request span when method has no handler', async () => {
+      // Regression: MethodNotFound path skips AbortController creation, so the span must be
+      // finished directly in the instrumentation rather than waiting for .delete().
+      const traceAssertion = expectSomeSpan(agent, {
+        name: 'mcp.server.request',
+        type: 'mcp',
+        resource: 'dd/unknownMethod',
+        meta: {
+          component: 'modelcontextprotocol_server',
+          '_dd.integration': 'modelcontextprotocol_server',
+          'span.kind': 'server',
+        },
+      })
+
+      await testSetup.clientSendUnknownMethod()
+
+      return traceAssertion
+    })
+  })
+
   describe('McpServer.executeToolHandler - mcp.server.tool.call', () => {
     it('should generate server tool call span (happy path)', async () => {
       const traceAssertion = expectSomeSpan(agent, {

@@ -2,6 +2,7 @@
 
 class ModelcontextprotocolSdkTestSetup {
   async setup (clientModule, versionMod) {
+    this._versionMod = versionMod
     const path = require('path')
     const { Client } = clientModule
     // Use versionMod.getPath to resolve the SDK root since the package exports map
@@ -62,6 +63,17 @@ class ModelcontextprotocolSdkTestSetup {
 
   async clientListTools () {
     return this._client.listTools()
+  }
+
+  async clientSendUnknownMethod () {
+    // Send a request for a method the server has no handler for (triggers MethodNotFound).
+    // The client rejects with an McpError; catch it so the test can assert on the server span.
+    const { EmptyResultSchema } = this._versionMod.get('@modelcontextprotocol/sdk/types.js')
+    try {
+      await this._client.request({ method: 'dd/unknownMethod' }, EmptyResultSchema)
+    } catch {
+      // Expected — server returns MethodNotFound
+    }
   }
 
   get server () {
