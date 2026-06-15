@@ -114,13 +114,22 @@ fi
 # both loops below, or the global variant-index shard math drops/misassigns variants.
 RUN_ASYNC_HOOKS="1"
 if [[ -d /app/candidate/.git && -n "${COMMIT_SHA:-}" && -n "${CI_COMMIT_SHA:-}" ]]; then
-  if git -C /app/candidate diff "${COMMIT_SHA}..${CI_COMMIT_SHA}" -- \
-       packages/dd-trace/test/plugins/versions/package.json 2>/dev/null \
-       | grep -qE '^[-+][[:space:]]*"node-[0-9]+":'; then
-    echo "async_hooks: a node-<major> pin changed in this diff; running it."
+  # Capture the diff and its status separately rather than piping straight into
+  # grep: a pipeline reports only grep's exit code, so a failed diff (shallow
+  # checkout, stale COMMIT_SHA, missing range) would look like "no match" and
+  # silently skip async_hooks -- the opposite of failing open. Only skip when the
+  # diff actually succeeds and shows no node-<major> pin change.
+  ASYNC_HOOKS_DIFF=""
+  if ASYNC_HOOKS_DIFF=$(git -C /app/candidate diff "${COMMIT_SHA}..${CI_COMMIT_SHA}" -- \
+       packages/dd-trace/test/plugins/versions/package.json 2>/dev/null); then
+    if grep -qE '^[-+][[:space:]]*"node-[0-9]+":' <<< "${ASYNC_HOOKS_DIFF}"; then
+      echo "async_hooks: a node-<major> pin changed in this diff; running it."
+    else
+      RUN_ASYNC_HOOKS=""
+      echo "async_hooks: no Node version change in this diff; skipping (Node-primitive floor)."
+    fi
   else
-    RUN_ASYNC_HOOKS=""
-    echo "async_hooks: no Node version change in this diff; skipping (Node-primitive floor)."
+    echo "async_hooks: could not determine the diff; running it (fail open)."
   fi
 fi
 
