@@ -1308,6 +1308,13 @@
         "default": null
       }
     ],
+    "DD_PROFILING_ALLOCATION_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false"
+      }
+    ],
     "DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED": [
       {
         "implementation": "A",
