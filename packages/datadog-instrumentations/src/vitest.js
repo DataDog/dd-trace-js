@@ -20,6 +20,10 @@ const {
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
   getTestOptimizationRequestResults,
+  isModifiedTest,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
 } = require('../../dd-trace/src/plugins/util/test')
 const { addHook, channel } = require('./helpers/instrument')
 
@@ -80,6 +84,7 @@ const workerProcesses = new WeakSet()
 const mainProcessSetupPromises = new WeakMap()
 const coverageWrappedProviders = new WeakSet()
 const finishWrappedContexts = new WeakSet()
+const mainProcessReporterContexts = new WeakSet()
 let isFlakyTestRetriesEnabled = false
 let flakyTestRetriesCount = 0
 let isEarlyFlakeDetectionEnabled = false
@@ -94,12 +99,29 @@ let vitestSetFn = null
 let vitestGetHooks = null
 let testManagementAttemptToFixRetries = 0
 let isDiEnabled = false
+let testOptimizationRequestErrorTags = {}
 let testCodeCoverageLinesTotal
 let coverageRootDir
 let isSessionStarted = false
 let vitestPool = null
+let isVitestNoWorkerInitActive = false
+let hasWarnedVitestNoWorkerInitWithIsolationDisabled = false
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 400
+const DATADOG_TEST_OPTIMIZATION_BOOTSTRAPS = new Set([
+  'dd-trace/register.js',
+  'dd-trace/ci/init',
+  'dd-trace/ci/init.js',
+])
+const DATADOG_TEST_OPTIMIZATION_NODE_OPTION_FLAGS = new Set(['--import', '--require', '-r'])
+const VITEST_NO_WORKER_INIT_ACTIVE_ENV = 'DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE'
+const VITEST_NO_WORKER_INIT_REQUEST_ENV = 'DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT'
+const NODE_OPTIONS_QUOTE_RE = /[\s"\\]/
+const VITEST_NO_WORKER_INIT_ISOLATE_WARNING =
+  `${VITEST_NO_WORKER_INIT_REQUEST_ENV} is ignored because Vitest isolate is disabled. ` +
+  'The lighter Vitest worker path only helps when each test file runs in an isolated worker.'
+
+function noop () {}
 
 function getConfiguredEfdRetryCount (slowTestRetries, fallbackRetryCount) {
   if (!slowTestRetries || !Object.keys(slowTestRetries).length) {
@@ -387,6 +409,43 @@ function getWorkspaceProject (ctx) {
     : ctx.getRootProject()
 }
 
+function isVitestNoWorkerInitRequested () {
+  // eslint-disable-next-line eslint-rules/eslint-process-env
+  const value = process.env[VITEST_NO_WORKER_INIT_REQUEST_ENV]
+  return value === 'true' || value === '1'
+}
+
+function shouldUseVitestNoWorkerInit (ctx) {
+  if (!isVitestNoWorkerInitRequested()) {
+    return false
+  }
+
+  const config = ctx?.config
+  if (!config) {
+    return false
+  }
+
+  if (config.isolate === false) {
+    warnVitestNoWorkerInitWithIsolationDisabled()
+    return false
+  }
+
+  if (config.pool === 'threads' || config.pool === 'vmThreads') {
+    return false
+  }
+
+  return true
+}
+
+function warnVitestNoWorkerInitWithIsolationDisabled () {
+  if (hasWarnedVitestNoWorkerInitWithIsolationDisabled) {
+    return
+  }
+
+  hasWarnedVitestNoWorkerInitWithIsolationDisabled = true
+  log.warn(VITEST_NO_WORKER_INIT_ISOLATE_WARNING)
+}
+
 function setProvidedContext (ctx, values, warningMessage) {
   try {
     Object.assign(getWorkspaceProject(ctx)._provided, values)
@@ -461,9 +520,19 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
     return
   }
 
+  let testSessionConfiguration
+  let knownTests
+  let testManagementTests
+  let modifiedFiles
+  testOptimizationRequestErrorTags = {}
+
   try {
-    const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh, frameworkVersion)
-    if (!err) {
+    const { err, libraryConfig, requestErrorTags = {} } =
+      await getChannelPromise(libraryConfigurationCh, frameworkVersion)
+    testOptimizationRequestErrorTags = requestErrorTags
+    if (err) {
+      addTestOptimizationRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS)
+    } else {
       isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
       flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
       isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
@@ -483,18 +552,26 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
     isImpactedTestsEnabled = false
   }
 
+  const shouldInstallNoWorkerInit = shouldUseVitestNoWorkerInit(ctx)
+  isVitestNoWorkerInitActive = shouldInstallNoWorkerInit
+  const shouldSendWorkerInstrumentationContext = !shouldInstallNoWorkerInit ||
+    hasThreadPoolTestSpecification(ctx.config?.pool, testSpecifications)
+
   if (testSessionConfigurationCh.hasSubscribers) {
-    const { testSessionId, testModuleId, testCommand, repositoryRoot, codeOwnersEntries } = await getChannelPromise(
+    testSessionConfiguration = await getChannelPromise(
       testSessionConfigurationCh,
       frameworkVersion
     )
-    setProvidedContext(ctx, {
-      _ddTestSessionId: testSessionId,
-      _ddTestModuleId: testModuleId,
-      _ddTestCommand: testCommand,
-      _ddRepositoryRoot: repositoryRoot,
-      _ddCodeOwnersEntries: codeOwnersEntries,
-    }, 'Could not send test session configuration to workers.')
+    const { testSessionId, testModuleId, testCommand, repositoryRoot, codeOwnersEntries } = testSessionConfiguration
+    if (shouldSendWorkerInstrumentationContext) {
+      setProvidedContext(ctx, {
+        _ddTestSessionId: testSessionId,
+        _ddTestModuleId: testModuleId,
+        _ddTestCommand: testCommand,
+        _ddRepositoryRoot: repositoryRoot,
+        _ddCodeOwnersEntries: codeOwnersEntries,
+      }, 'Could not send test session configuration to workers.')
+    }
   }
 
   const {
@@ -508,7 +585,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
   })
 
   const flakyTestRetriesConfiguration = configureFlakyTestRetries(ctx, testSpecifications)
-  if (flakyTestRetriesConfiguration) {
+  if (shouldSendWorkerInstrumentationContext && flakyTestRetriesConfiguration) {
     setProvidedContext(ctx, {
       _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled,
       _ddFlakyTestRetriesCount: flakyTestRetriesCount,
@@ -521,8 +598,9 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
     const currentKnownTestsResponse = knownTestsResponse || await getChannelPromise(knownTestsCh)
     if (currentKnownTestsResponse.err) {
       isEarlyFlakeDetectionEnabled = false
+      addTestOptimizationRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS)
     } else {
-      const knownTests = currentKnownTestsResponse.knownTests
+      knownTests = currentKnownTestsResponse.knownTests
       const testFilepaths = await getTestFilepaths(ctx, testSpecifications)
 
       if (isValidKnownTests(knownTests)) {
@@ -536,7 +614,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
         if (isEarlyFlakeDetectionFaulty) {
           isEarlyFlakeDetectionEnabled = false
           log.warn('New test detection is disabled because the number of new tests is too high.')
-        } else {
+        } else if (shouldSendWorkerInstrumentationContext) {
           setProvidedContext(ctx, {
             _ddIsKnownTestsEnabled: isKnownTestsEnabled,
             _ddKnownTests: knownTests,
@@ -553,7 +631,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
     }
   }
 
-  if (isDiEnabled) {
+  if (shouldSendWorkerInstrumentationContext && isDiEnabled) {
     setProvidedContext(ctx, {
       _ddIsDiEnabled: isDiEnabled,
     }, 'Could not send Dynamic Instrumentation configuration to workers.')
@@ -564,30 +642,650 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
       testManagementTestsResponse || await getChannelPromise(testManagementTestsCh)
     if (err) {
       isTestManagementTestsEnabled = false
+      addTestOptimizationRequestErrorTag(DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS)
       log.error('Could not get test management tests.')
     } else {
-      setProvidedContext(ctx, {
-        _ddIsTestManagementTestsEnabled: isTestManagementTestsEnabled,
-        _ddTestManagementAttemptToFixRetries: testManagementAttemptToFixRetries,
-        _ddTestManagementTests: receivedTestManagementTests,
-      }, 'Could not send test management tests to workers so Test Management will not work.')
+      testManagementTests = receivedTestManagementTests
+      if (shouldSendWorkerInstrumentationContext) {
+        setProvidedContext(ctx, {
+          _ddIsTestManagementTestsEnabled: isTestManagementTestsEnabled,
+          _ddTestManagementAttemptToFixRetries: testManagementAttemptToFixRetries,
+          _ddTestManagementTests: receivedTestManagementTests,
+        }, 'Could not send test management tests to workers so Test Management will not work.')
+      }
     }
   }
 
   if (isImpactedTestsEnabled) {
-    const { err, modifiedFiles } = await getChannelPromise(modifiedFilesCh)
+    const modifiedFilesResponse = await getChannelPromise(modifiedFilesCh)
+    const { err } = modifiedFilesResponse
     if (err) {
       log.error('Could not get modified tests.')
     } else {
-      setProvidedContext(ctx, {
-        _ddIsImpactedTestsEnabled: isImpactedTestsEnabled,
-        _ddModifiedFiles: modifiedFiles,
-      }, 'Could not send modified tests to workers so Impacted Tests will not work.')
+      modifiedFiles = modifiedFilesResponse.modifiedFiles
+      if (shouldSendWorkerInstrumentationContext) {
+        setProvidedContext(ctx, {
+          _ddIsImpactedTestsEnabled: isImpactedTestsEnabled,
+          _ddModifiedFiles: modifiedFiles,
+        }, 'Could not send modified tests to workers so Impacted Tests will not work.')
+      }
     }
   }
 
+  installMainProcessReporter(ctx, frameworkVersion, testSessionConfiguration, {
+    knownTests,
+    testManagementTests,
+    modifiedFiles,
+  }, shouldInstallNoWorkerInit, testSpecifications)
+  configureMainProcessExecutionHooks(ctx, testSessionConfiguration, {
+    knownTests,
+    testManagementTests,
+  }, shouldInstallNoWorkerInit, testSpecifications)
   wrapCoverageProvider(ctx)
   wrapSessionFinish(ctx)
+}
+
+function addTestOptimizationRequestErrorTag (tag) {
+  testOptimizationRequestErrorTags[tag] = 'true'
+}
+
+function configureMainProcessExecutionHooks (
+  ctx,
+  testSessionConfiguration = {},
+  testOptimizationData = {},
+  shouldInstallNoWorkerInit = shouldUseVitestNoWorkerInit(ctx),
+  testSpecifications
+) {
+  if (
+    !shouldInstallNoWorkerInit ||
+    ctx.config?.pool === 'threads' ||
+    ctx.config?.pool === 'vmThreads'
+  ) {
+    return
+  }
+
+  const { knownTests, testManagementTests } = testOptimizationData
+  const attemptToFixTests = testManagementTests && getMainProcessAttemptToFixTests(testManagementTests)
+  const disabledTests = testManagementTests && getMainProcessDisabledTests(testManagementTests)
+  const shouldConfigureEarlyFlakeDetection =
+    isEarlyFlakeDetectionEnabled && knownTests?.vitest && !isEarlyFlakeDetectionFaulty
+  if (!attemptToFixTests && !disabledTests && !shouldConfigureEarlyFlakeDetection) return
+
+  const setupFile = path.join(__dirname, '..', '..', '..', 'ci', 'vitest-worker-setup.mjs')
+  addSetupFileToVitestConfigs(ctx, setupFile, testSpecifications)
+  setProvidedContext(ctx, {
+    _ddVitestWorkerSetup: {
+      attemptToFixRetries: testManagementAttemptToFixRetries,
+      attemptToFixTests: attemptToFixTests || {},
+      disabledTests: disabledTests || {},
+      earlyFlakeDetectionRetries: getConfiguredEfdRetryCount(
+        earlyFlakeDetectionSlowTestRetries,
+        earlyFlakeDetectionNumRetries
+      ),
+      earlyFlakeDetectionSlowRetries: earlyFlakeDetectionSlowTestRetries,
+      isEarlyFlakeDetectionEnabled: shouldConfigureEarlyFlakeDetection,
+      knownTests: knownTests?.vitest || {},
+      repositoryRoot: testSessionConfiguration.repositoryRoot || process.cwd(),
+    },
+  }, 'Could not send Vitest worker setup context, so no-worker execution changes will not work.')
+}
+
+function getVitestConfigs (ctx, testSpecifications) {
+  const configs = new Set()
+
+  if (Array.isArray(testSpecifications)) {
+    const defaultPool = ctx.config?.pool
+    for (const testSpecification of testSpecifications) {
+      if (!isForkPool(getEffectiveTestSpecificationPool(testSpecification, defaultPool))) continue
+
+      const config = safeConfig(getTestSpecificationProject(testSpecification))
+      if (config) {
+        configs.add(config)
+      }
+    }
+
+    return configs
+  }
+
+  configs.add(ctx.config)
+
+  try {
+    configs.add(getWorkspaceProject(ctx).config)
+  } catch {
+    // best effort: ctx.config is enough for newer Vitest versions
+  }
+
+  return configs
+}
+
+function addSetupFileToVitestConfigs (ctx, setupFile, testSpecifications) {
+  const configs = getVitestConfigs(ctx, testSpecifications)
+
+  for (const config of configs) {
+    if (!config) continue
+    config.setupFiles ||= []
+    if (!config.setupFiles.includes(setupFile)) {
+      config.setupFiles.push(setupFile)
+    }
+  }
+}
+
+function getMainProcessAttemptToFixTests (testManagementTests) {
+  return getMainProcessTestManagementTests(testManagementTests, properties => properties.attempt_to_fix)
+}
+
+function getMainProcessDisabledTests (testManagementTests) {
+  return getMainProcessTestManagementTests(testManagementTests, properties =>
+    properties.disabled && !properties.attempt_to_fix
+  )
+}
+
+function getMainProcessTestManagementTests (testManagementTests, predicate) {
+  const suites = testManagementTests.vitest?.suites
+  if (!suites) return
+
+  const selectedTests = {}
+  let hasSelectedTests = false
+
+  for (const [testSuite, testSuiteData] of Object.entries(suites)) {
+    const tests = testSuiteData.tests
+    if (!tests) continue
+
+    for (const [testName, testData] of Object.entries(tests)) {
+      const properties = testData.properties
+      if (!properties || !predicate(properties)) continue
+
+      selectedTests[testSuite] ||= {}
+      selectedTests[testSuite][testName] = true
+      hasSelectedTests = true
+    }
+  }
+
+  return hasSelectedTests ? selectedTests : undefined
+}
+
+function installMainProcessReporter (
+  ctx,
+  frameworkVersion,
+  testSessionConfiguration,
+  testOptimizationData,
+  shouldInstallNoWorkerInit = shouldUseVitestNoWorkerInit(ctx),
+  testSpecifications
+) {
+  const forkPoolTestModules = getForkPoolTestModules(ctx.config?.pool, testSpecifications)
+
+  if (
+    !shouldInstallNoWorkerInit ||
+    forkPoolTestModules?.isEmpty ||
+    mainProcessReporterContexts.has(ctx) ||
+    ctx.config?.pool === 'threads' ||
+    ctx.config?.pool === 'vmThreads'
+  ) {
+    return
+  }
+  mainProcessReporterContexts.add(ctx)
+  ctx.reporters.push(createMainProcessReporter(
+    frameworkVersion,
+    testSessionConfiguration,
+    testOptimizationData,
+    forkPoolTestModules
+  ))
+}
+
+function createMainProcessReporter (
+  frameworkVersion,
+  testSessionConfiguration = {},
+  testOptimizationData = {},
+  forkPoolTestModules
+) {
+  const testSuiteContexts = new Map()
+  const finishedTestModules = new Set()
+
+  return {
+    onTestModuleStart (testModule) {
+      if (!shouldReportTestModule(testModule)) return
+
+      startTestSuite(testModule)
+    },
+
+    onTestModuleEnd (testModule) {
+      if (!shouldReportTestModule(testModule)) return
+
+      return reportTestModule(testModule)
+    },
+
+    onFinished (files) {
+      if (!files) return
+      for (const file of files) {
+        const testModule = createTestModuleFromFile(file)
+        if (!shouldReportTestModule(testModule)) continue
+
+        if (!finishedTestModules.has(file.id)) {
+          reportTestModule(testModule)
+        }
+      }
+    },
+  }
+
+  function shouldReportTestModule (testModule) {
+    if (!forkPoolTestModules) return true
+
+    const filepath = getTestModuleFilepath(testModule)
+    const normalizedFilepath = normalizeFilepath(filepath)
+    if (!normalizedFilepath) return false
+
+    const projectName = getTestModuleProjectName(testModule)
+    if (projectName) {
+      return forkPoolTestModules.projectFilepaths.has(getProjectFilepathKey(projectName, normalizedFilepath))
+    }
+    return forkPoolTestModules.filepaths.has(normalizedFilepath)
+  }
+
+  function reportTestModule (testModule) {
+    finishedTestModules.add(testModule.id)
+    const testSuiteCtx = testSuiteContexts.get(testModule.id) || startTestSuite(testModule)
+    const testTasks = getTypeTasks(testModule.task.tasks)
+    const testReports = []
+    let testSuiteError
+
+    for (const task of testTasks) {
+      const testReport = getTestReport(task)
+      testReports.push(testReport)
+
+      for (const attempt of testReport.nonFinalAttempts) {
+        reportTestAttempt(testReport, attempt)
+      }
+    }
+
+    for (const testReport of testReports) {
+      const error = reportFinalTestAttempt(testReport)
+      testSuiteError ||= error
+    }
+
+    recomputeTaskState(testModule.task)
+    const testSuiteResult = testModule.task.result
+    if (testSuiteResult?.errors?.length) {
+      testSuiteError = testSuiteResult.errors[0]
+    }
+
+    if (testSuiteError) {
+      testSuiteCtx.error = testSuiteError
+      testSuiteErrorCh.runStores(testSuiteCtx, () => {})
+    }
+
+    testSuiteFinishCh.publish({
+      status: getDatadogStatus(testSuiteResult),
+      deferFlush: true,
+      onFinish: noop,
+      ...testSuiteCtx.currentStore,
+    })
+    testSuiteContexts.delete(testModule.id)
+  }
+
+  function startTestSuite (testModule) {
+    const testSuiteCtx = {
+      testSuiteAbsolutePath: testModule.moduleId || testModule.task.filepath,
+      frameworkVersion,
+      testSessionId: testSessionConfiguration.testSessionId,
+      testModuleId: testSessionConfiguration.testModuleId,
+      testCommand: testSessionConfiguration.testCommand,
+      repositoryRoot: testSessionConfiguration.repositoryRoot,
+      codeOwnersEntries: testSessionConfiguration.codeOwnersEntries,
+      isTestFrameworkWorker: true,
+      requestErrorTags: testOptimizationRequestErrorTags,
+    }
+    testSuiteStartCh.runStores(testSuiteCtx, () => {})
+    testSuiteContexts.set(testModule.id, testSuiteCtx)
+    return testSuiteCtx
+  }
+
+  function getTestReport (task) {
+    const result = task.result
+    const testSuiteAbsolutePath = task.file?.filepath
+    const testName = getTestName(task)
+    const testProperties = getMainProcessTestProperties(testSuiteAbsolutePath, testName)
+    let status = getDatadogStatus(result)
+
+    if (testProperties.isAttemptToFix && task.meta?.__ddTestOptAtfStatuses?.length) {
+      return getRepeatedTestReport(task, testName, testSuiteAbsolutePath, testProperties, status, {
+        errorCounts: task.meta.__ddTestOptAtfErrorCounts,
+        finalStatus: getAttemptToFixFinalStatus,
+        statuses: task.meta.__ddTestOptAtfStatuses,
+        type: 'attempt_to_fix',
+      })
+    }
+
+    if (testProperties.isEarlyFlakeDetection && task.meta?.__ddTestOptEfdStatuses?.length) {
+      return getRepeatedTestReport(task, testName, testSuiteAbsolutePath, testProperties, status, {
+        errorCounts: task.meta.__ddTestOptEfdErrorCounts,
+        finalStatus: getEarlyFlakeDetectionFinalStatus,
+        statuses: task.meta.__ddTestOptEfdStatuses,
+        type: 'early_flake_detection',
+      })
+    }
+
+    if (!testProperties.isAttemptToFix && task.result?.repeatCount > 0) {
+      return getRepeatedTestReport(task, testName, testSuiteAbsolutePath, testProperties, status, {
+        finalStatus: () => status,
+        statuses: getRepeatedTaskStatuses(task, status),
+        type: 'external',
+      })
+    }
+
+    if (testProperties.isAttemptToFix) {
+      logAttemptToFixTestExecution(testProperties.testSuite, testName, loggedAttemptToFixTests)
+    }
+
+    if (testProperties.isDisabled && !testProperties.isAttemptToFix) {
+      status = 'skip'
+      if (result) result.state = 'skip'
+    } else if (testProperties.isQuarantined && status === 'fail' && !testProperties.isAttemptToFix) {
+      result.state = 'pass'
+    }
+
+    const errors = result?.errors || []
+    const finalErrorIndex = status === 'fail' ? errors.length - 1 : -1
+    const nonFinalAttempts = []
+
+    if (status !== 'skip') {
+      for (let index = 0; index < errors.length; index++) {
+        if (index === finalErrorIndex) continue
+        nonFinalAttempts.push({
+          error: errors[index],
+          isRetry: index > 0,
+          status: 'fail',
+        })
+      }
+    }
+
+    return {
+      errors,
+      nonFinalAttempts,
+      status,
+      task,
+      testName,
+      testProperties,
+      testSuiteAbsolutePath,
+    }
+  }
+
+  function getMainProcessTestProperties (testSuiteAbsolutePath, testName) {
+    const testSuite = getTestSuitePath(
+      testSuiteAbsolutePath,
+      testSessionConfiguration.repositoryRoot || process.cwd()
+    )
+    const knownTests = testOptimizationData.knownTests?.vitest
+    const testsForThisTestSuite = knownTests?.[testSuite] || []
+    const isNew = !!(
+      isKnownTestsEnabled &&
+      knownTests &&
+      !isEarlyFlakeDetectionFaulty &&
+      !testsForThisTestSuite.includes(testName)
+    )
+    const testManagementProperties =
+      testOptimizationData.testManagementTests?.vitest?.suites?.[testSuite]?.tests?.[testName]?.properties || {}
+    const isModified = !!(isImpactedTestsEnabled && testOptimizationData.modifiedFiles &&
+      isModifiedTest(testSuite, 0, 0, testOptimizationData.modifiedFiles, 'vitest'))
+
+    return {
+      isAttemptToFix: testManagementProperties.attempt_to_fix,
+      isDisabled: testManagementProperties.disabled,
+      isEarlyFlakeDetection: isNew && isEarlyFlakeDetectionEnabled,
+      isQuarantined: testManagementProperties.quarantined,
+      isModified,
+      isNew,
+      testSuite,
+      hasDynamicName: isNew && DYNAMIC_NAME_RE.test(testName),
+    }
+  }
+}
+
+function createTestModuleFromFile (file) {
+  return {
+    id: file.id,
+    moduleId: file.filepath,
+    task: file,
+  }
+}
+
+function getTestModuleFilepath (testModule) {
+  return testModule.moduleId || testModule.task?.filepath || testModule.filepath
+}
+
+function getTestModuleProjectName (testModule) {
+  return normalizeProjectName(
+    testModule.projectName || testModule.task?.projectName || testModule.task?.file?.projectName
+  )
+}
+
+function getRepeatedTestReport (task, testName, testSuiteAbsolutePath, testProperties, status, options) {
+  const result = task.result
+  const errors = result?.errors || []
+  const { errorCounts, finalStatus, statuses, type } = options
+  const finalAttemptStatus = finalStatus(statuses)
+  const hasFailure = finalAttemptStatus === 'fail'
+  const attempts = []
+  const attemptCount = getRepeatedAttemptCount(task, statuses)
+  let errorIndex = 0
+  let previousErrorCount = 0
+
+  if (type === 'attempt_to_fix') {
+    logAttemptToFixTestExecution(testProperties.testSuite, testName, loggedAttemptToFixTests)
+  }
+
+  for (let index = 0; index < attemptCount; index++) {
+    const isFinalAttempt = index === attemptCount - 1
+    const attemptStatus = statuses[index] || 'pass'
+    const nextErrorCount = errorCounts?.[index]
+    const error = attemptStatus === 'fail' ? errors[previousErrorCount] || errors[errorIndex] || errors[0] : undefined
+    if (nextErrorCount !== undefined) {
+      previousErrorCount = nextErrorCount
+    } else if (attemptStatus === 'fail') {
+      errorIndex++
+    }
+    const attempt = {
+      attemptToFixFailed: isFinalAttempt && hasFailure,
+      earlyFlakeAbortReason: type === 'early_flake_detection' && isFinalAttempt
+        ? task.meta?.__ddTestOptEfdAbortReason
+        : undefined,
+      error,
+      finalStatus: isFinalAttempt ? finalAttemptStatus : undefined,
+      hasFailedAllRetries: isFinalAttempt && hasFailure && statuses.every(status => status === 'fail'),
+      isRetry: index > 0,
+      status: attemptStatus,
+    }
+    if (type === 'attempt_to_fix') {
+      attempt.attemptToFixPassed = isFinalAttempt && !hasFailure
+    } else if (type === 'early_flake_detection') {
+      attempt.isRetryReasonEfd = index > 0
+    }
+    attempts.push(attempt)
+  }
+
+  return {
+    errors,
+    finalAttempt: attempts[attempts.length - 1],
+    nonFinalAttempts: attempts.slice(0, -1),
+    status,
+    task,
+    testName,
+    testProperties,
+    testSuiteAbsolutePath,
+  }
+}
+
+function getRepeatedAttemptCount (task, statuses) {
+  const retries = task.meta?.__ddTestOptAtfRetries ?? task.meta?.__ddTestOptEfdRetries ?? task.repeats ?? 0
+  return Math.max(statuses.length, retries + 1)
+}
+
+function getAttemptToFixFinalStatus (statuses) {
+  return statuses.includes('fail') ? 'fail' : 'pass'
+}
+
+function getEarlyFlakeDetectionFinalStatus (statuses) {
+  return statuses.includes('pass') ? 'pass' : 'fail'
+}
+
+function getRepeatedTaskStatuses (task, status) {
+  const repeatedStatuses = []
+  const repeatCount = task.result?.repeatCount || 0
+  for (let index = 0; index <= repeatCount; index++) {
+    repeatedStatuses.push(status)
+  }
+  return repeatedStatuses
+}
+
+function reportFinalTestAttempt (testReport) {
+  const {
+    errors,
+    status,
+    task,
+    testName,
+    testProperties,
+    testSuiteAbsolutePath,
+  } = testReport
+
+  if (status === 'skip') {
+    testSkipCh.publish({
+      testName,
+      testSuiteAbsolutePath,
+      isNew: testProperties.isNew,
+      isDisabled: testProperties.isDisabled,
+      isTestFrameworkWorker: true,
+    })
+    return
+  }
+
+  const result = task.result
+  const finalStatus = getFinalTestStatus(testReport)
+  const finalAttempt = testReport.finalAttempt
+
+  if (status === 'fail') {
+    const error = errors[errors.length - 1] || errors[0]
+    reportTestAttempt(testReport, finalAttempt || {
+      error,
+      finalStatus,
+      hasFailedAllRetries: (result?.retryCount || 0) > 0,
+      isRetry: errors.length > 1 || (result?.retryCount || 0) > 0 || (result?.repeatCount || 0) > 0,
+      status: 'fail',
+    })
+    return error
+  }
+
+  reportTestAttempt(testReport, finalAttempt || {
+    finalStatus,
+    isRetry: errors.length > 0 || (result?.retryCount || 0) > 0 || (result?.repeatCount || 0) > 0,
+    status: 'pass',
+  })
+}
+
+function reportTestAttempt (testReport, attempt) {
+  const {
+    task,
+    testName,
+    testProperties,
+    testSuiteAbsolutePath,
+  } = testReport
+  const result = task.result
+  const status = attempt.status
+  const testCtx = {
+    testName,
+    testSuiteAbsolutePath,
+    isRetry: attempt.isRetry,
+    isNew: testProperties.isNew,
+    hasDynamicName: testProperties.hasDynamicName,
+    isAttemptToFix: testProperties.isAttemptToFix,
+    isDisabled: testProperties.isDisabled,
+    isQuarantined: testProperties.isQuarantined,
+    isModified: testProperties.isModified,
+    isRetryReasonEfd: attempt.isRetryReasonEfd,
+    isRetryReasonAttemptToFix: testProperties.isAttemptToFix && attempt.isRetry,
+    isRetryReasonAtr: !testProperties.isAttemptToFix && !testProperties.isEarlyFlakeDetection &&
+      isFlakyTestRetriesEnabled,
+    isTestFrameworkWorker: true,
+    requestErrorTags: testOptimizationRequestErrorTags,
+  }
+  if (testProperties.isAttemptToFix) {
+    recordAttemptToFixExecution(attemptToFixExecutions, {
+      testSuite: testProperties.testSuite,
+      testName,
+      status,
+      isDisabled: testProperties.isDisabled,
+      isQuarantined: testProperties.isQuarantined,
+    })
+  }
+  if (testProperties.hasDynamicName) {
+    newTestsWithDynamicNames.add(`${testProperties.testSuite} › ${testName}`)
+  }
+  if (attempt.attemptToFixPassed) {
+    testCtx.attemptToFixPassed = true
+  } else if (attempt.attemptToFixFailed) {
+    testCtx.attemptToFixFailed = true
+  }
+  testStartCh.runStores(testCtx, () => {})
+  testCtx.status = status
+  testCtx.task = task
+  testFinishTimeCh.runStores(testCtx, () => {})
+
+  if (status === 'pass') {
+    testPassCh.publish({
+      task,
+      earlyFlakeAbortReason: attempt.earlyFlakeAbortReason,
+      finalStatus: attempt.finalStatus,
+      ...testCtx.currentStore,
+    })
+    return
+  }
+
+  testErrorCh.publish({
+    duration: attempt.isRetry ? undefined : result?.duration,
+    error: attempt.error,
+    earlyFlakeAbortReason: attempt.earlyFlakeAbortReason,
+    finalStatus: attempt.finalStatus,
+    hasFailedAllRetries: attempt.hasFailedAllRetries,
+    attemptToFixFailed: attempt.attemptToFixFailed,
+    ...testCtx.currentStore,
+  })
+}
+
+function getFinalTestStatus (testReport) {
+  const testProperties = testReport.testProperties
+  if (testProperties.isAttemptToFix) {
+    const finalAttempt = testReport.finalAttempt
+    return finalAttempt?.finalStatus
+  }
+  if (testProperties.isDisabled || testProperties.isQuarantined) {
+    return 'skip'
+  }
+  return testReport.status
+}
+
+function getDatadogStatus (result) {
+  const state = result?.state
+  if (state === 'pass' || state === 'passed') return 'pass'
+  if (state === 'fail' || state === 'failed') return 'fail'
+  return 'skip'
+}
+
+function recomputeTaskState (task) {
+  if (!task.tasks) {
+    return getDatadogStatus(task.result)
+  }
+
+  let hasFailed = false
+  let hasPassed = false
+
+  for (const child of task.tasks) {
+    const childStatus = recomputeTaskState(child)
+    hasFailed ||= childStatus === 'fail'
+    hasPassed ||= childStatus === 'pass'
+  }
+
+  const status = hasFailed ? 'fail' : hasPassed ? 'pass' : 'skip'
+  task.result ||= {}
+  task.result.state = status
+  return status
 }
 
 function ensureMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
@@ -872,6 +1570,7 @@ function getFinishWrapper (exitOrClose) {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
+      requestErrorTags: testOptimizationRequestErrorTags,
       vitestPool,
       onFinish,
     })
@@ -913,6 +1612,10 @@ function isThreadPool (pool) {
   return pool === 'threads' || pool === 'vmThreads'
 }
 
+function normalizeFilepath (filepath) {
+  return typeof filepath === 'string' ? filepath.replaceAll('\\', '/') : undefined
+}
+
 /**
  * Return the project object attached to a Vitest test specification.
  *
@@ -931,13 +1634,26 @@ function getTestSpecificationPool (testSpecification) {
   return project?.config?.pool || project?.serializedConfig?.pool || project?.pool || testSpecification?.pool
 }
 
-function hasForkPoolTestSpecification (testSpecifications) {
+function getEffectiveTestSpecificationPool (testSpecification, defaultPool) {
+  return getTestSpecificationPool(testSpecification) || defaultPool
+}
+
+function getTestSpecificationFilepath (testSpecification) {
+  const testFile = Array.isArray(testSpecification) ? testSpecification[1] : testSpecification
+  return testFile?.moduleId || testFile?.filepath || testFile
+}
+
+function getTestSpecificationProjectName (testSpecification) {
+  return getProjectName(getTestSpecificationProject(testSpecification))
+}
+
+function hasForkPoolTestSpecification (testSpecifications, defaultPool) {
   if (!Array.isArray(testSpecifications)) {
     return false
   }
 
   for (const testSpecification of testSpecifications) {
-    if (isForkPool(getTestSpecificationPool(testSpecification))) {
+    if (isForkPool(getEffectiveTestSpecificationPool(testSpecification, defaultPool))) {
       return true
     }
   }
@@ -945,18 +1661,64 @@ function hasForkPoolTestSpecification (testSpecifications) {
   return false
 }
 
+function hasThreadPoolTestSpecification (defaultPool, testSpecifications) {
+  if (!Array.isArray(testSpecifications)) {
+    return false
+  }
+
+  for (const testSpecification of testSpecifications) {
+    if (isThreadPool(getEffectiveTestSpecificationPool(testSpecification, defaultPool))) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function getForkPoolTestModules (defaultPool, testSpecifications) {
+  if (!Array.isArray(testSpecifications)) {
+    return
+  }
+
+  const filepaths = new Set()
+  const projectFilepaths = new Set()
+  for (const testSpecification of testSpecifications) {
+    if (!isForkPool(getEffectiveTestSpecificationPool(testSpecification, defaultPool))) continue
+
+    const filepath = normalizeFilepath(getTestSpecificationFilepath(testSpecification))
+    if (!filepath) return
+
+    const projectName = getTestSpecificationProjectName(testSpecification)
+    if (projectName) {
+      projectFilepaths.add(getProjectFilepathKey(projectName, filepath))
+    } else {
+      filepaths.add(filepath)
+    }
+  }
+
+  return {
+    filepaths,
+    isEmpty: filepaths.size === 0 && projectFilepaths.size === 0,
+    projectFilepaths,
+  }
+}
+
+function getProjectFilepathKey (projectName, filepath) {
+  return `${projectName}\u0000${filepath}`
+}
+
 function shouldMarkVitestWorkerEnv (pool, testSpecifications) {
-  return isForkPool(pool) || hasForkPoolTestSpecification(testSpecifications) ||
+  return isForkPool(pool) || hasForkPoolTestSpecification(testSpecifications, pool) ||
     (!testSpecifications && !isThreadPool(pool))
 }
 
 function markVitestWorkerEnv (ctx, testSpecifications) {
   const config = ctx?.config
+  isVitestNoWorkerInitActive = shouldUseVitestNoWorkerInit(ctx)
   if (!config || !shouldMarkVitestWorkerEnv(config.pool, testSpecifications)) {
     return
   }
-  config.env = config.env || {}
-  config.env.DD_VITEST_WORKER = '1'
+  config.env = getVitestWorkerEnv(config.env, isVitestNoWorkerInitActive)
 }
 
 function wrapVitestRunFiles (Vitest, frameworkVersion) {
@@ -1010,22 +1772,76 @@ function threadHandler (thread) {
   }
   workerProcesses.add(workerProcess)
   workerProcess.on('message', (message) => {
-    if (message.__tinypool_worker_message__ && message.data) {
-      if (message.interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE) {
-        collectTestOptimizationSummariesFromTraces(message.data, {
-          newTestsWithDynamicNames,
-          attemptToFixExecutions,
-        })
-        workerReportTraceCh.publish(message.data)
-      } else if (message.interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE) {
-        workerReportLogsCh.publish(message.data)
-      }
-    }
+    handleVitestWorkerMessage(message)
   })
 }
 
-function wrapTinyPoolRun (TinyPool) {
-  shimmer.wrap(TinyPool.prototype, 'run', run => async function () {
+function getVitestWorkerMessage (message) {
+  if (message?.__tinypool_worker_message__ && message.data) {
+    return {
+      interprocessCode: message.interprocessCode,
+      data: message.data,
+    }
+  }
+
+  if (message?.type !== 'Buffer' && Array.isArray(message)) {
+    return {
+      interprocessCode: message[0],
+      data: message[1],
+    }
+  }
+}
+
+function handleVitestWorkerMessage (message) {
+  const workerMessage = getVitestWorkerMessage(message)
+  if (!workerMessage) return false
+
+  const { interprocessCode, data } = workerMessage
+  if (interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE) {
+    collectTestOptimizationSummariesFromTraces(data, {
+      newTestsWithDynamicNames,
+      attemptToFixExecutions,
+    })
+    workerReportTraceCh.publish(data)
+  } else if (interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE) {
+    workerReportLogsCh.publish(data)
+  }
+  return true
+}
+
+function getTinypoolClass (TinyPool) {
+  return TinyPool.Tinypool || TinyPool.default || TinyPool
+}
+
+function wrapTinypoolConstructor (Tinypool) {
+  return class DatadogTinypool extends Tinypool {
+    constructor (options) {
+      super(getTinypoolOptions(options))
+    }
+  }
+}
+
+function getTinypoolOptions (options = {}) {
+  if (!shouldMarkVitestForkWorkerPool(options)) {
+    return options
+  }
+
+  return {
+    ...options,
+    env: getVitestWorkerEnv(options.env, isVitestNoWorkerInitActive),
+  }
+}
+
+function shouldMarkVitestForkWorkerPool (options) {
+  if (options?.runtime !== 'child_process') return false
+  if (options.env?.VITEST !== 'true') return false
+
+  const filename = typeof options.filename === 'string' ? options.filename.replaceAll('\\', '/') : ''
+  return filename.includes('/node_modules/vitest/dist/worker.js')
+}
+
+function wrapTinyPoolRun (Tinypool) {
+  shimmer.wrap(Tinypool.prototype, 'run', run => async function () {
     // We have to do this before and after because the threads list gets recycled, that is, the processes are re-created
     // eslint-disable-next-line unicorn/no-array-for-each
     this.threads.forEach(threadHandler)
@@ -1041,8 +1857,20 @@ addHook({
   // version from tinypool@0.8 was used in vitest@1.6.0
   versions: ['>=0.8.0'],
 }, (TinyPool) => {
-  wrapTinyPoolRun(TinyPool)
-  return TinyPool
+  const Tinypool = getTinypoolClass(TinyPool)
+  wrapTinyPoolRun(Tinypool)
+
+  if (TinyPool.Tinypool || TinyPool.default) {
+    if (TinyPool.Tinypool) {
+      shimmer.wrap(TinyPool, 'Tinypool', wrapTinypoolConstructor)
+    }
+    if (TinyPool.default) {
+      shimmer.wrap(TinyPool, 'default', wrapTinypoolConstructor)
+    }
+    return TinyPool
+  }
+
+  return wrapTinypoolConstructor(TinyPool)
 })
 
 function getWrappedOn (on) {
@@ -1054,17 +1882,7 @@ function getWrappedOn (on) {
     // we modify to intercept our messages to not interfere
     // with vitest's own messages
     arguments[1] = shimmer.wrapFunction(callback, callback => function (message) {
-      if (message.type !== 'Buffer' && Array.isArray(message)) {
-        const [interprocessCode, data] = message
-        if (interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE) {
-          collectTestOptimizationSummariesFromTraces(data, {
-            newTestsWithDynamicNames,
-            attemptToFixExecutions,
-          })
-          workerReportTraceCh.publish(data)
-        } else if (interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE) {
-          workerReportLogsCh.publish(data)
-        }
+      if (handleVitestWorkerMessage(message)) {
         // If we execute the callback vitest crashes, as the message is not supported
         return
       }
@@ -1091,7 +1909,7 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
     // function is async
     shimmer.wrap(forksPoolWorker.value.prototype, 'start', start => function (...args) {
       vitestPool = 'child_process'
-      this.env.DD_VITEST_WORKER = '1'
+      this.env = getVitestWorkerEnv(this.env, isVitestNoWorkerInitActive)
 
       return start.apply(this, args)
     })
@@ -1109,6 +1927,142 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
     shimmer.wrap(threadsPoolWorker.value.prototype, 'on', getWrappedOn)
   }
   return cliApiPackage
+}
+
+function getVitestWorkerEnv (env = {}, shouldSkipWorkerInit = false) {
+  const workerEnv = {
+    ...env,
+    DD_VITEST_WORKER: '1',
+  }
+
+  if (!shouldSkipWorkerInit) {
+    delete workerEnv[VITEST_NO_WORKER_INIT_ACTIVE_ENV]
+    return workerEnv
+  }
+
+  workerEnv[VITEST_NO_WORKER_INIT_ACTIVE_ENV] = '1'
+
+  const nodeOptions = removeDatadogTestOptimizationNodeOptions(workerEnv.NODE_OPTIONS)
+  if (nodeOptions) {
+    workerEnv.NODE_OPTIONS = nodeOptions
+  } else {
+    delete workerEnv.NODE_OPTIONS
+  }
+  return workerEnv
+}
+
+function removeDatadogTestOptimizationNodeOptions (nodeOptions) {
+  if (!nodeOptions) return nodeOptions
+
+  const tokens = splitNodeOptions(nodeOptions)
+  const filteredTokens = []
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index]
+    const valueSeparator = token.indexOf('=')
+    if (valueSeparator !== -1) {
+      const flag = token.slice(0, valueSeparator)
+      const value = token.slice(valueSeparator + 1)
+      if (shouldRemoveNodeOption(flag, value)) {
+        continue
+      }
+    }
+
+    if (token.startsWith('-r') && token.length > 2 && isDatadogTestOptimizationBootstrap(token.slice(2))) {
+      continue
+    }
+
+    if (
+      DATADOG_TEST_OPTIMIZATION_NODE_OPTION_FLAGS.has(token) &&
+      isDatadogTestOptimizationBootstrap(tokens[index + 1])
+    ) {
+      index++
+      continue
+    }
+
+    filteredTokens.push(token)
+  }
+
+  return serializeNodeOptions(filteredTokens)
+}
+
+function shouldRemoveNodeOption (flag, value) {
+  return DATADOG_TEST_OPTIMIZATION_NODE_OPTION_FLAGS.has(flag) &&
+    isDatadogTestOptimizationBootstrap(value)
+}
+
+function isDatadogTestOptimizationBootstrap (value) {
+  if (!value) return false
+
+  const normalizedValue = value.replaceAll('\\', '/')
+  if (DATADOG_TEST_OPTIMIZATION_BOOTSTRAPS.has(normalizedValue)) return true
+
+  for (const bootstrap of DATADOG_TEST_OPTIMIZATION_BOOTSTRAPS) {
+    if (normalizedValue.endsWith(`/node_modules/${bootstrap}`)) return true
+  }
+  return false
+}
+
+function splitNodeOptions (nodeOptions) {
+  const tokens = []
+  let token = ''
+  let quote
+  let isEscaped = false
+
+  for (let index = 0; index < nodeOptions.length; index++) {
+    const char = nodeOptions[index]
+
+    if (isEscaped) {
+      token += char
+      isEscaped = false
+      continue
+    }
+
+    if (char === '\\') {
+      isEscaped = true
+      continue
+    }
+
+    if (quote) {
+      if (char === quote) {
+        quote = undefined
+      } else {
+        token += char
+      }
+      continue
+    }
+
+    if (char === '"' || char === "'") {
+      quote = char
+      continue
+    }
+
+    if (char === ' ' || char === '\n' || char === '\t') {
+      if (token) {
+        tokens.push(token)
+        token = ''
+      }
+      continue
+    }
+
+    token += char
+  }
+
+  if (token) {
+    tokens.push(token)
+  }
+  return tokens
+}
+
+function serializeNodeOptions (tokens) {
+  const serializedTokens = []
+  for (const token of tokens) {
+    if (NODE_OPTIONS_QUOTE_RE.test(token)) {
+      serializedTokens.push(JSON.stringify(token))
+    } else {
+      serializedTokens.push(token)
+    }
+  }
+  return serializedTokens.join(' ')
 }
 
 function wrapVitestTestRunner (VitestTestRunner) {

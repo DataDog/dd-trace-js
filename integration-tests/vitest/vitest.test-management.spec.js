@@ -367,6 +367,19 @@ versions.forEach((version) => {
             runAttemptToFixTest(done, { isAttemptingToFix: true })
           })
 
+          it('can attempt to fix when no-worker init is enabled', (done) => {
+            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+            runAttemptToFixTest(done, {
+              isAttemptingToFix: true,
+              expectedExecutionCount: 4,
+              extraEnvVars: {
+                DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+                EXPECT_DD_TEST_OPT_VITEST_SETUP_ENV_ABSENT: '1',
+              },
+            })
+          })
+
           it('can attempt to fix and mark last attempt as passed if every attempt passes', (done) => {
             receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 

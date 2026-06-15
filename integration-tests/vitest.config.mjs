@@ -70,6 +70,10 @@ if (process.env.PROJECT_POOL_CONFIG) {
   config.test.projects = projectConfigs
 }
 
+if (process.env.NO_ISOLATE) {
+  config.test.isolate = false
+}
+
 if (process.env.COVERAGE_PROVIDER) {
   config.test.coverage = {
     provider: process.env.COVERAGE_PROVIDER || 'v8',

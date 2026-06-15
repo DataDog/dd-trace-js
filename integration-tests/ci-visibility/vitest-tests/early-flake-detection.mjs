@@ -48,7 +48,7 @@ describe('early flake detection', () => {
   if (process.env.SHOULD_ADD_SLOW_DURATION_TEST) {
     test('slightly slow duration bucket test', async () => {
       await new Promise(resolve => setTimeout(resolve, 5100))
-      expect(sum(1, 2)).to.equal(3)
+      expect(sum(1, 2)).to.equal(process.env.SLOW_DURATION_ALWAYS_FAIL ? 4 : 3)
     }, 7000)
   }
   if (process.env.SHOULD_ADD_CURRENT_ERROR_TEST) {
