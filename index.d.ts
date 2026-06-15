@@ -304,6 +304,7 @@ interface Plugins {
   "rhea": tracer.plugins.rhea;
   "router": tracer.plugins.router;
   "selenium": tracer.plugins.selenium;
+  "sequelize": tracer.plugins.sequelize;
   "sharedb": tracer.plugins.sharedb;
   "tedious": tracer.plugins.tedious;
   "undici": tracer.plugins.undici;
@@ -2801,6 +2802,12 @@ declare namespace tracer {
     interface jest extends Integration {}
 
     /**
+     * This plugin patches the [knex](https://knexjs.org/) module to bind the promise callback to the
+     * caller context and to add a span for the time spent acquiring a connection from the pool.
+     */
+    interface knex extends Integration {}
+
+    /**
      * This plugin automatically instruments the
      * [koa](https://koajs.com/) module.
      */
@@ -3133,6 +3140,12 @@ declare namespace tracer {
     * [selenium-webdriver](https://www.npmjs.com/package/selenium-webdriver) module.
     */
     interface selenium extends Integration {}
+
+    /**
+     * This plugin patches the [sequelize](https://sequelize.org/) module to add a span for the time
+     * spent acquiring a connection from the pool.
+     */
+    interface sequelize extends Integration {}
 
     /**
      * This plugin automatically instruments the
