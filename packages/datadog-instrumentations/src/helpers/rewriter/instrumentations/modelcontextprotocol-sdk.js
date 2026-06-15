@@ -56,6 +56,14 @@ module.exports = [
   // Server-side: Protocol._onrequest covers all incoming JSON-RPC requests on both
   // Server and McpServer. Trace context is extracted from extra.requestInfo.headers
   // which is populated by HTTP-based transports (SSE, StreamableHttp).
+  //
+  // _onrequest is fire-and-forget: it returns void synchronously and schedules its
+  // async work via an internal Promise chain. There is no returned Promise to await,
+  // so kind: 'Async' would not cover the full request lifecycle either — awaiting
+  // undefined resolves immediately. We use kind: 'Sync' intentionally: this span
+  // represents "request received and trace context extracted", not "request completed".
+  // The mcp.server.tool.call span on McpServer.executeToolHandler (truly async) covers
+  // tool execution duration.
   {
     module: {
       name: '@modelcontextprotocol/sdk',

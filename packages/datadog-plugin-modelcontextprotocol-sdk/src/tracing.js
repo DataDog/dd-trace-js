@@ -2,6 +2,15 @@
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
+function setIsErrorTag (ctx) {
+  const result = ctx.result
+  if (result?.isError) {
+    const span = ctx.currentStore?.span
+    const errorText = result.content?.find?.(c => c.type === 'text')?.text || 'Tool call returned isError: true'
+    span?.setTag('error', new Error(errorText))
+  }
+}
+
 class McpToolCallPlugin extends TracingPlugin {
   static id = 'modelcontextprotocol_client'
   static prefix = 'tracing:orchestrion:@modelcontextprotocol/sdk:Client_callTool'
@@ -20,12 +29,7 @@ class McpToolCallPlugin extends TracingPlugin {
   }
 
   asyncEnd (ctx) {
-    const result = ctx.result
-    if (result?.isError) {
-      const span = ctx.currentStore?.span
-      const errorText = result.content?.find?.(c => c.type === 'text')?.text || 'Tool call returned isError: true'
-      span?.setTag('error', new Error(errorText))
-    }
+    setIsErrorTag(ctx)
     super.finish(ctx)
   }
 }
@@ -58,8 +62,10 @@ class McpServerRequestPlugin extends TracingPlugin {
     const method = request?.method
     const headers = extra?.requestInfo?.headers
 
-    // Extract distributed trace context from HTTP transport headers when available
-    const childOf = headers ? this.tracer.extract('http_headers', headers) : null
+    // Extract distributed trace context from HTTP transport headers when available.
+    // When no headers are present (e.g. InMemoryTransport), omit childOf so async
+    // context propagation naturally carries the parent span from the current store.
+    const childOf = headers ? this.tracer.extract('http_headers', headers) : undefined
 
     this.startSpan('mcp.server.request', {
       childOf,
@@ -71,6 +77,9 @@ class McpServerRequestPlugin extends TracingPlugin {
     return ctx.currentStore
   }
 
+  // _onrequest is fire-and-forget (returns void, async work is internal). This span
+  // represents "request received" — the sync end is intentional. See the rewriter
+  // config comment for full rationale.
   end (ctx) {
     super.finish(ctx)
   }
@@ -82,7 +91,12 @@ class McpServerToolCallPlugin extends TracingPlugin {
 
   bindStart (ctx) {
     const [tool] = ctx.arguments || []
-    const toolName = tool?.name
+    // RegisteredTool objects do not carry a .name property — the name is the key
+    // in McpServer._registeredTools. Look up by reference using ctx.self (the McpServer).
+    const registeredTools = ctx.self?._registeredTools
+    const toolName = registeredTools
+      ? Object.keys(registeredTools).find(k => registeredTools[k] === tool)
+      : undefined
 
     this.startSpan('mcp.server.tool.call', {
       resource: toolName,
@@ -94,12 +108,7 @@ class McpServerToolCallPlugin extends TracingPlugin {
   }
 
   asyncEnd (ctx) {
-    const result = ctx.result
-    if (result?.isError) {
-      const span = ctx.currentStore?.span
-      const errorText = result.content?.find?.(c => c.type === 'text')?.text || 'Tool handler returned isError: true'
-      span?.setTag('error', new Error(errorText))
-    }
+    setIsErrorTag(ctx)
     super.finish(ctx)
   }
 }

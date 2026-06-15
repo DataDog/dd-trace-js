@@ -121,11 +121,36 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
     })
   })
 
+  describe('context propagation', () => {
+    it('mcp.server.request span should be a child of mcp.client.tool.call span', async () => {
+      // Client and server run in the same process via InMemoryTransport, so async
+      // context propagation carries the client span into the server _onrequest handler.
+      // Both spans land in the same trace payload.
+      const traceAssertion = agent.assertSomeTraces(traces => {
+        const allSpans = traces.flatMap(trace => trace)
+        const clientSpan = allSpans.find(s => s.name === 'mcp.client.tool.call')
+        const serverSpan = allSpans.find(s => s.name === 'mcp.server.request')
+        assert.ok(clientSpan, 'mcp.client.tool.call span should exist')
+        assert.ok(serverSpan, 'mcp.server.request span should exist')
+        assert.strictEqual(
+          serverSpan.parent_id.toString(),
+          clientSpan.span_id.toString(),
+          'server request span parent_id should equal client tool call span_id'
+        )
+      })
+
+      await testSetup.clientCallTool()
+
+      return traceAssertion
+    })
+  })
+
   describe('McpServer.executeToolHandler - mcp.server.tool.call', () => {
     it('should generate server tool call span (happy path)', async () => {
       const traceAssertion = expectSomeSpan(agent, {
         name: 'mcp.server.tool.call',
         type: 'mcp',
+        resource: 'test-tool',
         meta: {
           component: 'modelcontextprotocol_server_tool',
           '_dd.integration': 'modelcontextprotocol_server_tool',
