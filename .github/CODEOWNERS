@@ -45,8 +45,10 @@
 /benchmark/sirun/plugin-aws-sdk/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-dns/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-graphql/ @DataDog/apm-idm-js
+/benchmark/sirun/plugin-grpc/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-http/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-kafkajs/ @DataDog/apm-idm-js
+/benchmark/sirun/plugin-memcached/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-mongodb-core/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-net/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-pg/ @DataDog/apm-idm-js
