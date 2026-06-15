@@ -119,6 +119,9 @@ function getErrorLog (err) {
   return err
 }
 
-log.configure({})
-
+// Assign before the bootstrap configure() call: an invalid DD_TRACE_LOG_LEVEL
+// makes config/defaults re-require this module to warn, which must observe the
+// fully built log object rather than a half-initialized one.
 module.exports = log
+
+log.configure({})

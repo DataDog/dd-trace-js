@@ -7,7 +7,7 @@ const inJestWorker = typeof jest !== 'undefined'
 
 const ddTraceEnabled = getValueFromEnvSources('DD_TRACE_ENABLED')
 const ddTraceDisabled = ddTraceEnabled === undefined
-  ? String(getValueFromEnvSources('OTEL_TRACES_EXPORTER')).toLowerCase() === 'none'
+  ? getValueFromEnvSources('OTEL_TRACES_EXPORTER') === 'none'
   : ddTraceEnabled === false
 
 module.exports = ddTraceDisabled || inJestWorker

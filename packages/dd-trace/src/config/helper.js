@@ -263,24 +263,23 @@ module.exports = {
       loadStableConfig()
     }
 
-    let rawValue
-    /** @type {'env_var' | 'fleet_stable_config' | 'local_stable_config'} */
-    let source = 'env_var'
     if (fleetStableConfig !== undefined) {
-      rawValue = getValueFromSource(name, fleetStableConfig)
-      source = 'fleet_stable_config'
-    }
-    if (rawValue === undefined) {
-      rawValue = getValueFromSource(name, process.env)
-      source = 'env_var'
-    }
-    if (rawValue === undefined && localStableConfig !== undefined) {
-      rawValue = getValueFromSource(name, localStableConfig)
-      source = 'local_stable_config'
+      const fromFleet = getValueFromSource(name, fleetStableConfig)
+      if (fromFleet !== undefined) {
+        return parseConfigurationValue(name, fromFleet, 'fleet_stable_config')
+      }
     }
 
-    if (rawValue !== undefined) {
-      return parseConfigurationValue(name, rawValue, source)
+    const fromEnv = getValueFromSource(name, process.env)
+    if (fromEnv !== undefined) {
+      return parseConfigurationValue(name, fromEnv, 'env_var')
+    }
+
+    if (localStableConfig !== undefined) {
+      const fromLocal = getValueFromSource(name, localStableConfig)
+      if (fromLocal !== undefined) {
+        return parseConfigurationValue(name, fromLocal, 'local_stable_config')
+      }
     }
   },
 
