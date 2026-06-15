@@ -55,10 +55,14 @@ class McpListToolsPlugin extends TracingPlugin {
 
 class McpServerRequestPlugin extends TracingPlugin {
   static id = 'modelcontextprotocol_server'
-  static prefix = 'tracing:orchestrion:@modelcontextprotocol/sdk:Protocol__onrequest'
+  // Channel prefix for the shimmer-based lifecycle (not orchestrion).
+  // The instrumentation publishes:
+  //   apm:mcp:server:request:start  — when _onrequest is entered (sync, via runStores)
+  //   apm:mcp:server:request:finish — when the internal Promise chain's .finally() fires
+  static prefix = 'apm:mcp:server:request'
 
   bindStart (ctx) {
-    const [request, extra] = ctx.arguments || []
+    const { request, extra } = ctx
     const method = request?.method
     const headers = extra?.requestInfo?.headers
 
@@ -77,10 +81,8 @@ class McpServerRequestPlugin extends TracingPlugin {
     return ctx.currentStore
   }
 
-  // _onrequest is fire-and-forget (returns void, async work is internal). This span
-  // represents "request received" — the sync end is intentional. See the rewriter
-  // config comment for full rationale.
-  end (ctx) {
+  // Finish the span when the full async Promise chain completes (.finally in _onrequest).
+  finish (ctx) {
     super.finish(ctx)
   }
 }
