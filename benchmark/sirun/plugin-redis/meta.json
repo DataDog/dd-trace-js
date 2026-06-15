@@ -13,10 +13,13 @@
       "env": { "VARIANT": "long-value", "ITERATIONS": "13000000" }
     },
     "mset-wide": {
-      "env": { "VARIANT": "mset-wide", "ITERATIONS": "1150000" }
+      "env": { "VARIANT": "mset-wide", "ITERATIONS": "980000" }
     },
     "mixed": {
-      "env": { "VARIANT": "mixed", "ITERATIONS": "13000000" }
+      "env": { "VARIANT": "mixed", "ITERATIONS": "11500000" }
+    },
+    "churn": {
+      "env": { "VARIANT": "churn", "ITERATIONS": "5000000" }
     }
   }
 }

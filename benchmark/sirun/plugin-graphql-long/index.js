@@ -62,5 +62,8 @@ guard.loopStart()
       checked = true
     }
   }
-  guard.done()
+  // Node 26 runs this loop ~2x faster than Node 20, so the fixed tracer.init()
+  // plus graphql-load setup is a larger share of the run there. Sizing QUERIES to
+  // keep it under the default 7% would push the Node 20 run past ~110s, so allow 10%.
+  guard.done(0.1)
 })()
