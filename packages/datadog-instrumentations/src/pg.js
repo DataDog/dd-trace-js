@@ -1,6 +1,7 @@
 'use strict'
 
 const { errorMonitor } = require('node:events')
+const { performance } = require('node:perf_hooks')
 
 const shimmer = require('../../datadog-shimmer')
 const {
@@ -22,6 +23,10 @@ const poolConnectFinishCh = channel('apm:pg:pool:connect:finish')
 // the un-injected `text` so the wrap doesn't capture a previous DBM injection as the new original.
 const originalTextCache = new WeakMap()
 
+// Carry the time a pooled client spent being acquired from the connect callback over to the first
+// query run on that client, so the query span can report the pool wait the query actually paid for.
+const poolWaitTimes = new WeakMap()
+
 addHook({ name: 'pg', versions: ['>=8.0.3'], file: 'lib/native/client.js' }, Client => {
   shimmer.wrap(Client.prototype, 'query', query => wrapQuery(query))
   return Client
@@ -41,7 +46,12 @@ addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
     }
 
     const ctx = {}
+    const start = acquireStart(this)
     arguments[0] = function (...args) {
+      const client = args[1]
+      if (client !== undefined) {
+        poolWaitTimes.set(client, acquireWait(start))
+      }
       return poolConnectFinishCh.runStores(ctx, cb, this, ...args)
     }
 
@@ -82,6 +92,12 @@ function wrapQuery (query) {
       processId,
       abortController,
       stream,
+    }
+
+    const poolWaitTime = poolWaitTimes.get(this)
+    if (poolWaitTime !== undefined) {
+      poolWaitTimes.delete(this)
+      ctx.poolWaitTime = poolWaitTime
     }
     const finish = (error, res) => {
       if (error) {
@@ -184,6 +200,16 @@ function wrapQuery (query) {
 }
 const finish = (ctx) => {
   finishPoolQueryCh.publish(ctx)
+}
+// An idle client is handed back within a tick, so treat that as a zero wait and skip the clock
+// reads entirely; only a queued client or a freshly established connection (no idle client at
+// acquire time) is worth timing. `idleCount` is `undefined` on pg builds that predate the getter,
+// which falls through to timing rather than crashing.
+function acquireStart (pool) {
+  return pool.idleCount > 0 ? undefined : performance.now()
+}
+function acquireWait (start) {
+  return start === undefined ? 0 : performance.now() - start
 }
 function wrapPoolQuery (query) {
   return function (...args) {
