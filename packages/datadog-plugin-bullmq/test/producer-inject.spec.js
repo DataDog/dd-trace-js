@@ -189,7 +189,7 @@ describe('bullmq producer telemetry metadata injection', () => {
       name: 'keep', data: { id: 2 }, opts: secondJob.opts, queueName: 'test-queue',
     })
     sinon.assert.calledTwice(producerFilter)
-    assert.strictEqual(instance.startSpan.firstCall.args[0].meta['messaging.batch.message_count'], 1)
+    assert.strictEqual(instance.startSpan.firstCall.args[0].meta['messaging.batch.message_count'], 2)
   })
 
   it('skips Queue.addBulk when producerFilter rejects every job in a non-empty batch', () => {

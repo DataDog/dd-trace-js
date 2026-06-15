@@ -204,7 +204,7 @@ class QueueAddBulkPlugin extends BaseBullmqProducerPlugin {
 
   getSpanData (ctx) {
     const queueName = ctx.self?.name || 'bullmq'
-    const jobs = this.#getFilteredJobs(ctx)
+    const jobs = ctx.arguments?.[0]
     return {
       resource: queueName,
       meta: {
