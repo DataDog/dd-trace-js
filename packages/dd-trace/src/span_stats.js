@@ -317,12 +317,12 @@ function buildResourceAttributes (tags, { reportHostname, otelSemanticsEnabled, 
 
   // Datadog-specific resource attributes are emitted only in default mode.
   if (!otelSemanticsEnabled) {
-    if (tags?.['runtime-id']) attrs['dd.runtime_id'] = tags['runtime-id']
-    // Emit each process tag (key:value) as an individual dd.<key> resource attribute.
+    if (tags?.['runtime-id']) attrs['datadog.runtime_id'] = tags['runtime-id']
+    // Emit each process tag (key:value) as an individual datadog.<key> resource attribute.
     const processTagsObject = processTags.tagsObject
     if (processTagsObject) {
       for (const key of Object.keys(processTagsObject)) {
-        attrs[`dd.${key}`] = processTagsObject[key]
+        attrs[`datadog.${key}`] = processTagsObject[key]
       }
     }
   }

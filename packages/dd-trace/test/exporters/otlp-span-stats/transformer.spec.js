@@ -117,10 +117,10 @@ describe('OtlpStatsTransformer', () => {
         'http.route': '/users/:id',
         'rpc.method': 'GetUser',
         'rpc.response.status_code': 0,
-        'dd.operation.name': 'test.op',
-        'dd.span.type': 'web',
-        'dd.origin': 'synthetics',
-        'dd.span.top_level': false,
+        'datadog.operation.name': 'test.op',
+        'datadog.span.type': 'web',
+        'datadog.origin': 'synthetics',
+        'datadog.span.top_level': false,
       })
     })
 
@@ -165,10 +165,10 @@ describe('OtlpStatsTransformer', () => {
       const payload = JSON.parse(transformer.transform(makeDrained(12340000000000, spans), BUCKET_SIZE_NS))
       const points = dataPointsOf(payload)
 
-      const ok = points.find(dp => attrMapOf(dp)['dd.span.top_level'] === true && !attrMapOf(dp)['status.code'])
+      const ok = points.find(dp => attrMapOf(dp)['datadog.span.top_level'] === true && !attrMapOf(dp)['status.code'])
       const err = points.find(dp => attrMapOf(dp)['status.code'] === 2)
       assert.ok(ok, 'ok data point should carry no status.code')
-      assert.strictEqual(attrMapOf(err)['dd.span.top_level'], true)
+      assert.strictEqual(attrMapOf(err)['datadog.span.top_level'], true)
     })
 
     it('emits at most two data points per group (ok + error) tagged top-level when all hits are top-level', () => {
@@ -182,18 +182,18 @@ describe('OtlpStatsTransformer', () => {
       const err = points.find(dp => attrMapOf(dp)['status.code'] === 2)
       assert.strictEqual(ok.count, 2)
       assert.strictEqual(err.count, 1)
-      assert.strictEqual(attrMapOf(ok)['dd.span.top_level'], true)
-      assert.strictEqual(attrMapOf(err)['dd.span.top_level'], true)
+      assert.strictEqual(attrMapOf(ok)['datadog.span.top_level'], true)
+      assert.strictEqual(attrMapOf(err)['datadog.span.top_level'], true)
     })
 
-    it('tags dd.span.top_level=false for a group mixing top-level and non-top-level hits', () => {
+    it('tags datadog.span.top_level=false for a group mixing top-level and non-top-level hits', () => {
       const spans = [makeSpan(), makeTopLevelSpan()] // same aggregation key, mixed top-level
       const payload = JSON.parse(transformer.transform(makeDrained(12340000000000, spans), BUCKET_SIZE_NS))
       const points = dataPointsOf(payload)
 
       assert.strictEqual(points.length, 1)
       assert.strictEqual(points[0].count, 2)
-      assert.strictEqual(attrMapOf(points[0])['dd.span.top_level'], false)
+      assert.strictEqual(attrMapOf(points[0])['datadog.span.top_level'], false)
     })
 
     it('omits data points with zero count', () => {
@@ -268,7 +268,10 @@ describe('OtlpStatsTransformer', () => {
       const payload = JSON.parse(transformer.transform(makeDrained(12340000000000, [span]), BUCKET_SIZE_NS))
       const attrs = attrMapOf(dataPointsOf(payload)[0])
 
-      assert.ok(!Object.keys(attrs).some(k => k.startsWith('dd.')), 'no dd.* attributes in OTel-semantics mode')
+      assert.ok(
+        !Object.keys(attrs).some(k => k.startsWith('datadog.')),
+        'no datadog.* attributes in OTel-semantics mode'
+      )
       assert.deepStrictEqual(
         { name: attrs['span.name'], method: attrs['http.request.method'], status: attrs['status.code'] },
         { name: 'GET /foo', method: 'GET', status: 2 }
@@ -303,12 +306,12 @@ describe('OtlpStatsTransformer', () => {
 
       assert.strictEqual(metric.histogram.aggregationTemporality, delta)
       const okNotTopLevel = metric.histogram.dataPoints.find(dp =>
-        dp.attributes.some(a => a.key === 'dd.span.top_level' && a.value.boolValue === false) &&
+        dp.attributes.some(a => a.key === 'datadog.span.top_level' && a.value.boolValue === false) &&
         !dp.attributes.some(a => a.key === 'status.code')
       )
       const errTopLevel = metric.histogram.dataPoints.find(dp =>
         dp.attributes.some(a => a.key === 'status.code' && Number(a.value.intValue) === 2) &&
-        dp.attributes.some(a => a.key === 'dd.span.top_level' && a.value.boolValue === true)
+        dp.attributes.some(a => a.key === 'datadog.span.top_level' && a.value.boolValue === true)
       )
       assert.ok(okNotTopLevel, 'should have ok not-top-level data point')
       assert.ok(errTopLevel, 'should have error top-level data point')

@@ -157,7 +157,7 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
         const topLevel = aggStats.hits > 0 && aggStats.topLevelHits === aggStats.hits
         const attrs = this.#otelSemanticsEnabled
           ? baseAttrs
-          : [...baseAttrs, this.#boolAttr('dd.span.top_level', topLevel)]
+          : [...baseAttrs, this.#boolAttr('datadog.span.top_level', topLevel)]
 
         this.#pushPoint(dataPoints, aggStats.okDistribution, startNano, endNano, attrs)
         this.#pushPoint(dataPoints, aggStats.errorDistribution, startNano, endNano, [...attrs, this.#errorStatus()])
@@ -209,7 +209,7 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
 
   /**
    * Builds the shared OTLP data point attributes for an aggregation key. OTel semantic-convention
-   * attributes are emitted in both modes; Datadog dd.* attributes are added only in default mode.
+   * attributes are emitted in both modes; Datadog datadog.* attributes are added only in default mode.
    * Values are emitted with their native OTLP types (e.g. the HTTP status code as an int).
    *
    * @param {import('../../span_stats').SpanAggKey} aggKey
@@ -235,9 +235,9 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
     }
 
     if (!this.#otelSemanticsEnabled) {
-      raw['dd.operation.name'] = aggKey.name
-      if (aggKey.type) raw['dd.span.type'] = aggKey.type
-      if (aggKey.origin) raw['dd.origin'] = aggKey.origin
+      raw['datadog.operation.name'] = aggKey.name
+      if (aggKey.type) raw['datadog.span.type'] = aggKey.type
+      if (aggKey.origin) raw['datadog.origin'] = aggKey.origin
     }
 
     return this.transformAttributes(raw)
