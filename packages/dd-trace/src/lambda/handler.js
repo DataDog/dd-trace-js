@@ -2,6 +2,7 @@
 
 const log = require('../log')
 const { channel } = require('../../../datadog-instrumentations/src/helpers/instrument')
+const { getEnvironmentVariable } = require('../config/helper')
 const { ERROR_MESSAGE, ERROR_TYPE } = require('../constants')
 const id = require('../id')
 const { ImpendingTimeout } = require('./runtime/errors')
@@ -65,10 +66,13 @@ function crashFlush () {
  */
 exports.datadog = function datadog (lambdaHandler) {
   return (...args) => {
-    // A snapshot-resumed MicroVM clone re-enters here on every invocation; tell
-    // the ID generator a time shift may have happened so it draws fresh kernel
-    // entropy instead of replaying the snapshot's cached randomness.
-    id.reseed()
+    // Only snapshot-resumed MicroVM clones set AWS_LAMBDA_MICROVM_IMAGE_ARN. Gate
+    // the reseed on it so the ID generator draws fresh kernel entropy after a
+    // possible time shift there, and leaves the default DRBG hot path untouched
+    // everywhere else.
+    if (getEnvironmentVariable('AWS_LAMBDA_MICROVM_IMAGE_ARN')) {
+      id.reseed()
+    }
 
     const context = extractContext(args)
 

@@ -318,14 +318,26 @@ describe('lambda snapshot reseed', () => {
 
   afterEach(() => {
     reseed.restore()
+    process.env = oldEnv
   })
 
-  it('reseeds the id generator at the start of every invocation', () => {
+  it('reseeds the id generator on every invocation inside a snapshot MicroVM clone', () => {
+    process.env = { ...oldEnv, AWS_LAMBDA_MICROVM_IMAGE_ARN: 'arn:aws:lambda:us-east-1:123:microvm/abc' }
     const wrapped = datadog(() => ({ statusCode: 200 }))
 
     wrapped()
     wrapped()
 
     assert.strictEqual(reseed.callCount, 2)
+  })
+
+  it('does not reseed when not running inside a snapshot MicroVM clone', () => {
+    process.env = { ...oldEnv }
+    delete process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
+    const wrapped = datadog(() => ({ statusCode: 200 }))
+
+    wrapped()
+
+    assert.strictEqual(reseed.callCount, 0)
   })
 })
