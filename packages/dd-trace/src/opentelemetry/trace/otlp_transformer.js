@@ -74,6 +74,9 @@ const EXCLUDED_META_KEYS = new Set([
   TRACE_ID_128,
 ])
 
+// DD-only error tags that should not appear as attributes when OTel trace semantics are enabled.
+const DD_ERROR_META_KEYS = new Set(['error.message'])
+
 /**
  * OtlpTraceTransformer transforms DD-formatted spans to OTLP trace JSON format.
  *
@@ -211,6 +214,7 @@ class OtlpTraceTransformer extends OtlpTransformerBase {
     if (span.meta) {
       for (const [key, value] of Object.entries(span.meta)) {
         if (EXCLUDED_META_KEYS.has(key)) continue
+        if (this.#otelTraceSemanticsEnabled && DD_ERROR_META_KEYS.has(key)) continue
         attributes.push({ key, value: { stringValue: value } })
       }
     }

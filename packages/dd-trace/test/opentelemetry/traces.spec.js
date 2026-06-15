@@ -589,6 +589,29 @@ describe('OpenTelemetry Traces', () => {
         assert.strictEqual(attrs['http.url'], 'http://localhost/api')
         assert.strictEqual(attrs['http.status_code'], 200)
       })
+
+      it('excludes error.message from attributes but still populates OTLP status', () => {
+        const transformer = new OtlpTraceTransformer({}, true)
+        const span = createMockSpan({
+          error: 1,
+          meta: {
+            'error.message': 'cannot read properties',
+            'http.method': 'GET',
+          },
+        })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]
+        const attrs = extractAttrs(otlpSpan.attributes)
+
+        assert.strictEqual(attrs['error.message'], undefined, 'error.message must not appear as an attribute')
+        assert.strictEqual(attrs['http.method'], 'GET', 'non-error meta should still be present')
+
+        assert.deepStrictEqual(otlpSpan.status, {
+          code: 2,
+          message: 'cannot read properties',
+        }, 'OTLP status must still be populated from error.message')
+      })
     })
   })
 
