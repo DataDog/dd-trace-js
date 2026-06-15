@@ -2,7 +2,6 @@
 
 const OtlpTransformerBase = require('../../opentelemetry/otlp/otlp_transformer_base')
 const { getProtobufTypes } = require('../../opentelemetry/otlp/protobuf_loader')
-const { VERSION } = require('../../../../../version')
 
 const NS_PER_S = 1e9
 
@@ -39,8 +38,6 @@ function sketchToFixedHistogram (sketch) {
   }
 }
 
-const SCOPE = { name: 'dd-trace', version: VERSION }
-
 // Cached at module load time since protobuf types are initialized once.
 let _deltaTemporality
 
@@ -68,8 +65,9 @@ const STATUS_CODE_ERROR = 2
  * all dd.* attributes) is omitted in OTel-semantics mode. Data points with count=0 are omitted.
  *
  * Service identity (service.name/service.version/deployment.environment.name) is carried on the
- * resource; all data points share a single InstrumentationScope. A span whose service differs from
- * the configured default service additionally carries service.name on its data point.
+ * resource. No InstrumentationScope is emitted (it would be redundant with the resource's
+ * telemetry.sdk.* attributes). A span whose service differs from the configured default service
+ * additionally carries service.name on its data point.
  *
  * @class OtlpStatsTransformer
  * @augments OtlpTransformerBase
@@ -167,9 +165,9 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
     }
 
     if (dataPoints.length === 0) return []
+    // No InstrumentationScope: a `dd-trace` scope is redundant with the resource's telemetry.sdk.*
+    // attributes, so the scope field is omitted.
     return [{
-      scope: this.#buildScope(),
-      schemaUrl: '',
       metrics: [
         {
           name: 'traces.span.sdk.metrics.duration',
@@ -179,16 +177,6 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
         },
       ],
     }]
-  }
-
-  /**
-   * Builds the single dd-trace InstrumentationScope. Service identity is carried on the resource,
-   * so the scope has no attributes.
-   *
-   * @returns {object}
-   */
-  #buildScope () {
-    return { name: SCOPE.name, version: SCOPE.version, attributes: [] }
   }
 
   /**

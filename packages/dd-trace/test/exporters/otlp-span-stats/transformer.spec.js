@@ -203,30 +203,29 @@ describe('OtlpStatsTransformer', () => {
       assert.strictEqual(dataPointsOf(payload).length, 1)
     })
 
-    it('reports service identity on the resource, not the dd-trace scope', () => {
+    it('reports service identity on the resource and emits no InstrumentationScope', () => {
       const payload = JSON.parse(transformer.transform(makeDrained(12340000000000, [makeSpan()]), BUCKET_SIZE_NS))
       const resourceAttrs = Object.fromEntries(
         payload.resourceMetrics[0].resource.attributes.map(a => [a.key, a.value.stringValue])
       )
-      const scope = payload.resourceMetrics[0].scopeMetrics[0].scope
+      const scopeMetrics = payload.resourceMetrics[0].scopeMetrics[0]
 
-      assert.strictEqual(scope.name, 'dd-trace')
-      assert.deepStrictEqual(scope.attributes, [], 'scope carries no service identity attributes')
+      assert.ok(!('scope' in scopeMetrics), 'no InstrumentationScope should be emitted')
       assert.strictEqual(resourceAttrs['service.name'], 'svc')
       assert.strictEqual(resourceAttrs['service.version'], '1.2.3')
       assert.strictEqual(resourceAttrs['deployment.environment.name'], 'test')
     })
 
-    it('emits a single scope and tags data points whose service differs from the default', () => {
+    it('emits a single scopeMetrics and tags data points whose service differs from the default', () => {
       const drained = makeDrained(12340000000000, [
         makeSpan({ service: 'svc', resource: 'GET /foo' }), // default service -> service.name omitted
         makeSpan({ service: 'svc-other', resource: 'GET /bar' }), // custom service -> service.name emitted
       ])
       const payload = JSON.parse(transformer.transform(drained, BUCKET_SIZE_NS))
-      const scopes = payload.resourceMetrics[0].scopeMetrics
+      const scopeMetrics = payload.resourceMetrics[0].scopeMetrics
 
-      assert.strictEqual(scopes.length, 1)
-      assert.deepStrictEqual(scopes[0].scope.attributes, [])
+      assert.strictEqual(scopeMetrics.length, 1)
+      assert.ok(!('scope' in scopeMetrics[0]), 'no InstrumentationScope should be emitted')
       const serviceByResource = Object.fromEntries(
         dataPointsOf(payload).map(dp => [attrMapOf(dp)['span.name'], attrMapOf(dp)['service.name']])
       )
