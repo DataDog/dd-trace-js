@@ -8,8 +8,8 @@ const AWS_SDK_V3_RANGE = NODE_MAJOR === 18 ? '3.0.0' : '>3.0.0'
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
 /**
- * @param {object} client SQS client (v2 `AWS.SQS` or v3 aggregated client).
- * @param {string} method Operation name, e.g. `sendMessage`.
+ * @param {object} client AWS client (v2 service instance or v3 aggregated client).
+ * @param {string} method Operation name, e.g. `getRecords` or `sendMessage`.
  * @param {object} params Operation parameters.
  * @returns {Promise<object>} Resolves with the operation result.
  */
