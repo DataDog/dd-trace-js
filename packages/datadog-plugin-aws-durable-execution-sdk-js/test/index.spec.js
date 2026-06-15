@@ -53,6 +53,29 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
 }, (meta) => {
   const { agent } = meta
 
+  // Run with the cross-invocation trace-context checkpoint feature (default-on) disabled.
+  // The feature is gated at plugin-construction time: the handler plugin subscribes to the
+  // terminate channel only when enabled, and the instrumentation wraps terminate() only while
+  // that channel has subscribers. So we disable for a single invocation by unsubscribing that
+  // one subscription, then restore it.
+  // TODO: Remove this once the bug is fixed upstream in aws/aws-durable-execution-sdk-js#544.
+  const TERMINATE_CHANNEL = 'apm:aws-durable-execution-sdk-js:terminate'
+
+  function terminateSubscription () {
+    const composite = meta.tracer._pluginManager?._pluginsByName?.['aws-durable-execution-sdk-js']
+    return composite?.handler?._subscriptions?.find(sub => sub._channel?.name === TERMINATE_CHANNEL)
+  }
+
+  async function withCrossInvocationTracingDisabled (fn) {
+    const subscription = terminateSubscription()
+    subscription?.disable()
+    try {
+      return await fn()
+    } finally {
+      subscription?.enable()
+    }
+  }
+
   beforeEach(async () => setup(meta.mod, meta.versionMod))
   afterEach(async () => teardown())
 
@@ -102,7 +125,7 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     })
   })
 
-  for (const { span, operationName, run, opts } of [
+  for (const { span, operationName, run, opts, disableCrossInvocationTracing } of [
     {
       span: 'aws.durable.step',
       operationName: 'test-step',
@@ -131,6 +154,9 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
       operationName: 'test-callback',
       run: ctx => ctx.waitForCallback('test-callback', async () => {}),
       opts: { resolveCallback: 'test-callback' },
+      // Resume is driven externally by sendCallbackSuccess(); run with the checkpoint feature
+      // disabled to avoid the #544 race (see withCrossInvocationTracingDisabled).
+      disableCrossInvocationTracing: true,
     },
     {
       span: 'aws.durable.create_callback',
@@ -158,7 +184,8 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
         assert.match(matched.meta?.['aws.durable.operation_id'] ?? '', OPERATION_ID_RE)
         assert.notEqual(matched.error, 1, `${span} happy path should not be errored`)
       })
-      await invokeHandler(async (event, ctx) => run(ctx), opts)
+      const invoke = () => invokeHandler(async (event, ctx) => run(ctx), opts)
+      await (disableCrossInvocationTracing ? withCrossInvocationTracingDisabled(invoke) : invoke())
       return tracePromise
     })
   }
@@ -260,6 +287,10 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     })
   })
 
+  // The chained-invoke resume (target completing) is driven externally, so the checkpoint hook
+  // races the #544 TimerScheduler bug. These assert invoke span shape only — independent of the
+  // checkpoint feature — so we run them with the feature disabled (see
+  // withCrossInvocationTracingDisabled) rather than skipping them.
   describe('DurableContextImpl.invoke() - aws.durable.invoke', () => {
     it('happy: emits function_name, operation_name and operation_id with span.kind=client', async () => {
       const tracePromise = agent.assertSomeTraces(traces => {
@@ -277,10 +308,10 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
         assert.match(matched.meta?.['aws.durable.operation_id'] ?? '', OPERATION_ID_RE)
       })
 
-      const result = await invokeHandler(
+      const result = await withCrossInvocationTracingDisabled(() => invokeHandler(
         async (event, ctx) => ctx.invoke('test-func', TEST_FUNC_ARN, {}),
-        { invokeTarget: async () => {} }
-      )
+        { invokeTarget: async () => { } }
+      ))
       assert.notStrictEqual(result, undefined, 'invoke should return a result')
 
       return tracePromise
@@ -299,10 +330,10 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
       }))
 
       try {
-        await invokeHandler(
+        await withCrossInvocationTracingDisabled(() => invokeHandler(
           async (event, ctx) => ctx.invoke('error-func', TEST_FUNC_ARN, {}),
           { invokeTarget: async () => { throw new Error('Intentional invoke error') } }
-        )
+        ))
       } catch { /* expected */ }
 
       return tracePromise
@@ -340,5 +371,116 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     assert.equal(attempts, 2, 'expected the step body to be called twice (initial + retry)')
 
     return Promise.all([failedAttemptSpan, succeededAttemptSpan, successfulExecuteSpan])
+  })
+
+  // Regression coverage for the SDK "safe paths" the trace-checkpoint hook relies on
+  // (see packages/datadog-plugin-aws-durable-execution-sdk-js/src/trace-checkpoint.js).
+  // These exercise the real @aws/durable-execution-sdk-js + @aws/durable-execution-sdk-js-testing
+  // version pinned in packages/dd-trace/test/plugins/versions/package.json. If an SDK upgrade
+  // starts iterating all stepData entries, drops the chronological Operations[0] guarantee,
+  // or routes our blake2b-hashed stepIds through the user-step lifecycle map, one of these
+  // will fail and tell us exactly which assumption broke.
+  describe('trace-checkpoint propagation (SDK safe-path coverage)', () => {
+    const CHECKPOINT_NAME_RE = /^_datadog_\d+$/
+
+    const checkpointOps = (result) =>
+      result.getOperations().filter(op => CHECKPOINT_NAME_RE.test(op.getName() ?? ''))
+
+    const parseCheckpointHeaders = (op) => {
+      const data = op.getOperationData()
+      const payload = data?.Payload ?? data?.StepDetails?.Result
+      return typeof payload === 'string' ? JSON.parse(payload) : null
+    }
+
+    // Safe paths covered: stepData namespace isolation (getStepData lookups by user-code
+    // sequential stepIds never hit our blake2b-hashed entries) and Operations[0] ordering
+    // (the customer's original payload remains reachable on resume even though our
+    // _datadog_* op is appended to InitialExecutionState.Operations).
+    //
+    // NB: This test does NOT assert trace_id continuity across initial and replay
+    // spans. The dd-trace integration only persists the checkpoint; the extraction
+    // layer that seeds the resumed invocation with the saved context lives in
+    // datadog-lambda-js (the upstream wrapper), which isn't loaded in this harness.
+    // See dd-trace-py tests/contrib/aws_durable_execution_sdk_python/
+    // test_aws_durable_execution_sdk_python.py docstring for the parallel reasoning.
+    it('single cycle: writes _datadog_0, preserves customer payload across resume', async () => {
+      const replayExecute = agent.assertSomeTraces(traces => assertSpanByName(traces, {
+        name: 'aws.durable.execute',
+        meta: { 'aws.durable.replayed': 'true' },
+      }), { timeoutMs: 5000 })
+
+      const handlerInputs = []
+      const result = await invokeHandler(async (event, ctx) => {
+        handlerInputs.push(event)
+        await ctx.wait('checkpoint-trigger', { seconds: 1 })
+      })
+
+      assert.equal(handlerInputs.length, 2, 'handler should run on initial invocation and resume')
+      for (const ev of handlerInputs) {
+        assertObjectContains(ev, { testInput: true })
+      }
+
+      const saved = checkpointOps(result)
+      assert.ok(saved.length >= 1, `expected a _datadog_ checkpoint op, got names: ${
+        result.getOperations().map(o => o.getName()).join(', ')}`)
+      const headers = parseCheckpointHeaders(saved[0])
+      assert.ok(headers?.['x-datadog-trace-id'], 'checkpoint payload should carry x-datadog-trace-id')
+      assert.ok(headers?.['x-datadog-parent-id'], 'checkpoint payload should carry x-datadog-parent-id')
+      // Checkpoints are written and read entirely by Datadog code, so we force
+      // datadog-only injection regardless of the user's propagation-style config.
+      assert.equal(headers?.traceparent, undefined,
+        'tracecontext headers must not be persisted — checkpoints are datadog-style only')
+      assert.equal(headers?.tracestate, undefined,
+        'tracestate must not be persisted — checkpoints are datadog-style only')
+
+      return replayExecute
+    })
+
+    // Safe path covered: hasFinishedAncestor() in CheckpointManager parses stepIds by
+    // splitting on `-`. Our 64-char hex blake2b stepIds contain no `-`, so even when the
+    // suspend happens inside runInChildContext (whose own child stepIds DO use `-`),
+    // ancestor-finished pruning never targets our checkpoint write.
+    it('child-context: checkpoint still saves when suspend happens inside runInChildContext', async () => {
+      const replayExecute = agent.assertSomeTraces(traces => assertSpanByName(traces, {
+        name: 'aws.durable.execute',
+        meta: { 'aws.durable.replayed': 'true' },
+      }), { timeoutMs: 5000 })
+
+      const result = await invokeHandler(async (event, ctx) =>
+        ctx.runInChildContext('child', async cctx => cctx.wait('child-wait', { seconds: 1 })))
+
+      assert.ok(checkpointOps(result).length >= 1,
+        'a _datadog_ checkpoint must save even when the suspend originates inside runInChildContext')
+
+      return replayExecute
+    })
+
+    // Safe paths covered: this.operations lifecycle map (checkAndTerminate / cleanupAllOperations
+    // never see us) and validateReplayConsistency (per-stepId, called only with user stepIds).
+    // A real step before AND after a suspend forces the SDK to (1) validateReplayConsistency
+    // against the prior step's stored entry, (2) walk through REPLAY → ExecutionMode while our
+    // _datadog_0 sits in stepData, and (3) start a fresh user step after the transition. Any
+    // leakage of our blake2b-hashed entries into those checks would surface as
+    // NonDeterministicExecutionError or a hung termination.
+    it('step-suspend-step: replay-validation runs around our _datadog_0 without errors', async () => {
+      const succeededExecute = agent.assertSomeTraces(traces => assertSpanByName(traces, {
+        name: 'aws.durable.execute',
+        meta: { 'aws.durable.invocation_status': 'succeeded' },
+      }), { timeoutMs: 5000 })
+
+      const stepInvocations = { before: 0, after: 0 }
+      const result = await invokeHandler(async (event, ctx) => {
+        await ctx.step('before', async () => { stepInvocations.before++ })
+        await ctx.wait('mid-wait', { seconds: 1 })
+        await ctx.step('after', async () => { stepInvocations.after++ })
+      })
+
+      assert.equal(stepInvocations.before, 1, "'before' step body must run exactly once across replay")
+      assert.equal(stepInvocations.after, 1, "'after' step body must run exactly once after the suspend resume")
+      assert.ok(checkpointOps(result).length >= 1,
+        'expected at least one _datadog_ checkpoint op across the suspend cycle')
+
+      return succeededExecute
+    })
   })
 })
