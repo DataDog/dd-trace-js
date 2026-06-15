@@ -38,8 +38,10 @@ withVersions('express', 'express', version => {
       if (isExpress4) {
         app.get('/items/:id?', (req, res) => res.end('OK'))
       } else {
-        // Express 5: {/:id} optional segment — our normalizer returns null (omit-rather-than-guess)
         app.get('/items{/:id}', (req, res) => res.end('OK'))
+        // Express 5 optional static group and nested optional groups
+        app.get('/posts{/draft}', (req, res) => res.end('OK'))
+        app.get('/tree{/:branch{/:leaf}}', (req, res) => res.end('OK'))
       }
 
       // Multi-param segment in one URL segment
@@ -172,6 +174,46 @@ withVersions('express', 'express', version => {
         await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
           assert.equal(span.meta['_dd.appsec.normalized_route'], '/items')
+        })
+      })
+
+      it('sets normalized route for Express 5 optional static group {/draft} — present', async () => {
+        enableAppsecWithApiSecurity()
+        await axios.get('/posts/draft')
+
+        await agent.assertSomeTraces((traces) => {
+          const span = traces[0][0]
+          assert.equal(span.meta['_dd.appsec.normalized_route'], '/posts/draft')
+        })
+      })
+
+      it('sets normalized route for Express 5 optional static group {/draft} — absent', async () => {
+        enableAppsecWithApiSecurity()
+        await axios.get('/posts')
+
+        await agent.assertSomeTraces((traces) => {
+          const span = traces[0][0]
+          assert.equal(span.meta['_dd.appsec.normalized_route'], '/posts')
+        })
+      })
+
+      it('sets normalized route for Express 5 nested optional groups — both present', async () => {
+        enableAppsecWithApiSecurity()
+        await axios.get('/tree/main/leaf1')
+
+        await agent.assertSomeTraces((traces) => {
+          const span = traces[0][0]
+          assert.equal(span.meta['_dd.appsec.normalized_route'], '/tree/{branch}/{leaf}')
+        })
+      })
+
+      it('sets normalized route for Express 5 nested optional groups — inner absent', async () => {
+        enableAppsecWithApiSecurity()
+        await axios.get('/tree/main')
+
+        await agent.assertSomeTraces((traces) => {
+          const span = traces[0][0]
+          assert.equal(span.meta['_dd.appsec.normalized_route'], '/tree/{branch}')
         })
       })
     }
