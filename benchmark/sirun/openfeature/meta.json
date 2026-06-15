@@ -9,7 +9,7 @@
     "flag-eval-hook": {
       "env": {
         "VARIANT": "flag-eval-hook",
-        "COUNT": "12000000"
+        "COUNT": "40000000"
       }
     },
     "aggregate": {
