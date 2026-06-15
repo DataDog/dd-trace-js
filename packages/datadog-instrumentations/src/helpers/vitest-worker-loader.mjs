@@ -1,8 +1,12 @@
 import { load as iitmLoad, resolve as iitmResolve } from 'import-in-the-middle/hook.mjs'
-import configHelper from '../packages/dd-trace/src/config/helper.js'
+
+import configHelper from '../../../dd-trace/src/config/helper.js'
 
 // This file must support Node.js 12.0.0 syntax
 
+// Vitest isolate:true runs each test file in a worker, so the default ESM loader cost is paid per suite.
+// This worker loader keeps import-in-the-middle on the path only for the Vitest and HTTP modules that
+// Test Optimization needs inside workers, while letting unrelated imports resolve without rewriter setup.
 const VITEST_WORKER_INSTRUMENTATION_INCLUDES = [
   '@vitest/runner',
   'http',
@@ -29,21 +33,14 @@ const vitestWorkerLoader = {
   load,
   resolve,
 }
-const VITEST_LIGHT_INIT_ENV = 'DD_EXPERIMENTAL_TEST_OPT_VITEST_LIGHT_INIT'
 
 // For some reason `getEnvironmentVariable` is not otherwise available to ESM.
 const env = configHelper.getEnvironmentVariable
 
 function getVitestWorkerLoader () {
-  if (env('DD_VITEST_WORKER') && isVitestLightInitEnabled()) {
+  if (env('DD_VITEST_WORKER')) {
     return vitestWorkerLoader
   }
-}
-
-function isVitestLightInitEnabled () {
-  // eslint-disable-next-line eslint-rules/eslint-process-env
-  const value = process.env[VITEST_LIGHT_INIT_ENV]
-  return value === 'true' || value === '1'
 }
 
 function addInstrumentations (data) {

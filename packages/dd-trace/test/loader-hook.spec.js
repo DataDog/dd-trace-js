@@ -8,15 +8,12 @@ describe('loader-hook', () => {
   let importCounter = 0
   let originalTinypoolWorkerId
   let originalDdVitestWorker
-  let originalVitestLightInit
 
   beforeEach(() => {
     originalTinypoolWorkerId = process.env.TINYPOOL_WORKER_ID
     originalDdVitestWorker = process.env.DD_VITEST_WORKER
-    originalVitestLightInit = process.env.DD_EXPERIMENTAL_TEST_OPT_VITEST_LIGHT_INIT
     delete process.env.TINYPOOL_WORKER_ID
     delete process.env.DD_VITEST_WORKER
-    delete process.env.DD_EXPERIMENTAL_TEST_OPT_VITEST_LIGHT_INIT
   })
 
   afterEach(() => {
@@ -29,11 +26,6 @@ describe('loader-hook', () => {
       delete process.env.DD_VITEST_WORKER
     } else {
       process.env.DD_VITEST_WORKER = originalDdVitestWorker
-    }
-    if (originalVitestLightInit === undefined) {
-      delete process.env.DD_EXPERIMENTAL_TEST_OPT_VITEST_LIGHT_INIT
-    } else {
-      process.env.DD_EXPERIMENTAL_TEST_OPT_VITEST_LIGHT_INIT = originalVitestLightInit
     }
   })
 
@@ -50,7 +42,6 @@ describe('loader-hook', () => {
 
   it('uses the default ESM loader when only TINYPOOL_WORKER_ID is set', async () => {
     process.env.TINYPOOL_WORKER_ID = '1'
-    process.env.DD_EXPERIMENTAL_TEST_OPT_VITEST_LIGHT_INIT = 'true'
 
     const loaderHook = await importLoaderHook()
     const result = await resolveModule(loaderHook, 'left-pad', 'file:///app/node_modules/left-pad/index.js')
@@ -62,21 +53,8 @@ describe('loader-hook', () => {
     })
   })
 
-  it('uses the default ESM loader in Vitest workers when light init is disabled', async () => {
-    process.env.DD_VITEST_WORKER = '1'
-
-    const loaderHook = await importLoaderHook()
-    const result = await resolveModule(loaderHook, 'left-pad', 'file:///app/node_modules/left-pad/index.js')
-
-    assert.deepStrictEqual(result, {
-      url: 'file:///app/node_modules/left-pad/index.js?iitm=true',
-      shortCircuit: true,
-      format: undefined,
-    })
-  })
-
-  it('skips import-in-the-middle for non-target modules when Vitest light init is enabled', async () => {
-    enableVitestLightInit()
+  it('skips import-in-the-middle for non-target modules in Vitest workers', async () => {
+    markVitestWorker()
 
     const loaderHook = await importLoaderHook()
     const result = await resolveModule(loaderHook, 'left-pad', 'file:///app/node_modules/left-pad/index.js')
@@ -86,8 +64,8 @@ describe('loader-hook', () => {
     })
   })
 
-  it('uses import-in-the-middle for Vitest runner modules when Vitest light init is enabled', async () => {
-    enableVitestLightInit()
+  it('uses import-in-the-middle for Vitest runner modules in Vitest workers', async () => {
+    markVitestWorker()
 
     const loaderHook = await importLoaderHook()
     const result = await resolveModule(
@@ -103,8 +81,8 @@ describe('loader-hook', () => {
     })
   })
 
-  it('uses import-in-the-middle for HTTP builtins when Vitest light init is enabled', async () => {
-    enableVitestLightInit()
+  it('uses import-in-the-middle for HTTP builtins in Vitest workers', async () => {
+    markVitestWorker()
 
     const loaderHook = await importLoaderHook()
     const result = await resolveModule(loaderHook, 'node:http', 'node:http')
@@ -116,8 +94,8 @@ describe('loader-hook', () => {
     })
   })
 
-  it('does not use import-in-the-middle for DNS and net builtins when Vitest light init is enabled', async () => {
-    enableVitestLightInit()
+  it('does not use import-in-the-middle for DNS and net builtins in Vitest workers', async () => {
+    markVitestWorker()
 
     const loaderHook = await importLoaderHook()
 
@@ -132,9 +110,8 @@ describe('loader-hook', () => {
     })
   })
 
-  function enableVitestLightInit () {
+  function markVitestWorker () {
     process.env.DD_VITEST_WORKER = '1'
-    process.env.DD_EXPERIMENTAL_TEST_OPT_VITEST_LIGHT_INIT = 'true'
   }
 
   function importLoaderHook () {

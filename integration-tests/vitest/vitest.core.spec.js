@@ -256,43 +256,49 @@ versions.forEach((version) => {
       })
     })
 
-    newerVitestIt('sets DD_VITEST_WORKER in fork workers', async () => {
-      const payloadsPromise = receiver.gatherPayloadsMaxTimeout(
-        ({ url }) => url === '/api/v2/citestcycle',
-        payloads => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-          const testEvent = events.find(event => event.type === 'test')
+    // Vitest 3.x threads do not expose the newer pool worker hook, so only fork workers get DD_VITEST_WORKER.
+    const workerEnvPoolConfig = version === 'latest' ? poolConfig : ['forks']
 
-          assert.ok(testEvent, 'should have test event')
-          assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'pass')
-          assert.strictEqual(testEvent.content.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
-        }
-      )
+    workerEnvPoolConfig.forEach((poolConfig) => {
+      newerVitestIt(`sets DD_VITEST_WORKER in workers with pool=${poolConfig}`, async () => {
+        const payloadsPromise = receiver.gatherPayloadsMaxTimeout(
+          ({ url }) => url === '/api/v2/citestcycle',
+          payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const testEvent = events.find(event => event.type === 'test')
 
-      childProcess = exec(
-        './node_modules/.bin/vitest run',
-        {
-          cwd,
-          env: {
-            ...getCiVisAgentlessConfig(receiver.port),
-            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-            TEST_DIR: 'ci-visibility/vitest-tests/vitest-worker-env.mjs',
-            POOL_CONFIG: 'forks',
-            DD_EXPERIMENTAL_TEST_OPT_VITEST_LIGHT_INIT: 'true',
-            DD_SERVICE: undefined,
-          },
-        }
-      )
+            assert.ok(testEvent, 'should have test event')
+            assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'pass')
+            if (poolConfig === 'forks') {
+              assert.strictEqual(testEvent.content.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
+            }
+          }
+        )
 
-      childProcess.stdout.on('data', data => { testOutput += data })
-      childProcess.stderr.on('data', data => { testOutput += data })
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              TEST_DIR: 'ci-visibility/vitest-tests/vitest-worker-env.mjs',
+              POOL_CONFIG: poolConfig,
+              DD_SERVICE: undefined,
+            },
+          }
+        )
 
-      const [[exitCode]] = await Promise.all([
-        once(childProcess, 'exit'),
-        payloadsPromise,
-      ])
+        childProcess.stdout.on('data', data => { testOutput += data })
+        childProcess.stderr.on('data', data => { testOutput += data })
 
-      assert.strictEqual(exitCode, 0, testOutput)
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          payloadsPromise,
+        ])
+
+        assert.strictEqual(exitCode, 0, testOutput)
+      })
     })
 
     it('propagates test span context to HTTP requests and hooks during test execution', async () => {

@@ -4,7 +4,7 @@ import hooks from './packages/datadog-instrumentations/src/helpers/hooks.js'
 import configHelper from './packages/dd-trace/src/config/helper.js'
 import * as rewriterLoader from './packages/datadog-instrumentations/src/helpers/rewriter/loader.mjs'
 import { isRelativeRequire } from './packages/datadog-instrumentations/src/helpers/shared-utils.js'
-import { getVitestWorkerLoader } from './ci/vitest-worker-loader.mjs'
+import { getVitestWorkerLoader } from './packages/datadog-instrumentations/src/helpers/vitest-worker-loader.mjs'
 
 // This file must support Node.js 12.0.0 syntax
 
