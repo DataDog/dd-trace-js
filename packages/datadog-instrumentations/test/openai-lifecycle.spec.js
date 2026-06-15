@@ -90,6 +90,10 @@ function blockLifecycle (ctx, err) {
   ctx.pending.push(Promise.resolve())
 }
 
+function blockLifecycleSynchronously (ctx, err) {
+  ctx.abortController.abort(err)
+}
+
 function loadOpenAIInstrumentation () {
   const instrumentPath = require.resolve('../src/helpers/instrument')
   const realInstrument = require(instrumentPath)
@@ -231,6 +235,45 @@ describe('openai lifecycle instrumentation', () => {
         () => completions.create({ messages: [{ role: 'user', content: 'Hi' }] }).parse(),
         e => e === err
       ).finally(unsubscribe)
+    })
+
+    it('rejects when the before lifecycle aborts synchronously without pending work', () => {
+      const err = lifecycleAbortError()
+      const unsubscribe = subscribeWithHandler(
+        [chatCompletionsBeforeChannel],
+        ctx => blockLifecycleSynchronously(ctx, err)
+      )
+      const completions = new Completions()
+      completions._nextApiPromise = new FakeAPIPromise({ choices: [{ message: { role: 'assistant', content: 'x' } }] })
+
+      return assert.rejects(
+        () => completions.create({ messages: [{ role: 'user', content: 'Hi' }] }).parse(),
+        e => e === err
+      ).finally(unsubscribe)
+    })
+
+    it('does not run before lifecycle until the returned APIPromise is consumed', async () => {
+      const unhandledRejections = []
+      const onUnhandledRejection = err => unhandledRejections.push(err)
+      let calls = 0
+      const unsubscribe = subscribeWithHandler([chatCompletionsBeforeChannel], ctx => {
+        calls++
+        blockLifecycle(ctx, lifecycleAbortError())
+      })
+      const completions = new Completions()
+      completions._nextApiPromise = new FakeAPIPromise({ choices: [{ message: { role: 'assistant', content: 'x' } }] })
+      process.on('unhandledRejection', onUnhandledRejection)
+
+      try {
+        completions.create({ messages: [{ role: 'user', content: 'Hi' }] })
+        await new Promise(resolve => setImmediate(resolve))
+
+        assert.strictEqual(calls, 0)
+        assert.deepStrictEqual(unhandledRejections, [])
+      } finally {
+        process.removeListener('unhandledRejection', onUnhandledRejection)
+        unsubscribe()
+      }
     })
 
     it('rejects when the after lifecycle denies', () => {

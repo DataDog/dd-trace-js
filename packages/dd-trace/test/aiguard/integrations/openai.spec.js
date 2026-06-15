@@ -147,4 +147,14 @@ describe('AIGuard OpenAI integration', () => {
 
     assert.strictEqual(ctx.abortController.signal.reason, err)
   })
+
+  it('aborts immediately when evaluation throws an AIGuardAbortError synchronously', () => {
+    const err = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
+    evaluate.throws(err)
+
+    const ctx = publish(responsesBeforeChannel, { args: [{ input: 'Hello' }] })
+
+    assert.strictEqual(ctx.pending.length, 0)
+    assert.strictEqual(ctx.abortController.signal.reason, err)
+  })
 })

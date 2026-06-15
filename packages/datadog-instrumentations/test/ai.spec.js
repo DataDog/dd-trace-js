@@ -74,6 +74,22 @@ function subscribeAutoReject (channels) {
   }
 }
 
+function subscribeSyncAbort (channels) {
+  const err = Object.assign(new Error(), { name: 'AIGuardAbortError', reason: 'blocked' })
+  const handler = ctx => ctx.abortController.abort(err)
+  for (const lifecycleChannel of channels) {
+    lifecycleChannel.subscribe(handler)
+  }
+  return {
+    err,
+    unsubscribe: () => {
+      for (const lifecycleChannel of channels) {
+        lifecycleChannel.unsubscribe(handler)
+      }
+    },
+  }
+}
+
 function subscribeAbortOnCall (channels, abortOnCall, err) {
   let callCount = 0
   const handler = ctx => {
@@ -164,6 +180,16 @@ describe('wrapModelWithLifecycle', () => {
 
     it('rejects with guard error when input is rejected', () => {
       const { err, unsubscribe } = subscribeAutoReject([doGenerateBeforeChannel])
+      const original = sinon.stub().resolves({ content: [] })
+      model.doGenerate = original
+      wrapModelWithLifecycle(model)
+
+      return assert.rejects(() => model.doGenerate({ prompt }), e => e === err)
+        .finally(unsubscribe)
+    })
+
+    it('rejects when input evaluation aborts synchronously without pending work', () => {
+      const { err, unsubscribe } = subscribeSyncAbort([doGenerateBeforeChannel])
       const original = sinon.stub().resolves({ content: [] })
       model.doGenerate = original
       wrapModelWithLifecycle(model)

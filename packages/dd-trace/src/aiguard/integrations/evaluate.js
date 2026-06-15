@@ -3,11 +3,10 @@
 const log = require('../../log')
 
 /**
- * Pushes one AI Guard evaluation promise into a lifecycle ctx.
+ * Starts one AI Guard evaluation for a lifecycle ctx.
  *
- * Subscribers must push synchronously during channel publication. Abort before
- * the pushed promise resolves so publishers can inspect `signal.reason` after
- * `Promise.all(ctx.pending)`.
+ * Async evaluations are pushed synchronously during channel publication. If
+ * evaluation throws synchronously, the error is handled before publish returns.
  *
  * @param {object} ctx
  * @param {AbortController} ctx.abortController
@@ -25,7 +24,7 @@ function pushEvaluation (ctx, aiguard, messages, opts) {
   try {
     ctx.pending.push(aiguard.evaluate(messages, evaluateOpts).catch(handleEvaluationError.bind(null, ctx)))
   } catch (err) {
-    ctx.pending.push(Promise.resolve().then(() => handleEvaluationError(ctx, err)))
+    handleEvaluationError(ctx, err)
   }
 }
 

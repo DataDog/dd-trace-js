@@ -285,12 +285,15 @@ for (const extension of extensions) {
 
             const apiProm = methodFn.apply(this, args)
 
-            // Publish :before eagerly so the after gate and any side channels share one verdict.
-            const beforeVerdict = hasLifecycle && channels.before.hasSubscribers
-              ? publishLifecycle(channels.before, { args, parentSpan })
-              : null
-
+            const beforeChannel = hasLifecycle && channels.before.hasSubscribers ? channels.before : null
             const afterChannel = hasLifecycle && channels.after.hasSubscribers ? channels.after : null
+            let beforeVerdict
+            const getBeforeVerdict = beforeChannel
+              ? function getBeforeVerdict () {
+                beforeVerdict ??= publishLifecycle(beforeChannel, { args, parentSpan })
+                return beforeVerdict
+              }
+              : null
 
             if (baseResource === 'chat.completions' && typeof apiProm._thenUnwrap === 'function') {
               // this should only ever be invoked from a client.beta.chat.completions.parse call
@@ -305,7 +308,9 @@ for (const extension of extensions) {
                   const parsedPromise = origApiPromParse.apply(this, args)
                     .then(body => Promise.all([this.responsePromise, body]))
 
-                  return handleUnwrappedAPIPromise(parsedPromise, ctx, stream, beforeVerdict, afterChannel, parentSpan)
+                  return handleUnwrappedAPIPromise(
+                    parsedPromise, ctx, stream, getBeforeVerdict, afterChannel, parentSpan
+                  )
                 })
 
                 return unwrappedPromise
@@ -318,14 +323,14 @@ for (const extension of extensions) {
               const parsedPromise = origApiPromParse.apply(this, args)
                 .then(body => Promise.all([this.responsePromise, body]))
 
-              return handleUnwrappedAPIPromise(parsedPromise, ctx, stream, beforeVerdict, afterChannel, parentSpan)
+              return handleUnwrappedAPIPromise(parsedPromise, ctx, stream, getBeforeVerdict, afterChannel, parentSpan)
             })
 
             // Gate `.asResponse()` callers on the before verdict so raw-response paths still block.
-            if (beforeVerdict && typeof apiProm.asResponse === 'function') {
+            if (beforeChannel && typeof apiProm.asResponse === 'function') {
               shimmer.wrap(apiProm, 'asResponse', origAsResponse => function (...args) {
                 const responsePromise = origAsResponse.apply(this, args)
-                return Promise.all([beforeVerdict, responsePromise]).then(([, response]) => response)
+                return Promise.all([getBeforeVerdict(), responsePromise]).then(([, response]) => response)
               })
             }
 
@@ -340,9 +345,9 @@ for (const extension of extensions) {
   }
 }
 
-function handleUnwrappedAPIPromise (apiProm, ctx, stream, beforeVerdict, afterChannel, parentSpan) {
-  const gatedApiProm = beforeVerdict
-    ? Promise.all([beforeVerdict, apiProm]).then(([, result]) => result)
+function handleUnwrappedAPIPromise (apiProm, ctx, stream, getBeforeVerdict, afterChannel, parentSpan) {
+  const gatedApiProm = getBeforeVerdict
+    ? Promise.all([getBeforeVerdict(), apiProm]).then(([, result]) => result)
     : apiProm
 
   return gatedApiProm
