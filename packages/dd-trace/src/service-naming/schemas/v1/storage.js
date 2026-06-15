@@ -54,6 +54,11 @@ const storage = {
       serviceName: configWithFallback,
       serviceSource: optionServiceSource,
     },
+    knex: {
+      opName: () => 'knex.pool.acquire',
+      serviceName: configWithFallback,
+      serviceSource: optionServiceSource,
+    },
     mariadb: {
       opName: () => 'mariadb.query',
       serviceName: withFunction,
@@ -92,6 +97,11 @@ const storage = {
       serviceSource: optionServiceSource,
     },
     redis: redisNaming,
+    sequelize: {
+      opName: () => 'sequelize.pool.acquire',
+      serviceName: configWithFallback,
+      serviceSource: optionServiceSource,
+    },
     tedious: {
       opName: () => 'mssql.query',
       serviceName: configWithFallback,

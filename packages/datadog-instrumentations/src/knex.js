@@ -3,10 +3,14 @@
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel } = require('./helpers/instrument')
 const { wrapThen } = require('./helpers/promise')
+const { wrapPoolAcquire } = require('./helpers/promise-pool-acquire')
 
 const startRawQueryCh = channel('datadog:knex:raw:start')
 const rawQuerySubscribes = channel('datadog:knex:raw:subscribes')
 const finishRawQueryCh = channel('datadog:knex:raw:finish')
+
+const startPoolAcquireCh = channel('apm:knex:pool:acquire:start')
+const finishPoolAcquireCh = channel('apm:knex:pool:acquire:finish')
 
 patch('lib/query/builder.js')
 patch('lib/raw.js')
@@ -32,6 +36,17 @@ addHook({
   versions: ['>=2'],
   file: 'lib/knex-builder/Knex.js',
 }, Knex => {
+  // `acquireConnection` pulls a connection from the tarn pool before every query. Wrap it so a caller
+  // that has to wait for a busy pool gets a span reporting that wait; a connection handed back from
+  // the free list takes the fast path with no span. See helpers/promise-pool-acquire.js.
+  shimmer.wrap(Knex.Client.prototype, 'acquireConnection', acquireConnection => wrapPoolAcquire(
+    acquireConnection,
+    startPoolAcquireCh,
+    finishPoolAcquireCh,
+    client => ({ conf: client.connectionSettings, dialect: client.dialect ?? client.driverName }),
+    knexHasIdleConnection
+  ))
+
   shimmer.wrap(Knex.Client.prototype, 'raw', raw => function (...args) {
     if (!startRawQueryCh.hasSubscribers) {
       return raw.apply(this, args)
@@ -83,4 +98,17 @@ function wrapCallbackWithFinish (callback, finish, context) {
   return shimmer.wrapFunction(callback, callback => function (...args) {
     finish(context, () => callback.apply(this, args))
   })
+}
+
+/**
+ * A connection on the tarn free list is handed back without waiting, so no span is opened for it.
+ * A missing pool (not yet initialized or already destroyed) also takes the fast path; the original
+ * method raises its own error in that case.
+ *
+ * @param {{ pool?: { numFree: () => number } }} client
+ * @returns {boolean}
+ */
+function knexHasIdleConnection (client) {
+  const pool = client.pool
+  return pool === undefined || pool.numFree() > 0
 }

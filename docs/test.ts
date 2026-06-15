@@ -398,6 +398,8 @@ tracer.use('restify', httpServerOptions);
 tracer.use('rhea');
 tracer.use('router');
 tracer.use('selenium');
+tracer.use('sequelize');
+tracer.use('sequelize', { service: () => `my-custom-sequelize` });
 tracer.use('sharedb');
 tracer.use('sharedb', sharedbOptions);
 tracer.use('tedious');

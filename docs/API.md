@@ -98,6 +98,7 @@ tracer.use('pg', {
 <h5 id="rhea"></h5>
 <h5 id="router"></h5>
 <h5 id="selenium"></h5>
+<h5 id="sequelize"></h5>
 <h5 id="sharedb"></h5>
 <h5 id="tedious"></h5>
 <h5 id="undici"></h5>
@@ -182,6 +183,7 @@ tracer.use('pg', {
 * [rhea](./interfaces/export_.plugins.rhea.html)
 * [router](./interfaces/export_.plugins.router.html)
 * [selenium](./interfaces/export_.plugins.selenium.html)
+* [sequelize](./interfaces/export_.plugins.sequelize.html)
 * [sharedb](./interfaces/export_.plugins.sharedb.html)
 * [tedious](./interfaces/export_.plugins.tedious.html)
 * [undici](./interfaces/export_.plugins.undici.html)

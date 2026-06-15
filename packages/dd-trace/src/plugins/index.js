@@ -77,6 +77,7 @@ const plugins = {
   get '@confluentinc/kafka-javascript' () {
     return require('../../../datadog-plugin-confluentinc-kafka-javascript/src')
   },
+  get knex () { return require('../../../datadog-plugin-knex/src') },
   get langchain () { return require('../../../datadog-plugin-langchain/src') },
   get mariadb () { return require('../../../datadog-plugin-mariadb/src') },
   get memcached () { return require('../../../datadog-plugin-memcached/src') },
@@ -114,6 +115,7 @@ const plugins = {
   get rhea () { return require('../../../datadog-plugin-rhea/src') },
   get router () { return require('../../../datadog-plugin-router/src') },
   get 'selenium-webdriver' () { return require('../../../datadog-plugin-selenium/src') },
+  get sequelize () { return require('../../../datadog-plugin-sequelize/src') },
   get sharedb () { return require('../../../datadog-plugin-sharedb/src') },
   get tedious () { return require('../../../datadog-plugin-tedious/src') },
   get undici () { return require('../../../datadog-plugin-undici/src') },
