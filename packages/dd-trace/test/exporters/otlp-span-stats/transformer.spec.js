@@ -6,6 +6,7 @@ const { describe, it, before } = require('mocha')
 require('../../setup/core')
 
 const OtlpStatsTransformer = require('../../../src/exporters/otlp-span-stats/transformer')
+const { EXPLICIT_BOUNDS_SECONDS } = OtlpStatsTransformer
 const { SpanBuckets } = require('../../../src/span_stats')
 const { getProtobufTypes } = require('../../../src/opentelemetry/otlp/protobuf_loader')
 const { HTTP_STATUS_CODE, HTTP_METHOD, HTTP_ROUTE, SPAN_KIND } = require('../../../../../ext/tags')
@@ -137,15 +138,20 @@ describe('OtlpStatsTransformer', () => {
       }
     })
 
-    it('converts duration to seconds and emits min/max/sum/bucketCounts', () => {
-      const spans = [makeSpan({ duration: 1e9 }), makeSpan({ duration: 3e9 })] // 1s and 3s, same cell
+    it('converts duration to seconds with fixed bounds and a sketch-derived distribution', () => {
+      const spans = [makeSpan({ duration: 1e9 }), makeSpan({ duration: 3e9 })] // 1s and 3s, same group
       const payload = JSON.parse(transformer.transform(makeDrained(12340000000000, spans), BUCKET_SIZE_NS))
       const dp = dataPointsOf(payload)[0]
 
-      assert.deepStrictEqual(
-        { count: dp.count, min: dp.min, max: dp.max, sum: dp.sum, buckets: dp.bucketCounts, bounds: dp.explicitBounds },
-        { count: 2, min: 1, max: 3, sum: 4, buckets: [2], bounds: [] }
-      )
+      assert.strictEqual(dp.count, 2)
+      assert.strictEqual(dp.min, 1)
+      assert.strictEqual(dp.max, 3)
+      assert.strictEqual(dp.sum, 4)
+      assert.deepStrictEqual(dp.explicitBounds, EXPLICIT_BOUNDS_SECONDS)
+      assert.strictEqual(dp.bucketCounts.length, EXPLICIT_BOUNDS_SECONDS.length + 1)
+      // 1s and 3s land in two distinct fixed buckets; counts sum to the total.
+      assert.strictEqual(dp.bucketCounts.reduce((a, b) => a + b, 0), 2)
+      assert.strictEqual(dp.bucketCounts.filter(c => c > 0).length, 2)
     })
 
     it('marks error data points with status.code=ERROR and ok data points without it', () => {
@@ -159,26 +165,29 @@ describe('OtlpStatsTransformer', () => {
       assert.strictEqual(attrMapOf(err)['dd.span.top_level'], true)
     })
 
-    it('conveys top-level via dd.span.top_level across the ok/error matrix', () => {
-      const spans = [
-        makeSpan(), makeSpan(), // 2 ok not-top-level
-        makeTopLevelSpan(), makeTopLevelSpan(), // 2 ok top-level
-        makeSpan({ error: 1 }), // 1 error not-top-level
-        makeTopLevelSpan({ error: 1 }), // 1 error top-level
-      ]
+    it('emits at most two data points per group (ok + error) tagged top-level when all hits are top-level', () => {
+      // All spans share one aggregation key: okDistribution gets 2 ok, errorDistribution gets 1 error.
+      const spans = [makeTopLevelSpan(), makeTopLevelSpan(), makeTopLevelSpan({ error: 1 })]
       const payload = JSON.parse(transformer.transform(makeDrained(12340000000000, spans), BUCKET_SIZE_NS))
       const points = dataPointsOf(payload)
 
-      const countFor = (isError, topLevel) => points.find(dp => {
-        const m = attrMapOf(dp)
-        return (m['status.code'] === 2) === isError && m['dd.span.top_level'] === topLevel
-      })?.count ?? 0
+      assert.strictEqual(points.length, 2)
+      const ok = points.find(dp => !attrMapOf(dp)['status.code'])
+      const err = points.find(dp => attrMapOf(dp)['status.code'] === 2)
+      assert.strictEqual(ok.count, 2)
+      assert.strictEqual(err.count, 1)
+      assert.strictEqual(attrMapOf(ok)['dd.span.top_level'], true)
+      assert.strictEqual(attrMapOf(err)['dd.span.top_level'], true)
+    })
 
-      assert.strictEqual(points.length, 4)
-      assert.deepStrictEqual(
-        [countFor(false, false), countFor(false, true), countFor(true, false), countFor(true, true)],
-        [2, 2, 1, 1]
-      )
+    it('tags dd.span.top_level=false for a group mixing top-level and non-top-level hits', () => {
+      const spans = [makeSpan(), makeTopLevelSpan()] // same aggregation key, mixed top-level
+      const payload = JSON.parse(transformer.transform(makeDrained(12340000000000, spans), BUCKET_SIZE_NS))
+      const points = dataPointsOf(payload)
+
+      assert.strictEqual(points.length, 1)
+      assert.strictEqual(points[0].count, 2)
+      assert.strictEqual(attrMapOf(points[0])['dd.span.top_level'], false)
     })
 
     it('omits data points with zero count', () => {
@@ -285,7 +294,9 @@ describe('OtlpStatsTransformer', () => {
 
     it('uses delta temporality and native typed attribute values', () => {
       const delta = protoAggregationTemporality.values.AGGREGATION_TEMPORALITY_DELTA
-      const spans = [makeSpan(), makeTopLevelSpan({ error: 1 })]
+      // Distinct aggregation keys so the per-group top-level heuristic yields one ok-not-top-level
+      // group and one error-top-level group.
+      const spans = [makeSpan({ resource: 'GET /a' }), makeTopLevelSpan({ error: 1, resource: 'GET /b' })]
       const buf = transformer.transform(makeDrained(12340000000000, spans), BUCKET_SIZE_NS)
       const decoded = protoMetricsService.decode(buf)
       const metric = decoded.resourceMetrics[0].scopeMetrics[0].metrics[0]

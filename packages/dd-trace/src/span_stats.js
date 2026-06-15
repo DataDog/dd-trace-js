@@ -27,36 +27,6 @@ const {
   DEFAULT_SERVICE_NAME,
 } = require('./encode/tags-processors')
 
-/**
- * @typedef {{ count: number, sum: number, min: number, max: number }} HistogramCell
- */
-
-/**
- * @returns {HistogramCell} An empty histogram accumulator.
- */
-function emptyCell () {
-  return { count: 0, sum: 0, min: 0, max: 0 }
-}
-
-/**
- * Records a duration into a histogram cell, tracking count, sum, min and max.
- *
- * @param {HistogramCell} cell
- * @param {number} durationNs
- * @returns {void}
- */
-function recordCell (cell, durationNs) {
-  if (cell.count === 0) {
-    cell.min = durationNs
-    cell.max = durationNs
-  } else {
-    if (durationNs < cell.min) cell.min = durationNs
-    if (durationNs > cell.max) cell.max = durationNs
-  }
-  cell.count++
-  cell.sum += durationNs
-}
-
 class SpanAggStats {
   constructor (aggKey) {
     this.aggKey = aggKey
@@ -70,12 +40,6 @@ class SpanAggStats {
     this.topLevelErrorDuration = 0
     this.okDistribution = new LogCollapsingLowestDenseDDSketch()
     this.errorDistribution = new LogCollapsingLowestDenseDDSketch()
-    this.cells = {
-      okNotTopLevel: emptyCell(),
-      okTopLevel: emptyCell(),
-      errNotTopLevel: emptyCell(),
-      errTopLevel: emptyCell(),
-    }
   }
 
   record (span) {
@@ -97,10 +61,8 @@ class SpanAggStats {
         this.topLevelErrorDuration += durationNs
       }
       this.errorDistribution.accept(durationNs)
-      recordCell(isTopLevel ? this.cells.errTopLevel : this.cells.errNotTopLevel, durationNs)
     } else {
       this.okDistribution.accept(durationNs)
-      recordCell(isTopLevel ? this.cells.okTopLevel : this.cells.okNotTopLevel, durationNs)
     }
   }
 

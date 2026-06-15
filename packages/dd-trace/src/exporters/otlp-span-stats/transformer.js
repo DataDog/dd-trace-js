@@ -6,6 +6,39 @@ const { VERSION } = require('../../../../../version')
 
 const NS_PER_S = 1e9
 
+// Fixed explicit histogram bucket boundaries (seconds), mirroring the OpenTelemetry spanmetrics
+// connector defaults so the exported histogram is comparable across tracers and backends. Kept in
+// sync with libdatadog's EXPLICIT_BOUNDS_SECONDS.
+const EXPLICIT_BOUNDS_SECONDS = [
+  0.002, 0.004, 0.006, 0.008, 0.01, 0.05, 0.1, 0.2, 0.4, 0.8, 1, 1.4, 2, 5, 10, 15,
+]
+
+/**
+ * Buckets a DDSketch's bins into the fixed explicit bounds (see EXPLICIT_BOUNDS_SECONDS). Each bin's
+ * representative value (converted to seconds) is accumulated into the matching bucket; values above
+ * the last bound land in the trailing overflow bucket and exact zeros in the first bucket.
+ *
+ * @param {object} sketch - A LogCollapsingLowestDenseDDSketch (positive durations only)
+ * @returns {{ bucketCounts: number[], explicitBounds: number[] }}
+ */
+function sketchToFixedHistogram (sketch) {
+  const bucketCounts = new Array(EXPLICIT_BOUNDS_SECONDS.length + 1).fill(0)
+  if (sketch.zeroCount > 0) bucketCounts[0] += sketch.zeroCount
+  const { store, mapping } = sketch
+  for (let key = store.minKey; key <= store.maxKey; key++) {
+    const weight = store.bins[key - store.offset]
+    if (!weight || weight <= 0) continue
+    const seconds = mapping.value(key) / NS_PER_S
+    let idx = EXPLICIT_BOUNDS_SECONDS.findIndex((bound) => seconds <= bound)
+    if (idx === -1) idx = EXPLICIT_BOUNDS_SECONDS.length
+    bucketCounts[idx] += weight
+  }
+  return {
+    bucketCounts: bucketCounts.map((weight) => Math.round(weight)),
+    explicitBounds: EXPLICIT_BOUNDS_SECONDS,
+  }
+}
+
 const SCOPE = { name: 'dd-trace', version: VERSION }
 
 // Cached at module load time since protobuf types are initialized once.
@@ -29,9 +62,10 @@ const STATUS_CODE_ERROR = 2
  * Emits a single histogram metric (delta temporality):
  *   - traces.span.sdk.metrics.duration (Histogram)
  *
- * Each aggregation key emits up to 4 data points covering the (ok/error) × (not-top-level/top-level)
- * matrix. Errors carry status.code=ERROR; top-level is conveyed via the dd.span.top_level attribute,
- * which (like all dd.* attributes) is omitted in OTel-semantics mode. Data points with count=0 are omitted.
+ * Each aggregation key emits up to 2 data points (ok and error), each a fixed explicit-bounds
+ * histogram derived from the group's DDSketch. Errors carry status.code=ERROR; top-level is conveyed
+ * via the per-group dd.span.top_level attribute (true only when every hit was top-level), which (like
+ * all dd.* attributes) is omitted in OTel-semantics mode. Data points with count=0 are omitted.
  *
  * @class OtlpStatsTransformer
  * @augments OtlpTransformerBase
@@ -117,24 +151,21 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
       const endNano = isJson ? String(endTimeNs) : endTimeNs
 
       for (const aggStats of bucket.values()) {
-        const { aggKey, cells } = aggStats
+        const { aggKey } = aggStats
         let points = pointsByService.get(aggKey.service)
         if (points === undefined) {
           points = []
           pointsByService.set(aggKey.service, points)
         }
         const baseAttrs = this.#buildAttributes(aggKey)
-        const dd = !this.#otelSemanticsEnabled
-        const error = this.#errorStatus()
+        // Per-group top-level heuristic: a group is top-level only when every hit was top-level.
+        const topLevel = aggStats.hits > 0 && aggStats.topLevelHits === aggStats.hits
+        const attrs = this.#otelSemanticsEnabled
+          ? baseAttrs
+          : [...baseAttrs, this.#boolAttr('dd.span.top_level', topLevel)]
 
-        this.#pushPoint(points, cells.okNotTopLevel, startNano, endNano,
-          dd ? [...baseAttrs, this.#boolAttr('dd.span.top_level', false)] : baseAttrs)
-        this.#pushPoint(points, cells.okTopLevel, startNano, endNano,
-          dd ? [...baseAttrs, this.#boolAttr('dd.span.top_level', true)] : baseAttrs)
-        this.#pushPoint(points, cells.errNotTopLevel, startNano, endNano,
-          dd ? [...baseAttrs, error, this.#boolAttr('dd.span.top_level', false)] : [...baseAttrs, error])
-        this.#pushPoint(points, cells.errTopLevel, startNano, endNano,
-          dd ? [...baseAttrs, error, this.#boolAttr('dd.span.top_level', true)] : [...baseAttrs, error])
+        this.#pushPoint(points, aggStats.okDistribution, startNano, endNano, attrs)
+        this.#pushPoint(points, aggStats.errorDistribution, startNano, endNano, [...attrs, this.#errorStatus()])
       }
     }
 
@@ -173,28 +204,30 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
   }
 
   /**
-   * Appends a histogram data point for a non-empty cell. Durations are converted from
-   * nanoseconds to seconds. A single (unbounded) bucket holds the full count.
+   * Appends a fixed explicit-bounds histogram data point derived from a non-empty sketch. count/sum/
+   * min/max use the sketch's exact scalars; bucket counts are bucketed from its bins. Durations are
+   * converted from nanoseconds to seconds.
    *
    * @param {object[]} points
-   * @param {import('../../span_stats').HistogramCell} cell
+   * @param {object} sketch - A LogCollapsingLowestDenseDDSketch
    * @param {string|number} startNano
    * @param {string|number} endNano
    * @param {object[]} attributes
    * @returns {void}
    */
-  #pushPoint (points, cell, startNano, endNano, attributes) {
-    if (!cell || cell.count === 0) return
+  #pushPoint (points, sketch, startNano, endNano, attributes) {
+    if (!sketch || sketch.count === 0) return
+    const { bucketCounts, explicitBounds } = sketchToFixedHistogram(sketch)
     points.push({
       attributes,
       startTimeUnixNano: startNano,
       timeUnixNano: endNano,
-      count: cell.count,
-      sum: cell.sum / NS_PER_S,
-      min: cell.min / NS_PER_S,
-      max: cell.max / NS_PER_S,
-      bucketCounts: [cell.count],
-      explicitBounds: [],
+      count: sketch.count,
+      sum: sketch.sum / NS_PER_S,
+      min: sketch.min / NS_PER_S,
+      max: sketch.max / NS_PER_S,
+      bucketCounts,
+      explicitBounds,
     })
   }
 
@@ -246,3 +279,4 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
 }
 
 module.exports = OtlpStatsTransformer
+module.exports.EXPLICIT_BOUNDS_SECONDS = EXPLICIT_BOUNDS_SECONDS
