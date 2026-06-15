@@ -396,6 +396,7 @@ export interface GeneratedConfig {
   DD_TRACE_WS_ENABLED: boolean;
   DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH: number;
   DD_VITEST_WORKER: string | undefined;
+  ddTraceMetricsOtelFlushInterval: number | undefined;
   dogstatsd: {
     hostname: string;
     port: string | number;
