@@ -64,10 +64,7 @@ function planResponseBodyCollection ({ ctx, res }) {
   const originatingRequest = getActiveRequest()
   if (!originatingRequest || !res) return
 
-  const outgoingUrl = (ctx.args.options?.uri && format(ctx.args.options.uri)) ?? ctx.args.uri
-  if (!outgoingUrl) return
-
-  downstream.planResponseBodyCollection(originatingRequest, outgoingUrl, res, ctx)
+  downstream.planResponseBodyCollection(originatingRequest, res, ctx)
 }
 
 /**

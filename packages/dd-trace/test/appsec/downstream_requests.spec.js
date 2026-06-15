@@ -72,7 +72,7 @@ describe('appsec downstream_requests', () => {
         headers: { 'content-type': 'application/json', 'content-length': '2' },
       }
       const ctx = {}
-      downstream.planResponseBodyCollection(req, 'http://example.com/api', validRes, ctx)
+      downstream.planResponseBodyCollection(req, validRes, ctx)
 
       sinon.assert.notCalled(logWarnStub)
     })
@@ -91,12 +91,12 @@ describe('appsec downstream_requests', () => {
         headers: { location: 'http://example.com/next' },
       }
 
-      downstream.planResponseBodyCollection(inboundReq, 'http://example.com/first', res, ctx)
+      downstream.planResponseBodyCollection(inboundReq, res, ctx)
 
       assert.strictEqual(ctx.shouldCollectBody, undefined)
 
       const ctxAfter = {}
-      downstream.planResponseBodyCollection(inboundReq, 'http://example.com/next', validJsonRes, ctxAfter)
+      downstream.planResponseBodyCollection(inboundReq, validJsonRes, ctxAfter)
       assert.strictEqual(ctxAfter.shouldCollectBody, true)
     })
 
@@ -111,7 +111,7 @@ describe('appsec downstream_requests', () => {
         },
       }
 
-      downstream.planResponseBodyCollection(inboundReq, 'http://example.com/api', res, ctx)
+      downstream.planResponseBodyCollection(inboundReq, res, ctx)
 
       assert.strictEqual(ctx.shouldCollectBody, true)
     })
@@ -128,7 +128,7 @@ describe('appsec downstream_requests', () => {
         headers: { 'content-type': 'application/json' },
       }
 
-      downstream.planResponseBodyCollection(inboundReq, 'http://example.com/api', res, ctx)
+      downstream.planResponseBodyCollection(inboundReq, res, ctx)
 
       assert.strictEqual(ctx.shouldCollectBody, undefined)
       const tag = '_dd.appsec.downstream_request.response_body_ignored.content_length_missing'
@@ -147,8 +147,8 @@ describe('appsec downstream_requests', () => {
       }
       const ctx1 = {}
       const ctx2 = {}
-      downstream.planResponseBodyCollection(inboundReq, 'http://example.com/a', badRes, ctx1)
-      downstream.planResponseBodyCollection(inboundReq, 'http://example.com/b', badRes, ctx2)
+      downstream.planResponseBodyCollection(inboundReq, badRes, ctx1)
+      downstream.planResponseBodyCollection(inboundReq, badRes, ctx2)
 
       const tag = '_dd.appsec.downstream_request.response_body_ignored.content_type_invalid'
       sinon.assert.calledTwice(span.setTag)
@@ -171,7 +171,7 @@ describe('appsec downstream_requests', () => {
         },
       }
 
-      downstream.planResponseBodyCollection(inboundReq, 'http://example.com/api', res, ctx)
+      downstream.planResponseBodyCollection(inboundReq, res, ctx)
 
       assert.strictEqual(ctx.shouldCollectBody, undefined)
       const tag = '_dd.appsec.downstream_request.response_body_ignored.content_length_too_big'
@@ -185,18 +185,18 @@ describe('appsec downstream_requests', () => {
 
       const inboundReq = {}
       const ctx = {}
-      downstream.planResponseBodyCollection(inboundReq, 'http://example.com/api', validJsonRes, ctx)
+      downstream.planResponseBodyCollection(inboundReq, validJsonRes, ctx)
       assert.strictEqual(ctx.shouldCollectBody, undefined)
     })
 
     it('stops planning body collection when per-request analysis limit is reached', () => {
       const inboundReq = {}
       const ctx1 = {}
-      downstream.planResponseBodyCollection(inboundReq, 'http://example.com/api', validJsonRes, ctx1)
+      downstream.planResponseBodyCollection(inboundReq, validJsonRes, ctx1)
       assert.strictEqual(ctx1.shouldCollectBody, true)
 
       const ctx2 = {}
-      downstream.planResponseBodyCollection(inboundReq, 'http://example.com/api2', validJsonRes, ctx2)
+      downstream.planResponseBodyCollection(inboundReq, validJsonRes, ctx2)
       assert.strictEqual(ctx2.shouldCollectBody, undefined)
     })
   })
@@ -501,7 +501,7 @@ describe('appsec downstream_requests', () => {
       for (let i = 0; i < 10; i++) {
         const inboundReq = {}
         const ctx = {}
-        downstream.planResponseBodyCollection(inboundReq, `http://example.com/${i}`, validJsonRes, ctx)
+        downstream.planResponseBodyCollection(inboundReq, validJsonRes, ctx)
         assert.strictEqual(ctx.shouldCollectBody, true)
       }
     })
@@ -515,7 +515,7 @@ describe('appsec downstream_requests', () => {
       for (let i = 0; i < 10; i++) {
         const inboundReq = {}
         const ctx = {}
-        downstream.planResponseBodyCollection(inboundReq, `http://example.com/${i}`, validJsonRes, ctx)
+        downstream.planResponseBodyCollection(inboundReq, validJsonRes, ctx)
         assert.strictEqual(ctx.shouldCollectBody, undefined)
       }
     })
@@ -530,7 +530,7 @@ describe('appsec downstream_requests', () => {
       for (let i = 0; i < 100; i++) {
         const inboundReq = {}
         const ctx = {}
-        downstream.planResponseBodyCollection(inboundReq, `http://example.com/${i}`, validJsonRes, ctx)
+        downstream.planResponseBodyCollection(inboundReq, validJsonRes, ctx)
         results.push(ctx.shouldCollectBody === true)
       }
 
@@ -551,23 +551,23 @@ describe('appsec downstream_requests', () => {
       const req2 = {}
 
       const c1 = {}
-      downstream.planResponseBodyCollection(req1, 'http://example.com/1', validJsonRes, c1)
+      downstream.planResponseBodyCollection(req1, validJsonRes, c1)
       assert.strictEqual(c1.shouldCollectBody, true)
 
       const c2 = {}
-      downstream.planResponseBodyCollection(req2, 'http://example.com/2', validJsonRes, c2)
+      downstream.planResponseBodyCollection(req2, validJsonRes, c2)
       assert.strictEqual(c2.shouldCollectBody, true)
 
       const c3 = {}
-      downstream.planResponseBodyCollection(req1, 'http://example.com/3', validJsonRes, c3)
+      downstream.planResponseBodyCollection(req1, validJsonRes, c3)
       assert.strictEqual(c3.shouldCollectBody, true)
 
       const c4 = {}
-      downstream.planResponseBodyCollection(req1, 'http://example.com/4', validJsonRes, c4)
+      downstream.planResponseBodyCollection(req1, validJsonRes, c4)
       assert.strictEqual(c4.shouldCollectBody, undefined)
 
       const c5 = {}
-      downstream.planResponseBodyCollection(req2, 'http://example.com/5', validJsonRes, c5)
+      downstream.planResponseBodyCollection(req2, validJsonRes, c5)
       assert.strictEqual(c5.shouldCollectBody, true)
     })
 
@@ -581,12 +581,12 @@ describe('appsec downstream_requests', () => {
 
       for (let i = 0; i < 3; i++) {
         const ctx = {}
-        downstream.planResponseBodyCollection(testReq, `http://example.com/${i}`, validJsonRes, ctx)
+        downstream.planResponseBodyCollection(testReq, validJsonRes, ctx)
         assert.strictEqual(ctx.shouldCollectBody, true)
       }
 
       const ctxLast = {}
-      downstream.planResponseBodyCollection(testReq, 'http://example.com/last', validJsonRes, ctxLast)
+      downstream.planResponseBodyCollection(testReq, validJsonRes, ctxLast)
       assert.strictEqual(ctxLast.shouldCollectBody, undefined)
     })
   })

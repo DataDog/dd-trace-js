@@ -131,10 +131,9 @@ function evaluateResponseBodyCollection (originatingReq, res) {
  * Probabilistic gate for downstream response body capture (rate + per-request cap).
  * Only used from {@link planResponseBodyCollection}; does not increment {@link bodyAnalysisCount}.
  * @param {import('http').IncomingMessage} req originating server request.
- * @param {string} [_outgoingUrl] reserved for future use.
  * @returns {boolean}
  */
-function shouldSampleBody (req, _outgoingUrl) {
+function shouldSampleBody (req) {
   globalRequestCounter = (globalRequestCounter + 1n) & UINT64_MAX
 
   const currentCount = bodyAnalysisCount.get(req) || 0
@@ -154,7 +153,7 @@ function shouldSampleBody (req, _outgoingUrl) {
  * @returns {boolean}
  */
 function isRedirectResponse (res) {
-  const location = res.headers?.location || res.headers?.Location
+  const location = res.headers?.location || ''
   return res.statusCode >= 300 && res.statusCode < 400 && !!location
 }
 
@@ -163,11 +162,10 @@ function isRedirectResponse (res) {
  * Redirect responses (3xx + Location) are ignored; each outbound hop is evaluated independently
  * when its own non-redirect response arrives.
  * @param {import('http').IncomingMessage} originatingReq incoming server request.
- * @param {string} _outgoingUrl downstream URL for this hop (unused; redirect hops exit earlier).
  * @param {import('http').IncomingMessage} res downstream response.
  * @param {object} ctx http client instrumentation context (mutated).
  */
-function planResponseBodyCollection (originatingReq, _outgoingUrl, res, ctx) {
+function planResponseBodyCollection (originatingReq, res, ctx) {
   if (!config?.appsec.apiSecurity) {
     return
   }
@@ -176,7 +174,7 @@ function planResponseBodyCollection (originatingReq, _outgoingUrl, res, ctx) {
     return
   }
 
-  if (!shouldSampleBody(originatingReq, _outgoingUrl)) {
+  if (!shouldSampleBody(originatingReq)) {
     return
   }
 

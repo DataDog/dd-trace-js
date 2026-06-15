@@ -73,7 +73,7 @@ describe('RASP - ssrf.js', () => {
       extractRequestData: sinon.stub().returns({}),
       extractResponseData: sinon.stub().returns({}),
       incrementDownstreamAnalysisCount: sinon.stub(),
-      planResponseBodyCollection: sinon.stub().callsFake((originatingReq, outgoingUrl, res, ctx) => {
+      planResponseBodyCollection: sinon.stub().callsFake((originatingReq, res, ctx) => {
         delete ctx.shouldCollectBody
 
         const location = res.headers?.location
