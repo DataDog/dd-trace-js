@@ -536,7 +536,7 @@ describe('Plugin', () => {
           assert.strictEqual(idleWaitTime, 0)
         })
 
-        it('does not tag a query on an unrelated client with the pool wait', async () => {
+        it('reports an explicit acquire on its own span and leaves every query span untagged', async () => {
           const standalone = new pg.Client({
             host: '127.0.0.1',
             user: 'postgres',
@@ -547,54 +547,69 @@ describe('Plugin', () => {
 
           await standalone.connect()
 
-          try {
-            await Promise.all([
-              agent.assertSomeTraces(traces => {
-                assert.ok(!Object.hasOwn(traces[0][0].metrics, 'db.pool.wait_time_ms'))
-              }, { spanResourceMatch: /^SELECT 10 AS unrelated_probe$/ }),
-              agent.assertSomeTraces(traces => {
-                const waitTime = traces[0][0].metrics['db.pool.wait_time_ms']
+          const parent = tracer.startSpan('unrelated-client-parent')
 
-                assert.ok(waitTime > 0, `expected the acquired client to carry the wait, got ${waitTime}`)
-              }, { spanResourceMatch: /^SELECT 11 AS acquired_probe$/ }),
-              new Promise((resolve, reject) => {
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const acquireSpan = traces[0].find(span => span.name === 'pg.pool.acquire')
+            const unrelatedSpan = traces[0].find(span => span.resource === 'SELECT 10 AS unrelated_probe')
+            const acquiredSpan = traces[0].find(span => span.resource === 'SELECT 11 AS acquired_probe')
+
+            assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
+
+            const waitTime = acquireSpan.metrics['db.pool.wait_time_ms']
+            assert.ok(waitTime > 0, `expected the acquire span to carry the wait, got ${waitTime}`)
+
+            assert.ok(unrelatedSpan, `missing unrelated span: ${inspect(traces[0].map(span => span.resource))}`)
+            assert.ok(!Object.hasOwn(unrelatedSpan.metrics, 'db.pool.wait_time_ms'))
+
+            assert.ok(acquiredSpan, `missing acquired span: ${inspect(traces[0].map(span => span.resource))}`)
+            assert.ok(!Object.hasOwn(acquiredSpan.metrics, 'db.pool.wait_time_ms'))
+          })
+
+          try {
+            await new Promise((resolve, reject) => {
+              tracer.scope().activate(parent, () => {
                 pool.connect((error, client, release) => {
                   if (error) {
                     reject(error)
                     return
                   }
 
-                  standalone.query('SELECT 10 AS unrelated_probe', unrelatedError => {
-                    if (unrelatedError) {
-                      reject(unrelatedError)
-                    }
-                  })
+                  const unrelated = standalone.query('SELECT 10 AS unrelated_probe')
+                  const acquired = client.query('SELECT 11 AS acquired_probe')
 
-                  client.query('SELECT 11 AS acquired_probe', queryError => {
+                  Promise.all([unrelated, acquired]).then(() => {
                     release()
-
-                    if (queryError) {
-                      reject(queryError)
-                    } else {
-                      resolve()
-                    }
-                  })
+                    parent.finish()
+                    resolve()
+                  }, reject)
                 })
-              }),
-            ])
+              })
+            })
+
+            await tracePromise
           } finally {
             await standalone.end()
           }
         })
 
         it('gives an acquire nested in a release its own wait', async () => {
-          await Promise.all([
-            agent.assertSomeTraces(traces => {
-              const waitTime = traces[0][0].metrics['db.pool.wait_time_ms']
+          const parent = tracer.startSpan('nested-acquire-parent')
 
-              assert.ok(waitTime > 0, `expected the nested acquire to carry its own wait, got ${waitTime}`)
-            }, { spanResourceMatch: /^SELECT 12 AS nested_probe$/ }),
-            new Promise((resolve, reject) => {
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const waits = traces[0]
+              .filter(span => span.name === 'pg.pool.acquire')
+              .map(span => span.metrics['db.pool.wait_time_ms'])
+
+            assert.strictEqual(waits.length, 2, `expected one span per acquire, got ${inspect(waits)}`)
+
+            for (const wait of waits) {
+              assert.ok(wait > 0, `expected each acquire to carry its own wait, got ${inspect(waits)}`)
+            }
+          })
+
+          await new Promise((resolve, reject) => {
+            tracer.scope().activate(parent, () => {
               pool.connect((error, client, release) => {
                 if (error) {
                   reject(error)
@@ -609,6 +624,7 @@ describe('Plugin', () => {
 
                   nestedClient.query('SELECT 12 AS nested_probe', queryError => {
                     nestedRelease()
+                    parent.finish()
 
                     if (queryError) {
                       reject(queryError)
@@ -619,24 +635,36 @@ describe('Plugin', () => {
                 })
 
                 // `release` pulses the pending queue synchronously, so the acquire queued above runs
-                // inside this callback while this callback's own entry is still on the stack.
+                // inside this callback.
                 release()
               })
-            }),
-          ])
+            })
+          })
+
+          await tracePromise
         })
 
         it('records the deepest wait when acquires nest six releases deep', async () => {
           const deepest = 6
           const blockMs = 50
 
-          await Promise.all([
-            agent.assertSomeTraces(traces => {
-              const waitTime = traces[0][0].metrics['db.pool.wait_time_ms']
+          const parent = tracer.startSpan('deep-acquire-parent')
 
-              assert.ok(waitTime > 40, `expected the deepest acquire's own ~${blockMs}ms wait, got ${waitTime}`)
-            }, { spanResourceMatch: /^SELECT 13 AS deep_probe$/ }),
-            new Promise((resolve, reject) => {
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const waits = traces[0]
+              .filter(span => span.name === 'pg.pool.acquire')
+              .map(span => span.metrics['db.pool.wait_time_ms'])
+
+            assert.strictEqual(waits.length, deepest, `expected one span per acquire, got ${inspect(waits)}`)
+            assert.strictEqual(
+              waits.filter(wait => wait > 40).length,
+              1,
+              `expected exactly one acquire to carry the ~${blockMs}ms block, got ${inspect(waits)}`
+            )
+          })
+
+          await new Promise((resolve, reject) => {
+            tracer.scope().activate(parent, () => {
               const acquireLevel = level => {
                 pool.connect((error, client, release) => {
                   if (error) {
@@ -647,6 +675,7 @@ describe('Plugin', () => {
                   if (level === deepest) {
                     client.query('SELECT 13 AS deep_probe', queryError => {
                       release()
+                      parent.finish()
 
                       if (queryError) {
                         reject(queryError)
@@ -660,7 +689,7 @@ describe('Plugin', () => {
                   acquireLevel(level + 1)
 
                   // Every level acquires the same `max: 1` client, so only the size of the wait tells
-                  // the entries apart. A timer instead of a block would end the nesting chain.
+                  // the acquires apart. A timer instead of a block would end the nesting chain.
                   if (level === deepest - 1) {
                     const until = performance.now() + blockMs
                     while (performance.now() < until) { /* block the acquire queued above */ }
@@ -671,8 +700,10 @@ describe('Plugin', () => {
               }
 
               acquireLevel(1)
-            }),
-          ])
+            })
+          })
+
+          await tracePromise
         })
 
         it('does not throw when the pool fails to acquire a connection', done => {
@@ -694,6 +725,96 @@ describe('Plugin', () => {
                 failingPool.end(() => done())
               })
             })
+          })
+        })
+
+        it('creates a dedicated acquire span for an explicit promise pool.connect()', async () => {
+          const parent = tracer.startSpan('acquire-promise-parent')
+
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const acquireSpan = traces[0].find(span => span.name === 'pg.pool.acquire')
+            const querySpan = traces[0].find(span => span.resource === 'SELECT 5 AS five')
+
+            assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
+            assert.strictEqual(acquireSpan.parent_id.toString(), parent.context().toSpanId())
+            assert.strictEqual(typeof acquireSpan.metrics['db.pool.wait_time_ms'], 'number')
+            assert.ok(acquireSpan.metrics['db.pool.wait_time_ms'] >= 0)
+
+            assert.ok(querySpan, `missing query span: ${inspect(traces[0].map(span => span.resource))}`)
+            assert.ok(!Object.hasOwn(querySpan.metrics, 'db.pool.wait_time_ms'))
+          })
+
+          await tracer.scope().activate(parent, async () => {
+            const client = await pool.connect()
+            await client.query('SELECT 5 AS five')
+            client.release()
+            parent.finish()
+          })
+
+          await tracePromise
+        })
+
+        it('creates a dedicated acquire span for an explicit callback pool.connect()', done => {
+          const parent = tracer.startSpan('acquire-callback-parent')
+
+          agent.assertSomeTraces(traces => {
+            const acquireSpan = traces[0].find(span => span.name === 'pg.pool.acquire')
+
+            assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
+            assert.strictEqual(acquireSpan.parent_id.toString(), parent.context().toSpanId())
+            assert.strictEqual(typeof acquireSpan.metrics['db.pool.wait_time_ms'], 'number')
+          })
+            .then(done)
+            .catch(done)
+
+          tracer.scope().activate(parent, () => {
+            pool.connect((error, client, release) => {
+              if (error) return done(error)
+              release()
+              parent.finish()
+            })
+          })
+        })
+
+        it('records an error on the acquire span when an explicit connect fails', async () => {
+          const probe = net.createServer()
+          await new Promise(resolve => probe.listen(0, '127.0.0.1', resolve))
+          const { port } = probe.address()
+          await new Promise(resolve => probe.close(resolve))
+
+          const failingPool = new pg.Pool({
+            host: '127.0.0.1',
+            port,
+            user: 'postgres',
+            database: 'postgres',
+            connectionTimeoutMillis: 500,
+          })
+          failingPool.on('error', () => {})
+
+          const tracePromise = agent.assertSomeTraces(traces => {
+            const acquireSpan = traces[0].find(span => span.name === 'pg.pool.acquire')
+
+            assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
+            assert.strictEqual(acquireSpan.error, 1)
+          })
+
+          await assert.rejects(failingPool.connect())
+          await tracePromise
+          await failingPool.end()
+        })
+
+        it('does not create an acquire span for pool.query', done => {
+          agent.assertSomeTraces(traces => {
+            assert.ok(
+              !traces[0].some(span => span.name === 'pg.pool.acquire'),
+              `unexpected acquire span: ${inspect(traces[0].map(span => span.name))}`
+            )
+          }, { spanResourceMatch: /^SELECT 6 AS six$/ })
+            .then(done)
+            .catch(done)
+
+          pool.query('SELECT 6 AS six', error => {
+            if (error) done(error)
           })
         })
       })
