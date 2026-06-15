@@ -84,7 +84,6 @@ class McpServerToolCallPlugin extends TracingPlugin {
 
   bindStart (ctx) {
     const [tool] = ctx.arguments || []
-    // Tool name is the map key in _registeredTools, not a property on the tool object.
     const registeredTools = ctx.self?._registeredTools
     const toolName = registeredTools
       ? Object.keys(registeredTools).find(k => registeredTools[k] === tool)
