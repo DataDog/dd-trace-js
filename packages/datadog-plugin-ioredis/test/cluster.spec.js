@@ -67,12 +67,21 @@ describe('Plugin', () => {
       })
 
       it('runs the command in the active parent context', async () => {
-        const span = tracer.startSpan('test')
+        const parent = tracer.startSpan('test')
 
-        await tracer.scope().activate(span, async () => {
+        const assertion = agent.assertSomeTraces(traces => {
+          const span = traces[0].find(span => span.resource === 'get')
+          assert.ok(span, 'expected a span for the get command')
+          assert.strictEqual(span.parent_id.toString(), parent.context().toSpanId())
+        }, { spanResourceMatch: /^get$/ })
+
+        await tracer.scope().activate(parent, async () => {
           await cluster.get('cluster-key')
-          assert.strictEqual(tracer.scope().active(), span)
+          assert.strictEqual(tracer.scope().active(), parent)
         })
+        parent.finish()
+
+        await assertion
       })
 
       withNamingSchema(
