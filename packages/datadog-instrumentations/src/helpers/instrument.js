@@ -42,25 +42,28 @@ exports.tracingChannel = function (name) {
   return tc
 }
 
-let publishingError = false
-
 /**
- * Publish on a public error channel, guarding against re-entrancy. A subscriber
- * that re-enters a wrapped dispatch while handling the error would otherwise
- * republish here and recurse until the stack overflows. Error publishes are
- * never legitimately nested, so a single in-flight flag guards every channel
- * without a per-channel lookup.
+ * Build a guarded publisher for a public error channel. A subscriber that
+ * re-enters the same wrapped dispatch while handling the error would otherwise
+ * republish here and recurse until the stack overflows. Each framework binds
+ * its own publisher, so the in-flight flag stays private to one channel: a
+ * genuinely nested error on a different framework's channel (a Koa app mounted
+ * inside Express) still reaches its subscribers instead of being dropped, and
+ * the guard costs a closure read rather than a per-publish channel lookup.
  *
  * @param {Channel} errorChannel
- * @param {object} message
  */
-exports.publishError = function publishError (errorChannel, message) {
-  if (publishingError) return
-  publishingError = true
-  try {
-    errorChannel.publish(message)
-  } finally {
-    publishingError = false
+exports.createErrorPublisher = function createErrorPublisher (errorChannel) {
+  let publishing = false
+  /** @param {object} message */
+  return function publishError (message) {
+    if (publishing) return
+    publishing = true
+    try {
+      errorChannel.publish(message)
+    } finally {
+      publishing = false
+    }
   }
 }
 

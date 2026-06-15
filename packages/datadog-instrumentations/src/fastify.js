@@ -1,9 +1,10 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
-const { addHook, channel, publishError: publishErrorChannel } = require('./helpers/instrument')
+const { addHook, channel, createErrorPublisher } = require('./helpers/instrument')
 
 const errorChannel = channel('apm:fastify:middleware:error')
+const publishErrorChannel = createErrorPublisher(errorChannel)
 const handleChannel = channel('apm:fastify:request:handle')
 const routeAddedChannel = channel('apm:fastify:route:added')
 const bodyParserReadCh = channel('datadog:fastify:body-parser:finish')
@@ -305,7 +306,7 @@ function getRouteConfig (request) {
 
 function publishError (ctx) {
   if (ctx.error) {
-    publishErrorChannel(errorChannel, ctx)
+    publishErrorChannel(ctx)
   }
 
   return ctx.error

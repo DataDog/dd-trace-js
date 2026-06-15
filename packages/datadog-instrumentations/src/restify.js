@@ -1,7 +1,7 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
-const { addHook, channel, publishError } = require('./helpers/instrument')
+const { addHook, channel, createErrorPublisher } = require('./helpers/instrument')
 const handlers = ['use', 'pre']
 const methods = ['del', 'get', 'head', 'opts', 'post', 'put', 'patch']
 
@@ -11,6 +11,7 @@ const enterChannel = channel('apm:restify:middleware:enter')
 const exitChannel = channel('apm:restify:middleware:exit')
 const finishChannel = channel('apm:restify:middleware:finish')
 const nextChannel = channel('apm:restify:middleware:next')
+const publishError = createErrorPublisher(errorChannel)
 
 function wrapSetupRequest (setupRequest) {
   return function (req, res) {
@@ -53,7 +54,7 @@ function wrapFn (fn) {
           finishChannel.publish({ req })
           return result
         }).catch(function (error) {
-          publishError(errorChannel, { req, error })
+          publishError({ req, error })
           nextChannel.publish({ req })
           finishChannel.publish({ req })
           throw error
@@ -61,7 +62,7 @@ function wrapFn (fn) {
       }
       return result
     } catch (error) {
-      publishError(errorChannel, { req, error })
+      publishError({ req, error })
       nextChannel.publish({ req })
       finishChannel.publish({ req })
       throw error

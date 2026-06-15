@@ -2,7 +2,7 @@
 
 const METHODS = [...require('http').METHODS.map(v => v.toLowerCase()), 'all']
 const shimmer = require('../../datadog-shimmer')
-const { addHook, channel, publishError } = require('./helpers/instrument')
+const { addHook, channel, createErrorPublisher } = require('./helpers/instrument')
 const { getCompileToRegexp } = require('./path-to-regexp')
 
 const {
@@ -40,6 +40,8 @@ function createWrapRouterMethod (name, compile) {
   const errorChannel = channel(`apm:${name}:middleware:error`)
   const nextChannel = channel(`apm:${name}:middleware:next`)
   const routeAddedChannel = channel(`apm:${name}:route:added`)
+  // Bound per name so express and a bare router keep independent guards.
+  const publishError = createErrorPublisher(errorChannel)
 
   function wrapLayerHandle (layer, original, matchers) {
     // Resolve `name` once at wrap time: cached on the original for any code
@@ -91,7 +93,7 @@ function createWrapRouterMethod (name, compile) {
       try {
         return original.call(this, req, res, wrappedNext)
       } catch (error) {
-        publishError(errorChannel, { req, error })
+        publishError({ req, error })
         nextChannel.publish({ req })
         finishChannel.publish({ req })
 
@@ -123,7 +125,7 @@ function createWrapRouterMethod (name, compile) {
       try {
         return original.call(this, error, req, res, wrappedNext)
       } catch (caught) {
-        publishError(errorChannel, { req, error: caught })
+        publishError({ req, error: caught })
         nextChannel.publish({ req })
         finishChannel.publish({ req })
 
@@ -161,7 +163,7 @@ function createWrapRouterMethod (name, compile) {
     // router continuation so wrapCallback skips its name/length rewrite.
     return shimmer.wrapCallback(originalNext, original => function next (error) {
       if (error && error !== 'route' && error !== 'router') {
-        publishError(errorChannel, { req, error })
+        publishError({ req, error })
       }
 
       nextChannel.publish({ req })
