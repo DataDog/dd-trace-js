@@ -231,7 +231,7 @@ function addOtelEvent (ddSpan, name, attributesOrStartTime, startTime) {
  * @param {TimeInput} [timeInput]
  * @param {boolean} [otelTraceSemanticsEnabled]
  */
-function recordException (ddSpan, exception, timeInput, otelTraceSemanticsEnabled = false) {
+function recordException (ddSpan, exception, timeInput, otelTraceSemanticsEnabled) {
   if (!isWritable(ddSpan)) return
 
   if (!otelTraceSemanticsEnabled) {
@@ -263,7 +263,7 @@ function recordException (ddSpan, exception, timeInput, otelTraceSemanticsEnable
  * @param {boolean} [otelTraceSemanticsEnabled]
  * @returns {number} The new status code to track on the caller.
  */
-function applyOtelStatus (ddSpan, currentCode, status, otelTraceSemanticsEnabled = false) {
+function applyOtelStatus (ddSpan, currentCode, status, otelTraceSemanticsEnabled) {
   if (!isWritable(ddSpan)) return currentCode
 
   const code = status?.code

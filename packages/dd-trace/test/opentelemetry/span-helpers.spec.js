@@ -84,7 +84,7 @@ describe('OTel bridge helpers', () => {
         { context: { traceId: 'c'.repeat(32), spanId: 'd'.repeat(16) } },
       ])
       addOtelEvent(ddSpan, 'evt', { code: 42 })
-      recordException(ddSpan, new Error('boom'))
+      recordException(ddSpan, new Error('boom'), undefined, false)
       setOtelOperationName(ddSpan, 'GET /users')
       setOtelResource(ddSpan, 'GET /users')
 
@@ -262,7 +262,7 @@ describe('OTel bridge helpers', () => {
       // Date.now() is past `timeOrigin`; the vendored `timeInputToHrTime` treats numbers
       // smaller than that as performance-relative timestamps and adds the origin.
       const now = Date.now()
-      recordException(ddSpan, error, now)
+      recordException(ddSpan, error, now, false)
 
       assert.strictEqual(ddSpan.tags[ERROR_TYPE], 'Error')
       assert.strictEqual(ddSpan.tags[ERROR_MESSAGE], 'boom')
@@ -281,7 +281,7 @@ describe('OTel bridge helpers', () => {
     it('preserves an existing IGNORE_OTEL_ERROR=false tag from setStatus(ERROR)', () => {
       const ddSpan = createMockDdSpan()
       ddSpan.tags[IGNORE_OTEL_ERROR] = false
-      recordException(ddSpan, new Error('boom'))
+      recordException(ddSpan, new Error('boom'), undefined, false)
 
       assert.strictEqual(ddSpan.tags[IGNORE_OTEL_ERROR], false)
     })
@@ -313,25 +313,25 @@ describe('OTel bridge helpers', () => {
     it('ignores UNSET and missing codes, returning currentCode unchanged', () => {
       const ddSpan = createMockDdSpan()
 
-      assert.strictEqual(applyOtelStatus(ddSpan, 0, { code: 0 }), 0)
-      assert.strictEqual(applyOtelStatus(ddSpan, 0, undefined), 0)
-      assert.strictEqual(applyOtelStatus(ddSpan, 2, { code: 0 }), 2)
+      assert.strictEqual(applyOtelStatus(ddSpan, 0, { code: 0 }, false), 0)
+      assert.strictEqual(applyOtelStatus(ddSpan, 0, undefined, false), 0)
+      assert.strictEqual(applyOtelStatus(ddSpan, 2, { code: 0 }, false), 2)
       assert.deepStrictEqual(ddSpan.tags, {})
     })
 
     it('locks at OK once set', () => {
       const ddSpan = createMockDdSpan()
-      const fromUnset = applyOtelStatus(ddSpan, 0, { code: 1 })
+      const fromUnset = applyOtelStatus(ddSpan, 0, { code: 1 }, false)
       assert.strictEqual(fromUnset, 1)
 
-      const stillOk = applyOtelStatus(ddSpan, 1, { code: 2, message: 'late error' })
+      const stillOk = applyOtelStatus(ddSpan, 1, { code: 2, message: 'late error' }, false)
       assert.strictEqual(stillOk, 1)
       assert.deepStrictEqual(ddSpan.tags, {})
     })
 
     it('writes ERROR tags on transition to ERROR', () => {
       const ddSpan = createMockDdSpan()
-      const after = applyOtelStatus(ddSpan, 0, { code: 2, message: 'boom' })
+      const after = applyOtelStatus(ddSpan, 0, { code: 2, message: 'boom' }, false)
 
       assert.strictEqual(after, 2)
       assert.strictEqual(ddSpan.tags[ERROR_MESSAGE], 'boom')
@@ -340,8 +340,8 @@ describe('OTel bridge helpers', () => {
 
     it('lets ERROR replace ERROR with a fresh message', () => {
       const ddSpan = createMockDdSpan()
-      applyOtelStatus(ddSpan, 0, { code: 2, message: 'first' })
-      const after = applyOtelStatus(ddSpan, 2, { code: 2, message: 'second' })
+      applyOtelStatus(ddSpan, 0, { code: 2, message: 'first' }, false)
+      const after = applyOtelStatus(ddSpan, 2, { code: 2, message: 'second' }, false)
 
       assert.strictEqual(after, 2)
       assert.strictEqual(ddSpan.tags[ERROR_MESSAGE], 'second')
@@ -349,11 +349,11 @@ describe('OTel bridge helpers', () => {
 
     it('records the OK transition out of ERROR so future ERRORs are locked', () => {
       const ddSpan = createMockDdSpan()
-      applyOtelStatus(ddSpan, 0, { code: 2, message: 'first' })
-      const afterOk = applyOtelStatus(ddSpan, 2, { code: 1 })
+      applyOtelStatus(ddSpan, 0, { code: 2, message: 'first' }, false)
+      const afterOk = applyOtelStatus(ddSpan, 2, { code: 1 }, false)
       assert.strictEqual(afterOk, 1)
 
-      const stillOk = applyOtelStatus(ddSpan, 1, { code: 2, message: 'should be ignored' })
+      const stillOk = applyOtelStatus(ddSpan, 1, { code: 2, message: 'should be ignored' }, false)
       assert.strictEqual(stillOk, 1)
       // The first ERROR's message stays. Tag clearing on OK override is out of scope.
       assert.strictEqual(ddSpan.tags[ERROR_MESSAGE], 'first')
