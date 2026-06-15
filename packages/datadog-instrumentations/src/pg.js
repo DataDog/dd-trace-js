@@ -19,6 +19,9 @@ const finishPoolQueryCh = channel('datadog:pg:pool:query:finish')
 const poolConnectStartCh = channel('apm:pg:pool:connect:start')
 const poolConnectFinishCh = channel('apm:pg:pool:connect:finish')
 
+const poolAcquireStartCh = channel('apm:pg:pool:acquire:start')
+const poolAcquireFinishCh = channel('apm:pg:pool:acquire:finish')
+
 // Drivers like pg-promise reuse the same prepared-statement query object across executions; cache
 // the un-injected `text` so the wrap doesn't capture a previous DBM injection as the new original.
 const originalTextCache = new WeakMap()
@@ -29,6 +32,12 @@ const originalTextCache = new WeakMap()
 // Each entry is popped by the frame that pushed it, so no client outlives its callback.
 const poolWaitClients = []
 const poolWaitTimes = []
+
+// `Pool.prototype.query` acquires a client internally via `connect`. That acquire is reported as a
+// tag on the resulting query span, so the connect wrap must not also open a standalone acquire span
+// for it; an explicit user `pool.connect()` gets the standalone span instead. `connect` is invoked
+// synchronously from within `query`, so a module flag set around the call reliably distinguishes them.
+let acquiringForPoolQuery = false
 
 addHook({ name: 'pg', versions: ['>=8.0.3'], file: 'lib/native/client.js' }, Client => {
   shimmer.wrap(Client.prototype, 'query', query => wrapQuery(query))
@@ -44,27 +53,59 @@ addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
   // pg defers a busy pool's connect callback and runs it in the releasing query's async context;
   // capture the caller's context and restore it around the callback so spans attach to the caller.
   shimmer.wrap(pg.Pool.prototype, 'connect', connect => function (cb) {
-    if (typeof cb !== 'function' || !poolConnectStartCh.hasSubscribers) {
+    // `await pool.connect()`: no callback, so the caller's async context is preserved by the await
+    // itself and only the standalone acquire span is needed. `Pool.query` always acquires with a
+    // callback, so a missing callback is always an explicit caller-initiated acquire.
+    if (typeof cb !== 'function') {
+      if (!poolAcquireStartCh.hasSubscribers) {
+        return connect.apply(this, arguments)
+      }
+
+      const start = acquireStart(this)
+      const acquireCtx = { poolOptions: this.options }
+      poolAcquireStartCh.publish(acquireCtx)
+
+      return connect.apply(this, arguments).then(client => {
+        finishAcquire(acquireCtx, start)
+        return client
+      }, error => {
+        acquireCtx.error = error
+        finishAcquire(acquireCtx, start)
+        throw error
+      })
+    }
+
+    if (!poolConnectStartCh.hasSubscribers) {
       return connect.apply(this, arguments)
     }
 
     const ctx = {}
-    // pg drains its pending queue FIFO on the next tick, so an idle client is only ours when it
-    // outnumbers the requests already queued ahead of us. That handoff is not a wait on the pool.
-    const start = this.idleCount > this.waitingCount ? 0 : performance.now()
-    arguments[0] = function (...args) {
-      const client = args[1]
-      if (client !== undefined) {
-        poolWaitClients.push(client)
-        poolWaitTimes.push(start === 0 ? 0 : performance.now() - start)
-      }
-      try {
-        return poolConnectFinishCh.runStores(ctx, cb, this, ...args)
-      } finally {
+    const start = acquireStart(this)
+
+    if (acquiringForPoolQuery) {
+      arguments[0] = function (...args) {
+        const client = args[1]
         if (client !== undefined) {
-          poolWaitClients.pop()
-          poolWaitTimes.pop()
+          poolWaitClients.push(client)
+          poolWaitTimes.push(acquireWait(start))
         }
+        try {
+          return poolConnectFinishCh.runStores(ctx, cb, this, ...args)
+        } finally {
+          if (client !== undefined) {
+            poolWaitClients.pop()
+            poolWaitTimes.pop()
+          }
+        }
+      }
+    } else {
+      const acquireCtx = { poolOptions: this.options }
+      poolAcquireStartCh.publish(acquireCtx)
+
+      arguments[0] = function (...args) {
+        acquireCtx.error = args[0]
+        finishAcquire(acquireCtx, start)
+        return poolConnectFinishCh.runStores(ctx, cb, this, ...args)
       }
     }
 
@@ -219,10 +260,30 @@ function wrapQuery (query) {
 const finish = (ctx) => {
   finishPoolQueryCh.publish(ctx)
 }
+// pg drains its pending queue FIFO on the next tick, so an idle client is only ours when it
+// outnumbers the requests already queued ahead of us. That handoff is not a wait on the pool.
+function acquireStart (pool) {
+  return pool.idleCount > pool.waitingCount ? 0 : performance.now()
+}
+function acquireWait (start) {
+  return start === 0 ? 0 : performance.now() - start
+}
+function finishAcquire (ctx, start) {
+  ctx.poolWaitTime = acquireWait(start)
+  poolAcquireFinishCh.publish(ctx)
+}
+function acquireForPoolQuery (query, pool, args) {
+  acquiringForPoolQuery = true
+  try {
+    return query.apply(pool, args)
+  } finally {
+    acquiringForPoolQuery = false
+  }
+}
 function wrapPoolQuery (query) {
   return function (...args) {
     if (!startPoolQueryCh.hasSubscribers) {
-      return query.apply(this, args)
+      return acquireForPoolQuery(query, this, args)
     }
 
     const pgQuery = args[0] !== null && typeof args[0] === 'object' ? args[0] : { text: args[0] }
@@ -252,7 +313,7 @@ function wrapPoolQuery (query) {
         })
       }
 
-      const retval = query.apply(this, args)
+      const retval = acquireForPoolQuery(query, this, args)
 
       if (retval?.then) {
         retval.then(() => {
