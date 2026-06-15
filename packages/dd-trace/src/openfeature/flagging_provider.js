@@ -1,5 +1,4 @@
 'use strict'
-
 const { DatadogNodeServerProvider } = require('@datadog/openfeature-node-server')
 const { channel } = require('dc-polyfill')
 const log = require('../log')
@@ -25,12 +24,9 @@ class FlaggingProvider extends DatadogNodeServerProvider {
       exposureChannel: channel(EXPOSURE_CHANNEL),
       initializationTimeoutMs: config.experimental.flaggingProvider.initializationTimeoutMs,
     })
-
     this._tracer = tracer
     this._config = config
-
     this.hooks.push(new EvalMetricsHook(config))
-
     if (config.experimental.flaggingProvider.spanEnrichment?.enabled) {
       this.#spanEnrichmentHook = new SpanEnrichmentHook(tracer)
       this.hooks.push(this.#spanEnrichmentHook)
@@ -38,9 +34,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     } else {
       log.info('%s span enrichment disabled', this.constructor.name)
     }
-
-    log.debug('%s created with timeout: %dms', this.constructor.name,
-      config.experimental.flaggingProvider.initializationTimeoutMs)
+    log.debug('%s created with timeout: %dms', this.constructor.name, config.experimental.flaggingProvider.initializationTimeoutMs)
   }
 
   /**
@@ -64,6 +58,15 @@ class FlaggingProvider extends DatadogNodeServerProvider {
       this.setConfiguration(ufc)
     }
     log.debug('%s provider configuration updated', this.constructor.name)
+  }
+
+  // Add a check to ensure that optional peer dependencies are not included in the bundle.
+  _checkPeerDependencies() {
+    if (this._config.experimental.flaggingProvider.skipPeerDependencies) {
+      log.info('%s skipping peer dependencies', this.constructor.name)
+      return
+    }
+    // Add logic to handle peer dependencies here.
   }
 }
 
