@@ -49,7 +49,64 @@ class McpListToolsPlugin extends TracingPlugin {
   }
 }
 
+class McpServerRequestPlugin extends TracingPlugin {
+  static id = 'modelcontextprotocol_server'
+  static prefix = 'tracing:orchestrion:@modelcontextprotocol/sdk:Protocol__onrequest'
+
+  bindStart (ctx) {
+    const [request, extra] = ctx.arguments || []
+    const method = request?.method
+    const headers = extra?.requestInfo?.headers
+
+    // Extract distributed trace context from HTTP transport headers when available
+    const childOf = headers ? this.tracer.extract('http_headers', headers) : null
+
+    this.startSpan('mcp.server.request', {
+      childOf,
+      resource: method,
+      type: 'mcp',
+      kind: 'server',
+    }, ctx)
+
+    return ctx.currentStore
+  }
+
+  end (ctx) {
+    super.finish(ctx)
+  }
+}
+
+class McpServerToolCallPlugin extends TracingPlugin {
+  static id = 'modelcontextprotocol_server_tool'
+  static prefix = 'tracing:orchestrion:@modelcontextprotocol/sdk:McpServer_executeToolHandler'
+
+  bindStart (ctx) {
+    const [tool] = ctx.arguments || []
+    const toolName = tool?.name
+
+    this.startSpan('mcp.server.tool.call', {
+      resource: toolName,
+      type: 'mcp',
+      kind: 'internal',
+    }, ctx)
+
+    return ctx.currentStore
+  }
+
+  asyncEnd (ctx) {
+    const result = ctx.result
+    if (result?.isError) {
+      const span = ctx.currentStore?.span
+      const errorText = result.content?.find?.(c => c.type === 'text')?.text || 'Tool handler returned isError: true'
+      span?.setTag('error', new Error(errorText))
+    }
+    super.finish(ctx)
+  }
+}
+
 module.exports = [
   McpToolCallPlugin,
   McpListToolsPlugin,
+  McpServerRequestPlugin,
+  McpServerToolCallPlugin,
 ]

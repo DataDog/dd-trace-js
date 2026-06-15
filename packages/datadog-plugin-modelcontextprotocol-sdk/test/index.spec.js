@@ -84,4 +84,75 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
       return traceAssertion
     })
   })
+
+  describe('Protocol._onrequest - mcp.server.request', () => {
+    it('should generate server request span for tools/call', async () => {
+      const traceAssertion = expectSomeSpan(agent, {
+        name: 'mcp.server.request',
+        type: 'mcp',
+        resource: 'tools/call',
+        meta: {
+          component: 'modelcontextprotocol_server',
+          '_dd.integration': 'modelcontextprotocol_server',
+          'span.kind': 'server',
+        },
+      })
+
+      await testSetup.clientCallTool()
+
+      return traceAssertion
+    })
+
+    it('should generate server request span for tools/list', async () => {
+      const traceAssertion = expectSomeSpan(agent, {
+        name: 'mcp.server.request',
+        type: 'mcp',
+        resource: 'tools/list',
+        meta: {
+          component: 'modelcontextprotocol_server',
+          '_dd.integration': 'modelcontextprotocol_server',
+          'span.kind': 'server',
+        },
+      })
+
+      await testSetup.clientListTools()
+
+      return traceAssertion
+    })
+  })
+
+  describe('McpServer.executeToolHandler - mcp.server.tool.call', () => {
+    it('should generate server tool call span (happy path)', async () => {
+      const traceAssertion = expectSomeSpan(agent, {
+        name: 'mcp.server.tool.call',
+        type: 'mcp',
+        meta: {
+          component: 'modelcontextprotocol_server_tool',
+          '_dd.integration': 'modelcontextprotocol_server_tool',
+          'span.kind': 'internal',
+        },
+      })
+
+      await testSetup.clientCallTool()
+
+      return traceAssertion
+    })
+
+    it('should generate server tool call span with error (error path)', async () => {
+      const traceAssertion = expectSomeSpan(agent, {
+        name: 'mcp.server.tool.call',
+        type: 'mcp',
+        error: 1,
+        meta: {
+          component: 'modelcontextprotocol_server_tool',
+          '_dd.integration': 'modelcontextprotocol_server_tool',
+          'span.kind': 'internal',
+        },
+      })
+
+      await testSetup.clientCallToolError()
+
+      return traceAssertion
+    })
+  })
 })

@@ -63,6 +63,10 @@ class ModelcontextprotocolSdkTestSetup {
   async clientListTools () {
     return this._client.listTools()
   }
+
+  get server () {
+    return this._server
+  }
 }
 
 module.exports = ModelcontextprotocolSdkTestSetup
