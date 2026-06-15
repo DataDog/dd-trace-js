@@ -238,6 +238,42 @@ for (const hook of getHooks('ai')) {
   })
 }
 
-addHook({ name: 'ai', versions: ['>=7.0.0-0'] }, exports => exports)
+addHook({ name: 'ai', versions: ['>=7.0.0-0'] }, exports => {
+  // ai sdk v7 only supported on node.js 22+
+  // inlining this import here so we only import in those cases
+  // eslint-disable-next-line n/no-unsupported-features/node-builtins
+  const { TransformStream } = require('node:stream/web')
+
+  tracingChannel('ai:telemetry').subscribe({
+    asyncEnd (ctx) {
+      // guard against this event being re-emitted.
+      if (!ctx.isStream || !ctx.result?.stream || ctx.streamConsumed) return
+
+      const transform = new TransformStream({
+        transform (chunk, controller) {
+          const done = chunk.type === 'finish'
+
+          channel('dd-trace:vercel-ai:chunk').publish({ ctx, chunk, done })
+
+          if (done) {
+            tracingChannel('ai:telemetry').asyncEnd.publish(ctx)
+          }
+
+          controller.enqueue(chunk) // pass through value
+        },
+
+        cancel (reason) {
+          ctx.error = reason
+
+          tracingChannel('ai:telemetry').error.publish(ctx)
+          tracingChannel('ai:telemetry').asyncEnd.publish(ctx)
+        },
+      })
+
+      ctx.result.stream = ctx.result.stream.pipeThrough(transform)
+    },
+  })
+  return exports
+})
 
 module.exports = { wrapModelWithAIGuard }

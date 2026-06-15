@@ -35,10 +35,30 @@ class VercelAiTelemetryPlugin extends TracingPlugin {
   static id = 'ai'
   static prefix = 'tracing:ai:telemetry'
 
+  #streamedCalls = new Set()
+
+  constructor () {
+    super(...arguments)
+
+    this.addSub('dd-trace:vercel-ai:chunk', ({ ctx, chunk, done }) => {
+      ctx.streamConsumed = done
+    })
+  }
+
   bindStart (ctx) {
     const { type: name, event } = ctx
     const model = event.modelId
     const modelProvider = parseModelProvider(event.provider, model)
+
+    let isStream = this.#streamedCalls.has(event.callId)
+    if (name.includes('stream')) {
+      this.#streamedCalls.add(event.callId)
+      isStream = true
+
+      ctx.streamConsumed = false
+    }
+
+    ctx.isStream = isStream
 
     this.startSpan(name, {
       meta: {
@@ -52,6 +72,10 @@ class VercelAiTelemetryPlugin extends TracingPlugin {
   }
 
   asyncEnd (ctx) {
+    // check if isStreamed and stream resolved
+    // this event will fire multiple times for the same channel
+    if (ctx.isStream && ctx.result?.stream && !ctx.streamConsumed) return
+
     const span = ctx.currentStore?.span
     span?.finish()
   }

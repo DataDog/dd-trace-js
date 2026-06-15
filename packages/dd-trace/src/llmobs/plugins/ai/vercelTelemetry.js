@@ -14,9 +14,6 @@ const SPAN_NAME_TO_KIND_MAPPING = {
   // embeddings
   embed: 'embedding',
   embedMany: 'workflow',
-  // object generation
-  generateObject: 'workflow',
-  streamObject: 'workflow',
   // text generation
   generateText: 'workflow',
   streamText: 'workflow',
@@ -144,6 +141,61 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
   static integration = 'ai'
   static prefix = 'tracing:ai:telemetry'
 
+  /** @type {Map<string, Array<Record<string, unknown>>>} */
+  #outputContentsByCallId = new Map()
+
+  constructor () {
+    super(...arguments)
+
+    this.addSub('dd-trace:vercel-ai:chunk', ({ ctx, chunk, done }) => {
+      ctx.chunks ??= []
+      const chunks = ctx.chunks
+      if (chunk) chunks.push(chunk)
+
+      ctx.streamConsumed = done
+
+      if (!done) return
+
+      const contentById = {}
+
+      for (const chunk of chunks) {
+        if (chunk.type === 'finish') {
+          ctx.result.usage = chunk.usage
+        } else if (chunk.type === 'reasoning-start') {
+          contentById[chunk.id] = { type: 'reasoning', text: '' }
+        } else if (chunk.type === 'text-start') {
+          contentById[chunk.id] = { type: 'text', text: '' }
+        } else if (chunk.type === 'reasoning-delta' || chunk.type === 'text-delta') {
+          contentById[chunk.id].text += chunk.delta
+        } else if (chunk.type === 'tool-call') {
+          contentById[chunk.toolCallId] = chunk
+        }
+      }
+
+      const content = Object.values(contentById)
+      ctx.result.content = content
+
+      const { callId } = ctx.event
+      const outputContentForCallId = this.#outputContentsByCallId.get(callId)
+      if (outputContentForCallId) {
+        outputContentForCallId.push(content)
+      } else {
+        this.#outputContentsByCallId.set(callId, [content])
+      }
+    })
+  }
+
+  /**
+   * @override
+   */
+  asyncEnd (ctx) {
+    // check if isStreamed and stream resolved
+    // this event will fire multiple times for the same channel
+    if (ctx.isStream && ctx.result?.stream && !ctx.streamConsumed) return
+
+    super.asyncEnd(ctx)
+  }
+
   /**
    * @override
    */
@@ -182,16 +234,12 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
     const kind = SPAN_NAME_TO_KIND_MAPPING[operation]
     if (!kind) return
 
-    // console.log(operation)
-    // console.log('event', ctx.event)
-    // console.log('result', ctx.result)
-    // console.log('\n\n')
-
     switch (operation) {
       case 'embed':
         this.setEmbeddingTags(span, ctx)
         break
       case 'generateText':
+      case 'streamText':
         this.setTextGenerationTags(span, ctx)
         break
       case 'languageModelCall':
@@ -227,7 +275,14 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
 
     const lastUserPrompt = event.messages.reverse().find(message => message.role === 'user').content
     const input = Array.isArray(lastUserPrompt) ? lastUserPrompt.map(part => part.text ?? '').join('') : lastUserPrompt
-    const output = result._output
+
+    let output
+    if (ctx.isStream) {
+      const outputContents = this.#outputContentsByCallId.get(event.callId)
+      output = outputContents[outputContents.length - 1].find(part => part.type === 'text').text
+    } else {
+      output = result._output
+    }
 
     this._tagger.tagTextIO(span, input, output)
 
@@ -236,10 +291,18 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
   }
 
   setStepTags (span, ctx) {
-    const { result } = ctx
+    const { result, event } = ctx
+
+    let content
+    if (ctx.isStream) {
+      const outputContents = this.#outputContentsByCallId.get(event.callId)
+      content = outputContents?.[outputContents.length - 1]
+    } else {
+      content = result?.content
+    }
 
     // capture reasoning if applicable
-    const reasoning = result?.content.find(part => part.type === 'reasoning')?.text
+    const reasoning = content?.find(part => part.type === 'reasoning')?.text
     if (reasoning) {
       this._tagger.tagTextIO(span, reasoning)
     }
@@ -273,8 +336,9 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
       )
     }
 
-    // TODO: metadata tagging
-    // console.log('metadata for llm call', event)
+    // metadata
+    const metadata = getGenerationMetadataFromEvent(event)
+    this._tagger.tagMetadata(span, metadata)
 
     // metrics
     const { usage } = result
@@ -282,8 +346,8 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
       inputTokens: usage?.inputTokens?.total,
       cacheWriteTokens: usage?.inputTokens?.cacheWrite ?? 0,
       cacheReadTokens: usage?.inputTokens?.cacheRead ?? 0,
-      outputTokens: usage?.outputTokens.text, // maybe usage.outputTokens.total?
-      reasoningOutputTokens: usage?.outputTokens.reasoning ?? 0,
+      outputTokens: usage?.outputTokens?.total,
+      reasoningOutputTokens: usage?.outputTokens?.reasoning ?? 0,
     })
   }
 
