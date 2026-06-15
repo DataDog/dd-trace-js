@@ -380,6 +380,7 @@ describe('opentelemetry', function () {
         DD_TRACE_OTEL_ENABLED: '1',
         SERVER_PORT,
         DD_TRACE_DISABLED_INSTRUMENTATIONS: 'http,dns,express,net',
+        DD_TRACE_OTEL_SEMANTICS_ENABLED: 'true',
       },
     })
     await getWithRetry(`http://localhost:${SERVER_PORT}/first-endpoint`, 10_000)

@@ -284,11 +284,11 @@ describe('OTel Span', () => {
     })
   })
 
-  it('updateName should set the DD resource name and keep span.name in sync', () => {
+  it('updateName should set the DD operation name and keep span.name in sync', () => {
     const span = makeSpan('original name')
     span.updateName('updated name')
 
-    assert.strictEqual(span._ddSpan.context().getTag(RESOURCE_NAME), 'updated name')
+    assert.strictEqual(span._ddSpan.context()._name, 'updated name')
     assert.strictEqual(span.name, 'updated name')
   })
 
@@ -679,6 +679,14 @@ describe('OTel Span', () => {
       assert.strictEqual(tags[ERROR_TYPE], undefined)
       assert.strictEqual(tags[ERROR_MESSAGE], undefined)
       assert.strictEqual(tags[ERROR_STACK], undefined)
+    })
+
+    it('updateName should set the DD resource name and keep span.name in sync', () => {
+      const span = makeSpan('original name')
+      span.updateName('updated name')
+
+      assert.strictEqual(span._ddSpan.context().getTag(RESOURCE_NAME), 'updated name')
+      assert.strictEqual(span.name, 'updated name')
     })
   })
 })
