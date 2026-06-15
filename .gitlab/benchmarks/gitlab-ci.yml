@@ -1,10 +1,31 @@
+# The microbenchmarks CI image is built in-repo from container/ via the shared
+# benchmarking-platform template (manual `build-benchmark-ci-images` job).
+# @see https://github.com/DataDog/benchmarking-platform-tools/blob/main/images/templates/gitlab/build-ci-images.template.yml
+include:
+  - project: 'DataDog/benchmarking-platform-tools'
+    file: 'images/templates/gitlab/build-ci-images.template.yml'
+
 variables:
-  MICROBENCHMARKS_CI_IMAGE: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/benchmarking-platform:dd-trace-js
+  # Consumed by the benchmark jobs below. Repin after a `build-benchmark-ci-images`
+  # run to the tag it pushes; the @sha256 digest is what image-integrity verifies, so
+  # the pull can't be shifted by a tag rewrite.
+  # Built here: https://gitlab.ddbuild.io/DataDog/apm-reliability/dd-trace-js/-/jobs/1755904623
+  MICROBENCHMARKS_CI_IMAGE: registry.ddbuild.io/ci/benchmarking-platform:dd-trace-js-117825597@sha256:23a63e17211bb712a07494ccbbed86edb8f4a3c1c301310c217938dbe1b7284d
+
+  # Image build, consumed by the included build-ci-images template. The per-pipeline
+  # suffix pins each build to a unique tag so a rebuild can't shift what older
+  # pipelines pulled.
+  BASE_CI_IMAGE_SUFFIX: dd-trace-js-${CI_PIPELINE_ID}
+  BASE_CI_IMAGE_CONTAINER_DIR: .gitlab/benchmarks/container
+  # sirun and CPython are x86_64 only; the template defaults to multi-arch, which
+  # would build an arm64 leg with amd64 binaries (exec format error). Pin amd64.
+  BASE_CI_IMAGE_PLATFORM: linux/amd64
+
   SLS_CI_IMAGE: registry.ddbuild.io/ci/serverless-tools:1
   SLS_CI_BRANCH: main
 
   # Benchmark's env variables. Modify to tweak benchmark parameters.
-  UNCONFIDENCE_THRESHOLD: "5.0"
+  UNCONFIDENCE_THRESHOLD: "2.0"
   MD_REPORT_ONLY_CHANGES: "1"
 
 .benchmarks:
@@ -20,13 +41,12 @@ variables:
     - interruptible: true
   timeout: 30m  # TODO: Reduce this once GitLab CI runner availability improves
   script:
-    - git clone --branch dd-trace-js https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/benchmarking-platform platform && cd platform
-    - bp-runner bp-runner.yml --debug
+    - cd .gitlab/benchmarks && bp-runner bp-runner.yml --debug
   artifacts:
     name: "artifacts"
     when: always
     paths:
-      - platform/artifacts/
+      - .gitlab/benchmarks/artifacts/
     expire_in: 3 months
   retry:
     max: 2
@@ -47,8 +67,7 @@ benchmarks-pr-comment:
   tags: ["arch:amd64"]
   image: $MICROBENCHMARKS_CI_IMAGE
   script:
-    - cd platform && (git init && git remote add origin https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/benchmarking-platform && git pull origin dd-trace-js)
-    - bp-runner bp-runner.pr-comment.yml --debug
+    - cd .gitlab/benchmarks && bp-runner bp-runner.pr-comment.yml --debug
   allow_failure: true
 
 check-big-regressions:
@@ -63,8 +82,7 @@ check-big-regressions:
   tags: ["arch:amd64"]
   image: $MICROBENCHMARKS_CI_IMAGE
   script:
-    - cd platform && (git init && git remote add origin https://gitlab-ci-token:${CI_JOB_TOKEN}@gitlab.ddbuild.io/DataDog/benchmarking-platform && git pull origin dd-trace-js)
-    - bp-runner bp-runner.fail-on-regression.yml --debug
+    - cd .gitlab/benchmarks && bp-runner bp-runner.fail-on-regression.yml --debug
 
 benchmark:
   extends: .benchmarks

@@ -49,7 +49,7 @@ describe('Plugin', () => {
       })
 
       describe('without configuration', () => {
-        before(() => {
+        before(async () => {
           dateNowStub = sinon.stub(Date, 'now').callsFake(() => {
             const returnValue = mockTime
             mockTime += 50000 // Increment by 50000 ms to ensure each DSM schema is sampled
@@ -57,9 +57,8 @@ describe('Plugin', () => {
           })
           const cache = SchemaBuilder.getCache()
           cache.clear()
-          return agent.load('protobufjs').then(() => {
-            protobuf = require(`../../../versions/protobufjs@${version}`).get()
-          })
+          await agent.load('protobufjs')
+          protobuf = require(`../../../versions/protobufjs@${version}`).get()
         })
 
         after(() => {

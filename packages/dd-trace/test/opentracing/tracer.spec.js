@@ -19,6 +19,7 @@ describe('Tracer', () => {
   let tracer
   let Span
   let span
+  let spanCtx
   let PrioritySampler
   let prioritySampler
   let AgentExporter
@@ -40,8 +41,13 @@ describe('Tracer', () => {
   beforeEach(() => {
     fields = {}
 
+    spanCtx = {
+      getTag: sinon.stub().returns(undefined),
+      setTag: sinon.stub(),
+    }
     span = {
       addTags: sinon.stub().returns(span),
+      context: sinon.stub().returns(spanCtx),
     }
     Span = sinon.stub().returns(span)
 
@@ -132,9 +138,6 @@ describe('Tracer', () => {
       sinon.assert.calledWith(Span, tracer, processor, prioritySampler, {
         operationName: 'name',
         parent: null,
-        tags: {
-          'service.name': 'service',
-        },
         startTime: fields.startTime,
         hostname: undefined,
         traceId128BitGenerationEnabled: undefined,
@@ -146,6 +149,7 @@ describe('Tracer', () => {
         foo: 'bar',
       })
 
+      sinon.assert.calledWith(spanCtx.setTag, 'service.name', 'service')
       assert.strictEqual(testSpan, span)
     })
 
@@ -191,9 +195,6 @@ describe('Tracer', () => {
       sinon.assert.calledWith(Span, tracer, processor, prioritySampler, {
         operationName: 'name',
         parent: null,
-        tags: {
-          'service.name': 'service',
-        },
         startTime: fields.startTime,
         hostname: os.hostname(),
         traceId128BitGenerationEnabled: undefined,
@@ -255,6 +256,21 @@ describe('Tracer', () => {
       sinon.assert.calledWith(span.addTags, fields.tags)
     })
 
+    it('should preserve the span version when the span service matches the global service', () => {
+      fields.tags = {
+        service: 'service',
+        version: '1.2.3',
+      }
+
+      tracer = new Tracer(config)
+      const testSpan = tracer.startSpan('name', fields)
+
+      sinon.assert.calledWith(span.addTags, fields.tags)
+      sinon.assert.calledWith(spanCtx.setTag, 'service.name', 'service')
+      assert.strictEqual(fields.tags.version, '1.2.3')
+      assert.strictEqual(testSpan, span)
+    })
+
     it('If span is granted a service name that differs from the global service name' +
       'ensure spans `version` tag is undefined.', () => {
       config.tags = {
@@ -277,15 +293,13 @@ describe('Tracer', () => {
       sinon.assert.calledWith(Span, tracer, processor, prioritySampler, {
         operationName: 'name',
         parent: null,
-        tags: {
-          'service.name': 'new-service',
-        },
         startTime: fields.startTime,
         hostname: undefined,
         traceId128BitGenerationEnabled: undefined,
         integrationName: undefined,
         links: undefined,
       })
+      sinon.assert.calledWith(spanCtx.setTag, 'service.name', 'new-service')
       assert.strictEqual(testSpan, span)
     })
 
@@ -297,9 +311,6 @@ describe('Tracer', () => {
       sinon.assert.calledWith(Span, tracer, processor, prioritySampler, {
         operationName: 'name',
         parent: null,
-        tags: {
-          'service.name': 'service',
-        },
         startTime: fields.startTime,
         hostname: undefined,
         traceId128BitGenerationEnabled: true,
@@ -319,9 +330,6 @@ describe('Tracer', () => {
       sinon.assert.calledWith(Span, tracer, processor, prioritySampler, {
         operationName: 'name',
         parent: null,
-        tags: {
-          'service.name': 'service',
-        },
         startTime: fields.startTime,
         hostname: undefined,
         traceId128BitGenerationEnabled: undefined,

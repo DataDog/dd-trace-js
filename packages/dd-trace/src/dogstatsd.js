@@ -6,7 +6,6 @@ const isIP = require('net').isIP
 const request = require('./exporters/common/request')
 const log = require('./log')
 const Histogram = require('./histogram')
-const { getAgentUrl } = require('./agent/url')
 const { entityId } = require('./exporters/common/docker')
 
 const MAX_BUFFER_SIZE = 1024 // limit from the agent
@@ -191,8 +190,8 @@ class DogStatsDClient {
       lookup: config.lookup,
     }
 
-    if (config.url || config.port) {
-      clientConfig.metricsProxyUrl = getAgentUrl(config)
+    if (config.url) {
+      clientConfig.metricsProxyUrl = config.url
     }
 
     return clientConfig

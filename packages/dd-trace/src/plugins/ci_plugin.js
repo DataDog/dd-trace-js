@@ -143,6 +143,7 @@ module.exports = class CiPlugin extends Plugin {
     this.fileLineToProbeId = new Map()
     this.rootDir = process.cwd() // fallback in case :session:start events are not emitted
     this._testSuiteSpansByTestSuite = new Map()
+    this._pendingWorkerTracesByTestSuite = new Map()
     this._pendingRequestErrorTags = []
 
     this.addSub(`ci:${this.constructor.id}:library-configuration`, (ctx) => {
@@ -352,52 +353,8 @@ module.exports = class CiPlugin extends Plugin {
       const formattedTraces = JSON.parse(traces)
 
       for (const trace of formattedTraces) {
-        for (const span of trace) {
-          span.span_id = id(span.span_id)
-          span.trace_id = id(span.trace_id)
-          span.parent_id = id(span.parent_id)
-
-          if (span.name?.startsWith(`${this.constructor.id}.`)) {
-            span.meta[TEST_IS_TEST_FRAMEWORK_WORKER] = 'true'
-            if (span.name === `${this.constructor.id}.test` || span.name === `${this.constructor.id}.test_suite`) {
-              Object.assign(span.meta, getSessionItrSkippingEnabledTags(this.testSessionSpan))
-            }
-            // augment with git information (since it will not be available in the worker)
-            for (const key in this.testEnvironmentMetadata) {
-              // CAREFUL: this bypasses the metadata/metrics distinction
-              // Be careful not to pass numbers in `meta`
-              if (key.startsWith('git.')) {
-                span.meta[key] = this.testEnvironmentMetadata[key]
-              }
-            }
-          }
-
-          // Only test hooks run in the cucumber worker, so the test events do not have the
-          // test session, test module and test suite ids. We have to update them here.
-          if (span.name === 'cucumber.test' || span.name === 'mocha.test') {
-            const testSuite = span.meta[TEST_SUITE]
-            const testSuiteSpan = this._testSuiteSpansByTestSuite.get(testSuite)
-            if (!testSuiteSpan) {
-              log.warn('Test suite span not found for test span with test suite %s', testSuite)
-              continue
-            }
-
-            const testSuiteTags = getTestSuiteLevelVisibilityTags(testSuiteSpan, this.constructor.id)
-            span.meta = {
-              ...span.meta,
-              ...testSuiteTags,
-              ...getSessionRequestErrorTags(this.testSessionSpan),
-            }
-          }
-
-          // Jest and Vitest worker test spans are serialized in the worker and may not include
-          // request error tags; add them from the session span in the main process.
-          if ((span.name === 'jest.test' || span.name === 'vitest.test' || span.name === 'vitest.test_suite') &&
-              this.testSessionSpan) {
-            Object.assign(span.meta, getSessionRequestErrorTags(this.testSessionSpan))
-          }
-        }
-        this.tracer._exporter.export(trace)
+        this._prepareWorkerTrace(trace)
+        this._exportWorkerTraceOrBuffer(trace)
       }
     })
 
@@ -500,6 +457,134 @@ module.exports = class CiPlugin extends Plugin {
    */
   getSessionItrSkippingEnabledTags () {
     return getSessionItrSkippingEnabledTags(this.testSessionSpan)
+  }
+
+  /**
+   * Normalizes worker trace identifiers and adds process-level metadata before exporting or buffering.
+   *
+   * @param {object[]} trace - Worker trace spans decoded from the worker payload.
+   */
+  _prepareWorkerTrace (trace) {
+    for (const span of trace) {
+      span.span_id = id(span.span_id)
+      span.trace_id = id(span.trace_id)
+      span.parent_id = id(span.parent_id)
+
+      if (span.name?.startsWith(`${this.constructor.id}.`)) {
+        span.meta[TEST_IS_TEST_FRAMEWORK_WORKER] = 'true'
+        if (span.name === `${this.constructor.id}.test` || span.name === `${this.constructor.id}.test_suite`) {
+          Object.assign(span.meta, getSessionItrSkippingEnabledTags(this.testSessionSpan))
+        }
+        // augment with git information (since it will not be available in the worker)
+        for (const key in this.testEnvironmentMetadata) {
+          // CAREFUL: this bypasses the metadata/metrics distinction
+          // Be careful not to pass numbers in `meta`
+          if (key.startsWith('git.')) {
+            span.meta[key] = this.testEnvironmentMetadata[key]
+          }
+        }
+      }
+
+      // Jest and Vitest worker test spans are serialized in the worker and may not include
+      // request error tags; add them from the session span in the main process.
+      if ((span.name === 'jest.test' || span.name === 'vitest.test' || span.name === 'vitest.test_suite') &&
+          this.testSessionSpan) {
+        Object.assign(span.meta, getSessionRequestErrorTags(this.testSessionSpan))
+      }
+    }
+  }
+
+  /**
+   * Adds suite-level CI Visibility tags to worker test spans when their suite span is available.
+   *
+   * @param {object[]} trace - Worker trace spans.
+   * @returns {string|undefined} Missing test suite name, if the trace cannot be exported yet.
+   */
+  _addSuiteTagsToWorkerTrace (trace) {
+    for (const span of trace) {
+      // Only test hooks run in Cucumber and Mocha workers, so the test events do not have the
+      // test session, test module and test suite ids. We have to update them in the main process.
+      if (span.name !== 'cucumber.test' && span.name !== 'mocha.test') continue
+
+      const testSuite = span.meta[TEST_SUITE]
+      const testSuiteSpan = this._testSuiteSpansByTestSuite.get(testSuite)
+      if (!testSuiteSpan) return testSuite
+
+      const testSuiteTags = getTestSuiteLevelVisibilityTags(testSuiteSpan, this.constructor.id)
+      span.meta = {
+        ...span.meta,
+        ...testSuiteTags,
+        ...getSessionRequestErrorTags(this.testSessionSpan),
+      }
+    }
+  }
+
+  /**
+   * Stores a worker trace until the matching test suite span exists in the main process.
+   *
+   * @param {string} testSuite - Test suite path used as the pending trace key.
+   * @param {object[]} trace - Worker trace spans.
+   */
+  _bufferWorkerTrace (testSuite, trace) {
+    let pendingTraces = this._pendingWorkerTracesByTestSuite.get(testSuite)
+    if (!pendingTraces) {
+      pendingTraces = []
+      this._pendingWorkerTracesByTestSuite.set(testSuite, pendingTraces)
+    }
+    pendingTraces.push(trace)
+  }
+
+  /**
+   * Exports a worker trace immediately, or buffers it if suite-level tags cannot be added yet.
+   *
+   * @param {object[]} trace - Worker trace spans.
+   */
+  _exportWorkerTraceOrBuffer (trace) {
+    const missingTestSuite = this._addSuiteTagsToWorkerTrace(trace)
+    if (missingTestSuite) {
+      this._bufferWorkerTrace(missingTestSuite, trace)
+      return
+    }
+    this.tracer._exporter.export(trace)
+  }
+
+  /**
+   * Exports buffered worker traces for a suite after its suite span has been created.
+   *
+   * @param {string} testSuite - Test suite path that may now have pending worker traces.
+   */
+  _exportPendingWorkerTracesForTestSuite (testSuite) {
+    const pendingTraces = this._pendingWorkerTracesByTestSuite.get(testSuite)
+    if (!pendingTraces) return
+
+    this._pendingWorkerTracesByTestSuite.delete(testSuite)
+    for (const trace of pendingTraces) {
+      this._exportWorkerTraceOrBuffer(trace)
+    }
+  }
+
+  /**
+   * Drains all buffered worker traces, falling back to the previous unaugmented export behavior
+   * if a matching suite span never appears.
+   */
+  _exportPendingWorkerTraces () {
+    if (!this._pendingWorkerTracesByTestSuite.size) return
+
+    const pendingTraces = new Set()
+    for (const traces of this._pendingWorkerTracesByTestSuite.values()) {
+      for (const trace of traces) {
+        pendingTraces.add(trace)
+      }
+    }
+    this._pendingWorkerTracesByTestSuite.clear()
+
+    for (const trace of pendingTraces) {
+      const missingTestSuite = this._addSuiteTagsToWorkerTrace(trace)
+      if (missingTestSuite) {
+        log.warn('Test suite span not found for test span with test suite %s', missingTestSuite)
+      }
+      this.tracer._exporter.export(trace)
+    }
   }
 
   /**

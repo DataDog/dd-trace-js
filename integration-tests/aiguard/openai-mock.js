@@ -48,20 +48,32 @@ function startOpenAIMock () {
         return res.end()
       }
 
-      const message = wantsToolCall
-        ? {
-            role: 'assistant',
-            content: null,
-            tool_calls: [{
-              id: 'call_mock',
-              type: 'function',
-              function: {
-                name: 'search',
-                arguments: '{"q":"example"}',
-              },
-            }],
-          }
-        : { role: 'assistant', content: denyResponse ? 'Unsafe mock response [deny]' : 'Hello from the mock!' }
+      // Structured-output (`.parse()`) requests carry a `json_schema` response_format and route
+      // through the SDK's lazy `_thenUnwrap`/`parse` path, which JSON-parses `message.content`.
+      // Keep the content valid JSON while still carrying the `[deny]` marker the AI Guard mock
+      // recognizes for the After Model verdict.
+      const structured = req.body?.response_format?.type === 'json_schema'
+
+      let message
+      if (wantsToolCall) {
+        message = {
+          role: 'assistant',
+          content: null,
+          tool_calls: [{
+            id: 'call_mock',
+            type: 'function',
+            function: {
+              name: 'search',
+              arguments: '{"q":"example"}',
+            },
+          }],
+        }
+      } else if (structured) {
+        const greeting = denyResponse ? 'Unsafe structured output [deny]' : 'Hello from the structured mock!'
+        message = { role: 'assistant', content: JSON.stringify({ greeting }), refusal: null }
+      } else {
+        message = { role: 'assistant', content: denyResponse ? 'Unsafe mock response [deny]' : 'Hello from the mock!' }
+      }
 
       res.status(200).json({
         id: 'chatcmpl-mock',
