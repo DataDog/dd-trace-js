@@ -223,8 +223,10 @@ addHook({
 // From next 15.4.1 each app-route build inlines its own copy of `fromNodeNextRequest`, so the hook
 // above no longer maps the node request to the app-route NextRequest and a thrown handler error
 // cannot reach `finish`. The app-route runtime reports real errors (redirect/notFound and other
-// control-flow signals excluded by next) through `RouteModule.onRequestError`, which next loads
-// from one of the precompiled runtime bundles below regardless of how the route chunk is bundled.
+// control-flow signals excluded by next) through `RouteModule.onRequestError`, which next loads from
+// a precompiled `app-route*.runtime.{dev,prod}.js` bundle regardless of how the route chunk is
+// bundled. The bundler/experimental part of the name is matched with a pattern rather than
+// enumerated, so a variant next adds later is picked up without a code change.
 const patchedAppRouteModules = new WeakSet()
 
 function wrapOnRequestError (onRequestError) {
@@ -246,18 +248,11 @@ function instrumentAppRouteRuntime (runtime) {
   return runtime
 }
 
-for (const file of [
-  'dist/compiled/next-server/app-route.runtime.dev.js',
-  'dist/compiled/next-server/app-route.runtime.prod.js',
-  'dist/compiled/next-server/app-route-turbo.runtime.dev.js',
-  'dist/compiled/next-server/app-route-turbo.runtime.prod.js',
-  'dist/compiled/next-server/app-route-experimental.runtime.dev.js',
-  'dist/compiled/next-server/app-route-experimental.runtime.prod.js',
-  'dist/compiled/next-server/app-route-turbo-experimental.runtime.dev.js',
-  'dist/compiled/next-server/app-route-turbo-experimental.runtime.prod.js',
-]) {
-  addHook({ name: 'next', versions: ['>=15.4.1'], file }, instrumentAppRouteRuntime)
-}
+addHook({
+  name: 'next',
+  versions: ['>=15.4.1'],
+  filePattern: String.raw`dist/compiled/next-server/app-route[\w-]*\.runtime\.(?:dev|prod)\.js$`,
+}, instrumentAppRouteRuntime)
 
 addHook({
   name: 'next',
