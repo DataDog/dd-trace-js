@@ -6,6 +6,7 @@ const { inspect } = require('node:util')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+const featureRegistry = require('../src/feature-registry')
 
 require('./setup/core')
 
@@ -256,8 +257,9 @@ describe('TracerProxy', () => {
     })
 
     const { enable: openfeatureRcEnable } = require('../src/openfeature/remote_config')
-    ProxyClass.registerFeature({
+    featureRegistry.registerFeature({
       name: 'openfeature',
+      noop: {},
       factory: () => openfeature,
       remoteConfig (rc, config, proxy) {
         openfeatureRcEnable(rc, config, () => proxy.openfeature)

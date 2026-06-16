@@ -1,5 +1,6 @@
 'use strict'
 
+const { features } = require('../feature-registry')
 const NoopAppsecSdk = require('../appsec/sdk/noop')
 const NoopLLMObsSDK = require('../llmobs/noop')
 const NoopAIGuardSDK = require('../aiguard/noop')
@@ -18,23 +19,15 @@ const noopProfiling = {
 
 /** @type {import('../../src/index')} Proxy */
 class NoopProxy {
-  static _noopRegistry = {}
-
-  /**
-   * @param {string} name
-   * @param {object} value
-   */
-  static registerNoop (name, value) {
-    NoopProxy._noopRegistry[name] = value
-  }
-
   constructor () {
     this._tracer = noop
     this.appsec = noopAppsec
     this.dogstatsd = noopDogStatsDClient
     this.llmobs = noopLLMObs
     this.aiguard = noopAIGuard
-    Object.assign(this, NoopProxy._noopRegistry)
+    for (const { name, noop } of Object.values(features)) {
+      this[name] = noop
+    }
     this.setBaggageItem = (key, value) => {}
     this.getBaggageItem = (key) => {}
     this.getAllBaggageItems = () => {}

@@ -1,6 +1,7 @@
 'use strict'
 
 const NoopProxy = require('./noop/proxy')
+const { features } = require('./feature-registry')
 const DatadogTracer = require('./tracer')
 const getConfig = require('./config')
 const runtimeMetrics = require('./runtime_metrics')
@@ -69,15 +70,6 @@ function defineLazily (obj, property, getClass, ...args) {
 }
 
 class Tracer extends NoopProxy {
-  static _featureRegistry = []
-
-  /**
-   * @param {{ name: string, factory: () => object, remoteConfig?: Function, enable?: Function }} feature
-   */
-  static registerFeature (feature) {
-    Tracer._featureRegistry.push(feature)
-  }
-
   constructor () {
     super()
 
@@ -102,7 +94,7 @@ class Tracer extends NoopProxy {
       rewriter: new LazyModule(() => require('./appsec/iast/taint-tracking/rewriter')),
     }
 
-    for (const feature of Tracer._featureRegistry) {
+    for (const feature of Object.values(features)) {
       this._modules[feature.name] = new LazyModule(feature.factory)
     }
   }
@@ -188,7 +180,7 @@ class Tracer extends NoopProxy {
           DynamicInstrumentation.start(config, rc)
         }
 
-        for (const feature of Tracer._featureRegistry) {
+        for (const feature of Object.values(features)) {
           feature.remoteConfig?.(rc, config, this)
         }
       }
@@ -305,7 +297,7 @@ class Tracer extends NoopProxy {
         }
         this._tracingInitialized = true
       }
-      for (const feature of Tracer._featureRegistry) {
+      for (const feature of Object.values(features)) {
         feature.enable?.(config, this._tracer, this, lazyProxy)
       }
       if (config.iast.enabled) {
@@ -317,7 +309,7 @@ class Tracer extends NoopProxy {
       this._modules.aiguard.disable()
       this._modules.iast.disable()
       this._modules.llmobs.disable()
-      for (const feature of Tracer._featureRegistry) {
+      for (const feature of Object.values(features)) {
         this._modules[feature.name].disable()
       }
     }
