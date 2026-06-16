@@ -498,20 +498,19 @@ describe('normalizeRouteExpress', () => {
   })
 
   describe('URL matching with static-prefix optional params (v:major? pattern)', () => {
-    it('emits {major} when URL has a value after the static prefix', () => {
-      // URL seg 'v2': getSegmentRegex('v:major?') = /^v([^/]*)$/ → captures '2'
+    // A non-delimiter static prefix ('v') is mandatory; only ':major' is optional. path-to-regexp
+    // treats just a delimiter char ('/', '.') as part of the optional prefix, not arbitrary text.
+    it('emits {major} when the param has a value after the static prefix', () => {
       assert.equal(
         normalizeRouteExpress('/api/v:major?/users', {}, '/api/v2/users'),
         '/api/{major}/users'
       )
     })
 
-    it('skips the entire segment when optional is absent (static prefix is dropped)', () => {
-      // URL seg 'v': captures '' → param absent; the segment is skipped (omit-rather-than-guess
-      // for the static prefix). Both /api/v/users and /api/users produce /api/users.
+    it('keeps the mandatory static prefix when the optional param is absent', () => {
       assert.equal(
         normalizeRouteExpress('/api/v:major?/users', {}, '/api/v/users'),
-        '/api/users'
+        '/api/v/users'
       )
     })
 
@@ -522,7 +521,7 @@ describe('normalizeRouteExpress', () => {
       )
       assert.equal(
         normalizeRouteExpress('/api/v:major?/users', {}),
-        '/api/users'
+        '/api/v/users'
       )
     })
   })
@@ -772,12 +771,58 @@ describe('normalizeRouteExpress', () => {
     })
 
     it('does not blow up on many optional params against a non-matching URL', () => {
-      const route = '/' + Array.from({ length: 24 }, (_, i) => `:p${i}?`).join('/') + '/zzz'
-      const url = '/' + Array.from({ length: 24 }, () => 'x').join('/') + '/nomatch'
+      const route = '/' + Array.from({ length: 12 }, (_, i) => `:p${i}?`).join('/') + '/zzz'
+      const url = '/' + Array.from({ length: 12 }, () => 'x').join('/') + '/nomatch'
       const start = process.hrtime.bigint()
       normalizeRouteExpress(route, {}, url) // must return quickly (step-budget bounded)
       const ms = Number(process.hrtime.bigint() - start) / 1e6
       assert.ok(ms < 100, `expected < 100ms, got ${ms.toFixed(1)}ms`)
+    })
+  })
+
+  describe('review-finding regressions (round 3)', () => {
+    it('does not stall on a catastrophic-backtracking inline constraint (ReDoS)', () => {
+      // The constraint is NOT embedded in the URL matcher (generic [^/]+? used instead).
+      const url = '/' + 'a'.repeat(60) + '!/x'
+      const start = process.hrtime.bigint()
+      normalizeRouteExpress('/:id((a+)+$)?/x', {}, url)
+      const ms = Number(process.hrtime.bigint() - start) / 1e6
+      assert.ok(ms < 50, `expected < 50ms, got ${ms.toFixed(1)}ms`)
+    })
+
+    it('keeps a non-delimiter static prefix on an absent optional param', () => {
+      assert.equal(normalizeRouteExpress('/x:id?', {}, '/x'), '/x')
+      assert.equal(normalizeRouteExpress('/x:id?', {}, '/x5'), '/{id}')
+      assert.equal(normalizeRouteExpress('/foo/v:id?', {}, '/foo/v'), '/foo/v')
+    })
+
+    it('rejects a non-terminal param whose constraint contains a literal "/"', () => {
+      assert.equal(normalizeRouteExpress('/:id(foo/bar)/tail', {}, '/foo/bar/tail'), null)
+    })
+
+    it('matches a non-ASCII static optional against the percent-encoded URL', () => {
+      assert.equal(normalizeRouteExpress('/posts{/café}', {}, '/posts/caf%C3%A9'), '/posts/caf%C3%A9')
+      assert.equal(normalizeRouteExpress('/posts{/café}', {}, '/posts'), '/posts')
+    })
+
+    it('supports $ and Unicode characters in param names', () => {
+      assert.equal(normalizeRouteExpress('/:$foo', { $foo: 'x' }, '/x'), '/{$foo}')
+      assert.equal(normalizeRouteExpress('/:café', { café: 'x' }, '/x'), '/{café}')
+    })
+
+    it('handles escaped quotes inside a quoted param name (" is allowed unencoded per rule 4)', () => {
+      assert.equal(normalizeRouteExpress('/:"a\\"b"', { 'a"b': 'x' }, '/x'), '/{a"b}')
+    })
+
+    it('a constraint containing our marker group name does not corrupt detection', () => {
+      assert.equal(normalizeRouteExpress('/:id((?<_ddg1>foo)){.:format}', {}, '/foo.json'), '/{id+format}')
+    })
+
+    it('returns a string or null (never throws/stalls) on a pathological no-match', () => {
+      const route = '/' + Array.from({ length: 12 }, (_, i) => `:p${i}?`).join('/') + '/zzz'
+      const url = '/' + Array.from({ length: 12 }, () => 'x').join('/') + '/nomatch'
+      const result = normalizeRouteExpress(route, {}, url)
+      assert.ok(result === null || typeof result === 'string')
     })
   })
 })

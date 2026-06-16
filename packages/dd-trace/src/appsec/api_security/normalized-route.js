@@ -27,12 +27,14 @@ const web = require('../../plugins/util/web')
  *   and the rendered output is cached per presence bitmask.
  */
 
-// Unquoted param/wildcard name: one or more [A-Za-z0-9_]
-const NAME_RE = /^[A-Za-z0-9_]+/
+// Unquoted param/wildcard name: JS-identifier-ish — Unicode letters/digits plus _ and $
+// (path-to-regexp v8 accepts identifier characters, not just [A-Za-z0-9_]).
+const NAME_RE = /^[\p{L}\p{N}_$]+/u
 
-// Cap on optional groups per route. Keeps the presence bitmask within 32 bits and bounds the
-// backtracking matcher; routes beyond this are omitted (return null) rather than mis-normalized.
-const MAX_OPTIONAL_GROUPS = 24
+// Cap on optional groups per route. Keeps the presence bitmask within 32 bits, bounds the
+// backtracking matcher, and caps the per-route variant cache at 2^N entries (4096 at N=12).
+// Routes beyond this are omitted (return null) rather than mis-normalized.
+const MAX_OPTIONAL_GROUPS = 12
 
 // Upper bound on matcher steps per presence resolution; protects the request hot path from
 // pathological backtracking. On exceedance the URL match aborts and we fall back to req.params.
@@ -78,10 +80,15 @@ const segmentRegexCache = new Map()
  */
 function parseName (route, i) {
   if (route[i] === '"') {
+    // Quoted name: any char until the closing quote; a backslash escapes the next char.
+    let name = ''
     let j = i + 1
-    while (j < route.length && route[j] !== '"') j++
+    while (j < route.length && route[j] !== '"') {
+      if (route[j] === '\\' && j + 1 < route.length) j++
+      name += route[j]
+      j++
+    }
     if (j >= route.length) return null // unterminated quote
-    const name = route.slice(i + 1, j)
     return name ? { name, next: j + 1 } : null
   }
   const m = NAME_RE.exec(route.slice(i))
@@ -188,10 +195,15 @@ function parseRoute (route) {
         if (prev) {
           if (prev.type === 'slash' && prev.group === currentGroup) {
             prev.group = gN
-          } else if (prev.type === 'static' && prev.group === currentGroup && prev.text.length > 0) {
-            const delim = prev.text[prev.text.length - 1]
+          } else if (
+            prev.type === 'static' && prev.group === currentGroup &&
+            prev.text[prev.text.length - 1] === '.'
+          ) {
+            // path-to-regexp treats only a single delimiter char ('.') before the param as part
+            // of the optional prefix; ordinary preceding static (e.g. the 'x' in '/x:id?') stays
+            // mandatory, so the param alone is optional.
             prev.text = prev.text.slice(0, -1)
-            tokens.splice(-1, 0, { type: 'static', text: delim, group: gN })
+            tokens.splice(-1, 0, { type: 'static', text: '.', group: gN })
             if (prev.text === '') tokens.splice(-3, 1)
           }
         }
@@ -503,12 +515,16 @@ function getSegmentMatcher (seg, groupParent) {
     }
 
     if (t.type === 'static') {
-      pattern += escapeRegex(t.text)
+      // Match against the encoded form so non-ASCII static optionals match the (percent-encoded)
+      // request URL, e.g. route 'café' vs URL segment 'caf%C3%A9'.
+      pattern += escapeRegex(encodeStaticSegment(t.text))
     } else if (t.type === 'param') {
       // Lazy so a trailing optional group (e.g. ':id{.:format}') can still match its part
-      // instead of the greedy base param swallowing the whole segment. A constraint is used
-      // only when it is itself a valid regex; otherwise it is ignored (generic single-segment).
-      pattern += isValidRegex(t.constraint) ? `(?:${t.constraint})` : '[^/]+?'
+      // instead of the greedy base param swallowing the whole segment. The developer's inline
+      // constraint is only embedded when safe to run against attacker-controlled URL input
+      // (valid, no catastrophic backtracking, no named group that could clash with our markers);
+      // otherwise it is ignored and a generic single-segment matcher is used.
+      pattern += canEmbedConstraint(t.constraint) ? `(?:${t.constraint})` : '[^/]+?'
     } else { // wildcard inside a single-segment match (rare); match the rest of the segment
       pattern += '[^/]*'
     }
@@ -556,6 +572,52 @@ function isValidRegex (src) {
 }
 
 /**
+ * Heuristic detector for catastrophic-backtracking ("ReDoS") constraint shapes — a quantified
+ * group whose body itself contains a quantifier or alternation, e.g. (a+)+, (a*)*, (a|b)+.
+ * Walks the source tracking paren depth and skipping char classes / escapes. Conservative:
+ * may over-flag (→ generic matcher, slightly less precise) but does not miss the common families.
+ * @param {string} src
+ * @returns {boolean}
+ */
+function isCatastrophicConstraint (src) {
+  const innerHasQuant = [] // per open group: did its body contain a quantifier/alternation?
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i]
+    if (c === '\\') { i++; continue }
+    if (c === '[') { // skip character class
+      i++
+      while (i < src.length && src[i] !== ']') {
+        if (src[i] === '\\') i++
+        i++
+      }
+      continue
+    }
+    if (c === '(') { innerHasQuant.push(false); continue }
+    if (c === ')') {
+      const flagged = innerHasQuant.pop()
+      const next = src[i + 1]
+      if (flagged && (next === '+' || next === '*' || next === '{')) return true
+      continue
+    }
+    if ((c === '+' || c === '*' || c === '|' || c === '{') && innerHasQuant.length > 0) {
+      innerHasQuant[innerHasQuant.length - 1] = true
+    }
+  }
+  return false
+}
+
+/**
+ * Whether a developer inline constraint is safe to embed in the per-segment matcher that runs
+ * against request-URL input. Rejects invalid regexes, catastrophic-backtracking shapes, and any
+ * constraint containing a named group (which could clash with our (?<_ddgN>) presence markers).
+ * @param {string|undefined} src
+ * @returns {boolean}
+ */
+function canEmbedConstraint (src) {
+  return isValidRegex(src) && !src.includes('(?<') && !isCatastrophicConstraint(src)
+}
+
+/**
  * True when an inline constraint can match a string containing '/', i.e. the param may span
  * multiple URL segments (e.g. `(.+)`, `(.*)`, `([^x]+)`).
  * @param {string|undefined} src
@@ -563,8 +625,11 @@ function isValidRegex (src) {
  */
 function constraintMatchesSlash (src) {
   if (!isValidRegex(src)) return false
+  // A literal '/' in the source (outside an escape) means the param can span segments.
+  if (src.replaceAll(/\\./g, '').includes('/')) return true
   try {
-    return new RegExp(`^(?:${src})$`).test('a/b')
+    const re = new RegExp(`^(?:${src})$`)
+    return re.test('a/b') || re.test('a/b/c') || re.test('/')
   } catch {
     return false
   }
@@ -597,6 +662,11 @@ function resolvePresenceFromUrl (compiled, urlSegs) {
   const present = new Set()
   matchStepsRemaining = MAX_MATCH_STEPS
   return matchSegments(compiled, 0, urlSegs, 0, present) ? present : null
+}
+
+/** @returns {boolean} true if the last matchSegments traversal aborted on the step budget */
+function lastMatchAborted () {
+  return matchStepsRemaining < 0
 }
 
 // Step budget for the current matchSegments traversal. Safe as module state because presence
@@ -752,7 +822,13 @@ function normalizeRouteExpress (route, params, urlPath) {
   let present
   if (urlPath) {
     const urlSegs = urlPath.split('/').filter(Boolean)
-    present = resolvePresenceFromUrl(entry, urlSegs) ?? resolvePresenceFromParams(entry, params)
+    present = resolvePresenceFromUrl(entry, urlSegs)
+    if (present === null) {
+      // If the matcher aborted on its step budget, the result is unknown — omit the tag rather
+      // than emit a guess. Only on a clean (fast) URL/route mismatch do we fall back to params.
+      if (lastMatchAborted()) return null
+      present = resolvePresenceFromParams(entry, params)
+    }
   } else {
     present = resolvePresenceFromParams(entry, params)
   }
