@@ -138,6 +138,47 @@ describe('plugins/util/url', () => {
     })
   })
 
+  describe('buildClientHttpUrl', () => {
+    const base = 'http://perdu.com'
+    const strippedUrl = 'http://perdu.com/path'
+
+    it('returns the stripped url when OTel semantics are disabled, even with a query', () => {
+      const config = { queryStringObfuscation: 'secret' }
+
+      assert.strictEqual(url.buildClientHttpUrl(config, base, '/path?data=secret', strippedUrl), strippedUrl)
+    })
+
+    it('returns the stripped url when there is no query', () => {
+      const config = { DD_TRACE_OTEL_SEMANTICS_ENABLED: true, queryStringObfuscation: 'secret' }
+
+      assert.strictEqual(url.buildClientHttpUrl(config, base, '/path', strippedUrl), strippedUrl)
+    })
+
+    it('includes the query, with sensitive values obfuscated, when OTel semantics are enabled', () => {
+      const config = { DD_TRACE_OTEL_SEMANTICS_ENABLED: true, queryStringObfuscation: 'secret' }
+
+      assert.strictEqual(
+        url.buildClientHttpUrl(config, base, '/path?data=secret', strippedUrl),
+        'http://perdu.com/path?data=<redacted>'
+      )
+    })
+
+    it('drops the query when query-string obfuscation is set to true', () => {
+      const config = { DD_TRACE_OTEL_SEMANTICS_ENABLED: true, queryStringObfuscation: true }
+
+      assert.strictEqual(url.buildClientHttpUrl(config, base, '/path?data=secret', strippedUrl), strippedUrl)
+    })
+
+    it('keeps the raw query when query-string obfuscation is disabled', () => {
+      const config = { DD_TRACE_OTEL_SEMANTICS_ENABLED: true, queryStringObfuscation: false }
+
+      assert.strictEqual(
+        url.buildClientHttpUrl(config, base, '/path?data=secret', strippedUrl),
+        'http://perdu.com/path?data=secret'
+      )
+    })
+  })
+
   describe('extractPathFromUrl', () => {
     it('should return / for empty or missing url', () => {
       assert.strictEqual(url.extractPathFromUrl(''), '/')

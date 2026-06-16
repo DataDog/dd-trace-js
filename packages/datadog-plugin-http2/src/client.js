@@ -10,6 +10,7 @@ const kinds = require('../../../ext/kinds')
 const formats = require('../../../ext/formats')
 const { COMPONENT, CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
+const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
 
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
@@ -33,7 +34,8 @@ class Http2ClientPlugin extends ClientPlugin {
     const path = headers[HTTP2_HEADER_PATH] || '/'
     const pathname = path.split(/[?#]/)[0]
     const method = headers[HTTP2_HEADER_METHOD] || HTTP2_METHOD_GET
-    const uri = `${sessionDetails.protocol}//${sessionDetails.host}:${sessionDetails.port}${pathname}`
+    const base = `${sessionDetails.protocol}//${sessionDetails.host}:${sessionDetails.port}`
+    const uri = `${base}${pathname}`
     const allowed = this.config.filter(uri)
 
     const store = storage('legacy').getStore()
@@ -48,7 +50,7 @@ class Http2ClientPlugin extends ClientPlugin {
         'resource.name': method,
         'span.type': 'http',
         'http.method': method,
-        'http.url': uri,
+        'http.url': buildClientHttpUrl(this.config, base, path, uri),
         'out.host': sessionDetails.host,
       },
       metrics: {

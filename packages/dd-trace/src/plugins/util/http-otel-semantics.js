@@ -176,8 +176,13 @@ function applyHttpOtelSemantics (formattedSpan) {
   }
 
   const status = meta['http.status_code']
+  let statusCode
   if (status !== undefined) {
-    meta[HTTP_RESPONSE_STATUS_CODE] = status
+    // OTel types http.response.status_code as an int, so emit it as a numeric
+    // metric (the OTLP exporter serializes meta as stringValue but metrics as
+    // intValue) — mirroring how server.port is handled below.
+    statusCode = Number.parseInt(status)
+    metrics[HTTP_RESPONSE_STATUS_CODE] = statusCode
     delete meta['http.status_code']
   }
 
@@ -233,7 +238,6 @@ function applyHttpOtelSemantics (formattedSpan) {
   // type): server spans are errors on 5xx only (4xx MUST be left unset per the
   // spec); client spans on any status >= 400.
   if (status !== undefined && meta[ERROR_TYPE] === undefined) {
-    const statusCode = Number.parseInt(status)
     const isError = meta['span.kind'] === 'server' ? statusCode >= 500 : statusCode >= 400
     if (isError) {
       meta[ERROR_TYPE] = status

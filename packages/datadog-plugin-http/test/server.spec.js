@@ -74,7 +74,7 @@ describe('Plugin', () => {
             assert.strictEqual(span.meta['url.scheme'], 'http')
             assert.strictEqual(span.meta['server.address'], 'localhost')
             assert.strictEqual(span.metrics['server.port'], otelPort)
-            assert.strictEqual(span.meta['http.response.status_code'], '200')
+            assert.strictEqual(span.metrics['http.response.status_code'], 200)
             // ...and the Datadog ones are absent.
             assert.strictEqual(span.meta['http.method'], undefined)
             assert.strictEqual(span.meta['http.url'], undefined)

@@ -240,7 +240,7 @@ describe('Plugin', () => {
             assert.strictEqual(span.meta['url.path'], '/user')
             assert.strictEqual(span.meta['url.scheme'], 'http')
             assert.strictEqual(span.meta['server.address'], 'localhost')
-            assert.strictEqual(span.meta['http.response.status_code'], '200')
+            assert.strictEqual(span.metrics['http.response.status_code'], 200)
             assert.strictEqual(span.meta['http.method'], undefined)
             assert.strictEqual(span.meta['http.url'], undefined)
             assert.strictEqual(span.meta['http.status_code'], undefined)

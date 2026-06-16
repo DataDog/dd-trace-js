@@ -150,7 +150,7 @@ describe('spanFormat', () => {
       assert.strictEqual(trace.meta['http.request.method'], 'GET')
       assert.strictEqual(trace.meta['url.path'], '/u')
       assert.strictEqual(trace.meta['url.scheme'], 'http')
-      assert.strictEqual(trace.meta['http.response.status_code'], '200')
+      assert.strictEqual(trace.metrics['http.response.status_code'], 200)
       assert.ok(!('http.method' in trace.meta))
       assert.ok(!('http.url' in trace.meta))
       assert.ok(!('http.status_code' in trace.meta))

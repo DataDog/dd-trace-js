@@ -221,7 +221,9 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
               'url.path': '/test',
               'url.scheme': 'https',
               'server.address': config.expectedService,
-              'http.response.status_code': '200',
+            },
+            metrics: {
+              'http.response.status_code': 200,
             },
           })
           assert.ok(!('http.url' in proxySpan.meta))

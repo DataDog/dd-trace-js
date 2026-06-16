@@ -8,6 +8,7 @@ const tags = require('../../../ext/tags')
 const formats = require('../../../ext/formats')
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
+const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
 const log = require('../../dd-trace/src/log')
 const { CLIENT_PORT_KEY, COMPONENT, ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
@@ -27,9 +28,10 @@ class HttpClientPlugin extends ClientPlugin {
     const protocol = options.protocol || agent.protocol || 'http:'
     const hostname = options.hostname || options.host || 'localhost'
     const host = options.port ? `${hostname}:${options.port}` : hostname
+    const base = `${protocol}//${host}`
     const pathname = options.path || options.pathname
     const path = pathname ? pathname.split(/[?#]/)[0] : '/'
-    const uri = `${protocol}//${host}${path}`
+    const uri = `${base}${path}`
 
     const allowed = this.config.filter(uri)
 
@@ -46,7 +48,7 @@ class HttpClientPlugin extends ClientPlugin {
         'resource.name': method,
         'span.type': 'http',
         'http.method': method,
-        'http.url': uri,
+        'http.url': buildClientHttpUrl(this.config, base, pathname, uri),
         'out.host': hostname,
       },
       metrics: {

@@ -87,7 +87,7 @@ describe('Plugin', () => {
               assert.strictEqual(span.meta['http.request.method'], 'GET')
               assert.strictEqual(span.meta['url.full'], `${protocol}://localhost:${port}/user`)
               assert.strictEqual(span.meta['server.address'], 'localhost')
-              assert.strictEqual(span.meta['http.response.status_code'], '200')
+              assert.strictEqual(span.metrics['http.response.status_code'], 200)
               assert.strictEqual(span.metrics['server.port'], port)
               // ...and the Datadog ones are absent.
               assert.strictEqual(span.meta['http.method'], undefined)
@@ -112,11 +112,29 @@ describe('Plugin', () => {
 
           appListener = server(app, port => {
             agent.assertFirstTraceSpan(span => {
-              assert.strictEqual(span.meta['http.response.status_code'], '400')
+              assert.strictEqual(span.metrics['http.response.status_code'], 400)
               assert.strictEqual(span.meta['error.type'], '400')
             }).then(done).catch(done)
 
             const req = http.request(`${protocol}://localhost:${port}/bad`, res => {
+              res.on('data', () => {})
+            })
+            req.end()
+          })
+        })
+
+        it('includes the query string in url.full (obfuscation preserved)', done => {
+          const app = express()
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          appListener = server(app, port => {
+            agent.assertFirstTraceSpan(span => {
+              assert.strictEqual(span.meta['url.full'], `${protocol}://localhost:${port}/user?foo=bar`)
+            }).then(done).catch(done)
+
+            const req = http.request(`${protocol}://localhost:${port}/user?foo=bar`, res => {
               res.on('data', () => {})
             })
             req.end()

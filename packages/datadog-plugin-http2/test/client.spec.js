@@ -84,7 +84,7 @@ describe('Plugin', () => {
               assert.strictEqual(span.meta['http.request.method'], 'GET')
               assert.strictEqual(span.meta['url.full'], `${protocol}://localhost:${port}/user`)
               assert.strictEqual(span.meta['server.address'], 'localhost')
-              assert.strictEqual(span.meta['http.response.status_code'], '200')
+              assert.strictEqual(span.metrics['http.response.status_code'], 200)
               assert.strictEqual(span.metrics['server.port'], port)
               assert.strictEqual(span.meta['http.method'], undefined)
               assert.strictEqual(span.meta['http.url'], undefined)
