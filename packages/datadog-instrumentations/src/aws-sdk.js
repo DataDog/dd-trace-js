@@ -150,6 +150,7 @@ function wrapDeserialize (deserialize, headersCh, responseIndex = 0) {
 function wrapSmithySend (send) {
   return function (command, ...args) {
     const cb = args.at(-1)
+    const cbExists = typeof cb === 'function'
     const serviceIdentifier = this.config.serviceId.toLowerCase()
     const channelSuffix = getChannelSuffix(serviceIdentifier)
     const channels = getChannelBag(channelSuffix)
@@ -188,6 +189,7 @@ function wrapSmithySend (send) {
       operation,
       awsService: clientName,
       request,
+      cbExists,
     }
 
     return channels.start.runStores(ctx, () => {
@@ -197,7 +199,7 @@ function wrapSmithySend (send) {
         channels.region.publish(ctx)
       })
 
-      if (typeof cb === 'function') {
+      if (cbExists) {
         args[args.length - 1] = shimmer.wrapCallback(cb, cb => function (err, result) {
           addResponse(ctx, err, result)
 
@@ -233,13 +235,14 @@ function wrapSmithySend (send) {
 }
 
 function handleCompletion (result, ctx, channels) {
-  const iterator = result?.body?.[Symbol.asyncIterator]
+  const streamable = result?.body ?? result?.stream
+  const iterator = streamable?.[Symbol.asyncIterator]
   if (!iterator) {
     channels.complete.publish(ctx)
     return
   }
 
-  shimmer.wrap(result.body, Symbol.asyncIterator, function (asyncIterator) {
+  shimmer.wrap(streamable, Symbol.asyncIterator, function (asyncIterator) {
     return function (...args) {
       const iterator = asyncIterator.apply(this, args)
       shimmer.wrap(iterator, 'next', function (next) {

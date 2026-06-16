@@ -170,6 +170,18 @@ describe('Plugin', () => {
             })
           })
 
+          it('should not overwrite a caller-supplied dd field', () => {
+            tracer.scope().activate(span, () => {
+              logger.info({ dd: { custom: 'value' } }, 'message')
+
+              sinon.assert.called(stream.write)
+
+              const record = JSON.parse(stream.write.firstCall.args[0].toString())
+
+              assert.deepStrictEqual(record.dd, { custom: 'value' })
+            })
+          })
+
           it('should not inject trace_id or span_id without an active span', () => {
             logger.info('message')
 

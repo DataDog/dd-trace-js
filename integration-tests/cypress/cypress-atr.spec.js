@@ -103,6 +103,7 @@ moduleTypes.forEach(({
     useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript'], true)
 
     before(async function () {
+      this.timeout(180_000)
       cwd = sandboxCwd()
       await warmCypressBinary(cwd)
 
@@ -225,10 +226,6 @@ moduleTypes.forEach(({
               assert.equal(testExecutionOrder[9].name, 'flaky test retry always passes')
               assert.equal(testExecutionOrder[9].isRetry, false)
             }, { hardTimeout: 30000 })
-
-        // TODO: remove this once we have figured out flakiness
-        childProcess.stdout?.pipe(process.stdout)
-        childProcess.stderr?.pipe(process.stderr)
 
         await Promise.all([
           once(childProcess, 'exit'),

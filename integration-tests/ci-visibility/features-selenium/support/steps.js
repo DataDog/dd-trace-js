@@ -10,7 +10,7 @@ let title
 let helloWorldText
 
 const options = new chrome.Options()
-options.addArguments('--headless')
+options.addArguments('--headless', '--no-sandbox', '--disable-dev-shm-usage')
 
 Before(async function () {
   const build = new Builder().forBrowser('chrome').setChromeOptions(options)

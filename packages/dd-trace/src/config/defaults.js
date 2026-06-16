@@ -72,6 +72,12 @@ for (const [name, value] of Object.entries(defaults)) {
 function generateTelemetry (value = null, origin, optionName) {
   const tableEntry = configurationsTable[optionName]
   const { type, canonicalName = optionName } = tableEntry ?? { type: typeof value }
+  // Sensitive configurations are excluded from configuration telemetry: their
+  // entry is never added to `configWithOrigin`, the single source for every
+  // telemetry path (app-started and app-client-configuration-change).
+  if (sensitiveConfigurations.has(canonicalName)) {
+    return
+  }
   // TODO: Should we not send defaults to telemetry to reduce size?
   // TODO: How to handle aliases/actual names in the future? Optional fields? Normalize the name at intake?
   // TODO: Validate that space separated tags are parsed by the backend. Optimizations would be possible with that.
@@ -196,6 +202,11 @@ const fallbackConfigurations = new Map()
 
 const regExps = {}
 
+// Canonical names of configurations whose value is excluded from configuration
+// telemetry. Driven by the `sensitive: true` attribute in
+// `supported-configurations.json` so new entries opt in without code changes.
+const sensitiveConfigurations = new Set()
+
 for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) {
   if (entries.length !== 1) {
     // TODO: Determine if we really want to support multiple entries for a canonical name.
@@ -207,6 +218,9 @@ for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) 
     )
   }
   for (const entry of entries) {
+    if (entry.sensitive) {
+      sensitiveConfigurations.add(canonicalName)
+    }
     const configurationNames = entry.internalPropertyName ? [entry.internalPropertyName] : entry.configurationNames
     const fullPropertyName = configurationNames?.[0] ?? canonicalName
     const type = entry.type.toUpperCase()

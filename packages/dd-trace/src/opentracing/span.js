@@ -10,6 +10,7 @@ const tagger = require('../tagger')
 const runtimeMetrics = require('../runtime_metrics')
 const log = require('../log')
 const { storage } = require('../../../datadog-core')
+const { resolveServiceSource } = require('../service-naming/source-resolver')
 const telemetryMetrics = require('../telemetry/metrics')
 const { MANUAL_DROP, MANUAL_KEEP, SAMPLING_PRIORITY } = require('../../../../ext/tags')
 const { DD_MAJOR } = require('../../../../version')
@@ -37,20 +38,26 @@ const tagsUpdateCh = channel('dd-trace:span:tags:update')
 // Module-scope so we don't allocate a fresh recursive closure on every
 // `addLink` / `addEvent`.
 /**
- * @param {Record<string, string>} out
+ * @param {Record<string, string> | undefined} out Accumulator, created lazily
+ * on the first surviving entry so an all-dropped set stays `undefined`.
  * @param {string} key
  * @param {unknown} value
+ * @returns {Record<string, string> | undefined}
  */
 function addArrayOrScalarAttribute (out, key, value) {
   if (Array.isArray(value)) {
     for (let i = 0; i < value.length; i++) {
-      addArrayOrScalarAttribute(out, `${key}.${i}`, value[i])
+      out = addArrayOrScalarAttribute(out, `${key}.${i}`, value[i])
     }
-  } else if (ALLOWED.has(typeof value)) {
-    out[key] = typeof value === 'string' ? value : String(value)
-  } else {
-    log.warn('Dropping span link attribute. It is not of an allowed type')
+    return out
   }
+  if (ALLOWED.has(typeof value)) {
+    out ??= {}
+    out[key] = typeof value === 'string' ? value : String(value)
+    return out
+  }
+  log.warn('Dropping span link attribute. It is not of an allowed type')
+  return out
 }
 
 function getIntegrationCounter (event, integration) {
@@ -78,12 +85,6 @@ class DatadogSpan {
 
     const operationName = fields.operationName
     const parent = fields.parent || null
-    // Stay on `Object.assign({}, src)` for backportability: V8 12+ (Node 22 /
-    // 24) inlines `{ ...src }` and beats `Object.assign` here, but on V8 10.2
-    // / 11.3 (Node 18 / 20) the spread takes a generic runtime path and slows
-    // `spans-finish-*` by ~140%. Revisit once those LTS lines drop.
-    // eslint-disable-next-line prefer-object-spread
-    const tags = Object.assign({}, fields.tags)
     const hostname = fields.hostname
 
     this.#parentTracer = tracer
@@ -105,7 +106,7 @@ class DatadogSpan {
 
     this._spanContext = this._createContext(parent, fields)
     this._spanContext._name = operationName
-    Object.assign(this._spanContext.getTags(), tags)
+    if (fields.tags) Object.assign(this._spanContext.getTags(), fields.tags)
     this._spanContext._hostname = hostname
 
     this._spanContext._trace.started.push(this)
@@ -215,7 +216,38 @@ class DatadogSpan {
   }
 
   addTags (keyValueMap) {
-    this._addTags(keyValueMap)
+    // v6 hot path: `Object.assign` straight onto the live tag map. The
+    // string and array shapes never appeared in the public TypeScript
+    // surface, and no internal v6 caller passes one (see MIGRATING.md).
+    // v5 still accepts both via `tagger.add` for `config.tags` /
+    // `options.tags` callers that pass `'key:val,key:val'` strings.
+    const tags = this._spanContext.getTags()
+    let mayChangeSamplingPriority
+
+    if (keyValueMap !== null && typeof keyValueMap === 'object' && !Array.isArray(keyValueMap)) {
+      Object.assign(tags, keyValueMap)
+      mayChangeSamplingPriority =
+        MANUAL_KEEP in keyValueMap ||
+        MANUAL_DROP in keyValueMap ||
+        SAMPLING_PRIORITY in keyValueMap
+    } else {
+      /* istanbul ignore if: v5 fallback, master ships 6.0.0-pre */
+      if (DD_MAJOR < 6 && (typeof keyValueMap === 'string' || Array.isArray(keyValueMap))) {
+        tagger.add(tags, keyValueMap)
+        mayChangeSamplingPriority = true
+      } else {
+        return this
+      }
+    }
+
+    if (mayChangeSamplingPriority && this._spanContext._sampling.priority === undefined) {
+      this._prioritySampler.sample(this, false)
+    }
+
+    if (tagsUpdateCh.hasSubscribers) {
+      tagsUpdateCh.publish(this)
+    }
+
     return this
   }
 
@@ -286,6 +318,8 @@ class DatadogSpan {
     getIntegrationCounter('spans_finished', this._integrationName).inc()
     this._spanContext.setTag('_dd.integration', this._integrationName)
 
+    resolveServiceSource(this, this.#parentTracer._service)
+
     if (this.#parentTracer._config.DD_TRACE_EXPERIMENTAL_SPAN_COUNTS && finishedRegistry) {
       runtimeMetrics.decrement('runtime.node.spans.unfinished')
       runtimeMetrics.decrement('runtime.node.spans.unfinished.by.name', `span_name:${this._name}`)
@@ -314,21 +348,24 @@ class DatadogSpan {
 
   /**
    * @param {Record<string, unknown>} [attributes]
+   * @returns {Record<string, string> | undefined} `undefined` when nothing
+   * survives, so `extractSpanLinks` omits the slot without an emptiness probe.
    */
   _sanitizeAttributes (attributes = {}) {
-    /** @type {Record<string, string>} */
-    const out = {}
+    let out
     for (const key of Object.keys(attributes)) {
-      addArrayOrScalarAttribute(out, key, attributes[key])
+      out = addArrayOrScalarAttribute(out, key, attributes[key])
     }
     return out
   }
 
   /**
    * @param {Record<string, unknown>} [attributes]
+   * @returns {Record<string, unknown> | undefined} `undefined` when nothing
+   * survives, so the encoders skip the slot without an emptiness probe.
    */
   _sanitizeEventAttributes (attributes = {}) {
-    const sanitizedAttributes = {}
+    let sanitizedAttributes
 
     for (const key of Object.keys(attributes)) {
       const value = attributes[key]
@@ -341,8 +378,10 @@ class DatadogSpan {
             log.warn('Dropping span event attribute. It is not of an allowed type')
           }
         }
+        sanitizedAttributes ??= {}
         sanitizedAttributes[key] = newArray
       } else if (ALLOWED.has(typeof value)) {
+        sanitizedAttributes ??= {}
         sanitizedAttributes[key] = value
       } else {
         log.warn('Dropping span event attribute. It is not of an allowed type')
@@ -355,7 +394,7 @@ class DatadogSpan {
     let spanContext
     let startTime
 
-    let baggage = {}
+    let baggage
     const propagationBehavior = this.#parentTracer._config.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
     if (parent && parent._isRemote && propagationBehavior !== 'continue') {
       baggage = parent._baggageItems
@@ -397,7 +436,7 @@ class DatadogSpan {
       }
 
       if (propagationBehavior === 'restart') {
-        spanContext._baggageItems = baggage
+        spanContext._baggageItems = baggage ?? {}
       }
     }
 
@@ -415,16 +454,6 @@ class DatadogSpan {
     const { startTime, ticks } = this._spanContext._trace
 
     return startTime + now() - ticks
-  }
-
-  _addTags (keyValuePairs) {
-    tagger.add(this._spanContext.getTags(), keyValuePairs)
-
-    this._prioritySampler.sample(this, false)
-
-    if (tagsUpdateCh.hasSubscribers) {
-      tagsUpdateCh.publish(this)
-    }
   }
 }
 

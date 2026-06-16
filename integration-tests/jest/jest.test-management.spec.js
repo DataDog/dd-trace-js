@@ -26,7 +26,6 @@ const {
   TEST_NAME,
   TEST_RETRY_REASON,
   TEST_SESSION_NAME,
-  TEST_LEVEL_EVENT_TYPES,
   DD_TEST_IS_USER_PROVIDED_SERVICE,
   TEST_MANAGEMENT_ENABLED,
   TEST_MANAGEMENT_IS_DISABLED,
@@ -113,9 +112,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
           const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
           metadataDicts.forEach(metadata => {
-            for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-              assert.strictEqual(metadata[testLevel][TEST_SESSION_NAME], 'my-lage-package')
-            }
+            assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-lage-package')
           })
         })
 
@@ -160,11 +157,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
           assert.ok(
-            metadataDicts.some(metadata => metadata.test?.[TEST_SESSION_NAME] === 'my-lage-package-a'),
+            metadataDicts.some(metadata => metadata['*']?.[TEST_SESSION_NAME] === 'my-lage-package-a'),
             `Got: ${inspect(metadataDicts)}`
           )
           assert.ok(
-            metadataDicts.some(metadata => metadata.test?.[TEST_SESSION_NAME] === 'my-lage-package-b'),
+            metadataDicts.some(metadata => metadata['*']?.[TEST_SESSION_NAME] === 'my-lage-package-b'),
             `Got: ${inspect(metadataDicts)}`
           )
         })
@@ -2018,7 +2015,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
             assert.strictEqual(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
             // capabilities logic does not overwrite test session name
-            assert.strictEqual(metadata.test[TEST_SESSION_NAME], 'my-test-session-name')
+            assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session-name')
           })
         })
 

@@ -29,7 +29,7 @@ jobs:
         with:
           scope: DataDog/dd-trace-js
           policy: self.github.release.push-tags
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/node
       - run: npm publish --tag latest-node14
       - id: pkg
@@ -57,7 +57,7 @@ jobs:
         with:
           scope: DataDog/dd-trace-js
           policy: self.github.release.push-tags
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/node
       - run: npm publish --tag latest-node16
       - id: pkg
@@ -85,7 +85,7 @@ jobs:
         with:
           scope: DataDog/dd-trace-js
           policy: self.github.release.push-tags
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
       - uses: ./.github/actions/node
@@ -108,7 +108,7 @@ jobs:
       id-token: write
       contents: write
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/node
       - id: pkg
         run: |
@@ -121,7 +121,7 @@ jobs:
           yarn
           yarn build
           mv out /tmp/out
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           ref: gh-pages
       - name: Deploy
@@ -133,7 +133,7 @@ jobs:
           git add -A
           git commit -m ${{ fromJson(steps.pkg.outputs.json).version }}
           git push
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
   publish-dev:
     if: github.event_name == 'workflow_dispatch'
@@ -149,7 +149,7 @@ jobs:
         with:
           scope: DataDog/dd-trace-js
           policy: self.github.release.push-tags
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
       - uses: ./.github/actions/node

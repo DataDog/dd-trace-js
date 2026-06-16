@@ -72,7 +72,11 @@ addHook({ name: 'oracledb', versions: ['>=5'], file: 'lib/oracledb.js' }, oracle
       }
 
       return startChannel.runStores(ctx, () => {
-        arguments[0] = ctx.injected
+        // bindStart is skipped when tracing is suppressed (legacy store is `noop`),
+        // leaving ctx.injected unset — do not overwrite the caller's SQL argument.
+        if (ctx.injected !== undefined) {
+          arguments[0] = ctx.injected
+        }
         try {
           let result = execute.apply(this, arguments)
 

@@ -27,7 +27,7 @@ describeNotWindows('crashtracker', () => {
     binding = libdatadog.load('crashtracker')
 
     config = {
-      port: 7357,
+      url: new URL('http://127.0.0.1:7357'),
       tags: {
         foo: 'bar',
       },

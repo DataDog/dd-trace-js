@@ -407,10 +407,9 @@ describe('Plugin', () => {
       let tds
       let connection
 
-      beforeEach(() => {
-        return agent.load('tedious', { dbmPropagationMode: 'service', service: 'custom' }).then(() => {
-          tds = require(`../../../versions/tedious@${version}`).get()
-        })
+      beforeEach(async () => {
+        await agent.load('tedious', { dbmPropagationMode: 'service', service: 'custom' })
+        tds = require(`../../../versions/tedious@${version}`).get()
       })
 
       afterEach(() => {

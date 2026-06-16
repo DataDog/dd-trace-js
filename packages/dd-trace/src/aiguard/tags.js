@@ -10,6 +10,12 @@ module.exports = {
   EVENT_TAG_KEY: 'ai_guard.event',
   META_STRUCT_KEY: 'ai_guard',
 
+  HTTP_USERAGENT_TAG_KEY: 'ai_guard.http.useragent',
+  HTTP_CLIENT_IP_TAG_KEY: 'ai_guard.http.client_ip',
+  NETWORK_CLIENT_IP_TAG_KEY: 'ai_guard.network.client.ip',
+  USR_ID_TAG_KEY: 'ai_guard.usr.id',
+  USR_SESSION_ID_TAG_KEY: 'ai_guard.usr.session_id',
+
   TELEMETRY_REQUESTS: 'requests',
   TELEMETRY_TRUNCATED: 'truncated',
   TELEMETRY_ERROR: 'error',
