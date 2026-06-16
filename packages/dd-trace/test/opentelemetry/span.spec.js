@@ -284,11 +284,12 @@ describe('OTel Span', () => {
     })
   })
 
-  it('should update span name', () => {
-    const span = makeSpan('name')
-    span.updateName('new name')
+  it('updateName should set the DD operation name and keep span.name in sync', () => {
+    const span = makeSpan('original name')
+    span.updateName('updated name')
 
-    assert.strictEqual(span.name, 'new name')
+    assert.strictEqual(span._ddSpan.context()._name, 'updated name')
+    assert.strictEqual(span.name, 'updated name')
   })
 
   it('updateName is a no-op after end()', () => {
@@ -650,5 +651,42 @@ describe('OTel Span', () => {
       { name: 'date-as-second-arg', startTime: date.getTime() },
       { name: 'attrs-and-hr-time', attributes: { code: 42 }, startTime: hrTimeMs },
     ])
+  })
+
+  describe('OTel compatibility mode (otelTraceSemanticsEnabled)', () => {
+    beforeEach(() => {
+      tracer._tracer._config.DD_TRACE_OTEL_SEMANTICS_ENABLED = true
+    })
+
+    afterEach(() => {
+      tracer._tracer._config.DD_TRACE_OTEL_SEMANTICS_ENABLED = false
+    })
+
+    it('does not mirror http.response.status_code to http.status_code', () => {
+      const span = makeSpan('my-span')
+      span.setAttribute('http.response.status_code', 200)
+      const tags = span._ddSpan.context().getTags()
+
+      assert.strictEqual(tags['http.response.status_code'], 200)
+      assert.strictEqual(tags['http.status_code'], undefined)
+    })
+
+    it('does not set error tags on recordException', () => {
+      const span = makeSpan('my-span')
+      span.recordException(new Error('boom'))
+      const tags = span._ddSpan.context().getTags()
+
+      assert.strictEqual(tags[ERROR_TYPE], undefined)
+      assert.strictEqual(tags[ERROR_MESSAGE], undefined)
+      assert.strictEqual(tags[ERROR_STACK], undefined)
+    })
+
+    it('updateName should set the DD resource name and keep span.name in sync', () => {
+      const span = makeSpan('original name')
+      span.updateName('updated name')
+
+      assert.strictEqual(span._ddSpan.context().getTag(RESOURCE_NAME), 'updated name')
+      assert.strictEqual(span.name, 'updated name')
+    })
   })
 })

@@ -167,6 +167,14 @@
         "default": "1"
       }
     ],
+    "DD_API_SECURITY_MAX_DOWNSTREAM_BODY_BYTES": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "internalPropertyName": "appsec.apiSecurity.maxDownstreamBodyBytes",
+        "default": "10485760"
+      }
+    ],
     "DD_API_SECURITY_SAMPLE_DELAY": [
       {
         "implementation": "A",
@@ -1245,6 +1253,20 @@
         "implementation": "A",
         "type": "boolean",
         "default": "false"
+      }
+    ],
+    "DD_TRACE_AWS_DURABLE_EXECUTION_SDK_JS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
+    "DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
       }
     ],
     "DD_TRACE_LOG_LEVEL": [

@@ -252,6 +252,11 @@ const awsSdkOptions: plugins.aws_sdk = {
   }
 };
 
+const bullmqOptions: plugins.bullmq = {
+  service: 'test',
+  producerFilter: ({ name, queueName }) => name !== 'skip' && queueName !== 'dead-letter',
+};
+
 const redisOptions: plugins.redis = {
   service: 'test',
   allowlist: ['info', /auth/i, command => true],
@@ -286,12 +291,14 @@ tracer.use('amqp10');
 tracer.use('amqplib');
 tracer.use('anthropic');
 tracer.use('avsc');
+tracer.use('aws-durable-execution-sdk-js');
 tracer.use('aws-sdk');
 tracer.use('aws-sdk', awsSdkOptions);
 tracer.use('azure-cosmos');
 tracer.use('azure-event-hubs')
 tracer.use('azure-functions');
 tracer.use('bullmq');
+tracer.use('bullmq', bullmqOptions);
 tracer.use('bunyan');
 tracer.use('couchbase');
 tracer.use('cassandra-driver');
