@@ -115,12 +115,16 @@ function consumeParens (route, i) {
 }
 
 /**
- * Parse an Express route (v4 or v5) into a token list, tracking optional `{...}` group nesting.
- * Returns null for syntax we cannot safely normalize (standalone parens, unbalanced braces, …).
+ * Parse an Express route into a token list, tracking optional `{...}` group nesting.
+ * Dialect differs by major version: Express 5 (path-to-regexp v8) uses `{...}` optional groups,
+ * `:"quoted"` names, and `*name` named wildcards; Express 4 (path-to-regexp 0.x) treats `{}` as
+ * literal characters, `*` as an unnamed wildcard, and bare `?`/`+`/`(` as string-pattern regex
+ * (which we cannot safely normalize → null). Returns null for syntax we cannot represent.
  * @param {string} route
+ * @param {boolean} isV5
  * @returns {{ tokens: RouteToken[], groupParent: Map<number, number> } | null}
  */
-function parseRoute (route) {
+function parseRoute (route, isV5 = true) {
   const tokens = []
   const groupStack = [0]
   const groupParent = new Map()
@@ -138,7 +142,7 @@ function parseRoute (route) {
   while (i < route.length) {
     const c = route[i]
     if (c === '\\') {
-      // Express 5 backslash-escape: the next char is a literal static char (incl. reserved {}()).
+      // Backslash-escape: the next char is a literal static char (incl. reserved {}()).
       if (i + 1 < route.length) {
         staticBuf += route[i + 1]
         i += 2
@@ -146,17 +150,20 @@ function parseRoute (route) {
         staticBuf += '\\'
         i++
       }
-    } else if (c === '{') {
+    } else if (c === '{' && isV5) {
       flush()
       nextGroupId++
       groupParent.set(nextGroupId, groupStack[groupStack.length - 1])
       groupStack.push(nextGroupId)
       i++
-    } else if (c === '}') {
+    } else if (c === '}' && isV5) {
       flush()
       if (groupStack.length === 1) return null // unbalanced
       groupStack.pop()
       i++
+    } else if (!isV5 && (c === '?' || c === '+')) {
+      // Express 4 string-pattern regex outside a :param — cannot be safely normalized.
+      return null
     } else if (c === '/') {
       flush()
       tokens.push({ type: 'slash', group: groupStack[groupStack.length - 1] })
@@ -212,7 +219,9 @@ function parseRoute (route) {
       }
     } else if (c === '*') {
       flush()
-      const nm = parseName(route, i + 1)
+      // Express 5: `*name` is a named wildcard. Express 4: `*` is an unnamed wildcard (any name
+      // chars after it are ordinary static text).
+      const nm = isV5 ? parseName(route, i + 1) : null
       i = nm ? nm.next : i + 1
       const group = groupStack[groupStack.length - 1]
       tokens.push({ type: 'wildcard', name: nm ? nm.name : null, group, zeroOrMore: true })
@@ -235,12 +244,13 @@ function parseRoute (route) {
 /**
  * Compile a raw route string into a CompiledRoute, or null when unsupported.
  * @param {string} route
+ * @param {boolean} [isV5] - parse with Express 5 dialect (default true)
  * @returns {CompiledRoute | null}
  */
-function compileRoute (route) {
+function compileRoute (route, isV5 = true) {
   if (route.charAt(0) === '(') return null // RegExp route, stored as "(/.../flags)"
 
-  const parsed = parseRoute(route)
+  const parsed = parseRoute(route, isV5)
   if (!parsed) return null
   const { tokens, groupParent } = parsed
 
@@ -277,13 +287,16 @@ function compileRoute (route) {
   // Drop empty (collapsed `//`) segments.
   const cleaned = segments.filter(s => s.tokens.length > 0)
 
-  // A param whose inline constraint can match a '/' spans multiple URL segments. That only has a
-  // single-element representation when it is the route's tail (a catch-all); anywhere else it
-  // breaks the one-segment-one-element rule, so omit rather than guess.
+  // A param whose inline constraint can match a '/' spans multiple URL segments. In the route's
+  // tail it is effectively a catch-all (convert it so the matcher consumes the rest); anywhere
+  // else it breaks the one-segment-one-element rule, so omit rather than guess.
   for (let s = 0; s < cleaned.length; s++) {
-    for (const t of cleaned[s].tokens) {
-      if (t.type === 'param' && constraintMatchesSlash(t.constraint) && s !== cleaned.length - 1) {
-        return null
+    const toks = cleaned[s].tokens
+    for (let k = 0; k < toks.length; k++) {
+      const t = toks[k]
+      if (t.type === 'param' && constraintMatchesSlash(t.constraint)) {
+        if (s !== cleaned.length - 1) return null
+        toks[k] = { type: 'wildcard', name: t.name, group: t.group, zeroOrMore: true }
       }
     }
   }
@@ -297,7 +310,29 @@ function compileRoute (route) {
   // wrong (aliased) cached result or an event-loop stall.
   if (optionalGroups.length > MAX_OPTIONAL_GROUPS) return null
 
-  const compiled = { segments: cleaned, groupParent, optionalGroups, trailingSlash, precomputed: null }
+  // Which optional groups carry a named param (→ resolvable from req.params) and which do not
+  // (static-only or wildcard-only → only the URL can tell whether they are present).
+  const optionalParamNames = []
+  const paramBearingGroups = new Set()
+  for (const seg of cleaned) {
+    for (const t of seg.tokens) {
+      if (t.group !== 0 && t.type === 'param' && t.name != null) {
+        optionalParamNames.push(t.name)
+        paramBearingGroups.add(t.group)
+      }
+    }
+  }
+  const hasGroupNeedingUrl = optionalGroups.some(g => !paramBearingGroups.has(g))
+
+  const compiled = {
+    segments: cleaned,
+    groupParent,
+    optionalGroups,
+    trailingSlash,
+    precomputed: null,
+    optionalParamNames,
+    hasGroupNeedingUrl,
+  }
 
   // No optional groups → the normalized output is fixed; precompute it once.
   if (optionalGroups.length === 0) {
@@ -519,12 +554,12 @@ function getSegmentMatcher (seg, groupParent) {
       // request URL, e.g. route 'café' vs URL segment 'caf%C3%A9'.
       pattern += escapeRegex(encodeStaticSegment(t.text))
     } else if (t.type === 'param') {
-      // Lazy so a trailing optional group (e.g. ':id{.:format}') can still match its part
-      // instead of the greedy base param swallowing the whole segment. The developer's inline
-      // constraint is only embedded when safe to run against attacker-controlled URL input
-      // (valid, no catastrophic backtracking, no named group that could clash with our markers);
-      // otherwise it is ignored and a generic single-segment matcher is used.
-      pattern += canEmbedConstraint(t.constraint) ? `(?:${t.constraint})` : '[^/]+?'
+      // Always a generic, lazy single-segment matcher — developer inline constraints are NEVER
+      // embedded here, so an attacker-controlled URL can never trigger catastrophic backtracking
+      // (ReDoS) in a developer-authored regex. The constraint value is discarded from the output
+      // anyway; req.params is the authority for which optional params are present (see
+      // normalizeRouteExpress), so the small loss of constraint-based disambiguation is acceptable.
+      pattern += '[^/]+?'
     } else { // wildcard inside a single-segment match (rare); match the rest of the segment
       pattern += '[^/]*'
     }
@@ -533,7 +568,9 @@ function getSegmentMatcher (seg, groupParent) {
 
   let result
   try {
-    result = { regex: new RegExp('^' + pattern + '$'), presence }
+    // Case-insensitive: Express routing is case-insensitive by default, so static segments must
+    // match regardless of case. The normalized OUTPUT still preserves the route's declared case.
+    result = { regex: new RegExp('^' + pattern + '$', 'i'), presence }
   } catch {
     // Last-resort fallback (should not happen: fragments are pre-validated). Use a generic
     // single-segment match with no presence markers so the read side never dereferences a
@@ -569,52 +606,6 @@ function isValidRegex (src) {
   } catch {
     return false
   }
-}
-
-/**
- * Heuristic detector for catastrophic-backtracking ("ReDoS") constraint shapes — a quantified
- * group whose body itself contains a quantifier or alternation, e.g. (a+)+, (a*)*, (a|b)+.
- * Walks the source tracking paren depth and skipping char classes / escapes. Conservative:
- * may over-flag (→ generic matcher, slightly less precise) but does not miss the common families.
- * @param {string} src
- * @returns {boolean}
- */
-function isCatastrophicConstraint (src) {
-  const innerHasQuant = [] // per open group: did its body contain a quantifier/alternation?
-  for (let i = 0; i < src.length; i++) {
-    const c = src[i]
-    if (c === '\\') { i++; continue }
-    if (c === '[') { // skip character class
-      i++
-      while (i < src.length && src[i] !== ']') {
-        if (src[i] === '\\') i++
-        i++
-      }
-      continue
-    }
-    if (c === '(') { innerHasQuant.push(false); continue }
-    if (c === ')') {
-      const flagged = innerHasQuant.pop()
-      const next = src[i + 1]
-      if (flagged && (next === '+' || next === '*' || next === '{')) return true
-      continue
-    }
-    if ((c === '+' || c === '*' || c === '|' || c === '{') && innerHasQuant.length > 0) {
-      innerHasQuant[innerHasQuant.length - 1] = true
-    }
-  }
-  return false
-}
-
-/**
- * Whether a developer inline constraint is safe to embed in the per-segment matcher that runs
- * against request-URL input. Rejects invalid regexes, catastrophic-backtracking shapes, and any
- * constraint containing a named group (which could clash with our (?<_ddgN>) presence markers).
- * @param {string|undefined} src
- * @returns {boolean}
- */
-function canEmbedConstraint (src) {
-  return isValidRegex(src) && !src.includes('(?<') && !isCatastrophicConstraint(src)
 }
 
 /**
@@ -661,12 +652,8 @@ function segmentWildcard (seg) {
 function resolvePresenceFromUrl (compiled, urlSegs) {
   const present = new Set()
   matchStepsRemaining = MAX_MATCH_STEPS
-  return matchSegments(compiled, 0, urlSegs, 0, present) ? present : null
-}
-
-/** @returns {boolean} true if the last matchSegments traversal aborted on the step budget */
-function lastMatchAborted () {
-  return matchStepsRemaining < 0
+  const matched = matchSegments(compiled, 0, urlSegs, 0, present)
+  return { present: matched ? present : null, aborted: matchStepsRemaining < 0 }
 }
 
 // Step budget for the current matchSegments traversal. Safe as module state because presence
@@ -720,6 +707,18 @@ function matchSegmentHere (compiled, si, urlSegs, ui, present) {
   const wildcard = segmentWildcard(seg)
 
   if (wildcard) {
+    const wIdx = seg.tokens.indexOf(wildcard)
+    // Any tokens before the wildcard in the same segment (e.g. ':a-' in ':a-*') must match the
+    // start of the current URL segment before the wildcard consumes the remainder.
+    if (wIdx > 0) {
+      if (ui >= urlSegs.length) return false
+      let pfx = ''
+      for (let k = 0; k < wIdx; k++) {
+        const t = seg.tokens[k]
+        pfx += t.type === 'static' ? escapeRegex(encodeStaticSegment(t.text)) : '[^/]+?'
+      }
+      if (!new RegExp('^' + pfx, 'i').test(urlSegs[ui])) return false
+    }
     if (ui >= urlSegs.length) {
       // Optional catch-all ({/*path}) matching zero segments → treat as absent (Express drops it).
       if (wildcard.group !== 0) return false
@@ -803,32 +802,43 @@ function presenceBitmask (optionalGroups, present) {
  * @param {object|null|undefined} params - req.params from the matched request
  * @param {string|undefined} urlPath - URL path without query string; used to resolve optional
  *   elements (and to recover parent params dropped by mergeParams=false sub-routers)
+ * @param {boolean} [isV5] - parse with Express 5 dialect (default true)
  * @returns {string|null} Normalized route, or null when normalization is not possible
  */
-function normalizeRouteExpress (route, params, urlPath) {
+function normalizeRouteExpress (route, params, urlPath, isV5 = true) {
   if (typeof route !== 'string' || !route) return null
 
-  let entry = routeCache.get(route)
+  // Cache key includes the dialect: the same route string parses differently in v4 vs v5.
+  const cacheKey = (isV5 ? '5:' : '4:') + route
+  let entry = routeCache.get(cacheKey)
   if (entry === undefined) {
-    entry = compileRoute(route)
-    routeCache.set(route, entry)
+    entry = compileRoute(route, isV5)
+    routeCache.set(cacheKey, entry)
   }
   if (entry === null) return null
 
   // No optional groups → fixed result (computed once at compile time).
   if (entry.precomputed !== null) return entry.precomputed
 
-  // Optional route: resolve which groups are present, then render (cached per presence bitmask).
+  // Resolve which optional groups are present. req.params is the authority: when it already
+  // determines every optional param (and there are no static/wildcard-only optional groups that
+  // only the URL can resolve), trust it directly. Otherwise use the URL — which also recovers
+  // params dropped by mergeParams=false sub-routers.
+  const paramsHasOptional = entry.optionalParamNames.some(
+    n => params != null && Object.hasOwn(params, n) && params[n]
+  )
   let present
-  if (urlPath) {
+  if (paramsHasOptional && !entry.hasGroupNeedingUrl) {
+    present = resolvePresenceFromParams(entry, params)
+  } else if (urlPath) {
     const urlSegs = urlPath.split('/').filter(Boolean)
-    present = resolvePresenceFromUrl(entry, urlSegs)
-    if (present === null) {
-      // If the matcher aborted on its step budget, the result is unknown — omit the tag rather
-      // than emit a guess. Only on a clean (fast) URL/route mismatch do we fall back to params.
-      if (lastMatchAborted()) return null
-      present = resolvePresenceFromParams(entry, params)
-    }
+    const { present: urlPresent, aborted } = resolvePresenceFromUrl(entry, urlSegs)
+    // On step-budget abort the result is unknown — fall back to the (safe, bounded) req.params
+    // resolution rather than guessing from a half-finished match. A clean URL mismatch (no
+    // aborted, urlPresent null) likewise falls back to params.
+    present = (aborted || urlPresent === null)
+      ? resolvePresenceFromParams(entry, params)
+      : urlPresent
   } else {
     present = resolvePresenceFromParams(entry, params)
   }
@@ -856,12 +866,15 @@ function normalizeRoute (req) {
   // eslint-disable-next-line sonarjs/no-small-switch
   switch (component) {
     case 'express': {
-      const paths = web.getContext(req)?.paths
+      const context = web.getContext(req)
+      const paths = context?.paths
       const route = paths && (paths.length > 1 ? paths.join('') : paths[0])
       const raw = req.originalUrl || req.url
       const qIdx = raw ? raw.indexOf('?') : -1
       const urlPath = qIdx === -1 ? raw : raw.slice(0, qIdx)
-      return normalizeRouteExpress(route, req.params, urlPath)
+      // Default to the Express 5 dialect when the major version is unknown.
+      const isV5 = context?.frameworkVersion === undefined || context.frameworkVersion >= 5
+      return normalizeRouteExpress(route, req.params, urlPath, isV5)
     }
     default:
       return null

@@ -559,26 +559,26 @@ describe('normalizeRouteExpress', () => {
     })
   })
 
-  describe('constraint-aware URL matching (fixes req.params override bug)', () => {
-    it('correctly assigns b when a has a non-matching \\d+ constraint', () => {
-      // Route /:a(\\d+)?/:b? on URL /foo: Express sets b='foo' (a has \\d+ constraint)
-      // URL extraction must respect the constraint — not assign a='foo'
+  describe('constraint disambiguation via req.params (authority for optional presence)', () => {
+    // Developer inline constraints are no longer embedded in the URL matcher (ReDoS safety), so
+    // adjacent optional params are disambiguated by req.params — exactly what Express populates.
+    it('assigns b when Express matched b (a has a non-matching \\d+ constraint)', () => {
       assert.equal(
-        normalizeRouteExpress('/:a(\\d+)?/:b?', {}, '/foo'),
+        normalizeRouteExpress('/:a(\\d+)?/:b?', { b: 'foo' }, '/foo'),
         '/{b}'
       )
     })
 
-    it('correctly assigns a when URL matches the \\d+ constraint', () => {
+    it('assigns a when Express matched a (value satisfies the \\d+ constraint)', () => {
       assert.equal(
-        normalizeRouteExpress('/:a(\\d+)?/:b?', {}, '/5'),
+        normalizeRouteExpress('/:a(\\d+)?/:b?', { a: '5' }, '/5'),
         '/{a}'
       )
     })
 
-    it('assigns both when URL has two segments', () => {
+    it('assigns both when both params are present', () => {
       assert.equal(
-        normalizeRouteExpress('/:a(\\d+)?/:b?', {}, '/5/foo'),
+        normalizeRouteExpress('/:a(\\d+)?/:b?', { a: '5', b: 'foo' }, '/5/foo'),
         '/{a}/{b}'
       )
     })
@@ -823,6 +823,67 @@ describe('normalizeRouteExpress', () => {
       const url = '/' + Array.from({ length: 12 }, () => 'x').join('/') + '/nomatch'
       const result = normalizeRouteExpress(route, {}, url)
       assert.ok(result === null || typeof result === 'string')
+    })
+  })
+
+  describe('review-finding regressions (round 4)', () => {
+    it('does not stall on sequential-quantifier constraints (ReDoS class 2)', () => {
+      const url = '/' + 'a'.repeat(60) + '!/x'
+      const start = process.hrtime.bigint()
+      normalizeRouteExpress('/:id(a*a*a*a*a*a*a*a*a*a*$)?/x', {}, url)
+      const ms = Number(process.hrtime.bigint() - start) / 1e6
+      assert.ok(ms < 50, `expected < 50ms, got ${ms.toFixed(1)}ms`)
+    })
+
+    it('disambiguates adjacent optionals from req.params, not the URL', () => {
+      // req.params is authoritative: a constrained param Express did not match stays absent.
+      assert.equal(normalizeRouteExpress('/:a(\\d+)?/:b?', { b: 'foo' }, '/foo'), '/{b}')
+    })
+
+    it('matches static segments case-insensitively (Express default) but preserves declared case', () => {
+      assert.equal(normalizeRouteExpress('/api/:version?/Users', {}, '/api/v1/users'), '/api/{version}/Users')
+    })
+
+    it('treats a terminal slash-consuming constraint as a catch-all (recovers parent param)', () => {
+      assert.equal(
+        normalizeRouteExpress('/api/:version?/files/:rest(.+)', {}, '/api/v1/files/a/b'),
+        '/api/{version}/files/{rest}'
+      )
+    })
+
+    it('matches a wildcard segment prefix before consuming the rest', () => {
+      // ':a-' prefix must match; on /y-z/w the :id? is correctly absent (Express: id undefined).
+      assert.equal(normalizeRouteExpress('/:id?/:a-*', {}, '/y-z/w'), '/{a+param1}')
+    })
+
+    describe('Express 4 dialect (isV5=false)', () => {
+      it('treats braces as literal static, not optional groups', () => {
+        assert.equal(normalizeRouteExpress('/file/{id}', {}, '/file/{id}', false), '/file/%7Bid%7D')
+      })
+
+      it('rejects bare string-pattern regex characters', () => {
+        assert.equal(normalizeRouteExpress('/ab?cd', {}, '/acd', false), null)
+        assert.equal(normalizeRouteExpress('/ab+cd', {}, '/abbcd', false), null)
+      })
+
+      it('treats * as an unnamed wildcard', () => {
+        assert.equal(normalizeRouteExpress('/files/*', { 0: 'a/b' }, '/files/a/b', false), '/files/{param1}')
+      })
+
+      it('still normalizes ordinary v4 params and optionals', () => {
+        assert.equal(normalizeRouteExpress('/users/:id', { id: '1' }, '/users/1', false), '/users/{id}')
+        assert.equal(normalizeRouteExpress('/users/:id?', {}, '/users', false), '/users')
+      })
+    })
+
+    describe('Express 5 dialect (default) keeps brace/quoted/named-wildcard syntax', () => {
+      it('parses {/:id} optional group', () => {
+        assert.equal(normalizeRouteExpress('/items{/:id}', {}, '/items/42', true), '/items/{id}')
+      })
+
+      it('parses *name named wildcard', () => {
+        assert.equal(normalizeRouteExpress('/files/*splat', { splat: 'a/b' }, '/files/a/b', true), '/files/{splat}')
+      })
     })
   })
 })
