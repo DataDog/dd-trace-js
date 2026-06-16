@@ -469,8 +469,8 @@ export interface GeneratedConfig {
   isTestDynamicInstrumentationEnabled: boolean;
   isTestManagementEnabled: boolean;
   langchain: {
-    spanCharLimit: number;
-    spanPromptCompletionSampleRate: number;
+    DD_LANGCHAIN_SPAN_CHAR_LIMIT: number;
+    DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE: number;
   };
   legacyBaggageEnabled: boolean;
   llmobs: {
@@ -482,7 +482,7 @@ export interface GeneratedConfig {
   logLevel: "debug" | "info" | "warn" | "error";
   middlewareTracingEnabled: boolean;
   openai: {
-    spanCharLimit: number;
+    DD_OPENAI_SPAN_CHAR_LIMIT: number;
   };
   openAiLogsEnabled: boolean;
   OTEL_BSP_MAX_EXPORT_BATCH_SIZE: number;
@@ -573,8 +573,8 @@ export interface GeneratedConfig {
   url: string | URL;
   version: string | undefined;
   vertexai: {
-    spanCharLimit: number;
-    spanPromptCompletionSampleRate: number;
+    DD_VERTEXAI_SPAN_CHAR_LIMIT: number;
+    DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE: number;
   };
 }
 
