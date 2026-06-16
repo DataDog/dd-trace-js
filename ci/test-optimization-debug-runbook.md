@@ -99,11 +99,55 @@ Full advanced validation continues through Step 7 and Step 8 before Step 9.
 Use this path:
 
 1. Run Step 0 cleanup and source-edit restore safety.
-2. Run Step 2 to choose one small test command.
-3. Run the Preferred Wrapper.
-4. If the wrapper reports `Reporting complete`, run Step 7 for EFD and Auto Test Retries.
-5. If the wrapper reports `Reporting complete`, run Step 8 for Test Management.
-6. Run Step 9 and report the diagnostic answers with each question text inline.
+2. Run the full-validation driver below.
+3. If the full driver completes, report the Step 9 extractor output it prints.
+4. If the full driver completes with `Basic primary stage` other than `Reporting complete` for a
+   supported framework, revisit Step 2 command selection and runner-specific adaptations before
+   treating the result as a product failure. Common causes are a package script that routes to a
+   different runner, a TypeScript Jest config that fails before collection, a custom resolver, or a
+   generated-source preflight problem.
+5. Use manual Steps 1-9 only when the full driver cannot select a safe command, reports incomplete
+   basic reporting after the first command choice, or a repository needs custom setup before tests
+   can run.
+
+Preferred full-validation driver:
+
+```bash
+$(cat dd-test-optimization-node-command.txt) "$(cat dd-test-optimization-ci-dir.txt)/test-optimization-debug.js" \
+  --full \
+  --preflight \
+  --no-open
+```
+
+If the user asks to focus on one framework, pass it to the driver:
+
+```bash
+$(cat dd-test-optimization-node-command.txt) "$(cat dd-test-optimization-ci-dir.txt)/test-optimization-debug.js" \
+  --full \
+  --framework vitest \
+  --preflight \
+  --no-open
+```
+
+If the supported framework lives in a nested package, pass the package root:
+
+```bash
+$(cat dd-test-optimization-node-command.txt) "$(cat dd-test-optimization-ci-dir.txt)/test-optimization-debug.js" \
+  --full \
+  --package-root packages/example \
+  --preflight \
+  --no-open
+```
+
+Manual fallback path:
+
+1. Run Step 0 cleanup and source-edit restore safety.
+2. Run Step 1 static diagnosis.
+3. Run Step 2 to choose one small test command for an eligible supported framework.
+4. Run the Preferred Wrapper.
+5. If the wrapper reports `Reporting complete`, run Step 7 for EFD and Auto Test Retries.
+6. If the wrapper reports `Reporting complete`, run Step 8 for Test Management.
+7. Run Step 9 and report the diagnostic answers with each question text inline.
 
 Wrapper result routing:
 
@@ -119,34 +163,57 @@ Manual fallback trigger: run manual Steps 3-6 only when the wrapper is unavailab
 producing artifacts, reports `Nothing` after a confirmed test run, or requires repository-specific
 process handling.
 
+Framework selection rule:
+
+- Run the live validation only against an explicitly eligible supported framework/version.
+- Prefer `dd-test-optimization-static.json.eligibleFrameworks[]` when it exists. It lists framework
+  candidates with both a supported version and an eligible live-validation command.
+- If static diagnosis finds only unsupported frameworks, stop after Step 2 and report that as the
+  diagnosis. Do not try `node:test`, AVA, tap, Jasmine, Karma, uvu, TestCafe, or any other
+  unsupported runner just because a test command exists.
+- If the repository has multiple supported frameworks, choose one supported framework and state it
+  before running the wrapper.
+- If the user's prompt says to focus on a framework, such as "focus on vitest" or
+  "focus on playwright", use that framework when it is supported and detected. If it is not
+  supported or the detected version is unsupported, stop and report that reason.
+
 Happy path command list:
 
 1. Set `dd-test-optimization-ci-dir.txt` and `dd-test-optimization-node-command.txt` from the
    runbook location block above.
 2. Run Step 0 cleanup.
-3. Run Step 2 and write `dd-test-optimization-test-command.txt` and
+3. Run the Preferred full-validation driver.
+4. If the driver cannot select a command, run Step 1 and Step 2 manually and write
+   `dd-test-optimization-framework.txt`, `dd-test-optimization-test-command.txt`, and
    `dd-test-optimization-selected-test-files.txt`.
-4. Run the Preferred Wrapper.
-5. If the root stage is `Reporting complete`, run Step 7.
-6. If Step 7 passes, run Step 8 for `disabled`, `quarantined`, and `attempt-to-fix`.
-7. Run Step 9 and report the extractor output plus any agent adaptations.
+5. Run the Preferred Wrapper.
+6. If the root stage is `Reporting complete`, run Step 7.
+7. If Step 7 passes, run Step 8 for `disabled`, `quarantined`, and `attempt-to-fix`.
+8. Run Step 9 and report the extractor output plus any agent adaptations.
 
 Wrapper happy path command skeleton:
 
-For common npm/yarn repositories where `scripts.test` accepts file arguments, replace only
-`SELECTED_TEST_COMMAND` and `SELECTED_TEST_FILES`, then run the block after Step 0 cleanup.
+For common npm/yarn repositories where `scripts.test` accepts file arguments, replace
+`SELECTED_FRAMEWORK`, `SELECTED_TEST_COMMAND`, and `SELECTED_TEST_FILES`, then run the block after
+Step 0 cleanup.
 
 ```bash
 set -e
 
 $(cat dd-test-optimization-node-command.txt) "$(cat dd-test-optimization-ci-dir.txt)/diagnose.js" --json --fail-on=never > dd-test-optimization-static.json
 
+SELECTED_FRAMEWORK='FILL_IN_SELECTED_FRAMEWORK'
 SELECTED_TEST_COMMAND='FILL_IN_SELECTED_TEST_COMMAND'
 SELECTED_TEST_FILES='FILL_IN_SELECTED_TEST_FILES_ONE_PER_LINE'
+if [ "$SELECTED_FRAMEWORK" = 'FILL_IN_SELECTED_FRAMEWORK' ] || [ -z "$SELECTED_FRAMEWORK" ]; then
+  echo "Select one eligible supported framework before running the wrapper." >&2
+  exit 1
+fi
 if [ "$SELECTED_TEST_COMMAND" = 'FILL_IN_SELECTED_TEST_COMMAND' ] || [ -z "$SELECTED_TEST_COMMAND" ]; then
   echo "Select one small test command before running the wrapper." >&2
   exit 1
 fi
+printf '%s\n' "$SELECTED_FRAMEWORK" > dd-test-optimization-framework.txt
 printf '%s\n' "$SELECTED_TEST_COMMAND" > dd-test-optimization-test-command.txt
 printf '%s\n' "$SELECTED_TEST_FILES" > dd-test-optimization-selected-test-files.txt
 
@@ -354,6 +421,7 @@ These files are published under the `dd-trace/ci` package directory:
   and calibrated properties files.
 - `test-optimization-render-report.js`: final customer-facing report renderer.
 - `test-optimization-intake-analysis.js`: shared decision-tree rules.
+- `test-optimization-extract-report.js`: machine-oriented Step 9 final-output extractor.
 
 ## Expected Output
 
@@ -369,6 +437,9 @@ These files are published under the `dd-trace/ci` package directory:
   expected managed-test behavior.
 - Harmless stdout from `dd-trace/ci/init` can be ignored. Do not ignore warnings about missing
   `DD_API_KEY` or disabled CI Visibility reporting.
+- The wrapper writes `dd-test-optimization-diagnosis.json` with the primary stage, likely failure
+  cause, and advanced-skip reason when basic reporting is incomplete.
+- The wrapper writes `dd-test-optimization-artifacts.json` with the paths it produced.
 
 ## Command Labels
 
@@ -433,6 +504,8 @@ rm -f \
   dd-intake-shutdown-url.txt \
   dd-intake-url.txt \
   dd-test-optimization-agent-adaptations.txt \
+  dd-test-optimization-artifacts.json \
+  dd-test-optimization-diagnosis.json \
   dd-test-optimization-env.txt \
   dd-test-optimization-advanced-validation-url.txt \
   dd-test-optimization-efd-command.txt \
@@ -448,6 +521,7 @@ rm -f \
   dd-test-optimization-atr-generated-test-file.txt \
   dd-test-optimization-selected-command.input \
   dd-test-optimization-selected-files.input \
+  dd-test-optimization-framework.txt \
   dd-test-optimization-atr-flaky-test-backup.txt \
   dd-test-optimization-atr-flaky-test-file.txt \
   dd-test-optimization-atr-flaky-test-name.txt \
@@ -571,9 +645,83 @@ proves the integration regardless of static warnings. Report such warnings as
 ### 2. Choose a test command (wrapper path entry point)
 
 Inspect `package.json`, framework config files, and the static diagnosis output.
-Use the actionable static findings printed in Step 1 when Step 1 was run. On the wrapper path, the
-wrapper produces the root `dd-test-optimization-static.json` after the selected command is chosen.
-This is the only step required before running the Preferred Wrapper.
+Use the actionable static findings printed in Step 1. The wrapper also writes a fresh root
+`dd-test-optimization-static.json`, but Step 2 uses the Step 1 copy to avoid selecting an
+unsupported framework before the live run.
+
+Supported framework gate:
+
+- Eligible framework candidates for this runbook are listed in
+  `dd-test-optimization-static.json.eligibleFrameworks[]` when that field exists.
+- `dd-test-optimization-static.json.supportedFrameworks[]` means the framework family/package was
+  detected; it does not by itself prove the version or command is eligible for live validation.
+- A framework with a static `error` like `Jest 27.5.1 is not supported` is not eligible for the
+  live wrapper validation until the version is upgraded or a compatible dd-trace major is used.
+- Entries in `dd-test-optimization-static.json.unsupportedFrameworks[]` are diagnostic findings,
+  not wrapper candidates.
+- Do not select `node:test`, `node --test`, `vitest bench`, AVA, tap, Jasmine, Karma, uvu,
+  TestCafe, or a custom runner unless it delegates to one supported framework and emits ordinary
+  per-test events.
+- If no eligible supported framework remains, write the reason to
+  `dd-test-optimization-agent-adaptations.txt`, run Step 9 with the static/root artifacts that
+  exist, and report the unsupported-framework or unsupported-version diagnosis.
+
+Print the detected framework inventory:
+
+Verbatim:
+
+```bash
+$(cat dd-test-optimization-node-command.txt) -e '
+const fs = require("node:fs")
+const d = JSON.parse(fs.readFileSync("dd-test-optimization-static.json", "utf8"))
+const eligible = d.eligibleFrameworks || []
+const supported = d.supportedFrameworks || []
+const unsupported = d.unsupportedFrameworks || []
+const unsupportedVersions = (d.results || [])
+  .filter(r => r.status === "error" && /\bis not supported\b/.test(r.title || ""))
+
+console.log("Eligible framework candidates:")
+for (const framework of eligible) {
+  console.log(`- ${framework.id}: ${framework.name} ${framework.version} via ${framework.command}`)
+}
+if (eligible.length === 0) console.log("- none")
+
+console.log("Supported framework candidates:")
+for (const framework of supported) {
+  const version = (framework.versionDetections || [])[0]?.version ||
+    (framework.versionDetections || [])[0]?.rawVersion ||
+    "unknown"
+  console.log(`- ${framework.id}: ${framework.name} ${version}`)
+}
+if (supported.length === 0) console.log("- none")
+
+console.log("Unsupported framework findings:")
+for (const framework of unsupported) console.log(`- ${framework.id}: ${framework.name}`)
+for (const finding of unsupportedVersions) {
+  console.log(`- ${finding.title}${finding.recommendation ? `: ${finding.recommendation}` : ""}`)
+}
+if (unsupported.length === 0 && unsupportedVersions.length === 0) console.log("- none")
+'
+```
+
+When choosing among multiple supported frameworks, write the chosen framework id and state it in the
+final response:
+
+Adapt:
+
+```bash
+SELECTED_FRAMEWORK='FILL_IN' # replace with jest, mocha, vitest, cucumber, cypress, or playwright
+if [ "$SELECTED_FRAMEWORK" = 'FILL_IN' ] || [ -z "$SELECTED_FRAMEWORK" ]; then
+  echo "Choose one supported framework before continuing."
+  exit 1
+fi
+printf '%s\n' "$SELECTED_FRAMEWORK" > dd-test-optimization-framework.txt
+printf 'Selected framework: %s\n' "$SELECTED_FRAMEWORK"
+```
+
+If the prompt includes an explicit framework focus, set `SELECTED_FRAMEWORK` to that framework. If
+that framework is absent, unsupported, or detected with an unsupported version, stop and report that
+as the diagnosis instead of trying another framework silently.
 
 Run discovery commands:
 
@@ -599,7 +747,7 @@ find . \
   \( -path ./node_modules -o -path ./.git -o -path ./vendor \
      -o -name dist -o -name build -o -name coverage \) -prune -o \
   \( -name "*.test.js" -o -name "*.spec.js" -o -name "*.test.ts" -o -name "*.spec.ts" \
-     -o -name "*.cy.js" -o -name "*.cy.ts" \) \
+     -o -name "*.cy.js" -o -name "*.cy.ts" -o -path "./test/*.js" \) \
   -print | head -20
 
 find . \
@@ -629,16 +777,39 @@ Selection guardrails:
 - Prefer source test files over generated `dist` test files when both are present.
 - Prefer test files that are not listed in `git status --short`; avoid user-modified files when a
   clean equivalent exists.
+- Prefer a selected command that clearly invokes the chosen supported framework.
 - Preserve the repository's normal runner command when possible.
 - Avoid full suites, watch mode, update snapshots, browser UI mode, or destructive scripts.
 - If `scripts.test` already contains runner flags, verify the file argument reaches the runner as intended.
 - Never write a bare runner binary command such as `mocha test/sum.spec.js`.
+- Do not use benchmark commands, such as `vitest bench`, for validation. Benchmarks may emit
+  session/module/suite events without per-test spans.
+
+For common Jest, Mocha, and Vitest repositories, the selector helper can draft the command and file
+inputs. Use the user's framework focus as `--framework` when present. For Cypress, Playwright, or
+Cucumber, skip this helper and write the repository-specific command manually.
+
+Adapt:
+
+```bash
+SELECTED_FRAMEWORK="$(cat dd-test-optimization-framework.txt)"
+$(cat dd-test-optimization-node-command.txt) "$(cat dd-test-optimization-ci-dir.txt)/test-optimization-select-command.js" \
+  --framework "$SELECTED_FRAMEWORK" \
+  --command-out dd-test-optimization-test-command.txt \
+  --files-out dd-test-optimization-selected-test-files.txt \
+  --dry-run
+```
+
+If the selector prints an unsupported-framework error, stop and report that diagnosis. If the
+selector cannot build a safe command for the selected supported framework, write the command
+manually below.
 
 Runner-specific notes:
 
 | Runner | Note |
 | --- | --- |
 | Jest | Generated multi-file helper commands append `--runInBand` automatically; use `--force-run-in-band` for custom Jest commands that lose suite/test spans. |
+| Jest TypeScript config | If Jest fails before collection because `jest.config.ts` needs `ts-node` or a custom resolver is TypeScript, use a temporary JSON/CommonJS config generated from the repository config, or install the missing config loader intentionally for the diagnostic run. |
 | Mocha | Direct file arguments usually work; prefer `npm test -- file` or `./node_modules/.bin/mocha file` over a bare `mocha` binary. |
 | Vitest | The wrapper handles the Vitest preload variant; preserve the repository's normal Vitest command and selected file arguments. |
 | Cypress | Select one spec through the repository's normal Cypress command or `--spec`; Cypress wiring can differ from Node-only runners. |
@@ -1853,6 +2024,32 @@ For each subcheck:
 4. Run the generated test again with the matching `tm-*` settings mode and the calibrated response.
 5. Restore generated source and marker files before moving to the next subcheck.
 
+Preferred all-modes helper:
+
+```bash
+$(cat dd-test-optimization-node-command.txt) "$(cat dd-test-optimization-ci-dir.txt)/test-optimization-debug.js" \
+  --tm-all \
+  --no-open
+```
+
+If a Jest multi-file generated command loses suite/test spans, rerun with:
+
+```bash
+$(cat dd-test-optimization-node-command.txt) "$(cat dd-test-optimization-ci-dir.txt)/test-optimization-debug.js" \
+  --tm-all \
+  --force-run-in-band \
+  --no-open
+```
+
+The helper runs `disabled`, `quarantined`, and `attempt-to-fix` sequentially. For each mode it
+creates a generated sibling test, runs a baseline wrapper command with
+`DD_TEST_OPTIMIZATION_TM_BASELINE=1`, builds the calibrated properties response, runs the managed
+wrapper command, validates the expected subcheck, and restores generated source files before the
+next mode.
+
+Manual fallback follows. Use it only when `--tm-all` cannot infer a safe generated-test command or
+the repository needs custom setup around one Test Management mode.
+
 8a. Infer one subcheck plan.
 
 Run Step 8a and Step 8b once for each `TM_MODE`: `disabled`, `quarantined`, and
@@ -2097,9 +2294,62 @@ case being reported.
 Apply the Step 1 static false-positive guidance when live intake succeeds in a Yarn PnP,
 `portal:`, `link:`, or monorepo layout.
 
-Use this extractor to assemble the required fields from the root, advanced-check, and Test
-Management artifacts. It prints one combined `Datadog validation:` path for the whole runbook
-execution.
+Use this preferred Step 9 block to assemble the required fields. It prints one `Datadog validation:`
+path and a machine-oriented report summary. It uses strict full validation only when the advanced
+and Test Management artifacts exist. If only the root wrapper report exists, it uses that root
+report. If live validation was intentionally skipped before wrapper artifacts were created, it uses
+the static diagnosis and `dd-test-optimization-diagnosis.json` files to build a static-only
+validation payload with the local failure reason.
+
+Verbatim:
+
+```bash
+set -e
+
+ROOT_STAGE="$($(cat dd-test-optimization-node-command.txt) -e '
+const fs = require("node:fs")
+try {
+  const report = JSON.parse(fs.readFileSync("dd-test-optimization-agent-report.json", "utf8"))
+  process.stdout.write(report.primaryStage || "unknown")
+} catch {
+  process.stdout.write("unknown")
+}
+')"
+
+if [ ! -f dd-test-optimization-final-report.txt ]; then
+  $(cat dd-test-optimization-node-command.txt) "$(cat dd-test-optimization-ci-dir.txt)/test-optimization-validation-link.js" \
+    --static-report dd-test-optimization-static.json \
+    --diagnosis dd-test-optimization-diagnosis.json \
+    --framework-file dd-test-optimization-framework.txt \
+    --test-command-file dd-test-optimization-test-command.txt \
+    --test-result-file dd-test-optimization-test-result.txt \
+    > dd-test-optimization-validation-url.txt
+elif [ "$ROOT_STAGE" = "Reporting complete" ] &&
+   [ -f dd-test-optimization-efd/dd-test-optimization-final-report.txt ] &&
+   [ -f dd-test-optimization-tm-disabled/dd-test-optimization-final-report.txt ] &&
+   [ -f dd-test-optimization-tm-quarantined/dd-test-optimization-final-report.txt ] &&
+   [ -f dd-test-optimization-tm-attempt-to-fix/dd-test-optimization-final-report.txt ]; then
+  $(cat dd-test-optimization-node-command.txt) "$(cat dd-test-optimization-ci-dir.txt)/test-optimization-validation-link.js" \
+    --strict-test-management \
+    --from-report dd-test-optimization-final-report.txt \
+    --from-report dd-test-optimization-efd/dd-test-optimization-final-report.txt \
+    --from-report dd-test-optimization-tm-disabled/dd-test-optimization-final-report.txt \
+    --from-report dd-test-optimization-tm-quarantined/dd-test-optimization-final-report.txt \
+    --from-report dd-test-optimization-tm-attempt-to-fix/dd-test-optimization-final-report.txt \
+    > dd-test-optimization-validation-url.txt
+else
+  $(cat dd-test-optimization-node-command.txt) "$(cat dd-test-optimization-ci-dir.txt)/test-optimization-validation-link.js" \
+    --from-report dd-test-optimization-final-report.txt \
+    > dd-test-optimization-validation-url.txt
+fi
+
+$(cat dd-test-optimization-node-command.txt) "$(cat dd-test-optimization-ci-dir.txt)/test-optimization-extract-report.js" \
+  > dd-test-optimization-step9-extractor-output.txt
+cat dd-test-optimization-step9-extractor-output.txt
+```
+
+Do not run another Step 9 extractor after the block above. Include the output it prints in the final
+response.
 
 The `--strict-test-management` flag requires all three Test Management subchecks to be present in
 the combined result: disabled, quarantined, and attempt-to-fix. If strict validation fails, inspect
@@ -2107,7 +2357,7 @@ the Test Management subcheck reasons in the final reports and any `unmatchedProp
 evidence before rerunning. Treat missing subchecks or identity mismatches as setup/artifact issues
 until the individual Step 8 result explains a product behavior failure.
 
-Verbatim:
+Reference only:
 
 ```bash
 $(cat dd-test-optimization-node-command.txt) "$(cat dd-test-optimization-ci-dir.txt)/test-optimization-validation-link.js" \
@@ -2294,7 +2544,9 @@ The final response must include:
 - HTML report `file://` URL and absolute path.
 - One Datadog validation relative path for the combined runbook result.
 - Final report path and compact summary path.
+- Selected framework.
 - Selected test command and test result.
+- Likely failure cause and advanced skip reason when basic reporting is incomplete.
 - EFD check result when Step 7 ran, including known tests count, retried new test execution count,
   distinct retried new test name count, and EFD execution diagnosis.
 - Auto Test Retries check result when Step 7 ran, including failing executions, passing
@@ -2319,6 +2571,9 @@ HTML report: file:///absolute/path/to/dd-test-optimization-report.html
 Datadog validation: ci/test/validation#pako:{payload}
 Final report path: /absolute/path/to/dd-test-optimization-final-report.txt
 
+Selected framework:
+{framework}
+
 Selected test command:
 {command}
 
@@ -2339,6 +2594,9 @@ Pass/fail table:
 
 Basic reporting:
 {stage}; requests={count}; events=sessions={count}, modules={count}, suites={count}, tests={count}; decodeErrors={count}
+
+Likely failure cause:
+{n/a | reason}
 
 EFD check:
 {not run | skipped: reason | passed | failed}; knownTests={count}; retriedNewTests={count}; names={names or none}

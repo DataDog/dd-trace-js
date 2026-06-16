@@ -31,6 +31,26 @@ function parseArgs (args) {
       options.fromReports.push(args[++i])
     } else if (arg.startsWith('--from-report=')) {
       options.fromReports.push(arg.slice('--from-report='.length))
+    } else if (arg === '--static-report') {
+      options.staticReport = args[++i]
+    } else if (arg.startsWith('--static-report=')) {
+      options.staticReport = arg.slice('--static-report='.length)
+    } else if (arg === '--diagnosis') {
+      options.diagnosis = args[++i]
+    } else if (arg.startsWith('--diagnosis=')) {
+      options.diagnosis = arg.slice('--diagnosis='.length)
+    } else if (arg === '--framework-file') {
+      options.frameworkFile = args[++i]
+    } else if (arg.startsWith('--framework-file=')) {
+      options.frameworkFile = arg.slice('--framework-file='.length)
+    } else if (arg === '--test-command-file') {
+      options.testCommandFile = args[++i]
+    } else if (arg.startsWith('--test-command-file=')) {
+      options.testCommandFile = arg.slice('--test-command-file='.length)
+    } else if (arg === '--test-result-file') {
+      options.testResultFile = args[++i]
+    } else if (arg.startsWith('--test-result-file=')) {
+      options.testResultFile = arg.slice('--test-result-file='.length)
     } else if (arg === '--strict-test-management') {
       options.strictTestManagement = true
     } else if (arg === '--help' || arg === '-h') {
@@ -55,6 +75,13 @@ function getHelpText () {
     '',
     'Reads Datadog validation payloads from final reports and prints one combined validation path.',
     'Use --strict-test-management for full runbook results that must include all three Test Management subchecks.',
+    '',
+    'Static-only path:',
+    '  --static-report <file>       Build a validation payload when live validation was intentionally skipped.',
+    '  --diagnosis <file>           Optional diagnosis JSON with likelyFailureCause.',
+    '  --framework-file <file>      Optional selected framework file.',
+    '  --test-command-file <file>   Optional selected/skipped command file.',
+    '  --test-result-file <file>    Optional selected/skipped result file.',
   ].join('\n')
 }
 
@@ -89,6 +116,79 @@ function buildValidationPayload (input) {
       htmlPath: input.artifacts?.htmlPath || summary.artifacts.htmlPath,
     },
     framework: getFramework(input.staticReport),
+  }
+}
+
+/**
+ * Builds a validation payload for repositories where live validation was intentionally skipped.
+ *
+ * @param {object} input validation input
+ * @param {object} input.staticReport static diagnosis report
+ * @param {object|undefined} input.diagnosis diagnosis artifact
+ * @param {string|undefined} input.framework selected framework id
+ * @param {string|undefined} input.testCommand selected or skipped command text
+ * @param {string|undefined} input.testResult selected or skipped result text
+ * @returns {object} validation payload
+ */
+function buildStaticValidationPayload (input) {
+  const reason = input.diagnosis?.likelyFailureCause ||
+    getStaticFrameworkFailureCause(input.staticReport, input.testCommand || '') ||
+    'Live validation was skipped because no eligible supported test command was selected.'
+  const checks = [
+    {
+      id: 'basic-reporting',
+      name: 'Basic reporting',
+      status: 'failed',
+      reason,
+      steps: [
+        {
+          id: 'setup-intake',
+          name: 'Set up intake',
+          status: 'skipped',
+          evidence: {
+            reason: 'live fake intake was not started',
+          },
+        },
+        {
+          id: 'run-tests',
+          name: 'Run tests',
+          status: 'skipped',
+          command: input.testCommand,
+          result: input.testResult,
+          evidence: {
+            reason: 'live validation was skipped before running tests',
+          },
+        },
+        {
+          id: 'check-events',
+          name: 'Check that events show up',
+          status: 'failed',
+          evidence: {
+            citestcyclePayloads: 0,
+            decodeErrors: 0,
+            events: {
+              modules: 0,
+              sessions: 0,
+              suites: 0,
+              tests: 0,
+            },
+            missingLevels: ['test_session_end', 'test_module_end', 'test_suite_end', 'test'],
+            reason,
+            requestCount: 0,
+          },
+        },
+      ],
+    },
+  ]
+
+  return {
+    version: 2,
+    source: 'dd-trace-js',
+    type: 'test-optimization-validation',
+    status: 'failed',
+    checks,
+    artifacts: {},
+    framework: getFramework(input.staticReport, input.framework),
   }
 }
 
@@ -405,11 +505,13 @@ function getBasicReportingCheck (input, analysis) {
   const summary = analysis.summary
   const events = getEventCounts(summary)
   const status = getBasicReportingStatus(summary)
+  const reason = status === 'failed' ? getBasicReportingFailureCause(input, analysis) : undefined
 
   return {
     id: 'basic-reporting',
     name: 'Basic reporting',
     status,
+    reason,
     steps: [
       {
         id: 'setup-intake',
@@ -434,10 +536,182 @@ function getBasicReportingCheck (input, analysis) {
           events,
           missingLevels: summary.events.missingLevels,
           decodeErrors: summary.decodeErrors.length,
+          reason,
         }, getBasicSamples(summary.events.samples, input.testCommand), 4),
       },
     ],
   }
+}
+
+/**
+ * Gets the likely failure cause for a failed basic-reporting check.
+ *
+ * @param {object} input validation input
+ * @param {object} analysis intake analysis report
+ * @returns {string} likely failure cause
+ */
+function getBasicReportingFailureCause (input, analysis) {
+  const summary = analysis.summary
+  const staticCause = getStaticFrameworkFailureCause(input.staticReport, input.testCommand || '')
+
+  if (staticCause) return staticCause
+  if (summary.citestcycle.payloadCount === 0) {
+    return 'No Test Optimization payload reached the fake intake. The tracer may not have loaded, the selected ' +
+      'command may not have run tests, or the selected runner may not be supported.'
+  }
+  if (summary.events.missingLevels.includes('test')) {
+    return 'Test Optimization initialized and emitted higher-level events, but per-test hooks did not fire. ' +
+      'This usually points to an unsupported runner, unsupported framework version, or unsupported framework ' +
+      'configuration for the selected command.'
+  }
+  if (summary.events.missingLevels.length > 0) {
+    return `Test Optimization emitted partial event levels. Missing levels: ${summary.events.missingLevels.join(', ')}.`
+  }
+  if (summary.decodeErrors.length > 0) {
+    return 'The fake intake received payloads but could not decode one or more of them.'
+  }
+
+  return 'Basic reporting failed, but no more specific cause was available from the local artifacts.'
+}
+
+/**
+ * Gets framework-related failure cause text from static diagnosis.
+ *
+ * @param {object|undefined} staticReport static diagnosis report
+ * @param {string} testCommand selected test command
+ * @returns {string|undefined} framework failure cause
+ */
+function getStaticFrameworkFailureCause (staticReport, testCommand) {
+  if (!staticReport) return
+
+  const unsupportedFramework = getUnsupportedFrameworkCause(staticReport, testCommand)
+  if (unsupportedFramework) return unsupportedFramework
+
+  const unsupportedVersion = getUnsupportedVersionCause(staticReport, testCommand)
+  if (unsupportedVersion) return unsupportedVersion
+
+  const frameworkConfiguration = getFrameworkConfigurationCause(staticReport, testCommand)
+  if (frameworkConfiguration) return frameworkConfiguration
+}
+
+/**
+ * Gets unsupported-framework cause text from static diagnosis.
+ *
+ * @param {object} staticReport static diagnosis report
+ * @param {string} testCommand selected test command
+ * @returns {string|undefined} unsupported framework cause
+ */
+function getUnsupportedFrameworkCause (staticReport, testCommand) {
+  const frameworks = Array.isArray(staticReport.unsupportedFrameworks) ? staticReport.unsupportedFrameworks : []
+  if (frameworks.length === 0) return
+
+  const normalizedCommand = testCommand.toLowerCase()
+  const selected = frameworks.filter(framework => commandMatchesUnsupportedFramework(normalizedCommand, framework))
+  let relevant = selected
+
+  if (relevant.length === 0 && !normalizedCommand) {
+    relevant = frameworks
+  }
+
+  if (relevant.length === 0) return
+
+  return `Selected command appears to use unsupported test framework(s): ${
+    relevant.map(framework => framework.name).join(', ')
+  }. Choose a supported framework before running the live validation.`
+}
+
+/**
+ * Checks whether a command appears to invoke an unsupported framework.
+ *
+ * @param {string} command selected command
+ * @param {object} framework unsupported framework summary
+ * @returns {boolean} whether the command matches the framework
+ */
+function commandMatchesUnsupportedFramework (command, framework) {
+  if (framework.id === 'node-test') return /\bnode\s+--test\b|\bnode:test\b/.test(command)
+  if (framework.id === 'testcafe') return /\btestcafe\b/.test(command)
+
+  return command.includes(String(framework.id).toLowerCase()) ||
+    command.includes(String(framework.name).toLowerCase())
+}
+
+/**
+ * Gets unsupported-version cause text from static diagnosis.
+ *
+ * @param {object} staticReport static diagnosis report
+ * @param {string} testCommand selected command
+ * @returns {string|undefined} unsupported version cause
+ */
+function getUnsupportedVersionCause (staticReport, testCommand) {
+  const findings = (Array.isArray(staticReport.results) ? staticReport.results : [])
+    .filter(finding => finding.status === 'error' && /\bis not supported\b/.test(finding.title || ''))
+  if (findings.length === 0) return
+
+  const normalizedCommand = testCommand.toLowerCase()
+  const selected = findings.filter(finding => normalizedCommand.includes(getFindingFrameworkName(finding)))
+  const relevant = dedupeFindings(selected.length > 0 ? selected : findings)
+
+  return `Static diagnosis found unsupported framework version(s): ${
+    relevant.map(finding => finding.title).join('; ')
+  }. ${relevant.map(finding => finding.recommendation).filter(Boolean).join(' ')}`
+}
+
+/**
+ * Deduplicates repeated static findings.
+ *
+ * @param {object[]} findings static diagnosis findings
+ * @returns {object[]} deduplicated findings
+ */
+function dedupeFindings (findings) {
+  const seen = new Set()
+  const deduped = []
+
+  for (const finding of findings) {
+    const key = `${finding.status || ''}|${finding.title || ''}|${finding.recommendation || ''}`
+    if (seen.has(key)) continue
+
+    seen.add(key)
+    deduped.push(finding)
+  }
+
+  return deduped
+}
+
+/**
+ * Gets framework-configuration cause text from static diagnosis.
+ *
+ * @param {object} staticReport static diagnosis report
+ * @param {string} testCommand selected command
+ * @returns {string|undefined} framework configuration cause
+ */
+function getFrameworkConfigurationCause (staticReport, testCommand) {
+  const findings = (Array.isArray(staticReport.results) ? staticReport.results : [])
+    .filter(finding => finding.status === 'warning' && /^Jest TypeScript config may need ts-node$/.test(
+      finding.title || ''
+    ))
+  if (findings.length === 0) return
+
+  const command = testCommand.toLowerCase()
+  const supportedFrameworks = Array.isArray(staticReport.supportedFrameworks) ? staticReport.supportedFrameworks : []
+  const appearsToUseJest = /\bjest\b/.test(command) ||
+    /\bnpm\s+(?:run\s+)?test\b/.test(command) ||
+    (supportedFrameworks.length === 1 && supportedFrameworks[0].id === 'jest')
+
+  if (!appearsToUseJest) return
+
+  return `Static diagnosis found Jest configuration risk: ${
+    findings.map(finding => finding.title).join('; ')
+  }. ${findings.map(finding => finding.recommendation).filter(Boolean).join(' ')}`
+}
+
+/**
+ * Gets a normalized framework name from a static finding.
+ *
+ * @param {object} finding static finding
+ * @returns {string} normalized framework name
+ */
+function getFindingFrameworkName (finding) {
+  return String(finding.title || '').split(/\s+/)[0].toLowerCase()
 }
 
 /**
@@ -913,11 +1187,13 @@ function getValidationAppUrl (payload) {
  * @param {object|undefined} staticReport static diagnosis report
  * @returns {object|undefined} framework payload
  */
-function getFramework (staticReport) {
+function getFramework (staticReport, selectedFramework) {
   if (!staticReport) return
 
   const frameworks = Array.isArray(staticReport.supportedFrameworks) ? staticReport.supportedFrameworks : []
-  const framework = frameworks[0]
+  const framework = selectedFramework
+    ? frameworks.find(framework => framework.id === selectedFramework) || frameworks[0]
+    : frameworks[0]
   if (!framework) return
 
   return {
@@ -938,6 +1214,55 @@ function getFrameworkVersion (framework) {
   return detections[0]?.version || detections[0]?.rawVersion
 }
 
+/**
+ * Reads JSON from disk.
+ *
+ * @param {string|undefined} file file path
+ * @param {object} fallback fallback value
+ * @returns {object} parsed JSON or fallback
+ */
+function readJson (file, fallback) {
+  if (!file) return fallback
+
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8'))
+  } catch {
+    return fallback
+  }
+}
+
+/**
+ * Reads text from disk.
+ *
+ * @param {string|undefined} file file path
+ * @returns {string|undefined} file text
+ */
+function readText (file) {
+  if (!file) return
+
+  try {
+    return fs.readFileSync(file, 'utf8').trim()
+  } catch {}
+}
+
+/**
+ * Gets a static-only validation web app path.
+ *
+ * @param {object} options CLI options
+ * @returns {string} validation web app path
+ */
+function getStaticValidationAppUrl (options) {
+  const payload = buildStaticValidationPayload({
+    diagnosis: readJson(options.diagnosis, {}),
+    framework: readText(options.frameworkFile),
+    staticReport: readJson(options.staticReport, { results: [] }),
+    testCommand: readText(options.testCommandFile),
+    testResult: readText(options.testResultFile),
+  })
+
+  return getValidationAppUrl(payload)
+}
+
 if (require.main === module) {
   const options = parseArgs(process.argv.slice(2))
 
@@ -947,6 +1272,8 @@ if (require.main === module) {
     console.error(`Unknown argument: ${options.unknown}`)
     console.error(getHelpText())
     process.exitCode = 1
+  } else if (options.staticReport) {
+    console.log(`Datadog validation: ${getStaticValidationAppUrl(options)}`)
   } else {
     try {
       console.log(`Datadog validation: ${getCombinedValidationAppUrlFromReports(options.fromReports, options)}`)
@@ -959,10 +1286,13 @@ if (require.main === module) {
 
 module.exports = {
   buildCombinedValidationPayload,
+  buildStaticValidationPayload,
   buildValidationPayload,
   decodeValidationPayload,
   encodeValidationPayload,
   getCombinedValidationAppUrlFromReports,
+  getBasicReportingFailureCause,
+  getStaticValidationAppUrl,
   getValidationAppUrl,
   getValidationPayloadFromReport,
   parseArgs,

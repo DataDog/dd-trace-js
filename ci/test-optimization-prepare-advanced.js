@@ -425,20 +425,21 @@ function inferPrepareOptions (options) {
   const inferred = generatedAtrFile
     ? getKnownTestForSuite(knownTests, generatedAtrFile)
     : getFirstKnownTest(knownTests)
-  const efdTestFile = options.efdTestFile || getTemporaryEfdTestFile(inferred.suite)
+  const selectedSuite = generatedAtrFile || resolveSuiteToSelectedFile(inferred.suite, options)
+  const efdTestFile = options.efdTestFile || getTemporaryEfdTestFile(selectedSuite)
 
   const framework = options.frameworkExplicit ? options.framework : inferred.framework
 
   return {
     ...options,
     efdCommand: maybeForceRunInBand(
-      options.efdCommand || addEfdTestFileToCommand(selectedCommand, inferred.suite, efdTestFile),
+      options.efdCommand || addEfdTestFileToCommand(selectedCommand, selectedSuite, efdTestFile),
       options,
       framework
     ),
     efdTestFile,
     efdTestName: options.efdTestName || DEFAULT_EFD_TEST_NAME,
-    flakyTestFile: options.flakyTestFile || generatedAtrFile || inferred.suite,
+    flakyTestFile: options.flakyTestFile || selectedSuite,
     flakyTestName: options.flakyTestName || inferred.testName,
     framework,
   }
@@ -492,15 +493,42 @@ function addEfdTestFileToCommand (command, selectedTestFile, efdTestFile) {
  */
 function addTestFileToCommand (command, selectedTestFile, testFile) {
   const tokens = tokenizeCommand(command)
-  const insertion = ` ${quoteShellArg(testFile)}`
+  const commandWorkingDirectory = getCommandWorkingDirectory(tokens)
+  const insertion = ` ${quoteShellArg(getCommandPathForTestFile(testFile, commandWorkingDirectory))}`
 
   for (let i = tokens.length - 1; i >= 0; i--) {
-    if (isSamePathToken(tokens[i].value, selectedTestFile)) {
+    if (isSamePathToken(tokens[i].value, selectedTestFile, commandWorkingDirectory)) {
       return `${command.slice(0, tokens[i].end)}${insertion}${command.slice(tokens[i].end)}`
     }
   }
 
   return `${command}${insertion}`
+}
+
+/**
+ * Gets the working directory from a simple `cd <dir> && <test command>` wrapper.
+ *
+ * @param {Array<{value: string}>} tokens parsed command tokens
+ * @returns {string|undefined} command working directory
+ */
+function getCommandWorkingDirectory (tokens) {
+  if (tokens[0]?.value === 'cd') {
+    if (!tokens[1]?.value || tokens[2]?.value !== '&&') return
+
+    return tokens[1].value
+  }
+
+  for (let i = 0; i < tokens.length - 1; i++) {
+    if (tokens[i].value === '--dir' || tokens[i].value === '--cwd' || tokens[i].value === '--prefix') {
+      return tokens[i + 1].value
+    }
+  }
+
+  for (const token of tokens) {
+    if (token.value.startsWith('--dir=')) return token.value.slice('--dir='.length)
+    if (token.value.startsWith('--cwd=')) return token.value.slice('--cwd='.length)
+    if (token.value.startsWith('--prefix=')) return token.value.slice('--prefix='.length)
+  }
 }
 
 /**
@@ -560,10 +588,100 @@ function tokenizeCommand (command) {
  *
  * @param {string} token command token value
  * @param {string} selectedTestFile selected test file
+ * @param {string|undefined} commandWorkingDirectory command working directory
  * @returns {boolean} whether token points to the selected test file
  */
-function isSamePathToken (token, selectedTestFile) {
-  return normalizeCommandPath(token) === normalizeCommandPath(selectedTestFile)
+function isSamePathToken (token, selectedTestFile, commandWorkingDirectory) {
+  if (pathsReferToSameFile(token, selectedTestFile)) return true
+  if (!commandWorkingDirectory) return false
+
+  return pathsReferToSameFile(path.join(commandWorkingDirectory, token), selectedTestFile)
+}
+
+/**
+ * Gets the command-local path to a generated test file.
+ *
+ * @param {string} testFile generated test file
+ * @param {string|undefined} commandWorkingDirectory command working directory
+ * @returns {string} path to use in the command
+ */
+function getCommandPathForTestFile (testFile, commandWorkingDirectory) {
+  if (!commandWorkingDirectory) return testFile
+
+  const relative = path.relative(path.resolve(commandWorkingDirectory), path.resolve(testFile))
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) return testFile
+
+  return normalizeCommandPath(relative)
+}
+
+/**
+ * Resolves a suite path from known-tests to the repository-relative selected file when possible.
+ *
+ * @param {string} suite suite path from known-tests
+ * @param {object} options helper options
+ * @returns {string} selected file path when it can be matched
+ */
+function resolveSuiteToSelectedFile (suite, options = {}) {
+  const selectedTestFilesFile = options.selectedTestFilesFile || DEFAULT_SELECTED_TEST_FILES_FILE
+  const selectedFiles = readStateFile(selectedTestFilesFile)
+  const commandWorkingDirectory = getSelectedCommandWorkingDirectory(options)
+
+  for (const selectedFile of selectedFiles) {
+    if (pathsReferToSameFile(selectedFile, suite)) return selectedFile
+  }
+
+  if (commandWorkingDirectory && !path.isAbsolute(suite)) {
+    const commandRelativeSuite = path.join(commandWorkingDirectory, suite)
+
+    for (const selectedFile of selectedFiles) {
+      if (pathsReferToSameFile(selectedFile, commandRelativeSuite)) return selectedFile
+    }
+
+    return normalizeCommandPath(commandRelativeSuite)
+  }
+
+  return suite
+}
+
+/**
+ * Gets the working directory implied by the selected test command.
+ *
+ * @param {object} options helper options
+ * @returns {string|undefined} selected command working directory
+ */
+function getSelectedCommandWorkingDirectory (options) {
+  const selectedCommand = options.selectedCommand || options.testCommand || readSelectedCommand(options.testCommandFile)
+  if (!selectedCommand) return
+
+  return getCommandWorkingDirectory(tokenizeCommand(selectedCommand))
+}
+
+/**
+ * Reads the selected command for path resolution.
+ *
+ * @param {string|undefined} testCommandFile selected command file
+ * @returns {string|undefined} selected command
+ */
+function readSelectedCommand (testCommandFile) {
+  try {
+    return fs.readFileSync(path.resolve(testCommandFile || DEFAULT_TEST_COMMAND_FILE), 'utf8').trim()
+  } catch {}
+}
+
+/**
+ * Checks whether two possibly differently-rooted test paths refer to the same file.
+ *
+ * @param {string} left first path
+ * @param {string} right second path
+ * @returns {boolean} whether both paths appear to refer to the same file
+ */
+function pathsReferToSameFile (left, right) {
+  const normalizedLeft = normalizeCommandPath(left)
+  const normalizedRight = normalizeCommandPath(right)
+
+  return normalizedLeft === normalizedRight ||
+    normalizedLeft.endsWith(`/${normalizedRight}`) ||
+    normalizedRight.endsWith(`/${normalizedLeft}`)
 }
 
 /**
@@ -573,7 +691,7 @@ function isSamePathToken (token, selectedTestFile) {
  * @returns {string} normalized path
  */
 function normalizeCommandPath (value) {
-  return path.normalize(value).replace(/^\.\/+/, '')
+  return path.normalize(value).replace(/^\.\/+/, '').replaceAll('\\', '/')
 }
 
 /**
@@ -628,11 +746,9 @@ function getFirstKnownTest (knownTests) {
  * @returns {{framework: string, suite: string, testName: string}} generated known test
  */
 function getKnownTestForSuite (knownTests, suite) {
-  const expectedSuite = normalizeCommandPath(suite)
-
   for (const [framework, suites] of Object.entries(knownTests || {})) {
     for (const [knownSuite, tests] of Object.entries(suites || {})) {
-      if (normalizeCommandPath(knownSuite) !== expectedSuite) continue
+      if (!pathsReferToSameFile(knownSuite, suite)) continue
       if (Array.isArray(tests) && tests.length > 0) {
         return {
           framework,
@@ -1170,5 +1286,6 @@ module.exports = {
   parseArgs,
   prepareAtrBaselineCandidate,
   prepareAdvancedChecks,
+  resolveSuiteToSelectedFile,
   restoreAdvancedChecks,
 }

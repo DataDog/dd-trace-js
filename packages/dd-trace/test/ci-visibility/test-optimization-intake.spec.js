@@ -33,18 +33,23 @@ const {
 } = require('../../../../ci/test-optimization-render-report')
 const {
   buildCombinedValidationPayload,
+  buildStaticValidationPayload,
 } = require('../../../../ci/test-optimization-validation-link')
 const {
   assertAdvancedPlanMatchesSelectedFiles,
   getNodeOptions,
   getTestResult,
   parseArgs: parseDebugArgs,
+  prefixEnvForCommand,
   runDebug,
+  runFullValidation,
 } = require('../../../../ci/test-optimization-debug')
 const {
+  addTestFileToCommand,
   addRunInBandToCommand,
   getAtrBaselinePlan,
   getTemporaryEfdTestFile,
+  getTemporaryTestSource,
   inferPrepareOptions,
   insertFlakyFailure,
   prepareAtrBaselineCandidate,
@@ -61,6 +66,7 @@ const {
 } = require('../../../../ci/test-optimization-prepare-test-management')
 const {
   buildTestCommand,
+  detectFramework,
   selectTestCommand,
   writeSelection,
 } = require('../../../../ci/test-optimization-select-command')
@@ -919,19 +925,32 @@ describe('Test Optimization debug intake', () => {
       'dd-test-optimization-atr-flaky-test-snippet.txt',
       '--no-clean',
       '--no-open',
+      '--full',
+      '--tm-all',
+      '--framework=jest',
+      '--package-root',
+      'packages/example',
+      '--preflight',
+      '--force-run-in-band',
     ]), {
       clean: false,
+      forceRunInBand: true,
+      framework: 'jest',
+      full: true,
       flakyTestSnippetFile: 'dd-test-optimization-atr-flaky-test-snippet.txt',
       knownTests,
       open: false,
       outDir: tmpDir,
       newTestSnippetFile: 'dd-test-optimization-efd-new-test-snippet.txt',
+      packageRoot: 'packages/example',
+      preflight: true,
       readyTimeoutMs: 1234,
       service: 'ci-debug',
       settingsMode: 'efd',
       testCommand: 'npm test -- test/sum.spec.js',
       testCommandFile: 'dd-test-optimization-test-command.txt',
       testManagementTests,
+      tmAll: true,
     })
   })
 
@@ -1110,6 +1129,21 @@ describe('Test Optimization debug intake', () => {
     assert.strictEqual(getTestResult('no runner summary here\n'), 'unknown')
   })
 
+  it('prefixes Test Management baseline env inside package-root commands', () => {
+    assert.strictEqual(
+      prefixEnvForCommand(
+        'DD_TEST_OPTIMIZATION_TM_BASELINE=1',
+        'cd scripts/codemods/ac3-to-ac4 && ../../../node_modules/.bin/vitest run src/__tests__/links.test.ts'
+      ),
+      'cd scripts/codemods/ac3-to-ac4 && DD_TEST_OPTIMIZATION_TM_BASELINE=1 ' +
+        '../../../node_modules/.bin/vitest run src/__tests__/links.test.ts'
+    )
+    assert.strictEqual(
+      prefixEnvForCommand('DD_TEST_OPTIMIZATION_TM_BASELINE=1', 'npm test -- test/sum.spec.js'),
+      'DD_TEST_OPTIMIZATION_TM_BASELINE=1 npm test -- test/sum.spec.js'
+    )
+  })
+
   it('runs the debug wrapper and writes artifacts', (done) => {
     const testCommand = 'node report.js'
     const testCommandFile = path.join(tmpDir, 'selected-command.txt')
@@ -1149,13 +1183,13 @@ describe('Test Optimization debug intake', () => {
         process.chdir(cwd)
         assert.ifError(error)
         assert.match(report, /Primary funnel stage: Connected, no settings/)
-        assert.match(report, /Requests: 1/)
-        assert.match(report, /Consistency checks:\n- Intake URL: ok/)
-        assert.match(report, /- Request count: ok \(artifact=1, analyzer=1\)/)
-        assert.match(report, /Test result: 2 passing/)
+        assert.match(report, /Summary:\n- Reporting: failed \(Connected, no settings\)/)
         const htmlReportPath = path.join(tmpDir, 'dd-test-optimization-report.html')
 
-        assert.match(report, new RegExp(`HTML report path: ${escapeRegExp(htmlReportPath)}`))
+        assert.match(report, new RegExp(`HTML report: ${escapeRegExp(pathToFileURL(htmlReportPath).href)}`))
+        assert.doesNotMatch(report, /HTML report path:/)
+        assert.doesNotMatch(report, /Consistency checks:/)
+        assert.doesNotMatch(report, /Env vars used/)
         assert.strictEqual(
           fs.readFileSync(path.join(tmpDir, 'dd-test-optimization-test-command.txt'), 'utf8'),
           `${testCommand}\n`
@@ -1186,6 +1220,11 @@ describe('Test Optimization debug intake', () => {
         assert.ok(fs.existsSync(path.join(tmpDir, 'dd-test-optimization-final-report.txt')))
         assert.ok(fs.existsSync(path.join(tmpDir, 'dd-test-optimization-summary.txt')))
         assert.ok(fs.existsSync(path.join(tmpDir, 'dd-test-optimization-agent-report.json')))
+        assert.strictEqual(
+          JSON.parse(fs.readFileSync(path.join(tmpDir, 'dd-test-optimization-artifacts.json'), 'utf8'))
+            .artifacts.artifactManifest.exists,
+          true
+        )
         done()
       } catch (assertionError) {
         process.chdir(cwd)
@@ -1419,6 +1458,44 @@ describe('Test Optimization debug intake', () => {
     }
   })
 
+  it('infers Test Management helper state for nested package commands', () => {
+    const cwd = process.cwd()
+    const selectedTestFile = path.join(tmpDir, 'integrationTests/dev-jest/index.test.js')
+
+    fs.mkdirSync(path.dirname(selectedTestFile), { recursive: true })
+    fs.writeFileSync(selectedTestFile, getSimpleJestTestSource('works'))
+
+    process.chdir(tmpDir)
+    fs.writeFileSync(
+      'dd-test-optimization-test-command.txt',
+      'cd integrationTests/dev-jest && npm test -- index.test.js --runInBand\n'
+    )
+    fs.writeFileSync('dd-test-optimization-selected-test-files.txt', 'integrationTests/dev-jest/index.test.js\n')
+    fs.writeFileSync('dd-test-optimization-known-tests.json', JSON.stringify({
+      jest: {
+        'index.test.js': ['works'],
+      },
+    }))
+
+    try {
+      assert.deepStrictEqual(inferTestManagementPlan({
+        auto: true,
+        mode: 'disabled',
+      }), {
+        auto: true,
+        framework: 'jest',
+        mode: 'disabled',
+        settingsMode: 'tm-disabled',
+        testCommand:
+          'cd integrationTests/dev-jest && npm test -- index.test.js ' +
+          'dd-trace-tm-disabled.test.js --runInBand',
+        testFile: 'integrationTests/dev-jest/dd-trace-tm-disabled.test.js',
+      })
+    } finally {
+      process.chdir(cwd)
+    }
+  })
+
   it('infers Test Management helper state from selected test files without known-tests', () => {
     const cwd = process.cwd()
     const selectedTestFile = path.join(tmpDir, 'packages/foo/test/scope.node.test.ts')
@@ -1508,6 +1585,90 @@ describe('Test Optimization debug intake', () => {
     } finally {
       process.chdir(cwd)
     }
+  })
+
+  it('infers advanced generated candidates for nested package commands', () => {
+    const cwd = process.cwd()
+    const selectedTestFile = path.join(tmpDir, 'integrationTests/dev-jest/index.test.js')
+
+    fs.mkdirSync(path.dirname(selectedTestFile), { recursive: true })
+    fs.writeFileSync(selectedTestFile, getSimpleJestTestSource('works'))
+
+    process.chdir(tmpDir)
+    fs.writeFileSync(
+      'dd-test-optimization-test-command.txt',
+      'cd integrationTests/dev-jest && npm test -- index.test.js --runInBand\n'
+    )
+    fs.writeFileSync('dd-test-optimization-selected-test-files.txt', 'integrationTests/dev-jest/index.test.js\n')
+
+    try {
+      assert.deepStrictEqual(getAtrBaselinePlan({
+        auto: true,
+        baselineCandidate: true,
+        framework: 'jest',
+        frameworkExplicit: true,
+      }), {
+        atrCommand:
+          'cd integrationTests/dev-jest && npm test -- index.test.js dd-trace-atr-debug.test.js --runInBand',
+        atrTestFile: 'integrationTests/dev-jest/dd-trace-atr-debug.test.js',
+        atrTestName: 'dd trace Auto Test Retries debug temporary test',
+        framework: 'jest',
+        source: getTemporaryTestSource(
+          'jest',
+          'dd trace Auto Test Retries debug temporary test',
+          'dd trace Auto Test Retries debug'
+        ),
+      })
+
+      fs.writeFileSync(
+        'dd-test-optimization-atr-generated-test-file.txt',
+        'integrationTests/dev-jest/dd-trace-atr-debug.test.js\n'
+      )
+      fs.writeFileSync(
+        'dd-test-optimization-atr-baseline-command.txt',
+        'cd integrationTests/dev-jest && npm test -- index.test.js dd-trace-atr-debug.test.js --runInBand\n'
+      )
+      fs.writeFileSync('dd-test-optimization-known-tests.json', JSON.stringify({
+        jest: {
+          'dd-trace-atr-debug.test.js': ['dd trace Auto Test Retries debug temporary test'],
+        },
+      }))
+
+      assert.deepStrictEqual(inferPrepareOptions({ auto: true }), {
+        auto: true,
+        efdCommand:
+          'cd integrationTests/dev-jest && npm test -- index.test.js dd-trace-atr-debug.test.js ' +
+          'dd-trace-efd-debug.test.js --runInBand',
+        efdTestFile: 'integrationTests/dev-jest/dd-trace-efd-debug.test.js',
+        efdTestName: 'dd trace EFD debug temporary test',
+        flakyTestFile: 'integrationTests/dev-jest/dd-trace-atr-debug.test.js',
+        flakyTestName: 'dd trace Auto Test Retries debug temporary test',
+        framework: 'jest',
+      })
+      assert.deepStrictEqual(inferTestManagementPlan({ auto: true, mode: 'disabled' }), {
+        auto: true,
+        framework: 'jest',
+        mode: 'disabled',
+        settingsMode: 'tm-disabled',
+        testCommand:
+          'cd integrationTests/dev-jest && npm test -- index.test.js --runInBand dd-trace-tm-disabled.test.js',
+        testFile: 'integrationTests/dev-jest/dd-trace-tm-disabled.test.js',
+      })
+    } finally {
+      process.chdir(cwd)
+    }
+  })
+
+  it('uses package-relative generated paths for pnpm --dir commands', () => {
+    assert.strictEqual(
+      addTestFileToCommand(
+        'pnpm --dir docs/src/prerender/bench exec vitest run src/basic.test.ts',
+        'docs/src/prerender/bench/src/basic.test.ts',
+        'docs/src/prerender/bench/src/dd-trace-atr-debug.test.ts'
+      ),
+      'pnpm --dir docs/src/prerender/bench exec vitest run ' +
+        'src/basic.test.ts src/dd-trace-atr-debug.test.ts'
+    )
   })
 
   it('preserves custom test file suffixes in generated advanced and Test Management files', () => {
@@ -1874,6 +2035,105 @@ describe('Test Optimization debug intake', () => {
       buildTestCommand({}, 'npm', 'vitest', 'test/sum.test.ts'),
       './node_modules/.bin/vitest run test/sum.test.ts'
     )
+    assert.strictEqual(
+      buildTestCommand({
+        scripts: {
+          test: 'node --test',
+        },
+      }, 'npm', 'vitest', 'test/sum.test.ts'),
+      './node_modules/.bin/vitest run test/sum.test.ts'
+    )
+    assert.strictEqual(
+      buildTestCommand({
+        scripts: {
+          test: 'mocha --require test/support/env --reporter spec --check-leaks test/ test/acceptance/',
+        },
+      }, 'npm', 'mocha', 'test/utils.js'),
+      './node_modules/.bin/mocha --require test/support/env --reporter spec --check-leaks test/utils.js'
+    )
+    assert.strictEqual(
+      buildTestCommand({
+        scripts: {
+          ci: 'vitest run',
+          test: 'pnpm lint && vitest run',
+        },
+      }, 'pnpm', 'vitest', 'scripts/e2e-diagram-scope.spec.ts'),
+      'pnpm run ci scripts/e2e-diagram-scope.spec.ts'
+    )
+    assert.strictEqual(
+      buildTestCommand({
+        scripts: {
+          bench: 'vitest bench --run',
+        },
+      }, 'pnpm', 'vitest', 'route-pattern.bench.test.ts'),
+      './node_modules/.bin/vitest run route-pattern.bench.test.ts'
+    )
+    assert.strictEqual(
+      buildTestCommand({
+        scripts: {
+          test: 'jest',
+        },
+      }, 'npm', 'jest', 'index.test.js', 'integrationTests/dev-jest'),
+      'cd integrationTests/dev-jest && npm test -- index.test.js --runInBand'
+    )
+  })
+
+  it('rejects unsupported-only framework selection before live validation', () => {
+    assert.throws(() => detectFramework({
+      scripts: {
+        test: 'node --test src/*.test.js',
+      },
+    }), /Only unsupported test framework\(s\) were detected: Node\.js test runner/)
+    assert.throws(() => detectFramework({
+      devDependencies: {
+        tap: '^18.0.0',
+      },
+      scripts: {
+        test: 'tap test/*.js',
+      },
+    }, {
+      framework: 'tap',
+    }), /tap is not supported by this selector/)
+  })
+
+  it('writes a static-only full validation payload when only unsupported frameworks are detected', (done) => {
+    const cwd = process.cwd()
+
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({
+      scripts: {
+        test: 'node --test test/*.js',
+      },
+    }))
+
+    process.chdir(tmpDir)
+
+    runFullValidation({ open: false }, (error, report) => {
+      try {
+        assert.ifError(error)
+
+        const diagnosis = JSON.parse(fs.readFileSync('dd-test-optimization-diagnosis.json', 'utf8'))
+        const validationPayload = getValidationPayload(report)
+        const basicCheck = validationPayload.checks.find(check => check.id === 'basic-reporting')
+
+        assert.match(
+          diagnosis.likelyFailureCause,
+          /Only unsupported test framework\(s\) were detected: Node\.js test runner/
+        )
+        assert.match(report, /Summary:\n- Reporting: failed \(Not run\)/)
+        assert.doesNotMatch(report, /Advanced skip reason:/)
+        assert.strictEqual(validationPayload.status, 'failed')
+        assert.strictEqual(basicCheck.status, 'failed')
+        assert.match(basicCheck.reason, /Node\.js test runner/)
+        assert.ok(fs.existsSync('dd-test-optimization-validation-url.txt'))
+      } catch (assertionError) {
+        done(assertionError)
+        return
+      } finally {
+        process.chdir(cwd)
+      }
+
+      done()
+    })
   })
 
   it('selects a clean unit test command and writes F0-select inputs', () => {
@@ -1942,6 +2202,47 @@ describe('Test Optimization debug intake', () => {
         fs.readFileSync('dd-test-optimization-selected-files.input', 'utf8'),
         'packages/plugin-gate/src/__tests__/scope.test.ts\n'
       )
+    } finally {
+      process.chdir(cwd)
+    }
+  })
+
+  it('selects plain files under test for mocha repositories', () => {
+    const cwd = process.cwd()
+    const selectedTestFile = path.join(tmpDir, 'test/app.listen.js')
+
+    fs.mkdirSync(path.dirname(selectedTestFile), { recursive: true })
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify({
+      devDependencies: {
+        mocha: '11.7.6',
+      },
+      scripts: {
+        test: 'mocha',
+      },
+    }))
+    fs.writeFileSync(selectedTestFile, [
+      'describe("app.listen", () => {',
+      '  it("works", () => {})',
+      '})',
+      '',
+    ].join('\n'))
+
+    process.chdir(tmpDir)
+
+    try {
+      const selection = selectTestCommand()
+
+      assert.deepStrictEqual({
+        command: selection.command,
+        file: selection.file,
+        framework: selection.framework,
+        packageManager: selection.packageManager,
+      }, {
+        command: 'npm test -- test/app.listen.js',
+        file: 'test/app.listen.js',
+        framework: 'mocha',
+        packageManager: 'npm',
+      })
     } finally {
       process.chdir(cwd)
     }
@@ -2084,24 +2385,18 @@ describe('Test Optimization debug intake', () => {
     assert.match(report, /\nDatadog validation: ci\/test\/validation#pako:/)
     assert.match(report, /Primary funnel stage: Reporting complete/)
     assert.match(report, /Scope:\n- Selected test subset only\./)
-    assert.match(report, /- Framework: Mocha 11\.7\.6/)
-    assert.match(report, /- Test exit code: 0/)
-    assert.match(report, /- Test result: 3 passing/)
-    assert.match(report, /Consistency checks:\n- Intake URL: ok/)
-    assert.match(report, /- Request count: ok \(artifact=1, analyzer=1\)/)
+    assert.match(report, /Summary:\n- Reporting: OK/)
     assert.match(report, /Test command used:\nnpm test -- test\/sum\.spec\.js/)
-    assert.match(report, /DD_API_KEY=debug/)
     assert.match(report, /Expected for this live run; Step 4 injected NODE_OPTIONS="-r dd-trace\/ci\/init"/)
-    assert.match(report, /Add NODE_OPTIONS="-r dd-trace\/ci\/init" to the CI job/)
-    assert.match(report, /Set DD_SERVICE to the service name used for Test Optimization grouping/)
     assert.match(report, /What this proves:/)
-    assert.match(report, /Diagnostic answers:/)
-    assert.match(
-      report,
-      /Does dd-trace\/ci\/init reach the test process through NODE_OPTIONS\? yes; inferred from citestcycle/
-    )
-    assert.match(report, /Final report: /)
-    assert.match(report, /Agent JSON report: /)
+    assert.doesNotMatch(report, /HTML report path:/)
+    assert.doesNotMatch(report, /- Framework:/)
+    assert.doesNotMatch(report, /Consistency checks:/)
+    assert.doesNotMatch(report, /DD_API_KEY=debug/)
+    assert.doesNotMatch(report, /warning: DD_SERVICE/)
+    assert.doesNotMatch(report, /What this does not prove:/)
+    assert.doesNotMatch(report, /Diagnostic answers:/)
+    assert.doesNotMatch(report, /Artifacts:/)
 
     const validationPayload = getValidationPayload(report)
     const summary = renderSummaryReport({
@@ -2141,13 +2436,164 @@ describe('Test Optimization debug intake', () => {
     assert.strictEqual(validationPayload.summary, undefined)
     assert.strictEqual(validationPayload.env, undefined)
     assert.strictEqual(validationPayload.test, undefined)
+    assert.strictEqual(basicCheck.reason, undefined)
     assert.match(summary, /Test Optimization debug summary/)
     assert.match(summary, /Primary funnel stage: Reporting complete/)
-    assert.match(summary, /Selected test command: npm test -- test\/sum\.spec\.js/)
-    assert.match(summary, /Test result: 3 passing/)
-    assert.match(summary, /EFD status: not run/)
-    assert.match(summary, /Auto Test Retries status: not run/)
-    assert.match(summary, /Validation path: see the final report Datadog validation line\./)
+    assert.match(summary, /Summary:\n- Reporting: OK/)
+    assert.match(summary, /Test command used:\nnpm test -- test\/sum\.spec\.js/)
+    assert.doesNotMatch(summary, /HTML report path:/)
+    assert.doesNotMatch(summary, /Consistency checks:/)
+    assert.doesNotMatch(summary, /Static warnings\/errors:/)
+  })
+
+  it('includes likely failure cause in failed validation payloads', () => {
+    const staticPath = path.join(tmpDir, 'static.json')
+    const intakePath = path.join(tmpDir, 'intake.json')
+    const htmlPath = path.join(tmpDir, 'report.html')
+    const staticReport = getUnsupportedJestStaticReport()
+
+    staticReport.results.push({ ...staticReport.results[0] })
+    fs.writeFileSync(staticPath, JSON.stringify(staticReport, null, 2))
+    fs.writeFileSync(intakePath, JSON.stringify(getSessionOnlyIntakeArtifact(intakePath, htmlPath), null, 2))
+
+    const report = renderFinalReport({
+      static: staticPath,
+      intake: intakePath,
+      testCommand: 'yarn test:unit packages/foo/scope.test.js',
+      testExitCode: '0',
+      testResult: '1 passed',
+      agentReport: path.join(tmpDir, 'agent.txt'),
+      agentJsonReport: path.join(tmpDir, 'agent.json'),
+    })
+    const validationPayload = getValidationPayload(report)
+    const basicCheck = validationPayload.checks.find(check => check.id === 'basic-reporting')
+    const eventsStep = basicCheck.steps.find(step => step.id === 'check-events')
+
+    const likelyCause = report.split(/\r?\n/).find(line => line.startsWith('- error: Likely failure cause -'))
+
+    assert.match(likelyCause, /Static diagnosis found unsupported framework version\(s\): Jest 27\.5\.1 is not supported/)
+    assert.strictEqual((likelyCause.match(/Jest 27\.5\.1 is not supported/g) || []).length, 1)
+    assert.match(basicCheck.reason, /Jest 27\.5\.1 is not supported/)
+    assert.match(eventsStep.evidence.reason, /Jest 27\.5\.1 is not supported/)
+  })
+
+  it('does not attribute a live supported command failure to unrelated unsupported frameworks', () => {
+    const staticPath = path.join(tmpDir, 'static.json')
+    const intakePath = path.join(tmpDir, 'intake.json')
+    const htmlPath = path.join(tmpDir, 'report.html')
+    const staticReport = {
+      ddTraceVersion: '6.0.0-pre',
+      supportedFrameworks: [
+        {
+          id: 'jest',
+          name: 'Jest',
+          versionDetections: [
+            {
+              version: '30.2.0',
+            },
+          ],
+        },
+      ],
+      unsupportedFrameworks: [
+        {
+          id: 'node-test',
+          name: 'Node.js test runner',
+        },
+      ],
+      results: [],
+    }
+
+    fs.writeFileSync(staticPath, JSON.stringify(staticReport, null, 2))
+    fs.writeFileSync(intakePath, JSON.stringify(getSessionOnlyIntakeArtifact(intakePath, htmlPath), null, 2))
+
+    const report = renderFinalReport({
+      static: staticPath,
+      intake: intakePath,
+      testCommand: 'npm test -- src/masking/__tests__/utils.test.ts --runInBand',
+      testExitCode: '0',
+      testResult: 'unknown',
+      agentReport: path.join(tmpDir, 'agent.txt'),
+      agentJsonReport: path.join(tmpDir, 'agent.json'),
+    })
+    const validationPayload = getValidationPayload(report)
+    const basicCheck = validationPayload.checks.find(check => check.id === 'basic-reporting')
+
+    assert.doesNotMatch(basicCheck.reason, /Node\.js test runner/)
+    assert.match(basicCheck.reason, /per-test hooks did not fire/)
+  })
+
+  it('attributes failed Jest collection to TypeScript config loader risk when present', () => {
+    const staticPath = path.join(tmpDir, 'static.json')
+    const intakePath = path.join(tmpDir, 'intake.json')
+    const htmlPath = path.join(tmpDir, 'report.html')
+    const staticReport = {
+      ddTraceVersion: '6.0.0-pre',
+      supportedFrameworks: [
+        {
+          id: 'jest',
+          name: 'Jest',
+          versionDetections: [
+            {
+              version: '30.2.0',
+            },
+          ],
+        },
+      ],
+      results: [
+        {
+          status: 'warning',
+          title: 'Jest TypeScript config may need ts-node',
+          message: 'A jest.config.ts file was found, but ts-node was not detected.',
+          recommendation: 'Install ts-node for the diagnostic run, or use a temporary JSON/CommonJS Jest config.',
+        },
+      ],
+    }
+
+    fs.writeFileSync(staticPath, JSON.stringify(staticReport, null, 2))
+    fs.writeFileSync(intakePath, JSON.stringify(getSessionOnlyIntakeArtifact(intakePath, htmlPath), null, 2))
+
+    const report = renderFinalReport({
+      static: staticPath,
+      intake: intakePath,
+      testCommand: 'npm test -- src/masking/__tests__/utils.test.ts --runInBand',
+      testExitCode: '0',
+      testResult: 'unknown',
+      agentReport: path.join(tmpDir, 'agent.txt'),
+      agentJsonReport: path.join(tmpDir, 'agent.json'),
+    })
+    const validationPayload = getValidationPayload(report)
+    const basicCheck = validationPayload.checks.find(check => check.id === 'basic-reporting')
+
+    assert.match(basicCheck.reason, /Jest TypeScript config may need ts-node/)
+    assert.match(basicCheck.reason, /temporary JSON\/CommonJS Jest config/)
+  })
+
+  it('builds a static-only validation payload with a skip reason', () => {
+    const payload = buildStaticValidationPayload({
+      diagnosis: {
+        likelyFailureCause: 'Static diagnosis found unsupported framework versions.',
+      },
+      framework: 'jest',
+      staticReport: getUnsupportedJestStaticReport(),
+      testCommand: 'not run',
+      testResult: 'skipped',
+    })
+    const basicCheck = payload.checks.find(check => check.id === 'basic-reporting')
+    const runStep = basicCheck.steps.find(step => step.id === 'run-tests')
+    const eventsStep = basicCheck.steps.find(step => step.id === 'check-events')
+
+    assert.strictEqual(payload.status, 'failed')
+    assert.deepStrictEqual(payload.framework, {
+      id: 'jest',
+      name: 'Jest',
+      version: '27.5.1',
+    })
+    assert.strictEqual(basicCheck.status, 'failed')
+    assert.strictEqual(basicCheck.reason, 'Static diagnosis found unsupported framework versions.')
+    assert.strictEqual(runStep.status, 'skipped')
+    assert.strictEqual(runStep.command, 'not run')
+    assert.strictEqual(eventsStep.evidence.requestCount, 0)
+    assert.strictEqual(eventsStep.evidence.reason, 'Static diagnosis found unsupported framework versions.')
   })
 
   it('renders Test Management final report and validation payload', () => {
@@ -2194,11 +2640,8 @@ describe('Test Optimization debug intake', () => {
     const attemptToFixStep = testManagementCheck.steps.find(step => step.id === 'attemptToFix')
 
     assert.match(report, /Primary funnel stage: Test Management disabled reported/)
-    assert.match(report, /- Test Management disabled status: passed/)
-    assert.match(
-      report,
-      /Does Test Management apply disabled, quarantined, or attempt-to-fix properties\? yes;/
-    )
+    assert.match(report, /Summary:\n- Reporting: OK\n- Test Management: OK/)
+    assert.doesNotMatch(report, /Diagnostic answers:/)
     assert.strictEqual(testManagementCheck.status, 'ok')
     assert.strictEqual(disabledStep.status, 'ok')
     assert.strictEqual(disabledStep.evidence.expectedExitCode, '0')
@@ -2428,12 +2871,8 @@ describe('Test Optimization debug intake', () => {
 
     assert.match(report, /Primary funnel stage: EFD retried new test/)
     assert.match(report, /- EFD check: known tests endpoint, new-test detection, and retry evidence/)
-    assert.match(report, /- EFD settings enabled: yes/)
-    assert.match(report, /- Known tests requested: yes/)
-    assert.match(report, /- Known tests received: 1/)
-    assert.match(report, /- New tests observed: 1/)
-    assert.match(report, /- Retried new tests: 1/)
-    assert.match(report, /- Distinct retried new test names: 1/)
+    assert.match(report, /Summary:\n- Reporting: OK\n- EFD: OK/)
+    assert.doesNotMatch(report, /Likely failure cause/)
     assert.match(report, /Early Flake Detection retried a new test for: npm test -- test\/sum\.spec\.js/)
 
     const validationPayload = getValidationPayload(report)
@@ -2494,11 +2933,7 @@ describe('Test Optimization debug intake', () => {
     })
 
     assert.match(report, /- Auto Test Retries check: failed and passing retry executions/)
-    assert.match(report, /- Auto Test Retries settings enabled: yes/)
-    assert.match(report, /- Auto Test Retries failed executions: 1/)
-    assert.match(report, /- Auto Test Retries passed executions: 1/)
-    assert.match(report, /- Auto Test Retries passed retry executions: 1/)
-    assert.match(report, /- Auto Test Retries flaky tests reported: 1/)
+    assert.match(report, /Summary:\n- Reporting: OK\n- EFD: OK\n- Auto Test Retries: OK/)
 
     const validationPayload = getValidationPayload(report)
     const atrCheck = validationPayload.checks.find(check => check.id === 'auto-test-retries')
@@ -2633,6 +3068,39 @@ function getStaticReport () {
       },
     ],
   }
+}
+
+function getUnsupportedJestStaticReport () {
+  return {
+    ddTraceVersion: '6.0.0-pre',
+    supportedFrameworks: [
+      {
+        id: 'jest',
+        name: 'Jest',
+        versionDetections: [
+          {
+            version: '27.5.1',
+          },
+        ],
+      },
+    ],
+    results: [
+      {
+        status: 'error',
+        title: 'Jest 27.5.1 is not supported',
+        message: 'Detected jest@27.5.1 from installed package; supported range is >=28.0.0.',
+        recommendation: 'Upgrade Jest to >=28.0.0, or use dd-trace v5 for older Jest versions.',
+      },
+    ],
+  }
+}
+
+function getSessionOnlyIntakeArtifact (intakePath, htmlPath) {
+  const artifact = getCompleteIntakeArtifact(intakePath, htmlPath)
+  artifact.requests[0].payload.events = artifact.requests[0].payload.events
+    .filter(event => event.type !== 'test')
+
+  return artifact
 }
 
 function getCompleteIntakeArtifact (intakePath, htmlPath) {

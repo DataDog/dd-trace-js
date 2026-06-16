@@ -53,6 +53,17 @@ describe('Test Optimization diagnosis script', () => {
     const report = diagnose()
 
     assert.ok(hasResult(report, 'ok', 'Jest 29.7.0 is supported'))
+    assert.deepStrictEqual(report.eligibleFrameworks, [
+      {
+        command: 'jest',
+        commandLocation: 'package.json',
+        id: 'jest',
+        name: 'Jest',
+        supportedRange: '>=28.0.0',
+        version: '29.7.0',
+        versionLocation: undefined,
+      },
+    ])
     assert.ok(hasResult(report, 'ok', 'Test Optimization initialization found'))
     assert.strictEqual(getExitCode(report, 'error'), 0)
   })
@@ -90,7 +101,26 @@ describe('Test Optimization diagnosis script', () => {
     const report = diagnose()
 
     assert.ok(hasResult(report, 'error', 'Cypress 11.2.0 is not supported'))
+    assert.deepStrictEqual(report.eligibleFrameworks, [])
     assert.match(renderText(report), /Upgrade Cypress to >=12\.0\.0/)
+  })
+
+  it('reports TypeScript Jest config risk without ts-node', () => {
+    writeJson('package.json', {
+      scripts: {
+        test: 'jest',
+      },
+      devDependencies: {
+        'dd-trace': '^6.0.0',
+        jest: '^29.0.0',
+      },
+    })
+    writeJson('node_modules/jest/package.json', { version: '29.7.0' })
+    writeFile('jest.config.ts', 'export default {}\n')
+
+    const report = diagnose()
+
+    assert.ok(hasResult(report, 'warning', 'Jest TypeScript config may need ts-node'))
   })
 
   it('reports plain dd-trace initialization in test setup', () => {

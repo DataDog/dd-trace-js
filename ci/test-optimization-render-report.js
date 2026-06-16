@@ -12,6 +12,7 @@ const {
 } = require('./test-optimization-intake-analysis')
 const {
   buildValidationPayload,
+  getBasicReportingFailureCause,
   getValidationAppUrl,
 } = require('./test-optimization-validation-link')
 
@@ -23,8 +24,6 @@ const DEFAULT_ENV_KEYS = [
   'DD_INSTRUMENTATION_TELEMETRY_ENABLED',
   'NODE_OPTIONS',
 ]
-
-const SECRET_KEY_RE = /(?:API_?KEY|TOKEN|SECRET|PASSWORD)/i
 
 /**
  * Parses CLI arguments.
@@ -230,9 +229,12 @@ function renderFinalReport (options) {
   const env = getEnvList(options, analysis)
   const htmlPath = getHtmlPath(options, analysis)
   const htmlFileUrl = analysis.summary.artifacts.htmlFileUrl || pathToFileURL(htmlPath).href
-  const frameworkSummary = getFrameworkSummary(staticReport)
   const staticHighlights = getStaticHighlights(staticReport)
+  const staticErrors = staticHighlights.filter(finding => finding.status === 'error')
   const artifactPaths = getArtifactPaths(options, staticPath, intakePath, htmlPath)
+  const likelyFailureCause = getReportingStatus(analysis) === 'OK'
+    ? undefined
+    : getBasicReportingFailureCause({ staticReport, testCommand }, analysis)
   const validationAppUrl = getValidationAppUrl(buildValidationPayload({
     analysis,
     artifacts: {
@@ -250,7 +252,6 @@ function renderFinalReport (options) {
 
   const lines = [
     `HTML report: ${htmlFileUrl}`,
-    `HTML report path: ${htmlPath}`,
     `Datadog validation: ${validationAppUrl}`,
     '',
     `Primary funnel stage: ${analysis.primaryStage}`,
@@ -259,27 +260,7 @@ function renderFinalReport (options) {
     ...getScopeLines(analysis),
     '',
     'Summary:',
-    `- dd-trace: ${staticReport.ddTraceVersion || 'unknown'}`,
-    `- Framework: ${frameworkSummary}`,
-    `- Requests: ${analysis.summary.requestCount}`,
-    `- citestcycle payloads: ${analysis.summary.citestcycle.payloadCount}`,
-    '- Event levels: ' +
-      `sessions=${analysis.summary.events.counts.test_session_end}, ` +
-      `modules=${analysis.summary.events.counts.test_module_end}, ` +
-      `suites=${analysis.summary.events.counts.test_suite_end}, ` +
-      `tests=${analysis.summary.events.counts.test}`,
-    `- Decode errors: ${analysis.summary.decodeErrors.length}`,
-    `- Test exit code: ${testExitCode}`,
-    `- Test result: ${testResult || 'not recorded'}`,
-    `- Intake shutdown: ${intakeArtifact.intake?.stoppedAt ? 'successful' : 'not confirmed'}`,
-    `- Final artifact flushed: ${intakeArtifact.intake?.stoppedAt ? 'yes' : 'partial artifact possible'}`,
-    ...getEfdSummaryLines(analysis),
-    ...getEfdExecutionSummaryLines(efdExecution),
-    ...getAutoTestRetriesSummaryLines(analysis),
-    ...getTestManagementSummaryLines(analysis, testExitCode),
-    '',
-    'Consistency checks:',
-    ...getConsistencyChecks(env, intakeArtifact, analysis),
+    ...getStageStatusLines(analysis, testExitCode),
     '',
     'Findings:',
   ]
@@ -292,11 +273,15 @@ function renderFinalReport (options) {
     )
   }
 
+  if (likelyFailureCause) {
+    lines.push(`- error: Likely failure cause - ${likelyFailureCause}`)
+  }
+
   lines.push('', 'Static diagnosis highlights:')
-  if (staticHighlights.length === 0) {
+  if (staticErrors.length === 0) {
     lines.push('- none')
   } else {
-    for (const finding of staticHighlights) {
+    for (const finding of staticErrors) {
       lines.push(`- ${formatStaticFinding(finding)}`)
     }
   }
@@ -306,52 +291,8 @@ function renderFinalReport (options) {
     'Test command used:',
     testCommand,
     '',
-    'Env vars used, without real secrets:'
-  )
-
-  for (const [key, value] of env) {
-    lines.push(`- ${key}=${maskEnvValue(key, value)}`)
-  }
-
-  lines.push(
-    '',
     'What this proves:',
-    `- ${getProvesText(analysis, testCommand)}`,
-    '',
-    'What this does not prove:',
-    '- The full test suite reports correctly.',
-    '- The CI workflow is configured correctly.',
-    ...getNotProvenLines(analysis),
-    '',
-    'Recommended next actions:'
-  )
-
-  for (const recommendation of getRecommendations(staticHighlights)) {
-    lines.push(`- ${recommendation}`)
-  }
-
-  lines.push(
-    '',
-    'Diagnostic answers:',
-    '- Is dd-trace installed and statically configured in a supported way? ' +
-      getStaticSetupAnswer(staticReport, staticHighlights),
-    '- Does dd-trace/ci/init reach the test process through NODE_OPTIONS? ' +
-      getInitializationAnswer(analysis),
-    '- Does the selected test subset send Test Optimization requests to the local fake intake? ' +
-      getIntakeAnswer(analysis),
-    '- If data is reported, does it include session, module, suite, and test events? ' +
-      getEventLevelsAnswer(analysis),
-    '- Does Test Management apply disabled, quarantined, or attempt-to-fix properties? ' +
-      getTestManagementAnswer(analysis, testExitCode),
-    '',
-    'Artifacts:',
-    `- Final report: ${artifactPaths.finalReportPath}`,
-    `- Static diagnosis: ${artifactPaths.staticPath}`,
-    `- Agent report: ${artifactPaths.agentReportPath}`,
-    `- Agent JSON report: ${artifactPaths.agentJsonReportPath}`,
-    `- Intake artifact: ${artifactPaths.intakePath}`,
-    `- HTML report path: ${artifactPaths.htmlPath}`,
-    `- HTML report file URL: ${htmlFileUrl}`
+    `- ${getProvesText(analysis, testCommand)}`
   )
 
   return lines.join('\n')
@@ -373,7 +314,6 @@ function renderSummaryReport (options) {
   const analysis = analyzeIntakeArtifact(intakeArtifact)
   const testCommand = readTextValue(options.testCommand, options.testCommandFile, 'test command')
   const testExitCode = readTextValue(options.testExitCode, options.testExitCodeFile, 'test exit code')
-  const testResult = readOptionalTextValue(options.testResult, options.testResultFile)
   const testOutput = readOptionalTextValue(undefined, options.testOutputFile)
   const newTestFile = readOptionalTextValue(options.newTestFile)
   const newTestSnippet = readOptionalTextValue(options.newTestSnippet, options.newTestSnippetFile)
@@ -386,59 +326,32 @@ function renderSummaryReport (options) {
 
   if (efdExecution) analysis.summary.efd.execution = efdExecution
 
-  const env = getEnvList(options, analysis)
   const htmlPath = getHtmlPath(options, analysis)
   const htmlFileUrl = analysis.summary.artifacts.htmlFileUrl || pathToFileURL(htmlPath).href
   const staticHighlights = getStaticHighlights(staticReport)
-  const artifactPaths = getArtifactPaths(options, staticPath, intakePath, htmlPath)
+  const staticErrors = staticHighlights.filter(finding => finding.status === 'error')
+  const likelyFailureCause = getReportingStatus(analysis) === 'OK'
+    ? undefined
+    : getBasicReportingFailureCause({ staticReport, testCommand }, analysis)
   const lines = [
     'Test Optimization debug summary',
     `HTML report: ${htmlFileUrl}`,
-    `HTML report path: ${htmlPath}`,
-    `Final report: ${artifactPaths.finalReportPath}`,
     `Primary funnel stage: ${analysis.primaryStage}`,
-    `Selected test command: ${testCommand}`,
-    `Test exit code: ${testExitCode}`,
-    `Test result: ${testResult || 'not recorded'}`,
-    `Requests: ${analysis.summary.requestCount}`,
-    `citestcycle payloads: ${analysis.summary.citestcycle.payloadCount}`,
-    'Event levels: ' +
-      `sessions=${analysis.summary.events.counts.test_session_end}, ` +
-      `modules=${analysis.summary.events.counts.test_module_end}, ` +
-      `suites=${analysis.summary.events.counts.test_suite_end}, ` +
-      `tests=${analysis.summary.events.counts.test}`,
-    `Decode errors: ${analysis.summary.decodeErrors.length}`,
-    `EFD status: ${getEfdStatus(analysis)}`,
-    `EFD known tests received: ${analysis.summary.efd.knownTestsReceived}`,
-    `EFD retried new tests: ${analysis.summary.efd.retriedNewTests}`,
-    `EFD distinct retried new test names: ${getDistinctCount(analysis.summary.efd.retriedNewTestNames)}`,
-    `EFD execution diagnosis: ${efdExecution?.diagnosis || 'n/a'}`,
-    `Auto Test Retries status: ${getAutoTestRetriesStatus(analysis)}`,
-    `Auto Test Retries failed executions: ${analysis.summary.atr.failedExecutions}`,
-    `Auto Test Retries passed executions: ${analysis.summary.atr.passedExecutions}`,
-    `Auto Test Retries passed retry executions: ${analysis.summary.atr.passedRetryTests}`,
-    `Auto Test Retries flaky tests reported: ${analysis.summary.atr.failedThenPassedRetryTests}`,
-    `Test Management status: ${getTestManagementStatus(analysis, testExitCode)}`,
-    `Test Management disabled status: ${getTestManagementSubcheckStatus(
-      analysis.summary.tm.disabled,
-      testExitCode,
-      '0'
-    )}`,
-    `Test Management quarantined status: ${getTestManagementSubcheckStatus(
-      analysis.summary.tm.quarantined,
-      testExitCode,
-      '0'
-    )}`,
-    `Test Management attempt-to-fix status: ${getTestManagementSubcheckStatus(
-      analysis.summary.tm.attemptToFix,
-      testExitCode,
-      'non-zero'
-    )}`,
-    'Consistency checks:',
-    ...getConsistencyChecks(env, intakeArtifact, analysis),
-    'Static warnings/errors:',
-    ...getSummaryStaticLines(staticHighlights),
-    'Validation path: see the final report Datadog validation line.',
+    '',
+    'Summary:',
+    ...getStageStatusLines(analysis, testExitCode),
+    '',
+    'Findings:',
+    ...getSummaryFindingLines(analysis, likelyFailureCause),
+    '',
+    'Static diagnosis highlights:',
+    ...getSummaryStaticLines(staticErrors),
+    '',
+    'Test command used:',
+    testCommand,
+    '',
+    'What this proves:',
+    `- ${getProvesText(analysis, testCommand)}`,
   ]
 
   return lines.join('\n')
@@ -668,6 +581,62 @@ function getAutoTestRetriesStatus (analysis) {
 }
 
 /**
+ * Gets concise per-stage status lines for console output.
+ *
+ * @param {object} analysis intake analysis
+ * @param {string} testExitCode selected command exit code
+ * @returns {string[]} stage status lines
+ */
+function getStageStatusLines (analysis, testExitCode) {
+  const lines = [
+    `- Reporting: ${getReportingStatus(analysis)}`,
+  ]
+  const efdStatus = getEfdStatus(analysis)
+  const atrStatus = getAutoTestRetriesStatus(analysis)
+  const tmStatus = getTestManagementStatus(analysis, testExitCode)
+
+  if (efdStatus !== 'not run') lines.push(`- EFD: ${formatStageStatus(efdStatus)}`)
+  if (atrStatus !== 'not run') lines.push(`- Auto Test Retries: ${formatStageStatus(atrStatus)}`)
+  if (tmStatus !== 'not run') lines.push(`- Test Management: ${formatStageStatus(tmStatus)}`)
+
+  return lines
+}
+
+/**
+ * Gets concise basic reporting status.
+ *
+ * @param {object} analysis intake analysis
+ * @returns {string} reporting status
+ */
+function getReportingStatus (analysis) {
+  if (
+    analysis.primaryStage === 'Reporting complete' ||
+    (
+      analysis.summary.citestcycle.payloadCount > 0 &&
+      analysis.summary.events.missingLevels.length === 0
+    )
+  ) {
+    return 'OK'
+  }
+
+  return `failed (${analysis.primaryStage})`
+}
+
+/**
+ * Formats a compact stage status.
+ *
+ * @param {string} status raw status
+ * @returns {string} formatted status
+ */
+function formatStageStatus (status) {
+  if (status === 'passed') return 'OK'
+  if (status === 'failed') return 'failed'
+  if (status.startsWith('failed:')) return `failed (${status.slice('failed:'.length).trim()})`
+
+  return status
+}
+
+/**
  * Gets compact static finding lines.
  *
  * @param {Array<object>} staticHighlights actionable static findings
@@ -677,6 +646,21 @@ function getSummaryStaticLines (staticHighlights) {
   if (staticHighlights.length === 0) return ['- none']
 
   return staticHighlights.map(finding => `- ${finding.status}: ${finding.title}`)
+}
+
+/**
+ * Gets concise finding lines for summary artifacts.
+ *
+ * @param {object} analysis intake analysis
+ * @param {string|undefined} likelyFailureCause likely failure cause
+ * @returns {string[]} finding lines
+ */
+function getSummaryFindingLines (analysis, likelyFailureCause) {
+  const lines = analysis.findings.map(finding => `- ${finding.status}: ${finding.stage} - ${finding.observation}`)
+
+  if (likelyFailureCause) lines.push(`- error: Likely failure cause - ${likelyFailureCause}`)
+
+  return lines.length === 0 ? ['- none'] : lines
 }
 
 /**
@@ -705,50 +689,6 @@ function getScopeLines (analysis) {
     )
   } else {
     lines.push('- Does not validate EFD, ITR, test skipping, test management, coverage, or the full CI workflow.')
-  }
-
-  return lines
-}
-
-/**
- * Gets optional EFD summary lines.
- *
- * @param {object} analysis intake analysis
- * @returns {string[]} EFD summary lines
- */
-function getEfdSummaryLines (analysis) {
-  if (!analysis.summary.efd.settingsEnabled && !analysis.summary.efd.requested) return []
-
-  return [
-    `- EFD settings enabled: ${analysis.summary.efd.settingsEnabled ? 'yes' : 'no'}`,
-    `- Known tests requested: ${analysis.summary.efd.requested ? 'yes' : 'no'}`,
-    `- Known tests received: ${analysis.summary.efd.knownTestsReceived}`,
-    `- New tests observed: ${analysis.summary.efd.newTests.length}`,
-    `- Retried new tests: ${analysis.summary.efd.retriedNewTests}`,
-    `- Distinct retried new test names: ${getDistinctCount(analysis.summary.efd.retriedNewTestNames)}`,
-  ]
-}
-
-/**
- * Gets optional EFD execution diagnosis lines.
- *
- * @param {object|undefined} execution EFD execution diagnosis
- * @returns {string[]} diagnosis lines
- */
-function getEfdExecutionSummaryLines (execution) {
-  if (!execution) return []
-
-  const lines = [
-    `- EFD execution diagnosis: ${execution.diagnosis}`,
-  ]
-
-  if (execution.newTestFile) lines.push(`- EFD temporary test file: ${execution.newTestFile}`)
-  if (execution.newTestName) lines.push(`- EFD temporary test name: ${execution.newTestName}`)
-  if (execution.commandIncludesNewTestFile !== undefined) {
-    lines.push(`- EFD command includes temporary file: ${execution.commandIncludesNewTestFile ? 'yes' : 'no'}`)
-  }
-  if (execution.outputMentionsNewTestName !== undefined) {
-    lines.push(`- Test output mentions temporary test name: ${execution.outputMentionsNewTestName ? 'yes' : 'no'}`)
   }
 
   return lines
@@ -821,51 +761,6 @@ function getDistinctCount (values) {
 }
 
 /**
- * Gets optional Auto Test Retries summary lines.
- *
- * @param {object} analysis intake analysis
- * @returns {string[]} Auto Test Retries summary lines
- */
-function getAutoTestRetriesSummaryLines (analysis) {
-  if (!analysis.summary.atr.settingsEnabled && analysis.summary.atr.retriedTests === 0) return []
-
-  return [
-    `- Auto Test Retries settings enabled: ${analysis.summary.atr.settingsEnabled ? 'yes' : 'no'}`,
-    `- Auto Test Retries failed executions: ${analysis.summary.atr.failedExecutions}`,
-    `- Auto Test Retries passed executions: ${analysis.summary.atr.passedExecutions}`,
-    `- Auto Test Retries passed retry executions: ${analysis.summary.atr.passedRetryTests}`,
-    `- Auto Test Retries flaky tests reported: ${analysis.summary.atr.failedThenPassedRetryTests}`,
-  ]
-}
-
-/**
- * Gets optional Test Management summary lines.
- *
- * @param {object} analysis intake analysis
- * @param {string} testExitCode selected command exit code
- * @returns {string[]} Test Management summary lines
- */
-function getTestManagementSummaryLines (analysis, testExitCode) {
-  const tm = analysis.summary.tm
-  if (!tm.settingsEnabled && !tm.propertiesEndpointCalled && tm.managedTests.count === 0) return []
-
-  return [
-    `- Test Management settings enabled: ${tm.settingsEnabled ? 'yes' : 'no'}`,
-    `- Test Management properties endpoint called: ${tm.propertiesEndpointCalled ? 'yes' : 'no'}`,
-    `- Test Management properties returned: ${tm.returnedProperties}`,
-    `- Test Management matched identities: ${tm.matchedPropertyIdentities.length}`,
-    `- Test Management disabled status: ${getTestManagementSubcheckStatus(tm.disabled, testExitCode, '0')}`,
-    `- Test Management quarantined status: ${getTestManagementSubcheckStatus(tm.quarantined, testExitCode, '0')}`,
-    `- Test Management attempt-to-fix status: ${getTestManagementSubcheckStatus(
-      tm.attemptToFix,
-      testExitCode,
-      'non-zero'
-    )}`,
-    `- Test Management managed test identities: ${tm.managedTests.identities.join(', ') || 'none'}`,
-  ]
-}
-
-/**
  * Gets compact Test Management status text.
  *
  * @param {object} analysis intake analysis
@@ -920,24 +815,6 @@ function getTestManagementSubcheckStatus (subcheck, testExitCode, expectedExitCo
   }
 
   return exitCode === expectedExitCode ? 'passed' : `failed: expected command exit code ${expectedExitCode}`
-}
-
-/**
- * Gets limitations that remain unproven.
- *
- * @param {object} analysis intake analysis
- * @returns {string[]} limitation lines
- */
-function getNotProvenLines (analysis) {
-  if (analysis.summary.tm.settingsEnabled || analysis.summary.tm.propertiesEndpointCalled) {
-    return ['- EFD, Auto Test Retries, ITR, test skipping, or coverage are working.']
-  }
-
-  if (analysis.summary.efd.settingsEnabled || analysis.summary.atr.settingsEnabled) {
-    return ['- ITR, test skipping, test management, or coverage are working.']
-  }
-
-  return ['- EFD, ITR, test skipping, test management, or coverage are working.']
 }
 
 /**
@@ -1021,55 +898,6 @@ function getEnvList (options, analysis) {
 }
 
 /**
- * Gets consistency checks between the env file, raw intake artifact, and analyzer summary.
- *
- * @param {Array<Array<string>>} env rendered env entries
- * @param {object} intakeArtifact raw intake artifact
- * @param {object} analysis analyzer output
- * @returns {string[]} rendered consistency checks
- */
-function getConsistencyChecks (env, intakeArtifact, analysis) {
-  const envIntakeUrl = getEnvValue(env, 'DD_CIVISIBILITY_AGENTLESS_URL')
-  const artifactIntakeUrl = analysis.summary.artifacts.intakeUrl || intakeArtifact.intake?.url
-  const rawRequestCount = Array.isArray(intakeArtifact.requests) ? intakeArtifact.requests.length : 0
-  const analyzedRequestCount = analysis.summary.requestCount
-
-  return [
-    '- Intake URL: ' + formatConsistencyResult(envIntakeUrl === artifactIntakeUrl, [
-      `env=${envIntakeUrl || 'missing'}`,
-      `artifact=${artifactIntakeUrl || 'missing'}`,
-    ]),
-    '- Request count: ' + formatConsistencyResult(rawRequestCount === analyzedRequestCount, [
-      `artifact=${rawRequestCount}`,
-      `analyzer=${analyzedRequestCount}`,
-    ]),
-  ]
-}
-
-/**
- * Gets a value from rendered env entries.
- *
- * @param {Array<Array<string>>} env rendered env entries
- * @param {string} key env key
- * @returns {string|undefined} env value
- */
-function getEnvValue (env, key) {
-  const entry = env.find(([entryKey]) => entryKey === key)
-  return entry && entry[1]
-}
-
-/**
- * Formats a consistency check.
- *
- * @param {boolean} matches whether the check passed
- * @param {string[]} details rendered details
- * @returns {string} rendered check
- */
-function formatConsistencyResult (matches, details) {
-  return `${matches ? 'ok' : 'mismatch'} (${details.join(', ')})`
-}
-
-/**
  * Gets default env vars for the debug run.
  *
  * @param {object} analysis intake analysis
@@ -1115,20 +943,6 @@ function addEnvEntry (env, entry) {
 }
 
 /**
- * Masks secret-looking env values.
- *
- * @param {string} key env key
- * @param {string} value env value
- * @returns {string} rendered value
- */
-function maskEnvValue (key, value) {
-  if (value === 'debug') return value
-  if (SECRET_KEY_RE.test(key)) return '<redacted>'
-
-  return value
-}
-
-/**
  * Gets the HTML report path.
  *
  * @param {object} options report options
@@ -1160,33 +974,6 @@ function getArtifactPaths (options, staticPath, intakePath, htmlPath) {
 }
 
 /**
- * Gets supported framework summary text.
- *
- * @param {object} staticReport static diagnosis report
- * @returns {string} framework summary
- */
-function getFrameworkSummary (staticReport) {
-  const frameworks = Array.isArray(staticReport.supportedFrameworks) ? staticReport.supportedFrameworks : []
-  if (frameworks.length === 0) return 'none detected'
-
-  return frameworks.map(framework => {
-    const version = getFrameworkVersion(framework)
-    return version ? `${framework.name} ${version}` : framework.name
-  }).join(', ')
-}
-
-/**
- * Gets the first detected framework version.
- *
- * @param {object} framework supported framework summary
- * @returns {string|undefined} framework version
- */
-function getFrameworkVersion (framework) {
-  const detections = Array.isArray(framework.versionDetections) ? framework.versionDetections : []
-  return detections[0]?.version || detections[0]?.rawVersion
-}
-
-/**
  * Gets actionable static diagnosis findings.
  *
  * @param {object} staticReport static diagnosis report
@@ -1194,7 +981,20 @@ function getFrameworkVersion (framework) {
  */
 function getStaticHighlights (staticReport) {
   const results = Array.isArray(staticReport.results) ? staticReport.results : []
-  return results.filter(result => result.status === 'error' || result.status === 'warning')
+  const highlights = []
+  const seen = new Set()
+
+  for (const result of results) {
+    if (result.status !== 'error' && result.status !== 'warning') continue
+
+    const key = [result.status, result.title, result.message, result.recommendation].join('\0')
+    if (seen.has(key)) continue
+
+    seen.add(key)
+    highlights.push(result)
+  }
+
+  return highlights
 }
 
 /**
@@ -1216,51 +1016,6 @@ function formatStaticFinding (finding) {
   }
 
   return parts.filter(Boolean).join(' - ')
-}
-
-/**
- * Gets recommendations from static findings.
- *
- * @param {Array<object>} staticHighlights actionable static findings
- * @returns {string[]} recommendations
- */
-function getRecommendations (staticHighlights) {
-  const recommendations = []
-
-  if (hasStaticFinding(staticHighlights, 'Missing Test Optimization initialization')) {
-    recommendations.push(
-      'Add NODE_OPTIONS="-r dd-trace/ci/init" to the CI job that runs the selected test command.'
-    )
-  }
-
-  if (hasStaticFinding(staticHighlights, 'DD_SERVICE was not found')) {
-    recommendations.push('Set DD_SERVICE to the service name used for Test Optimization grouping.')
-  }
-
-  for (const finding of staticHighlights) {
-    if (!finding.recommendation) continue
-    if (finding.title === 'Missing Test Optimization initialization') continue
-    if (finding.title === 'DD_SERVICE was not found') continue
-
-    recommendations.push(finding.recommendation)
-  }
-
-  if (recommendations.length === 0) {
-    recommendations.push('No basic reporting fix is needed for the selected test subset.')
-  }
-
-  return [...new Set(recommendations)]
-}
-
-/**
- * Checks whether a static finding title is present.
- *
- * @param {Array<object>} findings static findings
- * @param {string} title finding title
- * @returns {boolean} true when present
- */
-function hasStaticFinding (findings, title) {
-  return findings.some(finding => finding.title === title)
 }
 
 /**
@@ -1288,83 +1043,6 @@ function getProvesText (analysis, testCommand) {
   }
 
   return `The selected command reached stage "${analysis.primaryStage}" in the basic reporting funnel.`
-}
-
-/**
- * Gets static setup answer text.
- *
- * @param {object} staticReport static diagnosis report
- * @param {Array<object>} staticHighlights actionable static findings
- * @returns {string} answer text
- */
-function getStaticSetupAnswer (staticReport, staticHighlights) {
-  const errors = staticHighlights.filter(finding => finding.status === 'error')
-  const warnings = staticHighlights.filter(finding => finding.status === 'warning')
-
-  return `${staticReport.ddTraceVersion || 'unknown'} detected; ${errors.length} error(s), ` +
-    `${warnings.length} warning(s) in static diagnosis.`
-}
-
-/**
- * Gets initialization answer text.
- *
- * @param {object} analysis intake analysis
- * @returns {string} answer text
- */
-function getInitializationAnswer (analysis) {
-  if (analysis.summary.citestcycle.payloadCount > 0) {
-    return 'yes; inferred from citestcycle payloads reaching the fake intake.'
-  }
-
-  return 'not confirmed; no citestcycle payload reached the fake intake.'
-}
-
-/**
- * Gets intake answer text.
- *
- * @param {object} analysis intake analysis
- * @returns {string} answer text
- */
-function getIntakeAnswer (analysis) {
-  if (analysis.summary.anyRequestReceived) {
-    return `yes; ${analysis.summary.requestCount} request(s) reached the fake intake.`
-  }
-
-  return 'no; zero requests reached the fake intake.'
-}
-
-/**
- * Gets event levels answer text.
- *
- * @param {object} analysis intake analysis
- * @returns {string} answer text
- */
-function getEventLevelsAnswer (analysis) {
-  if (analysis.summary.citestcycle.payloadCount > 0 && analysis.summary.events.missingLevels.length === 0) {
-    return 'yes; session, module, suite, and test events are present.'
-  }
-
-  if (analysis.summary.events.missingLevels.length > 0) {
-    return `no; missing ${analysis.summary.events.missingLevels.join(', ')}.`
-  }
-
-  return 'not confirmed; no citestcycle payload was captured.'
-}
-
-/**
- * Gets Test Management answer text.
- *
- * @param {object} analysis intake analysis
- * @param {string} testExitCode selected command exit code
- * @returns {string} answer text
- */
-function getTestManagementAnswer (analysis, testExitCode) {
-  const status = getTestManagementStatus(analysis, testExitCode)
-
-  if (status === 'not run') return 'not run in this report.'
-  if (status === 'passed') return 'yes; the attempted Test Management subcheck passed.'
-
-  return `no; ${status}.`
 }
 
 if (require.main === module) {

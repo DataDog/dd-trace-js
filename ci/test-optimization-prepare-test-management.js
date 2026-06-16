@@ -12,6 +12,7 @@ const {
   addRunInBandToCommand,
   addTestFileToCommand,
   getTestFileSuffix,
+  resolveSuiteToSelectedFile,
 } = require('./test-optimization-prepare-advanced')
 
 const DEFAULT_ARTIFACT_DIR = 'dd-test-optimization-test-management'
@@ -287,8 +288,9 @@ function inferTestManagementPlan (options) {
   const testCommandFile = options.testCommandFile || DEFAULT_TEST_COMMAND_FILE
   const selectedCommand = fs.readFileSync(path.resolve(testCommandFile), 'utf8').trim()
   const inferred = getTestManagementInference(options, knownTestsFile, selectedCommand)
-  const testFile = options.testFile || getTemporaryTestManagementFile(inferred.suite, options.mode)
-  const inferredTestCommand = options.testCommand || addTestFileToCommand(selectedCommand, inferred.suite, testFile)
+  const selectedSuite = resolveSuiteToSelectedFile(inferred.suite, options)
+  const testFile = options.testFile || getTemporaryTestManagementFile(selectedSuite, options.mode)
+  const inferredTestCommand = options.testCommand || addTestFileToCommand(selectedCommand, selectedSuite, testFile)
   const framework = options.frameworkExplicit ? options.framework : inferred.framework
   const testCommand = options.forceRunInBand || framework === 'jest'
     ? addRunInBandToCommand(inferredTestCommand)

@@ -239,6 +239,7 @@ function runDiagnosis (options = {}) {
   const workflowFiles = textFiles.filter(file => isWorkflowFile(file.relativePath))
   const definitions = getFrameworkDefinitions(DD_MAJOR)
   const supportedFrameworks = detectSupportedFrameworks(root, definitions, manifests, scripts, textFiles)
+  const eligibleFrameworks = getEligibleFrameworks(supportedFrameworks)
   const unsupportedFrameworks = detectUnsupportedFrameworks(UNSUPPORTED_FRAMEWORKS, manifests, scripts)
   const evidence = collectEvidence(textFiles, env)
 
@@ -247,7 +248,7 @@ function runDiagnosis (options = {}) {
   checkSupportedFrameworks(results, supportedFrameworks)
   checkUnsupportedFrameworks(results, unsupportedFrameworks, supportedFrameworks)
   checkInitialization(results, supportedFrameworks, evidence, env)
-  checkFrameworkConfiguration(results, supportedFrameworks, evidence, textFiles)
+  checkFrameworkConfiguration(results, supportedFrameworks, evidence, textFiles, manifests)
   checkCiConfiguration(results, workflowFiles, evidence, env)
   checkGit(results, root, env, execFile)
   checkCurrentEnvironment(results, env, evidence)
@@ -259,6 +260,7 @@ function runDiagnosis (options = {}) {
     scannedFileCount: textFiles.length,
     truncatedFileScan: files.truncated,
     supportedFrameworks: supportedFrameworks.map(serializeSupportedFramework),
+    eligibleFrameworks: eligibleFrameworks.map(serializeEligibleFramework),
     unsupportedFrameworks: unsupportedFrameworks.map(serializeUnsupportedFramework),
     results,
   }
@@ -655,8 +657,9 @@ function checkInitialization (results, frameworks, evidence, env) {
  * @param {Array<object>} frameworks detected supported frameworks
  * @param {object} evidence repository evidence
  * @param {Array<object>} textFiles scanned text files
+ * @param {Array<object>} manifests package manifests
  */
-function checkFrameworkConfiguration (results, frameworks, evidence, textFiles) {
+function checkFrameworkConfiguration (results, frameworks, evidence, textFiles, manifests) {
   if (hasFramework(frameworks, 'cypress')) {
     checkCypressConfiguration(results, evidence)
   }
@@ -686,6 +689,24 @@ function checkFrameworkConfiguration (results, frameworks, evidence, textFiles) 
         {
           locations: jasmineLocations,
           recommendation: 'Prefer the default jest-circus runner on supported Jest versions.',
+        }
+      )
+    }
+
+    const tsConfigLocations = findJestTypescriptConfigLocations(textFiles)
+    const hasTsNode = findDependencyEntries(manifests, ['ts-node']).length > 0
+    if (tsConfigLocations.length && !hasTsNode) {
+      addResult(
+        results,
+        'warning',
+        'Jest TypeScript config may need ts-node',
+        'Jest loads TypeScript configuration files before test transforms. Without ts-node or an equivalent ' +
+          'precompiled config, the selected command can fail before collecting tests.',
+        {
+          locations: tsConfigLocations,
+          recommendation:
+            'Install ts-node for the diagnostic run, or use a temporary JSON/CommonJS Jest config generated ' +
+            'from the repository config.',
         }
       )
     }
@@ -1128,6 +1149,90 @@ function detectSupportedFrameworks (root, definitions, manifests, scripts, textF
 }
 
 /**
+ * Gets frameworks that are eligible live-validation candidates.
+ *
+ * @param {Array<object>} frameworks detected supported frameworks
+ * @returns {Array<object>} eligible frameworks with eligibility details
+ */
+function getEligibleFrameworks (frameworks) {
+  const eligible = []
+
+  for (const framework of frameworks) {
+    const version = getSupportedVersionDetection(framework)
+    const command = getEligibleCommandMatch(framework)
+    const reasons = []
+
+    if (!version) reasons.push(`No statically supported ${framework.name} version was found.`)
+    if (!command) reasons.push(`No eligible ${framework.name} test command was found.`)
+
+    if (!version || !command) continue
+
+    eligible.push({
+      ...framework,
+      eligibleCommand: command,
+      eligibleVersion: version,
+      eligibility: {
+        command: command.command,
+        commandLocation: command.relativePath,
+        version: version.version,
+        versionLocation: version.relativePath,
+      },
+      ineligibleReasons: reasons,
+    })
+  }
+
+  return eligible
+}
+
+/**
+ * Gets the first supported version detection for a framework.
+ *
+ * @param {object} framework detected framework
+ * @returns {object|undefined} supported version detection
+ */
+function getSupportedVersionDetection (framework) {
+  for (const detection of framework.versionDetections || []) {
+    if (detection.version && satisfies(detection.version, framework.supportedRange)) return detection
+  }
+}
+
+/**
+ * Gets an eligible script command for a framework.
+ *
+ * @param {object} framework detected framework
+ * @returns {object|undefined} eligible command match
+ */
+function getEligibleCommandMatch (framework) {
+  const scriptMatches = framework.scriptMatches || []
+
+  for (const script of scriptMatches) {
+    if (isIneligibleFrameworkCommand(framework.id, script.command)) continue
+    return script
+  }
+
+  if (framework.id === 'jest' || framework.id === 'mocha' || framework.id === 'vitest') {
+    return framework.dependencyEntries?.[0] && {
+      command: `direct ${framework.id} binary`,
+      relativePath: framework.dependencyEntries[0].relativePath,
+    }
+  }
+}
+
+/**
+ * Checks whether a framework command is ineligible for live validation.
+ *
+ * @param {string} frameworkId framework id
+ * @param {string} command package script command
+ * @returns {boolean} whether the command is ineligible
+ */
+function isIneligibleFrameworkCommand (frameworkId, command) {
+  if (frameworkId === 'vitest' && /\bvitest\s+bench\b/.test(command)) return true
+  if (/\b(?:watch|--watch|--watchAll)\b/.test(command)) return true
+
+  return false
+}
+
+/**
  * Detects unsupported test frameworks.
  *
  * @param {Array<object>} definitions unsupported framework definitions
@@ -1314,6 +1419,18 @@ function findConfigMatches (textFiles, patterns) {
   }
 
   return matches
+}
+
+/**
+ * Finds Jest TypeScript config files.
+ *
+ * @param {Array<object>} textFiles scanned text files
+ * @returns {string[]} matching relative paths
+ */
+function findJestTypescriptConfigLocations (textFiles) {
+  return textFiles
+    .map(file => file.relativePath)
+    .filter(relativePath => /(?:^|\/)jest\.config\.(?:ts|mts|cts)$/.test(relativePath))
 }
 
 /**
@@ -1699,6 +1816,24 @@ function serializeSupportedFramework (framework) {
     supportedRange: framework.supportedRange,
     locations: framework.locations,
     versionDetections: framework.versionDetections,
+  }
+}
+
+/**
+ * Serializes an eligible framework for JSON output.
+ *
+ * @param {object} framework eligible framework
+ * @returns {object} serializable eligible framework summary
+ */
+function serializeEligibleFramework (framework) {
+  return {
+    id: framework.id,
+    name: framework.name,
+    command: framework.eligibility.command,
+    commandLocation: framework.eligibility.commandLocation,
+    supportedRange: framework.supportedRange,
+    version: framework.eligibility.version,
+    versionLocation: framework.eligibility.versionLocation,
   }
 }
 

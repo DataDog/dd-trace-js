@@ -21,14 +21,29 @@ const {
 } = require('./test-optimization-intake-analysis')
 const {
   getPreparePlan,
+  prepareAtrBaselineCandidate,
   prepareAdvancedChecks,
   restoreAdvancedChecks,
 } = require('./test-optimization-prepare-advanced')
+const {
+  buildTestManagementResponse,
+  createTestManagementCandidate,
+  inferTestManagementPlan,
+  restoreTestManagementChecks,
+} = require('./test-optimization-prepare-test-management')
 const {
   getEfdExecutionDiagnostics,
   renderFinalReport,
   renderSummaryReport,
 } = require('./test-optimization-render-report')
+const {
+  getBasicReportingFailureCause,
+  getCombinedValidationAppUrlFromReports,
+  getStaticValidationAppUrl,
+} = require('./test-optimization-validation-link')
+const {
+  selectTestCommand,
+} = require('./test-optimization-select-command')
 const {
   normalizeKnownTests,
   normalizeTestManagementTests,
@@ -39,6 +54,8 @@ const {
 const ARTIFACTS = {
   agentJsonReport: 'dd-test-optimization-agent-report.json',
   agentReport: 'dd-test-optimization-agent-report.txt',
+  artifactManifest: 'dd-test-optimization-artifacts.json',
+  diagnosis: 'dd-test-optimization-diagnosis.json',
   env: 'dd-test-optimization-env.txt',
   finalReport: 'dd-test-optimization-final-report.txt',
   html: 'dd-test-optimization-report.html',
@@ -53,6 +70,8 @@ const ARTIFACTS = {
 const ANSI_ESCAPE_RE = new RegExp(`${String.fromCharCode(27)}${String.raw`\[[0-?]*[ -/]*[@-~]`}`, 'g')
 const FEEDBACK_ARTIFACTS = {
   advancedDryRun: 'dd-test-optimization-advanced-dry-run.txt',
+  atrBaselineCommand: 'dd-test-optimization-atr-baseline-command.txt',
+  atrBaselinePreflight: 'dd-test-optimization-atr-baseline-preflight.txt',
   basicDir: 'dd-test-optimization-basic',
   efdDir: 'dd-test-optimization-efd',
   efdCommand: 'dd-test-optimization-efd-command.txt',
@@ -62,6 +81,7 @@ const FEEDBACK_ARTIFACTS = {
 }
 const DEFAULT_READY_TIMEOUT_MS = 5000
 const READY_RETRY_INTERVAL_MS = 50
+const TEST_MANAGEMENT_MODES = ['disabled', 'quarantined', 'attempt-to-fix']
 
 /**
  * Parses CLI arguments.
@@ -81,6 +101,22 @@ function parseArgs (args) {
 
     if (arg === '--feedback-mode') {
       options.feedbackMode = true
+    } else if (arg === '--full') {
+      options.full = true
+    } else if (arg === '--tm-all') {
+      options.tmAll = true
+    } else if (arg === '--framework') {
+      options.framework = args[++i]
+    } else if (arg.startsWith('--framework=')) {
+      options.framework = arg.slice('--framework='.length)
+    } else if (arg === '--package-root') {
+      options.packageRoot = args[++i]
+    } else if (arg.startsWith('--package-root=')) {
+      options.packageRoot = arg.slice('--package-root='.length)
+    } else if (arg === '--preflight') {
+      options.preflight = true
+    } else if (arg === '--force-run-in-band') {
+      options.forceRunInBand = true
     } else if (arg === '--test-command') {
       options.testCommand = args[++i]
     } else if (arg.startsWith('--test-command=')) {
@@ -155,6 +191,12 @@ function getHelpText () {
     'static diagnosis, local fake intake, selected test command, analyzer, and final report.',
     '',
     'Options:',
+    '  --full                    Select a command and run basic, EFD/ATR, Test Management, validation, and extraction.',
+    '  --tm-all                  Run all three Test Management modes from existing selected-command artifacts.',
+    '  --framework <name>        Framework focus for --full selection, for example jest, mocha, or vitest.',
+    '  --package-root <dir>      Select tests from a nested package directory for --full.',
+    '  --preflight               In --full selection, try candidate commands and choose the first that exits 0.',
+    '  --force-run-in-band       Force generated Jest-style multi-file commands to include --runInBand.',
     '  --test-command <command>  Exact test command to run, for example "npm test -- test/foo.spec.js".',
     '  --test-command-file <file>  Read the exact selected test command from a file.',
     '  --feedback-mode          Run root, baseline, and advanced feedback checks with restore safety.',
@@ -288,11 +330,636 @@ function runDebug (options, callback) {
 
           fs.writeFileSync(artifacts.finalReport, `${finalReport}\n`)
           fs.writeFileSync(artifacts.summary, `${summaryReport}\n`)
+          fs.writeFileSync(artifacts.diagnosis, `${JSON.stringify(getDiagnosisArtifact({
+            analysis,
+            staticReport,
+            testCommand,
+          }), null, 2)}\n`)
+          writeArtifactManifest(artifacts)
           callback(undefined, finalReport)
         })
       })
     })
   })
+}
+
+/**
+ * Gets a machine-readable diagnosis artifact for agents.
+ *
+ * @param {object} input diagnosis input
+ * @param {object} input.analysis intake analysis
+ * @param {object} input.staticReport static diagnosis report
+ * @param {string} input.testCommand selected test command
+ * @returns {object} diagnosis artifact
+ */
+function getDiagnosisArtifact (input) {
+  const stage = input.analysis.primaryStage
+  const advancedSkipReason = stage === 'Reporting complete'
+    ? undefined
+    : `Advanced checks skipped because the root wrapper stage was "${stage}", not "Reporting complete".`
+
+  return {
+    advancedSkipReason,
+    basicReportingComplete: stage === 'Reporting complete',
+    likelyFailureCause: stage === 'Reporting complete'
+      ? undefined
+      : getBasicReportingFailureCause({
+        staticReport: input.staticReport,
+        testCommand: input.testCommand,
+      }, input.analysis),
+    primaryStage: stage,
+  }
+}
+
+/**
+ * Gets a machine-readable artifact manifest for the wrapper run.
+ *
+ * @param {object} artifacts resolved artifact paths
+ * @returns {object} artifact manifest
+ */
+function getArtifactManifest (artifacts) {
+  const entries = {}
+
+  for (const [name, file] of Object.entries(artifacts)) {
+    entries[name] = {
+      exists: name === 'artifactManifest' || fs.existsSync(file),
+      path: path.resolve(file),
+    }
+  }
+
+  return {
+    artifacts: entries,
+    generatedAt: new Date().toISOString(),
+  }
+}
+
+/**
+ * Writes the artifact manifest after all other wrapper artifacts exist.
+ *
+ * @param {object} artifacts resolved artifact paths
+ */
+function writeArtifactManifest (artifacts) {
+  fs.writeFileSync(artifacts.artifactManifest, `${JSON.stringify(getArtifactManifest(artifacts), null, 2)}\n`)
+}
+
+/**
+ * Runs the full customer validation flow.
+ *
+ * @param {object} options full validation options
+ * @param {Function} callback called with (error, report)
+ */
+function runFullValidation (options, callback) {
+  let selection
+
+  try {
+    restoreGeneratedSources()
+    selection = getFullValidationSelection(options)
+    writeFullSelectionArtifacts(selection)
+  } catch (error) {
+    finalizeFullValidationSelectionFailure(error, options, callback)
+    return
+  }
+
+  runDebug(getFullDebugOptions(options, {
+    testCommand: selection.command,
+  }), (rootError) => {
+    if (rootError) {
+      callback(rootError)
+      return
+    }
+
+    const rootStage = getRootStage()
+    fs.writeFileSync(FEEDBACK_ARTIFACTS.rootStage, `${rootStage}\n`)
+    console.log(`Basic reporting: ${rootStage === 'Reporting complete' ? 'passed' : rootStage}`)
+
+    if (rootStage !== 'Reporting complete') {
+      finalizeFullValidation(callback)
+      return
+    }
+
+    runAdvancedFullValidation(options, (advancedError) => {
+      if (advancedError) {
+        callback(advancedError)
+        return
+      }
+
+      runTestManagementAllModes(options, (tmError) => {
+        if (tmError) {
+          callback(tmError)
+          return
+        }
+
+        finalizeFullValidation(callback)
+      })
+    })
+  })
+}
+
+/**
+ * Writes static-only artifacts when full validation stops before a live run.
+ *
+ * @param {Error} error selection failure
+ * @param {object} options full validation options
+ * @param {Function} callback called with (error, report)
+ */
+function finalizeFullValidationSelectionFailure (error, options, callback) {
+  let staticReport
+
+  try {
+    staticReport = runDiagnosis()
+    fs.writeFileSync(ARTIFACTS.static, `${JSON.stringify(staticReport, null, 2)}\n`)
+    fs.writeFileSync('dd-test-optimization-framework.txt', `${options.framework || 'not selected'}\n`)
+    fs.writeFileSync(ARTIFACTS.testResult, `validation skipped: ${error.message}\n`)
+    fs.writeFileSync(ARTIFACTS.diagnosis, `${JSON.stringify({
+      advancedSkipReason: 'Advanced checks skipped because live validation was not started.',
+      basicReportingComplete: false,
+      likelyFailureCause: error.message,
+      primaryStage: 'Not run',
+    }, null, 2)}\n`)
+    writeArtifactManifest(ARTIFACTS)
+  } catch (artifactError) {
+    callback(artifactError)
+    return
+  }
+
+  finalizeStaticOnlyValidation(callback)
+}
+
+/**
+ * Writes the static-only validation URL and extractor output.
+ *
+ * @param {Function} callback called with (error, report)
+ */
+function finalizeStaticOnlyValidation (callback) {
+  const validationLine = `Datadog validation: ${getStaticValidationAppUrl({
+    diagnosis: ARTIFACTS.diagnosis,
+    frameworkFile: 'dd-test-optimization-framework.txt',
+    staticReport: ARTIFACTS.static,
+    testResultFile: ARTIFACTS.testResult,
+  })}`
+
+  fs.writeFileSync('dd-test-optimization-validation-url.txt', `${validationLine}\n`)
+
+  const extractor = spawnSync(process.execPath, [path.join(__dirname, 'test-optimization-extract-report.js')], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+  })
+  const output = extractor.stdout || extractor.stderr || ''
+
+  fs.writeFileSync('dd-test-optimization-step9-extractor-output.txt', output)
+  if (extractor.status !== 0) {
+    callback(new Error(`Step 9 extractor failed: ${extractor.stderr || extractor.stdout}`))
+    return
+  }
+
+  callback(undefined, output.trimEnd())
+}
+
+/**
+ * Restores temporary source edits before a full run starts.
+ */
+function restoreGeneratedSources () {
+  try {
+    restoreAdvancedChecks()
+  } catch {}
+
+  try {
+    restoreTestManagementChecks()
+  } catch {}
+}
+
+/**
+ * Gets the selected command and files for full validation.
+ *
+ * @param {object} options full validation options
+ * @returns {{command: string, file: string, files: string[], framework: string}} selection
+ */
+function getFullValidationSelection (options) {
+  const command = readTextValue(options.testCommand, options.testCommandFile, 'test command')
+
+  if (command) {
+    const files = readSelectedTestFilesIfPresent(options.selectedTestFilesFile)
+    if (files.length === 0) {
+      throw new Error('Full validation with an explicit command requires --selected-test-files-file.')
+    }
+
+    return {
+      command,
+      file: files[0],
+      files,
+      framework: options.framework || 'manual',
+    }
+  }
+
+  const selection = selectTestCommand({
+    framework: options.framework,
+    packageRoot: options.packageRoot,
+    preflight: options.preflight,
+  })
+
+  return {
+    command: selection.command,
+    file: selection.file,
+    files: [selection.file],
+    framework: selection.framework,
+  }
+}
+
+/**
+ * Writes selected full-validation state files.
+ *
+ * @param {{command: string, files: string[], framework: string}} selection selection
+ */
+function writeFullSelectionArtifacts (selection) {
+  fs.writeFileSync(ARTIFACTS.testCommand, `${selection.command}\n`)
+  fs.writeFileSync(FEEDBACK_ARTIFACTS.selectedTestFiles, `${selection.files.join('\n')}\n`)
+  fs.writeFileSync('dd-test-optimization-framework.txt', `${selection.framework}\n`)
+}
+
+/**
+ * Reads selected test files when a file was provided.
+ *
+ * @param {string|undefined} file selected test files file
+ * @returns {string[]} selected test files
+ */
+function readSelectedTestFilesIfPresent (file) {
+  if (!file) return []
+
+  return readSelectedTestFiles(file)
+}
+
+/**
+ * Runs full validation EFD and Auto Test Retries.
+ *
+ * @param {object} options full validation options
+ * @param {Function} callback called when done
+ */
+function runAdvancedFullValidation (options, callback) {
+  const selectedTestFiles = readSelectedTestFiles(FEEDBACK_ARTIFACTS.selectedTestFiles)
+
+  try {
+    prepareAtrBaselineCandidate({
+      auto: true,
+      baselineCandidate: true,
+      forceRunInBand: options.forceRunInBand,
+    })
+    preflightAtrBaselineCandidate(options)
+  } catch (error) {
+    restoreAdvancedChecksAfterFailure(error, callback)
+    return
+  }
+
+  runDebug(getFullDebugOptions(options, {
+    outDir: FEEDBACK_ARTIFACTS.basicDir,
+    testCommand: undefined,
+    testCommandFile: FEEDBACK_ARTIFACTS.atrBaselineCommand,
+  }), (basicError) => {
+    if (basicError) {
+      callback(basicError)
+      return
+    }
+
+    try {
+      writeKnownTestsFromBaseline()
+      dryRunAdvancedChecks(selectedTestFiles, options)
+      prepareAdvancedChecks({ auto: true, forceRunInBand: options.forceRunInBand })
+    } catch (error) {
+      restoreAdvancedChecksAfterFailure(error, callback)
+      return
+    }
+
+    runDebug(getFullDebugOptions(options, {
+      flakyTestSnippetFile: 'dd-test-optimization-atr-flaky-test-snippet.txt',
+      knownTests: normalizeKnownTests(readJsonFile(FEEDBACK_ARTIFACTS.knownTests)),
+      newTestSnippetFile: 'dd-test-optimization-efd-new-test-snippet.txt',
+      outDir: FEEDBACK_ARTIFACTS.efdDir,
+      settingsMode: 'debug-all',
+      testCommand: undefined,
+      testCommandFile: FEEDBACK_ARTIFACTS.efdCommand,
+    }), (advancedError) => {
+      let restoreError
+
+      try {
+        restoreAdvancedChecks()
+      } catch (error) {
+        restoreError = error
+      }
+
+      if (advancedError) {
+        callback(advancedError)
+        return
+      }
+
+      if (restoreError) {
+        callback(restoreError)
+        return
+      }
+
+      try {
+        assertAdvancedFeedbackEvidence()
+      } catch (error) {
+        callback(error)
+        return
+      }
+
+      callback()
+    })
+  })
+}
+
+/**
+ * Runs the generated Auto Test Retries baseline candidate without the fake intake.
+ *
+ * @param {object} options full validation options
+ */
+function preflightAtrBaselineCandidate (options) {
+  if (!options.preflight) return
+
+  const command = fs.readFileSync(FEEDBACK_ARTIFACTS.atrBaselineCommand, 'utf8').trim()
+  const result = spawnSync(command, {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+    env: process.env,
+    maxBuffer: 1024 * 1024 * 20,
+    shell: true,
+  })
+  const output = `${result.stdout || ''}${result.stderr || ''}`
+  const exitCode = getSpawnExitCode(result)
+
+  fs.writeFileSync(FEEDBACK_ARTIFACTS.atrBaselinePreflight, output)
+  if (exitCode !== 0) {
+    throw new Error(
+      `Generated Auto Test Retries baseline preflight failed with exit code ${exitCode}. ` +
+      `See ${FEEDBACK_ARTIFACTS.atrBaselinePreflight}.`
+    )
+  }
+
+  console.log('Generated Auto Test Retries baseline preflight: passed')
+}
+
+/**
+ * Gets wrapper options for one full-validation wrapper run.
+ *
+ * @param {object} options full validation options
+ * @param {object} overrides wrapper option overrides
+ * @returns {object} wrapper options
+ */
+function getFullDebugOptions (options, overrides = {}) {
+  return {
+    ...options,
+    clean: true,
+    feedbackMode: false,
+    full: false,
+    open: false,
+    tmAll: false,
+    ...overrides,
+  }
+}
+
+/**
+ * Runs all Test Management subchecks.
+ *
+ * @param {object} options full validation options
+ * @param {Function} callback called when done
+ */
+function runTestManagementAllModes (options, callback) {
+  runTestManagementModeAtIndex(options, 0, callback)
+}
+
+/**
+ * Runs one Test Management mode by index.
+ *
+ * @param {object} options full validation options
+ * @param {number} index mode index
+ * @param {Function} callback called when done
+ */
+function runTestManagementModeAtIndex (options, index, callback) {
+  if (index >= TEST_MANAGEMENT_MODES.length) {
+    callback()
+    return
+  }
+
+  runTestManagementMode(options, TEST_MANAGEMENT_MODES[index], (error) => {
+    if (error) {
+      callback(error)
+      return
+    }
+
+    runTestManagementModeAtIndex(options, index + 1, callback)
+  })
+}
+
+/**
+ * Runs one Test Management mode.
+ *
+ * @param {object} options full validation options
+ * @param {string} mode Test Management mode
+ * @param {Function} callback called when done
+ */
+function runTestManagementMode (options, mode, callback) {
+  let plan
+
+  try {
+    plan = inferTestManagementPlan({
+      auto: true,
+      forceRunInBand: options.forceRunInBand,
+      mode,
+      selectedTestFilesFile: FEEDBACK_ARTIFACTS.selectedTestFiles,
+    })
+    createTestManagementCandidate(plan)
+  } catch (error) {
+    restoreTestManagementModeAfterFailure(error, callback)
+    return
+  }
+
+  const baselineDir = `dd-test-optimization-tm-${mode}-baseline`
+  const resultDir = `dd-test-optimization-tm-${mode}`
+  const baselineCommand = prefixEnvForCommand('DD_TEST_OPTIMIZATION_TM_BASELINE=1', plan.testCommand)
+
+  runDebug(getFullDebugOptions(options, {
+    outDir: baselineDir,
+    settingsMode: 'basic-reporting',
+    testCommand: baselineCommand,
+  }), (baselineError) => {
+    if (baselineError) {
+      restoreTestManagementModeAfterFailure(baselineError, callback)
+      return
+    }
+
+    try {
+      buildTestManagementResponse({
+        baselineIntake: path.join(baselineDir, ARTIFACTS.intake),
+        identityOut: path.join(resultDir, 'test-management-identity.json'),
+        mode,
+        out: path.join(resultDir, 'test-management-tests.json'),
+      })
+    } catch (error) {
+      restoreTestManagementModeAfterFailure(error, callback)
+      return
+    }
+
+    runDebug(getFullDebugOptions(options, {
+      outDir: resultDir,
+      settingsMode: plan.settingsMode,
+      testCommand: plan.testCommand,
+      testManagementTests: normalizeTestManagementTests(
+        readJsonFile(path.join(resultDir, 'test-management-tests.json'))
+      ),
+    }), (managedError) => {
+      let restoreError
+
+      try {
+        restoreTestManagementChecks()
+      } catch (error) {
+        restoreError = error
+      }
+
+      if (managedError) {
+        callback(managedError)
+        return
+      }
+
+      if (restoreError) {
+        callback(restoreError)
+        return
+      }
+
+      try {
+        assertTestManagementModeEvidence(mode, resultDir)
+      } catch (error) {
+        callback(error)
+        return
+      }
+
+      callback()
+    })
+  })
+}
+
+/**
+ * Prefixes an environment assignment to a command, preserving simple `cd <dir> && <command>` wrappers.
+ *
+ * @param {string} envAssignment environment assignment
+ * @param {string} command command to run
+ * @returns {string} command with the environment assignment scoped to the runner
+ */
+function prefixEnvForCommand (envAssignment, command) {
+  const cdMatch = command.match(/^(cd\s+(?:"[^"]+"|'[^']+'|[^&\s]+)\s+&&\s+)([\s\S]+)$/)
+  if (cdMatch) return `${cdMatch[1]}${envAssignment} ${cdMatch[2]}`
+
+  return `${envAssignment} ${command}`
+}
+
+/**
+ * Restores Test Management generated files after a failure.
+ *
+ * @param {Error} originalError original failure
+ * @param {Function} callback called with the original error
+ */
+function restoreTestManagementModeAfterFailure (originalError, callback) {
+  try {
+    restoreTestManagementChecks()
+  } catch (restoreError) {
+    console.error(`Test Management restore failed after error: ${restoreError.message}`)
+  }
+
+  callback(originalError)
+}
+
+/**
+ * Validates one Test Management mode result.
+ *
+ * @param {string} mode Test Management mode
+ * @param {string} resultDir Test Management result directory
+ */
+function assertTestManagementModeEvidence (mode, resultDir) {
+  const report = readJsonFile(path.join(resultDir, ARTIFACTS.agentJsonReport))
+  const exitCode = readOptionalTextFile(path.join(resultDir, ARTIFACTS.testExitCode))
+  const tm = report.summary.tm
+  const expected = mode === 'attempt-to-fix' ? 'attemptToFix' : mode
+  const subcheck = tm[expected]
+
+  assertFeedbackEvidence(tm.settingsEnabled, 'Test Management settings were not enabled.')
+  assertFeedbackEvidence(tm.propertiesEndpointCalled, 'Test Management properties endpoint was not called.')
+  assertFeedbackEvidence(tm.returnedProperties > 0, 'Test Management properties response was empty.')
+  assertFeedbackEvidence(
+    tm.unmatchedPropertyIdentities.length === 0,
+    `Test Management properties did not match emitted identities: ${tm.unmatchedPropertyIdentities.join(', ')}`
+  )
+  assertFeedbackEvidence(
+    subcheck && subcheck.status === 'passed',
+    `Test Management ${mode} subcheck failed: ${subcheck?.reason || 'missing subcheck'}`
+  )
+
+  if (mode === 'disabled' || mode === 'quarantined') {
+    assertFeedbackEvidence(exitCode === '0', `Expected ${mode} command exit code 0, got ${exitCode}.`)
+  } else {
+    assertFeedbackEvidence(exitCode !== '0', 'Expected attempt-to-fix command exit code to be non-zero.')
+    assertFeedbackEvidence(
+      subcheck.badRetryReasons.length === 0,
+      `Attempt-to-fix used unexpected retry reasons: ${subcheck.badRetryReasons.join(', ')}`
+    )
+  }
+
+  console.log(`Test Management ${mode}: passed`)
+}
+
+/**
+ * Writes combined validation and extractor artifacts for a full run.
+ *
+ * @param {Function} callback called with (error, report)
+ */
+function finalizeFullValidation (callback) {
+  const reports = getFullValidationReports()
+  let validationLine
+
+  try {
+    validationLine = `Datadog validation: ${
+      getCombinedValidationAppUrlFromReports(reports, { strictTestManagement: hasAllTestManagementReports() })
+    }`
+    fs.writeFileSync('dd-test-optimization-validation-url.txt', `${validationLine}\n`)
+  } catch (error) {
+    callback(error)
+    return
+  }
+
+  const extractor = spawnSync(process.execPath, [path.join(__dirname, 'test-optimization-extract-report.js')], {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+  })
+  const output = extractor.stdout || extractor.stderr || ''
+
+  fs.writeFileSync('dd-test-optimization-step9-extractor-output.txt', output)
+  if (extractor.status !== 0) {
+    callback(new Error(`Step 9 extractor failed: ${extractor.stderr || extractor.stdout}`))
+    return
+  }
+
+  callback(undefined, output.trimEnd())
+}
+
+/**
+ * Gets final reports that exist for full validation.
+ *
+ * @returns {string[]} final report paths
+ */
+function getFullValidationReports () {
+  return [
+    ARTIFACTS.finalReport,
+    path.join(FEEDBACK_ARTIFACTS.efdDir, ARTIFACTS.finalReport),
+    ...TEST_MANAGEMENT_MODES.map(mode => path.join(`dd-test-optimization-tm-${mode}`, ARTIFACTS.finalReport)),
+  ].filter(file => fs.existsSync(file))
+}
+
+/**
+ * Checks whether all Test Management final reports exist.
+ *
+ * @returns {boolean} whether every Test Management subcheck report exists
+ */
+function hasAllTestManagementReports () {
+  return TEST_MANAGEMENT_MODES.every(mode =>
+    fs.existsSync(path.join(`dd-test-optimization-tm-${mode}`, ARTIFACTS.finalReport))
+  )
 }
 
 /**
@@ -313,13 +980,11 @@ function runFeedbackMode (options, callback) {
     return
   }
 
-  runDebug(getFeedbackDebugOptions(options), (rootError, rootReport) => {
+  runDebug(getFeedbackDebugOptions(options), (rootError) => {
     if (rootError) {
       callback(rootError)
       return
     }
-
-    console.log(rootReport)
 
     const rootStage = getRootStage()
 
@@ -331,13 +996,11 @@ function runFeedbackMode (options, callback) {
       return
     }
 
-    runDebug(getFeedbackDebugOptions(options, { outDir: FEEDBACK_ARTIFACTS.basicDir }), (basicError, basicReport) => {
+    runDebug(getFeedbackDebugOptions(options, { outDir: FEEDBACK_ARTIFACTS.basicDir }), (basicError) => {
       if (basicError) {
         callback(basicError)
         return
       }
-
-      console.log(basicReport)
 
       try {
         writeKnownTestsFromBaseline()
@@ -356,7 +1019,7 @@ function runFeedbackMode (options, callback) {
         settingsMode: 'debug-all',
         testCommand: undefined,
         testCommandFile: FEEDBACK_ARTIFACTS.efdCommand,
-      }), (advancedError, advancedReport) => {
+      }), (advancedError) => {
         let restoreError
 
         try {
@@ -374,8 +1037,6 @@ function runFeedbackMode (options, callback) {
           callback(restoreError)
           return
         }
-
-        console.log(advancedReport)
 
         try {
           assertAdvancedFeedbackEvidence()
@@ -476,9 +1137,10 @@ function writeKnownTestsFromBaseline () {
  * Prints and validates inferred advanced-check edits.
  *
  * @param {string[]} selectedTestFiles selected test files
+ * @param {object} options full validation options
  */
-function dryRunAdvancedChecks (selectedTestFiles) {
-  const plan = getPreparePlan({ auto: true })
+function dryRunAdvancedChecks (selectedTestFiles, options) {
+  const plan = getPreparePlan({ auto: true, forceRunInBand: options.forceRunInBand })
   const { prepareOptions } = plan
   const dryRunText = [
     'Advanced helper dry run:',
@@ -492,7 +1154,7 @@ function dryRunAdvancedChecks (selectedTestFiles) {
 
   fs.writeFileSync(FEEDBACK_ARTIFACTS.advancedDryRun, `${dryRunText}\n`)
   console.log(dryRunText)
-  assertAdvancedPlanMatchesSelectedFiles(prepareOptions, selectedTestFiles)
+  assertAdvancedPlanMatchesSelectedFiles(prepareOptions, selectedTestFiles, plan.generatedAtrCandidate)
   console.log('Advanced dry-run guardrails: passed')
 }
 
@@ -501,8 +1163,9 @@ function dryRunAdvancedChecks (selectedTestFiles) {
  *
  * @param {object} prepareOptions inferred advanced-check options
  * @param {string[]} selectedTestFiles selected test files
+ * @param {boolean} generatedAtrCandidate whether the ATR target is generated
  */
-function assertAdvancedPlanMatchesSelectedFiles (prepareOptions, selectedTestFiles) {
+function assertAdvancedPlanMatchesSelectedFiles (prepareOptions, selectedTestFiles, generatedAtrCandidate) {
   const selectedFiles = selectedTestFiles.map(file => path.normalize(file))
   const selectedDirs = new Set(selectedFiles.map(file => path.dirname(file)))
   const efdFile = path.normalize(prepareOptions.efdTestFile)
@@ -516,7 +1179,11 @@ function assertAdvancedPlanMatchesSelectedFiles (prepareOptions, selectedTestFil
     throw new Error(`Temporary EFD file already exists: ${efdFile}`)
   }
 
-  if (!selectedFiles.includes(flakyFile)) {
+  if (generatedAtrCandidate && !selectedDirs.has(path.dirname(flakyFile))) {
+    throw new Error(`Generated Auto Test Retries file is not under a selected test directory: ${flakyFile}`)
+  }
+
+  if (!generatedAtrCandidate && !selectedFiles.includes(flakyFile)) {
     throw new Error(`Auto Test Retries flaky file is not one of the selected test files: ${flakyFile}`)
   }
 }
@@ -1028,6 +1695,34 @@ if (require.main === module) {
 
       console.log(report)
     })
+  } else if (options.full) {
+    runFullValidation(options, (error, report) => {
+      if (error) {
+        console.error(error.message)
+        process.exitCode = 1
+        return
+      }
+
+      console.log(report)
+    })
+  } else if (options.tmAll) {
+    runTestManagementAllModes(options, (error) => {
+      if (error) {
+        console.error(error.message)
+        process.exitCode = 1
+        return
+      }
+
+      finalizeFullValidation((finalizeError, report) => {
+        if (finalizeError) {
+          console.error(finalizeError.message)
+          process.exitCode = 1
+          return
+        }
+
+        console.log(report)
+      })
+    })
   } else {
     runDebug(options, (error, report) => {
       if (error) {
@@ -1047,6 +1742,9 @@ module.exports = {
   getTestResult,
   isVitestRun,
   parseArgs,
+  prefixEnvForCommand,
   runDebug,
   runFeedbackMode,
+  runFullValidation,
+  runTestManagementAllModes,
 }
