@@ -17,20 +17,40 @@ function setIsErrorTag (ctx) {
   }
 }
 
+function tagRequestParams (span, request) {
+  const params = request?.params
+  if (!params) return
+  if (params.name) {
+    span.setTag(request.method === 'prompts/get' ? 'mcp.prompt.name' : 'mcp.tool.name', params.name)
+  }
+  if (params.uri) span.setTag('mcp.resource.uri', params.uri)
+  if (params.arguments && Object.keys(params.arguments).length) {
+    span.setTag('mcp.request.arguments', JSON.stringify(params.arguments))
+  }
+}
+
+function tagRequestResult (span, result) {
+  if (!result) return
+  if (result.tools) span.setTag('mcp.tool.names', result.tools.map(t => t.name).join(','))
+  if (result.resources) span.setTag('mcp.resource.uris', result.resources.map(r => r.uri).join(','))
+  if (result.prompts) {
+    span.setTag('mcp.prompt.names', result.prompts.map(p => p.name).join(','))
+    const descriptions = result.prompts.map(p => p.description).filter(Boolean)
+    if (descriptions.length) span.setTag('mcp.prompt.descriptions', descriptions.join(','))
+  }
+  if (result.content) {
+    const text = result.content.filter(c => c.type === 'text').map(c => c.text).join('\n')
+    if (text) span.setTag('mcp.tool.response', text)
+  }
+}
+
 class McpToolCallPlugin extends TracingPlugin {
   static id = 'modelcontextprotocol_client'
   static prefix = 'tracing:orchestrion:@modelcontextprotocol/sdk:Client_callTool'
 
   bindStart (ctx) {
     const params = ctx.arguments?.[0]
-    const toolName = params?.name
-
-    this.startSpan('mcp.client.tool.call', {
-      resource: toolName,
-      type: 'mcp',
-      kind: 'client',
-    }, ctx)
-
+    this.startSpan('mcp.client.tool.call', { resource: params?.name, type: 'mcp', kind: 'client' }, ctx)
     return ctx.currentStore
   }
 
@@ -45,12 +65,7 @@ class McpListToolsPlugin extends TracingPlugin {
   static prefix = 'tracing:orchestrion:@modelcontextprotocol/sdk:Client_listTools'
 
   bindStart (ctx) {
-    this.startSpan('mcp.tools.list', {
-      resource: 'tools/list',
-      type: 'mcp',
-      kind: 'client',
-    }, ctx)
-
+    this.startSpan('mcp.tools.list', { resource: 'tools/list', type: 'mcp', kind: 'client' }, ctx)
     return ctx.currentStore
   }
 
@@ -61,46 +76,20 @@ class McpListToolsPlugin extends TracingPlugin {
 
 class McpServerRequestPlugin extends TracingPlugin {
   static id = 'modelcontextprotocol_server'
-  static prefix = 'apm:mcp:server:request'
+  static prefix = 'tracing:apm:mcp:server:request'
 
   bindStart (ctx) {
     const { request } = ctx
-
-    this.startSpan('mcp.server.request', {
-      resource: request?.method,
-      type: 'mcp',
-      kind: 'server',
-    }, ctx)
-
+    this.startSpan('mcp.server.request', { resource: request?.method, type: 'mcp', kind: 'server' }, ctx)
     const span = ctx.currentStore?.span
-    const params = request?.params
-    if (params?.name) {
-      const tag = request.method === 'prompts/get' ? 'mcp.prompt.name' : 'mcp.tool.name'
-      span?.setTag(tag, params.name)
-    }
-    if (params?.uri) span?.setTag('mcp.resource.uri', params.uri)
-    if (params?.arguments && Object.keys(params.arguments).length) {
-      span?.setTag('mcp.request.arguments', JSON.stringify(params.arguments))
-    }
-
+    if (span) tagRequestParams(span, request)
     return ctx.currentStore
   }
 
-  finish (ctx) {
+  asyncEnd (ctx) {
     const span = ctx.currentStore?.span
     if (ctx.error) span?.setTag('error', ctx.error)
-    const result = ctx.result
-    if (result?.tools) span?.setTag('mcp.tool.names', result.tools.map(t => t.name).join(','))
-    if (result?.resources) span?.setTag('mcp.resource.uris', result.resources.map(r => r.uri).join(','))
-    if (result?.prompts) {
-      span?.setTag('mcp.prompt.names', result.prompts.map(p => p.name).join(','))
-      const descriptions = result.prompts.map(p => p.description).filter(Boolean)
-      if (descriptions.length) span?.setTag('mcp.prompt.descriptions', descriptions.join(','))
-    }
-    if (result?.content) {
-      const text = result.content.filter(c => c.type === 'text').map(c => c.text).join('\n')
-      if (text) span?.setTag('mcp.tool.response', text)
-    }
+    if (span) tagRequestResult(span, ctx.result)
     super.finish(ctx)
   }
 }
@@ -111,14 +100,7 @@ class McpServerToolCallPlugin extends TracingPlugin {
 
   bindStart (ctx) {
     const [tool] = ctx.arguments || []
-    const toolName = toolNames.get(tool)
-
-    this.startSpan('mcp.server.tool.call', {
-      resource: toolName,
-      type: 'mcp',
-      kind: 'internal',
-    }, ctx)
-
+    this.startSpan('mcp.server.tool.call', { resource: toolNames.get(tool), type: 'mcp', kind: 'internal' }, ctx)
     return ctx.currentStore
   }
 

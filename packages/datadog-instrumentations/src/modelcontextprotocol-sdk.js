@@ -1,5 +1,6 @@
 'use strict'
 
+const { tracingChannel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, channel, getHooks } = require('./helpers/instrument')
 
@@ -7,12 +8,10 @@ for (const hook of getHooks('@modelcontextprotocol/sdk')) {
   addHook(hook, exports => exports)
 }
 
-const serverRequestStartCh = channel('apm:mcp:server:request:start')
-const serverRequestFinishCh = channel('apm:mcp:server:request:finish')
+const serverRequestCh = tracingChannel('apm:mcp:server:request')
+const serverToolRegisteredCh = channel('apm:mcp:server:tool:registered')
 
 const TRACED_METHOD_PREFIX = /^(?:tools|resources|prompts)\//
-
-const serverToolRegisteredCh = channel('apm:mcp:server:tool:registered')
 
 // Maps Protocol instance → Map<requestId, ctx>. Shares the ctx object between
 // _onrequest (span start, in the correct HTTP async context) and setRequestHandler
@@ -24,12 +23,12 @@ function wrapProtocol (Protocol) {
   // async context, so ALS correctly parents server spans under the HTTP span.
   shimmer.wrap(Protocol.prototype, '_onrequest', function (original) {
     return function _onrequestWithTrace (request, extra) {
-      if (!serverRequestStartCh.hasSubscribers || !TRACED_METHOD_PREFIX.test(request.method)) {
+      if (!serverRequestCh.hasSubscribers || !TRACED_METHOD_PREFIX.test(request.method)) {
         return original.call(this, request, extra)
       }
 
       const ctx = { request, extra }
-      serverRequestStartCh.runStores(ctx, () => {
+      serverRequestCh.start.runStores(ctx, () => {
         if (!pendingContexts.has(this)) pendingContexts.set(this, new Map())
         pendingContexts.get(this).set(request.id, ctx)
 
@@ -39,7 +38,7 @@ function wrapProtocol (Protocol) {
         const hasHandler = this._requestHandlers?.has(request.method) || !!this.fallbackRequestHandler
         if (!hasHandler) {
           pendingContexts.get(this)?.delete(request.id)
-          serverRequestFinishCh.publish(ctx)
+          serverRequestCh.asyncEnd.publish(ctx)
         }
       })
     }
@@ -65,7 +64,7 @@ function wrapProtocol (Protocol) {
           throw err
         } finally {
           pending.delete(extra?.requestId)
-          serverRequestFinishCh.publish(ctx)
+          serverRequestCh.asyncEnd.publish(ctx)
         }
       }
 
@@ -78,6 +77,9 @@ function wrapProtocol (Protocol) {
 
 function wrapMcpServer (McpServer) {
   // Both public registration methods (tool/registerTool) delegate here — one hook covers both.
+  // Publishes to serverToolRegisteredCh so tracing.js can build a WeakMap of tool → name
+  // for O(1) lookup in McpServerToolCallPlugin (executeToolHandler receives the tool object,
+  // not the name string).
   shimmer.wrap(McpServer.prototype, '_createRegisteredTool', function (original) {
     return function (name) {
       const result = original.apply(this, arguments)
