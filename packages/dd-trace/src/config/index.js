@@ -553,7 +553,7 @@ class Config extends ConfigBase {
     if (IS_SERVERLESS) {
       setAndTrack(this, 'telemetry.enabled', false)
       setAndTrack(this, 'DD_CRASHTRACKING_ENABLED', false)
-      setAndTrack(this, 'remoteConfig.enabled', false)
+      setAndTrack(this, 'remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED', false)
     }
 
     // TODO: Should this unconditionally be disabled?

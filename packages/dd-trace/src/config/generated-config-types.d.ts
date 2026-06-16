@@ -523,7 +523,7 @@ export interface GeneratedConfig {
   queryStringObfuscation: string;
   rateLimit: number;
   remoteConfig: {
-    enabled: boolean;
+    DD_REMOTE_CONFIGURATION_ENABLED: boolean;
     pollInterval: number;
   };
   reportHostname: boolean;

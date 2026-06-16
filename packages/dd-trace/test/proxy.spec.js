@@ -161,7 +161,7 @@ describe('TracerProxy', () => {
       DD_CRASHTRACKING_ENABLED: false,
       dynamicInstrumentation: {},
       remoteConfig: {
-        enabled: true,
+        DD_REMOTE_CONFIGURATION_ENABLED: true,
       },
       runtimeMetrics: {
         enabled: false,
@@ -285,7 +285,7 @@ describe('TracerProxy', () => {
       })
 
       it('should not enable remote config when disabled', () => {
-        config.remoteConfig.enabled = false
+        config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED = false
 
         proxy.init()
 

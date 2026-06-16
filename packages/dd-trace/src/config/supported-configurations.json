@@ -1568,7 +1568,7 @@
         "aliases": [
           "DD_REMOTE_CONFIG_ENABLED"
         ],
-        "internalPropertyName": "remoteConfig.enabled"
+        "namespace": "remoteConfig"
       }
     ],
     "DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS": [

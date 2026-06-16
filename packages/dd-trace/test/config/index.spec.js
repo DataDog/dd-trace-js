@@ -882,7 +882,7 @@ describe('Config', () => {
         service: 'node',
       },
       remoteConfig: {
-        enabled: true,
+        DD_REMOTE_CONFIGURATION_ENABLED: true,
         pollInterval: 5,
       },
       reportHostname: false,
@@ -1358,7 +1358,7 @@ describe('Config', () => {
       protocolVersion: '0.5',
       queryStringObfuscation: '.*',
       remoteConfig: {
-        enabled: false,
+        DD_REMOTE_CONFIGURATION_ENABLED: false,
         pollInterval: 42,
       },
       reportHostname: true,
@@ -2912,7 +2912,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.remoteConfig.enabled, false)
+    assert.strictEqual(config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED, false)
   })
 
   describe('flushInterval in Lambda', () => {
@@ -2944,7 +2944,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.remoteConfig.enabled, false)
+    assert.strictEqual(config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED, false)
   })
 
   it('should not set DD_REMOTE_CONFIGURATION_ENABLED if K_SERVICE and FUNCTION_TARGET are present', () => {
@@ -2953,7 +2953,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.remoteConfig.enabled, false)
+    assert.strictEqual(config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED, false)
   })
 
   it('should not set DD_REMOTE_CONFIGURATION_ENABLED if Azure Functions env vars are present', () => {
@@ -2963,7 +2963,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.remoteConfig.enabled, false)
+    assert.strictEqual(config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED, false)
   })
 
   it('should send empty array when remote config is called on empty options', () => {

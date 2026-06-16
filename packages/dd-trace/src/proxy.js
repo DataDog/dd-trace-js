@@ -138,7 +138,7 @@ class Tracer extends NoopProxy {
         spanleak.startScrubber()
       }
 
-      if (config.remoteConfig.enabled && !config.isCiVisibility) {
+      if (config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED && !config.isCiVisibility) {
         const RemoteConfig = require('./remote_config')
         const rc = new RemoteConfig(config)
 
