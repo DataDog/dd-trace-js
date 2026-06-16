@@ -60,6 +60,46 @@ describe('Plugin', () => {
         return agent.close()
       })
 
+      describe('with OTel semantics enabled', () => {
+        beforeEach(() => {
+          process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+          return agent.load('undici', {
+            service: 'test',
+          })
+            .then(() => {
+              express = require('express')
+              fetch = require(`../../../versions/undici@${version}`, {}).get()
+            })
+        })
+
+        afterEach(() => {
+          express = null
+          delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+        })
+
+        it('emits OpenTelemetry client attributes and omits the Datadog ones', done => {
+          const app = express()
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+          appListener = server(app, port => {
+            agent.assertFirstTraceSpan(span => {
+              assert.strictEqual(span.meta['span.kind'], 'client')
+              assert.strictEqual(span.meta['http.request.method'], 'GET')
+              assert.strictEqual(span.meta['url.full'], `http://localhost:${port}/user`)
+              assert.strictEqual(span.meta['server.address'], 'localhost')
+              assert.strictEqual(span.meta['http.response.status_code'], '200')
+              assert.strictEqual(span.meta['http.method'], undefined)
+              assert.strictEqual(span.meta['http.url'], undefined)
+              assert.strictEqual(span.meta['http.status_code'], undefined)
+              assert.strictEqual(span.meta['out.host'], undefined)
+            }).then(done).catch(done)
+
+            fetch.fetch(`http://localhost:${port}/user`, { method: 'GET' })
+          })
+        })
+      })
+
       describe('without configuration', () => {
         beforeEach(() => {
           return agent.load('undici', {

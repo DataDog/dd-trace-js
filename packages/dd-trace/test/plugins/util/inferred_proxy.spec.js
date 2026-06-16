@@ -194,6 +194,43 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
       await cleanupTest()
     })
 
+    describe('with OTel semantics enabled', () => {
+      beforeEach(() => {
+        process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+      })
+
+      afterEach(() => {
+        delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+      })
+
+      it('emits OpenTelemetry attributes on the inferred proxy span', async () => {
+        await loadTest({})
+
+        await httpClient.get(`http://127.0.0.1:${port}/`, {
+          headers: config.headers,
+        })
+
+        await agent.assertSomeTraces(traces => {
+          const proxySpan = traces[0][0]
+
+          assert.strictEqual(proxySpan.name, config.expectedSpanName)
+          assertObjectContains(proxySpan, {
+            meta: {
+              'span.kind': 'server',
+              'http.request.method': 'GET',
+              'url.path': '/test',
+              'url.scheme': 'https',
+              'server.address': config.expectedService,
+              'http.response.status_code': '200',
+            },
+          })
+          assert.ok(!('http.url' in proxySpan.meta))
+          assert.ok(!('http.method' in proxySpan.meta))
+          assert.ok(!('http.status_code' in proxySpan.meta))
+        })
+      })
+    })
+
     describe('without configuration', () => {
       it('should create a parent span and a child span for a 200', async () => {
         await loadTest({})
