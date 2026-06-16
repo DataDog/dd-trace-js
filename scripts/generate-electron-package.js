@@ -14,7 +14,7 @@ function generate () {
   const source = JSON.parse(readFileSync(SOURCE_PACKAGE, 'utf8'))
   const excludes = JSON.parse(readFileSync(EXCLUDES_FILE, 'utf8'))
 
-  const output = { ...source, name: 'dd-trace-electron' }
+  const output = { ...source, name: 'dd-trace-electron', main: 'index.electron.js' }
 
   for (const [section, names] of Object.entries(excludes)) {
     if (!output[section]) continue
