@@ -97,41 +97,16 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
    * @returns {Buffer} Serialized OTLP ExportMetricsServiceRequest
    */
   transform (drained, bucketSizeNs) {
-    if (this.protocol === 'http/json') {
-      return this.#transformToJson(drained, bucketSizeNs)
-    }
-    return this.#transformToProtobuf(drained, bucketSizeNs)
-  }
-
-  /**
-   * @param {Array} drained
-   * @param {number} bucketSizeNs
-   * @returns {Buffer}
-   */
-  #transformToProtobuf (drained, bucketSizeNs) {
-    const { protoMetricsService } = getProtobufTypes()
+    const isJson = this.protocol === 'http/json'
     const data = {
       resourceMetrics: [{
         resource: this.transformResource(),
-        scopeMetrics: this.#buildScopeMetrics(drained, bucketSizeNs, false),
+        scopeMetrics: this.#buildScopeMetrics(drained, bucketSizeNs, isJson),
       }],
     }
-    return this.serializeToProtobuf(protoMetricsService, data)
-  }
-
-  /**
-   * @param {Array} drained
-   * @param {number} bucketSizeNs
-   * @returns {Buffer}
-   */
-  #transformToJson (drained, bucketSizeNs) {
-    const data = {
-      resourceMetrics: [{
-        resource: this.transformResource(),
-        scopeMetrics: this.#buildScopeMetrics(drained, bucketSizeNs, true),
-      }],
-    }
-    return this.serializeToJson(data)
+    return isJson
+      ? this.serializeToJson(data)
+      : this.serializeToProtobuf(getProtobufTypes().protoMetricsService, data)
   }
 
   /**

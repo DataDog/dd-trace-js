@@ -266,17 +266,6 @@ describe('SpanAggStats', () => {
       OkSummary: okDistribution.toProto(),
       ErrorSummary: errorDistribution.toProto(),
     })
-    assert.strictEqual(aggStats.errorDuration, errorSpan.duration)
-  })
-
-  it('should track errorDuration separately', () => {
-    const aggKey = new SpanAggKey(basicSpan)
-    const aggStats = new SpanAggStats(aggKey)
-    aggStats.record(basicSpan)
-    aggStats.record({ ...basicSpan, error: 1, duration: 500 })
-
-    assert.strictEqual(aggStats.errorDuration, 500)
-    assert.strictEqual(aggStats.duration, basicSpan.duration + 500)
   })
 })
 
@@ -503,8 +492,8 @@ describe('SpanStatsProcessor', () => {
     const p = new SpanStatsProcessor({
       ...config,
       otlpTraceMetricsEnabled: true,
-      otelMetricsUrl: 'http://localhost:4318/v1/metrics',
-      otelMetricsProtocol: 'http/json',
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
+      OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/json',
     })
     clearTimeout(p.timer)
 
@@ -517,8 +506,8 @@ describe('SpanStatsProcessor', () => {
     const p = new SpanStatsProcessor({
       ...config,
       otlpTraceMetricsEnabled: true,
-      otelMetricsUrl: 'http://localhost:4318/v1/metrics',
-      otelMetricsProtocol: 'http/json',
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
+      OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/json',
     })
     clearTimeout(p.timer)
     p.onSpanFinished(topLevelSpan)
@@ -535,8 +524,8 @@ describe('SpanStatsProcessor', () => {
     const p = new SpanStatsProcessor({
       ...config,
       otlpTraceMetricsEnabled: true,
-      otelMetricsUrl: 'http://localhost:4318/v1/metrics',
-      otelMetricsProtocol: 'http/json',
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
+      OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/json',
     })
     clearTimeout(p.timer)
     p.onInterval()
@@ -550,8 +539,8 @@ describe('SpanStatsProcessor', () => {
     const p = new SpanStatsProcessor({
       ...config,
       otlpTraceMetricsEnabled: true,
-      otelMetricsUrl: 'http://localhost:4318/v1/metrics',
-      otelMetricsProtocol: 'http/json',
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
+      OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/json',
     })
     clearTimeout(p.timer)
     p.onSpanFinished(topLevelSpan)
@@ -571,8 +560,8 @@ describe('SpanStatsProcessor', () => {
       env: 'test',
       tags: {},
       otlpTraceMetricsEnabled: true,
-      otelMetricsUrl: 'http://localhost:4318/v1/metrics',
-      otelMetricsProtocol: 'http/json',
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
+      OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/json',
     })
     clearTimeout(p.timer)
 

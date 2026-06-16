@@ -602,7 +602,7 @@ class Config extends ConfigBase {
     // Auto-enabled (when OTEL_TRACES_SPAN_METRICS_ENABLED is unset) only when both OTLP
     // trace export (OTEL_TRACES_EXPORTER=otlp) and OTel metrics export (DD_METRICS_OTEL_ENABLED)
     // are enabled.
-    const autoTraceMetrics = this.OTEL_TRACES_EXPORTER === 'otlp' && this.otelMetricsEnabled === true
+    const autoTraceMetrics = this.OTEL_TRACES_EXPORTER === 'otlp' && this.DD_METRICS_OTEL_ENABLED === true
     setAndTrack(this, 'otlpTraceMetricsEnabled', this.otlpTraceMetricsEnabled ?? autoTraceMetrics)
 
     // Internal `_DD_*` vars are skipped by the generic env applier (it only reads DD_/OTEL_ prefixes),

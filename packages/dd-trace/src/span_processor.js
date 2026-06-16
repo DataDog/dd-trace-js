@@ -66,9 +66,6 @@ class SpanProcessor {
         }
       }
 
-      // BUG: when client-side stats are computed (this._stats), sampled-out (p0) traces are still
-      // exported here instead of being dropped, since the stats already account for them
-      // (fails test_otlp_trace_metrics FR09.1).
       if (formatted.length !== 0 && trace.isRecording !== false) {
         this._exporter.export(formatted)
       }

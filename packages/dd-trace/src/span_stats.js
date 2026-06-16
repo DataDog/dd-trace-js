@@ -34,10 +34,6 @@ class SpanAggStats {
     this.topLevelHits = 0
     this.errors = 0
     this.duration = 0
-    this.errorDuration = 0
-    this.topLevelErrors = 0
-    this.topLevelDuration = 0
-    this.topLevelErrorDuration = 0
     this.okDistribution = new LogCollapsingLowestDenseDDSketch()
     this.errorDistribution = new LogCollapsingLowestDenseDDSketch()
   }
@@ -47,19 +43,12 @@ class SpanAggStats {
     this.hits++
     this.duration += durationNs
 
-    const isTopLevel = !!span.metrics[TOP_LEVEL_KEY]
-    if (isTopLevel) {
+    if (span.metrics[TOP_LEVEL_KEY]) {
       this.topLevelHits++
-      this.topLevelDuration += durationNs
     }
 
     if (span.error) {
       this.errors++
-      this.errorDuration += durationNs
-      if (isTopLevel) {
-        this.topLevelErrors++
-        this.topLevelErrorDuration += durationNs
-      }
       this.errorDistribution.accept(durationNs)
     } else {
       this.okDistribution.accept(durationNs)
@@ -174,8 +163,8 @@ class SpanStatsProcessor {
     tags,
     version: appVersion,
     otlpTraceMetricsEnabled,
-    otelMetricsUrl,
-    otelMetricsProtocol,
+    OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: otelMetricsUrl,
+    OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: otelMetricsProtocol,
     ddTraceMetricsOtelFlushInterval,
     otelSemanticsEnabled,
     reportHostname,

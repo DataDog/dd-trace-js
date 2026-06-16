@@ -317,9 +317,6 @@ function extractRootTags (formattedSpan, span) {
   if (typeof agentDecision === 'number') {
     metrics[SAMPLING_AGENT_DECISION] = agentDecision
   }
-  // BUG: only the local root is tagged top-level. A child whose parent is in a different service is
-  // also a service-entry (top-level) span and should be tagged here for client-side stats to be
-  // correct (fails test_otlp_trace_metrics FR06.3).
   metrics[TOP_LEVEL_KEY] = 1
 }
 
