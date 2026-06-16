@@ -84,7 +84,7 @@ describe('release changelog', () => {
       '- <b>AppSec</b> Add AppSec integrations to Laminas Framework ' +
         '(http.route, endpoint collection, login events) #3716',
       '- <b>General</b> Add Node.js 26 support #8429',
-      '- <b>LLMObs</b> Support Bedrock Converse and ConverseStream #8079',
+      '- <b>LLM Observability</b> Support Bedrock Converse and ConverseStream #8079',
       '- <b>OpenTelemetry</b> Add support for OTLP Runtime Metrics #8357',
       '',
       '<b>Fixes</b>',
@@ -92,7 +92,8 @@ describe('release changelog', () => {
         'via WAF strings #3884',
       '- <b>AppSec</b> Treat cleared shared memory as no-config rather than an error in AppSec helper #3876',
       '- <b>General</b> Encoder JSON number type fix #38799',
-      '- <b>LLMObs</b> Revert "Fan array-valued user tags out into one wire entry per element (#8689)" #8790',
+      '- <b>LLM Observability</b> Revert "Fan array-valued user tags out into one wire entry per element ' +
+        '(#8689)" #8790',
       '- <b>Profiling</b> Prevent panics in profiling encoding under out-of-memory and out-of-bounds ' +
         'conditions #3888',
       '- <b>unknown-scope</b> Handle strange thing #9999',
@@ -212,6 +213,9 @@ describe('release changelog', () => {
       { sha: 'abc003', subject: 'fix(dsm): track message lineage (#9003)' },
       { sha: 'abc004', subject: 'fix(dbm): propagate trace context to SQL comments (#9004)' },
       { sha: 'abc005', subject: 'fix(exporters): route agentless spans to the regional intake (#9005)' },
+      { sha: 'abc006', subject: 'fix(openfeature): record exposure events (#9006)' },
+      { sha: 'abc007', subject: 'fix(test-optimization): dedupe known tests (#9007)' },
+      { sha: 'abc008', subject: 'fix(jest): stabilize worker handoff (#9008)' },
     ])
 
     assert.strictEqual(changelog.markdown, [
@@ -220,7 +224,10 @@ describe('release changelog', () => {
       '- <b>AppSec</b> Block on suspicious request #9001',
       '- <b>Data Streams Monitoring</b> Track message lineage #9003',
       '- <b>Database Monitoring</b> Propagate trace context to SQL comments #9004',
+      '- <b>Feature Flags</b> Record exposure events #9006',
       '- <b>General</b> Route agentless spans to the regional intake #9005',
+      '- <b>Test Optimization</b> Dedupe known tests #9007',
+      '- <b>Test Optimization</b> Stabilize worker handoff #9008',
       '',
     ].join('\n'))
     assert.deepStrictEqual(changelog.warnings, [])

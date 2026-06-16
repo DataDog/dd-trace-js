@@ -25,7 +25,7 @@ const PRODUCTS = [
   ['AppSec', ['appsec', 'iast', 'rasp', 'waf', 'asm', 'aap']],
   ['AI Guard', ['aiguard', 'ai-guard', 'ai_guard']],
   ['Profiling', ['profiling', 'profiler']],
-  ['CI Visibility', [
+  ['Test Optimization', [
     'ci-visibility',
     'test-optimization',
     'testopt',
@@ -42,7 +42,7 @@ const PRODUCTS = [
   ]],
   ['Crash Tracking', ['crashtracking', 'crash-tracking']],
   ['Dynamic Instrumentation', ['debugger', 'code-origin', 'dynamic-instrumentation']],
-  ['LLMObs', [
+  ['LLM Observability', [
     'llmobs',
     'ai',
     'openai',
@@ -57,6 +57,7 @@ const PRODUCTS = [
   ['OpenTelemetry', ['otel', 'opentelemetry']],
   ['Data Streams Monitoring', ['dsm', 'data-streams']],
   ['Database Monitoring', ['dbm']],
+  ['Feature Flags', ['openfeature', 'feature-flags', 'flagging', 'ffe']],
   ['General', [
     'core',
     'tracing',
