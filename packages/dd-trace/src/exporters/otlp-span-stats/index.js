@@ -26,7 +26,7 @@ class OtlpStatsExporter extends OtlpHttpExporterBase {
    * @param {number} [timeout] - OTEL_EXPORTER_OTLP_METRICS_TIMEOUT in milliseconds
    */
   constructor (url, protocol, resourceAttributes, otelSemanticsEnabled = false, defaultService = '',
-    headers = undefined, timeout = 10_000) {
+    headers, timeout = 10_000) {
     super(url, headers, timeout, protocol, 'span-stats')
     this.transformer = new OtlpStatsTransformer(resourceAttributes, protocol, otelSemanticsEnabled, defaultService)
   }

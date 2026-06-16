@@ -12,9 +12,9 @@ const {
   HTTP_METHOD,
   SPAN_KIND,
 } = require('../../../ext/tags')
+const { VERSION } = require('../../../version')
 const { ORIGIN_KEY, TOP_LEVEL_KEY, SVC_SRC_KEY } = require('./constants')
 const { version } = require('./pkg')
-const { VERSION } = require('../../../version')
 const processTags = require('./process-tags')
 
 const { SpanStatsExporter } = require('./exporters/span-stats')
