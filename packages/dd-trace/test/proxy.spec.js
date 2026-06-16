@@ -254,8 +254,21 @@ describe('TracerProxy', () => {
       './dogstatsd': dogStatsD,
       './noop/dogstatsd': NoopDogStatsDClient,
       './flare': flare,
-      './openfeature': openfeature,
-      './openfeature/flagging_provider': OpenFeatureProvider,
+    })
+
+    const { enable: openfeatureRcEnable } = require('../src/openfeature/remote_config')
+    ProxyClass.registerFeature({
+      name: 'openfeature',
+      factory: () => openfeature,
+      remoteConfig (rc, config, proxy) {
+        openfeatureRcEnable(rc, config, () => proxy.openfeature)
+      },
+      enable (config, tracer, proxy, lazyProxy) {
+        if (config.experimental.flaggingProvider.enabled) {
+          proxy._modules.openfeature.enable(config)
+          lazyProxy(proxy, 'openfeature', () => OpenFeatureProvider, tracer, config)
+        }
+      },
     })
 
     proxy = new ProxyClass()
