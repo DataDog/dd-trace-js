@@ -14,6 +14,7 @@ const {
 } = require('../../../ext/tags')
 const { ORIGIN_KEY, TOP_LEVEL_KEY, SVC_SRC_KEY } = require('./constants')
 const { version } = require('./pkg')
+const { VERSION } = require('../../../version')
 const processTags = require('./process-tags')
 
 const { SpanStatsExporter } = require('./exporters/span-stats')
@@ -165,6 +166,8 @@ class SpanStatsProcessor {
     otlpTraceMetricsEnabled,
     OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: otelMetricsUrl,
     OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: otelMetricsProtocol,
+    OTEL_EXPORTER_OTLP_METRICS_HEADERS: otelMetricsHeaders,
+    OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: otelMetricsTimeout,
     ddTraceMetricsOtelFlushInterval,
     otelSemanticsEnabled,
     reportHostname,
@@ -206,7 +209,8 @@ class SpanStatsProcessor {
         serviceVersion: appVersion,
       })
       this.otlpExporter = new OtlpStatsExporter(
-        otelMetricsUrl, protocol, resourceAttributes, otelSemanticsEnabled, service
+        otelMetricsUrl, protocol, resourceAttributes, otelSemanticsEnabled, service,
+        otelMetricsHeaders, otelMetricsTimeout
       )
     }
 
@@ -294,7 +298,7 @@ function buildResourceAttributes (tags, { reportHostname, otelSemanticsEnabled, 
   const attrs = {
     'telemetry.sdk.name': 'datadog',
     'telemetry.sdk.language': 'nodejs',
-    'telemetry.sdk.version': version,
+    'telemetry.sdk.version': VERSION,
   }
   // Service identity (OTel attributes, emitted in both modes).
   if (service) attrs['service.name'] = service

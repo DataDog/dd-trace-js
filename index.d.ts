@@ -1309,9 +1309,9 @@ declare namespace tracer {
 
     /**
      * Whether to export client-computed span stats as OTLP metrics to a /v1/metrics endpoint.
-     * Auto-enabled when both OTEL_TRACES_EXPORTER=otlp and OTEL_METRICS_EXPORTER=otlp are set.
+     * Auto-enabled when both OTEL_TRACES_EXPORTER=otlp and DD_METRICS_OTEL_ENABLED=true are set.
      * @default false
-     * @env DD_TRACE_OTEL_STATS_COMPUTATION_ENABLED
+     * @env OTEL_TRACES_SPAN_METRICS_ENABLED
      * Programmatic configuration takes precedence over the environment variables listed above.
      */
     otlpTraceMetricsEnabled?: boolean

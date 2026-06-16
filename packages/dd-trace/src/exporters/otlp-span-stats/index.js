@@ -22,9 +22,12 @@ class OtlpStatsExporter extends OtlpHttpExporterBase {
    * @param {boolean} [otelSemanticsEnabled] - When true, only OTel attributes are emitted (no dd.*)
    * @param {string} [defaultService] - The configured default service (DD_SERVICE), reported on the
    *   resource; a data point carries service.name only when its span's service differs from this.
+   * @param {Record<string, string>} [headers] - OTEL_EXPORTER_OTLP_METRICS_HEADERS
+   * @param {number} [timeout] - OTEL_EXPORTER_OTLP_METRICS_TIMEOUT in milliseconds
    */
-  constructor (url, protocol, resourceAttributes, otelSemanticsEnabled = false, defaultService = '') {
-    super(url, undefined, 10_000, protocol, 'span-stats')
+  constructor (url, protocol, resourceAttributes, otelSemanticsEnabled = false, defaultService = '',
+    headers = undefined, timeout = 10_000) {
+    super(url, headers, timeout, protocol, 'span-stats')
     this.transformer = new OtlpStatsTransformer(resourceAttributes, protocol, otelSemanticsEnabled, defaultService)
   }
 
