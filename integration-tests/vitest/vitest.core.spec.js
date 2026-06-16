@@ -289,6 +289,40 @@ versions.forEach((version) => {
       assert.strictEqual(code, 0)
     })
 
+    newerVitestIt('sets DD_VITEST_WORKER in workers when a fork project has a threads root pool', async () => {
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const test = events.find(event => event.type === 'test').content
+
+          assert.ok(test)
+          assert.strictEqual(test.meta[TEST_NAME], 'vitest worker env sets DD_VITEST_WORKER')
+          assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+        }, 25000)
+
+      childProcess = exec(
+        './node_modules/.bin/vitest run',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            TEST_DIR: 'ci-visibility/vitest-tests/vitest-worker-env.mjs',
+            POOL_CONFIG: 'threads',
+            PROJECT_POOL_CONFIG: 'forks',
+            DD_SERVICE: undefined,
+          },
+        }
+      )
+
+      const [[code]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      assert.strictEqual(code, 0)
+    })
+
     it('propagates test span context to HTTP requests and hooks during test execution', async () => {
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {

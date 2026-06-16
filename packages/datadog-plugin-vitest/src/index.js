@@ -64,7 +64,7 @@ class VitestPlugin extends CiPlugin {
         testModuleId: testModuleSpanContext?.toSpanId(),
         testCommand: this.command,
         repositoryRoot: this.repositoryRoot,
-        codeOwnersEntries: this._getSerializableCodeOwnersEntries(),
+        codeOwnersEntries: this.codeOwnersEntries,
       })
     })
 

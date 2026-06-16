@@ -8,4 +8,5 @@ module.exports = [
   ...require('./langgraph'),
   ...require('./modelcontextprotocol-sdk'),
   ...require('./playwright'),
+  ...require('./aws-durable-execution-sdk-js'),
 ]
