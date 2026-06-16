@@ -303,13 +303,24 @@ function extractRootTags (formattedSpan, span) {
 
   if (span !== context._trace.started[0] || (parentId && parentId.toString(10) !== '0')) return
 
-  addTag({}, formattedSpan.metrics, SAMPLING_RULE_DECISION, context._trace[SAMPLING_RULE_DECISION])
-  addTag({}, formattedSpan.metrics, SAMPLING_LIMIT_DECISION, context._trace[SAMPLING_LIMIT_DECISION])
-  addTag({}, formattedSpan.metrics, SAMPLING_AGENT_DECISION, context._trace[SAMPLING_AGENT_DECISION])
+  const trace = context._trace
+  const metrics = formattedSpan.metrics
+  const ruleDecision = trace[SAMPLING_RULE_DECISION]
+  if (typeof ruleDecision === 'number') {
+    metrics[SAMPLING_RULE_DECISION] = ruleDecision
+  }
+  const limitDecision = trace[SAMPLING_LIMIT_DECISION]
+  if (typeof limitDecision === 'number') {
+    metrics[SAMPLING_LIMIT_DECISION] = limitDecision
+  }
+  const agentDecision = trace[SAMPLING_AGENT_DECISION]
+  if (typeof agentDecision === 'number') {
+    metrics[SAMPLING_AGENT_DECISION] = agentDecision
+  }
   // BUG: only the local root is tagged top-level. A child whose parent is in a different service is
   // also a service-entry (top-level) span and should be tagged here for client-side stats to be
   // correct (fails test_otlp_trace_metrics FR06.3).
-  addTag({}, formattedSpan.metrics, TOP_LEVEL_KEY, 1)
+  metrics[TOP_LEVEL_KEY] = 1
 }
 
 function extractChunkTags (formattedSpan, span, tagForFirstSpanInChunk) {

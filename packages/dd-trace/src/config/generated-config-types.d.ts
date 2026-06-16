@@ -511,23 +511,7 @@ export interface GeneratedConfig {
   OTEL_TRACES_EXPORTER: "none" | "otlp" | undefined;
   OTEL_TRACES_SAMPLER: "always_on" | "always_off" | "traceidratio" | "parentbased_always_on" | "parentbased_always_off" | "parentbased_traceidratio";
   OTEL_TRACES_SAMPLER_ARG: number | undefined;
-  otelBatchTimeout: number;
-  otelLogsEnabled: boolean;
-  otelLogsProtocol: string;
-  otelLogsTimeout: number;
-  otelLogsUrl: string;
-  otelMaxExportBatchSize: number;
-  otelMaxQueueSize: number;
-  otelMetricsEnabled: boolean;
-  otelMetricsExportInterval: number;
-  otelMetricsExportTimeout: number;
-  otelMetricsProtocol: string;
-  otelMetricsTemporalityPreference: "DELTA" | "CUMULATIVE" | "LOWMEMORY";
-  otelMetricsTimeout: number;
-  otelMetricsUrl: string;
-  otelProtocol: string;
   otelSemanticsEnabled: boolean;
-  otelTimeout: number;
   otlpTraceMetricsEnabled: boolean | undefined;
   peerServiceMapping: Record<string, string>;
   port: string | number;
@@ -577,8 +561,6 @@ export interface GeneratedConfig {
   testManagementAttemptToFixRetries: number;
   traceId128BitGenerationEnabled: boolean;
   traceId128BitLoggingEnabled: boolean;
-  tracePropagationBehaviorExtract: "continue" | "restart" | "ignore";
-  tracePropagationExtractFirst: boolean;
   tracePropagationStyle: {
     extract: string[];
     inject: string[];

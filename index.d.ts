@@ -1313,7 +1313,16 @@ declare namespace tracer {
      * @env DD_TRACE_OTEL_STATS_COMPUTATION_ENABLED
      * Programmatic configuration takes precedence over the environment variables listed above.
      */
-    traceMetricsEnabled?: boolean
+    otlpTraceMetricsEnabled?: boolean
+
+    /**
+     * Whether to emit only OpenTelemetry semantic-convention attributes on OTLP trace metrics,
+     * omitting Datadog-specific dd.* attributes.
+     * @default false
+     * @env DD_TRACE_OTEL_SEMANTICS_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    otelSemanticsEnabled?: boolean
 
     /**
      * Whether to generate 128-bit trace IDs.
