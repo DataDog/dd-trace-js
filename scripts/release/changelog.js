@@ -22,8 +22,8 @@ const CATEGORY_BY_TYPE = {
   perf: 'Performance',
 }
 const PRODUCTS = [
-  ['AppSec', ['appsec', 'iast', 'rasp', 'waf', 'asm']],
-  ['AI Guard', ['aiguard', 'ai-guard']],
+  ['AppSec', ['appsec', 'iast', 'rasp', 'waf', 'asm', 'aap']],
+  ['AI Guard', ['aiguard', 'ai-guard', 'ai_guard']],
   ['Profiling', ['profiling', 'profiler']],
   ['CI Visibility', [
     'ci-visibility',
@@ -55,6 +55,8 @@ const PRODUCTS = [
   ]],
   ['Serverless', ['serverless', 'lambda', 'azure_metadata', 'inferred_proxy']],
   ['OpenTelemetry', ['otel', 'opentelemetry']],
+  ['Data Streams Monitoring', ['dsm', 'data-streams']],
+  ['Database Monitoring', ['dbm']],
   ['General', [
     'core',
     'tracing',
@@ -71,8 +73,22 @@ const PRODUCTS = [
     'telemetry',
     'remote-config',
     'runtime-metrics',
+    'runtime_metrics',
+    'metrics',
+    'dogstatsd',
     'stats',
     'sampler',
+    'propagation',
+    'exporters',
+    'agent',
+    'agentless',
+    'startup-log',
+    'shimmer',
+    'storage',
+    'esm',
+    'stacktrace',
+    'service-naming',
+    'tags',
     'types',
   ]],
 ]
@@ -164,9 +180,6 @@ function parseChange (entry) {
   const category = CATEGORY_BY_TYPE[parsed.type] || INTERNAL_CATEGORY
   const internal = INTERNAL_TYPES.has(parsed.type)
   const product = selectProduct(parsed.scopes)
-  const warning = !internal && product === 'Other'
-    ? `Unknown release-note product for ${entry.sha}: ${entry.subject}`
-    : undefined
 
   return {
     category,
@@ -175,7 +188,6 @@ function parseChange (entry) {
     pr: subjectWithPullRequest.pr,
     internal,
     revert: parsed.isRevert,
-    warning,
   }
 }
 
@@ -232,18 +244,22 @@ function splitScopes (scope) {
  * @param {string[]} scopes
  */
 function selectProduct (scopes) {
-  let fallback = 'General'
+  let allGeneral = true
 
   for (const scope of scopes) {
     const product = findProduct(scope)
-    if (!product) {
-      fallback = 'Other'
+    if (product === undefined) {
+      allGeneral = false
       continue
     }
     if (product !== 'General') return product
   }
 
-  return fallback
+  // No product groups these scopes. Fall back to the full scope list from the
+  // commit verbatim rather than a catch-all, unless every scope is a core one.
+  if (allGeneral) return 'General'
+
+  return scopes.join(', ')
 }
 
 /**
