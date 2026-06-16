@@ -135,5 +135,44 @@ describe('http-otel-semantics', () => {
 
       assert.deepStrictEqual(meta, { 'span.kind': 'client', 'db.system': 'redis' })
     })
+
+    it('normalizes an unknown HTTP method to _OTHER and preserves the original', () => {
+      const { meta } = run({ 'span.kind': 'server', 'http.method': 'PROPFIND', 'http.url': 'http://h/p' })
+
+      assert.strictEqual(meta['http.request.method'], '_OTHER')
+      assert.strictEqual(meta['http.request.method_original'], 'PROPFIND')
+    })
+
+    it('passes a known HTTP method through without method_original', () => {
+      const { meta } = run({ 'span.kind': 'server', 'http.method': 'GET', 'http.url': 'http://h/p' })
+
+      assert.strictEqual(meta['http.request.method'], 'GET')
+      assert.ok(!('http.request.method_original' in meta))
+    })
+
+    it('redacts credentials embedded in a client url.full', () => {
+      assert.strictEqual(
+        run({ 'span.kind': 'client', 'http.url': 'https://user:pass@h:8443/p?q=1' }).meta['url.full'],
+        'https://REDACTED:REDACTED@h:8443/p?q=1'
+      )
+      assert.strictEqual(
+        run({ 'span.kind': 'client', 'http.url': 'http://user@h/p' }).meta['url.full'],
+        'http://REDACTED@h/p'
+      )
+      assert.strictEqual(
+        run({ 'span.kind': 'client', 'http.url': 'https://h/p' }).meta['url.full'],
+        'https://h/p'
+      )
+    })
+
+    it('falls back to the scheme default port for a client without an explicit port', () => {
+      assert.strictEqual(run({ 'span.kind': 'client', 'http.url': 'https://h/p' }).metrics['server.port'], 443)
+      assert.strictEqual(run({ 'span.kind': 'client', 'http.url': 'http://h/p' }).metrics['server.port'], 80)
+      assert.strictEqual(
+        run({ 'span.kind': 'client', 'http.url': 'http://h:8080/p' }, { 'network.destination.port': 8080 })
+          .metrics['server.port'],
+        8080
+      )
+    })
   })
 })

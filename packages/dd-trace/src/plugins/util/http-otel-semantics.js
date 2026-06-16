@@ -16,6 +16,14 @@ const SERVER_PORT = 'server.port'
 const USER_AGENT_ORIGINAL = 'user_agent.original'
 const CLIENT_ADDRESS = 'client.address'
 const NETWORK_PEER_ADDRESS = 'network.peer.address'
+const HTTP_REQUEST_METHOD_ORIGINAL = 'http.request.method_original'
+
+// Known HTTP methods (RFC 9110 + PATCH RFC 5789 + QUERY httpbis draft). A verb
+// outside this set is reported as `_OTHER` with the raw value preserved on
+// `http.request.method_original`, per the OTel HTTP semantic conventions.
+const KNOWN_METHODS = new Set([
+  'CONNECT', 'DELETE', 'GET', 'HEAD', 'OPTIONS', 'PATCH', 'POST', 'PUT', 'QUERY', 'TRACE',
+])
 
 /**
  * @typedef {object} ServerUrlParts
@@ -80,6 +88,49 @@ function toHttpScheme (scheme) {
 }
 
 /**
+ * Redact any userinfo embedded in a URL's authority, since `url.full` must not
+ * leak credentials: `user:pass@host` -> `REDACTED:REDACTED@host`, `user@host` ->
+ * `REDACTED@host`. Returns the URL unchanged when no userinfo is present.
+ *
+ * @param {string} url
+ * @returns {string}
+ */
+function redactUrlCredentials (url) {
+  const schemeEnd = url.indexOf('://')
+  if (schemeEnd === -1) return url
+  const authorityStart = schemeEnd + 3
+
+  let authorityEnd = url.length
+  for (let i = authorityStart; i < url.length; i++) {
+    const char = url[i]
+    if (char === '/' || char === '?' || char === '#') {
+      authorityEnd = i
+      break
+    }
+  }
+
+  const at = url.indexOf('@', authorityStart)
+  if (at === -1 || at >= authorityEnd) return url
+
+  const redacted = url.slice(authorityStart, at).includes(':') ? 'REDACTED:REDACTED' : 'REDACTED'
+  return url.slice(0, authorityStart) + redacted + url.slice(at)
+}
+
+/**
+ * The scheme's default port, used as the `server.port` fallback for client spans
+ * (the attribute is required for clients but the explicit port is absent for
+ * default-port requests).
+ *
+ * @param {string} [url]
+ * @returns {number | undefined}
+ */
+function defaultPortForUrl (url) {
+  if (url === undefined) return
+  if (url.startsWith('https:') || url.startsWith('wss:')) return 443
+  if (url.startsWith('http:') || url.startsWith('ws:')) return 80
+}
+
+/**
  * @typedef {object} FormattedHttpSpan
  * @property {Record<string, string>} meta
  * @property {Record<string, number>} metrics
@@ -104,7 +155,13 @@ function applyHttpOtelSemantics (formattedSpan) {
   if (method === undefined && url === undefined) return
 
   if (method !== undefined) {
-    meta[HTTP_REQUEST_METHOD] = method
+    if (KNOWN_METHODS.has(method)) {
+      meta[HTTP_REQUEST_METHOD] = method
+    } else {
+      // Unknown verb: bucket to `_OTHER` and preserve the raw value.
+      meta[HTTP_REQUEST_METHOD] = '_OTHER'
+      meta[HTTP_REQUEST_METHOD_ORIGINAL] = method
+    }
     delete meta['http.method']
   }
 
@@ -142,7 +199,8 @@ function applyHttpOtelSemantics (formattedSpan) {
     }
   } else {
     if (url !== undefined) {
-      meta[URL_FULL] = url
+      // url.full must not carry embedded credentials.
+      meta[URL_FULL] = redactUrlCredentials(url)
       delete meta['http.url']
     }
     const outHost = meta['out.host']
@@ -151,7 +209,11 @@ function applyHttpOtelSemantics (formattedSpan) {
       delete meta['out.host']
     }
     const clientPort = metrics['network.destination.port']
-    if (clientPort !== undefined) {
+    if (clientPort === undefined) {
+      // server.port is required for client spans; fall back to the scheme default.
+      const defaultPort = defaultPortForUrl(url)
+      if (defaultPort !== undefined) metrics[SERVER_PORT] = defaultPort
+    } else {
       metrics[SERVER_PORT] = clientPort
       delete metrics['network.destination.port']
     }
@@ -176,6 +238,7 @@ module.exports = {
   USER_AGENT_ORIGINAL,
   CLIENT_ADDRESS,
   NETWORK_PEER_ADDRESS,
+  HTTP_REQUEST_METHOD_ORIGINAL,
   decomposeServerUrl,
   applyHttpOtelSemantics,
 }
