@@ -924,4 +924,48 @@ describe('normalizeRouteExpress', () => {
       assert.equal(normalizeRouteExpress('/:id(foo\\))', { id: 'foo)' }, '/foo)', false), '/{id}')
     })
   })
+
+  describe('review-finding regressions (round 6)', () => {
+    it('a constraint with "/" only inside a character class is single-segment (not a catch-all)', () => {
+      // [^/]+ contains a slash but denies it → a normal single-segment param, not slash-spanning.
+      assert.equal(normalizeRouteExpress('/:id([^/]+)/users', { id: 'foo' }, '/foo/users', false), '/{id}/users')
+      assert.equal(normalizeRouteExpress('/:id([^/]+)?/users', { id: 'x' }, '/x/users', false), '/{id}/users')
+      assert.equal(normalizeRouteExpress('/:id([^/]+)?/users', {}, '/users', false), '/users')
+    })
+
+    it('still rejects a constraint that genuinely contains a literal "/" (non-terminal)', () => {
+      assert.equal(normalizeRouteExpress('/:id(foo/bar)/tail', {}, '/foo/bar/tail', false), null)
+    })
+
+    it('returns null for a non-terminal catch-all (cannot be represented)', () => {
+      assert.equal(normalizeRouteExpress('/x{/*rest}/tail', {}, '/x/a/tail', true), null)
+      assert.equal(normalizeRouteExpress('/a/*splat/b', {}, '/a/x/b', true), null)
+    })
+
+    it('still normalizes a terminal optional catch-all', () => {
+      assert.equal(normalizeRouteExpress('/files{/*path}', {}, '/files/a/b', true), '/files/{path}')
+      assert.equal(normalizeRouteExpress('/files{/*path}', {}, '/files', true), '/files')
+    })
+
+    it('returns null when a segment has two independent optional groups', () => {
+      assert.equal(normalizeRouteExpress('/:a{.:b}{-:c}', { a: 'x', b: 'z' }, '/x.z', true), null)
+    })
+
+    it('still normalizes a single intra-segment optional group', () => {
+      assert.equal(
+        normalizeRouteExpress('/photos/:id{.:format}', { id: '1', format: 'jpg' }, '/photos/1.jpg', true),
+        '/photos/{id+format}'
+      )
+    })
+
+    it('collapses structural-only (empty) nested optional groups', () => {
+      assert.equal(normalizeRouteExpress('/a{{/b}}', {}, '/a/b', true), '/a/b')
+      assert.equal(normalizeRouteExpress('/a{{/b}}', {}, '/a', true), '/a')
+    })
+
+    it('still resolves genuinely nested optional params', () => {
+      assert.equal(normalizeRouteExpress('/a{/:b{/:c}}', {}, '/a/x/y', true), '/a/{b}/{c}')
+      assert.equal(normalizeRouteExpress('/a{/:b{/:c}}', {}, '/a/x', true), '/a/{b}')
+    })
+  })
 })

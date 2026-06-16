@@ -305,9 +305,40 @@ function compileRoute (route, isV5 = true) {
     }
   }
 
-  const optionalGroups = []
-  for (const [id] of groupParent) optionalGroups.push(id)
-  optionalGroups.sort((a, b) => a - b)
+  // A catch-all must be terminal: any non-empty segment after the one containing a wildcard can't
+  // be represented (the catch-all consumes the rest). Omit rather than emit a misleading route.
+  for (let s = 0; s < cleaned.length - 1; s++) {
+    if (cleaned[s].tokens.some(t => t.type === 'wildcard')) return null
+  }
+
+  // Two or more independent optional groups within a single segment (e.g. ':a{.:b}{-:c}') can't be
+  // resolved by our single per-segment regex the way path-to-regexp's ordered alternatives do, so
+  // the combined name could be wrong. Omit rather than guess.
+  for (const seg of cleaned) {
+    const intra = new Set()
+    for (const t of seg.tokens) {
+      if (isStrictDescendant(t.group, seg.group, groupParent)) intra.add(t.group)
+    }
+    if (intra.size > 1) return null
+  }
+
+  // Collapse "structural-only" optional groups — a `{...}` that wraps only nested group(s) and has
+  // no segment/token of its own (e.g. the outer braces in '/a{{/b}}'). Such a wrapper adds nesting
+  // but no content, and the matcher can never mark it present from the URL. Reparent each
+  // represented group to its nearest represented ancestor and drop the empty wrappers.
+  const represented = new Set()
+  for (const seg of cleaned) {
+    if (seg.group !== 0) represented.add(seg.group)
+    for (const t of seg.tokens) if (t.group !== 0) represented.add(t.group)
+  }
+  const effectiveParent = new Map()
+  for (const g of represented) {
+    let p = groupParent.get(g)
+    while (p !== 0 && p !== undefined && !represented.has(p)) p = groupParent.get(p)
+    effectiveParent.set(g, p === undefined ? 0 : p)
+  }
+
+  const optionalGroups = [...represented].sort((a, b) => a - b)
 
   // Guard against pathological routes: too many optional groups makes the presence bitmask
   // (1 << i) overflow 32 bits and the backtracking matcher blow up. Omit rather than risk a
@@ -316,7 +347,7 @@ function compileRoute (route, isV5 = true) {
 
   const compiled = {
     segments: cleaned,
-    groupParent,
+    groupParent: effectiveParent,
     optionalGroups,
     trailingSlash,
     precomputed: null,
@@ -598,8 +629,11 @@ function isValidRegex (src) {
  */
 function constraintMatchesSlash (src) {
   if (!isValidRegex(src)) return false
-  // A literal '/' in the source (outside an escape) means the param can span segments.
-  if (src.replaceAll(/\\./g, '').includes('/')) return true
+  // A literal '/' in the source means the param can span segments — but only when it is NOT
+  // inside a character class (e.g. `[^/]+` denies slashes despite containing one). Strip escapes
+  // and `[...]` classes before the literal check.
+  const stripped = src.replaceAll(/\\./g, '').replaceAll(/\[[^\]]*\]/g, '')
+  if (stripped.includes('/')) return true
   try {
     const re = new RegExp(`^(?:${src})$`)
     return re.test('a/b') || re.test('a/b/c') || re.test('/')
