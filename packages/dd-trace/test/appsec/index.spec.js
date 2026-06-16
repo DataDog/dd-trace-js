@@ -249,8 +249,8 @@ describe('AppSec Index', function () {
 
     it('should call appsec telemetry enable', () => {
       config.telemetry = {
-        enabled: true,
-        metrics: true,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_METRICS_ENABLED: true,
       }
       AppSec.enable(config)
 

@@ -193,7 +193,7 @@ function appStarted (config) {
 }
 
 function appClosing () {
-  if (!config?.telemetry?.DD_INSTRUMENTATION_TELEMETRY_ENABLED) {
+  if (!config?.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED) {
     return
   }
   // Give chance to listeners to update metrics before shutting down.

@@ -421,8 +421,7 @@ describe('Appsec Waf Telemetry metrics', () => {
   describe('if disabled', () => {
     it('should not increment any metric if telemetry is disabled', () => {
       appsecTelemetry.enable({
-        enabled: false,
-        metrics: true,
+        telemetry: { DD_INSTRUMENTATION_TELEMETRY_ENABLED: false, DD_TELEMETRY_METRICS_ENABLED: true },
       })
 
       appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion, true)
@@ -433,8 +432,7 @@ describe('Appsec Waf Telemetry metrics', () => {
 
     it('should not increment any metric if telemetry metrics are disabled', () => {
       appsecTelemetry.enable({
-        enabled: true,
-        metrics: false,
+        telemetry: { DD_INSTRUMENTATION_TELEMETRY_ENABLED: true, DD_TELEMETRY_METRICS_ENABLED: false },
       })
 
       appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion, true)
@@ -458,8 +456,7 @@ describe('Appsec Waf Telemetry metrics', () => {
     describe('updateWafRequestMetricTags', () => {
       it('should sum waf.duration and waf.durationExt request metrics', () => {
         appsecTelemetry.enable({
-          enabled: false,
-          metrics: true,
+          telemetry: { DD_INSTRUMENTATION_TELEMETRY_ENABLED: false, DD_TELEMETRY_METRICS_ENABLED: true },
         })
 
         appsecTelemetry.updateWafRequestsMetricTags({
@@ -480,8 +477,7 @@ describe('Appsec Waf Telemetry metrics', () => {
 
       it('should sum waf.duration and waf.durationExt with telemetry enabled and metrics disabled', () => {
         appsecTelemetry.enable({
-          enabled: true,
-          metrics: false,
+          telemetry: { DD_INSTRUMENTATION_TELEMETRY_ENABLED: true, DD_TELEMETRY_METRICS_ENABLED: false },
         })
 
         appsecTelemetry.updateWafRequestsMetricTags({

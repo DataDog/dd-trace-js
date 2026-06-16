@@ -40,7 +40,7 @@ function onChildProcessStart (context) {
 }
 
 function start (config) {
-  if (!config.telemetry?.DD_INSTRUMENTATION_TELEMETRY_ENABLED || subscribed) return
+  if (!config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED || subscribed) return
   subscribed = true
 
   runtimeId = config.DD_ROOT_JS_SESSION_ID || config.tags['runtime-id']

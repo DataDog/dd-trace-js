@@ -135,7 +135,7 @@ describe('telemetry', () => {
         'runtime-id': '1a2b3c',
       },
       circularObject,
-      appsec: { enabled: true },
+      appsec: { enabled: true, apiSecurity: { endpointCollectionEnabled: false } },
       profiling: { DD_PROFILING_ENABLED: 'true' },
       peerServiceMapping: {
         service_1: 'remapped_service_1',
@@ -339,7 +339,7 @@ describe('telemetry app-heartbeat', () => {
       port: 0,
       service: 'test service',
       version: '1.2.3-beta4',
-      appsec: { enabled: true },
+      appsec: { enabled: true, apiSecurity: { endpointCollectionEnabled: false } },
       profiling: { DD_PROFILING_ENABLED: true },
       env: 'preprod',
       tags: {
@@ -407,7 +407,7 @@ describe('Telemetry extended heartbeat', () => {
       port: 0,
       service: 'test service',
       version: '1.2.3-beta4',
-      appsec: { enabled: true },
+      appsec: { enabled: true, apiSecurity: { endpointCollectionEnabled: false } },
       profiling: { DD_PROFILING_ENABLED: true },
       env: 'preprod',
       tags: {
@@ -452,7 +452,7 @@ describe('Telemetry extended heartbeat', () => {
       port: 0,
       service: 'test service',
       version: '1.2.3-beta4',
-      appsec: { enabled: true },
+      appsec: { enabled: true, apiSecurity: { endpointCollectionEnabled: false } },
       profiling: { DD_PROFILING_ENABLED: true },
       env: 'preprod',
       tags: {
@@ -559,7 +559,7 @@ describe('Telemetry extended heartbeat', () => {
       port: 0,
       service: 'test service',
       version: '1.2.3-beta4',
-      appsec: { enabled: true },
+      appsec: { enabled: true, apiSecurity: { endpointCollectionEnabled: false } },
       profiling: { DD_PROFILING_ENABLED: true },
       env: 'preprod',
       tags: {
@@ -655,7 +655,7 @@ describe('Telemetry retry', () => {
       port: 0,
       service: 'test service',
       version: '1.2.3-beta4',
-      appsec: { enabled: true },
+      appsec: { enabled: true, apiSecurity: { endpointCollectionEnabled: false } },
       profiling: { DD_PROFILING_ENABLED: true },
       env: 'preprod',
       tags: {
@@ -748,7 +748,7 @@ describe('Telemetry retry', () => {
       port: 0,
       service: 'test service',
       version: '1.2.3-beta4',
-      appsec: { enabled: true },
+      appsec: { enabled: true, apiSecurity: { endpointCollectionEnabled: false } },
       profiling: { DD_PROFILING_ENABLED: true },
       env: 'preprod',
       tags: {
@@ -823,7 +823,7 @@ describe('Telemetry retry', () => {
       port: 0,
       service: 'test service',
       version: '1.2.3-beta4',
-      appsec: { enabled: true },
+      appsec: { enabled: true, apiSecurity: { endpointCollectionEnabled: false } },
       profiling: { DD_PROFILING_ENABLED: true },
       env: 'preprod',
       tags: {
@@ -889,7 +889,7 @@ describe('Telemetry retry', () => {
       port: 0,
       service: 'test service',
       version: '1.2.3-beta4',
-      appsec: { enabled: true },
+      appsec: { enabled: true, apiSecurity: { endpointCollectionEnabled: false } },
       profiling: { DD_PROFILING_ENABLED: true },
       env: 'preprod',
       tags: {
@@ -977,7 +977,7 @@ describe('Telemetry retry', () => {
       port: 0,
       service: 'test service',
       version: '1.2.3-beta4',
-      appsec: { enabled: true },
+      appsec: { enabled: true, apiSecurity: { endpointCollectionEnabled: false } },
       profiling: { DD_PROFILING_ENABLED: true },
       env: 'preprod',
       tags: {
@@ -1080,7 +1080,7 @@ describe('AVM OSS', () => {
             tags: {
               'runtime-id': '1a2b3c',
             },
-            appsec: { enabled: false },
+            appsec: { enabled: false, apiSecurity: { endpointCollectionEnabled: false } },
             profiling: { DD_PROFILING_ENABLED: false },
           }
         })
