@@ -270,9 +270,9 @@ describe('Appsec Rasp Telemetry metrics', () => {
 
   describe('if disabled', () => {
     it('should not increment any metric if telemetry is disabled', () => {
-      appsecTelemetry.enable({
-        telemetry: { DD_INSTRUMENTATION_TELEMETRY_ENABLED: false, DD_TELEMETRY_METRICS_ENABLED: true },
-      })
+      const config = getConfig()
+      config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED = false
+      appsecTelemetry.enable(config)
 
       appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion)
 
@@ -281,9 +281,9 @@ describe('Appsec Rasp Telemetry metrics', () => {
     })
 
     it('should not increment any metric if telemetry metrics are disabled', () => {
-      appsecTelemetry.enable({
-        telemetry: { DD_INSTRUMENTATION_TELEMETRY_ENABLED: true, DD_TELEMETRY_METRICS_ENABLED: false },
-      })
+      const config = getConfig()
+      config.telemetry.DD_TELEMETRY_METRICS_ENABLED = false
+      appsecTelemetry.enable(config)
 
       appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion)
 
@@ -293,9 +293,9 @@ describe('Appsec Rasp Telemetry metrics', () => {
 
     describe('updateRaspRequestsMetricTags', () => {
       it('should sum rasp.duration and rasp.durationExt request metrics', () => {
-        appsecTelemetry.enable({
-          telemetry: { DD_INSTRUMENTATION_TELEMETRY_ENABLED: false, DD_TELEMETRY_METRICS_ENABLED: true },
-        })
+        const config = getConfig()
+        config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED = false
+        appsecTelemetry.enable(config)
 
         appsecTelemetry.updateRaspRequestsMetricTags({
           duration: 42,
@@ -315,9 +315,9 @@ describe('Appsec Rasp Telemetry metrics', () => {
       })
 
       it('should sum rasp.duration and rasp.durationExt with telemetry enabled and metrics disabled', () => {
-        appsecTelemetry.enable({
-          telemetry: { DD_INSTRUMENTATION_TELEMETRY_ENABLED: true, DD_TELEMETRY_METRICS_ENABLED: false },
-        })
+        const config = getConfig()
+        config.telemetry.DD_TELEMETRY_METRICS_ENABLED = false
+        appsecTelemetry.enable(config)
 
         appsecTelemetry.updateRaspRequestsMetricTags({
           duration: 42,
@@ -337,9 +337,9 @@ describe('Appsec Rasp Telemetry metrics', () => {
       })
 
       it('should not increment any metric if telemetry metrics are disabled', () => {
-        appsecTelemetry.enable({
-          telemetry: { DD_INSTRUMENTATION_TELEMETRY_ENABLED: true, DD_TELEMETRY_METRICS_ENABLED: false },
-        })
+        const config = getConfig()
+        config.telemetry.DD_TELEMETRY_METRICS_ENABLED = false
+        appsecTelemetry.enable(config)
 
         appsecTelemetry.updateRaspRequestsMetricTags({
           duration: 24,

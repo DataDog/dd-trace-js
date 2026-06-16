@@ -420,9 +420,9 @@ describe('Appsec Waf Telemetry metrics', () => {
 
   describe('if disabled', () => {
     it('should not increment any metric if telemetry is disabled', () => {
-      appsecTelemetry.enable({
-        telemetry: { DD_INSTRUMENTATION_TELEMETRY_ENABLED: false, DD_TELEMETRY_METRICS_ENABLED: true },
-      })
+      const config = getConfig()
+      config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED = false
+      appsecTelemetry.enable(config)
 
       appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion, true)
 
@@ -431,9 +431,9 @@ describe('Appsec Waf Telemetry metrics', () => {
     })
 
     it('should not increment any metric if telemetry metrics are disabled', () => {
-      appsecTelemetry.enable({
-        telemetry: { DD_INSTRUMENTATION_TELEMETRY_ENABLED: true, DD_TELEMETRY_METRICS_ENABLED: false },
-      })
+      const config = getConfig()
+      config.telemetry.DD_TELEMETRY_METRICS_ENABLED = false
+      appsecTelemetry.enable(config)
 
       appsecTelemetry.incrementWafInitMetric(wafVersion, rulesVersion, true)
 
@@ -455,9 +455,9 @@ describe('Appsec Waf Telemetry metrics', () => {
 
     describe('updateWafRequestMetricTags', () => {
       it('should sum waf.duration and waf.durationExt request metrics', () => {
-        appsecTelemetry.enable({
-          telemetry: { DD_INSTRUMENTATION_TELEMETRY_ENABLED: false, DD_TELEMETRY_METRICS_ENABLED: true },
-        })
+        const config = getConfig()
+        config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED = false
+        appsecTelemetry.enable(config)
 
         appsecTelemetry.updateWafRequestsMetricTags({
           duration: 42,
@@ -476,9 +476,9 @@ describe('Appsec Waf Telemetry metrics', () => {
       })
 
       it('should sum waf.duration and waf.durationExt with telemetry enabled and metrics disabled', () => {
-        appsecTelemetry.enable({
-          telemetry: { DD_INSTRUMENTATION_TELEMETRY_ENABLED: true, DD_TELEMETRY_METRICS_ENABLED: false },
-        })
+        const config = getConfig()
+        config.telemetry.DD_TELEMETRY_METRICS_ENABLED = false
+        appsecTelemetry.enable(config)
 
         appsecTelemetry.updateWafRequestsMetricTags({
           duration: 42,
