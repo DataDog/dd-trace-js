@@ -22,7 +22,7 @@ if (!global._ddtrace) {
     }
   })
 
-  const TracerProxy = require('./proxy')
+  const TracerProxy = require('.')
 
   Object.defineProperty(global, '_ddtrace', {
     value: new TracerProxy(),
