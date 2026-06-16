@@ -1,4 +1,4 @@
 'use strict'
 
 require('./src/openfeature/register')
-module.exports = require('./index.electron')
+module.exports = require('./src/bootstrap')
