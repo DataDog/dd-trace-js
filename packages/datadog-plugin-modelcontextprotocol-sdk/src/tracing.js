@@ -1,6 +1,6 @@
 'use strict'
 
-const { channel } = require('diagnostics_channel')
+const { channel } = require('dc-polyfill')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
 const toolNames = new WeakMap()
@@ -44,75 +44,107 @@ function tagRequestResult (span, result) {
   }
 }
 
-class McpToolCallPlugin extends TracingPlugin {
+class McpPlugin extends TracingPlugin {
+  bindStart (ctx) {
+    this.startSpan(this.constructor.spanName, {
+      resource: this.getResource(ctx),
+      type: 'mcp',
+      kind: this.constructor.kind,
+    }, ctx)
+    const span = ctx.currentStore?.span
+    if (span) this.onStart(span, ctx)
+    return ctx.currentStore
+  }
+
+  asyncEnd (ctx) {
+    const span = ctx.currentStore?.span
+    if (span) this.onEnd(span, ctx)
+    super.finish(ctx)
+  }
+
+  getResource () {}
+  onStart () {}
+  onEnd () {}
+}
+
+class McpToolCallPlugin extends McpPlugin {
   static id = 'modelcontextprotocol_client'
   static prefix = 'tracing:orchestrion:@modelcontextprotocol/sdk:Client_callTool'
-
-  bindStart (ctx) {
-    const params = ctx.arguments?.[0]
-    this.startSpan('mcp.client.tool.call', { resource: params?.name, type: 'mcp', kind: 'client' }, ctx)
-    return ctx.currentStore
-  }
-
-  asyncEnd (ctx) {
-    setIsErrorTag(ctx)
-    super.finish(ctx)
-  }
+  static spanName = 'mcp.client.tool.call'
+  static kind = 'client'
+  getResource (ctx) { return ctx.arguments?.[0]?.name }
+  onEnd (span, ctx) { setIsErrorTag(ctx) }
 }
 
-class McpListToolsPlugin extends TracingPlugin {
+class McpListToolsPlugin extends McpPlugin {
   static id = 'modelcontextprotocol_list_tools'
   static prefix = 'tracing:orchestrion:@modelcontextprotocol/sdk:Client_listTools'
-
-  bindStart (ctx) {
-    this.startSpan('mcp.tools.list', { resource: 'tools/list', type: 'mcp', kind: 'client' }, ctx)
-    return ctx.currentStore
-  }
-
-  asyncEnd (ctx) {
-    super.finish(ctx)
-  }
+  static spanName = 'mcp.tools.list'
+  static kind = 'client'
+  getResource () { return 'tools/list' }
 }
 
-class McpServerRequestPlugin extends TracingPlugin {
+class McpListResourcesPlugin extends McpPlugin {
+  static id = 'modelcontextprotocol_list_resources'
+  static prefix = 'tracing:orchestrion:@modelcontextprotocol/sdk:Client_listResources'
+  static spanName = 'mcp.resources.list'
+  static kind = 'client'
+  getResource () { return 'resources/list' }
+}
+
+class McpReadResourcePlugin extends McpPlugin {
+  static id = 'modelcontextprotocol_read_resource'
+  static prefix = 'tracing:orchestrion:@modelcontextprotocol/sdk:Client_readResource'
+  static spanName = 'mcp.resource.read'
+  static kind = 'client'
+  getResource (ctx) { return ctx.arguments?.[0]?.uri }
+}
+
+class McpListPromptsPlugin extends McpPlugin {
+  static id = 'modelcontextprotocol_list_prompts'
+  static prefix = 'tracing:orchestrion:@modelcontextprotocol/sdk:Client_listPrompts'
+  static spanName = 'mcp.prompts.list'
+  static kind = 'client'
+  getResource () { return 'prompts/list' }
+}
+
+class McpGetPromptPlugin extends McpPlugin {
+  static id = 'modelcontextprotocol_get_prompt'
+  static prefix = 'tracing:orchestrion:@modelcontextprotocol/sdk:Client_getPrompt'
+  static spanName = 'mcp.prompt.get'
+  static kind = 'client'
+  getResource (ctx) { return ctx.arguments?.[0]?.name }
+}
+
+class McpServerRequestPlugin extends McpPlugin {
   static id = 'modelcontextprotocol_server'
   static prefix = 'tracing:apm:mcp:server:request'
-
-  bindStart (ctx) {
-    const { request } = ctx
-    this.startSpan('mcp.server.request', { resource: request?.method, type: 'mcp', kind: 'server' }, ctx)
-    const span = ctx.currentStore?.span
-    if (span) tagRequestParams(span, request)
-    return ctx.currentStore
-  }
-
-  asyncEnd (ctx) {
-    const span = ctx.currentStore?.span
-    if (ctx.error) span?.setTag('error', ctx.error)
-    if (span) tagRequestResult(span, ctx.result)
-    super.finish(ctx)
+  static spanName = 'mcp.server.request'
+  static kind = 'server'
+  getResource (ctx) { return ctx.request?.method }
+  onStart (span, ctx) { tagRequestParams(span, ctx.request) }
+  onEnd (span, ctx) {
+    if (ctx.error) span.setTag('error', ctx.error)
+    tagRequestResult(span, ctx.result)
   }
 }
 
-class McpServerToolCallPlugin extends TracingPlugin {
+class McpServerToolCallPlugin extends McpPlugin {
   static id = 'modelcontextprotocol_server_tool'
   static prefix = 'tracing:orchestrion:@modelcontextprotocol/sdk:McpServer_executeToolHandler'
-
-  bindStart (ctx) {
-    const [tool] = ctx.arguments || []
-    this.startSpan('mcp.server.tool.call', { resource: toolNames.get(tool), type: 'mcp', kind: 'internal' }, ctx)
-    return ctx.currentStore
-  }
-
-  asyncEnd (ctx) {
-    setIsErrorTag(ctx)
-    super.finish(ctx)
-  }
+  static spanName = 'mcp.server.tool.call'
+  static kind = 'internal'
+  getResource (ctx) { return toolNames.get(ctx.arguments?.[0]) }
+  onEnd (span, ctx) { setIsErrorTag(ctx) }
 }
 
 module.exports = [
   McpToolCallPlugin,
   McpListToolsPlugin,
+  McpListResourcesPlugin,
+  McpReadResourcePlugin,
+  McpListPromptsPlugin,
+  McpGetPromptPlugin,
   McpServerRequestPlugin,
   McpServerToolCallPlugin,
 ]

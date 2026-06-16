@@ -85,6 +85,58 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
     })
   })
 
+  describe('Client.listResources() - mcp.resources.list', () => {
+    it('should generate span with correct tags', async () => {
+      const traceAssertion = expectSomeSpan(agent, {
+        name: 'mcp.resources.list',
+        type: 'mcp',
+        resource: 'resources/list',
+        meta: { component: 'modelcontextprotocol_list_resources', 'span.kind': 'client' },
+      })
+      await testSetup.clientListResources()
+      return traceAssertion
+    })
+  })
+
+  describe('Client.readResource() - mcp.resource.read', () => {
+    it('should generate span with resource uri as resource tag', async () => {
+      const traceAssertion = expectSomeSpan(agent, {
+        name: 'mcp.resource.read',
+        type: 'mcp',
+        resource: 'file:///test-resource.txt',
+        meta: { component: 'modelcontextprotocol_read_resource', 'span.kind': 'client' },
+      })
+      await testSetup.clientReadResource()
+      return traceAssertion
+    })
+  })
+
+  describe('Client.listPrompts() - mcp.prompts.list', () => {
+    it('should generate span with correct tags', async () => {
+      const traceAssertion = expectSomeSpan(agent, {
+        name: 'mcp.prompts.list',
+        type: 'mcp',
+        resource: 'prompts/list',
+        meta: { component: 'modelcontextprotocol_list_prompts', 'span.kind': 'client' },
+      })
+      await testSetup.clientListPrompts()
+      return traceAssertion
+    })
+  })
+
+  describe('Client.getPrompt() - mcp.prompt.get', () => {
+    it('should generate span with prompt name as resource tag', async () => {
+      const traceAssertion = expectSomeSpan(agent, {
+        name: 'mcp.prompt.get',
+        type: 'mcp',
+        resource: 'test-prompt',
+        meta: { component: 'modelcontextprotocol_get_prompt', 'span.kind': 'client' },
+      })
+      await testSetup.clientGetPrompt()
+      return traceAssertion
+    })
+  })
+
   describe('Protocol.setRequestHandler - mcp.server.request', () => {
     it('should tag mcp.tool.name and mcp.request.arguments on tools/call', async () => {
       const traceAssertion = expectSomeSpan(agent, {
