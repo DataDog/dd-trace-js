@@ -141,21 +141,23 @@ describe('FlagEvaluationsWriter', () => {
   })
 
   describe('two-tier aggregation — full tier', () => {
-    it('two identical evaluations aggregate into ONE bucket with count=2 and first<=last', () => {
-      const ev1 = makeEvent({ evalTimeMs: 1760000001000 })
-      const ev2 = makeEvent({ evalTimeMs: 1760000002000 })
+    it('identical evaluations aggregate into ONE bucket with count and first/last bounds', () => {
+      const ev1 = makeEvent({ evalTimeMs: 1760000002000 })
+      const ev2 = makeEvent({ evalTimeMs: 1760000001000 })
+      const ev3 = makeEvent({ evalTimeMs: 1760000003000 })
 
       writer.enqueue(ev1)
       writer.enqueue(ev2)
+      writer.enqueue(ev3)
       writer.flush()
 
       const payload = JSON.parse(request.getCall(0).args[0])
       assert.strictEqual(payload.flagEvaluations.length, 1)
       const ev = payload.flagEvaluations[0]
-      assert.strictEqual(ev.evaluation_count, 2)
+      assert.strictEqual(ev.evaluation_count, 3)
       assert.ok(ev.first_evaluation <= ev.last_evaluation)
       assert.strictEqual(ev.first_evaluation, 1760000001000)
-      assert.strictEqual(ev.last_evaluation, 1760000002000)
+      assert.strictEqual(ev.last_evaluation, 1760000003000)
     })
 
     it('two evaluations differing only by context attr value type (int vs string) produce TWO distinct buckets', () => {
@@ -181,6 +183,17 @@ describe('FlagEvaluationsWriter', () => {
 
       const payload = JSON.parse(request.getCall(0).args[0])
       assert.strictEqual(payload.flagEvaluations.length, 2)
+    })
+
+    it('context keying keeps boolean, null, and empty-context snapshots distinct', () => {
+      writer.enqueue(makeEvent({ attrs: { value: true } }))
+      writer.enqueue(makeEvent({ attrs: { value: false } }))
+      writer.enqueue(makeEvent({ attrs: { value: null } }))
+      writer.enqueue(makeEvent({ attrs: { value: new Date('2026-06-16T00:00:00.000Z') } }))
+      writer.flush()
+
+      const payload = JSON.parse(request.getCall(0).args[0])
+      assert.strictEqual(payload.flagEvaluations.length, 4)
     })
   })
 
@@ -213,6 +226,25 @@ describe('FlagEvaluationsWriter', () => {
       writer.enqueue(makeEvent({ flagKey: 'flag-b', attrs: { x: 2 } }))
 
       assert.ok(writer._droppedDegradedOverflow >= 0, 'droppedDegradedOverflow must be an observable number')
+    })
+
+    it('existing degraded buckets aggregate count and first/last bounds', () => {
+      writer._globalCap = 0
+      writer._degradedCap = 100000
+
+      writer.enqueue(makeEvent({ evalTimeMs: 1760000002000 }))
+      writer.enqueue(makeEvent({ evalTimeMs: 1760000001000 }))
+      writer.enqueue(makeEvent({ evalTimeMs: 1760000003000 }))
+      writer.flush()
+
+      const payload = JSON.parse(request.getCall(0).args[0])
+      assert.strictEqual(payload.flagEvaluations.length, 1)
+      const ev = payload.flagEvaluations[0]
+      assert.strictEqual(ev.evaluation_count, 3)
+      assert.strictEqual(ev.first_evaluation, 1760000001000)
+      assert.strictEqual(ev.last_evaluation, 1760000003000)
+      assert.ok(!ev.targeting_key, 'degraded tier must omit targeting_key')
+      assert.ok(!ev.context, 'degraded tier must omit context')
     })
   })
 
@@ -297,6 +329,24 @@ describe('FlagEvaluationsWriter', () => {
       })
     })
 
+    it('flattens arrays and skips unsupported context values before queueing', () => {
+      writer.enqueue(makeEvent({
+        attrs: {
+          list: ['a', { nested: true }, null],
+          skipUndefined: undefined,
+          skipFunction: () => {},
+          skipSymbol: Symbol('skip'),
+          skipBigInt: 1n,
+        },
+      }))
+
+      assert.deepStrictEqual(writer._rawQueue[0].attrs, {
+        'list.0': 'a',
+        'list.1.nested': true,
+        'list.2': null,
+      })
+    })
+
     it('does not include targetingKey inside context.evaluation', () => {
       writer.enqueue(makeEvent({ attrs: { targetingKey: 'user-1', plan: 'premium' } }))
       writer.flush()
@@ -344,6 +394,32 @@ describe('FlagEvaluationsWriter', () => {
 
       sinon.assert.notCalled(request)
       sinon.assert.calledWithMatch(log.warn, sinon.match(/event size .* exceeds limit/))
+    })
+
+    it('drops a single aggregate event that exceeds the payload limit', () => {
+      writer._payloadSizeLimit = 1
+
+      writer.enqueue(makeEvent())
+      writer.flush()
+
+      sinon.assert.notCalled(request)
+      sinon.assert.calledWithMatch(log.warn, sinon.match(/payload size .* exceeds limit/))
+      assert.strictEqual(writer._droppedEvents, 1)
+    })
+
+    it('sends the current batch, then drops the next event when it alone exceeds the payload limit', () => {
+      writer._payloadSizeLimit = 350
+
+      writer.enqueue(makeEvent({ flagKey: 'small', attrs: {} }))
+      writer.enqueue(makeEvent({ flagKey: 'large', attrs: { blob: 'x'.repeat(256) } }))
+      writer.flush()
+
+      sinon.assert.calledOnce(request)
+      const payload = JSON.parse(request.getCall(0).args[0])
+      assert.strictEqual(payload.flagEvaluations.length, 1)
+      assert.strictEqual(payload.flagEvaluations[0].flag.key, 'small')
+      sinon.assert.calledWithMatch(log.warn, sinon.match(/payload size .* exceeds limit/))
+      assert.strictEqual(writer._droppedEvents, 1)
     })
   })
 
