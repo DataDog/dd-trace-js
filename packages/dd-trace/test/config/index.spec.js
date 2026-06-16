@@ -4737,4 +4737,10 @@ rules:
       assert.strictEqual(config.service, 'node')
     })
   })
+
+  it('should override ddTraceMetricsOtelFlushInterval via _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL', () => {
+    process.env._DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL = '5000'
+    const config = getConfig()
+    assert.strictEqual(config.ddTraceMetricsOtelFlushInterval, 5000)
+  })
 })
