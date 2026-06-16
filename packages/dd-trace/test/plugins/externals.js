@@ -340,6 +340,12 @@ module.exports = {
       versions: ['^5.0.8'],
     },
     {
+      // knex 1.x is the only major whose sqlite3 dialect requires the @vscode/sqlite3 fork instead of `sqlite3`
+      // (reverted in 2.x). Pin an exact prerelease build so prebuilt binaries exist for the whole Node CI matrix.
+      name: '@vscode/sqlite3',
+      versions: ['5.1.12-vscode'],
+    },
+    {
       name: 'pg',
       versions: [
         '8.7.3',

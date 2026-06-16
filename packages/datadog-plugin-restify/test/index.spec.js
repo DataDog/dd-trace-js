@@ -21,8 +21,10 @@ describe('Plugin', () => {
     withVersions('restify', 'restify', version => {
       const pkgVersion = require(`../../../versions/restify@${version}`).version()
 
-      // Some internal code of older versions is not compatible with Node >6
-      if (semver.intersects(pkgVersion, '<5')) return
+      // restify <9 targets Node <=12 and breaks on the maintenance-LTS runner this job uses: 7.x crashes setting the
+      // getter-only `stream.closed`, and 5.x/6.x mismatch the bundled router. restify >=9 targets Node >=14, so the
+      // floor + every in-between major now installed below only run from 9 upward.
+      if (semver.intersects(pkgVersion, '<9')) return
 
       beforeEach(() => {
         tracer = require('../../dd-trace')
