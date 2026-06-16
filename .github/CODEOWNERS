@@ -363,6 +363,8 @@
 /packages/datadog-core/ @DataDog/lang-platform-js
 /packages/datadog-shimmer/ @DataDog/lang-platform-js
 /packages/dd-trace/*/crashtracking/ @DataDog/lang-platform-js
+/packages/dd-trace/src/bootstrap.js @DataDog/lang-platform-js
+/packages/dd-trace/src/feature-registry.js @DataDog/lang-platform-js
 /packages/dd-trace/src/exporters/common/ @DataDog/lang-platform-js
 /packages/dd-trace/test/agent/ @DataDog/lang-platform-js
 /packages/dd-trace/test/dd-trace.spec.js @DataDog/lang-platform-js
