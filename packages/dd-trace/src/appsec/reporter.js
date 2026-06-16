@@ -379,7 +379,8 @@ function reportAttack ({ events: attackData, actions }, req, rootSpan) {
   if (!rootSpan) {
     rootSpan = web.root(req)
   }
-  if (!rootSpan) return
+
+  if (!req || !rootSpan) return
 
   const spanContext = rootSpan.context()
 
@@ -400,13 +401,11 @@ function reportAttack ({ events: attackData, actions }, req, rootSpan) {
     ? currentJson.slice(0, -2) + ',' + attackDataStr.slice(1) + '}'
     : '{"triggers":' + attackDataStr + '}'
 
-  if (req?.socket) {
+  if (req.socket) {
     newTags[NETWORK_CLIENT_IP] = req.socket.remoteAddress
   }
 
   rootSpan.addTags(newTags)
-
-  if (!req) return
 
   // Add _dd.appsec.json tag to inferred proxy span
   if (config.inferredProxyServicesEnabled) {

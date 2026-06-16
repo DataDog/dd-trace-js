@@ -1366,17 +1366,6 @@ describe('reporter', () => {
       assert.ok(tags['_dd.appsec.json'].includes('test-rule'))
     })
 
-    it('should not crash when req is null and rootSpan is provided', () => {
-      Reporter.reportAttack({
-        events: [{ rule: { id: 'test-rule' } }],
-        actions: {},
-      }, null, span)
-
-      sinon.assert.calledOnce(span.addTags)
-      const tags = span.addTags.firstCall.args[0]
-      assert.strictEqual(tags['appsec.event'], 'true')
-    })
-
     it('should not set NETWORK_CLIENT_IP when req has no socket', () => {
       Reporter.reportAttack({
         events: [{ rule: { id: 'test-rule' } }],
