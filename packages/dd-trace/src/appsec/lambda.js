@@ -7,6 +7,10 @@ const addresses = require('./addresses')
 const Reporter = require('./reporter')
 const waf = require('./waf')
 
+// Tracks spans for which start-invocation has been processed, so that
+// end-invocation can gate correctly
+const activeInvocations = new WeakSet()
+
 /**
  * Maps pre-extracted HTTP data from the Lambda event to WAF addresses,
  * runs the WAF, and reports results on the span.
@@ -27,14 +31,9 @@ function onLambdaStartInvocation (data) {
       return
     }
 
-    const invocationKey = {}
-    span._lambdaAppsecKey = invocationKey
+    activeInvocations.add(span)
 
     span.setTag('_dd.appsec.enabled', 1)
-
-    if (clientIp) {
-      span.setTag(HTTP_CLIENT_IP, clientIp)
-    }
 
     const persistent = {}
 
@@ -52,6 +51,7 @@ function onLambdaStartInvocation (data) {
     }
 
     if (clientIp) {
+      span.setTag(HTTP_CLIENT_IP, clientIp)
       persistent[addresses.HTTP_CLIENT_IP] = clientIp
     }
 
@@ -71,7 +71,7 @@ function onLambdaStartInvocation (data) {
       persistent[addresses.HTTP_INCOMING_COOKIES] = cookies
     }
 
-    waf.run({ persistent }, invocationKey, undefined, span)
+    waf.run({ persistent }, span, undefined, span)
   } catch (err) {
     log.error('[ASM] Error in Lambda start-invocation handler', err)
   }
@@ -93,32 +93,34 @@ function onLambdaEndInvocation (data) {
       return
     }
 
-    const invocationKey = span._lambdaAppsecKey
-    if (!invocationKey) {
+    if (!activeInvocations.has(span)) {
       return
     }
 
+    activeInvocations.delete(span)
+
+    let hasPersistentData = false
     const persistent = {}
 
     if (statusCode) {
       persistent[addresses.HTTP_INCOMING_RESPONSE_CODE] = String(statusCode)
+      hasPersistentData = true
     }
 
     if (responseHeaders) {
       const filteredHeaders = { ...responseHeaders }
       delete filteredHeaders['set-cookie']
       persistent[addresses.HTTP_INCOMING_RESPONSE_HEADERS] = filteredHeaders
+      hasPersistentData = true
     }
 
-    if (Object.keys(persistent).length > 0) {
-      waf.run({ persistent }, invocationKey, undefined, span)
+    if (hasPersistentData) {
+      waf.run({ persistent }, span, undefined, span)
     }
 
-    waf.disposeContext(invocationKey)
+    waf.disposeContext(span)
 
-    Reporter.finishRequest(null, null, {}, undefined, span)
-
-    delete span._lambdaAppsecKey
+    Reporter.finishRequest(span, null, {}, undefined, span)
   } catch (err) {
     log.error('[ASM] Error in Lambda end-invocation handler', err)
   }

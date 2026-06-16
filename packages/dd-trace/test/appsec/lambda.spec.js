@@ -93,21 +93,7 @@ describe('AppSec Lambda handler', () => {
       assert.equal(span.context().getTag('http.client_ip'), '1.2.3.4')
     })
 
-    it('should store the invocation key on the span', () => {
-      const span = fakeSpan()
-
-      lambda.onLambdaStartInvocation({
-        span,
-        headers: {},
-        method: 'GET',
-        path: '/',
-      })
-
-      assert.ok(span._lambdaAppsecKey)
-      assert.equal(typeof span._lambdaAppsecKey, 'object')
-    })
-
-    it('should call waf.run with mapped addresses', () => {
+    it('should call waf.run with mapped addresses using span as the invocation key', () => {
       const span = fakeSpan()
 
       lambda.onLambdaStartInvocation({
@@ -135,7 +121,7 @@ describe('AppSec Lambda handler', () => {
         [addresses.HTTP_INCOMING_PARAMS]: { id: '123' },
         [addresses.HTTP_INCOMING_COOKIES]: { session: 'abc' },
       })
-      assert.equal(key, span._lambdaAppsecKey)
+      assert.equal(key, span)
       assert.equal(raspRule, undefined)
       assert.equal(rootSpan, span)
     })
@@ -182,7 +168,7 @@ describe('AppSec Lambda handler', () => {
       sinon.assert.notCalled(waf.run)
     })
 
-    it('should return silently when no invocation key is found on span', () => {
+    it('should return silently when start-invocation was not called for this span', () => {
       const span = fakeSpan()
 
       lambda.onLambdaEndInvocation({ span })
@@ -193,7 +179,9 @@ describe('AppSec Lambda handler', () => {
 
     it('should run WAF with response addresses and dispose context', () => {
       const span = fakeSpan()
-      span._lambdaAppsecKey = {}
+
+      lambda.onLambdaStartInvocation({ span, headers: {}, method: 'GET', path: '/' })
+      waf.run.reset()
 
       lambda.onLambdaEndInvocation({
         span,
@@ -202,12 +190,13 @@ describe('AppSec Lambda handler', () => {
       })
 
       sinon.assert.calledOnce(waf.run)
-      const persistent = waf.run.firstCall.args[0].persistent
-      assert.equal(persistent[addresses.HTTP_INCOMING_RESPONSE_CODE], '200')
-      assert.deepStrictEqual(persistent[addresses.HTTP_INCOMING_RESPONSE_HEADERS], {
+      const [data, key] = waf.run.firstCall.args
+      assert.equal(data.persistent[addresses.HTTP_INCOMING_RESPONSE_CODE], '200')
+      assert.deepStrictEqual(data.persistent[addresses.HTTP_INCOMING_RESPONSE_HEADERS], {
         'content-type': 'application/json',
       })
-      assert.ok(!('set-cookie' in persistent[addresses.HTTP_INCOMING_RESPONSE_HEADERS]))
+      assert.ok(!('set-cookie' in data.persistent[addresses.HTTP_INCOMING_RESPONSE_HEADERS]))
+      assert.equal(key, span)
 
       sinon.assert.calledOnce(waf.disposeContext)
       sinon.assert.calledOnce(Reporter.finishRequest)
@@ -215,7 +204,9 @@ describe('AppSec Lambda handler', () => {
 
     it('should skip WAF run when no response data', () => {
       const span = fakeSpan()
-      span._lambdaAppsecKey = {}
+
+      lambda.onLambdaStartInvocation({ span, headers: {}, method: 'GET', path: '/' })
+      waf.run.reset()
 
       lambda.onLambdaEndInvocation({ span })
 
@@ -224,22 +215,21 @@ describe('AppSec Lambda handler', () => {
       sinon.assert.calledOnce(Reporter.finishRequest)
     })
 
-    it('should clean up _lambdaAppsecKey after processing', () => {
+    it('should not process end-invocation twice for the same span', () => {
       const span = fakeSpan()
-      span._lambdaAppsecKey = {}
 
-      lambda.onLambdaEndInvocation({
-        span,
-        statusCode: '200',
-      })
+      lambda.onLambdaStartInvocation({ span, headers: {}, method: 'GET', path: '/' })
+      lambda.onLambdaEndInvocation({ span, statusCode: '200' })
+      lambda.onLambdaEndInvocation({ span, statusCode: '200' })
 
-      assert.equal(span._lambdaAppsecKey, undefined)
+      assert.equal(waf.disposeContext.callCount, 1)
+      assert.equal(Reporter.finishRequest.callCount, 1)
     })
 
     it('should pass the span as rootSpan to Reporter.finishRequest', () => {
       const span = fakeSpan()
-      span._lambdaAppsecKey = {}
 
+      lambda.onLambdaStartInvocation({ span, headers: {}, method: 'GET', path: '/' })
       lambda.onLambdaEndInvocation({ span, statusCode: '200' })
 
       sinon.assert.calledOnce(Reporter.finishRequest)
@@ -247,9 +237,25 @@ describe('AppSec Lambda handler', () => {
       assert.equal(args[4], span)
     })
 
+    it('should pass span as req to Reporter.finishRequest', () => {
+      const span = fakeSpan()
+
+      lambda.onLambdaStartInvocation({ span, headers: {}, method: 'GET', path: '/' })
+      lambda.onLambdaEndInvocation({ span, statusCode: '200' })
+
+      sinon.assert.calledOnce(Reporter.finishRequest)
+      const [req, res, storedHeaders, body, rootSpan] = Reporter.finishRequest.firstCall.args
+      assert.equal(req, span)
+      assert.equal(res, null)
+      assert.deepStrictEqual(storedHeaders, {})
+      assert.equal(body, undefined)
+      assert.equal(rootSpan, span)
+    })
+
     it('should catch errors and log them', () => {
       const span = fakeSpan()
-      span._lambdaAppsecKey = {}
+
+      lambda.onLambdaStartInvocation({ span, headers: {}, method: 'GET', path: '/' })
       waf.disposeContext.throws(new Error('boom'))
 
       lambda.onLambdaEndInvocation({ span, statusCode: '200' })
@@ -257,22 +263,7 @@ describe('AppSec Lambda handler', () => {
       sinon.assert.calledOnce(log.error)
     })
 
-    it('should call Reporter.finishRequest with null req/res and the span as rootSpan', () => {
-      const span = fakeSpan()
-      span._lambdaAppsecKey = {}
-
-      lambda.onLambdaEndInvocation({ span, statusCode: '200' })
-
-      sinon.assert.calledOnce(Reporter.finishRequest)
-      const [req, res, storedHeaders, body, rootSpan] = Reporter.finishRequest.firstCall.args
-      assert.equal(req, null)
-      assert.equal(res, null)
-      assert.deepStrictEqual(storedHeaders, {})
-      assert.equal(body, undefined)
-      assert.equal(rootSpan, span)
-    })
-
-    it('should use the same invocationKey for WAF run and dispose across start and end', () => {
+    it('should use span as key for WAF run and dispose across start and end', () => {
       const span = fakeSpan()
 
       lambda.onLambdaStartInvocation({
@@ -282,25 +273,23 @@ describe('AppSec Lambda handler', () => {
         path: '/',
       })
 
-      const invocationKey = span._lambdaAppsecKey
-
       lambda.onLambdaEndInvocation({ span, statusCode: '200' })
 
       const startKey = waf.run.firstCall.args[1]
       const endKey = waf.run.secondCall.args[1]
       const disposeKey = waf.disposeContext.firstCall.args[0]
 
-      assert.equal(startKey, invocationKey)
-      assert.equal(endKey, invocationKey)
-      assert.equal(disposeKey, invocationKey)
+      assert.equal(startKey, span)
+      assert.equal(endKey, span)
+      assert.equal(disposeKey, span)
     })
   })
 })
 
 // ─── WAF path safety: contract enforcement for non-HTTP req ───────────────────
 //
-// In Lambda, `req` in the WAF execution path is a plain context key ({}) with
-// no HTTP properties (no socket, headers, body, etc.). The tests below exercise
+// In Lambda, `req` in the WAF execution path is the span object, which has no
+// HTTP properties (no socket, headers, body, etc.). The tests below exercise
 // the real WAFContextWrapper → Reporter chain with such an object to verify that
 // no unguarded req property access exists.
 //
@@ -483,18 +472,18 @@ describe('WAF path safety with non-HTTP req', () => {
     assert.ok(span.context().getTag('_dd.appsec.s.req.body'))
   })
 
-  it('should complete finishRequest with null req without crash', () => {
+  it('should complete finishRequest with span as req without crash', () => {
     const span = fakeSpan()
 
-    RealReporter.finishRequest(null, null, {}, undefined, span)
+    RealReporter.finishRequest(span, null, {}, undefined, span)
   })
 
-  it('should flush metricsQueue in finishRequest with null req (Lambda production path)', () => {
+  it('should flush metricsQueue in finishRequest with span as req (Lambda production path)', () => {
     const span = fakeSpan()
 
     RealReporter.metricsQueue.set('_dd.appsec.waf.duration', 100)
 
-    RealReporter.finishRequest(null, null, {}, undefined, span)
+    RealReporter.finishRequest(span, null, {}, undefined, span)
 
     assert.equal(span.context().getTag('_dd.appsec.waf.duration'), 100)
     assert.equal(RealReporter.metricsQueue.size, 0)
