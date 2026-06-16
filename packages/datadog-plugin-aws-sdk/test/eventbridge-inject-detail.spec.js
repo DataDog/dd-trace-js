@@ -3,15 +3,100 @@
 const assert = require('node:assert/strict')
 const { Buffer } = require('node:buffer')
 
-const { describe, it } = require('mocha')
+const { afterEach, describe, it } = require('mocha')
+const { channel } = require('dc-polyfill')
 
 const { getHeadersSize } = require('../../dd-trace/src/datastreams')
 const log = require('../../dd-trace/src/log')
 const EventBridge = require('../src/services/eventbridge')
 
+const requestStartChannel = channel('apm:aws:request:start:eventbridge')
+const activePlugins = []
+const tracerConfig = {
+  cloudPayloadTagging: {},
+  codeOriginForSpans: {
+    enabled: false,
+    experimental: {
+      exit_spans: {
+        enabled: false,
+      },
+    },
+  },
+  peerServiceMapping: {},
+  spanComputePeerService: false,
+}
+
+function createSpan () {
+  const tags = {}
+  return {
+    addTags (newTags) {
+      Object.assign(tags, newTags)
+    },
+    context () {
+      return {
+        getTag (key) {
+          return tags[key]
+        },
+        getTags () {
+          return tags
+        },
+      }
+    },
+    finish () {},
+    setTag (key, value) {
+      tags[key] = value
+    },
+  }
+}
+
 /**
- * Build a lightweight EventBridge plugin instance for unit-testing the
- * request-mutation logic without wiring diagnostic channels.
+ * Construct a fully wired EventBridge plugin and exercise it through the
+ * AWS diagnostic channel used by instrumented requests in production.
+ *
+ * @param {object} [options]
+ * @param {boolean} [options.dsmEnabled]
+ * @param {boolean} [options.batchPropagationEnabled]
+ * @param {(span: unknown, format: string, carrier: object) => void} [options.inject]
+ * @param {(edgeTags: string[], span: unknown, payloadSize: number) => object|null|undefined} [options.setCheckpoint]
+ * @returns {EventBridge}
+ */
+function buildChannelPlugin ({
+  dsmEnabled,
+  batchPropagationEnabled,
+  inject = () => {},
+  setCheckpoint = () => null,
+} = {}) {
+  const tracer = {
+    _nomenclature: {
+      opName: () => 'aws.request',
+      serviceName: () => 'test-aws-eventbridge',
+    },
+    _service: 'test',
+    inject,
+    setCheckpoint,
+    startSpan: () => createSpan(),
+  }
+  const plugin = new EventBridge(tracer, tracerConfig)
+  const config = { enabled: true }
+
+  if (dsmEnabled !== undefined) {
+    config.dsmEnabled = dsmEnabled
+  }
+
+  if (batchPropagationEnabled !== undefined) {
+    config.batchPropagationEnabled = batchPropagationEnabled
+  }
+
+  plugin.configure(config)
+  activePlugins.push(plugin)
+
+  return plugin
+}
+
+/**
+ * Helper-only tests below need tight control over `injectToEntry` ordering
+ * and fallback behaviour, so they intentionally bypass the diagnostic-channel
+ * constructor path.
  *
  * @param {object} [options]
  * @param {boolean} [options.dsmEnabled]
@@ -20,7 +105,7 @@ const EventBridge = require('../src/services/eventbridge')
  * @param {object|null} [options.dataStreamsContext]
  * @returns {EventBridge & { dsmCalls: Array<{ detail: string }> }}
  */
-function buildPlugin ({
+function buildHelperPlugin ({
   dsmEnabled = false,
   batchPropagationEnabled = false,
   inject = () => {},
@@ -36,6 +121,30 @@ function buildPlugin ({
   }
   return plugin
 }
+
+/**
+ * @param {EventBridge} plugin
+ * @param {object} request
+ * @returns {void}
+ */
+function publishRequest (plugin, request) {
+  assert.ok(plugin)
+
+  requestStartChannel.runStores({
+    awsRegion: 'us-east-1',
+    awsService: 'EventBridge',
+    cbExists: false,
+    operation: request.operation,
+    request,
+    serviceIdentifier: 'eventbridge',
+  }, () => {})
+}
+
+afterEach(() => {
+  while (activePlugins.length > 0) {
+    activePlugins.pop().configure(false)
+  }
+})
 
 describe('EventBridge plugin generateTags', () => {
   it('returns undefined when the source is missing', () => {
@@ -59,9 +168,9 @@ describe('EventBridge plugin generateTags', () => {
   })
 })
 
-describe('EventBridge plugin requestInject', () => {
+describe('EventBridge plugin injectToEntry', () => {
   it('attaches `_datadog` before setDSMCheckpoint reads payload size', () => {
-    const plugin = buildPlugin({ dsmEnabled: true })
+    const plugin = buildHelperPlugin({ dsmEnabled: true })
     const entry = { Detail: '{"hello":"world"}' }
 
     plugin.injectToEntry(null, entry, false, true)
@@ -72,7 +181,7 @@ describe('EventBridge plugin requestInject', () => {
   })
 
   it('keeps the trace-only `_datadog` payload when DSM yields no context', () => {
-    const plugin = buildPlugin({
+    const plugin = buildHelperPlugin({
       dsmEnabled: true,
       inject: (span, format, carrier) => { carrier['x-datadog-trace-id'] = '123' },
     })
@@ -86,7 +195,7 @@ describe('EventBridge plugin requestInject', () => {
   })
 
   it('adds the encoded DSM context to `_datadog`', () => {
-    const plugin = buildPlugin({
+    const plugin = buildHelperPlugin({
       dsmEnabled: true,
       dataStreamsContext: {
         hash: Buffer.alloc(8),
@@ -103,7 +212,7 @@ describe('EventBridge plugin requestInject', () => {
   })
 
   it('restores the original detail when DSM reinjection fails', () => {
-    const plugin = buildPlugin({
+    const plugin = buildHelperPlugin({
       dsmEnabled: true,
       dataStreamsContext: {
         hash: Buffer.alloc(8),
@@ -124,9 +233,11 @@ describe('EventBridge plugin requestInject', () => {
 
     assert.strictEqual(entry.Detail, '{"hello":"world"}')
   })
+})
 
+describe('EventBridge plugin requestInject', () => {
   it('injects only the first batch entry by default', () => {
-    const plugin = buildPlugin({
+    const plugin = buildChannelPlugin({
       inject: (span, format, carrier) => { carrier['x-datadog-trace-id'] = '123' },
     })
     const request = {
@@ -139,7 +250,7 @@ describe('EventBridge plugin requestInject', () => {
       },
     }
 
-    plugin.requestInject(null, request)
+    publishRequest(plugin, request)
 
     assert.deepStrictEqual(JSON.parse(request.params.Entries[0].Detail)._datadog, {
       'x-datadog-trace-id': '123',
@@ -148,11 +259,9 @@ describe('EventBridge plugin requestInject', () => {
   })
 
   it('defaults to trace-only first-entry propagation when config is unset', () => {
-    const plugin = Object.create(EventBridge.prototype)
-    plugin._tracer = {
+    const plugin = buildChannelPlugin({
       inject: (span, format, carrier) => { carrier['x-datadog-trace-id'] = '123' },
-      setCheckpoint: () => null,
-    }
+    })
     const request = {
       operation: 'putEvents',
       params: {
@@ -163,7 +272,8 @@ describe('EventBridge plugin requestInject', () => {
       },
     }
 
-    plugin.requestInject(null, request)
+    publishRequest(plugin, request)
+
     assert.deepStrictEqual(JSON.parse(request.params.Entries[0].Detail)._datadog, {
       'x-datadog-trace-id': '123',
     })
@@ -171,7 +281,7 @@ describe('EventBridge plugin requestInject', () => {
   })
 
   it('skips rewriting non-propagated batch entries by default', () => {
-    const plugin = buildPlugin({
+    const plugin = buildChannelPlugin({
       inject: (span, format, carrier) => { carrier['x-datadog-trace-id'] = '123' },
     })
     let injectDetailCalls = 0
@@ -189,20 +299,20 @@ describe('EventBridge plugin requestInject', () => {
       },
     }
 
-    plugin.requestInject(null, request)
+    publishRequest(plugin, request)
 
     assert.strictEqual(injectDetailCalls, 1)
     assert.strictEqual(request.params.Entries[1].Detail, '{ "id": 2 }')
   })
 
   it('injects DSM context into every batch entry by default', () => {
-    const plugin = buildPlugin({
+    const plugin = buildChannelPlugin({
       dsmEnabled: true,
-      dataStreamsContext: {
+      setCheckpoint: () => ({
         hash: Buffer.alloc(8),
         pathwayStartNs: 0,
         edgeStartNs: 0,
-      },
+      }),
     })
     const request = {
       operation: 'putEvents',
@@ -214,7 +324,7 @@ describe('EventBridge plugin requestInject', () => {
       },
     }
 
-    plugin.requestInject(null, request)
+    publishRequest(plugin, request)
 
     const first = JSON.parse(request.params.Entries[0].Detail)._datadog
     const second = JSON.parse(request.params.Entries[1].Detail)._datadog
@@ -223,7 +333,7 @@ describe('EventBridge plugin requestInject', () => {
   })
 
   it('injects all batch entries when batchPropagationEnabled is enabled', () => {
-    const plugin = buildPlugin({
+    const plugin = buildChannelPlugin({
       batchPropagationEnabled: true,
       inject: (span, format, carrier) => { carrier['x-datadog-trace-id'] = '123' },
     })
@@ -237,7 +347,7 @@ describe('EventBridge plugin requestInject', () => {
       },
     }
 
-    plugin.requestInject(null, request)
+    publishRequest(plugin, request)
 
     assert.deepStrictEqual(JSON.parse(request.params.Entries[0].Detail)._datadog, {
       'x-datadog-trace-id': '123',
@@ -249,7 +359,7 @@ describe('EventBridge plugin requestInject', () => {
 
   it('uses the event bus and detail type in the DSM checkpoint tags', () => {
     const calls = []
-    const plugin = buildPlugin()
+    const plugin = buildHelperPlugin()
     plugin._tracer.setCheckpoint = (...args) => {
       calls.push(args)
       return null
@@ -271,7 +381,7 @@ describe('EventBridge plugin requestInject', () => {
 
   it('uses the default event bus and detail type in the DSM checkpoint tags', () => {
     const calls = []
-    const plugin = buildPlugin()
+    const plugin = buildHelperPlugin()
     plugin._tracer.setCheckpoint = (...args) => {
       calls.push(args)
       return null
@@ -290,7 +400,7 @@ describe('EventBridge plugin requestInject', () => {
 
 describe('EventBridge plugin injectDetail', () => {
   it('logs and returns undefined when the detail is invalid JSON', () => {
-    const plugin = buildPlugin()
+    const plugin = buildHelperPlugin()
     const originalError = log.error
     const calls = []
     log.error = (...args) => calls.push(args)
@@ -305,7 +415,7 @@ describe('EventBridge plugin injectDetail', () => {
   })
 
   it('logs and returns undefined when the payload is too large', () => {
-    const plugin = buildPlugin()
+    const plugin = buildHelperPlugin()
     const originalInfo = log.info
     const calls = []
     log.info = (...args) => calls.push(args)
