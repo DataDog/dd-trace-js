@@ -1,10 +1,10 @@
 'use strict'
 
-const Tracer = require('../proxy')
-const NoopProxy = require('../noop/proxy')
+const { registerFeature } = require('../feature-registry')
 
-Tracer.registerFeature({
+registerFeature({
   name: 'openfeature',
+  noop: new (require('./noop'))(),
   factory: () => require('./index'),
 
   /**
@@ -30,5 +30,3 @@ Tracer.registerFeature({
     }
   },
 })
-
-NoopProxy.registerNoop('openfeature', new (require('./noop'))())
