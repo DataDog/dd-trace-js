@@ -3110,8 +3110,7 @@
         "type": "int",
         "default": "10000",
         "allowed": "[1-9]\\d*",
-        "internalPropertyName": "ddTraceMetricsOtelFlushInterval",
-        "description": "Milliseconds between OTLP exports of client-side trace span metrics"
+        "internalPropertyName": "ddTraceMetricsOtelFlushInterval"
       }
     ],
     "DD_TRACE_MICROGATEWAY_CORE_ENABLED": [
