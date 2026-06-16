@@ -20,7 +20,7 @@ describe('appsec downstream_requests', () => {
           enabled: true,
           DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: 1,
           DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: 1,
-          maxDownstreamBodyBytes: 1024,
+          DD_API_SECURITY_MAX_DOWNSTREAM_BODY_BYTES: 1024,
         },
       },
     }

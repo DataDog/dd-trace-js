@@ -8,12 +8,12 @@ export interface GeneratedConfig {
   appsec: {
     apiSecurity: {
       DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: number;
+      DD_API_SECURITY_MAX_DOWNSTREAM_BODY_BYTES: number;
       DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: number;
       DD_API_SECURITY_SAMPLE_DELAY: number;
       enabled: boolean;
       endpointCollectionEnabled: boolean;
       endpointCollectionMessageLimit: number;
-      maxDownstreamBodyBytes: number;
     };
     blockedTemplateGraphql: string | undefined;
     blockedTemplateHtml: string | undefined;
