@@ -188,10 +188,6 @@ module.exports = {
       versions: ['>=4', '>=4.0.0 <4.3.0', '>=4.0.0 <5.0.0', '>=4.3.0 <5.0.0'],
     },
     {
-      name: 'mquery',
-      versions: ['>=5.0.0'],
-    },
-    {
       name: 'mongodb',
       versions: ['5', '>=6'],
     },
@@ -424,12 +420,6 @@ module.exports = {
       versions: ['>=3'],
     },
   ],
-  lodash: [
-    {
-      name: 'lodash',
-      versions: ['>=4'],
-    },
-  ],
   mariadb: [
     {
       name: 'mariadb',
@@ -651,12 +641,6 @@ module.exports = {
     {
       name: 'body-parser',
       versions: ['1.20.1'],
-    },
-  ],
-  ws: [
-    {
-      name: 'ws',
-      versions: ['>=8.0.0'],
     },
   ],
 }
