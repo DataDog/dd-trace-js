@@ -1,6 +1,6 @@
 'use strict'
 
-const INTERNAL_CATEGORY = '<b>Internal</b> (CI, Testing, Benchmarking)'
+const INTERNAL_CATEGORY = 'Internal'
 const CATEGORY_ORDER = [
   'Features',
   'Fixes',
@@ -22,10 +22,10 @@ const CATEGORY_BY_TYPE = {
   perf: 'Performance',
 }
 const PRODUCTS = [
-  ['AppSec', ['appsec', 'iast', 'rasp', 'waf', 'asm']],
-  ['AI Guard', ['aiguard', 'ai-guard']],
+  ['AppSec', ['appsec', 'iast', 'rasp', 'waf', 'asm', 'aap']],
+  ['AI Guard', ['aiguard', 'ai-guard', 'ai_guard']],
   ['Profiling', ['profiling', 'profiler']],
-  ['CI Visibility', [
+  ['Test Optimization', [
     'ci-visibility',
     'test-optimization',
     'testopt',
@@ -42,7 +42,7 @@ const PRODUCTS = [
   ]],
   ['Crash Tracking', ['crashtracking', 'crash-tracking']],
   ['Dynamic Instrumentation', ['debugger', 'code-origin', 'dynamic-instrumentation']],
-  ['LLMObs', [
+  ['LLM Observability', [
     'llmobs',
     'ai',
     'openai',
@@ -55,6 +55,9 @@ const PRODUCTS = [
   ]],
   ['Serverless', ['serverless', 'lambda', 'azure_metadata', 'inferred_proxy']],
   ['OpenTelemetry', ['otel', 'opentelemetry']],
+  ['Data Streams Monitoring', ['dsm', 'data-streams']],
+  ['Database Monitoring', ['dbm']],
+  ['Feature Flags', ['openfeature', 'feature-flags', 'flagging', 'ffe']],
   ['General', [
     'core',
     'tracing',
@@ -71,8 +74,22 @@ const PRODUCTS = [
     'telemetry',
     'remote-config',
     'runtime-metrics',
+    'runtime_metrics',
+    'metrics',
+    'dogstatsd',
     'stats',
     'sampler',
+    'propagation',
+    'exporters',
+    'agent',
+    'agentless',
+    'startup-log',
+    'shimmer',
+    'storage',
+    'esm',
+    'stacktrace',
+    'service-naming',
+    'tags',
     'types',
   ]],
 ]
@@ -164,9 +181,6 @@ function parseChange (entry) {
   const category = CATEGORY_BY_TYPE[parsed.type] || INTERNAL_CATEGORY
   const internal = INTERNAL_TYPES.has(parsed.type)
   const product = selectProduct(parsed.scopes)
-  const warning = !internal && product === 'Other'
-    ? `Unknown release-note product for ${entry.sha}: ${entry.subject}`
-    : undefined
 
   return {
     category,
@@ -175,7 +189,6 @@ function parseChange (entry) {
     pr: subjectWithPullRequest.pr,
     internal,
     revert: parsed.isRevert,
-    warning,
   }
 }
 
@@ -232,18 +245,22 @@ function splitScopes (scope) {
  * @param {string[]} scopes
  */
 function selectProduct (scopes) {
-  let fallback = 'General'
+  let allGeneral = true
 
   for (const scope of scopes) {
     const product = findProduct(scope)
-    if (!product) {
-      fallback = 'Other'
+    if (product === undefined) {
+      allGeneral = false
       continue
     }
     if (product !== 'General') return product
   }
 
-  return fallback
+  // No product groups these scopes. Fall back to the full scope list from the
+  // commit verbatim rather than a catch-all, unless every scope is a core one.
+  if (allGeneral) return 'General'
+
+  return scopes.join(', ')
 }
 
 /**
@@ -274,15 +291,15 @@ function renderMarkdown (sections, contributors) {
     const changes = sections.get(category)
     if (!changes?.length) continue
 
-    lines.push(category)
-    for (const change of changes) {
+    lines.push(renderHeading(category))
+    for (const change of changes.sort(compareChanges)) {
       lines.push(renderChange(change))
     }
     lines.push('')
   }
 
   if (contributors.size > 0) {
-    lines.push('Contributors')
+    lines.push('<b>Contributors</b>')
     for (const contributor of [...contributors].sort(compareContributors)) {
       lines.push(`- ${contributor}`)
     }
@@ -290,6 +307,33 @@ function renderMarkdown (sections, contributors) {
   }
 
   return lines.join('\n')
+}
+
+/**
+ * @param {string} category
+ */
+function renderHeading (category) {
+  if (category === INTERNAL_CATEGORY) {
+    return `<b>${category}</b> (CI, Testing, Benchmarking)`
+  }
+
+  return `<b>${category}</b>`
+}
+
+/**
+ * Groups same-product entries together; the internal section carries no product,
+ * so it falls through to a plain subject sort.
+ *
+ * @param {Change} a
+ * @param {Change} b
+ */
+function compareChanges (a, b) {
+  if (!a.internal) {
+    const byProduct = a.product.toLowerCase().localeCompare(b.product.toLowerCase())
+    if (byProduct !== 0) return byProduct
+  }
+
+  return a.subject.toLowerCase().localeCompare(b.subject.toLowerCase())
 }
 
 /**
