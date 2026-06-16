@@ -888,6 +888,40 @@ describe('normalizeRouteExpress', () => {
       it('parses *name named wildcard', () => {
         assert.equal(normalizeRouteExpress('/files/*splat', { splat: 'a/b' }, '/files/a/b', true), '/files/{splat}')
       })
+
+      it('rejects v4-only quoted names and char-class string-patterns', () => {
+        assert.equal(normalizeRouteExpress('/:"user-id"', {}, '/x', false), null)
+        assert.equal(normalizeRouteExpress('/ab[cd]e', {}, '/abce', false), null)
+      })
+    })
+  })
+
+  describe('review-finding regressions (round 5)', () => {
+    it('URL is authoritative: recovers a mergeParams-dropped parent optional param', () => {
+      // req.params only has the child's id (parent version dropped by mergeParams=false), but the
+      // URL shows version present — must not be dropped.
+      assert.equal(
+        normalizeRouteExpress('/api/:version?/users/:id?', { id: '42' }, '/api/v1/users/42', false),
+        '/api/{version}/users/{id}'
+      )
+    })
+
+    it('does not mark an absent optional present when a name is shared across groups', () => {
+      assert.equal(normalizeRouteExpress('/:id{/:id}', { id: 'x' }, '/x', true), '/{id}')
+      assert.equal(normalizeRouteExpress('/a{/:x}/b{/:x}', { x: 'v' }, '/a/b/v', true), '/a/b/{x}')
+    })
+
+    it('req.params only biases ordering; empty params keeps Express greedy (first optional wins)', () => {
+      assert.equal(normalizeRouteExpress('/a/:x?/:y?/b', {}, '/a/1/b', true), '/a/{x}/b')
+    })
+
+    it('biases to the param Express actually set for adjacent constrained optionals', () => {
+      assert.equal(normalizeRouteExpress('/:a(\\d+)?/:b?', { b: 'foo' }, '/foo', true), '/{b}')
+      assert.equal(normalizeRouteExpress('/:a(\\d+)?/:b?', { a: '5' }, '/5', true), '/{a}')
+    })
+
+    it('accepts an escaped paren inside a v4 inline constraint', () => {
+      assert.equal(normalizeRouteExpress('/:id(foo\\))', { id: 'foo)' }, '/foo)', false), '/{id}')
     })
   })
 })

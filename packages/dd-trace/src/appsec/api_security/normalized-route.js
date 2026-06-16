@@ -31,6 +31,9 @@ const web = require('../../plugins/util/web')
 // (path-to-regexp v8 accepts identifier characters, not just [A-Za-z0-9_]).
 const NAME_RE = /^[\p{L}\p{N}_$]+/u
 
+// Express 4 (path-to-regexp 0.x) only allows [A-Za-z0-9_] in param names.
+const NAME_RE_V4 = /^\w+/
+
 // Cap on optional groups per route. Keeps the presence bitmask within 32 bits, bounds the
 // backtracking matcher, and caps the per-route variant cache at 2^N entries (4096 at N=12).
 // Routes beyond this are omitted (return null) rather than mis-normalized.
@@ -76,8 +79,9 @@ const segmentRegexCache = new Map()
  * @param {number} i
  * @returns {{ name: string, next: number } | null}
  */
-function parseName (route, i) {
-  if (route[i] === '"') {
+function parseName (route, i, isV5) {
+  // Quoted names are an Express 5 (path-to-regexp v8) feature only.
+  if (isV5 && route[i] === '"') {
     // Quoted name: any char until the closing quote; a backslash escapes the next char.
     let name = ''
     let j = i + 1
@@ -89,7 +93,9 @@ function parseName (route, i) {
     if (j >= route.length) return null // unterminated quote
     return name ? { name, next: j + 1 } : null
   }
-  const m = NAME_RE.exec(route.slice(i))
+  // Express 5 accepts Unicode/$ identifier names; Express 4 only [A-Za-z0-9_].
+  const re = isV5 ? NAME_RE : NAME_RE_V4
+  const m = re.exec(route.slice(i))
   return m ? { name: m[0], next: i + m[0].length } : null
 }
 
@@ -103,6 +109,7 @@ function parseName (route, i) {
 function consumeParens (route, i) {
   let depth = 0
   for (let j = i; j < route.length; j++) {
+    if (route[j] === '\\') { j++; continue } // skip an escaped char (e.g. \) inside a constraint)
     if (route[j] === '(') depth++
     else if (route[j] === ')') {
       depth--
@@ -159,8 +166,9 @@ function parseRoute (route, isV5 = true) {
       if (groupStack.length === 1) return null // unbalanced
       groupStack.pop()
       i++
-    } else if (!isV5 && (c === '?' || c === '+')) {
-      // Express 4 string-pattern regex outside a :param — cannot be safely normalized.
+    } else if (!isV5 && (c === '?' || c === '+' || c === '[')) {
+      // Express 4 string-pattern regex (modifiers `?`/`+` or a `[...]` char class) outside a
+      // :param — cannot be safely normalized.
       return null
     } else if (c === '/') {
       flush()
@@ -168,7 +176,7 @@ function parseRoute (route, isV5 = true) {
       i++
     } else if (c === ':') {
       flush()
-      const nm = parseName(route, i + 1)
+      const nm = parseName(route, i + 1, isV5)
       if (!nm) return null
       i = nm.next
       let constraint
@@ -219,7 +227,7 @@ function parseRoute (route, isV5 = true) {
       flush()
       // Express 5: `*name` is a named wildcard. Express 4: `*` is an unnamed wildcard (any name
       // chars after it are ordinary static text).
-      const nm = isV5 ? parseName(route, i + 1) : null
+      const nm = isV5 ? parseName(route, i + 1, isV5) : null
       i = nm ? nm.next : i + 1
       const group = groupStack[groupStack.length - 1]
       tokens.push({ type: 'wildcard', name: nm ? nm.name : null, group, zeroOrMore: true })
@@ -306,28 +314,12 @@ function compileRoute (route, isV5 = true) {
   // wrong (aliased) cached result or an event-loop stall.
   if (optionalGroups.length > MAX_OPTIONAL_GROUPS) return null
 
-  // Which optional groups carry a named param (→ resolvable from req.params) and which do not
-  // (static-only or wildcard-only → only the URL can tell whether they are present).
-  const optionalParamNames = []
-  const paramBearingGroups = new Set()
-  for (const seg of cleaned) {
-    for (const t of seg.tokens) {
-      if (t.group !== 0 && t.type === 'param' && t.name != null) {
-        optionalParamNames.push(t.name)
-        paramBearingGroups.add(t.group)
-      }
-    }
-  }
-  const hasGroupNeedingUrl = optionalGroups.some(g => !paramBearingGroups.has(g))
-
   const compiled = {
     segments: cleaned,
     groupParent,
     optionalGroups,
     trailingSlash,
     precomputed: null,
-    optionalParamNames,
-    hasGroupNeedingUrl,
   }
 
   // No optional groups → the normalized output is fixed; precompute it once.
@@ -628,37 +620,102 @@ function segmentWildcard (seg) {
   return null
 }
 
+// Cache for the start-anchored prefix regex of a wildcard segment (keyed by segment object).
+const wildcardPrefixCache = new Map()
+
+/**
+ * Build (and cache) a start-anchored, case-insensitive regex for the tokens preceding a wildcard
+ * in a segment (e.g. ':a-' in ':a-*'), used to validate the prefix before the catch-all consumes.
+ * @param {RouteSegment} seg
+ * @param {number} wIdx - index of the wildcard token in seg.tokens
+ * @returns {RegExp}
+ */
+function getWildcardPrefixRegex (seg, wIdx) {
+  const cached = wildcardPrefixCache.get(seg)
+  if (cached !== undefined) return cached
+  let pfx = ''
+  for (let k = 0; k < wIdx; k++) {
+    const t = seg.tokens[k]
+    pfx += t.type === 'static' ? escapeRegex(encodeStaticSegment(t.text)) : '[^/]+?'
+  }
+  const re = new RegExp('^' + pfx, 'i')
+  wildcardPrefixCache.set(seg, re)
+  return re
+}
+
 // Presence resolution from the request URL (rule 6)
 
 /**
  * Resolve which optional groups are present by matching the route segments against the URL
- * path segments. Returns the set of present group ids, or null when the route does not match.
+ * path segments. URL structure is authoritative; `params` only biases the backtracking order
+ * (so ambiguous adjacent optionals resolve to the param Express actually populated).
  * @param {CompiledRoute} compiled
  * @param {string[]} urlSegs
- * @returns {Set<number> | null}
+ * @param {object | null | undefined} params
+ * @returns {{ present: Set<number> | null, aborted: boolean }}
  */
-function resolvePresenceFromUrl (compiled, urlSegs) {
+function resolvePresenceFromUrl (compiled, urlSegs, params) {
   const present = new Set()
   matchStepsRemaining = MAX_MATCH_STEPS
-  const matched = matchSegments(compiled, 0, urlSegs, 0, present)
+  // "Informative" = req.params names at least one of this route's optional params. When false
+  // (no params signal at all), the matcher defaults to Express's greedy present-first order.
+  matchParamsInformative = optionalParamInParams(compiled, params)
+  const matched = matchSegments(compiled, 0, urlSegs, 0, present, params)
   return { present: matched ? present : null, aborted: matchStepsRemaining < 0 }
+}
+
+/**
+ * True if req.params names at least one optional (group ≠ 0) param of the route.
+ * @param {CompiledRoute} compiled
+ * @param {object | null | undefined} params
+ * @returns {boolean}
+ */
+function optionalParamInParams (compiled, params) {
+  if (params == null) return false
+  for (const seg of compiled.segments) {
+    for (const t of seg.tokens) {
+      if (t.group !== 0 && t.name != null && Object.hasOwn(params, t.name) && params[t.name]) return true
+    }
+  }
+  return false
 }
 
 // Step budget for the current matchSegments traversal. Safe as module state because presence
 // resolution is synchronous and non-reentrant (each request resolves fully before the next).
 let matchStepsRemaining = MAX_MATCH_STEPS
 
+// Whether req.params is informative for this traversal (see resolvePresenceFromUrl).
+let matchParamsInformative = false
+
+/**
+ * True if any param token in this segment has a truthy own-property value in params — used only
+ * to bias which branch (present/absent) the backtracking tries first for an optional segment.
+ * @param {RouteSegment} seg
+ * @param {object | null | undefined} params
+ * @returns {boolean}
+ */
+function segParamInParams (seg, params) {
+  if (params == null) return false
+  for (const t of seg.tokens) {
+    if (t.name != null && Object.hasOwn(params, t.name) && params[t.name]) return true
+  }
+  return false
+}
+
 /**
  * Backtracking matcher: try to match segments[si..] against urlSegs[ui..], recording present
- * optional groups in `present`. Greedy (tries "present" before "absent" for optional segments).
+ * optional groups in `present`. For an optional segment the order of the present/absent branches
+ * is biased by req.params (try the params-consistent branch first); the URL still decides what
+ * structurally matches.
  * @param {CompiledRoute} compiled
  * @param {number} si
  * @param {string[]} urlSegs
  * @param {number} ui
  * @param {Set<number>} present
+ * @param {object | null | undefined} params
  * @returns {boolean}
  */
-function matchSegments (compiled, si, urlSegs, ui, present) {
+function matchSegments (compiled, si, urlSegs, ui, present, params) {
   if (--matchStepsRemaining < 0) return false // budget exhausted → abort (caller falls back to params)
   const { segments, groupParent } = compiled
   if (si === segments.length) return ui === urlSegs.length
@@ -669,19 +726,28 @@ function matchSegments (compiled, si, urlSegs, ui, present) {
 
   // Optional segment whose parent group is absent can only be absent too.
   if (optional && !parentPresent) {
-    return matchSegments(compiled, si + 1, urlSegs, ui, present)
+    return matchSegments(compiled, si + 1, urlSegs, ui, present, params)
   }
 
   if (optional) {
-    // Try present first.
-    present.add(seg.group)
-    if (matchSegmentHere(compiled, si, urlSegs, ui, present)) return true
-    present.delete(seg.group)
-    // Then absent.
-    return matchSegments(compiled, si + 1, urlSegs, ui, present)
+    // Greedy present-first by default (matches Express's left-to-right assignment). Only when
+    // req.params is informative but does NOT name this segment's param do we try absent first —
+    // i.e. Express set some other optional, so this one is more likely absent.
+    const tryPresentFirst = !matchParamsInformative || segParamInParams(seg, params)
+    const tryPresent = () => {
+      present.add(seg.group)
+      if (matchSegmentHere(compiled, si, urlSegs, ui, present, params)) return true
+      present.delete(seg.group)
+      return false
+    }
+    const tryAbsent = () => matchSegments(compiled, si + 1, urlSegs, ui, present, params)
+    if (tryPresentFirst) {
+      return tryPresent() || tryAbsent()
+    }
+    return tryAbsent() || tryPresent()
   }
 
-  return matchSegmentHere(compiled, si, urlSegs, ui, present)
+  return matchSegmentHere(compiled, si, urlSegs, ui, present, params)
 }
 
 /**
@@ -689,7 +755,7 @@ function matchSegments (compiled, si, urlSegs, ui, present) {
  * optional groups, and handles catch-all segments (consume the remaining URL).
  * @returns {boolean}
  */
-function matchSegmentHere (compiled, si, urlSegs, ui, present) {
+function matchSegmentHere (compiled, si, urlSegs, ui, present, params) {
   const { segments } = compiled
   const seg = segments[si]
   const wildcard = segmentWildcard(seg)
@@ -700,12 +766,7 @@ function matchSegmentHere (compiled, si, urlSegs, ui, present) {
     // start of the current URL segment before the wildcard consumes the remainder.
     if (wIdx > 0) {
       if (ui >= urlSegs.length) return false
-      let pfx = ''
-      for (let k = 0; k < wIdx; k++) {
-        const t = seg.tokens[k]
-        pfx += t.type === 'static' ? escapeRegex(encodeStaticSegment(t.text)) : '[^/]+?'
-      }
-      if (!new RegExp('^' + pfx, 'i').test(urlSegs[ui])) return false
+      if (!getWildcardPrefixRegex(seg, wIdx).test(urlSegs[ui])) return false
     }
     if (ui >= urlSegs.length) {
       // Optional catch-all ({/*path}) matching zero segments → treat as absent (Express drops it).
@@ -714,7 +775,7 @@ function matchSegmentHere (compiled, si, urlSegs, ui, present) {
       if (!wildcard.zeroOrMore) return false
     }
     if (wildcard.group !== 0) present.add(wildcard.group)
-    return matchSegments(compiled, si + 1, urlSegs, urlSegs.length, present)
+    return matchSegments(compiled, si + 1, urlSegs, urlSegs.length, present, params)
   }
 
   if (ui >= urlSegs.length) return false
@@ -729,7 +790,7 @@ function matchSegmentHere (compiled, si, urlSegs, ui, present) {
       added.push(groupId)
     }
   }
-  if (matchSegments(compiled, si + 1, urlSegs, ui + 1, present)) return true
+  if (matchSegments(compiled, si + 1, urlSegs, ui + 1, present, params)) return true
   for (const g of added) present.delete(g)
   return false
 }
@@ -804,22 +865,15 @@ function normalizeRouteExpress (route, params, urlPath, isV5 = true) {
   // No optional groups → fixed result (computed once at compile time).
   if (entry.precomputed !== null) return entry.precomputed
 
-  // Resolve which optional groups are present. req.params is the authority: when it already
-  // determines every optional param (and there are no static/wildcard-only optional groups that
-  // only the URL can resolve), trust it directly. Otherwise use the URL — which also recovers
-  // params dropped by mergeParams=false sub-routers.
-  const paramsHasOptional = entry.optionalParamNames.some(
-    n => params != null && Object.hasOwn(params, n) && params[n]
-  )
+  // Resolve which optional groups are present. The URL is authoritative — it correctly handles
+  // mergeParams=false sub-routers (where a parent param is missing from req.params) and routes
+  // that reuse a param name across groups. req.params is used only to bias the matcher's
+  // present/absent ordering (so ambiguous adjacent optionals resolve to the param Express set).
+  // On step-budget abort or a clean URL/route mismatch we fall back to a params-only resolution.
   let present
-  if (paramsHasOptional && !entry.hasGroupNeedingUrl) {
-    present = resolvePresenceFromParams(entry, params)
-  } else if (urlPath) {
+  if (urlPath) {
     const urlSegs = urlPath.split('/').filter(Boolean)
-    const { present: urlPresent, aborted } = resolvePresenceFromUrl(entry, urlSegs)
-    // On step-budget abort the result is unknown — fall back to the (safe, bounded) req.params
-    // resolution rather than guessing from a half-finished match. A clean URL mismatch (no
-    // aborted, urlPresent null) likewise falls back to params.
+    const { present: urlPresent, aborted } = resolvePresenceFromUrl(entry, urlSegs, params)
     present = (aborted || urlPresent === null)
       ? resolvePresenceFromParams(entry, params)
       : urlPresent
