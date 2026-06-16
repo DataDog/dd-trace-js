@@ -115,6 +115,7 @@ moduleTypes.forEach(({
     useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript'], true)
 
     before(async function () {
+      this.timeout(180_000)
       cwd = sandboxCwd()
       await warmCypressBinary(cwd)
 
@@ -158,10 +159,6 @@ moduleTypes.forEach(({
             },
           }
         )
-
-        // TODO: remove this once we have figured out flakiness
-        childProcess.stdout?.pipe(process.stdout)
-        childProcess.stderr?.pipe(process.stderr)
 
         const [, searchCommitRequest, packfileRequest] = await Promise.all([
           once(childProcess, 'exit'),
@@ -241,10 +238,6 @@ moduleTypes.forEach(({
           }
         )
 
-        // TODO: remove this once we have figured out flakiness
-        childProcess.stdout?.pipe(process.stdout)
-        childProcess.stderr?.pipe(process.stderr)
-
         const eventsPromise = gatherCypressPayloads(receiver, childProcess, '/api/v2/citestcycle', payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const eventTypes = events.map(event => event.type)
@@ -312,10 +305,6 @@ moduleTypes.forEach(({
           }
         )
 
-        // TODO: remove this once we have figured out flakiness
-        childProcess.stdout?.pipe(process.stdout)
-        childProcess.stderr?.pipe(process.stderr)
-
         const receiverPromise = gatherCypressPayloads(receiver, childProcess, '/api/v2/citestcycle', payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const notSkippedTest = events.find(event =>
@@ -364,10 +353,6 @@ moduleTypes.forEach(({
             },
           }
         )
-
-        // TODO: remove this once we have figured out flakiness
-        childProcess.stdout?.pipe(process.stdout)
-        childProcess.stderr?.pipe(process.stderr)
 
         const receiverPromise = gatherCypressPayloads(receiver, childProcess, '/api/v2/citestcycle', payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -429,10 +414,6 @@ moduleTypes.forEach(({
           }
         )
 
-        // TODO: remove this once we have figured out flakiness
-        childProcess.stdout?.pipe(process.stdout)
-        childProcess.stderr?.pipe(process.stderr)
-
         const receiverPromise = gatherCypressPayloads(receiver, childProcess, '/api/v2/citestcycle', payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
@@ -491,10 +472,6 @@ moduleTypes.forEach(({
             },
           }
         )
-
-        // TODO: remove this once we have figured out flakiness
-        childProcess.stdout?.pipe(process.stdout)
-        childProcess.stderr?.pipe(process.stderr)
 
         const eventsPromise = gatherCypressPayloads(receiver, childProcess, '/api/v2/citestcycle', payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -576,10 +553,6 @@ moduleTypes.forEach(({
             },
           }
         )
-
-        // TODO: remove this once we have figured out flakiness
-        childProcess.stdout?.pipe(process.stdout)
-        childProcess.stderr?.pipe(process.stderr)
 
         const eventsPromise = gatherCypressPayloads(receiver, childProcess, '/api/v2/citestcov', payloads => {
           const coveredFiles = payloads

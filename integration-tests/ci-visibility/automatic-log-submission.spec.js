@@ -16,13 +16,15 @@ const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { NODE_MAJOR } = require('../../version')
 const webAppServer = require('./web-app-server')
 
+const isLatestCucumberSupported = NODE_MAJOR === 22 || NODE_MAJOR === 24 || NODE_MAJOR >= 26
+
 describe('test optimization automatic log submission', () => {
   let cwd, receiver, childProcess, webAppPort
   let testOutput = ''
 
   useSandbox([
     'mocha',
-    '@cucumber/cucumber',
+    ...(isLatestCucumberSupported ? ['@cucumber/cucumber'] : []),
     'jest',
     'winston',
     '@playwright/test',
@@ -83,7 +85,7 @@ describe('test optimization automatic log submission', () => {
   ]
 
   testFrameworks.forEach(({ name, command, getExtraEnvVars = () => ({}) }) => {
-    if ((NODE_MAJOR === 18 || NODE_MAJOR === 23) && name === 'cucumber') return
+    if (!isLatestCucumberSupported && name === 'cucumber') return
 
     context(`with ${name}`, () => {
       it('can automatically submit logs', async () => {

@@ -29,6 +29,29 @@ updates:
       - github_actions
       - semver-patch
 
+  # Docker base images in our Dockerfiles. Already digest-pinned references
+  # (image:tag@sha256:...) get both the tag and the digest bumped on each
+  # release; bare tags would only have the tag bumped, so every FROM here is
+  # pinned by digest. docker-compose.yml is handled separately (GHCR mirror).
+  - package-ecosystem: "docker"
+    directories:
+      - "/.github/playwright"
+      - "/.github/selenium"
+      - "/benchmark/sirun"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 5
+    labels:
+      - dependabot
+      - dependencies
+      - docker
+      - semver-patch
+    groups:
+      docker-images:
+        patterns:
+          - "*"
+
   # Regular npm packages that fall into our supported ranges besides OTEL
   - package-ecosystem: "npm"
     directories:

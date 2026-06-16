@@ -21,6 +21,7 @@ import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
 import eslintNoPrivateTagsAccess from './eslint-rules/eslint-no-private-tags-access.mjs'
 import eslintNonPrefixEnvNames from './eslint-rules/eslint-non-prefix-env-names.mjs'
 import eslintPreferAssertMatch from './eslint-rules/eslint-prefer-assert-match.mjs'
+import eslintPreferSetServiceName from './eslint-rules/eslint-prefer-set-service-name.mjs'
 import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
 import eslintRequireBooleanAssertMessage from './eslint-rules/eslint-require-boolean-assert-message.mjs'
 import eslintRequireExportExists from './eslint-rules/eslint-require-export-exists.mjs'
@@ -89,6 +90,7 @@ export default [
       '!**/integration-tests/coverage/**',
       '**/dist', // Generated
       '**/docs', // Any JS here is for presentation only.
+      '**/.next', // Generated Next.js build output
       '**/out', // Generated
       '**/node_modules', // We don't own these.
       '**/versions', // This is effectively a node_modules tree.
@@ -385,6 +387,7 @@ export default [
           'eslint-config-names-sync': eslintConfigNamesSync,
           'eslint-non-prefix-env-names': eslintNonPrefixEnvNames,
           'eslint-prefer-assert-match': eslintPreferAssertMatch,
+          'eslint-prefer-set-service-name': eslintPreferSetServiceName,
           'eslint-safe-typeof-object': eslintSafeTypeOfObject,
           'eslint-log-printf-style': eslintLogPrintfStyle,
           'eslint-no-private-tags-access': eslintNoPrivateTagsAccess,
@@ -541,6 +544,7 @@ export default [
       'eslint-rules/eslint-env-aliases': 'error',
       'eslint-rules/eslint-log-printf-style': 'error',
       'eslint-rules/eslint-non-prefix-env-names': 'error',
+      'eslint-rules/eslint-prefer-set-service-name': 'error',
       'eslint-rules/eslint-timer-unref': 'error',
 
       'no-restricted-syntax': ['error', {
@@ -885,6 +889,24 @@ export default [
     ],
     rules: {
       'import/no-extraneous-dependencies': 'off',
+    },
+  },
+  {
+    // The Next.js fixture apps import dd-trace the way a customer does
+    // (`require('dd-trace')`). The package is supplied to the app at runtime via a
+    // stub written into node_modules (see test/index.spec.js), so it never appears
+    // in a manifest the extraneous-dependency rules can read.
+    name: 'dd-trace/datadog-plugin-next/fixtures',
+    plugins: {
+      import: eslintPluginImport,
+    },
+    files: [
+      'packages/datadog-plugin-next/test/app/**/*.js',
+      'packages/datadog-plugin-next/test/**/pages/**/*.js',
+    ],
+    rules: {
+      'import/no-extraneous-dependencies': 'off',
+      'n/no-extraneous-require': 'off',
     },
   },
 ]

@@ -43,7 +43,7 @@ const {
   INSTRUMENTATION_METHOD_ANNOTATED,
 } = require('./constants/tags')
 const { storage } = require('./storage')
-const { validateCostTags } = require('./util')
+const { findGenAIAncestorSpanId, validateCostTags, writeBridgeTags, validateToolDefinitions } = require('./util')
 
 // global registry of LLMObs spans
 // maps LLMObs spans to their annotations
@@ -97,6 +97,13 @@ class LLMObsTagger {
 
     this._register(span)
 
+    // When the registering span sits below an OTel `gen_ai.*` ancestor, use
+    // that ancestor as the parent_id fallback and suppress the bridge
+    // parent_id tag so the indexer doesn't invert the trace.
+    const genAIAncestorSpanId = findGenAIAncestorSpanId(span)
+
+    writeBridgeTags(span, { includeParentId: genAIAncestorSpanId === null })
+
     this._setTag(span, ML_APP, spanMlApp)
 
     if (name) this._setTag(span, NAME, name)
@@ -113,6 +120,7 @@ class LLMObsTagger {
     const parentId =
       parent?.context().toSpanId() ??
       span.context()._trace.tags[PROPAGATED_PARENT_ID_KEY] ??
+      genAIAncestorSpanId ??
       ROOT_PARENT_ID
     this._setTag(span, PARENT_ID_KEY, parentId)
 
@@ -168,8 +176,10 @@ class LLMObsTagger {
   }
 
   tagToolDefinitions (span, toolDefinitions) {
-    if (Array.isArray(toolDefinitions) && toolDefinitions.length > 0) {
-      this._setTag(span, TOOL_DEFINITIONS, toolDefinitions)
+    const validatedToolDefinitions = validateToolDefinitions(toolDefinitions)
+
+    if (validatedToolDefinitions.length > 0) {
+      this._setTag(span, TOOL_DEFINITIONS, validatedToolDefinitions)
     } else {
       this.#handleFailure('Tool definitions must be a non-empty array.', 'invalid_tool_definitions')
     }

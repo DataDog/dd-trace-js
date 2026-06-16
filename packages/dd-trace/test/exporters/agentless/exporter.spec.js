@@ -54,17 +54,22 @@ describe('AgentlessExporter', () => {
       sinon.assert.match(exporter._url.href, expectedUrl.href)
     })
 
-    it('should use provided URL', () => {
-      const customUrl = 'https://custom-intake.example.com'
-      exporter = new Exporter({ url: customUrl, site: 'datadoghq.com' })
+    it('should send to the https intake and ignore the agent URL (config.url)', () => {
+      exporter = new Exporter({ url: 'http://127.0.0.1:8126', site: 'datadoghq.com' })
 
-      sinon.assert.match(exporter._url.href, customUrl)
+      assert.strictEqual(exporter._url.href, 'https://public-trace-http-intake.logs.datadoghq.com/')
     })
 
     it('should default to datadoghq.com site', () => {
       exporter = new Exporter({})
 
       sinon.assert.match(exporter._url.hostname, 'public-trace-http-intake.logs.datadoghq.com')
+    })
+
+    it('should map a regional site to its data-center intake host', () => {
+      exporter = new Exporter({ site: 'us3.datadoghq.com' })
+
+      assert.strictEqual(exporter._url.hostname, 'trace.browser-intake-us3-datadoghq.com')
     })
 
     it('should register beforeExit handler', () => {
@@ -77,7 +82,7 @@ describe('AgentlessExporter', () => {
       )
     })
 
-    it('should handle invalid URL gracefully', () => {
+    it('should handle an invalid site gracefully', () => {
       const log = { error: sinon.spy() }
 
       Exporter = proxyquire('../../../src/exporters/agentless', {
@@ -85,7 +90,7 @@ describe('AgentlessExporter', () => {
         '../../log': log,
       })
 
-      exporter = new Exporter({ url: 'not-a-valid-url' })
+      exporter = new Exporter({ site: 'bad host' })
 
       sinon.assert.calledOnce(log.error)
       assert.strictEqual(exporter._url, null)

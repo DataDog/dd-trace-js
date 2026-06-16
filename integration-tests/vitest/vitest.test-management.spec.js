@@ -31,7 +31,7 @@ const {
 const { NODE_MAJOR } = require('../../version')
 
 // vitest@4.x requires Node.js >= 20
-const versions = NODE_MAJOR <= 18 ? ['1.6.0', '3'] : ['1.6.0', 'latest']
+const versions = NODE_MAJOR <= 18 ? ['1.6.0', '3.2.6'] : ['1.6.0', 'latest']
 
 versions.forEach((version) => {
   describe(`vitest@${version}`, () => {
@@ -182,6 +182,7 @@ versions.forEach((version) => {
 
           const getTestAssertions = ({
             isAttemptingToFix,
+            expectedExecutionCount,
             shouldAlwaysPass,
             shouldFailSometimes,
             shouldFailFirstOnly,
@@ -210,7 +211,11 @@ versions.forEach((version) => {
 
                 const attemptedToFixTests = tests.filter(
                   test => test.meta[TEST_NAME] === 'attempt to fix tests can attempt to fix a test'
-                )
+                ).sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+                if (expectedExecutionCount !== undefined) {
+                  assert.strictEqual(attemptedToFixTests.length, expectedExecutionCount)
+                }
 
                 for (let i = 0; i < attemptedToFixTests.length; i++) {
                   const isFirstAttempt = i === 0
@@ -263,26 +268,31 @@ versions.forEach((version) => {
            * @param {() => void} done
            * @param {{
            *   isAttemptingToFix?: boolean,
+           *   expectedExecutionCount?: number,
            *   shouldAlwaysPass?: boolean,
            *   isQuarantining?: boolean,
            *   shouldFailSometimes?: boolean,
            *   shouldFailFirstOnly?: boolean,
            *   isDisabling?: boolean,
-           *   extraEnvVars?: Record<string, string>
+           *   extraEnvVars?: Record<string, string>,
+           *   vitestCommand?: string
            * }} [options]
            */
           const runAttemptToFixTest = (done, {
             isAttemptingToFix,
+            expectedExecutionCount,
             shouldAlwaysPass,
             isQuarantining,
             shouldFailSometimes,
             shouldFailFirstOnly,
             isDisabling,
             extraEnvVars = {},
+            vitestCommand = './node_modules/.bin/vitest run',
           } = {}) => {
             let stdout = ''
             const testAssertionsPromise = getTestAssertions({
               isAttemptingToFix,
+              expectedExecutionCount,
               shouldAlwaysPass,
               shouldFailSometimes,
               shouldFailFirstOnly,
@@ -290,7 +300,7 @@ versions.forEach((version) => {
               isDisabling,
             })
             childProcess = exec(
-              './node_modules/.bin/vitest run',
+              vitestCommand,
               {
                 cwd,
                 env: {
@@ -316,6 +326,9 @@ versions.forEach((version) => {
             childProcess.on('exit', (exitCode) => {
               testAssertionsPromise.then(() => {
                 assert.match(stdout, /I am running/)
+                if (expectedExecutionCount !== undefined) {
+                  assert.strictEqual((stdout.match(/I am running/g) || []).length, expectedExecutionCount)
+                }
                 if (isAttemptingToFix) {
                   assert.match(
                     stdout,
@@ -370,6 +383,20 @@ versions.forEach((version) => {
             receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
             runAttemptToFixTest(done, { isAttemptingToFix: true, shouldFailFirstOnly: true })
+          })
+
+          it('disables manual Vitest retries when attempting to fix a test', (done) => {
+            receiver.setSettings({
+              test_management: { enabled: true, attempt_to_fix_retries: 2 },
+              flaky_test_retries_enabled: false,
+            })
+
+            runAttemptToFixTest(done, {
+              isAttemptingToFix: true,
+              shouldFailFirstOnly: true,
+              expectedExecutionCount: 3,
+              vitestCommand: './node_modules/.bin/vitest run --retry=1',
+            })
           })
 
           it('records afterEach failures in attempt to fix summary', async () => {
@@ -815,6 +842,160 @@ versions.forEach((version) => {
             receiver.setSettings({ test_management: { enabled: true } })
 
             runQuarantineTest(done, true)
+          })
+
+          it('can quarantine tests retried by Vitest', async () => {
+            receiver.setSettings({
+              test_management: { enabled: true },
+              flaky_test_retries_enabled: false,
+            })
+
+            const testAssertionsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                const testSession = events.find(event => event.type === 'test_session_end').content
+
+                assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+                assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+
+                const quarantinedTests = tests
+                  .filter(test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a test')
+                  .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+                assert.strictEqual(quarantinedTests.length, 2)
+
+                quarantinedTests.forEach((test, index) => {
+                  assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+                  assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+
+                  if (index === 0) {
+                    assert.ok(!(TEST_IS_RETRY in test.meta))
+                    assert.ok(!(TEST_RETRY_REASON in test.meta))
+                  } else {
+                    assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
+                    assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+                  }
+
+                  if (index === quarantinedTests.length - 1) {
+                    assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'skip')
+                  } else {
+                    assert.ok(!(TEST_FINAL_STATUS in test.meta))
+                  }
+                })
+              })
+
+            let stdout = ''
+            childProcess = exec(
+              './node_modules/.bin/vitest run --retry=1',
+              {
+                cwd,
+                env: {
+                  ...getCiVisAgentlessConfig(receiver.port),
+                  TEST_DIR: 'ci-visibility/vitest-tests/test-quarantine.mjs',
+                  NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+                },
+              }
+            )
+            childProcess.stdout?.on('data', data => {
+              stdout += data
+            })
+
+            const [[exitCode]] = await Promise.all([
+              once(childProcess, 'exit'),
+              testAssertionsPromise,
+            ])
+
+            assert.strictEqual(
+              (stdout.match(/I am running when quarantined/g) || []).length,
+              2
+            )
+            assert.strictEqual(exitCode, 0)
+          })
+
+          it('can quarantine tests retried by Vitest that eventually pass', async () => {
+            receiver.setSettings({
+              test_management: { enabled: true },
+              flaky_test_retries_enabled: false,
+            })
+            receiver.setTestManagementTests({
+              vitest: {
+                suites: {
+                  'ci-visibility/vitest-tests/quarantine-eventually-passes.mjs': {
+                    tests: {
+                      'quarantine tests with retries can quarantine a test that eventually passes': {
+                        properties: {
+                          quarantined: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            })
+
+            const testAssertionsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                const testSession = events.find(event => event.type === 'test_session_end').content
+
+                assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+                assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+
+                const quarantinedTests = tests
+                  .filter(test => test.meta[TEST_NAME] ===
+                    'quarantine tests with retries can quarantine a test that eventually passes')
+                  .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+                assert.strictEqual(quarantinedTests.length, 3)
+
+                quarantinedTests.forEach((test, index) => {
+                  assert.strictEqual(test.meta[TEST_STATUS], index === 2 ? 'pass' : 'fail')
+                  assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+
+                  if (index === 0) {
+                    assert.ok(!(TEST_IS_RETRY in test.meta))
+                    assert.ok(!(TEST_RETRY_REASON in test.meta))
+                  } else {
+                    assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
+                    assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+                  }
+
+                  if (index === quarantinedTests.length - 1) {
+                    assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'skip')
+                  } else {
+                    assert.ok(!(TEST_FINAL_STATUS in test.meta))
+                  }
+                })
+              })
+
+            let stdout = ''
+            childProcess = exec(
+              './node_modules/.bin/vitest run --retry=2',
+              {
+                cwd,
+                env: {
+                  ...getCiVisAgentlessConfig(receiver.port),
+                  TEST_DIR: 'ci-visibility/vitest-tests/quarantine-eventually-passes.mjs',
+                  NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+                },
+              }
+            )
+            childProcess.stdout?.on('data', data => {
+              stdout += data
+            })
+
+            const [[exitCode]] = await Promise.all([
+              once(childProcess, 'exit'),
+              testAssertionsPromise,
+            ])
+
+            assert.strictEqual(
+              (stdout.match(/I am running when quarantined and eventually passes/g) || []).length,
+              3
+            )
+            assert.strictEqual(exitCode, 0)
           })
 
           it('fails if quarantine is not enabled', (done) => {

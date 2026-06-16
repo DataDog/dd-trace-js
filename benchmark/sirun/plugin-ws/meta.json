@@ -1,0 +1,16 @@
+{
+  "name": "plugin-ws",
+  "run": "node index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "cachegrind": false,
+  "iterations": 15,
+  "instructions": true,
+  "variants": {
+    "send": {
+      "env": { "VARIANT": "send", "ITERATIONS": "6000000" }
+    },
+    "receive": {
+      "env": { "VARIANT": "receive", "ITERATIONS": "6000000" }
+    }
+  }
+}

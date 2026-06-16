@@ -104,6 +104,7 @@ The `scope` is optional. Valid types are:
 | `refactor` | Code change that neither fixes a bug nor adds a feature |
 | `perf` | A code change that improves performance |
 | `test` | Adding or updating tests |
+| `bench` | Adding or updating benchmarks (e.g. under `benchmark/sirun/`) |
 | `build` | Changes to build system or external dependencies |
 | `ci` | Changes to CI configuration files and scripts |
 | `chore` | Other changes that don't modify src or test files |

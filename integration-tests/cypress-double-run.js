@@ -22,8 +22,9 @@ const runOptions = {
 async function runCypressTwice () {
   for (let runNumber = 0; runNumber < 2; runNumber++) {
     const results = await cypress.run(runOptions)
-    if (results.totalFailed !== 0) {
-      process.exit(1)
+    const failures = results.totalFailed ?? results.failures ?? 0
+    if (failures !== 0) {
+      process.exit(failures)
     }
   }
 }

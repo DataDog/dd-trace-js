@@ -28,7 +28,7 @@ class RedisPlugin extends CachePlugin {
   }
 
   bindStart (ctx) {
-    const { db, command, args, argsStartIndex, connectionOptions, connectionName } = ctx
+    const { command, args, argsStartIndex, connectionOptions, connectionName } = ctx
 
     const resource = command
     const normalizedCommand = command.toUpperCase()
@@ -55,7 +55,6 @@ class RedisPlugin extends CachePlugin {
       type: this._spanType,
       meta: {
         'db.type': this._spanType,
-        'db.name': db || '0',
         [this.#rawCommandKey]: formatCommand(normalizedCommand, args, argsStartIndex),
         'out.host': connectionOptions.host,
         [CLIENT_PORT_KEY]: connectionOptions.port,

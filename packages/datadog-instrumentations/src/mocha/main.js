@@ -6,19 +6,25 @@ const { DD_MAJOR } = require('../../../../version')
 const { addHook, channel } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
 const { isMarkedAsUnskippable } = require('../../../datadog-plugin-jest/src/util')
+const { writeCoverageBackfillToCache } = require('../../../dd-trace/src/ci-visibility/test-optimization-cache')
 const log = require('../../../dd-trace/src/log')
 const { getEnvironmentVariable } = require('../../../dd-trace/src/config/helper')
 const {
   getTestSuitePath,
   MOCHA_WORKER_TRACE_PAYLOAD_CODE,
   fromCoverageMapToCoverage,
-  getCoveredFilenamesFromCoverage,
+  getCoveredFilesFromCoverage,
+  getExecutableFilesFromCoverage,
+  applySkippedCoverageToCoverage,
   mergeCoverage,
   resetCoverage,
   getIsFaultyEarlyFlakeDetection,
+  getRelativeCoverageFiles,
+  getTestCoverageLinesPercentage,
   collectTestOptimizationSummariesFromTraces,
   logTestOptimizationSummary,
   getTestOptimizationRequestResults,
+  isModifiedTest,
 } = require('../../../dd-trace/src/plugins/util/test')
 
 const {
@@ -34,6 +40,7 @@ const {
   getOnPendingHandler,
   testFileToSuiteCtx,
   newTests,
+  efdTests,
   testsQuarantined,
   getTestFullName,
   getRunTestsWrapper,
@@ -53,6 +60,8 @@ const unskippableSuites = []
 let suitesToSkip = []
 let isSuitesSkipped = false
 let skippedSuites = []
+let skippableSuitesCoverage = {}
+let skippedSuitesCoverage = {}
 let itrCorrelationId = ''
 let isForcedToRun = false
 const config = {}
@@ -133,10 +142,33 @@ function haveRootTestsFinished (rootTests) {
   return true
 }
 
+function getSuitePath (suite) {
+  return getTestSuitePath(suite.file, process.cwd())
+}
+
+function getSuitesToSkip (originalSuites) {
+  return getSuitesToSkipFromPaths(originalSuites.map(getSuitePath))
+}
+
+function getSuitesToSkipFromPaths (localSuites) {
+  const localSuitesSet = new Set(localSuites)
+  const suitesToSkipForRun = []
+
+  for (const suite of suitesToSkip) {
+    if (localSuitesSet.has(suite)) {
+      suitesToSkipForRun.push(suite)
+    }
+  }
+
+  return suitesToSkipForRun
+}
+
 function getFilteredSuites (originalSuites) {
+  const suitesToSkipForRun = getSuitesToSkip(originalSuites)
+
   return originalSuites.reduce((acc, suite) => {
-    const testPath = getTestSuitePath(suite.file, process.cwd())
-    const shouldSkip = suitesToSkip.includes(testPath)
+    const testPath = getSuitePath(suite)
+    const shouldSkip = suitesToSkipForRun.includes(testPath)
     const isUnskippable = unskippableSuites.includes(suite.file)
     if (shouldSkip && !isUnskippable) {
       acc.skippedSuites.add(testPath)
@@ -144,7 +176,67 @@ function getFilteredSuites (originalSuites) {
       acc.suitesToRun.push(suite)
     }
     return acc
-  }, { suitesToRun: [], skippedSuites: new Set() })
+  }, { suitesToRun: [], skippedSuites: new Set(), suitesToSkipForRun })
+}
+
+function hasSkippableSuitesCoverage () {
+  return skippableSuitesCoverage &&
+    typeof skippableSuitesCoverage === 'object' &&
+    Object.keys(skippableSuitesCoverage).length > 0
+}
+
+function isTiaCoverageBackfillEnabled () {
+  return config.isItrEnabled && config.isCoverageReportUploadEnabled
+}
+
+function getCoverageRootDir () {
+  return config.repositoryRoot || process.cwd()
+}
+
+/**
+ * Recomputes whether a parallel worker result belongs to a modified suite.
+ *
+ * In parallel mode, `_ddIsModified` is set on Mocha Test objects inside the worker.
+ * The main process receives `Test.prototype.serialize()` output for test events,
+ * and that fixed serialization drops custom properties. We still need modified-test
+ * bookkeeping in the main process for EFD failure suppression, so infer it again
+ * from the suite path.
+ *
+ * @param {string} testSuiteAbsolutePath
+ * @returns {boolean}
+ */
+function isModifiedTestSuite (testSuiteAbsolutePath) {
+  const testPath = getTestSuitePath(testSuiteAbsolutePath, getCoverageRootDir())
+  return isModifiedTest(testPath, null, null, config.modifiedFiles, 'mocha')
+}
+
+function shouldReportCodeCoverageLinesPct (hasBackfilledCoverage) {
+  return !isSuitesSkipped || hasBackfilledCoverage
+}
+
+function getSkippedSuitesCoverageForRun () {
+  return isSuitesSkipped && isTiaCoverageBackfillEnabled() && hasSkippableSuitesCoverage()
+    ? skippableSuitesCoverage
+    : {}
+}
+
+function applySkippedCoverageToMochaCoverageMap () {
+  if (!isTiaCoverageBackfillEnabled()) return false
+  return applySkippedCoverageToCoverage(originalCoverageMap, skippedSuitesCoverage, getCoverageRootDir())
+}
+
+function getMochaTestSessionCoverageFiles () {
+  return getRelativeCoverageFiles(getExecutableFilesFromCoverage(originalCoverageMap), getCoverageRootDir())
+}
+
+function resetSuiteSkippingRunState () {
+  isSuitesSkipped = false
+  skippedSuites = []
+  skippableSuitesCoverage = {}
+  skippedSuitesCoverage = {}
+  untestedCoverage = undefined
+  config.repositoryRoot = undefined
+  writeCoverageBackfillToCache({})
 }
 
 function getOnStartHandler (frameworkVersion) {
@@ -179,12 +271,13 @@ function getOnEndHandler (isParallel) {
        * The rationale behind is the following: you may still be able to block your CI pipeline by gating
        * on flakiness (the test will be considered flaky), but you may choose to unblock the pipeline too.
        */
-      for (const tests of Object.values(newTests)) {
-        const failingNewTests = tests.filter(test => isTestFailed(test))
-        const areAllNewTestsFailing = failingNewTests.length === tests.length
-        if (failingNewTests.length && !areAllNewTestsFailing) {
-          this.stats.failures -= failingNewTests.length
-          this.failures -= failingNewTests.length
+      for (const tests of Object.values(efdTests)) {
+        const failingEfdTests = tests.filter(test => isTestFailed(test))
+        const areAllEfdTestsFailing = failingEfdTests.length === tests.length
+        const nonQuarantinedFailingEfdTests = failingEfdTests.filter(test => !testsQuarantined.has(test))
+        if (nonQuarantinedFailingEfdTests.length && !areAllEfdTestsFailing) {
+          this.stats.failures -= nonQuarantinedFailingEfdTests.length
+          this.failures -= nonQuarantinedFailingEfdTests.length
         }
       }
     }
@@ -218,12 +311,24 @@ function getOnEndHandler (isParallel) {
     testFileToSuiteCtx.clear()
 
     let testCodeCoverageLinesTotal
-    if (global.__coverage__) {
+    let testSessionCoverageFiles
+    if (global.__coverage__ || untestedCoverage) {
       try {
+        let hasBackfilledCoverage = false
         if (untestedCoverage) {
           originalCoverageMap.merge(fromCoverageMapToCoverage(untestedCoverage))
         }
-        testCodeCoverageLinesTotal = originalCoverageMap.getCoverageSummary().lines.pct
+        hasBackfilledCoverage = applySkippedCoverageToMochaCoverageMap()
+        if (shouldReportCodeCoverageLinesPct(hasBackfilledCoverage)) {
+          testCodeCoverageLinesTotal = getTestCoverageLinesPercentage(
+            originalCoverageMap,
+            undefined,
+            getCoverageRootDir()
+          )
+        }
+        if (isTiaCoverageBackfillEnabled()) {
+          testSessionCoverageFiles = getMochaTestSessionCoverageFiles()
+        }
       } catch {
         // ignore errors
       }
@@ -235,6 +340,7 @@ function getOnEndHandler (isParallel) {
       status,
       isSuitesSkipped,
       testCodeCoverageLinesTotal,
+      testSessionCoverageFiles,
       numSkippedSuites: skippedSuites.length,
       hasForcedToRunSuites: isForcedToRun,
       hasUnskippableSuites: !!unskippableSuites.length,
@@ -276,23 +382,39 @@ function applyTestManagementTestsResponse ({ err, testManagementTests: receivedT
   }
 }
 
-function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFinishRequest) {
+function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFinishRequest, localSuites) {
   const ctx = {
     isParallel,
     frameworkVersion,
   }
   let skippableSuitesResponse
+  resetSuiteSkippingRunState()
 
-  const onReceivedSkippableSuites = ({ err, skippableSuites, itrCorrelationId: responseItrCorrelationId }) => {
+  const onReceivedSkippableSuites = ({
+    err,
+    skippableSuites,
+    itrCorrelationId: responseItrCorrelationId,
+    skippableSuitesCoverage: responseSkippableSuitesCoverage,
+  }) => {
     if (err) {
       suitesToSkip = []
+      skippableSuitesCoverage = {}
     } else {
       suitesToSkip = skippableSuites
       itrCorrelationId = responseItrCorrelationId
+      skippableSuitesCoverage = responseSkippableSuitesCoverage || {}
     }
+    if (localSuites) {
+      suitesToSkip = getSuitesToSkipFromPaths(localSuites)
+      mochaGlobalRunCh.runStores(ctx, () => {
+        onFinishRequest()
+      })
+      return
+    }
+
     // We remove the suites that we skip through ITR
     const filteredSuites = getFilteredSuites(runner.suite.suites)
-    const { suitesToRun } = filteredSuites
+    const { suitesToRun, suitesToSkipForRun } = filteredSuites
 
     isSuitesSkipped = suitesToRun.length !== runner.suite.suites.length
 
@@ -301,6 +423,9 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     runner.suite.suites = suitesToRun
 
     skippedSuites = [...filteredSuites.skippedSuites]
+    suitesToSkip = suitesToSkipForRun
+    skippedSuitesCoverage = getSkippedSuitesCoverageForRun()
+    writeCoverageBackfillToCache(skippedSuitesCoverage, getCoverageRootDir())
 
     mochaGlobalRunCh.runStores(ctx, () => {
       onFinishRequest()
@@ -346,12 +471,13 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     }
   }
 
-  const onReceivedConfiguration = ({ err, libraryConfig }) => {
+  const onReceivedConfiguration = ({ err, libraryConfig, repositoryRoot }) => {
     if (err || !skippableSuitesCh.hasSubscribers || !knownTestsCh.hasSubscribers) {
       return mochaGlobalRunCh.runStores(ctx, () => {
         onFinishRequest()
       })
     }
+    config.repositoryRoot = repositoryRoot
     config.isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
     config.earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
     config.earlyFlakeDetectionSlowTestRetries = libraryConfig.earlyFlakeDetectionSlowTestRetries ?? {}
@@ -360,7 +486,10 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     config.isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
     config.testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
     config.isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
-    config.isSuitesSkippingEnabled = libraryConfig.isSuitesSkippingEnabled
+    config.isItrEnabled = libraryConfig.isItrEnabled
+    config.isCodeCoverageEnabled = libraryConfig.isCodeCoverageEnabled
+    config.isCoverageReportUploadEnabled = libraryConfig.isCoverageReportUploadEnabled
+    config.isSuitesSkippingEnabled = config.isItrEnabled && libraryConfig.isSuitesSkippingEnabled
     config.isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
     config.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
 
@@ -588,7 +717,7 @@ addHook({
       const status = getRootSuiteStatus(rootTests)
 
       if (global.__coverage__) {
-        const coverageFiles = getCoveredFilenamesFromCoverage(global.__coverage__)
+        const coverageFiles = getCoveredFilesFromCoverage(global.__coverage__)
         testSuiteCodeCoverageCh.publish({ coverageFiles, suiteFile: file })
         mergeCoverage(global.__coverage__, originalCoverageMap)
         resetCoverage(global.__coverage__)
@@ -786,7 +915,7 @@ addHook({
       }
 
       if (global.__coverage__) {
-        const coverageFiles = getCoveredFilenamesFromCoverage(global.__coverage__)
+        const coverageFiles = getCoveredFilesFromCoverage(global.__coverage__)
 
         testSuiteCodeCoverageCh.publish({
           coverageFiles,
@@ -908,11 +1037,11 @@ addHook({
       }
     }
 
+    const localSuites = files.map(file => getTestSuitePath(file, process.cwd()))
     getExecutionConfiguration(this, true, frameworkVersion, () => {
       if (config.isKnownTestsEnabled) {
-        const testSuites = files.map(file => getTestSuitePath(file, process.cwd()))
         const isFaulty = getIsFaultyEarlyFlakeDetection(
-          testSuites,
+          localSuites,
           config.knownTests?.mocha || {},
           config.earlyFlakeDetectionFaultyThreshold
         )
@@ -937,11 +1066,13 @@ addHook({
         }
         isSuitesSkipped = skippedFiles.length > 0
         skippedSuites = skippedFiles
+        skippedSuitesCoverage = getSkippedSuitesCoverageForRun()
+        writeCoverageBackfillToCache(skippedSuitesCoverage, getCoverageRootDir())
         run.apply(this, [cb, { files: filteredFiles }])
       } else {
         run.apply(this, arguments)
       }
-    })
+    }, localSuites)
 
     return this
   })
@@ -1028,10 +1159,15 @@ addHook({
       .events
       .filter(event => event.eventName === 'test end')
       .map(event => event.data)
+    const isModified = config.isImpactedTestsEnabled && isModifiedTestSuite(testSuiteAbsolutePath)
 
     for (const test of tests) {
+      const testProperties = getTestProperties(test, config.testManagementTests)
+      const isAttemptToFix = config.isTestManagementTestsEnabled && testProperties.isAttemptToFix
+
       // `newTests` is filled in the worker process, so we need to use the test results to fill it here too.
-      if (config.isKnownTestsEnabled && isNewTest(test, config.knownTests)) {
+      const isNew = config.isKnownTestsEnabled && isNewTest(test, config.knownTests)
+      if (isNew) {
         const testFullName = getTestFullName(test)
         const tests = newTests[testFullName]
 
@@ -1041,8 +1177,18 @@ addHook({
           newTests[testFullName] = [test]
         }
       }
+      // `efdTests` is filled in the worker process, so we need to use the test results to fill it here too.
+      if (!isAttemptToFix && (isNew || isModified)) {
+        const testFullName = getTestFullName(test)
+        const tests = efdTests[testFullName]
+
+        if (tests) {
+          tests.push(test)
+        } else {
+          efdTests[testFullName] = [test]
+        }
+      }
       // `testsQuarantined` is filled in the worker process, so we need to use the test results to fill it here too.
-      const testProperties = getTestProperties(test, config.testManagementTests)
       if (config.isTestManagementTestsEnabled && testProperties.isQuarantined && !testProperties.isAttemptToFix) {
         testsQuarantined.add(test)
       }
