@@ -396,7 +396,7 @@ export interface GeneratedConfig {
   DD_TRACE_WS_ENABLED: boolean;
   DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH: number;
   DD_VITEST_WORKER: string | undefined;
-  ddTraceMetricsOtelFlushInterval: number | undefined;
+  ddTraceMetricsOtelFlushInterval: number;
   dogstatsd: {
     hostname: string;
     port: string | number;
@@ -511,7 +511,7 @@ export interface GeneratedConfig {
   OTEL_TRACES_EXPORTER: "none" | "otlp" | undefined;
   OTEL_TRACES_SAMPLER: "always_on" | "always_off" | "traceidratio" | "parentbased_always_on" | "parentbased_always_off" | "parentbased_traceidratio";
   OTEL_TRACES_SAMPLER_ARG: number | undefined;
-  otelSemanticsEnabled: boolean;
+  otelSemanticsEnabled: boolean | undefined;
   otlpTraceMetricsEnabled: boolean | undefined;
   peerServiceMapping: Record<string, string>;
   port: string | number;
