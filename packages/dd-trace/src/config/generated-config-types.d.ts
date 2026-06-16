@@ -11,6 +11,7 @@ export interface GeneratedConfig {
       enabled: boolean;
       endpointCollectionEnabled: boolean;
       endpointCollectionMessageLimit: number;
+      maxDownstreamBodyBytes: number;
       maxDownstreamRequestBodyAnalysis: number;
       sampleDelay: number;
     };
