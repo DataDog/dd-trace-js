@@ -474,16 +474,13 @@ describe('SpanStatsProcessor', () => {
     })
   })
 
-  it('_drainBuckets should return raw bucket data and clear buckets', () => {
+  it('should clear buckets after each interval flush', () => {
     const p = new SpanStatsProcessor(config)
     clearTimeout(p.timer)
     p.onSpanFinished(topLevelSpan)
 
     assert.strictEqual(p.buckets.size, 1)
-    const drained = p._drainBuckets()
-    assert.strictEqual(drained.length, 1)
-    assert.ok('timeNs' in drained[0])
-    assert.ok(drained[0].bucket instanceof SpanBuckets)
+    p.onInterval()
     assert.strictEqual(p.buckets.size, 0)
   })
 

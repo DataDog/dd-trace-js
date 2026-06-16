@@ -169,12 +169,14 @@ class SpanStatsProcessor {
     otelSemanticsEnabled,
     reportHostname,
   } = {}) {
-    this.exporter = new SpanStatsExporter({
-      hostname,
-      port,
-      tags,
-      url,
-    })
+    if (!otlpTraceMetricsEnabled) {
+      this.exporter = new SpanStatsExporter({
+        hostname,
+        port,
+        tags,
+        url,
+      })
+    }
     // OTLP trace metrics flush on a fixed 10s cadence (not driven by OTEL_METRIC_EXPORT_INTERVAL).
     // _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL is internal and only overrides the cadence in tests.
     let intervalMs = interval * 1e3
@@ -215,14 +217,14 @@ class SpanStatsProcessor {
   }
 
   onInterval () {
-    const drained = this._drainBuckets()
+    const drained = this.#drainBuckets()
 
     if (this.enabled && !this.otlpExporter) {
       this.exporter.export({
         Hostname: this.hostname,
         Env: this.env,
         Version: this.version || version,
-        Stats: this._toLegacyPayload(drained),
+        Stats: this.#toLegacyPayload(drained),
         Lang: 'javascript',
         TracerVersion: pkg.version,
         RuntimeID: this.tags['runtime-id'],
@@ -249,10 +251,9 @@ class SpanStatsProcessor {
   }
 
   /**
-   * Drains all time buckets and returns the raw data for export.
    * @returns {Array<{timeNs: number, bucket: SpanBuckets}>}
    */
-  _drainBuckets () {
+  #drainBuckets () {
     const drained = []
     for (const [timeNs, bucket] of this.buckets.entries()) {
       drained.push({ timeNs, bucket })
@@ -262,11 +263,10 @@ class SpanStatsProcessor {
   }
 
   /**
-   * Converts drained buckets to the Datadog /v0.6/stats wire format.
    * @param {Array<{timeNs: number, bucket: SpanBuckets}>} drained
    * @returns {Array}
    */
-  _toLegacyPayload (drained) {
+  #toLegacyPayload (drained) {
     const { bucketSizeNs } = this
     return drained.map(({ timeNs, bucket }) => ({
       Start: timeNs,

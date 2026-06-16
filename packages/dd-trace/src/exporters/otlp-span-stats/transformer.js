@@ -18,7 +18,7 @@ const EXPLICIT_BOUNDS_SECONDS = [
  * the last bound land in the trailing overflow bucket and exact zeros in the first bucket.
  *
  * @param {object} sketch - A LogCollapsingLowestDenseDDSketch (positive durations only)
- * @returns {{ bucketCounts: number[], explicitBounds: number[] }}
+ * @returns {number[]}
  */
 function sketchToFixedHistogram (sketch) {
   const bucketCounts = new Array(EXPLICIT_BOUNDS_SECONDS.length + 1).fill(0)
@@ -26,16 +26,13 @@ function sketchToFixedHistogram (sketch) {
   const { store, mapping } = sketch
   for (let key = store.minKey; key <= store.maxKey; key++) {
     const weight = store.bins[key - store.offset]
-    if (!weight || weight <= 0) continue
+    if (!weight) continue
     const seconds = mapping.value(key) / NS_PER_S
     let idx = EXPLICIT_BOUNDS_SECONDS.findIndex((bound) => seconds <= bound)
     if (idx === -1) idx = EXPLICIT_BOUNDS_SECONDS.length
     bucketCounts[idx] += weight
   }
-  return {
-    bucketCounts: bucketCounts.map((weight) => Math.round(weight)),
-    explicitBounds: EXPLICIT_BOUNDS_SECONDS,
-  }
+  return bucketCounts.map((weight) => Math.round(weight))
 }
 
 // Cached at module load time since protobuf types are initialized once.
@@ -51,7 +48,7 @@ function getDeltaTemporality () {
 
 // OTel span status code denoting an error (StatusCode.ERROR == 2). Emitted on error data points so the
 // backend can derive error counts from status.code; ok/unset data points carry no status.code.
-const STATUS_CODE_ERROR = 2
+const ERROR_STATUS_ATTR = { key: 'status.code', value: { intValue: 2 } }
 
 /**
  * Transforms span stats bucket data into an OTLP ExportMetricsServiceRequest.
@@ -109,12 +106,6 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
       : this.serializeToProtobuf(getProtobufTypes().protoMetricsService, data)
   }
 
-  /**
-   * @param {Array} drained
-   * @param {number} bucketSizeNs
-   * @param {boolean} isJson
-   * @returns {object}
-   */
   #buildScopeMetrics (drained, bucketSizeNs, isJson) {
     const temporality = isJson ? 'AGGREGATION_TEMPORALITY_DELTA' : getDeltaTemporality()
 
@@ -132,10 +123,10 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
         const topLevel = aggStats.hits > 0 && aggStats.topLevelHits === aggStats.hits
         const attrs = this.#otelSemanticsEnabled
           ? baseAttrs
-          : [...baseAttrs, this.#boolAttr('datadog.span.top_level', topLevel)]
+          : [...baseAttrs, { key: 'datadog.span.top_level', value: { boolValue: topLevel } }]
 
         this.#pushPoint(dataPoints, aggStats.okDistribution, startNano, endNano, attrs)
-        this.#pushPoint(dataPoints, aggStats.errorDistribution, startNano, endNano, [...attrs, this.#errorStatus()])
+        this.#pushPoint(dataPoints, aggStats.errorDistribution, startNano, endNano, [...attrs, ERROR_STATUS_ATTR])
       }
     }
 
@@ -154,21 +145,8 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
     }]
   }
 
-  /**
-   * Appends a fixed explicit-bounds histogram data point derived from a non-empty sketch. count/sum/
-   * min/max use the sketch's exact scalars; bucket counts are bucketed from its bins. Durations are
-   * converted from nanoseconds to seconds.
-   *
-   * @param {object[]} points
-   * @param {object} sketch - A LogCollapsingLowestDenseDDSketch
-   * @param {string|number} startNano
-   * @param {string|number} endNano
-   * @param {object[]} attributes
-   * @returns {void}
-   */
   #pushPoint (points, sketch, startNano, endNano, attributes) {
     if (!sketch || sketch.count === 0) return
-    const { bucketCounts, explicitBounds } = sketchToFixedHistogram(sketch)
     points.push({
       attributes,
       startTimeUnixNano: startNano,
@@ -177,8 +155,8 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
       sum: sketch.sum / NS_PER_S,
       min: sketch.min / NS_PER_S,
       max: sketch.max / NS_PER_S,
-      bucketCounts,
-      explicitBounds,
+      bucketCounts: sketchToFixedHistogram(sketch),
+      explicitBounds: EXPLICIT_BOUNDS_SECONDS,
     })
   }
 
@@ -216,22 +194,6 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
     }
 
     return this.transformAttributes(raw)
-  }
-
-  /**
-   * @returns {object} status.code attribute denoting an error span status.
-   */
-  #errorStatus () {
-    return { key: 'status.code', value: { intValue: STATUS_CODE_ERROR } }
-  }
-
-  /**
-   * @param {string} key
-   * @param {boolean} value
-   * @returns {object}
-   */
-  #boolAttr (key, value) {
-    return { key, value: { boolValue: value } }
   }
 }
 

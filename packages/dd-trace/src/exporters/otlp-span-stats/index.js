@@ -37,20 +37,9 @@ class OtlpStatsExporter extends OtlpHttpExporterBase {
    */
   export (drained, bucketSizeNs) {
     if (drained.length === 0) return
-
-    let pointCount = 0
-    for (const { bucket } of drained) {
-      pointCount += bucket.size
-    }
-
-    const additionalTags = [`points:${pointCount}`]
-    this.recordTelemetry('dd.trace.span_stats_export_attempts', 1, additionalTags)
-
     const payload = this.transformer.transform(drained, bucketSizeNs)
     this.sendPayload(payload, (result) => {
-      if (result.code === 0) {
-        this.recordTelemetry('dd.trace.span_stats_export_successes', 1, additionalTags)
-      } else {
+      if (result.code !== 0) {
         log.error('Failed to export span stats: %s', result.error?.message)
       }
     })
