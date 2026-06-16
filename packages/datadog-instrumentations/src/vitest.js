@@ -143,6 +143,8 @@ function getProvidedContext () {
       _ddTestSessionId: testSessionId,
       _ddTestModuleId: testModuleId,
       _ddTestCommand: testCommand,
+      _ddRepositoryRoot: repositoryRoot,
+      _ddCodeOwnersEntries: codeOwnersEntries,
     } = globalThis.__vitest_worker__.providedContext
 
     return {
@@ -162,6 +164,8 @@ function getProvidedContext () {
       testSessionId,
       testModuleId,
       testCommand,
+      repositoryRoot,
+      codeOwnersEntries,
     }
   } catch {
     log.error('Vitest workers could not parse provided context, so some features will not work.')
@@ -182,6 +186,8 @@ function getProvidedContext () {
       testSessionId: undefined,
       testModuleId: undefined,
       testCommand: undefined,
+      repositoryRoot: undefined,
+      codeOwnersEntries: undefined,
     }
   }
 }
@@ -472,7 +478,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
   }
 
   if (testSessionConfigurationCh.hasSubscribers) {
-    const { testSessionId, testModuleId, testCommand } = await getChannelPromise(
+    const { testSessionId, testModuleId, testCommand, repositoryRoot, codeOwnersEntries } = await getChannelPromise(
       testSessionConfigurationCh,
       frameworkVersion
     )
@@ -480,6 +486,8 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
       _ddTestSessionId: testSessionId,
       _ddTestModuleId: testModuleId,
       _ddTestCommand: testCommand,
+      _ddRepositoryRoot: repositoryRoot,
+      _ddCodeOwnersEntries: codeOwnersEntries,
     }, 'Could not send test session configuration to workers.')
   }
 
@@ -653,15 +661,32 @@ function getCliOrStartVitestWrapper (frameworkVersion) {
   }
 }
 
+function markVitestWorkerEnv (ctx) {
+  const config = ctx?.config
+  if (!config || config.pool === 'threads' || config.pool === 'vmThreads') {
+    return
+  }
+  config.env = config.env || {}
+  config.env.DD_VITEST_WORKER = '1'
+}
+
 function wrapVitestRunFiles (Vitest, frameworkVersion) {
   if (!Vitest?.prototype?.runFiles) {
     return
   }
 
   shimmer.wrap(Vitest.prototype, 'runFiles', runFiles => async function (testSpecifications) {
+    markVitestWorkerEnv(this)
     await ensureMainProcessSetup(this, frameworkVersion, testSpecifications)
     return runFiles.apply(this, arguments)
   })
+
+  if (Vitest.prototype.collectTests) {
+    shimmer.wrap(Vitest.prototype, 'collectTests', collectTests => function () {
+      markVitestWorkerEnv(this)
+      return collectTests.apply(this, arguments)
+    })
+  }
 }
 
 function getCreateCliWrapper (vitestPackage, frameworkVersion) {
@@ -1393,6 +1418,8 @@ addHook({
       testSessionId: providedContext.testSessionId,
       testModuleId: providedContext.testModuleId,
       testCommand: providedContext.testCommand,
+      repositoryRoot: providedContext.repositoryRoot,
+      codeOwnersEntries: providedContext.codeOwnersEntries,
     }
     testSuiteStartCh.runStores(testSuiteCtx, () => {})
     const startTestsResponse = await startTests.apply(this, arguments)
