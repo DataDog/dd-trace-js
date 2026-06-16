@@ -2,6 +2,7 @@
   "name": "openfeature",
   "run": "node index.js",
   "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "allow_baseline_skip_with_source_changes": true,
   "cachegrind": false,
   "iterations": 10,
   "instructions": true,

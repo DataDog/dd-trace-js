@@ -201,8 +201,23 @@ if [[ "${SKIPPED_COUNT}" -gt 0 ]]; then
   fi
 
   if [[ -n "${NON_BENCH_SOURCE_CHANGED}" ]]; then
+    UNAPPROVED_SKIPS="$(while read -r SKIPPED_VARIANT; do
+      SKIPPED_DIR="${SKIPPED_VARIANT%%/*}"
+      if ! node -e "const meta = require('./' + process.argv[1] + '/meta.json'); process.exit(meta.allow_baseline_skip_with_source_changes === true ? 0 : 1)" "${SKIPPED_DIR}"; then
+        echo "${SKIPPED_VARIANT}"
+      fi
+    done < "$SKIPPED_FILE")"
+
+    if [[ -z "${UNAPPROVED_SKIPS}" ]]; then
+      echo "" >&2
+      echo "All baseline-only benchmark failures explicitly allow source-change skips." >&2
+      exit 0
+    fi
+
     echo "" >&2
     echo "This PR also changes non-benchmark source, so the A/B comparison is incomplete." >&2
+    echo "Skipped variants without explicit allow_baseline_skip_with_source_changes=true:" >&2
+    echo "${UNAPPROVED_SKIPS}" | sed 's/^/  - /' >&2
     echo "Land the benchmark change separately first, then rebase. Changed source files:" >&2
     echo "${NON_BENCH_SOURCE_CHANGED}" | sed 's/^/  - /' >&2
     exit 1
