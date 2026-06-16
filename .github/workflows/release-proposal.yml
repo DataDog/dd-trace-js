@@ -42,7 +42,8 @@ jobs:
         if: >
           github.event_name == 'schedule' &&
           steps.proposal.outputs.commit_count != '' &&
-          fromJSON(steps.proposal.outputs.commit_count) >= 50
+          fromJSON(steps.proposal.outputs.commit_count) >= 50 &&
+          fromJSON(steps.proposal.outputs.commit_count) < 100
         with:
           method: chat.postMessage
           token: ${{ secrets.SLACK_BOT_TOKEN }}
@@ -58,5 +59,27 @@ jobs:
                     <${{ steps.proposal.outputs.pr_url }}|${{ steps.proposal.outputs.version }}>*
                     has ${{ steps.proposal.outputs.commit_count }} commits queued.
                     GitHub's rebase limit is 100 — once reached, commits that don't fit
+                    will be deferred to a subsequent release.
+                    Consider cutting this release soon.
+      - uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v2.1.0
+        if: >
+          github.event_name == 'schedule' &&
+          steps.proposal.outputs.commit_count != '' &&
+          fromJSON(steps.proposal.outputs.commit_count) >= 100
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          errors: true
+          payload: |
+            channel: ${{ secrets.SLACK_CHANNEL_ID }}
+            blocks:
+              - type: "section"
+                text:
+                  type: "mrkdwn"
+                  text: >-
+                    :rotating_light: *Release proposal
+                    <${{ steps.proposal.outputs.pr_url }}|${{ steps.proposal.outputs.version }}>*
+                    has ${{ steps.proposal.outputs.commit_count }} commits queued.
+                    GitHub's rebase limit of 100 has been reached — commits that don't fit
                     will be deferred to a subsequent release.
                     Consider cutting this release soon.

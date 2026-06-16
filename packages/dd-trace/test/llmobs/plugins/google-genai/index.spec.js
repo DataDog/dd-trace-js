@@ -28,8 +28,27 @@ describe('Plugin', () => {
     describe('models.generateContent', () => {
       it('creates a span', async () => {
         const result = await client.models.generateContent({
-          model: 'gemini-2.0-flash',
+          model: 'gemini-2.5-flash',
           contents: 'Hello, world!',
+          config: {
+            tools: [
+              {
+                functionDeclarations: [
+                  {
+                    name: 'tool1',
+                    description: 'A simple tool',
+                    parameters: {
+                      type: 'object',
+                      properties: {
+                        location: { type: 'string', description: 'The city name' },
+                      },
+                      required: ['location'],
+                    },
+                  },
+                ],
+              },
+            ],
+          },
         })
 
         assert.ok(result)
@@ -39,7 +58,7 @@ describe('Plugin', () => {
           span: apmSpans[0],
           spanKind: 'llm',
           name: 'google_genai.request',
-          modelName: 'gemini-2.0-flash',
+          modelName: 'gemini-2.5-flash',
           modelProvider: 'google',
           inputMessages: [{ role: 'user', content: 'Hello, world!' }],
           outputMessages: [{ role: 'assistant', content: MOCK_STRING }],
@@ -64,6 +83,17 @@ describe('Plugin', () => {
             output_tokens: MOCK_NUMBER,
             total_tokens: MOCK_NUMBER,
           },
+          toolDefinitions: [{
+            name: 'tool1',
+            description: 'A simple tool',
+            schema: {
+              type: 'OBJECT',
+              properties: {
+                location: { type: 'STRING', description: 'The city name' },
+              },
+              required: ['location'],
+            },
+          }],
           tags: { ml_app: 'test', integration: 'google_genai' },
         })
       })
@@ -72,7 +102,7 @@ describe('Plugin', () => {
     describe('models.generateContentStream', () => {
       it('creates a span', async () => {
         const stream = await client.models.generateContentStream({
-          model: 'gemini-2.0-flash',
+          model: 'gemini-2.5-flash',
           contents: 'Hello, world!',
         })
 
@@ -85,7 +115,7 @@ describe('Plugin', () => {
           span: apmSpans[0],
           spanKind: 'llm',
           name: 'google_genai.request',
-          modelName: 'gemini-2.0-flash',
+          modelName: 'gemini-2.5-flash',
           modelProvider: 'google',
           inputMessages: [{ role: 'user', content: 'Hello, world!' }],
           outputMessages: [{ role: 'assistant', content: MOCK_STRING }],

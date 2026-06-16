@@ -1322,6 +1322,13 @@
         "default": null
       }
     ],
+    "DD_PROFILING_ALLOCATION_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false"
+      }
+    ],
     "DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED": [
       {
         "implementation": "A",
@@ -2640,9 +2647,9 @@
     ],
     "DD_TRACE_FS_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_GCP_PUBSUB_PUSH_ENABLED": [
