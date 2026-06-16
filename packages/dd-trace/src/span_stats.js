@@ -221,7 +221,7 @@ class SpanStatsProcessor {
 
     if (this.enabled || this.otlpExporter) {
       this.timer = setInterval(this.onInterval.bind(this), intervalMs)
-      this.timer.unref()
+      this.timer.unref?.()
     }
   }
 
