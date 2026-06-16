@@ -1247,6 +1247,20 @@
         "default": "false"
       }
     ],
+    "DD_TRACE_AWS_DURABLE_EXECUTION_SDK_JS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
+    "DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_LOG_LEVEL": [
       {
         "implementation": "C",
@@ -1306,6 +1320,13 @@
         "implementation": "A",
         "type": "string",
         "default": null
+      }
+    ],
+    "DD_PROFILING_ALLOCATION_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false"
       }
     ],
     "DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED": [
@@ -2626,9 +2647,9 @@
     ],
     "DD_TRACE_FS_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_GCP_PUBSUB_PUSH_ENABLED": [

@@ -424,6 +424,25 @@ module.exports = class CiPlugin extends Plugin {
   }
 
   /**
+   * Adds a hidden _dd tag to the test session span when a test-optimization request fails.
+   * If the session span does not exist yet (e.g. library-configuration failed before session:start),
+   * the tag is queued and applied when the span is created.
+   * @param {string} tag - Tag name (e.g. DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS)
+   * @param {Error} err - Request error
+   */
+  _addRequestErrorTag (tag, err) {
+    const value = 'true'
+    if (this.testSessionSpan) {
+      this.testSessionSpan.setTag(tag, value)
+      if (this.testModuleSpan) {
+        this.testModuleSpan.setTag(tag, value)
+      }
+    } else {
+      this._pendingRequestErrorTags.push({ tag, value })
+    }
+  }
+
+  /**
    * Updates repository-root-dependent state when a worker receives the root from
    * the coordinator process after plugin configuration.
    *
@@ -442,25 +461,6 @@ module.exports = class CiPlugin extends Plugin {
     this.repositoryRoot = repositoryRoot
     if (codeOwnersEntries === undefined) {
       this.codeOwnersEntries = getCodeOwnersFileEntries(this.repositoryRoot)
-    }
-  }
-
-  /**
-   * Adds a hidden _dd tag to the test session span when a test-optimization request fails.
-   * If the session span does not exist yet (e.g. library-configuration failed before session:start),
-   * the tag is queued and applied when the span is created.
-   * @param {string} tag - Tag name (e.g. DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS)
-   * @param {Error} err - Request error
-   */
-  _addRequestErrorTag (tag, err) {
-    const value = 'true'
-    if (this.testSessionSpan) {
-      this.testSessionSpan.setTag(tag, value)
-      if (this.testModuleSpan) {
-        this.testModuleSpan.setTag(tag, value)
-      }
-    } else {
-      this._pendingRequestErrorTags.push({ tag, value })
     }
   }
 
@@ -517,7 +517,7 @@ module.exports = class CiPlugin extends Plugin {
   }
 
   /**
-   * Adds suite-level Test Optimization tags to worker test spans when their suite span is available.
+   * Adds suite-level CI Visibility tags to worker test spans when their suite span is available.
    *
    * @param {object[]} trace - Worker trace spans.
    * @returns {string|undefined} Missing test suite name, if the trace cannot be exported yet.

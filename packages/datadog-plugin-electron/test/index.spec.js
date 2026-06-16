@@ -205,6 +205,30 @@ describe('Plugin', () => {
           child.send({ name: 'send' })
         })
 
+        it('should do automatic instrumentation for net.request from a utility process', done => {
+          agent
+            .assertSomeTraces(traces => {
+              const span = traces[0][0]
+              const { meta } = span
+
+              assert.strictEqual(span.type, 'http')
+              assert.strictEqual(span.name, 'http.request')
+              assert.strictEqual(span.resource, 'GET')
+              assert.strictEqual(span.service, 'test')
+              assert.strictEqual(span.error, 0)
+
+              assert.strictEqual(meta.component, 'electron')
+              assert.strictEqual(meta['span.kind'], 'client')
+              assert.strictEqual(meta['http.url'], `http://127.0.0.1:${port}/utility`)
+              assert.strictEqual(meta['http.method'], 'GET')
+              assert.strictEqual(meta['http.status_code'], '200')
+            })
+            .then(done)
+            .catch(done)
+
+          child.send({ name: 'utility-request', url: `http://127.0.0.1:${port}/utility` })
+        })
+
         it('should do automatic instrumentation for renderer IPC when sending', done => {
           agent
             .assertSomeTraces(traces => {

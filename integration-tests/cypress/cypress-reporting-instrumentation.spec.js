@@ -190,6 +190,10 @@ moduleTypes.forEach(({
     // These tests require Cypress >=10 features (defineConfig, setupNodeEvents)
     const over10It = (version !== '6.7.0') ? it : it.skip
 
+    const getCypressRunCommand = specToRun => version === '6.7.0'
+      ? `./node_modules/.bin/cypress run --config-file cypress-config.json --spec "${specToRun}"`
+      : testCommand
+
     // Regression guard: when OTEL_TRACES_EXPORTER=otlp is set in the
     // environment (e.g. by an unrelated OpenTelemetry-instrumented shell),
     // the tracer must still ship Test Optimization spans to
@@ -889,16 +893,17 @@ moduleTypes.forEach(({
         'tags session and children with _dd.ci.library_configuration_error.settings when settings fails 4xx',
         async () => {
           const envVars = getCiVisAgentlessConfig(receiver.port)
+          const specToRun = 'cypress/e2e/basic-pass.js'
 
           receiver.setSettingsResponseCode(404)
           childProcess = exec(
-            testCommand,
+            getCypressRunCommand(specToRun),
             {
               cwd,
               env: {
                 ...envVars,
                 CYPRESS_BASE_URL: webAppBaseUrl,
-                SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+                SPEC_PATTERN: specToRun,
               },
             }
           )
@@ -923,6 +928,7 @@ moduleTypes.forEach(({
         'tags session and children when test optimization requests fail',
         async () => {
           const envVars = getCiVisAgentlessConfig(receiver.port)
+          const specToRun = 'cypress/e2e/basic-pass.js'
 
           receiver.setSettings({
             code_coverage: true,
@@ -937,13 +943,13 @@ moduleTypes.forEach(({
           receiver.setKnownTestsResponseCode(404)
           receiver.setTestManagementTestsResponseCode(404)
           childProcess = exec(
-            testCommand,
+            getCypressRunCommand(specToRun),
             {
               cwd,
               env: {
                 ...envVars,
                 CYPRESS_BASE_URL: webAppBaseUrl,
-                SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+                SPEC_PATTERN: specToRun,
               },
             }
           )

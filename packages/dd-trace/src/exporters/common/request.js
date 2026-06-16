@@ -6,6 +6,7 @@
 const { Readable } = require('stream')
 const http = require('http')
 const https = require('https')
+const net = require('net')
 const zlib = require('zlib')
 
 const { storage } = require('../../../../datadog-core')
@@ -46,6 +47,17 @@ function parseUrl (urlObjOrString) {
 }
 
 /**
+ * @param {string} hostname Host as resolved by {@link parseUrl}; IPv6 is unbracketed (`::1`).
+ */
+function isLoopbackHost (hostname) {
+  // The 127.0.0.0/8 block is loopback, but only when the host is an actual IPv4 literal: a
+  // hostname like `127.evil.com` shares the prefix yet resolves anywhere, so net.isIPv4 gates it.
+  return hostname === 'localhost' ||
+    hostname === '::1' ||
+    (hostname.startsWith('127.') && net.isIPv4(hostname))
+}
+
+/**
  * @param {Buffer|string|Readable|Array<Buffer|string>} data
  * @param {object} options
  * @param {(error: Error|null, result: string, statusCode: number) => void} callback
@@ -65,6 +77,20 @@ function request (data, options, callback) {
       options.hostname = url.hostname // for IPv6 this should be '::1' and not '[::1]'
       options.port = url.port
     }
+  }
+
+  // Never put the Datadog API key on a cleartext connection to a non-loopback host; that would
+  // expose it on the wire. Loopback (local agent, dev proxy, tests) is exempt. Strip the key
+  // rather than drop the request: the agent proxies telemetry with its own key, while an https
+  // intake URL is required to authenticate agentless traffic.
+  const hasApiKey = options.headers['dd-api-key'] !== undefined || options.headers['DD-API-KEY'] !== undefined
+  if (hasApiKey && options.protocol === 'http:' && !isLoopbackHost(options.hostname)) {
+    log.error(
+      'Not sending the Datadog API key over a non-TLS connection to %s. Configure an https intake URL.',
+      options.hostname
+    )
+    delete options.headers['dd-api-key']
+    delete options.headers['DD-API-KEY']
   }
 
   if (data instanceof Readable) {

@@ -1,5 +1,7 @@
-import { test, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
-test('marks the vitest worker process', () => {
-  expect(process.env.DD_VITEST_WORKER).to.equal('1')
+describe('vitest worker env', () => {
+  it('sets DD_VITEST_WORKER', () => {
+    expect(process.env.DD_VITEST_WORKER).toBe('1')
+  })
 })

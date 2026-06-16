@@ -224,8 +224,8 @@ interface Tracer extends opentracing.Tracer {
   removeAllBaggageItems (): Record<string, string>;
 }
 
-// left out of the namespace, so it
-// is doesn't need to be exported for Tracer
+// Left out of the namespace, so it doesn't need to be exported for Tracer.
+// Only include plugins here that can be either disabled or configured.
 /** @hidden */
 interface Plugins {
   "aerospike": tracer.plugins.aerospike;
@@ -235,6 +235,7 @@ interface Plugins {
   "anthropic": tracer.plugins.anthropic;
   "apollo": tracer.plugins.apollo;
   "avsc": tracer.plugins.avsc;
+  "aws-durable-execution-sdk-js": tracer.plugins.aws_durable_execution_sdk_js;
   "aws-sdk": tracer.plugins.aws_sdk;
   "azure-cosmos": tracer.plugins.azure_cosmos;
   "azure-event-hubs": tracer.plugins.azure_event_hubs;
@@ -258,7 +259,6 @@ interface Plugins {
   "fetch": tracer.plugins.fetch;
   "find-my-way": tracer.plugins.find_my_way;
   "fs": tracer.plugins.fs;
-  "generic-pool": tracer.plugins.generic_pool;
   "google-cloud-pubsub": tracer.plugins.google_cloud_pubsub;
   "google-cloud-vertexai": tracer.plugins.google_cloud_vertexai;
   "google-genai": tracer.plugins.google_genai;
@@ -272,7 +272,6 @@ interface Plugins {
   "iovalkey": tracer.plugins.iovalkey;
   "jest": tracer.plugins.jest;
   "kafkajs": tracer.plugins.kafkajs;
-  "knex": tracer.plugins.knex;
   "koa": tracer.plugins.koa;
   "langchain": tracer.plugins.langchain;
   "langgraph": tracer.plugins.langgraph;
@@ -2227,6 +2226,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [aws-durable-execution-sdk-js](https://github.com/aws/aws-durable-execution-sdk-js) module.
+     */
+    interface aws_durable_execution_sdk_js extends Integration {}
+
+    /**
+     * This plugin automatically instruments the
      * [aws-sdk](https://github.com/aws/aws-sdk-js) module.
      */
     interface aws_sdk extends Instrumentation {
@@ -2417,12 +2422,6 @@ declare namespace tracer {
      * This plugin automatically instruments Node.js core fs operations.
      */
     interface fs extends Instrumentation {}
-
-    /**
-     * This plugin patches the [generic-pool](https://github.com/coopernurse/node-pool)
-     * module to bind the callbacks the the caller context.
-     */
-    interface generic_pool extends Integration {}
 
     /**
      * This plugin automatically instruments the
@@ -2704,12 +2703,6 @@ declare namespace tracer {
      * [jest](https://github.com/jestjs/jest) module.
      */
     interface jest extends Integration {}
-
-    /**
-     * This plugin patches the [knex](https://knexjs.org/)
-     * module to bind the promise callback the the caller context.
-     */
-    interface knex extends Integration {}
 
     /**
      * This plugin automatically instruments the

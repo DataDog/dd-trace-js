@@ -661,9 +661,41 @@ function getCliOrStartVitestWrapper (frameworkVersion) {
   }
 }
 
-function markVitestWorkerEnv (ctx) {
+function isForkPool (pool) {
+  return pool === 'forks' || pool === 'vmForks'
+}
+
+function isThreadPool (pool) {
+  return pool === 'threads' || pool === 'vmThreads'
+}
+
+function getTestSpecificationPool (testSpecification) {
+  const project = Array.isArray(testSpecification) ? testSpecification[0] : testSpecification?.project
+  return project?.config?.pool || project?.serializedConfig?.pool || project?.pool || testSpecification?.pool
+}
+
+function hasForkPoolTestSpecification (testSpecifications) {
+  if (!Array.isArray(testSpecifications)) {
+    return false
+  }
+
+  for (const testSpecification of testSpecifications) {
+    if (isForkPool(getTestSpecificationPool(testSpecification))) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function shouldMarkVitestWorkerEnv (pool, testSpecifications) {
+  return isForkPool(pool) || hasForkPoolTestSpecification(testSpecifications) ||
+    (!testSpecifications && !isThreadPool(pool))
+}
+
+function markVitestWorkerEnv (ctx, testSpecifications) {
   const config = ctx?.config
-  if (!config || config.pool === 'threads' || config.pool === 'vmThreads') {
+  if (!config || !shouldMarkVitestWorkerEnv(config.pool, testSpecifications)) {
     return
   }
   config.env = config.env || {}
@@ -676,7 +708,7 @@ function wrapVitestRunFiles (Vitest, frameworkVersion) {
   }
 
   shimmer.wrap(Vitest.prototype, 'runFiles', runFiles => async function (testSpecifications) {
-    markVitestWorkerEnv(this)
+    markVitestWorkerEnv(this, testSpecifications)
     await ensureMainProcessSetup(this, frameworkVersion, testSpecifications)
     return runFiles.apply(this, arguments)
   })
@@ -1359,7 +1391,6 @@ addHook({
   if (baseSequencer) {
     shimmer.wrap(baseSequencer.value.prototype, 'sort', getSortWrapper)
   }
-
   return coveragePackage
 })
 

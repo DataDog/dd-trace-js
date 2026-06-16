@@ -739,9 +739,13 @@ moduleTypes.forEach(({
           const envVars = getCiVisEvpProxyConfig(receiver.port)
 
           const specToRun = 'cypress/e2e/{disable,quarantine}.js'
+          const cypress67SpecToRun = 'cypress/e2e/disable.js,cypress/e2e/quarantine.js'
+          const command = version === '6.7.0'
+            ? `./node_modules/.bin/cypress run --config-file cypress-config.json --spec "${cypress67SpecToRun}"`
+            : version === 'latest' ? testCommand : `${testCommand} --spec "${specToRun}"`
 
           childProcess = exec(
-            version === 'latest' ? testCommand : `${testCommand} --spec "${specToRun}"`,
+            command,
             {
               cwd,
               env: {
