@@ -158,9 +158,19 @@ function applyHttpOtelSemantics (formattedSpan) {
     if (KNOWN_METHODS.has(method)) {
       meta[HTTP_REQUEST_METHOD] = method
     } else {
-      // Unknown verb: bucket to `_OTHER` and preserve the raw value.
+      // Unknown verb: bucket to `_OTHER`, preserve the raw value, and use the
+      // literal "HTTP" in the span name — the spec forbids the raw verb (or the
+      // URL path) there. Known-method names are already `{method} {route}`.
       meta[HTTP_REQUEST_METHOD] = '_OTHER'
       meta[HTTP_REQUEST_METHOD_ORIGINAL] = method
+      const resource = formattedSpan.resource
+      if (typeof resource === 'string') {
+        if (resource === method) {
+          formattedSpan.resource = 'HTTP'
+        } else if (resource.startsWith(`${method} `)) {
+          formattedSpan.resource = `HTTP${resource.slice(method.length)}`
+        }
+      }
     }
     delete meta['http.method']
   }
@@ -219,10 +229,16 @@ function applyHttpOtelSemantics (formattedSpan) {
     }
   }
 
-  // OTel error.type for an error response is the status code, unless an
-  // exception already provided a more specific type.
-  if (formattedSpan.error && status !== undefined && meta[ERROR_TYPE] === undefined) {
-    meta[ERROR_TYPE] = status
+  // OTel error semantics for an error response (no-clobber on an exception-derived
+  // type): server spans are errors on 5xx only (4xx MUST be left unset per the
+  // spec); client spans on any status >= 400.
+  if (status !== undefined && meta[ERROR_TYPE] === undefined) {
+    const statusCode = Number.parseInt(status)
+    const isError = meta['span.kind'] === 'server' ? statusCode >= 500 : statusCode >= 400
+    if (isError) {
+      meta[ERROR_TYPE] = status
+      formattedSpan.error = 1
+    }
   }
 }
 

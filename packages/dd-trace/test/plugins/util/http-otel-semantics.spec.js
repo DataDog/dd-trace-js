@@ -174,5 +174,58 @@ describe('http-otel-semantics', () => {
         8080
       )
     })
+
+    it('uses "HTTP" in the span name for an unknown method', () => {
+      const serverSpan = {
+        meta: { 'span.kind': 'server', 'http.method': 'PROPFIND', 'http.url': 'http://h/p' },
+        metrics: {},
+        error: 0,
+        resource: 'PROPFIND /p',
+      }
+      applyHttpOtelSemantics(serverSpan)
+      assert.strictEqual(serverSpan.resource, 'HTTP /p')
+
+      const clientSpan = {
+        meta: { 'span.kind': 'client', 'http.method': 'PROPFIND', 'http.url': 'http://h/p' },
+        metrics: {},
+        error: 0,
+        resource: 'PROPFIND',
+      }
+      applyHttpOtelSemantics(clientSpan)
+      assert.strictEqual(clientSpan.resource, 'HTTP')
+    })
+
+    it('leaves a known-method span name unchanged', () => {
+      const span = {
+        meta: { 'span.kind': 'server', 'http.method': 'GET', 'http.url': 'http://h/users/1' },
+        metrics: {},
+        error: 0,
+        resource: 'GET /users/{id}',
+      }
+      applyHttpOtelSemantics(span)
+      assert.strictEqual(span.resource, 'GET /users/{id}')
+    })
+
+    it('marks a server 5xx as an error with error.type, but never a server 4xx', () => {
+      const e503 = run({ 'span.kind': 'server', 'http.method': 'GET', 'http.status_code': '503', 'http.url': 'http://h/p' })
+      assert.strictEqual(e503.meta['error.type'], '503')
+      assert.strictEqual(e503.error, 1)
+
+      const e404 = run({ 'span.kind': 'server', 'http.method': 'GET', 'http.status_code': '404', 'http.url': 'http://h/p' })
+      assert.ok(!('error.type' in e404.meta))
+    })
+
+    it('sets error.type for client 4xx and 5xx', () => {
+      assert.strictEqual(
+        run({ 'span.kind': 'client', 'http.method': 'GET', 'http.status_code': '404', 'http.url': 'http://h/p' })
+          .meta['error.type'],
+        '404'
+      )
+      assert.strictEqual(
+        run({ 'span.kind': 'client', 'http.method': 'GET', 'http.status_code': '503', 'http.url': 'http://h/p' })
+          .meta['error.type'],
+        '503'
+      )
+    })
   })
 })
