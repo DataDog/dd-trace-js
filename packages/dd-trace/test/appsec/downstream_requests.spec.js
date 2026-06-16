@@ -167,7 +167,7 @@ describe('appsec downstream_requests', () => {
         statusCode: 200,
         headers: {
           'content-type': 'application/json',
-          'content-length': '5000',
+          'content-length': '1025',
         },
       }
 
