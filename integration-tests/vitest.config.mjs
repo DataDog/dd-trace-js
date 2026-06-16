@@ -30,6 +30,20 @@ if (process.env.CUSTOM_SEQUENCER) {
   }
 }
 
+if (process.env.PROJECT_POOL_CONFIG) {
+  config.test.projects = [
+    {
+      test: {
+        include: [
+          process.env.TEST_DIR || 'ci-visibility/vitest-tests/test-visibility*',
+        ],
+        name: 'project-pool',
+        pool: process.env.PROJECT_POOL_CONFIG,
+      },
+    },
+  ]
+}
+
 if (process.env.COVERAGE_PROVIDER) {
   config.test.coverage = {
     provider: process.env.COVERAGE_PROVIDER || 'v8',
