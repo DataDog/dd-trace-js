@@ -348,6 +348,7 @@ export interface GeneratedConfig {
   DD_TRACE_OPENTELEMETRY_SDK_TRACE_NODE_ENABLED: boolean;
   DD_TRACE_ORACLEDB_ENABLED: boolean;
   DD_TRACE_OTEL_ENABLED: boolean;
+  DD_TRACE_OTEL_SEMANTICS_ENABLED: boolean;
   DD_TRACE_PASSPORT_ENABLED: boolean;
   DD_TRACE_PASSPORT_HTTP_ENABLED: boolean;
   DD_TRACE_PASSPORT_LOCAL_ENABLED: boolean;
@@ -514,7 +515,6 @@ export interface GeneratedConfig {
   OTEL_TRACES_EXPORTER: "none" | "otlp" | undefined;
   OTEL_TRACES_SAMPLER: "always_on" | "always_off" | "traceidratio" | "parentbased_always_on" | "parentbased_always_off" | "parentbased_traceidratio";
   OTEL_TRACES_SAMPLER_ARG: number | undefined;
-  otelSemanticsEnabled: boolean | undefined;
   otlpTraceMetricsEnabled: boolean | undefined;
   peerServiceMapping: Record<string, string>;
   port: string | number;

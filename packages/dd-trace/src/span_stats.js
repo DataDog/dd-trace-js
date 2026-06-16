@@ -169,7 +169,7 @@ class SpanStatsProcessor {
     OTEL_EXPORTER_OTLP_METRICS_HEADERS: otelMetricsHeaders,
     OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: otelMetricsTimeout,
     ddTraceMetricsOtelFlushInterval,
-    otelSemanticsEnabled,
+    DD_TRACE_OTEL_SEMANTICS_ENABLED: otelSemanticsEnabled,
     reportHostname,
   } = {}) {
     if (!otlpTraceMetricsEnabled) {

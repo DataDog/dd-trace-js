@@ -3340,11 +3340,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "configurationNames": [
-          "otelSemanticsEnabled"
-        ],
-        "default": null,
-        "internalPropertyName": "otelSemanticsEnabled"
+        "default": "false"
       }
     ],
     "DD_TRACE_PARTIAL_FLUSH_MIN_SPANS": [
