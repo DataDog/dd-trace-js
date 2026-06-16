@@ -67,9 +67,7 @@ const segmentRegexCache = new Map()
  * }} CompiledRoute
  */
 
-// ---------------------------------------------------------------------------
 // Parser: route string → token list
-// ---------------------------------------------------------------------------
 
 /**
  * Read a param/wildcard name at position i: either "quoted" (any char but ") or unquoted
@@ -237,9 +235,7 @@ function parseRoute (route, isV5 = true) {
   return { tokens, groupParent }
 }
 
-// ---------------------------------------------------------------------------
 // Compiler: token list → segment templates + cached entry
-// ---------------------------------------------------------------------------
 
 /**
  * Compile a raw route string into a CompiledRoute, or null when unsupported.
@@ -343,9 +339,7 @@ function compileRoute (route, isV5 = true) {
 
 const EMPTY_SET = new Set()
 
-// ---------------------------------------------------------------------------
 // Group helpers
-// ---------------------------------------------------------------------------
 
 /**
  * True when group `g` (and its whole ancestor chain) is present. Group 0 is always present.
@@ -379,9 +373,7 @@ function isStrictDescendant (g, ancestor, groupParent) {
   return false
 }
 
-// ---------------------------------------------------------------------------
 // Renderer: segment templates + present-group set → normalized string
-// ---------------------------------------------------------------------------
 
 /**
  * URL-encode characters outside the RFC-1103 static-constant alphabet [A-Za-z0-9.-~_].
@@ -506,9 +498,7 @@ function renderRoute (compiled, present) {
   return compiled.trailingSlash && normalized !== '/' ? normalized + '/' : normalized
 }
 
-// ---------------------------------------------------------------------------
 // Per-segment matching regex (resolves intra-segment optional groups + constraints)
-// ---------------------------------------------------------------------------
 
 /**
  * Build (and cache) a regex that matches a single URL segment against a route segment, plus the
@@ -638,9 +628,7 @@ function segmentWildcard (seg) {
   return null
 }
 
-// ---------------------------------------------------------------------------
 // Presence resolution from the request URL (rule 6)
-// ---------------------------------------------------------------------------
 
 /**
  * Resolve which optional groups are present by matching the route segments against the URL
@@ -746,9 +734,7 @@ function matchSegmentHere (compiled, si, urlSegs, ui, present) {
   return false
 }
 
-// ---------------------------------------------------------------------------
 // Presence resolution from req.params (fallback when no URL path is available)
-// ---------------------------------------------------------------------------
 
 /**
  * Best-effort presence from req.params: an optional group is present iff one of its param
@@ -777,9 +763,7 @@ function resolvePresenceFromParams (compiled, params) {
   return present
 }
 
-// ---------------------------------------------------------------------------
 // Public API
-// ---------------------------------------------------------------------------
 
 /**
  * Compute a stable bitmask key for a present-group set (group ids are small, route-local).

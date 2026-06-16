@@ -56,6 +56,10 @@ describe('normalizeRouteExpress', () => {
     it('does not add trailing slash when not declared', () => {
       assert.equal(normalizeRouteExpress('/users', {}), '/users')
     })
+
+    it('collapses empty (consecutive-slash) segments (rule 2)', () => {
+      assert.equal(normalizeRouteExpress('/a//b', {}, '/a/b'), '/a/b')
+    })
   })
 
   describe('static routes', () => {
