@@ -136,7 +136,7 @@ describe('telemetry', () => {
       },
       circularObject,
       appsec: { enabled: true },
-      profiling: { enabled: 'true' },
+      profiling: { DD_PROFILING_ENABLED: 'true' },
       peerServiceMapping: {
         service_1: 'remapped_service_1',
         service_2: 'remapped_service_2',
@@ -284,7 +284,7 @@ describe('telemetry', () => {
         DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
       },
       appsec: { enabled: false, sca: { DD_APPSEC_SCA_ENABLED: undefined } },
-      profiling: { enabled: false },
+      profiling: { DD_PROFILING_ENABLED: false },
     }, {
       _pluginsByName: pluginsByName,
     })
@@ -340,7 +340,7 @@ describe('telemetry app-heartbeat', () => {
       service: 'test service',
       version: '1.2.3-beta4',
       appsec: { enabled: true },
-      profiling: { enabled: true },
+      profiling: { DD_PROFILING_ENABLED: true },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -408,7 +408,7 @@ describe('Telemetry extended heartbeat', () => {
       service: 'test service',
       version: '1.2.3-beta4',
       appsec: { enabled: true },
-      profiling: { enabled: true },
+      profiling: { DD_PROFILING_ENABLED: true },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -453,7 +453,7 @@ describe('Telemetry extended heartbeat', () => {
       service: 'test service',
       version: '1.2.3-beta4',
       appsec: { enabled: true },
-      profiling: { enabled: true },
+      profiling: { DD_PROFILING_ENABLED: true },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -560,7 +560,7 @@ describe('Telemetry extended heartbeat', () => {
       service: 'test service',
       version: '1.2.3-beta4',
       appsec: { enabled: true },
-      profiling: { enabled: true },
+      profiling: { DD_PROFILING_ENABLED: true },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -656,7 +656,7 @@ describe('Telemetry retry', () => {
       service: 'test service',
       version: '1.2.3-beta4',
       appsec: { enabled: true },
-      profiling: { enabled: true },
+      profiling: { DD_PROFILING_ENABLED: true },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -749,7 +749,7 @@ describe('Telemetry retry', () => {
       service: 'test service',
       version: '1.2.3-beta4',
       appsec: { enabled: true },
-      profiling: { enabled: true },
+      profiling: { DD_PROFILING_ENABLED: true },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -824,7 +824,7 @@ describe('Telemetry retry', () => {
       service: 'test service',
       version: '1.2.3-beta4',
       appsec: { enabled: true },
-      profiling: { enabled: true },
+      profiling: { DD_PROFILING_ENABLED: true },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -890,7 +890,7 @@ describe('Telemetry retry', () => {
       service: 'test service',
       version: '1.2.3-beta4',
       appsec: { enabled: true },
-      profiling: { enabled: true },
+      profiling: { DD_PROFILING_ENABLED: true },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -978,7 +978,7 @@ describe('Telemetry retry', () => {
       service: 'test service',
       version: '1.2.3-beta4',
       appsec: { enabled: true },
-      profiling: { enabled: true },
+      profiling: { DD_PROFILING_ENABLED: true },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -1081,7 +1081,7 @@ describe('AVM OSS', () => {
               'runtime-id': '1a2b3c',
             },
             appsec: { enabled: false },
-            profiling: { enabled: false },
+            profiling: { DD_PROFILING_ENABLED: false },
           }
         })
 

@@ -3724,7 +3724,7 @@ describe('Config', () => {
       assertObjectContains(config, {
         apmTracingEnabled: true,
         stats: {
-          enabled: true,
+          DD_TRACE_STATS_COMPUTATION_ENABLED: true,
         },
       })
 
@@ -3742,7 +3742,7 @@ describe('Config', () => {
       assertObjectContains(config, {
         apmTracingEnabled: false,
         stats: {
-          enabled: false,
+          DD_TRACE_STATS_COMPUTATION_ENABLED: false,
         },
       })
 
@@ -3760,7 +3760,7 @@ describe('Config', () => {
       assertObjectContains(config, {
         apmTracingEnabled: false,
         stats: {
-          enabled: false,
+          DD_TRACE_STATS_COMPUTATION_ENABLED: false,
         },
       })
     })
@@ -4667,7 +4667,7 @@ rules:
     it('should disable stats computation when agentless is enabled', () => {
       process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
       const config = getConfig()
-      assert.strictEqual(config.stats.enabled, false)
+      assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, false)
     })
 
     it('should enable hostname reporting when agentless is enabled', () => {

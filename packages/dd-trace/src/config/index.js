@@ -381,9 +381,9 @@ class Config extends ConfigBase {
     }
 
     if (!this.apmTracingEnabled) {
-      setAndTrack(this, 'stats.enabled', false)
-    } else if (!trackedConfigOrigins.has('stats.enabled')) {
-      setAndTrack(this, 'stats.enabled', getIsGCPFunction() || getIsAzureFunction())
+      setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', false)
+    } else if (!trackedConfigOrigins.has('stats.DD_TRACE_STATS_COMPUTATION_ENABLED')) {
+      setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', getIsGCPFunction() || getIsAzureFunction())
     }
 
     // TODO: Remove the experimental env vars as a major or deprecate the option?
@@ -570,7 +570,7 @@ class Config extends ConfigBase {
     if (agentlessEnabled) {
       setAndTrack(this, 'experimental.exporter', 'agentless')
       // Disable client-side stats computation
-      setAndTrack(this, 'stats.enabled', false)
+      setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', false)
       // Enable hostname reporting
       setAndTrack(this, 'reportHostname', true)
       // Disable rate limiting - server-side sampling will be used

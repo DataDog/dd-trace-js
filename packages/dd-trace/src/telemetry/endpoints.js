@@ -142,7 +142,8 @@ function flushAndSend () {
   for (const [key, endpoint] of pendingEndpoints) {
     batchEndpoints.push(endpoint)
     pendingEndpoints.delete(key)
-    if (batchEndpoints.length >= config.appsec.apiSecurity.endpointCollectionMessageLimit) break
+    // Config is set when endpoint collection is enabled; message limit is optional
+    if (batchEndpoints.length >= (config.appsec?.apiSecurity?.endpointCollectionMessageLimit ?? 0)) break
   }
 
   const payloadObj = {
@@ -183,7 +184,7 @@ function flushAndSend () {
  * @param {import('./send-data').SendDataCallback} updateRetryDataFunction
  */
 function start (_config, _application, _host, getRetryDataFunction, updateRetryDataFunction) {
-  if (!_config.appsec.apiSecurity.endpointCollectionEnabled) return
+  if (!_config.appsec?.apiSecurity?.endpointCollectionEnabled) return
 
   config = _config
   application = _application

@@ -517,7 +517,7 @@ export interface GeneratedConfig {
   peerServiceMapping: Record<string, string>;
   port: string | number;
   profiling: {
-    enabled: 'true' | 'false' | 'auto';
+    DD_PROFILING_ENABLED: 'true' | 'false' | 'auto';
   };
   protocolVersion: string;
   queryStringObfuscation: string;
@@ -547,7 +547,7 @@ export interface GeneratedConfig {
   spanSamplingRules: import('../../../../index').SpanSamplingRule[] | undefined;
   startupLogs: boolean;
   stats: {
-    enabled: boolean;
+    DD_TRACE_STATS_COMPUTATION_ENABLED: boolean;
   };
   tags: Record<string, string>;
   telemetry: {

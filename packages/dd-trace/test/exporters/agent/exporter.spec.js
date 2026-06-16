@@ -37,7 +37,7 @@ describe('Exporter', () => {
   })
 
   it('should pass computed stats header through to writer', () => {
-    const stats = { enabled: true }
+    const stats = { DD_TRACE_STATS_COMPUTATION_ENABLED: true }
     exporter = new Exporter({ url, flushInterval, stats }, prioritySampler)
     sinon.assert.calledWithMatch(Writer, {
       headers: {
@@ -47,7 +47,7 @@ describe('Exporter', () => {
   })
 
   it('should pass computed stats header through to writer if APM Tracing is disabled', () => {
-    const stats = { enabled: false }
+    const stats = { DD_TRACE_STATS_COMPUTATION_ENABLED: false }
     const apmTracingEnabled = false
     exporter = new Exporter({ url, flushInterval, stats, apmTracingEnabled }, prioritySampler)
 
@@ -59,7 +59,7 @@ describe('Exporter', () => {
   })
 
   it('should forward an IPv6 agent URL to the writer', () => {
-    const stats = { enabled: true }
+    const stats = { DD_TRACE_STATS_COMPUTATION_ENABLED: true }
     const url = new URL('http://[::1]:8126/')
     exporter = new Exporter({ url, flushInterval, stats }, prioritySampler)
     sinon.assert.calledWithMatch(Writer, { url })

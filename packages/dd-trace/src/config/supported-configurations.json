@@ -1406,7 +1406,7 @@
       {
         "implementation": "B",
         "type": "string",
-        "internalPropertyName": "profiling.enabled",
+        "namespace": "profiling",
         "configurationNames": [
           "profiling"
         ],
@@ -3754,7 +3754,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "internalPropertyName": "stats.enabled",
+        "namespace": "stats",
         "configurationNames": [
           "stats"
         ],

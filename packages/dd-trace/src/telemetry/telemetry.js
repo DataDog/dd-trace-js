@@ -154,7 +154,7 @@ function getProducts (config) {
     },
     profiler: {
       version: tracerVersion,
-      enabled: profilingEnabledToBoolean(config.profiling.enabled),
+      enabled: profilingEnabledToBoolean(config.profiling.DD_PROFILING_ENABLED),
     },
   }
 }

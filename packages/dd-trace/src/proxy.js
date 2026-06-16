@@ -180,11 +180,11 @@ class Tracer extends NoopProxy {
         openfeatureRemoteConfig.enable(rc, config, () => this.openfeature)
       }
 
-      if (config.profiling.enabled === 'true') {
+      if (config.profiling.DD_PROFILING_ENABLED === 'true') {
         this._profilerStarted = this._startProfiler(config)
       } else {
         this._profilerStarted = false
-        if (config.profiling.enabled === 'auto') {
+        if (config.profiling.DD_PROFILING_ENABLED === 'auto') {
           const { SSIHeuristics } = require('./profiling/ssi-heuristics')
           const ssiHeuristics = new SSIHeuristics(config)
           ssiHeuristics.start()
