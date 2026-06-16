@@ -212,9 +212,12 @@ class AIGuard extends NoopAIGuard {
     if (!this.#initialized) {
       return super.evaluate(messages, opts)
     }
-    const { block = true, source = TAGS.SOURCE_SDK, integration = TAGS.INTEGRATION_NONE } = opts ?? {}
+    const { block = true, source = TAGS.SOURCE_SDK, integration = TAGS.INTEGRATION_NONE, childOf } = opts ?? {}
     const telemetryTags = { source, integration }
-    return this.#tracer.trace(TAGS.RESOURCE, {}, async (span) => {
+    // Only pass `childOf` when truthy so `tracer.trace`'s default (`scope().active()`)
+    // still applies for SDK callers that don't supply an explicit parent.
+    const traceOpts = childOf ? { childOf } : {}
+    return this.#tracer.trace(TAGS.RESOURCE, traceOpts, async (span) => {
       const last = messages[messages.length - 1]
       const target = this.#isToolCall(last) ? 'tool' : 'prompt'
       span.setTag(TAGS.TARGET_TAG_KEY, target)

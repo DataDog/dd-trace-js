@@ -11,7 +11,7 @@
 //   // ...requires, setup...
 //   guard.loopStart()
 //   for (...) { ... }
-//   guard.done()            // default 10% ceiling
+//   guard.done()            // default 7% ceiling
 //   guard.done(0.15)        // relaxed ceiling when the loop legitimately can't dominate further
 
 const assert = require('node:assert/strict')
@@ -21,9 +21,14 @@ let loopStartedAt
 
 function loopStart () {
   loopStartedAt = process.hrtime.bigint()
+  if (process.env.SIRUN_READY_FD) {
+    require('fs').writeSync(parseInt(process.env.SIRUN_READY_FD), 'x')
+  } else {
+    process.stderr.write('startup-guard: SIRUN_READY_FD is not set, startup time will be included in measurements\n')
+  }
 }
 
-function done (maxShare = 0.10) {
+function done (maxShare = 0.07) {
   const end = process.hrtime.bigint()
   assert.ok(loopStartedAt !== undefined, 'startup-guard: loopStart() was never called')
   const total = Number(end - START)

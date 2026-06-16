@@ -111,7 +111,8 @@
         "aliases": [
           "DATADOG_API_KEY"
         ],
-        "internalPropertyName": "apiKey"
+        "internalPropertyName": "apiKey",
+        "sensitive": true
       }
     ],
     "DD_API_SECURITY_ENABLED": [
@@ -164,6 +165,14 @@
         "type": "int",
         "internalPropertyName": "appsec.apiSecurity.maxDownstreamRequestBodyAnalysis",
         "default": "1"
+      }
+    ],
+    "DD_API_SECURITY_MAX_DOWNSTREAM_BODY_BYTES": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "internalPropertyName": "appsec.apiSecurity.maxDownstreamBodyBytes",
+        "default": "10485760"
       }
     ],
     "DD_API_SECURITY_SAMPLE_DELAY": [
@@ -423,7 +432,8 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": null
+        "default": null,
+        "sensitive": true
       }
     ],
     "DD_AZURE_RESOURCE_GROUP": [
@@ -1245,6 +1255,20 @@
         "default": "false"
       }
     ],
+    "DD_TRACE_AWS_DURABLE_EXECUTION_SDK_JS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
+    "DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_LOG_LEVEL": [
       {
         "implementation": "C",
@@ -1304,6 +1328,13 @@
         "implementation": "A",
         "type": "string",
         "default": null
+      }
+    ],
+    "DD_PROFILING_ALLOCATION_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false"
       }
     ],
     "DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED": [
@@ -2624,9 +2655,9 @@
     ],
     "DD_TRACE_FS_ENABLED": [
       {
-        "implementation": "A",
+        "implementation": "B",
         "type": "boolean",
-        "default": "true"
+        "default": "false"
       }
     ],
     "DD_TRACE_GCP_PUBSUB_PUSH_ENABLED": [
@@ -3289,6 +3320,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_OTEL_SEMANTICS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false"
+      }
+    ],
     "DD_TRACE_OTEL_ENABLED": [
       {
         "implementation": "A",
@@ -3914,7 +3952,8 @@
       {
         "implementation": "B",
         "type": "map",
-        "default": null
+        "default": null,
+        "sensitive": true
       }
     ],
     "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": [
@@ -3931,7 +3970,8 @@
         "default": null,
         "aliases": [
           "OTEL_EXPORTER_OTLP_HEADERS"
-        ]
+        ],
+        "sensitive": true
       }
     ],
     "OTEL_EXPORTER_OTLP_TRACES_PROTOCOL": [
@@ -3969,7 +4009,8 @@
         "default": null,
         "aliases": [
           "OTEL_EXPORTER_OTLP_HEADERS"
-        ]
+        ],
+        "sensitive": true
       }
     ],
     "OTEL_EXPORTER_OTLP_LOGS_PROTOCOL": [
@@ -4007,7 +4048,8 @@
         "default": null,
         "aliases": [
           "OTEL_EXPORTER_OTLP_HEADERS"
-        ]
+        ],
+        "sensitive": true
       }
     ],
     "OTEL_EXPORTER_OTLP_METRICS_PROTOCOL": [

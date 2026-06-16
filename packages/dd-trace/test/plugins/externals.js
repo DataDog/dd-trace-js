@@ -3,6 +3,13 @@
 const { DD_MAJOR } = require('../../../../version')
 
 module.exports = {
+  '@aws/durable-execution-sdk-js': [
+    {
+      name: '@aws/durable-execution-sdk-js-testing',
+      dep: true,
+      forced: true,
+    },
+  ],
   aerospike: [
     {
       name: 'aerospike',

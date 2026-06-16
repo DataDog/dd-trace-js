@@ -13,8 +13,8 @@ const {
   getCiVisAgentlessConfig,
   getCiVisEvpProxyConfig,
   assertObjectContains,
+  createParallelIt,
 } = require('../helpers')
-const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
 const { createWebAppServerWithRedirect } = require('../ci-visibility/web-app-server-with-redirect')
 const {
@@ -46,7 +46,9 @@ versions.forEach((version) => {
   }
 
   describe(`playwright@${version}`, function () {
-    let cwd, receiver, childProcess, webAppPort, webPortWithRedirect, webAppServer, webAppServerWithRedirect
+    const it = createParallelIt(global.it, { withReceiver: true })
+
+    let cwd, webAppPort, webPortWithRedirect, webAppServer, webAppServerWithRedirect
 
     this.timeout(80000)
 
@@ -84,17 +86,8 @@ versions.forEach((version) => {
       await new Promise(resolve => webAppServerWithRedirect.close(resolve))
     })
 
-    beforeEach(async function () {
-      receiver = await new FakeCiVisIntake().start()
-    })
-
-    afterEach(async () => {
-      childProcess.kill()
-      await receiver.stop()
-    })
-
     contextNewVersions('active test span', () => {
-      it('can grab the test span and add tags', (done) => {
+      it('can grab the test span and add tags', async (receiver, run) => {
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
@@ -104,7 +97,7 @@ versions.forEach((version) => {
             assert.strictEqual(test.meta['test.custom_tag'], 'this is custom')
           })
 
-        childProcess = exec(
+        const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js active-test-span-tags-test.js',
           {
             cwd,
@@ -116,12 +109,10 @@ versions.forEach((version) => {
           }
         )
 
-        childProcess.on('exit', () => {
-          receiverPromise.then(() => done()).catch(done)
-        })
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
 
-      it('can grab the test span and add spans', (done) => {
+      it('can grab the test span and add spans', async (receiver, run) => {
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
@@ -139,7 +130,7 @@ versions.forEach((version) => {
             assert.strictEqual(customSpan.parent_id.toString(), test.span_id.toString())
           })
 
-        childProcess = exec(
+        const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js active-test-span-custom-span-test.js',
           {
             cwd,
@@ -151,14 +142,12 @@ versions.forEach((version) => {
           }
         )
 
-        childProcess.on('exit', () => {
-          receiverPromise.then(() => done()).catch(done)
-        })
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
     })
 
     contextNewVersions('correlation between tests and RUM sessions', () => {
-      const getTestAssertions = ({ isRedirecting }) =>
+      const getTestAssertions = (receiver, { isRedirecting }) =>
         receiver
           .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
@@ -184,33 +173,34 @@ versions.forEach((version) => {
             })
           })
 
-      const runRumTest = async ({ isRedirecting }, extraEnvVars) => {
-        const testAssertionsPromise = getTestAssertions({ isRedirecting })
+      const runRumTest = async (receiver, { isRedirecting }, extraEnvVars) => {
+        const testAssertionsPromise = getTestAssertions(receiver, { isRedirecting })
+        let proc
+        try {
+          proc = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${isRedirecting ? webPortWithRedirect : webAppPort}`,
+                TEST_DIR: './ci-visibility/playwright-tests-rum',
+                ...extraEnvVars,
+              },
+            }
+          )
 
-        childProcess = exec(
-          './node_modules/.bin/playwright test -c playwright.config.js',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              PW_BASE_URL: `http://localhost:${isRedirecting ? webPortWithRedirect : webAppPort}`,
-              TEST_DIR: './ci-visibility/playwright-tests-rum',
-              ...extraEnvVars,
-            },
-          }
-        )
-
-        await Promise.all([
-          once(childProcess, 'exit'),
-          testAssertionsPromise,
-        ])
+          await Promise.all([once(proc, 'exit'), testAssertionsPromise])
+        } finally {
+          proc?.kill()
+        }
       }
 
-      it('can correlate tests and RUM sessions', async () => {
-        await runRumTest({ isRedirecting: false })
+      it('can correlate tests and RUM sessions', async (receiver) => {
+        await runRumTest(receiver, { isRedirecting: false })
       })
 
-      it('sends telemetry for RUM browser tests when telemetry is enabled', async () => {
+      it('sends telemetry for RUM browser tests when telemetry is enabled', async (receiver) => {
         const telemetryPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/apmtelemetry'), (payloads) => {
             const telemetryEvents = payloads.flatMap(({ payload }) => payload.payload.series)
@@ -231,6 +221,7 @@ versions.forEach((version) => {
 
         await Promise.all([
           runRumTest(
+            receiver,
             { isRedirecting: false },
             {
               ...getCiVisEvpProxyConfig(receiver.port),
@@ -241,13 +232,13 @@ versions.forEach((version) => {
         ])
       })
 
-      it('do not crash when redirecting and RUM sessions are not active', async () => {
-        await runRumTest({ isRedirecting: true })
+      it('do not crash when redirecting and RUM sessions are not active', async (receiver) => {
+        await runRumTest(receiver, { isRedirecting: true })
       })
     })
 
     contextNewVersions('check retries tagging', () => {
-      it('does not send attempt to fix tags if test is retried and not attempt to fix', (done) => {
+      it('does not send attempt to fix tags if test is retried and not attempt to fix', async (receiver, run) => {
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
@@ -275,7 +266,7 @@ versions.forEach((version) => {
           },
         })
 
-        childProcess = exec(
+        const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js retried-test.js',
           {
             cwd,
@@ -287,14 +278,12 @@ versions.forEach((version) => {
           }
         )
 
-        childProcess.on('exit', () => {
-          receiverPromise.then(done).catch(done)
-        })
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
     })
 
     contextNewVersions('playwright early bail', () => {
-      it('reports tests that did not run', async () => {
+      it('reports tests that did not run', async (receiver, run) => {
         const receiverPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
@@ -310,7 +299,7 @@ versions.forEach((version) => {
             })
           })
 
-        childProcess = exec(
+        const proc = run(
           './node_modules/.bin/playwright test -c playwright.config.js',
           {
             cwd,
@@ -323,10 +312,7 @@ versions.forEach((version) => {
           }
         )
 
-        await Promise.all([
-          once(childProcess, 'exit'),
-          receiverPromise,
-        ])
+        await Promise.all([once(proc, 'exit'), receiverPromise])
       })
     })
   })
