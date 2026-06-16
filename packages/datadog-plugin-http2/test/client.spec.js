@@ -59,6 +59,47 @@ describe('Plugin', () => {
         return agent.close()
       })
 
+      describe('with OTel semantics enabled', () => {
+        beforeEach(() => {
+          process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+          return agent.load('http2', { server: false })
+            .then(() => {
+              http2 = require(loadPlugin)
+            })
+        })
+
+        afterEach(() => {
+          delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+        })
+
+        it('emits OpenTelemetry client attributes and omits the Datadog ones', done => {
+          const app = (stream, headers) => {
+            stream.respond({ ':status': 200 })
+            stream.end()
+          }
+
+          appListener = server(app, port => {
+            agent.assertFirstTraceSpan(span => {
+              assert.strictEqual(span.meta['span.kind'], 'client')
+              assert.strictEqual(span.meta['http.request.method'], 'GET')
+              assert.strictEqual(span.meta['url.full'], `${protocol}://localhost:${port}/user`)
+              assert.strictEqual(span.meta['server.address'], 'localhost')
+              assert.strictEqual(span.meta['http.response.status_code'], '200')
+              assert.strictEqual(span.metrics['server.port'], port)
+              assert.strictEqual(span.meta['http.method'], undefined)
+              assert.strictEqual(span.meta['http.url'], undefined)
+              assert.strictEqual(span.meta['http.status_code'], undefined)
+              assert.strictEqual(span.meta['out.host'], undefined)
+            }).then(done).catch(done)
+
+            const client = http2.connect(`${protocol}://localhost:${port}`).on('error', done)
+            const req = client.request({ ':path': '/user', ':method': 'GET' })
+            req.on('error', done)
+            req.end()
+          })
+        })
+      })
+
       describe('without configuration', () => {
         beforeEach(() => {
           return agent.load('http2', { server: false })

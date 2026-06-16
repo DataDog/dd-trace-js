@@ -94,9 +94,29 @@ describe('Plugin', () => {
               assert.strictEqual(span.meta['http.url'], undefined)
               assert.strictEqual(span.meta['http.status_code'], undefined)
               assert.strictEqual(span.meta['out.host'], undefined)
+              assert.strictEqual(span.meta['error.type'], undefined)
             }).then(done).catch(done)
 
             const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+              res.on('data', () => {})
+            })
+            req.end()
+          })
+        })
+
+        it('sets error.type to the status code on a 4xx client response', done => {
+          const app = express()
+          app.get('/bad', (req, res) => {
+            res.status(400).send()
+          })
+
+          appListener = server(app, port => {
+            agent.assertFirstTraceSpan(span => {
+              assert.strictEqual(span.meta['http.response.status_code'], '400')
+              assert.strictEqual(span.meta['error.type'], '400')
+            }).then(done).catch(done)
+
+            const req = http.request(`${protocol}://localhost:${port}/bad`, res => {
               res.on('data', () => {})
             })
             req.end()

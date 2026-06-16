@@ -2,26 +2,9 @@
 
 const assert = require('node:assert/strict')
 
-const {
-  decomposeServerUrl,
-  HTTP_REQUEST_METHOD,
-  HTTP_RESPONSE_STATUS_CODE,
-  URL_FULL,
-  URL_PATH,
-  SERVER_ADDRESS,
-} = require('../../../src/plugins/util/http-otel-semantics')
+const { decomposeServerUrl } = require('../../../src/plugins/util/http-otel-semantics')
 
 describe('http-otel-semantics', () => {
-  describe('attribute names', () => {
-    it('uses the OpenTelemetry HTTP semantic-convention names', () => {
-      assert.strictEqual(HTTP_REQUEST_METHOD, 'http.request.method')
-      assert.strictEqual(HTTP_RESPONSE_STATUS_CODE, 'http.response.status_code')
-      assert.strictEqual(URL_FULL, 'url.full')
-      assert.strictEqual(URL_PATH, 'url.path')
-      assert.strictEqual(SERVER_ADDRESS, 'server.address')
-    })
-  })
-
   describe('decomposeServerUrl', () => {
     it('splits scheme, address, port, path, and query', () => {
       assert.deepStrictEqual(
@@ -37,7 +20,7 @@ describe('http-otel-semantics', () => {
       )
     })
 
-    it('omits the query when there is none', () => {
+    it('keeps an explicit non-default port and omits an absent query', () => {
       const parts = decomposeServerUrl('http://h:8080/', 'http://h:8080/')
       assert.strictEqual(parts.path, '/')
       assert.strictEqual(parts.port, 8080)
@@ -49,10 +32,23 @@ describe('http-otel-semantics', () => {
       assert.strictEqual(parts.query, '<redacted>')
     })
 
-    it('falls back to the root path for a malformed URL', () => {
+    it('strips brackets from an IPv6 server.address', () => {
+      const parts = decomposeServerUrl('http://[::1]:8080/p', 'http://[::1]:8080/p')
+      assert.strictEqual(parts.address, '::1')
+      assert.strictEqual(parts.port, 8080)
+    })
+
+    it('omits server.address when the Host header is absent', () => {
+      // extractURL builds `http://undefined/...` when req.headers.host is missing.
+      const parts = decomposeServerUrl('http://undefined/p', 'http://undefined/p')
+      assert.strictEqual(parts.address, undefined)
+      assert.strictEqual(parts.path, '/p')
+    })
+
+    it('falls back to the root path for a malformed URL while still reading its query', () => {
       assert.deepStrictEqual(
-        decomposeServerUrl('not-a-valid-url', 'not-a-valid-url'),
-        { scheme: undefined, address: undefined, port: undefined, path: '/', query: undefined }
+        decomposeServerUrl('not-a-valid-url?x=1', 'not-a-valid-url?x=1'),
+        { scheme: undefined, address: undefined, port: undefined, path: '/', query: 'x=1' }
       )
     })
   })

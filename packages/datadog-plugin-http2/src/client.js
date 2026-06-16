@@ -8,8 +8,9 @@ const log = require('../../dd-trace/src/log')
 const tags = require('../../../ext/tags')
 const kinds = require('../../../ext/kinds')
 const formats = require('../../../ext/formats')
-const { COMPONENT, CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
+const { COMPONENT, CLIENT_PORT_KEY, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
+const httpOtel = require('../../dd-trace/src/plugins/util/http-otel-semantics')
 
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
@@ -27,6 +28,10 @@ class Http2ClientPlugin extends ClientPlugin {
   static id = 'http2'
   static prefix = 'apm:http2:client:request'
 
+  // In OTel-semantics mode the host is tagged as `server.address`; keep it as a
+  // peer.service precursor so peer.service still resolves.
+  static peerServicePrecursors = ['server.address']
+
   bindStart (message) {
     const { authority, options, headers = {} } = message
     const sessionDetails = extractSessionDetails(authority, options)
@@ -38,22 +43,35 @@ class Http2ClientPlugin extends ClientPlugin {
 
     const store = storage('legacy').getStore()
     const childOf = store && allowed ? store.span : null
+
+    const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    const meta = {
+      [COMPONENT]: this.constructor.id,
+      [SPAN_KIND]: CLIENT,
+      'resource.name': method,
+      'span.type': 'http',
+    }
+    const metrics = {}
+
+    if (otelSemantics) {
+      meta[httpOtel.HTTP_REQUEST_METHOD] = method
+      meta[httpOtel.URL_FULL] = uri
+      meta[httpOtel.SERVER_ADDRESS] = sessionDetails.host
+      const port = Number.parseInt(sessionDetails.port)
+      if (port > 0) metrics[httpOtel.SERVER_PORT] = port
+    } else {
+      meta['http.method'] = method
+      meta['http.url'] = uri
+      meta['out.host'] = sessionDetails.host
+      metrics[CLIENT_PORT_KEY] = Number.parseInt(sessionDetails.port)
+    }
+
     const span = this.startSpan(this.operationName(), {
       childOf,
       integrationName: this.constructor.id,
       service: this.serviceName({ pluginConfig: this.config, sessionDetails }),
-      meta: {
-        [COMPONENT]: this.constructor.id,
-        [SPAN_KIND]: CLIENT,
-        'resource.name': method,
-        'span.type': 'http',
-        'http.method': method,
-        'http.url': uri,
-        'out.host': sessionDetails.host,
-      },
-      metrics: {
-        [CLIENT_PORT_KEY]: Number.parseInt(sessionDetails.port),
-      },
+      meta,
+      metrics,
     }, false)
 
     // TODO: Figure out a better way to do this for any span.
@@ -100,11 +118,17 @@ class Http2ClientPlugin extends ClientPlugin {
 
   _onResponse (store, headers) {
     const status = headers && headers[HTTP2_HEADER_STATUS]
+    const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
 
-    store.span.setTag(HTTP_STATUS_CODE, status)
+    if (otelSemantics) {
+      if (status !== undefined) store.span.setTag(httpOtel.HTTP_RESPONSE_STATUS_CODE, String(status))
+    } else {
+      store.span.setTag(HTTP_STATUS_CODE, status)
+    }
 
     if (!this.config.validateStatus(status)) {
       storage('legacy').run(store, () => this.addError())
+      if (otelSemantics && status !== undefined) store.span.setTag(ERROR_TYPE, String(status))
     }
 
     addHeaderTags(store.span, headers, HTTP_RESPONSE_HEADERS, this.config)

@@ -141,5 +141,5 @@ module.exports = {
   obfuscateQs,
   calculateHttpEndpoint,
   filterSensitiveInfoFromRepository,
-  extractPathFromUrl, // test only
+  extractPathFromUrl, // used by http-otel-semantics decomposeServerUrl fallback (and tests)
 }

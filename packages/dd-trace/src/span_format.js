@@ -213,7 +213,6 @@ function extractTags (formattedSpan, span) {
         }
         break
       // HACK: remove when Datadog supports numeric status code
-      case 'http.response.status_code':
       case 'http.status_code': {
         const stringValue = value && String(value)
         if (typeof stringValue === 'string') {

@@ -2,6 +2,7 @@
 
 const log = require('../../log')
 const tags = require('../../../../../ext/tags')
+const httpOtel = require('./http-otel-semantics')
 
 const RESOURCE_NAME = tags.RESOURCE_NAME
 const SPAN_TYPE = tags.SPAN_TYPE
@@ -56,6 +57,19 @@ function createInferredProxySpan (headers, childOf, tracer, reqCtx, traceCtx, co
 
   log.debug('Successfully extracted inferred span info %s for proxy:', proxyContext, proxyContext.proxySystemName)
 
+  const fullUrl = 'https://' + proxyContext.domainName + proxyContext.path
+  let httpMeta
+  if (tracer._config?.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+    const { scheme, address, port, path, query } = httpOtel.decomposeServerUrl(fullUrl, fullUrl)
+    httpMeta = { [httpOtel.HTTP_REQUEST_METHOD]: proxyContext.method, [httpOtel.URL_PATH]: path }
+    if (scheme) httpMeta[httpOtel.URL_SCHEME] = scheme
+    if (query) httpMeta[httpOtel.URL_QUERY] = query
+    if (address) httpMeta[httpOtel.SERVER_ADDRESS] = address
+    if (port) httpMeta[httpOtel.SERVER_PORT] = port
+  } else {
+    httpMeta = { [HTTP_METHOD]: proxyContext.method, [HTTP_URL]: fullUrl }
+  }
+
   const span = startSpanHelper(tracer, proxySpanInfo.spanName, {
     childOf,
     type: 'web',
@@ -66,8 +80,7 @@ function createInferredProxySpan (headers, childOf, tracer, reqCtx, traceCtx, co
       component: proxySpanInfo.component,
       [SPAN_TYPE]: 'web',
       [SPAN_KIND]: 'server',
-      [HTTP_METHOD]: proxyContext.method,
-      [HTTP_URL]: 'https://' + proxyContext.domainName + proxyContext.path,
+      ...httpMeta,
       stage: proxyContext.stage,
       region: proxyContext.region,
       ...(proxyContext.resourcePath && { [HTTP_ROUTE]: proxyContext.resourcePath }),

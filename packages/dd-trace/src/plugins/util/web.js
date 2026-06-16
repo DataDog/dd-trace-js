@@ -241,8 +241,9 @@ const web = {
       inferredProxySpan.setTag(ERROR, error || true)
     }
 
-    // OTel `error.type` for an error response is the (string) status code.
-    if (context.config.DD_TRACE_OTEL_SEMANTICS_ENABLED && !isValidStatusCode) {
+    // OTel `error.type` for an error response is the (string) status code. Skipped when an
+    // exception is present so span_format's exception-derived `error.type` is not clobbered.
+    if (context.config.DD_TRACE_OTEL_SEMANTICS_ENABLED && !isValidStatusCode && !error) {
       if (!spanContext.getTag(ERROR_TYPE)) {
         span.setTag(ERROR_TYPE, String(statusCode))
       }
@@ -422,7 +423,11 @@ function addRequestTags (context, spanType) {
   }
 
   // if client ip has already been set by appsec, no need to run it again
-  if (config.extractIp && !spanContext.hasTag(HTTP_CLIENT_IP) && !spanContext.hasTag(httpOtel.CLIENT_ADDRESS)) {
+  if (
+    config.extractIp &&
+    !spanContext.hasTag(HTTP_CLIENT_IP) &&
+    (!otelSemantics || !spanContext.hasTag(httpOtel.CLIENT_ADDRESS))
+  ) {
     const clientIp = config.extractIp(config, req)
 
     if (clientIp) {
@@ -449,12 +454,15 @@ function addResponseTags (context) {
 
   applyRouteOrEndpointTag(context)
 
-  const statusCodeTag = config.DD_TRACE_OTEL_SEMANTICS_ENABLED ? httpOtel.HTTP_RESPONSE_STATUS_CODE : HTTP_STATUS_CODE
+  const otelSemantics = config.DD_TRACE_OTEL_SEMANTICS_ENABLED
+  const statusCodeTag = otelSemantics ? httpOtel.HTTP_RESPONSE_STATUS_CODE : HTTP_STATUS_CODE
+  // String in OTel mode so it serializes to `meta` like the Datadog `http.status_code` does.
+  const statusCodeValue = otelSemantics ? String(res.statusCode) : res.statusCode
   span.addTags({
-    [statusCodeTag]: res.statusCode,
+    [statusCodeTag]: statusCodeValue,
   })
   inferredProxySpan?.addTags({
-    [statusCodeTag]: res.statusCode,
+    [statusCodeTag]: statusCodeValue,
   })
 
   addResponseHeaders(context)

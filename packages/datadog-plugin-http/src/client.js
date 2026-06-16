@@ -107,10 +107,12 @@ class HttpClientPlugin extends ClientPlugin {
     if (res) {
       const status = res.status || res.statusCode
 
-      span.setTag(
-        this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED ? httpOtel.HTTP_RESPONSE_STATUS_CODE : HTTP_STATUS_CODE,
-        status
-      )
+      if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+        // String so it serializes to `meta` like the Datadog `http.status_code` does.
+        span.setTag(httpOtel.HTTP_RESPONSE_STATUS_CODE, String(status))
+      } else {
+        span.setTag(HTTP_STATUS_CODE, status)
+      }
 
       if (!this.config.validateStatus(status)) {
         span.setTag('error', 1)

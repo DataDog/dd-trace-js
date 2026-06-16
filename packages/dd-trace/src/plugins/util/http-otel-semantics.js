@@ -45,7 +45,12 @@ function decomposeServerUrl (rawUrl, obfuscatedUrl) {
   try {
     const parsed = new URL(rawUrl)
     scheme = parsed.protocol.length > 1 ? parsed.protocol.slice(0, -1) : undefined
-    address = parsed.hostname || undefined
+    // `extractURL` builds `http://undefined/...` when the Host header is absent; skip that.
+    const hostname = parsed.hostname
+    if (hostname && hostname !== 'undefined') {
+      // Strip IPv6 brackets so `server.address` carries the bare address.
+      address = hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname
+    }
     if (parsed.port) {
       const parsedPort = Number.parseInt(parsed.port)
       if (parsedPort > 0) port = parsedPort
