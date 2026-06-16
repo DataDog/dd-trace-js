@@ -5,9 +5,12 @@ const { channel } = require('dc-polyfill')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
-const { wrapModelWithAIGuard } = require('../src/ai')
+const { wrapModelWithLifecycle } = require('../src/ai')
 
-const evaluateChannel = channel('dd-trace:ai:aiguard')
+const doGenerateBeforeChannel = channel('dd-trace:vercel-ai:doGenerate:before')
+const doGenerateAfterChannel = channel('dd-trace:vercel-ai:doGenerate:after')
+const doStreamBeforeChannel = channel('dd-trace:vercel-ai:doStream:before')
+const doStreamAfterChannel = channel('dd-trace:vercel-ai:doStream:after')
 
 const prompt = [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }]
 
@@ -33,38 +36,78 @@ function readStream (stream) {
   return readAll()
 }
 
-function subscribeAutoResolve () {
+function subscribeAutoResolve (channels) {
   const calls = []
   const handler = ctx => {
     calls.push(ctx)
     ctx.pending.push(Promise.resolve())
   }
-  evaluateChannel.subscribe(handler)
-  return { calls, unsubscribe: () => evaluateChannel.unsubscribe(handler) }
+  for (const lifecycleChannel of channels) {
+    lifecycleChannel.subscribe(handler)
+  }
+  return {
+    calls,
+    unsubscribe: () => {
+      for (const lifecycleChannel of channels) {
+        lifecycleChannel.unsubscribe(handler)
+      }
+    },
+  }
 }
 
-function subscribeAutoReject () {
+function subscribeAutoReject (channels) {
   const err = Object.assign(new Error(), { name: 'AIGuardAbortError', reason: 'blocked' })
   const handler = ctx => {
     ctx.abortController.abort(err)
     ctx.pending.push(Promise.resolve())
   }
-  evaluateChannel.subscribe(handler)
-  return { err, unsubscribe: () => evaluateChannel.unsubscribe(handler) }
+  for (const lifecycleChannel of channels) {
+    lifecycleChannel.subscribe(handler)
+  }
+  return {
+    err,
+    unsubscribe: () => {
+      for (const lifecycleChannel of channels) {
+        lifecycleChannel.unsubscribe(handler)
+      }
+    },
+  }
 }
 
-function subscribeAbortOnCall (abortOnCall, err) {
+function subscribeSyncAbort (channels) {
+  const err = Object.assign(new Error(), { name: 'AIGuardAbortError', reason: 'blocked' })
+  const handler = ctx => ctx.abortController.abort(err)
+  for (const lifecycleChannel of channels) {
+    lifecycleChannel.subscribe(handler)
+  }
+  return {
+    err,
+    unsubscribe: () => {
+      for (const lifecycleChannel of channels) {
+        lifecycleChannel.unsubscribe(handler)
+      }
+    },
+  }
+}
+
+function subscribeAbortOnCall (channels, abortOnCall, err) {
   let callCount = 0
   const handler = ctx => {
     callCount++
     if (callCount === abortOnCall) ctx.abortController.abort(err)
     ctx.pending.push(Promise.resolve())
   }
-  evaluateChannel.subscribe(handler)
-  return () => evaluateChannel.unsubscribe(handler)
+  for (const lifecycleChannel of channels) {
+    lifecycleChannel.subscribe(handler)
+  }
+  return () => {
+    for (const lifecycleChannel of channels) {
+      lifecycleChannel.unsubscribe(handler)
+    }
+  }
 }
 
-describe('wrapModelWithAIGuard', () => {
+describe('wrapModelWithLifecycle', () => {
   let model
 
   beforeEach(() => {
@@ -80,7 +123,7 @@ describe('wrapModelWithAIGuard', () => {
       const result = { content: [] }
       const original = sinon.stub().resolves(result)
       model.doGenerate = original
-      wrapModelWithAIGuard(model)
+      wrapModelWithLifecycle(model)
 
       return model.doGenerate({ prompt }).then(r => {
         assert.strictEqual(r, result)
@@ -89,10 +132,10 @@ describe('wrapModelWithAIGuard', () => {
     })
 
     it('calls original directly when prompt is empty', () => {
-      const { unsubscribe } = subscribeAutoResolve()
+      const { unsubscribe } = subscribeAutoResolve([doGenerateBeforeChannel])
       const original = sinon.stub().resolves({ content: [] })
       model.doGenerate = original
-      wrapModelWithAIGuard(model)
+      wrapModelWithLifecycle(model)
 
       return model.doGenerate({ prompt: [] })
         .then(() => sinon.assert.calledOnce(original))
@@ -100,10 +143,10 @@ describe('wrapModelWithAIGuard', () => {
     })
 
     it('calls original directly when prompt is absent', () => {
-      const { unsubscribe } = subscribeAutoResolve()
+      const { unsubscribe } = subscribeAutoResolve([doGenerateBeforeChannel])
       const original = sinon.stub().resolves({ content: [] })
       model.doGenerate = original
-      wrapModelWithAIGuard(model)
+      wrapModelWithLifecycle(model)
 
       return model.doGenerate({})
         .then(() => sinon.assert.calledOnce(original))
@@ -111,19 +154,20 @@ describe('wrapModelWithAIGuard', () => {
     })
 
     it('publishes input evaluation in parallel with LLM call', () => {
-      const { calls, unsubscribe } = subscribeAutoResolve()
+      const { calls, unsubscribe } = subscribeAutoResolve([doGenerateBeforeChannel])
       let llmCalledBeforeGuardResolves = false
       const original = sinon.stub().callsFake(() => {
         llmCalledBeforeGuardResolves = calls.length === 0 || calls.length === 1
         return Promise.resolve({ content: [] })
       })
       model.doGenerate = original
-      wrapModelWithAIGuard(model)
+      wrapModelWithLifecycle(model)
 
       return model.doGenerate({ prompt })
         .then(() => {
           assert.strictEqual(calls.length, 1)
-          assert.deepStrictEqual(calls[0].messages, [{ role: 'user', content: 'Hello' }])
+          assert.deepStrictEqual(calls[0].prompt, prompt)
+          assert.deepStrictEqual(calls[0].options, { prompt })
           assert.ok(calls[0].abortController instanceof AbortController)
           assert.ok(Array.isArray(calls[0].pending))
           assert.strictEqual(Object.hasOwn(calls[0], 'resolve'), false)
@@ -135,60 +179,59 @@ describe('wrapModelWithAIGuard', () => {
     })
 
     it('rejects with guard error when input is rejected', () => {
-      const { err, unsubscribe } = subscribeAutoReject()
+      const { err, unsubscribe } = subscribeAutoReject([doGenerateBeforeChannel])
       const original = sinon.stub().resolves({ content: [] })
       model.doGenerate = original
-      wrapModelWithAIGuard(model)
+      wrapModelWithLifecycle(model)
+
+      return assert.rejects(() => model.doGenerate({ prompt }), e => e === err)
+        .finally(unsubscribe)
+    })
+
+    it('rejects when input evaluation aborts synchronously without pending work', () => {
+      const { err, unsubscribe } = subscribeSyncAbort([doGenerateBeforeChannel])
+      const original = sinon.stub().resolves({ content: [] })
+      model.doGenerate = original
+      wrapModelWithLifecycle(model)
 
       return assert.rejects(() => model.doGenerate({ prompt }), e => e === err)
         .finally(unsubscribe)
     })
 
     it('publishes output evaluation with text content', () => {
-      const { calls, unsubscribe } = subscribeAutoResolve()
+      const { calls, unsubscribe } = subscribeAutoResolve([doGenerateBeforeChannel, doGenerateAfterChannel])
       const content = [{ type: 'text', text: 'Hello!' }]
       model.doGenerate = sinon.stub().resolves({ content })
-      wrapModelWithAIGuard(model)
+      wrapModelWithLifecycle(model)
 
       return model.doGenerate({ prompt })
         .then(() => {
           assert.strictEqual(calls.length, 2)
-          assert.deepStrictEqual(calls[1].messages, [
-            { role: 'user', content: 'Hello' },
-            { role: 'assistant', content: 'Hello!' },
-          ])
+          assert.deepStrictEqual(calls[1].prompt, prompt)
+          assert.deepStrictEqual(calls[1].result, { content })
           assert.strictEqual(calls[1].abortController.signal.aborted, false)
         })
         .finally(unsubscribe)
     })
 
     it('publishes output evaluation with tool call content', () => {
-      const { calls, unsubscribe } = subscribeAutoResolve()
+      const { calls, unsubscribe } = subscribeAutoResolve([doGenerateBeforeChannel, doGenerateAfterChannel])
       const content = [{ type: 'tool-call', toolCallId: 'c1', toolName: 'search', args: { q: 'test' } }]
       model.doGenerate = sinon.stub().resolves({ content })
-      wrapModelWithAIGuard(model)
+      wrapModelWithLifecycle(model)
 
       return model.doGenerate({ prompt })
         .then(() => {
           assert.strictEqual(calls.length, 2)
-          assert.deepStrictEqual(calls[1].messages, [
-            { role: 'user', content: 'Hello' },
-            {
-              role: 'assistant',
-              tool_calls: [{
-                id: 'c1',
-                function: { name: 'search', arguments: '{"q":"test"}' },
-              }],
-            },
-          ])
+          assert.deepStrictEqual(calls[1].result, { content })
         })
         .finally(unsubscribe)
     })
 
     it('skips output evaluation when content is empty', () => {
-      const { calls, unsubscribe } = subscribeAutoResolve()
+      const { calls, unsubscribe } = subscribeAutoResolve([doGenerateBeforeChannel, doGenerateAfterChannel])
       model.doGenerate = sinon.stub().resolves({ content: [] })
-      wrapModelWithAIGuard(model)
+      wrapModelWithLifecycle(model)
 
       return model.doGenerate({ prompt })
         .then(() => assert.strictEqual(calls.length, 1))
@@ -196,9 +239,9 @@ describe('wrapModelWithAIGuard', () => {
     })
 
     it('skips output evaluation when content is absent', () => {
-      const { calls, unsubscribe } = subscribeAutoResolve()
+      const { calls, unsubscribe } = subscribeAutoResolve([doGenerateBeforeChannel, doGenerateAfterChannel])
       model.doGenerate = sinon.stub().resolves({})
-      wrapModelWithAIGuard(model)
+      wrapModelWithLifecycle(model)
 
       return model.doGenerate({ prompt })
         .then(() => assert.strictEqual(calls.length, 1))
@@ -206,11 +249,11 @@ describe('wrapModelWithAIGuard', () => {
     })
 
     it('returns original result after output evaluation', () => {
-      const { unsubscribe } = subscribeAutoResolve()
+      const { unsubscribe } = subscribeAutoResolve([doGenerateBeforeChannel, doGenerateAfterChannel])
       const content = [{ type: 'text', text: 'reply' }]
       const expected = { content, usage: { tokens: 10 } }
       model.doGenerate = sinon.stub().resolves(expected)
-      wrapModelWithAIGuard(model)
+      wrapModelWithLifecycle(model)
 
       return model.doGenerate({ prompt })
         .then(result => assert.strictEqual(result, expected))
@@ -219,19 +262,19 @@ describe('wrapModelWithAIGuard', () => {
 
     it('rejects when output evaluation rejects', () => {
       const err = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
-      const unsubscribe = subscribeAbortOnCall(2, err)
+      const unsubscribe = subscribeAbortOnCall([doGenerateBeforeChannel, doGenerateAfterChannel], 2, err)
       model.doGenerate = sinon.stub().resolves({ content: [{ type: 'text', text: 'bad' }] })
-      wrapModelWithAIGuard(model)
+      wrapModelWithLifecycle(model)
 
       return assert.rejects(() => model.doGenerate({ prompt }), e => e === err)
         .finally(unsubscribe)
     })
 
     it('does not wrap already wrapped model', () => {
-      const { calls, unsubscribe } = subscribeAutoResolve()
+      const { calls, unsubscribe } = subscribeAutoResolve([doGenerateBeforeChannel])
       model.doGenerate = sinon.stub().resolves({ content: [] })
-      wrapModelWithAIGuard(model)
-      wrapModelWithAIGuard(model)
+      wrapModelWithLifecycle(model)
+      wrapModelWithLifecycle(model)
 
       return model.doGenerate({ prompt })
         .then(() => assert.strictEqual(calls.length, 1))
@@ -244,7 +287,7 @@ describe('wrapModelWithAIGuard', () => {
       const stream = makeStream([])
       const original = sinon.stub().resolves({ stream })
       model.doStream = original
-      wrapModelWithAIGuard(model)
+      wrapModelWithLifecycle(model)
 
       return model.doStream({ prompt }).then(result => {
         assert.ok(result.stream)
@@ -253,10 +296,10 @@ describe('wrapModelWithAIGuard', () => {
     })
 
     it('calls original directly when prompt is empty', () => {
-      const { unsubscribe } = subscribeAutoResolve()
+      const { unsubscribe } = subscribeAutoResolve([doStreamBeforeChannel])
       const original = sinon.stub().resolves({ stream: makeStream([]) })
       model.doStream = original
-      wrapModelWithAIGuard(model)
+      wrapModelWithLifecycle(model)
 
       return model.doStream({ prompt: [] })
         .then(() => sinon.assert.calledOnce(original))
@@ -264,36 +307,36 @@ describe('wrapModelWithAIGuard', () => {
     })
 
     it('publishes input evaluation in parallel with LLM call', () => {
-      const { calls, unsubscribe } = subscribeAutoResolve()
+      const { calls, unsubscribe } = subscribeAutoResolve([doStreamBeforeChannel])
       model.doStream = sinon.stub().resolves({ stream: makeStream([]) })
-      wrapModelWithAIGuard(model)
+      wrapModelWithLifecycle(model)
 
       return model.doStream({ prompt })
         .then(() => {
-          assert.deepStrictEqual(calls[0].messages, [{ role: 'user', content: 'Hello' }])
+          assert.deepStrictEqual(calls[0].prompt, prompt)
         })
         .finally(unsubscribe)
     })
 
     it('rejects with guard error when input is rejected', () => {
-      const { err, unsubscribe } = subscribeAutoReject()
+      const { err, unsubscribe } = subscribeAutoReject([doStreamBeforeChannel])
       const original = sinon.stub().resolves({ stream: makeStream([]) })
       model.doStream = original
-      wrapModelWithAIGuard(model)
+      wrapModelWithLifecycle(model)
 
       return assert.rejects(() => model.doStream({ prompt }), e => e === err)
         .finally(unsubscribe)
     })
 
     it('replays all collected chunks in the output stream', () => {
-      const { unsubscribe } = subscribeAutoResolve()
+      const { unsubscribe } = subscribeAutoResolve([doStreamBeforeChannel, doStreamAfterChannel])
       const chunks = [
         { type: 'text-delta', textDelta: 'Hello' },
         { type: 'text-delta', textDelta: ' World' },
         { type: 'finish' },
       ]
       model.doStream = sinon.stub().resolves({ stream: makeStream(chunks) })
-      wrapModelWithAIGuard(model)
+      wrapModelWithLifecycle(model)
 
       return model.doStream({ prompt })
         .then(result => readStream(result.stream))
@@ -302,81 +345,70 @@ describe('wrapModelWithAIGuard', () => {
     })
 
     it('publishes output evaluation with accumulated text', () => {
-      const { calls, unsubscribe } = subscribeAutoResolve()
+      const { calls, unsubscribe } = subscribeAutoResolve([doStreamBeforeChannel, doStreamAfterChannel])
       const chunks = [
         { type: 'text-delta', textDelta: 'Hello' },
         { type: 'text-delta', textDelta: ' World' },
         { type: 'finish' },
       ]
       model.doStream = sinon.stub().resolves({ stream: makeStream(chunks) })
-      wrapModelWithAIGuard(model)
+      wrapModelWithLifecycle(model)
 
       return model.doStream({ prompt })
         .then(() => {
           assert.strictEqual(calls.length, 2)
-          assert.deepStrictEqual(calls[1].messages, [
-            { role: 'user', content: 'Hello' },
-            { role: 'assistant', content: 'Hello World' },
-          ])
+          assert.deepStrictEqual(calls[1].prompt, prompt)
+          assert.deepStrictEqual(calls[1].chunks, chunks)
         })
         .finally(unsubscribe)
     })
 
     it('publishes output evaluation with all collected tool calls', () => {
-      const { calls, unsubscribe } = subscribeAutoResolve()
+      const { calls, unsubscribe } = subscribeAutoResolve([doStreamBeforeChannel, doStreamAfterChannel])
       const tc1 = { type: 'tool-call', toolCallId: 'c1', toolName: 'search', args: { q: 'a' } }
       const tc2 = { type: 'tool-call', toolCallId: 'c2', toolName: 'fetch', args: { url: 'x' } }
       const chunks = [tc1, tc2, { type: 'finish' }]
       model.doStream = sinon.stub().resolves({ stream: makeStream(chunks) })
-      wrapModelWithAIGuard(model)
+      wrapModelWithLifecycle(model)
 
       return model.doStream({ prompt })
         .then(() => {
           assert.strictEqual(calls.length, 2)
-          assert.deepStrictEqual(calls[1].messages, [
-            { role: 'user', content: 'Hello' },
-            {
-              role: 'assistant',
-              tool_calls: [
-                { id: 'c1', function: { name: 'search', arguments: '{"q":"a"}' } },
-                { id: 'c2', function: { name: 'fetch', arguments: '{"url":"x"}' } },
-              ],
-            },
-          ])
+          assert.deepStrictEqual(calls[1].chunks, chunks)
         })
         .finally(unsubscribe)
     })
 
     it('prefers tool calls over text when both present', () => {
-      const { calls, unsubscribe } = subscribeAutoResolve()
+      const { calls, unsubscribe } = subscribeAutoResolve([doStreamBeforeChannel, doStreamAfterChannel])
       const tc = { type: 'tool-call', toolCallId: 'c1', toolName: 'action', args: {} }
       const chunks = [{ type: 'text-delta', textDelta: 'some text' }, tc, { type: 'finish' }]
       model.doStream = sinon.stub().resolves({ stream: makeStream(chunks) })
-      wrapModelWithAIGuard(model)
+      wrapModelWithLifecycle(model)
 
       return model.doStream({ prompt })
         .then(() => {
-          assert.ok(calls[1].messages[1].tool_calls)
+          assert.deepStrictEqual(calls[1].chunks, chunks)
         })
         .finally(unsubscribe)
     })
 
     it('skips output evaluation when stream has no text or tool calls', () => {
-      const { calls, unsubscribe } = subscribeAutoResolve()
+      const { calls, unsubscribe } = subscribeAutoResolve([doStreamBeforeChannel, doStreamAfterChannel])
       model.doStream = sinon.stub().resolves({ stream: makeStream([{ type: 'finish' }]) })
-      wrapModelWithAIGuard(model)
+      wrapModelWithLifecycle(model)
 
       return model.doStream({ prompt })
-        .then(() => assert.strictEqual(calls.length, 1))
+        .then(() => assert.strictEqual(calls.length, 2))
         .finally(unsubscribe)
     })
 
     it('rejects when output evaluation rejects', () => {
       const err = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
-      const unsubscribe = subscribeAbortOnCall(2, err)
+      const unsubscribe = subscribeAbortOnCall([doStreamBeforeChannel, doStreamAfterChannel], 2, err)
       const chunks = [{ type: 'text-delta', textDelta: 'bad response' }, { type: 'finish' }]
       model.doStream = sinon.stub().resolves({ stream: makeStream(chunks) })
-      wrapModelWithAIGuard(model)
+      wrapModelWithLifecycle(model)
 
       return assert.rejects(() => model.doStream({ prompt }), e => e === err)
         .finally(unsubscribe)

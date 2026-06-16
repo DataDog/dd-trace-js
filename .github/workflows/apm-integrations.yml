@@ -1231,9 +1231,21 @@ jobs:
         image: redis@sha256:a0bb2f95a4672c5bbf3a01fcc2eb6dfb8fd898d83fc71cbf012c6b9479ab1607 # 6.2-alpine
         ports:
           - 6379:6379
+      redis-cluster:
+        image: grokzen/redis-cluster@sha256:f130dd8a322fc4dc595380ec94907539c341d5841de7d31e679223aec04d30f6 # 7.0.10
+        env:
+          IP: 0.0.0.0
+          INITIAL_PORT: 7000
+        ports:
+          - 7000:7000
+          - 7001:7001
+          - 7002:7002
+          - 7003:7003
+          - 7004:7004
+          - 7005:7005
     env:
       PLUGINS: ioredis
-      SERVICES: ioredis
+      SERVICES: redis-cluster
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/plugins/test
