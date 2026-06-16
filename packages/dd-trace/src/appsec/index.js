@@ -4,7 +4,6 @@ const log = require('../log')
 const web = require('../plugins/util/web')
 const { extractIp } = require('../plugins/util/ip_extractor')
 const { HTTP_CLIENT_IP } = require('../../../../ext/tags')
-const { CLIENT_ADDRESS } = require('../plugins/util/http-otel-semantics')
 const { IS_SERVERLESS } = require('../serverless')
 const { isEmpty } = require('../util')
 const RuleManager = require('./rule_manager')
@@ -172,9 +171,7 @@ function incomingHttpStartTranslator ({ req, res, abortController }) {
   rootSpan.addTags({
     '_dd.appsec.enabled': 1,
     '_dd.runtime_family': 'nodejs',
-    // In OTel-semantics mode the client IP is `client.address`, matching web.js,
-    // so AppSec does not add the Datadog `http.client_ip` name on top.
-    [config.DD_TRACE_OTEL_SEMANTICS_ENABLED ? CLIENT_ADDRESS : HTTP_CLIENT_IP]: clientIp,
+    [HTTP_CLIENT_IP]: clientIp,
   })
 
   if (config.inferredProxyServicesEnabled) {

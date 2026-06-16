@@ -6,8 +6,7 @@ const tags = require('../../../ext/tags')
 const formats = require('../../../ext/formats')
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const log = require('../../dd-trace/src/log')
-const { CLIENT_PORT_KEY, ERROR_TYPE } = require('../../dd-trace/src/constants')
-const httpOtel = require('../../dd-trace/src/plugins/util/http-otel-semantics')
+const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 
 const {
   HTTP_STATUS_CODE,
@@ -67,27 +66,17 @@ class UndiciPlugin extends HttpClientPlugin {
     const allowed = this.config.filter(uri)
     const childOf = store && allowed ? store.span : null
 
-    const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
-    const meta = { 'span.kind': 'client' }
-    const metrics = {}
-
-    if (otelSemantics) {
-      meta[httpOtel.HTTP_REQUEST_METHOD] = method
-      meta[httpOtel.URL_FULL] = uri
-      meta[httpOtel.SERVER_ADDRESS] = hostname
-      const portNumber = port ? Number.parseInt(port, 10) : undefined
-      if (portNumber > 0) metrics[httpOtel.SERVER_PORT] = portNumber
-    } else {
-      meta['http.method'] = method
-      meta['http.url'] = uri
-      meta['out.host'] = hostname
-      metrics[CLIENT_PORT_KEY] = port ? Number.parseInt(port, 10) : undefined
-    }
-
     const span = this.startSpan(this.operationName(), {
       childOf,
-      meta,
-      metrics,
+      meta: {
+        'span.kind': 'client',
+        'http.method': method,
+        'http.url': uri,
+        'out.host': hostname,
+      },
+      metrics: {
+        [CLIENT_PORT_KEY]: port ? Number.parseInt(port, 10) : undefined,
+      },
       service: this.serviceName({ pluginConfig: this.config, sessionDetails: { host: hostname, port } }),
       resource: method,
       type: 'http',
@@ -153,17 +142,10 @@ class UndiciPlugin extends HttpClientPlugin {
     const statusCode = response?.statusCode
 
     if (statusCode) {
-      const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
-
-      if (otelSemantics) {
-        span.setTag(httpOtel.HTTP_RESPONSE_STATUS_CODE, String(statusCode))
-      } else {
-        span.setTag(HTTP_STATUS_CODE, statusCode)
-      }
+      span.setTag(HTTP_STATUS_CODE, statusCode)
 
       if (!this.config.validateStatus(statusCode)) {
         span.setTag('error', 1)
-        if (otelSemantics) span.setTag(ERROR_TYPE, String(statusCode))
       }
     }
 

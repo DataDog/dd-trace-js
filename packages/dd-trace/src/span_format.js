@@ -11,6 +11,7 @@ const id = require('./id')
 const { isError } = require('./util')
 const { registerExtraService } = require('./service-naming/extra-services')
 const { TRACING_FIELD_NAME } = require('./process-tags')
+const { applyHttpOtelSemantics } = require('./plugins/util/http-otel-semantics')
 
 const SAMPLING_PRIORITY_KEY = constants.SAMPLING_PRIORITY_KEY
 const SAMPLING_RULE_DECISION = constants.SAMPLING_RULE_DECISION
@@ -176,7 +177,8 @@ function extractTags (formattedSpan, span) {
     metrics[MEASURED] = 1
   }
 
-  const tracerService = span.tracer().serviceLower
+  const tracer = span.tracer()
+  const tracerService = tracer.serviceLower
   if (tags['service.name']?.toLowerCase() !== tracerService) {
     span.setTag(BASE_SERVICE, tracerService)
 
@@ -294,6 +296,12 @@ function extractTags (formattedSpan, span) {
     meta[HOSTNAME_KEY] = hostname.length > MAX_META_VALUE_LENGTH
       ? `${hostname.slice(0, MAX_META_VALUE_LENGTH)}...`
       : hostname
+  }
+
+  // OTel HTTP semantic conventions are applied once here, at serialization, so
+  // every HTTP integration is covered without per-plugin branching.
+  if (tracer._config?.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+    applyHttpOtelSemantics(formattedSpan)
   }
 }
 

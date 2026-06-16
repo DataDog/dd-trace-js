@@ -176,98 +176,24 @@ describe('plugins/util/web', () => {
       })
   })
 
-  describe('OTel semantics', () => {
-    const otelConfig = (extra = {}) => web.normalizeConfig({ DD_TRACE_OTEL_SEMANTICS_ENABLED: true, ...extra })
-
-    it('tags request attributes with OpenTelemetry names and omits the Datadog ones', () => {
-      req.url = '/user'
-      req.headers.host = 'localhost:8080'
-      req.headers['user-agent'] = 'test-agent'
+  describe('OTel semantics network.peer.address', () => {
+    // The HTTP tag renames happen centrally in span_format; only network.peer.address
+    // is set here (the socket isn't available at serialization).
+    it('sets network.peer.address from the socket when OTel semantics are enabled', () => {
+      const otelConfig = web.normalizeConfig({ DD_TRACE_OTEL_SEMANTICS_ENABLED: true })
       req.socket = { remoteAddress: '10.0.0.1' }
 
-      const tags = web.startSpan(tracer, otelConfig(), req, res, 'test.request').context().getTags()
+      const span = web.startSpan(tracer, otelConfig, req, res, 'test.request')
 
-      assert.strictEqual(tags['http.request.method'], 'GET')
-      assert.strictEqual(tags['url.path'], '/user')
-      assert.strictEqual(tags['url.scheme'], 'http')
-      assert.strictEqual(tags['server.address'], 'localhost')
-      assert.strictEqual(tags['server.port'], 8080)
-      assert.strictEqual(tags['user_agent.original'], 'test-agent')
-      assert.strictEqual(tags['network.peer.address'], '10.0.0.1')
-      assert.ok(!('http.url' in tags))
-      assert.ok(!('http.method' in tags))
-      assert.ok(!('http.useragent' in tags))
+      assert.strictEqual(span.context().getTag('network.peer.address'), '10.0.0.1')
     })
 
-    it('decomposes url.query when query-string obfuscation is disabled', () => {
-      req.url = '/user?demo=1'
-      const tags = web.startSpan(tracer, otelConfig({ queryStringObfuscation: false }), req, res, 'test.request')
-        .context().getTags()
+    it('does not set network.peer.address when OTel semantics are disabled', () => {
+      req.socket = { remoteAddress: '10.0.0.1' }
 
-      assert.strictEqual(tags['url.path'], '/user')
-      assert.strictEqual(tags['url.query'], 'demo=1')
-    })
+      const span = web.startSpan(tracer, config, req, res, 'test.request')
 
-    it('omits url.query when the obfuscator strips the query string', () => {
-      req.url = '/user?password=secret'
-      const tags = web.startSpan(tracer, otelConfig(), req, res, 'test.request').context().getTags()
-
-      assert.ok(!('url.query' in tags))
-    })
-
-    it('uses client.address (not http.client_ip) for the extracted IP', () => {
-      req.headers['x-forwarded-for'] = '8.8.8.8'
-      const tags = web.startSpan(tracer, otelConfig({ clientIpEnabled: true }), req, res, 'test.request')
-        .context().getTags()
-
-      assert.strictEqual(tags['client.address'], '8.8.8.8')
-      assert.ok(!(HTTP_CLIENT_IP in tags))
-    })
-
-    it('tags the response status as the string http.response.status_code', () => {
-      res.statusCode = 201
-      const span = web.startSpan(tracer, otelConfig(), req, res, 'test.request')
-      web.finishAll(web.getContext(req))
-      const tags = span.context().getTags()
-
-      assert.strictEqual(tags['http.response.status_code'], '201')
-      assert.ok(!('http.status_code' in tags))
-    })
-
-    it('sets error.type to the status code for an error response', () => {
-      res.statusCode = 500
-      const span = web.startSpan(tracer, otelConfig(), req, res, 'test.request')
-      web.finishAll(web.getContext(req))
-      const tags = span.context().getTags()
-
-      assert.strictEqual(tags['error.type'], '500')
-      assert.strictEqual(tags[ERROR], true)
-    })
-
-    it('does not clobber an exception-derived error.type with the status code', () => {
-      span = tracer.startSpan('test.request')
-      web.patch(req)
-      const context = web.getContext(req)
-      context.span = span
-      context.req = req
-      context.res = res
-      context.config = otelConfig()
-
-      web.addError(req, new Error('boom'))
-      web.addStatusError(req, 500)
-
-      // error.type is left unset so span_format can fill it from the exception name.
-      assert.ok(!('error.type' in span.context().getTags()))
-    })
-
-    it('omits the Datadog-only http.endpoint in OTel mode', () => {
-      req.url = '/users/123'
-      const span = web.startSpan(tracer, otelConfig({ resourceRenamingEnabled: true }), req, res, 'test.request')
-      web.finishAll(web.getContext(req))
-      const tags = span.context().getTags()
-
-      assert.ok(!(HTTP_ENDPOINT in tags))
-      assert.strictEqual(tags['url.path'], '/users/123')
+      assert.strictEqual(span.context().hasTag('network.peer.address'), false)
     })
   })
 

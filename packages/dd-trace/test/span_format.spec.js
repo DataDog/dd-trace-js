@@ -132,6 +132,30 @@ describe('spanFormat', () => {
       })
     })
 
+    it('applies OTel HTTP semantics when DD_TRACE_OTEL_SEMANTICS_ENABLED is set', () => {
+      span.tracer.returns({
+        _service: 'test',
+        serviceLower: 'test',
+        _config: { DD_TRACE_OTEL_SEMANTICS_ENABLED: true },
+      })
+      spanContext._tags = {
+        'span.kind': 'server',
+        'http.method': 'GET',
+        'http.url': 'http://localhost:8080/u?x=1',
+        'http.status_code': 200,
+      }
+
+      trace = spanFormat(span)
+
+      assert.strictEqual(trace.meta['http.request.method'], 'GET')
+      assert.strictEqual(trace.meta['url.path'], '/u')
+      assert.strictEqual(trace.meta['url.scheme'], 'http')
+      assert.strictEqual(trace.meta['http.response.status_code'], '200')
+      assert.ok(!('http.method' in trace.meta))
+      assert.ok(!('http.url' in trace.meta))
+      assert.ok(!('http.status_code' in trace.meta))
+    })
+
     it('pins the formatted-span hidden-class shape for a representative HTTP server span', () => {
       // Regression guard for the typed-helper inlining: covers every slot
       // `formatSpan` / `extractTags` / `extractRootTags` / `extractChunkTags`

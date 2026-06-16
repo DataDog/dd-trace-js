@@ -71,6 +71,99 @@ function decomposeServerUrl (rawUrl, obfuscatedUrl) {
   return { scheme, address, port, path, query }
 }
 
+const ERROR_TYPE = 'error.type'
+
+function toHttpScheme (scheme) {
+  if (scheme === 'ws') return 'http'
+  if (scheme === 'wss') return 'https'
+  return scheme
+}
+
+/**
+ * @typedef {object} FormattedHttpSpan
+ * @property {Record<string, string>} meta
+ * @property {Record<string, number>} metrics
+ * @property {number} error
+ */
+
+/**
+ * Rewrite a formatted span's Datadog HTTP tags to OpenTelemetry HTTP
+ * semantic-convention names, in place. Called at serialization time (from
+ * `span_format`) when `DD_TRACE_OTEL_SEMANTICS_ENABLED` is set, so every HTTP
+ * integration is covered from one place. No-op for non-HTTP spans. The span
+ * keeps the Datadog tag names throughout its lifetime — only the serialized
+ * output is renamed — so runtime consumers (peer.service, AppSec, trace stats)
+ * are unaffected.
+ *
+ * @param {FormattedHttpSpan} formattedSpan
+ */
+function applyHttpOtelSemantics (formattedSpan) {
+  const { meta, metrics } = formattedSpan
+  const method = meta['http.method']
+  const url = meta['http.url']
+  if (method === undefined && url === undefined) return
+
+  if (method !== undefined) {
+    meta[HTTP_REQUEST_METHOD] = method
+    delete meta['http.method']
+  }
+
+  const status = meta['http.status_code']
+  if (status !== undefined) {
+    meta[HTTP_RESPONSE_STATUS_CODE] = status
+    delete meta['http.status_code']
+  }
+
+  const userAgent = meta['http.useragent']
+  if (userAgent !== undefined) {
+    meta[USER_AGENT_ORIGINAL] = userAgent
+    delete meta['http.useragent']
+  }
+
+  const clientIp = meta['http.client_ip']
+  if (clientIp !== undefined) {
+    meta[CLIENT_ADDRESS] = clientIp
+    delete meta['http.client_ip']
+  }
+
+  // http.endpoint is a Datadog-only attribute with no OTel equivalent.
+  delete meta['http.endpoint']
+
+  if (meta['span.kind'] === 'server') {
+    if (url !== undefined) {
+      // The query in `http.url` is already obfuscated per config, so it is preserved.
+      const { scheme, address, port, path, query } = decomposeServerUrl(url, url)
+      if (path !== undefined) meta[URL_PATH] = path
+      if (scheme !== undefined) meta[URL_SCHEME] = toHttpScheme(scheme)
+      if (query !== undefined) meta[URL_QUERY] = query
+      if (address !== undefined) meta[SERVER_ADDRESS] = address
+      if (port !== undefined) metrics[SERVER_PORT] = port
+      delete meta['http.url']
+    }
+  } else {
+    if (url !== undefined) {
+      meta[URL_FULL] = url
+      delete meta['http.url']
+    }
+    const outHost = meta['out.host']
+    if (outHost !== undefined) {
+      meta[SERVER_ADDRESS] = outHost
+      delete meta['out.host']
+    }
+    const clientPort = metrics['network.destination.port']
+    if (clientPort !== undefined) {
+      metrics[SERVER_PORT] = clientPort
+      delete metrics['network.destination.port']
+    }
+  }
+
+  // OTel error.type for an error response is the status code, unless an
+  // exception already provided a more specific type.
+  if (formattedSpan.error && status !== undefined && meta[ERROR_TYPE] === undefined) {
+    meta[ERROR_TYPE] = status
+  }
+}
+
 module.exports = {
   HTTP_REQUEST_METHOD,
   HTTP_RESPONSE_STATUS_CODE,
@@ -84,4 +177,5 @@ module.exports = {
   CLIENT_ADDRESS,
   NETWORK_PEER_ADDRESS,
   decomposeServerUrl,
+  applyHttpOtelSemantics,
 }

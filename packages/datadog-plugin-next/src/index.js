@@ -5,7 +5,6 @@ const { storage } = require('../../datadog-core')
 const analyticsSampler = require('../../dd-trace/src/analytics_sampler')
 const { COMPONENT, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
 const web = require('../../dd-trace/src/plugins/util/web')
-const httpOtel = require('../../dd-trace/src/plugins/util/http-otel-semantics')
 
 const errorPages = new Set(['/404', '/500', '/_error', '/_not-found', '/_not-found/page'])
 
@@ -33,9 +32,7 @@ class NextPlugin extends ServerPlugin {
         'resource.name': req.method,
         'span.type': 'web',
         'span.kind': 'server',
-        ...(this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
-          ? { [httpOtel.HTTP_REQUEST_METHOD]: req.method }
-          : { 'http.method': req.method }),
+        'http.method': req.method,
         ...(serviceSource === undefined ? undefined : { [SVC_SRC_KEY]: serviceSource }),
       },
       integrationName: this.constructor.id,
@@ -82,11 +79,9 @@ class NextPlugin extends ServerPlugin {
       web.addError(req, true)
     }
 
-    if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
-      span.addTags({ [httpOtel.HTTP_RESPONSE_STATUS_CODE]: String(res.statusCode) })
-    } else {
-      span.addTags({ 'http.status_code': res.statusCode })
-    }
+    span.addTags({
+      'http.status_code': res.statusCode,
+    })
 
     this.config.hooks.request(span, req, res)
 

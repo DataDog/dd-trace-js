@@ -370,39 +370,6 @@ describe('AppSec Index', function () {
       }, req)
     })
 
-    it('tags client.address instead of http.client_ip in OTel-semantics mode', () => {
-      AppSec.disable()
-      AppSec.enable({ ...config, DD_TRACE_OTEL_SEMANTICS_ENABLED: true })
-
-      const rootSpan = {
-        addTags: sinon.stub(),
-      }
-
-      web.root.returns(rootSpan)
-
-      const req = {
-        url: '/path',
-        headers: {
-          'user-agent': 'Arachni',
-          host: 'localhost',
-          cookie: 'a=1;b=2',
-        },
-        method: 'POST',
-        socket: {
-          remoteAddress: '127.0.0.1',
-          remotePort: 8080,
-        },
-      }
-
-      AppSec.incomingHttpStartTranslator({ req, res: {} })
-
-      sinon.assert.calledOnceWithExactly(rootSpan.addTags, {
-        '_dd.appsec.enabled': 1,
-        '_dd.runtime_family': 'nodejs',
-        'client.address': '127.0.0.1',
-      })
-    })
-
     describe('inferred proxy spans', () => {
       it('should add _dd.appsec.enabled to inferred proxy span when present', () => {
         AppSec.disable()
