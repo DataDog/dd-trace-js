@@ -1,6 +1,12 @@
 'use strict'
 
+const { channel } = require('diagnostics_channel')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
+
+const toolNames = new WeakMap()
+channel('apm:mcp:server:tool:registered').subscribe(({ tool, name }) => {
+  toolNames.set(tool, name)
+})
 
 function setIsErrorTag (ctx) {
   const result = ctx.result
@@ -58,22 +64,43 @@ class McpServerRequestPlugin extends TracingPlugin {
   static prefix = 'apm:mcp:server:request'
 
   bindStart (ctx) {
-    const { request, extra } = ctx
-    const headers = extra?.requestInfo?.headers
-    // Extract trace context from HTTP transport headers; omit for in-process transports.
-    const childOf = headers ? this.tracer.extract('http_headers', headers) : undefined
+    const { request } = ctx
 
     this.startSpan('mcp.server.request', {
-      childOf,
       resource: request?.method,
       type: 'mcp',
       kind: 'server',
     }, ctx)
 
+    const span = ctx.currentStore?.span
+    const params = request?.params
+    if (params?.name) {
+      const tag = request.method === 'prompts/get' ? 'mcp.prompt.name' : 'mcp.tool.name'
+      span?.setTag(tag, params.name)
+    }
+    if (params?.uri) span?.setTag('mcp.resource.uri', params.uri)
+    if (params?.arguments && Object.keys(params.arguments).length) {
+      span?.setTag('mcp.request.arguments', JSON.stringify(params.arguments))
+    }
+
     return ctx.currentStore
   }
 
   finish (ctx) {
+    const span = ctx.currentStore?.span
+    if (ctx.error) span?.setTag('error', ctx.error)
+    const result = ctx.result
+    if (result?.tools) span?.setTag('mcp.tool.names', result.tools.map(t => t.name).join(','))
+    if (result?.resources) span?.setTag('mcp.resource.uris', result.resources.map(r => r.uri).join(','))
+    if (result?.prompts) {
+      span?.setTag('mcp.prompt.names', result.prompts.map(p => p.name).join(','))
+      const descriptions = result.prompts.map(p => p.description).filter(Boolean)
+      if (descriptions.length) span?.setTag('mcp.prompt.descriptions', descriptions.join(','))
+    }
+    if (result?.content) {
+      const text = result.content.filter(c => c.type === 'text').map(c => c.text).join('\n')
+      if (text) span?.setTag('mcp.tool.response', text)
+    }
     super.finish(ctx)
   }
 }
@@ -84,11 +111,7 @@ class McpServerToolCallPlugin extends TracingPlugin {
 
   bindStart (ctx) {
     const [tool] = ctx.arguments || []
-    // Tool name is the map key in _registeredTools, not a property on the tool object.
-    const registeredTools = ctx.self?._registeredTools
-    const toolName = registeredTools
-      ? Object.keys(registeredTools).find(k => registeredTools[k] === tool)
-      : undefined
+    const toolName = toolNames.get(tool)
 
     this.startSpan('mcp.server.tool.call', {
       resource: toolName,

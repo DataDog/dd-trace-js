@@ -32,6 +32,23 @@ class ModelcontextprotocolSdkTestSetup {
       }
     )
 
+    this._server.registerResource(
+      'test-resource',
+      'file:///test-resource.txt',
+      { description: 'A test resource', mimeType: 'text/plain' },
+      async () => ({
+        contents: [{ uri: 'file:///test-resource.txt', text: 'resource content' }],
+      })
+    )
+
+    this._server.registerPrompt(
+      'test-prompt',
+      { description: 'A test prompt', argsSchema: {} },
+      async () => ({
+        messages: [{ role: 'user', content: { type: 'text', text: 'test prompt message' } }],
+      })
+    )
+
     const [clientTransport, serverTransport] = this._InMemoryTransport.createLinkedPair()
 
     await this._server.connect(serverTransport)
@@ -63,6 +80,22 @@ class ModelcontextprotocolSdkTestSetup {
 
   async clientListTools () {
     return this._client.listTools()
+  }
+
+  async clientListResources () {
+    return this._client.listResources()
+  }
+
+  async clientReadResource () {
+    return this._client.readResource({ uri: 'file:///test-resource.txt' })
+  }
+
+  async clientListPrompts () {
+    return this._client.listPrompts()
+  }
+
+  async clientGetPrompt () {
+    return this._client.getPrompt({ name: 'test-prompt', arguments: {} })
   }
 
   async clientSendUnknownMethod () {

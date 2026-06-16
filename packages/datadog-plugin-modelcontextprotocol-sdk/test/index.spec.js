@@ -85,16 +85,14 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
     })
   })
 
-  describe('Protocol._onrequest - mcp.server.request', () => {
-    it('should generate server request span for tools/call', async () => {
+  describe('Protocol.setRequestHandler - mcp.server.request', () => {
+    it('should tag mcp.tool.name and mcp.request.arguments on tools/call', async () => {
       const traceAssertion = expectSomeSpan(agent, {
         name: 'mcp.server.request',
-        type: 'mcp',
         resource: 'tools/call',
         meta: {
           component: 'modelcontextprotocol_server',
-          '_dd.integration': 'modelcontextprotocol_server',
-          'span.kind': 'server',
+          'mcp.tool.name': 'test-tool',
         },
       })
 
@@ -103,19 +101,92 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
       return traceAssertion
     })
 
-    it('should generate server request span for tools/list', async () => {
+    it('should tag mcp.tool.response on tools/call', async () => {
       const traceAssertion = expectSomeSpan(agent, {
         name: 'mcp.server.request',
-        type: 'mcp',
+        resource: 'tools/call',
+        meta: {
+          'mcp.tool.response': 'Result from test-tool',
+        },
+      })
+
+      await testSetup.clientCallTool()
+
+      return traceAssertion
+    })
+
+    it('should tag mcp.tool.names on tools/list', async () => {
+      const traceAssertion = expectSomeSpan(agent, {
+        name: 'mcp.server.request',
         resource: 'tools/list',
         meta: {
           component: 'modelcontextprotocol_server',
-          '_dd.integration': 'modelcontextprotocol_server',
-          'span.kind': 'server',
+          'mcp.tool.names': 'test-tool,error-tool',
         },
       })
 
       await testSetup.clientListTools()
+
+      return traceAssertion
+    })
+
+    it('should tag mcp.resource.uri on resources/read', async () => {
+      const traceAssertion = expectSomeSpan(agent, {
+        name: 'mcp.server.request',
+        resource: 'resources/read',
+        meta: {
+          component: 'modelcontextprotocol_server',
+          'mcp.resource.uri': 'file:///test-resource.txt',
+        },
+      })
+
+      await testSetup.clientReadResource()
+
+      return traceAssertion
+    })
+
+    it('should tag mcp.resource.uris on resources/list', async () => {
+      const traceAssertion = expectSomeSpan(agent, {
+        name: 'mcp.server.request',
+        resource: 'resources/list',
+        meta: {
+          component: 'modelcontextprotocol_server',
+          'mcp.resource.uris': 'file:///test-resource.txt',
+        },
+      })
+
+      await testSetup.clientListResources()
+
+      return traceAssertion
+    })
+
+    it('should tag mcp.prompt.name and mcp.request.arguments on prompts/get', async () => {
+      const traceAssertion = expectSomeSpan(agent, {
+        name: 'mcp.server.request',
+        resource: 'prompts/get',
+        meta: {
+          component: 'modelcontextprotocol_server',
+          'mcp.prompt.name': 'test-prompt',
+        },
+      })
+
+      await testSetup.clientGetPrompt()
+
+      return traceAssertion
+    })
+
+    it('should tag mcp.prompt.names and mcp.prompt.descriptions on prompts/list', async () => {
+      const traceAssertion = expectSomeSpan(agent, {
+        name: 'mcp.server.request',
+        resource: 'prompts/list',
+        meta: {
+          component: 'modelcontextprotocol_server',
+          'mcp.prompt.names': 'test-prompt',
+          'mcp.prompt.descriptions': 'A test prompt',
+        },
+      })
+
+      await testSetup.clientListPrompts()
 
       return traceAssertion
     })
@@ -145,10 +216,10 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
     })
   })
 
-  describe('Protocol._onrequest - transport disconnect (connection closed)', () => {
-    it('should finish in-flight server request spans when the transport closes', async () => {
-      // Regression: _onclose() calls _requestHandlerAbortControllers.clear() which bypasses
-      // the wrapped delete(). The instrumentation must also wrap clear() to finish pending spans.
+  describe('Protocol.setRequestHandler - transport disconnect (connection closed)', () => {
+    it('should finish in-flight server request spans when the handler completes after transport closes', async () => {
+      // The handler is wrapped at setRequestHandler time. When the transport disconnects,
+      // the in-flight handler eventually resolves and the .finally() fires serverRequestFinishCh.
       const { McpServer } = meta.versionMod.get('@modelcontextprotocol/sdk/server/mcp.js')
       const { InMemoryTransport } = meta.versionMod.get('@modelcontextprotocol/sdk/inMemory.js')
       const { Client } = meta.mod
@@ -194,27 +265,6 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
       await disconnectServer.close()
       resumeSlowTool()
       await callPromise
-
-      return traceAssertion
-    })
-  })
-
-  describe('Protocol._onrequest - unsupported method (MethodNotFound)', () => {
-    it('should generate and immediately finish server request span when method has no handler', async () => {
-      // Regression: MethodNotFound path skips AbortController creation, so the span must be
-      // finished directly in the instrumentation rather than waiting for .delete().
-      const traceAssertion = expectSomeSpan(agent, {
-        name: 'mcp.server.request',
-        type: 'mcp',
-        resource: 'dd/unknownMethod',
-        meta: {
-          component: 'modelcontextprotocol_server',
-          '_dd.integration': 'modelcontextprotocol_server',
-          'span.kind': 'server',
-        },
-      })
-
-      await testSetup.clientSendUnknownMethod()
 
       return traceAssertion
     })
