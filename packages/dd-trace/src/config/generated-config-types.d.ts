@@ -446,6 +446,7 @@ export interface GeneratedConfig {
   hostname: string;
   iast: {
     dbRowsToTaint: number;
+    DD_IAST_SECURITY_CONTROLS_CONFIGURATION: string | undefined;
     deduplicationEnabled: boolean;
     enabled: boolean;
     maxConcurrentRequests: number;
@@ -454,7 +455,6 @@ export interface GeneratedConfig {
     redactionNamePattern: string;
     redactionValuePattern: string;
     requestSampling: number;
-    securityControlsConfiguration: string | undefined;
     stackTrace: {
       enabled: boolean;
     };

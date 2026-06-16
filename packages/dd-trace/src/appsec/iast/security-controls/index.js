@@ -21,10 +21,10 @@ let controlsKeys
 let hooks
 
 function configure (iastConfig) {
-  if (!iastConfig?.securityControlsConfiguration) return
+  if (!iastConfig?.DD_IAST_SECURITY_CONTROLS_CONFIGURATION) return
 
   try {
-    controls = parse(iastConfig.securityControlsConfiguration)
+    controls = parse(iastConfig.DD_IAST_SECURITY_CONTROLS_CONFIGURATION)
     if (controls?.size > 0) {
       hooks = new WeakSet()
       controlsKeys = [...controls.keys()]

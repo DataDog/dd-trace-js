@@ -250,8 +250,8 @@ describe('Config', () => {
       const firstConfig = getConfig(undefined, { ddMajor: 5 })
       const secondConfig = getConfig(undefined, { ddMajor: 5 })
 
-      assert.strictEqual(firstConfig.iast.securityControlsConfiguration, undefined)
-      assert.strictEqual(secondConfig.iast.securityControlsConfiguration, undefined)
+      assert.strictEqual(firstConfig.iast.DD_IAST_SECURITY_CONTROLS_CONFIGURATION, undefined)
+      assert.strictEqual(secondConfig.iast.DD_IAST_SECURITY_CONTROLS_CONFIGURATION, undefined)
     })
 
     it('should pass through random envs', async () => {
@@ -1343,7 +1343,7 @@ describe('Config', () => {
         redactionNamePattern: 'REDACTION_NAME_PATTERN',
         redactionValuePattern: 'REDACTION_VALUE_PATTERN',
         requestSampling: 40,
-        securityControlsConfiguration: 'SANITIZER:CODE_INJECTION:sanitizer.js:method',
+        DD_IAST_SECURITY_CONTROLS_CONFIGURATION: 'SANITIZER:CODE_INJECTION:sanitizer.js:method',
         stackTrace: {
           enabled: false,
         },
@@ -1892,7 +1892,10 @@ describe('Config', () => {
     assert.deepStrictEqual(config.dynamicInstrumentation.redactedIdentifiers, ['foo', 'bar'])
     assert.deepStrictEqual(config.dynamicInstrumentation.redactionExcludedIdentifiers, ['a', 'b', 'c'])
     if (DD_MAJOR < 6) {
-      assert.strictEqual(config.iast.securityControlsConfiguration, 'SANITIZER:CODE_INJECTION:sanitizer.js:method')
+      assert.strictEqual(
+        config.iast.DD_IAST_SECURITY_CONTROLS_CONFIGURATION,
+        'SANITIZER:CODE_INJECTION:sanitizer.js:method'
+      )
     } else {
       assert.ok(!('iast.securityControlsConfiguration' in config))
     }
@@ -2464,7 +2467,8 @@ describe('Config', () => {
         redactionNamePattern: 'REDACTION_NAME_PATTERN',
         redactionValuePattern: 'REDACTION_VALUE_PATTERN',
         requestSampling: 30,
-        securityControlsConfiguration: 'SANITIZER:CODE_INJECTION:sanitizer.js:method' + (DD_MAJOR < 6 ? '2' : '1'),
+        DD_IAST_SECURITY_CONTROLS_CONFIGURATION:
+          'SANITIZER:CODE_INJECTION:sanitizer.js:method' + (DD_MAJOR < 6 ? '2' : '1'),
         stackTrace: {
           enabled: false,
         },
@@ -2650,7 +2654,7 @@ describe('Config', () => {
       redactionNamePattern: 'REDACTION_NAME_PATTERN',
       redactionValuePattern: 'REDACTION_VALUE_PATTERN',
       requestSampling: 15,
-      securityControlsConfiguration: undefined,
+      DD_IAST_SECURITY_CONTROLS_CONFIGURATION: undefined,
       stackTrace: {
         enabled: false,
       },

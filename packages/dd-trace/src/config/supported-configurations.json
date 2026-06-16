@@ -1094,7 +1094,7 @@
       {
         "implementation": "B",
         "type": "string",
-        "internalPropertyName": "iast.securityControlsConfiguration",
+        "namespace": "iast",
         "default": null
       }
     ],
