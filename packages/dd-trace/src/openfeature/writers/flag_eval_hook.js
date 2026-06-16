@@ -52,8 +52,6 @@ class FlagEvalEVPHook {
     // (no matched allocation) signals runtime_default. Matches the OTel hook.
     const variant = evaluationDetails.variant ?? ''
 
-    const reason = (evaluationDetails.reason ?? 'unknown').toLowerCase()
-
     // allocationKey from evaluationDetails.flagMetadata (camelCase), the same source
     // eval-metrics-hook.js reads for feature_flag.result.allocation_key.
     const flagMetadata = evaluationDetails.flagMetadata
@@ -69,7 +67,7 @@ class FlagEvalEVPHook {
     // Shallow reference to the context attrs — owned by the SDK; safe to read off hot path
     const attrs = hookContext.context ?? {}
 
-    writer.enqueue({ flagKey, variant, reason, allocationKey, targetingKey, evalTimeMs, attrs })
+    writer.enqueue({ flagKey, variant, allocationKey, targetingKey, evalTimeMs, attrs })
   }
 }
 

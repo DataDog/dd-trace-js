@@ -7,8 +7,8 @@
 //   flag-eval-hook — the synchronous cost a flag evaluation pays for the Finally
 //     hook. This is the only work charged to the caller's evaluation; it must stay
 //     cheap (scalar capture + bounded enqueue), with all aggregation deferred.
-//   aggregate — the off-hot-path aggregator cost (prune + canonical-key + two-tier
-//     map work) that runs in the deferred drain, NOT on the evaluation path.
+//   aggregate — the off-hot-path aggregator cost (canonical-key + two-tier map work)
+//     that runs in the deferred drain, NOT on the evaluation path.
 //     Measured for completeness so a regression in the worker path is visible too.
 
 const assert = require('node:assert/strict')
@@ -72,19 +72,23 @@ const evaluationDetails = {
 }
 
 if (VARIANT === 'aggregate') {
-  // Off-hot-path aggregator: the prune + canonical-key + two-tier map work that runs
-  // in the deferred drain. A pre-built raw event matching what the hook enqueues.
+  // Off-hot-path aggregator: the canonical-key + two-tier map work that runs
+  // in the deferred drain. A pre-built bounded event matching what enqueue stores.
   const writer = new FlagEvaluationsWriter(config)
   clearInterval(writer._periodic)
 
   const rawEvent = {
     flagKey: hookContext.flagKey,
     variant: evaluationDetails.variant,
-    reason: 'targeting_match',
     allocationKey: 'allocation-123',
     targetingKey: hookContext.context.targetingKey,
-    evalTimeMs: 1_700_000_000_000,
-    attrs: hookContext.context,
+    evalTimeMs: 1_760_000_000_000,
+    attrs: {
+      plan: hookContext.context.plan,
+      country: hookContext.context.country,
+      betaTester: hookContext.context.betaTester,
+      seatCount: hookContext.context.seatCount,
+    },
   }
 
   // Pre-flight: one aggregation must create a full-tier bucket. Catches a silent
@@ -109,11 +113,11 @@ if (VARIANT === 'aggregate') {
   clearInterval(writer._periodic)
   const hook = new FlagEvalEVPHook(writer)
 
-  // Pre-flight: one finally() must enqueue exactly one raw event. Catches a silent
+  // Pre-flight: one finally() must enqueue exactly one bounded event. Catches a silent
   // breakage where the hook stopped enqueuing (which would make the loop measure a
   // near-empty function and falsely "pass").
   hook.finally(hookContext, evaluationDetails)
-  assert.equal(writer._rawQueue.length, 1, 'hook.finally did not enqueue a raw event')
+  assert.equal(writer._rawQueue.length, 1, 'hook.finally did not enqueue a bounded event')
   writer._rawQueue.length = 0
 
   guard.loopStart()

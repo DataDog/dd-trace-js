@@ -1,59 +1,27 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
 
+const Ajv = require('ajv')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('../../setup/core')
 
-// Structural validator for the EVP flageval-worker batched payload contract. Required
-// event fields and the {key} object shape for variant/allocation mirror the dd-trace-go
-// reference (openfeature/flagevaluation.go) and the flageval-worker ingestion contract.
-// Returns an array of contract violations (empty array == valid). Mechanical: it inspects
-// actual runtime types/shapes, it does not substring-match serialized text.
-const KEY_OBJECT_FIELDS = ['variant', 'allocation']
-const REQUIRED_EVENT_FIELDS = ['timestamp', 'flag', 'first_evaluation', 'last_evaluation', 'evaluation_count']
+const schemaPath = path.join(__dirname, 'testdata/flageval-worker/batchedflagevaluations.json')
+const schema = JSON.parse(fs.readFileSync(schemaPath, 'utf8'))
+const ajv = new Ajv({ allErrors: true })
+const validateBatchedFlagEvaluations = ajv.compile(schema)
 
 function validateFlagEvaluationPayload (payload) {
-  const errors = []
-  const isObject = (value) => typeof value === 'object' && value !== null && !Array.isArray(value)
-
-  if (!isObject(payload)) return ['payload is not an object']
-  if (!isObject(payload.context)) errors.push('context must be an object')
-  else if (typeof payload.context.service !== 'string') errors.push('context.service must be a string')
-  if (!Array.isArray(payload.flagEvaluations)) return [...errors, 'flagEvaluations must be an array']
-
-  for (const [index, event] of payload.flagEvaluations.entries()) {
-    if (!isObject(event)) { errors.push(`event[${index}] is not an object`); continue }
-
-    for (const field of REQUIRED_EVENT_FIELDS) {
-      if (!Object.hasOwn(event, field)) errors.push(`event[${index}] missing required field "${field}"`)
-    }
-    if (!isObject(event.flag) || typeof event.flag.key !== 'string') {
-      errors.push(`event[${index}].flag must be { key: string }`)
-    }
-    for (const numericField of ['timestamp', 'first_evaluation', 'last_evaluation', 'evaluation_count']) {
-      if (Object.hasOwn(event, numericField) && !Number.isInteger(event[numericField])) {
-        errors.push(`event[${index}].${numericField} must be an integer`)
-      }
-    }
-    // variant and allocation MUST be { key: string } OBJECTS, never bare strings.
-    for (const field of KEY_OBJECT_FIELDS) {
-      if (!Object.hasOwn(event, field)) continue
-      if (!isObject(event[field]) || typeof event[field].key !== 'string') {
-        errors.push(`event[${index}].${field} must be { key: string }, got ${JSON.stringify(event[field])}`)
-      }
-    }
-    if (Object.hasOwn(event, 'targeting_key') && typeof event.targeting_key !== 'string') {
-      errors.push(`event[${index}].targeting_key must be a string`)
-    }
-    if (Object.hasOwn(event, 'context') && !isObject(event.context)) {
-      errors.push(`event[${index}].context must be an object`)
-    }
-  }
-  return errors
+  if (validateBatchedFlagEvaluations(payload)) return []
+  return validateBatchedFlagEvaluations.errors.map(error => {
+    const path = error.instancePath || error.dataPath || '/'
+    return `${path} ${error.message} ${JSON.stringify(error.params || {})}`
+  })
 }
 
 describe('FlagEvaluationsWriter', () => {
@@ -67,10 +35,9 @@ describe('FlagEvaluationsWriter', () => {
   const makeEvent = (overrides = {}) => ({
     flagKey: 'my-flag',
     variant: 'on',
-    reason: 'targeting_match',
     allocationKey: 'alloc-1',
     targetingKey: 'user-1',
-    evalTimeMs: 1700000000000,
+    evalTimeMs: 1760000000000,
     attrs: { plan: 'premium', count: 5 },
     ...overrides,
   })
@@ -158,7 +125,7 @@ describe('FlagEvaluationsWriter', () => {
     })
 
     it('each event carries flag.key, first_evaluation, last_evaluation, evaluation_count', () => {
-      writer.enqueue(makeEvent({ evalTimeMs: 1700000001000 }))
+      writer.enqueue(makeEvent({ evalTimeMs: 1760000001000 }))
       writer.flush()
 
       const payload = JSON.parse(request.getCall(0).args[0])
@@ -175,8 +142,8 @@ describe('FlagEvaluationsWriter', () => {
 
   describe('two-tier aggregation — full tier', () => {
     it('two identical evaluations aggregate into ONE bucket with count=2 and first<=last', () => {
-      const ev1 = makeEvent({ evalTimeMs: 1700000001000 })
-      const ev2 = makeEvent({ evalTimeMs: 1700000002000 })
+      const ev1 = makeEvent({ evalTimeMs: 1760000001000 })
+      const ev2 = makeEvent({ evalTimeMs: 1760000002000 })
 
       writer.enqueue(ev1)
       writer.enqueue(ev2)
@@ -187,8 +154,8 @@ describe('FlagEvaluationsWriter', () => {
       const ev = payload.flagEvaluations[0]
       assert.strictEqual(ev.evaluation_count, 2)
       assert.ok(ev.first_evaluation <= ev.last_evaluation)
-      assert.strictEqual(ev.first_evaluation, 1700000001000)
-      assert.strictEqual(ev.last_evaluation, 1700000002000)
+      assert.strictEqual(ev.first_evaluation, 1760000001000)
+      assert.strictEqual(ev.last_evaluation, 1760000002000)
     })
 
     it('two evaluations differing only by context attr value type (int vs string) produce TWO distinct buckets', () => {
@@ -287,24 +254,28 @@ describe('FlagEvaluationsWriter', () => {
   })
 
   describe('context pruning', () => {
-    it('context with >256 fields is pruned to ≤256 before keying', () => {
+    it('context with >256 fields is pruned to ≤256 before queueing', () => {
       const attrs = {}
       for (let i = 0; i < 300; i++) {
         attrs[`field_${i}`] = `value_${i}`
       }
 
       writer.enqueue(makeEvent({ attrs }))
+      assert.strictEqual(Object.keys(writer._rawQueue[0].attrs).length, 256,
+        'queued context snapshot must be bounded before buffering')
       writer.flush()
 
       const payload = JSON.parse(request.getCall(0).args[0])
-      // Should not throw; payload is produced
-      assert.ok(payload.flagEvaluations.length >= 1)
+      const ev = payload.flagEvaluations[0]
+      assert.strictEqual(Object.keys(ev.context.evaluation).length, 256)
     })
 
-    it('context with a string value >256 chars has that field skipped', () => {
+    it('context with a string value >256 chars has that field skipped before queueing', () => {
       const attrs = { normal: 'ok', oversized: 'x'.repeat(300) }
 
       writer.enqueue(makeEvent({ attrs }))
+      assert.ok(!Object.hasOwn(writer._rawQueue[0].attrs, 'oversized'),
+        'oversized string field must be pruned from the queued snapshot')
       writer.flush()
 
       const payload = JSON.parse(request.getCall(0).args[0])
@@ -315,6 +286,24 @@ describe('FlagEvaluationsWriter', () => {
         assert.ok(!ev.context.evaluation.oversized,
           'oversized string field must be pruned from context before keying')
       }
+    })
+
+    it('flattens nested context values before queueing to avoid String(object) collisions', () => {
+      writer.enqueue(makeEvent({ attrs: { user: { id: 1, plan: 'pro' } } }))
+
+      assert.deepStrictEqual(writer._rawQueue[0].attrs, {
+        'user.id': 1,
+        'user.plan': 'pro',
+      })
+    })
+
+    it('does not include targetingKey inside context.evaluation', () => {
+      writer.enqueue(makeEvent({ attrs: { targetingKey: 'user-1', plan: 'premium' } }))
+      writer.flush()
+
+      const payload = JSON.parse(request.getCall(0).args[0])
+      assert.strictEqual(payload.flagEvaluations[0].targeting_key, 'user-1')
+      assert.ok(!Object.hasOwn(payload.flagEvaluations[0].context.evaluation, 'targetingKey'))
     })
   })
 
@@ -329,6 +318,32 @@ describe('FlagEvaluationsWriter', () => {
       assert.match(options.path, /\/evp_proxy\/v2\/api\/v2\/flagevaluations/)
       assert.strictEqual(options.headers['X-Datadog-EVP-Subdomain'], 'event-platform-intake')
       assert.strictEqual(options.headers['Content-Type'], 'application/json')
+    })
+  })
+
+  describe('payload size limits', () => {
+    it('splits aggregate payloads so each request stays under the configured payload limit', () => {
+      writer._payloadSizeLimit = 520
+
+      writer.enqueue(makeEvent({ flagKey: 'flag-a', attrs: { blob: 'a'.repeat(180) } }))
+      writer.enqueue(makeEvent({ flagKey: 'flag-b', attrs: { blob: 'b'.repeat(180) } }))
+      writer.flush()
+
+      assert.ok(request.callCount > 1, 'payload limit should split aggregate events across requests')
+      for (const call of request.getCalls()) {
+        assert.ok(Buffer.byteLength(call.args[0]) <= writer._payloadSizeLimit,
+          `request payload exceeded configured limit: ${Buffer.byteLength(call.args[0])}`)
+      }
+    })
+
+    it('drops an aggregate event that exceeds the configured event size limit', () => {
+      writer._eventSizeLimit = 120
+
+      writer.enqueue(makeEvent({ attrs: { blob: 'x'.repeat(180) } }))
+      writer.flush()
+
+      sinon.assert.notCalled(request)
+      sinon.assert.calledWithMatch(log.warn, sinon.match(/event size .* exceeds limit/))
     })
   })
 
@@ -379,17 +394,47 @@ describe('FlagEvaluationsWriter', () => {
       const bad = {
         context: { service: 's' },
         flagEvaluations: [{
-          timestamp: 1,
+          timestamp: 1760000000000,
           flag: { key: 'f' },
-          first_evaluation: 1,
-          last_evaluation: 1,
+          first_evaluation: 1760000000000,
+          last_evaluation: 1760000000000,
           evaluation_count: 1,
           variant: 'on', // bare string — must be rejected
         }],
       }
       const errors = validateFlagEvaluationPayload(bad)
-      assert.ok(errors.some(e => /variant must be \{ key: string \}/.test(e)),
+      assert.ok(errors.some(e => /variant/.test(e) && /object/.test(e)),
         `validator must reject a bare-string variant; got errors: ${JSON.stringify(errors)}`)
+    })
+
+    it('rejects a top-level reason field because the worker schema has additionalProperties=false', () => {
+      const bad = {
+        context: { service: 's' },
+        flagEvaluations: [{
+          timestamp: 1760000000000,
+          flag: { key: 'f' },
+          first_evaluation: 1760000000000,
+          last_evaluation: 1760000000000,
+          evaluation_count: 1,
+          reason: 'targeting_match',
+        }],
+      }
+      const errors = validateFlagEvaluationPayload(bad)
+      assert.ok(errors.some(e => /additional properties/.test(e) || /reason/.test(e)),
+        `validator must reject top-level reason; got errors: ${JSON.stringify(errors)}`)
+    })
+  })
+
+  describe('G0 — OpenFeature reason is not EVP cardinality', () => {
+    it('two evaluations differing only by reason aggregate into one schema-visible bucket', () => {
+      writer.enqueue(makeEvent({ reason: 'targeting_match' }))
+      writer.enqueue(makeEvent({ reason: 'split' }))
+      writer.flush()
+
+      const payload = JSON.parse(request.getCall(0).args[0])
+      assert.strictEqual(payload.flagEvaluations.length, 1)
+      assert.strictEqual(payload.flagEvaluations[0].evaluation_count, 2)
+      assert.ok(!Object.hasOwn(payload.flagEvaluations[0], 'reason'))
     })
   })
 
@@ -401,7 +446,7 @@ describe('FlagEvaluationsWriter', () => {
 
       sinon.assert.notCalled(aggregateSpy)
       assert.strictEqual(writer._rawQueue.length, 1,
-        'enqueue must only push the raw event; aggregation is deferred')
+        'enqueue must only push the bounded event snapshot; aggregation is deferred')
       assert.strictEqual(writer._full.size, 0,
         'no full-tier bucket may exist before the drain runs')
 

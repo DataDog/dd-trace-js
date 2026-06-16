@@ -43,7 +43,7 @@ describe('FlagEvalEVPHook — real OpenFeature eval-path lifecycle', () => {
     const event = writer.enqueue.firstCall.args[0]
     assert.strictEqual(event.flagKey, 'bool-flag')
     assert.strictEqual(event.variant, 'on', 'success path captures the matched variant')
-    assert.strictEqual(event.reason, 'static')
+    assert.ok(!Object.hasOwn(event, 'reason'), 'OpenFeature reason is not an EVP field')
   })
 
   it('fires on the ERROR path (type mismatch) of a real evaluation', async () => {
@@ -54,7 +54,7 @@ describe('FlagEvalEVPHook — real OpenFeature eval-path lifecycle', () => {
     sinon.assert.calledOnce(writer.enqueue)
     const event = writer.enqueue.firstCall.args[0]
     assert.strictEqual(event.flagKey, 'bool-flag')
-    assert.strictEqual(event.reason, 'error', 'error path must still fire the finally hook')
+    assert.ok(!Object.hasOwn(event, 'reason'), 'error path must still omit OpenFeature reason')
     assert.strictEqual(event.variant, '', 'no variant on the error path → runtime_default')
   })
 

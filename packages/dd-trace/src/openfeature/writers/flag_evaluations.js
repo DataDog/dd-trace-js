@@ -29,6 +29,7 @@ const MAX_FIELD_LENGTH = 256
 const TAG_STRING = 's'
 const TAG_BOOL = 'b'
 const TAG_NUMBER = 'n' // all JS numbers (float64 under the hood)
+const TAG_NULL = '0'
 const TAG_OTHER = 'o'
 
 /**
@@ -65,6 +66,9 @@ function encodeField (key, value) {
   } else if (typeof value === 'number') {
     tag = TAG_NUMBER
     valStr = String(value)
+  } else if (value === null) {
+    tag = TAG_NULL
+    valStr = ''
   } else {
     tag = TAG_OTHER
     valStr = String(value)
@@ -96,23 +100,78 @@ function canonicalContextKey (attrs) {
 }
 
 /**
- * Prunes the evaluation context to at most MAX_CONTEXT_FIELDS fields, sorting keys
- * deterministically and skipping string values longer than MAX_FIELD_LENGTH.
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+function isPlainObject (value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+/**
+ * @param {string} prefix
+ * @param {unknown} value
+ * @param {Record<string, unknown>} out
+ * @returns {void}
+ */
+function flattenValue (prefix, value, out) {
+  if (value === undefined || typeof value === 'function' || typeof value === 'symbol' || typeof value === 'bigint') {
+    return
+  }
+
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) {
+      flattenValue(`${prefix}.${i}`, value[i], out)
+    }
+    return
+  }
+
+  if (isPlainObject(value)) {
+    for (const key of Object.keys(value)) {
+      flattenValue(`${prefix}.${key}`, value[key], out)
+    }
+    return
+  }
+
+  out[prefix] = value
+}
+
+/**
+ * Flattens nested context attributes into dot-notation keys and removes targetingKey,
+ * which is emitted separately as targeting_key.
+ *
+ * @param {Record<string, unknown>} attrs
+ * @returns {Record<string, unknown>}
+ */
+function flattenContext (attrs) {
+  if (!attrs) return {}
+
+  const out = {}
+  for (const key of Object.keys(attrs)) {
+    if (key === 'targetingKey') continue
+    flattenValue(key, attrs[key], out)
+  }
+  return out
+}
+
+/**
+ * Flattens and prunes the evaluation context to at most MAX_CONTEXT_FIELDS fields,
+ * sorting keys deterministically and skipping string values longer than MAX_FIELD_LENGTH.
  * Mirrors flageval-worker MAX_EVALUATION_CONTEXT_FIELDS / MAX_FIELD_LENGTH exactly.
  *
  * @param {Record<string, unknown>} attrs - Raw context attributes
  * @returns {Record<string, unknown>}
  */
 function pruneContext (attrs) {
-  if (!attrs) return {}
+  const flat = flattenContext(attrs)
+  if (Object.keys(flat).length === 0) return {}
 
-  const keys = Object.keys(attrs).sort()
+  const keys = Object.keys(flat).sort()
   const out = {}
   let count = 0
 
   for (const k of keys) {
     if (count >= MAX_CONTEXT_FIELDS) break
-    const v = attrs[k]
+    const v = flat[k]
     if (typeof v === 'string' && v.length > MAX_FIELD_LENGTH) continue
     out[k] = v
     count++
@@ -121,19 +180,18 @@ function pruneContext (attrs) {
 }
 
 /**
- * Builds the full-tier bucket key string (6 dimensions, comparable).
+ * Builds the full-tier bucket key string from schema-visible dimensions only.
  *
  * @param {string} flagKey
  * @param {string} variant
  * @param {string} allocationKey
- * @param {string} reason
  * @param {string} targetingKey
  * @param {string} ctxKey
  * @returns {string}
  */
-function makeFullKey (flagKey, variant, allocationKey, reason, targetingKey, ctxKey) {
+function makeFullKey (flagKey, variant, allocationKey, targetingKey, ctxKey) {
   // NUL separator: safe because length-delimited ctxKey cannot contain NUL as a separator
-  return `${flagKey}\0${variant}\0${allocationKey}\0${reason}\0${targetingKey}\0${ctxKey}`
+  return `${flagKey}\0${variant}\0${allocationKey}\0${targetingKey}\0${ctxKey}`
 }
 
 /**
@@ -142,22 +200,20 @@ function makeFullKey (flagKey, variant, allocationKey, reason, targetingKey, ctx
  * @param {string} flagKey
  * @param {string} variant
  * @param {string} allocationKey
- * @param {string} reason
  * @returns {string}
  */
-function makeDegradedKey (flagKey, variant, allocationKey, reason) {
-  return `${flagKey}\0${variant}\0${allocationKey}\0${reason}`
+function makeDegradedKey (flagKey, variant, allocationKey) {
+  return `${flagKey}\0${variant}\0${allocationKey}`
 }
 
 /**
  * @typedef {object} FlagEvalRawEvent
  * @property {string} flagKey
  * @property {string} variant - empty string means absent (runtime_default)
- * @property {string} reason
  * @property {string} allocationKey
  * @property {string} targetingKey
  * @property {number} evalTimeMs
- * @property {Record<string, unknown>} attrs
+ * @property {Record<string, unknown>} attrs - Flattened and pruned context attributes
  */
 
 /**
@@ -165,7 +221,6 @@ function makeDegradedKey (flagKey, variant, allocationKey, reason) {
  * @property {string} flagKey
  * @property {string} variant
  * @property {string} allocationKey
- * @property {string} reason
  * @property {string} targetingKey
  * @property {number} count
  * @property {number} first
@@ -179,7 +234,6 @@ function makeDegradedKey (flagKey, variant, allocationKey, reason) {
  * @property {string} flagKey
  * @property {string} variant
  * @property {string} allocationKey
- * @property {string} reason
  * @property {number} count
  * @property {number} first
  * @property {number} last
@@ -187,22 +241,13 @@ function makeDegradedKey (flagKey, variant, allocationKey, reason) {
  */
 
 /**
- * Sentinel object placed in _buffer to allow BaseFFEWriter.flush() to proceed.
- * The buffer is replaced by drain output in makePayload().
- */
-const FLUSH_SENTINEL = Object.freeze({ _sentinel: true })
-
-/**
  * FlagEvaluationsWriter extends BaseFFEWriter to aggregate EVP flagevaluation events
  * using two-tier (full → degraded → drop-counted) aggregation with a comparable
  * canonical-context key (no hash digest).
  *
- * The eval hot path (enqueue) does ONLY a cheap scalar capture + a bounded push to a
- * raw queue. All aggregation cost — prune, canonical key, two-tier map updates — runs
- * off the eval call stack on a microtask-scheduled drain (and on flush). OpenFeature
- * hooks run synchronously on the caller's evaluation, so charging aggregation to the
- * hook would charge it to the user's flag evaluation; this design keeps that off the
- * hot path, mirroring the dd-trace-go background-worker reference.
+ * The eval hot path (enqueue) captures scalars, makes a bounded context snapshot, and
+ * pushes to a bounded queue. Aggregation cost — canonical key and two-tier map updates —
+ * runs off the eval call stack on a microtask-scheduled drain (and on flush).
  *
  * Aggregation caps: globalCap=131072 / perFlagCap=10000 / degradedCap=32768
  * Context bounds: 256 fields / 256 chars (pruned before keying).
@@ -221,7 +266,7 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
   /** @type {(() => void) | undefined} cached drain callback to avoid per-enqueue closure allocation */
   _boundDrain
 
-  /** @type {number} count of raw events dropped because the hand-off queue was full */
+  /** @type {number} count of event snapshots dropped because the hand-off queue was full */
   _droppedQueueOverflow
 
   /** @type {Map<string, FullEntry>} */
@@ -284,10 +329,9 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
 
   /**
    * Hot-path capture. Called synchronously from the OpenFeature Finally hook on the
-   * caller's evaluation. Does ONLY a bounded push to the raw queue + a microtask
-   * schedule — NO prune, NO canonical-key, NO map aggregation (that runs in the
-   * drain, off the eval call stack). On overflow, drop-and-count (observable) rather
-   * than block the user's evaluation.
+   * caller's evaluation. Makes a bounded context snapshot before buffering, then
+   * schedules the aggregate drain — NO canonical-key or map aggregation runs here.
+   * On overflow, drop-and-count (observable) rather than block the user's evaluation.
    *
    * @param {FlagEvalRawEvent} event
    * @returns {boolean} true if enqueued, false if dropped due to backpressure
@@ -298,7 +342,14 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
       return false
     }
 
-    this._rawQueue.push(event)
+    this._rawQueue.push({
+      flagKey: event.flagKey,
+      variant: event.variant ?? '',
+      allocationKey: event.allocationKey ?? '',
+      targetingKey: event.targetingKey ?? '',
+      evalTimeMs: event.evalTimeMs,
+      attrs: pruneContext(event.attrs || {}),
+    })
 
     if (!this._drainScheduled) {
       this._drainScheduled = true
@@ -311,9 +362,9 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
   }
 
   /**
-   * Aggregator. Drains every queued raw event through prune → canonical key →
-   * two-tier aggregation. Runs off the eval hot path (microtask or flush), never
-   * synchronously from enqueue().
+   * Aggregator. Drains every queued bounded event through canonical key → two-tier
+   * aggregation. Runs off the eval hot path (microtask or flush), never synchronously
+   * from enqueue().
    */
   _drainQueue () {
     this._drainScheduled = false
@@ -327,23 +378,22 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
   }
 
   /**
-   * Aggregates one raw event into the two-tier maps. Worker-path only.
+   * Aggregates one bounded event snapshot into the two-tier maps. Worker-path only.
    *
    * @private
    * @param {FlagEvalRawEvent} event
    */
   _aggregate (event) {
-    const { flagKey, reason, evalTimeMs } = event
+    const { flagKey, evalTimeMs } = event
     const variant = event.variant ?? ''
     const allocationKey = event.allocationKey ?? ''
     const targetingKey = event.targetingKey ?? ''
     const attrs = event.attrs || {}
 
-    const pruned = pruneContext(attrs)
-    const ctxKey = canonicalContextKey(pruned)
+    const ctxKey = canonicalContextKey(attrs)
     const isRuntimeDefault = variant === ''
 
-    const fKey = makeFullKey(flagKey, variant, allocationKey, reason, targetingKey, ctxKey)
+    const fKey = makeFullKey(flagKey, variant, allocationKey, targetingKey, ctxKey)
 
     // Fast path: existing full-tier bucket
     const existing = this._full.get(fKey)
@@ -357,7 +407,7 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
     // Check per-flag cap
     const perFlagCount = this._perFlagFullCount.get(flagKey) ?? 0
     if (perFlagCount >= this._perFlagCap) {
-      this._addToDegraded(flagKey, variant, allocationKey, reason, evalTimeMs, isRuntimeDefault)
+      this._addToDegraded(flagKey, variant, allocationKey, evalTimeMs, isRuntimeDefault)
       return
     }
 
@@ -366,7 +416,7 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
 
     // Check global cap
     if (this._globalCount >= this._globalCap) {
-      this._addToDegraded(flagKey, variant, allocationKey, reason, evalTimeMs, isRuntimeDefault)
+      this._addToDegraded(flagKey, variant, allocationKey, evalTimeMs, isRuntimeDefault)
       return
     }
 
@@ -375,21 +425,14 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
       flagKey,
       variant,
       allocationKey,
-      reason,
       targetingKey,
       count: 1,
       first: evalTimeMs,
       last: evalTimeMs,
       runtimeDefault: isRuntimeDefault,
-      contextAttrs: Object.keys(pruned).length > 0 ? pruned : null,
+      contextAttrs: Object.keys(attrs).length > 0 ? attrs : null,
     })
     this._globalCount++
-
-    // Place a sentinel in _buffer so BaseFFEWriter.flush() does not short-circuit
-    if (this._buffer.length === 0) {
-      this._buffer.push(FLUSH_SENTINEL)
-      this._bufferSize = 1
-    }
   }
 
   /**
@@ -399,12 +442,11 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
    * @param {string} flagKey
    * @param {string} variant
    * @param {string} allocationKey
-   * @param {string} reason
    * @param {number} evalTimeMs
    * @param {boolean} isRuntimeDefault
    */
-  _addToDegraded (flagKey, variant, allocationKey, reason, evalTimeMs, isRuntimeDefault) {
-    const dKey = makeDegradedKey(flagKey, variant, allocationKey, reason)
+  _addToDegraded (flagKey, variant, allocationKey, evalTimeMs, isRuntimeDefault) {
+    const dKey = makeDegradedKey(flagKey, variant, allocationKey)
     const existing = this._degraded.get(dKey)
     if (existing) {
       existing.count++
@@ -423,46 +465,43 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
       flagKey,
       variant,
       allocationKey,
-      reason,
       count: 1,
       first: evalTimeMs,
       last: evalTimeMs,
       runtimeDefault: isRuntimeDefault,
     })
-
-    // Place a sentinel in _buffer so BaseFFEWriter.flush() does not short-circuit
-    if (this._buffer.length === 0) {
-      this._buffer.push(FLUSH_SENTINEL)
-      this._bufferSize = 1
-    }
   }
 
   /**
-   * Flushes aggregated buckets. Drains any pending raw events first so a flush never
+   * Flushes aggregated buckets. Drains any pending event snapshots first so a flush never
    * races ahead of the microtask-scheduled drain and loses queued evaluations.
    */
   flush () {
     this._drainQueue()
 
-    // Ensure drop counts are emitted (and reset) even when every event overflowed and
-    // produced no bucket — without a sentinel BaseFFEWriter.flush() would short-circuit.
-    if (this._buffer.length === 0 && (this._droppedQueueOverflow > 0 || this._droppedDegradedOverflow > 0)) {
-      this._buffer.push(FLUSH_SENTINEL)
-      this._bufferSize = 1
+    const nowMs = Date.now()
+    const flagEvaluations = this._drainFlagEvaluations(nowMs)
+    const droppedQueueOverflow = this._droppedQueueOverflow
+    const droppedDegradedOverflow = this._droppedDegradedOverflow
+
+    this._resetAggregationState()
+
+    if (droppedQueueOverflow > 0 || droppedDegradedOverflow > 0) {
+      log.warn(
+        '%s dropped evaluations (queue overflow: %d, degraded overflow: %d)',
+        this.constructor.name, droppedQueueOverflow, droppedDegradedOverflow
+      )
     }
 
-    super.flush()
+    this._flushPayloadBatches(flagEvaluations)
   }
 
   /**
-   * Drains aggregation maps and returns the EVP flagevaluation payload.
-   * Called by BaseFFEWriter.flush() with whatever is in _buffer (ignored here).
-   *
-   * @param {Array} _events - Ignored; aggregation maps are the canonical source
-   * @returns {{ context: object, flagEvaluations: Array }}
+   * @private
+   * @param {number} nowMs
+   * @returns {Array<object>}
    */
-  makePayload (_events) {
-    const nowMs = Date.now()
+  _drainFlagEvaluations (nowMs) {
     const flagEvaluations = []
 
     // Full tier: all optional fields (variant, allocation, targeting_key, context)
@@ -503,22 +542,79 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
       flagEvaluations.push(ev)
     }
 
-    if (this._droppedQueueOverflow > 0 || this._droppedDegradedOverflow > 0) {
-      log.warn(
-        '%s dropped evaluations (queue overflow: %d, degraded overflow: %d)',
-        this.constructor.name, this._droppedQueueOverflow, this._droppedDegradedOverflow
-      )
+    return flagEvaluations
+  }
+
+  /**
+   * @private
+   * @param {Array<object>} flagEvaluations
+   * @returns {void}
+   */
+  _flushPayloadBatches (flagEvaluations) {
+    let batch = []
+
+    for (const event of flagEvaluations) {
+      const eventSizeBytes = Buffer.byteLength(JSON.stringify(event))
+      if (this._eventSizeLimit && eventSizeBytes > this._eventSizeLimit) {
+        log.warn('%s event size %d bytes exceeds limit %d, dropping event',
+          this.constructor.name, eventSizeBytes, this._eventSizeLimit)
+        this._droppedEvents++
+        continue
+      }
+
+      const candidate = [...batch, event]
+      const candidatePayload = this._encode(this.makePayload(candidate))
+      const candidateSizeBytes = Buffer.byteLength(candidatePayload)
+
+      if (this._payloadSizeLimit && candidateSizeBytes > this._payloadSizeLimit && batch.length > 0) {
+        const payload = this._encode(this.makePayload(batch))
+        this._sendPayload(payload, batch.length)
+        batch = [event]
+
+        const singlePayload = this._encode(this.makePayload(batch))
+        const singleSizeBytes = Buffer.byteLength(singlePayload)
+        if (this._payloadSizeLimit && singleSizeBytes > this._payloadSizeLimit) {
+          log.warn('%s payload size %d bytes exceeds limit %d, dropping event',
+            this.constructor.name, singleSizeBytes, this._payloadSizeLimit)
+          this._droppedEvents++
+          batch = []
+        }
+        continue
+      }
+
+      if (this._payloadSizeLimit && candidateSizeBytes > this._payloadSizeLimit) {
+        log.warn('%s payload size %d bytes exceeds limit %d, dropping event',
+          this.constructor.name, candidateSizeBytes, this._payloadSizeLimit)
+        this._droppedEvents++
+        continue
+      }
+
+      batch = candidate
     }
 
-    // Reset aggregation state
+    if (batch.length > 0) {
+      const payload = this._encode(this.makePayload(batch))
+      this._sendPayload(payload, batch.length)
+    }
+  }
+
+  /**
+   * Returns the EVP flagevaluation payload for a batch of already-drained events.
+   *
+   * @param {Array<object>} events - Aggregated event batch to send
+   * @returns {{ context: object, flagEvaluations: Array }}
+   */
+  makePayload (events) {
+    return { context: this._context, flagEvaluations: events }
+  }
+
+  _resetAggregationState () {
     this._full = new Map()
     this._degraded = new Map()
     this._perFlagFullCount = new Map()
     this._globalCount = 0
     this._droppedDegradedOverflow = 0
     this._droppedQueueOverflow = 0
-
-    return { context: this._context, flagEvaluations }
   }
 }
 

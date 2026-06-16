@@ -106,8 +106,8 @@ suite
       flagEvalHook.finally(flagEvalArgs.hookContext, flagEvalArgs.evaluationDetails)
     },
   })
-  // Off-hot-path aggregator cost: the prune + canonical-key + two-tier map work that
-  // runs in the deferred drain, NOT on the evaluation path. Measured for completeness.
+  // Off-hot-path aggregator cost: the canonical-key + two-tier map work that runs in
+  // the deferred drain, NOT on the evaluation path. Measured for completeness.
   .add('FlagEvaluationsWriter#_aggregate (deferred worker path)', {
     onStart () {
       flagEvalWriter = new FlagEvaluationsWriter(config)
@@ -117,11 +117,15 @@ suite
       flagEvalWriter._aggregate({
         flagKey: flagEvalArgs.hookContext.flagKey,
         variant: flagEvalArgs.evaluationDetails.variant,
-        reason: 'targeting_match',
         allocationKey: 'allocation-123',
         targetingKey: flagEvalArgs.hookContext.context.targetingKey,
-        evalTimeMs: 1700000000000,
-        attrs: flagEvalArgs.hookContext.context,
+        evalTimeMs: 1760000000000,
+        attrs: {
+          plan: flagEvalArgs.hookContext.context.plan,
+          country: flagEvalArgs.hookContext.context.country,
+          betaTester: flagEvalArgs.hookContext.context.betaTester,
+          seatCount: flagEvalArgs.hookContext.context.seatCount,
+        },
       })
     },
   })

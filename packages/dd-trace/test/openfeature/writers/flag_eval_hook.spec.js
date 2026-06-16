@@ -103,14 +103,14 @@ describe('FlagEvalEVPHook', () => {
   })
 
   describe('field extraction', () => {
-    it('lowercases the reason', () => {
+    it('does not include OpenFeature reason in the EVP event snapshot', () => {
       hook.finally({ flagKey: 'f' }, { variant: 'on', reason: 'TARGETING_MATCH' })
-      assert.strictEqual(lastEnqueued().reason, 'targeting_match')
+      assert.ok(!Object.hasOwn(lastEnqueued(), 'reason'))
     })
 
-    it('defaults reason to "unknown" when absent', () => {
+    it('does not add a hidden reason value when OpenFeature reason is absent', () => {
       hook.finally({ flagKey: 'f' }, { variant: 'on' })
-      assert.strictEqual(lastEnqueued().reason, 'unknown')
+      assert.ok(!Object.hasOwn(lastEnqueued(), 'reason'))
     })
 
     it('reads targetingKey and context attrs from hookContext.context', () => {
