@@ -43,7 +43,7 @@ describe('telemetry (proxy)', () => {
   })
 
   it('should proxy when enabled', () => {
-    const config = { telemetry: { enabled: true } }
+    const config = { telemetry: { DD_INSTRUMENTATION_TELEMETRY_ENABLED: true } }
 
     proxy.start(config)
     proxy.updateIntegrations()
@@ -57,7 +57,7 @@ describe('telemetry (proxy)', () => {
   })
 
   it('should proxy when enabled from updateConfig', () => {
-    const config = { telemetry: { enabled: true } }
+    const config = { telemetry: { DD_INSTRUMENTATION_TELEMETRY_ENABLED: true } }
 
     proxy.updateConfig([], config)
     proxy.updateIntegrations()
@@ -122,9 +122,9 @@ describe('telemetry', () => {
 
     telemetry.start({
       telemetry: {
-        enabled: true,
-        heartbeatInterval: DEFAULT_HEARTBEAT_INTERVAL,
-        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: DEFAULT_HEARTBEAT_INTERVAL,
+        DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
       },
       hostname: 'localhost',
       port: traceAgent.address().port,
@@ -254,9 +254,9 @@ describe('telemetry', () => {
     }).listen(0, () => {
       telemetry.start({
         telemetry: {
-          enabled: false,
-          heartbeatInterval: 60000,
-          extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+          DD_INSTRUMENTATION_TELEMETRY_ENABLED: false,
+          DD_TELEMETRY_HEARTBEAT_INTERVAL: 60000,
+          DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
         },
         hostname: 'localhost',
         port: (/** @type {import('net').AddressInfo} */ (server.address())).port,
@@ -279,9 +279,9 @@ describe('telemetry', () => {
     })
     notEnabledTelemetry.start({
       telemetry: {
-        enabled: false,
-        heartbeatInterval: DEFAULT_HEARTBEAT_INTERVAL,
-        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: false,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: DEFAULT_HEARTBEAT_INTERVAL,
+        DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
       },
       appsec: { enabled: false, sca: { DD_APPSEC_SCA_ENABLED: undefined } },
       profiling: { enabled: false },
@@ -331,9 +331,9 @@ describe('telemetry app-heartbeat', () => {
 
     telemetry.start({
       telemetry: {
-        enabled: true,
-        heartbeatInterval: HEARTBEAT_INTERVAL,
-        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: HEARTBEAT_INTERVAL,
+        DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
       },
       hostname: 'localhost',
       port: 0,
@@ -399,9 +399,9 @@ describe('Telemetry extended heartbeat', () => {
 
     telemetry.start({
       telemetry: {
-        enabled: true,
-        heartbeatInterval: HEARTBEAT_INTERVAL,
-        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: HEARTBEAT_INTERVAL,
+        DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
       },
       hostname: 'localhost',
       port: 0,
@@ -444,9 +444,9 @@ describe('Telemetry extended heartbeat', () => {
 
     const config = {
       telemetry: {
-        enabled: true,
-        heartbeatInterval: HEARTBEAT_INTERVAL,
-        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: HEARTBEAT_INTERVAL,
+        DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
       },
       hostname: 'localhost',
       port: 0,
@@ -551,9 +551,9 @@ describe('Telemetry extended heartbeat', () => {
 
     const config = {
       telemetry: {
-        enabled: true,
-        heartbeatInterval: HEARTBEAT_INTERVAL,
-        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: HEARTBEAT_INTERVAL,
+        DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
       },
       hostname: 'localhost',
       port: 0,
@@ -647,9 +647,9 @@ describe('Telemetry retry', () => {
 
     telemetry.start({
       telemetry: {
-        enabled: true,
-        heartbeatInterval: HEARTBEAT_INTERVAL,
-        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: HEARTBEAT_INTERVAL,
+        DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
       },
       hostname: 'localhost',
       port: 0,
@@ -740,9 +740,9 @@ describe('Telemetry retry', () => {
 
     telemetry.start({
       telemetry: {
-        enabled: true,
-        heartbeatInterval: HEARTBEAT_INTERVAL,
-        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: HEARTBEAT_INTERVAL,
+        DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
       },
       hostname: 'localhost',
       port: 0,
@@ -815,9 +815,9 @@ describe('Telemetry retry', () => {
 
     telemetry.start({
       telemetry: {
-        enabled: true,
-        heartbeatInterval: HEARTBEAT_INTERVAL,
-        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: HEARTBEAT_INTERVAL,
+        DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
       },
       hostname: 'localhost',
       port: 0,
@@ -881,9 +881,9 @@ describe('Telemetry retry', () => {
     // Start function sends 2 messages app-started & app-integrations-change
     telemetry.start({
       telemetry: {
-        enabled: true,
-        heartbeatInterval: HEARTBEAT_INTERVAL,
-        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: HEARTBEAT_INTERVAL,
+        DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
       },
       hostname: 'localhost',
       port: 0,
@@ -969,9 +969,9 @@ describe('Telemetry retry', () => {
     // Start function sends 2 messages app-started & app-integrations-change
     telemetry.start({
       telemetry: {
-        enabled: true,
-        heartbeatInterval: HEARTBEAT_INTERVAL,
-        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: HEARTBEAT_INTERVAL,
+        DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
       },
       hostname: 'localhost',
       port: 0,
@@ -1068,9 +1068,9 @@ describe('AVM OSS', () => {
 
           telemetryConfig = {
             telemetry: {
-              enabled: true,
-              heartbeatInterval: HEARTBEAT_INTERVAL,
-              extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+              DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+              DD_TELEMETRY_HEARTBEAT_INTERVAL: HEARTBEAT_INTERVAL,
+              DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
             },
             hostname: 'localhost',
             port: traceAgent.address().port,
@@ -1139,7 +1139,7 @@ describe('AVM OSS', () => {
     it('should log a warning when sca is enabled and telemetry no', () => {
       telemetry.start(
         {
-          telemetry: { enabled: false },
+          telemetry: { DD_INSTRUMENTATION_TELEMETRY_ENABLED: false },
           appsec: { sca: { DD_APPSEC_SCA_ENABLED: true } },
         }
       )

@@ -43,7 +43,7 @@ const profilerConfig = {
   DD_PROFILING_V8_PROFILER_BUG_WORKAROUND: false,
   DD_PROFILING_ALLOCATION_ENABLED: false,
   DD_PROFILING_HEAP_SAMPLING_INTERVAL: 512 * 1024,
-  telemetry: { heartbeatInterval: 60 * 1e3 },
+  telemetry: { DD_TELEMETRY_HEARTBEAT_INTERVAL: 60 * 1e3 },
 }
 
 async function createProfile (periodType) {

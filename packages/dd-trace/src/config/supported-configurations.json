@@ -1170,7 +1170,7 @@
         "aliases": [
           "DD_TRACE_TELEMETRY_ENABLED"
         ],
-        "internalPropertyName": "telemetry.enabled"
+        "namespace": "telemetry"
       }
     ],
     "DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD": [
@@ -1730,7 +1730,7 @@
         "implementation": "A",
         "type": "boolean",
         "default": "false",
-        "internalPropertyName": "telemetry.debug"
+        "namespace": "telemetry"
       }
     ],
     "DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED": [
@@ -1738,7 +1738,7 @@
         "implementation": "A",
         "type": "boolean",
         "default": "true",
-        "internalPropertyName": "telemetry.dependencyCollection"
+        "namespace": "telemetry"
       }
     ],
     "DD_TELEMETRY_FORWARDER_PATH": [
@@ -1753,7 +1753,7 @@
         "implementation": "A",
         "type": "int",
         "default": "86400",
-        "internalPropertyName": "telemetry.extendedHeartbeatInterval"
+        "namespace": "telemetry"
       }
     ],
     "DD_TELEMETRY_HEARTBEAT_INTERVAL": [
@@ -1761,7 +1761,7 @@
         "implementation": "B",
         "type": "decimal",
         "default": "60.0",
-        "internalPropertyName": "telemetry.heartbeatInterval"
+        "namespace": "telemetry"
       }
     ],
     "DD_TELEMETRY_LOG_COLLECTION_ENABLED": [
@@ -1769,7 +1769,7 @@
         "implementation": "A",
         "type": "boolean",
         "default": "true",
-        "internalPropertyName": "telemetry.logCollection"
+        "namespace": "telemetry"
       }
     ],
     "DD_TELEMETRY_METRICS_ENABLED": [
@@ -1777,7 +1777,7 @@
         "implementation": "A",
         "type": "boolean",
         "default": "true",
-        "internalPropertyName": "telemetry.metrics"
+        "namespace": "telemetry"
       }
     ],
     "DD_TEST_FAILED_TEST_REPLAY_ENABLED": [

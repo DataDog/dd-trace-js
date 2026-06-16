@@ -358,15 +358,16 @@ class Config extends ConfigBase {
       setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'none')
     }
 
-    if (this.telemetry.heartbeatInterval) {
-      setAndTrack(this, 'telemetry.heartbeatInterval', Math.floor(this.telemetry.heartbeatInterval * 1000))
+    if (this.telemetry.DD_TELEMETRY_HEARTBEAT_INTERVAL) {
+      setAndTrack(this, 'telemetry.DD_TELEMETRY_HEARTBEAT_INTERVAL',
+        Math.floor(this.telemetry.DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000))
     }
 
     // Allocation profiling needs a sampling hook only available on Node.js 26+.
     setAndTrack(this, 'DD_PROFILING_ALLOCATION_ENABLED', NODE_MAJOR >= 26 && this.DD_PROFILING_ALLOCATION_ENABLED)
-    if (this.telemetry.extendedHeartbeatInterval) {
-      setAndTrack(this, 'telemetry.extendedHeartbeatInterval',
-        Math.floor(this.telemetry.extendedHeartbeatInterval * 1000))
+    if (this.telemetry.DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL) {
+      setAndTrack(this, 'telemetry.DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL',
+        Math.floor(this.telemetry.DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL * 1000))
     }
 
     // Enable resourceRenamingEnabled when appsec is enabled and only
@@ -551,14 +552,15 @@ class Config extends ConfigBase {
     this.tags['runtime-id'] = RUNTIME_ID
 
     if (IS_SERVERLESS) {
-      setAndTrack(this, 'telemetry.enabled', false)
+      setAndTrack(this, 'telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED', false)
       setAndTrack(this, 'DD_CRASHTRACKING_ENABLED', false)
       setAndTrack(this, 'remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED', false)
     }
 
     // TODO: Should this unconditionally be disabled?
-    if (getEnvironmentVariable('JEST_WORKER_ID') && !trackedConfigOrigins.has('telemetry.enabled')) {
-      setAndTrack(this, 'telemetry.enabled', false)
+    if (getEnvironmentVariable('JEST_WORKER_ID') &&
+        !trackedConfigOrigins.has('telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED')) {
+      setAndTrack(this, 'telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED', false)
     }
 
     // Experimental agentless APM span intake

@@ -1536,8 +1536,8 @@ describe('AppSec Index', function () {
     })
 
     it('should increment waf.init metric', () => {
-      config.telemetry.enabled = true
-      config.telemetry.metrics = true
+      config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED = true
+      config.telemetry.DD_TELEMETRY_METRICS_ENABLED = true
 
       appsec.enable(config)
 
@@ -1548,8 +1548,8 @@ describe('AppSec Index', function () {
     })
 
     it('should not increment waf.init metric if metrics are not enabled', () => {
-      config.telemetry.enabled = true
-      config.telemetry.metrics = false
+      config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED = true
+      config.telemetry.DD_TELEMETRY_METRICS_ENABLED = false
 
       appsec.enable(config)
 
@@ -1559,8 +1559,8 @@ describe('AppSec Index', function () {
     })
 
     it('should not increment waf.init metric if telemetry is not enabled', () => {
-      config.telemetry.enabled = false
-      config.telemetry.metrics = true
+      config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED = false
+      config.telemetry.DD_TELEMETRY_METRICS_ENABLED = true
 
       appsec.enable(config)
 

@@ -193,7 +193,7 @@ function appStarted (config) {
 }
 
 function appClosing () {
-  if (!config?.telemetry?.enabled) {
+  if (!config?.telemetry?.DD_INSTRUMENTATION_TELEMETRY_ENABLED) {
     return
   }
   // Give chance to listeners to update metrics before shutting down.
@@ -244,7 +244,7 @@ function createHostObject () {
 }
 
 function getTelemetryData () {
-  return { config, application, host, heartbeatInterval: config?.telemetry.heartbeatInterval }
+  return { config, application, host, heartbeatInterval: config?.telemetry.DD_TELEMETRY_HEARTBEAT_INTERVAL }
 }
 
 /**
@@ -291,7 +291,7 @@ function heartbeat (config, application) {
 
     const { reqType, payload } = createPayload('app-heartbeat')
     sendData(config, application, host, reqType, payload, updateRetryData)
-  }, config.telemetry.heartbeatInterval).unref?.()
+  }, config.telemetry.DD_TELEMETRY_HEARTBEAT_INTERVAL).unref?.()
 }
 
 /** @param {import('../config/config-base')} config */
@@ -307,7 +307,7 @@ function extendedHeartbeat (config) {
       heartbeatFailedDependencies = []
     }
     sendData(config, application, host, 'app-extended-heartbeat', appPayload)
-  }, config.telemetry.extendedHeartbeatInterval).unref?.()
+  }, config.telemetry.DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL).unref?.()
 }
 
 /**
@@ -315,7 +315,7 @@ function extendedHeartbeat (config) {
  * @param {PluginManager} thePluginManager
  */
 function start (aConfig, thePluginManager) {
-  if (!aConfig.telemetry.enabled) {
+  if (!aConfig.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED) {
     if (aConfig.appsec.sca.DD_APPSEC_SCA_ENABLED) {
       logger.warn('DD_APPSEC_SCA_ENABLED requires enabling telemetry to work.')
     }
@@ -347,7 +347,7 @@ function start (aConfig, thePluginManager) {
 }
 
 function updateIntegrations () {
-  if (!config?.telemetry.enabled) {
+  if (!config?.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED) {
     return
   }
   const integrations = getIntegrations()
@@ -367,7 +367,7 @@ let latestConfiguration = []
  * @param {import('../config/config-base')} config
  */
 function updateConfig (configuration, config) {
-  if (!config.telemetry.enabled) return
+  if (!config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED) return
 
   logger.trace(configuration)
 

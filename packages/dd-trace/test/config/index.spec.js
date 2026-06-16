@@ -2804,7 +2804,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.telemetry.enabled, false)
+    assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, false)
   })
 
   it('should not set DD_INSTRUMENTATION_TELEMETRY_ENABLED if FUNCTION_NAME and GCP_PROJECT are present', () => {
@@ -2814,7 +2814,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.telemetry.enabled, false)
+    assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, false)
   })
 
   it('should not set DD_INSTRUMENTATION_TELEMETRY_ENABLED if K_SERVICE and FUNCTION_TARGET are present', () => {
@@ -2824,7 +2824,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.telemetry.enabled, false)
+    assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, false)
   })
 
   it('should not set DD_INSTRUMENTATION_TELEMETRY_ENABLED if Azure Consumption Plan Function', () => {
@@ -2835,7 +2835,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.telemetry.enabled, false)
+    assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, false)
   })
 
   it('should set telemetry default values', () => {
@@ -2843,11 +2843,11 @@ describe('Config', () => {
 
     assertObjectContains(config, {
       telemetry: {
-        enabled: true,
-        heartbeatInterval: 60000,
-        logCollection: true,
-        debug: false,
-        metrics: true,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: 60000,
+        DD_TELEMETRY_LOG_COLLECTION_ENABLED: true,
+        DD_TELEMETRY_DEBUG: false,
+        DD_TELEMETRY_METRICS_ENABLED: true,
       },
     })
   })
@@ -2858,7 +2858,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.telemetry.heartbeatInterval, 42000)
+    assert.strictEqual(config.telemetry.DD_TELEMETRY_HEARTBEAT_INTERVAL, 42000)
 
     process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL = origTelemetryHeartbeatIntervalValue
   })
@@ -2869,7 +2869,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.telemetry.enabled, false)
+    assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, false)
 
     process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = origTraceTelemetryValue
   })
@@ -2880,7 +2880,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.telemetry.metrics, false)
+    assert.strictEqual(config.telemetry.DD_TELEMETRY_METRICS_ENABLED, false)
 
     process.env.DD_TELEMETRY_METRICS_ENABLED = origTelemetryMetricsEnabledValue
   })
@@ -2891,7 +2891,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.telemetry.logCollection, false)
+    assert.strictEqual(config.telemetry.DD_TELEMETRY_LOG_COLLECTION_ENABLED, false)
 
     process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED = origLogsValue
   })
@@ -2902,7 +2902,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.telemetry.debug, true)
+    assert.strictEqual(config.telemetry.DD_TELEMETRY_DEBUG, true)
 
     process.env.DD_TELEMETRY_DEBUG = origTelemetryDebugValue
   })
@@ -3391,7 +3391,7 @@ describe('Config', () => {
       })
       it('should enable telemetry', () => {
         const config = getConfig(options)
-        assert.strictEqual(config.telemetry.enabled, true)
+        assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, true)
       })
       it('should enable early flake detection by default', () => {
         const config = getConfig(options)
@@ -3478,7 +3478,7 @@ describe('Config', () => {
     it('disables telemetry if inside a jest worker', () => {
       process.env.JEST_WORKER_ID = '1'
       const config = getConfig(options)
-      assert.strictEqual(config.telemetry.enabled, false)
+      assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, false)
     })
   })
 
@@ -3966,8 +3966,8 @@ apm_configuration_default:
           maxConcurrentRequests: 10,
         },
         telemetry: {
-          heartbeatInterval: 42000,
-          metrics: false,
+          DD_TELEMETRY_HEARTBEAT_INTERVAL: 42000,
+          DD_TELEMETRY_METRICS_ENABLED: false,
         },
         llmobs: {
           mlApp: 'my-llm-app',

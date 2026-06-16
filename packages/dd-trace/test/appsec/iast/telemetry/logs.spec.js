@@ -35,7 +35,11 @@ describe('Telemetry logs', () => {
     })
 
     const config = {
-      telemetry: { enabled: true, heartbeatInterval: 3000, logCollection: true },
+      telemetry: {
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: 3000,
+        DD_TELEMETRY_LOG_COLLECTION_ENABLED: true,
+      },
       version: '1.2.3-beta4',
       appsec: { enabled: false },
       profiling: { enabled: false },

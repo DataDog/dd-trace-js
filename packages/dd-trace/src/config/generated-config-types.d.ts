@@ -551,13 +551,13 @@ export interface GeneratedConfig {
   };
   tags: Record<string, string>;
   telemetry: {
-    debug: boolean;
-    dependencyCollection: boolean;
-    enabled: boolean;
-    extendedHeartbeatInterval: number;
-    heartbeatInterval: number;
-    logCollection: boolean;
-    metrics: boolean;
+    DD_INSTRUMENTATION_TELEMETRY_ENABLED: boolean;
+    DD_TELEMETRY_DEBUG: boolean;
+    DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED: boolean;
+    DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: number;
+    DD_TELEMETRY_HEARTBEAT_INTERVAL: number;
+    DD_TELEMETRY_LOG_COLLECTION_ENABLED: boolean;
+    DD_TELEMETRY_METRICS_ENABLED: boolean;
   };
   testManagementAttemptToFixRetries: number;
   traceId128BitGenerationEnabled: boolean;

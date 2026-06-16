@@ -32,7 +32,7 @@ function waitAndSend (config, application, host) {
       const [name, version, initialLoadModule] = dependency.split(' ')
       // If a dependency is from the initial load, *always* send the event
       // Otherwise, only send if dependencyCollection is enabled
-      const sendModule = isTrue(initialLoadModule) || config.telemetry?.dependencyCollection
+      const sendModule = isTrue(initialLoadModule) || config.telemetry?.DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED
 
       savedDependenciesToSend.delete(dependency)
 

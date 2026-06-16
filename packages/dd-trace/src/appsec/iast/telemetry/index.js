@@ -6,7 +6,8 @@ const { initRequestNamespace, finalizeRequestNamespace, globalNamespace } = requ
 
 class Telemetry {
   configure (config, verbosity) {
-    const telemetryAndMetricsEnabled = config?.telemetry?.enabled && config.telemetry.metrics
+    const telemetryAndMetricsEnabled = config?.telemetry?.DD_INSTRUMENTATION_TELEMETRY_ENABLED &&
+      config.telemetry.DD_TELEMETRY_METRICS_ENABLED
 
     this.verbosity = telemetryAndMetricsEnabled ? getVerbosity(verbosity) : Verbosity.OFF
     this.enabled = this.verbosity !== Verbosity.OFF
