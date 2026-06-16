@@ -362,13 +362,13 @@ jobs:
         module-type: ["commonJS", "esm"]
         spec:
           - cypress-reporting
+          - cypress-reporting-instrumentation
           - cypress-itr
           - cypress-tia-code-coverage
           - cypress-efd
           - cypress-atr
           - cypress-test-management
-          - cypress-impacted-tests
-          - cypress-final-status
+          - cypress-final-status-impacted-tests
         exclude:
           # 6.7.0 only runs on DD_MAJOR <= 5 with Node 16/commonJS.
           # On DD_MAJOR >= 6, shouldTestsRun() skips this remaining matrix entry.

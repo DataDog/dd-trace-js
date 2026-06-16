@@ -74,7 +74,17 @@ function preflight (ctx) {
 }
 
 guard.loopStart()
-if (VARIANT === 'mixed') {
+if (VARIANT === 'churn') {
+  // Rebuild the ctx getStartCtx allocates per command instead of reusing one:
+  // the only variant that pays that per-command allocation, isolating the GC
+  // cost the reuse variants hoist out of the loop.
+  const cmd = COMMANDS.get
+  preflight(makeCtx(cmd))
+  lastMeta = undefined
+  for (let i = 0; i < ITERATIONS; i++) {
+    plugin.bindStart(makeCtx(cmd))
+  }
+} else if (VARIANT === 'mixed') {
   const ctxs = MIXED.map(makeCtx)
   for (const ctx of ctxs) preflight(ctx)
   lastMeta = undefined
