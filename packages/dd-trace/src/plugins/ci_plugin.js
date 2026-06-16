@@ -443,6 +443,28 @@ module.exports = class CiPlugin extends Plugin {
   }
 
   /**
+   * Updates repository-root-dependent state when a worker receives the root from
+   * the coordinator process after plugin configuration.
+   *
+   * @param {string|undefined} repositoryRoot - Repository root discovered by the coordinator process.
+   * @param {Array<{ pattern: string, owners: string[] }>|null|undefined} codeOwnersEntries
+   * Parsed CODEOWNERS entries discovered by the coordinator process.
+   * @returns {void}
+   */
+  _setRepositoryRoot (repositoryRoot, codeOwnersEntries) {
+    if (codeOwnersEntries !== undefined) {
+      this.codeOwnersEntries = codeOwnersEntries
+    }
+
+    if (!repositoryRoot || repositoryRoot === this.repositoryRoot) return
+
+    this.repositoryRoot = repositoryRoot
+    if (codeOwnersEntries === undefined) {
+      this.codeOwnersEntries = getCodeOwnersFileEntries(this.repositoryRoot)
+    }
+  }
+
+  /**
    * Returns request error tags from the test session span for propagation to module, suite and test spans.
    * @returns {Record<string, string>}
    */
@@ -610,6 +632,8 @@ module.exports = class CiPlugin extends Plugin {
     const workerTestFramework = WORKER_EXPORTER_TO_TEST_FRAMEWORK[exporter]
     this.shouldSkipGitMetadataExtraction = workerTestFramework &&
       TEST_FRAMEWORKS_TO_SKIP_GIT_METADATA_EXTRACTION.has(workerTestFramework)
+    const shouldDeferCodeOwnersEntries = workerTestFramework === 'vitest'
+    const shouldDeferRepositoryRoot = workerTestFramework === 'vitest'
 
     this.testEnvironmentMetadata = getTestEnvironmentMetadata(
       this.constructor.id,
@@ -635,9 +659,10 @@ module.exports = class CiPlugin extends Plugin {
       [GIT_COMMIT_HEAD_MESSAGE]: commitHeadMessage,
     } = this.testEnvironmentMetadata
 
-    this.repositoryRoot = repositoryRoot || getRepositoryRoot() || process.cwd()
+    this.repositoryRoot = repositoryRoot ||
+      (shouldDeferRepositoryRoot ? process.cwd() : getRepositoryRoot() || process.cwd())
 
-    this.codeOwnersEntries = getCodeOwnersFileEntries(this.repositoryRoot)
+    this.codeOwnersEntries = shouldDeferCodeOwnersEntries ? null : getCodeOwnersFileEntries(this.repositoryRoot)
 
     this.ciProviderName = ciProviderName
 

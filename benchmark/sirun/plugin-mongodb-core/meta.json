@@ -7,10 +7,10 @@
   "instructions": true,
   "variants": {
     "plain-find": {
-      "env": { "VARIANT": "plain-find", "ITERATIONS": "11000000" }
+      "env": { "VARIANT": "plain-find", "ITERATIONS": "8200000" }
     },
     "deep-aggregate": {
-      "env": { "VARIANT": "deep-aggregate", "ITERATIONS": "1600000" }
+      "env": { "VARIANT": "deep-aggregate", "ITERATIONS": "1170000" }
     },
     "bigint-id": {
       "env": { "VARIANT": "bigint-id", "ITERATIONS": "5500000" }
