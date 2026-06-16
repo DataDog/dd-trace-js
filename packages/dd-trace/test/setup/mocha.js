@@ -14,7 +14,7 @@ const sinon = require('sinon')
 require('./core')
 
 const externals = require('../plugins/externals')
-const { getVersionList } = require('../plugins/versions')
+const { resolvePluginVersions } = require('../plugins/versions')
 const runtimeMetrics = require('../../src/runtime_metrics')
 const Nomenclature = require('../../src/service-naming')
 const { SVC_SRC_KEY } = require('../../src/constants')
@@ -284,14 +284,14 @@ function withVersions (plugin, modules, range, cb) {
 
       // Some entries coming from `externals.js` are dependency-only (e.g. `dep: true`) and don't have `versions`.
       // Treat those as "not a test target" instead of crashing.
-      const versions = process.env.PACKAGE_VERSION_RANGE
-        ? [process.env.PACKAGE_VERSION_RANGE]
-        : normalizeVersions(instrumentation.versions)
-
-      // Share the install script's expansion so the tested folders exactly match the installed ones (lowest supported
+      // Share the install script's resolution so the tested folders exactly match the installed ones (lowest supported
       // version, the latest of every major in between, and the newest supported version), de-duplicated by version.
-      for (const { versionKey, range: declaredRange } of getVersionList(moduleName, versions)) {
-        if (process.env.RANGE && !semver.subset(versionKey, process.env.RANGE)) continue
+      const { versionList } = resolvePluginVersions({
+        name: moduleName,
+        declaredVersions: normalizeVersions(instrumentation.versions),
+      })
+
+      for (const { versionKey, range: declaredRange } of versionList) {
         // Exact keys resolve to themselves; range keys (`*`, `>=2`, `>=3.0.0 <4.0.0`) resolve to what was installed.
         const resolvedVersion = semver.valid(versionKey) ?? require(getModulePath(moduleName, versionKey)).version()
         testVersions.set(resolvedVersion, { versionRange: declaredRange, versionKey, resolvedVersion })

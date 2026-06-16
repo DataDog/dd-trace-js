@@ -11,7 +11,7 @@ const semver = require('semver')
 
 const externals = require('../packages/dd-trace/test/plugins/externals')
 const { getInstrumentation } = require('../packages/dd-trace/test/setup/helpers/load-inst')
-const { getCappedRange, getVersionList } = require('../packages/dd-trace/test/plugins/versions')
+const { getCappedRange, resolvePluginVersions } = require('../packages/dd-trace/test/plugins/versions')
 const latests = require('../packages/dd-trace/test/plugins/versions/package.json').dependencies
 const { isRelativeRequire } = require('../packages/datadog-instrumentations/src/helpers/shared-utils')
 const exec = require('./helpers/exec')
@@ -99,21 +99,17 @@ function collectPackages (moduleNames) {
    *   major to install on every job.
    */
   const addInstrumentation = (instrumentation, external, pluginName) => {
-    const honourEnvRange = !external || instrumentation.name === pluginName
-    const versions = process.env.PACKAGE_VERSION_RANGE && honourEnvRange
-      ? [process.env.PACKAGE_VERSION_RANGE]
-      : (instrumentation.versions || [])
-
-    const versionList = getVersionList(instrumentation.name, versions)
+    const { versionList, unversioned } = resolvePluginVersions({
+      name: instrumentation.name,
+      declaredVersions: instrumentation.versions || [],
+      honourEnvRange: !external || instrumentation.name === pluginName,
+    })
 
     // The unversioned `versions/<name>` folder is the default `require('versions/<name>')` target used by service
-    // setup and several plugin specs; it resolves to the newest in-scope version (the env shard, or the newest
-    // declared entry).
-    const unversioned = unversionedRange(honourEnvRange, versionList)
+    // setup and several plugin specs.
     if (unversioned) addFolder(instrumentation.name, null, unversioned, external)
 
     for (const { versionKey } of versionList) {
-      if (process.env.RANGE && !semver.subset(versionKey, process.env.RANGE)) continue
       addFolder(instrumentation.name, versionKey, versionKey, external)
     }
   }
@@ -132,25 +128,6 @@ function collectPackages (moduleNames) {
   }
 
   return packages
-}
-
-/**
- * Resolve the dependency range for the unversioned `versions/<name>` folder. Honours the CI matrix shard, otherwise
- * follows the newest declared entry: the trailing range caps to the pinned latest, while an auxiliary external that
- * deliberately declares an older compatible version (e.g. middie 5.1.0 for fastify 3) keeps that version instead of
- * jumping to the global pinned latest, which may only support newer majors.
- *
- * @param {boolean} honourEnvRange
- * @param {Array<{ versionKey: string, range: string }>} versionList
- * @returns {string|undefined}
- */
-function unversionedRange (honourEnvRange, versionList) {
-  if (process.env.PACKAGE_VERSION_RANGE && honourEnvRange) return process.env.PACKAGE_VERSION_RANGE
-  if (process.env.RANGE) {
-    const inRange = versionList.filter(({ versionKey }) => semver.subset(versionKey, process.env.RANGE))
-    return inRange.at(-1)?.versionKey
-  }
-  return versionList.at(-1)?.versionKey
 }
 
 /**

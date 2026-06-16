@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 
 const { describe, it } = require('mocha')
 
-const { getVersionList } = require('./versions')
+const { getVersionList, resolvePluginVersions } = require('./versions')
 
 const keys = (name, versions, nonConsecutive) =>
   getVersionList(name, versions, nonConsecutive).map(({ versionKey }) => versionKey)
@@ -58,5 +58,79 @@ describe('getVersionList', () => {
 
   it('ignores empty entries', () => {
     assert.deepEqual(keys('mongodb', ['', undefined, '>=2 <3']), ['2.0.0', '>=2 <3'])
+  })
+})
+
+describe('resolvePluginVersions', () => {
+  const versionKeys = result => result.versionList.map(({ versionKey }) => versionKey)
+
+  it('expands the declared versions and points the unversioned folder at the newest in-scope key', () => {
+    const result = resolvePluginVersions({ name: 'mongodb', declaredVersions: ['>=2 <5'], env: {} })
+
+    assert.deepEqual(versionKeys(result), ['2.0.0', '>=3.0.0 <4.0.0', '>=2 <5'])
+    assert.equal(result.unversioned, '>=2 <5')
+  })
+
+  it('filters the installed keys by RANGE and follows the filtered tail', () => {
+    const result = resolvePluginVersions({
+      name: 'mongodb',
+      declaredVersions: ['>=1 <6'],
+      env: { RANGE: '>=2.0.0 <4.0.0' },
+    })
+
+    assert.deepEqual(versionKeys(result), ['>=2.0.0 <3.0.0', '>=3.0.0 <4.0.0'])
+    assert.equal(result.unversioned, '>=3.0.0 <4.0.0')
+  })
+
+  it('replaces the declared versions with PACKAGE_VERSION_RANGE when the module is honoured', () => {
+    const result = resolvePluginVersions({
+      name: 'mongodb',
+      declaredVersions: ['>=2 <5'],
+      env: { PACKAGE_VERSION_RANGE: '>=3 <4' },
+    })
+
+    assert.deepEqual(versionKeys(result), ['3.0.0', '>=3 <4'])
+    assert.equal(result.unversioned, '>=3 <4')
+  })
+
+  it('ignores PACKAGE_VERSION_RANGE for a sibling external that must not be sharded', () => {
+    const result = resolvePluginVersions({
+      name: 'mongodb',
+      declaredVersions: ['>=2 <5'],
+      honourEnvRange: false,
+      env: { PACKAGE_VERSION_RANGE: '>=3 <4' },
+    })
+
+    assert.deepEqual(versionKeys(result), ['2.0.0', '>=3.0.0 <4.0.0', '>=2 <5'])
+    assert.equal(result.unversioned, '>=2 <5')
+  })
+
+  it('keeps the unversioned folder on the raw shard while RANGE narrows the installed keys', () => {
+    const result = resolvePluginVersions({
+      name: 'mongodb',
+      declaredVersions: ['>=1 <6'],
+      env: { PACKAGE_VERSION_RANGE: '>=2 <5', RANGE: '>=3.0.0 <4.0.0' },
+    })
+
+    assert.deepEqual(versionKeys(result), ['>=3.0.0 <4.0.0'])
+    assert.equal(result.unversioned, '>=2 <5')
+  })
+
+  it('reports nothing in scope when no version is declared', () => {
+    const result = resolvePluginVersions({ name: 'mongodb', declaredVersions: [], env: {} })
+
+    assert.deepEqual(result.versionList, [])
+    assert.equal(result.unversioned, undefined)
+  })
+
+  it('reports nothing in scope when RANGE excludes every declared key', () => {
+    const result = resolvePluginVersions({
+      name: 'mongodb',
+      declaredVersions: ['>=2 <3'],
+      env: { RANGE: '>=9.0.0 <10.0.0' },
+    })
+
+    assert.deepEqual(result.versionList, [])
+    assert.equal(result.unversioned, undefined)
   })
 })

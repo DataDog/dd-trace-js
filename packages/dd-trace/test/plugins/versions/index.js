@@ -128,7 +128,39 @@ function highestMajor (name, range, floorMajor) {
   return floorMajor
 }
 
+/**
+ * Resolve which version keys to install and test for a module, plus which key the unversioned
+ * `versions/<name>` folder points at. `scripts/install_plugin_modules.js` and `withVersions()` both call this so the
+ * installed folder set and the tested folder set are derived from one place and cannot drift.
+ *
+ * @param {object} options
+ * @param {string} options.name The module name, e.g. `fastify`.
+ * @param {string[]} options.declaredVersions The declared version entries to expand.
+ * @param {boolean} [options.honourEnvRange] Whether `PACKAGE_VERSION_RANGE` applies to this module. False for sibling
+ *   externals that must stay on their declared versions while the matrix shards a different package.
+ * @param {NodeJS.ProcessEnv} [options.env] Injectable for testing.
+ * @returns {{ versionList: Array<{ versionKey: string, range: string }>, unversioned: string|undefined }} The ordered,
+ *   `RANGE`-filtered key set, and the key the default `versions/<name>` folder resolves to (the newest in-scope entry,
+ *   or `undefined` when nothing is in scope).
+ */
+function resolvePluginVersions ({ name, declaredVersions, honourEnvRange = true, env = process.env }) {
+  const useEnvRange = Boolean(env.PACKAGE_VERSION_RANGE) && honourEnvRange
+  const versions = useEnvRange ? [env.PACKAGE_VERSION_RANGE] : declaredVersions
+
+  let versionList = getVersionList(name, versions)
+  if (env.RANGE) {
+    versionList = versionList.filter(({ versionKey }) => subset(versionKey, env.RANGE))
+  }
+
+  // With `PACKAGE_VERSION_RANGE` the shard itself is the target, so the unversioned folder keeps the raw range even
+  // when `RANGE` narrows the installed keys; otherwise it follows the newest in-scope key.
+  const unversioned = useEnvRange ? env.PACKAGE_VERSION_RANGE : versionList.at(-1)?.versionKey
+
+  return { versionList, unversioned }
+}
+
 module.exports = {
   getCappedRange,
   getVersionList,
+  resolvePluginVersions,
 }
