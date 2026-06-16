@@ -3108,7 +3108,7 @@
       {
         "implementation": "A",
         "type": "int",
-        "default": 10000,
+        "default": "10000",
         "allowed": "[1-9]\\d*",
         "internalPropertyName": "ddTraceMetricsOtelFlushInterval",
         "description": "Internal/testing only: overrides the fixed 10s OTLP trace-metrics flush interval (ms)."
