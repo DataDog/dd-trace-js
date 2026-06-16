@@ -455,11 +455,11 @@ class Config extends ConfigBase {
     }
 
     // For LLMObs, we want to auto enable it when other llmobs options are defined.
-    if (!this.llmobs.enabled &&
-        !trackedConfigOrigins.has('llmobs.enabled') &&
+    if (!this.llmobs.DD_LLMOBS_ENABLED &&
+        !trackedConfigOrigins.has('llmobs.DD_LLMOBS_ENABLED') &&
         (trackedConfigOrigins.has('llmobs.agentlessEnabled') ||
         trackedConfigOrigins.has('llmobs.mlApp'))) {
-      setAndTrack(this, 'llmobs.enabled', true)
+      setAndTrack(this, 'llmobs.DD_LLMOBS_ENABLED', true)
     }
 
     if (this.OTEL_RESOURCE_ATTRIBUTES) {

@@ -274,7 +274,7 @@ class Tracer extends NoopProxy {
       if (config.appsec.enabled) {
         this._modules.appsec.enable(config)
       }
-      if (config.llmobs.enabled) {
+      if (config.llmobs.DD_LLMOBS_ENABLED) {
         this._modules.llmobs.enable(config)
       }
       if (!this._tracingInitialized) {

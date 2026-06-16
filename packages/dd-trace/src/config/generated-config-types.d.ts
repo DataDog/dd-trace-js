@@ -475,7 +475,7 @@ export interface GeneratedConfig {
   legacyBaggageEnabled: boolean;
   llmobs: {
     agentlessEnabled: boolean | undefined;
-    enabled: boolean;
+    DD_LLMOBS_ENABLED: boolean;
     mlApp: string | undefined;
   };
   logInjection: boolean;

@@ -29,7 +29,7 @@ describe('span processor', () => {
       '../log': log,
     })
 
-    processor = new LLMObsSpanProcessor({ llmobs: { enabled: true } })
+    processor = new LLMObsSpanProcessor({ llmobs: { DD_LLMOBS_ENABLED: true } })
     processor.setWriter(writer)
   })
 
@@ -37,7 +37,7 @@ describe('span processor', () => {
     let span
 
     it('should do nothing if llmobs is not enabled', () => {
-      processor = new LLMObsSpanProcessor({ llmobs: { enabled: false } })
+      processor = new LLMObsSpanProcessor({ llmobs: { DD_LLMOBS_ENABLED: false } })
 
       processor.process(span)
     })

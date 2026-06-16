@@ -870,7 +870,7 @@ describe('Config', () => {
       DD_INSTRUMENTATION_CONFIG_ID: undefined,
       llmobs: {
         agentlessEnabled: undefined,
-        enabled: false,
+        DD_LLMOBS_ENABLED: false,
         mlApp: undefined,
       },
       logLevel: 'debug',
@@ -3485,7 +3485,7 @@ describe('Config', () => {
   context('llmobs config', () => {
     it('should disable llmobs by default', () => {
       const config = getConfig()
-      assert.strictEqual(config.llmobs.enabled, false)
+      assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, false)
 
       // check origin computation
       assertConfigUpdateContains(updateConfig.getCall(0).args[0], [{
@@ -3496,7 +3496,7 @@ describe('Config', () => {
     it('should enable llmobs if DD_LLMOBS_ENABLED is set to true', () => {
       process.env.DD_LLMOBS_ENABLED = 'true'
       const config = getConfig()
-      assert.strictEqual(config.llmobs.enabled, true)
+      assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, true)
 
       // check origin computation
       assertConfigUpdateContains(updateConfig.getCall(0).args[0], [{
@@ -3507,7 +3507,7 @@ describe('Config', () => {
     it('should disable llmobs if DD_LLMOBS_ENABLED is set to false', () => {
       process.env.DD_LLMOBS_ENABLED = 'false'
       const config = getConfig()
-      assert.strictEqual(config.llmobs.enabled, false)
+      assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, false)
 
       // check origin computation
       assertConfigUpdateContains(updateConfig.getCall(0).args[0], [{
@@ -3517,7 +3517,7 @@ describe('Config', () => {
 
     it('should enable llmobs with options and DD_LLMOBS_ENABLED is not set', () => {
       const config = getConfig({ llmobs: { agentlessEnabled: true } })
-      assert.strictEqual(config.llmobs.enabled, true)
+      assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, true)
 
       // check origin computation
       assertConfigUpdateContains(updateConfig.getCall(0).args[0], [{
@@ -3528,7 +3528,7 @@ describe('Config', () => {
     it('should have DD_LLMOBS_ENABLED take priority over options', () => {
       process.env.DD_LLMOBS_ENABLED = 'false'
       const config = getConfig({ llmobs: { agentlessEnabled: true } })
-      assert.strictEqual(config.llmobs.enabled, false)
+      assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, false)
 
       // check origin computation
       assertConfigUpdateContains(updateConfig.getCall(0).args[0], [{

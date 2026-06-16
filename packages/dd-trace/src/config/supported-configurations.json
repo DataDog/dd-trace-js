@@ -1225,7 +1225,7 @@
         "implementation": "A",
         "type": "boolean",
         "default": "false",
-        "internalPropertyName": "llmobs.enabled"
+        "namespace": "llmobs"
       }
     ],
     "DD_LLMOBS_ML_APP": [
