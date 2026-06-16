@@ -260,7 +260,7 @@ describe('telemetry', () => {
         },
         hostname: 'localhost',
         port: (/** @type {import('net').AddressInfo} */ (server.address())).port,
-        appsec: { sca: { enabled: false } },
+        appsec: { sca: { DD_APPSEC_SCA_ENABLED: false } },
       })
 
       setTimeout(() => {
@@ -283,7 +283,7 @@ describe('telemetry', () => {
         heartbeatInterval: DEFAULT_HEARTBEAT_INTERVAL,
         extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
       },
-      appsec: { enabled: false, sca: { enabled: undefined } },
+      appsec: { enabled: false, sca: { DD_APPSEC_SCA_ENABLED: undefined } },
       profiling: { enabled: false },
     }, {
       _pluginsByName: pluginsByName,
@@ -1140,7 +1140,7 @@ describe('AVM OSS', () => {
       telemetry.start(
         {
           telemetry: { enabled: false },
-          appsec: { sca: { enabled: true } },
+          appsec: { sca: { DD_APPSEC_SCA_ENABLED: true } },
         }
       )
 

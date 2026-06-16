@@ -778,11 +778,11 @@ describe('Config', () => {
       appsec: {
         apiSecurity: {
           enabled: true,
-          sampleDelay: 30,
+          DD_API_SECURITY_SAMPLE_DELAY: 30,
           endpointCollectionEnabled: true,
           endpointCollectionMessageLimit: 300,
-          downstreamBodyAnalysisSampleRate: 0.5,
-          maxDownstreamRequestBodyAnalysis: 1,
+          DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: 0.5,
+          DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: 1,
           maxDownstreamBodyBytes: 10485760,
         },
         blockedTemplateHtml: undefined,
@@ -804,7 +804,7 @@ describe('Config', () => {
         },
         rateLimit: 100,
         sca: {
-          enabled: undefined,
+          DD_APPSEC_SCA_ENABLED: undefined,
         },
         stackTrace: {
           enabled: true,
@@ -1256,11 +1256,11 @@ describe('Config', () => {
       appsec: {
         apiSecurity: {
           enabled: true,
-          sampleDelay: 25,
+          DD_API_SECURITY_SAMPLE_DELAY: 25,
           endpointCollectionEnabled: false,
           endpointCollectionMessageLimit: 500,
-          downstreamBodyAnalysisSampleRate: 0.75,
-          maxDownstreamRequestBodyAnalysis: 2,
+          DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: 0.75,
+          DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: 2,
           maxDownstreamBodyBytes: 2048,
         },
         blockedTemplateGraphql: BLOCKED_TEMPLATE_GRAPHQL,
@@ -1284,7 +1284,7 @@ describe('Config', () => {
         rateLimit: 42,
         rules: RULES_JSON_PATH,
         sca: {
-          enabled: true,
+          DD_APPSEC_SCA_ENABLED: true,
         },
         stackTrace: {
           enabled: false,
@@ -2602,11 +2602,11 @@ describe('Config', () => {
     assert.deepStrictEqual(config.appsec, {
       apiSecurity: {
         enabled: true,
-        sampleDelay: 30,
+        DD_API_SECURITY_SAMPLE_DELAY: 30,
         endpointCollectionEnabled: true,
         endpointCollectionMessageLimit: 500,
-        downstreamBodyAnalysisSampleRate: 0.5,
-        maxDownstreamRequestBodyAnalysis: 1,
+        DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: 0.5,
+        DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: 1,
         maxDownstreamBodyBytes: 10485760,
       },
       blockedTemplateGraphql: BLOCKED_TEMPLATE_GRAPHQL,
@@ -2630,7 +2630,7 @@ describe('Config', () => {
       rateLimit: 42,
       rules: RULES_JSON_PATH,
       sca: {
-        enabled: undefined,
+        DD_APPSEC_SCA_ENABLED: undefined,
       },
       stackTrace: {
         enabled: true,

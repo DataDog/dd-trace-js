@@ -316,7 +316,7 @@ function extendedHeartbeat (config) {
  */
 function start (aConfig, thePluginManager) {
   if (!aConfig.telemetry.enabled) {
-    if (aConfig.appsec.sca.enabled) {
+    if (aConfig.appsec.sca.DD_APPSEC_SCA_ENABLED) {
       logger.warn('DD_APPSEC_SCA_ENABLED requires enabling telemetry to work.')
     }
 

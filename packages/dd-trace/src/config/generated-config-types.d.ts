@@ -7,13 +7,13 @@ export interface GeneratedConfig {
   apmTracingEnabled: boolean;
   appsec: {
     apiSecurity: {
-      downstreamBodyAnalysisSampleRate: number;
+      DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: number;
+      DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: number;
+      DD_API_SECURITY_SAMPLE_DELAY: number;
       enabled: boolean;
       endpointCollectionEnabled: boolean;
       endpointCollectionMessageLimit: number;
       maxDownstreamBodyBytes: number;
-      maxDownstreamRequestBodyAnalysis: number;
-      sampleDelay: number;
     };
     blockedTemplateGraphql: string | undefined;
     blockedTemplateHtml: string | undefined;
@@ -36,7 +36,7 @@ export interface GeneratedConfig {
     rateLimit: number;
     rules: string | undefined;
     sca: {
-      enabled: boolean | undefined;
+      DD_APPSEC_SCA_ENABLED: boolean | undefined;
     };
     stackTrace: {
       enabled: boolean;

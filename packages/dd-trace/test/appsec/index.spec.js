@@ -87,7 +87,7 @@ describe('AppSec Index', function () {
         },
         apiSecurity: {
           enabled: false,
-          sampleDelay: 10,
+          DD_API_SECURITY_SAMPLE_DELAY: 10,
         },
         rasp: {
           enabled: true,
@@ -793,7 +793,7 @@ describe('AppSec Index', function () {
     it('should not trigger schema extraction with feature disabled', () => {
       config.appsec.apiSecurity = {
         enabled: false,
-        sampleDelay: 1,
+        DD_API_SECURITY_SAMPLE_DELAY: 1,
       }
 
       AppSec.enable(config)
@@ -844,7 +844,7 @@ describe('AppSec Index', function () {
     it('should trigger schema extraction with sampling enabled', () => {
       config.appsec.apiSecurity = {
         enabled: true,
-        sampleDelay: 1,
+        DD_API_SECURITY_SAMPLE_DELAY: 1,
       }
 
       AppSec.enable(config)
@@ -899,7 +899,7 @@ describe('AppSec Index', function () {
       beforeEach(() => {
         config.appsec.apiSecurity = {
           enabled: true,
-          sampleDelay: 1,
+          DD_API_SECURITY_SAMPLE_DELAY: 1,
         }
 
         AppSec.enable(config)

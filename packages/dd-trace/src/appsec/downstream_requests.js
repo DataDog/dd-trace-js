@@ -41,7 +41,7 @@ function enable (_config) {
   downstreamAnalysisCount = new WeakMap()
   responseBodyIgnoredCount = new WeakMap()
 
-  const bodyAnalysisSampleRate = config.appsec.apiSecurity?.downstreamBodyAnalysisSampleRate
+  const bodyAnalysisSampleRate = config.appsec.apiSecurity?.DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE
   samplingRate = Math.min(Math.max(bodyAnalysisSampleRate, 0), 1)
 
   if (samplingRate !== bodyAnalysisSampleRate) {
@@ -137,7 +137,7 @@ function shouldSampleBody (req) {
   globalRequestCounter = (globalRequestCounter + 1n) & UINT64_MAX
 
   const currentCount = bodyAnalysisCount.get(req) || 0
-  if (currentCount >= config.appsec.apiSecurity?.maxDownstreamRequestBodyAnalysis) {
+  if (currentCount >= config.appsec.apiSecurity?.DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS) {
     return false
   }
 

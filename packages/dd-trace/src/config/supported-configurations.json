@@ -155,7 +155,7 @@
       {
         "implementation": "A",
         "type": "decimal",
-        "internalPropertyName": "appsec.apiSecurity.downstreamBodyAnalysisSampleRate",
+        "namespace": "appsec.apiSecurity",
         "default": "0.5"
       }
     ],
@@ -163,7 +163,7 @@
       {
         "implementation": "A",
         "type": "int",
-        "internalPropertyName": "appsec.apiSecurity.maxDownstreamRequestBodyAnalysis",
+        "namespace": "appsec.apiSecurity",
         "default": "1"
       }
     ],
@@ -180,7 +180,7 @@
         "implementation": "A",
         "type": "decimal",
         "default": "30",
-        "internalPropertyName": "appsec.apiSecurity.sampleDelay"
+        "namespace": "appsec.apiSecurity"
       }
     ],
     "DD_APM_FLUSH_DEADLINE_MILLISECONDS": [
@@ -392,7 +392,7 @@
         "implementation": "B",
         "type": "boolean",
         "default": null,
-        "internalPropertyName": "appsec.sca.enabled"
+        "namespace": "appsec.sca"
       }
     ],
     "DD_APPSEC_STACK_TRACE_ENABLED": [

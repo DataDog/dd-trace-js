@@ -319,7 +319,7 @@ withVersions('express', 'express', version => {
 
     describe('with sample delay 10', () => {
       beforeEach(() => {
-        config.appsec.apiSecurity.sampleDelay = 10
+        config.appsec.apiSecurity.DD_API_SECURITY_SAMPLE_DELAY = 10
         appsec.enable(config)
       })
 
@@ -388,7 +388,7 @@ withVersions('express', 'express', version => {
 
     it('should not get the schema', async () => {
       config.appsec.apiSecurity.enabled = false
-      config.appsec.apiSecurity.sampleDelay = 10
+      config.appsec.apiSecurity.DD_API_SECURITY_SAMPLE_DELAY = 10
       appsec.enable(config)
 
       const res = await axios.post('/', { key: 'value' })
