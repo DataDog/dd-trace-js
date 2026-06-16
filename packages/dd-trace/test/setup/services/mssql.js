@@ -1,9 +1,16 @@
 'use strict'
 
+const semver = require('semver')
+
 const RetryOperation = require('../operation')
 
 function waitForMssql (isSandbox) {
-  const tedious = isSandbox ? require('tedious') : require('../../../../../versions/tedious').get()
+  const tediousPackage = isSandbox ? require('tedious') : require('../../../../../versions/tedious')
+  const tedious = isSandbox ? tediousPackage : tediousPackage.get()
+  // tedious <10 starts connecting on construction, while >=10 requires an explicit connect(); calling connect() on
+  // the older line throws "No event 'socketConnect' in state 'SentPrelogin'". The version expansion can resolve the
+  // unversioned folder to an older major (e.g. the >=1 <7 shard), so mirror the guard the plugin specs already use.
+  const needsExplicitConnect = isSandbox || semver.intersects(tediousPackage.version(), '>=10.0.0')
 
   return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
     const operation = new RetryOperation('mssql')
@@ -35,7 +42,7 @@ function waitForMssql (isSandbox) {
 
         connection.execSql(request)
       })
-      connection.connect()
+      if (needsExplicitConnect) connection.connect()
     })
   }))
 }

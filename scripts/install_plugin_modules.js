@@ -107,8 +107,9 @@ function collectPackages (moduleNames) {
     const versionList = getVersionList(instrumentation.name, versions)
 
     // The unversioned `versions/<name>` folder is the default `require('versions/<name>')` target used by service
-    // setup and several plugin specs; it resolves to the newest in-scope version (the env shard, or the pinned latest).
-    const unversioned = unversionedRange(instrumentation.name, honourEnvRange, versionList)
+    // setup and several plugin specs; it resolves to the newest in-scope version (the env shard, or the newest
+    // declared entry).
+    const unversioned = unversionedRange(honourEnvRange, versionList)
     if (unversioned) addFolder(instrumentation.name, null, unversioned, external)
 
     for (const { versionKey } of versionList) {
@@ -135,21 +136,20 @@ function collectPackages (moduleNames) {
 
 /**
  * Resolve the dependency range for the unversioned `versions/<name>` folder. Honours the CI matrix shard, otherwise
- * pins the newest published version so the default require resolves to the latest.
+ * follows the newest declared entry: the trailing range caps to the pinned latest, while an auxiliary external that
+ * deliberately declares an older compatible version (e.g. middie 5.1.0 for fastify 3) keeps that version instead of
+ * jumping to the global pinned latest, which may only support newer majors.
  *
- * @param {string} name
  * @param {boolean} honourEnvRange
  * @param {Array<{ versionKey: string, range: string }>} versionList
  * @returns {string|undefined}
  */
-function unversionedRange (name, honourEnvRange, versionList) {
+function unversionedRange (honourEnvRange, versionList) {
   if (process.env.PACKAGE_VERSION_RANGE && honourEnvRange) return process.env.PACKAGE_VERSION_RANGE
   if (process.env.RANGE) {
     const inRange = versionList.filter(({ versionKey }) => semver.subset(versionKey, process.env.RANGE))
     return inRange.at(-1)?.versionKey
   }
-  if (latests[name]) return latests[name]
-  // Modules without a pinned latest only declare exact versions; fall back to the highest declared one.
   return versionList.at(-1)?.versionKey
 }
 

@@ -42,13 +42,8 @@ describe('Plugin', () => {
             fastify = getExport()
             app = fastify()
 
-            // The latest published middie (7.x, what the unversioned folder resolves to) only supports fastify >=4.
-            // Fastify 3 needs the 5.x line, so pin it explicitly; decide on the resolved version, not the range key.
-            if (semver.intersects(specificVersion, '>=4')) {
+            if (semver.intersects(version, '>=3')) {
               return app.register(require('../../../versions/middie').get())
-            }
-            if (semver.intersects(specificVersion, '>=3')) {
-              return app.register(require('../../../versions/middie@5.1.0').get())
             }
           })
 

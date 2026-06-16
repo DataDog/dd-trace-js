@@ -58,7 +58,9 @@ describe('extended data collection', () => {
         reply.send('DONE')
       })
 
-      app.listen(port, (err, address) => {
+      // Fastify 1.x already accepts the options-object form, while the variadic `listen(port, cb)` signature is a
+      // throwing deprecation in 4.x and removed in 5.x. Use the object form so every tested major starts cleanly.
+      app.listen({ host: 'localhost', port: 0 }, (err) => {
         if (err) {
           throw err
         }

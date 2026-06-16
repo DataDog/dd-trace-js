@@ -15,5 +15,5 @@ message Request {
 }
 
 message Response {
-  required string first = 1;
+  string first = 1;
 }
