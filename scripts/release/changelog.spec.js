@@ -95,7 +95,7 @@ describe('release changelog', () => {
       '- <b>Profiling</b> Prevent panics in profiling encoding under out-of-memory and out-of-bounds ' +
         'conditions #3888',
       '- <b>LLMObs</b> Revert "Fan array-valued user tags out into one wire entry per element (#8689)" #8790',
-      '- <b>Other</b> Handle strange thing #9999',
+      '- <b>unknown-scope</b> Handle strange thing #9999',
       '',
       'Performance',
       '- <b>General</b> Reduce per-span format and encode overhead #8754',
@@ -111,7 +111,6 @@ describe('release changelog', () => {
       '',
     ].join('\n'))
     assert.deepStrictEqual(changelog.warnings, [
-      'Unknown release-note product for abc015: fix(unknown-scope): handle strange thing (#9999)',
       'Non-conventional release-note subject for abc016: ' +
         'Fixes APMS-19181: sets the service discovery logs to respect the log level (#8677)',
     ])
@@ -175,6 +174,56 @@ describe('release changelog', () => {
       '- <b>AppSec</b> Trim empty scope segments #1234',
       '',
     ].join('\n'))
+  })
+
+  it('labels an unmapped scope with the scope from the commit and does not warn', () => {
+    const changelog = createReleaseChangelog([
+      { sha: 'abc001', subject: 'feat(aws-sdk): create SQS consumer spans (#8827)' },
+      { sha: 'abc002', subject: 'fix(redis): drop db.name placeholder (#8402)' },
+    ])
+
+    assert.strictEqual(changelog.markdown, [
+      'Features',
+      '- <b>aws-sdk</b> Create SQS consumer spans #8827',
+      '',
+      'Fixes',
+      '- <b>redis</b> Drop db.name placeholder #8402',
+      '',
+    ].join('\n'))
+    assert.deepStrictEqual(changelog.warnings, [])
+  })
+
+  it('renders the full scope list when no scope maps to a product', () => {
+    const changelog = createReleaseChangelog([
+      { sha: 'abc001', subject: 'fix(redis, iovalkey): align reconnect handling (#8001)' },
+    ])
+
+    assert.strictEqual(changelog.markdown, [
+      'Fixes',
+      '- <b>redis, iovalkey</b> Align reconnect handling #8001',
+      '',
+    ].join('\n'))
+  })
+
+  it('maps newly recognized scopes to their products', () => {
+    const changelog = createReleaseChangelog([
+      { sha: 'abc001', subject: 'fix(aap): block on suspicious request (#9001)' },
+      { sha: 'abc002', subject: 'fix(ai_guard): tighten prompt evaluation (#9002)' },
+      { sha: 'abc003', subject: 'fix(dsm): track message lineage (#9003)' },
+      { sha: 'abc004', subject: 'fix(dbm): propagate trace context to SQL comments (#9004)' },
+      { sha: 'abc005', subject: 'fix(exporters): route agentless spans to the regional intake (#9005)' },
+    ])
+
+    assert.strictEqual(changelog.markdown, [
+      'Fixes',
+      '- <b>AppSec</b> Block on suspicious request #9001',
+      '- <b>AI Guard</b> Tighten prompt evaluation #9002',
+      '- <b>Data Streams Monitoring</b> Track message lineage #9003',
+      '- <b>Database Monitoring</b> Propagate trace context to SQL comments #9004',
+      '- <b>General</b> Route agentless spans to the regional intake #9005',
+      '',
+    ].join('\n'))
+    assert.deepStrictEqual(changelog.warnings, [])
   })
 
   it('lists unique contributors sorted case-insensitively after the change sections', () => {
