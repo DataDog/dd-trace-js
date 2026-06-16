@@ -6,11 +6,11 @@ include:
     file: 'images/templates/gitlab/build-ci-images.template.yml'
 
 variables:
-  # Consumed by the benchmark jobs below. After the first `build-benchmark-ci-images`
-  # run, repin this to the registry.ddbuild.io/ci/benchmarking-platform:dd-trace-js-<pipeline-id>
-  # tag it pushes (dd-trace-go pins the same way).
-  # TODO(BridgeAR): repin to the registry.ddbuild.io tag once the in-repo image is built.
-  MICROBENCHMARKS_CI_IMAGE: 486234852809.dkr.ecr.us-east-1.amazonaws.com/ci/benchmarking-platform:dd-trace-js
+  # Consumed by the benchmark jobs below. Repin after a `build-benchmark-ci-images`
+  # run to the tag it pushes; the @sha256 digest is what image-integrity verifies, so
+  # the pull can't be shifted by a tag rewrite.
+  # Built here: https://gitlab.ddbuild.io/DataDog/apm-reliability/dd-trace-js/-/jobs/1755904623
+  MICROBENCHMARKS_CI_IMAGE: registry.ddbuild.io/ci/benchmarking-platform:dd-trace-js-117825597@sha256:23a63e17211bb712a07494ccbbed86edb8f4a3c1c301310c217938dbe1b7284d
 
   # Image build, consumed by the included build-ci-images template. The per-pipeline
   # suffix pins each build to a unique tag so a rebuild can't shift what older
@@ -25,7 +25,7 @@ variables:
   SLS_CI_BRANCH: main
 
   # Benchmark's env variables. Modify to tweak benchmark parameters.
-  UNCONFIDENCE_THRESHOLD: "5.0"
+  UNCONFIDENCE_THRESHOLD: "2.0"
   MD_REPORT_ONLY_CHANGES: "1"
 
 .benchmarks:

@@ -14,10 +14,11 @@
       }
     },
     "finish-later": {
+      "iterations": 16,
       "env": {
         "DD_TRACE_SCOPE": "noop",
         "FINISH": "later",
-        "COUNT": "2000000"
+        "COUNT": "3000000"
       }
     },
     "finish-immediately-with-tags": {

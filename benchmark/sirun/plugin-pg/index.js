@@ -32,7 +32,7 @@ const plugin = new BenchedPGPlugin(tracer, tracerConfig)
 plugin.configure({
   enabled: true,
   service: 'pg-prod',
-  dbmPropagationMode: VARIANT === 'disabled' ? 'disabled' : (VARIANT === 'full' ? 'full' : 'service'),
+  dbmPropagationMode: VARIANT === 'full' ? 'full' : 'service',
   appendComment: false,
   truncate: 5000,
 })
@@ -61,15 +61,11 @@ function injectOnce () {
   return plugin.injectDbmQuery(span, QUERY, 'pg-prod', false)
 }
 
-// Preflight: confirm the comment was actually spliced (or, for disabled, that
-// the query is returned untouched), so a refactor cannot silently no-op it.
+// Preflight: confirm the comment was actually spliced, so a refactor cannot
+// silently no-op it.
 const sample = injectOnce()
-if (VARIANT === 'disabled') {
-  assert.equal(sample, QUERY, 'disabled mode should return the query untouched')
-} else {
-  assert.ok(sample.includes("dddb='orders'") && sample.length > QUERY.length,
-    'injectDbmQuery did not splice the dbm comment')
-}
+assert.ok(sample.includes("dddb='orders'") && sample.length > QUERY.length,
+  'injectDbmQuery did not splice the dbm comment')
 
 guard.loopStart()
 let sink = 0

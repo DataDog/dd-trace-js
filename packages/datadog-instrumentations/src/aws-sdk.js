@@ -150,6 +150,7 @@ function wrapDeserialize (deserialize, headersCh, responseIndex = 0) {
 function wrapSmithySend (send) {
   return function (command, ...args) {
     const cb = args.at(-1)
+    const cbExists = typeof cb === 'function'
     const serviceIdentifier = this.config.serviceId.toLowerCase()
     const channelSuffix = getChannelSuffix(serviceIdentifier)
     const channels = getChannelBag(channelSuffix)
@@ -188,6 +189,7 @@ function wrapSmithySend (send) {
       operation,
       awsService: clientName,
       request,
+      cbExists,
     }
 
     return channels.start.runStores(ctx, () => {
@@ -197,7 +199,7 @@ function wrapSmithySend (send) {
         channels.region.publish(ctx)
       })
 
-      if (typeof cb === 'function') {
+      if (cbExists) {
         args[args.length - 1] = shimmer.wrapCallback(cb, cb => function (err, result) {
           addResponse(ctx, err, result)
 
