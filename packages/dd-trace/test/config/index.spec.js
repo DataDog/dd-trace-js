@@ -906,6 +906,7 @@ describe('Config', () => {
     assert.deepStrictEqual(config.DD_GRPC_CLIENT_ERROR_STATUSES, GRPC_CLIENT_ERROR_STATUSES)
     assert.deepStrictEqual(config.DD_GRPC_SERVER_ERROR_STATUSES, GRPC_SERVER_ERROR_STATUSES)
     assert.deepStrictEqual(config.DD_INJECTION_ENABLED, undefined)
+    assert.strictEqual(config.DD_TRACE_OTEL_SEMANTICS_ENABLED, false)
     assert.deepStrictEqual(config.serviceMapping, {})
     assert.deepStrictEqual(config.tracePropagationStyle.extract, ['datadog', 'tracecontext', 'baggage'])
     assert.deepStrictEqual(config.tracePropagationStyle.inject, ['datadog', 'tracecontext', 'baggage'])
@@ -1594,6 +1595,12 @@ describe('Config', () => {
         enabled: false,
       },
     })
+  })
+
+  it('should read DD_TRACE_OTEL_SEMANTICS_ENABLED from the environment', () => {
+    process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+
+    assert.strictEqual(getConfig().DD_TRACE_OTEL_SEMANTICS_ENABLED, true)
   })
 
   it('should initialize from environment variables with url taking precedence', () => {

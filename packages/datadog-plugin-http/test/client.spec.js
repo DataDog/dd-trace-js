@@ -60,6 +60,50 @@ describe('Plugin', () => {
         await agent.close()
       })
 
+      describe('with OTel semantics enabled', () => {
+        beforeEach(async () => {
+          process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+          tracer = await agent.load('http', { server: false })
+          http = require(pluginToBeLoaded)
+          express = require('express')
+        })
+
+        afterEach(() => {
+          delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+        })
+
+        it('emits OpenTelemetry client attributes and omits the Datadog ones', done => {
+          const app = express()
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          appListener = server(app, port => {
+            agent.assertFirstTraceSpan(span => {
+              assert.strictEqual(span.type, 'http')
+              assert.strictEqual(span.resource, 'GET')
+              assert.strictEqual(span.meta['span.kind'], 'client')
+              // OpenTelemetry attribute names are present...
+              assert.strictEqual(span.meta['http.request.method'], 'GET')
+              assert.strictEqual(span.meta['url.full'], `${protocol}://localhost:${port}/user`)
+              assert.strictEqual(span.meta['server.address'], 'localhost')
+              assert.strictEqual(span.meta['http.response.status_code'], '200')
+              assert.strictEqual(span.metrics['server.port'], port)
+              // ...and the Datadog ones are absent.
+              assert.strictEqual(span.meta['http.method'], undefined)
+              assert.strictEqual(span.meta['http.url'], undefined)
+              assert.strictEqual(span.meta['http.status_code'], undefined)
+              assert.strictEqual(span.meta['out.host'], undefined)
+            }).then(done).catch(done)
+
+            const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+              res.on('data', () => {})
+            })
+            req.end()
+          })
+        })
+      })
+
       describe('without configuration', () => {
         beforeEach(async () => {
           tracer = await agent.load('http', { server: false })

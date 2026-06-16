@@ -7,13 +7,14 @@ const log = require('../../log')
 const tags = require('../../../../../ext/tags')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
-const { ERROR_MESSAGE } = require('../../constants')
+const { ERROR_MESSAGE, ERROR_TYPE } = require('../../constants')
 const TracingPlugin = require('../tracing')
 const { storage } = require('../../../../datadog-core')
 const legacyStorage = storage('legacy')
 const urlFilter = require('./urlfilter')
 const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
 const { extractURL, obfuscateQs, calculateHttpEndpoint } = require('./url')
+const httpOtel = require('./http-otel-semantics')
 
 const WEB = types.WEB
 const SERVER = kinds.SERVER
@@ -239,6 +240,16 @@ const web = {
     if (inferredProxySpan && !inferredSpanHasExistingError && !isValidStatusCode) {
       inferredProxySpan.setTag(ERROR, error || true)
     }
+
+    // OTel `error.type` for an error response is the (string) status code.
+    if (context.config.DD_TRACE_OTEL_SEMANTICS_ENABLED && !isValidStatusCode) {
+      if (!spanContext.getTag(ERROR_TYPE)) {
+        span.setTag(ERROR_TYPE, String(statusCode))
+      }
+      if (inferredProxySpan && !inferredSpanContext?.getTag(ERROR_TYPE)) {
+        inferredProxySpan.setTag(ERROR_TYPE, String(statusCode))
+      }
+    }
   },
 
   // Add an error to the request
@@ -369,33 +380,55 @@ function splitHeader (str) {
 function addRequestTags (context, spanType) {
   const { req, span, inferredProxySpan, config } = context
   const spanContext = span.context()
+  const otelSemantics = config.DD_TRACE_OTEL_SEMANTICS_ENABLED
 
   // Idempotency guard. `addRequestTags` runs in `web.startSpan` for the
   // normal HTTP path and again in `web.finishSpan`; without this guard the
   // second call would re-extract the URL, re-obfuscate the query string,
   // and re-publish five `tagsUpdateCh` events with the same values. The
   // serverless path skips `startSpan` and lands here first, in which case
-  // HTTP_URL is unset and the work runs normally.
-  if (spanContext.hasTag(HTTP_URL)) return
+  // the URL tag is unset and the work runs normally. In OTel-semantics mode
+  // `url.path` is the stand-in marker since `http.url` is never set.
+  if (spanContext.hasTag(HTTP_URL) || (otelSemantics && spanContext.hasTag(httpOtel.URL_PATH))) return
 
   const url = extractURL(req)
   const type = spanType ?? WEB
 
-  span.addTags({
-    [HTTP_URL]: obfuscateQs(config, url),
-    [HTTP_METHOD]: req.method,
-    [SPAN_KIND]: SERVER,
-    [SPAN_TYPE]: type,
-    [HTTP_USERAGENT]: req.headers['user-agent'],
-  })
+  if (otelSemantics) {
+    const { scheme, address, port, path, query } = httpOtel.decomposeServerUrl(url, obfuscateQs(config, url))
+    const otelTags = {
+      [SPAN_KIND]: SERVER,
+      [SPAN_TYPE]: type,
+      [httpOtel.HTTP_REQUEST_METHOD]: req.method,
+      [httpOtel.URL_PATH]: path,
+    }
+    if (scheme) otelTags[httpOtel.URL_SCHEME] = scheme
+    if (query) otelTags[httpOtel.URL_QUERY] = query
+    if (address) otelTags[httpOtel.SERVER_ADDRESS] = address
+    if (port) otelTags[httpOtel.SERVER_PORT] = port
+    const userAgent = req.headers['user-agent']
+    if (userAgent) otelTags[httpOtel.USER_AGENT_ORIGINAL] = userAgent
+    const peerAddress = req.socket?.remoteAddress
+    if (peerAddress) otelTags[httpOtel.NETWORK_PEER_ADDRESS] = peerAddress
+    span.addTags(otelTags)
+  } else {
+    span.addTags({
+      [HTTP_URL]: obfuscateQs(config, url),
+      [HTTP_METHOD]: req.method,
+      [SPAN_KIND]: SERVER,
+      [SPAN_TYPE]: type,
+      [HTTP_USERAGENT]: req.headers['user-agent'],
+    })
+  }
 
   // if client ip has already been set by appsec, no need to run it again
-  if (config.extractIp && !spanContext.hasTag(HTTP_CLIENT_IP)) {
+  if (config.extractIp && !spanContext.hasTag(HTTP_CLIENT_IP) && !spanContext.hasTag(httpOtel.CLIENT_ADDRESS)) {
     const clientIp = config.extractIp(config, req)
 
     if (clientIp) {
-      span.setTag(HTTP_CLIENT_IP, clientIp)
-      inferredProxySpan?.setTag(HTTP_CLIENT_IP, clientIp)
+      const clientIpTag = otelSemantics ? httpOtel.CLIENT_ADDRESS : HTTP_CLIENT_IP
+      span.setTag(clientIpTag, clientIp)
+      inferredProxySpan?.setTag(clientIpTag, clientIp)
     }
   }
 
@@ -412,15 +445,16 @@ function addRequestTags (context, spanType) {
 }
 
 function addResponseTags (context) {
-  const { req, res, inferredProxySpan, span } = context
+  const { req, res, inferredProxySpan, span, config } = context
 
   applyRouteOrEndpointTag(context)
 
+  const statusCodeTag = config.DD_TRACE_OTEL_SEMANTICS_ENABLED ? httpOtel.HTTP_RESPONSE_STATUS_CODE : HTTP_STATUS_CODE
   span.addTags({
-    [HTTP_STATUS_CODE]: res.statusCode,
+    [statusCodeTag]: res.statusCode,
   })
   inferredProxySpan?.addTags({
-    [HTTP_STATUS_CODE]: res.statusCode,
+    [statusCodeTag]: res.statusCode,
   })
 
   addResponseHeaders(context)
@@ -449,6 +483,9 @@ function applyRouteOrEndpointTag (context) {
     span.setTag(HTTP_ROUTE, route)
     return
   }
+
+  // http.endpoint is a Datadog-only attribute; omit it in OTel-semantics mode.
+  if (config.DD_TRACE_OTEL_SEMANTICS_ENABLED) return
 
   if (!config.resourceRenamingEnabled) return
 

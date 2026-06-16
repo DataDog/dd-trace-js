@@ -41,6 +41,51 @@ describe('Plugin', () => {
         return agent.close()
       })
 
+      describe('with OTel semantics enabled', () => {
+        let otelPort
+
+        beforeEach(async () => {
+          process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+          await agent.load('http', { client: false })
+          http = require(pluginToBeLoaded)
+        })
+
+        beforeEach(done => {
+          appListener = new http.Server(listener).listen(0, 'localhost', () => {
+            otelPort = appListener.address().port
+            done()
+          })
+        })
+
+        afterEach(() => {
+          delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+        })
+
+        it('emits OpenTelemetry server attributes and omits the Datadog ones', done => {
+          agent.assertSomeTraces(traces => {
+            const span = traces[0][0]
+            assert.strictEqual(span.name, 'web.request')
+            assert.strictEqual(span.type, 'web')
+            assert.strictEqual(span.resource, 'GET')
+            assert.strictEqual(span.meta['span.kind'], 'server')
+            // OpenTelemetry attribute names are present...
+            assert.strictEqual(span.meta['http.request.method'], 'GET')
+            assert.strictEqual(span.meta['url.path'], '/user')
+            assert.strictEqual(span.meta['url.scheme'], 'http')
+            assert.strictEqual(span.meta['server.address'], 'localhost')
+            assert.strictEqual(span.metrics['server.port'], otelPort)
+            assert.strictEqual(span.meta['http.response.status_code'], '200')
+            // ...and the Datadog ones are absent.
+            assert.strictEqual(span.meta['http.method'], undefined)
+            assert.strictEqual(span.meta['http.url'], undefined)
+            assert.strictEqual(span.meta['http.status_code'], undefined)
+            assert.strictEqual(span.meta['http.useragent'], undefined)
+          }).then(done).catch(done)
+
+          axios.get(`http://localhost:${otelPort}/user`).catch(done)
+        })
+      })
+
       describe('canceled request', () => {
         beforeEach(() => {
           listener = (req, res) => {

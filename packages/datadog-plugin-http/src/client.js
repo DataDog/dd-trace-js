@@ -7,6 +7,7 @@ const { storage } = require('../../datadog-core')
 const tags = require('../../../ext/tags')
 const formats = require('../../../ext/formats')
 const HTTP_HEADERS = formats.HTTP_HEADERS
+const httpOtel = require('../../dd-trace/src/plugins/util/http-otel-semantics')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const log = require('../../dd-trace/src/log')
 const { CLIENT_PORT_KEY, COMPONENT, ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
@@ -18,6 +19,10 @@ const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 class HttpClientPlugin extends ClientPlugin {
   static id = 'http'
   static prefix = 'apm:http:client:request'
+
+  // In OTel-semantics mode the host is tagged as `server.address` instead of
+  // `out.host`; keep it as a peer.service precursor so peer.service still resolves.
+  static peerServicePrecursors = ['server.address']
 
   bindStart (message) {
     const { args, http = {} } = message
@@ -35,23 +40,36 @@ class HttpClientPlugin extends ClientPlugin {
 
     const method = (options.method || 'GET').toUpperCase()
     const childOf = store && allowed ? store.span : null
+
+    const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    const meta = {
+      [COMPONENT]: this.component,
+      'span.kind': 'client',
+      'resource.name': method,
+      'span.type': 'http',
+    }
+    const metrics = {}
+
+    if (otelSemantics) {
+      meta[httpOtel.HTTP_REQUEST_METHOD] = method
+      meta[httpOtel.URL_FULL] = uri
+      meta[httpOtel.SERVER_ADDRESS] = hostname
+      const port = Number.parseInt(options.port)
+      if (port > 0) metrics[httpOtel.SERVER_PORT] = port
+    } else {
+      meta['http.method'] = method
+      meta['http.url'] = uri
+      meta['out.host'] = hostname
+      metrics[CLIENT_PORT_KEY] = Number.parseInt(options.port)
+    }
+
     // TODO delegate to super.startspan
     const span = this.startSpan(this.operationName(), {
       childOf,
       integrationName: this.component,
       service: this.serviceName({ pluginConfig: this.config, sessionDetails: extractSessionDetails(options) }),
-      meta: {
-        [COMPONENT]: this.component,
-        'span.kind': 'client',
-        'resource.name': method,
-        'span.type': 'http',
-        'http.method': method,
-        'http.url': uri,
-        'out.host': hostname,
-      },
-      metrics: {
-        [CLIENT_PORT_KEY]: Number.parseInt(options.port),
-      },
+      meta,
+      metrics,
     }, false)
 
     // TODO: Figure out a better way to do this for any span.
@@ -89,10 +107,16 @@ class HttpClientPlugin extends ClientPlugin {
     if (res) {
       const status = res.status || res.statusCode
 
-      span.setTag(HTTP_STATUS_CODE, status)
+      span.setTag(
+        this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED ? httpOtel.HTTP_RESPONSE_STATUS_CODE : HTTP_STATUS_CODE,
+        status
+      )
 
       if (!this.config.validateStatus(status)) {
         span.setTag('error', 1)
+        if (this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+          span.setTag(ERROR_TYPE, String(status))
+        }
       }
 
       addResponseHeaders(res, span, this.config)
