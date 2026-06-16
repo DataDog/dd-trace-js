@@ -57,6 +57,7 @@ const codeCoverageReportCh = channel('ci:vitest:coverage-report')
 
 const taskToCtx = new WeakMap()
 const taskToStatuses = new WeakMap()
+const taskToReportedErrorCount = new WeakMap()
 const attemptToFixTaskToStatuses = new WeakMap()
 const originalHookFns = new WeakMap()
 const newTasks = new WeakSet()
@@ -142,6 +143,8 @@ function getProvidedContext () {
       _ddTestSessionId: testSessionId,
       _ddTestModuleId: testModuleId,
       _ddTestCommand: testCommand,
+      _ddRepositoryRoot: repositoryRoot,
+      _ddCodeOwnersEntries: codeOwnersEntries,
     } = globalThis.__vitest_worker__.providedContext
 
     return {
@@ -161,6 +164,8 @@ function getProvidedContext () {
       testSessionId,
       testModuleId,
       testCommand,
+      repositoryRoot,
+      codeOwnersEntries,
     }
   } catch {
     log.error('Vitest workers could not parse provided context, so some features will not work.')
@@ -181,6 +186,8 @@ function getProvidedContext () {
       testSessionId: undefined,
       testModuleId: undefined,
       testCommand: undefined,
+      repositoryRoot: undefined,
+      codeOwnersEntries: undefined,
     }
   }
 }
@@ -321,6 +328,23 @@ function disableFrameworkRetries (task) {
 }
 
 /**
+ * Vitest accumulates retry and repeat errors on one task result. The first error added since
+ * the last reported attempt is the primary error for the failed attempt currently being reported.
+ *
+ * @param {object} task
+ * @param {Array<object> | undefined} errors
+ * @returns {object | undefined}
+ */
+function getCurrentAttemptTestError (task, errors) {
+  if (!errors?.length) return
+
+  const previousErrorCount = taskToReportedErrorCount.get(task) ?? 0
+  const testError = errors[previousErrorCount] ?? errors[0]
+  taskToReportedErrorCount.set(task, errors.length)
+  return testError
+}
+
+/**
  * Wraps a function so it runs inside the current test span context.
  * @param {object} task
  * @param {Function} fn
@@ -454,7 +478,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
   }
 
   if (testSessionConfigurationCh.hasSubscribers) {
-    const { testSessionId, testModuleId, testCommand } = await getChannelPromise(
+    const { testSessionId, testModuleId, testCommand, repositoryRoot, codeOwnersEntries } = await getChannelPromise(
       testSessionConfigurationCh,
       frameworkVersion
     )
@@ -462,6 +486,8 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
       _ddTestSessionId: testSessionId,
       _ddTestModuleId: testModuleId,
       _ddTestCommand: testCommand,
+      _ddRepositoryRoot: repositoryRoot,
+      _ddCodeOwnersEntries: codeOwnersEntries,
     }, 'Could not send test session configuration to workers.')
   }
 
@@ -635,15 +661,64 @@ function getCliOrStartVitestWrapper (frameworkVersion) {
   }
 }
 
+function isForkPool (pool) {
+  return pool === 'forks' || pool === 'vmForks'
+}
+
+function isThreadPool (pool) {
+  return pool === 'threads' || pool === 'vmThreads'
+}
+
+function getTestSpecificationPool (testSpecification) {
+  const project = Array.isArray(testSpecification) ? testSpecification[0] : testSpecification?.project
+  return project?.config?.pool || project?.serializedConfig?.pool || project?.pool || testSpecification?.pool
+}
+
+function hasForkPoolTestSpecification (testSpecifications) {
+  if (!Array.isArray(testSpecifications)) {
+    return false
+  }
+
+  for (const testSpecification of testSpecifications) {
+    if (isForkPool(getTestSpecificationPool(testSpecification))) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function shouldMarkVitestWorkerEnv (pool, testSpecifications) {
+  return isForkPool(pool) || hasForkPoolTestSpecification(testSpecifications) ||
+    (!testSpecifications && !isThreadPool(pool))
+}
+
+function markVitestWorkerEnv (ctx, testSpecifications) {
+  const config = ctx?.config
+  if (!config || !shouldMarkVitestWorkerEnv(config.pool, testSpecifications)) {
+    return
+  }
+  config.env = config.env || {}
+  config.env.DD_VITEST_WORKER = '1'
+}
+
 function wrapVitestRunFiles (Vitest, frameworkVersion) {
   if (!Vitest?.prototype?.runFiles) {
     return
   }
 
   shimmer.wrap(Vitest.prototype, 'runFiles', runFiles => async function (testSpecifications) {
+    markVitestWorkerEnv(this, testSpecifications)
     await ensureMainProcessSetup(this, frameworkVersion, testSpecifications)
     return runFiles.apply(this, arguments)
   })
+
+  if (Vitest.prototype.collectTests) {
+    shimmer.wrap(Vitest.prototype, 'collectTests', collectTests => function () {
+      markVitestWorkerEnv(this)
+      return collectTests.apply(this, arguments)
+    })
+  }
 }
 
 function getCreateCliWrapper (vitestPackage, frameworkVersion) {
@@ -993,7 +1068,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
       const promises = {}
       const shouldSetProbe = isDiEnabled && numAttempt === 1
       const ctx = taskToCtx.get(task)
-      const testError = task.result?.errors?.[0]
+      const testError = getCurrentAttemptTestError(task, task.result?.errors)
       if (ctx) {
         testErrorCh.publish({
           error: testError,
@@ -1023,7 +1098,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
       const ctx = taskToCtx.get(task)
       if (ctx) {
         if (lastExecutionStatus === 'fail') {
-          const testError = task.result?.errors?.[0]
+          const testError = getCurrentAttemptTestError(task, task.result?.errors)
           testErrorCh.publish({ error: testError, ...ctx.currentStore })
         } else {
           testPassCh.publish({ task, ...ctx.currentStore })
@@ -1047,7 +1122,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
 
       const ctx = taskToCtx.get(task)
       if (lastExecutionStatus === 'fail') {
-        const testError = task.result?.errors?.[0]
+        const testError = getCurrentAttemptTestError(task, task.result?.errors)
         testErrorCh.publish({ error: testError, ...ctx.currentStore })
       } else {
         testPassCh.publish({ task, ...ctx.currentStore })
@@ -1375,6 +1450,8 @@ addHook({
       testSessionId: providedContext.testSessionId,
       testModuleId: providedContext.testModuleId,
       testCommand: providedContext.testCommand,
+      repositoryRoot: providedContext.repositoryRoot,
+      codeOwnersEntries: providedContext.codeOwnersEntries,
     }
     testSuiteStartCh.runStores(testSuiteCtx, () => {})
     const startTestsResponse = await startTests.apply(this, arguments)
@@ -1396,7 +1473,7 @@ addHook({
 
       if (result) {
         const { state, duration, errors } = result
-        const testError = errors?.[0]
+        const testError = getCurrentAttemptTestError(task, errors)
         if (attemptToFixTasks.has(task)) {
           const status = getFinalAttemptToFixStatus(task, state, isSwitchedStatus, testCtx)
           recordFinalAttemptToFixExecution(task, status, providedContext)

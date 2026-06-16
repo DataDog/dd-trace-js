@@ -27,7 +27,7 @@ jobs:
         with:
           scope: DataDog/test-environment
           policy: dd-trace-js
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           token: ${{ steps.octo-sts.outputs.token }}
       - uses: ./.github/actions/node/oldest-maintenance-lts
@@ -48,9 +48,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -70,7 +68,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-testopt-${{ matrix.version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   playwright-image:
     strategy:
@@ -87,7 +84,7 @@ jobs:
       # behaviour of matrix outputs is safe here.
       images: ${{ steps.versions.outputs.images }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - name: Determine versions
         id: versions
         run: |
@@ -153,7 +150,7 @@ jobs:
       OPTIONS_OVERRIDE: 1
       PLAYWRIGHT_VERSION: ${{ matrix.playwright-version }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node
@@ -172,7 +169,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-playwright-${{ matrix.node-version }}-${{ matrix.playwright-version }}-${{ matrix.spec }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-mocha:
     strategy:
@@ -188,7 +184,7 @@ jobs:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node
@@ -203,7 +199,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-mocha-${{ matrix.version }}-${{ matrix.mocha-version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-jest:
     strategy:
@@ -224,7 +219,7 @@ jobs:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node
@@ -240,7 +235,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-jest-${{ matrix.version }}-${{ matrix.jest-version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   # Unit tests for `packages/datadog-plugin-jest`. The `integration-jest` matrix above only runs
   # `integration-tests/jest/*.spec.js`, so this is the only CI invocation whose glob expands to
@@ -252,7 +246,7 @@ jobs:
     env:
       PLUGINS: jest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/plugins/test
 
   integration-cucumber:
@@ -268,7 +262,7 @@ jobs:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node
@@ -283,7 +277,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-cucumber-${{ matrix.version }}-${{ matrix.cucumber-version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   selenium-image:
     name: Ensure Selenium Docker image
@@ -294,7 +287,7 @@ jobs:
     outputs:
       image: ${{ steps.image.outputs.image }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - name: Determine image tag
         id: image
         run: |
@@ -337,7 +330,7 @@ jobs:
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
       OPTIONS_OVERRIDE: 1
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node
@@ -355,7 +348,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-selenium-${{ matrix.version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-cypress:
     strategy:
@@ -370,13 +362,13 @@ jobs:
         module-type: ["commonJS", "esm"]
         spec:
           - cypress-reporting
+          - cypress-reporting-instrumentation
           - cypress-itr
           - cypress-tia-code-coverage
           - cypress-efd
           - cypress-atr
           - cypress-test-management
-          - cypress-impacted-tests
-          - cypress-final-status
+          - cypress-final-status-impacted-tests
         exclude:
           # 6.7.0 only runs on DD_MAJOR <= 5 with Node 16/commonJS.
           # On DD_MAJOR >= 6, shouldTestsRun() skips this remaining matrix entry.
@@ -404,7 +396,7 @@ jobs:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node
@@ -437,7 +429,6 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-cypress-${{ matrix.version }}-${{ matrix.cypress-version }}-${{ matrix.module-type }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
 
   integration-vitest:
     runs-on: ubuntu-latest
@@ -457,7 +448,7 @@ jobs:
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
       OPTIONS_OVERRIDE: 1
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node
@@ -472,4 +463,3 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: test-optimization-vitest-${{ matrix.version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}

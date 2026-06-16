@@ -150,6 +150,7 @@ class MochaPlugin extends CiPlugin {
       ctx.parentStore = store
       ctx.currentStore = { ...store, testSuiteSpan }
       this._testSuiteSpansByTestSuite.set(testSuite, testSuiteSpan)
+      this._exportPendingWorkerTracesForTestSuite(testSuite)
     })
 
     this.addSub('ci:mocha:test-suite:finish', ({ testSuiteSpan, status }) => {
@@ -365,6 +366,7 @@ class MochaPlugin extends CiPlugin {
       isTestManagementEnabled,
       isParallel,
     }) => {
+      this._exportPendingWorkerTraces()
       if (this.testSessionSpan) {
         const {
           isSuitesSkippingEnabled,

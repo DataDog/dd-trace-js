@@ -235,6 +235,7 @@ interface Plugins {
   "anthropic": tracer.plugins.anthropic;
   "apollo": tracer.plugins.apollo;
   "avsc": tracer.plugins.avsc;
+  "aws-durable-execution-sdk-js": tracer.plugins.aws_durable_execution_sdk_js;
   "aws-sdk": tracer.plugins.aws_sdk;
   "azure-cosmos": tracer.plugins.azure_cosmos;
   "azure-event-hubs": tracer.plugins.azure_event_hubs;
@@ -2353,6 +2354,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [aws-durable-execution-sdk-js](https://github.com/aws/aws-durable-execution-sdk-js) module.
+     */
+    interface aws_durable_execution_sdk_js extends Integration {}
+
+    /**
+     * This plugin automatically instruments the
      * [aws-sdk](https://github.com/aws/aws-sdk-js) module.
      */
     interface aws_sdk extends Instrumentation {
@@ -2428,7 +2435,21 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [bullmq](https://github.com/npmjs/package/bullmq) message queue library.
      */
-    interface bullmq extends Instrumentation {}
+    interface bullmq extends Instrumentation {
+      /**
+       * Filter applied to BullMQ producer operations (`Queue.add`, `Queue.addBulk`,
+       * `FlowProducer.add`). Return `false` to skip span creation, trace context
+       * injection, and DSM checkpoint handling for the matching job. Consumer-side
+       * (`Worker`) instrumentation is unaffected.
+       *
+       * @param job.name - The BullMQ job name.
+       * @param job.data - The BullMQ job data.
+       * @param job.opts - The BullMQ job options.
+       * @param job.queueName - The name of the queue the job is being added to.
+       * @returns true to instrument the producer operation, false to skip it.
+       */
+      producerFilter?: (job: { name?: string; data?: unknown; opts?: unknown; queueName?: string }) => boolean;
+    }
 
     interface bunyan extends Integration {}
 
@@ -4006,6 +4027,14 @@ declare namespace tracer {
       template?: string | Message[]
     }
 
+    interface ToolDefinition {
+      name : string,
+      description? : string,
+      schema? : {[key : string] : any}
+      version? : string
+    }
+
+
     /**
      * Annotation options for LLM Observability spans.
      */
@@ -4052,6 +4081,12 @@ declare namespace tracer {
        * A Prompt object that represents the prompt used for an LLM call. Only used on `llm` spans.
        */
       prompt?: Prompt,
+
+      /**
+       * A list of ToolDefinition object that represents the tools available to the LLM for this span
+       * Each definition requires a `name` and optionally accepts `description`, `schema`, and `version`.
+       * */
+      toolDefinitions?: ToolDefinition[]
     }
 
     interface AnnotationContextOptions {
@@ -4167,7 +4202,6 @@ declare namespace tracer {
        */
       agentlessEnabled?: boolean,
     }
-
     /** @hidden */
     type spanKind = 'agent' | 'workflow' | 'task' | 'tool' | 'retrieval' | 'embedding' | 'llm'
   }

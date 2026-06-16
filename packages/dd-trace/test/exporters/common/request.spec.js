@@ -605,4 +605,95 @@ describe('request', function () {
         })
     }
   })
+
+  describe('stripping the Datadog API key from a non-TLS connection', () => {
+    // `badheaders` only matches when the key is absent, so a passing request proves it was
+    // stripped; a regression that left the key on would miss the interceptor and surface here.
+    it('strips dd-api-key when sending over http to a non-loopback host', (done) => {
+      nock('http://intake.example.com', { badheaders: ['dd-api-key'] })
+        .post('/v1/input')
+        .reply(200, 'OK')
+
+      request(Buffer.from(''), {
+        method: 'POST',
+        url: new URL('http://intake.example.com/v1/input'),
+        headers: { 'dd-api-key': 'secret-key' },
+      }, (err, res) => {
+        assert.strictEqual(res, 'OK')
+        sinon.assert.calledOnce(log.error)
+        assert.match(log.error.getCall(0).args[0], /non-TLS connection/)
+        done(err)
+      })
+    })
+
+    it('strips the DD-API-KEY header casing as well', (done) => {
+      nock('http://intake.example.com', { badheaders: ['dd-api-key'] })
+        .post('/v1/input')
+        .reply(200, 'OK')
+
+      request(Buffer.from(''), {
+        method: 'POST',
+        url: new URL('http://intake.example.com/v1/input'),
+        headers: { 'DD-API-KEY': 'secret-key' },
+      }, (err, res) => {
+        assert.strictEqual(res, 'OK')
+        sinon.assert.calledOnce(log.error)
+        done(err)
+      })
+    })
+
+    it('strips dd-api-key for a non-loopback host that merely starts with "127."', (done) => {
+      nock('http://127.evil.com', { badheaders: ['dd-api-key'] })
+        .post('/v1/input')
+        .reply(200, 'OK')
+
+      request(Buffer.from(''), {
+        method: 'POST',
+        url: new URL('http://127.evil.com/v1/input'),
+        headers: { 'dd-api-key': 'secret-key' },
+      }, (err, res) => {
+        assert.strictEqual(res, 'OK')
+        sinon.assert.calledOnce(log.error)
+        done(err)
+      })
+    })
+
+    for (const loopbackHost of ['127.0.0.1', '127.1.2.3', 'localhost', '[::1]']) {
+      it(`keeps dd-api-key over http to the loopback host ${loopbackHost}`, (done) => {
+        nock(`http://${loopbackHost}:9999`, {
+          reqheaders: { 'dd-api-key': 'secret-key' },
+        })
+          .post('/v1/input')
+          .reply(200, 'OK')
+
+        request(Buffer.from(''), {
+          method: 'POST',
+          url: new URL(`http://${loopbackHost}:9999/v1/input`),
+          headers: { 'dd-api-key': 'secret-key' },
+        }, (err, res) => {
+          assert.strictEqual(res, 'OK')
+          sinon.assert.notCalled(log.error)
+          done(err)
+        })
+      })
+    }
+
+    it('keeps dd-api-key over https to a non-loopback host', (done) => {
+      nock('https://intake.example.com', {
+        reqheaders: { 'dd-api-key': 'secret-key' },
+      })
+        .post('/v1/input')
+        .reply(200, 'OK')
+
+      request(Buffer.from(''), {
+        method: 'POST',
+        url: new URL('https://intake.example.com/v1/input'),
+        headers: { 'dd-api-key': 'secret-key' },
+      }, (err, res) => {
+        assert.strictEqual(res, 'OK')
+        sinon.assert.notCalled(log.error)
+        done(err)
+      })
+    })
+  })
 })

@@ -80,6 +80,7 @@ class CucumberPlugin extends CiPlugin {
       isTestManagementTestsEnabled,
       isParallel,
     }) => {
+      this._exportPendingWorkerTraces()
       const {
         isSuitesSkippingEnabled,
         isCodeCoverageEnabled,
@@ -186,6 +187,7 @@ class CucumberPlugin extends CiPlugin {
         integrationName: this.constructor.id,
       })
       this._testSuiteSpansByTestSuite.set(testSuitePath, testSuiteSpan)
+      this._exportPendingWorkerTracesForTestSuite(testSuitePath)
 
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       if (this.libraryConfig?.isCodeCoverageEnabled) {

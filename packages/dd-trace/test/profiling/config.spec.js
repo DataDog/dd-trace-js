@@ -22,6 +22,7 @@ const { isACFActive } = require('../../../datadog-core/src/storage')
 const samplingContextsAvailable = process.platform !== 'win32'
 const oomMonitoringSupported = process.platform !== 'win32'
 const isAtLeast24 = satisfies(process.versions.node, '>=24.0.0')
+const isAtLeast26 = satisfies(process.versions.node, '>=26.0.0')
 const zstdOrGzip = isAtLeast24 ? 'zstd' : 'gzip'
 
 /** @typedef {InstanceType<(typeof import('../../src/profiling/config'))['Config']>} ProfilerConfig */
@@ -40,9 +41,10 @@ describe('config', () => {
 
   /**
    * @param {Record<string, unknown>} [tracerOptions]
+   * @param {Record<string, unknown>} [moduleStubs]
    * @returns {{config: ProfilerConfig, warnings: string[], errors: string[]}}
    */
-  function getProfilerConfig (tracerOptions) {
+  function getProfilerConfig (tracerOptions, moduleStubs = {}) {
     process.env.DD_PROFILING_ENABLED = '1'
 
     const tracerConfig = getConfigFresh(tracerOptions)
@@ -50,6 +52,7 @@ describe('config', () => {
     const gitMetadata = proxyquire.noPreserveCache()('../../src/git_metadata', {})
     const ProfilingConfig = proxyquire.noPreserveCache()('../../src/profiling/config', {
       '../git_metadata': gitMetadata,
+      ...moduleStubs,
     }).Config
     const config = /** @type {ProfilerConfig} */ (new ProfilingConfig(tracerConfig))
 
@@ -67,6 +70,7 @@ describe('config', () => {
       flushInterval: 65 * 1000,
       activation: 'manual',
       v8ProfilerBugWorkaroundEnabled: true,
+      allocationProfilingEnabled: false,
       cpuProfilingEnabled: samplingContextsAvailable,
       uploadCompression: {
         method: zstdOrGzip,
@@ -280,6 +284,7 @@ describe('config', () => {
     process.env = {
       DD_PROFILING_DEBUG_SOURCE_MAPS: '1',
       DD_PROFILING_HEAP_SAMPLING_INTERVAL: '1000',
+      DD_PROFILING_ALLOCATION_ENABLED: 'true',
       DD_PROFILING_PPROF_PREFIX: 'test-prefix',
       DD_PROFILING_UPLOAD_TIMEOUT: '10000',
       DD_PROFILING_TIMELINE_ENABLED: '0',
@@ -289,11 +294,36 @@ describe('config', () => {
 
     assertObjectContains(config, {
       debugSourceMaps: true,
+      allocationProfilingEnabled: isAtLeast26,
       heapSamplingInterval: 1000,
       pprofPrefix: 'test-prefix',
       uploadTimeout: 10000,
       timelineEnabled: false,
     })
+  })
+
+  it('should disable allocation profiling on unsupported Node.js versions', () => {
+    process.env = {
+      DD_PROFILING_ALLOCATION_ENABLED: 'true',
+    }
+
+    const { config } = getProfilerConfig(undefined, {
+      '../../../../version': { NODE_MAJOR: 25 },
+    })
+
+    assert.strictEqual(config.allocationProfilingEnabled, false)
+  })
+
+  it('should enable allocation profiling on supported Node.js versions', () => {
+    process.env = {
+      DD_PROFILING_ALLOCATION_ENABLED: 'true',
+    }
+
+    const { config } = getProfilerConfig(undefined, {
+      '../../../../version': { NODE_MAJOR: 26 },
+    })
+
+    assert.strictEqual(config.allocationProfilingEnabled, true)
   })
 
   it('should deduplicate profilers', () => {
