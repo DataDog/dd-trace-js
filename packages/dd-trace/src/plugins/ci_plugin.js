@@ -3,6 +3,7 @@
 const { storage } = require('../../../datadog-core')
 const { COMPONENT } = require('../constants')
 const log = require('../log')
+const { getEnvironmentVariable } = require('../config/helper')
 const { discoverCoverageReports } = require('../ci-visibility/coverage-report-discovery')
 const {
   incrementCountMetric,
@@ -13,7 +14,14 @@ const {
 const getDiClient = require('../ci-visibility/dynamic-instrumentation')
 const { DD_MAJOR } = require('../../../../version')
 const id = require('../id')
-const { OS_VERSION, OS_PLATFORM, OS_ARCHITECTURE, RUNTIME_NAME, RUNTIME_VERSION } = require('./util/env')
+const {
+  DD_TEST_OPT_WORKER_REPOSITORY_ROOT,
+  OS_VERSION,
+  OS_PLATFORM,
+  OS_ARCHITECTURE,
+  RUNTIME_NAME,
+  RUNTIME_VERSION,
+} = require('./util/env')
 const {
   CI_PROVIDER_NAME,
   GIT_REPOSITORY_URL,
@@ -105,6 +113,26 @@ const TEST_FRAMEWORKS_TO_SKIP_GIT_METADATA_EXTRACTION = new Set([
   'mocha',
   'cucumber',
 ])
+const TEST_FRAMEWORKS_WITH_PROPAGATED_WORKER_GIT_METADATA = new Set([
+  'cucumber',
+  'vitest',
+  'jest',
+  'mocha',
+  'playwright',
+])
+
+function getSerializableCodeOwnersEntries (codeOwnersEntries) {
+  if (!codeOwnersEntries) {
+    return codeOwnersEntries
+  }
+
+  const entries = new Array(codeOwnersEntries.length)
+  for (let index = 0; index < codeOwnersEntries.length; index++) {
+    const { pattern, owners } = codeOwnersEntries[index]
+    entries[index] = { pattern, owners: [...owners] }
+  }
+  return entries
+}
 
 function setItrSkippingEnabledTagFromLibraryConfig (plugin, frameworkVersion) {
   const libraryCapabilitiesTags = getLibraryCapabilitiesTags(plugin.constructor.id, frameworkVersion)
@@ -173,7 +201,13 @@ module.exports = class CiPlugin extends Plugin {
           },
         }
         this.tracer._exporter.addMetadataTags(metadataTags)
-        onDone({ err, libraryConfig, repositoryRoot: this.repositoryRoot, requestErrorTags })
+        onDone({
+          err,
+          libraryConfig,
+          repositoryRoot: this.repositoryRoot,
+          codeOwnersEntries: this._getSerializableCodeOwnersEntries(),
+          requestErrorTags,
+        })
       })
     })
 
@@ -456,12 +490,24 @@ module.exports = class CiPlugin extends Plugin {
       this.codeOwnersEntries = codeOwnersEntries
     }
 
-    if (!repositoryRoot || repositoryRoot === this.repositoryRoot) return
+    if (!repositoryRoot) return
 
-    this.repositoryRoot = repositoryRoot
-    if (codeOwnersEntries === undefined) {
+    const hasNewRepositoryRoot = repositoryRoot !== this.repositoryRoot
+    if (hasNewRepositoryRoot) {
+      this.repositoryRoot = repositoryRoot
+    }
+    if (codeOwnersEntries === undefined && (hasNewRepositoryRoot || this.codeOwnersEntries === null)) {
       this.codeOwnersEntries = getCodeOwnersFileEntries(this.repositoryRoot)
     }
+  }
+
+  /**
+   * Gets CODEOWNERS entries that can be passed across framework worker boundaries.
+   *
+   * @returns {Array<{ pattern: string, owners: string[] }>|null|undefined}
+   */
+  _getSerializableCodeOwnersEntries () {
+    return getSerializableCodeOwnersEntries(this.codeOwnersEntries)
   }
 
   /**
@@ -630,10 +676,13 @@ module.exports = class CiPlugin extends Plugin {
 
     const exporter = this.config.experimental?.exporter
     const workerTestFramework = WORKER_EXPORTER_TO_TEST_FRAMEWORK[exporter]
+    const propagatedWorkerRepositoryRoot = getEnvironmentVariable(DD_TEST_OPT_WORKER_REPOSITORY_ROOT)
+    const shouldDeferWorkerGitMetadata =
+      TEST_FRAMEWORKS_WITH_PROPAGATED_WORKER_GIT_METADATA.has(workerTestFramework) &&
+      (workerTestFramework !== 'playwright' || !!propagatedWorkerRepositoryRoot)
+    const workerRepositoryRoot = shouldDeferWorkerGitMetadata ? propagatedWorkerRepositoryRoot : undefined
     this.shouldSkipGitMetadataExtraction = workerTestFramework &&
-      TEST_FRAMEWORKS_TO_SKIP_GIT_METADATA_EXTRACTION.has(workerTestFramework)
-    const shouldDeferCodeOwnersEntries = workerTestFramework === 'vitest'
-    const shouldDeferRepositoryRoot = workerTestFramework === 'vitest'
+      (TEST_FRAMEWORKS_TO_SKIP_GIT_METADATA_EXTRACTION.has(workerTestFramework) || shouldDeferWorkerGitMetadata)
 
     this.testEnvironmentMetadata = getTestEnvironmentMetadata(
       this.constructor.id,
@@ -659,10 +708,10 @@ module.exports = class CiPlugin extends Plugin {
       [GIT_COMMIT_HEAD_MESSAGE]: commitHeadMessage,
     } = this.testEnvironmentMetadata
 
-    this.repositoryRoot = repositoryRoot ||
-      (shouldDeferRepositoryRoot ? process.cwd() : getRepositoryRoot() || process.cwd())
+    this.repositoryRoot = repositoryRoot || workerRepositoryRoot ||
+      (shouldDeferWorkerGitMetadata ? process.cwd() : getRepositoryRoot() || process.cwd())
 
-    this.codeOwnersEntries = shouldDeferCodeOwnersEntries ? null : getCodeOwnersFileEntries(this.repositoryRoot)
+    this.codeOwnersEntries = shouldDeferWorkerGitMetadata ? null : getCodeOwnersFileEntries(this.repositoryRoot)
 
     this.ciProviderName = ciProviderName
 
@@ -685,6 +734,10 @@ module.exports = class CiPlugin extends Plugin {
   }
 
   getCodeOwners (tags) {
+    if (this.codeOwnersEntries === null) {
+      this.codeOwnersEntries = getCodeOwnersFileEntries(this.repositoryRoot)
+    }
+
     const {
       [TEST_SOURCE_FILE]: testSourceFile,
       [TEST_SUITE]: testSuite,

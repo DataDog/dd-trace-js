@@ -229,7 +229,17 @@ class CucumberPlugin extends CiPlugin {
     })
 
     this.addBind('ci:cucumber:test:start', (ctx) => {
-      const { testName, testFileAbsolutePath, testSourceLine, isParallel, promises } = ctx
+      const {
+        testName,
+        testFileAbsolutePath,
+        testSourceLine,
+        isParallel,
+        promises,
+        repositoryRoot,
+        codeOwnersEntries,
+      } = ctx
+      this._setRepositoryRoot(repositoryRoot, codeOwnersEntries)
+
       const store = storage('legacy').getStore()
       const testSuite = getTestSuitePath(testFileAbsolutePath, this.sourceRoot)
       const testSourceFile = getTestSuitePath(testFileAbsolutePath, this.repositoryRoot)

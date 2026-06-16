@@ -28,6 +28,11 @@ addHook({
   file: 'lib/mocha.js',
 }, (Mocha) => {
   shimmer.wrap(Mocha.prototype, 'run', run => function (...args) {
+    config.repositoryRoot = this.options._ddRepositoryRoot
+    config.codeOwnersEntries = this.options._ddCodeOwnersEntries
+    delete this.options._ddRepositoryRoot
+    delete this.options._ddCodeOwnersEntries
+
     if (this.options._ddIsKnownTestsEnabled) {
       config.isKnownTestsEnabled = true
       config.isEarlyFlakeDetectionEnabled = this.options._ddIsEfdEnabled
@@ -82,7 +87,7 @@ addHook({
     this.once('end', () => {
       workerFinishCh.publish()
     })
-    this.on('test', getOnTestHandler(false))
+    this.on('test', getOnTestHandler(false, config))
 
     this.on('test end', getOnTestEndHandler(config))
 

@@ -119,6 +119,8 @@ let knownTests = {}
 let skippedSuites = []
 let isSuitesSkipped = false
 let repositoryRoot
+let codeOwnersEntries
+let hasReadParallelWorkerWorldParameters = false
 
 function isValidKnownTests (receivedKnownTests) {
   return !!receivedKnownTests.cucumber
@@ -164,6 +166,8 @@ function resetSuiteSkippingRunState () {
   skippedSuites = []
   isSuitesSkipped = false
   repositoryRoot = undefined
+  codeOwnersEntries = undefined
+  hasReadParallelWorkerWorldParameters = false
   writeCoverageBackfillToCache({})
 }
 
@@ -213,6 +217,8 @@ function publishWorkerEfdRetryCount (pickle, retryCount) {
 
 function configureParallelWorkerWorldParameters (options) {
   options.worldParameters ??= {}
+  options.worldParameters._ddRepositoryRoot = repositoryRoot
+  options.worldParameters._ddCodeOwnersEntries = codeOwnersEntries
 
   if (isKnownTestsEnabled && isValidKnownTests(knownTests)) {
     options.worldParameters._ddIsKnownTestsEnabled = true
@@ -248,6 +254,9 @@ function readParallelWorkerWorldParameters (options) {
   const worldParameters = options?.worldParameters
   if (!worldParameters) return
 
+  hasReadParallelWorkerWorldParameters = true
+  repositoryRoot = worldParameters._ddRepositoryRoot
+  codeOwnersEntries = worldParameters._ddCodeOwnersEntries
   isKnownTestsEnabled = !!worldParameters._ddIsKnownTestsEnabled
   if (isKnownTestsEnabled) {
     knownTests = worldParameters._ddKnownTests
@@ -273,6 +282,12 @@ function readParallelWorkerWorldParameters (options) {
     testManagementTests = worldParameters._ddTestManagementTests
     testManagementAttemptToFixRetries = worldParameters._ddTestManagementAttemptToFixRetries
   }
+}
+
+function readParallelWorkerWorldParametersOnce (options) {
+  if (hasReadParallelWorkerWorldParameters) return
+
+  readParallelWorkerWorldParameters(options)
 }
 
 function handleDdWorkerMessage (message) {
@@ -671,6 +686,9 @@ function wrapRun (pl, isLatestVersion, version) {
     if (!testFinishCh.hasSubscribers) {
       return run.apply(this, args)
     }
+    if (getEnvironmentVariable('CUCUMBER_WORKER_ID')) {
+      readParallelWorkerWorldParametersOnce(this.options)
+    }
 
     let numAttempt = 0
 
@@ -684,6 +702,8 @@ function wrapRun (pl, isLatestVersion, version) {
       testFileAbsolutePath,
       testSourceLine,
       isParallel: !!getEnvironmentVariable('CUCUMBER_WORKER_ID'),
+      repositoryRoot,
+      codeOwnersEntries,
     }
     const ctx = testStartPayload
     numAttemptToCtx.set(numAttempt, ctx)
@@ -998,6 +1018,7 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
     const configurationResponse = await getChannelPromise(libraryConfigurationCh, frameworkVersion)
 
     repositoryRoot = configurationResponse.repositoryRoot
+    codeOwnersEntries = configurationResponse.codeOwnersEntries
     isItrEnabled = configurationResponse.libraryConfig?.isItrEnabled
     isEarlyFlakeDetectionEnabled = configurationResponse.libraryConfig?.isEarlyFlakeDetectionEnabled
     earlyFlakeDetectionNumRetries = configurationResponse.libraryConfig?.earlyFlakeDetectionNumRetries
@@ -1105,6 +1126,9 @@ function getWrappedStart (start, frameworkVersion, isParallel = false, isCoordin
 
     if (isFlakyTestRetriesEnabled && !options.retry && numTestRetries > 0) {
       options.retry = numTestRetries
+    }
+    if (isParallel && options) {
+      configureParallelWorkerWorldParameters(options)
     }
 
     atrStatusesByScenarioKey.clear()

@@ -208,6 +208,7 @@ class JestPlugin extends CiPlugin {
         config._ddIsEarlyFlakeDetectionEnabled = !!this.libraryConfig?.isEarlyFlakeDetectionEnabled
         config._ddEarlyFlakeDetectionSlowTestRetries = this.libraryConfig?.earlyFlakeDetectionSlowTestRetries ?? {}
         config._ddRepositoryRoot = this.repositoryRoot
+        config._ddCodeOwnersEntries = this._getSerializableCodeOwnersEntries()
         config._ddIsFlakyTestRetriesEnabled = this.libraryConfig?.isFlakyTestRetriesEnabled ?? false
         config._ddIsTestManagementTestsEnabled = this.libraryConfig?.isTestManagementEnabled ?? false
         config._ddTestManagementAttemptToFixRetries = this.libraryConfig?.testManagementAttemptToFixRetries ?? 0
@@ -237,7 +238,11 @@ class JestPlugin extends CiPlugin {
         _ddUnskippable,
         _ddTestCodeCoverageEnabled,
         _ddItrSkippingEnabledTags: itrSkippingEnabledTags,
+        _ddRepositoryRoot,
+        _ddCodeOwnersEntries,
       } = testEnvironmentOptions
+
+      this._setRepositoryRoot(_ddRepositoryRoot, _ddCodeOwnersEntries)
 
       const testSessionSpanContext = this.tracer.extract('text_map', {
         'x-datadog-trace-id': testSessionId,

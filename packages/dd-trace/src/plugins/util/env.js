@@ -8,6 +8,7 @@ const OS_ARCHITECTURE = 'os.architecture'
 const RUNTIME_NAME = 'runtime.name'
 const RUNTIME_VERSION = 'runtime.version'
 const DD_HOST_CPU_COUNT = '_dd.host.vcpu_count'
+const DD_TEST_OPT_WORKER_REPOSITORY_ROOT = '_DD_TEST_OPT_WORKER_REPOSITORY_ROOT'
 
 function getRuntimeAndOSMetadata () {
   return {
@@ -28,4 +29,5 @@ module.exports = {
   RUNTIME_NAME,
   RUNTIME_VERSION,
   DD_HOST_CPU_COUNT,
+  DD_TEST_OPT_WORKER_REPOSITORY_ROOT,
 }

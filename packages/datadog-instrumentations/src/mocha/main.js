@@ -236,6 +236,7 @@ function resetSuiteSkippingRunState () {
   skippedSuitesCoverage = {}
   untestedCoverage = undefined
   config.repositoryRoot = undefined
+  config.codeOwnersEntries = undefined
   writeCoverageBackfillToCache({})
 }
 
@@ -471,13 +472,14 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     }
   }
 
-  const onReceivedConfiguration = ({ err, libraryConfig, repositoryRoot }) => {
+  const onReceivedConfiguration = ({ err, libraryConfig, repositoryRoot, codeOwnersEntries }) => {
     if (err || !skippableSuitesCh.hasSubscribers || !knownTestsCh.hasSubscribers) {
       return mochaGlobalRunCh.runStores(ctx, () => {
         onFinishRequest()
       })
     }
     config.repositoryRoot = repositoryRoot
+    config.codeOwnersEntries = codeOwnersEntries
     config.isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
     config.earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
     config.earlyFlakeDetectionSlowTestRetries = libraryConfig.earlyFlakeDetectionSlowTestRetries ?? {}
@@ -767,7 +769,7 @@ addHook({
       }
     })
 
-    this.on('test', getOnTestHandler(true))
+    this.on('test', getOnTestHandler(true, config))
 
     this.on('test end', getOnTestEndHandler(config, {
       onStart: incrementPendingRootFinalization,
@@ -1091,17 +1093,22 @@ addHook({
   const { BufferedWorkerPool } = BufferedWorkerPoolPackage
 
   shimmer.wrap(BufferedWorkerPool.prototype, 'run', run => async function (testSuiteAbsolutePath, workerArgs) {
-    if (!testFinishCh.hasSubscribers ||
-        (!config.isKnownTestsEnabled &&
-         !config.isTestManagementTestsEnabled &&
-         !config.isImpactedTestsEnabled &&
-         !config.isFlakyTestRetriesEnabled)) {
+    if (!testFinishCh.hasSubscribers) {
       return run.apply(this, arguments)
     }
 
     const testPath = getTestSuitePath(testSuiteAbsolutePath, process.cwd())
 
-    const newWorkerArgs = { ...workerArgs }
+    const newWorkerArgs = {
+      ...workerArgs,
+      _ddRepositoryRoot: config.repositoryRoot,
+      _ddCodeOwnersEntries: config.codeOwnersEntries,
+    }
+    const shouldProcessWorkerResults =
+      config.isKnownTestsEnabled ||
+      config.isTestManagementTestsEnabled ||
+      config.isImpactedTestsEnabled ||
+      config.isFlakyTestRetriesEnabled
 
     if (config.isKnownTestsEnabled) {
       if (config.knownTests?.mocha) {
@@ -1154,6 +1161,10 @@ addHook({
         newWorkerArgs,
       ]
     )
+
+    if (!shouldProcessWorkerResults) {
+      return testFileResult
+    }
 
     const tests = testFileResult
       .events

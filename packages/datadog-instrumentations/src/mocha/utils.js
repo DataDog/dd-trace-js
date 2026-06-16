@@ -376,7 +376,7 @@ function runnableWrapper (RunnablePackage, libraryConfig) {
   return RunnablePackage
 }
 
-function getOnTestHandler (isMain) {
+function getOnTestHandler (isMain, libraryConfig) {
   return function (test) {
     const testStartLine = testToStartLine.get(test)
 
@@ -417,6 +417,8 @@ function getOnTestHandler (isMain) {
       testSuiteAbsolutePath,
       title,
       testStartLine,
+      repositoryRoot: libraryConfig.repositoryRoot,
+      codeOwnersEntries: libraryConfig.codeOwnersEntries,
     }
 
     if (!isMain) {

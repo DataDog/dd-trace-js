@@ -22,6 +22,7 @@ const {
   getTestOptimizationRequestResults,
 } = require('../../dd-trace/src/plugins/util/test')
 const log = require('../../dd-trace/src/log')
+const { DD_TEST_OPT_WORKER_REPOSITORY_ROOT } = require('../../dd-trace/src/plugins/util/env')
 const {
   getValueFromEnvSources,
 } = require('../../dd-trace/src/config/helper')
@@ -106,6 +107,7 @@ const efdSlowAbortedTests = new Set()
 const ddPropertiesByTestId = new Map()
 const ddPropertiesRequestsByTestId = new Map()
 let rootDir = ''
+let repositoryRoot
 let sessionProjects = []
 
 const MINIMUM_SUPPORTED_VERSION_RANGE_EFD = '>=1.38.0' // TODO: remove this once we drop support for v5
@@ -1116,16 +1118,18 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
     let onDone
 
     rootDir = getRootDir(this, config)
+    repositoryRoot = undefined
     const processArgv = process.argv.slice(2).join(' ')
     const command = `playwright ${processArgv}`
     testSessionStartCh.publish({ command, frameworkVersion: playwrightVersion, rootDir })
 
     try {
-      const { err, libraryConfig } = await getChannelPromise(
+      const { err, libraryConfig, repositoryRoot: receivedRepositoryRoot } = await getChannelPromise(
         libraryConfigurationCh,
         { frameworkVersion: playwrightVersion }
       )
       if (!err) {
+        repositoryRoot = receivedRepositoryRoot
         isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
         isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
         earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
@@ -1699,6 +1703,7 @@ function prepareProcessHostStartRunner (processHost) {
     ...processHost._extraEnv,
     // Used to detect that we're in a playwright worker
     DD_PLAYWRIGHT_WORKER: '1',
+    ...(repositoryRoot ? { [DD_TEST_OPT_WORKER_REPOSITORY_ROOT]: repositoryRoot } : {}),
   }
 }
 

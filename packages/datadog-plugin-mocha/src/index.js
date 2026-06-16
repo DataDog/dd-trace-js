@@ -453,7 +453,11 @@ class MochaPlugin extends CiPlugin {
       isQuarantined,
       isModified,
       hasDynamicName,
+      repositoryRoot,
+      codeOwnersEntries,
     } = testInfo
+
+    this._setRepositoryRoot(repositoryRoot, codeOwnersEntries)
 
     const extraTags = {}
     const testParametersString = getTestParametersString(this._testTitleToParams, title)
