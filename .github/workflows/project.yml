@@ -51,6 +51,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: npm run test:release
+      - run: npm run test:scripts
 
   generated-config-types:
     runs-on: ubuntu-latest
