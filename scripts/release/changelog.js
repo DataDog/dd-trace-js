@@ -1,6 +1,6 @@
 'use strict'
 
-const INTERNAL_CATEGORY = '<b>Internal</b> (CI, Testing, Benchmarking)'
+const INTERNAL_CATEGORY = 'Internal'
 const CATEGORY_ORDER = [
   'Features',
   'Fixes',
@@ -290,15 +290,15 @@ function renderMarkdown (sections, contributors) {
     const changes = sections.get(category)
     if (!changes?.length) continue
 
-    lines.push(category)
-    for (const change of changes) {
+    lines.push(renderHeading(category))
+    for (const change of changes.sort(compareChanges)) {
       lines.push(renderChange(change))
     }
     lines.push('')
   }
 
   if (contributors.size > 0) {
-    lines.push('Contributors')
+    lines.push('<b>Contributors</b>')
     for (const contributor of [...contributors].sort(compareContributors)) {
       lines.push(`- ${contributor}`)
     }
@@ -306,6 +306,33 @@ function renderMarkdown (sections, contributors) {
   }
 
   return lines.join('\n')
+}
+
+/**
+ * @param {string} category
+ */
+function renderHeading (category) {
+  if (category === INTERNAL_CATEGORY) {
+    return `<b>${category}</b> (CI, Testing, Benchmarking)`
+  }
+
+  return `<b>${category}</b>`
+}
+
+/**
+ * Groups same-product entries together; the internal section carries no product,
+ * so it falls through to a plain subject sort.
+ *
+ * @param {Change} a
+ * @param {Change} b
+ */
+function compareChanges (a, b) {
+  if (!a.internal) {
+    const byProduct = a.product.toLowerCase().localeCompare(b.product.toLowerCase())
+    if (byProduct !== 0) return byProduct
+  }
+
+  return a.subject.toLowerCase().localeCompare(b.subject.toLowerCase())
 }
 
 /**
