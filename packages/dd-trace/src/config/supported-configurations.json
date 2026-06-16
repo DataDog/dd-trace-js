@@ -3111,7 +3111,7 @@
         "default": "10000",
         "allowed": "[1-9]\\d*",
         "internalPropertyName": "ddTraceMetricsOtelFlushInterval",
-        "description": "The interval, in milliseconds, between OTLP exports of client-side trace span metrics. Controls how frequently the accumulated span duration histogram (traces.span.sdk.metrics.duration) is aggregated and flushed to the configured OTLP metrics endpoint. Lower values reduce export latency at the cost of more frequent network calls; higher values batch more data per export. Internal/advanced setting (leading underscore), primarily for testing and tuning."
+        "description": "Milliseconds between OTLP exports of client-side trace span metrics"
       }
     ],
     "DD_TRACE_MICROGATEWAY_CORE_ENABLED": [
