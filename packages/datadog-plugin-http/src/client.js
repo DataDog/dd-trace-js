@@ -29,7 +29,9 @@ class HttpClientPlugin extends ClientPlugin {
     const hostname = options.hostname || options.host || 'localhost'
     const host = options.port ? `${hostname}:${options.port}` : hostname
     const base = `${protocol}//${host}`
-    const pathname = options.path || options.pathname
+    // A URL object (e.g. from the fetch integration) carries the query in
+    // `options.search`, not `options.path`; keep it so url.full retains the query.
+    const pathname = options.path || `${options.pathname || ''}${options.search || ''}`
     const path = pathname ? pathname.split(/[?#]/)[0] : '/'
     const uri = `${base}${path}`
 
