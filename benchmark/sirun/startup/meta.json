@@ -16,6 +16,14 @@
         "USE_TRACER": "1",
         "EVERYTHING": "1"
       }
+    },
+    "with-tracer-everything-esm": {
+      "env": {
+        "USE_TRACER": "1",
+        "EVERYTHING": "1",
+        "ESM": "1",
+        "NODE_OPTIONS": "--import ../../../register.js"
+      }
     }
   }
 }
