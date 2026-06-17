@@ -3584,6 +3584,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_RETHINKDB_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_REDIS_ENABLED": [
       {
         "implementation": "A",
