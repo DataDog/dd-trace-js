@@ -1266,6 +1266,22 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/plugins/test
 
+  rethinkdb:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    services:
+      rethinkdb:
+        image: rethinkdb@sha256:30e0235da35e645025ca755c50d9ba617765f7f186fd1b0879fe00177e14de6a # 2.4.3
+        ports:
+          - 28015:28015
+    env:
+      PLUGINS: rethinkdb
+      SERVICES: rethinkdb
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: ./.github/actions/plugins/test
+
   # Restify isn't compatible with Node.js v24 so we don't run against latest Node.js
   # see: https://github.com/restify/node-restify/issues/1984
   restify:

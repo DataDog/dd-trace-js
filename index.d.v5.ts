@@ -300,6 +300,7 @@ interface Plugins {
   "prisma": tracer.plugins.prisma;
   "protobufjs": tracer.plugins.protobufjs;
   "redis": tracer.plugins.redis;
+  "rethinkdb": tracer.plugins.rethinkdb;
   "restify": tracer.plugins.restify;
   "rhea": tracer.plugins.rhea;
   "router": tracer.plugins.router;
@@ -3200,6 +3201,12 @@ declare namespace tracer {
        */
       splitByInstance?: boolean;
     }
+
+    /**
+     * This plugin automatically instruments the
+     * [rethinkdb](https://github.com/rethinkdb/rethinkdb-javascript) module.
+     */
+    interface rethinkdb extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the

@@ -92,6 +92,11 @@ const storage = {
       serviceSource: optionServiceSource,
     },
     redis: redisNaming,
+    rethinkdb: {
+      opName: () => 'rethinkdb.query',
+      serviceName: configWithFallback,
+      serviceSource: optionServiceSource,
+    },
     tedious: {
       opName: () => 'mssql.query',
       serviceName: configWithFallback,
