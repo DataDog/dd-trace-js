@@ -179,6 +179,29 @@ describe('plugins/util/url', () => {
     })
   })
 
+  describe('getQsObfuscator', () => {
+    it('passes booleans through', () => {
+      assert.strictEqual(url.getQsObfuscator({ queryStringObfuscation: true }), true)
+      assert.strictEqual(url.getQsObfuscator({ queryStringObfuscation: false }), false)
+    })
+
+    it('treats an empty string as disabled and ".*" as a full redaction', () => {
+      assert.strictEqual(url.getQsObfuscator({ queryStringObfuscation: '' }), false)
+      assert.strictEqual(url.getQsObfuscator({ queryStringObfuscation: '.*' }), true)
+    })
+
+    it('compiles a regex string and caches the compiled result', () => {
+      const first = url.getQsObfuscator({ queryStringObfuscation: 'token' })
+      assert.ok(first instanceof RegExp)
+      assert.strictEqual(url.getQsObfuscator({ queryStringObfuscation: 'token' }), first)
+    })
+
+    it('falls back to full redaction on an invalid regex or a non-string/boolean value', () => {
+      assert.strictEqual(url.getQsObfuscator({ queryStringObfuscation: '[' }), true)
+      assert.strictEqual(url.getQsObfuscator({ queryStringObfuscation: 123 }), true)
+    })
+  })
+
   describe('extractPathFromUrl', () => {
     it('should return / for empty or missing url', () => {
       assert.strictEqual(url.extractPathFromUrl(''), '/')

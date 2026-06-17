@@ -251,5 +251,17 @@ describe('http-otel-semantics', () => {
         '503'
       )
     })
+
+    it('skips the status-code metric and error.type when the status is non-numeric', () => {
+      const { meta, metrics } = run({
+        'span.kind': 'client',
+        'http.method': 'GET',
+        'http.status_code': 'bogus',
+        'http.url': 'http://h/p',
+      })
+
+      assert.ok(!('http.response.status_code' in metrics))
+      assert.ok(!('error.type' in meta))
+    })
   })
 })
