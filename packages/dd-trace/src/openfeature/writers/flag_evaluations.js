@@ -551,10 +551,16 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
    * @returns {void}
    */
   _flushPayloadBatches (flagEvaluations) {
+    const payloadPrefix = `{"context":${this._encode(this._context)},"flagEvaluations":[`
+    const payloadSuffix = ']}'
+    const basePayloadSizeBytes = Buffer.byteLength(payloadPrefix) + Buffer.byteLength(payloadSuffix)
+
     let batch = []
+    let batchSizeBytes = basePayloadSizeBytes
 
     for (const event of flagEvaluations) {
-      const eventSizeBytes = Buffer.byteLength(JSON.stringify(event))
+      const encodedEvent = this._encode(event)
+      const eventSizeBytes = Buffer.byteLength(encodedEvent)
       if (this._eventSizeLimit && eventSizeBytes > this._eventSizeLimit) {
         log.warn('%s event size %d bytes exceeds limit %d, dropping event',
           this.constructor.name, eventSizeBytes, this._eventSizeLimit)
@@ -562,22 +568,22 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
         continue
       }
 
-      const candidate = [...batch, event]
-      const candidatePayload = this._encode(this.makePayload(candidate))
-      const candidateSizeBytes = Buffer.byteLength(candidatePayload)
+      const separatorBytes = batch.length > 0 ? 1 : 0
+      const candidateSizeBytes = batchSizeBytes + separatorBytes + eventSizeBytes
 
       if (this._payloadSizeLimit && candidateSizeBytes > this._payloadSizeLimit && batch.length > 0) {
-        const payload = this._encode(this.makePayload(batch))
-        this._sendPayload(payload, batch.length)
-        batch = [event]
+        this._sendPayload(payloadPrefix + batch.join(',') + payloadSuffix, batch.length)
+        batch = []
+        batchSizeBytes = basePayloadSizeBytes
 
-        const singlePayload = this._encode(this.makePayload(batch))
-        const singleSizeBytes = Buffer.byteLength(singlePayload)
+        const singleSizeBytes = batchSizeBytes + eventSizeBytes
         if (this._payloadSizeLimit && singleSizeBytes > this._payloadSizeLimit) {
           log.warn('%s payload size %d bytes exceeds limit %d, dropping event',
             this.constructor.name, singleSizeBytes, this._payloadSizeLimit)
           this._droppedEvents++
-          batch = []
+        } else {
+          batch = [encodedEvent]
+          batchSizeBytes = singleSizeBytes
         }
         continue
       }
@@ -589,12 +595,12 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
         continue
       }
 
-      batch = candidate
+      batch.push(encodedEvent)
+      batchSizeBytes = candidateSizeBytes
     }
 
     if (batch.length > 0) {
-      const payload = this._encode(this.makePayload(batch))
-      this._sendPayload(payload, batch.length)
+      this._sendPayload(payloadPrefix + batch.join(',') + payloadSuffix, batch.length)
     }
   }
 
