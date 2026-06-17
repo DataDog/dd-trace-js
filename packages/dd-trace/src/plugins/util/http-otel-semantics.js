@@ -25,6 +25,12 @@ const KNOWN_METHODS = new Set([
   'CONNECT', 'DELETE', 'GET', 'HEAD', 'OPTIONS', 'PATCH', 'POST', 'PUT', 'QUERY', 'TRACE',
 ])
 
+// Datadog HTTP meta keys replaced by OTel names — omitted when rebuilding meta.
+const DD_HTTP_META_KEYS = new Set([
+  'http.method', 'http.status_code', 'http.useragent', 'http.client_ip', 'http.endpoint', 'http.url', 'out.host',
+])
+const NETWORK_DESTINATION_PORT = 'network.destination.port'
+
 /**
  * @typedef {object} ServerUrlParts
  * @property {string} [scheme] value for `url.scheme`
@@ -109,8 +115,10 @@ function redactUrlCredentials (url) {
     }
   }
 
-  const at = url.indexOf('@', authorityStart)
-  if (at === -1 || at >= authorityEnd) return url
+  // userinfo runs to the LAST '@' in the authority (WHATWG); using the first
+  // '@' would leak the remainder, e.g. `user:p@ss@host`.
+  const at = url.lastIndexOf('@', authorityEnd - 1)
+  if (at < authorityStart) return url
 
   const redacted = url.slice(authorityStart, at).includes(':') ? 'REDACTED:REDACTED' : 'REDACTED'
   return url.slice(0, authorityStart) + redacted + url.slice(at)
@@ -149,20 +157,36 @@ function defaultPortForUrl (url) {
  * @param {FormattedHttpSpan} formattedSpan
  */
 function applyHttpOtelSemantics (formattedSpan) {
-  const { meta, metrics } = formattedSpan
+  const meta = formattedSpan.meta
+  const metrics = formattedSpan.metrics
   const method = meta['http.method']
   const url = meta['http.url']
   if (method === undefined && url === undefined) return
 
+  // Rebuild meta/metrics as fresh objects that omit the renamed Datadog HTTP
+  // keys. Deleting them in place demotes the formatted span to V8 dictionary
+  // mode (~40% slower than this rebuild, measured); a fresh object keeps fast
+  // properties and can't leak a renamed key as `undefined` on the OTLP path.
+  const newMeta = {}
+  for (const key of Object.keys(meta)) {
+    if (!DD_HTTP_META_KEYS.has(key)) newMeta[key] = meta[key]
+  }
+  const newMetrics = {}
+  for (const key of Object.keys(metrics)) {
+    if (key !== NETWORK_DESTINATION_PORT) newMetrics[key] = metrics[key]
+  }
+
+  const kind = meta['span.kind']
+
   if (method !== undefined) {
     if (KNOWN_METHODS.has(method)) {
-      meta[HTTP_REQUEST_METHOD] = method
+      newMeta[HTTP_REQUEST_METHOD] = method
     } else {
       // Unknown verb: bucket to `_OTHER`, preserve the raw value, and use the
-      // literal "HTTP" in the span name — the spec forbids the raw verb (or the
-      // URL path) there. Known-method names are already `{method} {route}`.
-      meta[HTTP_REQUEST_METHOD] = '_OTHER'
-      meta[HTTP_REQUEST_METHOD_ORIGINAL] = method
+      // literal "HTTP" in the span name (the spec forbids the URL path there).
+      // Known-method names are already `{method} {route}`.
+      newMeta[HTTP_REQUEST_METHOD] = '_OTHER'
+      newMeta[HTTP_REQUEST_METHOD_ORIGINAL] = method
       const resource = formattedSpan.resource
       if (typeof resource === 'string') {
         if (resource === method) {
@@ -172,7 +196,6 @@ function applyHttpOtelSemantics (formattedSpan) {
         }
       }
     }
-    delete meta['http.method']
   }
 
   const status = meta['http.status_code']
@@ -180,85 +203,64 @@ function applyHttpOtelSemantics (formattedSpan) {
   if (status !== undefined) {
     // OTel types http.response.status_code as an int, so emit it as a numeric
     // metric (the OTLP exporter serializes meta as stringValue but metrics as
-    // intValue) — mirroring how server.port is handled below.
+    // intValue) — mirroring how server.port is handled below. Guard against a
+    // non-numeric status, which would otherwise write a NaN metric.
     statusCode = Number.parseInt(status)
-    metrics[HTTP_RESPONSE_STATUS_CODE] = statusCode
-    delete meta['http.status_code']
+    if (Number.isFinite(statusCode)) newMetrics[HTTP_RESPONSE_STATUS_CODE] = statusCode
   }
 
   const userAgent = meta['http.useragent']
-  if (userAgent !== undefined) {
-    meta[USER_AGENT_ORIGINAL] = userAgent
-    delete meta['http.useragent']
-  }
+  if (userAgent !== undefined) newMeta[USER_AGENT_ORIGINAL] = userAgent
 
   const clientIp = meta['http.client_ip']
-  if (clientIp !== undefined) {
-    meta[CLIENT_ADDRESS] = clientIp
-    delete meta['http.client_ip']
-  }
+  if (clientIp !== undefined) newMeta[CLIENT_ADDRESS] = clientIp
 
-  // http.endpoint is a Datadog-only attribute with no OTel equivalent.
-  delete meta['http.endpoint']
+  // http.endpoint is Datadog-only (omitted above); it has no OTel equivalent.
 
-  if (meta['span.kind'] === 'server') {
+  if (kind === 'server') {
     if (url !== undefined) {
       // The query in `http.url` is already obfuscated per config, so it is preserved.
       const { scheme, address, port, path, query } = decomposeServerUrl(url, url)
-      if (path !== undefined) meta[URL_PATH] = path
-      if (scheme !== undefined) meta[URL_SCHEME] = toHttpScheme(scheme)
-      if (query !== undefined) meta[URL_QUERY] = query
-      if (address !== undefined) meta[SERVER_ADDRESS] = address
-      if (port !== undefined) metrics[SERVER_PORT] = port
-      delete meta['http.url']
+      if (path !== undefined) newMeta[URL_PATH] = path
+      if (scheme !== undefined) newMeta[URL_SCHEME] = toHttpScheme(scheme)
+      if (query !== undefined) newMeta[URL_QUERY] = query
+      if (address !== undefined) newMeta[SERVER_ADDRESS] = address
+      if (port !== undefined) newMetrics[SERVER_PORT] = port
     }
   } else {
     if (url !== undefined) {
       // url.full must not carry embedded credentials.
-      meta[URL_FULL] = redactUrlCredentials(url)
-      delete meta['http.url']
+      newMeta[URL_FULL] = redactUrlCredentials(url)
     }
     const outHost = meta['out.host']
-    if (outHost !== undefined) {
-      meta[SERVER_ADDRESS] = outHost
-      delete meta['out.host']
-    }
-    const clientPort = metrics['network.destination.port']
+    if (outHost !== undefined) newMeta[SERVER_ADDRESS] = outHost
+    const clientPort = metrics[NETWORK_DESTINATION_PORT]
     if (clientPort === undefined) {
       // server.port is required for client spans; fall back to the scheme default.
       const defaultPort = defaultPortForUrl(url)
-      if (defaultPort !== undefined) metrics[SERVER_PORT] = defaultPort
+      if (defaultPort !== undefined) newMetrics[SERVER_PORT] = defaultPort
     } else {
-      metrics[SERVER_PORT] = clientPort
-      delete metrics['network.destination.port']
+      newMetrics[SERVER_PORT] = clientPort
     }
   }
 
   // OTel error semantics for an error response (no-clobber on an exception-derived
   // type): server spans are errors on 5xx only (4xx MUST be left unset per the
   // spec); client spans on any status >= 400.
-  if (status !== undefined && meta[ERROR_TYPE] === undefined) {
-    const isError = meta['span.kind'] === 'server' ? statusCode >= 500 : statusCode >= 400
+  if (status !== undefined && newMeta[ERROR_TYPE] === undefined) {
+    const isError = kind === 'server' ? statusCode >= 500 : statusCode >= 400
     if (isError) {
-      meta[ERROR_TYPE] = status
+      newMeta[ERROR_TYPE] = status
       formattedSpan.error = 1
     }
   }
+
+  formattedSpan.meta = newMeta
+  formattedSpan.metrics = newMetrics
 }
 
 module.exports = {
-  HTTP_REQUEST_METHOD,
-  HTTP_RESPONSE_STATUS_CODE,
-  URL_FULL,
-  URL_PATH,
-  URL_SCHEME,
-  URL_QUERY,
-  SERVER_ADDRESS,
-  SERVER_PORT,
-  USER_AGENT_ORIGINAL,
-  CLIENT_ADDRESS,
-  NETWORK_PEER_ADDRESS,
-  HTTP_REQUEST_METHOD_ORIGINAL,
-  decomposeServerUrl,
+  NETWORK_PEER_ADDRESS, // imported by web.js (set from req.socket, not at serialization)
+  decomposeServerUrl, // exercised directly by the helper spec
   applyHttpOtelSemantics,
 }

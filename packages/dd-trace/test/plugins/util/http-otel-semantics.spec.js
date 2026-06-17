@@ -130,6 +130,25 @@ describe('http-otel-semantics', () => {
       assert.strictEqual(meta['error.type'], 'Error')
     })
 
+    it('preserves non-HTTP meta and metrics keys through the rebuild', () => {
+      const { meta, metrics } = run(
+        {
+          'span.kind': 'server',
+          component: 'express',
+          '_dd.base_service': 'svc',
+          'http.method': 'GET',
+          'http.url': 'http://h/p',
+          'http.status_code': '200',
+        },
+        { '_dd.measured': 1, _sampling_priority_v1: 1 }
+      )
+
+      assert.strictEqual(meta.component, 'express')
+      assert.strictEqual(meta['_dd.base_service'], 'svc')
+      assert.strictEqual(metrics['_dd.measured'], 1)
+      assert.strictEqual(metrics._sampling_priority_v1, 1)
+    })
+
     it('leaves non-HTTP spans untouched', () => {
       const { meta } = run({ 'span.kind': 'client', 'db.system': 'redis' })
 
@@ -158,6 +177,11 @@ describe('http-otel-semantics', () => {
       assert.strictEqual(
         run({ 'span.kind': 'client', 'http.url': 'http://user@h/p' }).meta['url.full'],
         'http://REDACTED@h/p'
+      )
+      // userinfo extends to the last '@' in the authority — redact all of it.
+      assert.strictEqual(
+        run({ 'span.kind': 'client', 'http.url': 'http://user:p@ss@h/p' }).meta['url.full'],
+        'http://REDACTED:REDACTED@h/p'
       )
       assert.strictEqual(
         run({ 'span.kind': 'client', 'http.url': 'https://h/p' }).meta['url.full'],
