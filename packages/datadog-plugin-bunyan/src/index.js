@@ -23,6 +23,7 @@ class BunyanPlugin extends LogPlugin {
    * @param {{ message: object }} arg
    */
   handleLog (arg) {
+    if (!this.config.logInjection) return
     const rec = arg.message
     if (rec === null || typeof rec !== 'object' || Object.hasOwn(rec, 'dd')) return
 

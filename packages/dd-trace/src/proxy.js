@@ -208,6 +208,11 @@ class Tracer extends NoopProxy {
         initializeOpenTelemetryMetrics(config)
       }
 
+      if (config.logCaptureEnabled) {
+        const { initializeLogCapture } = require('./log-capture')
+        initializeLogCapture(config)
+      }
+
       if (config.runtimeMetrics.enabled) {
         runtimeMetrics.start(config)
       }
