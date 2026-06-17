@@ -32,12 +32,15 @@ function normalizeEvent (event, request) {
     testStatus: meta['test.status'],
     testSourceFile: meta['test.source.file'],
     retryReason: meta['test.retry_reason'],
+    isNew: meta['test.is_new'] === 'true' || metrics['test.is_new'] === 1,
     isRetry: meta['test.is_retry'] === 'true' || metrics['test.is_retry'] === 1,
+    finalStatus: meta['test.final_status'],
     earlyFlakeEnabled: meta['test.early_flake.enabled'] === 'true',
     testManagementEnabled: meta['test.test_management.enabled'] === 'true',
     isQuarantined: meta['test.test_management.is_quarantined'] === 'true',
     isDisabled: meta['test.test_management.is_test_disabled'] === 'true',
     isAttemptToFix: meta['test.test_management.is_attempt_to_fix'] === 'true',
+    attemptToFixPassed: meta['test.test_management.attempt_to_fix_passed'] === 'true',
   }
 }
 

@@ -1,6 +1,8 @@
 'use strict'
 
 const {
+  discoverScenarioTests,
+  discoveryEvidence,
   error,
   fail,
   pass,
@@ -9,7 +11,8 @@ const {
   requireGeneratedScenario,
   runInstrumentedCommand,
   skip,
-  testsForScenario,
+  testEventSamples,
+  testsForDiscoveredScenario,
 } = require('./helpers')
 
 async function runEarlyFlakeDetection ({ framework, intake, out, options }) {
@@ -22,6 +25,17 @@ async function runEarlyFlakeDetection ({ framework, intake, out, options }) {
     const { scenario } = await prepareGeneratedScenario(framework, 'basic-pass')
     if (!scenario) {
       return skip(framework, scenarioName, 'Generated scenario "basic-pass" is not present in the manifest.')
+    }
+
+    const discovery = await discoverScenarioTests({ framework, intake, out, scenarioName, scenario, options })
+    if (discovery.tests.length === 0) {
+      return fail(
+        framework,
+        scenarioName,
+        'The generated new-test candidate was not reported during baseline identity discovery.',
+        discoveryEvidence(discovery),
+        discovery.outDir
+      )
     }
 
     intake.configure({
@@ -50,15 +64,17 @@ async function runEarlyFlakeDetection ({ framework, intake, out, options }) {
     })
     outDir = run.outDir
 
-    const tests = testsForScenario(run.events, scenario)
+    const tests = testsForDiscoveredScenario(run.events, scenario, discovery)
     const retriedTests = tests.filter(test => test.isRetry || test.retryReason === 'early_flake_detection')
     const evidence = {
+      ...discoveryEvidence(discovery),
       commandExitCode: run.result.exitCode,
       settingsRequested: requestsUrlIncludes(intake, '/api/v2/libraries/tests/services/setting'),
       knownTestsRequested: requestsUrlIncludes(intake, '/api/v2/ci/libraries/tests'),
       matchingTestEvents: tests.length,
       retryLikeEvents: retriedTests.length,
       earlyFlakeTaggedEvents: tests.filter(test => test.earlyFlakeEnabled).length,
+      samples: testEventSamples(tests),
     }
 
     if (!evidence.settingsRequested || !evidence.knownTestsRequested) {

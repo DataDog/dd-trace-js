@@ -4,7 +4,11 @@ const fs = require('fs')
 const path = require('path')
 
 const { buildDatadogEnv, runCommand } = require('../command-runner')
-const { findGeneratedScenario, writeGeneratedFiles } = require('../generated-files')
+const {
+  cleanupGeneratedRuntimeFiles,
+  findGeneratedScenario,
+  writeGeneratedFiles,
+} = require('../generated-files')
 const {
   eventsOfType,
   findTestsByIdentity,
@@ -64,6 +68,7 @@ function basicEventEvidence (events) {
     testModuleEvents: eventsOfType(events, 'test_module_end').length,
     testSuiteEvents: eventsOfType(events, 'test_suite_end').length,
     testEvents: eventsOfType(events, 'test').length,
+    samples: basicEventSamples(events),
   }
 }
 
@@ -81,6 +86,94 @@ function requestsUrlIncludes (intake, fragment) {
 
 function testsForScenario (events, scenario) {
   return findTestsByIdentity(events, scenario.testIdentities || [])
+}
+
+async function discoverScenarioTests ({ framework, intake, out, scenarioName, scenario, options }) {
+  intake.configure()
+  const baseline = await runInstrumentedCommand({
+    framework,
+    intake,
+    out,
+    scenarioName: `${scenarioName}-baseline`,
+    command: scenario.runCommand,
+    options,
+  })
+  const tests = testsForScenario(baseline.events, scenario)
+  cleanupGeneratedRuntimeFiles(framework)
+  return {
+    ...baseline,
+    tests,
+    testIdentities: tests.map(testToIdentity),
+  }
+}
+
+function testsForDiscoveredScenario (events, scenario, discovery) {
+  if (discovery?.testIdentities?.length > 0) {
+    return findTestsByIdentity(events, discovery.testIdentities)
+  }
+  return testsForScenario(events, scenario)
+}
+
+function discoveryEvidence (discovery) {
+  return {
+    baselineCommandExitCode: discovery.result.exitCode,
+    baselineMatchingTestEvents: discovery.tests.length,
+    baselineSamples: testEventSamples(discovery.tests),
+  }
+}
+
+function testToIdentity (test) {
+  return {
+    discovered: true,
+    suite: test.testSuite,
+    name: test.testName,
+    file: test.testSourceFile,
+    parameters: test.meta?.['test.parameters'],
+  }
+}
+
+function basicEventSamples (events) {
+  return [
+    sampleLevel(events, 'test_session_end', 'test session'),
+    sampleLevel(events, 'test_module_end', 'test module'),
+    sampleLevel(events, 'test_suite_end', 'test suite'),
+    sampleLevel(events, 'test', 'test'),
+  ].filter(Boolean)
+}
+
+function sampleLevel (events, type, level) {
+  const event = eventsOfType(events, type)[0]
+  if (!event) return null
+
+  const sample = { level }
+  copy(sample, event.meta, 'test.command')
+  copy(sample, event.meta, 'test.module')
+  copy(sample, event.meta, 'test.suite')
+  copy(sample, event.meta, 'test.name')
+  copy(sample, event.meta, 'test.status')
+  return sample
+}
+
+function testEventSamples (tests) {
+  return tests.slice(0, 3).map(test => {
+    const sample = {}
+    copy(sample, test.meta, 'test.name')
+    copy(sample, test.meta, 'test.status')
+    copy(sample, test.meta, 'test.is_new')
+    copy(sample, test.meta, 'test.is_retry')
+    copy(sample, test.meta, 'test.retry_reason')
+    copy(sample, test.meta, 'test.final_status')
+    copy(sample, test.meta, 'test.test_management.enabled')
+    copy(sample, test.meta, 'test.test_management.is_test_disabled')
+    copy(sample, test.meta, 'test.test_management.is_quarantined')
+    copy(sample, test.meta, 'test.test_management.is_attempt_to_fix')
+    copy(sample, test.meta, 'test.test_management.attempt_to_fix_passed')
+    return sample
+  })
+}
+
+function copy (target, source, key) {
+  if (source && source[key] !== undefined) target[key] = source[key]
 }
 
 function pass (framework, scenario, diagnosis, evidence, outDir) {
@@ -124,6 +217,8 @@ function wait (ms) {
 
 module.exports = {
   basicEventEvidence,
+  discoverScenarioTests,
+  discoveryEvidence,
   error,
   fail,
   frameworkOutDir,
@@ -134,5 +229,7 @@ module.exports = {
   requireGeneratedScenario,
   runInstrumentedCommand,
   skip,
+  testEventSamples,
+  testsForDiscoveredScenario,
   testsForScenario,
 }

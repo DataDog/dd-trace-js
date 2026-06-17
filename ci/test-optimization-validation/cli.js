@@ -13,6 +13,10 @@ const { cleanupGeneratedFiles } = require('./generated-files')
 const { loadManifest } = require('./manifest-loader')
 const { MockIntake } = require('./mock-intake')
 const { writeReport } = require('./report-writer')
+const {
+  getStaticBlocker,
+  runStaticDiagnosis,
+} = require('./static-diagnosis')
 
 const DEFAULT_MANIFEST = './dd-test-optimization-validation-manifest.json'
 const DEFAULT_OUT = './dd-test-optimization-validation-results'
@@ -106,29 +110,39 @@ async function main (argv) {
     const manifest = loadManifest(options.manifest)
     const out = path.resolve(options.out)
     fs.mkdirSync(out, { recursive: true })
+    const staticDiagnosis = runStaticDiagnosis({ manifest, out })
 
     const intake = new MockIntake({ out, verbose: options.verbose })
-    await intake.start()
-
     const results = []
+    let intakeStarted = false
+
     try {
       const frameworks = manifest.frameworks.filter(framework => {
         return options.frameworks.size === 0 || options.frameworks.has(framework.id)
       })
+      const runnableFrameworks = []
 
       for (const framework of frameworks) {
         if (framework.status !== 'runnable') {
-          results.push({
-            frameworkId: framework.id,
-            scenario: 'all',
-            status: 'skip',
-            diagnosis: `Framework status is ${framework.status}.`,
-            evidence: {},
-            artifacts: [],
-          })
+          results.push(getFrameworkStatusResult(framework))
           continue
         }
 
+        const staticBlocker = getStaticBlocker(framework, staticDiagnosis.report)
+        if (staticBlocker) {
+          results.push(getStaticFailure(framework, staticBlocker, staticDiagnosis.reportPath))
+          continue
+        }
+
+        runnableFrameworks.push(framework)
+      }
+
+      if (runnableFrameworks.length > 0) {
+        await intake.start()
+        intakeStarted = true
+      }
+
+      for (const framework of runnableFrameworks) {
         for (const scenario of options.scenarios) {
           const runScenario = SCENARIOS[scenario]
           // Scenarios intentionally run in order so each one can reset and configure the shared intake.
@@ -137,15 +151,53 @@ async function main (argv) {
         }
       }
     } finally {
-      await intake.close()
+      if (intakeStarted) await intake.close()
       await cleanupGeneratedFiles(manifest, { keep: options.keepTempFiles })
     }
 
-    await writeReport({ manifest, results, out, intake })
+    await writeReport({ manifest, results, out, intake, staticDiagnosis })
     process.exitCode = results.some(result => result.status === 'fail' || result.status === 'error') ? 1 : 0
   } catch (err) {
     process.exitCode = 1
     console.error(err && err.stack ? err.stack : err)
+  }
+}
+
+function getStaticFailure (framework, blocker, staticDiagnosisPath) {
+  return {
+    frameworkId: framework.id,
+    scenario: 'all',
+    status: 'fail',
+    diagnosis: blocker.reason,
+    evidence: {
+      staticDiagnosis: true,
+      recommendation: blocker.recommendation,
+    },
+    artifacts: [staticDiagnosisPath],
+  }
+}
+
+function getFrameworkStatusResult (framework) {
+  if (framework.status === 'unsupported_by_validator') {
+    return {
+      frameworkId: framework.id,
+      scenario: 'all',
+      status: 'fail',
+      diagnosis: `${framework.framework} is not supported by the deterministic validator.`,
+      evidence: {
+        recommendation: 'Choose a supported framework before running live validation.',
+      },
+      artifacts: [],
+    }
+  }
+
+  return {
+    frameworkId: framework.id,
+    scenario: 'all',
+    status: 'skip',
+    diagnosis: `Framework status is ${framework.status}.`,
+    evidence: {},
+    artifacts: [],
   }
 }
 

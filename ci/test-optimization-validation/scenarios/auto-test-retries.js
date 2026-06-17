@@ -1,13 +1,16 @@
 'use strict'
 
 const {
+  discoverScenarioTests,
+  discoveryEvidence,
   error,
   fail,
   pass,
   prepareGeneratedScenario,
   requireGeneratedScenario,
   runInstrumentedCommand,
-  testsForScenario,
+  testEventSamples,
+  testsForDiscoveredScenario,
 } = require('./helpers')
 
 async function runAutoTestRetries ({ framework, intake, out, options }) {
@@ -18,6 +21,17 @@ async function runAutoTestRetries ({ framework, intake, out, options }) {
   let outDir
   try {
     const { scenario } = await prepareGeneratedScenario(framework, 'atr-fail-once')
+    const discovery = await discoverScenarioTests({ framework, intake, out, scenarioName, scenario, options })
+    if (discovery.tests.length === 0) {
+      return fail(
+        framework,
+        scenarioName,
+        'The fail-once generated test was not reported during baseline identity discovery.',
+        discoveryEvidence(discovery),
+        discovery.outDir
+      )
+    }
+
     intake.configure({
       settings: {
         flaky_test_retries_enabled: true,
@@ -34,14 +48,16 @@ async function runAutoTestRetries ({ framework, intake, out, options }) {
     })
     outDir = run.outDir
 
-    const tests = testsForScenario(run.events, scenario)
+    const tests = testsForDiscoveredScenario(run.events, scenario, discovery)
     const retryLikeEvents = tests.filter(test => test.isRetry || test.retryReason === 'auto_test_retry')
     const evidence = {
+      ...discoveryEvidence(discovery),
       commandExitCode: run.result.exitCode,
       matchingTestEvents: tests.length,
       retryLikeEvents: retryLikeEvents.length,
       failedAttempts: tests.filter(test => test.testStatus === 'fail' || test.error === 1).length,
       passedAttempts: tests.filter(test => test.testStatus === 'pass').length,
+      samples: testEventSamples(tests),
     }
 
     if (run.result.exitCode !== 0) {

@@ -5,9 +5,11 @@ You are running inside the repository that needs Datadog Test Optimization valid
 Your task is to discover how tests are run here and write a validation manifest for a deterministic
 Datadog validator.
 
-Do not debug Datadog behavior. Do not run tests with Datadog instrumentation. Do not add
-dependencies. Do not permanently modify source files. You may create temporary validation test files
-only to prove that generated tests can run, and you must delete them before finishing.
+Do not debug Datadog behavior. Do not run tests with Datadog instrumentation. Do not add new
+dependencies to the project. You may run the project's normal dependency install or documented setup
+commands when they are required to make an already-declared test runner available. Do not
+permanently modify source files. You may create temporary validation test files only to prove that
+generated tests can run, and you must delete them before finishing.
 
 Write the manifest to:
 
@@ -27,12 +29,21 @@ The manifest is discovery only. The deterministic validator will later start the
 Datadog environment variables, run these commands, collect payloads, and validate Test Optimization
 behavior.
 
+Before live validation, the deterministic validator also runs `dd-trace/ci/diagnose.js`. Static
+diagnosis can stop live execution for known hard blockers such as unsupported frameworks
+(`node:test`, AVA, tap, Jasmine, Karma, uvu, TestCafe) or unsupported supported-framework versions.
+Advisory findings such as missing static `NODE_OPTIONS` do not block this validator because the
+validator injects Test Optimization initialization itself.
+
 ## Rules
 
 - Include every detected test framework, even if it cannot be run.
 - Prefer the smallest reliable passing test command.
 - Prefer existing package scripts over invented commands.
 - Prefer `argv` arrays over shell strings.
+- Treat dependency setup as part of test-command discovery. Before reporting that a runner is
+  missing, check whether the command's package or workspace has had its declared dependencies and
+  documented setup installed.
 - Do not include secrets. Record required environment variable names only.
 - Do not include `dd-trace/ci/init`, `NODE_OPTIONS`, or Datadog-specific env vars in discovered
   commands unless they are already unavoidable in the repository; explain if so.
@@ -47,12 +58,45 @@ behavior.
 
 1. Detect repository root, package manager, workspace manager, Node version, and git metadata.
 2. Inspect package scripts, workspace packages, lockfiles, config files, and dependencies.
-3. For each framework/package/workspace, identify a small existing passing test command.
-4. Run that command without Datadog instrumentation and record the preflight result.
-5. For each runnable framework, create a temporary generated validation test strategy.
-6. Prove the generated passing test runs without Datadog instrumentation.
-7. Delete all temporary files and record cleanup success.
-8. Write only valid JSON matching the manifest shape below.
+3. Resolve dependency/setup requirements for each candidate command.
+4. For each framework/package/workspace, identify a small existing passing test command.
+5. Run that command without Datadog instrumentation and record the preflight result.
+6. For each runnable framework, create a temporary generated validation test strategy.
+7. Prove the generated passing test runs without Datadog instrumentation.
+8. Delete all temporary files and record cleanup success.
+9. Write only valid JSON matching the manifest shape below.
+
+## Dependency Setup and Runner Availability
+
+The test runner binary must be available from the command `cwd` before a framework is considered
+runnable. A missing runner usually means one of these cases:
+
+- repository dependencies have not been installed yet
+- the command belongs to a workspace package and must use the workspace/package-manager entry point
+- the command belongs to a nested non-workspace fixture with its own `package.json`
+- the nested fixture requires a documented build/setup step before install, such as generating a
+  local file dependency or package tarball
+
+Use the project's package manager and lockfile. If root dependencies are missing, run or record the
+normal root install command, such as `npm ci`, `yarn install --frozen-lockfile`, or
+`pnpm install --frozen-lockfile`, unless the environment forbids installs.
+
+If the selected command lives in a workspace package, prefer the repository's workspace-aware test
+entry point. Do not install that package independently unless the repository documents that workflow.
+
+If the selected command lives in a nested non-workspace package or fixture, install that nested
+package only when all of the following are true:
+
+- it is the selected or only viable supported framework path
+- the fixture's local `file:` dependencies already exist, or the repository documents how to create
+  them
+- running the fixture install is allowed in this environment
+
+If those conditions are not met, mark the framework `requires_manual_setup`. Include the exact
+evidence in `notes`, such as the nested `package.json` path, the missing runner, and the missing
+local file dependency or setup command. Prefer another runnable supported framework if one exists.
+
+Do not classify a missing runner dependency as a Datadog Test Optimization failure.
 
 ## Generated Test Strategy Requirements
 
@@ -264,14 +308,15 @@ pnpm exec node /absolute/path/to/validate-test-optimization.js \
 The validator is responsible for:
 
 1. Validating the manifest schema.
-2. Starting a local mock intake.
-3. Serving Datadog Test Optimization settings responses.
-4. Creating temporary validation tests from the manifest.
-5. Running test commands with Datadog instrumentation enabled.
-6. Reading and decoding intake payloads.
-7. Evaluating Basic Reporting, EFD, ATR, and Test Management behavior.
-8. Cleaning up temporary validation files.
-9. Writing a validation report and artifacts.
+2. Running static diagnosis and stopping live execution for known hard blockers.
+3. Starting a local mock intake when at least one framework is eligible for live validation.
+4. Serving Datadog Test Optimization settings responses.
+5. Creating temporary validation tests from the manifest.
+6. Running test commands with Datadog instrumentation enabled.
+7. Reading and decoding intake payloads.
+8. Evaluating Basic Reporting, EFD, ATR, and Test Management behavior.
+9. Cleaning up temporary validation files.
+10. Writing a validation report, validation UI payloads, and artifacts.
 
 Your job in this phase is only to run the validator and preserve its output.
 
@@ -305,6 +350,8 @@ Include:
 - The validator's diagnosis for each failed scenario
 - The exact test command associated with each failed scenario
 - Relevant stdout/stderr excerpts selected by the validator
+- Path to `validation-urls.txt`
+- The relative `ci/test/validation#pako:...` UI path or paths emitted by the validator
 - Artifact paths for detailed inspection
 
 Do not summarize raw payloads unless the validator explicitly includes them in its report.

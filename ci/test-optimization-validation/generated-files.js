@@ -33,8 +33,35 @@ function cleanupGeneratedFiles (manifest, { keep = false } = {}) {
   }
 }
 
+function cleanupGeneratedRuntimeFiles (framework) {
+  const strategy = framework.generatedTestStrategy
+  if (!strategy) return
+
+  const generatedFiles = (strategy.files || []).map(file => path.resolve(file.path))
+  for (const cleanupPath of strategy.cleanupPaths || []) {
+    const resolvedCleanupPath = path.resolve(cleanupPath)
+    if (containsGeneratedFile(resolvedCleanupPath, generatedFiles)) continue
+    try {
+      fs.rmSync(resolvedCleanupPath, { force: true, recursive: true })
+    } catch {
+      // Runtime cleanup should be best-effort. Feature validation will report missing events if reset failed.
+    }
+  }
+}
+
+function containsGeneratedFile (cleanupPath, generatedFiles) {
+  return generatedFiles.some(file => {
+    return file === cleanupPath || file.startsWith(`${cleanupPath}${path.sep}`)
+  })
+}
+
 function findGeneratedScenario (framework, scenarioId) {
   return (framework.generatedTestStrategy?.scenarios || []).find(scenario => scenario.id === scenarioId)
 }
 
-module.exports = { writeGeneratedFiles, cleanupGeneratedFiles, findGeneratedScenario }
+module.exports = {
+  cleanupGeneratedFiles,
+  cleanupGeneratedRuntimeFiles,
+  findGeneratedScenario,
+  writeGeneratedFiles,
+}
