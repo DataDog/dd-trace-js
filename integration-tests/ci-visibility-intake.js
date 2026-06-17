@@ -540,28 +540,7 @@ class FakeCiVisIntake extends FakeAgent {
   }
 
   assertPayloadReceived (fn, messageMatch, timeout) {
-    return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
-      const timeoutObj = setTimeout(() => {
-        this.off('message', messageHandler)
-        reject(new Error('timeout'))
-      }, timeout || 15000)
-
-      const messageHandler = (message) => {
-        if (!messageMatch || messageMatch(message)) {
-          try {
-            fn(message)
-            resolve()
-          } catch (e) {
-            reject(e)
-          } finally {
-            clearTimeout(timeoutObj)
-            this.off('message', messageHandler)
-          }
-        }
-      }
-
-      this.on('message', messageHandler)
-    }))
+    return this.payloadReceived(messageMatch, timeout).then(fn)
   }
 }
 

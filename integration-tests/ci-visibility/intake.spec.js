@@ -13,7 +13,7 @@ describe('FakeCiVisIntake', () => {
     await assert.rejects(
       intake.assertPayloadReceived(() => {}, undefined, 5),
       {
-        message: 'timeout',
+        message: 'Timeout',
       }
     )
     assert.strictEqual(intake.listenerCount('message'), 0)

@@ -296,6 +296,7 @@ describe('telemetry', () => {
 describe('telemetry app-heartbeat', () => {
   const HEARTBEAT_INTERVAL = 60000
   let telemetry
+  let pluginsByName
   let clock
 
   before(() => {
@@ -326,6 +327,7 @@ describe('telemetry app-heartbeat', () => {
       },
       './send-data': sendDataRequest,
     })
+    pluginsByName = {}
 
     telemetry.start({
       telemetry: {
@@ -343,7 +345,7 @@ describe('telemetry app-heartbeat', () => {
       tags: {
         'runtime-id': '1a2b3c',
       },
-    }, { _pluginsByName: {} })
+    }, { _pluginsByName: pluginsByName })
     clock.tick(HEARTBEAT_INTERVAL)
     assert.strictEqual(beats, 1)
     clock.tick(HEARTBEAT_INTERVAL)
