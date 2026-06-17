@@ -161,7 +161,7 @@ class Span extends BridgeSpanBase {
 
     super(ddSpan)
 
-    this._otelTraceSemanticsEnabled = _tracer._config.DD_TRACE_OTEL_SEMANTICS_ENABLED
+    this._otelTraceSemanticsEnabled = _tracer._config.otelSemanticsEnabled
 
     if (attributes) {
       this.setAttributes(attributes)

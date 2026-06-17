@@ -655,11 +655,11 @@ describe('OTel Span', () => {
 
   describe('OTel compatibility mode (otelTraceSemanticsEnabled)', () => {
     beforeEach(() => {
-      tracer._tracer._config.DD_TRACE_OTEL_SEMANTICS_ENABLED = true
+      tracer._tracer._config.otelSemanticsEnabled = true
     })
 
     afterEach(() => {
-      tracer._tracer._config.DD_TRACE_OTEL_SEMANTICS_ENABLED = false
+      tracer._tracer._config.otelSemanticsEnabled = false
     })
 
     it('does not mirror http.response.status_code to http.status_code', () => {

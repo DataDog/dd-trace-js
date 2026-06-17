@@ -3340,6 +3340,9 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "configurationNames": [
+          "otelSemanticsEnabled"
+        ],
         "default": "false"
       }
     ],
