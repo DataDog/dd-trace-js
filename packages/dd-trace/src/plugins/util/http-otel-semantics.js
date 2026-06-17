@@ -31,6 +31,12 @@ const DD_HTTP_META_KEYS = new Set([
 ])
 const NETWORK_DESTINATION_PORT = 'network.destination.port'
 
+// IPv6 literals arrive bracketed (URL.hostname / out.host = `[::1]`); OTel
+// `server.address` is the bare address.
+function stripIpv6Brackets (host) {
+  return host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host
+}
+
 /**
  * @typedef {object} ServerUrlParts
  * @property {string} [scheme] value for `url.scheme`
@@ -62,8 +68,7 @@ function decomposeServerUrl (rawUrl, obfuscatedUrl) {
     // `extractURL` builds `http://undefined/...` when the Host header is absent; skip that.
     const hostname = parsed.hostname
     if (hostname && hostname !== 'undefined') {
-      // Strip IPv6 brackets so `server.address` carries the bare address.
-      address = hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname
+      address = stripIpv6Brackets(hostname)
     }
     if (parsed.port) {
       const parsedPort = Number.parseInt(parsed.port)
@@ -233,7 +238,7 @@ function applyHttpOtelSemantics (formattedSpan) {
       newMeta[URL_FULL] = redactUrlCredentials(url)
     }
     const outHost = meta['out.host']
-    if (outHost !== undefined) newMeta[SERVER_ADDRESS] = outHost
+    if (outHost !== undefined) newMeta[SERVER_ADDRESS] = stripIpv6Brackets(outHost)
     const clientPort = metrics[NETWORK_DESTINATION_PORT]
     if (clientPort === undefined) {
       // server.port is required for client spans; fall back to the scheme default.

@@ -199,6 +199,15 @@ describe('http-otel-semantics', () => {
       )
     })
 
+    it('strips IPv6 brackets from a client server.address (matching the server path)', () => {
+      const { meta } = run(
+        { 'span.kind': 'client', 'http.url': 'http://[::1]:8080/p', 'out.host': '[::1]' },
+        { 'network.destination.port': 8080 }
+      )
+
+      assert.strictEqual(meta['server.address'], '::1')
+    })
+
     it('uses "HTTP" in the span name for an unknown method', () => {
       const serverSpan = {
         meta: { 'span.kind': 'server', 'http.method': 'PROPFIND', 'http.url': 'http://h/p' },
