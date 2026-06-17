@@ -27,6 +27,7 @@ const SCENARIOS = {
   atr: runAutoTestRetries,
   'test-management': runTestManagement,
 }
+const BASIC_REPORTING_SCENARIO = 'basic-reporting'
 
 function parseArgs (argv) {
   const options = {
@@ -143,7 +144,23 @@ async function main (argv) {
       }
 
       for (const framework of runnableFrameworks) {
-        for (const scenario of options.scenarios) {
+        let basicResult
+        if (options.scenarios.has(BASIC_REPORTING_SCENARIO)) {
+          // Scenarios intentionally run in order so each one can reset and configure the shared intake.
+          // eslint-disable-next-line no-await-in-loop
+          basicResult = await SCENARIOS[BASIC_REPORTING_SCENARIO]({ manifest, framework, intake, out, options })
+          results.push(basicResult)
+        }
+
+        const advancedScenarios = getAdvancedScenarios(options.scenarios)
+        if (basicResult && basicResult.status !== 'pass') {
+          for (const scenario of advancedScenarios) {
+            results.push(getSkippedAfterBasicFailure(framework, scenario, basicResult))
+          }
+          continue
+        }
+
+        for (const scenario of advancedScenarios) {
           const runScenario = SCENARIOS[scenario]
           // Scenarios intentionally run in order so each one can reset and configure the shared intake.
           // eslint-disable-next-line no-await-in-loop
@@ -163,6 +180,27 @@ async function main (argv) {
   }
 }
 
+function getAdvancedScenarios (scenarios) {
+  return Object.keys(SCENARIOS).filter(scenario => {
+    return scenario !== BASIC_REPORTING_SCENARIO && scenarios.has(scenario)
+  })
+}
+
+function getSkippedAfterBasicFailure (framework, scenario, basicResult) {
+  return {
+    frameworkId: framework.id,
+    scenario,
+    status: 'skip',
+    diagnosis: `Skipped because basic reporting did not pass: ${basicResult.diagnosis}`,
+    evidence: {
+      blockedBy: BASIC_REPORTING_SCENARIO,
+      basicReportingStatus: basicResult.status,
+      basicReportingDiagnosis: basicResult.diagnosis,
+    },
+    artifacts: [],
+  }
+}
+
 function getStaticFailure (framework, blocker, staticDiagnosisPath) {
   return {
     frameworkId: framework.id,
@@ -178,6 +216,8 @@ function getStaticFailure (framework, blocker, staticDiagnosisPath) {
 }
 
 function getFrameworkStatusResult (framework) {
+  const evidence = getFrameworkStatusEvidence(framework)
+
   if (framework.status === 'unsupported_by_validator') {
     return {
       frameworkId: framework.id,
@@ -185,6 +225,7 @@ function getFrameworkStatusResult (framework) {
       status: 'fail',
       diagnosis: `${framework.framework} is not supported by the deterministic validator.`,
       evidence: {
+        ...evidence,
         recommendation: 'Choose a supported framework before running live validation.',
       },
       artifacts: [],
@@ -194,11 +235,179 @@ function getFrameworkStatusResult (framework) {
   return {
     frameworkId: framework.id,
     scenario: 'all',
-    status: 'skip',
-    diagnosis: `Framework status is ${framework.status}.`,
-    evidence: {},
+    status: 'fail',
+    diagnosis: getFrameworkStatusDiagnosis(framework, evidence),
+    evidence: {
+      ...evidence,
+      recommendation: 'Provide a small runnable command for this framework, or mark the setup blocker explicitly.',
+    },
     artifacts: [],
   }
+}
+
+function getFrameworkStatusDiagnosis (framework, evidence) {
+  const frameworkName = framework.framework
+  const notes = evidence.manifestNotes || []
+
+  if (isDependencyOnlyDetection(evidence)) {
+    return getDependencyOnlyDiagnosis(framework, evidence)
+  }
+
+  if (notes.length > 0) {
+    return `${frameworkName} was detected, but no runnable validation command was available. ` +
+      `Basic reporting was not run. Manifest reason: ${notes[0]}`
+  }
+
+  return `${frameworkName} was detected, but the manifest did not prove a runnable validation command. ` +
+    'Basic reporting was not run. See discovery evidence for scripts/config files to turn into a small command.'
+}
+
+function isDependencyOnlyDetection (evidence) {
+  return evidence.directDependency && evidence.configFiles.length === 0 && evidence.frameworkScripts.length === 0
+}
+
+function getDependencyOnlyDiagnosis (framework, evidence) {
+  const frameworkName = getDisplayFrameworkName(framework.framework)
+  const dependency = formatDependency(evidence.directDependency)
+  const note = evidence.manifestNotes?.[0] ? ` Manifest note: ${evidence.manifestNotes[0]}` : ''
+  const common = `${frameworkName} is installed${dependency}, but this repository does not appear to use ` +
+    `${frameworkName} to run tests: no ${framework.framework} config, package script, or runnable ` +
+    `${framework.framework} test command was found. Basic reporting was not run for ${frameworkName}.`
+
+  if (framework.framework === 'playwright') {
+    return `${frameworkName} is installed${dependency}, but no Playwright Test setup was found. ` +
+      'The playwright package can be used only for browser automation; Test Optimization validation needs a ' +
+      '`playwright test` setup with a config, script, or runnable test command. Basic reporting was not run ' +
+      `for ${frameworkName}.${note}`
+  }
+
+  return `${common} If this repo does use ${frameworkName}, provide a small ${frameworkName} test command; ` +
+    `otherwise this dependency-only detection can be ignored.${note}`
+}
+
+function getDisplayFrameworkName (frameworkName) {
+  return {
+    cucumber: 'Cucumber',
+    cypress: 'Cypress',
+    jest: 'Jest',
+    mocha: 'Mocha',
+    playwright: 'Playwright',
+    vitest: 'Vitest',
+  }[frameworkName] || frameworkName
+}
+
+function formatDependency (dependency) {
+  if (!dependency) return ''
+  return ` in ${dependency.field}${dependency.version ? ` (${dependency.version})` : ''}`
+}
+
+function getFrameworkStatusEvidence (framework) {
+  const root = framework.project?.root
+  return {
+    frameworkStatus: framework.status,
+    frameworkVersion: framework.frameworkVersion,
+    manifestNotes: Array.isArray(framework.notes) ? framework.notes : [],
+    directDependency: root ? getDirectDependency(root, framework.framework) : undefined,
+    frameworkScripts: root ? findFrameworkScripts(root, framework.framework) : [],
+    testLikeScripts: root ? findTestLikeScripts(root) : [],
+    configFiles: root ? findFrameworkConfigFiles(root, framework.framework) : [],
+  }
+}
+
+function getDirectDependency (root, frameworkName) {
+  const packageJson = readPackageJson(root)
+  if (!packageJson) return
+
+  for (const field of ['dependencies', 'devDependencies', 'optionalDependencies']) {
+    const value = packageJson[field]?.[frameworkName]
+    if (value) return { field, version: value }
+  }
+}
+
+function findFrameworkScripts (root, frameworkName) {
+  return findScripts(root, (name, command) => {
+    return includesWord(name, frameworkName) || includesWord(command, frameworkName)
+  })
+}
+
+function findTestLikeScripts (root) {
+  return findScripts(root, name => /(^|:)(test|unit|e2e|integration|ci)(:|$)/.test(name)).slice(0, 8)
+}
+
+function findScripts (root, predicate) {
+  const packageJson = readPackageJson(root)
+  const scripts = packageJson?.scripts || {}
+  const matches = []
+  for (const [name, command] of Object.entries(scripts)) {
+    if (predicate(name, command)) matches.push({ name, command })
+  }
+  return matches.slice(0, 8)
+}
+
+function findFrameworkConfigFiles (root, frameworkName) {
+  const patterns = getFrameworkConfigPatterns(frameworkName)
+  if (patterns.length === 0) return []
+
+  const files = []
+  findFiles(root, 4, file => {
+    if (patterns.some(pattern => pattern.test(path.basename(file)))) {
+      files.push(path.relative(root, file))
+    }
+    return files.length < 8
+  })
+  return files
+}
+
+function getFrameworkConfigPatterns (frameworkName) {
+  return {
+    cypress: [/^cypress\.config\./],
+    jest: [/^jest\.config\./],
+    playwright: [/^playwright\.config\./],
+    vitest: [/^vitest\.config\./, /^vite\.config\./],
+  }[frameworkName] || []
+}
+
+function readPackageJson (root) {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
+  } catch {
+    return null
+  }
+}
+
+function findFiles (dir, depth, visit) {
+  if (depth < 0) return true
+
+  let entries
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true })
+  } catch {
+    return true
+  }
+
+  for (const entry of entries) {
+    if (shouldSkipDirectory(entry.name)) continue
+    const filename = path.join(dir, entry.name)
+    if (entry.isDirectory()) {
+      if (!findFiles(filename, depth - 1, visit)) return false
+    } else if (!visit(filename)) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function shouldSkipDirectory (name) {
+  return name === '.git' || name === 'node_modules' || name === 'dist' || name === 'coverage'
+}
+
+function includesWord (value, word) {
+  return new RegExp(`(^|[^a-zA-Z0-9_-])${escapeRegExp(word)}([^a-zA-Z0-9_-]|$)`).test(value)
+}
+
+function escapeRegExp (value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 module.exports = { main, parseArgs }

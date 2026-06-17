@@ -7,6 +7,7 @@ const path = require('path')
 const { spawn } = require('child_process')
 
 const INIT_PATH = path.resolve(__dirname, '..', 'init.js')
+const REGISTER_PATH = path.resolve(__dirname, '..', '..', 'register.js')
 
 function runCommand (command, { env = {}, outDir, label, verbose = false } = {}) {
   const startedAt = Date.now()
@@ -91,7 +92,7 @@ function runCommand (command, { env = {}, outDir, label, verbose = false } = {})
   })
 }
 
-function buildDatadogEnv ({ intake, scenario }) {
+function buildDatadogEnv ({ intake, scenario, framework }) {
   return {
     DD_TRACE_AGENT_PORT: String(intake.port),
     DD_TRACE_AGENT_URL: `http://127.0.0.1:${intake.port}`,
@@ -102,16 +103,30 @@ function buildDatadogEnv ({ intake, scenario }) {
     DD_ENV: 'local-validation',
     DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
     DD_TAGS: `test_optimization.validation.scenario:${scenario}`,
-    NODE_OPTIONS: withCiInit(process.env.NODE_OPTIONS),
+    NODE_OPTIONS: withCiPreloads(process.env.NODE_OPTIONS, framework),
   }
 }
 
-function withCiInit (nodeOptions = '') {
-  const existing = nodeOptions
-  if (existing.includes('dd-trace/ci/init') || existing.includes(INIT_PATH)) {
-    return existing
+function withCiPreloads (nodeOptions = '', framework) {
+  let result = nodeOptions.trim()
+
+  if (framework?.framework === 'vitest' && !hasRegister(result)) {
+    result = `--import ${formatNodeRequire(REGISTER_PATH)}${result ? ` ${result}` : ''}`
   }
-  return `${existing} -r ${formatNodeRequire(INIT_PATH)}`.trim()
+
+  if (!hasCiInit(result)) {
+    result = `${result ? `${result} ` : ''}-r ${formatNodeRequire(INIT_PATH)}`
+  }
+
+  return result
+}
+
+function hasCiInit (nodeOptions) {
+  return nodeOptions.includes('dd-trace/ci/init') || nodeOptions.includes(INIT_PATH)
+}
+
+function hasRegister (nodeOptions) {
+  return nodeOptions.includes('dd-trace/register.js') || nodeOptions.includes(REGISTER_PATH)
 }
 
 function formatNodeRequire (filename) {
@@ -123,4 +138,4 @@ function serializeCommand (command) {
   return command.usesShell ? command.shellCommand : command.argv.join(' ')
 }
 
-module.exports = { runCommand, buildDatadogEnv, serializeCommand }
+module.exports = { runCommand, buildDatadogEnv, serializeCommand, withCiPreloads }

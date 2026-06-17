@@ -117,43 +117,7 @@ function buildStaticOnlyCheck (result) {
     name: 'Basic reporting',
     status: toUiStatus(result.status),
     reason: result.diagnosis,
-    steps: [
-      {
-        id: 'setup-intake',
-        name: 'Set up intake',
-        status: 'skipped',
-        evidence: {
-          reason: 'live fake intake was not started',
-        },
-      },
-      {
-        id: 'run-tests',
-        name: 'Run tests',
-        status: 'skipped',
-        result: 'skipped',
-        evidence: {
-          reason: 'live validation was skipped before running tests',
-        },
-      },
-      {
-        id: 'check-events',
-        name: 'Check that events show up',
-        status: toUiStatus(result.status),
-        evidence: {
-          citestcyclePayloads: 0,
-          decodeErrors: 0,
-          events: {
-            modules: 0,
-            sessions: 0,
-            suites: 0,
-            tests: 0,
-          },
-          missingLevels: ['test_session_end', 'test_module_end', 'test_suite_end', 'test'],
-          reason: result.diagnosis,
-          requestCount: 0,
-        },
-      },
-    ],
+    steps: [],
   }
 }
 
@@ -183,6 +147,7 @@ function buildBasicReportingCheck (result) {
         status: getRunTestsStatus(result),
         command: readResultCommand(result),
         exitCode: stringify(evidence.commandExitCode),
+        result: getRunTestsResult(result),
       },
       {
         id: 'check-events',
@@ -192,6 +157,7 @@ function buildBasicReportingCheck (result) {
           decodeErrors: 0,
           events: eventCounts,
           missingLevels: getMissingLevels(eventCounts),
+          commandFailure: evidence.commandFailure,
           reason: result.status === 'fail' || result.status === 'error' ? result.diagnosis : undefined,
           samples: evidence.samples,
         },
@@ -202,8 +168,16 @@ function buildBasicReportingCheck (result) {
 
 function getRunTestsStatus (result) {
   if (result.status === 'skip') return 'skipped'
+  if (result.evidence.commandExitMatchesPreflight === true) return 'ok'
   if (result.evidence.commandExitCode === undefined) return toUiStatus(result.status)
   return result.evidence.commandExitCode === 0 ? 'ok' : 'failed'
+}
+
+function getRunTestsResult (result) {
+  const evidence = result.evidence || {}
+  if (evidence.commandExitMatchesPreflight === true) {
+    return `exited ${evidence.commandExitCode}, matching dd-trace-less preflight`
+  }
 }
 
 function getMissingLevels (events) {

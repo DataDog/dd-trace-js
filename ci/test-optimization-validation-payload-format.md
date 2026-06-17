@@ -56,6 +56,11 @@ Multi-framework repositories should present each URL separately. A failed static
 emitted when live validation is skipped because static diagnosis found a hard blocker, such as an
 unsupported framework or unsupported framework version.
 
+If a framework is detected but no runnable validation command is available, the payload is also
+failed. Basic reporting was not proven, so the UI should not present that framework as OK.
+Because no live validation was attempted, the failed check has no steps. The failure cause is in
+the check-level `reason`.
+
 ## Checks
 
 Each check has this shape:
@@ -133,59 +138,35 @@ to four compact samples: one per event level.
 }
 ```
 
-When basic reporting fails, the `basic-reporting` check and its `check-events` step evidence include
-a concise local diagnosis in `reason`. Examples:
+When live basic reporting runs and fails, the `basic-reporting` check and its `check-events` step
+evidence include a concise local diagnosis in `reason`. Examples:
 
 - `Selected command appears to use unsupported test framework(s): Node.js test runner. Choose a supported framework before running the live validation.`
 - `Static diagnosis found unsupported framework version(s): Jest 27.5.1 is not supported. Upgrade Jest to >=28.0.0, or use dd-trace v5 for older Jest versions.`
 - `Test Optimization initialized and emitted higher-level events, but per-test hooks did not fire. This usually points to an unsupported runner, unsupported framework version, or unsupported framework configuration for the selected command.`
 
+EFD, Auto Test Retries, and Test Management depend on Basic Reporting. When Basic Reporting fails
+for a framework, the validator skips those feature checks and includes the Basic Reporting diagnosis
+as the reason.
+
+When the selected Basic Reporting command exits non-zero, `check-events.evidence.commandFailure`
+contains compact stdout/stderr excerpts plus classified build/module-resolution/assertion lines.
+If the command also emitted all required event levels and the exit code matches the dd-trace-less
+preflight exit code recorded in the manifest, Basic Reporting remains `ok`; the `run-tests` step
+includes a result such as `exited 1, matching dd-trace-less preflight`.
+
 ## Static-Only Payloads
 
 When the runbook stops before starting the fake intake because no eligible supported framework or
-test command exists, the payload still contains a failed `basic-reporting` check. The intake and
-test-run steps are marked `skipped`, and the `check-events` step carries the local diagnosis:
+test command exists, the payload still contains a failed `basic-reporting` check. Since no intake
+or test command was executed, `steps` is empty and the local diagnosis is carried by `reason`:
 
 ```json
 {
   "id": "basic-reporting",
   "status": "failed",
   "reason": "Static diagnosis found unsupported framework version(s): Jest 27.5.1 is not supported.",
-  "steps": [
-    {
-      "id": "setup-intake",
-      "status": "skipped",
-      "evidence": {
-        "reason": "live fake intake was not started"
-      }
-    },
-    {
-      "id": "run-tests",
-      "status": "skipped",
-      "command": "not run",
-      "result": "skipped",
-      "evidence": {
-        "reason": "live validation was skipped before running tests"
-      }
-    },
-    {
-      "id": "check-events",
-      "status": "failed",
-      "evidence": {
-        "requestCount": 0,
-        "citestcyclePayloads": 0,
-        "events": {
-          "sessions": 0,
-          "modules": 0,
-          "suites": 0,
-          "tests": 0
-        },
-        "missingLevels": ["test_session_end", "test_module_end", "test_suite_end", "test"],
-        "decodeErrors": 0,
-        "reason": "Static diagnosis found unsupported framework version(s): Jest 27.5.1 is not supported."
-      }
-    }
-  ]
+  "steps": []
 }
 ```
 

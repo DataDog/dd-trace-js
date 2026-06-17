@@ -27,7 +27,7 @@ async function runInstrumentedCommand ({ framework, intake, out, scenarioName, c
   const outDir = frameworkOutDir(out, framework, scenarioName)
   intake.resetRequests()
   const result = await runCommand(command, {
-    env: buildDatadogEnv({ intake, scenario: scenarioName }),
+    env: buildDatadogEnv({ intake, scenario: scenarioName, framework }),
     outDir,
     label: `${framework.id}:${scenarioName}`,
     verbose: options.verbose,

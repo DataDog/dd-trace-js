@@ -29,6 +29,9 @@ The manifest is discovery only. The deterministic validator will later start the
 Datadog environment variables, run these commands, collect payloads, and validate Test Optimization
 behavior.
 
+For Vitest, the validator injects both the Test Optimization init preload and
+`dd-trace/register.js` through `NODE_OPTIONS`. Do not add these preloads to the manifest commands.
+
 Before live validation, the deterministic validator also runs `dd-trace/ci/diagnose.js`. Static
 diagnosis can stop live execution for known hard blockers such as unsupported frameworks
 (`node:test`, AVA, tap, Jasmine, Karma, uvu, TestCafe) or unsupported supported-framework versions.
@@ -38,6 +41,9 @@ validator injects Test Optimization initialization itself.
 ## Rules
 
 - Include every detected test framework, even if it cannot be run.
+- For every framework that is not `runnable`, include a concrete `notes` entry explaining why:
+  no package script, no config file, no safe passing test, missing setup step, missing external
+  service, unsupported framework, or unsupported version.
 - Prefer the smallest reliable passing test command.
 - Prefer existing package scripts over invented commands.
 - Prefer `argv` arrays over shell strings.
@@ -65,6 +71,13 @@ validator injects Test Optimization initialization itself.
 7. Prove the generated passing test runs without Datadog instrumentation.
 8. Delete all temporary files and record cleanup success.
 9. Write only valid JSON matching the manifest shape below.
+
+If an existing test command fails because tests fail or the repository is missing generated source,
+compiled artifacts, browser binaries, a dev server, or another project setup step, record the
+dd-trace-less `preflight.exitCode`, `stdoutSummary`, and `stderrSummary`. Prefer a smaller passing
+command when one exists. If the failing command is still the best representative command, it may
+remain `runnable`: the validator will consider Basic Reporting valid when the instrumented run emits
+the required event hierarchy and exits the same way as the dd-trace-less preflight run.
 
 ## Dependency Setup and Runner Availability
 
@@ -97,6 +110,10 @@ evidence in `notes`, such as the nested `package.json` path, the missing runner,
 local file dependency or setup command. Prefer another runnable supported framework if one exists.
 
 Do not classify a missing runner dependency as a Datadog Test Optimization failure.
+
+Do not leave `notes` empty for `detected_not_runnable`, `requires_external_service`,
+`requires_manual_setup`, `unsupported_by_validator`, or `unknown` framework entries. The validator
+uses those notes as the customer-facing reason when Basic Reporting cannot run.
 
 ## Generated Test Strategy Requirements
 
@@ -317,6 +334,10 @@ The validator is responsible for:
 8. Evaluating Basic Reporting, EFD, ATR, and Test Management behavior.
 9. Cleaning up temporary validation files.
 10. Writing a validation report, validation UI payloads, and artifacts.
+
+Basic Reporting is the prerequisite for EFD, ATR, and Test Management validation. If Basic Reporting
+fails for a framework, the validator skips the remaining feature checks for that framework and
+reports the Basic Reporting failure as the root cause.
 
 Your job in this phase is only to run the validator and preserve its output.
 
