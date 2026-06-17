@@ -2,7 +2,6 @@
 
 const { randomUUID } = require('crypto')
 const { version } = require('../../../../../package.json')
-const { NODE_MAJOR } = require('../../../../../version')
 const processTags = require('../../process-tags')
 const { breakpointToProbes } = require('./state')
 const session = require('./session')
@@ -39,24 +38,9 @@ const getDDTagsExpression = `(() => {
 const threadId = config.parentThreadId === 0 ? `pid:${process.pid}` : `pid:${process.pid};tid:${config.parentThreadId}`
 const threadName = config.parentThreadId === 0 ? 'MainThread' : `WorkerThread:${config.parentThreadId}`
 
-const SUPPORT_ARRAY_BUFFER_RESIZE = NODE_MAJOR >= 20
 const oneSecondNs = 1_000_000_000n
 let globalSnapshotSamplingRateWindowStart = 0n
 let snapshotsSampledWithinTheLastSecond = 0
-
-// TODO: Change to const once we drop support for Node.js 18
-let snapshotProbeIndexBuffer, snapshotProbeIndex
-
-if (SUPPORT_ARRAY_BUFFER_RESIZE) {
-  // TODO: Is a limit of 256 snapshots ever going to be a problem?
-  // @ts-ignore - ArrayBuffer constructor with maxByteLength is available in Node.js 20+ but not in @types/node@18
-  // eslint-disable-next-line n/no-unsupported-features/es-syntax
-  snapshotProbeIndexBuffer = new ArrayBuffer(1, { maxByteLength: 256 })
-  // TODO: Is a limit of 256 probes ever going to be a problem?
-  snapshotProbeIndex = new Uint8Array(snapshotProbeIndexBuffer)
-} else {
-  snapshotProbeIndex = new Uint8Array(1)
-}
 
 // WARNING: The code above the line `await session.post('Debugger.resume')` is highly optimized. Please edit with care!
 session.on('Debugger.paused', async ({ params }) => {
@@ -94,13 +78,6 @@ session.on('Debugger.paused', async ({ params }) => {
 
     if (probesAtLocation.size !== 1) {
       numberOfProbesOnBreakpoint = numberOfProbesOnBreakpoint + probesAtLocation.size - 1
-      if (numberOfProbesOnBreakpoint > snapshotProbeIndex.length) {
-        if (SUPPORT_ARRAY_BUFFER_RESIZE) {
-          snapshotProbeIndexBuffer.resize(numberOfProbesOnBreakpoint)
-        } else {
-          snapshotProbeIndex = new Uint8Array(numberOfProbesOnBreakpoint)
-        }
-      }
     }
 
     for (const probe of probesAtLocation.values()) {
@@ -121,7 +98,7 @@ session.on('Debugger.paused', async ({ params }) => {
         }
 
         if (probe.captureSnapshot === true) {
-          snapshotProbeIndex[numberOfProbesWithSnapshots++] = probes.length
+          numberOfProbesWithSnapshots++
           maxReferenceDepth = Math.max(probe.capture.maxReferenceDepth, maxReferenceDepth)
           maxCollectionSize = Math.max(probe.capture.maxCollectionSize, maxCollectionSize)
           maxFieldCount = Math.max(probe.capture.maxFieldCount, maxFieldCount)
