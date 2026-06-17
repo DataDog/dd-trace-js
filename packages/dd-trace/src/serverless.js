@@ -35,6 +35,10 @@ function getIsFlexConsumptionAzureFunction () {
   return getIsAzureFunction() && getEnvironmentVariable('WEBSITE_SKU') === 'FlexConsumption'
 }
 
+function isSomethingUnderNDA () {
+  return getEnvironmentVariable('SOMETHING_UNDER_NDA') === 'something-under-nda'
+}
+
 function isInServerlessEnvironment () {
   const inAWSLambda = getEnvironmentVariable('AWS_LAMBDA_FUNCTION_NAME') !== undefined
   const isGCPFunction = getIsGCPFunction()
@@ -48,5 +52,6 @@ module.exports = {
   getIsAzureFunction,
   enableGCPPubSubPushSubscription,
   getIsFlexConsumptionAzureFunction,
+  isSomethingUnderNDA,
   IS_SERVERLESS: isInServerlessEnvironment(),
 }
