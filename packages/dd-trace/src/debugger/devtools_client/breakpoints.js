@@ -5,6 +5,7 @@ const { getGeneratedPosition } = require('./source-maps')
 const session = require('./session')
 const { compile, compileSegments, templateRequiresEvaluation } = require('./condition')
 const { MAX_SNAPSHOTS_PER_SECOND_PER_PROBE, MAX_NON_SNAPSHOTS_PER_SECOND_PER_PROBE } = require('./defaults')
+const { compileBreakpointCondition, getInstallSamplerExpression, getRemoveProbeExpression } = require('./probe_sampler')
 const {
   DEFAULT_MAX_REFERENCE_DEPTH,
   DEFAULT_MAX_COLLECTION_SIZE,
@@ -17,6 +18,7 @@ const {
   locationToBreakpoint,
   breakpointToProbes,
   probeToLocation,
+  samplingIndexToProbe,
 } = require('./state')
 const log = require('./log')
 
@@ -26,6 +28,7 @@ const log = require('./log')
 
 let sessionStarted = false
 const probes = new Map()
+let nextSamplingIndex = 0
 let scriptLoadingStabilizedResolve
 const scriptLoadingStabilized = new Promise((resolve) => { scriptLoadingStabilizedResolve = resolve })
 
@@ -55,6 +58,8 @@ async function addBreakpoint (probe) {
   if (!sessionStarted) await start()
 
   probes.set(probe.id, probe)
+  probe.samplingIndex = nextSamplingIndex++
+  samplingIndexToProbe.set(probe.samplingIndex, probe)
 
   const file = probe.where.sourceFile
   let lineNumber = Number(probe.where.lines[0]) // Tracer doesn't support multiple-line breakpoints
@@ -75,8 +80,6 @@ async function addBreakpoint (probe) {
     ? MAX_SNAPSHOTS_PER_SECOND_PER_PROBE
     : MAX_NON_SNAPSHOTS_PER_SECOND_PER_PROBE)
   probe.nsBetweenSampling = BigInt(Math.trunc(1 / snapshotsPerSecond * 1e9))
-  // Initialize to a large negative value to ensure first probe hit is always captured
-  probe.lastCaptureNs = BigInt(Number.MIN_SAFE_INTEGER)
 
   // Warning: The code below relies on undocumented behavior of the inspector!
   // It expects that `await session.post('Debugger.enable')` will wait for all loaded scripts to be emitted as
@@ -174,7 +177,7 @@ async function addBreakpoint (probe) {
     try {
       result = /** @type {SetBreakpointResponse} */ (await session.post('Debugger.setBreakpoint', {
         location,
-        condition: probe.condition,
+        condition: compileBreakpointCondition([probe]),
       }))
     } catch (err) {
       throw new Error(`Error setting breakpoint for probe ${probe.id} (version: ${probe.version})`, { cause: err })
@@ -195,11 +198,14 @@ async function removeBreakpoint ({ id }) {
   }
 
   probes.delete(id)
+  await removeProbeFromSampler(id)
 
   const locationKey = probeToLocation.get(id)
   const breakpoint = locationToBreakpoint.get(locationKey)
   const probesAtLocation = breakpointToProbes.get(breakpoint.id)
+  const probe = probesAtLocation.get(id)
 
+  samplingIndexToProbe.delete(probe.samplingIndex)
   probesAtLocation.delete(id)
   probeToLocation.delete(id)
 
@@ -229,36 +235,37 @@ async function modifyBreakpoint (probe) {
 
 async function updateBreakpointInternal (breakpoint, probe) {
   const probesAtLocation = breakpointToProbes.get(breakpoint.id)
-  const conditionBeforeNewProbe = compileCompoundCondition([...probesAtLocation.values()])
 
-  // If a probe is provided, add it to the breakpoint. If not, it's because we're removing a probe, but potentially
-  // need to update the condition of the breakpoint.
+  // If a probe is provided, add it to the breakpoint. If not, it's because we're removing a probe. In both cases the
+  // breakpoint condition must be rebuilt to match the remaining probes at the location.
   if (probe) {
     probesAtLocation.set(probe.id, probe)
     probeToLocation.set(probe.id, breakpoint.locationKey)
   }
 
-  const condition = compileCompoundCondition([...probesAtLocation.values()])
-
-  if (condition || conditionBeforeNewProbe !== condition) {
-    try {
-      await session.post('Debugger.removeBreakpoint', { breakpointId: breakpoint.id })
-    } catch (err) {
-      throw new Error(`Error removing breakpoint for probe ${probe.id}`, { cause: err })
-    }
-    breakpointToProbes.delete(breakpoint.id)
-    let result
-    try {
-      result = /** @type {SetBreakpointResponse} */ (await session.post('Debugger.setBreakpoint', {
-        location: breakpoint.location,
-        condition,
-      }))
-    } catch (err) {
-      throw new Error(`Error setting breakpoint for probe ${probe.id} (version: ${probe.version})`, { cause: err })
-    }
-    breakpoint.id = result.breakpointId
-    breakpointToProbes.set(result.breakpointId, probesAtLocation)
+  try {
+    await session.post('Debugger.removeBreakpoint', { breakpointId: breakpoint.id })
+  } catch (err) {
+    const message = probe
+      ? `Error replacing breakpoint while adding probe ${probe.id} (version: ${probe.version})`
+      : `Error replacing breakpoint after removing probe from ${breakpoint.locationKey}`
+    throw new Error(message, { cause: err })
   }
+  breakpointToProbes.delete(breakpoint.id)
+  let result
+  try {
+    result = /** @type {SetBreakpointResponse} */ (await session.post('Debugger.setBreakpoint', {
+      location: breakpoint.location,
+      condition: compileBreakpointCondition([...probesAtLocation.values()]),
+    }))
+  } catch (err) {
+    const message = probe
+      ? `Error setting breakpoint while adding probe ${probe.id} (version: ${probe.version})`
+      : `Error setting breakpoint after removing probe from ${breakpoint.locationKey}`
+    throw new Error(message, { cause: err })
+  }
+  breakpoint.id = result.breakpointId
+  breakpointToProbes.set(result.breakpointId, probesAtLocation)
 }
 
 async function reEvaluateProbe (probe) {
@@ -280,6 +287,7 @@ async function start () {
   sessionStarted = true
   log.debug('[debugger:devtools_client] Starting debugger')
   await session.post('Debugger.enable')
+  await session.post('Runtime.evaluate', { expression: getInstallSamplerExpression() })
 
   // Wait until there's a pause in script-loading to avoid accidentally adding probes to incorrect scripts. This is not
   // a guarantee, but best effort.
@@ -306,16 +314,18 @@ function lock (fn) {
   }
 }
 
-// Only if all probes have a condition can we use a compound condition.
-// Otherwise, we need to evaluate each probe individually once the breakpoint is hit.
-function compileCompoundCondition (probes) {
-  if (probes.length === 1) return probes[0].condition
-
-  return probes.every(p => p.condition)
-    ? probes
-      .map((p) => `(() => { try { return ${p.condition} } catch { return false } })()`)
-      .join(' || ')
-    : undefined
+/**
+ * Remove cached sampling state for a probe from the runtime sampler.
+ *
+ * @param {string} id - The probe id.
+ * @returns {Promise<void>}
+ */
+async function removeProbeFromSampler (id) {
+  await session.post('Runtime.evaluate', {
+    expression: getRemoveProbeExpression(id),
+  }).catch(err => {
+    log.error('[debugger:devtools_client] Error removing probe %s from sampler', id, err)
+  })
 }
 
 function generateLocationKey (scriptId, lineNumber, columnNumber) {
