@@ -119,13 +119,21 @@ function analyzeIntakeArtifact (artifact) {
   }
 
   if (summary.citestcycle.payloadCount > 0 && summary.events.missingLevels.length > 0) {
+    const genericSpanOnly = hasOnlyGenericSpanEvents(summary)
+
     addFinding(findings, 'error', 'Incomplete test event levels', {
-      observation: `missingLevels: ${summary.events.missingLevels.join(', ')}`,
-      cause:
-        'The tracer reported citestcycle payloads, but one or more expected test event levels were missing.',
-      fix:
-        'Confirm the selected command runs a normal test session and that the framework instrumentation emits ' +
-        'session, module, suite, and test events.',
+      observation: genericSpanOnly
+        ? `citestcycle payloads contained ${summary.events.counts.span} generic span event(s), but no test events`
+        : `missingLevels: ${summary.events.missingLevels.join(', ')}`,
+      cause: genericSpanOnly
+        ? 'The tracer loaded and sent CI Visibility payloads, but the selected test framework instrumentation ' +
+          'did not emit Test Optimization test events.'
+        : 'The tracer reported citestcycle payloads, but one or more expected test event levels were missing.',
+      fix: genericSpanOnly
+        ? 'Confirm that the selected command propagates the dd-trace CI init preload to the process or worker ' +
+          'that executes tests. ESM-based runners such as Vitest may also need --import dd-trace/register.js.'
+        : 'Confirm the selected command runs a normal test session and that the framework instrumentation emits ' +
+          'session, module, suite, and test events.',
     })
   }
 
@@ -497,6 +505,23 @@ function getHtmlReportReference (analysis) {
   if (htmlPath) return pathToFileURL(path.resolve(htmlPath)).href
 
   return 'not available'
+}
+
+/**
+ * Checks whether CI Visibility payloads contained only generic spans, not test events.
+ *
+ * @param {object} summary intake summary
+ * @returns {boolean} whether only generic spans were observed
+ */
+function hasOnlyGenericSpanEvents (summary) {
+  const counts = summary.events.counts || {}
+
+  return summary.citestcycle.payloadCount > 0 &&
+    (counts.span || 0) > 0 &&
+    (counts.test_session_end || 0) === 0 &&
+    (counts.test_module_end || 0) === 0 &&
+    (counts.test_suite_end || 0) === 0 &&
+    (counts.test || 0) === 0
 }
 
 /**

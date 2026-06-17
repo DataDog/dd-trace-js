@@ -95,6 +95,14 @@ function parseArgs (args) {
       options.flakyTestSnippetFile = args[++i]
     } else if (arg.startsWith('--flaky-test-snippet-file=')) {
       options.flakyTestSnippetFile = arg.slice('--flaky-test-snippet-file='.length)
+    } else if (arg === '--framework') {
+      options.framework = args[++i]
+    } else if (arg.startsWith('--framework=')) {
+      options.framework = arg.slice('--framework='.length)
+    } else if (arg === '--framework-file') {
+      options.frameworkFile = args[++i]
+    } else if (arg.startsWith('--framework-file=')) {
+      options.frameworkFile = arg.slice('--framework-file='.length)
     } else if (arg === '--env') {
       options.env.push(args[++i])
     } else if (arg.startsWith('--env=')) {
@@ -180,6 +188,8 @@ function getHelpText () {
     '  --new-test-snippet-file <file>  Read the temporary test snippet used for EFD.',
     '  --flaky-test-snippet <text>     Include the temporary flaky test snippet used for Auto Test Retries.',
     '  --flaky-test-snippet-file <file>  Read the temporary flaky test snippet used for Auto Test Retries.',
+    '  --framework <id>                Selected framework id used for the live validation.',
+    '  --framework-file <file>         Read the selected framework id from a file.',
     '  --env KEY=value                Include an environment variable used for the live run.',
     '  --env-file <file>              Read environment variables, one KEY=value per line.',
     '  --agent-report <file>          Path to the plain text analyzer artifact.',
@@ -217,6 +227,8 @@ function renderFinalReport (options) {
   const newTestFile = readOptionalTextValue(options.newTestFile)
   const newTestSnippet = readOptionalTextValue(options.newTestSnippet, options.newTestSnippetFile)
   const flakyTestSnippet = readOptionalTextValue(options.flakyTestSnippet, options.flakyTestSnippetFile)
+  const framework = readOptionalTextValue(options.framework, options.frameworkFile) ||
+    readOptionalExistingTextFile('dd-test-optimization-framework.txt')
   const efdExecution = getEfdExecutionDiagnostics(analysis, {
     newTestFile,
     newTestSnippet,
@@ -234,7 +246,7 @@ function renderFinalReport (options) {
   const artifactPaths = getArtifactPaths(options, staticPath, intakePath, htmlPath)
   const likelyFailureCause = getReportingStatus(analysis) === 'OK'
     ? undefined
-    : getBasicReportingFailureCause({ staticReport, testCommand }, analysis)
+    : getBasicReportingFailureCause({ framework, staticReport, testCommand }, analysis)
   const validationAppUrl = getValidationAppUrl(buildValidationPayload({
     analysis,
     artifacts: {
@@ -243,6 +255,7 @@ function renderFinalReport (options) {
     },
     env,
     flakyTestSnippet,
+    framework,
     newTestSnippet,
     staticReport,
     testCommand,
@@ -317,6 +330,8 @@ function renderSummaryReport (options) {
   const testOutput = readOptionalTextValue(undefined, options.testOutputFile)
   const newTestFile = readOptionalTextValue(options.newTestFile)
   const newTestSnippet = readOptionalTextValue(options.newTestSnippet, options.newTestSnippetFile)
+  const framework = readOptionalTextValue(options.framework, options.frameworkFile) ||
+    readOptionalExistingTextFile('dd-test-optimization-framework.txt')
   const efdExecution = getEfdExecutionDiagnostics(analysis, {
     newTestFile,
     newTestSnippet,
@@ -332,7 +347,7 @@ function renderSummaryReport (options) {
   const staticErrors = staticHighlights.filter(finding => finding.status === 'error')
   const likelyFailureCause = getReportingStatus(analysis) === 'OK'
     ? undefined
-    : getBasicReportingFailureCause({ staticReport, testCommand }, analysis)
+    : getBasicReportingFailureCause({ framework, staticReport, testCommand }, analysis)
   const lines = [
     'Test Optimization debug summary',
     `HTML report: ${htmlFileUrl}`,
@@ -867,6 +882,18 @@ function readTextValue (value, file, name) {
 function readOptionalTextValue (value, file) {
   if (value !== undefined) return String(value).trim()
   if (!file) return
+
+  return fs.readFileSync(path.resolve(file), 'utf8').trim()
+}
+
+/**
+ * Reads an optional text file when it exists.
+ *
+ * @param {string} file text file path
+ * @returns {string|undefined} file text
+ */
+function readOptionalExistingTextFile (file) {
+  if (!fs.existsSync(path.resolve(file))) return
 
   return fs.readFileSync(path.resolve(file), 'utf8').trim()
 }

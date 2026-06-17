@@ -1,45 +1,45 @@
 # Test Optimization Debug Runbook for Coding Agents
 
-This runbook is to diagnose Datadog Test Optimization setup problems in a JavaScript repository.
-Use repository-specific judgment to adapt commands.
+Objective: prove, with a local fake intake and no real Datadog API key, whether one selected test
+command initializes Datadog Test Optimization, reports session/module/suite/test events, and
+supports Early Flake Detection (EFD), Auto Test Retries (ATR), and Test Management when those
+features are supported for the selected framework.
 
-Objective: by the end, produce local fake-intake evidence that this repository reports test
-sessions, modules, suites, and tests, and optionally validates the advanced Test Optimization
-features against generated temporary tests.
+Scope: this runbook covers every JavaScript test framework known to `diagnose.js` and dd-trace-js
+Test Optimization, not every JavaScript test runner in the ecosystem.
 
-What this runbook produces:
+- Supported framework list: Jest, Mocha, Cucumber, Cypress, Playwright, Vitest.
+- Diagnostic-only runner list: `node:test`, AVA, tap, Jasmine, Karma, uvu, TestCafe, and custom
+  unsupported runners that do not delegate to a supported framework.
 
-- One combined Datadog validation relative path, `ci/test/validation#pako:{payload}`.
-- A local HTML report, `dd-test-optimization-report.html`.
-- A text final report, `dd-test-optimization-final-report.txt`.
-- A compact summary, `dd-test-optimization-summary.txt`.
-- Cleanup verification for generated source files.
+Expected outputs:
 
-Terms:
+- `Datadog validation: ci/test/validation#pako:{payload}`
+- `HTML report: file:///.../dd-test-optimization-report.html`
+- `dd-test-optimization-all-frameworks-summary.txt`
+- `dd-test-optimization-step9-extractor-output.txt`
+- `dd-test-optimization-final-report.txt`
+- Cleanup status for generated EFD, ATR, and Test Management files
 
-- EFD: Early Flake Detection, which marks a newly discovered test as new and retries it.
-- ATR: Auto Test Retries, which retries known flaky tests and reports retry metadata.
-- TIA/ITR: Test Impact Analysis / Intelligent Test Runner, the coverage-backed test selection and
-  skipping flow.
-- Test Management: Datadog-backed disabled, quarantined, and attempt-to-fix test behavior.
+## Canonical Driver Path
 
-## Runbook and Script Location
+Run this path first. Do not read or execute the appendices unless the all-framework driver tells you
+to use a manual/framework-specific branch, fails before writing artifacts, or reports an incomplete
+basic stage after a confirmed test run.
 
-The invoking prompt should locate this runbook before asking the agent to execute it. Once this
-file is open, do not search for it again.
+### 1. Resolve the Published CI Script Directory
 
-Recommended invoking prompt:
+Treat the directory containing this file as the published `ci` script directory. Keep
+`NODE_OPTIONS="-r dd-trace/ci/init"` as a package preload; do not replace it with a file path.
+
+The invoking prompt should locate this runbook before asking the agent to execute it. Recommended
+prompt:
 
 ```text
 Find dd-trace/ci/test-optimization-debug-runbook.md in the installed dependencies. Try ./node_modules/dd-trace/ci/test-optimization-debug-runbook.md first. If that path is missing, use package-manager-dependent resolution for Yarn/PnP/portal/link installs. Then read and execute the runbook.
 ```
 
-Treat the directory containing this file as the published `ci` script directory. Keep
-`NODE_OPTIONS="-r dd-trace/ci/init"` as a package preload; do not replace it with a file path.
-
-Set the script directory before Step 0. This block tries `node_modules`, then a dd-trace source
-checkout, then `require.resolve` through `yarn node` for Yarn PnP repositories or through `node`
-otherwise:
+Verbatim:
 
 ```bash
 if [ -f ./node_modules/dd-trace/ci/test-optimization-debug-runbook.md ]; then
@@ -84,153 +84,327 @@ Later commands read `dd-test-optimization-ci-dir.txt` and
 `dd-test-optimization-node-command.txt` so Yarn PnP repositories can run the published scripts
 through `yarn node` even when the agent runs each command block in a fresh shell.
 
-## Start Here
+### 2. Clean Prior Diagnostic Artifacts and Restore Temporary Source Edits
 
-This section is the canonical entry point. The detailed section index later in this file is
-reference material for the steps named here.
+Verbatim:
 
-A successful run reports session, module, suite, and test events for one small test subset, then
-proves EFD, Auto Test Retries, and the three Test Management modes using generated temporary tests,
-with all temporary source changes restored.
+```bash
+set -e
 
-Minimal validation stops after Step 9 once the Preferred Wrapper reports `Reporting complete`.
-Full advanced validation continues through Step 7 and Step 8 before Step 9.
+if [ -f dd-test-optimization-efd-temp-test-file.txt ] || [ -f dd-test-optimization-atr-flaky-test-file.txt ]; then
+  $(cat dd-test-optimization-node-command.txt) \
+    "$(cat dd-test-optimization-ci-dir.txt)/test-optimization-prepare-advanced.js" \
+    --restore
+fi
 
-Use this path:
+if [ -d dd-test-optimization-test-management ]; then
+  $(cat dd-test-optimization-node-command.txt) \
+    "$(cat dd-test-optimization-ci-dir.txt)/test-optimization-prepare-test-management.js" \
+    --restore
+fi
 
-1. Run Step 0 cleanup and source-edit restore safety.
-2. Run the full-validation driver below.
-3. If the full driver completes, report the Step 9 extractor output it prints.
-4. If the full driver completes with `Basic primary stage` other than `Reporting complete` for a
-   supported framework, revisit Step 2 command selection and runner-specific adaptations before
-   treating the result as a product failure. Common causes are a package script that routes to a
-   different runner, a TypeScript Jest config that fails before collection, a custom resolver, or a
-   generated-source preflight problem.
-5. Use manual Steps 1-9 only when the full driver cannot select a safe command, reports incomplete
-   basic reporting after the first command choice, or a repository needs custom setup before tests
-   can run.
+if [ -f dd-test-optimization-manual-generated-files.txt ]; then
+  while IFS= read -r file; do
+    test -z "$file" && continue
+    if [ -f "$file" ]; then
+      if grep -q 'dd trace' "$file"; then
+        rm -f "$file"
+      else
+        echo "Manual generated file marker exists, but file lacks dd trace marker: $file" >&2
+        exit 1
+      fi
+    fi
+  done < dd-test-optimization-manual-generated-files.txt
+fi
 
-Preferred full-validation driver:
+rm -f \
+  dd-intake-html-file-url.txt \
+  dd-intake-html-path.txt \
+  dd-intake-log-path.txt \
+  dd-intake.pid \
+  dd-intake-shutdown-url.txt \
+  dd-intake-url.txt \
+  dd-test-optimization-agent-adaptations.txt \
+  dd-test-optimization-agent-report.json \
+  dd-test-optimization-agent-report.txt \
+  dd-test-optimization-all-frameworks-summary.txt \
+  dd-test-optimization-artifacts.json \
+  dd-test-optimization-diagnosis.json \
+  dd-test-optimization-env.txt \
+  dd-test-optimization-advanced-validation-url.txt \
+  dd-test-optimization-advanced-cleanup.json \
+  dd-test-optimization-atr-baseline-command.txt \
+  dd-test-optimization-atr-baseline-preflight.txt \
+  dd-test-optimization-atr-baseline-snippet.txt \
+  dd-test-optimization-atr-flaky-test-backup.txt \
+  dd-test-optimization-atr-flaky-test-file.txt \
+  dd-test-optimization-atr-flaky-test-name.txt \
+  dd-test-optimization-atr-flaky-test-snippet.txt \
+  dd-test-optimization-atr-generated-test-file.txt \
+  dd-test-optimization-efd-command.txt \
+  dd-test-optimization-efd-preflight-command.txt \
+  dd-test-optimization-efd-new-test-snippet.txt \
+  dd-test-optimization-efd-preflight.txt \
+  dd-test-optimization-efd-temp-test-file.txt \
+  dd-test-optimization-efd-test-name.txt \
+  dd-test-optimization-efd-validation-url.txt \
+  dd-test-optimization-final-report.txt \
+  dd-test-optimization-full-advanced-validation-url.txt \
+  dd-test-optimization-full-validation-url.txt \
+  dd-test-optimization-framework.txt \
+  dd-test-optimization-intake.json \
+  dd-test-optimization-known-tests.json \
+  dd-test-optimization-manual-generated-files.txt \
+  dd-test-optimization-preexisting-status.txt \
+  dd-test-optimization-report.html \
+  dd-test-optimization-root-stage.txt \
+  dd-test-optimization-selected-command.input \
+  dd-test-optimization-selected-files.input \
+  dd-test-optimization-selected-test-files.txt \
+  dd-test-optimization-static.json \
+  dd-test-optimization-step9-extractor-output.txt \
+  dd-test-optimization-summary.txt \
+  dd-test-optimization-test-management-cleanup.json \
+  dd-test-optimization-test-command.txt \
+  dd-test-optimization-test-exit-code.txt \
+  dd-test-optimization-test-output.txt \
+  dd-test-optimization-test-result.txt \
+  dd-test-optimization-tm-attempt-to-fix-command.txt \
+  dd-test-optimization-tm-attempt-to-fix-preflight.txt \
+  dd-test-optimization-tm-disabled-command.txt \
+  dd-test-optimization-tm-disabled-preflight.txt \
+  dd-test-optimization-tm-framework.txt \
+  dd-test-optimization-tm-mode.txt \
+  dd-test-optimization-tm-quarantined-command.txt \
+  dd-test-optimization-tm-quarantined-preflight.txt \
+  dd-test-optimization-tm-settings-mode.txt \
+  dd-test-optimization-tm-test-command.txt \
+  dd-test-optimization-tm-test-file.txt \
+  dd-test-optimization-validation-url.txt
+
+rm -rf \
+  dd-test-optimization-basic \
+  dd-test-optimization-efd \
+  dd-test-optimization-efd-only \
+  dd-test-optimization-framework-runs \
+  dd-test-optimization-atr-only \
+  dd-test-optimization-test-management \
+  dd-test-optimization-tm-attempt-to-fix \
+  dd-test-optimization-tm-attempt-to-fix-baseline \
+  dd-test-optimization-tm-disabled \
+  dd-test-optimization-tm-disabled-baseline \
+  dd-test-optimization-tm-quarantined \
+  dd-test-optimization-tm-quarantined-baseline
+```
+
+### 3. Run the Full Driver for Every Eligible Framework
+
+The full driver automation currently selects commands for Jest, Mocha, and Vitest. If more than
+one eligible automated framework is detected, run each one separately. A failure in one framework
+branch must not be reported as a repository-wide failure until the other eligible framework branches
+have been tried.
+
+For every eligible Jest, Mocha, and Vitest framework, the all-framework driver starts the fake
+intake, runs basic reporting, validates EFD/ATR, validates Test Management, renders the validation
+payload, and writes isolated artifacts under `dd-test-optimization-framework-runs/<framework>/`.
+
+For Cucumber, Cypress, or Playwright, run static diagnosis, choose the command manually through the
+framework adapter branch, then use the root wrapper. Do not treat missing full-driver command
+selection for those frameworks as unsupported Test Optimization coverage.
+
+Verbatim:
 
 ```bash
 $(cat dd-test-optimization-node-command.txt) "$(cat dd-test-optimization-ci-dir.txt)/test-optimization-debug.js" \
-  --full \
+  --all-frameworks \
   --preflight \
   --no-open
 ```
 
-If the user asks to focus on one framework, pass it to the driver:
+If the user asks to focus on one framework, pass it to the driver. If that framework is detected but
+not automated by the full driver, use the framework adapter table below and report the reason.
 
 ```bash
 $(cat dd-test-optimization-node-command.txt) "$(cat dd-test-optimization-ci-dir.txt)/test-optimization-debug.js" \
-  --full \
+  --all-frameworks \
   --framework vitest \
   --preflight \
   --no-open
 ```
 
-If the supported framework lives in a nested package, pass the package root:
+If the selected framework lives in a nested package, pass the package root:
 
 ```bash
 $(cat dd-test-optimization-node-command.txt) "$(cat dd-test-optimization-ci-dir.txt)/test-optimization-debug.js" \
-  --full \
+  --all-frameworks \
   --package-root packages/example \
   --preflight \
   --no-open
 ```
 
-Manual fallback path:
+### 4. Report the All-Framework Summary
 
-1. Run Step 0 cleanup and source-edit restore safety.
-2. Run Step 1 static diagnosis.
-3. Run Step 2 to choose one small test command for an eligible supported framework.
-4. Run the Preferred Wrapper.
-5. If the wrapper reports `Reporting complete`, run Step 7 for EFD and Auto Test Retries.
-6. If the wrapper reports `Reporting complete`, run Step 8 for Test Management.
-7. Run Step 9 and report the diagnostic answers with each question text inline.
+If the all-framework driver exits 0, use the output it printed. It is also written to
+`dd-test-optimization-all-frameworks-summary.txt`. Per-framework reports and validation URL files
+are under `dd-test-optimization-framework-runs/<framework>/`.
 
-Wrapper result routing:
+Verbatim, only when the driver completed but its stdout was not captured:
 
-| Root wrapper result | Next action |
+```bash
+cat dd-test-optimization-step9-extractor-output.txt
+```
+
+Do not reconstruct the final answer from multiple JSON files unless the extractor failed. The
+extractor output is the source of truth for the console report.
+
+## Execution Modes and Routing
+
+Use these names consistently:
+
+- All-framework driver: `test-optimization-debug.js --all-frameworks`. This is the canonical path.
+- Full driver: `test-optimization-debug.js --full --framework <id>`. This is one isolated
+  automated framework branch, normally invoked by the all-framework driver.
+- Root wrapper: one basic-reporting wrapper run with `--test-command-file`.
+- Manual fallback: hand-managed fake intake, test command, shutdown, and analyzer.
+
+Do not run the root wrapper or manual fallback after the all-framework driver succeeds and prints
+its summary. Use recovery modes only for the routed cases below.
+
+| All-framework, full-driver branch, or root wrapper result | Next action |
 | --- | --- |
 | `listen EPERM: operation not permitted 127.0.0.1` | Rerun the wrapper with loopback bind/connect approval. Do not diagnose Test Optimization from this result. |
 | `connect EPERM 127.0.0.1:PORT` in debug logs | Rerun the wrapper with loopback bind/connect approval. The fake intake or test process was blocked locally. |
-| `Reporting complete` | Run Step 7 to validate EFD and Auto Test Retries, run Step 8 for Test Management, then Step 9. |
-| `Nothing` | Confirm the selected test ran and `NODE_OPTIONS` reached it. Use the manual fallback/debug path only when those are true and the wrapper still captures no requests. Then run Step 9. |
-| Any other stage | Skip Step 7 and Step 8, consult the matching Decision Tree stage, then run the Step 9 extractor. |
+| `Reporting complete` from an isolated full-driver branch | Report that framework branch as passed. Continue any remaining eligible framework branches. |
+| `Reporting complete` from the root wrapper | Run Appendix Step 7 for EFD/ATR, Appendix Step 8 for Test Management, then Appendix Step 9. |
+| `Nothing` | Confirm the selected test ran and `NODE_OPTIONS` reached it. Use manual fallback only when both are true and the wrapper still captures no requests. |
+| Detected unsupported or unsupported-version framework | Produce a diagnostic-only report with selected framework, version, reason, and next action. Do not run live validation against that runner. |
+| Cypress, Playwright, or Cucumber not handled by full driver automation | Use the framework adapter matrix below, then root wrapper/manual recovery as needed. |
+| Any other incomplete stage | Consult the matching Decision Tree stage, then run the Step 9 extractor. |
 
-Manual fallback trigger: run manual Steps 3-6 only when the wrapper is unavailable, fails before
-producing artifacts, reports `Nothing` after a confirmed test run, or requires repository-specific
-process handling.
+## Framework Coverage Matrix
 
-Framework selection rule:
+Every framework detected by `diagnose.js` from the supported or diagnostic-only lists above must
+take one branch from this matrix. "Manual" means runbook-covered but not fully automated by the
+full driver helper.
 
-- Run the live validation only against an explicitly eligible supported framework/version.
-- Prefer `dd-test-optimization-static.json.eligibleFrameworks[]` when it exists. It lists framework
-  candidates with both a supported version and an eligible live-validation command.
-- If static diagnosis finds only unsupported frameworks, stop after Step 2 and report that as the
-  diagnosis. Do not try `node:test`, AVA, tap, Jasmine, Karma, uvu, TestCafe, or any other
-  unsupported runner just because a test command exists.
-- If the repository has multiple supported frameworks, choose one supported framework and state it
-  before running the wrapper.
-- If the user's prompt says to focus on a framework, such as "focus on vitest" or
-  "focus on playwright", use that framework when it is supported and detected. If it is not
-  supported or the detected version is unsupported, stop and report that reason.
+| Framework | Command selection | How `dd-trace/ci/init` reaches tests | Temporary test strategy | Basic reporting | EFD | ATR | Test Management | Known limitations |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Jest | Full driver selector or root wrapper command | `NODE_OPTIONS="-r dd-trace/ci/init"`; generated multi-file commands use `--runInBand` | Helper-generated sibling tests matching suffix/module style | Automated | Automated | Automated with generated ATR candidate | Automated | TypeScript config loaders/custom resolvers can fail before collection. |
+| Mocha | Full driver selector or root wrapper command | `NODE_OPTIONS="-r dd-trace/ci/init"` | Helper-generated sibling tests | Automated | Automated | Automated with generated ATR candidate | Automated | Custom bootstrap/require hooks may need to stay in the selected command. |
+| Vitest | Full driver selector or root wrapper command | `NODE_OPTIONS="--import dd-trace/register.js -r dd-trace/ci/init"` | Helper-generated Vitest-style sibling tests | Automated | Automated | Automated with generated ATR candidate | Automated | `vitest bench` is diagnostic-only, not a validation command. |
+| Cucumber | [Cucumber adapter](#cucumber-adapter) | `NODE_OPTIONS="-r dd-trace/ci/init"` reaches the Node Cucumber process | [Generated feature/scenario](#cucumber-adapter) | Manual/root wrapper | Manual with generated scenario | Manual with generated known scenario | Manual calibration or diagnostic-only skip | Parallel mode may require newer Cucumber; feature support can be framework-version dependent. |
+| Cypress | [Cypress adapter](#cypress-adapter) | `NODE_OPTIONS="-r dd-trace/ci/init"` reaches Cypress plugin/node process; browser-side support may require Cypress support-file setup | [Generated `.cy.*` spec](#cypress-adapter) | Manual/root wrapper | Manual with generated spec | Manual with generated known spec | Manual calibration or diagnostic-only skip | Cypress process wiring differs; browser events can require `dd-trace/ci/cypress/support`. |
+| Playwright | [Playwright adapter](#playwright-adapter) | `NODE_OPTIONS="-r dd-trace/ci/init"` reaches Playwright workers | [Generated Playwright spec](#playwright-adapter) | Manual/root wrapper | Manual with generated spec | Manual with generated known spec | Manual calibration or diagnostic-only skip | Worker/process propagation must be confirmed. |
+| `node:test`, AVA, tap, Jasmine, Karma, uvu, TestCafe, custom unsupported runner | [Diagnostic-only branch](#diagnostic-only-unsupported-runner-branch) | Diagnostic-only | None | Not attempted | Not attempted | Not attempted | Not attempted | Report unsupported runner/version as the diagnosis, not agent failure. |
 
-Happy path command list:
+When a framework or feature is unsupported or only partially supported, the final diagnostic must
+include: selected framework, detected version, attempted command or reason no command was attempted,
+unsupported feature, exact reason, and recommended next action.
 
-1. Set `dd-test-optimization-ci-dir.txt` and `dd-test-optimization-node-command.txt` from the
-   runbook location block above.
-2. Run Step 0 cleanup.
-3. Run the Preferred full-validation driver.
-4. If the driver cannot select a command, run Step 1 and Step 2 manually and write
-   `dd-test-optimization-framework.txt`, `dd-test-optimization-test-command.txt`, and
-   `dd-test-optimization-selected-test-files.txt`.
-5. Run the Preferred Wrapper.
-6. If the root stage is `Reporting complete`, run Step 7.
-7. If Step 7 passes, run Step 8 for `disabled`, `quarantined`, and `attempt-to-fix`.
-8. Run Step 9 and report the extractor output plus any agent adaptations.
+## Framework Adapter Contract
 
-Wrapper happy path command skeleton:
+Each framework branch must fill this contract before running validation or reporting a
+diagnostic-only result:
 
-For common npm/yarn repositories where `scripts.test` accepts file arguments, replace
-`SELECTED_FRAMEWORK`, `SELECTED_TEST_COMMAND`, and `SELECTED_TEST_FILES`, then run the block after
-Step 0 cleanup.
+1. Detect framework and version from `diagnose.js`.
+2. Select a minimal command for exactly one small test subset, or write the reason no command was
+   attempted.
+3. Confirm the command runs tests and exits normally without Test Optimization instrumentation when
+   command selection is uncertain.
+4. Inject/preload `dd-trace/ci/init` through `NODE_OPTIONS`; never use `require("dd-trace/ci/init")`
+   as the validation mechanism.
+5. Generate or identify a temporary new test for EFD, or mark EFD as skipped with a reason.
+6. Generate or identify a known flaky test candidate for ATR, or mark ATR as skipped with a reason.
+7. Calibrate Test Management identity from emitted events, or mark Test Management as skipped with
+   a reason.
+8. Restore every generated or modified source file and report cleanup status.
+
+Jest, Mocha, and Vitest usually satisfy this contract through the all-framework driver. Cypress,
+Playwright, and Cucumber satisfy it through repository-specific commands plus the root wrapper/manual
+recovery appendices. Unsupported runners satisfy it with a diagnostic-only result.
+
+Framework branches:
+
+- Jest/Mocha/Vitest: run the all-framework driver so every eligible automated framework is tested
+  separately. If command selection fails for a supported framework/version, use Appendix Step 2 to
+  write `dd-test-optimization-framework.txt`, `dd-test-optimization-test-command.txt`, and
+  `dd-test-optimization-selected-test-files.txt`, then run the root wrapper and Step 9.
+- Cucumber: choose the repository Cucumber command that selects one feature or scenario, for
+  example a package script with one feature path or `./node_modules/.bin/cucumber-js
+  features/example.feature --name "scenario name"`. Run the root wrapper. Use the
+  [Cucumber adapter](#cucumber-adapter) for EFD/ATR and Test Management.
+- Cypress: choose the repository Cypress run command with one `--spec` path. Run the root wrapper.
+  If browser-side test events are missing, report Cypress support-file/plugin wiring from static
+  diagnosis. Use the [Cypress adapter](#cypress-adapter) for EFD/ATR and Test Management.
+- Playwright: choose the repository Playwright command with one spec path or grep filter. Run the
+  root wrapper. Use the [Playwright adapter](#playwright-adapter) for EFD/ATR and Test Management.
+- Unsupported runners (`node:test`, AVA, tap, Jasmine, Karma, uvu, TestCafe, custom runner without
+  supported-framework delegation): do not run live validation. Use the
+  [diagnostic-only branch](#diagnostic-only-unsupported-runner-branch).
+
+### Diagnostic-Only Unsupported Runner Branch
+
+Use this when static diagnosis finds only diagnostic-only runners or unsupported framework
+versions, or when the requested framework focus is absent/unsupported.
+
+Verbatim:
 
 ```bash
 set -e
 
-$(cat dd-test-optimization-node-command.txt) "$(cat dd-test-optimization-ci-dir.txt)/diagnose.js" --json --fail-on=never > dd-test-optimization-static.json
-
-SELECTED_FRAMEWORK='FILL_IN_SELECTED_FRAMEWORK'
-SELECTED_TEST_COMMAND='FILL_IN_SELECTED_TEST_COMMAND'
-SELECTED_TEST_FILES='FILL_IN_SELECTED_TEST_FILES_ONE_PER_LINE'
-if [ "$SELECTED_FRAMEWORK" = 'FILL_IN_SELECTED_FRAMEWORK' ] || [ -z "$SELECTED_FRAMEWORK" ]; then
-  echo "Select one eligible supported framework before running the wrapper." >&2
-  exit 1
-fi
-if [ "$SELECTED_TEST_COMMAND" = 'FILL_IN_SELECTED_TEST_COMMAND' ] || [ -z "$SELECTED_TEST_COMMAND" ]; then
-  echo "Select one small test command before running the wrapper." >&2
-  exit 1
-fi
-printf '%s\n' "$SELECTED_FRAMEWORK" > dd-test-optimization-framework.txt
-printf '%s\n' "$SELECTED_TEST_COMMAND" > dd-test-optimization-test-command.txt
-printf '%s\n' "$SELECTED_TEST_FILES" > dd-test-optimization-selected-test-files.txt
-
-$(cat dd-test-optimization-node-command.txt) "$(cat dd-test-optimization-ci-dir.txt)/test-optimization-debug.js" \
-  --test-command-file dd-test-optimization-test-command.txt \
-  --no-open
+$(cat dd-test-optimization-node-command.txt) "$(cat dd-test-optimization-ci-dir.txt)/diagnose.js" \
+  --json \
+  --fail-on=never > dd-test-optimization-static.json
 
 $(cat dd-test-optimization-node-command.txt) -e '
 const fs = require("node:fs")
-const report = JSON.parse(fs.readFileSync("dd-test-optimization-agent-report.json", "utf8"))
-console.log(`Basic primary stage: ${report.primaryStage}`)
+const d = JSON.parse(fs.readFileSync("dd-test-optimization-static.json", "utf8"))
+const unsupported = d.unsupportedFrameworks || []
+const versionErrors = (d.results || [])
+  .filter(r => r.status === "error" && /\bis not supported\b/.test(r.title || ""))
+const framework = unsupported[0] || (d.supportedFrameworks || [])[0] || { id: "unknown", name: "unknown" }
+const version = (framework.versionDetections || [])[0]?.version ||
+  (framework.versionDetections || [])[0]?.rawVersion ||
+  "unknown"
+const reason = versionErrors[0]
+  ? `${versionErrors[0].title}${versionErrors[0].recommendation ? `. ${versionErrors[0].recommendation}` : ""}`
+  : unsupported.length
+    ? `Only unsupported test framework(s) were detected: ${unsupported.map(f => f.name).join(", ")}.`
+    : "No eligible supported framework command was detected."
+
+fs.writeFileSync("dd-test-optimization-framework.txt", `${framework.id || framework.name}\n`)
+fs.writeFileSync("dd-test-optimization-test-command.txt", "not run\n")
+fs.writeFileSync("dd-test-optimization-test-result.txt", `validation skipped: ${reason}\n`)
+fs.writeFileSync("dd-test-optimization-diagnosis.json", `${JSON.stringify({
+  advancedSkipReason: "Advanced checks skipped because live validation was not started.",
+  basicReportingComplete: false,
+  detectedFramework: framework.name || framework.id,
+  detectedVersion: version,
+  likelyFailureCause: reason,
+  primaryStage: "Not run",
+  recommendedNextAction: "Choose a supported framework/version or upgrade the detected framework before running live validation.",
+  unsupportedFeature: "Test Optimization live validation for this runner",
+}, null, 2)}\n`)
+console.log(reason)
 '
+
+$(cat dd-test-optimization-node-command.txt) "$(cat dd-test-optimization-ci-dir.txt)/test-optimization-validation-link.js" \
+  --static-report dd-test-optimization-static.json \
+  --diagnosis dd-test-optimization-diagnosis.json \
+  --framework-file dd-test-optimization-framework.txt \
+  --test-command-file dd-test-optimization-test-command.txt \
+  --test-result-file dd-test-optimization-test-result.txt \
+  > dd-test-optimization-validation-url.txt
+
+$(cat dd-test-optimization-node-command.txt) "$(cat dd-test-optimization-ci-dir.txt)/test-optimization-extract-report.js" \
+  > dd-test-optimization-step9-extractor-output.txt
+cat dd-test-optimization-step9-extractor-output.txt
 ```
 
-Continue to Step 7 only when this wrapper run reports `Reporting complete`.
-When live fake-intake evidence reaches `Reporting complete`, static diagnosis warnings are
-advisory. Report static warnings as context, not blockers.
+The final response for this branch must include the Step 9 extractor output plus a `Notable
+execution cases:` line with: detected framework, detected version, detection evidence from
+`dd-test-optimization-static.json`, unsupported reason, no attempted live command, and recommended
+next action.
 
 ## Execution Notes
 
@@ -269,17 +443,21 @@ Command categories:
 - Loopback commands: wrapper commands that start a fake intake and run tests against
   `127.0.0.1`.
 
-## Detailed Section Index
+## Appendix Index
 
-The start section above is the canonical execution flow. The detailed sections below provide
-the commands and adaptation rules for each referenced step:
+The canonical execution flow is the all-framework driver path at the top of this file. The
+appendices below are recovery and framework-adapter material. Do not execute them after the
+all-framework driver succeeds.
 
-- Step 0: cleanup and source-edit restore safety.
-- Step 2: selected test command discovery.
-- Preferred Wrapper: root wrapper command details.
-- Step 7: advanced EFD and Auto Test Retries checks when basic reporting is complete.
+- Root wrapper reference: one basic-reporting wrapper run when the full driver cannot select a
+  command.
+- Tool reference: published helper scripts.
+- Step 0/1/2 reference: expanded cleanup, static diagnosis, and command selection.
+- Manual fallback Steps 3-6: hand-managed fake intake, test command, shutdown, and analyzer.
+- Step 7: EFD and Auto Test Retries checks when basic reporting is complete.
 - Step 8: Test Management disabled, quarantined, and attempt-to-fix checks.
-- Step 9: machine-oriented extractor and final response format.
+- Step 9: extractor-only final reporting.
+- Appendix G: Cucumber, Cypress, and Playwright manual advanced adapters.
 
 The goal is to answer these diagnostic questions:
 
@@ -300,19 +478,16 @@ Diagnostic question map:
 - Does EFD fetch known tests, mark a new test, and retry it? Step 7.
 - Does Auto Test Retries retry a failing known test and report retry tags? Step 7.
 - Does Test Management apply disabled, quarantined, and attempt-to-fix properties? Step 8.
-- Step 9: synthesize all diagnostic answers.
+- Step 9: produce the final console report from the extractor.
 
-Required final response checklist:
+Minimum final response source:
 
-- HTML report `file://` URL and absolute path.
-- One combined Datadog validation relative path.
-- Final report path and compact summary path.
-- Selected test command, advanced test command when Step 7 ran, and test result.
-- Basic reporting counts and decode errors.
-- EFD and Auto Test Retries status when Step 7 ran.
-- Test Management disabled, quarantined, and attempt-to-fix status when Step 8 ran.
-- The diagnostic question answers with each question text inline.
-- Static warnings and errors, recommended next actions, and temporary-edit cleanup confirmation.
+- Print the Step 9 extractor output exactly once.
+- Add a short `Notable execution cases:` section only for required context that is not represented
+  in the extractor output, such as a sandbox loopback approval, a framework-specific command
+  override, or an unsupported/partially supported framework reason.
+- Do not reconstruct counts, validation links, or artifact paths from multiple reports unless the
+  extractor fails.
 
 "All expected test event levels" means:
 
@@ -323,13 +498,13 @@ Required final response checklist:
 
 Do not use a real Datadog API key for this flow. Always route to the local fake intake.
 
-## Preferred Wrapper
+## Appendix A: Root Wrapper Reference
 
 Use this wrapper when available. Use `--no-open` by default for coding-agent runs; the HTML report
 URL and path are still printed, the final report is still written, and opening the file is not part
 of the diagnosis. Do not use browser automation for the local HTML report.
 
-The start section above is the authoritative wrapper flow. Apply the top-level loopback
+The canonical driver path above is the authoritative wrapper flow. Apply the top-level loopback
 prerequisite for sandboxed environments.
 
 After completing Step 2, use only the selected-command file form:
@@ -408,7 +583,7 @@ Use the manual fallback path below only when the wrapper is unavailable, when it
 producing artifacts, when it reports `Nothing` after a confirmed test run, or when the repository
 needs framework-specific command handling.
 
-## Tools
+## Appendix B: Tool Reference
 
 These files are published under the `dd-trace/ci` package directory:
 
@@ -423,7 +598,7 @@ These files are published under the `dd-trace/ci` package directory:
 - `test-optimization-intake-analysis.js`: shared decision-tree rules.
 - `test-optimization-extract-report.js`: machine-oriented Step 9 final-output extractor.
 
-## Expected Output
+## Appendix C: Expected Output Reference
 
 - Static diagnosis can report `Missing Test Optimization initialization`; the live debug run injects
   `NODE_OPTIONS="-r dd-trace/ci/init"`.
@@ -441,12 +616,12 @@ These files are published under the `dd-trace/ci` package directory:
   cause, and advanced-skip reason when basic reporting is incomplete.
 - The wrapper writes `dd-test-optimization-artifacts.json` with the paths it produced.
 
-## Command Labels
+## Appendix D: Command Labels
 
 - `Verbatim`: run the command as written.
 - `Adapt`: inspect the repository and replace the indicated value before running.
 
-## Steps
+## Appendix E: Expanded Helper Steps
 
 ### 0. Clean prior artifacts
 
@@ -472,6 +647,20 @@ fi
 if [ -f dd-intake-log-path.txt ]; then
   INTAKE_LOG="$(cat dd-intake-log-path.txt)"
   rm -f "$INTAKE_LOG"
+fi
+
+if [ -f dd-test-optimization-manual-generated-files.txt ]; then
+  while IFS= read -r file; do
+    test -z "$file" && continue
+    if [ -f "$file" ]; then
+      if grep -q 'dd trace' "$file"; then
+        rm -f "$file"
+      else
+        echo "Manual generated file marker exists, but file lacks dd trace marker: $file" >&2
+        exit 1
+      fi
+    fi
+  done < dd-test-optimization-manual-generated-files.txt
 fi
 
 if [ -f dd-test-optimization-atr-flaky-test-file.txt ] && [ -f dd-test-optimization-atr-flaky-test-backup.txt ]; then
@@ -509,6 +698,7 @@ rm -f \
   dd-test-optimization-env.txt \
   dd-test-optimization-advanced-validation-url.txt \
   dd-test-optimization-efd-command.txt \
+  dd-test-optimization-efd-preflight-command.txt \
   dd-test-optimization-efd-test-name.txt \
   dd-test-optimization-efd-validation-url.txt \
   dd-test-optimization-efd-new-test-snippet.txt \
@@ -519,6 +709,7 @@ rm -f \
   dd-test-optimization-atr-baseline-preflight.txt \
   dd-test-optimization-atr-baseline-snippet.txt \
   dd-test-optimization-atr-generated-test-file.txt \
+  dd-test-optimization-manual-generated-files.txt \
   dd-test-optimization-selected-command.input \
   dd-test-optimization-selected-files.input \
   dd-test-optimization-framework.txt \
@@ -541,6 +732,7 @@ rm -f \
   dd-test-optimization-tm-test-command.txt \
   dd-test-optimization-tm-test-file.txt \
   dd-test-optimization-agent-report.json \
+  dd-test-optimization-all-frameworks-summary.txt \
   dd-test-optimization-final-report.txt \
   dd-test-optimization-static.json \
   dd-test-optimization-intake.json \
@@ -563,6 +755,7 @@ rm -rf \
   dd-test-optimization-basic \
   dd-test-optimization-efd \
   dd-test-optimization-efd-only \
+  dd-test-optimization-framework-runs \
   dd-test-optimization-atr-only \
   dd-test-optimization-test-management \
   dd-test-optimization-tm-attempt-to-fix \
@@ -704,8 +897,9 @@ if (unsupported.length === 0 && unsupportedVersions.length === 0) console.log("-
 '
 ```
 
-When choosing among multiple supported frameworks, write the chosen framework id and state it in the
-final response:
+When multiple eligible automated frameworks are present, do not choose only one. Use
+`--all-frameworks` and report each framework branch separately. Only write a single chosen framework
+id when the user explicitly asked to focus on one framework or when running a manual adapter branch:
 
 Adapt:
 
@@ -887,7 +1081,7 @@ If the selected command is uncertain, run it once without Test Optimization inst
 the wrapper. Keep the same command in `dd-test-optimization-test-command.txt` if it selects the
 intended subset and exits normally.
 
-## Manual Fallback Path
+## Appendix F: Manual Recovery Path
 
 STOP: do not run this section after a wrapper run reports `Reporting complete`.
 
@@ -970,7 +1164,7 @@ Keep the intake process running while tests execute. Read these state files in l
 `dd-intake-url.txt` or `dd-intake-shutdown-url.txt` is empty, read the log path stored in
 `dd-intake-log-path.txt` and fix the intake startup before running tests.
 
-If background child processes are reaped when the shell command exits, use the Preferred Wrapper
+If background child processes are reaped when the shell command exits, use the root wrapper
 or start `test-optimization-intake.js` in a persistent foreground exec session. Keep that session
 running until Step 5 stops the intake.
 
@@ -1209,17 +1403,11 @@ Use the final report renderer output, not the browser, as the source of the fina
 the JSON analyzer output when traversing the decision tree. The `--open` attempt in 6a is
 best-effort and non-fatal.
 
-After rendering, check the final report's `Consistency checks` section. The intake URL from
-`dd-test-optimization-env.txt`, the intake URL from `dd-test-optimization-intake.json`, and the raw
-artifact request count versus analyzer request count should be `ok`. Treat mismatches as
-artifact/state problems before applying funnel-stage fixes.
-
-- If the intake URL check is `mismatch`, rerun from Step 0; the env file and intake artifact came
-  from different runs.
-- If the request count check is `mismatch`, rerun Step 6 from the current
-  `dd-test-optimization-intake.json`; if it still mismatches, rerun from Step 0.
-- If consistency checks are `ok` and the stage is still `Nothing`, use the matching decision-tree
-  stage below.
+After rendering, confirm the root artifacts came from the same run before applying funnel-stage
+fixes. If the intake URL in `dd-test-optimization-env.txt` does not match the intake URL recorded
+in `dd-test-optimization-intake.json`, rerun from the canonical cleanup step. If the analyzer
+request count disagrees with the raw intake artifact, rerun Step 6 from the current
+`dd-test-optimization-intake.json`; if it still disagrees, rerun from cleanup.
 
 If the primary stage is anything other than `Reporting complete`, consult `## Decision Tree` below
 Step 9 under the matching stage heading before writing the final response.
@@ -2000,8 +2188,9 @@ git status --short
 Run this step after the basic reporting result is `Reporting complete`. Test Management is three
 independent subchecks. Do not combine them unless every result can be attributed to one calibrated
 test identity. This is the slowest section of the runbook because each subcheck does a baseline
-calibration run and a managed run. In a time-boxed diagnosis, Step 8 is the first optional section
-to defer after basic reporting, EFD, and Auto Test Retries are already understood.
+calibration run and a managed run. If this step cannot run for the selected framework or command,
+record the exact reason and let Step 9 report Test Management as skipped or failed; do not omit it
+silently.
 
 Subcheck map:
 
@@ -2092,8 +2281,9 @@ Fallback command selection rules when auto inference cannot pick a safe generate
   a direct file argument.
 - Do not edit an existing customer test for these subchecks unless generated tests cannot work.
 - The generated helper supports Jest, Mocha, Vitest, and Cypress-style globals/imports. For
-  Playwright or another unsupported generated-test shape, skip Step 8 with the reason printed by
-  the helper or write a repository-specific temporary candidate manually.
+  Playwright, use the Playwright adapter's manual Test Management calibration path. For another
+  unsupported generated-test shape, write a repository-specific temporary candidate manually or
+  report the subcheck as diagnostic-only skipped with the exact template/collection reason.
 - Ensure the generated `TM_TEST_FILE` uses the suffix the runner actually collects; use the naming
   detection in Step 2. A non-matching extension such as `.ts` where the runner requires `.unit.ts`
   is silently not collected: the baseline run reports zero test events and the calibrated identity
@@ -2539,98 +2729,613 @@ console.log(`Static warnings/errors: ${staticFindings.join("; ") || "none"}`)
 '
 ```
 
-The final response must include:
+The final response must be the Step 9 extractor output, plus only the short additions below when
+they apply:
 
-- HTML report `file://` URL and absolute path.
-- One Datadog validation relative path for the combined runbook result.
-- Final report path and compact summary path.
-- Selected framework.
-- Selected test command and test result.
-- Likely failure cause and advanced skip reason when basic reporting is incomplete.
-- EFD check result when Step 7 ran, including known tests count, retried new test execution count,
-  distinct retried new test name count, and EFD execution diagnosis.
-- Auto Test Retries check result when Step 7 ran, including failing executions, passing
-  executions, and passing retry executions.
-- Test Management disabled, quarantined, and attempt-to-fix results when Step 8 ran.
-- Cleanup state and path verification lines for EFD, Auto Test Retries, and Test Management.
-- Agent adaptations when command overrides were used.
-- The diagnostic question answers with each question text inline.
-- Static warnings and errors.
-- Recommended next actions.
-- Cleanup confirmation for any temporary EFD test file and Auto Test Retries edit.
+- `Notable execution cases:` for sandbox loopback approvals, framework-specific command overrides,
+  unsupported framework branches, or other facts not represented in the extractor output.
+- `Extractor failed:` with the fallback fields below, only if
+  `test-optimization-extract-report.js` exits non-zero.
 
 Files that may remain after a successful run: `dd-test-optimization-final-report.txt`,
 `dd-test-optimization-summary.txt`, `dd-test-optimization-report.html`, `dd-test-optimization-*`
 JSON/text artifacts, and `dd-test-optimization-*` report directories. Temporary generated source
 files must not remain; cleanup path verification must report `ok`.
 
-Minimum final response template:
+Fallback template, only when the extractor fails:
 
 ```text
 HTML report: file:///absolute/path/to/dd-test-optimization-report.html
 Datadog validation: ci/test/validation#pako:{payload}
-Final report path: /absolute/path/to/dd-test-optimization-final-report.txt
+Summary:
+- Reporting: {status}
+- EFD: {status}
+- Auto Test Retries: {status}
+- Test Management: {status}
 
-Selected framework:
-{framework}
-
-Selected test command:
-{command}
-
-Advanced test command:
-{command}
-
-Test result:
-{one-line result}
-
-Pass/fail table:
-| Check | Status | Evidence |
-| --- | --- | --- |
-| Basic reporting | {passed | failed | skipped} | {request/event counts or reason} |
-| Early Flake Detection (EFD) | {passed | failed | skipped} | {knownTests/retriedNewTests or reason} |
-| Auto Test Retries (ATR) | {passed | failed | skipped} | {failed/passed/retry counts or reason} |
-| Test Management | {passed | failed | skipped} | {disabled/quarantined/attemptToFix status or reason} |
-| Cleanup | {passed | failed} | {state/path verification summary} |
-
-Basic reporting:
-{stage}; requests={count}; events=sessions={count}, modules={count}, suites={count}, tests={count}; decodeErrors={count}
-
-Likely failure cause:
-{n/a | reason}
-
-EFD check:
-{not run | skipped: reason | passed | failed}; knownTests={count}; retriedNewTests={count}; names={names or none}
-
-Auto Test Retries check:
-{not run | skipped: reason | passed | failed}; failed={count}; passed={count}; passingRetries={count}; names={names or none}
-
-Test Management check:
-disabled={status} exit={code}; quarantined={status} exit={code}; attemptToFix={status} exit={code} retryReasons={reasons or none}
+Findings:
+- {error/status/reason}
 
 Cleanup:
-EFD={ok | remaining state: ...}; Auto Test Retries={ok | remaining state: ...}; Test Management={ok | remaining state: ...}
-Path verification: advanced={ok | remaining paths: ...}; Test Management={ok | remaining paths: ...}
-
-Agent adaptations:
-{none | lines from dd-test-optimization-agent-adaptations.txt}
-
-Diagnostic answers:
-- Is dd-trace installed and statically configured in a supported way? {answer}
-- Does dd-trace/ci/init reach the test process through NODE_OPTIONS? {answer}
-- Does a small test subset send Test Optimization requests to a local fake intake? {answer}
-- If data is reported, does it include session, module, suite, and test events? {answer}
-- Does EFD fetch known tests, mark a new test, and retry it? {answer}
-- Does Auto Test Retries retry a failing known test and report retry tags? {answer}
-- Does Test Management apply disabled, quarantined, and attempt-to-fix properties? {answer}
-
-Static warnings/errors:
-- {finding}
-
-Recommended next actions:
-- {action}
+- EFD/ATR/Test Management generated files: {removed | restored | reason not verified}
 ```
 
 Add a `Notable execution cases:` section only when needed.
+
+## Appendix G: Framework-Specific Manual Advanced Adapters
+
+Use this appendix only for supported frameworks that the full driver selector does not automate:
+Cucumber, Cypress, and Playwright. Each adapter must write the same state files that Step 7 and
+Step 8 consume.
+
+Shared manual advanced wrapper commands:
+
+The preflight assertions below require the runner output to include generated test/spec/scenario
+names. If the repository's default formatter hides passed test names, add the runner's verbose/spec
+formatter to the adapter command prefix before running this block.
+
+```bash
+set -e
+
+set +e
+sh -c "$(cat dd-test-optimization-atr-baseline-command.txt)" \
+  > dd-test-optimization-atr-baseline-preflight.txt 2>&1
+ATR_BASELINE_PREFLIGHT_EXIT_CODE=$?
+cat dd-test-optimization-atr-baseline-preflight.txt
+set -e
+if [ "$ATR_BASELINE_PREFLIGHT_EXIT_CODE" -ne 0 ]; then
+  echo "Manual advanced baseline preflight failed; fix generated candidate collection before wrapper runs." >&2
+  exit "$ATR_BASELINE_PREFLIGHT_EXIT_CODE"
+fi
+
+$(cat dd-test-optimization-node-command.txt) "$(cat dd-test-optimization-ci-dir.txt)/test-optimization-debug.js" \
+  --test-command-file dd-test-optimization-atr-baseline-command.txt \
+  --out-dir dd-test-optimization-basic \
+  --no-open
+
+$(cat dd-test-optimization-node-command.txt) "$(cat dd-test-optimization-ci-dir.txt)/test-optimization-analyze-intake.js" \
+  dd-test-optimization-basic/dd-test-optimization-intake.json \
+  --json \
+  --known-tests-out dd-test-optimization-known-tests.json \
+  > dd-test-optimization-basic/dd-test-optimization-agent-report.json
+
+$(cat dd-test-optimization-node-command.txt) -e '
+const fs = require("node:fs")
+const report = JSON.parse(fs.readFileSync("dd-test-optimization-basic/dd-test-optimization-agent-report.json", "utf8"))
+const knownTests = JSON.parse(fs.readFileSync("dd-test-optimization-known-tests.json", "utf8"))
+const atrName = fs.readFileSync("dd-test-optimization-atr-flaky-test-name.txt", "utf8").trim()
+const atrFile = fs.readFileSync("dd-test-optimization-atr-generated-test-file.txt", "utf8").trim()
+const matches = []
+
+function normalizePath (value) {
+  return String(value || "").replace(/\\/g, "/").replace(/^\.\//, "")
+}
+
+function basename (value) {
+  return normalizePath(value).split("/").pop()
+}
+
+function isPathLike (value) {
+  const normalized = normalizePath(value)
+  return normalized.includes("/") || /\.(?:[cm]?[jt]sx?|feature)$/.test(normalized)
+}
+
+if (report.primaryStage !== "Reporting complete") {
+  console.error(`Manual advanced baseline must be Reporting complete, got: ${report.primaryStage}`)
+  process.exit(1)
+}
+
+for (const [framework, suites] of Object.entries(knownTests)) {
+  for (const [suite, names] of Object.entries(suites || {})) {
+    if (Array.isArray(names) && names.includes(atrName)) {
+      matches.push({ framework, name: atrName, suite })
+    }
+  }
+}
+
+if (matches.length === 0) {
+  console.error(`Known-tests extraction did not include generated ATR candidate: ${atrName}`)
+  process.exit(1)
+}
+
+if (matches.length > 1) {
+  console.error(`Known-tests extraction matched generated ATR candidate more than once: ${JSON.stringify(matches)}`)
+  process.exit(1)
+}
+
+const expectedSuite = normalizePath(atrFile)
+const actualSuite = normalizePath(matches[0].suite)
+if (actualSuite && expectedSuite && isPathLike(actualSuite)) {
+  const matchesExpectedFile = actualSuite.endsWith(expectedSuite) ||
+    expectedSuite.endsWith(actualSuite) ||
+    basename(actualSuite) === basename(expectedSuite)
+
+  if (!matchesExpectedFile) {
+    console.error(`Known-tests generated ATR suite mismatch: expected ${expectedSuite}, got ${actualSuite}`)
+    process.exit(1)
+  }
+} else if (actualSuite) {
+  console.log(`Known-tests suite is not file-like; matched generated ATR test by name in suite: ${actualSuite}`)
+}
+
+console.log(`Manual advanced baseline collected generated ATR identity: ${JSON.stringify(matches[0])}`)
+'
+
+set +e
+if [ -f dd-test-optimization-efd-preflight-command.txt ]; then
+  EFD_PREFLIGHT_COMMAND="$(cat dd-test-optimization-efd-preflight-command.txt)"
+else
+  EFD_PREFLIGHT_COMMAND="$(cat dd-test-optimization-efd-command.txt)"
+fi
+sh -c "$EFD_PREFLIGHT_COMMAND" \
+  > dd-test-optimization-efd-preflight.txt 2>&1
+EFD_PREFLIGHT_EXIT_CODE=$?
+cat dd-test-optimization-efd-preflight.txt
+set -e
+if [ "$EFD_PREFLIGHT_EXIT_CODE" -eq 0 ]; then
+  echo "Advanced preflight should fail once because the generated ATR candidate is flaky." >&2
+  exit 1
+fi
+
+EFD_TEST_NAME="$(cat dd-test-optimization-efd-test-name.txt)"
+ATR_TEST_NAME="$(cat dd-test-optimization-atr-flaky-test-name.txt)"
+if ! grep -F "$EFD_TEST_NAME" dd-test-optimization-efd-preflight.txt >/dev/null; then
+  echo "Advanced preflight did not show the generated EFD test/spec/scenario: $EFD_TEST_NAME" >&2
+  exit 1
+fi
+if ! grep -F "$ATR_TEST_NAME" dd-test-optimization-efd-preflight.txt >/dev/null; then
+  echo "Advanced preflight did not show the generated ATR candidate: $ATR_TEST_NAME" >&2
+  exit 1
+fi
+if ! grep -F 'dd trace auto retry debug flake' dd-test-optimization-efd-preflight.txt >/dev/null; then
+  echo "Advanced preflight did not show the temporary flaky marker." >&2
+  exit 1
+fi
+
+$(cat dd-test-optimization-node-command.txt) "$(cat dd-test-optimization-ci-dir.txt)/test-optimization-debug.js" \
+  --test-command-file dd-test-optimization-efd-command.txt \
+  --settings-mode debug-all \
+  --known-tests dd-test-optimization-known-tests.json \
+  --new-test-snippet-file dd-test-optimization-efd-new-test-snippet.txt \
+  --flaky-test-snippet-file dd-test-optimization-atr-flaky-test-snippet.txt \
+  --out-dir dd-test-optimization-efd \
+  --no-open
+```
+
+Shared manual Test Management calibration commands, one mode at a time:
+
+Before running this block, the adapter must create one generated candidate for `TM_MODE` and write
+`dd-test-optimization-tm-${TM_MODE}-command.txt`. The candidate must follow this behavior:
+
+- When `DD_TEST_OPTIMIZATION_TM_BASELINE=1`, pass.
+- For `disabled`, fail if it executes; the managed run should still exit `0` because the test is
+  skipped by Test Management.
+- For `quarantined`, fail when it executes; the managed run should exit `0` and report a failed
+  quarantined span.
+- For `attempt-to-fix`, pass on the first execution and fail on the retry; the managed run should
+  exit non-zero and report retry reason `attempt_to_fix`.
+
+```bash
+set -e
+
+TM_MODE='disabled' # disabled, quarantined, or attempt-to-fix
+TM_SETTINGS_MODE="tm-${TM_MODE}"
+TM_BASELINE_DIR="dd-test-optimization-tm-${TM_MODE}-baseline"
+TM_RESULT_DIR="dd-test-optimization-tm-${TM_MODE}"
+TM_TEST_COMMAND="$(cat "dd-test-optimization-tm-${TM_MODE}-command.txt")"
+
+set +e
+DD_TEST_OPTIMIZATION_TM_BASELINE=1 sh -c "$TM_TEST_COMMAND" \
+  > "dd-test-optimization-tm-${TM_MODE}-preflight.txt" 2>&1
+TM_PREFLIGHT_EXIT_CODE=$?
+cat "dd-test-optimization-tm-${TM_MODE}-preflight.txt"
+set -e
+if [ "$TM_PREFLIGHT_EXIT_CODE" -ne 0 ]; then
+  echo "Manual Test Management preflight failed before instrumentation; fix the generated candidate." >&2
+  exit "$TM_PREFLIGHT_EXIT_CODE"
+fi
+
+$(cat dd-test-optimization-node-command.txt) "$(cat dd-test-optimization-ci-dir.txt)/test-optimization-debug.js" \
+  --test-command "DD_TEST_OPTIMIZATION_TM_BASELINE=1 $TM_TEST_COMMAND" \
+  --settings-mode basic-reporting \
+  --out-dir "$TM_BASELINE_DIR" \
+  --no-open
+
+$(cat dd-test-optimization-node-command.txt) "$(cat dd-test-optimization-ci-dir.txt)/test-optimization-prepare-test-management.js" \
+  --response \
+  --mode "$TM_MODE" \
+  --baseline-intake "$TM_BASELINE_DIR/dd-test-optimization-intake.json" \
+  --out "$TM_RESULT_DIR/test-management-tests.json" \
+  --identity-out "$TM_RESULT_DIR/test-management-identity.json"
+
+$(cat dd-test-optimization-node-command.txt) "$(cat dd-test-optimization-ci-dir.txt)/test-optimization-debug.js" \
+  --test-command "$TM_TEST_COMMAND" \
+  --settings-mode "$TM_SETTINGS_MODE" \
+  --test-management-tests "$TM_RESULT_DIR/test-management-tests.json" \
+  --out-dir "$TM_RESULT_DIR" \
+  --no-open
+
+export TM_MODE
+
+$(cat dd-test-optimization-node-command.txt) -e '
+const fs = require("node:fs")
+
+const mode = process.env.TM_MODE
+const dir = `dd-test-optimization-tm-${mode}`
+const report = JSON.parse(fs.readFileSync(`${dir}/dd-test-optimization-agent-report.json`, "utf8"))
+const exitCode = fs.readFileSync(`${dir}/dd-test-optimization-test-exit-code.txt`, "utf8").trim()
+const tm = report.summary.tm
+const expected = mode === "attempt-to-fix" ? "attemptToFix" : mode
+const subcheck = tm[expected]
+
+function fail (message) {
+  console.error(message)
+  process.exit(1)
+}
+
+if (!tm.settingsEnabled) fail("Test Management settings were not enabled.")
+if (!tm.propertiesEndpointCalled) fail("Test Management properties endpoint was not called.")
+if (tm.returnedProperties === 0) fail("Test Management properties response was empty.")
+if (tm.unmatchedPropertyIdentities.length > 0) {
+  fail(`Test Management properties did not match emitted identities: ${tm.unmatchedPropertyIdentities.join(", ")}`)
+}
+if (!subcheck || subcheck.status !== "passed") {
+  fail(`Test Management ${mode} subcheck failed: ${subcheck?.reason || "missing subcheck"}`)
+}
+if ((mode === "disabled" || mode === "quarantined") && exitCode !== "0") {
+  fail(`Expected ${mode} command exit code 0, got ${exitCode}.`)
+}
+if (mode === "attempt-to-fix" && exitCode === "0") {
+  fail("Expected attempt-to-fix command exit code to be non-zero.")
+}
+if (mode === "attempt-to-fix" && subcheck.badRetryReasons.length > 0) {
+  fail(`Attempt-to-fix used unexpected retry reasons: ${subcheck.badRetryReasons.join(", ")}`)
+}
+
+console.log(`Manual Test Management ${mode}: passed`)
+'
+```
+
+### Cucumber Adapter
+
+Select one existing scenario for basic reporting, then define a separate runner prefix for generated
+advanced runs. `CUCUMBER_BASE_COMMAND` may include `--name "existing scenario"`; do not reuse it for
+generated scenarios. `CUCUMBER_RUNNER_COMMAND_PREFIX` must not include a feature path or `--name`
+filter, because those filters can exclude generated scenarios.
+
+```bash
+CUCUMBER_BASE_COMMAND='FILL_IN' # for example: npm test -- features/example.feature --name "existing scenario"
+CUCUMBER_RUNNER_COMMAND_PREFIX='FILL_IN' # for example: npm test -- ; no feature path and no --name
+CUCUMBER_BASE_FEATURE='FILL_IN' # for example: features/example.feature
+printf '%s\n' cucumber > dd-test-optimization-framework.txt
+printf '%s\n' "$CUCUMBER_BASE_COMMAND" > dd-test-optimization-test-command.txt
+printf '%s\n' "$CUCUMBER_BASE_FEATURE" > dd-test-optimization-selected-test-files.txt
+```
+
+Create generated Cucumber feature files and step definitions. Prefer JavaScript or TypeScript to
+match the repository's existing step-definition style.
+
+```bash
+CUCUMBER_EFD_FEATURE='features/dd-trace-efd-debug.feature'
+CUCUMBER_ATR_FEATURE='features/dd-trace-atr-debug.feature'
+CUCUMBER_STEPS='features/step_definitions/dd-trace-debug-steps.js'
+
+mkdir -p "$(dirname "$CUCUMBER_EFD_FEATURE")" "$(dirname "$CUCUMBER_STEPS")"
+
+cat > "$CUCUMBER_EFD_FEATURE" <<'EOF'
+Feature: dd trace EFD debug
+  Scenario: dd trace EFD debug temporary scenario
+    Given dd trace EFD debug passes
+EOF
+
+cat > "$CUCUMBER_ATR_FEATURE" <<'EOF'
+Feature: dd trace ATR debug
+  Scenario: dd trace Auto Test Retries debug temporary scenario
+    Given dd trace ATR debug passes
+EOF
+
+cat > "$CUCUMBER_STEPS" <<'EOF'
+'use strict'
+
+const fs = require('node:fs')
+const path = require('node:path')
+
+const { Given } = require('@cucumber/cucumber')
+
+let ddTraceAtrCounter = 0
+
+Given('dd trace EFD debug passes', function () {})
+
+Given('dd trace ATR debug passes', function () {
+  if (process.env.DD_TEST_OPTIMIZATION_ATR_FLAKE === '1' && ddTraceAtrCounter++ === 0) {
+    throw new Error('dd trace auto retry debug flake')
+  }
+})
+
+Given(/^dd trace test management (disabled|quarantined|attempt-to-fix) behaves$/, function (mode) {
+  if (process.env.DD_TEST_OPTIMIZATION_TM_BASELINE === '1') return
+  if (mode === 'disabled' || mode === 'quarantined') {
+    throw new Error(`dd trace test management ${mode} candidate failure`)
+  }
+  const marker = 'dd-test-optimization-test-management/cucumber-attempt-to-fix-marker'
+  fs.mkdirSync(path.dirname(marker), { recursive: true })
+  if (fs.existsSync(marker)) {
+    fs.rmSync(marker, { force: true })
+    throw new Error('dd trace test management attempt-to-fix retry failure')
+  }
+  fs.writeFileSync(marker, 'first execution passed')
+})
+EOF
+
+printf '%s\n' "$CUCUMBER_EFD_FEATURE" "$CUCUMBER_ATR_FEATURE" "$CUCUMBER_STEPS" \
+  > dd-test-optimization-manual-generated-files.txt
+printf '%s\n' "$CUCUMBER_EFD_FEATURE" > dd-test-optimization-efd-temp-test-file.txt
+printf '%s\n' 'dd trace EFD debug temporary scenario' > dd-test-optimization-efd-test-name.txt
+cat "$CUCUMBER_EFD_FEATURE" > dd-test-optimization-efd-new-test-snippet.txt
+printf '%s\n' "$CUCUMBER_ATR_FEATURE" > dd-test-optimization-atr-generated-test-file.txt
+printf '%s\n' "$CUCUMBER_ATR_FEATURE" > dd-test-optimization-atr-flaky-test-file.txt
+printf '%s\n' 'dd trace Auto Test Retries debug temporary scenario' > dd-test-optimization-atr-flaky-test-name.txt
+cat "$CUCUMBER_STEPS" > dd-test-optimization-atr-flaky-test-snippet.txt
+```
+
+Write Cucumber baseline and advanced commands. Include the generated step definition through the
+repository's normal Cucumber config or `--require` mechanism. If the repository already loads
+`features/step_definitions/**/*.js`, set `CUCUMBER_GENERATED_REQUIRE_ARGS=''`; otherwise point it
+at `CUCUMBER_STEPS`. A preflight failure containing an undefined generated step is a command/config
+problem, not an EFD/ATR product finding.
+
+```bash
+CUCUMBER_GENERATED_REQUIRE_ARGS="--require $CUCUMBER_STEPS"
+
+printf '%s\n' "$CUCUMBER_RUNNER_COMMAND_PREFIX $CUCUMBER_GENERATED_REQUIRE_ARGS $CUCUMBER_BASE_FEATURE $CUCUMBER_ATR_FEATURE" \
+  > dd-test-optimization-atr-baseline-command.txt
+printf '%s\n' "DD_TEST_OPTIMIZATION_ATR_FLAKE=1 $CUCUMBER_RUNNER_COMMAND_PREFIX $CUCUMBER_GENERATED_REQUIRE_ARGS $CUCUMBER_BASE_FEATURE $CUCUMBER_ATR_FEATURE $CUCUMBER_EFD_FEATURE" \
+  > dd-test-optimization-efd-command.txt
+```
+
+Run the shared manual advanced wrapper commands above. For Test Management, create one generated
+feature/scenario per mode, write `dd-test-optimization-tm-${TM_MODE}-command.txt` to select that
+scenario, then run the shared manual Test Management calibration commands. The generated step
+definition should pass when `DD_TEST_OPTIMIZATION_TM_BASELINE=1`; otherwise it should implement the
+mode behavior described in the shared Test Management contract.
+
+```bash
+TM_MODE='disabled' # disabled, quarantined, or attempt-to-fix
+CUCUMBER_TM_FEATURE="features/dd-trace-tm-${TM_MODE}.feature"
+cat > "$CUCUMBER_TM_FEATURE" <<EOF
+Feature: dd trace test management ${TM_MODE}
+  Scenario: dd trace test management ${TM_MODE} candidate
+    Given dd trace test management ${TM_MODE} behaves
+EOF
+printf '%s\n' "$CUCUMBER_RUNNER_COMMAND_PREFIX $CUCUMBER_GENERATED_REQUIRE_ARGS $CUCUMBER_TM_FEATURE" \
+  > "dd-test-optimization-tm-${TM_MODE}-command.txt"
+printf '%s\n' "$CUCUMBER_TM_FEATURE" >> dd-test-optimization-manual-generated-files.txt
+```
+
+If the repository cannot select the generated scenario or cannot load temporary step definitions
+safely, report Test Management as diagnostic-only skipped with: selected command, generated paths,
+preflight output, and exact loader/selection reason.
+
+### Cypress Adapter
+
+Select one existing spec for basic reporting, then define a separate Cypress runner prefix for
+generated advanced runs. `CYPRESS_BASE_COMMAND` may include `--spec`; `CYPRESS_RUNNER_COMMAND_PREFIX`
+must not include `--spec`.
+
+```bash
+CYPRESS_BASE_SPEC='FILL_IN' # for example: cypress/e2e/example.cy.js
+CYPRESS_BASE_COMMAND='FILL_IN' # for example: npm run cypress:run -- --spec cypress/e2e/example.cy.js
+CYPRESS_RUNNER_COMMAND_PREFIX='FILL_IN' # for example: npm run cypress:run -- ; no --spec
+printf '%s\n' cypress > dd-test-optimization-framework.txt
+printf '%s\n' "$CYPRESS_BASE_COMMAND" > dd-test-optimization-test-command.txt
+printf '%s\n' "$CYPRESS_BASE_SPEC" > dd-test-optimization-selected-test-files.txt
+```
+
+Create generated Cypress specs:
+
+```bash
+CYPRESS_EFD_SPEC='cypress/e2e/dd-trace-efd-debug.cy.js'
+CYPRESS_ATR_SPEC='cypress/e2e/dd-trace-atr-debug.cy.js'
+mkdir -p "$(dirname "$CYPRESS_EFD_SPEC")"
+
+cat > "$CYPRESS_EFD_SPEC" <<'EOF'
+describe('dd trace EFD debug', () => {
+  it('dd trace EFD debug temporary test', () => {
+    expect(1 + 1).to.equal(2)
+  })
+})
+EOF
+
+cat > "$CYPRESS_ATR_SPEC" <<'EOF'
+describe('dd trace ATR debug', () => {
+  let ddTraceAtrCounter = 0
+
+  it('dd trace Auto Test Retries debug temporary test', () => {
+    if (Cypress.env('DD_TEST_OPTIMIZATION_ATR_FLAKE') && ddTraceAtrCounter++ === 0) {
+      throw new Error('dd trace auto retry debug flake')
+    }
+    expect(1 + 1).to.equal(2)
+  })
+})
+EOF
+
+printf '%s\n' "$CYPRESS_EFD_SPEC" "$CYPRESS_ATR_SPEC" > dd-test-optimization-manual-generated-files.txt
+printf '%s\n' "$CYPRESS_EFD_SPEC" > dd-test-optimization-efd-temp-test-file.txt
+printf '%s\n' 'dd trace EFD debug temporary test' > dd-test-optimization-efd-test-name.txt
+cat "$CYPRESS_EFD_SPEC" > dd-test-optimization-efd-new-test-snippet.txt
+printf '%s\n' "$CYPRESS_ATR_SPEC" > dd-test-optimization-atr-generated-test-file.txt
+printf '%s\n' "$CYPRESS_ATR_SPEC" > dd-test-optimization-atr-flaky-test-file.txt
+printf '%s\n' 'dd trace Auto Test Retries debug temporary test' > dd-test-optimization-atr-flaky-test-name.txt
+cat "$CYPRESS_ATR_SPEC" > dd-test-optimization-atr-flaky-test-snippet.txt
+```
+
+Write commands using the repository's normal Cypress runner. Use comma-separated specs only if that
+is how the repository's Cypress version accepts multiple specs.
+
+```bash
+printf '%s\n' "$CYPRESS_RUNNER_COMMAND_PREFIX --spec $CYPRESS_BASE_SPEC,$CYPRESS_ATR_SPEC" \
+  > dd-test-optimization-atr-baseline-command.txt
+printf '%s\n' "CYPRESS_DD_TEST_OPTIMIZATION_ATR_FLAKE=1 $CYPRESS_RUNNER_COMMAND_PREFIX --spec $CYPRESS_BASE_SPEC,$CYPRESS_ATR_SPEC,$CYPRESS_EFD_SPEC" \
+  > dd-test-optimization-efd-command.txt
+```
+
+Run the shared manual advanced wrapper commands above. If basic reporting captures only
+higher-level events, check the Cypress static diagnosis for plugin/support-file wiring before
+diagnosing EFD, ATR, or Test Management. For Test Management, generate a Cypress spec per mode and
+run the shared manual Test Management calibration commands.
+
+```bash
+TM_MODE='disabled' # disabled, quarantined, or attempt-to-fix
+CYPRESS_TM_SPEC="cypress/e2e/dd-trace-tm-${TM_MODE}.cy.js"
+cat > "$CYPRESS_TM_SPEC" <<EOF
+describe('dd trace test management ${TM_MODE}', () => {
+  it('dd trace test management ${TM_MODE} candidate', () => {
+    if (Cypress.env('DD_TEST_OPTIMIZATION_TM_BASELINE')) {
+      expect(1 + 1).to.equal(2)
+      return
+    }
+    if ('${TM_MODE}' === 'disabled' || '${TM_MODE}' === 'quarantined') {
+      throw new Error('dd trace test management ${TM_MODE} candidate failure')
+    }
+    if ('${TM_MODE}' === 'attempt-to-fix') {
+      if (Cypress.env('DD_TRACE_TM_ATTEMPT_MARKER')) {
+        Cypress.env('DD_TRACE_TM_ATTEMPT_MARKER', false)
+        throw new Error('dd trace test management attempt-to-fix retry failure')
+      }
+      Cypress.env('DD_TRACE_TM_ATTEMPT_MARKER', true)
+    }
+    expect(1 + 1).to.equal(2)
+  })
+})
+EOF
+printf '%s\n' "CYPRESS_DD_TEST_OPTIMIZATION_TM_BASELINE=\$DD_TEST_OPTIMIZATION_TM_BASELINE $CYPRESS_RUNNER_COMMAND_PREFIX --spec $CYPRESS_TM_SPEC" \
+  > "dd-test-optimization-tm-${TM_MODE}-command.txt"
+printf '%s\n' "$CYPRESS_TM_SPEC" >> dd-test-optimization-manual-generated-files.txt
+```
+
+If the generated spec is not collected or browser-side support is unavailable, report the subcheck
+as diagnostic-only skipped with the preflight output and Cypress wiring finding.
+
+### Playwright Adapter
+
+Select one existing spec for basic reporting and force a single worker when possible. Then define a
+separate Playwright runner prefix for generated advanced runs. `PLAYWRIGHT_BASE_COMMAND` may include
+the existing spec and `--workers`; `PLAYWRIGHT_RUNNER_COMMAND_PREFIX` must not include a spec path
+or `--workers`.
+
+```bash
+PLAYWRIGHT_BASE_SPEC='FILL_IN' # for example: tests/example.spec.ts
+PLAYWRIGHT_BASE_COMMAND='FILL_IN' # for example: npx playwright test tests/example.spec.ts --workers=1
+PLAYWRIGHT_RUNNER_COMMAND_PREFIX='FILL_IN' # for example: npx playwright test ; no spec path and no --workers
+printf '%s\n' playwright > dd-test-optimization-framework.txt
+printf '%s\n' "$PLAYWRIGHT_BASE_COMMAND" > dd-test-optimization-test-command.txt
+printf '%s\n' "$PLAYWRIGHT_BASE_SPEC" > dd-test-optimization-selected-test-files.txt
+```
+
+Create generated Playwright specs. Use `.js` instead of `.ts` if the repository does not compile
+TypeScript Playwright tests.
+
+```bash
+PLAYWRIGHT_EFD_SPEC='tests/dd-trace-efd-debug.spec.ts'
+PLAYWRIGHT_ATR_SPEC='tests/dd-trace-atr-debug.spec.ts'
+mkdir -p "$(dirname "$PLAYWRIGHT_EFD_SPEC")"
+
+cat > "$PLAYWRIGHT_EFD_SPEC" <<'EOF'
+import { expect, test } from '@playwright/test'
+
+test('dd trace EFD debug temporary test', async () => {
+  expect(1 + 1).toBe(2)
+})
+EOF
+
+cat > "$PLAYWRIGHT_ATR_SPEC" <<'EOF'
+import { expect, test } from '@playwright/test'
+
+let ddTraceAtrCounter = 0
+
+test('dd trace Auto Test Retries debug temporary test', async () => {
+  const nodeOptions = String(process.env.NODE_OPTIONS || '')
+  const normalizedNodeOptions = nodeOptions.replace(/\\/g, '/')
+  const hasDdTraceCiInit = normalizedNodeOptions.includes('dd-trace/ci/init') ||
+    normalizedNodeOptions.includes('/ci/init.js')
+  if (process.env.DD_TEST_OPTIMIZATION_ASSERT_NODE_OPTIONS === '1' &&
+      !hasDdTraceCiInit) {
+    throw new Error('dd trace Playwright worker missing NODE_OPTIONS preload')
+  }
+  if (process.env.DD_TEST_OPTIMIZATION_ATR_FLAKE === '1' && ddTraceAtrCounter++ === 0) {
+    throw new Error('dd trace auto retry debug flake')
+  }
+  expect(1 + 1).toBe(2)
+})
+EOF
+
+printf '%s\n' "$PLAYWRIGHT_EFD_SPEC" "$PLAYWRIGHT_ATR_SPEC" > dd-test-optimization-manual-generated-files.txt
+printf '%s\n' "$PLAYWRIGHT_EFD_SPEC" > dd-test-optimization-efd-temp-test-file.txt
+printf '%s\n' 'dd trace EFD debug temporary test' > dd-test-optimization-efd-test-name.txt
+cat "$PLAYWRIGHT_EFD_SPEC" > dd-test-optimization-efd-new-test-snippet.txt
+printf '%s\n' "$PLAYWRIGHT_ATR_SPEC" > dd-test-optimization-atr-generated-test-file.txt
+printf '%s\n' "$PLAYWRIGHT_ATR_SPEC" > dd-test-optimization-atr-flaky-test-file.txt
+printf '%s\n' 'dd trace Auto Test Retries debug temporary test' > dd-test-optimization-atr-flaky-test-name.txt
+cat "$PLAYWRIGHT_ATR_SPEC" > dd-test-optimization-atr-flaky-test-snippet.txt
+```
+
+Write commands. Keep `--workers=1` unless the repository requires another worker model.
+
+```bash
+printf '%s\n' "$PLAYWRIGHT_RUNNER_COMMAND_PREFIX $PLAYWRIGHT_BASE_SPEC $PLAYWRIGHT_ATR_SPEC --workers=1" \
+  > dd-test-optimization-atr-baseline-command.txt
+printf '%s\n' "DD_TEST_OPTIMIZATION_ATR_FLAKE=1 $PLAYWRIGHT_RUNNER_COMMAND_PREFIX $PLAYWRIGHT_BASE_SPEC $PLAYWRIGHT_ATR_SPEC $PLAYWRIGHT_EFD_SPEC --workers=1" \
+  > dd-test-optimization-efd-preflight-command.txt
+printf '%s\n' "DD_TEST_OPTIMIZATION_ASSERT_NODE_OPTIONS=1 DD_TEST_OPTIMIZATION_ATR_FLAKE=1 $PLAYWRIGHT_RUNNER_COMMAND_PREFIX $PLAYWRIGHT_BASE_SPEC $PLAYWRIGHT_ATR_SPEC $PLAYWRIGHT_EFD_SPEC --workers=1" \
+  > dd-test-optimization-efd-command.txt
+```
+
+The shared manual preflight uses `dd-test-optimization-efd-preflight-command.txt`, which does not
+assert `NODE_OPTIONS`. The wrapper run uses `dd-test-optimization-efd-command.txt`, which asserts
+that Playwright workers received a dd-trace CI init preload. It accepts either the package preload
+form, `dd-trace/ci/init`, or an absolute `.../ci/init.js` preload used by some package-manager
+layouts. If the generated Playwright spec fails with
+`dd trace Playwright worker missing NODE_OPTIONS preload`, report a worker propagation failure and
+do not apply EFD/ATR feature fixes. For Test Management, create one Playwright spec per mode and
+run the shared manual Test Management calibration commands.
+
+```bash
+TM_MODE='disabled' # disabled, quarantined, or attempt-to-fix
+PLAYWRIGHT_TM_SPEC="tests/dd-trace-tm-${TM_MODE}.spec.ts"
+cat > "$PLAYWRIGHT_TM_SPEC" <<EOF
+import { dirname } from 'node:path'
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+
+import { expect, test } from '@playwright/test'
+
+test('dd trace test management ${TM_MODE} candidate', async () => {
+  if (process.env.DD_TEST_OPTIMIZATION_TM_BASELINE === '1') {
+    expect(1 + 1).toBe(2)
+    return
+  }
+  if ('${TM_MODE}' === 'disabled' || '${TM_MODE}' === 'quarantined') {
+    throw new Error('dd trace test management ${TM_MODE} candidate failure')
+  }
+  if ('${TM_MODE}' === 'attempt-to-fix') {
+    const marker = 'dd-test-optimization-test-management/playwright-attempt-to-fix-marker'
+    mkdirSync(dirname(marker), { recursive: true })
+    if (existsSync(marker)) {
+      rmSync(marker, { force: true })
+      throw new Error('dd trace test management attempt-to-fix retry failure')
+    }
+    writeFileSync(marker, 'first execution passed')
+  }
+  expect(1 + 1).toBe(2)
+})
+EOF
+printf '%s\n' "$PLAYWRIGHT_RUNNER_COMMAND_PREFIX $PLAYWRIGHT_TM_SPEC --workers=1" \
+  > "dd-test-optimization-tm-${TM_MODE}-command.txt"
+printf '%s\n' "$PLAYWRIGHT_TM_SPEC" >> dd-test-optimization-manual-generated-files.txt
+```
+
+If the baseline artifact cannot calibrate identity, report Test Management as diagnostic-only
+skipped with: baseline command, baseline primary stage, emitted event samples, and identity
+mismatch reason.
 
 ## Decision Tree
 
@@ -2737,8 +3442,9 @@ present.
 
 Cause: the basic Test Optimization reporting path is working for the selected command.
 
-Fix: no basic reporting fix is needed. Run Step 7 to validate EFD. Defer ITR, test skipping, test
-management, and coverage analysis to a later runbook version.
+Fix: no basic reporting fix is needed. Run Step 7 to validate EFD and Auto Test Retries, then run
+Step 8 to validate Test Management. Defer only features not covered by this runbook, such as
+TIA/ITR coverage and test-skipping behavior, when applicable.
 
 ### Stage: EFD Retry Missing
 

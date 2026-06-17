@@ -79,6 +79,24 @@ const FEEDBACK_ARTIFACTS = {
   rootStage: 'dd-test-optimization-root-stage.txt',
   selectedTestFiles: 'dd-test-optimization-selected-test-files.txt',
 }
+const ALL_FRAMEWORKS_DIR = 'dd-test-optimization-framework-runs'
+const AUTOMATED_FULL_FRAMEWORKS = new Set(['jest', 'mocha', 'vitest'])
+const FULL_VALIDATION_COPY_PATHS = [
+  ...Object.values(ARTIFACTS),
+  ...Object.values(FEEDBACK_ARTIFACTS),
+  'dd-test-optimization-advanced-cleanup.json',
+  'dd-test-optimization-all-frameworks-summary.txt',
+  'dd-test-optimization-framework.txt',
+  'dd-test-optimization-step9-extractor-output.txt',
+  'dd-test-optimization-test-management-cleanup.json',
+  'dd-test-optimization-validation-url.txt',
+  'dd-test-optimization-tm-disabled',
+  'dd-test-optimization-tm-disabled-baseline',
+  'dd-test-optimization-tm-quarantined',
+  'dd-test-optimization-tm-quarantined-baseline',
+  'dd-test-optimization-tm-attempt-to-fix',
+  'dd-test-optimization-tm-attempt-to-fix-baseline',
+]
 const DEFAULT_READY_TIMEOUT_MS = 5000
 const READY_RETRY_INTERVAL_MS = 50
 const TEST_MANAGEMENT_MODES = ['disabled', 'quarantined', 'attempt-to-fix']
@@ -103,6 +121,12 @@ function parseArgs (args) {
       options.feedbackMode = true
     } else if (arg === '--full') {
       options.full = true
+    } else if (arg === '--all-frameworks') {
+      options.allFrameworks = true
+    } else if (arg === '--all-frameworks-out-dir') {
+      options.allFrameworksOutDir = args[++i]
+    } else if (arg.startsWith('--all-frameworks-out-dir=')) {
+      options.allFrameworksOutDir = arg.slice('--all-frameworks-out-dir='.length)
     } else if (arg === '--tm-all') {
       options.tmAll = true
     } else if (arg === '--framework') {
@@ -184,14 +208,16 @@ function parseArgs (args) {
  */
 function getHelpText () {
   return [
-    'Usage: dd-trace-ci-debug (--test-command <command> | --test-command-file <file>) ' +
-      '[--service <name>] [--out-dir <dir>]',
+    'Usage: dd-trace-ci-debug (--all-frameworks | --full | --test-command <command> | ' +
+      '--test-command-file <file>) [--service <name>] [--out-dir <dir>]',
     '',
     'Runs the Test Optimization debug flow end-to-end:',
     'static diagnosis, local fake intake, selected test command, analyzer, and final report.',
     '',
     'Options:',
     '  --full                    Select a command and run basic, EFD/ATR, Test Management, validation, and extraction.',
+    '  --all-frameworks          Run --full separately for every eligible automated framework.',
+    `  --all-frameworks-out-dir <dir>  Per-framework artifact root. Defaults to ${ALL_FRAMEWORKS_DIR}.`,
     '  --tm-all                  Run all three Test Management modes from existing selected-command artifacts.',
     '  --framework <name>        Framework focus for --full selection, for example jest, mocha, or vitest.',
     '  --package-root <dir>      Select tests from a nested package directory for --full.',
@@ -313,6 +339,7 @@ function runDebug (options, callback) {
             agentJsonReport: artifacts.agentJsonReport,
             agentReport: artifacts.agentReport,
             envFile: artifacts.env,
+            frameworkFile: 'dd-test-optimization-framework.txt',
             intake: artifacts.intake,
             out: artifacts.finalReport,
             summaryOut: artifacts.summary,
@@ -332,6 +359,7 @@ function runDebug (options, callback) {
           fs.writeFileSync(artifacts.summary, `${summaryReport}\n`)
           fs.writeFileSync(artifacts.diagnosis, `${JSON.stringify(getDiagnosisArtifact({
             analysis,
+            framework: readOptionalTextFile('dd-test-optimization-framework.txt'),
             staticReport,
             testCommand,
           }), null, 2)}\n`)
@@ -348,6 +376,7 @@ function runDebug (options, callback) {
  *
  * @param {object} input diagnosis input
  * @param {object} input.analysis intake analysis
+ * @param {string|undefined} input.framework selected framework id
  * @param {object} input.staticReport static diagnosis report
  * @param {string} input.testCommand selected test command
  * @returns {object} diagnosis artifact
@@ -364,6 +393,7 @@ function getDiagnosisArtifact (input) {
     likelyFailureCause: stage === 'Reporting complete'
       ? undefined
       : getBasicReportingFailureCause({
+        framework: input.framework,
         staticReport: input.staticReport,
         testCommand: input.testCommand,
       }, input.analysis),
@@ -453,6 +483,317 @@ function runFullValidation (options, callback) {
       })
     })
   })
+}
+
+/**
+ * Runs full validation separately for every eligible automated framework.
+ *
+ * @param {object} options all-framework validation options
+ * @param {Function} callback called with (error, report)
+ */
+function runAllFrameworksValidation (options, callback) {
+  let staticReport
+  let plan
+
+  try {
+    restoreGeneratedSources()
+    staticReport = runDiagnosis()
+    fs.writeFileSync(ARTIFACTS.static, `${JSON.stringify(staticReport, null, 2)}\n`)
+    plan = getAllFrameworksPlan(staticReport, options)
+  } catch (error) {
+    callback(error)
+    return
+  }
+
+  const summaries = []
+
+  for (const framework of plan.automated) {
+    try {
+      summaries.push(runOneAutomatedFrameworkValidation(framework, options))
+      restoreGeneratedSources()
+    } catch (error) {
+      summaries.push({
+        framework,
+        status: 'failed',
+        reason: error.message,
+      })
+    }
+  }
+
+  for (const framework of plan.manual) {
+    summaries.push({
+      framework: framework.id,
+      name: framework.name,
+      status: 'manual',
+      reason: `${framework.name} requires the framework adapter branch before live validation.`,
+      version: framework.version,
+    })
+  }
+
+  for (const framework of plan.diagnosticOnly) {
+    summaries.push({
+      framework: framework.id,
+      name: framework.name,
+      status: 'diagnostic-only',
+      reason: `${framework.name} is diagnostic-only for this runbook.`,
+    })
+  }
+
+  const report = renderAllFrameworksSummary(summaries, plan)
+  fs.writeFileSync('dd-test-optimization-all-frameworks-summary.txt', `${report}\n`)
+  callback(undefined, report)
+}
+
+/**
+ * Gets the all-framework validation plan.
+ *
+ * @param {object} staticReport static diagnosis report
+ * @param {object} options wrapper options
+ * @returns {object} validation plan
+ */
+function getAllFrameworksPlan (staticReport, options) {
+  const eligible = getEligibleFrameworks(staticReport)
+  const requested = options.framework ? new Set([options.framework]) : undefined
+  const automated = []
+  const manual = []
+
+  for (const framework of eligible) {
+    if (requested && !requested.has(framework.id)) continue
+
+    if (AUTOMATED_FULL_FRAMEWORKS.has(framework.id)) {
+      automated.push(framework.id)
+    } else {
+      manual.push(framework)
+    }
+  }
+
+  return {
+    automated: dedupeStrings(automated),
+    diagnosticOnly: Array.isArray(staticReport.unsupportedFrameworks) ? staticReport.unsupportedFrameworks : [],
+    manual,
+    staticReport,
+  }
+}
+
+/**
+ * Gets eligible framework summaries from static diagnosis.
+ *
+ * @param {object} staticReport static diagnosis report
+ * @returns {object[]} eligible framework summaries
+ */
+function getEligibleFrameworks (staticReport) {
+  const eligible = Array.isArray(staticReport.eligibleFrameworks) ? staticReport.eligibleFrameworks : []
+  if (eligible.length > 0) return eligible.map(normalizeFrameworkSummary)
+
+  const supported = Array.isArray(staticReport.supportedFrameworks) ? staticReport.supportedFrameworks : []
+  return supported.map(normalizeFrameworkSummary)
+}
+
+/**
+ * Normalizes a framework summary to common id/name/version fields.
+ *
+ * @param {object} framework framework summary
+ * @returns {object} normalized framework summary
+ */
+function normalizeFrameworkSummary (framework) {
+  const detections = Array.isArray(framework.versionDetections) ? framework.versionDetections : []
+
+  return {
+    ...framework,
+    id: framework.id,
+    name: framework.name || framework.id,
+    version: framework.version || detections[0]?.version || detections[0]?.rawVersion,
+  }
+}
+
+/**
+ * Runs the full driver for one automated framework and copies artifacts to an isolated directory.
+ *
+ * @param {string} framework framework id
+ * @param {object} options wrapper options
+ * @returns {object} framework run summary
+ */
+function runOneAutomatedFrameworkValidation (framework, options) {
+  const runDir = path.resolve(options.allFrameworksOutDir || ALL_FRAMEWORKS_DIR, framework)
+  const args = getAllFrameworksChildArgs(framework, options)
+
+  removeFullValidationArtifacts()
+
+  const result = spawnSync(process.execPath, args, {
+    cwd: process.cwd(),
+    encoding: 'utf8',
+    env: process.env,
+    maxBuffer: 50 * 1024 * 1024,
+  })
+  const output = `${result.stdout || ''}${result.stderr || ''}`
+
+  fs.rmSync(runDir, { force: true, recursive: true })
+  fs.mkdirSync(runDir, { recursive: true })
+  fs.writeFileSync(path.join(runDir, 'dd-test-optimization-codex-output.txt'), output)
+  copyFullValidationArtifacts(runDir)
+
+  const report = readOptionalTextFile(path.join(runDir, 'dd-test-optimization-step9-extractor-output.txt')) ||
+    readOptionalTextFile(path.join(runDir, ARTIFACTS.finalReport))
+
+  return {
+    framework,
+    html: getReportLine(report, 'HTML report:'),
+    report: getExistingPath(path.join(runDir, 'dd-test-optimization-step9-extractor-output.txt')),
+    status: result.status === 0 ? 'completed' : 'failed',
+    summary: getReportSummaryLines(report),
+    validationUrlFile: getExistingPath(path.join(runDir, 'dd-test-optimization-validation-url.txt')),
+  }
+}
+
+/**
+ * Removes root full-validation artifacts before a per-framework child run.
+ */
+function removeFullValidationArtifacts () {
+  for (const artifactPath of FULL_VALIDATION_COPY_PATHS) {
+    fs.rmSync(artifactPath, { force: true, recursive: true })
+  }
+}
+
+/**
+ * Gets child CLI args for one all-framework full validation.
+ *
+ * @param {string} framework framework id
+ * @param {object} options parent options
+ * @returns {string[]} child process args
+ */
+function getAllFrameworksChildArgs (framework, options) {
+  const args = [__filename, '--full', '--framework', framework, '--no-open']
+
+  if (options.packageRoot) args.push('--package-root', options.packageRoot)
+  if (options.preflight) args.push('--preflight')
+  if (options.forceRunInBand) args.push('--force-run-in-band')
+  if (options.readyTimeoutMs) args.push('--ready-timeout-ms', String(options.readyTimeoutMs))
+  if (options.service) args.push('--service', options.service)
+
+  return args
+}
+
+/**
+ * Copies current full-validation artifacts to a per-framework directory.
+ *
+ * @param {string} runDir destination run directory
+ */
+function copyFullValidationArtifacts (runDir) {
+  for (const artifactPath of FULL_VALIDATION_COPY_PATHS) {
+    if (!fs.existsSync(artifactPath)) continue
+
+    const destination = path.join(runDir, artifactPath)
+    fs.mkdirSync(path.dirname(destination), { recursive: true })
+
+    const stat = fs.statSync(artifactPath)
+    if (stat.isDirectory()) {
+      fs.cpSync(artifactPath, destination, { force: true, recursive: true })
+    } else {
+      fs.copyFileSync(artifactPath, destination)
+    }
+  }
+}
+
+/**
+ * Renders the aggregate all-framework summary.
+ *
+ * @param {object[]} summaries framework run summaries
+ * @param {object} plan all-framework validation plan
+ * @returns {string} summary report
+ */
+function renderAllFrameworksSummary (summaries, plan) {
+  const lines = [
+    'Test Optimization all-framework validation summary',
+    '',
+    'Automated framework runs:',
+  ]
+
+  const automated = summaries.filter(summary => summary.status !== 'manual' && summary.status !== 'diagnostic-only')
+  if (automated.length === 0) {
+    lines.push('- none')
+  } else {
+    for (const summary of automated) {
+      lines.push(`- ${summary.framework}: ${summary.status}`)
+      for (const statusLine of summary.summary) lines.push(`  ${statusLine}`)
+      if (summary.html) lines.push(`  HTML report: ${summary.html}`)
+      if (summary.validationUrlFile) lines.push(`  Validation URL file: ${summary.validationUrlFile}`)
+      if (summary.report) lines.push(`  Report: ${summary.report}`)
+      if (summary.reason) lines.push(`  Reason: ${summary.reason}`)
+    }
+  }
+
+  const manual = summaries.filter(summary => summary.status === 'manual')
+  if (manual.length > 0) {
+    lines.push('', 'Manual framework branches:')
+    for (const summary of manual) {
+      lines.push(`- ${summary.framework}: ${summary.reason}`)
+    }
+  }
+
+  const diagnosticOnly = summaries.filter(summary => summary.status === 'diagnostic-only')
+  if (diagnosticOnly.length > 0) {
+    lines.push('', 'Diagnostic-only framework findings:')
+    for (const summary of diagnosticOnly) {
+      lines.push(`- ${summary.framework}: ${summary.reason}`)
+    }
+  }
+
+  if (plan.automated.length === 0 && manual.length === 0 && diagnosticOnly.length === 0) {
+    lines.push('', 'No eligible framework candidates were detected.')
+  }
+
+  return lines.join('\n')
+}
+
+/**
+ * Gets a prefixed report line.
+ *
+ * @param {string} report report text
+ * @param {string} prefix line prefix
+ * @returns {string|undefined} report line value
+ */
+function getReportLine (report, prefix) {
+  return report.split(/\r?\n/).find(line => line.startsWith(prefix))?.slice(prefix.length).trim()
+}
+
+/**
+ * Gets summary lines from a report.
+ *
+ * @param {string} report report text
+ * @returns {string[]} summary lines
+ */
+function getReportSummaryLines (report) {
+  const lines = report.split(/\r?\n/)
+  const start = lines.findIndex(line => line.trim() === 'Summary:')
+  const summary = []
+
+  if (start === -1) return summary
+
+  for (let i = start + 1; i < lines.length && lines[i].startsWith('- '); i++) {
+    summary.push(lines[i])
+  }
+
+  return summary
+}
+
+/**
+ * Deduplicates strings in insertion order.
+ *
+ * @param {string[]} values string values
+ * @returns {string[]} deduplicated values
+ */
+function dedupeStrings (values) {
+  return [...new Set(values)]
+}
+
+/**
+ * Gets a path only when it exists.
+ *
+ * @param {string} file file path
+ * @returns {string|undefined} file path
+ */
+function getExistingPath (file) {
+  return fs.existsSync(file) ? file : undefined
 }
 
 /**
@@ -1687,6 +2028,16 @@ if (require.main === module) {
     process.exitCode = 1
   } else if (options.feedbackMode) {
     runFeedbackMode(options, (error, report) => {
+      if (error) {
+        console.error(error.message)
+        process.exitCode = 1
+        return
+      }
+
+      console.log(report)
+    })
+  } else if (options.allFrameworks) {
+    runAllFrameworksValidation(options, (error, report) => {
       if (error) {
         console.error(error.message)
         process.exitCode = 1

@@ -97,6 +97,7 @@ function getHelpText () {
  * @param {string|undefined} input.newTestSnippet EFD temporary test snippet
  * @param {string|undefined} input.flakyTestSnippet Auto Test Retries temporary flaky test snippet
  * @param {object|undefined} input.artifacts artifact paths and URLs
+ * @param {string|undefined} input.framework selected framework id
  * @returns {object} validation payload
  */
 function buildValidationPayload (input) {
@@ -115,7 +116,7 @@ function buildValidationPayload (input) {
       htmlFileUrl: input.artifacts?.htmlFileUrl || summary.artifacts.htmlFileUrl,
       htmlPath: input.artifacts?.htmlPath || summary.artifacts.htmlPath,
     },
-    framework: getFramework(input.staticReport),
+    framework: getFramework(input.staticReport, input.framework),
   }
 }
 
@@ -534,6 +535,8 @@ function getBasicReportingCheck (input, analysis) {
           requestCount: summary.requestCount,
           citestcyclePayloads: summary.citestcycle.payloadCount,
           events,
+          genericSpanEvents: summary.events.counts.span || 0,
+          observedEventTypes: getObservedEventTypes(summary),
           missingLevels: summary.events.missingLevels,
           decodeErrors: summary.decodeErrors.length,
           reason,
@@ -559,6 +562,9 @@ function getBasicReportingFailureCause (input, analysis) {
     return 'No Test Optimization payload reached the fake intake. The tracer may not have loaded, the selected ' +
       'command may not have run tests, or the selected runner may not be supported.'
   }
+  if (hasOnlyGenericSpanEvents(summary)) {
+    return getGenericSpanOnlyFailureCause(input)
+  }
   if (summary.events.missingLevels.includes('test')) {
     return 'Test Optimization initialized and emitted higher-level events, but per-test hooks did not fire. ' +
       'This usually points to an unsupported runner, unsupported framework version, or unsupported framework ' +
@@ -572,6 +578,66 @@ function getBasicReportingFailureCause (input, analysis) {
   }
 
   return 'Basic reporting failed, but no more specific cause was available from the local artifacts.'
+}
+
+/**
+ * Checks whether CI Visibility payloads contained only generic spans, not test events.
+ *
+ * @param {object} summary intake summary
+ * @returns {boolean} whether only generic spans were observed
+ */
+function hasOnlyGenericSpanEvents (summary) {
+  const counts = summary.events.counts || {}
+
+  return summary.citestcycle.payloadCount > 0 &&
+    (counts.span || 0) > 0 &&
+    (counts.test_session_end || 0) === 0 &&
+    (counts.test_module_end || 0) === 0 &&
+    (counts.test_suite_end || 0) === 0 &&
+    (counts.test || 0) === 0
+}
+
+/**
+ * Gets the failure cause for generic-span-only CI Visibility payloads.
+ *
+ * @param {object} input validation input
+ * @returns {string} failure cause
+ */
+function getGenericSpanOnlyFailureCause (input) {
+  const framework = getSelectedFrameworkId(input)
+  const base = 'The fake intake received CI Visibility payloads, but they contained generic span events instead ' +
+    'of Test Optimization test events.'
+
+  if (framework === 'vitest') {
+    return `${base} For Vitest, this usually means the ESM preload did not reach the test worker. Rerun with ` +
+      'NODE_OPTIONS="--import dd-trace/register.js -r dd-trace/ci/init" or choose a Vitest command shape that ' +
+      'preserves NODE_OPTIONS in workers.'
+  }
+
+  return `${base} The selected command likely bypassed the supported test framework instrumentation, used a ` +
+    'custom runner configuration, or did not propagate the dd-trace CI init preload to the process that executed tests.'
+}
+
+/**
+ * Gets selected framework id from validation input.
+ *
+ * @param {object} input validation input
+ * @returns {string|undefined} selected framework id
+ */
+function getSelectedFrameworkId (input) {
+  return input.framework && String(input.framework).toLowerCase()
+}
+
+/**
+ * Gets observed event type names from the analyzer summary.
+ *
+ * @param {object} summary intake summary
+ * @returns {string[]} observed event type names
+ */
+function getObservedEventTypes (summary) {
+  return Object.entries(summary.events.counts || {})
+    .filter(([, count]) => count > 0)
+    .map(([type]) => type)
 }
 
 /**
