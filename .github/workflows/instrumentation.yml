@@ -464,6 +464,16 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/instrumentations/test
 
+  instrumentation-pino:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      PLUGINS: pino
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: ./.github/actions/instrumentations/test
+
   instrumentation-promise-js:
     runs-on: ubuntu-latest
     permissions:
