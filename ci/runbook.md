@@ -54,6 +54,27 @@ commands fail.
 9. Run `dd-trace/ci/validate-test-optimization` with the manifest.
 10. Report the validator's result and UI path.
 
+## Optional Target Framework
+
+If the prompt asks to target, focus on, or validate only one framework entry, still discover the
+repository normally, but run live validation only for the requested entry.
+
+Normalize the requested target by trimming whitespace and removing trailing colons. For example,
+`vitest:root-unit:` means the manifest entry with id `vitest:root-unit`.
+
+Pass the target to the validator with `--framework`:
+
+```bash
+node /absolute/path/to/validate-test-optimization.js \
+  --manifest ./dd-test-optimization-validation-manifest.json \
+  --out ./dd-test-optimization-validation-results \
+  --framework vitest:root-unit
+```
+
+If the target is a framework kind such as `vitest`, the validator runs all matching Vitest entries.
+If the requested target is not discovered, report the available framework entry ids and do not run
+an unrelated framework as a substitute.
+
 ## Goal
 
 Create a complete, verified manifest that tells a deterministic validator:
@@ -435,6 +456,8 @@ node /absolute/path/to/validate-test-optimization.js \
   --manifest ./dd-test-optimization-validation-manifest.json \
   --out ./dd-test-optimization-validation-results
 ```
+
+If a target framework was requested, add `--framework <normalized-target>` to the validator command.
 
 If the repository uses Yarn Plug'n'Play, pnpm, workspaces, or another non-standard module resolution
 setup, resolve and execute the validator through the package manager mechanism that works in this

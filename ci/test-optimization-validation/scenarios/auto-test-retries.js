@@ -4,7 +4,7 @@ const {
   discoverScenarioTests,
   discoveryEvidence,
   error,
-  fail,
+  failWithDebugRerun,
   pass,
   prepareGeneratedScenario,
   requireGeneratedScenario,
@@ -23,20 +23,26 @@ async function runAutoTestRetries ({ framework, intake, out, options }) {
     const { scenario } = await prepareGeneratedScenario(framework, 'atr-fail-once')
     const discovery = await discoverScenarioTests({ framework, intake, out, scenarioName, scenario, options })
     if (discovery.tests.length === 0) {
-      return fail(
+      return failWithDebugRerun({
+        command: scenario.runCommand,
+        configureIntake: () => intake.configure(),
+        diagnosis: 'The fail-once generated test was not reported during baseline identity discovery.',
+        evidence: discoveryEvidence(discovery),
         framework,
+        intake,
+        options,
+        out,
+        outDir: discovery.outDir,
         scenarioName,
-        'The fail-once generated test was not reported during baseline identity discovery.',
-        discoveryEvidence(discovery),
-        discovery.outDir
-      )
+      })
     }
 
-    intake.configure({
+    const configureAutoTestRetries = () => intake.configure({
       settings: {
         flaky_test_retries_enabled: true,
       },
     })
+    configureAutoTestRetries()
 
     const run = await runInstrumentedCommand({
       framework,
@@ -61,23 +67,33 @@ async function runAutoTestRetries ({ framework, intake, out, options }) {
     }
 
     if (run.result.exitCode !== 0) {
-      return fail(
-        framework,
-        scenarioName,
-        'The fail-once generated test still failed after ATR should have retried it.',
+      return failWithDebugRerun({
+        command: scenario.runCommand,
+        configureIntake: configureAutoTestRetries,
+        diagnosis: getAutoTestRetriesFailureDiagnosis(framework, evidence),
         evidence,
-        outDir
-      )
+        framework,
+        intake,
+        options,
+        out,
+        outDir,
+        scenarioName,
+      })
     }
 
     if (tests.length < 2 || retryLikeEvents.length === 0) {
-      return fail(
-        framework,
-        scenarioName,
-        'ATR was enabled, but no retry evidence was found for the fail-once generated test.',
+      return failWithDebugRerun({
+        command: scenario.runCommand,
+        configureIntake: configureAutoTestRetries,
+        diagnosis: getAutoTestRetriesFailureDiagnosis(framework, evidence),
         evidence,
-        outDir
-      )
+        framework,
+        intake,
+        options,
+        out,
+        outDir,
+        scenarioName,
+      })
     }
 
     return pass(
@@ -92,4 +108,34 @@ async function runAutoTestRetries ({ framework, intake, out, options }) {
   }
 }
 
-module.exports = { runAutoTestRetries }
+function getAutoTestRetriesFailureDiagnosis (framework, evidence) {
+  const frameworkName = getFrameworkName(framework)
+  const retryTagSummary = getRetryTagSummary(evidence.retryLikeEvents)
+  return 'Auto Test Retries was enabled, and the generated failing test was reported, but ' +
+    `${frameworkName} ` +
+    `did not execute a retry attempt. Observed ${formatAttemptCount(evidence.failedAttempts, 'failed')}, ` +
+    `${formatAttemptCount(evidence.passedAttempts, 'passed retry')}, and ${retryTagSummary}.`
+}
+
+function formatAttemptCount (count, label) {
+  return `${count} ${label} attempt${count === 1 ? '' : 's'}`
+}
+
+function getRetryTagSummary (count) {
+  if (count === 0) return 'no test.retry_reason=auto_test_retry tag'
+  if (count === 1) return '1 event tagged with test.retry_reason=auto_test_retry'
+  return `${count} events tagged with test.retry_reason=auto_test_retry`
+}
+
+function getFrameworkName (framework) {
+  return {
+    cucumber: 'Cucumber',
+    cypress: 'Cypress',
+    jest: 'Jest',
+    mocha: 'Mocha',
+    playwright: 'Playwright',
+    vitest: 'Vitest',
+  }[framework.framework] || 'the test runner'
+}
+
+module.exports = { getAutoTestRetriesFailureDiagnosis, runAutoTestRetries }

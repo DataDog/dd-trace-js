@@ -6,7 +6,7 @@ const {
   discoverScenarioTests,
   discoveryEvidence,
   error,
-  fail,
+  failWithDebugRerun,
   pass,
   prepareGeneratedScenario,
   requestsUrlIncludes,
@@ -26,17 +26,22 @@ async function runTestManagement ({ framework, intake, out, options }) {
     const { scenario } = await prepareGeneratedScenario(framework, 'test-management-target')
     const discovery = await discoverScenarioTests({ framework, intake, out, scenarioName, scenario, options })
     if (discovery.tests.length === 0) {
-      return fail(
+      return failWithDebugRerun({
+        command: scenario.runCommand,
+        configureIntake: () => intake.configure(),
+        diagnosis: 'The test-management target was not reported during baseline identity discovery.',
+        evidence: discoveryEvidence(discovery),
         framework,
+        intake,
+        options,
+        out,
+        outDir: discovery.outDir,
         scenarioName,
-        'The test-management target was not reported during baseline identity discovery.',
-        discoveryEvidence(discovery),
-        discovery.outDir
-      )
+      })
     }
 
     const testManagementTests = buildQuarantinedResponse(framework, scenario, discovery.testIdentities)
-    intake.configure({
+    const configureTestManagement = () => intake.configure({
       settings: {
         test_management: {
           enabled: true,
@@ -45,6 +50,7 @@ async function runTestManagement ({ framework, intake, out, options }) {
       },
       testManagementTests,
     })
+    configureTestManagement()
 
     const run = await runInstrumentedCommand({
       framework,
@@ -70,17 +76,33 @@ async function runTestManagement ({ framework, intake, out, options }) {
     }
 
     if (tests.length === 0) {
-      return fail(framework, scenarioName, 'The test-management target test was not reported.', evidence, outDir)
+      return failWithDebugRerun({
+        command: scenario.runCommand,
+        configureIntake: configureTestManagement,
+        diagnosis: 'The test-management target test was not reported.',
+        evidence,
+        framework,
+        intake,
+        options,
+        out,
+        outDir,
+        scenarioName,
+      })
     }
 
     if (quarantinedTests.length === 0) {
-      return fail(
-        framework,
-        scenarioName,
-        'Test Management was enabled, but the generated target was not tagged as quarantined.',
+      return failWithDebugRerun({
+        command: scenario.runCommand,
+        configureIntake: configureTestManagement,
+        diagnosis: 'Test Management was enabled, but the generated target was not tagged as quarantined.',
         evidence,
-        outDir
-      )
+        framework,
+        intake,
+        options,
+        out,
+        outDir,
+        scenarioName,
+      })
     }
 
     return pass(

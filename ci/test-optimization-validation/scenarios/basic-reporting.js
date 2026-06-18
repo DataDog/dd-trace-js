@@ -4,9 +4,12 @@ const {
   basicEventEvidence,
   error,
   fail,
+  failWithDebugRerun,
+  findInterestingLines,
   hasAllBasicEventTypes,
   pass,
   runInstrumentedCommand,
+  tailInterestingLines,
 } = require('./helpers')
 
 async function runBasicReporting ({ framework, intake, out, options }) {
@@ -39,30 +42,19 @@ async function runBasicReporting ({ framework, intake, out, options }) {
         evidence.commandFailure = summarizeCommandFailure(result, evidence)
       }
 
-      const debugRerun = await runDebugRerun({
+      return failWithDebugRerun({
         command: framework.existingTestCommand,
-        eventLevelFailure,
+        configureIntake: () => intake.configure(),
+        diagnosis: eventLevelFailure.summary,
+        evidence,
         framework,
         intake,
         options,
         out,
-        result,
-      })
-      if (debugRerun) {
-        evidence.debugRerun = debugRerun.summary
-      }
-
-      const failure = fail(
-        framework,
+        outDir,
         scenarioName,
-        eventLevelFailure.summary,
-        evidence,
-        outDir
-      )
-      if (debugRerun?.artifacts) {
-        failure.artifacts.push(...debugRerun.artifacts)
-      }
-      return failure
+        skipDebug: !shouldRunDebugRerun(eventLevelFailure, result),
+      })
     }
 
     if (result.exitCode === 0) {
@@ -90,84 +82,26 @@ async function runBasicReporting ({ framework, intake, out, options }) {
 
     evidence.commandFailure = summarizeCommandFailure(result, evidence)
     evidence.commandExitMatchesPreflight = false
-    return fail(
-      framework,
-      scenarioName,
-      `${evidence.commandFailure.summary} The exit code did not match the dd-trace-less preflight run.`,
+    return failWithDebugRerun({
+      command: framework.existingTestCommand,
+      configureIntake: () => intake.configure(),
+      diagnosis: `${evidence.commandFailure.summary} The exit code did not match the dd-trace-less preflight run.`,
       evidence,
-      outDir
-    )
+      framework,
+      intake,
+      options,
+      out,
+      outDir,
+      scenarioName,
+    })
   } catch (err) {
     return error(framework, scenarioName, err)
   }
 }
 
-async function runDebugRerun ({ command, eventLevelFailure, framework, intake, options, out, result }) {
-  if (!shouldRunDebugRerun(eventLevelFailure, result)) return null
-
-  try {
-    const debug = await runInstrumentedCommand({
-      framework,
-      intake,
-      out,
-      scenarioName: 'basic-reporting-debug',
-      command,
-      options,
-      extraEnv: {
-        DD_TRACE_DEBUG: 'true',
-        DD_TRACE_LOG_LEVEL: 'debug',
-      },
-    })
-
-    return {
-      summary: summarizeDebugRerun(debug),
-      artifacts: getDebugArtifacts(debug.outDir),
-    }
-  } catch (err) {
-    return {
-      summary: {
-        ran: false,
-        error: err && err.message ? err.message : String(err),
-      },
-    }
-  }
-}
-
 function shouldRunDebugRerun (eventLevelFailure, result) {
-  return result.exitCode === 0 &&
-    result.timedOut !== true &&
+  return result.timedOut !== true &&
     eventLevelFailure.kind !== 'vitest-benchmark'
-}
-
-function summarizeDebugRerun ({ result, events, outDir }) {
-  const output = `${result.stdout}\n${result.stderr}`
-
-  return {
-    ran: true,
-    commandExitCode: result.exitCode,
-    commandTimedOut: result.timedOut,
-    artifactDirectory: outDir,
-    ...basicEventEvidence(events),
-    debugLines: findInterestingLines(output, [
-      /dd-trace/i,
-      /test optimization/i,
-      /ci visibility/i,
-      /citestcycle/i,
-      /\b(?:error|warn)\b/i,
-    ]).slice(0, 20),
-    stderrExcerpt: tailInterestingLines(result.stderr),
-    stdoutExcerpt: tailInterestingLines(result.stdout),
-  }
-}
-
-function getDebugArtifacts (outDir) {
-  return [
-    'command.json',
-    'stdout.txt',
-    'stderr.txt',
-    'events.ndjson',
-    'result.json',
-  ].map(filename => `${outDir}/${filename}`)
 }
 
 function matchesPreflightExitCode (preflight, exitCode) {
@@ -333,32 +267,6 @@ function getFailureSummary ({ buildErrors, assertionFailures, exitCode, testEven
   }
 
   return `The selected test command exited ${exitCode} before payload validation could pass.`
-}
-
-function findInterestingLines (output, patterns) {
-  return uniqueLines(output.split(/\r?\n/).filter(line => {
-    return patterns.some(pattern => pattern.test(line))
-  })).slice(0, 8)
-}
-
-function tailInterestingLines (output) {
-  return output
-    .split(/\r?\n/)
-    .map(line => line.trimEnd())
-    .filter(line => line.trim() !== '')
-    .slice(-12)
-}
-
-function uniqueLines (lines) {
-  const seen = new Set()
-  const unique = []
-  for (const line of lines) {
-    const normalized = line.trim()
-    if (!normalized || seen.has(normalized)) continue
-    seen.add(normalized)
-    unique.push(line)
-  }
-  return unique
 }
 
 module.exports = {

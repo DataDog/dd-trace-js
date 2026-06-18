@@ -192,7 +192,7 @@ contains a structured local cause:
   fake intake.
 
 For ambiguous successful-command failures, the validator reruns the same command once with
-`DD_TRACE_DEBUG=true` and `DD_TRACE_LOG_LEVEL=debug`. Compact excerpts appear in `debugRerun`.
+`DD_TRACE_DEBUG=1` and `DD_TRACE_LOG_LEVEL=debug`. Compact excerpts appear in `debugRerun`.
 Recognized non-test command shapes such as `vitest-benchmark` do not trigger the debug rerun because
 the local cause is already known and benchmark reruns can be slow.
 

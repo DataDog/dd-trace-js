@@ -44,6 +44,81 @@ async function runInstrumentedCommand ({ framework, intake, out, scenarioName, c
   return { result, events, outDir }
 }
 
+async function failWithDebugRerun ({
+  command,
+  configureIntake,
+  diagnosis,
+  evidence,
+  framework,
+  intake,
+  options,
+  out,
+  outDir,
+  scenarioName,
+  skipDebug
+}) {
+  if (!skipDebug && command) {
+    const debugRerun = await runDebugInstrumentedCommand({
+      command,
+      configureIntake,
+      framework,
+      intake,
+      options,
+      out,
+      scenarioName,
+    })
+    evidence.debugRerun = debugRerun.summary
+
+    const failure = fail(framework, scenarioName, diagnosis, evidence, outDir)
+    if (debugRerun.artifacts) {
+      failure.artifacts.push(...debugRerun.artifacts)
+    }
+    return failure
+  }
+
+  return fail(framework, scenarioName, diagnosis, evidence, outDir)
+}
+
+async function runDebugInstrumentedCommand ({
+  command,
+  configureIntake,
+  framework,
+  intake,
+  options,
+  out,
+  scenarioName
+}) {
+  try {
+    cleanupGeneratedRuntimeFiles(framework)
+    if (configureIntake) configureIntake()
+
+    const debug = await runInstrumentedCommand({
+      framework,
+      intake,
+      out,
+      scenarioName: `${scenarioName}-debug`,
+      command,
+      options,
+      extraEnv: {
+        DD_TRACE_DEBUG: '1',
+        DD_TRACE_LOG_LEVEL: 'debug',
+      },
+    })
+
+    return {
+      summary: summarizeDebugRerun(debug),
+      artifacts: getDebugArtifacts(debug.outDir),
+    }
+  } catch (err) {
+    return {
+      summary: {
+        ran: false,
+        error: err && err.message ? err.message : String(err),
+      },
+    }
+  }
+}
+
 async function prepareGeneratedScenario (framework, scenarioId) {
   const scenario = findGeneratedScenario(framework, scenarioId)
   if (!scenario) return { scenario: null, written: [] }
@@ -179,6 +254,72 @@ function copy (target, source, key) {
   if (source && source[key] !== undefined) target[key] = source[key]
 }
 
+function summarizeDebugRerun ({ result, events, outDir }) {
+  const output = `${result.stdout}\n${result.stderr}`
+
+  return {
+    ran: true,
+    commandExitCode: result.exitCode,
+    commandTimedOut: result.timedOut,
+    debugCommandFailed: result.exitCode !== 0 || result.timedOut === true,
+    artifactDirectory: outDir,
+    ...basicEventEvidence(events),
+    debugLines: findInterestingLines(output, [
+      /dd-trace/i,
+      /test optimization/i,
+      /ci visibility/i,
+      /citestcycle/i,
+      /auto.?test.?retr/i,
+      /flaky.?retr/i,
+      /\b(?:error|warn)\b/i,
+    ], 20),
+    stderrExcerpt: tailInterestingLines(result.stderr),
+    stdoutExcerpt: tailInterestingLines(result.stdout),
+  }
+}
+
+function getDebugArtifacts (outDir) {
+  return [
+    'command.json',
+    'stdout.txt',
+    'stderr.txt',
+    'events.ndjson',
+    'result.json',
+  ].map(filename => `${outDir}/${filename}`)
+}
+
+function findInterestingLines (output, patterns, limit = 8) {
+  return uniqueLines(output.split(/\r?\n/).filter(line => {
+    if (/^\s*Encoding payload:/.test(line)) return false
+    return patterns.some(pattern => pattern.test(line))
+  }).map(truncateLine)).slice(0, limit)
+}
+
+function truncateLine (line) {
+  const maxLength = 500
+  return line.length > maxLength ? `${line.slice(0, maxLength)}...` : line
+}
+
+function tailInterestingLines (output) {
+  return output
+    .split(/\r?\n/)
+    .map(line => line.trimEnd())
+    .filter(line => line.trim() !== '')
+    .slice(-12)
+}
+
+function uniqueLines (lines) {
+  const seen = new Set()
+  const unique = []
+  for (const line of lines) {
+    const normalized = line.trim()
+    if (!normalized || seen.has(normalized)) continue
+    seen.add(normalized)
+    unique.push(line)
+  }
+  return unique
+}
+
 function pass (framework, scenario, diagnosis, evidence, outDir) {
   return result(framework, scenario, 'pass', diagnosis, evidence, outDir)
 }
@@ -224,15 +365,19 @@ module.exports = {
   discoveryEvidence,
   error,
   fail,
+  failWithDebugRerun,
+  findInterestingLines,
   frameworkOutDir,
   hasAllBasicEventTypes,
   pass,
   prepareGeneratedScenario,
   requestsUrlIncludes,
   requireGeneratedScenario,
+  runDebugInstrumentedCommand,
   runInstrumentedCommand,
   skip,
   testEventSamples,
+  tailInterestingLines,
   testsForDiscoveredScenario,
   testsForScenario,
 }

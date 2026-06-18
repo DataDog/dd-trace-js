@@ -4,7 +4,7 @@ const {
   discoverScenarioTests,
   discoveryEvidence,
   error,
-  fail,
+  failWithDebugRerun,
   pass,
   prepareGeneratedScenario,
   requestsUrlIncludes,
@@ -29,16 +29,21 @@ async function runEarlyFlakeDetection ({ framework, intake, out, options }) {
 
     const discovery = await discoverScenarioTests({ framework, intake, out, scenarioName, scenario, options })
     if (discovery.tests.length === 0) {
-      return fail(
+      return failWithDebugRerun({
+        command: scenario.runCommand,
+        configureIntake: () => intake.configure(),
+        diagnosis: 'The generated new-test candidate was not reported during baseline identity discovery.',
+        evidence: discoveryEvidence(discovery),
         framework,
+        intake,
+        options,
+        out,
+        outDir: discovery.outDir,
         scenarioName,
-        'The generated new-test candidate was not reported during baseline identity discovery.',
-        discoveryEvidence(discovery),
-        discovery.outDir
-      )
+      })
     }
 
-    intake.configure({
+    const configureEarlyFlakeDetection = () => intake.configure({
       settings: {
         early_flake_detection: {
           enabled: true,
@@ -53,6 +58,7 @@ async function runEarlyFlakeDetection ({ framework, intake, out, options }) {
         [framework.framework]: {},
       },
     })
+    configureEarlyFlakeDetection()
 
     const run = await runInstrumentedCommand({
       framework,
@@ -78,23 +84,33 @@ async function runEarlyFlakeDetection ({ framework, intake, out, options }) {
     }
 
     if (!evidence.settingsRequested || !evidence.knownTestsRequested) {
-      return fail(
-        framework,
-        scenarioName,
-        'EFD settings or known-tests endpoints were not requested.',
+      return failWithDebugRerun({
+        command: scenario.runCommand,
+        configureIntake: configureEarlyFlakeDetection,
+        diagnosis: 'EFD settings or known-tests endpoints were not requested.',
         evidence,
-        outDir
-      )
+        framework,
+        intake,
+        options,
+        out,
+        outDir,
+        scenarioName,
+      })
     }
 
     if (tests.length < 2 || retriedTests.length === 0) {
-      return fail(
-        framework,
-        scenarioName,
-        'The generated new test did not appear to be retried for Early Flake Detection.',
+      return failWithDebugRerun({
+        command: scenario.runCommand,
+        configureIntake: configureEarlyFlakeDetection,
+        diagnosis: 'The generated new test did not appear to be retried for Early Flake Detection.',
         evidence,
-        outDir
-      )
+        framework,
+        intake,
+        options,
+        out,
+        outDir,
+        scenarioName,
+      })
     }
 
     return pass(

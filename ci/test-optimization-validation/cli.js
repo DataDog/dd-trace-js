@@ -50,7 +50,7 @@ function parseArgs (argv) {
         options.out = requireValue(argv, ++i, arg)
         break
       case '--framework':
-        options.frameworks.add(requireValue(argv, ++i, arg))
+        options.frameworks.add(normalizeFrameworkTarget(requireValue(argv, ++i, arg)))
         break
       case '--scenario':
         options.scenarios = new Set([requireValue(argv, ++i, arg)])
@@ -93,7 +93,8 @@ function printHelp () {
 Options:
   --manifest <path>       Manifest path. Defaults to ${DEFAULT_MANIFEST}
   --out <path>            Output directory. Defaults to ${DEFAULT_OUT}
-  --framework <id>        Run one framework entry. Can be repeated.
+  --framework <id>        Run one framework entry. Can be repeated. A trailing ":" is ignored.
+                          A framework kind such as "vitest" runs all matching Vitest entries.
   --scenario <name>       Run one scenario: ${Object.keys(SCENARIOS).join(', ')}
   --keep-temp-files       Leave generated validation files in place.
   --verbose               Print command progress.
@@ -119,9 +120,7 @@ async function main (argv) {
     let intakeStarted = false
 
     try {
-      const frameworks = manifest.frameworks.filter(framework => {
-        return options.frameworks.size === 0 || options.frameworks.has(framework.id)
-      })
+      const frameworks = filterFrameworks(manifest.frameworks, options.frameworks)
       const setupReadyFrameworks = []
       const runnableFrameworks = []
 
@@ -200,6 +199,34 @@ async function main (argv) {
     process.exitCode = 1
     console.error(err && err.stack ? err.stack : err)
   }
+}
+
+function filterFrameworks (frameworks, targets) {
+  if (targets.size === 0) return frameworks
+
+  const selected = frameworks.filter(framework => {
+    return targets.has(framework.id) || targets.has(framework.framework)
+  })
+
+  if (selected.length === 0) {
+    throw new Error(`No framework entries matched ${formatFrameworkTargets(targets)}. Available entries: ${
+      frameworks.map(framework => framework.id).join(', ') || 'none'
+    }`)
+  }
+
+  return selected
+}
+
+function normalizeFrameworkTarget (target) {
+  const normalized = String(target).trim().replace(/:+$/g, '')
+  if (!normalized) {
+    throw new Error('Framework target cannot be empty')
+  }
+  return normalized
+}
+
+function formatFrameworkTargets (targets) {
+  return [...targets].map(target => `"${target}"`).join(', ')
 }
 
 function getAdvancedScenarios (scenarios) {
@@ -450,4 +477,4 @@ function escapeRegExp (value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-module.exports = { main, parseArgs }
+module.exports = { filterFrameworks, main, normalizeFrameworkTarget, parseArgs }
