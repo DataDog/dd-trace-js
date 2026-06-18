@@ -21,8 +21,9 @@ describe('nosql injection detection in mongodb - whole feature', () => {
       const mongodb = require(`../../../../../../versions/mongodb@${mongodbVersion}`)
 
       if (satisfies(mongodb.version(), '>=7') && NODE_MAJOR < 20) {
-        // eslint-disable-next-line mocha/no-pending-tests
-        describe.skip(`Skipping the tests as mongodb@${mongodb.version()} requires Node.js >= 20 (current: ${NODE_MAJOR})`)
+        describe.skip(
+          `Skipping the tests as mongodb@${mongodb.version()} requires Node.js >= 20 (current: ${NODE_MAJOR})`
+        )
         return
       }
 
