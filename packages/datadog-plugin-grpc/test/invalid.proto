@@ -1,4 +1,4 @@
-syntax = "proto3";
+syntax = "proto2";
 
 package test;
 
@@ -10,10 +10,14 @@ service TestService {
 }
 
 message Request {
-  string first = 1;
-  int32 second = 2;
+  optional string first = 1;
+  optional int32 second = 2;
 }
 
+// The client loads this fixture while the server answers with the empty `Response`
+// from test.proto. `required first` makes the client fail to decode that empty reply,
+// which is the gRPC protocol error (status 13) this test asserts. It must be proto2:
+// proto3 forbids `required`, so @grpc/proto-loader rejects it at loadSync.
 message Response {
-  string first = 1;
+  required string first = 1;
 }
