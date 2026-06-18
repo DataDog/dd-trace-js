@@ -102,7 +102,7 @@ function uploadTestScreenshot (
     url,
   }
 
-  log.debug('Uploading test screenshot %s to %s%s', filePath, url, options.path)
+  log.debug('Uploading test screenshot %s to %s', filePath, new URL(options.path, url).href)
 
   request(screenshotContent, options, (err, res, statusCode) => {
     if (err) {
