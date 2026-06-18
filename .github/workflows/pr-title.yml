@@ -18,12 +18,31 @@ jobs:
     env:
       # Shared between both steps. Must stay portable across bash ERE and JS
       # regex (no lookarounds, named groups, or other JS-only features).
-      # Revert PRs nest the reverted commit's type, e.g. `revert: feat(api): undo X`,
-      # so the semver label can track the magnitude of the original change.
-      PR_TITLE_PATTERN: '^(revert(!)?: )?(feat|fix|docs|style|refactor|perf|test|bench|build|ci|chore)(\(([^)]+)\))?(!)?: .+'
+      # Revert PRs always get semver-patch regardless of the original change's type.
+      PR_TITLE_PATTERN: '^(revert(!)?: .+|(feat|fix|docs|style|refactor|perf|test|bench|build|ci|chore)(\(([^)]+)\))?(!)?: .+)'
     steps:
+      - name: Auto-rename GitHub revert title to Conventional Commit
+        id: rename
+        if: startsWith(github.event.pull_request.title, 'Revert "')
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const title = context.payload.pull_request.title
+            const m = title.match(/^Revert "(.+)"$/)
+            if (!m) return
+            const newTitle = `revert: ${m[1]}`
+            core.notice(`Auto-renaming PR title to: ${newTitle}`)
+            await github.rest.pulls.update({
+              ...context.repo,
+              pull_number: context.payload.pull_request.number,
+              title: newTitle,
+            })
+            core.setOutput('renamed', 'true')
+
       - name: Validate PR title against Conventional Commits
-        if: github.event.action != 'edited' || github.event.changes.title != null
+        if: >-
+          steps.rename.outputs.renamed != 'true' &&
+          (github.event.action != 'edited' || github.event.changes.title != null)
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
@@ -31,17 +50,14 @@ jobs:
             echo "::error::PR title does not follow Conventional Commits format."
             echo "Got:      $PR_TITLE"
             echo "Expected: <type>(<scope>)?(!)?: <subject>"
-            echo "          revert(!)?: <type>(<scope>)?(!)?: <subject>  (for reverts)"
+            echo "          revert(!)?: <subject>  (for reverts, always semver-patch)"
             echo "Allowed types: feat, fix, docs, style, refactor, perf, test, bench, build, ci, chore"
-            echo "Revert PRs must embed the original commit's type so the semver impact can"
-            echo "be determined (e.g. 'revert: feat(scope): original title')."
-            echo "Reverts of reverts re-apply the original change, so use the original"
-            echo "title (e.g. 'feat: x', not 'revert: revert: feat: x')."
             exit 1
           fi
           echo "PR title OK: $PR_TITLE"
 
       - name: Sync labels with PR title
+        if: steps.rename.outputs.renamed != 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
@@ -49,22 +65,19 @@ jobs:
             const parse = (title) => {
               const m = (title || '').match(pattern)
               if (!m) return {}
-              const isRevert = !!m[1]
+              const isRevert = !m[3]
               return {
                 type: isRevert ? 'revert' : m[3],
-                revertedType: isRevert ? m[3] : undefined,
-                scope: m[5],
-                breaking: m[2] === '!' || m[6] === '!',
+                scope: isRevert ? undefined : m[5],
+                breaking: isRevert ? m[2] === '!' : m[6] === '!',
               }
             }
 
-            // For reverts, the semver bump tracks the magnitude of the change
-            // being undone, parsed from the nested type in the title.
-            const semverFor = ({ type, revertedType, breaking }) => {
+            // Reverts are always semver-patch regardless of the original change's type.
+            const semverFor = ({ type, breaking }) => {
               if (!type) return undefined
               if (breaking) return 'semver-major'
-              const effective = type === 'revert' ? revertedType : type
-              if (effective === 'feat') return 'semver-minor'
+              if (type === 'feat') return 'semver-minor'
               return 'semver-patch'
             }
 
