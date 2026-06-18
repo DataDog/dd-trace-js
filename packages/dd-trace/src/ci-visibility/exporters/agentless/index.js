@@ -2,15 +2,9 @@
 
 const URL = require('url').URL
 const CiVisibilityExporter = require('../ci-visibility-exporter')
-const { getEnvironmentVariable } = require('../../../config/helper')
 const log = require('../../../log')
 const Writer = require('./writer')
 const CoverageWriter = require('./coverage-writer')
-
-function getTestScreenshotUploadUrl () {
-  const pocSite = getEnvironmentVariable('DD_POC_SITE')
-  return pocSite ? new URL(`https://api.${pocSite}`) : undefined
-}
 
 class AgentlessCiVisibilityExporter extends CiVisibilityExporter {
   constructor (config) {
@@ -36,7 +30,8 @@ class AgentlessCiVisibilityExporter extends CiVisibilityExporter {
     }
 
     this._apiUrl = url || new URL(`https://api.${site}`)
-    this._testScreenshotUploadUrl = url || getTestScreenshotUploadUrl()
+    // Media uploads (raw bytes + DD-API-KEY) go to the same api.<site> host as the rest of the API.
+    this._testScreenshotUploadUrl = this._apiUrl
     // Agentless is always gzip compatible
     this._isGzipCompatible = true
   }

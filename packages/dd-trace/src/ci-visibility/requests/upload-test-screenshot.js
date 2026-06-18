@@ -34,17 +34,25 @@ function isValidTraceId (traceId) {
 }
 
 /**
- * Uploads a single test screenshot to the Datadog CI intake.
+ * Uploads a single test screenshot to the Test Optimization media intake.
  * The trace id is included in the request path and the body is the raw image bytes.
+ *
+ * The media service requires two values from the tracer:
+ * - `idempotencyKey`: stable per artifact and reused on retry, so a retried
+ *   upload overwrites the same stored object instead of creating a duplicate.
+ * - `capturedAtMs`: the capture time in epoch milliseconds, stamped once at
+ *   capture and resent unchanged on retry (it is part of the stored object key).
  *
  * @param {object} options - Upload options
  * @param {string} options.filePath - Path to the screenshot file
  * @param {string} options.traceId - Test trace id used as the screenshot key
+ * @param {string} options.idempotencyKey - Stable per-artifact key, reused on retry
+ * @param {number} options.capturedAtMs - Capture time in epoch milliseconds
  * @param {URL} options.url - The base URL for the screenshot upload
  * @param {Function} callback - Callback function (err)
  */
 function uploadTestScreenshot (
-  { filePath, traceId, url },
+  { filePath, traceId, idempotencyKey, capturedAtMs, url },
   callback
 ) {
   const apiKey = getConfig().apiKey
@@ -54,6 +62,12 @@ function uploadTestScreenshot (
   }
   if (!apiKey) {
     return callback(new Error('DD_API_KEY is required for test screenshot upload'))
+  }
+  if (!idempotencyKey) {
+    return callback(new Error('An idempotency key is required for test screenshot upload'))
+  }
+  if (!Number.isInteger(capturedAtMs) || capturedAtMs <= 0) {
+    return callback(new Error('A positive captured-at timestamp (epoch ms) is required for test screenshot upload'))
   }
 
   let screenshotContent
@@ -72,8 +86,10 @@ function uploadTestScreenshot (
     headers: {
       'Content-Type': contentType,
       'DD-API-KEY': apiKey,
-      // Required by the temporary test-drive media endpoint during the PoC.
-      'test-drive-test-failure-media-bucket': '1',
+      // Stable per-artifact key (reused on retry) → the service overwrites instead of duplicating.
+      'X-Dd-Idempotency-Key': idempotencyKey,
+      // Capture time in epoch ms; part of the stored object key, so it must be stable across retries.
+      'X-Dd-Media-Captured-At': String(capturedAtMs),
     },
     path: `${TEST_SCREENSHOT_ENDPOINT_PREFIX}${traceId}${TEST_SCREENSHOT_ENDPOINT_SUFFIX}`,
     timeout: UPLOAD_TIMEOUT_MS,

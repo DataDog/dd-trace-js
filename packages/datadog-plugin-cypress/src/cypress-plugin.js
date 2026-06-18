@@ -2,6 +2,8 @@
 
 // Capture real timers at module load, before any test can install fake timers.
 const { performance } = require('perf_hooks')
+const { statSync } = require('node:fs')
+const { basename } = require('node:path')
 const dateNow = Date.now
 
 const { createCoverageMap } = require('../../../vendor/dist/istanbul-lib-coverage')
@@ -138,6 +140,31 @@ const SCREENSHOT_ATTEMPT_RE = /\(attempt \d+\)/
 
 function getScreenshotFilePath (screenshot) {
   return typeof screenshot === 'string' ? screenshot : screenshot?.path
+}
+
+/**
+ * Resolves a screenshot's capture time (epoch ms) for the media upload. Cypress
+ * screenshot objects carry an ISO `takenAt`; falls back to the file's mtime, then
+ * to the current time. Stamped once here and reused on retry via the idempotency
+ * key, so the stored object is overwritten rather than duplicated.
+ *
+ * @param {object|string} screenshot - Cypress screenshot object or path
+ * @param {string} filePath - Resolved screenshot file path
+ * @returns {number} Capture time in epoch milliseconds
+ */
+function getScreenshotCapturedAtMs (screenshot, filePath) {
+  const takenAt = typeof screenshot === 'object' ? screenshot?.takenAt : undefined
+  if (takenAt) {
+    const parsedMs = new Date(takenAt).getTime()
+    if (Number.isInteger(parsedMs) && parsedMs > 0) {
+      return parsedMs
+    }
+  }
+  try {
+    return Math.floor(statSync(filePath).mtimeMs)
+  } catch {
+    return dateNow()
+  }
 }
 
 function isFailureScreenshotForUpload (screenshot) {
@@ -1488,10 +1515,17 @@ class CypressPlugin {
         continue
       }
       this.uploadedScreenshotPaths.add(filePath)
+      // Stable per-artifact key (trace + filename) so an upload retry overwrites the
+      // same stored object instead of duplicating; the Cypress filename encodes the
+      // test name and attempt, so it is unique within the trace.
+      const idempotencyKey = `${traceId}:${basename(filePath)}`
+      const capturedAtMs = getScreenshotCapturedAtMs(screenshot, filePath)
       uploadPromises.push(new Promise(resolve => {
         exporter.uploadTestScreenshot({
           filePath,
           traceId,
+          idempotencyKey,
+          capturedAtMs,
         }, () => {
           resolve()
         })
