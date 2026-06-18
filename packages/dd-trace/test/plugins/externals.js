@@ -157,7 +157,7 @@ module.exports = {
   'express-mongo-sanitize': [
     {
       name: 'mongodb',
-      versions: ['>=3.3 <5', '5', '>=6'],
+      versions: ['>=3.3 <5', '5', '6', '>=7'],
     },
     {
       name: 'mongodb-core',
