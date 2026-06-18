@@ -1714,6 +1714,18 @@ describe('Config', () => {
     delete process.env.SOMETHING_UNDER_NDA
   })
 
+  it('should preserve RC logCaptureEnabled when it matches the computed serverless default', () => {
+    process.env.SOMETHING_UNDER_NDA = 'something-under-nda'
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureEnabled, true)
+
+    config.setRemoteConfig({ logCaptureEnabled: true })
+    assert.strictEqual(config.logCaptureEnabled, true)
+    assert.strictEqual(config.getOrigin('logCaptureEnabled'), 'remote_config')
+
+    delete process.env.SOMETHING_UNDER_NDA
+  })
+
   it('should respect DD_LOG_CAPTURE_ENABLED=false even in serverless environment', () => {
     process.env.SOMETHING_UNDER_NDA = 'something-under-nda'
     process.env.DD_LOG_CAPTURE_ENABLED = 'false'
@@ -1775,7 +1787,7 @@ describe('Config', () => {
     delete process.env.DD_LOG_CAPTURE_PROTOCOL
   })
 
-  it('should normalize DD_LOG_CAPTURE_PROTOCOL uppercase without colon', () => {
+  it('should normalize DD_LOG_CAPTURE_PROTOCOL uppercase with colon', () => {
     process.env.DD_LOG_CAPTURE_PROTOCOL = 'HTTPS:'
     const config = getConfig()
     assert.strictEqual(config.logCaptureProtocol, 'https:')
@@ -1836,6 +1848,11 @@ describe('Config', () => {
     const config = getConfig()
     assert.strictEqual(config.logCaptureProtocol, 'http:')
     delete process.env.DD_LOG_CAPTURE_PROTOCOL
+  })
+
+  it('should fall back to http: for a non-string logCaptureProtocol option without crashing', () => {
+    const config = getConfig({ logCaptureProtocol: 123 })
+    assert.strictEqual(config.logCaptureProtocol, 'http:')
   })
 
   it('should not track logCaptureProtocol origin when using the default value', () => {

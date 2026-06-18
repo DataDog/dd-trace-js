@@ -87,6 +87,9 @@ const changeTracker = {
  */
 function undo (config, source) {
   for (const name of changeTracker[source]) {
+    // A calculated value that RC has since overridden must not be reset here —
+    // the RC value takes precedence and will survive until RC itself is rolled back.
+    if (source === 'calculated' && trackedConfigOrigins.get(name) === 'remote_config') continue
     const entry = changeTracker.baseValuesByPath[name] ?? { source: 'default', value: defaults[name] }
     setAndTrack(config, name, entry.value, undefined, entry.source)
   }
@@ -619,22 +622,20 @@ class Config extends ConfigBase {
 
     // Normalize logCaptureProtocol: strip any '://' suffix, lowercase, add trailing colon,
     // then validate — only 'http:' and 'https:' are supported; warn and fall back to 'http:'.
-    if (this.logCaptureProtocol) {
-      const rawProtocol = this.logCaptureProtocol
-      let protocol = rawProtocol.toLowerCase().replace(/:\/\/.*$/, '')
-      if (!protocol.endsWith(':')) {
-        protocol += ':'
-      }
-      if (protocol !== 'http:' && protocol !== 'https:') {
-        log.warn('logCaptureProtocol: unsupported value %j, falling back to http:', rawProtocol)
-        protocol = 'http:'
-      }
-      const origin = trackedConfigOrigins.get('logCaptureProtocol')
-      if (origin === undefined) {
-        set(this, 'logCaptureProtocol', protocol)
-      } else {
-        setAndTrack(this, 'logCaptureProtocol', protocol, rawProtocol, /** @type {TelemetrySource} */ (origin))
-      }
+    const rawProtocol = this.logCaptureProtocol
+    let protocol = String(rawProtocol).toLowerCase().replace(/:\/\/.*$/, '')
+    if (!protocol.endsWith(':')) {
+      protocol += ':'
+    }
+    if (protocol !== 'http:' && protocol !== 'https:') {
+      log.warn('logCaptureProtocol: unsupported value %j, falling back to http:', rawProtocol)
+      protocol = 'http:'
+    }
+    const origin = trackedConfigOrigins.get('logCaptureProtocol')
+    if (origin === undefined) {
+      set(this, 'logCaptureProtocol', protocol)
+    } else {
+      setAndTrack(this, 'logCaptureProtocol', protocol, rawProtocol, /** @type {TelemetrySource} */ (origin))
     }
 
     // Single tags update is tracked as a calculated value.
