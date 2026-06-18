@@ -89,6 +89,7 @@
     "@vitest/coverage-istanbul": "4.1.8",
     "@vitest/coverage-v8": "4.1.8",
     "@vitest/runner": "4.1.8",
+    "@vscode/sqlite3": "5.1.12-vscode",
     "aerospike": "6.7.0",
     "ai": "6.0.204",
     "amqp10": "3.6.0",
