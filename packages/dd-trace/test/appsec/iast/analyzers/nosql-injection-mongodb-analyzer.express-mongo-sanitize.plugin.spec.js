@@ -18,12 +18,13 @@ describe('nosql injection detection in mongodb - whole feature', () => {
   // https://github.com/fiznool/express-mongo-sanitize/issues/200
   withVersions('express-mongo-sanitize', 'express', '>4.18.0 <5.0.0', expressVersion => {
     withVersions('express-mongo-sanitize', 'mongodb', mongodbVersion => {
-      if (satisfies(mongodbVersion, '>=7') && NODE_MAJOR < 20) {
+      const mongodb = require(`../../../../../../versions/mongodb@${mongodbVersion}`)
+
+      if (satisfies(mongodb.version(), '>=7') && NODE_MAJOR < 20) {
         // eslint-disable-next-line mocha/no-pending-tests
-        describe.skip(`refusing to run tests as mongodb@${mongodbVersion} requires Node.js >= 20 (current: ${NODE_MAJOR})`)
+        describe.skip(`Skipping the tests as mongodb@${mongodb.version()} requires Node.js >= 20 (current: ${NODE_MAJOR})`)
         return
       }
-      const mongodb = require(`../../../../../../versions/mongodb@${mongodbVersion}`)
 
       const vulnerableMethodFilename = 'mongodb-vulnerable-method.js'
       let collection, tmpFilePath
