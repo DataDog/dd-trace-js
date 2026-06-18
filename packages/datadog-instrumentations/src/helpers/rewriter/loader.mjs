@@ -13,7 +13,13 @@ function loadSync (url, context, nextLoad) {
 }
 
 function rewriteResult (result, url, context) {
-  result.source = rewrite(result.source, url, context.format)
+  const format = result.format || context.format
+
+  // CommonJS source is rewritten by Module._compile. Rewriting it here too
+  // double-instruments CommonJS entrypoints loaded through sync hooks.
+  if (format === 'commonjs') return result
+
+  result.source = rewrite(result.source, url, format)
 
   return result
 }

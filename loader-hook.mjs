@@ -41,7 +41,7 @@ function load (url, context, nextLoad) {
 }
 
 function loadSync (url, context, nextLoad) {
-  if (isCommonJSRequire(context)) {
+  if (isCommonJSLoad(context)) {
     return getSyncImportInTheMiddleHook().loadSync(url, context, nextLoad)
   }
 
@@ -50,7 +50,9 @@ function loadSync (url, context, nextLoad) {
   })
 }
 
-function isCommonJSRequire (context) {
+function isCommonJSLoad (context) {
+  if (context.format === 'commonjs') return true
+
   const conditions = context.conditions
   if (!conditions) return false
 
