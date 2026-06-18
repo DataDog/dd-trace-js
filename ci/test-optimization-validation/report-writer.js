@@ -58,6 +58,7 @@ function writeReport ({ manifest, results, out, intake, staticDiagnosis }) {
     },
     validation: validationPayloads.map(payload => ({
       frameworkId: payload.frameworkId,
+      framework: payload.payload.framework,
       url: payload.url,
     })),
   }
@@ -87,6 +88,12 @@ function renderMarkdown (report) {
     lines.push(`- ${result.status.toUpperCase()} ${result.frameworkId} ${result.scenario}: ${result.diagnosis}`)
   }
 
+  lines.push('', '## Framework Context', '')
+  for (const validation of report.validation) {
+    const context = formatFrameworkContext(validation.framework, { markdown: true })
+    lines.push(`- ${validation.frameworkId}: ${context}`)
+  }
+
   lines.push('', '## Key Artifacts', '')
   for (const [name, artifactPath] of getKeyArtifacts(report.artifacts)) {
     if (!artifactPath) continue
@@ -106,6 +113,10 @@ function renderHtml (report) {
   const summaryItems = report.results.map(result => {
     return `<li><strong>${escapeHtml(result.status.toUpperCase())}</strong> ${escapeHtml(result.frameworkId)} ` +
       `${escapeHtml(result.scenario)} - ${escapeHtml(result.diagnosis)}</li>`
+  }).join('\n')
+  const contextItems = report.validation.map(validation => {
+    return `<li><code>${escapeHtml(validation.frameworkId)}</code>: ` +
+      `${escapeHtml(formatFrameworkContext(validation.framework))}</li>`
   }).join('\n')
   const validationItems = report.validation.map(validation => {
     return `<li><code>${escapeHtml(validation.frameworkId)}</code>: <code>${escapeHtml(validation.url)}</code></li>`
@@ -133,6 +144,10 @@ function renderHtml (report) {
     <ul>
       ${summaryItems}
     </ul>
+    <h2>Framework Context</h2>
+    <ul>
+      ${contextItems}
+    </ul>
     <h2>Validation UI</h2>
     <ul>
       ${validationItems}
@@ -151,6 +166,21 @@ function getKeyArtifacts (artifacts) {
     ['Manifest', artifacts.manifest],
     ['Static diagnosis', artifacts.staticDiagnosis],
   ]
+}
+
+function formatFrameworkContext (framework, options = {}) {
+  const format = options.markdown
+    ? value => `\`${value}\``
+    : value => value
+
+  if (!framework) return `language ${format('javascript')}`
+
+  return [
+    `language ${format(framework.language || 'javascript')}`,
+    `package ${format(framework.packageName || 'unknown')}`,
+    `working directory ${format(framework.workingDirectory || 'unknown')}`,
+    `command cwd ${format(framework.commandWorkingDirectory || 'unknown')}`,
+  ].join('; ')
 }
 
 function renderConsoleSummary (results, out) {

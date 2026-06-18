@@ -13,6 +13,14 @@ describe('test optimization validation payload', () => {
             id: 'mocha:root',
             framework: 'mocha',
             frameworkVersion: '11.7.6',
+            project: {
+              name: 'example-package',
+              root: '/repo/packages/example-package',
+              packageJson: '/repo/packages/example-package/package.json',
+            },
+            existingTestCommand: {
+              cwd: '/repo/packages/example-package/test-workdir',
+            },
           },
         ],
       },
@@ -42,6 +50,17 @@ describe('test optimization validation payload', () => {
       'run-tests',
       'check-events',
     ])
+    assert.deepStrictEqual(payload.framework, {
+      id: 'mocha',
+      name: 'Mocha',
+      version: '11.7.6',
+      language: 'javascript',
+      packageName: 'example-package',
+      workingDirectory: '/repo/packages/example-package',
+      commandWorkingDirectory: '/repo/packages/example-package/test-workdir',
+      projectRoot: '/repo/packages/example-package',
+      packageJson: '/repo/packages/example-package/package.json',
+    })
   })
 
   it('collapses validator plumbing failures to the check level', () => {

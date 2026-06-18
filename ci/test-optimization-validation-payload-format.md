@@ -36,12 +36,25 @@ const payload = JSON.parse(pako.inflate(compressed, { to: 'string' }))
   "framework": {
     "id": "mocha",
     "name": "Mocha",
-    "version": "11.7.6"
+    "version": "11.7.6",
+    "language": "javascript",
+    "packageName": "example-package",
+    "workingDirectory": "/absolute/path/to/repo/packages/example-package",
+    "commandWorkingDirectory": "/absolute/path/to/repo",
+    "projectRoot": "/absolute/path/to/repo/packages/example-package",
+    "packageJson": "/absolute/path/to/repo/packages/example-package/package.json"
   }
 }
 ```
 
 `status` is `ok` or `failed`.
+
+`framework.language` is currently hardcoded to `javascript`. `workingDirectory`, `projectRoot`,
+and `packageJson` come from the manifest framework entry so the UI can show which workspace package
+produced the result. `packageName` comes from the manifest project name and falls back to the
+referenced `package.json` name when possible. `workingDirectory` is the selected package/workspace
+root. `commandWorkingDirectory` is the literal cwd used to spawn the selected test command, which can
+be different when the command uses package-manager flags such as `--dir`, `--cwd`, or `--prefix`.
 
 ## Validator Artifacts
 
@@ -60,6 +73,11 @@ If a framework is detected but no runnable validation command is available, the 
 failed. Basic reporting was not proven, so the UI should not present that framework as OK.
 Because no live validation was attempted, the failed check has no steps. The failure cause is in
 the check-level `reason`.
+
+The same shape is used when a required project setup command, such as install, build, code
+generation, or browser-binary installation, fails before live validation starts. The failed check has
+`steps: []`; the setup command, exit code, and output excerpts are available in the JSON report
+evidence and artifact files.
 
 ## Checks
 

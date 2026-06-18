@@ -13,6 +13,7 @@ const { cleanupGeneratedFiles } = require('./generated-files')
 const { loadManifest } = require('./manifest-loader')
 const { MockIntake } = require('./mock-intake')
 const { writeReport } = require('./report-writer')
+const { runSetupCommands } = require('./setup-runner')
 const {
   getStaticBlocker,
   runStaticDiagnosis,
@@ -121,6 +122,7 @@ async function main (argv) {
       const frameworks = manifest.frameworks.filter(framework => {
         return options.frameworks.size === 0 || options.frameworks.has(framework.id)
       })
+      const setupReadyFrameworks = []
       const runnableFrameworks = []
 
       for (const framework of frameworks) {
@@ -132,6 +134,19 @@ async function main (argv) {
         const staticBlocker = getStaticBlocker(framework, staticDiagnosis.report)
         if (staticBlocker) {
           results.push(getStaticFailure(framework, staticBlocker, staticDiagnosis.reportPath))
+          continue
+        }
+
+        setupReadyFrameworks.push(framework)
+      }
+
+      for (const framework of setupReadyFrameworks) {
+        // Setup commands run before the shared fake intake is started. They are project preparation,
+        // not Test Optimization signal collection.
+        // eslint-disable-next-line no-await-in-loop
+        const setup = await runSetupCommands({ framework, out, options })
+        if (!setup.ok) {
+          results.push(setup.failure)
           continue
         }
 

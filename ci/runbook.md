@@ -64,9 +64,9 @@ Create a complete, verified manifest that tells a deterministic validator:
 4. How to run only those generated validation tests.
 5. Which generated test identities the validator should expect in Datadog payloads.
 
-The manifest is discovery only. The deterministic validator will later start the mock intake, inject
-Datadog environment variables, run these commands, collect payloads, and validate Test Optimization
-behavior.
+The manifest is discovery only. The deterministic validator will later replay any declared setup
+commands, start the mock intake, inject Datadog environment variables, run the test commands,
+collect payloads, and validate Test Optimization behavior.
 
 For Vitest, the validator injects both the Test Optimization init preload and
 `dd-trace/register.js` through `NODE_OPTIONS`. Do not add these preloads to the manifest commands.
@@ -103,6 +103,13 @@ validator injects Test Optimization initialization itself.
 - Treat dependency setup as part of test-command discovery. Before reporting that a runner is
   missing, check whether the command's package or workspace has had its declared dependencies and
   documented setup installed.
+- Record required setup commands in `setup.commands` when a selected test command only works after
+  a documented install, build, code generation, browser-binary install, or fixture preparation
+  step. These commands must be deterministic, idempotent when possible, and safe to replay before
+  validation.
+- Do not invent setup commands. Use package-manager install commands, package scripts, or
+  repository documentation. If the required setup is unclear, mark the framework
+  `requires_manual_setup` and explain the missing step in `notes`.
 - Do not include secrets. Record required environment variable names only.
 - Do not include `dd-trace/ci/init`, `NODE_OPTIONS`, or Datadog-specific env vars in discovered
   commands unless they are already unavoidable in the repository; explain if so.
@@ -140,6 +147,13 @@ selected command really runs only the intended file. If `npm test -- <file>` or 
 starts unrelated suites, stop that attempt and use a direct runner command with `--runTestsByPath`
 and the repository's required config/project flags. Record the broad-run attempt in `notes`; do not
 let it continue as the representative preflight.
+
+For each framework entry, set `project.root`, `project.packageJson`, and `project.name` to the
+smallest package or workspace that owns the selected test command. If the command uses package
+manager routing flags such as `pnpm --dir`, `yarn --cwd`, `npm --prefix`, or `pnpm --filter`, resolve
+the package directory selected by that flag and use that package's `package.json` when it exists.
+The command `cwd` may still be the repository root; keep that exact process cwd in the command
+object.
 
 If a package script sets `NODE_OPTIONS=...` inline, do not use that package script as the validation
 command unless there is no safer command shape. Inline `NODE_OPTIONS` in a package script can shadow
@@ -241,6 +255,7 @@ Use the smallest valid shape:
 
 - repository root, environment, and one framework entry per detected framework
 - `status`, `supportLevel`, `project.evidence`, and `notes`
+- `setup.commands` for required install/build/setup prerequisites that the validator should replay
 - `existingTestCommand` and `preflight` only when a real project test command was selected
 - `generatedTestStrategy` only when generated tests were verified or deliberately proposed/skipped
 
@@ -260,6 +275,35 @@ command when one exists. If the failing command is still the best representative
 remain `runnable`: the validator will consider Basic Reporting valid when the instrumented run emits
 the required event hierarchy and exits the same way as the dd-trace-less preflight run.
 
+If a documented install/build/setup command fixes the failure, add that command to `setup.commands`
+and rerun the dd-trace-less preflight after setup. The validator will replay `setup.commands` before
+starting the fake intake. If a required setup command fails during validation, the affected framework
+fails before live validation with that setup failure as the primary diagnosis.
+
+If a selected command for Playwright, Cypress, or another browser/app-backed framework fails before
+collecting tests because source files are not transformed, compiled assets are missing, a dev server
+cannot serve the app, or browser binaries are missing, run one bounded setup search before marking the
+framework `requires_manual_setup`:
+
+1. Inspect the selected package's `package.json` for `pretest`, `prepare`, `build`, `build:*`,
+   `install`, `postinstall`, `playwright install`, or a script invoked by the test server such as
+   `serve-app`.
+2. Inspect the repository root package scripts for the canonical build/setup command when the
+   selected package imports the root package or links it through a workspace, portal, or local
+   dependency.
+3. Prefer the smallest obvious setup command that belongs to the selected package or its linked root
+   package. Run at most one setup attempt for this framework before continuing.
+4. After the setup attempt, rerun the same dd-trace-less preflight command. If it now collects tests,
+   record the setup command in `setup.commands` and keep the framework `runnable`.
+5. If the setup attempt fails or the preflight still fails before collection, keep the framework
+   non-runnable and record the attempted setup command, its exit code, and the post-setup preflight
+   failure in `notes`.
+
+For Playwright specifically, transform errors mentioning TypeScript syntax, `declare` fields,
+uncompiled source, missing browser binaries, missing build output, or a web server that starts but
+serves an app that cannot import the package are setup signals. Do not run Datadog validation until
+the same Playwright command has been proven with a dd-trace-less preflight after any required setup.
+
 ## Dependency Setup and Runner Availability
 
 The test runner binary must be available from the command `cwd` before a framework is considered
@@ -274,6 +318,37 @@ runnable. A missing runner usually means one of these cases:
 Use the project's package manager and lockfile. If root dependencies are missing, run or record the
 normal root install command, such as `npm ci`, `yarn install --frozen-lockfile`, or
 `pnpm install --frozen-lockfile`, unless the environment forbids installs.
+
+When setup is needed for the selected command, include the exact replayable command in
+`setup.commands`:
+
+```json
+{
+  "setup": {
+    "commands": [
+      {
+        "id": "install",
+        "description": "Install repository dependencies",
+        "cwd": "/absolute/path/to/repo",
+        "argv": ["pnpm", "install", "--frozen-lockfile"],
+        "required": true,
+        "timeoutMs": 600000
+      },
+      {
+        "id": "build-playwright-package",
+        "description": "Build package before Playwright tests",
+        "cwd": "/absolute/path/to/repo",
+        "argv": ["pnpm", "build", "--filter", "package-name"],
+        "required": true,
+        "timeoutMs": 600000
+      }
+    ],
+    "services": []
+  }
+}
+```
+
+Use the repository's actual commands. The example only shows the expected shape.
 
 Respect the repository's declared runtime before classifying a command as broken. Check
 `engines`, `devEngines`, `.nvmrc`, `.node-version`, `.tool-versions`, `volta`, and package-manager
@@ -381,14 +456,15 @@ The validator is responsible for:
 
 1. Validating the manifest schema.
 2. Running static diagnosis and stopping live execution for known hard blockers.
-3. Starting a local mock intake when at least one framework is eligible for live validation.
-4. Serving Datadog Test Optimization settings responses.
-5. Creating temporary validation tests from the manifest.
-6. Running test commands with Datadog instrumentation enabled.
-7. Reading and decoding intake payloads.
-8. Evaluating Basic Reporting, EFD, ATR, and Test Management behavior.
-9. Cleaning up temporary validation files.
-10. Writing a validation report, validation UI payloads, and artifacts.
+3. Replaying required setup commands for each runnable framework.
+4. Starting a local mock intake when at least one framework is eligible for live validation.
+5. Serving Datadog Test Optimization settings responses.
+6. Creating temporary validation tests from the manifest.
+7. Running test commands with Datadog instrumentation enabled.
+8. Reading and decoding intake payloads.
+9. Evaluating Basic Reporting, EFD, ATR, and Test Management behavior.
+10. Cleaning up temporary validation files.
+11. Writing a validation report, validation UI payloads, and artifacts.
 
 Basic Reporting is the prerequisite for EFD, ATR, and Test Management validation. If Basic Reporting
 fails for a framework, the validator skips the remaining feature checks for that framework and

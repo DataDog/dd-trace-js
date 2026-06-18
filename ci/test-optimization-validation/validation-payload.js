@@ -57,18 +57,48 @@ function buildFrameworkPayload ({ framework, frameworkResults, artifacts }) {
       htmlFileUrl: artifacts.htmlFileUrl,
       htmlPath: artifacts.htmlPath,
     },
-    framework: framework
-      ? {
-          id: framework.framework,
-          name: getFrameworkName(framework.framework),
-          version: framework.frameworkVersion,
-        }
-      : {
-          id: frameworkResults[0].frameworkId,
-          name: frameworkResults[0].frameworkId,
-          version: 'unknown',
-        },
+    framework: buildFrameworkContext({ framework, frameworkResults }),
   }
+}
+
+function buildFrameworkContext ({ framework, frameworkResults }) {
+  if (!framework) {
+    const frameworkId = frameworkResults[0].frameworkId
+    return {
+      id: frameworkId,
+      name: frameworkId,
+      version: 'unknown',
+      language: 'javascript',
+      packageName: null,
+      workingDirectory: null,
+      commandWorkingDirectory: null,
+      projectRoot: null,
+      packageJson: null,
+    }
+  }
+
+  const project = framework.project || {}
+  const commandWorkingDirectory = framework.existingTestCommand?.cwd || null
+
+  return {
+    id: framework.framework,
+    name: getFrameworkName(framework.framework),
+    version: framework.frameworkVersion || 'unknown',
+    language: 'javascript',
+    packageName: project.name || readPackageName(project.packageJson) || null,
+    workingDirectory: project.root || commandWorkingDirectory,
+    commandWorkingDirectory,
+    projectRoot: project.root || null,
+    packageJson: project.packageJson || null,
+  }
+}
+
+function readPackageName (packageJsonPath) {
+  if (!packageJsonPath) return
+
+  try {
+    return JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')).name
+  } catch {}
 }
 
 function buildCheck ({ result }) {
