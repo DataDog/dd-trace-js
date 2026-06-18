@@ -41,9 +41,24 @@ function load (url, context, nextLoad) {
 }
 
 function loadSync (url, context, nextLoad) {
+  if (isCommonJSRequire(context)) {
+    return getSyncImportInTheMiddleHook().loadSync(url, context, nextLoad)
+  }
+
   return rewriterLoader.loadSync(url, context, (url, context) => {
     return getSyncImportInTheMiddleHook().loadSync(url, context, nextLoad)
   })
+}
+
+function isCommonJSRequire (context) {
+  const conditions = context.conditions
+  if (!conditions) return false
+
+  for (let i = 0; i < conditions.length; i++) {
+    if (conditions[i] === 'require') return true
+  }
+
+  return false
 }
 
 function getSyncImportInTheMiddleHook () {
