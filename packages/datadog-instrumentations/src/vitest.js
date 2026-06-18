@@ -501,8 +501,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
     getTestManagementTests: () => getChannelPromise(testManagementTestsCh),
   })
 
-  if (isFlakyTestRetriesEnabled && !ctx.config.retry && flakyTestRetriesCount > 0) {
-    ctx.config.retry = flakyTestRetriesCount
+  if (configureFlakyTestRetries(ctx)) {
     setProvidedContext(ctx, {
       _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled,
       _ddFlakyTestRetriesCount: flakyTestRetriesCount,
@@ -589,6 +588,87 @@ function ensureMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
     mainProcessSetupPromises.set(ctx, setupPromise)
   }
   return setupPromise
+}
+
+/**
+ * Configure Vitest retries for the root project and resolved workspace projects.
+ *
+ * @param {object} ctx
+ * @returns {boolean}
+ */
+function configureFlakyTestRetries (ctx) {
+  if (!isFlakyTestRetriesEnabled || flakyTestRetriesCount <= 0) return false
+
+  let configured = false
+  for (const config of getVitestProjectConfigs(ctx)) {
+    if (!config.retry) {
+      config.retry = flakyTestRetriesCount
+      configured = true
+    }
+  }
+
+  return configured
+}
+
+/**
+ * Return unique Vitest configs that can be used to run tests.
+ *
+ * @param {object} ctx
+ * @returns {object[]}
+ */
+function getVitestProjectConfigs (ctx) {
+  const configs = []
+
+  addConfig(configs, safeConfig(ctx))
+  addConfig(configs, safeConfig(safeWorkspaceProject(ctx)))
+
+  if (Array.isArray(ctx?.projects)) {
+    for (const project of ctx.projects) {
+      addConfig(configs, safeConfig(project))
+    }
+  }
+
+  return configs
+}
+
+/**
+ * Add a config object once.
+ *
+ * @param {object[]} configs
+ * @param {object|undefined} config
+ */
+function addConfig (configs, config) {
+  if (config && !configs.includes(config)) {
+    configs.push(config)
+  }
+}
+
+/**
+ * Read a Vitest config object without assuming the project is initialized.
+ *
+ * @param {object|undefined} project
+ * @returns {object|undefined}
+ */
+function safeConfig (project) {
+  try {
+    return project?.config
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Read the workspace project without assuming the root server is initialized.
+ *
+ * @param {object} ctx
+ * @returns {object|undefined}
+ */
+function safeWorkspaceProject (ctx) {
+  try {
+    return getWorkspaceProject(ctx)
+  } catch {
+    return undefined
+  }
 }
 
 function getSortWrapper (sort, frameworkVersion) {
