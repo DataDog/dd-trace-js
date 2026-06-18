@@ -69,6 +69,40 @@ describe('rewriter loader', () => {
     assert.strictEqual(result.status, 0, result.stderr)
     assert.strictEqual(result.stdout.trim(), '1')
   })
+
+  it('does not rewrite CommonJS entrypoint loads in the sync loader hook', () => {
+    const root = mkdtempSync(join(tmpdir(), 'dd-rewriter-loader-cjs-entrypoint-'))
+    const packageDirectory = join(root, 'node_modules', 'ai')
+
+    mkdirSync(join(packageDirectory, 'dist'), { recursive: true })
+    writeFileSync(join(packageDirectory, 'package.json'), '{"version":"4.0.0"}')
+    writeFileSync(join(packageDirectory, 'dist', 'index.js'), `
+      const { tracingChannel } = require(${JSON.stringify(join(repositoryRoot, 'node_modules', 'dc-polyfill'))})
+      const channel = tracingChannel('orchestrion:ai:getTracer')
+      let starts = 0
+
+      channel.subscribe({ start () { starts++ } })
+
+      function getTracer () { return 'tracer' }
+      getTracer()
+      console.log(starts)
+    `)
+
+    const result = spawnSync(process.execPath, [join(packageDirectory, 'dist', 'index.js')], {
+      cwd: root,
+      env: {
+        ...process.env,
+        NODE_OPTIONS: [
+          `--import ${join(repositoryRoot, 'register.js')}`,
+          `-r ${join(repositoryRoot, 'packages', 'datadog-instrumentations', 'src', 'helpers', 'rewriter', 'loader')}`,
+        ].join(' '),
+      },
+      encoding: 'utf8',
+    })
+
+    assert.strictEqual(result.status, 0, result.stderr)
+    assert.strictEqual(result.stdout.trim(), '1')
+  })
 })
 
 function createAiModuleUrl () {
