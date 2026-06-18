@@ -90,11 +90,6 @@ function buildCheck ({ result }) {
     reason: result.status === 'fail' || result.status === 'error' ? result.diagnosis : undefined,
     steps: [
       {
-        id: 'setup-intake',
-        name: 'Set up intake',
-        status: result.status === 'skip' ? 'skipped' : 'ok',
-      },
-      {
         id: 'run-tests',
         name: 'Run tests',
         status: getRunTestsStatus(result),
@@ -129,18 +124,25 @@ function buildBasicReportingCheck (result) {
     suites: evidence.testSuiteEvents || 0,
     tests: evidence.testEvents || 0,
   }
+  const status = toUiStatus(result.status)
+  const reason = result.status === 'fail' || result.status === 'error' ? result.diagnosis : undefined
+
+  if (isCheckLevelFailure(result)) {
+    return {
+      id: 'basic-reporting',
+      name: 'Basic reporting',
+      status,
+      reason,
+      steps: [],
+    }
+  }
 
   return {
     id: 'basic-reporting',
     name: 'Basic reporting',
-    status: toUiStatus(result.status),
-    reason: result.status === 'fail' || result.status === 'error' ? result.diagnosis : undefined,
+    status,
+    reason,
     steps: [
-      {
-        id: 'setup-intake',
-        name: 'Set up intake',
-        status: result.status === 'skip' ? 'skipped' : 'ok',
-      },
       {
         id: 'run-tests',
         name: 'Run tests',
@@ -158,12 +160,20 @@ function buildBasicReportingCheck (result) {
           events: eventCounts,
           missingLevels: getMissingLevels(eventCounts),
           commandFailure: evidence.commandFailure,
-          reason: result.status === 'fail' || result.status === 'error' ? result.diagnosis : undefined,
+          eventLevelFailure: evidence.eventLevelFailure,
+          debugRerun: evidence.debugRerun,
+          reason,
           samples: evidence.samples,
         },
       },
     ],
   }
+}
+
+function isCheckLevelFailure (result) {
+  if (result.status !== 'fail' && result.status !== 'error') return false
+  if (result.evidence?.commandExitCode !== undefined) return false
+  return !readResultCommand(result)
 }
 
 function getRunTestsStatus (result) {

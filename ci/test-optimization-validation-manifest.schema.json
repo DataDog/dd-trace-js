@@ -1,0 +1,667 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/DataDog/dd-trace-js/ci/test-optimization-validation-manifest.schema.json",
+  "title": "Datadog Test Optimization validation manifest",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "repository",
+    "environment",
+    "frameworks"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string"
+    },
+    "generatedAt": {
+      "type": "string"
+    },
+    "repository": {
+      "$ref": "#/$defs/repository"
+    },
+    "environment": {
+      "$ref": "#/$defs/environment"
+    },
+    "frameworks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/framework"
+      }
+    },
+    "omitted": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "repository": {
+      "type": "object",
+      "required": [
+        "root"
+      ],
+      "properties": {
+        "root": {
+          "type": "string"
+        },
+        "gitRemote": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "gitSha": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "packageManager": {
+          "enum": [
+            "npm",
+            "yarn",
+            "pnpm",
+            "bun",
+            "mixed",
+            "unknown"
+          ]
+        },
+        "workspaceManager": {
+          "enum": [
+            "npm",
+            "yarn",
+            "pnpm",
+            "lerna",
+            "nx",
+            "turbo",
+            "rush",
+            "none",
+            "unknown"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "environment": {
+      "type": "object",
+      "properties": {
+        "os": {
+          "enum": [
+            "darwin",
+            "linux",
+            "windows",
+            "unknown"
+          ]
+        },
+        "shell": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "nodeVersion": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "requiredEnvVars": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "safeEnv": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": true
+    },
+    "framework": {
+      "type": "object",
+      "required": [
+        "id",
+        "framework",
+        "status",
+        "project"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "framework": {
+          "enum": [
+            "jest",
+            "vitest",
+            "mocha",
+            "cucumber",
+            "cypress",
+            "playwright",
+            "node:test",
+            "ava",
+            "tap",
+            "jasmine",
+            "karma",
+            "uvu",
+            "testcafe",
+            "custom",
+            "unknown"
+          ]
+        },
+        "frameworkVersion": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "language": {
+          "enum": [
+            "javascript",
+            "typescript",
+            "mixed",
+            "unknown"
+          ]
+        },
+        "status": {
+          "enum": [
+            "runnable",
+            "detected_not_runnable",
+            "requires_external_service",
+            "requires_manual_setup",
+            "unsupported_by_validator",
+            "unknown"
+          ]
+        },
+        "supportLevel": {
+          "enum": [
+            "validator_supported",
+            "dd_trace_supported_but_validator_missing_adapter",
+            "detected_only",
+            "unknown"
+          ]
+        },
+        "project": {
+          "$ref": "#/$defs/project"
+        },
+        "setup": {
+          "$ref": "#/$defs/setup"
+        },
+        "existingTestCommand": {
+          "$ref": "#/$defs/command"
+        },
+        "preflight": {
+          "$ref": "#/$defs/preflight"
+        },
+        "generatedTestStrategy": {
+          "$ref": "#/$defs/generatedTestStrategy"
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "runnable"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "existingTestCommand"
+            ]
+          }
+        }
+      ]
+    },
+    "project": {
+      "type": "object",
+      "required": [
+        "root"
+      ],
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "root": {
+          "type": "string"
+        },
+        "packageJson": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "configFiles": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "setup": {
+      "type": "object",
+      "properties": {
+        "commands": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/setupCommand"
+          }
+        },
+        "services": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/service"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "setupCommand": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/command"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "required": {
+              "type": "boolean"
+            }
+          }
+        }
+      ]
+    },
+    "service": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "command": {
+      "type": "object",
+      "required": [
+        "cwd"
+      ],
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "cwd": {
+          "type": "string"
+        },
+        "argv": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "env": {
+          "type": "object"
+        },
+        "requiredEnvVars": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "timeoutMs": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "usesShell": {
+          "type": "boolean"
+        },
+        "shellCommand": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "shellReason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": true,
+      "anyOf": [
+        {
+          "required": [
+            "argv"
+          ]
+        },
+        {
+          "properties": {
+            "usesShell": {
+              "const": true
+            }
+          },
+          "required": [
+            "usesShell",
+            "shellCommand"
+          ]
+        }
+      ]
+    },
+    "preflight": {
+      "type": "object",
+      "properties": {
+        "ran": {
+          "type": "boolean"
+        },
+        "command": {
+          "type": "string"
+        },
+        "exitCode": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "durationMs": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "observedTestCount": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "stdoutSummary": {
+          "type": "string"
+        },
+        "stderrSummary": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "generatedTestStrategy": {
+      "type": "object",
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "verified",
+            "proposed",
+            "not_possible"
+          ]
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "adapter": {
+          "enum": [
+            "jest",
+            "vitest",
+            "mocha",
+            "cucumber",
+            "cypress",
+            "playwright",
+            "node:test",
+            "generic-js",
+            "custom",
+            "unknown"
+          ]
+        },
+        "testDirectory": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "moduleSystem": {
+          "enum": [
+            "commonjs",
+            "esm",
+            "typescript",
+            "unknown"
+          ]
+        },
+        "fileExtension": {
+          "type": "string"
+        },
+        "supportsFocusedSingleFileRun": {
+          "type": "boolean"
+        },
+        "usesMultipleFiles": {
+          "type": "boolean"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/generatedFile"
+          }
+        },
+        "scenarios": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/scenario"
+          }
+        },
+        "verification": {
+          "$ref": "#/$defs/verification"
+        },
+        "cleanupPaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "verified"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "files",
+              "scenarios",
+              "cleanupPaths"
+            ]
+          }
+        }
+      ]
+    },
+    "generatedFile": {
+      "type": "object",
+      "required": [
+        "path",
+        "contentLines"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "test",
+            "feature",
+            "steps",
+            "support",
+            "state",
+            "config"
+          ]
+        },
+        "contentLines": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "scenario": {
+      "type": "object",
+      "required": [
+        "id",
+        "runCommand"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "purpose": {
+          "type": "string"
+        },
+        "runCommand": {
+          "$ref": "#/$defs/command"
+        },
+        "expectedWithoutDatadog": {
+          "$ref": "#/$defs/expectedWithoutDatadog"
+        },
+        "testIdentities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/testIdentity"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "expectedWithoutDatadog": {
+      "type": "object",
+      "properties": {
+        "exitCode": {
+          "type": "number"
+        },
+        "observedTestCount": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": true
+    },
+    "testIdentity": {
+      "type": "object",
+      "properties": {
+        "suite": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "file": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "parameters": {
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "verification": {
+      "type": "object",
+      "properties": {
+        "createdTemporaryFiles": {
+          "type": "boolean"
+        },
+        "ranScenarioIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exitCode": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "durationMs": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "observedTestCount": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "cleanupCompleted": {
+          "type": "boolean"
+        },
+        "stdoutSummary": {
+          "type": "string"
+        },
+        "stderrSummary": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

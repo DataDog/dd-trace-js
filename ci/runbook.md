@@ -15,6 +15,45 @@ Write the manifest to:
 
 `./dd-test-optimization-validation-manifest.json`
 
+## Locate Installed Package
+
+Before broad filesystem searches, locate the installed `dd-trace` package with the repository's
+normal Node/package-manager resolution. Try the direct path first, then the cheapest resolver that
+matches this repository:
+
+```bash
+test -f ./node_modules/dd-trace/ci/runbook.md && echo ./node_modules/dd-trace/ci/runbook.md
+node -e "console.log(require.resolve('dd-trace/ci/runbook.md'))"
+yarn node -e "console.log(require.resolve('dd-trace/ci/runbook.md'))"
+pnpm exec node -e "console.log(require.resolve('dd-trace/ci/runbook.md'))"
+npm exec -- node -e "console.log(require.resolve('dd-trace/ci/runbook.md'))"
+```
+
+Use only the command that works in this repository. Do not run unrestricted recursive `find`
+commands across `node_modules`, workspace caches, or the whole repository unless all resolver
+commands fail.
+
+## What You Produce
+
+- `./dd-test-optimization-validation-manifest.json`
+- `./dd-test-optimization-validation-results`
+- a concise console report with the validation status
+- any `ci/test/validation#pako:...` UI path or paths emitted by the validator
+
+## Happy Path
+
+1. Discover every test framework present in the repository.
+2. Install declared project dependencies or run documented setup only when needed for runner availability.
+3. Pick one small representative command per framework.
+4. Run each selected command without Datadog instrumentation and record the preflight result.
+5. Immediately write `./dd-test-optimization-validation-manifest.json` with framework detection,
+   existing commands, preflight results, and non-runnable reasons.
+6. Create and verify temporary generated validation tests for each runnable framework.
+7. Delete temporary files.
+8. Update `./dd-test-optimization-validation-manifest.json` with generated test strategies.
+9. Run `dd-trace/ci/validate-test-optimization` with the manifest.
+10. Report the validator's result and UI path.
+
 ## Goal
 
 Create a complete, verified manifest that tells a deterministic validator:
@@ -47,6 +86,20 @@ validator injects Test Optimization initialization itself.
 - Prefer the smallest reliable passing test command.
 - Prefer existing package scripts over invented commands.
 - Prefer `argv` arrays over shell strings.
+- Honor the repository's declared runtime before judging a command failure. Check `package.json`
+  `engines`, `devEngines`, `volta`, `.node-version`, `.nvmrc`, `.tool-versions`, and available
+  runtime managers such as Volta, Mise, asdf, nvm, or fnm. If the default shell Node violates the
+  declared runtime and a compatible local runtime is available, run preflights and manifest commands
+  through that runtime and record the reason in `notes`.
+- Do not use benchmark or performance commands as representative test commands. For Vitest,
+  `vitest bench`, benchmark package scripts, and `*.bench.*` files that use `bench` are not normal
+  test runs and may emit session/module/suite events without per-test events. If no normal
+  `vitest run` or `vitest test` command exists, mark that Vitest entry non-runnable and explain
+  that only benchmark mode was found.
+- Avoid snapshot-update, golden-output, export-matrix, or very broad generated-list tests as the
+  representative command when smaller stable tests exist. These files often fail for repository
+  state unrelated to test-runner compatibility and can make discovery slow. If such a file is the
+  first attempt and fails or runs many tests, use the one allowed fallback on a smaller test file.
 - Treat dependency setup as part of test-command discovery. Before reporting that a runner is
   missing, check whether the command's package or workspace has had its declared dependencies and
   documented setup installed.
@@ -67,10 +120,138 @@ validator injects Test Optimization initialization itself.
 3. Resolve dependency/setup requirements for each candidate command.
 4. For each framework/package/workspace, identify a small existing passing test command.
 5. Run that command without Datadog instrumentation and record the preflight result.
-6. For each runnable framework, create a temporary generated validation test strategy.
-7. Prove the generated passing test runs without Datadog instrumentation.
-8. Delete all temporary files and record cleanup success.
-9. Write only valid JSON matching the manifest shape below.
+6. Write the manifest immediately with the existing-command and preflight information collected so far.
+7. For each runnable framework, create a temporary generated validation test strategy.
+8. Prove the generated passing test runs without Datadog instrumentation.
+9. Delete all temporary files and record cleanup success.
+10. Update the existing manifest with generated strategy details.
+
+For each framework, try at most one representative existing command and one smaller fallback command
+before recording the failure. Do not keep inventing alternate runner commands after two attempts.
+Record the best failure evidence and continue to the next framework.
+
+Cap discovery output. Do not dump full lockfiles, schemas, package-manager internals, or exhaustive
+file lists into the agent context. Read only the manifest example/schema fields needed for the
+entries being written. Once supported frameworks, non-runnable frameworks, and one command per
+runnable framework are known, write the basic manifest before doing any more exploration.
+
+For Jest projects with multiple configured projects or custom root directories, verify that the
+selected command really runs only the intended file. If `npm test -- <file>` or a package script
+starts unrelated suites, stop that attempt and use a direct runner command with `--runTestsByPath`
+and the repository's required config/project flags. Record the broad-run attempt in `notes`; do not
+let it continue as the representative preflight.
+
+If a package script sets `NODE_OPTIONS=...` inline, do not use that package script as the validation
+command unless there is no safer command shape. Inline `NODE_OPTIONS` in a package script can shadow
+the validator's injected Test Optimization preload. Prefer a direct runner command and move only
+the project-required Node options into `command.env.NODE_OPTIONS`; the validator will merge that
+value with its own Test Optimization preloads. Never put `dd-trace/ci/init`, `dd-trace/register.js`,
+or Datadog-specific environment variables in the manifest's `NODE_OPTIONS`. Record the avoided
+package script and the direct equivalent in `notes`. If the package script is the only runnable
+form, record that the inline `NODE_OPTIONS` may prevent validation and mark the framework
+`requires_manual_setup`.
+
+## Manifest Writing Checkpoint
+
+Write the manifest twice if needed: first as a basic draft before creating any temporary generated
+tests, then as an enriched manifest after generated tests are verified and cleaned up. Do not wait
+for a perfect manifest. The validator can report setup, static, and runtime failures from a
+concrete manifest; it cannot run if no manifest is written.
+
+Hard checkpoint: immediately after existing-command preflights and non-runnable classifications,
+the next file-writing action must create `./dd-test-optimization-validation-manifest.json`. If any
+framework entry is still incomplete, write that framework as `requires_manual_setup`,
+`detected_not_runnable`, `unsupported_by_validator`, or `unknown`; then enrich the file in a second
+pass. Do not create temporary generated tests while this file is absent.
+
+After generated-test cleanup, update the existing manifest in place. If enriching the manifest with
+generated-test strategies becomes slow or uncertain, leave the basic manifest in place, add a
+warning explaining that generated strategy enrichment was skipped, and run the validator. Never let
+generated-strategy JSON composition prevent the manifest file from existing.
+
+Use this pattern to make the first write mechanical. Replace the `frameworks` array with the
+entries discovered in this repository before running it:
+
+```bash
+node - <<'NODE'
+const fs = require('fs')
+const { execSync } = require('child_process')
+
+const root = process.cwd()
+
+function optionalGit (args) {
+  try {
+    return execSync(`git ${args}`, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null
+  } catch (_) {
+    return null
+  }
+}
+
+const manifest = {
+  schemaVersion: '1.0',
+  generatedAt: new Date().toISOString(),
+  repository: {
+    root,
+    gitRemote: optionalGit('config --get remote.origin.url'),
+    gitSha: optionalGit('rev-parse HEAD'),
+    packageManager: 'unknown',
+    workspaceManager: 'unknown'
+  },
+  environment: {
+    os: process.platform === 'darwin' ? 'darwin' : process.platform === 'win32' ? 'windows' : 'linux',
+    shell: process.env.SHELL || null,
+    nodeVersion: process.version,
+    requiredEnvVars: [],
+    safeEnv: {}
+  },
+  frameworks: [
+    /*
+    {
+      id: 'jest:root',
+      framework: 'jest',
+      frameworkVersion: null,
+      language: 'unknown',
+      status: 'requires_manual_setup',
+      supportLevel: 'validator_supported',
+      project: {
+        name: null,
+        root,
+        packageJson: `${root}/package.json`,
+        configFiles: [],
+        evidence: ['detected jest in package.json']
+      },
+      setup: { commands: [], services: [] },
+      notes: ['Fill in the concrete command result before validation.']
+    }
+    */
+  ],
+  omitted: [],
+  warnings: []
+}
+
+fs.writeFileSync('dd-test-optimization-validation-manifest.json', `${JSON.stringify(manifest, null, 2)}\n`)
+NODE
+```
+
+If you use the draft pattern, immediately replace the empty `frameworks` array with one entry for
+each detected framework. Never run the validator with an empty `frameworks` array when frameworks
+were detected.
+
+Use the smallest valid shape:
+
+- repository root, environment, and one framework entry per detected framework
+- `status`, `supportLevel`, `project.evidence`, and `notes`
+- `existingTestCommand` and `preflight` only when a real project test command was selected
+- `generatedTestStrategy` only when generated tests were verified or deliberately proposed/skipped
+
+Do not copy the full example. Omit optional fields you cannot fill confidently. For unknown
+versions, use `null`. For uncertain setup, set `status` to `requires_manual_setup` or
+`detected_not_runnable` and put the concrete reason in `notes`.
+
+A framework entry must not be marked `runnable` only because a generated validation file passed.
+Basic Reporting uses `existingTestCommand`, so `existingTestCommand` must be a real project test
+command or a deliberately safe direct runner command that can run without the generated files being
+present.
 
 If an existing test command fails because tests fail or the repository is missing generated source,
 compiled artifacts, browser binaries, a dev server, or another project setup step, record the
@@ -93,6 +274,12 @@ runnable. A missing runner usually means one of these cases:
 Use the project's package manager and lockfile. If root dependencies are missing, run or record the
 normal root install command, such as `npm ci`, `yarn install --frozen-lockfile`, or
 `pnpm install --frozen-lockfile`, unless the environment forbids installs.
+
+Respect the repository's declared runtime before classifying a command as broken. Check
+`engines`, `devEngines`, `.nvmrc`, `.node-version`, `.tool-versions`, `volta`, and package-manager
+metadata. If the required Node version is available through the local toolchain, use it in the
+selected command. If the required runtime is unavailable, mark the framework `requires_manual_setup`
+and record the expected runtime and the observed failure.
 
 If the selected command lives in a workspace package, prefer the repository's workspace-aware test
 entry point. Do not install that package independently unless the repository documents that workflow.
@@ -133,166 +320,32 @@ The generated tests should support these scenarios when possible:
 
 If a framework cannot support one of these scenarios, include the limitation explicitly.
 
-## Manifest Shape
+## Manifest Contract
 
-```json
-{
-  "schemaVersion": "1.0",
-  "generatedAt": "2026-06-17T00:00:00.000Z",
-  "repository": {
-    "root": "/absolute/path/to/repo",
-    "gitRemote": "string-or-null",
-    "gitSha": "string-or-null",
-    "packageManager": "npm|yarn|pnpm|bun|mixed|unknown",
-    "workspaceManager": "npm|yarn|pnpm|lerna|nx|turbo|rush|none|unknown"
-  },
-  "environment": {
-    "os": "darwin|linux|windows|unknown",
-    "shell": "string-or-null",
-    "nodeVersion": "string-or-null",
-    "requiredEnvVars": ["ENV_VAR_NAME_ONLY"],
-    "safeEnv": {}
-  },
-  "frameworks": [
-    {
-      "id": "jest:packages/ui",
-      "framework": "jest|vitest|mocha|cucumber|cypress|playwright|node:test|ava|tap|jasmine|karma|uvu|testcafe|custom|unknown",
-      "frameworkVersion": "string-or-null",
-      "language": "javascript|typescript|mixed|unknown",
-      "status": "runnable|detected_not_runnable|requires_external_service|requires_manual_setup|unsupported_by_validator|unknown",
-      "supportLevel": "validator_supported|dd_trace_supported_but_validator_missing_adapter|detected_only|unknown",
-      "project": {
-        "name": "string-or-null",
-        "root": "/absolute/path/to/project",
-        "packageJson": "/absolute/path/to/package.json-or-null",
-        "configFiles": ["/absolute/path/to/config-file"],
-        "evidence": ["why this framework was detected"]
-      },
-      "setup": {
-        "commands": [
-          {
-            "id": "install",
-            "description": "Install dependencies if missing",
-            "cwd": "/absolute/path/to/repo",
-            "argv": ["npm", "ci"],
-            "env": {},
-            "requiredEnvVars": [],
-            "timeoutMs": 600000,
-            "usesShell": false,
-            "shellCommand": null,
-            "shellReason": null,
-            "required": false
-          }
-        ],
-        "services": [
-          {
-            "name": "postgres",
-            "required": false,
-            "description": "Only required for broad integration tests; selected validation command avoids it"
-          }
-        ]
-      },
-      "existingTestCommand": {
-        "description": "Small passing existing test subset",
-        "cwd": "/absolute/path/to/project",
-        "argv": ["npm", "test", "--", "path/to/existing.test.js"],
-        "env": {},
-        "requiredEnvVars": [],
-        "timeoutMs": 300000,
-        "usesShell": false,
-        "shellCommand": null,
-        "shellReason": null
-      },
-      "preflight": {
-        "ran": true,
-        "command": "existingTestCommand",
-        "exitCode": 0,
-        "durationMs": 12345,
-        "observedTestCount": 1,
-        "stdoutSummary": "short non-secret summary",
-        "stderrSummary": "short non-secret summary"
-      },
-      "generatedTestStrategy": {
-        "status": "verified|proposed|not_possible",
-        "reason": "string-or-null",
-        "adapter": "jest|vitest|mocha|cucumber|cypress|playwright|node:test|generic-js|custom|unknown",
-        "testDirectory": "/absolute/path/to/generated/test/directory-or-null",
-        "moduleSystem": "commonjs|esm|typescript|unknown",
-        "fileExtension": ".test.js",
-        "supportsFocusedSingleFileRun": true,
-        "usesMultipleFiles": false,
-        "files": [
-          {
-            "path": "/absolute/path/to/dd-test-optimization-validation.test.js",
-            "role": "test|feature|steps|support|state|config",
-            "contentLines": [
-              "describe('dd-test-optimization-validation', () => {",
-              "  it('basic-pass', () => {",
-              "    expect(true).toBe(true)",
-              "  })",
-              "})"
-            ]
-          }
-        ],
-        "scenarios": [
-          {
-            "id": "basic-pass",
-            "purpose": "basic_reporting|efd_candidate",
-            "runCommand": {
-              "cwd": "/absolute/path/to/project",
-              "argv": ["npm", "test", "--", "path/to/dd-test-optimization-validation.test.js"],
-              "env": {},
-              "requiredEnvVars": [],
-              "timeoutMs": 300000,
-              "usesShell": false,
-              "shellCommand": null,
-              "shellReason": null
-            },
-            "expectedWithoutDatadog": {
-              "exitCode": 0,
-              "observedTestCount": 1
-            },
-            "testIdentities": [
-              {
-                "suite": "dd-test-optimization-validation",
-                "name": "basic-pass",
-                "file": "/absolute/path/to/dd-test-optimization-validation.test.js",
-                "parameters": null
-              }
-            ]
-          }
-        ],
-        "verification": {
-          "createdTemporaryFiles": true,
-          "ranScenarioIds": ["basic-pass"],
-          "exitCode": 0,
-          "durationMs": 12345,
-          "observedTestCount": 1,
-          "cleanupCompleted": true,
-          "stdoutSummary": "short non-secret summary",
-          "stderrSummary": "short non-secret summary"
-        },
-        "cleanupPaths": [
-          "/absolute/path/to/dd-test-optimization-validation.test.js",
-          "/absolute/path/to/.dd-test-optimization-validation-state.json"
-        ],
-        "limitations": []
-      },
-      "notes": []
-    }
-  ],
-  "omitted": [],
-  "warnings": []
-}
-```
+Write `./dd-test-optimization-validation-manifest.json` using the published manifest contract:
 
-# Phase 2 Runbook Addition
+- schema: `./node_modules/dd-trace/ci/test-optimization-validation-manifest.schema.json`
+- example: `./node_modules/dd-trace/ci/test-optimization-validation-manifest.example.json`
+
+If `dd-trace` is installed through Yarn Plug'n'Play, a portal dependency, pnpm, or another package
+manager layout where `./node_modules/dd-trace` is absent, locate the installed `dd-trace` package
+first and read the same files from that package's `ci/` directory.
+
+Use the example only to understand field names and nesting. Do not copy placeholder paths or
+commands into the customer manifest.
+
+Do not duplicate static diagnosis decisions in the manifest. Record detection evidence, preflight
+results, and concrete notes. The validator and `dd-trace/ci/diagnose.js` decide whether a detected
+framework/version is a hard blocker.
 
 ## Phase 2: Run Deterministic Validation
 
-After writing `./dd-test-optimization-validation-manifest.json`, run the Datadog Test Optimization validator shipped with the installed library.
+After writing `./dd-test-optimization-validation-manifest.json`, run the Datadog Test Optimization
+validator shipped with the installed library.
 
-Do not manually evaluate Datadog payloads. Do not inspect or rewrite validator internals. Do not decide whether Test Optimization behavior is correct by reading raw intake requests yourself. The deterministic validator is the source of truth for feature validation.
+Do not manually evaluate Datadog payloads. Do not inspect or rewrite validator internals. Do not
+decide whether Test Optimization behavior is correct by reading raw intake requests yourself. The
+deterministic validator is the source of truth for feature validation.
 
 First, locate the validator module:
 
@@ -308,7 +361,9 @@ node /absolute/path/to/validate-test-optimization.js \
   --out ./dd-test-optimization-validation-results
 ```
 
-If the repository uses Yarn Plug'n'Play, pnpm, workspaces, or another non-standard module resolution setup, resolve and execute the validator through the package manager mechanism that works in this repository. Examples:
+If the repository uses Yarn Plug'n'Play, pnpm, workspaces, or another non-standard module resolution
+setup, resolve and execute the validator through the package manager mechanism that works in this
+repository. Examples:
 
 ```bash
 yarn node /absolute/path/to/validate-test-optimization.js \
@@ -343,7 +398,8 @@ Your job in this phase is only to run the validator and preserve its output.
 
 If the validator succeeds, continue to Phase 3.
 
-If the validator fails because Test Optimization behavior did not match expectations, continue to Phase 3 and report the validator diagnosis.
+If the validator fails because Test Optimization behavior did not match expectations, continue to
+Phase 3 and report the validator diagnosis.
 
 If the validator itself cannot run, stop and report:
 
@@ -379,4 +435,5 @@ Do not summarize raw payloads unless the validator explicitly includes them in i
 
 Do not claim that Datadog Test Optimization is broken unless the validator reports that diagnosis.
 
-Do not hide manifest-discovery failures behind validator failures. If the manifest was incomplete, invalid, or based on unverified commands, report that as the primary issue.
+Do not hide manifest-discovery failures behind validator failures. If the manifest was incomplete,
+invalid, or based on unverified commands, report that as the primary issue.

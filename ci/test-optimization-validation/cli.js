@@ -139,8 +139,15 @@ async function main (argv) {
       }
 
       if (runnableFrameworks.length > 0) {
-        await intake.start()
-        intakeStarted = true
+        try {
+          await intake.start()
+          intakeStarted = true
+        } catch (err) {
+          for (const framework of runnableFrameworks) {
+            results.push(getIntakeStartupFailure(framework, err))
+          }
+          runnableFrameworks.length = 0
+        }
       }
 
       for (const framework of runnableFrameworks) {
@@ -201,6 +208,22 @@ function getSkippedAfterBasicFailure (framework, scenario, basicResult) {
   }
 }
 
+function getIntakeStartupFailure (framework, err) {
+  const message = err && err.message ? err.message : String(err)
+  return {
+    frameworkId: framework.id,
+    scenario: 'all',
+    status: 'error',
+    diagnosis: `The local fake intake could not start, so live validation was not run: ${message}`,
+    evidence: {
+      intakeStarted: false,
+      error: message,
+      recommendation: 'Allow the validator to bind to 127.0.0.1, then rerun validation.',
+    },
+    artifacts: [],
+  }
+}
+
 function getStaticFailure (framework, blocker, staticDiagnosisPath) {
   return {
     frameworkId: framework.id,
@@ -219,11 +242,13 @@ function getFrameworkStatusResult (framework) {
   const evidence = getFrameworkStatusEvidence(framework)
 
   if (framework.status === 'unsupported_by_validator') {
+    const frameworkName = getDisplayFrameworkName(framework.framework)
+
     return {
       frameworkId: framework.id,
       scenario: 'all',
       status: 'fail',
-      diagnosis: `${framework.framework} is not supported by the deterministic validator.`,
+      diagnosis: `${frameworkName} is not supported as a Test Optimization test framework.`,
       evidence: {
         ...evidence,
         recommendation: 'Choose a supported framework before running live validation.',

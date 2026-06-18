@@ -1,0 +1,184 @@
+{
+  "schemaVersion": "1.0",
+  "generatedAt": "2026-06-17T00:00:00.000Z",
+  "repository": {
+    "root": "/absolute/path/to/repo",
+    "gitRemote": null,
+    "gitSha": null,
+    "packageManager": "npm",
+    "workspaceManager": "none"
+  },
+  "environment": {
+    "os": "linux",
+    "shell": "/bin/bash",
+    "nodeVersion": "v22.0.0",
+    "requiredEnvVars": [],
+    "safeEnv": {}
+  },
+  "frameworks": [
+    {
+      "id": "jest:root",
+      "framework": "jest",
+      "frameworkVersion": "30.1.3",
+      "language": "javascript",
+      "status": "runnable",
+      "supportLevel": "validator_supported",
+      "project": {
+        "name": "example-project",
+        "root": "/absolute/path/to/repo",
+        "packageJson": "/absolute/path/to/repo/package.json",
+        "configFiles": [
+          "/absolute/path/to/repo/jest.config.js"
+        ],
+        "evidence": [
+          "package.json declares jest",
+          "package script test runs jest"
+        ]
+      },
+      "setup": {
+        "commands": [],
+        "services": []
+      },
+      "existingTestCommand": {
+        "description": "Small passing existing test subset",
+        "cwd": "/absolute/path/to/repo",
+        "argv": [
+          "npm",
+          "test",
+          "--",
+          "test/sum.test.js"
+        ],
+        "env": {},
+        "requiredEnvVars": [],
+        "timeoutMs": 300000,
+        "usesShell": false,
+        "shellCommand": null,
+        "shellReason": null
+      },
+      "preflight": {
+        "ran": true,
+        "command": "existingTestCommand",
+        "exitCode": 0,
+        "durationMs": 12345,
+        "observedTestCount": 1,
+        "stdoutSummary": "1 passing test",
+        "stderrSummary": ""
+      },
+      "generatedTestStrategy": {
+        "status": "verified",
+        "reason": null,
+        "adapter": "jest",
+        "testDirectory": "/absolute/path/to/repo/test",
+        "moduleSystem": "commonjs",
+        "fileExtension": ".test.js",
+        "supportsFocusedSingleFileRun": true,
+        "usesMultipleFiles": false,
+        "files": [
+          {
+            "path": "/absolute/path/to/repo/test/dd-test-optimization-validation.test.js",
+            "role": "test",
+            "contentLines": [
+              "describe('dd-test-optimization-validation', () => {",
+              "  it('basic-pass', () => {",
+              "    expect(true).toBe(true)",
+              "  })",
+              "})"
+            ]
+          }
+        ],
+        "scenarios": [
+          {
+            "id": "basic-pass",
+            "purpose": "basic_reporting|efd_candidate",
+            "runCommand": {
+              "cwd": "/absolute/path/to/repo",
+              "argv": [
+                "npm",
+                "test",
+                "--",
+                "test/dd-test-optimization-validation.test.js"
+              ],
+              "env": {},
+              "requiredEnvVars": [],
+              "timeoutMs": 300000,
+              "usesShell": false,
+              "shellCommand": null,
+              "shellReason": null
+            },
+            "expectedWithoutDatadog": {
+              "exitCode": 0,
+              "observedTestCount": 1
+            },
+            "testIdentities": [
+              {
+                "suite": "dd-test-optimization-validation",
+                "name": "basic-pass",
+                "file": "/absolute/path/to/repo/test/dd-test-optimization-validation.test.js",
+                "parameters": null
+              }
+            ]
+          }
+        ],
+        "verification": {
+          "createdTemporaryFiles": true,
+          "ranScenarioIds": [
+            "basic-pass"
+          ],
+          "exitCode": 0,
+          "durationMs": 12345,
+          "observedTestCount": 1,
+          "cleanupCompleted": true,
+          "stdoutSummary": "1 passing test",
+          "stderrSummary": ""
+        },
+        "cleanupPaths": [
+          "/absolute/path/to/repo/test/dd-test-optimization-validation.test.js"
+        ],
+        "limitations": []
+      },
+      "notes": []
+    },
+    {
+      "id": "node-test:root",
+      "framework": "node:test",
+      "frameworkVersion": null,
+      "language": "javascript",
+      "status": "unsupported_by_validator",
+      "supportLevel": "detected_only",
+      "project": {
+        "name": "example-project",
+        "root": "/absolute/path/to/repo",
+        "packageJson": "/absolute/path/to/repo/package.json",
+        "configFiles": [],
+        "evidence": [
+          "package script test:node runs node --test"
+        ]
+      },
+      "setup": {
+        "commands": [],
+        "services": []
+      },
+      "generatedTestStrategy": {
+        "status": "not_possible",
+        "reason": "node:test is detected for diagnosis only and is not supported as a Test Optimization test framework.",
+        "adapter": "node:test",
+        "testDirectory": null,
+        "moduleSystem": "unknown",
+        "fileExtension": ".test.js",
+        "supportsFocusedSingleFileRun": false,
+        "usesMultipleFiles": false,
+        "files": [],
+        "scenarios": [],
+        "cleanupPaths": [],
+        "limitations": [
+          "unsupported framework"
+        ]
+      },
+      "notes": [
+        "node:test is not supported as a Test Optimization test framework."
+      ]
+    }
+  ],
+  "omitted": [],
+  "warnings": []
+}

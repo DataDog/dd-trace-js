@@ -33,6 +33,9 @@ function runCommand (command, { env = {}, outDir, label, verbose = false } = {})
       ...command.env,
       ...env,
     }
+    if (command.env?.NODE_OPTIONS && env.NODE_OPTIONS) {
+      childEnv.NODE_OPTIONS = mergeNodeOptions(command.env.NODE_OPTIONS, env.NODE_OPTIONS)
+    }
 
     const child = command.usesShell
       ? spawn(command.shellCommand, {
@@ -121,6 +124,13 @@ function withCiPreloads (nodeOptions = '', framework) {
   return result
 }
 
+function mergeNodeOptions (...nodeOptions) {
+  return nodeOptions
+    .map(value => String(value || '').trim())
+    .filter(Boolean)
+    .join(' ')
+}
+
 function hasCiInit (nodeOptions) {
   return nodeOptions.includes('dd-trace/ci/init') || nodeOptions.includes(INIT_PATH)
 }
@@ -138,4 +148,4 @@ function serializeCommand (command) {
   return command.usesShell ? command.shellCommand : command.argv.join(' ')
 }
 
-module.exports = { runCommand, buildDatadogEnv, serializeCommand, withCiPreloads }
+module.exports = { runCommand, buildDatadogEnv, serializeCommand, withCiPreloads, mergeNodeOptions }

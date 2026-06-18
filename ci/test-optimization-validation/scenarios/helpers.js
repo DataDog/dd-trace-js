@@ -23,11 +23,14 @@ function sanitize (value) {
   return value.replaceAll(/[^a-zA-Z0-9._-]+/g, '-')
 }
 
-async function runInstrumentedCommand ({ framework, intake, out, scenarioName, command, options }) {
+async function runInstrumentedCommand ({ framework, intake, out, scenarioName, command, options, extraEnv }) {
   const outDir = frameworkOutDir(out, framework, scenarioName)
   intake.resetRequests()
   const result = await runCommand(command, {
-    env: buildDatadogEnv({ intake, scenario: scenarioName, framework }),
+    env: {
+      ...buildDatadogEnv({ intake, scenario: scenarioName, framework }),
+      ...extraEnv,
+    },
     outDir,
     label: `${framework.id}:${scenarioName}`,
     verbose: options.verbose,

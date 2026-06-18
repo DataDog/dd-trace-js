@@ -129,6 +129,18 @@ to four compact samples: one per event level.
   "missingLevels": [],
   "decodeErrors": 0,
   "reason": "optional failure cause when basic reporting failed",
+  "eventLevelFailure": {
+    "kind": "missing-test-events",
+    "missingLevels": ["test"],
+    "summary": "Test Optimization initialized and emitted higher-level events, but per-test events were missing.",
+    "recommendation": "Choose a smaller standard test command, then inspect the debug rerun output.",
+    "signals": []
+  },
+  "debugRerun": {
+    "ran": true,
+    "commandExitCode": 0,
+    "debugLines": []
+  },
   "samples": [
     { "level": "test session", "test.command": "npm test -- test/sum.spec.js" },
     { "level": "test module", "test.command": "npm test -- test/sum.spec.js" },
@@ -138,12 +150,33 @@ to four compact samples: one per event level.
 }
 ```
 
+The payload only includes user-facing validation steps. It does not include fake-intake setup as a
+step; that setup is validator plumbing. If the fake intake cannot start, the affected check is
+reported as failed with `steps: []` and the local diagnosis is carried by the check-level `reason`.
+
 When live basic reporting runs and fails, the `basic-reporting` check and its `check-events` step
 evidence include a concise local diagnosis in `reason`. Examples:
 
 - `Selected command appears to use unsupported test framework(s): Node.js test runner. Choose a supported framework before running the live validation.`
 - `Static diagnosis found unsupported framework version(s): Jest 27.5.1 is not supported. Upgrade Jest to >=28.0.0, or use dd-trace v5 for older Jest versions.`
 - `Test Optimization initialized and emitted higher-level events, but per-test hooks did not fire. This usually points to an unsupported runner, unsupported framework version, or unsupported framework configuration for the selected command.`
+
+When the command exits successfully but required event levels are missing, `eventLevelFailure`
+contains a structured local cause:
+
+- `kind: "vitest-benchmark"` means the selected command appears to be `vitest bench` or a
+  benchmark-only `*.bench.*` run. This is not a normal test command; choose `vitest run <test-file>`
+  or another standard Vitest test command.
+- `kind: "missing-test-events"` means Test Optimization emitted higher-level events but no per-test
+  events. This usually points to an unsupported runner mode, unsupported framework configuration, or
+  per-test hooks not firing for the selected command.
+- `kind: "no-test-optimization-events"` means no Test Optimization event levels reached the local
+  fake intake.
+
+For ambiguous successful-command failures, the validator reruns the same command once with
+`DD_TRACE_DEBUG=true` and `DD_TRACE_LOG_LEVEL=debug`. Compact excerpts appear in `debugRerun`.
+Recognized non-test command shapes such as `vitest-benchmark` do not trigger the debug rerun because
+the local cause is already known and benchmark reruns can be slow.
 
 EFD, Auto Test Retries, and Test Management depend on Basic Reporting. When Basic Reporting fails
 for a framework, the validator skips those feature checks and includes the Basic Reporting diagnosis

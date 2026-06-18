@@ -32,16 +32,37 @@ async function runBasicReporting ({ framework, intake, out, options }) {
     }
 
     if (!hasAllBasicEventTypes(events)) {
+      const eventLevelFailure = getMissingEventDiagnosis({ framework, result, evidence })
+      evidence.eventLevelFailure = eventLevelFailure
+
       if (result.exitCode !== 0) {
         evidence.commandFailure = summarizeCommandFailure(result, evidence)
       }
-      return fail(
+
+      const debugRerun = await runDebugRerun({
+        command: framework.existingTestCommand,
+        eventLevelFailure,
+        framework,
+        intake,
+        options,
+        out,
+        result,
+      })
+      if (debugRerun) {
+        evidence.debugRerun = debugRerun.summary
+      }
+
+      const failure = fail(
         framework,
         scenarioName,
-        'The command ran, but not all required test event levels were reported.',
+        eventLevelFailure.summary,
         evidence,
         outDir
       )
+      if (debugRerun?.artifacts) {
+        failure.artifacts.push(...debugRerun.artifacts)
+      }
+      return failure
     }
 
     if (result.exitCode === 0) {
@@ -79,6 +100,74 @@ async function runBasicReporting ({ framework, intake, out, options }) {
   } catch (err) {
     return error(framework, scenarioName, err)
   }
+}
+
+async function runDebugRerun ({ command, eventLevelFailure, framework, intake, options, out, result }) {
+  if (!shouldRunDebugRerun(eventLevelFailure, result)) return null
+
+  try {
+    const debug = await runInstrumentedCommand({
+      framework,
+      intake,
+      out,
+      scenarioName: 'basic-reporting-debug',
+      command,
+      options,
+      extraEnv: {
+        DD_TRACE_DEBUG: 'true',
+        DD_TRACE_LOG_LEVEL: 'debug',
+      },
+    })
+
+    return {
+      summary: summarizeDebugRerun(debug),
+      artifacts: getDebugArtifacts(debug.outDir),
+    }
+  } catch (err) {
+    return {
+      summary: {
+        ran: false,
+        error: err && err.message ? err.message : String(err),
+      },
+    }
+  }
+}
+
+function shouldRunDebugRerun (eventLevelFailure, result) {
+  return result.exitCode === 0 &&
+    result.timedOut !== true &&
+    eventLevelFailure.kind !== 'vitest-benchmark'
+}
+
+function summarizeDebugRerun ({ result, events, outDir }) {
+  const output = `${result.stdout}\n${result.stderr}`
+
+  return {
+    ran: true,
+    commandExitCode: result.exitCode,
+    commandTimedOut: result.timedOut,
+    artifactDirectory: outDir,
+    ...basicEventEvidence(events),
+    debugLines: findInterestingLines(output, [
+      /dd-trace/i,
+      /test optimization/i,
+      /ci visibility/i,
+      /citestcycle/i,
+      /\b(?:error|warn)\b/i,
+    ]).slice(0, 20),
+    stderrExcerpt: tailInterestingLines(result.stderr),
+    stdoutExcerpt: tailInterestingLines(result.stdout),
+  }
+}
+
+function getDebugArtifacts (outDir) {
+  return [
+    'command.json',
+    'stdout.txt',
+    'stderr.txt',
+    'events.ndjson',
+    'result.json',
+  ].map(filename => `${outDir}/${filename}`)
 }
 
 function matchesPreflightExitCode (preflight, exitCode) {
@@ -139,6 +228,89 @@ function summarizeCommandFailure (result, evidence) {
   }
 }
 
+function getMissingEventDiagnosis ({ framework, result, evidence }) {
+  const missingLevels = getMissingLevels(evidence)
+  const vitestBenchmark = detectVitestBenchmark(framework, result)
+
+  if (vitestBenchmark) {
+    return {
+      kind: 'vitest-benchmark',
+      missingLevels,
+      signals: vitestBenchmark.signals,
+      summary: 'The selected Vitest command appears to run benchmark mode, not normal tests. ' +
+        'Test Optimization reported session/module/suite events, but Vitest benchmark mode did not emit ' +
+        'per-test events. Choose a normal Vitest test command such as "vitest run <test-file>" for validation.',
+      recommendation: 'Replace the selected command with a normal Vitest test command; do not use `vitest bench` ' +
+        'or benchmark-only `*.bench.*` files for Test Optimization validation.',
+    }
+  }
+
+  if (!hasAnyTestOptimizationEvent(evidence)) {
+    return {
+      kind: 'no-test-optimization-events',
+      missingLevels,
+      summary: 'No Test Optimization test events reached the fake intake. The tracer may not have initialized ' +
+        'in the test process, the selected command may not have executed tests, or the process may not have ' +
+        'connected to the local intake.',
+      recommendation: 'Check the debug rerun output for tracer initialization, request, or intake connection errors.',
+    }
+  }
+
+  if (evidence.testEvents === 0) {
+    return {
+      kind: 'missing-test-events',
+      missingLevels,
+      summary: 'Test Optimization initialized and emitted higher-level events, but per-test events were missing. ' +
+        'This usually points to an unsupported runner mode, unsupported framework configuration, or per-test hooks ' +
+        'not firing for the selected command.',
+      recommendation: 'Choose a smaller standard test command, then inspect the debug rerun output for hook or ' +
+        'exporter errors.',
+    }
+  }
+
+  return {
+    kind: 'missing-event-levels',
+    missingLevels,
+    summary: `The command ran, but these required Test Optimization event levels were missing: ${
+      missingLevels.join(', ')
+    }.`,
+    recommendation: 'Inspect the debug rerun output for tracer initialization, hook, or exporter errors.',
+  }
+}
+
+function getMissingLevels (evidence) {
+  const missing = []
+  if (evidence.testSessionEvents === 0) missing.push('test_session_end')
+  if (evidence.testModuleEvents === 0) missing.push('test_module_end')
+  if (evidence.testSuiteEvents === 0) missing.push('test_suite_end')
+  if (evidence.testEvents === 0) missing.push('test')
+  return missing
+}
+
+function hasAnyTestOptimizationEvent (evidence) {
+  return evidence.testSessionEvents > 0 ||
+    evidence.testModuleEvents > 0 ||
+    evidence.testSuiteEvents > 0 ||
+    evidence.testEvents > 0
+}
+
+function detectVitestBenchmark (framework, result) {
+  if (framework.framework !== 'vitest') return null
+
+  const command = result.command || ''
+  const output = `${result.stdout}\n${result.stderr}`
+  const signals = []
+
+  if (/\bvitest\s+bench\b/.test(command)) signals.push('command contains `vitest bench`')
+  if (/\.bench\.[cm]?[jt]sx?\b/.test(command)) signals.push('command targets a `*.bench.*` file')
+  if (/^\s*BENCH\s+Summary\b/m.test(output)) signals.push('stdout contains a Vitest BENCH summary')
+  if (/Benchmarking is an experimental feature/.test(output)) {
+    signals.push('stderr says Vitest benchmarking is experimental')
+  }
+
+  return signals.length > 0 ? { signals } : null
+}
+
 function getFailureSummary ({ buildErrors, assertionFailures, exitCode, testEventsWereReported, timedOut }) {
   if (timedOut) {
     return 'The selected test command timed out before payload validation could pass.'
@@ -189,4 +361,8 @@ function uniqueLines (lines) {
   return unique
 }
 
-module.exports = { runBasicReporting }
+module.exports = {
+  getMissingEventDiagnosis,
+  runBasicReporting,
+  shouldRunDebugRerun,
+}
