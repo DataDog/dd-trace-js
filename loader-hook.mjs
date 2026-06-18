@@ -1,3 +1,9 @@
+/* eslint n/no-unsupported-features/node-builtins: ['error', { ignores: ['module.registerHooks'] }] */
+
+import * as Module from 'node:module'
+import { pathToFileURL } from 'node:url'
+
+import { createHook, supportsSyncHooks } from 'import-in-the-middle/create-hook.mjs'
 import { initialize as origInitialize, load as origLoad, resolve } from 'import-in-the-middle/hook.mjs'
 import regexpEscapeModule from './vendor/dist/escape-string-regexp/index.js'
 import hooks from './packages/datadog-instrumentations/src/helpers/hooks.js'
@@ -8,11 +14,18 @@ import { isRelativeRequire } from './packages/datadog-instrumentations/src/helpe
 // This file must support Node.js 12.0.0 syntax
 
 const regexpEscape = regexpEscapeModule.default
+const require = Module.createRequire(import.meta.url)
+let syncImportInTheMiddleHook
 
 // For some reason `getEnvironmentVariable` is not otherwise available to ESM.
 const env = configHelper.getEnvironmentVariable
 
 function initialize (data = {}) {
+  prepareImportInTheMiddleOptions(data)
+  return origInitialize(data)
+}
+
+function prepareImportInTheMiddleOptions (data = {}) {
   if (data.include == null) data.include = []
   if (data.exclude == null) data.exclude = []
 
@@ -20,11 +33,64 @@ function initialize (data = {}) {
   addSecurityControls(data)
   addExclusions(data)
 
-  return origInitialize(data)
+  return data
 }
 
 function load (url, context, nextLoad) {
   return rewriterLoader.load(url, context, (url, context) => origLoad(url, context, nextLoad))
+}
+
+function loadSync (url, context, nextLoad) {
+  return rewriterLoader.loadSync(url, context, (url, context) => {
+    return getSyncImportInTheMiddleHook().loadSync(url, context, nextLoad)
+  })
+}
+
+function getSyncImportInTheMiddleHook () {
+  if (syncImportInTheMiddleHook) {
+    return syncImportInTheMiddleHook
+  }
+
+  const importInTheMiddleRegisterHooksUrl = pathToFileURL(
+    require.resolve('import-in-the-middle/register-hooks.mjs')
+  ).href
+  syncImportInTheMiddleHook = createHook({ url: importInTheMiddleRegisterHooksUrl })
+  return syncImportInTheMiddleHook
+}
+
+function registerSyncLoaderHooks (data = {}) {
+  // The synchronous loader strips the source of a require() pulled into the iitm
+  // ESM graph so Node loads it natively, but module.registerHooks rejected that
+  // nullish CommonJS source until nodejs/node#59929 (released in 22.22.3, 24.11.1,
+  // 25.1.0 and 26.0.0). On versions that ship registerHooks but predate the fix,
+  // fall back to the asynchronous loader instead of crashing mid-graph.
+  if (!supportsSyncHooks()) {
+    return false
+  }
+
+  const syncHook = getSyncImportInTheMiddleHook()
+
+  if (
+    typeof Module.registerHooks !== 'function' ||
+    typeof syncHook.applyOptions !== 'function' ||
+    typeof syncHook.loadSync !== 'function' ||
+    typeof syncHook.resolveSync !== 'function'
+  ) {
+    return false
+  }
+
+  // Node built-ins are instrumented under the synchronous loader as well: iitm
+  // reads a built-in's exports through process.getBuiltinModule(), which
+  // bypasses the registered hooks and therefore cannot re-enter them. The
+  // synchronous and asynchronous loaders share the same option preparation so
+  // that `import http from 'node:http'` is wrapped on both paths.
+  syncHook.applyOptions(prepareImportInTheMiddleOptions(data))
+  Module.registerHooks({
+    resolve: syncHook.resolveSync,
+    load: loadSync,
+  })
+
+  return true
 }
 
 function addInstrumentations (data) {
@@ -74,4 +140,4 @@ export const iitmExclusions = [
   /@anthropic-ai\/sdk\/_shims/,
 ]
 
-export { initialize, load, resolve }
+export { initialize, load, registerSyncLoaderHooks, resolve }
