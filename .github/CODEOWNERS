@@ -370,6 +370,7 @@
 /packages/dd-trace/test/plugins/plugin.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/plugins/util/env.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/proxy.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/register.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/require-package-json.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/ritm-tests @DataDog/lang-platform-js
 /packages/dd-trace/test/ritm.spec.js @DataDog/lang-platform-js
