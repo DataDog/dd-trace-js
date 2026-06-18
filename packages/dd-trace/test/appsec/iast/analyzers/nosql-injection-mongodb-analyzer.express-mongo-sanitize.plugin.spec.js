@@ -20,6 +20,7 @@ describe('nosql injection detection in mongodb - whole feature', () => {
     withVersions('express-mongo-sanitize', 'mongodb', mongodbVersion => {
       const mongodb = require(`../../../../../../versions/mongodb@${mongodbVersion}`)
 
+      // TODO: remove once Node.js 18 is no longer supported
       if (satisfies(mongodb.version(), '>=7') && NODE_MAJOR < 20) {
         describe.skip(
           `Skipping the tests as mongodb@${mongodb.version()} requires Node.js >= 20 (current: ${NODE_MAJOR})`
