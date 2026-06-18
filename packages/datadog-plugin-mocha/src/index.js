@@ -222,6 +222,7 @@ class MochaPlugin extends CiPlugin {
       attemptToFixFailed,
       isAttemptToFixRetry,
       isAtrRetry,
+      isOsrRetry,
       finalStatus,
       earlyFlakeAbortReason,
     }) => {
@@ -233,7 +234,10 @@ class MochaPlugin extends CiPlugin {
         if (earlyFlakeAbortReason) {
           span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
         }
-        if (hasBeenRetried) {
+        if (isOsrRetry) {
+          span.setTag(TEST_IS_RETRY, 'true')
+          span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.osr)
+        } else if (hasBeenRetried) {
           span.setTag(TEST_IS_RETRY, 'true')
           if (isAtrRetry) {
             span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atr)

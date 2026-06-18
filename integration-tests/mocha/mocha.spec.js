@@ -4175,6 +4175,55 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         once(childProcess, 'exit'),
       ])
     })
+
+    onlyLatestIt('retries ATR-exhausted tests out of session', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      // Mark fail-test as known so EFD does not run; only ATR will retry
+      receiver.setKnownTests({
+        mocha: {
+          'ci-visibility/test/fail-test.js': ['can report failed tests'],
+        },
+      })
+      const NUM_RETRIES_ATR = 2
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        flaky_test_retries_count: NUM_RETRIES_ATR,
+      })
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const failTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test/fail-test.js'
+          )
+
+          // initial + ATR retries + 1 OSR
+          assert.strictEqual(failTests.length, NUM_RETRIES_ATR + 2)
+
+          const osrTest = failTests.find(test =>
+            test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.osr
+          )
+          assert.ok(osrTest, 'expected one OSR test event')
+          assert.strictEqual(osrTest.meta[TEST_IS_RETRY], 'true')
+          assert.strictEqual(osrTest.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.osr)
+          assert.strictEqual(osrTest.meta[TEST_STATUS], 'fail')
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify(['./test/fail-test.js']),
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: String(NUM_RETRIES_ATR),
+            DD_CIVISIBILITY_OUT_OF_SESSION_RETRIES_ENABLED: '1',
+          },
+        }
+      )
+
+      await Promise.all([once(childProcess, 'exit'), eventsPromise])
+    })
   })
 
   it('takes into account untested files if "all" is passed to nyc', (done) => {

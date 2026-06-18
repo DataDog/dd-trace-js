@@ -209,6 +209,7 @@ class JestPlugin extends CiPlugin {
         config._ddEarlyFlakeDetectionSlowTestRetries = this.libraryConfig?.earlyFlakeDetectionSlowTestRetries ?? {}
         config._ddRepositoryRoot = this.repositoryRoot
         config._ddIsFlakyTestRetriesEnabled = this.libraryConfig?.isFlakyTestRetriesEnabled ?? false
+        config._ddIsOutOfSessionRetriesEnabled = !!getEnvironmentVariable('DD_CIVISIBILITY_OUT_OF_SESSION_RETRIES_ENABLED')
         config._ddIsTestManagementTestsEnabled = this.libraryConfig?.isTestManagementEnabled ?? false
         config._ddTestManagementAttemptToFixRetries = this.libraryConfig?.testManagementAttemptToFixRetries ?? 0
         config._ddFlakyTestRetriesCount = this.libraryConfig?.flakyTestRetriesCount
@@ -449,6 +450,7 @@ class JestPlugin extends CiPlugin {
       failedAllTests,
       attemptToFixFailed,
       isAtrRetry,
+      isOsrRetry,
       finalStatus,
       earlyFlakeAbortReason,
     }) => {
@@ -467,7 +469,10 @@ class JestPlugin extends CiPlugin {
       if (failedAllTests) {
         span.setTag(TEST_HAS_FAILED_ALL_RETRIES, 'true')
       }
-      if (isAtrRetry) {
+      if (isOsrRetry) {
+        span.setTag(TEST_IS_RETRY, 'true')
+        span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.osr)
+      } else if (isAtrRetry) {
         span.setTag(TEST_IS_RETRY, 'true')
         span.setTag(TEST_RETRY_REASON, TEST_RETRY_REASON_TYPES.atr)
       }

@@ -47,6 +47,7 @@ const {
   newTestsWithDynamicNames,
   attemptToFixExecutions,
   loggedAttemptToFixTests,
+  runOutOfSessionRetries,
 } = require('./utils')
 
 require('./common')
@@ -492,6 +493,8 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     config.isSuitesSkippingEnabled = config.isItrEnabled && libraryConfig.isSuitesSkippingEnabled
     config.isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
     config.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
+    config.isOutOfSessionRetriesEnabled =
+      !!getEnvironmentVariable('DD_CIVISIBILITY_OUT_OF_SESSION_RETRIES_ENABLED')
 
     getTestOptimizationRequestResults({
       isKnownTestsEnabled: config.isKnownTestsEnabled,
@@ -750,7 +753,9 @@ addHook({
     this.once('end', function () {
       hasEnded = true
       endRunner = this
-      finishRunIfReady()
+      runOutOfSessionRetries(config, () => {
+        finishRunIfReady()
+      })
     })
 
     // The job of this listener is to

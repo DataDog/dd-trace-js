@@ -510,6 +510,14 @@
         "internalPropertyName": "isFlakyTestRetriesEnabled"
       }
     ],
+    "DD_CIVISIBILITY_OUT_OF_SESSION_RETRIES_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false",
+        "internalPropertyName": "isOutOfSessionRetriesEnabled"
+      }
+    ],
     "DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED": [
       {
         "implementation": "A",
