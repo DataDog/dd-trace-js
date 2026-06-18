@@ -6,6 +6,7 @@ const {
   METRIC_TYPES, TEMPORALITY, DEFAULT_HISTOGRAM_BUCKETS, DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE,
 } = require('./constants')
 const { ObservableInstrument } = require('./instruments')
+const { nowUnixNano } = require('./time')
 
 /**
  * @typedef {import('@opentelemetry/api').Attributes} Attributes
@@ -309,7 +310,7 @@ class PeriodicMetricReader {
  *
  */
 class MetricAggregator {
-  #startTime = Number(process.hrtime.bigint())
+  #startTime = nowUnixNano()
   #temporalityPreference
   #maxBatchedQueueSize
 
