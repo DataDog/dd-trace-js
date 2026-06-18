@@ -25,12 +25,18 @@ class RedisPlugin extends CachePlugin {
   constructor (...args) {
     super(...args)
     this._spanType = 'redis'
-    // @redis/client >= 5.12.0 emits built-in TracingChannel events on Node.js >= 19.9 / 20.2.
-    // Subscribe directly so no shimmer is needed for those version combinations.
-    this.addBind('tracing:node-redis:command:start', ctx => this.#bindBuiltinRedisStart(ctx))
-    // Use asyncEnd (not end) because tracePromise fires end before error.
-    this.addSub('tracing:node-redis:command:asyncEnd', ctx => this.finish(ctx))
-    this.addSub('tracing:node-redis:command:error', ctx => this.error(ctx))
+    // Only bind node-redis built-in channels for the redis plugin itself, not subclasses
+    // (e.g. ioredis, iovalkey). When both @redis/client and a subclass are loaded, the
+    // base-class constructor runs for each plugin instance; without this guard the subclass
+    // would also handle @redis/client spans and tag them with the wrong component/integration.
+    if (this.constructor === RedisPlugin) {
+      // @redis/client >= 5.12.0 emits built-in TracingChannel events on Node.js >= 19.9 / 20.2.
+      // Subscribe directly so no shimmer is needed for those version combinations.
+      this.addBind('tracing:node-redis:command:start', ctx => this.#bindBuiltinRedisStart(ctx))
+      // Use asyncEnd (not end) because tracePromise fires end before error.
+      this.addSub('tracing:node-redis:command:asyncEnd', ctx => this.finish(ctx))
+      this.addSub('tracing:node-redis:command:error', ctx => this.error(ctx))
+    }
   }
 
   /**
