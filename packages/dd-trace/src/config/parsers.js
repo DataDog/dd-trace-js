@@ -143,8 +143,15 @@ const transformers = {
         return transformers.stripColonWhitespace(item)
       })
     }
-    // eslint-disable-next-line regexp/no-super-linear-move -- DD_TAGS-style config value, trusted env/config.
-    return value.replaceAll(/\s*:\s*/g, ':')
+    // Trim whitespace touching each colon in linear time; the equivalent `/\s*:\s*/g` is
+    // super-linear on a colon-less whitespace run. The first and last segments keep their
+    // outer whitespace — only whitespace adjacent to a colon is removed.
+    const parts = value.split(':')
+    for (let i = 0; i < parts.length; i++) {
+      if (i !== 0) parts[i] = parts[i].trimStart()
+      if (i !== parts.length - 1) parts[i] = parts[i].trimEnd()
+    }
+    return parts.join(':')
   },
   /**
    * @param {string} value

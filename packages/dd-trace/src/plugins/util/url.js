@@ -8,7 +8,7 @@ const HTTP2_HEADER_AUTHORITY = ':authority'
 const HTTP2_HEADER_SCHEME = ':scheme'
 const HTTP2_HEADER_PATH = ':path'
 
-const PATH_REGEX = /^(?:[a-z]+:\/\/(?:[^?/]+))?(?<path>\/[^?]*)(?:(\?).*)?$/
+const PATH_REGEX = /^(?:[a-z]+:\/\/[^?/]+)?(?<path>\/[^?]*)(?:(\?).*)?$/
 
 const INT_SEGMENT = /^[1-9][0-9]+$/ // Integer of size at least 2 (>=10)
 const INT_ID_SEGMENT = /^(?=.*[0-9])[0-9._-]{3,}$/ // Mixed string with digits and delimiters

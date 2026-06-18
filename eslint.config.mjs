@@ -548,6 +548,12 @@ export default [
       'regexp/prefer-predefined-assertion': 'error', // `\b` for the equivalent lookarounds we use.
       'regexp/strict': 'error', // Flags genuinely ambiguous unescaped regex syntax.
       'regexp/prefer-range': 'error', // 0 findings outside the gitleaks port.
+      // Of the 246 `prefer-character-class` and 156 `no-useless-non-capturing-group` findings,
+      // 246 and 154 are in the vendored gitleaks port (file-blocked below); only two were in
+      // hand-written `src` (ci.js, url.js) and are fixed. Test-file findings are scoped off
+      // below. Enabled so future unnecessary groups / single-char alternatives fail.
+      'regexp/no-useless-non-capturing-group': 'error',
+      'regexp/prefer-character-class': 'error',
 
       // Enabled as errors so a new regex with poor matching performance is caught by
       // default; each existing finding is opted out with an inline `eslint-disable` that
@@ -564,11 +570,8 @@ export default [
       'regexp/no-unused-capturing-group': 'off', // 21 findings, mostly false positives here.
       'regexp/negation': 'off', // 2 findings. Cosmetic; explicit negated classes read clearer.
 
-      // --- Deferred: purely cosmetic, large mechanical diff across parsers/fixtures ---
-      // These rewrite deliberately spec-shaped regexes (propagation, SQL/obfuscation,
-      // CI parsers) for zero correctness gain. Not worth the review/backport churn now.
-      'regexp/prefer-character-class': 'off', // 246 errors.
-      'regexp/no-useless-non-capturing-group': 'off', // 162 errors.
+      // --- Left off: each changes the matched character set, so flipping needs a per-rule audit
+      // rather than a mechanical rewrite (counts are findings on master) ---
       'regexp/prefer-w': 'off', // 154 errors. `\w` also matches `_`; explicit classes read clearer in parsers.
       'regexp/use-ignore-case': 'off', // 25 errors. Changes the matched set; audit before flipping.
       'regexp/prefer-d': 'off', // 21 errors.
@@ -591,6 +594,10 @@ export default [
       'regexp/no-dupe-disjunctions': 'off',
       'regexp/prefer-range': 'off',
       'regexp/optimal-quantifier-concatenation': 'off',
+      // The 246 `prefer-character-class` and 154 `no-useless-non-capturing-group` findings here
+      // are upstream gitleaks' regex shape, not ours to rewrite.
+      'regexp/prefer-character-class': 'off',
+      'regexp/no-useless-non-capturing-group': 'off',
     },
   },
   {
@@ -605,6 +612,9 @@ export default [
       'regexp/no-super-linear-move': 'off',
       'regexp/optimal-quantifier-concatenation': 'off',
       'regexp/no-misleading-capturing-group': 'off',
+      // Cosmetic group / character-class nits in tests, scripts, and benchmarks are low-value.
+      'regexp/no-useless-non-capturing-group': 'off',
+      'regexp/prefer-character-class': 'off',
     },
   },
   {

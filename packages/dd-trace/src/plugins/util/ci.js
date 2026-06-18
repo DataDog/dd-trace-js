@@ -46,8 +46,8 @@ function parseEmailAndName (emailAndName) {
   let email = ''
   /* eslint-disable-next-line
      regexp/no-super-linear-backtracking, regexp/no-super-linear-move, regexp/no-misleading-capturing-group --
-     git author metadata; trusted CI input. */
-  const matchNameAndEmail = emailAndName.match(/(?:"?([^"]*)"?\s)?(?:<?(.+@[^>]+)>?)/)
+     untrusted git author metadata; the slice caps it to 1 KB, bounding worst-case match cost. */
+  const matchNameAndEmail = emailAndName.slice(0, 1024).match(/(?:"?([^"]*)"?\s)?<?(.+@[^>]+)>?/)
   if (matchNameAndEmail) {
     name = matchNameAndEmail[1]
     email = matchNameAndEmail[2]

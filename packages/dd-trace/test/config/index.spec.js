@@ -4457,6 +4457,11 @@ rules:
       ])
     })
 
+    it('collapses only whitespace adjacent to a colon in header tags', () => {
+      const config = getConfig({ headerTags: ['  a : b  ', 'k : : v'] })
+      assert.deepStrictEqual(config.headerTags, ['  a:b  ', 'k::v'])
+    })
+
     it('should map tracing_tags to tags', () => {
       const config = getConfig({ tags: { foo: 'bar' } })
       assertObjectContains(config.tags, { foo: 'bar' })
