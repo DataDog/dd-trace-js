@@ -1289,11 +1289,14 @@ class CypressPlugin {
   }
 
   afterSpec (spec, results) {
-    const { tests, stats, screenshots } = results || {}
+    const { tests, stats, screenshots, video } = results || {}
     const cypressTests = tests || []
     const specScreenshots = screenshots || []
     const finishedTests = this.finishedTestsByFile[spec.relative] || []
     const screenshotUploadPromises = []
+    // Cypress records one video per spec; collect the failed tests' trace ids so the
+    // spec video can be attached to each failed test run's media after the loop.
+    const failedTestTraceIds = []
 
     if (!this.testSuiteSpan) {
       // dd:testSuiteStart hasn't been triggered for whatever reason
@@ -1402,10 +1405,12 @@ class CypressPlugin {
         }
 
         if (cypressTestStatus === 'fail' || finishedTest.testStatus === 'fail' || cypressTest.displayError) {
+          const failedTestTraceId = finishedTest.testSpan.context().toTraceId()
+          failedTestTraceIds.push(failedTestTraceId)
           const testScreenshots = getTestScreenshots(cypressTest, attemptIndex, specScreenshots)
           const screenshotUploadPromise = this.uploadTestScreenshots({
             screenshots: testScreenshots,
-            traceId: finishedTest.testSpan.context().toTraceId(),
+            traceId: failedTestTraceId,
           })
           if (screenshotUploadPromise) {
             screenshotUploadPromises.push(screenshotUploadPromise)
@@ -1472,6 +1477,14 @@ class CypressPlugin {
       }
     }
 
+    // Attach the per-spec Cypress video to each failed test run's media.
+    if (video && failedTestTraceIds.length > 0) {
+      const videoUploadPromise = this.uploadTestVideo({ videoPath: video, traceIds: failedTestTraceIds })
+      if (videoUploadPromise) {
+        screenshotUploadPromises.push(videoUploadPromise)
+      }
+    }
+
     if (this.testSuiteSpan) {
       const status = getSuiteStatus(stats)
       this.testSuiteSpan.setTag(TEST_STATUS, status)
@@ -1525,6 +1538,47 @@ class CypressPlugin {
           filePath,
           traceId,
           idempotencyKey,
+          capturedAtMs,
+        }, () => {
+          resolve()
+        })
+      }))
+    }
+
+    if (uploadPromises.length > 0) {
+      return Promise.all(uploadPromises).then(() => {})
+    }
+  }
+
+  /**
+   * Uploads the per-spec Cypress video to each given failed test run's media.
+   * Cypress records one video per spec, so the same recording is attached to every
+   * failed test in that spec. The capture time falls back to the file mtime since
+   * the spec video has no per-test timestamp.
+   *
+   * @param {object} options - Upload options
+   * @param {string} options.videoPath - Path to the spec video file
+   * @param {Array<string>} options.traceIds - Failed test trace ids to attach the video to
+   * @returns {Promise<void>|undefined}
+   */
+  uploadTestVideo ({ videoPath, traceIds }) {
+    const exporter = this.tracer?._tracer?._exporter
+    if (!videoPath || !traceIds.length ||
+      !exporter?.canUploadTestScreenshots?.() ||
+      !exporter.uploadTestScreenshot) {
+      return
+    }
+
+    const capturedAtMs = getScreenshotCapturedAtMs(videoPath, videoPath)
+    const videoFileName = basename(videoPath)
+    const uploadPromises = []
+
+    for (const traceId of new Set(traceIds)) {
+      uploadPromises.push(new Promise(resolve => {
+        exporter.uploadTestScreenshot({
+          filePath: videoPath,
+          traceId,
+          idempotencyKey: `${traceId}:${videoFileName}`,
           capturedAtMs,
         }, () => {
           resolve()

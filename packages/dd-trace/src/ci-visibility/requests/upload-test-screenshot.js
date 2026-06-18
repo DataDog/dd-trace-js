@@ -23,6 +23,12 @@ function getContentType (filePath) {
   if (extension === '.webp') {
     return 'image/webp'
   }
+  if (extension === '.mp4') {
+    return 'video/mp4'
+  }
+  if (extension === '.webm') {
+    return 'video/webm'
+  }
   return 'image/png'
 }
 
