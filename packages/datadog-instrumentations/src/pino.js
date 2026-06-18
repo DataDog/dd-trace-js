@@ -35,12 +35,12 @@ function wrapAsJson (asJson) {
   return function asJsonWithTrace (obj, msg, num, time) {
     obj = arguments[0] = obj || {}
 
-    // Caller-provided `dd` wins -- skip the splice so a bespoke `dd` survives.
-    if (!jsonCh.hasSubscribers || Object.hasOwn(obj, 'dd')) {
+    if (!jsonCh.hasSubscribers) {
       return asJson.apply(this, arguments)
     }
 
-    const payload = { line: asJson.apply(this, arguments) }
+    // Pass hasUserDd so the plugin can skip injection while still capturing.
+    const payload = { line: asJson.apply(this, arguments), hasUserDd: Object.hasOwn(obj, 'dd') }
     jsonCh.publish(payload)
     return payload.line
   }
