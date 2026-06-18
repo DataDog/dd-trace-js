@@ -494,7 +494,7 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     config.isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
     config.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
     config.isOutOfSessionRetriesEnabled =
-      !!getEnvironmentVariable('DD_CIVISIBILITY_OUT_OF_SESSION_RETRIES_ENABLED')
+      !!getEnvironmentVariable('_DD_CIVISIBILITY_OUT_OF_SESSION_RETRIES_ENABLED')
 
     getTestOptimizationRequestResults({
       isKnownTestsEnabled: config.isKnownTestsEnabled,

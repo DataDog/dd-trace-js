@@ -4217,7 +4217,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify(['./test/fail-test.js']),
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: String(NUM_RETRIES_ATR),
-            DD_CIVISIBILITY_OUT_OF_SESSION_RETRIES_ENABLED: '1',
+            _DD_CIVISIBILITY_OUT_OF_SESSION_RETRIES_ENABLED: '1',
           },
         }
       )

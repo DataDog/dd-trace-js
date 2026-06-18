@@ -209,7 +209,7 @@ class JestPlugin extends CiPlugin {
         config._ddEarlyFlakeDetectionSlowTestRetries = this.libraryConfig?.earlyFlakeDetectionSlowTestRetries ?? {}
         config._ddRepositoryRoot = this.repositoryRoot
         config._ddIsFlakyTestRetriesEnabled = this.libraryConfig?.isFlakyTestRetriesEnabled ?? false
-        config._ddIsOutOfSessionRetriesEnabled = !!getEnvironmentVariable('DD_CIVISIBILITY_OUT_OF_SESSION_RETRIES_ENABLED')
+        config._ddIsOutOfSessionRetriesEnabled = !!getEnvironmentVariable('_DD_CIVISIBILITY_OUT_OF_SESSION_RETRIES_ENABLED')
         config._ddIsTestManagementTestsEnabled = this.libraryConfig?.isTestManagementEnabled ?? false
         config._ddTestManagementAttemptToFixRetries = this.libraryConfig?.testManagementAttemptToFixRetries ?? 0
         config._ddFlakyTestRetriesCount = this.libraryConfig?.flakyTestRetriesCount
