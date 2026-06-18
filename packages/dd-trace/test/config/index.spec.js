@@ -4737,5 +4737,4 @@ rules:
       assert.strictEqual(config.service, 'node')
     })
   })
-
 })
