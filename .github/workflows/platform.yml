@@ -47,7 +47,7 @@ jobs:
               && yarn set version stable
               && yarn config set nodeLinker node-modules
               && yarn config set enableScripts true
-              && yarn config set --json npmPreapprovedPackages '["@datadog/*"]'
+              && yarn config set --json npmPreapprovedPackages '["@datadog/*","import-in-the-middle"]'
               && yarn add
           - name: bun
             install: bun add --linker=hoisted
