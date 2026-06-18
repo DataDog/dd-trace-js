@@ -256,6 +256,7 @@ async function updateBreakpointInternal (breakpoint, probe) {
     } catch (err) {
       throw new Error(`Error setting breakpoint for probe ${probe.id} (version: ${probe.version})`, { cause: err })
     }
+    breakpoint.id = result.breakpointId
     breakpointToProbes.set(result.breakpointId, probesAtLocation)
   }
 }
