@@ -35,9 +35,16 @@ describe('user_blocking - Internal API', () => {
   })
 
   beforeEach(() => {
+    const tags = {}
     rootSpan = {
       context: () => {
-        return { _tags: {} }
+        return {
+          _tags: tags,
+          getTag: (key) => tags[key],
+          getTags: () => tags,
+          setTag: (key, value) => { tags[key] = value },
+          hasTag: (key) => key in tags,
+        }
       },
       setTag: sinon.stub(),
     }
@@ -85,8 +92,15 @@ describe('user_blocking - Internal API', () => {
     })
 
     it('should not override user when already set', () => {
+      const tags = { 'usr.id': 'mockUser' }
       rootSpan.context = () => {
-        return { _tags: { 'usr.id': 'mockUser' } }
+        return {
+          _tags: tags,
+          getTag: (key) => tags[key],
+          getTags: () => tags,
+          setTag: (key, value) => { tags[key] = value },
+          hasTag: (key) => key in tags,
+        }
       }
 
       const ret = userBlocking.checkUserAndSetUser(tracer, { id: 'user' })

@@ -49,18 +49,20 @@ describe('Dynamic Instrumentation', function () {
         assert.strictEqual(messages.shift(), '[ [Object], 2, 3, ... 2 more items ]')
         assert.strictEqual(messages.shift(), '{}')
         const obj = messages.shift()
-        assert.strictEqual(
-          obj,
-          '{ ' +
-            'foo: [Object], ' +
-            'bar: true, ' +
-            'baz: [Getter], ' +
-            (NODE_MAJOR >= 24
-              ? 'Symbol(nodejs.util.inspect.custom): [Function: [nodejs.util.inspect.custom]] '
-              : '[Symbol(nodejs.util.inspect.custom)]: [Function: [nodejs.util.inspect.custom]] ') +
-          '}'
-        )
-        assert.strictEqual(messages.shift(), obj) // a proxy should just be stringified to the wrapped object
+        let expectedObjectShape = '{ ' +
+          'foo: [Object], ' +
+          'bar: true, ' +
+          'baz: [Getter], ' +
+          (NODE_MAJOR >= 24
+            ? 'Symbol(nodejs.util.inspect.custom): [Function: [nodejs.util.inspect.custom]] '
+            : '[Symbol(nodejs.util.inspect.custom)]: [Function: [nodejs.util.inspect.custom]] ') +
+        '}'
+        assert.strictEqual(obj, expectedObjectShape)
+        if (NODE_MAJOR >= 26) {
+          // A proxy should be stringified to the wrapped object plus the proxy type in newer Node.js versions
+          expectedObjectShape = `Proxy(${expectedObjectShape})`
+        }
+        assert.strictEqual(messages.shift(), expectedObjectShape)
         assert.strictEqual(messages.shift(), '<ref *1> { circular: [Circular *1] }')
         assert.strictEqual(messages.shift(), '[class CustomClass]')
         // Notice execution of `Symbol.toStringTag` getter (`foo`). There's nothing we can do about it when using
@@ -77,7 +79,7 @@ describe('Dynamic Instrumentation', function () {
           //   [Symbol(trigger_async_id_symbol)]: 204,
           //   [Symbol(kResourceStore)]: {}
           // }
-          assert.ok(messages.shift().startsWith('Promise { 42, '))
+          assert.match(messages.shift(), /^Promise \{ 42, /)
         }
         assert.strictEqual(messages.shift(), '[Function: arrowFn]')
         assert.strictEqual(messages.shift(), '[Function: fn]')
@@ -96,7 +98,7 @@ describe('Dynamic Instrumentation', function () {
         assert.strictEqual(messages.shift(), 'WeakSet { <items unknown> }')
         assert.strictEqual(messages.shift(), 'WeakMap { <items unknown> }')
         assert.strictEqual(messages.shift(), 'Buffer(6) [Uint8Array] [ 102, 111, 111, ... 3 more items ]')
-        assert.ok(messages.shift().startsWith('Error: foo\n    at'))
+        assert.match(messages.shift(), /^Error: foo\n {4}at/)
         assert.strictEqual(
           messages.shift(),
           'ArrayBuffer { ' +
@@ -203,7 +205,7 @@ describe('Dynamic Instrumentation', function () {
 
         const { evaluationErrors } = payload.debugger.snapshot
 
-        assert.ok(Array.isArray(evaluationErrors))
+        assert.ok(Array.isArray(evaluationErrors), `Expected array, got ${inspect(evaluationErrors)}`)
         assert.strictEqual(evaluationErrors.length, 2)
         assert.strictEqual(evaluationErrors[0].expr, 'request.invalid.name')
         assert.strictEqual(evaluationErrors[0].message, 'TypeError: Cannot convert undefined or null to object')

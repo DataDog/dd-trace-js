@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -36,7 +37,7 @@ describe('Disabled APM Tracing or Standalone', () => {
       apmTracingEnabled: false,
 
       tracePropagationStyle: {
-        inject: ['datadog', 'tracecontext', 'b3'],
+        inject: ['datadog', 'tracecontext', 'b3multi'],
         extract: ['datadog'],
       },
     }
@@ -135,7 +136,7 @@ describe('Disabled APM Tracing or Standalone', () => {
         operationName: 'operation',
       })
 
-      assert.ok(!(APM_TRACING_ENABLED_KEY in span.context()._tags))
+      assert.ok(!span.context().hasTag(APM_TRACING_ENABLED_KEY))
     })
 
     it('should add _dd.apm.enabled tag when standalone is enabled', () => {
@@ -145,7 +146,10 @@ describe('Disabled APM Tracing or Standalone', () => {
         operationName: 'operation',
       })
 
-      assert.ok(Object.hasOwn(span.context()._tags, APM_TRACING_ENABLED_KEY))
+      assert.ok(
+        span.context().hasTag(APM_TRACING_ENABLED_KEY),
+        `Available keys: ${inspect(Object.keys(span.context().getTags()))}`
+      )
     })
 
     it('should not add _dd.apm.enabled tag in child spans with local parent', () => {
@@ -155,14 +159,14 @@ describe('Disabled APM Tracing or Standalone', () => {
         operationName: 'operation',
       })
 
-      assert.strictEqual(parent.context()._tags[APM_TRACING_ENABLED_KEY], 0)
+      assert.strictEqual(parent.context().getTag(APM_TRACING_ENABLED_KEY), 0)
 
       const child = new DatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'operation',
         parent,
       })
 
-      assert.ok(!(APM_TRACING_ENABLED_KEY in child.context()._tags))
+      assert.ok(!child.context().hasTag(APM_TRACING_ENABLED_KEY))
     })
 
     it('should add _dd.apm.enabled tag in child spans with remote parent', () => {
@@ -179,7 +183,7 @@ describe('Disabled APM Tracing or Standalone', () => {
         parent,
       })
 
-      assert.strictEqual(child.context()._tags[APM_TRACING_ENABLED_KEY], 0)
+      assert.strictEqual(child.context().getTag(APM_TRACING_ENABLED_KEY), 0)
     })
   })
 
@@ -308,9 +312,12 @@ describe('Disabled APM Tracing or Standalone', () => {
       const propagator = new TextMapPropagator(config)
       propagator.inject(span._spanContext, carrier)
 
-      assert.ok(Object.hasOwn(carrier, 'x-datadog-trace-id'))
-      assert.ok(Object.hasOwn(carrier, 'x-datadog-parent-id'))
-      assert.ok(Object.hasOwn(carrier, 'x-datadog-sampling-priority'))
+      assert.ok(Object.hasOwn(carrier, 'x-datadog-trace-id'), `Available keys: ${inspect(Object.keys(carrier))}`)
+      assert.ok(Object.hasOwn(carrier, 'x-datadog-parent-id'), `Available keys: ${inspect(Object.keys(carrier))}`)
+      assert.ok(
+        Object.hasOwn(carrier, 'x-datadog-sampling-priority'),
+        `Available keys: ${inspect(Object.keys(carrier))}`
+      )
       assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.ts=02')
     })
 
@@ -331,12 +338,15 @@ describe('Disabled APM Tracing or Standalone', () => {
       const propagator = new TextMapPropagator(config)
       propagator.inject(span._spanContext, carrier)
 
-      assert.ok(Object.hasOwn(carrier, 'x-datadog-trace-id'))
-      assert.ok(Object.hasOwn(carrier, 'x-datadog-parent-id'))
-      assert.ok(Object.hasOwn(carrier, 'x-datadog-sampling-priority'))
+      assert.ok(Object.hasOwn(carrier, 'x-datadog-trace-id'), `Available keys: ${inspect(Object.keys(carrier))}`)
+      assert.ok(Object.hasOwn(carrier, 'x-datadog-parent-id'), `Available keys: ${inspect(Object.keys(carrier))}`)
+      assert.ok(
+        Object.hasOwn(carrier, 'x-datadog-sampling-priority'),
+        `Available keys: ${inspect(Object.keys(carrier))}`
+      )
 
-      assert.ok(Object.hasOwn(carrier, 'x-b3-traceid'))
-      assert.ok(Object.hasOwn(carrier, 'x-b3-spanid'))
+      assert.ok(Object.hasOwn(carrier, 'x-b3-traceid'), `Available keys: ${inspect(Object.keys(carrier))}`)
+      assert.ok(Object.hasOwn(carrier, 'x-b3-spanid'), `Available keys: ${inspect(Object.keys(carrier))}`)
     })
 
     it('should clear tracestate datadog info', () => {

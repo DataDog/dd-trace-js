@@ -7,6 +7,7 @@ const tracerVersion = require('../../../../../package.json').version
 
 const BaseWriter = require('../common/writer')
 const { AgentlessJSONEncoder } = require('../../encode/agentless-json')
+const { computeIntakeUrl, INTAKE_PATH } = require('./intake')
 
 /**
  * Writer for agentless APM trace intake.
@@ -19,8 +20,8 @@ class AgentlessWriter extends BaseWriter {
   /**
    * @param {object} options - Writer options
    * @param {URL} [options.url] - The intake URL. If not provided, constructed from site.
-   * @param {string} [options.site='datadoghq.com'] - The Datadog site
-   * @param {object} [options.metadata={}] - Metadata to pass to the encoder (hostname, env, etc.)
+   * @param {string} [options.site] - The Datadog site
+   * @param {object} [options.metadata] - Metadata to pass to the encoder (hostname, env, etc.)
    */
   constructor ({ url, site = 'datadoghq.com', metadata = {} }) {
     super({ url })
@@ -28,7 +29,7 @@ class AgentlessWriter extends BaseWriter {
 
     if (!url) {
       try {
-        this._url = new URL(`https://public-trace-http-intake.logs.${site}`)
+        this._url = new URL(computeIntakeUrl(site))
       } catch (err) {
         log.error(
           'Invalid site value for agentless intake: %s. Cannot construct URL. Error: %s',
@@ -121,7 +122,7 @@ class AgentlessWriter extends BaseWriter {
     this.#apiKeyMissing = false
 
     const options = {
-      path: '/v1/input',
+      path: INTAKE_PATH,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -140,7 +141,7 @@ class AgentlessWriter extends BaseWriter {
 
     request(data, options, (err, res, statusCode) => {
       if (err) {
-        this._logRequestError(err, statusCode, count)
+        this.#logRequestError(err, statusCode, count)
         done()
         return
       }
@@ -156,7 +157,7 @@ class AgentlessWriter extends BaseWriter {
    * @param {number} statusCode - HTTP status code (if available)
    * @param {number} count - Number of traces that were being sent
    */
-  _logRequestError (err, statusCode, count) {
+  #logRequestError (err, statusCode, count) {
     if (statusCode === 401 || statusCode === 403) {
       log.error(
         'Authentication failed sending %d trace(s) (status %s). Verify DD_API_KEY is valid.',

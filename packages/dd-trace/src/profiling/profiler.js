@@ -17,7 +17,7 @@ function findWebSpan (startedSpans, spanId) {
     const ispan = startedSpans[i]
     const context = ispan.context()
     if (context._spanId === spanId) {
-      if (isWebServerSpan(context._tags)) {
+      if (isWebServerSpan(context.getTags())) {
         return true
       }
       spanId = context._parentId
@@ -40,6 +40,16 @@ function processInfo (infos, info, type) {
   }
 }
 
+// Route pprof through the central log module so logLevel applies.
+const pprofLogger = {
+  trace: (...args) => log.trace(...args),
+  debug: (...args) => log.debug(...args),
+  info: (...args) => log.info(...args),
+  warn: (...args) => log.warn(...args),
+  error: (...args) => log.error(...args),
+  fatal: (...args) => log.error(...args),
+}
+
 class Profiler extends EventEmitter {
   #compressionFn
   #compressionFnInitialized = false
@@ -49,7 +59,6 @@ class Profiler extends EventEmitter {
   #enabled = false
   #endpointCounts = new Map()
   #lastStart
-  #logger
   #profileSeq = 0
   #spanFinishListener
   #timer
@@ -159,14 +168,13 @@ class Profiler extends EventEmitter {
     this.#enabled = true
 
     const config = this.#config = new Config(options)
-    this.#logger = config.logger
 
     this._setInterval()
     // Log errors if the source map finder fails, but don't prevent the rest
     // of the profiler from running without source maps.
     let mapper
     const { setLogger, SourceMapper } = require('@datadog/pprof')
-    setLogger(config.logger)
+    setLogger(pprofLogger)
 
     if (config.sourceMap) {
       mapper = new SourceMapper(config.debugSourceMaps)
@@ -174,7 +182,8 @@ class Profiler extends EventEmitter {
         .then(() => {
           if (config.debugSourceMaps) {
             const count = mapper.infoMap.size
-            this.#logger.debug(() => {
+            // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+            log.debug(() => {
               return count === 0
                 ? 'Found no source maps'
                 : `Found source maps for following files: [${[...mapper.infoMap.keys()].join(', ')}]`
@@ -195,7 +204,7 @@ class Profiler extends EventEmitter {
           mapper,
           nearOOMCallback,
         })
-        this.#logger.debug(`Started ${profiler.type} profiler in ${threadNamePrefix} thread`)
+        log.debug('Started %s profiler in %s thread', profiler.type, threadNamePrefix)
       }
 
       if (config.endpointCollectionEnabled) {
@@ -248,7 +257,7 @@ class Profiler extends EventEmitter {
 
     for (const profiler of this.#config.profilers) {
       profiler.stop()
-      this.#logger.debug(`Stopped ${profiler.type} profiler in ${threadNamePrefix} thread`)
+      log.debug('Stopped %s profiler in %s thread', profiler.type, threadNamePrefix)
     }
 
     clearTimeout(this.#timer)
@@ -260,7 +269,7 @@ class Profiler extends EventEmitter {
     this.#lastStart = start
     if (!this.#timer || timeout !== this._timeoutInterval) {
       this.#timer = setTimeout(() => this._collect(snapshotKinds.PERIODIC), timeout)
-      this.#timer.unref()
+      this.#timer.unref?.()
     } else {
       this.#timer.refresh()
     }
@@ -268,7 +277,7 @@ class Profiler extends EventEmitter {
 
   #onSpanFinish (span) {
     const context = span.context()
-    const tags = context._tags
+    const tags = context.getTags()
     if (!isWebServerSpan(tags)) return
 
     const endpointName = endpointNameFromTags(tags)
@@ -312,7 +321,7 @@ class Profiler extends EventEmitter {
           const info = profiler.getInfo()
           const profile = profiler.profile(restart, startDate, endDate)
           if (!restart) {
-            this.#logger.debug(`Stopped ${profiler.type} profiler in ${threadNamePrefix} thread`)
+            log.debug('Stopped %s profiler in %s thread', profiler.type, threadNamePrefix)
           }
           if (!profile) continue
           profiles.push({ profiler, profile, info })
@@ -341,7 +350,8 @@ class Profiler extends EventEmitter {
             infos.hasMissingSourceMaps = true
           }
           processInfo(infos, info, profiler.type)
-          this.#logger.debug(() => {
+          // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+          log.debug(() => {
             const profileJson = JSON.stringify(profile, (_, value) => {
               return typeof value === 'bigint' ? value.toString() : value
             })
@@ -358,7 +368,7 @@ class Profiler extends EventEmitter {
       if (hasEncoded) {
         await this.#submit(encodedProfiles, infos, startDate, endDate, snapshotKind)
         profileSubmittedChannel.publish()
-        this.#logger.debug('Submitted profiles')
+        log.debug('Submitted profiles')
       }
     } catch (error) {
       log.error(error)

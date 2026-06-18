@@ -11,9 +11,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref == 'refs/heads/master' && github.run_id || github.ref }}
   cancel-in-progress: true
 
-env:
-  MOCHA_OPTIONS: ${{ github.ref == 'refs/heads/master' && '--retries 1' || '' }}
-
 jobs:
   ubuntu:
     name: ${{ github.workflow }} / ubuntu (node-${{ matrix.version }})
@@ -25,9 +22,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -38,8 +33,7 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: debugger-ubuntu-${{ matrix.version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}-${{ strategy.job-index }}

@@ -10,10 +10,11 @@ const {
   useSandbox,
   getCiVisEvpProxyConfig,
   assertObjectContains,
+  stopCiVisTestEnv,
   warmCypressBinary,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
-const { createWebAppServer } = require('../ci-visibility/web-app-server')
+const { startWebAppServer, stopWebAppServer } = require('../ci-visibility/web-app-server')
 const {
   TEST_STATUS,
   TEST_IS_NEW,
@@ -28,7 +29,6 @@ const {
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
 
-const RECEIVER_STOP_TIMEOUT = 20000
 const requestedVersion = process.env.CYPRESS_VERSION
 const oldestVersion = DD_MAJOR >= 6 ? '12.0.0' : '6.7.0'
 const version = requestedVersion === 'oldest' ? oldestVersion : requestedVersion
@@ -94,137 +94,64 @@ moduleTypes.forEach(({
     }
 
     this.timeout(80_000)
-    let cwd, receiver, childProcess, webAppPort, webAppServer
+    let cwd, receiver, childProcess, webAppBaseUrl, webAppServer
 
     // cypress-fail-fast is required as an incompatible plugin.
     // typescript is required to compile .cy.ts spec files in the pre-compiled JS tests.
     useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript'], true)
 
     before(async function () {
+      this.timeout(180_000)
       cwd = sandboxCwd()
       await warmCypressBinary(cwd)
+
+      const webApp = await startWebAppServer()
+      webAppBaseUrl = webApp.baseUrl
+      webAppServer = webApp.server
     })
 
     beforeEach(async function () {
       receiver = await new FakeCiVisIntake().start()
-
-      // Create a fresh web server for each test to avoid state issues
-      webAppServer = createWebAppServer()
-      await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
-        webAppServer.once('error', reject)
-        webAppServer.listen(0, 'localhost', () => {
-          webAppPort = webAppServer.address().port
-          webAppServer.removeListener('error', reject)
-          resolve()
-        })
-      }))
     })
 
-    // Cypress child processes can sometimes hang or take longer to
-    // terminate. This can cause `FakeCiVisIntake#stop` to be delayed
-    // because there are pending connections.
     afterEach(async () => {
-      if (childProcess && childProcess.pid) {
-        try {
-          childProcess.kill('SIGKILL')
-        } catch (error) {
-          // Process might already be dead - this is fine, ignore error
-        }
+      await stopCiVisTestEnv({ childProcess, receiver })
+      childProcess = undefined
+    })
 
-        // Don't wait for exit - Cypress processes can hang indefinitely in uninterruptible I/O
-        // The OS will clean up zombies, and fresh server per test prevents port conflicts
-      }
-
-      // Close web server before stopping receiver
-      if (webAppServer) {
-        await /** @type {Promise<void>} */ (new Promise((resolve) => {
-          webAppServer.close((err) => {
-            if (err) {
-              // eslint-disable-next-line no-console
-              console.error('Web server close error:', err)
-            }
-            resolve()
-          })
-        }))
-      }
-
-      // Add timeout to prevent hanging
-      const stopPromise = receiver.stop()
-      const timeoutPromise = new Promise((resolve, reject) =>
-        setTimeout(() => reject(new Error('Receiver stop timeout')), RECEIVER_STOP_TIMEOUT)
-      )
-
-      try {
-        await Promise.race([stopPromise, timeoutPromise])
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.warn('Receiver stop timed out:', error.message)
-      }
-
-      // Small delay to allow OS to release ports
-      await new Promise(resolve => setTimeout(resolve, 100))
+    after(async () => {
+      await stopWebAppServer(webAppServer)
     })
 
     context('early flake detection', () => {
-      it('retries new tests', async () => {
+      it('disables manual Cypress retries for new tests retried by EFD', async () => {
         receiver.setSettings({
           early_flake_detection: {
             enabled: true,
             slow_test_retries: {
-              '5s': NUM_RETRIES_EFD,
+              '5s': 2,
             },
+            faulty_session_threshold: 100,
           },
+          flaky_test_retries_enabled: false,
           known_tests_enabled: true,
         })
 
         receiver.setKnownTests({
-          cypress: {
-            'cypress/e2e/spec.cy.js': [
-              // 'context passes', // This test will be considered new
-              'other context fails',
-            ],
-          },
+          cypress: {},
         })
 
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            assert.strictEqual(tests.length, 5)
-
-            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
-            assert.strictEqual(newTests.length, NUM_RETRIES_EFD + 1)
-
-            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-            assert.strictEqual(retriedTests.length, NUM_RETRIES_EFD)
-
-            retriedTests.forEach((retriedTest) => {
-              assert.strictEqual(retriedTest.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
-            })
-
-            newTests.forEach(newTest => {
-              assert.strictEqual(newTest.resource, 'cypress/e2e/spec.cy.js.context passes')
-            })
-
-            const knownTest = tests.filter(test => !test.meta[TEST_IS_NEW])
-            assert.strictEqual(knownTest.length, 1)
-            assert.strictEqual(knownTest[0].resource, 'cypress/e2e/spec.cy.js.other context fails')
-
-            const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
-          }, 25000)
-
-        const envVars = getCiVisEvpProxyConfig(receiver.port)
-
-        const specToRun = 'cypress/e2e/spec.cy.js'
+        const specToRun = 'cypress/e2e/fails-first-then-passes.cy.js'
+        const testName = 'efd with manual cypress retries fails first then passes'
 
         childProcess = exec(
           version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
           {
             cwd,
             env: {
-              ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              ...getCiVisEvpProxyConfig(receiver.port),
+              CYPRESS_BASE_URL: webAppBaseUrl,
+              CYPRESS_RETRIES: '1',
               SPEC_PATTERN: specToRun,
             },
           }
@@ -232,7 +159,30 @@ moduleTypes.forEach(({
 
         await Promise.all([
           once(childProcess, 'exit'),
-          receiverPromise,
+          receiver.gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events
+                .filter(event => event.type === 'test')
+                .map(event => event.content)
+                .filter(test => test.meta[TEST_NAME] === testName)
+                .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+              const diagnosticTests = tests.map(test => ({
+                status: test.meta[TEST_STATUS],
+                isRetry: test.meta[TEST_IS_RETRY],
+                retryReason: test.meta[TEST_RETRY_REASON],
+              }))
+              assert.deepStrictEqual(diagnosticTests, [
+                { status: 'fail', isRetry: undefined, retryReason: undefined },
+                { status: 'fail', isRetry: 'true', retryReason: TEST_RETRY_REASON_TYPES.efd },
+                { status: 'pass', isRetry: 'true', retryReason: TEST_RETRY_REASON_TYPES.efd },
+              ])
+            },
+            { hardTimeout: 60_000 }
+          ),
         ])
       })
 
@@ -253,31 +203,6 @@ moduleTypes.forEach(({
           cypress: {},
         })
 
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-            const instantTests = tests.filter(test => test.resource ===
-              'cypress/e2e/efd-duration.cy.js.efd duration retries instant test'
-            )
-            assert.strictEqual(instantTests.length, 3)
-            assert.strictEqual(
-              instantTests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd).length,
-              2
-            )
-
-            const slowTests = tests.filter(test => test.resource ===
-              'cypress/e2e/efd-duration.cy.js.efd duration retries slightly slow test'
-            )
-            assert.strictEqual(slowTests.length, 1)
-            assert.strictEqual(slowTests[0].meta[TEST_IS_NEW], 'true')
-            assert.strictEqual(slowTests[0].meta[TEST_EARLY_FLAKE_ABORT_REASON], 'slow')
-            assert.strictEqual(slowTests[0].meta[TEST_STATUS], 'pass')
-            assert.strictEqual(slowTests[0].meta[TEST_FINAL_STATUS], 'pass')
-            assert.ok(!(TEST_IS_RETRY in slowTests[0].meta))
-          }, 30_000)
-
         const envVars = getCiVisEvpProxyConfig(receiver.port)
         const specToRun = 'cypress/e2e/efd-duration.cy.js'
 
@@ -287,11 +212,47 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL: webAppBaseUrl,
               SPEC_PATTERN: specToRun,
             },
           }
         )
+
+        const receiverPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              const instantTests = tests.filter(test => test.resource ===
+              'cypress/e2e/efd-duration.cy.js.efd duration retries instant test'
+              )
+              assert.strictEqual(instantTests.length, 3)
+              assert.strictEqual(
+                instantTests.filter(test => test.meta[TEST_IS_NEW] === 'true').length,
+                3
+              )
+              assert.strictEqual(
+                instantTests.filter(test => test.meta[TEST_IS_RETRY] === 'true').length,
+                2
+              )
+              assert.strictEqual(
+                instantTests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.efd).length,
+                2
+              )
+
+              const slowTests = tests.filter(test => test.resource ===
+              'cypress/e2e/efd-duration.cy.js.efd duration retries slightly slow test'
+              )
+              assert.strictEqual(slowTests.length, 1)
+              assert.strictEqual(slowTests[0].meta[TEST_IS_NEW], 'true')
+              assert.strictEqual(slowTests[0].meta[TEST_EARLY_FLAKE_ABORT_REASON], 'slow')
+              assert.strictEqual(slowTests[0].meta[TEST_STATUS], 'pass')
+              assert.strictEqual(slowTests[0].meta[TEST_FINAL_STATUS], 'pass')
+              assert.ok(!(TEST_IS_RETRY in slowTests[0].meta))
+            }, { hardTimeout: 30_000 })
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -321,23 +282,6 @@ moduleTypes.forEach(({
 
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            assert.strictEqual(tests.length, 2)
-
-            // new tests are detected but not retried
-            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
-            assert.strictEqual(newTests.length, 1)
-
-            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-            assert.strictEqual(retriedTests.length, 0)
-
-            const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
-          }, 25000)
-
         const specToRun = 'cypress/e2e/spec.cy.js'
         childProcess = exec(
           version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
@@ -345,12 +289,32 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL: webAppBaseUrl,
               SPEC_PATTERN: specToRun,
               DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false',
             },
           }
         )
+
+        const receiverPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              assert.strictEqual(tests.length, 2)
+
+              // new tests are detected but not retried
+              const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+              assert.strictEqual(newTests.length, 1)
+
+              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+              assert.strictEqual(retriedTests.length, 0)
+
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
+            }, { hardTimeout: 25000 })
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -375,22 +339,6 @@ moduleTypes.forEach(({
 
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            assert.strictEqual(tests.length, 1)
-
-            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
-            assert.strictEqual(newTests.length, 0)
-
-            assert.strictEqual(tests[0].resource, 'cypress/e2e/skipped-test.js.skipped skipped')
-            assert.strictEqual(tests[0].meta[TEST_STATUS], 'skip')
-
-            const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
-          }, 25000)
-
         const specToRun = 'cypress/e2e/skipped-test.js'
 
         childProcess = exec(
@@ -399,11 +347,30 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL: webAppBaseUrl,
               SPEC_PATTERN: 'cypress/e2e/skipped-test.js',
             },
           }
         )
+
+        const receiverPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              assert.strictEqual(tests.length, 1)
+
+              const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+              assert.strictEqual(newTests.length, 0)
+
+              assert.strictEqual(tests[0].resource, 'cypress/e2e/skipped-test.js.skipped skipped')
+              assert.strictEqual(tests[0].meta[TEST_STATUS], 'skip')
+
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
+            }, { hardTimeout: 25000 })
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -430,21 +397,6 @@ moduleTypes.forEach(({
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         // Request module waits before retrying; browser runs are slow — need longer gather timeout
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const testSessionEnd = events.find(event => event.type === 'test_session_end')
-            assert.ok(testSessionEnd, 'expected test_session_end event in payloads')
-            const testSession = testSessionEnd.content
-            assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
-
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            assert.strictEqual(tests.length, 2)
-
-            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
-            assert.strictEqual(newTests.length, 0)
-          }, 60000)
-
         const specToRun = 'cypress/e2e/spec.cy.js'
 
         childProcess = exec(
@@ -453,11 +405,29 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL: webAppBaseUrl,
               SPEC_PATTERN: specToRun,
             },
           }
         )
+
+        const receiverPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testSessionEnd = events.find(event => event.type === 'test_session_end')
+              assert.ok(testSessionEnd, 'expected test_session_end event in payloads')
+              const testSession = testSessionEnd.content
+              assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
+
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              assert.strictEqual(tests.length, 2)
+
+              const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+              assert.strictEqual(newTests.length, 0)
+            }, { hardTimeout: 60000 })
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -483,23 +453,6 @@ moduleTypes.forEach(({
 
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            assert.strictEqual(tests.length, 2)
-
-            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
-            assert.strictEqual(newTests.length, 0)
-
-            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-            assert.strictEqual(retriedTests.length, 0)
-
-            const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
-            assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'faulty')
-          }, 60000)
-
         const specToRun = 'cypress/e2e/spec.cy.js'
 
         childProcess = exec(
@@ -508,11 +461,31 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL: webAppBaseUrl,
               SPEC_PATTERN: specToRun,
             },
           }
         )
+
+        const receiverPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              assert.strictEqual(tests.length, 2)
+
+              const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+              assert.strictEqual(newTests.length, 0)
+
+              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+              assert.strictEqual(retriedTests.length, 0)
+
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
+              assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'faulty')
+            }, { hardTimeout: 60000 })
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -542,23 +515,6 @@ moduleTypes.forEach(({
 
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            assert.strictEqual(tests.length, 2)
-
-            // new tests are not detected
-            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
-            assert.strictEqual(newTests.length, 0)
-
-            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-            assert.strictEqual(retriedTests.length, 0)
-
-            const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
-          }, 25000)
-
         const specToRun = 'cypress/e2e/spec.cy.js'
         childProcess = exec(
           version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
@@ -566,12 +522,32 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL: webAppBaseUrl,
               SPEC_PATTERN: specToRun,
               DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: 'false',
             },
           }
         )
+
+        const receiverPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              assert.strictEqual(tests.length, 2)
+
+              // new tests are not detected
+              const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+              assert.strictEqual(newTests.length, 0)
+
+              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+              assert.strictEqual(retriedTests.length, 0)
+
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
+            }, { hardTimeout: 25000 })
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -600,23 +576,6 @@ moduleTypes.forEach(({
 
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            assert.strictEqual(tests.length, 2)
-
-            // new tests are not detected
-            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
-            assert.strictEqual(newTests.length, 0)
-
-            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-            assert.strictEqual(retriedTests.length, 0)
-
-            const testSession = events.find(event => event.type === 'test_session_end').content
-            assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
-          }, 25000)
-
         const specToRun = 'cypress/e2e/spec.cy.js'
 
         childProcess = exec(
@@ -625,11 +584,31 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL: webAppBaseUrl,
               SPEC_PATTERN: specToRun,
             },
           }
         )
+
+        const receiverPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              assert.strictEqual(tests.length, 2)
+
+              // new tests are not detected
+              const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+              assert.strictEqual(newTests.length, 0)
+
+              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+              assert.strictEqual(retriedTests.length, 0)
+
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assert.ok(!(TEST_EARLY_FLAKE_ENABLED in testSession.meta))
+            }, { hardTimeout: 25000 })
 
         await Promise.all([
           once(childProcess, 'exit'),
@@ -657,30 +636,6 @@ moduleTypes.forEach(({
           },
         })
 
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            // Should only have 2 tests, no retries
-            assert.equal(tests.length, 2)
-
-            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
-            assert.equal(newTests.length, 1)
-
-            // No retries should occur when testIsolation is false
-            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
-            assert.equal(retriedTests.length, 0)
-
-            newTests.forEach(newTest => {
-              assert.equal(newTest.resource, 'cypress/e2e/spec.cy.js.context passes')
-            })
-
-            const testSession = events.find(event => event.type === 'test_session_end').content
-            assertObjectContains(testSession.meta, {
-              [TEST_EARLY_FLAKE_ENABLED]: 'true',
-            })
-          }, 25000)
-
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/spec.cy.js'
@@ -691,17 +646,111 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL: webAppBaseUrl,
               SPEC_PATTERN: specToRun,
               CYPRESS_TEST_ISOLATION: 'false',
             },
           }
         )
 
+        const receiverPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              // Should only have 2 tests, no retries
+              assert.equal(tests.length, 2)
+
+              const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+              assert.equal(newTests.length, 1)
+
+              // No retries should occur when testIsolation is false
+              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+              assert.equal(retriedTests.length, 0)
+
+              newTests.forEach(newTest => {
+                assert.equal(newTest.resource, 'cypress/e2e/spec.cy.js.context passes')
+              })
+
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assertObjectContains(testSession.meta, {
+                [TEST_EARLY_FLAKE_ENABLED]: 'true',
+              })
+            }, { hardTimeout: 25000 })
+
         await Promise.all([
           once(childProcess, 'exit'),
           receiverPromise,
         ])
+      })
+
+      over12It('preserves manual Cypress retries for new tests when testIsolation is false', async () => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD,
+            },
+            faulty_session_threshold: 100,
+          },
+          flaky_test_retries_enabled: false,
+          known_tests_enabled: true,
+        })
+
+        receiver.setKnownTests({
+          cypress: {},
+        })
+
+        const specToRun = 'cypress/e2e/fails-first-then-passes.cy.js'
+        const testName = 'efd with manual cypress retries fails first then passes'
+
+        childProcess = exec(
+          version === 'latest' ? testCommand : `${testCommand} --spec ${specToRun}`,
+          {
+            cwd,
+            env: {
+              ...getCiVisEvpProxyConfig(receiver.port),
+              CYPRESS_BASE_URL: webAppBaseUrl,
+              CYPRESS_EXPECTED_ATTEMPT: '1',
+              CYPRESS_RETRIES: '1',
+              CYPRESS_TEST_ISOLATION: 'false',
+              SPEC_PATTERN: specToRun,
+            },
+          }
+        )
+
+        const receiverPromise = receiver.gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events
+              .filter(event => event.type === 'test')
+              .map(event => event.content)
+              .filter(test => test.meta[TEST_NAME] === testName)
+              .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+            const diagnosticTests = tests.map(test => ({
+              status: test.meta[TEST_STATUS],
+              isNew: test.meta[TEST_IS_NEW],
+              isRetry: test.meta[TEST_IS_RETRY],
+              retryReason: test.meta[TEST_RETRY_REASON],
+            }))
+            assert.deepStrictEqual(diagnosticTests, [
+              { status: 'fail', isNew: 'true', isRetry: undefined, retryReason: undefined },
+              { status: 'pass', isNew: undefined, isRetry: 'true', retryReason: TEST_RETRY_REASON_TYPES.ext },
+            ])
+          },
+          { hardTimeout: 60_000 }
+        )
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          receiverPromise,
+        ])
+        assert.strictEqual(exitCode, 0)
       })
 
       it('retries new tests in the correct order (right after original test)', async () => {
@@ -725,59 +774,6 @@ moduleTypes.forEach(({
           },
         })
 
-        const receiverPromise = receiver
-          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), payloads => {
-            const events = payloads.flatMap(({ payload }) => payload.events)
-            const tests = events.filter(event => event.type === 'test').map(event => event.content)
-
-            // 1 known test + 1 new test with retries: 1 + (1 + 3) = 5 tests
-            assert.equal(tests.length, 5)
-
-            // Extract test execution order: [testName, isRetry]
-            const testExecutionOrder = tests.map(test => ({
-              name: test.meta[TEST_NAME],
-              isRetry: test.meta[TEST_IS_RETRY] === 'true',
-              isNew: test.meta[TEST_IS_NEW] === 'true',
-            }))
-
-            // Expected order:
-            // 1. "context passes" (original, known - not retried)
-            // 2. "other context fails" (original, new)
-            // 3. "other context fails" (retry 1)
-            // 4. "other context fails" (retry 2)
-            // 5. "other context fails" (retry 3)
-
-            assertObjectContains(testExecutionOrder, [
-              { name: 'context passes', isRetry: false, isNew: false },
-              { name: 'other context fails', isRetry: false, isNew: true },
-              { name: 'other context fails', isRetry: true, isNew: true },
-              { name: 'other context fails', isRetry: true, isNew: true },
-              { name: 'other context fails', isRetry: true, isNew: true },
-            ])
-
-            // Verify TEST_HAS_FAILED_ALL_RETRIES is set correctly
-            const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
-            assert.strictEqual(newTests.length, NUM_RETRIES_EFD + 1)
-
-            const testsWithFailedAllRetries = newTests.filter(
-              test => test.meta[TEST_HAS_FAILED_ALL_RETRIES] === 'true'
-            )
-            assert.strictEqual(
-              testsWithFailedAllRetries.length,
-              1,
-              'Exactly one test should have TEST_HAS_FAILED_ALL_RETRIES set'
-            )
-            assert.strictEqual(newTests[newTests.length - 1].meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
-            for (let i = 0; i < newTests.length - 1; i++) {
-              assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in newTests[i].meta))
-            }
-
-            const testSession = events.find(event => event.type === 'test_session_end').content
-            assertObjectContains(testSession.meta, {
-              [TEST_EARLY_FLAKE_ENABLED]: 'true',
-            })
-          }, 25000)
-
         const envVars = getCiVisEvpProxyConfig(receiver.port)
 
         const specToRun = 'cypress/e2e/spec.cy.js'
@@ -788,11 +784,100 @@ moduleTypes.forEach(({
             cwd,
             env: {
               ...envVars,
-              CYPRESS_BASE_URL: `http://localhost:${webAppPort}`,
+              CYPRESS_BASE_URL: webAppBaseUrl,
               SPEC_PATTERN: specToRun,
             },
           }
         )
+
+        const receiverPromise = receiver
+          .gatherPayloadsUntilChildExit(
+            childProcess,
+            ({ url }) => url.endsWith('/api/v2/citestcycle'),
+            payloads => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+              // 1 known test + 1 new test with retries: 1 + (1 + 3) = 5 tests
+              assert.strictEqual(tests.length, 5)
+
+              const testExecutionOrder = tests.map(test => ({
+                resource: test.resource,
+                name: test.meta[TEST_NAME],
+                isRetry: test.meta[TEST_IS_RETRY] === 'true',
+                isNew: test.meta[TEST_IS_NEW] === 'true',
+                retryReason: test.meta[TEST_RETRY_REASON],
+              }))
+
+              // Expected order:
+              // 1. "context passes" (original, known - not retried)
+              // 2. "other context fails" (original, new)
+              // 3. "other context fails" (retry 1)
+              // 4. "other context fails" (retry 2)
+              // 5. "other context fails" (retry 3)
+              assert.deepStrictEqual(testExecutionOrder, [
+                {
+                  resource: 'cypress/e2e/spec.cy.js.context passes',
+                  name: 'context passes',
+                  isRetry: false,
+                  isNew: false,
+                  retryReason: undefined,
+                },
+                {
+                  resource: 'cypress/e2e/spec.cy.js.other context fails',
+                  name: 'other context fails',
+                  isRetry: false,
+                  isNew: true,
+                  retryReason: undefined,
+                },
+                {
+                  resource: 'cypress/e2e/spec.cy.js.other context fails',
+                  name: 'other context fails',
+                  isRetry: true,
+                  isNew: true,
+                  retryReason: TEST_RETRY_REASON_TYPES.efd,
+                },
+                {
+                  resource: 'cypress/e2e/spec.cy.js.other context fails',
+                  name: 'other context fails',
+                  isRetry: true,
+                  isNew: true,
+                  retryReason: TEST_RETRY_REASON_TYPES.efd,
+                },
+                {
+                  resource: 'cypress/e2e/spec.cy.js.other context fails',
+                  name: 'other context fails',
+                  isRetry: true,
+                  isNew: true,
+                  retryReason: TEST_RETRY_REASON_TYPES.efd,
+                },
+              ])
+
+              // Verify TEST_HAS_FAILED_ALL_RETRIES is set correctly
+              const newTests = tests.filter(test => test.meta[TEST_IS_NEW] === 'true')
+              assert.strictEqual(newTests.length, NUM_RETRIES_EFD + 1)
+
+              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+              assert.strictEqual(retriedTests.length, NUM_RETRIES_EFD)
+
+              const testsWithFailedAllRetries = newTests.filter(
+                test => test.meta[TEST_HAS_FAILED_ALL_RETRIES] === 'true'
+              )
+              assert.strictEqual(
+                testsWithFailedAllRetries.length,
+                1,
+                'Exactly one test should have TEST_HAS_FAILED_ALL_RETRIES set'
+              )
+              assert.strictEqual(newTests[newTests.length - 1].meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+              for (let i = 0; i < newTests.length - 1; i++) {
+                assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in newTests[i].meta))
+              }
+
+              const testSession = events.find(event => event.type === 'test_session_end').content
+              assertObjectContains(testSession.meta, {
+                [TEST_EARLY_FLAKE_ENABLED]: 'true',
+              })
+            }, { hardTimeout: 25000 })
 
         childProcess.stdout?.on('data', (data) => {
           testOutput += data.toString()

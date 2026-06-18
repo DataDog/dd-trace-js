@@ -13,21 +13,33 @@ const { storage } = require('../../datadog-core')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
 
-const plugins = require('../../dd-trace/src/plugins')
-
 const hasOSymlink = realFS.constants.O_SYMLINK
 
 describe('Plugin', () => {
+  describe('registry', () => {
+    const plugins = require('../../dd-trace/src/plugins')
+    const FsPlugin = require('../src')
+
+    it('resolves the fs plugin under both the fs and node:fs keys', () => {
+      assert.strictEqual(plugins.fs, FsPlugin)
+      assert.strictEqual(plugins['node:fs'], FsPlugin)
+    })
+
+    it('marks the fs plugin experimental so it stays disabled by default', () => {
+      assert.strictEqual(FsPlugin.experimental, true)
+    })
+  })
+
   describe('fs not instrumented without internal method call', () => {
     let fs
     let tracer
 
-    afterEach(() => agent.close({ ritmReset: false }))
+    afterEach(() => agent.close())
 
-    beforeEach(() => agent.load('fs', undefined, { flushInterval: 1 }).then(() => {
-      tracer = require('../../dd-trace')
+    beforeEach(async () => {
+      tracer = await agent.load([], undefined, { flushInterval: 1 })
       fs = require('node:fs')
-    }))
+    })
 
     describe('with parent span', () => {
       beforeEach((done) => {
@@ -75,23 +87,21 @@ describe('Plugin', () => {
     let tmpdir
     let tracer
 
-    afterEach(() => agent.close({ ritmReset: false }))
+    afterEach(() => agent.close())
 
-    beforeEach(() => agent.load('fs', undefined, { flushInterval: 1 }).then(() => {
-      tracer = require('../../dd-trace')
+    beforeEach(async () => {
+      tracer = await agent.load('fs', undefined, { flushInterval: 1 })
       fs = require('fs')
       tracer.use('fs', { enabled: true })
-    }))
+    })
 
     before(() => {
       tmpdir = realFS.mkdtempSync(path.join(os.tmpdir(), 'dd-trace-js-test'))
-      plugins.fs = require('../../datadog-plugin-fs/src')
       channel('dd-trace:instrumentation:load').publish({ name: 'fs' })
     })
 
     after((done) => {
       realFS.rm(tmpdir, { force: true, recursive: true }, done)
-      delete plugins.fs
     })
 
     describe('without parent span', () => {

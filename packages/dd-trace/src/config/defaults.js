@@ -4,34 +4,18 @@ const dns = require('dns')
 const util = require('util')
 
 const { DD_MAJOR } = require('../../../../version')
-const { applyMajorVersionAliasFilters } = require('./major-version-filters')
 const { parsers, transformers, telemetryTransformers, setWarnInvalidValue } = require('./parsers')
+const applyMajorOverrides = require('./major-overrides')
 const {
   supportedConfigurations,
 } = /** @type {import('./helper').SupportedConfigurationsJson} */ (require('./supported-configurations.json'))
+
+applyMajorOverrides(supportedConfigurations, DD_MAJOR)
 
 let log
 let seqId = 0
 const configWithOrigin = new Map()
 const parseErrors = new Map()
-
-applyMajorVersionAliasFilters(supportedConfigurations, DD_MAJOR)
-
-if (DD_MAJOR < 6) {
-  // Default value for DD_TRACE_STARTUP_LOGS is 'false' in older major versions.
-  // TODO: Remove this here once v5 is not supported anymore.
-  supportedConfigurations.DD_TRACE_STARTUP_LOGS[0].default = 'false'
-
-  // Programmatic configuration of DD_IAST_SECURITY_CONTROLS_CONFIGURATION is still supported
-  // on v5; restore the configurationNames that the env-only v6 shape drops.
-  // TODO: Remove this branch once v5 is not supported anymore.
-  const iastEntry = supportedConfigurations.DD_IAST_SECURITY_CONTROLS_CONFIGURATION[0]
-  iastEntry.configurationNames = [
-    iastEntry.internalPropertyName,
-    'experimental.iast.securityControlsConfiguration',
-  ]
-  delete iastEntry.internalPropertyName
-}
 
 /**
  * Warns about an invalid value for an option and adds the error to the last telemetry entry if it is not already set.
@@ -88,6 +72,12 @@ for (const [name, value] of Object.entries(defaults)) {
 function generateTelemetry (value = null, origin, optionName) {
   const tableEntry = configurationsTable[optionName]
   const { type, canonicalName = optionName } = tableEntry ?? { type: typeof value }
+  // Sensitive configurations are excluded from configuration telemetry: their
+  // entry is never added to `configWithOrigin`, the single source for every
+  // telemetry path (app-started and app-client-configuration-change).
+  if (sensitiveConfigurations.has(canonicalName)) {
+    return
+  }
   // TODO: Should we not send defaults to telemetry to reduce size?
   // TODO: How to handle aliases/actual names in the future? Optional fields? Normalize the name at intake?
   // TODO: Validate that space separated tags are parsed by the backend. Optimizations would be possible with that.
@@ -212,6 +202,11 @@ const fallbackConfigurations = new Map()
 
 const regExps = {}
 
+// Canonical names of configurations whose value is excluded from configuration
+// telemetry. Driven by the `sensitive: true` attribute in
+// `supported-configurations.json` so new entries opt in without code changes.
+const sensitiveConfigurations = new Set()
+
 for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) {
   if (entries.length !== 1) {
     // TODO: Determine if we really want to support multiple entries for a canonical name.
@@ -223,6 +218,9 @@ for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) 
     )
   }
   for (const entry of entries) {
+    if (entry.sensitive) {
+      sensitiveConfigurations.add(canonicalName)
+    }
     const configurationNames = entry.internalPropertyName ? [entry.internalPropertyName] : entry.configurationNames
     const fullPropertyName = configurationNames?.[0] ?? canonicalName
     const type = entry.type.toUpperCase()

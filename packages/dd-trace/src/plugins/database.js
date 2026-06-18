@@ -49,7 +49,7 @@ class DatabasePlugin extends StoragePlugin {
    * @returns {string}
    */
   #createDBMPropagationCommentService (serviceName, span, peerData) {
-    const spanTags = span.context()._tags
+    const spanTags = span.context().getTags()
     const dddb = spanTags['db.name']
     const ddh = spanTags['out.host']
     const cacheKey = `${dddb ?? ''}\0${ddh ?? ''}\0${serviceName ?? ''}`
@@ -91,23 +91,24 @@ class DatabasePlugin extends StoragePlugin {
       return null
     }
 
-    const peerData = this.getPeerService(span.context()._tags)
+    const peerData = this.getPeerService(span.context().getTags())
     const dbmService = this.#getDbmServiceName(serviceName, peerData)
     const servicePropagation = this.#createDBMPropagationCommentService(dbmService, span, peerData)
 
     let dbmComment = servicePropagation
 
-    // Add propagation hash if both process tags and SQL base hash injection are enabled
-    if (propagationHash.isEnabled() && this.config['dbm.injectSqlBaseHash']) {
+    // Add propagation hash if process tags are enabled and either SQL base hash injection is enabled
+    // or dynamic_service mode implicitly enables it
+    if (propagationHash.isEnabled() && (this.config['dbm.injectSqlBaseHash'] || mode === 'dynamic_service')) {
       const hashBase64 = propagationHash.getHashBase64()
       if (hashBase64) {
         dbmComment += `,ddsh='${hashBase64}'`
         // Add hash to span meta as a tag
-        span.setTag('_dd.dbm.propagation_hash', hashBase64)
+        span.setTag('_dd.propagated_hash', hashBase64)
       }
     }
 
-    if (disableFullMode || mode === 'service') {
+    if (disableFullMode || mode === 'service' || mode === 'dynamic_service') {
       return dbmComment
     } else if (mode === 'full') {
       span.setTag('_dd.dbm_trace_injected', 'true')

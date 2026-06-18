@@ -3,12 +3,10 @@
   "run": "node index.js",
   "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
   "cachegrind": false,
-  "iterations": 40,
+  "iterations": 10,
   "instructions": true,
   "variants": {
-    "without-log": { "env": { "DD_TRACE_DEBUG": "false" } },
-    "skip-log": { "env": { "DD_TRACE_DEBUG": "true", "WITH_LEVEL": "debug", "DD_TRACE_LOG_LEVEL": "error" } },
-    "with-debug": { "env": { "DD_TRACE_DEBUG": "true", "WITH_LEVEL": "debug", "DD_TRACE_LOG_LEVEL": "debug" } },
-    "with-error": { "env": { "DD_TRACE_DEBUG": "true", "WITH_LEVEL": "error", "DD_TRACE_LOG_LEVEL": "error" } }
+    "with-debug": { "env": { "DD_TRACE_DEBUG": "true", "WITH_LEVEL": "debug", "DD_TRACE_LOG_LEVEL": "debug", "COUNT": "8000000" } },
+    "with-error": { "env": { "DD_TRACE_DEBUG": "true", "WITH_LEVEL": "error", "DD_TRACE_LOG_LEVEL": "error", "COUNT": "800000" } }
   }
 }

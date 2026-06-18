@@ -165,7 +165,7 @@ class SpanStatsProcessor {
 
     if (this.enabled) {
       this.timer = setInterval(this.onInterval.bind(this), interval * 1e3)
-      this.timer.unref()
+      this.timer.unref?.()
     }
   }
 
@@ -190,7 +190,7 @@ class SpanStatsProcessor {
     if (!this.enabled) return
     if (!span.metrics[TOP_LEVEL_KEY] && !span.metrics[MEASURED]) return
 
-    const spanEndNs = span.startTime + span.duration
+    const spanEndNs = span.start + span.duration
     const bucketTime = spanEndNs - (spanEndNs % this.bucketSizeNs)
 
     this.buckets.forTime(bucketTime)

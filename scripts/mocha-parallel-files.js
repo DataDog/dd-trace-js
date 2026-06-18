@@ -288,7 +288,7 @@ async function main () {
         child.kill('SIGKILL')
       }
       process.exit()
-    }, 1000).unref()
+    }, 1000).unref?.()
   }
   process.once('SIGINT', () => onSignal('SIGINT'))
   process.once('SIGTERM', () => onSignal('SIGTERM'))

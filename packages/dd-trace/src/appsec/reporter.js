@@ -50,6 +50,11 @@ const contentHeaderList = [
   'content-language',
 ]
 
+const mandatoryResponseHeaderList = [
+  'content-type',
+  'content-length',
+]
+
 const responseHeaderList = [
   ...contentHeaderList,
   'content-type',
@@ -101,6 +106,8 @@ const REQUEST_HEADERS_MAP = mapHeaderAndTags(requestHeadersList, REQUEST_HEADER_
 const EVENT_HEADERS_MAP = mapHeaderAndTags(eventHeadersList, REQUEST_HEADER_TAG_PREFIX)
 
 const RESPONSE_HEADERS_MAP = mapHeaderAndTags(responseHeaderList, RESPONSE_HEADER_TAG_PREFIX)
+
+const MANDATORY_RESPONSE_HEADERS_MAP = mapHeaderAndTags(mandatoryResponseHeaderList, RESPONSE_HEADER_TAG_PREFIX)
 
 const NON_EXTENDED_REQUEST_HEADERS = new Set([...requestHeadersList, ...eventHeadersList])
 const NON_EXTENDED_RESPONSE_HEADERS = new Set(responseHeaderList)
@@ -168,14 +175,21 @@ function getCollectedHeaders (req, res, shouldCollectEventHeaders, storedRespons
   // Mandatory
   const mandatoryCollectedHeaders = filterHeaders(req.headers, REQUEST_HEADERS_MAP)
 
-  // Basic collection
-  if (!shouldCollectEventHeaders) return mandatoryCollectedHeaders
-
   // Skip the spread when the stored side is empty -- common during the early
   // request lifecycle when no upstream response headers have been captured.
+  const liveResponseHeaders = res?.getHeaders?.()
   const responseHeaders = isEmpty(storedResponseHeaders)
-    ? res.getHeaders()
-    : { ...storedResponseHeaders, ...res.getHeaders() }
+    ? (liveResponseHeaders ?? {})
+    : (liveResponseHeaders ? { ...storedResponseHeaders, ...liveResponseHeaders } : storedResponseHeaders)
+
+  // content-type and content-length are always reported when appsec is enabled,
+  // even without a security event.
+  if (!shouldCollectEventHeaders) {
+    return Object.assign(
+      mandatoryCollectedHeaders,
+      filterHeaders(responseHeaders, MANDATORY_RESPONSE_HEADERS_MAP)
+    )
+  }
 
   const requestEventCollectedHeaders = filterHeaders(req.headers, EVENT_HEADERS_MAP)
   const responseEventCollectedHeaders = filterHeaders(responseHeaders, RESPONSE_HEADERS_MAP)
@@ -347,18 +361,18 @@ function reportAttack ({ events: attackData, actions }, req) {
   const rootSpan = web.root(req)
   if (!rootSpan) return
 
-  const currentTags = rootSpan.context()._tags
+  const spanContext = rootSpan.context()
 
   const newTags = {
     'appsec.event': 'true',
   }
 
   // TODO: maybe add this to format.js later (to take decision as late as possible)
-  if (!currentTags['_dd.origin']) {
+  if (!spanContext.getTag('_dd.origin')) {
     newTags['_dd.origin'] = 'appsec'
   }
 
-  const currentJson = currentTags['_dd.appsec.json']
+  const currentJson = spanContext.getTag('_dd.appsec.json')
 
   // merge JSON arrays without parsing them
   const attackDataStr = JSON.stringify(attackData)
@@ -447,7 +461,7 @@ function truncateRequestBody (target, depth = 0) {
 }
 
 function reportRequestBody (rootSpan, requestBody, comesFromRaspAction = false) {
-  if (!requestBody || Object.keys(requestBody).length === 0) return
+  if (!requestBody || isEmpty(requestBody)) return
 
   if (!rootSpan.meta_struct) {
     rootSpan.meta_struct = {}
@@ -455,8 +469,7 @@ function reportRequestBody (rootSpan, requestBody, comesFromRaspAction = false) 
 
   if (rootSpan.meta_struct['http.request.body']) {
     // If the rasp.exceed metric exists, set also the same for the new tag
-    const currentTags = rootSpan.context()._tags
-    const sizeExceedTagValue = currentTags['_dd.appsec.rasp.request_body_size.exceeded']
+    const sizeExceedTagValue = rootSpan.context().getTag('_dd.appsec.rasp.request_body_size.exceeded')
 
     if (sizeExceedTagValue) {
       rootSpan.setTag('_dd.appsec.request_body_size.exceeded', sizeExceedTagValue)
@@ -558,7 +571,7 @@ function finishRequest (req, res, storedResponseHeaders, requestBody) {
 
   incrementWafRequestsMetric(req)
 
-  const tags = rootSpan.context()._tags
+  const tags = rootSpan.context().getTags()
 
   const extendedDataCollection = extendedDataCollectionRequest.get(req)
   const newTags = getCollectedHeaders(

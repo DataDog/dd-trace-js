@@ -1,9 +1,7 @@
 'use strict'
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const { extractErrorIntoSpanEvent } = require('./utils')
-
-let tools
+const { extractErrorIntoSpanEvent, getSignature } = require('./utils')
 
 class GraphQLExecutePlugin extends TracingPlugin {
   static id = 'graphql'
@@ -18,6 +16,8 @@ class GraphQLExecutePlugin extends TracingPlugin {
     const name = operation && operation.name && operation.name.value
     const document = args.document
     const source = this.config.source && document && docSource
+
+    ctx.collapse = this.config.collapse
 
     const span = this.startSpan(this.operationName(), {
       service: this.config.service || this.serviceName(),
@@ -63,25 +63,6 @@ function addVariableTags (config, span, variableValues) {
   }
 
   span.addTags(tags)
-}
-
-function getSignature (document, operationName, operationType, calculate) {
-  if (calculate !== false && tools !== false) {
-    try {
-      try {
-        tools = tools || require('./tools')
-      } catch (e) {
-        tools = false
-        throw e
-      }
-
-      return tools.defaultEngineReportingSignature(document, operationName)
-    } catch {
-      // safety net
-    }
-  }
-
-  return [operationType, operationName].filter(Boolean).join(' ')
 }
 
 module.exports = GraphQLExecutePlugin

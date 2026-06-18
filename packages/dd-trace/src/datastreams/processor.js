@@ -237,7 +237,7 @@ class DataStreamsProcessor {
 
     if (this.enabled) {
       this.timer = setInterval(this.onInterval.bind(this), flushInterval)
-      this.timer.unref()
+      this.timer.unref?.()
     }
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.onInterval.bind(this))
   }
@@ -377,7 +377,7 @@ class DataStreamsProcessor {
    *
    * @param {string} transactionId - Truncated to 255 UTF-8 bytes.
    * @param {string} checkpointName - Mapped to a stable 1-byte ID; silently dropped if registry full.
-   * @param {import('../opentelemetry/span').Span|null} [span=null] - Active span to tag with DSM transaction metadata.
+   * @param {import('../opentelemetry/span').Span|null} [span] - Active span to tag with DSM transaction metadata.
    */
   trackTransaction (transactionId, checkpointName, span = null) {
     if (!this.enabled) {

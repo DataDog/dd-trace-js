@@ -48,7 +48,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(async () => {
@@ -73,7 +73,6 @@ describe('Plugin', () => {
                 resource: 'GET',
                 type: 'redis',
                 meta: {
-                  'db.name': '0',
                   'db.type': 'redis',
                   'span.kind': 'client',
                   'redis.raw_command': 'GET foo',
@@ -128,8 +127,8 @@ describe('Plugin', () => {
           const promise = agent.assertSomeTraces(traces => {
             const rawCommand = traces[0][0].meta['redis.raw_command']
             assert.strictEqual(rawCommand.length, 1000)
-            assert.ok(rawCommand.startsWith('MSET '))
-            assert.ok(rawCommand.endsWith('...'))
+            assert.match(rawCommand, /^MSET /)
+            assert.match(rawCommand, /\.\.\.$/)
           }, { spanResourceMatch: /^MSET$/ })
 
           await Promise.all([client.sendCommand(['MSET', ...args]), promise])
@@ -170,7 +169,6 @@ describe('Plugin', () => {
                 resource: 'GET',
                 type: 'redis',
                 meta: {
-                  'db.name': '0',
                   'db.type': 'redis',
                   'span.kind': 'client',
                   'redis.raw_command': 'GET foo',
@@ -208,7 +206,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(async () => {
@@ -271,7 +269,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(async () => {
@@ -327,7 +325,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(async () => {
@@ -359,7 +357,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(async () => {

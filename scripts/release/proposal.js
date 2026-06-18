@@ -17,6 +17,7 @@ const {
   start,
   run,
 } = require('./helpers/terminal')
+const { createReleaseChangelog } = require('./changelog')
 const { checkAll } = require('./helpers/requirements')
 
 const tmpdir = process.env.RUNNER_TEMP || os.tmpdir()
@@ -66,19 +67,53 @@ try {
 
   pass(`v${releaseLine}.x`)
 
-  const diffCmd = 'branch-diff --user DataDog --repo dd-trace-js --exclude-label=semver-major'
+  // Notes exclude semver-major (gated behind a flag, not user-visible).
+  // Cherry-pick includes semver-major; only only-land-on-next is fully excluded.
+  const notesDiffCmd = 'branch-diff --user DataDog --repo dd-trace-js' +
+    ' --exclude-label=semver-major --exclude-label=only-land-on-next'
+  const cherryPickDiffCmd = 'branch-diff --user DataDog --repo dd-trace-js' +
+    ' --exclude-label=only-land-on-next'
 
   start('Determine version increment')
 
   const { DD_MAJOR, DD_MINOR, DD_PATCH } = require('../../version')
-  const lineDiff = capture(`${diffCmd} --markdown=true v${releaseLine}.x ${main}`)
 
-  if (!lineDiff) {
+  // GitHub rebase limit is 100 commits; reserve one slot for the version bump.
+  const MAX_CHERRY_PICKS = 99
+
+  // Get all applicable commits from the release branch to main.
+  // Used to derive the capped upper bound before checking out any branch,
+  // avoiding a circular dependency between isMinor and the proposal branch state.
+  const allMainShas = capture(`${cherryPickDiffCmd} --format=sha --reverse v${releaseLine}.x ${main}`)
+    .split('\n').filter(Boolean)
+
+  // The upper bound is the last main SHA that will fit in the proposal across all
+  // runs. It equals allMainShas[min(length, MAX_CHERRY_PICKS) - 1] regardless of
+  // how many commits are already on the branch (proven by:
+  // existingCherryPicked + shasToApply.length = min(allMainShas.length, MAX_CHERRY_PICKS)).
+  const upperBoundSha = allMainShas.at(Math.min(allMainShas.length, MAX_CHERRY_PICKS) - 1)
+
+  if (!upperBoundSha) {
     pass('none (already up to date)')
     process.exit(0)
   }
 
-  const isMinor = lineDiff.includes('SEMVER-MINOR')
+  // notesShas is scoped to upperBoundSha so isMinor and release notes only reflect
+  // the capped commits actually included in the proposal, not deferred ones.
+  // Excludes semver-major (gated behind a flag, not user-visible).
+  const notesShas = capture(`${notesDiffCmd} --format=sha --reverse v${releaseLine}.x ${upperBoundSha}`)
+    .split('\n').filter(Boolean)
+  const contributorBySha = getContributorsBySha(`v${releaseLine}.x`, upperBoundSha)
+  const notesEntries = []
+  for (const sha of notesShas) {
+    notesEntries.push({
+      sha,
+      subject: capture(`git show -s --format=%s ${sha}`),
+      author: contributorBySha.get(sha),
+    })
+  }
+  const notes = createReleaseChangelog(notesEntries)
+  const isMinor = notes.isMinor
   const newPatch = `${releaseLine}.${DD_MINOR}.${DD_PATCH + 1}`
   const newMinor = `${releaseLine}.${DD_MINOR + 1}.0`
   const newVersion = isMinor ? newMinor : newPatch
@@ -107,14 +142,22 @@ try {
 
   // Get the hashes of the last version and the commits to add.
   const lastCommit = capture('git log -1 --pretty=%B')
-  const proposalDiff = capture(`${diffCmd} --format=sha --reverse v${newVersion}-proposal ${main}`)
-    .replaceAll('\n', ' ').trim()
+  const branchCommitCount = Number.parseInt(capture(`git rev-list --count v${releaseLine}.x..HEAD`), 10)
+  const existingCherryPicked = lastCommit === `v${newVersion}` ? branchCommitCount - 1 : branchCommitCount
+  const proposalShas = allMainShas.slice(existingCherryPicked)
+  const shasToApply = proposalShas.slice(0, Math.max(0, MAX_CHERRY_PICKS - existingCherryPicked))
+  const truncated = shasToApply.length < proposalShas.length
+  const totalCommits = existingCherryPicked + shasToApply.length + 1
 
-  if (proposalDiff) {
-    // Get new changes since last commit of the proposal branch.
-    const newChanges = capture(`${diffCmd} v${newVersion}-proposal ${main}`)
+  if (shasToApply.length > 0) {
+    // Show only commits being applied; upperBoundSha is the last main SHA that fits.
+    const newChanges = capture(`${cherryPickDiffCmd} v${newVersion}-proposal ${upperBoundSha}`)
+    const truncationNote = truncated
+      ? `\n\n⚠️  Applying ${shasToApply.length} of ${proposalShas.length} available commits` +
+        ` (GitHub limit: ${MAX_CHERRY_PICKS}). Remaining commits require a separate release.`
+      : ''
 
-    pass(`\n${newChanges}`)
+    pass(`\n${newChanges}${truncationNote}`)
 
     start('Apply changes from the main branch')
 
@@ -123,9 +166,9 @@ try {
       run('git reset --hard HEAD~1')
     }
 
-    // Cherry pick all new commits to the proposal branch.
+    // Cherry pick commits up to the GitHub rebase limit.
     try {
-      run(`git cherry-pick ${proposalDiff}`)
+      run(`git cherry-pick ${shasToApply.join(' ')}`)
 
       pass()
     } catch {
@@ -136,6 +179,9 @@ try {
         'Please make sure the release branch contains all changes from the main branch.'
       )
     }
+  } else if (proposalShas.length > 0) {
+    pass(`⚠️  Proposal is at the commit limit (${MAX_CHERRY_PICKS}/${MAX_CHERRY_PICKS}).` +
+      ` ${proposalShas.length} new commit(s) require a separate release.`)
   } else {
     pass('none')
   }
@@ -146,11 +192,14 @@ try {
 
   start('Save release notes draft')
 
-  // Write release notes to a file that can be copied to the GitHub release.
   fs.mkdirSync(notesDir, { recursive: true })
-  fs.writeFileSync(notesFile, lineDiff)
+  fs.writeFileSync(notesFile, notes.markdown)
 
   pass(notesFile)
+
+  for (const warning of notes.warnings) {
+    log(`Warning: ${warning}`)
+  }
 
   if (flags.n) process.exit(0)
   if (!flags.y) {
@@ -223,6 +272,44 @@ try {
   if (process.env.CI) {
     log(`\n\n::notice::${newVersion}: ${pullRequest.url}`)
   }
+
+  if (process.env.GITHUB_OUTPUT) {
+    fs.appendFileSync(process.env.GITHUB_OUTPUT, [
+      `commit_count=${totalCommits}`,
+      `version=v${newVersion}`,
+      `pr_url=${pullRequest.url}`,
+    ].join('\n') + '\n')
+  }
 } catch (e) {
   fail(e)
+}
+
+/**
+ * Map each release commit SHA to its GitHub contributor handle (`@login`), or
+ * the git author name when the commit author is not a GitHub user. Bot accounts
+ * (dependabot, github-actions) are skipped so the Contributors list stays human.
+ *
+ * @param {string} base Release branch the proposal lands on, e.g. `v5.x`.
+ * @param {string} head Upper-bound commit the proposal is capped at.
+ */
+function getContributorsBySha (base, head) {
+  const contributors = new Map()
+  const jq = '.commits[] | [.sha, (.author.login // ""), (.author.type // ""), .commit.author.name] | @tsv'
+
+  let output
+  try {
+    output = capture(`gh api "repos/DataDog/dd-trace-js/compare/${base}...${head}" --paginate --jq '${jq}'`)
+  } catch {
+    log('Warning: unable to fetch contributors from GitHub; skipping the Contributors section.')
+    return contributors
+  }
+
+  for (const line of output.split('\n')) {
+    if (!line) continue
+    const [sha, login, type, name] = line.split('\t')
+    if (type === 'Bot') continue
+    contributors.set(sha, login ? `@${login}` : name)
+  }
+
+  return contributors
 }

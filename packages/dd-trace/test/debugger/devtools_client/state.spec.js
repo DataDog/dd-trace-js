@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { before, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -212,11 +213,11 @@ describe('findScriptFromPartialPath', function () {
     it('should be cleared when calling clearState', function () {
       const path = 'server/index.js'
 
-      assert.ok(state._loadedScripts.length > 0)
-      assert.ok(state._scriptUrls.size > 0)
+      assert.ok(state._loadedScripts.length > 0, `Expected ${state._loadedScripts.length} > 0`)
+      assert.ok(state._scriptUrls.size > 0, `Expected ${state._scriptUrls.size} > 0`)
 
       const result = state.findScriptFromPartialPath(path)
-      assert.ok(typeof result === 'object' && result !== null)
+      assert.ok(typeof result === 'object' && result !== null, `Expected non-null object, got ${inspect(result)}`)
 
       state.clearState()
 

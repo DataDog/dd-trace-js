@@ -5,6 +5,7 @@
 const assert = require('node:assert/strict')
 const crypto = require('node:crypto')
 const path = require('node:path')
+const { inspect } = require('node:util')
 
 const Axios = require('axios')
 const { describe, it, before, after } = require('mocha')
@@ -194,7 +195,7 @@ withVersions('stripe', 'stripe', version => {
     after(() => {
       server.close()
       appsec.disable()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     it('should detect checkout session creation', async () => {
@@ -295,16 +296,46 @@ withVersions('stripe', 'stripe', version => {
         const span = traces[0][0]
         assert.equal(span.metrics._sampling_priority_v1, 1)
 
-        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.integration'))
-        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.creation.id'))
-        assert(!Object.hasOwn(span.metrics, 'appsec.events.payments.creation.amount_total'))
-        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.creation.client_reference_id'))
-        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.creation.currency'))
-        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.creation.discounts.coupon'))
-        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.creation.discounts.promotion_code'))
-        assert(!Object.hasOwn(span.metrics, 'appsec.events.payments.creation.livemode'))
-        assert(!Object.hasOwn(span.metrics, 'appsec.events.payments.creation.total_details.amount_discount'))
-        assert(!Object.hasOwn(span.metrics, 'appsec.events.payments.creation.total_details.amount_shipping'))
+        assert(
+          !Object.hasOwn(span.meta, 'appsec.events.payments.integration'),
+          `Available keys: ${inspect(Object.keys(span.meta))}`
+        )
+        assert(
+          !Object.hasOwn(span.meta, 'appsec.events.payments.creation.id'),
+          `Available keys: ${inspect(Object.keys(span.meta))}`
+        )
+        assert(
+          !Object.hasOwn(span.metrics, 'appsec.events.payments.creation.amount_total'),
+          `Available keys: ${inspect(Object.keys(span.metrics))}`
+        )
+        assert(
+          !Object.hasOwn(span.meta, 'appsec.events.payments.creation.client_reference_id'),
+          `Available keys: ${inspect(Object.keys(span.meta))}`
+        )
+        assert(
+          !Object.hasOwn(span.meta, 'appsec.events.payments.creation.currency'),
+          `Available keys: ${inspect(Object.keys(span.meta))}`
+        )
+        assert(
+          !Object.hasOwn(span.meta, 'appsec.events.payments.creation.discounts.coupon'),
+          `Available keys: ${inspect(Object.keys(span.meta))}`
+        )
+        assert(
+          !Object.hasOwn(span.meta, 'appsec.events.payments.creation.discounts.promotion_code'),
+          `Available keys: ${inspect(Object.keys(span.meta))}`
+        )
+        assert(
+          !Object.hasOwn(span.metrics, 'appsec.events.payments.creation.livemode'),
+          `Available keys: ${inspect(Object.keys(span.metrics))}`
+        )
+        assert(
+          !Object.hasOwn(span.metrics, 'appsec.events.payments.creation.total_details.amount_discount'),
+          `Available keys: ${inspect(Object.keys(span.metrics))}`
+        )
+        assert(
+          !Object.hasOwn(span.metrics, 'appsec.events.payments.creation.total_details.amount_shipping'),
+          `Available keys: ${inspect(Object.keys(span.metrics))}`
+        )
       })
 
       assert.equal(res.status, 200)
@@ -360,16 +391,46 @@ withVersions('stripe', 'stripe', version => {
         const span = traces[0][0]
         assert.equal(span.metrics._sampling_priority_v1, 1)
 
-        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.integration'))
-        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.creation.id'))
-        assert(!Object.hasOwn(span.metrics, 'appsec.events.payments.creation.amount_total'))
-        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.creation.client_reference_id'))
-        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.creation.currency'))
-        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.creation.discounts.coupon'))
-        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.creation.discounts.promotion_code'))
-        assert(!Object.hasOwn(span.metrics, 'appsec.events.payments.creation.livemode'))
-        assert(!Object.hasOwn(span.metrics, 'appsec.events.payments.creation.total_details.amount_discount'))
-        assert(!Object.hasOwn(span.metrics, 'appsec.events.payments.creation.total_details.amount_shipping'))
+        assert(
+          !Object.hasOwn(span.meta, 'appsec.events.payments.integration'),
+          `Available keys: ${inspect(Object.keys(span.meta))}`
+        )
+        assert(
+          !Object.hasOwn(span.meta, 'appsec.events.payments.creation.id'),
+          `Available keys: ${inspect(Object.keys(span.meta))}`
+        )
+        assert(
+          !Object.hasOwn(span.metrics, 'appsec.events.payments.creation.amount_total'),
+          `Available keys: ${inspect(Object.keys(span.metrics))}`
+        )
+        assert(
+          !Object.hasOwn(span.meta, 'appsec.events.payments.creation.client_reference_id'),
+          `Available keys: ${inspect(Object.keys(span.meta))}`
+        )
+        assert(
+          !Object.hasOwn(span.meta, 'appsec.events.payments.creation.currency'),
+          `Available keys: ${inspect(Object.keys(span.meta))}`
+        )
+        assert(
+          !Object.hasOwn(span.meta, 'appsec.events.payments.creation.discounts.coupon'),
+          `Available keys: ${inspect(Object.keys(span.meta))}`
+        )
+        assert(
+          !Object.hasOwn(span.meta, 'appsec.events.payments.creation.discounts.promotion_code'),
+          `Available keys: ${inspect(Object.keys(span.meta))}`
+        )
+        assert(
+          !Object.hasOwn(span.metrics, 'appsec.events.payments.creation.livemode'),
+          `Available keys: ${inspect(Object.keys(span.metrics))}`
+        )
+        assert(
+          !Object.hasOwn(span.metrics, 'appsec.events.payments.creation.total_details.amount_discount'),
+          `Available keys: ${inspect(Object.keys(span.metrics))}`
+        )
+        assert(
+          !Object.hasOwn(span.metrics, 'appsec.events.payments.creation.total_details.amount_shipping'),
+          `Available keys: ${inspect(Object.keys(span.metrics))}`
+        )
       })
 
       assert.equal(res.status, 500)
@@ -415,12 +476,30 @@ withVersions('stripe', 'stripe', version => {
         const span = traces[0][0]
         assert.equal(span.metrics._sampling_priority_v1, 1)
 
-        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.creation.id'))
-        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.integration'))
-        assert(!Object.hasOwn(span.metrics, 'appsec.events.payments.creation.amount'))
-        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.creation.currency'))
-        assert(!Object.hasOwn(span.metrics, 'appsec.events.payments.creation.livemode'))
-        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.creation.payment_method'))
+        assert(
+          !Object.hasOwn(span.meta, 'appsec.events.payments.creation.id'),
+          `Available keys: ${inspect(Object.keys(span.meta))}`
+        )
+        assert(
+          !Object.hasOwn(span.meta, 'appsec.events.payments.integration'),
+          `Available keys: ${inspect(Object.keys(span.meta))}`
+        )
+        assert(
+          !Object.hasOwn(span.metrics, 'appsec.events.payments.creation.amount'),
+          `Available keys: ${inspect(Object.keys(span.metrics))}`
+        )
+        assert(
+          !Object.hasOwn(span.meta, 'appsec.events.payments.creation.currency'),
+          `Available keys: ${inspect(Object.keys(span.meta))}`
+        )
+        assert(
+          !Object.hasOwn(span.metrics, 'appsec.events.payments.creation.livemode'),
+          `Available keys: ${inspect(Object.keys(span.metrics))}`
+        )
+        assert(
+          !Object.hasOwn(span.meta, 'appsec.events.payments.creation.payment_method'),
+          `Available keys: ${inspect(Object.keys(span.meta))}`
+        )
       })
 
       assert.equal(res.status, 500)
@@ -567,12 +646,30 @@ withVersions('stripe', 'stripe', version => {
         const span = traces[0][0]
         assert.equal(span.metrics._sampling_priority_v1, 1)
 
-        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.integration'))
-        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.success.id'))
-        assert(!Object.hasOwn(span.metrics, 'appsec.events.payments.success.amount'))
-        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.success.currency'))
-        assert(!Object.hasOwn(span.metrics, 'appsec.events.payments.success.livemode'))
-        assert(!Object.hasOwn(span.metrics, 'appsec.events.payments.success.payment_method'))
+        assert(
+          !Object.hasOwn(span.meta, 'appsec.events.payments.integration'),
+          `Available keys: ${inspect(Object.keys(span.meta))}`
+        )
+        assert(
+          !Object.hasOwn(span.meta, 'appsec.events.payments.success.id'),
+          `Available keys: ${inspect(Object.keys(span.meta))}`
+        )
+        assert(
+          !Object.hasOwn(span.metrics, 'appsec.events.payments.success.amount'),
+          `Available keys: ${inspect(Object.keys(span.metrics))}`
+        )
+        assert(
+          !Object.hasOwn(span.meta, 'appsec.events.payments.success.currency'),
+          `Available keys: ${inspect(Object.keys(span.meta))}`
+        )
+        assert(
+          !Object.hasOwn(span.metrics, 'appsec.events.payments.success.livemode'),
+          `Available keys: ${inspect(Object.keys(span.metrics))}`
+        )
+        assert(
+          !Object.hasOwn(span.metrics, 'appsec.events.payments.success.payment_method'),
+          `Available keys: ${inspect(Object.keys(span.metrics))}`
+        )
       })
 
       assert.equal(res.status, 403)
@@ -597,7 +694,10 @@ withVersions('stripe', 'stripe', version => {
         const span = traces[0][0]
         assert.equal(span.metrics._sampling_priority_v1, 1)
 
-        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.integration'))
+        assert(
+          !Object.hasOwn(span.meta, 'appsec.events.payments.integration'),
+          `Available keys: ${inspect(Object.keys(span.meta))}`
+        )
       })
 
       assert.equal(res.status, 200)
@@ -663,12 +763,30 @@ withVersions('stripe', 'stripe', version => {
         const span = traces[0][0]
         assert.equal(span.metrics._sampling_priority_v1, 1)
 
-        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.integration'))
-        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.success.id'))
-        assert(!Object.hasOwn(span.metrics, 'appsec.events.payments.success.amount'))
-        assert(!Object.hasOwn(span.meta, 'appsec.events.payments.success.currency'))
-        assert(!Object.hasOwn(span.metrics, 'appsec.events.payments.success.livemode'))
-        assert(!Object.hasOwn(span.metrics, 'appsec.events.payments.success.payment_method'))
+        assert(
+          !Object.hasOwn(span.meta, 'appsec.events.payments.integration'),
+          `Available keys: ${inspect(Object.keys(span.meta))}`
+        )
+        assert(
+          !Object.hasOwn(span.meta, 'appsec.events.payments.success.id'),
+          `Available keys: ${inspect(Object.keys(span.meta))}`
+        )
+        assert(
+          !Object.hasOwn(span.metrics, 'appsec.events.payments.success.amount'),
+          `Available keys: ${inspect(Object.keys(span.metrics))}`
+        )
+        assert(
+          !Object.hasOwn(span.meta, 'appsec.events.payments.success.currency'),
+          `Available keys: ${inspect(Object.keys(span.meta))}`
+        )
+        assert(
+          !Object.hasOwn(span.metrics, 'appsec.events.payments.success.livemode'),
+          `Available keys: ${inspect(Object.keys(span.metrics))}`
+        )
+        assert(
+          !Object.hasOwn(span.metrics, 'appsec.events.payments.success.payment_method'),
+          `Available keys: ${inspect(Object.keys(span.metrics))}`
+        )
       })
 
       assert.equal(res.status, 403)

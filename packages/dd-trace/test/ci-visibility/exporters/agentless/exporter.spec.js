@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const cp = require('node:child_process')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach, before, after } = require('mocha')
 const context = describe
@@ -51,7 +52,9 @@ describe('CI Visibility Agentless Exporter', () => {
   })
 
   it('can use CI Vis protocol right away', () => {
-    const agentlessExporter = new AgentlessCiVisibilityExporter({ url, isGitUploadEnabled: true, tags: {} })
+    const agentlessExporter = new AgentlessCiVisibilityExporter({
+      DD_CIVISIBILITY_AGENTLESS_URL: url, isGitUploadEnabled: true, tags: {},
+    })
     assert.strictEqual(agentlessExporter.canReportSessionTraces(), true)
   })
 
@@ -127,7 +130,7 @@ describe('CI Visibility Agentless Exporter', () => {
           },
         }))
       const agentlessExporter = new AgentlessCiVisibilityExporter({
-        url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
+        DD_CIVISIBILITY_AGENTLESS_URL: url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
       })
       agentlessExporter.getLibraryConfiguration({}, () => {
         assert.strictEqual(scope.isDone(), true)
@@ -150,7 +153,7 @@ describe('CI Visibility Agentless Exporter', () => {
           },
         }))
       const agentlessExporter = new AgentlessCiVisibilityExporter({
-        url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
+        DD_CIVISIBILITY_AGENTLESS_URL: url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
       })
       agentlessExporter.getLibraryConfiguration({}, () => {
         assert.strictEqual(scope.isDone(), true)
@@ -176,7 +179,7 @@ describe('CI Visibility Agentless Exporter', () => {
         }))
 
       const agentlessExporter = new AgentlessCiVisibilityExporter({
-        url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
+        DD_CIVISIBILITY_AGENTLESS_URL: url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
       })
       agentlessExporter.sendGitMetadata = () => {
         return /** @type {Promise<void>} */ (new Promise(resolve => {
@@ -188,9 +191,8 @@ describe('CI Visibility Agentless Exporter', () => {
       agentlessExporter.getLibraryConfiguration({}, (err) => {
         assert.notStrictEqual(scope.isDone(), true)
         assert.ok(
-          err.message.includes(
-            'Request to settings endpoint was not done because Datadog API key is not defined'
-          )
+          err.message.includes('Request to settings endpoint was not done because Datadog API key is not defined'),
+          `Got: ${inspect(err.message)}`
         )
         assert.strictEqual(agentlessExporter.shouldRequestSkippableSuites(), false)
         done()
@@ -231,6 +233,15 @@ describe('CI Visibility Agentless Exporter', () => {
       const agentlessExporter = new AgentlessCiVisibilityExporter({ site, tags: {} })
       assert.strictEqual(agentlessExporter._url.href, `https://citestcycle-intake.${site}/`)
       assert.strictEqual(agentlessExporter._coverageUrl.href, `https://citestcov-intake.${site}/`)
+    })
+
+    it('uses DD_CIVISIBILITY_AGENTLESS_URL as the intake override for every endpoint', () => {
+      const agentlessExporter = new AgentlessCiVisibilityExporter({
+        DD_CIVISIBILITY_AGENTLESS_URL: url, site: 'd4tad0g.com', tags: {},
+      })
+      assert.strictEqual(agentlessExporter._url.href, 'http://www.example.com/')
+      assert.strictEqual(agentlessExporter._coverageUrl.href, 'http://www.example.com/')
+      assert.strictEqual(agentlessExporter._apiUrl.href, 'http://www.example.com/')
     })
   })
 })

@@ -74,7 +74,7 @@ describe('Plugin', () => {
       dc.channel('datadog-api:v1:tracerinit').publish(payload)
     })
 
-    after(() => agent.close({ ritmReset: false }))
+    after(() => agent.close())
 
     describe('scope', () => {
       let dummyScope
@@ -239,7 +239,7 @@ describe('Plugin', () => {
             fn: span.addLink,
             self: dummySpan,
             ret: dummySpan,
-            args: [dummySpanContext],
+            args: [{ context: dummySpanContext }],
           })
         })
       })

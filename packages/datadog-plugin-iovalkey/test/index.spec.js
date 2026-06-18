@@ -31,7 +31,7 @@ describe('Plugin', () => {
       describe('without configuration', () => {
         beforeEach(() => agent.load(['iovalkey']))
 
-        afterEach(() => agent.close({ ritmReset: false }))
+        afterEach(() => agent.close())
 
         it('should do automatic instrumentation when using callbacks', async () => {
           const promise = agent.assertSomeTraces(traces => {
@@ -41,7 +41,7 @@ describe('Plugin', () => {
             assert.strictEqual(traces[0][0].type, 'valkey')
             assert.strictEqual(traces[0][0].meta.component, 'iovalkey')
             assert.strictEqual(traces[0][0].meta['_dd.integration'], 'iovalkey')
-            assert.strictEqual(traces[0][0].meta['db.name'], '0')
+            assert.ok(!Object.hasOwn(traces[0][0].meta, 'db.name'))
             assert.strictEqual(traces[0][0].meta['db.type'], 'valkey')
             assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
             assert.strictEqual(traces[0][0].meta['out.host'], 'localhost')
@@ -92,7 +92,7 @@ describe('Plugin', () => {
             assert.strictEqual(traces[0][0].service, expectedSchema.outbound.serviceName)
             assert.strictEqual(traces[0][0].resource, 'get')
             assert.strictEqual(traces[0][0].type, 'valkey')
-            assert.strictEqual(traces[0][0].meta['db.name'], '0')
+            assert.ok(!Object.hasOwn(traces[0][0].meta, 'db.name'))
             assert.strictEqual(traces[0][0].meta['db.type'], 'valkey')
             assert.strictEqual(traces[0][0].meta['span.kind'], 'client')
             assert.strictEqual(traces[0][0].meta['out.host'], 'localhost')
@@ -121,7 +121,7 @@ describe('Plugin', () => {
           allowlist: ['get'],
         }))
 
-        after(() => agent.close({ ritmReset: false }))
+        after(() => agent.close())
 
         it('should be configured with the correct values', done => {
           agent
@@ -177,7 +177,7 @@ describe('Plugin', () => {
           whitelist: ['get'],
         }))
 
-        after(() => agent.close({ ritmReset: false }))
+        after(() => agent.close())
 
         it('should be able to filter commands', done => {
           agent.assertSomeTraces(() => {}) // wait for initial command

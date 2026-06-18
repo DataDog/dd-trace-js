@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -441,8 +442,14 @@ describe('breakpoints', function () {
           { name: 'myVar', expression: 'myVar' },
           { name: 'obj.foo' },
         ])
-        assert.ok(probe.compiledCaptureExpressions[1].expression.includes('myObj'))
-        assert.ok(probe.compiledCaptureExpressions[1].expression.includes('myProp'))
+        assert.ok(
+          probe.compiledCaptureExpressions[1].expression.includes('myObj'),
+          `Got: ${inspect(probe.compiledCaptureExpressions[1].expression)}`
+        )
+        assert.ok(
+          probe.compiledCaptureExpressions[1].expression.includes('myProp'),
+          `Got: ${inspect(probe.compiledCaptureExpressions[1].expression)}`
+        )
       })
 
       it('should store per-expression capture limits', async function () {
@@ -657,6 +664,47 @@ describe('breakpoints', function () {
         })
         sinon.assert.calledTwice(sessionMock.post)
       })
+
+      it('should use the new breakpoint id after updating conditions', async function () {
+        let nextBreakpointId = 0
+        sessionMock.post.callsFake((method, { location } = {}) => {
+          if (method === 'Debugger.setBreakpoint') {
+            nextBreakpointId += 1
+            return Promise.resolve({
+              breakpointId: `bp-${nextBreakpointId}`,
+            })
+          }
+          return Promise.resolve({})
+        })
+
+        await addProbe({
+          when: {
+            json: { eq: [{ ref: 'foo' }, 42] },
+            dsl: 'foo = 42',
+          },
+        })
+        await addProbe({
+          id: 'probe-2',
+          when: {
+            json: { eq: [{ ref: 'foo' }, 43] },
+            dsl: 'foo = 43',
+          },
+        })
+        sessionMock.post.resetHistory()
+
+        await breakpoints.removeBreakpoint({ id: 'probe-1' })
+
+        sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.removeBreakpoint', { breakpointId: 'bp-2' })
+        sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
+          location: {
+            scriptId: 'script-1',
+            lineNumber: 9,
+            columnNumber: 0,
+          },
+          condition: '(foo) === (43)',
+        })
+        sinon.assert.calledTwice(sessionMock.post)
+      })
     })
 
     it('should throw error if debugger not started', async function () {
@@ -748,9 +796,9 @@ describe('breakpoints', function () {
  * Generate a probe config
  *
  * @param {object} [config] Optional configuration object.
- * @param {string} [config.id='probe-1'] The probe ID.
- * @param {number} [config.version=1] The probe version.
- * @param {object} [config.where = { sourceFile: 'test.js', lines: ['10'] }] The location information.
+ * @param {string} [config.id] The probe ID. Defaults to `probe-1`.
+ * @param {number} [config.version] The probe version. Defaults to 1.
+ * @param {object} [config.where] The location information. Defaults to a test file on line 10.
  * @param {object} [config.when] The condition for the probe.
  *   { json: { eq: [{ ref: 'foo' }, 42] }, dsl: 'foo = 42' } by default.
  * @returns {{ id: string; version: number; where: object; when: object; }}

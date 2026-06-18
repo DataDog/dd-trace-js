@@ -3,6 +3,19 @@
 const { DD_MAJOR } = require('../../../../version')
 
 module.exports = {
+  '@aws/durable-execution-sdk-js': [
+    {
+      name: '@aws/durable-execution-sdk-js-testing',
+      dep: true,
+      forced: true,
+    },
+  ],
+  aerospike: [
+    {
+      name: 'aerospike',
+      versions: ['4', '5', '>=6'],
+    },
+  ],
   ai: [
     {
       name: 'ai',
@@ -11,6 +24,18 @@ module.exports = {
     {
       name: '@ai-sdk/openai',
       versions: ['^1.3.23', '^2.0.0', '>=3.0.0'],
+    },
+    {
+      name: '@ai-sdk/amazon-bedrock',
+      versions: ['^3.0.0', '>=4.0.0'],
+    },
+    {
+      name: '@ai-sdk/anthropic',
+      versions: ['^1.0.0', '^2.0.0', '>=3.0.0'],
+    },
+    {
+      name: '@ai-sdk/google',
+      versions: ['^1.0.0', '^2.0.0', '>=3.0.0'],
     },
     {
       name: 'zod',
@@ -132,7 +157,7 @@ module.exports = {
   'express-mongo-sanitize': [
     {
       name: 'mongodb',
-      versions: ['>=3.3 <5', '5', '>=6'],
+      versions: ['>=3.3 <5', '5', '6', '>=7'],
     },
     {
       name: 'mongodb-core',
@@ -565,6 +590,7 @@ module.exports = {
       name: 'mongodb',
       dep: true,
       forced: true,
+      node: '>=20.19.0',
     },
     {
       name: 'mongodb-core',
@@ -614,6 +640,10 @@ module.exports = {
     },
   ],
   stripe: [
+    {
+      name: 'stripe',
+      versions: ['9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '>=20.0.0 <22'],
+    },
     {
       name: 'express',
       versions: ['^4'],

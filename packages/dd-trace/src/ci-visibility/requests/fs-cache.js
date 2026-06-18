@@ -149,7 +149,7 @@ function touchLock (cacheKey) {
  */
 function startLockHeartbeat (cacheKey) {
   const interval = setInterval(() => touchLock(cacheKey), CACHE_LOCK_HEARTBEAT_MS)
-  interval.unref()
+  interval.unref?.()
   return () => {
     clearInterval(interval)
     try { fs.unlinkSync(getLockPath(cacheKey)) } catch { /* ignore */ }

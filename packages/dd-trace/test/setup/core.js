@@ -49,6 +49,17 @@ if (!globalThis[Symbol.for('dd-trace')]) {
 // Override per-test, if absolutely necessary.
 require('events').defaultMaxListeners = 6
 
+// Patch timer unref() to always return null, simulating Electron behavior
+// where unref() does not return the timer. Ensures code uses unref?.() not unref().
+const _t = setTimeout(() => {}, 0)
+const _TimeoutProto = Object.getPrototypeOf(_t)
+clearTimeout(_t)
+const _origUnref = _TimeoutProto.unref
+_TimeoutProto.unref = function () {
+  _origUnref.call(this)
+  return null
+}
+
 // Warnings that should not be thrown
 const warningExceptions = new Set([
   // Node.js core warnings. Ignore them.

@@ -14,7 +14,6 @@ const {
   EVP_SUBDOMAIN_HEADER_NAME,
   EVP_PROXY_AGENT_BASE_PATH,
 } = require('../constants/writers')
-const { getAgentUrl } = require('../../agent/url')
 const { parseResponseAndLog } = require('./util')
 
 class LLMObsBuffer {
@@ -54,7 +53,8 @@ class BaseLLMObsWriter {
 
     this._periodic = setInterval(() => {
       this.flush()
-    }, this._interval).unref()
+    }, this._interval)
+    this._periodic.unref?.()
 
     const destroyer = this.destroy.bind(this)
     globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(destroyer)
@@ -209,7 +209,7 @@ class BaseLLMObsWriter {
 
     const overrideOriginEnv = getEnvironmentVariable('_DD_LLMOBS_OVERRIDE_ORIGIN')
     const overrideOriginUrl = overrideOriginEnv && new URL(overrideOriginEnv)
-    const base = overrideOriginUrl ?? getAgentUrl(this._config)
+    const base = overrideOriginUrl ?? this._config.url
 
     return {
       url: base,

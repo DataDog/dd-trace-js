@@ -1,6 +1,6 @@
 import { ClientRequest, IncomingMessage, OutgoingMessage, ServerResponse } from "http";
 import { LookupFunction } from 'net';
-import * as opentracing from "./vendor/dist/opentracing";
+import * as opentracing from "opentracing";
 import * as otel from "@opentelemetry/api";
 
 /**
@@ -19,6 +19,12 @@ interface Tracer extends opentracing.Tracer {
 
   /**
    * Starts and returns a new Span representing a logical unit of work.
+   *
+   * The returned span is not activated on the current scope. Spans created
+   * while it is open — via {@link Tracer.trace} or auto-instrumentation — only
+   * nest under it when it is the active span, so wrap the work in
+   * {@link Scope.activate} (or use {@link Tracer.trace}) when child spans
+   * should descend from it.
    * @param {string} name The name of the operation.
    * @param {tracer.SpanOptions} [options] Options for the newly created span.
    * @returns {Span} A new Span object.
@@ -218,8 +224,8 @@ interface Tracer extends opentracing.Tracer {
   removeAllBaggageItems (): Record<string, string>;
 }
 
-// left out of the namespace, so it
-// is doesn't need to be exported for Tracer
+// Left out of the namespace, so it doesn't need to be exported for Tracer.
+// Only include plugins here that can be either disabled or configured.
 /** @hidden */
 interface Plugins {
   "aerospike": tracer.plugins.aerospike;
@@ -229,7 +235,9 @@ interface Plugins {
   "anthropic": tracer.plugins.anthropic;
   "apollo": tracer.plugins.apollo;
   "avsc": tracer.plugins.avsc;
+  "aws-durable-execution-sdk-js": tracer.plugins.aws_durable_execution_sdk_js;
   "aws-sdk": tracer.plugins.aws_sdk;
+  "azure-cosmos": tracer.plugins.azure_cosmos;
   "azure-event-hubs": tracer.plugins.azure_event_hubs;
   "azure-functions": tracer.plugins.azure_functions;
   "azure-service-bus": tracer.plugins.azure_service_bus;
@@ -245,12 +253,12 @@ interface Plugins {
   "cypress": tracer.plugins.cypress;
   "dns": tracer.plugins.dns;
   "elasticsearch": tracer.plugins.elasticsearch;
+  "electron": tracer.plugins.electron;
   "express": tracer.plugins.express;
   "fastify": tracer.plugins.fastify;
   "fetch": tracer.plugins.fetch;
   "find-my-way": tracer.plugins.find_my_way;
   "fs": tracer.plugins.fs;
-  "generic-pool": tracer.plugins.generic_pool;
   "google-cloud-pubsub": tracer.plugins.google_cloud_pubsub;
   "google-cloud-vertexai": tracer.plugins.google_cloud_vertexai;
   "google-genai": tracer.plugins.google_genai;
@@ -264,7 +272,6 @@ interface Plugins {
   "iovalkey": tracer.plugins.iovalkey;
   "jest": tracer.plugins.jest;
   "kafkajs": tracer.plugins.kafkajs;
-  "knex": tracer.plugins.knex;
   "koa": tracer.plugins.koa;
   "langchain": tracer.plugins.langchain;
   "langgraph": tracer.plugins.langgraph;
@@ -278,6 +285,7 @@ interface Plugins {
   "mongoose": tracer.plugins.mongoose;
   "mysql": tracer.plugins.mysql;
   "mysql2": tracer.plugins.mysql2;
+  "nats": tracer.plugins.nats;
   "net": tracer.plugins.net;
   "next": tracer.plugins.next;
   "nyc": tracer.plugins.nyc;
@@ -351,17 +359,6 @@ declare namespace tracer {
    */
   export interface Span extends opentracing.Span {
     context (): SpanContext;
-
-    /**
-     * Causally links another span to the current span
-     *
-     * @deprecated In favor of addLink(link: { context: SpanContext, attributes?: Object }).
-     * This will be removed in the next major version.
-     * @param {SpanContext} context The context of the span to link to.
-     * @param {Object} attributes An optional key value pair of arbitrary values.
-     * @returns {void}
-     */
-    addLink (context: SpanContext, attributes?: Object): void;
 
     /**
      * Adds a single link to the span.
@@ -700,28 +697,6 @@ declare namespace tracer {
     protocolVersion?: string
 
     /**
-     * Deprecated in favor of the global versions of the variables provided under this option
-     *
-     * @deprecated
-     * @hidden
-     */
-    ingestion?: {
-      /**
-       * Controls the ingestion sample rate (between 0 and 1) between the agent and the backend.
-       * @env DD_TRACE_SAMPLE_RATE
-       * Programmatic configuration takes precedence over the environment variables listed above.
-       */
-      sampleRate?: number
-
-      /**
-       * Controls the ingestion rate limit between the agent and the backend. Defaults to deferring the decision to the agent.
-       * @env DD_TRACE_RATE_LIMIT
-       * Programmatic configuration takes precedence over the environment variables listed above.
-       */
-      rateLimit?: number
-    };
-
-    /**
      * Whether to enable inferred proxy services.
      * @default false
      * @env DD_TRACE_INFERRED_PROXY_SERVICES_ENABLED
@@ -744,18 +719,11 @@ declare namespace tracer {
     experimental?: {
 
       /**
-       * @default false
-       * @env DD_TRACE_EXPERIMENTAL_B3_ENABLED
-       * Programmatic configuration takes precedence over the environment variables listed above.
-       */
-      b3?: boolean
-
-      /**
        * Whether to write traces to log output or agentless, rather than send to an agent
        * @env DD_TRACE_EXPERIMENTAL_EXPORTER
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
-      exporter?: 'log' | 'agent' | 'datadog'
+      exporter?: 'log' | 'agent' | 'datadog' | 'electron'
 
       /**
        * Whether to enable the experimental `getRumData` method.
@@ -764,28 +732,6 @@ declare namespace tracer {
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
       enableGetRumData?: boolean
-
-      /**
-       * Configuration of the AppSec. Can be a boolean as an alias to `appsec.enabled`.
-       * @deprecated Please use the non-experimental `appsec` option instead.
-       */
-      appsec?: boolean | {
-        /**
-         * Configuration of Standalone ASM mode
-         * Deprecated in favor of `apmTracingEnabled`.
-         *
-         * @deprecated Please use `apmTracingEnabled` instead.
-         */
-        standalone?: {
-          /**
-           * Whether to enable Standalone ASM.
-           * @default false
-           * @env DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED
-           * Programmatic configuration takes precedence over the environment variables listed above.
-           */
-          enabled?: boolean
-        }
-      } | TracerOptions['appsec'],
 
       aiguard?: {
         /**
@@ -855,6 +801,21 @@ declare namespace tracer {
          * Programmatic configuration takes precedence over the environment variables listed above.
          */
         initializationTimeoutMs?: number
+        /**
+         * Configuration for span enrichment with feature flag evaluation data.
+         */
+        spanEnrichment?: {
+          /**
+           * Whether to enable span enrichment with feature flag data.
+           * When enabled, feature flag evaluation metadata is attached to APM spans.
+           * Can be configured via DD_EXPERIMENTAL_FLAGGING_PROVIDER_SPAN_ENRICHMENT_ENABLED environment variable.
+           *
+           * @default false
+           * @env DD_EXPERIMENTAL_FLAGGING_PROVIDER_SPAN_ENRICHMENT_ENABLED
+           * Programmatic configuration takes precedence over the environment variables listed above.
+           */
+          enabled?: boolean
+        }
       }
     };
 
@@ -902,11 +863,20 @@ declare namespace tracer {
 
     /**
      * Enables DBM to APM link using tag injection.
+     *
+     * - `disabled`: No SQL comment is injected (default).
+     * - `service`: Injects a SQL comment with service-level tags (database name, service, environment,
+     *   host, tracer service, tracer version). Enables DBM–APM correlation without full trace linking.
+     * - `full`: Same as `service`, plus a W3C `traceparent` for full distributed trace correlation.
+     * - `dynamic_service`: Same as `service`, but also automatically injects the propagation hash
+     *   (`ddsh`) when process tags are enabled (`DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED=true`).
+     *   This is a convenience shorthand for `service` + `DD_DBM_INJECT_SQL_BASEHASH=true`.
+     *
      * @default 'disabled'
      * @env DD_DBM_PROPAGATION_MODE
      * Programmatic configuration takes precedence over the environment variables listed above.
      */
-    dbmPropagationMode?: 'disabled' | 'service' | 'full'
+    dbmPropagationMode?: 'disabled' | 'service' | 'full' | 'dynamic_service'
 
     /**
      * Whether to enable Data Streams Monitoring.
@@ -2256,6 +2226,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [aws-durable-execution-sdk-js](https://github.com/aws/aws-durable-execution-sdk-js) module.
+     */
+    interface aws_durable_execution_sdk_js extends Integration {}
+
+    /**
+     * This plugin automatically instruments the
      * [aws-sdk](https://github.com/aws/aws-sdk-js) module.
      */
     interface aws_sdk extends Instrumentation {
@@ -2285,6 +2261,12 @@ declare namespace tracer {
        */
       [key: string]: boolean | Object | undefined;
     }
+
+    /**
+     * This plugin automatically instruments the
+     * @azure/cosmos module
+     */
+    interface azure_cosmos extends Integration {}
 
     /**
      * This plugin automatically instruments the
@@ -2325,7 +2307,21 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [bullmq](https://github.com/npmjs/package/bullmq) message queue library.
      */
-    interface bullmq extends Instrumentation {}
+    interface bullmq extends Instrumentation {
+      /**
+       * Filter applied to BullMQ producer operations (`Queue.add`, `Queue.addBulk`,
+       * `FlowProducer.add`). Return `false` to skip span creation, trace context
+       * injection, and DSM checkpoint handling for the matching job. Consumer-side
+       * (`Worker`) instrumentation is unaffected.
+       *
+       * @param job.name - The BullMQ job name.
+       * @param job.data - The BullMQ job data.
+       * @param job.opts - The BullMQ job options.
+       * @param job.queueName - The name of the queue the job is being added to.
+       * @returns true to instrument the producer operation, false to skip it.
+       */
+      producerFilter?: (job: { name?: string; data?: unknown; opts?: unknown; queueName?: string }) => boolean;
+    }
 
     interface bunyan extends Integration {}
 
@@ -2395,6 +2391,26 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [electron](https://github.com/electron/electron) module.
+     */
+    interface electron extends Instrumentation {
+      /**
+       * Whether to enable instrumentation of ipc spans
+       *
+       * @default true
+       */
+      ipc?: boolean;
+
+      /**
+       * Whether to enable instrumentation of net spans
+       *
+       * @default true
+       */
+      net?: boolean;
+    }
+
+    /**
+     * This plugin automatically instruments the
      * [express](http://expressjs.com/) module.
      */
     interface express extends HttpServer {}
@@ -2420,12 +2436,6 @@ declare namespace tracer {
      * This plugin automatically instruments Node.js core fs operations.
      */
     interface fs extends Instrumentation {}
-
-    /**
-     * This plugin patches the [generic-pool](https://github.com/coopernurse/node-pool)
-     * module to bind the callbacks the the caller context.
-     */
-    interface generic_pool extends Integration {}
 
     /**
      * This plugin automatically instruments the
@@ -2709,12 +2719,6 @@ declare namespace tracer {
     interface jest extends Integration {}
 
     /**
-     * This plugin patches the [knex](https://knexjs.org/)
-     * module to bind the promise callback the the caller context.
-     */
-    interface knex extends Integration {}
-
-    /**
      * This plugin automatically instruments the
      * [koa](https://koajs.com/) module.
      */
@@ -2806,6 +2810,24 @@ declare namespace tracer {
       heartbeatEnabled?: boolean;
 
       /**
+       * How to mask primitive query values in the `mongodb.query` tag and the
+       * resource name (when `queryInResourceName` is also enabled). Keys,
+       * operator names, and array / pipeline shape are preserved so the masked
+       * query is still a usable query signature.
+       *
+       * - `'types'`: replace each primitive leaf with its `typeof` name
+       *   (`'string'`, `'number'`, `'boolean'`, `'bigint'`, `'object'`,
+       *   `'null'`). Keeps the same redaction guarantee as `'redact'` but
+       *   preserves the value types so the rendered query can still be used
+       *   to design indexes.
+       * - `'redact'`: replace each primitive leaf with `'?'`. Strictest masking.
+       * - `'none'`: do not mask. Values land verbatim on the span.
+       *
+       * @default 'none'
+       */
+      obfuscateQuery?: 'none' | 'types' | 'redact';
+
+      /**
        * Whether to include the query contents in the resource name.
        */
       queryInResourceName?: boolean;
@@ -2830,6 +2852,13 @@ declare namespace tracer {
      * [mysql2](https://github.com/sidorares/node-mysql2) module.
      */
     interface mysql2 extends mysql {}
+
+    /**
+     * This plugin automatically instruments the
+     * [@nats-io/transport-node](https://github.com/nats-io/nats.js) and
+     * [@nats-io/nats-core](https://github.com/nats-io/nats.js) modules.
+     */
+    interface nats extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the
@@ -3277,16 +3306,6 @@ declare namespace tracer {
       recordException(exception: Exception, time?: TimeInput): void;
 
       /**
-       * Causally links another span to the current span
-       *
-       * @deprecated In favor of addLink(link: otel.Link). This will be removed in the next major version.
-       * @param {otel.SpanContext} context The context of the span to link to.
-       * @param {SpanAttributes} attributes An optional key value pair of arbitrary values.
-       * @returns {void}
-       */
-      addLink(context: otel.SpanContext, attributes?: SpanAttributes): void;
-
-      /**
        * Adds a single link to the span.
        *
        * Links added after the creation will not affect the sampling decision.
@@ -3476,11 +3495,15 @@ declare namespace tracer {
 
       /**
        * Enable LLM Observability tracing.
+       *
+       * @deprecated Enabling LLM Observability via `llmobs.enable()` is deprecated and will be removed in dd-trace@7.0.0. Please instantiate LLM Observability via DD_LLMOBS_ENABLED or `tracer.init({ llmobs: ...options })`.
        */
       enable (options: LLMObsEnableOptions): void,
 
       /**
        * Disable LLM Observability tracing.
+       *
+       * @deprecated Disabling LLM Observability via `llmobs.disable()` is deprecated and will be removed in dd-trace@7.0.0. Set DD_LLMOBS_ENABLED=false to disable LLM Observability.
        */
       disable (): void,
 
@@ -3554,13 +3577,22 @@ declare namespace tracer {
        *    outputData: { content: 'response', role: 'ai' },
        *    metadata: { temperature: 0.7 },
        *    tags: { host: 'localhost' },
-       *    metrics: { inputTokens: 10, outputTokens: 20, totalTokens: 30 }
+       *    metrics: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+       *    toolDefinitions: [
+       *      {
+       *        name: 'get_weather',
+       *        description: 'Returns the current weather for a given location.',
+       *        schema: { type: 'object', properties: { location: { type: 'string' } }, required: ['location'] },
+       *        version: '1.0.0'
+       *      },
+       *      { name: 'get_time' }
+       *    ]
        *  })
        * })
        * ```
        *
        * @param span The span to annotate (defaults to the current LLM Observability span if not provided)
-       * @param options An object containing the inputs, outputs, tags, metadata, and metrics to set on the span.
+       * @param options An object containing the inputs, outputs, tags, metadata, tool definitions, and metrics to set on the span.
        */
       annotate (options: llmobs.AnnotationOptions): void
       annotate (span: tracer.Span | undefined, options: llmobs.AnnotationOptions): void
@@ -3796,6 +3828,13 @@ declare namespace tracer {
       template?: string | Message[]
     }
 
+    interface ToolDefinition {
+      name : string,
+      description? : string,
+      schema? : {[key : string] : any}
+      version? : string
+    }
+
     /**
      * Annotation options for LLM Observability spans.
      */
@@ -3842,6 +3881,11 @@ declare namespace tracer {
        * A Prompt object that represents the prompt used for an LLM call. Only used on `llm` spans.
        */
       prompt?: Prompt,
+      /**
+       * A list of ToolDefinition object that represents the tools available to the LLM for this span
+       * Each definition requires a `name` and optionally accepts `description`, `schema`, and `version`.
+       * */
+      toolDefinitions?: ToolDefinition[]
     }
 
     interface AnnotationContextOptions {

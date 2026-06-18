@@ -256,6 +256,7 @@ async function updateBreakpointInternal (breakpoint, probe) {
     } catch (err) {
       throw new Error(`Error setting breakpoint for probe ${probe.id} (version: ${probe.version})`, { cause: err })
     }
+    breakpoint.id = result.breakpointId
     breakpointToProbes.set(result.breakpointId, probesAtLocation)
   }
 }
@@ -269,6 +270,8 @@ async function reEvaluateProbe (probe) {
     if (probeToLocation.has(probe.id)) {
       await removeBreakpoint(probe)
     }
+    // TODO: Revisit diagnostic status handling for probes that recover during re-evaluation. A probe can initially
+    // report ERROR because no script matched, then attach successfully here without reporting INSTALLED.
     await addBreakpoint(probe)
   }
 }

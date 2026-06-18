@@ -11,6 +11,31 @@ const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { setup, sort, withAwsSdkV2Versions, withAwsSdkVersions } = require('./spec_helpers')
 
 describe('Plugin', () => {
+  // The config singleton is built lazily on the first `agent.load(...)` and is
+  // not rebuilt across describes, so any env var the singleton needs to see
+  // must be set before then. The 'with env variable _BATCH_PROPAGATION_ENABLED'
+  // describe asserts on these specific values; they're harmless to the other
+  // describes (which assert on programmatic config that wins in the `??` chain).
+  const ORIGINAL_BATCH_PROPAGATION_ENV = {
+    GLOBAL: process.env.DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED,
+    KINESIS: process.env.DD_TRACE_AWS_SDK_KINESIS_BATCH_PROPAGATION_ENABLED,
+    SQS: process.env.DD_TRACE_AWS_SDK_SQS_BATCH_PROPAGATION_ENABLED,
+  }
+  before(() => {
+    process.env.DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED = 'true'
+    process.env.DD_TRACE_AWS_SDK_KINESIS_BATCH_PROPAGATION_ENABLED = 'false'
+    process.env.DD_TRACE_AWS_SDK_SQS_BATCH_PROPAGATION_ENABLED = 'true'
+  })
+  after(() => {
+    function restore (name, original) {
+      if (original === undefined) delete process.env[name]
+      else process.env[name] = original
+    }
+    restore('DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED', ORIGINAL_BATCH_PROPAGATION_ENV.GLOBAL)
+    restore('DD_TRACE_AWS_SDK_KINESIS_BATCH_PROPAGATION_ENABLED', ORIGINAL_BATCH_PROPAGATION_ENV.KINESIS)
+    restore('DD_TRACE_AWS_SDK_SQS_BATCH_PROPAGATION_ENABLED', ORIGINAL_BATCH_PROPAGATION_ENV.SQS)
+  })
+
   // TODO: use the Request class directly for generic tests
   // TODO: add test files for every service
   describe('aws-sdk direct import', function () {
@@ -26,7 +51,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false, wipe: true })
+          return agent.close()
         })
 
         it('should instrument service methods with a callback', (done) => {
@@ -94,7 +119,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false, wipe: true })
+          return agent.close()
         })
 
         it('should instrument service methods with a callback', (done) => {
@@ -273,7 +298,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         it('should be configured', (done) => {
@@ -315,7 +340,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         it('should allow disabling a specific service', (done) => {
@@ -379,7 +404,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         it('should be configurable on a per-service basis', () => {
@@ -406,7 +431,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         it('should be configurable on a per-service basis', () => {

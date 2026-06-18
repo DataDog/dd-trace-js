@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { describe, it, beforeEach } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
@@ -17,6 +17,8 @@ describe('FlaggingProvider', () => {
   let channelStub
   let mockEvalMetricsHook
   let mockEvalMetricsHookClass
+  let mockSpanEnrichmentHook
+  let mockSpanEnrichmentHookClass
 
   beforeEach(() => {
     mockTracer = {
@@ -31,6 +33,9 @@ describe('FlaggingProvider', () => {
         flaggingProvider: {
           enabled: true,
           initializationTimeoutMs: 30_000,
+          spanEnrichment: {
+            enabled: true,
+          },
         },
       },
     }
@@ -43,6 +48,7 @@ describe('FlaggingProvider', () => {
 
     log = {
       debug: sinon.spy(),
+      info: sinon.spy(),
       error: sinon.spy(),
       warn: sinon.spy(),
     }
@@ -52,12 +58,18 @@ describe('FlaggingProvider', () => {
     }
     mockEvalMetricsHookClass = sinon.stub().returns(mockEvalMetricsHook)
 
+    mockSpanEnrichmentHook = {
+      destroy: sinon.spy(),
+    }
+    mockSpanEnrichmentHookClass = sinon.stub().returns(mockSpanEnrichmentHook)
+
     FlaggingProvider = proxyquire('../../src/openfeature/flagging_provider', {
       'dc-polyfill': {
         channel: channelStub,
       },
       '../log': log,
       './eval-metrics-hook': mockEvalMetricsHookClass,
+      './span-enrichment-hook': mockSpanEnrichmentHookClass,
     })
   })
 
@@ -102,6 +114,16 @@ describe('FlaggingProvider', () => {
       provider._setConfiguration(null)
       provider._setConfiguration(undefined)
     })
+
+    it('should not throw when setConfiguration is not a function', () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+      provider.setConfiguration = null // Remove the method
+
+      provider._setConfiguration({ flags: {} })
+
+      // Should still log the debug message
+      sinon.assert.calledWith(log.debug, '%s provider configuration updated', 'FlaggingProvider')
+    })
   })
 
   describe('hooks', () => {
@@ -111,11 +133,72 @@ describe('FlaggingProvider', () => {
       sinon.assert.calledOnceWithExactly(mockEvalMetricsHookClass, mockConfig)
     })
 
-    it('should register EvalMetricsHook as a hook', () => {
+    it('should create SpanEnrichmentHook with tracer when span enrichment is enabled', () => {
+      new FlaggingProvider(mockTracer, mockConfig) // eslint-disable-line no-new
+
+      sinon.assert.calledOnceWithExactly(mockSpanEnrichmentHookClass, mockTracer)
+    })
+
+    it('should not create SpanEnrichmentHook when span enrichment is disabled', () => {
+      mockConfig.experimental.flaggingProvider.spanEnrichment.enabled = false
+      new FlaggingProvider(mockTracer, mockConfig) // eslint-disable-line no-new
+
+      sinon.assert.notCalled(mockSpanEnrichmentHookClass)
+    })
+
+    it('should not create SpanEnrichmentHook when spanEnrichment config is missing', () => {
+      delete mockConfig.experimental.flaggingProvider.spanEnrichment
+      new FlaggingProvider(mockTracer, mockConfig) // eslint-disable-line no-new
+
+      sinon.assert.notCalled(mockSpanEnrichmentHookClass)
+    })
+
+    it('should register EvalMetricsHook and SpanEnrichmentHook as hooks when enabled', () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+      assert.strictEqual(provider.hooks.length, 2)
+      assert.strictEqual(provider.hooks[0], mockEvalMetricsHook)
+      assert.strictEqual(provider.hooks[1], mockSpanEnrichmentHook)
+    })
+
+    it('should only register EvalMetricsHook when span enrichment is disabled', () => {
+      mockConfig.experimental.flaggingProvider.spanEnrichment.enabled = false
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
       assert.strictEqual(provider.hooks.length, 1)
       assert.strictEqual(provider.hooks[0], mockEvalMetricsHook)
+    })
+
+    it('should log info message when span enrichment is enabled', () => {
+      new FlaggingProvider(mockTracer, mockConfig) // eslint-disable-line no-new
+
+      sinon.assert.calledWith(log.info, '%s span enrichment enabled', 'FlaggingProvider')
+    })
+
+    it('should log info message when span enrichment is disabled', () => {
+      mockConfig.experimental.flaggingProvider.spanEnrichment.enabled = false
+      new FlaggingProvider(mockTracer, mockConfig) // eslint-disable-line no-new
+
+      sinon.assert.calledWith(log.info, '%s span enrichment disabled', 'FlaggingProvider')
+    })
+  })
+
+  describe('onClose', () => {
+    it('should call destroy on SpanEnrichmentHook when enabled', () => {
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+      provider.onClose()
+
+      sinon.assert.calledOnce(mockSpanEnrichmentHook.destroy)
+    })
+
+    it('should not throw when span enrichment is disabled', () => {
+      mockConfig.experimental.flaggingProvider.spanEnrichment.enabled = false
+      const provider = new FlaggingProvider(mockTracer, mockConfig)
+
+      provider.onClose()
+
+      sinon.assert.notCalled(mockSpanEnrichmentHook.destroy)
     })
   })
 
@@ -125,6 +208,58 @@ describe('FlaggingProvider', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
       assert.ok(provider instanceof DatadogNodeServerProvider)
+    })
+  })
+
+  // Pins the bundler-opaque require gate against accidental regression to a
+  // direct `require('@datadog/openfeature-node-server')`, which would leak
+  // the optional peer chain into customer bundles (see #8635).
+  describe('bundler-opaque require gate', () => {
+    const modulePath = require.resolve('../../src/openfeature/flagging_provider')
+
+    afterEach(() => {
+      delete require.cache[modulePath]
+      delete globalThis.__webpack_require__
+      delete globalThis.__non_webpack_require__
+    })
+
+    it('uses `require` outside a bundler', () => {
+      assert.strictEqual(typeof globalThis.__webpack_require__, 'undefined')
+      delete require.cache[modulePath]
+
+      const ReloadedFlaggingProvider = require(modulePath)
+
+      assert.strictEqual(typeof ReloadedFlaggingProvider, 'function')
+      assert.strictEqual(ReloadedFlaggingProvider.name, 'FlaggingProvider')
+    })
+
+    it('uses `__non_webpack_require__` under a webpack runtime', () => {
+      let escapeHatchCalls = 0
+      globalThis.__webpack_require__ = () => {
+        throw new Error('webpack require must not run for the optional peer')
+      }
+      globalThis.__non_webpack_require__ = (request) => {
+        escapeHatchCalls++
+        return require(request)
+      }
+      delete require.cache[modulePath]
+
+      const ReloadedFlaggingProvider = require(modulePath)
+
+      assert.strictEqual(escapeHatchCalls, 1)
+      assert.strictEqual(typeof ReloadedFlaggingProvider, 'function')
+      assert.strictEqual(ReloadedFlaggingProvider.name, 'FlaggingProvider')
+    })
+
+    it('does not statically require `@datadog/openfeature-node-server`', () => {
+      const fs = require('node:fs')
+      const source = fs.readFileSync(modulePath, 'utf8')
+
+      assert.doesNotMatch(
+        source,
+        /require\(\s*['"]@datadog\/openfeature-node-server['"]\s*\)/,
+        'a literal require would let bundlers resolve the optional peer chain at build time'
+      )
     })
   })
 })

@@ -27,7 +27,7 @@ describe('URI sourcing with fastify', () => {
     })
 
     after(() => {
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(() => {
@@ -83,7 +83,7 @@ describe('Path params sourcing with fastify', () => {
     })
 
     after(() => {
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(() => {

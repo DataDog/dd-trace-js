@@ -68,7 +68,6 @@ describe('Plugin', () => {
   let collection
   let db
   let BSON
-  let startSpy
   let injectCommentSpy
   let usesDelete
 
@@ -93,7 +92,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(async () => {
@@ -501,7 +500,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(async () => {
@@ -567,10 +566,11 @@ describe('Plugin', () => {
         )
       })
 
-      describe('with dbmPropagationMode service', () => {
+      describe('with obfuscateQuery: "types"', () => {
         before(() => {
           return agent.load('mongodb-core', {
-            dbmPropagationMode: 'service',
+            obfuscateQuery: 'types',
+            queryInResourceName: true,
           })
         })
 
@@ -582,12 +582,91 @@ describe('Plugin', () => {
           client = await createClient()
           db = client.db('test')
           collection = db.collection(collectionName)
+        })
 
-          startSpy = sinon.spy(MongodbCorePlugin.prototype, 'start')
+        it('should report scalar value types in the mongodb.query tag', async () => {
+          collection.find({ user: 'alice', age: 30 }).toArray()
+
+          return agent.assertFirstTraceSpan({
+            resource: `find test.${collectionName} {"user":"string","age":"number"}`,
+            meta: {
+              'mongodb.query': '{"user":"string","age":"number"}',
+            },
+          })
+        })
+
+        it('should preserve operator keys while reporting value types', async () => {
+          collection.find({ age: { $gte: 18, $lte: 65 } }).toArray()
+
+          return agent.assertFirstTraceSpan({
+            meta: {
+              'mongodb.query': '{"age":{"$gte":"number","$lte":"number"}}',
+            },
+          })
+        })
+      })
+
+      describe('with obfuscateQuery: "redact"', () => {
+        before(() => {
+          return agent.load('mongodb-core', {
+            obfuscateQuery: 'redact',
+            queryInResourceName: true,
+          })
+        })
+
+        after(() => {
+          return agent.close({ ritmReset: false })
+        })
+
+        beforeEach(async () => {
+          client = await createClient()
+          db = client.db('test')
+          collection = db.collection(collectionName)
+        })
+
+        it('should redact scalar values in the mongodb.query tag', async () => {
+          collection.find({ user: 'alice', age: 30 }).toArray()
+
+          return agent.assertFirstTraceSpan({
+            resource: `find test.${collectionName} {"user":"?","age":"?"}`,
+            meta: {
+              'mongodb.query': '{"user":"?","age":"?"}',
+            },
+          })
+        })
+
+        it('should preserve operator keys while redacting their values', async () => {
+          collection.find({ age: { $gte: 18, $lte: 65 } }).toArray()
+
+          return agent.assertFirstTraceSpan({
+            meta: {
+              'mongodb.query': '{"age":{"$gte":"?","$lte":"?"}}',
+            },
+          })
+        })
+      })
+
+      describe('with dbmPropagationMode service', () => {
+        before(() => {
+          return agent.load('mongodb-core', {
+            dbmPropagationMode: 'service',
+          })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(async () => {
+          client = await createClient()
+          db = client.db('test')
+          collection = db.collection(collectionName)
+
+          injectCommentSpy = sinon.spy(MongodbCorePlugin.prototype, 'injectDbmComment')
         })
 
         afterEach(() => {
-          startSpy?.restore()
+          injectCommentSpy?.restore()
         })
 
         it('DBM propagation should inject service mode as comment', done => {
@@ -595,8 +674,8 @@ describe('Plugin', () => {
             .assertSomeTraces(traces => {
               const span = traces[0][0]
 
-              assert.strictEqual(startSpy.called, true)
-              const { comment } = startSpy.getCall(0).args[0].ops
+              assert.strictEqual(injectCommentSpy.called, true)
+              const comment = injectCommentSpy.getCall(0).returnValue
               assert.strictEqual(comment,
                 `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
                 'dddbs=\'test-mongodb\',' +
@@ -617,13 +696,12 @@ describe('Plugin', () => {
       })
 
       describe('with dbmPropagationMode full', () => {
-        before(() => {
-          tracer._tracer.configure({ sampler: { sampleRate: 1 } })
-          return agent.load('mongodb-core', { dbmPropagationMode: 'full' })
+        before(async () => {
+          await agent.load('mongodb-core', { dbmPropagationMode: 'full' }, { sampleRate: 1 })
         })
 
-        after(() => {
-          return agent.close({ ritmReset: false })
+        after(async () => {
+          await agent.close()
         })
 
         beforeEach(async () => {
@@ -631,12 +709,10 @@ describe('Plugin', () => {
           db = client.db('test')
           collection = db.collection(collectionName)
 
-          startSpy = sinon.spy(MongodbCorePlugin.prototype, 'start')
           injectCommentSpy = sinon.spy(MongodbCorePlugin.prototype, 'injectDbmComment')
         })
 
         afterEach(() => {
-          startSpy?.restore()
           injectCommentSpy?.restore()
         })
 
@@ -646,9 +722,7 @@ describe('Plugin', () => {
               const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
               const spanId = span.span_id.toString(16).padStart(16, '0')
 
-              assert.strictEqual(startSpy.called, true)
               assert.strictEqual(injectCommentSpy.called, true)
-
               const comment = injectCommentSpy.getCall(0).returnValue
               assert.strictEqual(comment,
                 `dddb='${encodeURIComponent(span.meta['db.name'])}',` +
@@ -671,18 +745,12 @@ describe('Plugin', () => {
       })
 
       describe('with dbmPropagationMode full but sampling disabled', () => {
-        before(() => {
-          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 0 } })
-
-          return agent.load('mongodb-core', {
-            dbmPropagationMode: 'full',
-          })
+        before(async () => {
+          await agent.load('mongodb-core', { dbmPropagationMode: 'full' }, { sampleRate: 0 })
         })
 
-        after(() => {
-          tracer._tracer.configure({ env: 'tester', sampler: { sampleRate: 1 } })
-
-          return agent.close({ ritmReset: false })
+        after(async () => {
+          await agent.close()
         })
 
         beforeEach(async () => {
@@ -690,11 +758,11 @@ describe('Plugin', () => {
           db = client.db('test')
           collection = db.collection(collectionName)
 
-          startSpy = sinon.spy(MongodbCorePlugin.prototype, 'start')
+          injectCommentSpy = sinon.spy(MongodbCorePlugin.prototype, 'injectDbmComment')
         })
 
         afterEach(() => {
-          startSpy?.restore()
+          injectCommentSpy?.restore()
         })
 
         it(
@@ -706,8 +774,8 @@ describe('Plugin', () => {
                 const traceId = span.meta['_dd.p.tid'] + span.trace_id.toString(16).padStart(16, '0')
                 const spanId = span.span_id.toString(16).padStart(16, '0')
 
-                assert.strictEqual(startSpy.called, true)
-                const { comment } = startSpy.getCall(0).args[0].ops
+                assert.strictEqual(injectCommentSpy.called, true)
+                const comment = injectCommentSpy.getCall(0).returnValue
                 assert.match(
                   comment,
                   new RegExp(String.raw`traceparent='00-${traceId}-${spanId}-00'`)
@@ -731,7 +799,7 @@ describe('Plugin', () => {
           })
 
           after(() => {
-            return agent.close({ ritmReset: false })
+            return agent.close()
           })
 
           beforeEach(async () => {
@@ -772,7 +840,7 @@ describe('Plugin', () => {
           })
 
           after(() => {
-            return agent.close({ ritmReset: false })
+            return agent.close()
           })
 
           beforeEach(async () => {
@@ -785,7 +853,7 @@ describe('Plugin', () => {
 
             agent
               .assertSomeTraces(traces => {
-                assert.ok(traces[0].length >= 2)
+                assert.ok(traces[0].length >= 2, `Expected ${traces[0].length} >= 2`)
                 const rootSpan = traces[0][0]
 
                 assert.strictEqual(rootSpan.name, 'test.parent')
@@ -818,7 +886,6 @@ describe('Plugin', () => {
           before(async () => {
             savedHeartbeatEnv = process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED
             process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = 'false'
-            agent.wipe()
             await agent.load('mongodb-core', {})
           })
 
@@ -828,7 +895,7 @@ describe('Plugin', () => {
             } else {
               process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = savedHeartbeatEnv
             }
-            await agent.close({ ritmReset: false, wipe: true })
+            await agent.close()
           })
 
           beforeEach(async () => {
@@ -867,7 +934,6 @@ describe('Plugin', () => {
           before(async () => {
             savedHeartbeatEnv = process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED
             process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = 'true'
-            agent.wipe()
             await agent.load('mongodb-core', {})
           })
 
@@ -877,7 +943,7 @@ describe('Plugin', () => {
             } else {
               process.env.DD_TRACE_MONGODB_HEARTBEAT_ENABLED = savedHeartbeatEnv
             }
-            await agent.close({ ritmReset: false, wipe: true })
+            await agent.close()
           })
 
           beforeEach(async () => {
@@ -890,7 +956,7 @@ describe('Plugin', () => {
 
             agent
               .assertSomeTraces(traces => {
-                assert.ok(traces[0].length >= 2)
+                assert.ok(traces[0].length >= 2, `Expected ${traces[0].length} >= 2`)
                 const rootSpan = traces[0][0]
 
                 assert.strictEqual(rootSpan.name, 'test.parent')

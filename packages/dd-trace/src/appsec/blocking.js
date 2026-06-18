@@ -104,8 +104,8 @@ function getBlockWithContentData (req, specificType, actionParameters) {
   const statusCode = actionParameters?.status_code || 403
 
   const headers = {
-    'Content-Type': type,
-    'Content-Length': Buffer.byteLength(body),
+    'content-type': type,
+    'content-length': Buffer.byteLength(body),
   }
 
   return { body, statusCode, headers }

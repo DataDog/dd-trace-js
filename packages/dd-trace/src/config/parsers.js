@@ -2,6 +2,7 @@
 
 const fs = require('fs')
 
+const { DD_MAJOR } = require('../../../../version')
 const tagger = require('../tagger')
 
 let warnInvalidValue
@@ -9,6 +10,7 @@ function setWarnInvalidValue (fn) {
   warnInvalidValue = fn
 }
 
+// `'b3 single header'` is the legacy spelling of `'b3'`; on v6 it is normalised below.
 const VALID_PROPAGATION_STYLES = new Set([
   'datadog', 'tracecontext', 'b3', 'b3 single header', 'b3multi', 'baggage', 'none',
 ])
@@ -143,12 +145,24 @@ const transformers = {
     }
     return value.replaceAll(/\s*:\s*/g, ':')
   },
+  /**
+   * @param {string} value
+   */
+  toURL (value) {
+    try {
+      return new URL(value)
+    } catch {}
+  },
   validatePropagationStyles (value, optionName) {
     value = transformers.toLowerCase(value)
-    for (const propagator of value) {
+    for (let index = 0; index < value.length; index++) {
+      const propagator = value[index]
       if (!VALID_PROPAGATION_STYLES.has(propagator)) {
         warnInvalidValue(propagator, optionName, optionName, 'Invalid propagator')
         return
+      }
+      if (DD_MAJOR >= 6 && propagator === 'b3 single header') {
+        value[index] = 'b3'
       }
     }
     return value

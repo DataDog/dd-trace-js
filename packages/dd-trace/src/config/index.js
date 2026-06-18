@@ -2,7 +2,7 @@
 
 const fs = require('node:fs')
 const os = require('node:os')
-const { URL } = require('node:url')
+const { URL, format } = require('node:url')
 
 const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
 const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
@@ -165,7 +165,7 @@ class Config extends ConfigBase {
   }
 
   /**
-   * @param {TracerOptions} [options={}]
+   * @param {TracerOptions} [options]
    */
   constructor (options = {}) {
     super()
@@ -322,18 +322,14 @@ class Config extends ConfigBase {
   #applyCalculated () {
     undo(this, 'calculated')
 
-    if (this.DD_CIVISIBILITY_AGENTLESS_URL ||
-        this.url ||
+    if (this.url ||
         os.type() !== 'Windows_NT' &&
         !trackedConfigOrigins.has('hostname') &&
         !trackedConfigOrigins.has('port') &&
-        !this.DD_CIVISIBILITY_AGENTLESS_ENABLED &&
         fs.existsSync('/var/run/datadog/apm.socket')) {
-      setAndTrack(
-        this,
-        'url',
-        new URL(this.DD_CIVISIBILITY_AGENTLESS_URL || this.url || 'unix:///var/run/datadog/apm.socket')
-      )
+      setAndTrack(this, 'url', new URL(this.url || 'unix:///var/run/datadog/apm.socket'))
+    } else {
+      setAndTrack(this, 'url', new URL(format({ protocol: 'http:', hostname: this.hostname, port: this.port })))
     }
 
     if (this.isCiVisibility) {

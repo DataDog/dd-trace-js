@@ -45,7 +45,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(async () => {
@@ -111,7 +111,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(async () => {
@@ -221,7 +221,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(async () => {
@@ -311,7 +311,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(async () => {
@@ -511,7 +511,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
           after(() => {
             server?.close()
-            return agent.close({ ritmReset: false })
+            return agent.close()
           })
 
           it('should not block the request without an attack', async () => {
@@ -607,7 +607,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
       after(() => {
         server?.close()
-        return agent.close({ ritmReset: false })
+        return agent.close()
       })
 
       it('should not block the request without an attack', async () => {
@@ -687,7 +687,7 @@ describe('Api Security - Fastify', () => {
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(() => {

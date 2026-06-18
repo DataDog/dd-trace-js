@@ -5,7 +5,7 @@ const assert = require('node:assert/strict')
 
 const path = require('node:path')
 const { execSync, spawn } = require('node:child_process')
-const { writeFileSync, readdirSync } = require('node:fs')
+const { mkdirSync, writeFileSync, readdirSync } = require('node:fs')
 const axios = require('axios')
 const { after, before, describe, it } = require('mocha')
 const { satisfies } = require('semver')
@@ -27,8 +27,7 @@ describe('Plugin', function () {
   describe('next', () => {
     const satisfiesStandalone = version => satisfies(version, '>=12.0.0')
 
-    // TODO: Figure out why 10.x tests are failing.
-    withVersions('next', 'next', `${min} <15.4.1`, version => {
+    withVersions('next', 'next', min, version => {
       const pkg = require(`../../../versions/next@${version}/node_modules/next/package.json`)
 
       const startServer = ({ withConfig, standalone }, schemaVersion = 'v0', defaultToGlobalService = false) => {
@@ -84,7 +83,7 @@ describe('Plugin', function () {
           server.kill()
 
           await axios.get(`http://127.0.0.1:${port}/api/hello/world`).catch(() => {})
-          await agent.close({ ritmReset: false })
+          await agent.close()
         })
       }
 
@@ -97,11 +96,12 @@ describe('Plugin', function () {
 
         delete pkg.workspaces
 
-        // builds fail for next.js 9.5 using node 14 due to webpack issues
-        // note that webpack version cannot be set in v9.5 in next.config.js so we do it here instead
-        // the link below highlights the initial support for webpack 5 (used to fix this issue) in next.js 9.5
-        // https://nextjs.org/blog/next-9-5#webpack-5-support-beta
-        if (realVersion.startsWith('9')) pkg.resolutions = { webpack: '^5.0.0' }
+        // Next.js 16's app-router build needs react 19; the version manager resolves next's
+        // loose peer to react 18, which fails the build. Pin both to what a next-16 app runs.
+        if (satisfies(realVersion, '>=16')) {
+          pkg.dependencies.react = '^19'
+          pkg.dependencies['react-dom'] = '^19'
+        }
 
         writeFileSync(path.join(__dirname, 'package.json'), JSON.stringify(pkg, null, 2))
 
@@ -113,11 +113,31 @@ describe('Plugin', function () {
           execSync('yarn install', { cwd })
         }
 
+        // dd-trace is the package under test, not a published dependency of this app. Drop a tiny
+        // resolvable `dd-trace` package into node_modules that delegates to the monorepo root, so
+        // route handlers can `require('dd-trace')` exactly like a customer. Kept external by the
+        // pages-API default and `serverExternalPackages`, it resolves at runtime to the one tracer
+        // the server loads via `--require datadog.js`, so the active span flows into the route.
+        const ddTraceStub = path.join(cwd, 'node_modules', 'dd-trace')
+        mkdirSync(ddTraceStub, { recursive: true })
+        writeFileSync(
+          path.join(ddTraceStub, 'package.json'),
+          JSON.stringify({ name: 'dd-trace', version: '0.0.0-local', main: 'index.js' })
+        )
+        writeFileSync(
+          path.join(ddTraceStub, 'index.js'),
+          `module.exports = require(${JSON.stringify(path.join(__dirname, '..', '..', '..'))})\n`
+        )
+
         // building in-process makes tests fail for an unknown reason
-        execSync('NODE_OPTIONS=--openssl-legacy-provider yarn exec next build', {
+        // next <12 needs OpenSSL's legacy provider for webpack's MD4 hashing on Node >=17; newer
+        // next does not, and from 16 the flag is rejected in a build worker's NODE_OPTIONS.
+        const legacyOpenssl = satisfies(realVersion, '<12') ? '--openssl-legacy-provider' : ''
+        execSync('yarn exec next build', {
           cwd,
           env: {
             ...process.env,
+            NODE_OPTIONS: legacyOpenssl,
             VERSION: realVersion,
           },
           stdio: ['pipe', 'ignore', 'pipe'],
@@ -262,7 +282,8 @@ describe('Plugin', function () {
                   meta: {
                     'span.kind': 'server',
                     'http.method': 'GET',
-                    'http.status_code': '400',
+                    // Next.js 16 surfaces a malformed request URL as a 500 instead of a 400.
+                    'http.status_code': satisfies(pkg.version, '>=16') ? '500' : '400',
                     component: 'next',
                   },
                 })
@@ -587,7 +608,12 @@ describe('Plugin', function () {
             .catch(done)
         })
 
-        if (satisfies(pkg.version, '>=13.3.0')) {
+        // From next 15.4.1 the app-route handler builds its NextRequest from a copy of
+        // `NextRequestAdapter.fromNodeNextRequest` that next bundles into the app build
+        // (dist/build/templates/app-route.js), so the file hook that maps the node request to
+        // the NextRequest never fires and a user-set `req.error` cannot reach the span. Capturing
+        // it again needs the runtime `onRequestError` hook rather than file instrumentation.
+        if (satisfies(pkg.version, '>=13.3.0 <15.4.1')) {
           it('should attach the error to the span from a NextRequest', done => {
             agent
               .assertSomeTraces(traces => {
@@ -609,6 +635,32 @@ describe('Plugin', function () {
 
             axios
               .get(`http://127.0.0.1:${port}/api/appDir/error`)
+              .catch(err => {
+                if (err.response.status !== 500) done(err)
+              })
+          })
+        } else if (satisfies(pkg.version, '>=15.4.1')) {
+          it('should attach a thrown app-route error to the span via onRequestError', done => {
+            agent
+              .assertSomeTraces(traces => {
+                const spans = traces[0]
+
+                assertObjectContains(spans[1], {
+                  name: 'next.request',
+                  error: 1,
+                  meta: {
+                    'error.message': 'thrown app dir error',
+                    'error.type': 'Error',
+                  },
+                })
+
+                assert.ok(spans[1].meta['error.stack'])
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://127.0.0.1:${port}/api/appDir/throw`)
               .catch(err => {
                 if (err.response.status !== 500) done(err)
               })
