@@ -9,6 +9,12 @@ const sinon = require('sinon')
 
 require('../../setup/mocha')
 
+const {
+  getInstallSamplerExpression,
+  MAX_SAMPLED_PROBES_PER_PAUSE,
+  setProbeSamplerBuffer,
+} = require('../../../src/debugger/devtools_client/probe_sampler')
+
 const breakpoint = { file: 'file.js', line: 1 }
 const breakpointId = 'breakpoint-id'
 const scriptId = 'script-id'
@@ -189,6 +195,26 @@ describe('onPause', function () {
     sinon.assert.notCalled(send)
   })
 
+  it('should not read past the sampled probe buffer when more probes are sampled than it can hold', async function () {
+    const probesAtLocation = new Map()
+    const sampler = installSampler(/** @type {SharedArrayBuffer} */ (sampledProbeIndexes.buffer))
+    for (let i = 0; i <= MAX_SAMPLED_PROBES_PER_PAUSE; i++) {
+      const probe = genProcessedProbe(`probe-${i}`)
+      probesAtLocation.set(probe.id, probe)
+      state.samplingIndexToProbe.set(i, probe)
+      sampler.makeSampleDecision(i, probe.id, 0n, false)
+    }
+    state.breakpointToProbes.set(breakpointId, probesAtLocation)
+
+    await onPaused(event)
+
+    sinon.assert.calledWith(log.error,
+      '[debugger:devtools_client] Too many probes sampled at the same breakpoint location; skipping excess probes')
+    sinon.assert.calledWith(session.post.secondCall, 'Debugger.resume')
+    sinon.assert.callCount(ackEmitting, MAX_SAMPLED_PROBES_PER_PAUSE)
+    sinon.assert.callCount(send, MAX_SAMPLED_PROBES_PER_PAUSE)
+  })
+
   it('should log if a sampled probe index is unknown', async function () {
     state.breakpointToProbes.set(breakpointId, new Map())
     Atomics.store(sampledProbeIndexes, 0, 1)
@@ -242,4 +268,19 @@ function genProcessedProbe (id) {
     template: id.replace('-', ' '),
     captureSnapshot: false,
   }
+}
+
+/**
+ * Install the runtime probe sampler for tests.
+ *
+ * @param {SharedArrayBuffer} buffer - The shared sampler buffer.
+ * @returns {{ makeSampleDecision: Function }}
+ */
+function installSampler (buffer) {
+  setProbeSamplerBuffer(buffer)
+  // eslint-disable-next-line no-new-func
+  new Function(getInstallSamplerExpression())()
+  return /** @type {{ makeSampleDecision: Function }} */ (
+    globalThis[Symbol.for('dd-trace')][Symbol.for('dd-trace.debugger.probeSampler')]
+  )
 }

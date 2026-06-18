@@ -8,6 +8,7 @@ const { breakpointToProbes, samplingIndexToProbe } = require('./state')
 const session = require('./session')
 const { getLocalStateForCallFrame, evaluateCaptureExpressions } = require('./snapshot')
 const {
+  MAX_SAMPLED_PROBES_PER_PAUSE,
   SAMPLED_PROBE_COUNT_INDEX,
   SAMPLED_PROBE_INDEXES_START,
   SAMPLED_PROBE_OVERFLOW_INDEX,
@@ -65,7 +66,10 @@ session.on('Debugger.paused', async ({ params }) => {
   // V8 doesn't allow setting more than one breakpoint at a specific location, however, it's possible to set two
   // breakpoints just next to each other that will "snap" to the same logical location, which in turn will be hit at the
   // same time. E.g. index.js:1:1 and index.js:1:2.
-  const numberOfSampledProbeIndexes = Atomics.exchange(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX, 0)
+  const numberOfSampledProbeIndexes = Math.min(
+    Atomics.exchange(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX, 0),
+    MAX_SAMPLED_PROBES_PER_PAUSE
+  )
   if (Atomics.exchange(sampledProbeIndexes, SAMPLED_PROBE_OVERFLOW_INDEX, 0) === 1) {
     log.error(
       '[debugger:devtools_client] Too many probes sampled at the same breakpoint location; skipping excess probes'
