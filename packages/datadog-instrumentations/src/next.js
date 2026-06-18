@@ -220,6 +220,40 @@ addHook({
   return NextRequestAdapter
 })
 
+// From next 15.4.1 each app-route build inlines its own copy of `fromNodeNextRequest`, so the hook
+// above no longer maps the node request to the app-route NextRequest and a thrown handler error
+// cannot reach `finish`. The app-route runtime reports real errors (redirect/notFound and other
+// control-flow signals excluded by next) through `RouteModule.onRequestError`, which next loads from
+// a precompiled `app-route*.runtime.{dev,prod}.js` bundle regardless of how the route chunk is
+// bundled. The bundler/experimental part of the name is matched with a pattern rather than
+// enumerated, so a variant next adds later is picked up without a code change.
+const patchedAppRouteModules = new WeakSet()
+
+function wrapOnRequestError (onRequestError) {
+  return function (req, error) {
+    if (error) {
+      errorChannel.publish({ error })
+    }
+    return onRequestError.apply(this, arguments)
+  }
+}
+
+function instrumentAppRouteRuntime (runtime) {
+  const AppRouteRouteModule = runtime.AppRouteRouteModule
+  const proto = AppRouteRouteModule?.prototype
+  if (proto && typeof proto.onRequestError === 'function' && !patchedAppRouteModules.has(AppRouteRouteModule)) {
+    patchedAppRouteModules.add(AppRouteRouteModule)
+    shimmer.wrap(proto, 'onRequestError', wrapOnRequestError)
+  }
+  return runtime
+}
+
+addHook({
+  name: 'next',
+  versions: ['>=15.4.1'],
+  filePattern: String.raw`dist/compiled/next-server/app-route[\w-]*\.runtime\.(?:dev|prod)\.js$`,
+}, instrumentAppRouteRuntime)
+
 addHook({
   name: 'next',
   versions: ['>=11.1'],
