@@ -51,8 +51,11 @@ function loadSync (url, context, nextLoad) {
 }
 
 function isCommonJSLoad (context) {
-  if (context.format === 'commonjs') return true
+  if (context.format) return context.format === 'commonjs'
 
+  // Sync hooks report CommonJS require() dependency loads with a `require`
+  // condition but no format. If a format is present, trust it instead: ESM
+  // loaded through require() reports `format: 'module'` and still needs rewrite.
   const conditions = context.conditions
   if (!conditions) return false
 

@@ -103,7 +103,54 @@ describe('rewriter loader', () => {
     assert.strictEqual(result.status, 0, result.stderr)
     assert.strictEqual(result.stdout.trim(), '1')
   })
+
+  it('rewrites ESM modules loaded from CommonJS in the sync loader hook', function () {
+    if (!supportsSyncLoaderHooks()) {
+      this.skip()
+    }
+
+    const root = mkdtempSync(join(tmpdir(), 'dd-rewriter-loader-cjs-esm-'))
+    const packageDirectory = join(root, 'node_modules', 'ai')
+
+    mkdirSync(join(packageDirectory, 'dist'), { recursive: true })
+    writeFileSync(join(packageDirectory, 'package.json'), '{"version":"4.0.0","type":"module","main":"dist/index.js"}')
+    writeFileSync(join(packageDirectory, 'dist', 'index.js'), source)
+    writeFileSync(join(root, 'main.js'), `
+      const { tracingChannel } = require(${JSON.stringify(join(repositoryRoot, 'node_modules', 'dc-polyfill'))})
+      const channel = tracingChannel('orchestrion:ai:getTracer')
+      let starts = 0
+
+      channel.subscribe({ start () { starts++ } })
+      require('ai').getTracer()
+      console.log(starts)
+    `)
+
+    const result = spawnSync(process.execPath, [join(root, 'main.js')], {
+      cwd: root,
+      env: {
+        ...process.env,
+        NODE_OPTIONS: `--import ${join(repositoryRoot, 'register.js')}`,
+      },
+      encoding: 'utf8',
+    })
+
+    assert.strictEqual(result.status, 0, result.stderr)
+    assert.strictEqual(result.stdout.trim(), '1')
+  })
 })
+
+function supportsSyncLoaderHooks () {
+  const version = process.versions.node.split('.')
+  const major = Number(version[0])
+  const minor = Number(version[1])
+  const patch = Number(version[2])
+
+  if (major >= 26) return true
+  if (major === 25) return minor >= 1
+  if (major === 24) return minor > 11 || (minor === 11 && patch >= 1)
+  if (major === 22) return minor > 22 || (minor === 22 && patch >= 3)
+  return false
+}
 
 function createAiModuleUrl () {
   const root = mkdtempSync(join(tmpdir(), 'dd-rewriter-loader-'))
