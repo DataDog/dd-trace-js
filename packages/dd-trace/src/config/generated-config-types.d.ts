@@ -3,6 +3,7 @@
 
 export interface GeneratedConfig {
   _DD_APM_TRACING_AGENTLESS_ENABLED: boolean;
+  _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: number;
   apiKey: string | undefined;
   apmTracingEnabled: boolean;
   appsec: {
@@ -348,6 +349,7 @@ export interface GeneratedConfig {
   DD_TRACE_OPENTELEMETRY_SDK_TRACE_NODE_ENABLED: boolean;
   DD_TRACE_ORACLEDB_ENABLED: boolean;
   DD_TRACE_OTEL_ENABLED: boolean;
+  DD_TRACE_OTEL_SEMANTICS_ENABLED: boolean;
   DD_TRACE_PASSPORT_ENABLED: boolean;
   DD_TRACE_PASSPORT_HTTP_ENABLED: boolean;
   DD_TRACE_PASSPORT_LOCAL_ENABLED: boolean;
@@ -399,7 +401,6 @@ export interface GeneratedConfig {
   DD_TRACE_WS_ENABLED: boolean;
   DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH: number;
   DD_VITEST_WORKER: string | undefined;
-  ddTraceMetricsOtelFlushInterval: number;
   dogstatsd: {
     hostname: string;
     port: string | number;
@@ -514,8 +515,7 @@ export interface GeneratedConfig {
   OTEL_TRACES_EXPORTER: "none" | "otlp" | undefined;
   OTEL_TRACES_SAMPLER: "always_on" | "always_off" | "traceidratio" | "parentbased_always_on" | "parentbased_always_off" | "parentbased_traceidratio";
   OTEL_TRACES_SAMPLER_ARG: number | undefined;
-  otelSemanticsEnabled: boolean;
-  otlpTraceMetricsEnabled: boolean | undefined;
+  OTEL_TRACES_SPAN_METRICS_ENABLED: boolean | undefined;
   peerServiceMapping: Record<string, string>;
   port: string | number;
   profiling: {

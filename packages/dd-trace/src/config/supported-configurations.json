@@ -3109,8 +3109,7 @@
         "implementation": "A",
         "type": "int",
         "default": "10000",
-        "allowed": "[1-9]\\d*",
-        "internalPropertyName": "ddTraceMetricsOtelFlushInterval"
+        "allowed": "[1-9]\\d*"
       }
     ],
     "DD_TRACE_MICROGATEWAY_CORE_ENABLED": [
@@ -3340,9 +3339,6 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "configurationNames": [
-          "otelSemanticsEnabled"
-        ],
         "default": "false"
       }
     ],
@@ -4188,11 +4184,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "configurationNames": [
-          "otlpTraceMetricsEnabled"
-        ],
-        "default": null,
-        "internalPropertyName": "otlpTraceMetricsEnabled"
+        "default": null
       }
     ]
   }

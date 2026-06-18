@@ -603,7 +603,7 @@ class Config extends ConfigBase {
     // trace export (OTEL_TRACES_EXPORTER=otlp) and OTel metrics export (DD_METRICS_OTEL_ENABLED)
     // are enabled.
     const autoTraceMetrics = this.OTEL_TRACES_EXPORTER === 'otlp' && this.DD_METRICS_OTEL_ENABLED === true
-    setAndTrack(this, 'otlpTraceMetricsEnabled', this.otlpTraceMetricsEnabled ?? autoTraceMetrics)
+    setAndTrack(this, 'otlpTraceMetricsEnabled', this.OTEL_TRACES_SPAN_METRICS_ENABLED ?? autoTraceMetrics)
 
     // Internal `_DD_*` vars are skipped by the generic env applier (it only reads DD_/OTEL_ prefixes),
     // so read the test-only flush interval override explicitly.

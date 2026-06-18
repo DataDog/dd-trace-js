@@ -1308,24 +1308,6 @@ declare namespace tracer {
     stats?: boolean
 
     /**
-     * Whether to export client-computed span stats as OTLP metrics to a /v1/metrics endpoint.
-     * Auto-enabled when both OTEL_TRACES_EXPORTER=otlp and DD_METRICS_OTEL_ENABLED=true are set.
-     * @default false
-     * @env OTEL_TRACES_SPAN_METRICS_ENABLED
-     * Programmatic configuration takes precedence over the environment variables listed above.
-     */
-    otlpTraceMetricsEnabled?: boolean
-
-    /**
-     * Whether to emit only OpenTelemetry semantic-convention attributes on OTLP trace metrics,
-     * omitting Datadog-specific dd.* attributes.
-     * @default false
-     * @env DD_TRACE_OTEL_SEMANTICS_ENABLED
-     * Programmatic configuration takes precedence over the environment variables listed above.
-     */
-    otelSemanticsEnabled?: boolean
-
-    /**
      * Whether to generate 128-bit trace IDs.
      * @default true
      * @env DD_TRACE_128_BIT_TRACEID_GENERATION_ENABLED
