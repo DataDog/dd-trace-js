@@ -21,9 +21,10 @@ describe('Plugin', () => {
     withVersions('restify', 'restify', version => {
       const pkgVersion = require(`../../../versions/restify@${version}`).version()
 
-      // restify <11 does not run on the Node >=18 CI matrix this job uses: 7.x-10.x crash setting the now
-      // getter-only `stream.closed` on the response, and 5.x/6.x mismatch the bundled router. Only the 11.x line
-      // supports modern Node, which is exactly what master tested, so skip every lower major the expansion installs.
+      // master only exercised restify 11 here; the install expansion now also installs 4.x-10.x. 7.x-9.x crash
+      // on load on this job's Node >=18 matrix (they assign the now getter-only `IncomingMessage#closed`), and the
+      // remaining older majors load fine but were never run against this deeper routing suite. Keep parity with
+      // master rather than broaden coverage in an install-only change, so skip every lower major.
       if (semver.intersects(pkgVersion, '<11')) return
 
       beforeEach(() => {
