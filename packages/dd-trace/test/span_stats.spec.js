@@ -488,7 +488,7 @@ describe('SpanStatsProcessor', () => {
     OtlpStatsExporter.resetHistory()
     const p = new SpanStatsProcessor({
       ...config,
-      otlpTraceMetricsEnabled: true,
+      OTEL_TRACES_SPAN_METRICS_ENABLED: true,
       OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
       OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/json',
     })
@@ -502,7 +502,7 @@ describe('SpanStatsProcessor', () => {
     otlpExporter.export.resetHistory()
     const p = new SpanStatsProcessor({
       ...config,
-      otlpTraceMetricsEnabled: true,
+      OTEL_TRACES_SPAN_METRICS_ENABLED: true,
       OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
       OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/json',
     })
@@ -520,7 +520,7 @@ describe('SpanStatsProcessor', () => {
     otlpExporter.export.resetHistory()
     const p = new SpanStatsProcessor({
       ...config,
-      otlpTraceMetricsEnabled: true,
+      OTEL_TRACES_SPAN_METRICS_ENABLED: true,
       OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
       OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/json',
     })
@@ -535,7 +535,7 @@ describe('SpanStatsProcessor', () => {
     otlpExporter.export.resetHistory()
     const p = new SpanStatsProcessor({
       ...config,
-      otlpTraceMetricsEnabled: true,
+      OTEL_TRACES_SPAN_METRICS_ENABLED: true,
       OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
       OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/json',
     })
@@ -556,7 +556,7 @@ describe('SpanStatsProcessor', () => {
       url: new URL('http://127.0.0.1:8126'),
       env: 'test',
       tags: {},
-      otlpTraceMetricsEnabled: true,
+      OTEL_TRACES_SPAN_METRICS_ENABLED: true,
       OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
       OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/json',
     })

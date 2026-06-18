@@ -9,7 +9,8 @@ class AgentExporter {
 
   constructor (config, prioritySampler) {
     this._config = config
-    const { lookup, protocolVersion, stats = {}, apmTracingEnabled, otlpTraceMetricsEnabled } = config
+    const { lookup, protocolVersion, stats = {}, apmTracingEnabled } = config
+    const otlpTraceMetricsEnabled = config.OTEL_TRACES_SPAN_METRICS_ENABLED
     this._url = config.url
 
     const headers = {}

@@ -13,6 +13,7 @@ const {
   SPAN_KIND,
 } = require('../../../ext/tags')
 const { VERSION } = require('../../../version')
+const { getEnvironmentVariable } = require('./config/helper')
 const { ORIGIN_KEY, TOP_LEVEL_KEY, SVC_SRC_KEY } = require('./constants')
 const { version } = require('./pkg')
 const processTags = require('./process-tags')
@@ -163,12 +164,11 @@ class SpanStatsProcessor {
     env,
     tags,
     version: appVersion,
-    otlpTraceMetricsEnabled,
+    OTEL_TRACES_SPAN_METRICS_ENABLED: otlpTraceMetricsEnabled,
     OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: otelMetricsUrl,
     OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: otelMetricsProtocol,
     OTEL_EXPORTER_OTLP_METRICS_HEADERS: otelMetricsHeaders,
     OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: otelMetricsTimeout,
-    ddTraceMetricsOtelFlushInterval,
     DD_TRACE_OTEL_SEMANTICS_ENABLED: otelSemanticsEnabled,
     reportHostname,
   } = {}) {
@@ -184,9 +184,8 @@ class SpanStatsProcessor {
     // _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL is internal and only overrides the cadence in tests.
     let intervalMs = interval * 1e3
     if (otlpTraceMetricsEnabled) {
-      intervalMs = Number.isFinite(ddTraceMetricsOtelFlushInterval) && ddTraceMetricsOtelFlushInterval > 0
-        ? ddTraceMetricsOtelFlushInterval
-        : 10_000
+      const flushOverride = Number(getEnvironmentVariable('_DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL'))
+      intervalMs = Number.isFinite(flushOverride) && flushOverride > 0 ? flushOverride : 10_000
     }
     this.interval = intervalMs / 1e3
     this.bucketSizeNs = intervalMs * 1e6

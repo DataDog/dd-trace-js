@@ -17,7 +17,7 @@ class SpanProcessor {
     this._killAll = false
 
     // TODO: This should already have been calculated in `config.js`.
-    if ((config.stats?.enabled || config.otlpTraceMetricsEnabled) && !config.appsec?.standalone?.enabled) {
+    if ((config.stats?.enabled || config.OTEL_TRACES_SPAN_METRICS_ENABLED) && !config.appsec?.standalone?.enabled) {
       const { SpanStatsProcessor } = require('./span_stats')
       this._stats = new SpanStatsProcessor(config)
     }
