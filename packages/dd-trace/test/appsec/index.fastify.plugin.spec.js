@@ -17,6 +17,14 @@ const { withVersions } = require('../setup/mocha')
 const { getConfigFresh } = require('../helpers/config')
 const { blockedTemplateJson: json, setTestBlockingTemplates } = require('./utils')
 
+// The version matrices below necessarily pair plugin majors with fastify majors they reject. fastify core
+// reports that while booting (during `listen`) as FST_ERR_PLUGIN_VERSION_MISMATCH; older fastify-plugin
+// builds throw a plain Error carrying the same "expected '<range>' fastify version" text instead. Either
+// means "skip this unsupported combo", not a real failure.
+function isFastifyPluginVersionMismatch (error) {
+  return error.code === 'FST_ERR_PLUGIN_VERSION_MISMATCH' || /expected '.+?' fastify version/.test(error.message)
+}
+
 withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersion) => {
   describe('Suspicious request blocking - query', () => {
     let server, requestBody, axios
@@ -465,7 +473,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
             return agent.load(['fastify', '@fastify/cookie', 'http'], { client: false })
           })
 
-          before((done) => {
+          before(async function () {
             const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
             const fastifyCookie = require(`../../../../versions/@fastify/cookie@${cookieVersion}`).get()
 
@@ -484,12 +492,18 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
               reply.send('DONE')
             })
 
-            app.listen({ port: 0 }, () => {
-              const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-              axios = Axios.create({ baseURL: `http://localhost:${port}` })
-              done()
-            })
+            try {
+              await app.listen({ port: 0 })
+            } catch (error) {
+              if (isFastifyPluginVersionMismatch(error)) {
+                return this.skip()
+              }
+              throw error
+            }
+
             server = app.server
+            const { port } = /** @type {import('net').AddressInfo} */ (server.address())
+            axios = Axios.create({ baseURL: `http://localhost:${port}` })
           })
 
           beforeEach(async () => {
@@ -570,7 +584,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         return agent.load(['fastify', '@fastify/multipart', 'http'], { client: false })
       })
 
-      before((done) => {
+      before(async function () {
         const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
         const fastifyMultipart = require(`../../../../versions/@fastify/multipart@${multipartVersion}`).get()
 
@@ -583,12 +597,18 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
           reply.send('DONE')
         })
 
-        app.listen({ port: 0 }, () => {
-          const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-          axios = Axios.create({ baseURL: `http://localhost:${port}` })
-          done()
-        })
+        try {
+          await app.listen({ port: 0 })
+        } catch (error) {
+          if (isFastifyPluginVersionMismatch(error)) {
+            return this.skip()
+          }
+          throw error
+        }
+
         server = app.server
+        const { port } = /** @type {import('net').AddressInfo} */ (server.address())
+        axios = Axios.create({ baseURL: `http://localhost:${port}` })
       })
 
       beforeEach(() => {
