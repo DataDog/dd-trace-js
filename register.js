@@ -5,4 +5,14 @@
 const { register } = require('node:module')
 const { pathToFileURL } = require('node:url')
 
-register('./loader-hook.mjs', pathToFileURL(__filename))
+const parentURL = pathToFileURL(__filename)
+let isSyncLoaderRegistered = false
+
+try {
+  const { registerSyncLoaderHooks } = require('./loader-hook.mjs')
+  isSyncLoaderRegistered = registerSyncLoaderHooks()
+} catch {}
+
+if (!isSyncLoaderRegistered) {
+  register('./loader-hook.mjs', parentURL)
+}

@@ -7,19 +7,24 @@ const path = require('node:path')
 const { NODE_MAJOR, NODE_MINOR } = require('../../../version.js')
 
 const getExportsImporting = (url) => import(url).then(Object.keys)
-let getExportsModulePromise
+let getExportsModulesPromise
 
-const loadGetExportsModule = () => {
-  if (!getExportsModulePromise) {
-    getExportsModulePromise = import('import-in-the-middle/lib/get-exports.mjs')
+const loadGetExportsModules = () => {
+  if (!getExportsModulesPromise) {
+    getExportsModulesPromise = Promise.all([
+      import('import-in-the-middle/lib/get-exports.mjs'),
+      import('import-in-the-middle/lib/io.mjs'),
+    ])
   }
-  return getExportsModulePromise
+  return getExportsModulesPromise
 }
 
 const getExports = NODE_MAJOR >= 20 || (NODE_MAJOR === 18 && NODE_MINOR >= 19)
   ? async (srcUrl, context, getSource) => {
-    const mod = await loadGetExportsModule()
-    return mod.getExports(srcUrl, context, getSource)
+    const [{ getExports: collectExports }, { driveAsync }] = await loadGetExportsModules()
+    // import-in-the-middle's getExports is a sans-io generator; driveAsync fulfils
+    // its `[LOAD, ...]` operations with the on-disk source reader (lib/io.mjs).
+    return driveAsync(collectExports(srcUrl, context), { load: getSource })
   }
   : getExportsImporting
 
