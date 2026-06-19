@@ -33,7 +33,7 @@ const OPERATIONS = Number(process.env.OPERATIONS)
 // event (meta/input/output by span kind, metrics, tags, error). This is the
 // per-span LLMObs hot path, uncovered by the existing llmobs writer bench.
 const processor = new LLMObsSpanProcessor({
-  llmobs: { enabled: true },
+  llmobs: { DD_LLMOBS_ENABLED: true },
   version: '1.0.0',
   env: 'bench',
   service: 'llmobs-bench',

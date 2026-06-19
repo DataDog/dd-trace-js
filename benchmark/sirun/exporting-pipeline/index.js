@@ -41,7 +41,8 @@ const exporter = { export (formatted) { exported += formatted.length; lastFormat
 const prioritySampler = new PrioritySampler()
 const config = {
   flushMinSpans: 100,
-  stats: { enabled: WITH_STATS },
+  stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: WITH_STATS },
+  appsec: {},
 }
 const sp = new SpanProcessor(exporter, prioritySampler, config)
 
