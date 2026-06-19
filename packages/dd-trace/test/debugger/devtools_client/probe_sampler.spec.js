@@ -116,6 +116,19 @@ describe('probe sampler', function () {
       assert.strictEqual(typeof getSampler().remove, 'function')
     })
 
+    it('should reinstall the runtime sampler with the latest shared buffer', function () {
+      const firstBuffer = createProbeSamplerBuffer()
+      const firstSampledProbeIndexes = installSampler(firstBuffer)
+
+      const secondBuffer = createProbeSamplerBuffer()
+      const secondSampledProbeIndexes = installSampler(secondBuffer)
+
+      assert.strictEqual(getSampler().makeSampleDecision(7, 'probe-1', 200000n, false), true)
+      assert.strictEqual(Atomics.load(firstSampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX), 0)
+      assert.strictEqual(Atomics.load(secondSampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX), 1)
+      assert.strictEqual(Atomics.load(secondSampledProbeIndexes, SAMPLED_PROBE_INDEXES_START), 7)
+    })
+
     it('should skip installation when the buffer is missing', function () {
       // eslint-disable-next-line no-new-func
       new Function(getInstallSamplerExpression())()
@@ -227,8 +240,13 @@ describe('probe sampler', function () {
   })
 })
 
-function installSampler () {
-  const buffer = createProbeSamplerBuffer()
+/**
+ * Install the runtime sampler expression for tests.
+ *
+ * @param {SharedArrayBuffer} [buffer] - The shared sampler buffer.
+ * @returns {Int32Array}
+ */
+function installSampler (buffer = createProbeSamplerBuffer()) {
   setProbeSamplerBuffer(buffer)
   // eslint-disable-next-line no-new-func
   new Function(getInstallSamplerExpression())()

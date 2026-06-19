@@ -72,7 +72,6 @@ function getInstallSamplerExpression () {
     const ddTrace = globalThis[Symbol.for(${JSON.stringify(DD_TRACE_SYMBOL)})]
     const probeSamplerSymbol = Symbol.for(${JSON.stringify(PROBE_SAMPLER_SYMBOL)})
     const probeSamplerBufferSymbol = Symbol.for(${JSON.stringify(PROBE_SAMPLER_BUFFER_SYMBOL)})
-    if (ddTrace[probeSamplerSymbol] !== undefined) return
     if (ddTrace[probeSamplerBufferSymbol] === undefined) return
 
     const lastCaptureNsByProbeId = new Map()
