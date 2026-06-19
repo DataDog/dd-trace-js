@@ -356,6 +356,25 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - uses: ./.github/actions/instrumentations/test
 
+  instrumentation-mysql:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    services:
+      mysql:
+        image: mariadb@sha256:22edfe1c78349f8cae88bbb5c2873b7e6c515be767c91c691308ce57445806f3 # 10.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+          MYSQL_DATABASE: "db"
+        ports:
+          - 3306:3306
+    env:
+      PLUGINS: mysql
+      SERVICES: mysql
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: ./.github/actions/instrumentations/test
+
   instrumentation-mysql2:
     runs-on: ubuntu-latest
     permissions:
