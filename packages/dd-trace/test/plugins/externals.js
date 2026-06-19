@@ -426,7 +426,7 @@ module.exports = {
   mariadb: [
     {
       name: 'mariadb',
-      versions: ['2.5.6', '3.0.0', '3.4.0'],
+      versions: ['2.5.6', '3.0.0', '3.4.0', '>=3.4.1'],
     },
   ],
   mocha: [

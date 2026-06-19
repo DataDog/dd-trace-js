@@ -2,6 +2,7 @@
 
 const shimmer = require('../../datadog-shimmer')
 const { channel, addHook } = require('./helpers/instrument')
+const { acquireStart, acquireWait } = require('./helpers/pool-acquire')
 
 const commandAddCh = channel('apm:mariadb:command:add')
 const connectionStartCh = channel('apm:mariadb:connection:start')
@@ -10,6 +11,8 @@ const startCh = channel('apm:mariadb:query:start')
 const finishCh = channel('apm:mariadb:query:finish')
 const errorCh = channel('apm:mariadb:query:error')
 const skipCh = channel('apm:mariadb:pool:skip')
+const acquireStartCh = channel('apm:mariadb:pool:acquire:start')
+const acquireFinishCh = channel('apm:mariadb:pool:acquire:finish')
 
 function wrapCommandStart (start, ctx) {
   return shimmer.wrapFunction(start, start => function (...args) {
@@ -136,12 +139,30 @@ function wrapPoolMethod (createConnection) {
 function wrapPoolGetConnectionMethod (getConnection) {
   return function wrappedGetConnection (...args) {
     const cb = args[args.length - 1]
-    if (typeof cb !== 'function') return getConnection.apply(this, args)
+    if (typeof cb !== 'function' || !connectionStartCh.hasSubscribers) {
+      return getConnection.apply(this, args)
+    }
 
     const ctx = {}
 
-    args[args.length - 1] = function (...args) {
-      return connectionFinishCh.runStores(ctx, cb, this, ...args)
+    // mariadb routes pool.query() / execute() through getConnection with the sql carried on cmdParam;
+    // an explicit getConnection() passes none, so only the latter opens a standalone acquire span.
+    const explicit = args[0].sql === undefined && acquireStartCh.hasSubscribers
+    let acquireCtx
+    let start
+    if (explicit) {
+      start = acquireStart(this)
+      acquireCtx = { conf: this.opts.connOptions }
+      acquireStartCh.publish(acquireCtx)
+    }
+
+    args[args.length - 1] = function (error) {
+      if (acquireCtx !== undefined) {
+        acquireCtx.error = error
+        acquireCtx.poolWaitTime = acquireWait(start)
+        acquireFinishCh.publish(acquireCtx)
+      }
+      return connectionFinishCh.runStores(ctx, cb, this, ...arguments)
     }
 
     connectionStartCh.publish(ctx)
@@ -160,14 +181,18 @@ addHook({ name, file: 'lib/cmd/execute.js', versions: ['>=3'] }, (Execute) => {
   return wrapCommand(Execute)
 })
 
-// in 3.4.1 getConnection method start to use callbacks instead of promises
+// 3.4.1 reworked the pool: getConnection became callback-based and connection creation moved to
+// `_createPoolConnection`. The reworked pool no longer leaks connection-creation spans across
+// queries, so the connection-creation skip is dropped for >=3.4.1 — applying it there both breaks
+// query context propagation (the noop store leaks into the pooled connection) and, since it targeted
+// the old `_createConnection` name, threw and aborted the whole mariadb instrumentation.
 addHook({ name, file: 'lib/pool.js', versions: ['>=3.4.1'] }, (Pool) => {
   shimmer.wrap(Pool.prototype, 'getConnection', wrapPoolGetConnectionMethod)
 
   return Pool
 })
 
-addHook({ name, file: 'lib/pool.js', versions: ['>=3'] }, (Pool) => {
+addHook({ name, file: 'lib/pool.js', versions: ['>=3 <3.4.1'] }, (Pool) => {
   shimmer.wrap(Pool.prototype, '_createConnection', wrapPoolMethod)
 
   return Pool

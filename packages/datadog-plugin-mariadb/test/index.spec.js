@@ -1,8 +1,9 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
-const { afterEach, beforeEach, describe, it } = require('mocha')
+const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
 const sinon = require('sinon')
 
@@ -866,6 +867,66 @@ describe('Plugin', () => {
             })
 
             await assertion
+          })
+        })
+      }
+
+      // mariadb only wraps the callback-based getConnection (>=3.4.1) for the acquire span.
+      if (semver.intersects(version, '>=3.4.1')) {
+        describe('with explicit pool acquire spans', () => {
+          let pool
+          let mariadb
+
+          before(async () => {
+            tracer = await agent.load('mariadb')
+          })
+
+          after(() => agent.close())
+
+          beforeEach(() => {
+            mariadb = proxyquire(`../../../versions/mariadb@${version}`, {}).get('mariadb')
+
+            pool = mariadb.createPool({
+              connectionLimit: 1,
+              host: 'localhost',
+              user: 'root',
+            })
+          })
+
+          afterEach(() => pool.end())
+
+          it('creates a dedicated acquire span for an explicit getConnection', async () => {
+            const parent = tracer.startSpan('acquire-parent')
+
+            const tracePromise = agent.assertSomeTraces(traces => {
+              const acquireSpan = traces[0].find(span => span.name === 'mariadb.pool.acquire')
+
+              assert.ok(acquireSpan, `missing acquire span: ${inspect(traces[0].map(span => span.name))}`)
+              assert.strictEqual(acquireSpan.resource, 'mariadb.pool.acquire')
+              assert.strictEqual(acquireSpan.parent_id.toString(), parent.context().toSpanId())
+              assert.strictEqual(typeof acquireSpan.metrics['mariadb.pool.wait_time'], 'number')
+              assert.ok(acquireSpan.metrics['mariadb.pool.wait_time'] >= 0)
+            }, { spanResourceMatch: /^mariadb\.pool\.acquire$/ })
+
+            await tracer.scope().activate(parent, async () => {
+              const connection = await pool.getConnection()
+              await connection.release()
+              parent.finish()
+            })
+
+            await tracePromise
+          })
+
+          it('does not create an acquire span for pool.query', async () => {
+            await Promise.all([
+              agent.assertSomeTraces(traces => {
+                assert.ok(
+                  !traces[0].some(span => span.name === 'mariadb.pool.acquire'),
+                  `unexpected acquire span: ${inspect(traces[0].map(span => span.name))}`
+                )
+              }, { spanResourceMatch: /^SELECT 6 AS six$/ }),
+              pool.query('SELECT 6 AS six'),
+            ])
           })
         })
       }

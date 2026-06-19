@@ -43,14 +43,16 @@ function wrapPoolQueryMethod (method) {
 
 /**
  * An idle connection is handed back within a tick, so treat that as a zero wait and skip the clock
- * reads; only a queued or freshly established connection is worth timing. The free list is absent on
- * builds that predate it, which falls through to timing rather than crashing.
+ * reads; only a queued or freshly established connection is worth timing. mysql / mysql2 expose the
+ * free list as `_freeConnections`, mariadb as an `idleConnections()` count; an absent source falls
+ * through to timing rather than crashing.
  *
- * @param {{ _freeConnections?: { length: number } }} pool
+ * @param {{ _freeConnections?: { length: number }, idleConnections?: () => number }} pool
  * @returns {number|undefined}
  */
 function acquireStart (pool) {
-  return pool._freeConnections?.length > 0 ? undefined : performance.now()
+  const idleConnections = pool._freeConnections?.length ?? pool.idleConnections?.()
+  return idleConnections > 0 ? undefined : performance.now()
 }
 
 /**
