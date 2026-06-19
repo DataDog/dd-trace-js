@@ -120,8 +120,7 @@ session.on('Debugger.paused', async ({ params }) => {
     }
   }
 
-  // This can happen if the sampler paused only to report overflow, or if the sampled probe indexes are inconsistent
-  // with the worker state. The inconsistent cases are logged above.
+  // This can happen if sampled probe indexes are inconsistent with the worker state. Those cases are logged above.
   if (probes.length === 0) {
     return session.post('Debugger.resume')
   }

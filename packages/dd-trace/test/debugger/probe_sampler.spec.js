@@ -20,7 +20,6 @@ const { MAX_SNAPSHOTS_PER_SECOND_GLOBALLY } = require('../../src/debugger/devtoo
 
 const ddTraceSymbol = Symbol.for('dd-trace')
 const samplerSymbol = Symbol.for('dd-trace.debugger.probeSampler')
-const samplerBufferSymbol = Symbol.for('dd-trace.debugger.probeSamplerBuffer')
 
 describe('probe sampler', function () {
   /** @type {typeof process.hrtime.bigint} */
@@ -30,7 +29,6 @@ describe('probe sampler', function () {
 
   beforeEach(function () {
     delete getDatadogGlobal()[samplerSymbol]
-    delete getDatadogGlobal()[samplerBufferSymbol]
     originalHrtimeBigint = process.hrtime.bigint
     now = 1_000_000_000n
     process.hrtime.bigint = () => now
@@ -39,7 +37,6 @@ describe('probe sampler', function () {
   afterEach(function () {
     process.hrtime.bigint = originalHrtimeBigint
     delete getDatadogGlobal()[samplerSymbol]
-    delete getDatadogGlobal()[samplerBufferSymbol]
   })
 
   describe('shared buffer', function () {
@@ -51,21 +48,19 @@ describe('probe sampler', function () {
       assert.strictEqual(sampledProbeIndexes.length, SAMPLED_PROBE_INDEXES_START + MAX_SAMPLED_PROBES_PER_PAUSE)
     })
 
-    it('should expose and initialize the shared buffer', function () {
+    it('should initialize the shared buffer', function () {
       const installedBuffer = installProbeSampler()
       const installedSampledProbeIndexes = new Int32Array(installedBuffer)
 
-      assert.strictEqual(getDatadogGlobal()[samplerBufferSymbol], installedBuffer)
       assert.strictEqual(Atomics.load(installedSampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX), 0)
       assert.strictEqual(Atomics.load(installedSampledProbeIndexes, SAMPLED_PROBE_OVERFLOW_INDEX), 0)
     })
 
-    it('should remove the shared buffer and runtime sampler', function () {
+    it('should remove the runtime sampler', function () {
       installSampler()
       uninstallProbeSampler()
 
       assert.strictEqual(getDatadogGlobal()[samplerSymbol], undefined)
-      assert.strictEqual(getDatadogGlobal()[samplerBufferSymbol], undefined)
     })
   })
 

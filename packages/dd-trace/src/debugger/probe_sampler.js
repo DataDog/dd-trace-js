@@ -4,7 +4,6 @@ const { MAX_SNAPSHOTS_PER_SECOND_GLOBALLY } = require('./devtools_client/default
 const {
   DD_TRACE_SYMBOL,
   MAX_SAMPLED_PROBES_PER_PAUSE,
-  PROBE_SAMPLER_BUFFER_SYMBOL,
   PROBE_SAMPLER_SYMBOL,
   SAMPLED_PROBE_COUNT_INDEX,
   SAMPLED_PROBE_INDEXES_START,
@@ -24,7 +23,6 @@ module.exports = {
 function installProbeSampler () {
   const ddTrace = getDatadogGlobal()
   const buffer = createProbeSamplerBuffer()
-  ddTrace[Symbol.for(PROBE_SAMPLER_BUFFER_SYMBOL)] = buffer
 
   const lastCaptureNsByProbeId = new Map()
   const sampledProbeIndexes = new Int32Array(buffer)
@@ -93,12 +91,11 @@ function installProbeSampler () {
 }
 
 /**
- * Remove the runtime sampler and shared buffer from the debuggee context.
+ * Remove the runtime sampler from the debuggee context.
  */
 function uninstallProbeSampler () {
   const ddTrace = getDatadogGlobal()
   delete ddTrace[Symbol.for(PROBE_SAMPLER_SYMBOL)]
-  delete ddTrace[Symbol.for(PROBE_SAMPLER_BUFFER_SYMBOL)]
 }
 
 /**

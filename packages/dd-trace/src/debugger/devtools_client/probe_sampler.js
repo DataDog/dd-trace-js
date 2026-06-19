@@ -38,6 +38,10 @@ function compileBreakpointCondition (probes) {
     probeConditions.push(compileProbeCondition(probe))
   }
 
+  // NOTE: $dd_sampler is read from the realm-local `globalThis` where it was installed (the main
+  // realm). A probe whose code runs in a different V8 realm (e.g. a `vm.createContext` script with a
+  // file-path filename) won't see it and will silently never fire. Known limitation: a breakpoint
+  // condition has no realm-independent handle to reach, so we degrade rather than crash.
   return `(() => {
     const $dd_sampler = ${getSamplerExpression()}
     if ($dd_sampler === undefined) return false
