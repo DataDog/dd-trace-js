@@ -115,8 +115,8 @@ function buildHelperPlugin ({
   plugin._tracer = { inject, setCheckpoint: () => null }
   plugin.config = { dsmEnabled, batchPropagationEnabled }
   plugin.dsmCalls = []
-  plugin.setDSMCheckpoint = (span, entry) => {
-    plugin.dsmCalls.push({ detail: entry.Detail })
+  plugin.setDSMCheckpoint = (span, entry, ddInfo) => {
+    plugin.dsmCalls.push({ detail: entry.Detail, ddInfo: ddInfo && { ...ddInfo } })
     return dataStreamsContext
   }
   return plugin
@@ -169,15 +169,20 @@ describe('EventBridge plugin generateTags', () => {
 })
 
 describe('EventBridge plugin injectToEntry', () => {
-  it('attaches `_datadog` before setDSMCheckpoint reads payload size', () => {
-    const plugin = buildHelperPlugin({ dsmEnabled: true })
+  it('measures the trace context via setDSMCheckpoint without rewriting the detail first', () => {
+    const plugin = buildHelperPlugin({
+      dsmEnabled: true,
+      inject: (span, format, carrier) => { carrier['x-datadog-trace-id'] = '123' },
+    })
     const entry = { Detail: '{"hello":"world"}' }
 
-    plugin.injectToEntry(null, entry, false, true)
+    plugin.injectToEntry(null, entry, true, true)
 
     assert.strictEqual(plugin.dsmCalls.length, 1)
-    assert.deepStrictEqual(JSON.parse(plugin.dsmCalls[0].detail)._datadog, {})
-    assert.strictEqual(entry.Detail, '{"hello":"world"}')
+    // The detail is left untouched at measurement time; the trace context is
+    // passed separately so the payload size can account for it.
+    assert.strictEqual(plugin.dsmCalls[0].detail, '{"hello":"world"}')
+    assert.deepStrictEqual(plugin.dsmCalls[0].ddInfo, { 'x-datadog-trace-id': '123' })
   })
 
   it('keeps the trace-only `_datadog` payload when DSM yields no context', () => {
@@ -211,7 +216,34 @@ describe('EventBridge plugin injectToEntry', () => {
     assert.ok(typeof injected['dd-pathway-ctx-base64'] === 'string' && injected['dd-pathway-ctx-base64'].length > 0)
   })
 
-  it('restores the original detail when DSM reinjection fails', () => {
+  it('keeps the trace-only detail when the DSM payload no longer fits', () => {
+    const plugin = buildHelperPlugin({
+      dsmEnabled: true,
+      inject: (span, format, carrier) => { carrier['x-datadog-trace-id'] = '123' },
+      dataStreamsContext: {
+        hash: Buffer.alloc(8),
+        pathwayStartNs: 0,
+        edgeStartNs: 0,
+      },
+    })
+    const entry = { Detail: '{"hello":"world"}' }
+    let injectDetailCalls = 0
+    plugin.injectDetail = (detail, ddInfo) => {
+      injectDetailCalls++
+      // First call is the DSM-inclusive carrier (too large); the fallback
+      // injects the trace-only context.
+      return injectDetailCalls === 1
+        ? undefined
+        : `{"hello":"world","_datadog":${JSON.stringify(ddInfo)}}`
+    }
+
+    plugin.injectToEntry(null, entry, true, true)
+
+    assert.strictEqual(injectDetailCalls, 2)
+    assert.deepStrictEqual(JSON.parse(entry.Detail)._datadog, { 'x-datadog-trace-id': '123' })
+  })
+
+  it('leaves the detail untouched when no context fits and there is nothing to fall back to', () => {
     const plugin = buildHelperPlugin({
       dsmEnabled: true,
       dataStreamsContext: {
@@ -221,13 +253,7 @@ describe('EventBridge plugin injectToEntry', () => {
       },
     })
     const entry = { Detail: '{"hello":"world"}' }
-    let injectDetailCalls = 0
-    plugin.injectDetail = () => {
-      injectDetailCalls++
-      return injectDetailCalls === 1
-        ? '{"hello":"world","_datadog":{}}'
-        : undefined
-    }
+    plugin.injectDetail = () => undefined
 
     plugin.injectToEntry(null, entry, false, true)
 

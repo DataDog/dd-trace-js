@@ -3,9 +3,11 @@
 const {
   DsmPathwayCodec,
   getHeadersSize,
+  getSizeOrZero,
 } = require('../../../dd-trace/src/datastreams')
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
+const { isEmpty } = require('../util')
 
 const DEFAULT_EVENT_BUS = 'default'
 const DEFAULT_DETAIL_TYPE = 'unknown'
@@ -41,8 +43,8 @@ class EventBridge extends BaseAwsSdkPlugin {
   requestInject (span, request) {
     const { operation, params } = request
     if (operation !== 'putEvents' || !params?.Entries?.length) return
-    const dsmEnabled = this.config?.dsmEnabled === true
-    const batchPropagationEnabled = this.config?.batchPropagationEnabled === true
+    const dsmEnabled = this.config.dsmEnabled
+    const batchPropagationEnabled = this.config.batchPropagationEnabled
     if (dsmEnabled || batchPropagationEnabled) {
       for (let i = 0; i < params.Entries.length; i++) {
         this.injectToEntry(
@@ -69,45 +71,35 @@ class EventBridge extends BaseAwsSdkPlugin {
    */
   injectToEntry (span, entry, injectTraceContext, dsmEnabled) {
     if (!entry?.Detail) return
-    if (!dsmEnabled) {
-      if (!injectTraceContext) return
 
-      const ddInfo = {}
-      this.tracer.inject(span, 'text_map', ddInfo)
-      const finalData = this.injectDetail(entry.Detail, ddInfo)
-      if (finalData) {
-        entry.Detail = finalData
-      }
-      return
-    }
-
-    const originalDetail = entry.Detail
     const ddInfo = {}
     if (injectTraceContext) {
       this.tracer.inject(span, 'text_map', ddInfo)
     }
 
-    let finalData = this.injectDetail(originalDetail, ddInfo)
-    if (!finalData) return
-
-    entry.Detail = finalData
-    const dataStreamsContext = this.setDSMCheckpoint(span, entry)
-    if (!dataStreamsContext) {
-      if (!injectTraceContext) {
-        entry.Detail = originalDetail
-        return
+    if (dsmEnabled) {
+      // Measure with the trace context so the reported payload size matches the
+      // on-wire payload, then fold the encoded pathway into a copy. `ddInfo`
+      // stays trace-only so we can fall back to it below if the combined
+      // payload no longer fits within the per-entry size limit.
+      const dataStreamsContext = this.setDSMCheckpoint(span, entry, ddInfo)
+      if (dataStreamsContext) {
+        const carrier = { ...ddInfo }
+        DsmPathwayCodec.encode(dataStreamsContext, carrier)
+        const finalData = this.injectDetail(entry.Detail, carrier)
+        if (finalData) {
+          entry.Detail = finalData
+          return
+        }
       }
-      return
     }
 
-    DsmPathwayCodec.encode(dataStreamsContext, ddInfo)
-    finalData = this.injectDetail(originalDetail, ddInfo)
-    if (!finalData) {
-      entry.Detail = originalDetail
-      return
-    }
+    if (isEmpty(ddInfo)) return
 
-    entry.Detail = finalData
+    const finalData = this.injectDetail(entry.Detail, ddInfo)
+    if (finalData) {
+      entry.Detail = finalData
+    }
   }
 
   /**
@@ -144,12 +136,13 @@ class EventBridge extends BaseAwsSdkPlugin {
    *
    * @param {import('../../../..').Span} span
    * @param {object} entry
+   * @param {object} [ddInfo] trace context folded into the measured payload size
    * @returns {object|null|undefined}
    */
-  setDSMCheckpoint (span, entry) {
+  setDSMCheckpoint (span, entry, ddInfo) {
     const eventBus = entry.EventBusName || DEFAULT_EVENT_BUS
     const detailType = entry.DetailType || DEFAULT_DETAIL_TYPE
-    const payloadSize = getHeadersSize(entry)
+    const payloadSize = getHeadersSize(entry) + getSizeOrZero(ddInfo)
     return this.tracer.setCheckpoint(
       ['direction:out', `exchange:${eventBus}`, `topic:${detailType}`, 'type:eventbridge'],
       span,
