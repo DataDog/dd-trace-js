@@ -16,6 +16,33 @@ class PGPlugin extends DatabasePlugin {
       ctx.parentStore = storage('legacy').getStore()
     })
     this.addBind('apm:pg:pool:connect:finish', ctx => ctx.parentStore)
+
+    this.addSub('apm:pg:pool:acquire:start', ctx => {
+      const params = ctx.poolOptions ?? {}
+
+      ctx.acquireSpan = this.startSpan('pg.pool.acquire', {
+        service: this.serviceName({ pluginConfig: this.config, params }),
+        resource: 'pg.pool.acquire',
+        type: 'sql',
+        kind: 'client',
+        meta: {
+          'db.type': 'postgres',
+          'db.name': params.database,
+          'db.user': params.user,
+          'out.host': params.host,
+          [CLIENT_PORT_KEY]: params.port,
+        },
+      }, false)
+    })
+    this.addSub('apm:pg:pool:acquire:finish', ctx => {
+      const span = ctx.acquireSpan
+
+      if (ctx.error) {
+        this.addError(ctx.error, span)
+      }
+      span.setTag('pg.pool.wait_time', ctx.poolWaitTime)
+      span.finish()
+    })
   }
 
   bindStart (ctx) {
