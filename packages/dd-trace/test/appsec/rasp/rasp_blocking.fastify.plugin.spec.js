@@ -17,7 +17,7 @@ const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require
 
 describe('RASP - fastify blocking', () => {
   withVersions('fastify', 'fastify', '>=2', (version) => {
-    let app, hooks, axios
+    let app, hooks, axios, pool
 
     before(async () => {
       await agent.load(['http', 'fastify'], { client: false })
@@ -48,7 +48,7 @@ describe('RASP - fastify blocking', () => {
       const childProcess = require('child_process')
       const fs = require('fs')
       const pg = require('../../../../../versions/pg@8.7.3').get()
-      const pool = new pg.Pool({
+      pool = new pg.Pool({
         host: '127.0.0.1',
         user: 'postgres',
         password: 'postgres',
@@ -99,7 +99,10 @@ describe('RASP - fastify blocking', () => {
     })
 
     after(async () => {
-      await app.server.close()
+      // The pg.Pool keeps connections and a reaper timer alive; leaking one per fastify version starves the
+      // event loop until later `before` hooks (server startup) time out.
+      await app.close()
+      await pool?.end()
       appsec.disable()
       await agent.close()
     })

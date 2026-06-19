@@ -27,7 +27,7 @@ function isFastifyPluginVersionMismatch (error) {
 
 withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersion) => {
   describe('Suspicious request blocking - query', () => {
-    let server, requestBody, axios
+    let app, server, requestBody, axios
 
     before(() => {
       return agent.load(['fastify', 'http'], { client: false })
@@ -36,7 +36,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
     before((done) => {
       const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
 
-      const app = fastify()
+      app = fastify()
 
       app.get('/', (request, reply) => {
         requestBody()
@@ -51,9 +51,9 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
       server = app.server
     })
 
-    after(() => {
-      server.close()
-      return agent.close()
+    after(async () => {
+      await app.close()
+      await agent.close()
     })
 
     beforeEach(async () => {
@@ -93,7 +93,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
   })
 
   describe('Suspicious request blocking - body', () => {
-    let server, requestBody, axios
+    let app, server, requestBody, axios
 
     before(() => {
       return agent.load(['fastify', 'http'], { client: false })
@@ -102,7 +102,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
     before((done) => {
       const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
 
-      const app = fastify()
+      app = fastify()
 
       app.post('/', (request, reply) => {
         requestBody()
@@ -117,9 +117,9 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
       server = app.server
     })
 
-    after(() => {
-      server.close()
-      return agent.close()
+    after(async () => {
+      await app.close()
+      await agent.close()
     })
 
     beforeEach(async () => {
@@ -194,7 +194,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
   })
 
   describe('Appsec blocking with schema validation', () => {
-    let server, axios
+    let app, server, axios
 
     before(() => {
       return agent.load(['fastify', 'http'], { client: false })
@@ -203,7 +203,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
     before((done) => {
       const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
 
-      const app = fastify()
+      app = fastify()
 
       app.post('/schema-validated', {
         schema: {
@@ -227,9 +227,9 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
       server = app.server
     })
 
-    after(() => {
-      server.close()
-      return agent.close()
+    after(async () => {
+      await app.close()
+      await agent.close()
     })
 
     beforeEach(async () => {
@@ -270,7 +270,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
   })
 
   describe('Suspicious request blocking - path parameters', () => {
-    let server, preHandlerHookSpy, preValidationHookSpy, axios
+    let app, server, preHandlerHookSpy, preValidationHookSpy, axios
 
     before(() => {
       return agent.load(['fastify', 'http'], { client: false })
@@ -279,7 +279,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
     before((done) => {
       const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
 
-      const app = fastify()
+      app = fastify()
       app.get('/multiple-path-params/:parameter1/:parameter2', (request, reply) => {
         reply.send('DONE')
       })
@@ -317,9 +317,9 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
       server = app.server
     })
 
-    after(() => {
-      server.close()
-      return agent.close()
+    after(async () => {
+      await app.close()
+      await agent.close()
     })
 
     beforeEach(async () => {
@@ -660,7 +660,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
 describe('Api Security - Fastify', () => {
   withVersions('fastify', 'fastify', version => {
-    let config, server, axios
+    let config, app, server, axios
 
     before(() => {
       return agent.load(['fastify', 'http'], { client: false })
@@ -669,7 +669,7 @@ describe('Api Security - Fastify', () => {
     before((done) => {
       const fastify = require(`../../../../versions/fastify@${version}`).get()
 
-      const app = fastify()
+      app = fastify()
 
       app.post('/send', (request, reply) => {
         reply.send({ sendResKey: 'sendResValue' })
@@ -705,9 +705,9 @@ describe('Api Security - Fastify', () => {
       server = app.server
     })
 
-    after(() => {
-      server.close()
-      return agent.close()
+    after(async () => {
+      await app.close()
+      await agent.close()
     })
 
     beforeEach(() => {

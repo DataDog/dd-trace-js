@@ -13,7 +13,7 @@ const { withVersions } = require('../setup/mocha')
 
 withVersions('fastify', 'fastify', fastifyVersion => {
   describe('Attacker fingerprinting', () => {
-    let server, axios
+    let app, server, axios
 
     before(() => {
       return agent.load(['fastify', 'http'], { client: false })
@@ -22,7 +22,7 @@ withVersions('fastify', 'fastify', fastifyVersion => {
     before((done) => {
       const fastify = require(`../../../../versions/fastify@${fastifyVersion}`).get()
 
-      const app = fastify()
+      app = fastify()
 
       app.post('/', (request, reply) => {
         reply.send('DONE')
@@ -36,9 +36,9 @@ withVersions('fastify', 'fastify', fastifyVersion => {
       server = app.server
     })
 
-    after(() => {
-      server.close()
-      return agent.close()
+    after(async () => {
+      await app.close()
+      await agent.close()
     })
 
     beforeEach(() => {
