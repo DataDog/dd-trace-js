@@ -140,3 +140,12 @@ addHook({ name: 'mysql', file: 'lib/Pool.js', versions: ['>=2'] }, Pool => {
 
   return Pool
 })
+
+// `PoolNamespace#query` acquires its connection internally, so bracket it with the pool-query flag to
+// fold the acquire wait into the query span rather than open a standalone acquire span. A `canRetry`
+// failover retries by re-invoking `query`, so the flag also covers the node it fails over to.
+addHook({ name: 'mysql', file: 'lib/PoolNamespace.js', versions: ['>=2'] }, PoolNamespace => {
+  shimmer.wrap(PoolNamespace.prototype, 'query', wrapPoolQueryMethod)
+
+  return PoolNamespace
+})
