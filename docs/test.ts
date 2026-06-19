@@ -253,7 +253,7 @@ const awsSdkOptions: plugins.aws_sdk = {
 };
 
 const awsSdkServiceFunctionOptions: plugins.aws_sdk = {
-  service: params => params.TableName ?? 'aws',
+  service: (params): string | undefined => params.TableName ? String(params.TableName) : undefined,
 };
 
 const bullmqOptions: plugins.bullmq = {

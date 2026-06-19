@@ -2241,7 +2241,7 @@ declare namespace tracer {
        * is used as the service name. Returning a nullish value falls back to the default service name, so
        * individual resources can be mapped without renaming every call to the service.
        */
-      service?: string | ((params: anyObject) => string);
+      service?: string | ((params: anyObject) => string | undefined | null);
 
       /**
        * Whether to inject all messages during batch AWS SQS, Kinesis, and SNS send operations. Normal
