@@ -6,18 +6,17 @@ export interface GeneratedConfig {
   apiKey: string | undefined;
   apmTracingEnabled: boolean;
   appsec: {
-    apiSecurity: {
-      DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: number;
-      DD_API_SECURITY_MAX_DOWNSTREAM_BODY_BYTES: number;
-      DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: number;
-      DD_API_SECURITY_SAMPLE_DELAY: number;
-      enabled: boolean;
-      endpointCollectionEnabled: boolean;
-      endpointCollectionMessageLimit: number;
-    };
     blockedTemplateGraphql: string | undefined;
     blockedTemplateHtml: string | undefined;
     blockedTemplateJson: string | undefined;
+    DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: number;
+    DD_API_SECURITY_ENABLED: boolean;
+    DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: boolean;
+    DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT: number;
+    DD_API_SECURITY_MAX_DOWNSTREAM_BODY_BYTES: number;
+    DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: number;
+    DD_API_SECURITY_SAMPLE_DELAY: number;
+    DD_APPSEC_SCA_ENABLED: boolean | undefined;
     enabled: boolean | undefined;
     eventTracking: {
       mode: string;
@@ -35,9 +34,6 @@ export interface GeneratedConfig {
     };
     rateLimit: number;
     rules: string | undefined;
-    sca: {
-      DD_APPSEC_SCA_ENABLED: boolean | undefined;
-    };
     stackTrace: {
       enabled: boolean;
       maxDepth: number;

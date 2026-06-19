@@ -41,7 +41,7 @@ function enable (_config) {
   downstreamAnalysisCount = new WeakMap()
   responseBodyIgnoredCount = new WeakMap()
 
-  const bodyAnalysisSampleRate = config.appsec.apiSecurity.DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE
+  const bodyAnalysisSampleRate = config.appsec.DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE
   samplingRate = Math.min(Math.max(bodyAnalysisSampleRate, 0), 1)
 
   if (samplingRate !== bodyAnalysisSampleRate) {
@@ -105,7 +105,7 @@ function recordResponseBodyIgnored (req, tag) {
  * @returns {boolean} whether downstream response body should be collected for AppSec.
  */
 function evaluateResponseBodyCollection (originatingReq, res) {
-  const maxBytes = config.appsec.apiSecurity.DD_API_SECURITY_MAX_DOWNSTREAM_BODY_BYTES
+  const maxBytes = config.appsec.DD_API_SECURITY_MAX_DOWNSTREAM_BODY_BYTES
 
   const mime = extractMimeType(res.headers?.['content-type'])
   if (!mime || !SUPPORTED_RESPONSE_BODY_MIME_TYPES.has(mime)) {
@@ -137,7 +137,7 @@ function shouldSampleBody (req) {
   globalRequestCounter = (globalRequestCounter + 1n) & UINT64_MAX
 
   const currentCount = bodyAnalysisCount.get(req) || 0
-  if (currentCount >= config.appsec.apiSecurity.DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS) {
+  if (currentCount >= config.appsec.DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS) {
     return false
   }
 
@@ -166,7 +166,7 @@ function isRedirectResponse (res) {
  * @param {object} ctx http client instrumentation context (mutated).
  */
 function planResponseBodyCollection (originatingReq, res, ctx) {
-  if (!config?.appsec.apiSecurity) {
+  if (!config) {
     return
   }
 

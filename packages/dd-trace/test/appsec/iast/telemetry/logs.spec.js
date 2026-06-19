@@ -41,7 +41,7 @@ describe('Telemetry logs', () => {
         DD_TELEMETRY_LOG_COLLECTION_ENABLED: true,
       },
       version: '1.2.3-beta4',
-      appsec: { enabled: false, apiSecurity: { endpointCollectionEnabled: false } },
+      appsec: { enabled: false, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
       profiling: { DD_PROFILING_ENABLED: false },
       env: 'preprod',
       tags: {

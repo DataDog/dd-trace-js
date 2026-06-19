@@ -776,15 +776,13 @@ describe('Config', () => {
       apmTracingEnabled: true,
       DD_APP_KEY: undefined,
       appsec: {
-        apiSecurity: {
-          enabled: true,
-          DD_API_SECURITY_SAMPLE_DELAY: 30,
-          endpointCollectionEnabled: true,
-          endpointCollectionMessageLimit: 300,
-          DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: 0.5,
-          DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: 1,
-          DD_API_SECURITY_MAX_DOWNSTREAM_BODY_BYTES: 10485760,
-        },
+        DD_API_SECURITY_ENABLED: true,
+        DD_API_SECURITY_SAMPLE_DELAY: 30,
+        DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: true,
+        DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT: 300,
+        DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: 0.5,
+        DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: 1,
+        DD_API_SECURITY_MAX_DOWNSTREAM_BODY_BYTES: 10485760,
         blockedTemplateHtml: undefined,
         blockedTemplateJson: undefined,
         blockedTemplateGraphql: undefined,
@@ -803,9 +801,7 @@ describe('Config', () => {
           enabled: true,
         },
         rateLimit: 100,
-        sca: {
-          DD_APPSEC_SCA_ENABLED: undefined,
-        },
+        DD_APPSEC_SCA_ENABLED: undefined,
         stackTrace: {
           enabled: true,
           maxDepth: 32,
@@ -1254,15 +1250,13 @@ describe('Config', () => {
       apmTracingEnabled: false,
       DD_APP_KEY: 'myAppKey',
       appsec: {
-        apiSecurity: {
-          enabled: true,
-          DD_API_SECURITY_SAMPLE_DELAY: 25,
-          endpointCollectionEnabled: false,
-          endpointCollectionMessageLimit: 500,
-          DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: 0.75,
-          DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: 2,
-          DD_API_SECURITY_MAX_DOWNSTREAM_BODY_BYTES: 2048,
-        },
+        DD_API_SECURITY_ENABLED: true,
+        DD_API_SECURITY_SAMPLE_DELAY: 25,
+        DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false,
+        DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT: 500,
+        DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: 0.75,
+        DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: 2,
+        DD_API_SECURITY_MAX_DOWNSTREAM_BODY_BYTES: 2048,
         blockedTemplateGraphql: BLOCKED_TEMPLATE_GRAPHQL,
         blockedTemplateHtml: BLOCKED_TEMPLATE_HTML,
         blockedTemplateJson: BLOCKED_TEMPLATE_JSON,
@@ -1283,9 +1277,7 @@ describe('Config', () => {
         },
         rateLimit: 42,
         rules: RULES_JSON_PATH,
-        sca: {
-          DD_APPSEC_SCA_ENABLED: true,
-        },
+        DD_APPSEC_SCA_ENABLED: true,
         stackTrace: {
           enabled: false,
           maxDepth: 42,
@@ -2389,11 +2381,9 @@ describe('Config', () => {
     assertObjectContains(config, {
       apmTracingEnabled: true,
       appsec: {
-        apiSecurity: {
-          enabled: true,
-          endpointCollectionEnabled: true,
-          endpointCollectionMessageLimit: 150,
-        },
+        DD_API_SECURITY_ENABLED: true,
+        DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: true,
+        DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT: 150,
         blockedTemplateGraphql: BLOCKED_TEMPLATE_GRAPHQL,
         blockedTemplateHtml: BLOCKED_TEMPLATE_HTML,
         blockedTemplateJson: BLOCKED_TEMPLATE_JSON,
@@ -2604,15 +2594,13 @@ describe('Config', () => {
     })
 
     assert.deepStrictEqual(config.appsec, {
-      apiSecurity: {
-        enabled: true,
-        DD_API_SECURITY_SAMPLE_DELAY: 30,
-        endpointCollectionEnabled: true,
-        endpointCollectionMessageLimit: 500,
-        DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: 0.5,
-        DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: 1,
-        DD_API_SECURITY_MAX_DOWNSTREAM_BODY_BYTES: 10485760,
-      },
+      DD_API_SECURITY_ENABLED: true,
+      DD_API_SECURITY_SAMPLE_DELAY: 30,
+      DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: true,
+      DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT: 500,
+      DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: 0.5,
+      DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: 1,
+      DD_API_SECURITY_MAX_DOWNSTREAM_BODY_BYTES: 10485760,
       blockedTemplateGraphql: BLOCKED_TEMPLATE_GRAPHQL,
       blockedTemplateHtml: BLOCKED_TEMPLATE_HTML,
       blockedTemplateJson: BLOCKED_TEMPLATE_JSON,
@@ -2633,9 +2621,7 @@ describe('Config', () => {
       },
       rateLimit: 42,
       rules: RULES_JSON_PATH,
-      sca: {
-        DD_APPSEC_SCA_ENABLED: undefined,
-      },
+      DD_APPSEC_SCA_ENABLED: undefined,
       stackTrace: {
         enabled: true,
         maxStackTraces: 2,
@@ -3184,7 +3170,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.appsec.apiSecurity.enabled, true)
+    assert.strictEqual(config.appsec.DD_API_SECURITY_ENABLED, true)
   })
 
   it('should disable api security with DD_EXPERIMENTAL_API_SECURITY_ENABLED', () => {
@@ -3192,7 +3178,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.appsec.apiSecurity.enabled, false)
+    assert.strictEqual(config.appsec.DD_API_SECURITY_ENABLED, false)
   })
 
   it('should ignore DD_EXPERIMENTAL_API_SECURITY_ENABLED with DD_API_SECURITY_ENABLED=true', () => {
@@ -3201,7 +3187,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.appsec.apiSecurity.enabled, true)
+    assert.strictEqual(config.appsec.DD_API_SECURITY_ENABLED, true)
   })
 
   it('should prioritize DD_DOGSTATSD_HOST over DD_DOGSTATSD_HOSTNAME', () => {

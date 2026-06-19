@@ -85,10 +85,8 @@ describe('AppSec Index', function () {
         eventTracking: {
           mode: 'anon',
         },
-        apiSecurity: {
-          enabled: false,
-          DD_API_SECURITY_SAMPLE_DELAY: 10,
-        },
+        DD_API_SECURITY_ENABLED: false,
+        DD_API_SECURITY_SAMPLE_DELAY: 10,
         rasp: {
           enabled: true,
           bodyCollection: true,
@@ -791,10 +789,8 @@ describe('AppSec Index', function () {
     })
 
     it('should not trigger schema extraction with feature disabled', () => {
-      config.appsec.apiSecurity = {
-        enabled: false,
-        DD_API_SECURITY_SAMPLE_DELAY: 1,
-      }
+      config.appsec.DD_API_SECURITY_ENABLED = false
+      config.appsec.DD_API_SECURITY_SAMPLE_DELAY = 1
 
       AppSec.enable(config)
 
@@ -842,10 +838,8 @@ describe('AppSec Index', function () {
     })
 
     it('should trigger schema extraction with sampling enabled', () => {
-      config.appsec.apiSecurity = {
-        enabled: true,
-        DD_API_SECURITY_SAMPLE_DELAY: 1,
-      }
+      config.appsec.DD_API_SECURITY_ENABLED = true
+      config.appsec.DD_API_SECURITY_SAMPLE_DELAY = 1
 
       AppSec.enable(config)
 
@@ -897,10 +891,8 @@ describe('AppSec Index', function () {
 
     describe('onResponseBody', () => {
       beforeEach(() => {
-        config.appsec.apiSecurity = {
-          enabled: true,
-          DD_API_SECURITY_SAMPLE_DELAY: 1,
-        }
+        config.appsec.DD_API_SECURITY_ENABLED = true
+        config.appsec.DD_API_SECURITY_SAMPLE_DELAY = 1
 
         AppSec.enable(config)
       })

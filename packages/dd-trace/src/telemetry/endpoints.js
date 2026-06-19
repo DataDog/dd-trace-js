@@ -11,7 +11,10 @@ const { sendData } = require('./send-data')
  */
 /**
  * @typedef {import('./send-data').TelemetryConfig & {
- *   appsec: { apiSecurity: { endpointCollectionEnabled: boolean, endpointCollectionMessageLimit: number } }
+ *   appsec: {
+ *     DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: boolean,
+ *     DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT: number
+ *   }
  * }} TelemetryConfig
  */
 
@@ -142,7 +145,7 @@ function flushAndSend () {
   for (const [key, endpoint] of pendingEndpoints) {
     batchEndpoints.push(endpoint)
     pendingEndpoints.delete(key)
-    if (batchEndpoints.length >= config.appsec.apiSecurity.endpointCollectionMessageLimit) break
+    if (batchEndpoints.length >= config.appsec.DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT) break
   }
 
   const payloadObj = {
@@ -183,7 +186,7 @@ function flushAndSend () {
  * @param {import('./send-data').SendDataCallback} updateRetryDataFunction
  */
 function start (_config, _application, _host, getRetryDataFunction, updateRetryDataFunction) {
-  if (!_config.appsec.apiSecurity.endpointCollectionEnabled) return
+  if (!_config.appsec.DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED) return
 
   config = _config
   application = _application

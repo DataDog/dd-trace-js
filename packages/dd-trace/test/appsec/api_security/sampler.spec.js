@@ -81,7 +81,7 @@ describe('API Security Sampler', () => {
 
   describe('with TTLCache', () => {
     beforeEach(() => {
-      apiSecuritySampler.configure({ appsec: { apiSecurity: { enabled: true, DD_API_SECURITY_SAMPLE_DELAY: 30 } } })
+      apiSecuritySampler.configure({ appsec: { DD_API_SECURITY_ENABLED: true, DD_API_SECURITY_SAMPLE_DELAY: 30 } })
     })
 
     it('should not sample before 30 seconds', () => {
@@ -157,7 +157,7 @@ describe('API Security Sampler', () => {
 
   describe('with NoopTTLCache', () => {
     beforeEach(() => {
-      apiSecuritySampler.configure({ appsec: { apiSecurity: { enabled: true, DD_API_SECURITY_SAMPLE_DELAY: 0 } } })
+      apiSecuritySampler.configure({ appsec: { DD_API_SECURITY_ENABLED: true, DD_API_SECURITY_SAMPLE_DELAY: 0 } })
     })
 
     it('should always return SAMPLE for sampleRequest', () => {
@@ -203,7 +203,7 @@ describe('API Security Sampler', () => {
 
   describe('MISSING_ROUTE decision', () => {
     beforeEach(() => {
-      apiSecuritySampler.configure({ appsec: { apiSecurity: { enabled: true, DD_API_SECURITY_SAMPLE_DELAY: 30 } } })
+      apiSecuritySampler.configure({ appsec: { DD_API_SECURITY_ENABLED: true, DD_API_SECURITY_SAMPLE_DELAY: 30 } })
     })
 
     it('returns MISSING_ROUTE when there is no route and status is not 404 and response is not blocked', () => {
@@ -258,10 +258,8 @@ describe('API Security Sampler', () => {
       SamplingDecision = apiSecuritySampler.SamplingDecision
       apiSecuritySampler.configure({
         appsec: {
-          apiSecurity: {
-            enabled: true,
-            DD_API_SECURITY_SAMPLE_DELAY: 30,
-          },
+          DD_API_SECURITY_ENABLED: true,
+          DD_API_SECURITY_SAMPLE_DELAY: 30,
         },
         apmTracingEnabled: false,
       })
@@ -283,7 +281,7 @@ describe('API Security Sampler', () => {
 
   describe('http.endpoint fallback', () => {
     beforeEach(() => {
-      apiSecuritySampler.configure({ appsec: { apiSecurity: { enabled: true, DD_API_SECURITY_SAMPLE_DELAY: 30 } } })
+      apiSecuritySampler.configure({ appsec: { DD_API_SECURITY_ENABLED: true, DD_API_SECURITY_SAMPLE_DELAY: 30 } })
     })
 
     function makeSpan (tags) {

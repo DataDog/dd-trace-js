@@ -717,7 +717,6 @@ describe('Api Security - Fastify', () => {
           rules: path.join(__dirname, 'api_security_rules.json'),
           apiSecurity: {
             enabled: true,
-            DD_API_SECURITY_SAMPLE_DELAY: 10,
           },
         },
       })
