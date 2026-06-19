@@ -13,8 +13,9 @@ const Hook = require('./hook')
 const { isRelativeRequire } = require('./shared-utils')
 const rewriter = require('./rewriter')
 
-const DD_TRACE_DISABLED_INSTRUMENTATIONS = getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS') || ''
-const DD_TRACE_DEBUG = getValueFromEnvSources('DD_TRACE_DEBUG') || ''
+const DD_TRACE_DISABLED_INSTRUMENTATIONS =
+  getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')
+const DD_TRACE_DEBUG = getValueFromEnvSources('DD_TRACE_DEBUG')
 
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
@@ -36,7 +37,7 @@ if (!disabledInstrumentations.has('process')) {
   require('../process')
 }
 
-if (DD_TRACE_DEBUG && DD_TRACE_DEBUG.toLowerCase() !== 'false') {
+if (DD_TRACE_DEBUG) {
   checkRequireCache.checkForRequiredModules()
   setImmediate(checkRequireCache.checkForPotentialConflicts)
 }
