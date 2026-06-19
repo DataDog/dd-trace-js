@@ -21,7 +21,7 @@ let controlsKeys
 let hooks
 
 function configure (iastConfig) {
-  if (!iastConfig?.DD_IAST_SECURITY_CONTROLS_CONFIGURATION) return
+  if (!iastConfig.DD_IAST_SECURITY_CONTROLS_CONFIGURATION) return
 
   try {
     controls = parse(iastConfig.DD_IAST_SECURITY_CONTROLS_CONFIGURATION)

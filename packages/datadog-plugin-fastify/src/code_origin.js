@@ -20,7 +20,7 @@ class FastifyCodeOriginForSpansPlugin extends Plugin {
       web.getContext(req)?.span?.addTags(tags)
     })
 
-    if (this._tracerConfig.remoteConfig?.DD_REMOTE_CONFIGURATION_ENABLED) {
+    if (this._tracerConfig.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED) {
       // When RC is enabled, use manual subscription (always pre-computes)
       // This allows tags to be computed even when CO is disabled, so runtime enabling works
       dc.channel('apm:fastify:route:added').subscribe(handleRouteAdded)
