@@ -1,15 +1,15 @@
 [core]
-	repositoryformatversion = 0
-	filemode = true
-	bare = false
-	logallrefupdates = true
-	ignorecase = true
-	precomposeunicode = true
+  repositoryformatversion = 0
+  filemode = true
+  bare = false
+  logallrefupdates = true
+  ignorecase = true
+  precomposeunicode = true
 [submodule]
-	active = .
+  active = .
 [remote "origin"]
-	url = git@github.com:DataDog/dd-trace-js.git
-	fetch = +refs/heads/*:refs/remotes/origin/*
+  url = git@github.com:DataDog/dd-trace-js.git
+  fetch = +refs/heads/*:refs/remotes/origin/*
 [branch "master"]
-	remote = origin
-	merge = refs/heads/master
+  remote = origin
+  merge = refs/heads/master
