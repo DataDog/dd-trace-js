@@ -489,6 +489,24 @@ describe('Plugin', () => {
           ])
         })
 
+        it('reports a positive wait time when a same-tick query takes the only idle client', async () => {
+          await pool.query('SELECT 1')
+
+          // Two queries dispatched in the same tick against a single idle client: the first takes
+          // it, the second queues behind it. `idleCount` still reads 1 when the second is
+          // dispatched, so a naive idle check would wrongly round its wait down to zero.
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              assert.ok(
+                traces[0][0].metrics['pg.pool.wait_time'] > 0,
+                `expected a positive wait, got ${traces[0][0].metrics['pg.pool.wait_time']}`
+              )
+            }, { spanResourceMatch: /^SELECT 9 AS queued_probe$/ }),
+            pool.query('SELECT 8 AS idle_taker'),
+            pool.query('SELECT 9 AS queued_probe'),
+          ])
+        })
+
         it('does not throw when the pool fails to acquire a connection', done => {
           const probe = net.createServer().listen(0, '127.0.0.1', () => {
             const { port } = probe.address()

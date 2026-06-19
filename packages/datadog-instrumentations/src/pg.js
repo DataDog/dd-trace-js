@@ -201,12 +201,13 @@ function wrapQuery (query) {
 const finish = (ctx) => {
   finishPoolQueryCh.publish(ctx)
 }
-// An idle client is handed back within a tick, so treat that as a zero wait and skip the clock
-// reads entirely; only a queued client or a freshly established connection (no idle client at
-// acquire time) is worth timing. `idleCount` is `undefined` on pg builds that predate the getter,
-// which falls through to timing rather than crashing.
+// pg drains its pending queue FIFO on the next tick, so within a synchronous burst `idleCount` is
+// stale: an idle client is only ours when it outnumbers the already-waiting requests ahead of us.
+// `idleCount > waitingCount` means the handoff lands within a tick (zero wait, skip the clock);
+// otherwise we wait for a connection or a release and time it. Both getters are `undefined` on pg
+// builds that predate them, so the check is false and falls through to timing rather than crashing.
 function acquireStart (pool) {
-  return pool.idleCount > 0 ? undefined : performance.now()
+  return pool.idleCount > pool.waitingCount ? undefined : performance.now()
 }
 function acquireWait (start) {
   return start === undefined ? 0 : performance.now() - start
