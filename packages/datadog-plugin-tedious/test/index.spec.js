@@ -440,7 +440,13 @@ describe('Plugin', () => {
         const promise = agent
           .assertSomeTraces(traces => {
             assert.strictEqual(traces[0][0].resource, 'SELECT 1 + 1 AS solution')
-            assert.strictEqual(request.sqlTextOrProcedure, "/*dddb='master',dddbs='custom',dde='tester'," +
+            // Some tedious majors route `execSql` through `sp_executesql`, so the injected query lands in
+            // the `statement`/`stmt` parameter instead of `sqlTextOrProcedure`; read it where the
+            // instrumentation wrote it (see `getQueryOrProcedure`).
+            const injectedQuery = request.parametersByName?.statement?.value ??
+              request.parametersByName?.stmt?.value ??
+              request.sqlTextOrProcedure
+            assert.strictEqual(injectedQuery, "/*dddb='master',dddbs='custom',dde='tester'," +
               "ddh='localhost',ddps='test',ddpv='1.0.0'*/ SELECT 1 + 1 AS solution")
           })
 
