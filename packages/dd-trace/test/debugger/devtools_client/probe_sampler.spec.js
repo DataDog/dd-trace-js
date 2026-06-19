@@ -177,7 +177,26 @@ describe('probe sampler', function () {
       assert.strictEqual(sampler.makeSampleDecision(100, 'non-snapshot', 0n, false), true)
       assert.strictEqual(
         Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX),
-        MAX_SNAPSHOTS_PER_SECOND_GLOBALLY + 2
+        MAX_SNAPSHOTS_PER_SECOND_GLOBALLY + 1
+      )
+    })
+
+    it('should not advance the sampled probe count when global snapshot rate rejects a probe', function () {
+      const sampledProbeIndexes = installSampler()
+      const sampler = getSampler()
+
+      for (let i = 0; i < MAX_SNAPSHOTS_PER_SECOND_GLOBALLY; i++) {
+        assert.strictEqual(sampler.makeSampleDecision(i, `snapshot-${i}`, 0n, true), true)
+      }
+      assert.strictEqual(
+        Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX),
+        MAX_SNAPSHOTS_PER_SECOND_GLOBALLY
+      )
+
+      assert.strictEqual(sampler.makeSampleDecision(99, 'snapshot-over-limit', 0n, true), false)
+      assert.strictEqual(
+        Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX),
+        MAX_SNAPSHOTS_PER_SECOND_GLOBALLY
       )
     })
 

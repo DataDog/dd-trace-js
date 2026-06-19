@@ -77,7 +77,7 @@ function getInstallSamplerExpression () {
 
     const lastCaptureNsByProbeId = new Map()
     const sampledProbeIndexes = new Int32Array(ddTrace[probeSamplerBufferSymbol])
-    const oneSecondNs = 1000000000n
+    const oneSecondNs = 1_000_000_000n
     let globalSnapshotSamplingRateWindowStart = 0n
     let snapshotsSampledWithinTheLastSecond = 0
 
@@ -87,6 +87,15 @@ function getInstallSamplerExpression () {
         const lastCaptureNs = lastCaptureNsByProbeId.get(probeId)
         if (lastCaptureNs !== undefined && now - lastCaptureNs < nsBetweenSampling) return false
 
+        let shouldResetGlobalSnapshotRateWindow = false
+        if (isSnapshotProducingProbe === true) {
+          if (now - globalSnapshotSamplingRateWindowStart > oneSecondNs) {
+            shouldResetGlobalSnapshotRateWindow = true
+          } else if (snapshotsSampledWithinTheLastSecond >= ${MAX_SNAPSHOTS_PER_SECOND_GLOBALLY}) {
+            return false
+          }
+        }
+
         const sampledProbeCount = Atomics.add(sampledProbeIndexes, ${SAMPLED_PROBE_COUNT_INDEX}, 1)
         if (sampledProbeCount >= ${MAX_SAMPLED_PROBES_PER_PAUSE}) {
           Atomics.store(sampledProbeIndexes, ${SAMPLED_PROBE_OVERFLOW_INDEX}, 1)
@@ -94,11 +103,9 @@ function getInstallSamplerExpression () {
         }
 
         if (isSnapshotProducingProbe === true) {
-          if (now - globalSnapshotSamplingRateWindowStart > oneSecondNs) {
+          if (shouldResetGlobalSnapshotRateWindow === true) {
             snapshotsSampledWithinTheLastSecond = 1
             globalSnapshotSamplingRateWindowStart = now
-          } else if (snapshotsSampledWithinTheLastSecond >= ${MAX_SNAPSHOTS_PER_SECOND_GLOBALLY}) {
-            return false
           } else {
             snapshotsSampledWithinTheLastSecond++
           }
