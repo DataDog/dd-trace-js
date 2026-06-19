@@ -603,24 +603,6 @@ versions.forEach((version) => {
             early_flake_detection: { enabled: false },
           })
 
-          const projectConfigPath = path.join(cwd, 'vitest-projects.config.mjs')
-          fs.writeFileSync(projectConfigPath, `
-            import { defineConfig } from 'vitest/config'
-
-            export default defineConfig({
-              test: {
-                projects: [
-                  {
-                    test: {
-                      name: 'unit',
-                      include: ['ci-visibility/vitest-tests/flaky-test-retries.mjs'],
-                    },
-                  },
-                ],
-              },
-            })
-          `)
-
           const eventsPromise = receiver
             .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
               const events = payloads.flatMap(({ payload }) => payload.events)
@@ -640,29 +622,18 @@ versions.forEach((version) => {
             })
 
           childProcess = exec(
-            './node_modules/.bin/vitest run --config vitest-projects.config.mjs --project unit',
+            './node_modules/.bin/vitest run --project project-pool',
             {
               cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
                 DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '3',
                 NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+                PROJECT_POOL_CONFIG: 'forks',
+                TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries.mjs',
               },
             }
           )
-
-          childProcess.on('exit', () => {
-            if (childProcess.exitCode !== 0) {
-              // eslint-disable-next-line no-console
-              console.log(testOutput)
-            }
-          })
-          childProcess.stderr.on('data', (data) => {
-            testOutput += data.toString()
-          })
-          childProcess.stdout.on('data', (data) => {
-            testOutput += data.toString()
-          })
 
           await Promise.all([once(childProcess, 'exit'), eventsPromise])
         })

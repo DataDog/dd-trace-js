@@ -650,11 +650,11 @@ function addConfig (configs, config) {
  * @returns {object|undefined}
  */
 function safeConfig (project) {
+  let config
   try {
-    return project?.config
-  } catch {
-    return undefined
-  }
+    config = project?.config
+  } catch {}
+  return config
 }
 
 /**
@@ -664,11 +664,11 @@ function safeConfig (project) {
  * @returns {object|undefined}
  */
 function safeWorkspaceProject (ctx) {
+  let project
   try {
-    return getWorkspaceProject(ctx)
-  } catch {
-    return undefined
-  }
+    project = getWorkspaceProject(ctx)
+  } catch {}
+  return project
 }
 
 function getSortWrapper (sort, frameworkVersion) {
