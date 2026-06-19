@@ -25,6 +25,14 @@ describe('breakpoints', function () {
   let sessionMock
   /**
    * @type {{
+   *   debug: sinon.SinonStub;
+   *   error: sinon.SinonStub;
+   *   '@noCallThru': boolean;
+   * }}
+   */
+  let logMock
+  /**
+   * @type {{
    *   findScriptFromPartialPath: sinon.SinonStub;
    *   clearState: sinon.SinonStub;
    *   locationToBreakpoint: Map<string, {
@@ -77,6 +85,12 @@ describe('breakpoints', function () {
       '@noCallThru': true,
     }
 
+    logMock = {
+      debug: sinon.stub(),
+      error: sinon.stub(),
+      '@noCallThru': true,
+    }
+
     stateMock = {
       findScriptFromPartialPath: sinon.stub().returns({
         url: 'file:///path/to/test.js',
@@ -95,6 +109,7 @@ describe('breakpoints', function () {
     breakpoints = proxyquire('../../../src/debugger/devtools_client/breakpoints', {
       './session': sessionMock,
       './state': stateMock,
+      './log': logMock,
     })
   })
 
@@ -453,6 +468,57 @@ describe('breakpoints', function () {
         })
     })
 
+    it('should wrap errors when replacing a breakpoint while adding a probe fails', async function () {
+      await addProbe()
+      sessionMock.post.resetHistory()
+
+      const cause = new Error('inspector failure')
+      sessionMock.post.callsFake((method, { location } = {}) => {
+        if (method === 'Debugger.removeBreakpoint') {
+          return Promise.reject(cause)
+        }
+        if (method === 'Debugger.setBreakpoint') {
+          return Promise.resolve({
+            breakpointId: `bp-${location.scriptId}:${location.lineNumber}:${location.columnNumber}`,
+          })
+        }
+        return Promise.resolve({})
+      })
+
+      await assert.rejects(
+        addProbe({ id: 'probe-2' }),
+        (err) => {
+          assert(err instanceof Error)
+          assert.strictEqual(err.message, 'Error replacing breakpoint while adding probe probe-2 (version: 1)')
+          assert.strictEqual(err.cause, cause)
+          return true
+        }
+      )
+    })
+
+    it('should wrap errors when setting a replacement breakpoint while adding a probe fails', async function () {
+      await addProbe()
+      sessionMock.post.resetHistory()
+
+      const cause = new Error('inspector failure')
+      sessionMock.post.callsFake((method, { location } = {}) => {
+        if (method === 'Debugger.setBreakpoint') {
+          return Promise.reject(cause)
+        }
+        return Promise.resolve({})
+      })
+
+      await assert.rejects(
+        addProbe({ id: 'probe-2' }),
+        (err) => {
+          assert(err instanceof Error)
+          assert.strictEqual(err.message, 'Error setting breakpoint while adding probe probe-2 (version: 1)')
+          assert.strictEqual(err.cause, cause)
+          return true
+        }
+      )
+    })
+
     describe('captureExpressions', function () {
       it('should compile capture expressions', async function () {
         await addProbe({
@@ -632,6 +698,35 @@ describe('breakpoints', function () {
       sinon.assert.calledThrice(sessionMock.post)
     })
 
+    it('should log and continue if removing a probe from the runtime sampler fails', async function () {
+      await addProbe()
+      sessionMock.post.resetHistory()
+      logMock.error.resetHistory()
+
+      const cause = new Error('runtime failure')
+      sessionMock.post.callsFake((method, { location } = {}) => {
+        if (method === 'Runtime.evaluate') {
+          return Promise.reject(cause)
+        }
+        if (method === 'Debugger.setBreakpoint') {
+          return Promise.resolve({
+            breakpointId: `bp-${location.scriptId}:${location.lineNumber}:${location.columnNumber}`,
+          })
+        }
+        return Promise.resolve({})
+      })
+
+      await breakpoints.removeBreakpoint({ id: 'probe-1' })
+
+      sinon.assert.calledWith(
+        logMock.error,
+        '[debugger:devtools_client] Error removing probe %s from sampler',
+        'probe-1',
+        cause
+      )
+      sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.disable')
+    })
+
     describe('update breakpoint when removing one of multiple probes at the same location', function () {
       it('no conditions', async function () {
         await addProbe()
@@ -791,6 +886,59 @@ describe('breakpoints', function () {
           ]),
         })
         sinon.assert.calledThrice(sessionMock.post)
+      })
+
+      it('should wrap errors when removing the existing breakpoint fails', async function () {
+        await addProbe()
+        await addProbe({ id: 'probe-2' })
+        sessionMock.post.resetHistory()
+
+        const cause = new Error('inspector failure')
+        sessionMock.post.callsFake((method, { location } = {}) => {
+          if (method === 'Debugger.removeBreakpoint') {
+            return Promise.reject(cause)
+          }
+          if (method === 'Debugger.setBreakpoint') {
+            return Promise.resolve({
+              breakpointId: `bp-${location.scriptId}:${location.lineNumber}:${location.columnNumber}`,
+            })
+          }
+          return Promise.resolve({})
+        })
+
+        await assert.rejects(
+          breakpoints.removeBreakpoint({ id: 'probe-1' }),
+          (err) => {
+            assert(err instanceof Error)
+            assert.strictEqual(err.message, 'Error replacing breakpoint after removing probe from script-1:10:0')
+            assert.strictEqual(err.cause, cause)
+            return true
+          }
+        )
+      })
+
+      it('should wrap errors when setting the replacement breakpoint fails', async function () {
+        await addProbe()
+        await addProbe({ id: 'probe-2' })
+        sessionMock.post.resetHistory()
+
+        const cause = new Error('inspector failure')
+        sessionMock.post.callsFake((method) => {
+          if (method === 'Debugger.setBreakpoint') {
+            return Promise.reject(cause)
+          }
+          return Promise.resolve({})
+        })
+
+        await assert.rejects(
+          breakpoints.removeBreakpoint({ id: 'probe-1' }),
+          (err) => {
+            assert(err instanceof Error)
+            assert.strictEqual(err.message, 'Error setting breakpoint after removing probe from script-1:10:0')
+            assert.strictEqual(err.cause, cause)
+            return true
+          }
+        )
       })
     })
 
