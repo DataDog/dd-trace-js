@@ -12,7 +12,9 @@ const SpanEnrichmentHook = require('./span-enrichment-hook')
 // Refs: https://github.com/DataDog/dd-trace-js/issues/8635
 // eslint-disable-next-line camelcase, no-undef
 const runtimeRequire = typeof __webpack_require__ === 'function' ? __non_webpack_require__ : require
-const { DatadogNodeServerProvider } = runtimeRequire(['@datadog/openfeature', 'node', 'server'].join('-'))
+const openfeatureNodeServer = ['@datadog/openfeature', 'node', 'server'].join('-')
+const openfeatureNodeServerPath = require.resolve(openfeatureNodeServer, { paths: [__dirname] })
+const { DatadogNodeServerProvider } = runtimeRequire(openfeatureNodeServerPath)
 
 /**
  * OpenFeature provider that integrates with Datadog's feature flagging system.

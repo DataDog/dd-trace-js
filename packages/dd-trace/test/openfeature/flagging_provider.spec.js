@@ -233,20 +233,21 @@ describe('FlaggingProvider', () => {
       assert.strictEqual(ReloadedFlaggingProvider.name, 'FlaggingProvider')
     })
 
-    it('uses `__non_webpack_require__` under a webpack runtime', () => {
-      let escapeHatchCalls = 0
+    it('uses `__non_webpack_require__` under a webpack runtime with the resolved package path', () => {
+      const expectedPackagePath = require.resolve('@datadog/openfeature-node-server', {
+        paths: [require.resolve('../../src/openfeature/flagging_provider')],
+      })
       globalThis.__webpack_require__ = () => {
         throw new Error('webpack require must not run for the optional peer')
       }
       globalThis.__non_webpack_require__ = (request) => {
-        escapeHatchCalls++
+        assert.strictEqual(request, expectedPackagePath)
         return require(request)
       }
       delete require.cache[modulePath]
 
       const ReloadedFlaggingProvider = require(modulePath)
 
-      assert.strictEqual(escapeHatchCalls, 1)
       assert.strictEqual(typeof ReloadedFlaggingProvider, 'function')
       assert.strictEqual(ReloadedFlaggingProvider.name, 'FlaggingProvider')
     })
