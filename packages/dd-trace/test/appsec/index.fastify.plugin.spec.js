@@ -43,9 +43,9 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         reply.send('DONE')
       })
 
-      app.listen({ port: 0 }, () => {
+      app.listen({ host: '127.0.0.1', port: 0 }, () => {
         const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
         done()
       })
       server = app.server
@@ -109,9 +109,9 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         reply.send('DONE')
       })
 
-      app.listen({ port: 0 }, () => {
+      app.listen({ host: '127.0.0.1', port: 0 }, () => {
         const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
         done()
       })
       server = app.server
@@ -219,9 +219,9 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         reply.send('DONE')
       })
 
-      app.listen({ port: 0 }, () => {
+      app.listen({ host: '127.0.0.1', port: 0 }, () => {
         const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
         done()
       })
       server = app.server
@@ -309,9 +309,9 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         reply.send('DONE')
       })
 
-      app.listen({ port: 0 }, () => {
+      app.listen({ host: '127.0.0.1', port: 0 }, () => {
         const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
         done()
       })
       server = app.server
@@ -493,7 +493,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
             })
 
             try {
-              await app.listen({ port: 0 })
+              await app.listen({ host: '127.0.0.1', port: 0 })
             } catch (error) {
               if (isFastifyPluginVersionMismatch(error)) {
                 return this.skip()
@@ -503,7 +503,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
             server = app.server
             const { port } = /** @type {import('net').AddressInfo} */ (server.address())
-            axios = Axios.create({ baseURL: `http://localhost:${port}` })
+            axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
           })
 
           beforeEach(async () => {
@@ -598,7 +598,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
         })
 
         try {
-          await app.listen({ port: 0 })
+          await app.listen({ host: '127.0.0.1', port: 0 })
         } catch (error) {
           if (isFastifyPluginVersionMismatch(error)) {
             return this.skip()
@@ -608,7 +608,7 @@ withVersions('fastify', 'fastify', '>=2', (fastifyVersion, _, fastifyLoadedVersi
 
         server = app.server
         const { port } = /** @type {import('net').AddressInfo} */ (server.address())
-        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
       })
 
       beforeEach(() => {
@@ -697,9 +697,9 @@ describe('Api Security - Fastify', () => {
         reply.send(new Uint16Array(10))
       })
 
-      app.listen({ port: 0 }, () => {
+      app.listen({ host: '127.0.0.1', port: 0 }, () => {
         const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
         done()
       })
       server = app.server

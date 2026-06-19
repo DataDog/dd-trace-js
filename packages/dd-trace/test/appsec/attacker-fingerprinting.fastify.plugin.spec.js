@@ -28,9 +28,9 @@ withVersions('fastify', 'fastify', fastifyVersion => {
         reply.send('DONE')
       })
 
-      app.listen({ port: 0 }, () => {
+      app.listen({ host: '127.0.0.1', port: 0 }, () => {
         const port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-        axios = Axios.create({ baseURL: `http://localhost:${port}` })
+        axios = Axios.create({ baseURL: `http://127.0.0.1:${port}` })
         done()
       })
       server = app.server

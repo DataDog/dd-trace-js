@@ -85,10 +85,10 @@ describe('RASP - fastify blocking', () => {
         })
       })
 
-      await app.listen()
+      await app.listen({ host: '127.0.0.1', port: 0 })
 
       axios = Axios.create({
-        baseURL: `http://localhost:${app.server.address().port}`,
+        baseURL: `http://127.0.0.1:${app.server.address().port}`,
         validateStatus: () => true,
         responseType: 'text',
       })
