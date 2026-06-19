@@ -44,6 +44,9 @@ const EVENTBRIDGE_DETAIL_JSON = JSON.stringify({
 })
 
 guard.loopStart()
+// Read a field of every result into `sink` so V8 can't dead-code-eliminate the
+// measured call; asserted non-zero after the loop.
+let sink = 0
 if (VARIANT === 'extract-response-body') {
   const plugin = Object.create(BaseAwsSdkPlugin.prototype)
   // Pre-flight: confirm extractResponseBody strips the SDK envelope keys; catches
@@ -52,7 +55,7 @@ if (VARIANT === 'extract-response-body') {
   assert.equal(sanityBody.$metadata, undefined)
   assert.equal(sanityBody.MessageId, 'msg-cccccccccc')
   for (let iteration = 0; iteration < ITERATIONS; iteration++) {
-    plugin.extractResponseBody(RESPONSE)
+    sink += plugin.extractResponseBody(RESPONSE).MessageId.length
   }
 } else if (VARIANT === 'eventbridge-inject-detail') {
   const plugin = Object.create(EventBridge.prototype)
@@ -70,6 +73,7 @@ if (VARIANT === 'extract-response-body') {
       params: { Entries: [{ Detail: EVENTBRIDGE_DETAIL_JSON }] },
     }
     plugin.requestInject(fakeSpan, request)
+    sink += request.params.Entries[0].Detail.length
   }
 } else if (VARIANT === 'lambda-inject-no-context') {
   const plugin = Object.create(Lambda.prototype)
@@ -80,6 +84,35 @@ if (VARIANT === 'extract-response-body') {
   for (let iteration = 0; iteration < ITERATIONS; iteration++) {
     const request = { operation: 'invoke', params: { FunctionName: 'my-fn' } }
     plugin.requestInject(fakeSpan, request)
+    sink += request.params.ClientContext.length
+  }
+} else if (VARIANT === 'lambda-inject-with-context') {
+  // The heavier real-world Lambda path: an existing ClientContext carrying a `custom`
+  // block, so requestInject base64-decodes it, JSON.parses, Object.assigns the injected
+  // trace keys into custom, then re-stringifies and re-encodes -- exercising the
+  // try/catch around the JSON ops that the no-context path never reaches.
+  const plugin = Object.create(Lambda.prototype)
+  plugin._tracer = fakeTracer
+  const EXISTING_CONTEXT = Buffer.from(
+    JSON.stringify({ custom: { 'app.request.id': 'req-1234567890' } })
+  ).toString('base64')
+  const sanityRequest = {
+    operation: 'invoke',
+    params: { FunctionName: 'my-fn', ClientContext: EXISTING_CONTEXT },
+  }
+  plugin.requestInject(fakeSpan, sanityRequest)
+  const merged = JSON.parse(Buffer.from(sanityRequest.params.ClientContext, 'base64').toString('utf8'))
+  assert.ok(merged.custom['app.request.id'] === 'req-1234567890' && merged.custom['x-datadog-trace-id'],
+    'Lambda requestInject did not merge datadog keys into the existing ClientContext')
+  for (let iteration = 0; iteration < ITERATIONS; iteration++) {
+    const request = {
+      operation: 'invoke',
+      params: { FunctionName: 'my-fn', ClientContext: EXISTING_CONTEXT },
+    }
+    plugin.requestInject(fakeSpan, request)
+    sink += request.params.ClientContext.length
   }
 }
 guard.done()
+
+if (sink === 0) throw new Error('unreachable')

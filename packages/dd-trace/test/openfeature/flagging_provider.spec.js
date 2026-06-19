@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { describe, it, beforeEach } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
@@ -251,6 +251,58 @@ describe('FlaggingProvider', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
       assert.ok(provider instanceof DatadogNodeServerProvider)
+    })
+  })
+
+  // Pins the bundler-opaque require gate against accidental regression to a
+  // direct `require('@datadog/openfeature-node-server')`, which would leak
+  // the optional peer chain into customer bundles (see #8635).
+  describe('bundler-opaque require gate', () => {
+    const modulePath = require.resolve('../../src/openfeature/flagging_provider')
+
+    afterEach(() => {
+      delete require.cache[modulePath]
+      delete globalThis.__webpack_require__
+      delete globalThis.__non_webpack_require__
+    })
+
+    it('uses `require` outside a bundler', () => {
+      assert.strictEqual(typeof globalThis.__webpack_require__, 'undefined')
+      delete require.cache[modulePath]
+
+      const ReloadedFlaggingProvider = require(modulePath)
+
+      assert.strictEqual(typeof ReloadedFlaggingProvider, 'function')
+      assert.strictEqual(ReloadedFlaggingProvider.name, 'FlaggingProvider')
+    })
+
+    it('uses `__non_webpack_require__` under a webpack runtime', () => {
+      let escapeHatchCalls = 0
+      globalThis.__webpack_require__ = () => {
+        throw new Error('webpack require must not run for the optional peer')
+      }
+      globalThis.__non_webpack_require__ = (request) => {
+        escapeHatchCalls++
+        return require(request)
+      }
+      delete require.cache[modulePath]
+
+      const ReloadedFlaggingProvider = require(modulePath)
+
+      assert.strictEqual(escapeHatchCalls, 1)
+      assert.strictEqual(typeof ReloadedFlaggingProvider, 'function')
+      assert.strictEqual(ReloadedFlaggingProvider.name, 'FlaggingProvider')
+    })
+
+    it('does not statically require `@datadog/openfeature-node-server`', () => {
+      const fs = require('node:fs')
+      const source = fs.readFileSync(modulePath, 'utf8')
+
+      assert.doesNotMatch(
+        source,
+        /require\(\s*['"]@datadog\/openfeature-node-server['"]\s*\)/,
+        'a literal require would let bundlers resolve the optional peer chain at build time'
+      )
     })
   })
 })

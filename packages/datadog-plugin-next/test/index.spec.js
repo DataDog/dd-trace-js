@@ -639,6 +639,32 @@ describe('Plugin', function () {
                 if (err.response.status !== 500) done(err)
               })
           })
+        } else if (satisfies(pkg.version, '>=15.4.1')) {
+          it('should attach a thrown app-route error to the span via onRequestError', done => {
+            agent
+              .assertSomeTraces(traces => {
+                const spans = traces[0]
+
+                assertObjectContains(spans[1], {
+                  name: 'next.request',
+                  error: 1,
+                  meta: {
+                    'error.message': 'thrown app dir error',
+                    'error.type': 'Error',
+                  },
+                })
+
+                assert.ok(spans[1].meta['error.stack'])
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://127.0.0.1:${port}/api/appDir/throw`)
+              .catch(err => {
+                if (err.response.status !== 500) done(err)
+              })
+          })
         }
       })
 

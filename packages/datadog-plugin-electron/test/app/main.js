@@ -3,7 +3,7 @@
 /* eslint-disable no-console */
 
 const { join } = require('path')
-const { BrowserWindow, app, ipcMain, net } = require('electron/main')
+const { BrowserWindow, app, ipcMain, net, utilityProcess } = require('electron/main')
 
 const CONFIG_CHANNEL = 'datadog:bridge-config'
 
@@ -22,6 +22,7 @@ app.on('ready', () => {
         case 'send': return onSend()
         case 'receive': return onReceive()
         case 'handle': return onHandle()
+        case 'utility-request': return onUtilityRequest(msg)
       }
     } catch (e) {
       console.error(e)
@@ -73,6 +74,11 @@ function onHandle () {
   loadWindow(win => {
     win.webContents.send('datadog:test:invoke')
   })
+}
+
+function onUtilityRequest ({ url }) {
+  const child = utilityProcess.fork(join(__dirname, 'utility.js'))
+  child.postMessage({ name: 'request', url })
 }
 
 function loadWindow (onShow) {

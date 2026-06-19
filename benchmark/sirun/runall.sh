@@ -106,8 +106,36 @@ if [[ "${TOLERATE_NEW_BENCHMARK_FAILURES:-}" == "1" ]]; then
   fi
 fi
 
+# async_hooks measures the Node async-hooks primitive floor, not tracer code, so it
+# only moves when the Node version changes. Skip it unless this PR's diff touches a
+# node-<major> pin in the versions manifest runall reads above (the single source of
+# truth for the benchmarked Node patch). Fail open -- run it -- when the diff can't be
+# determined, so a Node bump is never silently skipped. The same gate must apply in
+# both loops below, or the global variant-index shard math drops/misassigns variants.
+RUN_ASYNC_HOOKS="1"
+if [[ -d /app/candidate/.git && -n "${COMMIT_SHA:-}" && -n "${CI_COMMIT_SHA:-}" ]]; then
+  # Capture the diff and its status separately rather than piping straight into
+  # grep: a pipeline reports only grep's exit code, so a failed diff (shallow
+  # checkout, stale COMMIT_SHA, missing range) would look like "no match" and
+  # silently skip async_hooks -- the opposite of failing open. Only skip when the
+  # diff actually succeeds and shows no node-<major> pin change.
+  ASYNC_HOOKS_DIFF=""
+  if ASYNC_HOOKS_DIFF=$(git -C /app/candidate diff "${COMMIT_SHA}..${CI_COMMIT_SHA}" -- \
+      packages/dd-trace/test/plugins/versions/package.json 2>/dev/null); then
+    if grep -qE '^[-+][[:space:]]*"node-[0-9]+":' <<< "${ASYNC_HOOKS_DIFF}"; then
+      echo "async_hooks: a node-<major> pin changed in this diff; running it."
+    else
+      RUN_ASYNC_HOOKS=""
+      echo "async_hooks: no Node version change in this diff; skipping (Node-primitive floor)."
+    fi
+  else
+    echo "async_hooks: could not determine the diff; running it (fail open)."
+  fi
+fi
+
 BENCH_COUNT=0
 for D in "${DIRS[@]}"; do
+  if [[ "${D}" == "async_hooks" && -z "${RUN_ASYNC_HOOKS}" ]]; then continue; fi
   cd "${D}"
   variants="$(node ../get-variants.js)"
   for V in $variants; do BENCH_COUNT=$(($BENCH_COUNT+1)); done
@@ -133,6 +161,7 @@ BENCH_END=$(($GROUP_SIZE*$GROUP))
 BENCH_START=$(($BENCH_END-$GROUP_SIZE))
 
 for D in "${DIRS[@]}"; do
+  if [[ "${D}" == "async_hooks" && -z "${RUN_ASYNC_HOOKS}" ]]; then continue; fi
   cd "${D}"
   variants="$(node ../get-variants.js)"
 

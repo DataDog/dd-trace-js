@@ -3,6 +3,7 @@
 const { format } = require('url')
 const {
   httpClientRequestStart,
+  httpClientResponseStart,
   httpClientResponseFinish,
 } = require('../channels')
 const addresses = require('../addresses')
@@ -21,6 +22,7 @@ function enable (_config) {
   downstream.enable(_config)
 
   httpClientRequestStart.subscribe(analyzeSsrf)
+  httpClientResponseStart.subscribe(planResponseBodyCollection)
   httpClientResponseFinish.subscribe(handleResponseFinish)
 }
 
@@ -28,6 +30,7 @@ function disable () {
   downstream.disable()
 
   if (httpClientRequestStart.hasSubscribers) httpClientRequestStart.unsubscribe(analyzeSsrf)
+  if (httpClientResponseStart.hasSubscribers) httpClientResponseStart.unsubscribe(planResponseBodyCollection)
   if (httpClientResponseFinish.hasSubscribers) httpClientResponseFinish.unsubscribe(handleResponseFinish)
 }
 
@@ -36,9 +39,6 @@ function analyzeSsrf (ctx) {
   const outgoingUrl = (ctx.args.options?.uri && format(ctx.args.options.uri)) ?? ctx.args.uri
 
   if (!req || !outgoingUrl) return
-
-  // Determine if we should collect the response body based on sampling rate and redirect URL
-  ctx.shouldCollectBody = downstream.shouldSampleBody(req, outgoingUrl)
 
   const requestAddresses = downstream.extractRequestData(ctx)
 
@@ -57,12 +57,22 @@ function analyzeSsrf (ctx) {
 }
 
 /**
+ * Channel handler: plans downstream response body capture once response headers are available.
+ * @param {{ ctx: object, res: import('http').IncomingMessage }} payload channel payload.
+ */
+function planResponseBodyCollection ({ ctx, res }) {
+  const originatingRequest = getActiveRequest()
+  if (!originatingRequest || !res) return
+
+  downstream.planResponseBodyCollection(originatingRequest, res, ctx)
+}
+
+/**
  * Finalizes body collection for the response and triggers RASP analysis.
- * @param {{
- *   ctx: object,
- *   res: import('http').IncomingMessage,
- *   body: string|Buffer|null
- * }} payload event payload from the channel.
+ * @param {object} params event payload from the channel.
+ * @param {object} params.ctx instrumentation context.
+ * @param {import('http').IncomingMessage} params.res downstream response.
+ * @param {string|Buffer|null} params.body collected body.
  */
 function handleResponseFinish ({ ctx, res, body }) {
   // downstream response object
@@ -71,9 +81,7 @@ function handleResponseFinish ({ ctx, res, body }) {
   const originatingRequest = getActiveRequest()
   if (!originatingRequest) return
 
-  // Skip body analysis for redirect responses
-  const evaluateBody = ctx.shouldCollectBody && !downstream.handleRedirectResponse(originatingRequest, res)
-  const responseBody = evaluateBody ? body : null
+  const responseBody = ctx.shouldCollectBody ? body : null
   runResponseEvaluation(res, originatingRequest, responseBody)
 }
 
