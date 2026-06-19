@@ -86,7 +86,7 @@ function installProbeSampler () {
      */
     remove (probeId) {
       lastCaptureNsByProbeId.delete(probeId)
-    }
+    },
   }
 
   return buffer

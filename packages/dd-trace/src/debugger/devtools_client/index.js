@@ -4,15 +4,15 @@ const { randomUUID } = require('crypto')
 const { workerData: { probeSamplerBuffer } } = require('worker_threads')
 const { version } = require('../../../../../package.json')
 const processTags = require('../../process-tags')
-const { breakpointToProbes, samplingIndexToProbe } = require('./state')
-const session = require('./session')
-const { getLocalStateForCallFrame, evaluateCaptureExpressions } = require('./snapshot')
 const {
   MAX_SAMPLED_PROBES_PER_PAUSE,
   SAMPLED_PROBE_COUNT_INDEX,
   SAMPLED_PROBE_INDEXES_START,
   SAMPLED_PROBE_OVERFLOW_INDEX,
 } = require('../probe_sampler_constants')
+const { breakpointToProbes, samplingIndexToProbe } = require('./state')
+const session = require('./session')
+const { getLocalStateForCallFrame, evaluateCaptureExpressions } = require('./snapshot')
 const send = require('./send')
 const { getStackFromCallFrames } = require('./state')
 const { ackEmitting } = require('./status')

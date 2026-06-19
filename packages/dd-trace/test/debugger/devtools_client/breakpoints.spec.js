@@ -413,10 +413,10 @@ describe('breakpoints', function () {
           addProbe({ id: 'probe-2' }),
         ])
         sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.enable')
-      sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint')
-      sinon.assert.calledWith(sessionMock.post.thirdCall, 'Debugger.removeBreakpoint')
-      sinon.assert.calledWith(sessionMock.post.getCall(3), 'Debugger.setBreakpoint')
-      sinon.assert.callCount(sessionMock.post, 4)
+        sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint')
+        sinon.assert.calledWith(sessionMock.post.thirdCall, 'Debugger.removeBreakpoint')
+        sinon.assert.calledWith(sessionMock.post.getCall(3), 'Debugger.setBreakpoint')
+        sinon.assert.callCount(sessionMock.post, 4)
       })
     })
 
