@@ -25,12 +25,12 @@ async getStream() { /* returns Promise<ReadableStream> */ }
 **When `kind: 'AsyncIterator'` is used, Orchestrion automatically creates TWO channels:**
 
 1. **Base channel**: `tracing:orchestrion:{package}:{channelName}:*`
-   - Fires when the method is called (before iteration starts)
-   - Used to create the span
+  - Fires when the method is called (before iteration starts)
+  - Used to create the span
 
 2. **Next channel**: `tracing:orchestrion:{package}:{channelName}_next:*`
-   - Fires on EACH iteration (`next()` call)
-   - Used to finish the span when `result.done === true`
+  - Fires on EACH iteration (`next()` call)
+  - Used to finish the span when `result.done === true`
 
 ## Critical Implementation Requirements
 

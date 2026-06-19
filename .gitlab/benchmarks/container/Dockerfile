@@ -27,35 +27,35 @@ RUN --mount=type=ssh ./install-base-deps.sh
 # not fail the build: the bake steps below skip when a file is missing and runall.sh
 # installs the per-PR pin at runtime regardless.
 RUN raw=https://raw.githubusercontent.com/DataDog/dd-trace-js/master; \
-	curl -fsSL "$raw/benchmark/sirun/.sirun-version" -o /tmp/.sirun-version || true; \
-	curl -fsSL "$raw/packages/dd-trace/test/plugins/versions/package.json" -o /tmp/versions.json || true
+  curl -fsSL "$raw/benchmark/sirun/.sirun-version" -o /tmp/.sirun-version || true; \
+  curl -fsSL "$raw/packages/dd-trace/test/plugins/versions/package.json" -o /tmp/versions.json || true
 
 RUN if [ -s /tmp/.sirun-version ]; then \
-		read -r SIRUN_VERSION SIRUN_SHA256 < /tmp/.sirun-version \
-		&& wget -O sirun.tar.gz "https://github.com/DataDog/sirun/releases/download/v${SIRUN_VERSION}/sirun-v${SIRUN_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
-		&& echo "${SIRUN_SHA256}  sirun.tar.gz" | sha256sum -c - \
-		&& tar -xzf sirun.tar.gz \
-		&& rm sirun.tar.gz \
-		&& mv sirun /usr/bin/sirun \
-		&& printf '%s' "$SIRUN_VERSION" > /opt/baked-sirun-version; \
-	fi
+    read -r SIRUN_VERSION SIRUN_SHA256 < /tmp/.sirun-version \
+    && wget -O sirun.tar.gz "https://github.com/DataDog/sirun/releases/download/v${SIRUN_VERSION}/sirun-v${SIRUN_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+    && echo "${SIRUN_SHA256}  sirun.tar.gz" | sha256sum -c - \
+    && tar -xzf sirun.tar.gz \
+    && rm sirun.tar.gz \
+    && mv sirun /usr/bin/sirun \
+    && printf '%s' "$SIRUN_VERSION" > /opt/baked-sirun-version; \
+  fi
 
 # Node.js majors the benchmark matrix runs (skip 18/22); exact patch from the manifest.
 RUN mkdir -p /usr/local/nvm \
-	&& wget -q -O /tmp/nvm-install.sh https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh \
-	&& echo "4b7412c49960c7d31e8df72da90c1fb5b8cccb419ac99537b737028d497aba4f  /tmp/nvm-install.sh" | sha256sum -c - \
-	&& bash /tmp/nvm-install.sh \
-	&& rm /tmp/nvm-install.sh \
-	&& . $NVM_DIR/nvm.sh \
-	&& if [ -s /tmp/versions.json ]; then \
-		for major in 20 24 26; do \
-			version=$(sed -n "s/.*\"node-${major}\": *\"npm:node@\([0-9.]*\)\".*/\1/p" /tmp/versions.json); \
-			[ -n "$version" ] || { echo "No node-${major} pin in versions manifest" >&2; exit 1; }; \
-			nvm install --no-progress "$version"; \
-		done \
-		&& nvm alias default 24 \
-		&& nvm use 24; \
-	fi
+  && wget -q -O /tmp/nvm-install.sh https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh \
+  && echo "4b7412c49960c7d31e8df72da90c1fb5b8cccb419ac99537b737028d497aba4f  /tmp/nvm-install.sh" | sha256sum -c - \
+  && bash /tmp/nvm-install.sh \
+  && rm /tmp/nvm-install.sh \
+  && . $NVM_DIR/nvm.sh \
+  && if [ -s /tmp/versions.json ]; then \
+    for major in 20 24 26; do \
+      version=$(sed -n "s/.*\"node-${major}\": *\"npm:node@\([0-9.]*\)\".*/\1/p" /tmp/versions.json); \
+      [ -n "$version" ] || { echo "No node-${major} pin in versions manifest" >&2; exit 1; }; \
+      nvm install --no-progress "$version"; \
+    done \
+    && nvm alias default 24 \
+    && nvm use 24; \
+  fi
 
 RUN mkdir /opt/insecure-bank-js
 RUN git clone --depth 1 https://github.com/hdiv/insecure-bank-js.git /opt/insecure-bank-js
