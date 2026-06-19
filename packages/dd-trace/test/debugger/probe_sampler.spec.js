@@ -3,20 +3,20 @@
 const assert = require('node:assert/strict')
 
 const { beforeEach, describe, it } = require('mocha')
-require('../../setup/mocha')
+require('../setup/mocha')
 
 const {
-  compileBreakpointCondition,
-  createProbeSamplerBuffer,
-  getInstallSamplerExpression,
-  getRemoveProbeExpression,
   MAX_SAMPLED_PROBES_PER_PAUSE,
   SAMPLED_PROBE_COUNT_INDEX,
   SAMPLED_PROBE_INDEXES_START,
   SAMPLED_PROBE_OVERFLOW_INDEX,
-  setProbeSamplerBuffer,
-} = require('../../../src/debugger/devtools_client/probe_sampler')
-const { MAX_SNAPSHOTS_PER_SECOND_GLOBALLY } = require('../../../src/debugger/devtools_client/defaults')
+} = require('../../src/debugger/probe_sampler_constants')
+const { installProbeSampler, uninstallProbeSampler } = require('../../src/debugger/probe_sampler')
+const {
+  compileBreakpointCondition,
+  getRemoveProbeExpression,
+} = require('../../src/debugger/devtools_client/probe_sampler')
+const { MAX_SNAPSHOTS_PER_SECOND_GLOBALLY } = require('../../src/debugger/devtools_client/defaults')
 
 const ddTraceSymbol = Symbol.for('dd-trace')
 const samplerSymbol = Symbol.for('dd-trace.debugger.probeSampler')
@@ -44,7 +44,7 @@ describe('probe sampler', function () {
 
   describe('shared buffer', function () {
     it('should create a shared buffer with the expected layout', function () {
-      const buffer = createProbeSamplerBuffer()
+      const buffer = installProbeSampler()
       const sampledProbeIndexes = new Int32Array(buffer)
 
       assert(buffer instanceof SharedArrayBuffer)
@@ -52,16 +52,20 @@ describe('probe sampler', function () {
     })
 
     it('should expose and initialize the shared buffer', function () {
-      const buffer = createProbeSamplerBuffer()
-      const sampledProbeIndexes = new Int32Array(buffer)
-      Atomics.store(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX, 42)
-      Atomics.store(sampledProbeIndexes, SAMPLED_PROBE_OVERFLOW_INDEX, 1)
+      const installedBuffer = installProbeSampler()
+      const installedSampledProbeIndexes = new Int32Array(installedBuffer)
 
-      setProbeSamplerBuffer(buffer)
+      assert.strictEqual(getDatadogGlobal()[samplerBufferSymbol], installedBuffer)
+      assert.strictEqual(Atomics.load(installedSampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX), 0)
+      assert.strictEqual(Atomics.load(installedSampledProbeIndexes, SAMPLED_PROBE_OVERFLOW_INDEX), 0)
+    })
 
-      assert.strictEqual(getDatadogGlobal()[samplerBufferSymbol], buffer)
-      assert.strictEqual(Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX), 0)
-      assert.strictEqual(Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_OVERFLOW_INDEX), 0)
+    it('should remove the shared buffer and runtime sampler', function () {
+      installSampler()
+      uninstallProbeSampler()
+
+      assert.strictEqual(getDatadogGlobal()[samplerSymbol], undefined)
+      assert.strictEqual(getDatadogGlobal()[samplerBufferSymbol], undefined)
     })
   })
 
@@ -117,23 +121,14 @@ describe('probe sampler', function () {
     })
 
     it('should reinstall the runtime sampler with the latest shared buffer', function () {
-      const firstBuffer = createProbeSamplerBuffer()
-      const firstSampledProbeIndexes = installSampler(firstBuffer)
+      const firstSampledProbeIndexes = installSampler()
 
-      const secondBuffer = createProbeSamplerBuffer()
-      const secondSampledProbeIndexes = installSampler(secondBuffer)
+      const secondSampledProbeIndexes = installSampler()
 
       assert.strictEqual(getSampler().makeSampleDecision(7, 'probe-1', 200000n, false), true)
       assert.strictEqual(Atomics.load(firstSampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX), 0)
       assert.strictEqual(Atomics.load(secondSampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX), 1)
       assert.strictEqual(Atomics.load(secondSampledProbeIndexes, SAMPLED_PROBE_INDEXES_START), 7)
-    })
-
-    it('should skip installation when the buffer is missing', function () {
-      // eslint-disable-next-line no-new-func
-      new Function(getInstallSamplerExpression())()
-
-      assert.strictEqual(getDatadogGlobal()[samplerSymbol], undefined)
     })
 
     it('should sample a probe and write its index to the shared buffer', function () {
@@ -241,22 +236,14 @@ describe('probe sampler', function () {
 })
 
 /**
- * Install the runtime sampler expression for tests.
- *
- * @param {SharedArrayBuffer} [buffer] - The shared sampler buffer.
- * @returns {Int32Array}
+ * Install the runtime sampler for tests.
  */
-function installSampler (buffer = createProbeSamplerBuffer()) {
-  setProbeSamplerBuffer(buffer)
-  // eslint-disable-next-line no-new-func
-  new Function(getInstallSamplerExpression())()
-  return new Int32Array(buffer)
+function installSampler () {
+  return new Int32Array(installProbeSampler())
 }
 
 /**
  * Get the Datadog global test object.
- *
- * @returns {Record<symbol, unknown>}
  */
 function getDatadogGlobal () {
   return /** @type {Record<symbol, unknown>} */ (
@@ -266,8 +253,6 @@ function getDatadogGlobal () {
 
 /**
  * Get the installed runtime sampler.
- *
- * @returns {{ makeSampleDecision: Function, remove: Function }}
  */
 function getSampler () {
   return /** @type {{ makeSampleDecision: Function, remove: Function }} */ (getDatadogGlobal()[samplerSymbol])

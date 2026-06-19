@@ -8,7 +8,7 @@ const log = require('../log')
 const { fetchAgentInfo } = require('../agent/info')
 const getDebuggerConfig = require('./config')
 const { DEBUGGER_DIAGNOSTICS_V1, DEBUGGER_INPUT_V2 } = require('./constants')
-const { createProbeSamplerBuffer, setProbeSamplerBuffer } = require('./devtools_client/probe_sampler')
+const { installProbeSampler, uninstallProbeSampler } = require('./probe_sampler')
 
 /**
  * @typedef {ReturnType<import('../config')>} Config
@@ -63,10 +63,10 @@ function start (config, rcInstance) {
   const probeChannel = new MessageChannel()
   const logChannel = new MessageChannel()
   configChannel = new MessageChannel()
-  const probeSamplerBuffer = createProbeSamplerBuffer()
 
   globalThis[Symbol.for('dd-trace')].utilTypes = types
-  setProbeSamplerBuffer(probeSamplerBuffer)
+
+  const probeSamplerBuffer = installProbeSampler()
 
   readProbeFile(config.dynamicInstrumentation.probeFile, (probes) => {
     const action = 'apply'
@@ -191,6 +191,7 @@ function cleanup (error) {
     worker.removeAllListeners()
     worker = null
   }
+  uninstallProbeSampler()
   configChannel = null
   inputPath = null
 

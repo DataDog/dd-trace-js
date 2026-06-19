@@ -9,11 +9,8 @@ const sinon = require('sinon')
 
 require('../../setup/mocha')
 
-const {
-  getInstallSamplerExpression,
-  MAX_SAMPLED_PROBES_PER_PAUSE,
-  setProbeSamplerBuffer,
-} = require('../../../src/debugger/devtools_client/probe_sampler')
+const { installProbeSampler } = require('../../../src/debugger/probe_sampler')
+const { MAX_SAMPLED_PROBES_PER_PAUSE } = require('../../../src/debugger/probe_sampler_constants')
 
 const breakpoint = { file: 'file.js', line: 1 }
 const breakpointId = 'breakpoint-id'
@@ -97,7 +94,7 @@ describe('onPause', function () {
 
     send = sinon.spy()
     send['@noCallThru'] = true
-    sampledProbeIndexes = new Int32Array(new SharedArrayBuffer(258 * Int32Array.BYTES_PER_ELEMENT))
+    sampledProbeIndexes = new Int32Array(installProbeSampler())
 
     state = proxyquire('../../../src/debugger/devtools_client/state', { './session': session })
     proxyquire.noCallThru()('../../../src/debugger/devtools_client/status', { './config': config })
@@ -197,7 +194,7 @@ describe('onPause', function () {
 
   it('should not read past the sampled probe buffer when more probes are sampled than it can hold', async function () {
     const probesAtLocation = new Map()
-    const sampler = installSampler(/** @type {SharedArrayBuffer} */ (sampledProbeIndexes.buffer))
+    const sampler = getSampler()
     for (let i = 0; i <= MAX_SAMPLED_PROBES_PER_PAUSE; i++) {
       const probe = genProcessedProbe(`probe-${i}`)
       probesAtLocation.set(probe.id, probe)
@@ -250,14 +247,6 @@ describe('onPause', function () {
  * Generate a processed probe fixture for pause-handler tests.
  *
  * @param {string} id - The probe id.
- * @returns {{
- *   id: string,
- *   version: number,
- *   location: { file: string, lines: string[] },
- *   templateRequiresEvaluation: boolean,
- *   template: string,
- *   captureSnapshot: boolean
- * }}
  */
 function genProcessedProbe (id) {
   return {
@@ -271,15 +260,9 @@ function genProcessedProbe (id) {
 }
 
 /**
- * Install the runtime probe sampler for tests.
- *
- * @param {SharedArrayBuffer} buffer - The shared sampler buffer.
- * @returns {{ makeSampleDecision: Function }}
+ * Get the installed runtime probe sampler for tests.
  */
-function installSampler (buffer) {
-  setProbeSamplerBuffer(buffer)
-  // eslint-disable-next-line no-new-func
-  new Function(getInstallSamplerExpression())()
+function getSampler () {
   return /** @type {{ makeSampleDecision: Function }} */ (
     globalThis[Symbol.for('dd-trace')][Symbol.for('dd-trace.debugger.probeSampler')]
   )

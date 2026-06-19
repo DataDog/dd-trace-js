@@ -5,7 +5,7 @@ const { getGeneratedPosition } = require('./source-maps')
 const session = require('./session')
 const { compile, compileSegments, templateRequiresEvaluation } = require('./condition')
 const { MAX_SNAPSHOTS_PER_SECOND_PER_PROBE, MAX_NON_SNAPSHOTS_PER_SECOND_PER_PROBE } = require('./defaults')
-const { compileBreakpointCondition, getInstallSamplerExpression, getRemoveProbeExpression } = require('./probe_sampler')
+const { compileBreakpointCondition, getRemoveProbeExpression } = require('./probe_sampler')
 const {
   DEFAULT_MAX_REFERENCE_DEPTH,
   DEFAULT_MAX_COLLECTION_SIZE,
@@ -287,7 +287,6 @@ async function start () {
   sessionStarted = true
   log.debug('[debugger:devtools_client] Starting debugger')
   await session.post('Debugger.enable')
-  await session.post('Runtime.evaluate', { expression: getInstallSamplerExpression() })
 
   // Wait until there's a pause in script-loading to avoid accidentally adding probes to incorrect scripts. This is not
   // a guarantee, but best effort.

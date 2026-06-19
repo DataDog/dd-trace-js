@@ -103,8 +103,7 @@ describe('breakpoints', function () {
       await addProbe()
 
       sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.enable')
-      sinon.assert.calledWith(sessionMock.post.secondCall, 'Runtime.evaluate')
-      sinon.assert.calledWith(sessionMock.post.thirdCall, 'Debugger.setBreakpoint', {
+      sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
         location: {
           scriptId: 'script-1',
           lineNumber: 9,
@@ -112,7 +111,7 @@ describe('breakpoints', function () {
         },
         condition: compileBreakpointCondition([{ id: 'probe-1', samplingIndex: 0, nsBetweenSampling: 200000n }]),
       })
-      sinon.assert.calledThrice(sessionMock.post)
+      sinon.assert.calledTwice(sessionMock.post)
     })
 
     it('should not enable debugger for subsequent breakpoints', async function () {
@@ -135,10 +134,9 @@ describe('breakpoints', function () {
       ])
 
       sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.enable')
-      sinon.assert.calledWith(sessionMock.post.secondCall, 'Runtime.evaluate')
+      sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint')
       sinon.assert.calledWith(sessionMock.post.thirdCall, 'Debugger.setBreakpoint')
-      sinon.assert.calledWith(sessionMock.post.getCall(3), 'Debugger.setBreakpoint')
-      sinon.assert.callCount(sessionMock.post, 4)
+      sinon.assert.calledThrice(sessionMock.post)
 
       sinon.assert.calledWith(stateMock.findScriptFromPartialPath.firstCall, 'test.js')
       sinon.assert.calledWith(stateMock.findScriptFromPartialPath.secondCall, 'test2.js')
@@ -415,11 +413,10 @@ describe('breakpoints', function () {
           addProbe({ id: 'probe-2' }),
         ])
         sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.enable')
-        sinon.assert.calledWith(sessionMock.post.secondCall, 'Runtime.evaluate')
-        sinon.assert.calledWith(sessionMock.post.thirdCall, 'Debugger.setBreakpoint')
-        sinon.assert.calledWith(sessionMock.post.getCall(3), 'Debugger.removeBreakpoint')
-        sinon.assert.calledWith(sessionMock.post.getCall(4), 'Debugger.setBreakpoint')
-        sinon.assert.callCount(sessionMock.post, 5)
+      sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint')
+      sinon.assert.calledWith(sessionMock.post.thirdCall, 'Debugger.removeBreakpoint')
+      sinon.assert.calledWith(sessionMock.post.getCall(3), 'Debugger.setBreakpoint')
+      sinon.assert.callCount(sessionMock.post, 4)
       })
     })
 
@@ -613,9 +610,8 @@ describe('breakpoints', function () {
       })
       sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.disable')
       sinon.assert.calledWith(sessionMock.post.thirdCall, 'Debugger.enable')
-      sinon.assert.calledWith(sessionMock.post.getCall(3), 'Runtime.evaluate')
-      sinon.assert.calledWith(sessionMock.post.getCall(4), 'Debugger.setBreakpoint')
-      sinon.assert.callCount(sessionMock.post, 5)
+      sinon.assert.calledWith(sessionMock.post.getCall(3), 'Debugger.setBreakpoint')
+      sinon.assert.callCount(sessionMock.post, 4)
     })
 
     it('should not disable the debugger if a new probe is in the process of being added', async function () {
@@ -842,8 +838,7 @@ describe('breakpoints', function () {
       })
       sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.disable')
       sinon.assert.calledWith(sessionMock.post.thirdCall, 'Debugger.enable')
-      sinon.assert.calledWith(sessionMock.post.getCall(3), 'Runtime.evaluate')
-      sinon.assert.calledWith(sessionMock.post.getCall(4), 'Debugger.setBreakpoint', {
+      sinon.assert.calledWith(sessionMock.post.getCall(3), 'Debugger.setBreakpoint', {
         location: {
           scriptId: 'script-1',
           lineNumber: 9,
@@ -853,7 +848,7 @@ describe('breakpoints', function () {
           { id: 'probe-1', samplingIndex: 1, nsBetweenSampling: 200000n, condition: '(foo) === (42)' },
         ]),
       })
-      sinon.assert.callCount(sessionMock.post, 5)
+      sinon.assert.callCount(sessionMock.post, 4)
     })
 
     it('should re-add the probe when there are other active probes', async function () {
