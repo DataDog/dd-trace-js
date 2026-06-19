@@ -20,10 +20,17 @@ const wrappedOnResult = new WeakMap()
 /** @type {WeakSet<object>} */
 const flagWrappedNamespaces = new WeakSet()
 
+// Callbacks of pool-cluster namespace acquires that belong to a `query` / `execute`. With `canRetry`,
+// the namespace re-invokes `getConnection` with the same callback from the first acquire's async
+// failure callback — after `wrapPoolQueryMethod` has cleared the synchronous pool-query flag — so the
+// callback identity is what carries the pool-query intent across that boundary into the retry.
+/** @type {WeakSet<Function>} */
+const poolQueryAcquireCallbacks = new WeakSet()
+
 /**
  * Bracket a pool-cluster namespace's `query` / `execute` with the pool-query flag so the connection
  * acquired internally is treated as a pooled-query acquire rather than an explicit one.
- * @param {{ query?: Function, execute?: Function }} poolNamespace
+ * @param {{ query?: Function, execute?: Function, getConnection?: Function }} poolNamespace
  */
 function flagWrapNamespace (poolNamespace) {
   if (poolNamespace == null || flagWrappedNamespaces.has(poolNamespace)) return
@@ -34,6 +41,33 @@ function flagWrapNamespace (poolNamespace) {
   }
   if (typeof poolNamespace.execute === 'function') {
     shimmer.wrap(poolNamespace, 'execute', wrapPoolQueryMethod)
+  }
+  if (typeof poolNamespace.getConnection === 'function') {
+    shimmer.wrap(poolNamespace, 'getConnection', wrapNamespaceGetConnection)
+  }
+}
+
+/**
+ * Re-assert the pool-query flag around a namespace `getConnection` that belongs to a `query` /
+ * `execute`, including the `canRetry` failover retries it dispatches from the first acquire's async
+ * failure callback. Without this the retried internal acquire runs with the flag already cleared and
+ * is mistaken for an explicit user acquire, opening a standalone acquire span and dropping the
+ * `pool.wait_time` tag from the failover query span. A direct user `namespace.getConnection()` is not
+ * part of a pool query, so it falls through unwrapped and keeps its dedicated acquire span.
+ *
+ * @param {Function} getConnection
+ * @returns {Function}
+ */
+function wrapNamespaceGetConnection (getConnection) {
+  const bracketed = wrapPoolQueryMethod(getConnection)
+  return function (cb) {
+    if (!isPoolQueryAcquire() && !poolQueryAcquireCallbacks.has(cb)) {
+      return getConnection.apply(this, arguments)
+    }
+    if (typeof cb === 'function') {
+      poolQueryAcquireCallbacks.add(cb)
+    }
+    return bracketed.apply(this, arguments)
   }
 }
 
