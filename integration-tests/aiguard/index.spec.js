@@ -7,6 +7,13 @@ const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
 const { assertObjectContains } = require('../helpers')
+const { USER_KEEP } = require('../../ext/priority')
+const {
+  APM_TRACING_ENABLED_KEY,
+  DECISION_MAKER_KEY,
+  SAMPLING_MECHANISM_AI_GUARD,
+  TRACE_SOURCE_PROPAGATION_KEY,
+} = require('../../packages/dd-trace/src/constants')
 const startApiMock = require('./api-mock')
 const startOpenAIMock = require('./openai-mock')
 const { executeRequest } = require('./util')
@@ -56,6 +63,7 @@ function assertHasTags (metric, expectedTags) {
 
 describe('AIGuard SDK integration tests', () => {
   let cwd, appFile, agent, proc, api, openaiApi, url
+  let envOverrides = {}
 
   useSandbox(['express', 'ai@6.0.39', 'openai@6'])
 
@@ -91,6 +99,7 @@ describe('AIGuard SDK integration tests', () => {
       cwd,
       env: {
         ...baseEnv(),
+        ...envOverrides,
         OPENAI_BASE_URL: `http://127.0.0.1:${openaiApi.address().port}/v1`,
       },
     })
@@ -102,6 +111,21 @@ describe('AIGuard SDK integration tests', () => {
     await agent.stop()
   })
 
+  function assertStandaloneAiGuardTrace (headers, payload) {
+    assert.strictEqual(headers['datadog-client-computed-stats'], 'yes')
+
+    const requestSpan = payload[0].find(span => span.name === 'express.request')
+    const guardSpan = payload[0].find(span => span.name === 'ai_guard')
+
+    assert.notStrictEqual(requestSpan, undefined)
+    assert.notStrictEqual(guardSpan, undefined)
+    assert.strictEqual(requestSpan.metrics[APM_TRACING_ENABLED_KEY], 0)
+    assert.strictEqual(requestSpan.metrics._sampling_priority_v1, USER_KEEP)
+    assert.strictEqual(requestSpan.meta[TRACE_SOURCE_PROPAGATION_KEY], '20')
+    assert.strictEqual(requestSpan.meta[DECISION_MAKER_KEY], `-${SAMPLING_MECHANISM_AI_GUARD}`)
+    assert.strictEqual(requestSpan.meta['ai_guard.event'], 'true')
+  }
+
   it('test default options honors remote blocking', async () => {
     const response = await executeRequest(`${url}/deny-default-options`, 'GET')
     assert.strictEqual(response.status, 403)
@@ -112,6 +136,52 @@ describe('AIGuard SDK integration tests', () => {
       assert.notStrictEqual(span, undefined)
       assert.strictEqual(span.meta['ai_guard.action'], 'DENY')
       assert.strictEqual(span.meta['ai_guard.blocked'], 'true')
+    })
+  })
+
+  describe('with APM tracing disabled', () => {
+    before(() => {
+      envOverrides = {
+        DD_APM_TRACING_ENABLED: 'false',
+      }
+    })
+
+    after(() => {
+      envOverrides = {}
+    })
+
+    it('keeps direct SDK evaluations as AI Guard standalone traces', async () => {
+      const response = await executeRequest(`${url}/allow`, 'GET')
+      assert.strictEqual(response.status, 200)
+
+      await agent.assertMessageReceived(({ headers, payload }) => {
+        assertStandaloneAiGuardTrace(headers, payload)
+
+        const guardSpan = payload[0].find(span => span.name === 'ai_guard')
+        assert.strictEqual(guardSpan.meta['ai_guard.action'], 'ALLOW')
+      })
+    })
+
+    it('keeps auto-instrumented OpenAI evaluations as AI Guard standalone traces', async () => {
+      const response = await executeRequest(`${url}/openai-chat?deny=false`, 'GET')
+      assert.strictEqual(response.status, 200)
+      assert.strictEqual(response.body.blocked, false)
+
+      await agent.assertMessageReceived(({ headers, payload }) => {
+        assertStandaloneAiGuardTrace(headers, payload)
+        assertGuardSpansChildOf(payload, 'openai.request')
+      })
+    })
+
+    it('keeps auto-instrumented AI SDK evaluations as AI Guard standalone traces', async () => {
+      const response = await executeRequest(`${url}/auto?mode=point1&deny=false`, 'GET')
+      assert.strictEqual(response.status, 200)
+      assert.deepStrictEqual(response.body, { blocked: false })
+
+      await agent.assertMessageReceived(({ headers, payload }) => {
+        assertStandaloneAiGuardTrace(headers, payload)
+        assertGuardSpansChildOf(payload, 'ai.generateText.doGenerate')
+      })
     })
   })
 
