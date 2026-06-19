@@ -113,6 +113,23 @@ describe('FlagEvalEVPHook', () => {
       assert.ok(!Object.hasOwn(lastEnqueued(), 'reason'))
     })
 
+    it('captures errorMessage without using OpenFeature reason', () => {
+      hook.finally(
+        { flagKey: 'f' },
+        { variant: undefined, reason: 'ERROR', errorMessage: 'type mismatch' }
+      )
+
+      const event = lastEnqueued()
+      assert.strictEqual(event.errorMessage, 'type mismatch')
+      assert.ok(!Object.hasOwn(event, 'reason'))
+    })
+
+    it('falls back to errorCode for errorMessage when no message is present', () => {
+      hook.finally({ flagKey: 'f' }, { variant: undefined, errorCode: 'FLAG_NOT_FOUND' })
+
+      assert.strictEqual(lastEnqueued().errorMessage, 'FLAG_NOT_FOUND')
+    })
+
     it('reads targetingKey and context attrs from hookContext.context', () => {
       const context = { targetingKey: 'user-1', plan: 'premium' }
       hook.finally({ flagKey: 'f', context }, { variant: 'on', reason: 'SPLIT' })

@@ -83,8 +83,8 @@ describe('FlagEvaluationsWriter', () => {
   })
 
   describe('constructor', () => {
-    it('resolves endpoint to /evp_proxy/v2/api/v2/flagevaluations', () => {
-      assert.strictEqual(writer._endpoint, '/evp_proxy/v2/api/v2/flagevaluations')
+    it('resolves endpoint to /evp_proxy/v2/api/v2/flagevaluation', () => {
+      assert.strictEqual(writer._endpoint, '/evp_proxy/v2/api/v2/flagevaluation')
     })
 
     it('sets flush interval to 10000ms', () => {
@@ -358,16 +358,28 @@ describe('FlagEvaluationsWriter', () => {
   })
 
   describe('EVP transport', () => {
-    it('POSTs to /evp_proxy/v2/api/v2/flagevaluations with correct headers', () => {
+    it('POSTs to /evp_proxy/v2/api/v2/flagevaluation with correct headers', () => {
       writer.enqueue(makeEvent())
       writer.flush()
 
       sinon.assert.calledOnce(request)
       const options = request.getCall(0).args[1]
       assert.strictEqual(options.method, 'POST')
-      assert.match(options.path, /\/evp_proxy\/v2\/api\/v2\/flagevaluations/)
+      assert.match(options.path, /\/evp_proxy\/v2\/api\/v2\/flagevaluation/)
       assert.strictEqual(options.headers['X-Datadog-EVP-Subdomain'], 'event-platform-intake')
       assert.strictEqual(options.headers['Content-Type'], 'application/json')
+    })
+  })
+
+  describe('cap sizing', () => {
+    it('uses named sizing arithmetic for the default caps', () => {
+      assert.deepStrictEqual(FlagEvaluationsWriter._capSizingForTest, {
+        EVAL_SCALE_FULL_BUCKET_TARGET: 125000,
+        EVAL_SCALE_DEGRADED_BUCKET_TARGET: 25000,
+        GLOBAL_CAP: 131072,
+        PER_FLAG_CAP: 10000,
+        DEGRADED_CAP: 32768,
+      })
     })
   })
 
@@ -456,6 +468,19 @@ describe('FlagEvaluationsWriter', () => {
       const ev = payload.flagEvaluations[0]
       assert.deepStrictEqual(ev.variant, { key: 'on' })
       assert.deepStrictEqual(ev.allocation, { key: 'alloc-1' })
+    })
+
+    it('serializes error.message and keeps it in bucket identity', () => {
+      writer.enqueue(makeEvent({ variant: '', errorMessage: 'type mismatch' }))
+      writer.enqueue(makeEvent({ variant: '', errorMessage: 'flag not found' }))
+      writer.flush()
+
+      const payload = validatePayload()
+      assert.strictEqual(payload.flagEvaluations.length, 2)
+      assert.deepStrictEqual(
+        payload.flagEvaluations.map(ev => ev.error.message).sort(),
+        ['flag not found', 'type mismatch']
+      )
     })
 
     it('degraded-tier payload validates against the worker schema', () => {

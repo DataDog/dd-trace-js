@@ -37,7 +37,7 @@ class FlagEvalEVPHook {
    * The OpenFeature HookContext carries no flagMetadata; only EvaluationDetails does.
    *
    * @param {{ flagKey: string, context?: { targetingKey?: string } }} hookContext
-   * @param {{ variant?: string, reason?: string, errorCode?: string,
+   * @param {{ variant?: string, reason?: string, errorCode?: string, errorMessage?: string,
    *   flagMetadata?: Record<string, string | number | boolean> }} evaluationDetails
    * @returns {void}
    */
@@ -63,11 +63,12 @@ class FlagEvalEVPHook {
     // the Datadog Node evaluator does not currently stamp it, so this falls back to
     // hook-fire time, which still populates first/last_evaluation bounds correctly.
     const evalTimeMs = flagMetadata?.['dd.eval.timestamp_ms'] ?? Date.now()
+    const errorMessage = evaluationDetails.errorMessage ?? evaluationDetails.errorCode ?? ''
 
     // Shallow reference to the context attrs — owned by the SDK; safe to read off hot path
     const attrs = hookContext.context ?? {}
 
-    writer.enqueue({ flagKey, variant, allocationKey, targetingKey, evalTimeMs, attrs })
+    writer.enqueue({ flagKey, variant, allocationKey, targetingKey, errorMessage, evalTimeMs, attrs })
   }
 }
 

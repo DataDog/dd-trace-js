@@ -11,10 +11,18 @@ const {
 const log = require('../../log')
 const BaseFFEWriter = require('./base')
 
+const EVAL_SCALE_TARGET_FLAGS = 2_500
+const EVAL_SCALE_FULL_BUCKETS_PER_FLAG = 50
+const EVAL_SCALE_USERS_PER_FLAG = 1_000
+const EVAL_SCALE_PER_FLAG_HEADROOM_MULTIPLIER = 10
+const EVAL_SCALE_DEGRADED_BUCKETS_PER_FLAG = 10
+
 // Aggregation caps
 const GLOBAL_CAP = 131_072
-const PER_FLAG_CAP = 10_000
+const PER_FLAG_CAP = EVAL_SCALE_PER_FLAG_HEADROOM_MULTIPLIER * EVAL_SCALE_USERS_PER_FLAG
 const DEGRADED_CAP = 32_768
+const EVAL_SCALE_FULL_BUCKET_TARGET = EVAL_SCALE_TARGET_FLAGS * EVAL_SCALE_FULL_BUCKETS_PER_FLAG
+const EVAL_SCALE_DEGRADED_BUCKET_TARGET = EVAL_SCALE_TARGET_FLAGS * EVAL_SCALE_DEGRADED_BUCKETS_PER_FLAG
 
 // Bounded hand-off queue between the eval hot path (enqueue) and the aggregator (drain).
 // On overflow we drop-and-count rather than block the user's evaluation.
@@ -185,13 +193,14 @@ function pruneContext (attrs) {
  * @param {string} flagKey
  * @param {string} variant
  * @param {string} allocationKey
+ * @param {string} errorMessage
  * @param {string} targetingKey
  * @param {string} ctxKey
  * @returns {string}
  */
-function makeFullKey (flagKey, variant, allocationKey, targetingKey, ctxKey) {
+function makeFullKey (flagKey, variant, allocationKey, errorMessage, targetingKey, ctxKey) {
   // NUL separator: safe because length-delimited ctxKey cannot contain NUL as a separator
-  return `${flagKey}\0${variant}\0${allocationKey}\0${targetingKey}\0${ctxKey}`
+  return `${flagKey}\0${variant}\0${allocationKey}\0${errorMessage}\0${targetingKey}\0${ctxKey}`
 }
 
 /**
@@ -200,10 +209,11 @@ function makeFullKey (flagKey, variant, allocationKey, targetingKey, ctxKey) {
  * @param {string} flagKey
  * @param {string} variant
  * @param {string} allocationKey
+ * @param {string} errorMessage
  * @returns {string}
  */
-function makeDegradedKey (flagKey, variant, allocationKey) {
-  return `${flagKey}\0${variant}\0${allocationKey}`
+function makeDegradedKey (flagKey, variant, allocationKey, errorMessage) {
+  return `${flagKey}\0${variant}\0${allocationKey}\0${errorMessage}`
 }
 
 /**
@@ -212,6 +222,7 @@ function makeDegradedKey (flagKey, variant, allocationKey) {
  * @property {string} variant - empty string means absent (runtime_default)
  * @property {string} allocationKey
  * @property {string} targetingKey
+ * @property {string} errorMessage
  * @property {number} evalTimeMs
  * @property {Record<string, unknown>} attrs - Flattened and pruned context attributes
  */
@@ -222,6 +233,7 @@ function makeDegradedKey (flagKey, variant, allocationKey) {
  * @property {string} variant
  * @property {string} allocationKey
  * @property {string} targetingKey
+ * @property {string} errorMessage
  * @property {number} count
  * @property {number} first
  * @property {number} last
@@ -234,6 +246,7 @@ function makeDegradedKey (flagKey, variant, allocationKey) {
  * @property {string} flagKey
  * @property {string} variant
  * @property {string} allocationKey
+ * @property {string} errorMessage
  * @property {number} count
  * @property {number} first
  * @property {number} last
@@ -249,10 +262,10 @@ function makeDegradedKey (flagKey, variant, allocationKey) {
  * pushes to a bounded queue. Aggregation cost — canonical key and two-tier map updates —
  * runs off the eval call stack on a microtask-scheduled drain (and on flush).
  *
- * Aggregation caps: globalCap=131072 / perFlagCap=10000 / degradedCap=32768
- * Context bounds: 256 fields / 256 chars (pruned before keying).
- * Killswitch: DD_FLAGGING_EVALUATION_COUNTS_ENABLED (checked by the provider).
- */
+   * Aggregation caps: globalCap=131072 / perFlagCap=10000 / degradedCap=32768
+   * Context bounds: 256 fields / 256 chars (pruned before keying).
+   * Killswitch: DD_FLAGGING_EVALUATION_COUNTS_ENABLED (checked by the provider).
+   */
 class FlagEvaluationsWriter extends BaseFFEWriter {
   /** @type {Record<string, unknown>} */
   _context
@@ -347,6 +360,7 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
       variant: event.variant ?? '',
       allocationKey: event.allocationKey ?? '',
       targetingKey: event.targetingKey ?? '',
+      errorMessage: event.errorMessage ?? '',
       evalTimeMs: event.evalTimeMs,
       attrs: pruneContext(event.attrs || {}),
     })
@@ -388,12 +402,13 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
     const variant = event.variant ?? ''
     const allocationKey = event.allocationKey ?? ''
     const targetingKey = event.targetingKey ?? ''
+    const errorMessage = event.errorMessage ?? ''
     const attrs = event.attrs || {}
 
     const ctxKey = canonicalContextKey(attrs)
     const isRuntimeDefault = variant === ''
 
-    const fKey = makeFullKey(flagKey, variant, allocationKey, targetingKey, ctxKey)
+    const fKey = makeFullKey(flagKey, variant, allocationKey, errorMessage, targetingKey, ctxKey)
 
     // Fast path: existing full-tier bucket
     const existing = this._full.get(fKey)
@@ -407,7 +422,7 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
     // Check per-flag cap
     const perFlagCount = this._perFlagFullCount.get(flagKey) ?? 0
     if (perFlagCount >= this._perFlagCap) {
-      this._addToDegraded(flagKey, variant, allocationKey, evalTimeMs, isRuntimeDefault)
+      this._addToDegraded(flagKey, variant, allocationKey, errorMessage, evalTimeMs, isRuntimeDefault)
       return
     }
 
@@ -416,7 +431,7 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
 
     // Check global cap
     if (this._globalCount >= this._globalCap) {
-      this._addToDegraded(flagKey, variant, allocationKey, evalTimeMs, isRuntimeDefault)
+      this._addToDegraded(flagKey, variant, allocationKey, errorMessage, evalTimeMs, isRuntimeDefault)
       return
     }
 
@@ -426,6 +441,7 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
       variant,
       allocationKey,
       targetingKey,
+      errorMessage,
       count: 1,
       first: evalTimeMs,
       last: evalTimeMs,
@@ -442,11 +458,12 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
    * @param {string} flagKey
    * @param {string} variant
    * @param {string} allocationKey
+   * @param {string} errorMessage
    * @param {number} evalTimeMs
    * @param {boolean} isRuntimeDefault
    */
-  _addToDegraded (flagKey, variant, allocationKey, evalTimeMs, isRuntimeDefault) {
-    const dKey = makeDegradedKey(flagKey, variant, allocationKey)
+  _addToDegraded (flagKey, variant, allocationKey, errorMessage, evalTimeMs, isRuntimeDefault) {
+    const dKey = makeDegradedKey(flagKey, variant, allocationKey, errorMessage)
     const existing = this._degraded.get(dKey)
     if (existing) {
       existing.count++
@@ -465,6 +482,7 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
       flagKey,
       variant,
       allocationKey,
+      errorMessage,
       count: 1,
       first: evalTimeMs,
       last: evalTimeMs,
@@ -479,8 +497,8 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
   flush () {
     this._drainQueue()
 
-    const nowMs = Date.now()
-    const flagEvaluations = this._drainFlagEvaluations(nowMs)
+    const flushTimeMs = Date.now()
+    const flagEvaluations = this._drainFlagEvaluations(flushTimeMs)
     const droppedQueueOverflow = this._droppedQueueOverflow
     const droppedDegradedOverflow = this._droppedDegradedOverflow
 
@@ -498,16 +516,16 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
 
   /**
    * @private
-   * @param {number} nowMs
+   * @param {number} flushTimeMs
    * @returns {Array<object>}
    */
-  _drainFlagEvaluations (nowMs) {
+  _drainFlagEvaluations (flushTimeMs) {
     const flagEvaluations = []
 
     // Full tier: all optional fields (variant, allocation, targeting_key, context)
     for (const entry of this._full.values()) {
       const ev = {
-        timestamp: nowMs,
+        timestamp: flushTimeMs,
         flag: { key: entry.flagKey },
         first_evaluation: entry.first,
         last_evaluation: entry.last,
@@ -518,6 +536,7 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
       if (entry.targetingKey) ev.targeting_key = entry.targetingKey
       if (entry.variant) ev.variant = { key: entry.variant }
       if (entry.allocationKey) ev.allocation = { key: entry.allocationKey }
+      if (entry.errorMessage) ev.error = { message: entry.errorMessage }
       if (entry.contextAttrs && Object.keys(entry.contextAttrs).length > 0) {
         ev.context = { evaluation: entry.contextAttrs }
       }
@@ -528,7 +547,7 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
     // Degraded tier: required fields + variant + allocation; NO targeting_key, NO context
     for (const entry of this._degraded.values()) {
       const ev = {
-        timestamp: nowMs,
+        timestamp: flushTimeMs,
         flag: { key: entry.flagKey },
         first_evaluation: entry.first,
         last_evaluation: entry.last,
@@ -538,6 +557,7 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
       if (entry.runtimeDefault) ev.runtime_default_used = true
       if (entry.variant) ev.variant = { key: entry.variant }
       if (entry.allocationKey) ev.allocation = { key: entry.allocationKey }
+      if (entry.errorMessage) ev.error = { message: entry.errorMessage }
 
       flagEvaluations.push(ev)
     }
@@ -625,3 +645,10 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
 }
 
 module.exports = FlagEvaluationsWriter
+module.exports._capSizingForTest = {
+  EVAL_SCALE_FULL_BUCKET_TARGET,
+  EVAL_SCALE_DEGRADED_BUCKET_TARGET,
+  GLOBAL_CAP,
+  PER_FLAG_CAP,
+  DEGRADED_CAP,
+}
