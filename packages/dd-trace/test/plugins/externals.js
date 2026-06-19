@@ -312,6 +312,15 @@ module.exports = {
       versions: ['^16.6.0'],
     },
   ],
+  '@apollo/server': [
+    {
+      // The shared apollo-server-* install also brings in graphql 15.x (for apollo-server v3), which yarn may
+      // hoist over the ^16.11 that @apollo/server v5 needs. Without the pin, v5 resolves 15.x, whose TypeInfo
+      // lacks the `.enter`/`.leave` methods the graphql instrumentation calls, so every traced operation throws.
+      name: 'graphql',
+      dep: true,
+    },
+  ],
   grpc: [
     {
       name: '@grpc/proto-loader',
