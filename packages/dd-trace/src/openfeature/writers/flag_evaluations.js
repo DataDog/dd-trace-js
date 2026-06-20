@@ -11,9 +11,9 @@ const {
 const log = require('../../log')
 const BaseFFEWriter = require('./base')
 
-const EVAL_SCALE_TARGET_FLAGS = 2_500
+const EVAL_SCALE_TARGET_FLAGS = 2500
 const EVAL_SCALE_FULL_BUCKETS_PER_FLAG = 50
-const EVAL_SCALE_USERS_PER_FLAG = 1_000
+const EVAL_SCALE_USERS_PER_FLAG = 1000
 const EVAL_SCALE_PER_FLAG_HEADROOM_MULTIPLIER = 10
 const EVAL_SCALE_DEGRADED_BUCKETS_PER_FLAG = 10
 
@@ -262,10 +262,10 @@ function makeDegradedKey (flagKey, variant, allocationKey, errorMessage) {
  * pushes to a bounded queue. Aggregation cost — canonical key and two-tier map updates —
  * runs off the eval call stack on a microtask-scheduled drain (and on flush).
  *
-   * Aggregation caps: globalCap=131072 / perFlagCap=10000 / degradedCap=32768
-   * Context bounds: 256 fields / 256 chars (pruned before keying).
-   * Killswitch: DD_FLAGGING_EVALUATION_COUNTS_ENABLED (checked by the provider).
-   */
+ * Aggregation caps: globalCap=131072 / perFlagCap=10000 / degradedCap=32768
+ * Context bounds: 256 fields / 256 chars (pruned before keying).
+ * Killswitch: DD_FLAGGING_EVALUATION_COUNTS_ENABLED (checked by the provider).
+ */
 class FlagEvaluationsWriter extends BaseFFEWriter {
   /** @type {Record<string, unknown>} */
   _context
