@@ -11,8 +11,11 @@ const semver = require('semver')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+// hapi 19.x and 20.x are EOL and hang CI: on error and 404 replies they crash inside their own
+// `Request._finalize` (null `response.statusCode`) and never finish the request, stalling the
+// worker until the job is cancelled. 21.x fixed it, so the matrix covers 16.x and 21+.
 const versionRange = parseInt(process.versions.node.split('.')[0]) > 14
-  ? '<17 || >18'
+  ? '<17 || >=21'
   : ''
 
 describe('Plugin', () => {
@@ -24,7 +27,7 @@ describe('Plugin', () => {
   let reply
 
   describe('hapi', () => {
-    withVersions('hapi', ['hapi', '@hapi/hapi'], versionRange, (version, module, resolvedVersion) => {
+    withVersions('hapi', ['hapi', '@hapi/hapi'], versionRange, (version, module) => {
       beforeEach(() => {
         tracer = require('../../dd-trace')
         handler = (request, h, body) => h.response ? h.response(body) : h(body)
@@ -144,18 +147,7 @@ describe('Plugin', () => {
 
       // Hapi does not reply to POST requests on Node <=16
       if (semver.intersects(version, '>=17')) {
-        it('should run the request handler in the request scope with a payload', function (done) {
-          // hapi 19.x crashes inside its own `_finalize` ("Cannot read properties of null
-          // (reading 'statusCode')", request.js:491) while replying to this payload POST and then
-          // hangs the worker until CI cancels the job hours later. The matrix only reaches these
-          // EOL pre-21 majors now that it installs each major separately (master resolved the
-          // range to 21.x, which passes). 20.x carries the identical pre-21 `_finalize` and can't
-          // be verified — its deps are install-blocked and the 19.x hang stops CI before 20.x runs
-          // — so it is gated alongside 19.x rather than risk another multi-hour hang.
-          if (semver.satisfies(resolvedVersion, '>=19.0.0 <21.0.0')) {
-            return this.skip()
-          }
-
+        it('should run the request handler in the request scope with a payload', done => {
           server.route({
             method: 'POST',
             path: '/user/{id}',
