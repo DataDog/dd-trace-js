@@ -141,6 +141,9 @@ class Tracer extends NoopProxy {
       if (config.remoteConfig.enabled && !config.isCiVisibility) {
         const RemoteConfig = require('./remote_config')
         const rc = new RemoteConfig(config)
+        // Exposed so the test harness can stop the poller when it rebuilds the tracer between
+        // suites; otherwise each rebuild orphans a Scheduler that keeps polling a dead agent port.
+        this._rc = rc
 
         const tracingRemoteConfig = require('./config/remote_config')
         tracingRemoteConfig.enable(rc, config, () => {
