@@ -379,6 +379,25 @@ describe('Plugin', () => {
                 promise.then(done, done)
               })
             })
+
+            it('should run the BulkLoad stream event listeners in the parent context', done => {
+              const span = tracer.startSpan('test')
+              const bulkLoad = buildBulkLoad()
+              const rowStream = bulkLoad.getRowStream()
+
+              tracer.scope().activate(span, () => {
+                rowStream.on('finish', () => {
+                  assert.strictEqual(tracer.scope().active(), span)
+                  done()
+                })
+              })
+
+              connection.execBulkLoad(bulkLoad)
+              rowStream.write([5], (err) => {
+                rowStream.end()
+                if (err) done(err)
+              })
+            })
           }
         })
       }
