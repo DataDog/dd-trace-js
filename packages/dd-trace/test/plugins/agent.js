@@ -436,10 +436,6 @@ module.exports = {
       lastTracerConfigJson !== tracerConfigJson
     ) {
       if (global._ddtrace !== undefined) {
-        // Stop the outgoing tracer's Remote Config poller too: `agent.close` already does this for
-        // the load/close pairing, but a bare `load → load` rebuild (env or tracerConfig change)
-        // would otherwise orphan the previous poller against its dead agent port.
-        global._ddtrace._rc?.scheduler?.stop()
         global._ddtrace._pluginManager.destroy()
       }
       // Filter `mainBeforeExit` by name rather than calling
@@ -710,30 +706,16 @@ module.exports = {
    * tracer or rebuild it; tests do not pass options here.
    */
   close () {
-    // Stop the tracer's Remote Config poller before the next `agent.load` rebuilds the tracer.
-    // Every rebuild starts a fresh RemoteConfig Scheduler that polls the mock agent's
-    // `/v0.7/config` on the just-assigned port. Left running, each orphaned poller keeps a
-    // connect to the now-dead port alive, so the expanded plugin version matrix leaks sockets
-    // until the process OOMs (Node 18) or thrashes GC enough to blow the 5s hook budget (CI).
-    tracer?._rc?.scheduler?.stop()
-
     if (listener === null) {
       return Promise.resolve()
     }
 
     listener.close()
     listener = null
-    // Hard-destroy rather than `end()`: a graceful half-close waits on the peer (the exporter's
-    // keep-alive client socket), which delays the `'close'` event and keeps the handle around.
     for (const socket of sockets) {
-      socket.destroy()
+      socket.end()
     }
     sockets = []
-    // Drop the exporter's keep-alive sockets (shared by trace export and RC polling) so no
-    // outgoing connect outlives the agent it targeted.
-    const { httpAgent, httpsAgent } = require('../../src/exporters/common/agents')
-    httpAgent.destroy()
-    httpsAgent.destroy()
     agent = null
     traceHandlers.clear()
     statsHandlers.clear()

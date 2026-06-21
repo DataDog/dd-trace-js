@@ -4,7 +4,6 @@ const dc = require('node:diagnostics_channel')
 const assert = require('node:assert/strict')
 
 const { afterEach, describe, it } = require('mocha')
-const sinon = require('sinon')
 
 const agent = require('./agent')
 
@@ -33,14 +32,6 @@ describe('test agent helper', () => {
       await agent.load([])
       const secondId = global._ddtrace._tracer._config.tags['runtime-id']
       assert.notStrictEqual(secondId, firstId)
-    })
-
-    it('stops the remote config poller on close', async () => {
-      await agent.load([])
-      const stop = sinon.spy(global._ddtrace._rc.scheduler, 'stop')
-
-      await agent.close()
-      assert.ok(stop.called)
     })
 
     it('rebuilds the tracer when tracerConfig differs between consecutive loads', async () => {
