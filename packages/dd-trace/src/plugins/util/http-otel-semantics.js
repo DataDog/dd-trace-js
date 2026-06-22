@@ -223,6 +223,11 @@ function applyHttpOtelSemantics (formattedSpan) {
   // http.endpoint is Datadog-only (omitted above); it has no OTel equivalent.
 
   if (kind === 'server') {
+    // FIXME: some server frameworks (e.g. Next.js — `packages/datadog-plugin-next`)
+    // never populate `http.url`, so the OTel `url.*` / `server.*` attributes below
+    // can't be derived and are omitted for those spans. This needs a fix; the
+    // short-term option is to set `http.url` in those integrations so they emit
+    // the full server attribute set.
     if (url !== undefined) {
       // The query in `http.url` is already obfuscated per config, so it is preserved.
       const { scheme, address, port, path, query } = decomposeServerUrl(url, url)
