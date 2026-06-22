@@ -76,7 +76,7 @@ class BaseContextPlugin extends TracingPlugin {
   }
 }
 
-function makeContextPlugin (method, spanName, { retryable = false } = {}) {
+function makeContextPlugin (method, spanName, { retryable }) {
   return class extends BaseContextPlugin {
     static prefix = `tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_${method}`
     static settleChannel = `apm:aws-durable-execution-sdk-js:${method}:settle`
@@ -110,11 +110,11 @@ function getRunInChildContextSubType (ctx) {
 
 module.exports = {
   step: makeContextPlugin('step', 'aws.durable.step', { retryable: true }),
-  wait: makeContextPlugin('wait', 'aws.durable.wait'),
+  wait: makeContextPlugin('wait', 'aws.durable.wait', { retryable: false }),
   waitForCondition: makeContextPlugin('waitForCondition', 'aws.durable.wait_for_condition', { retryable: true }),
-  waitForCallback: makeContextPlugin('waitForCallback', 'aws.durable.wait_for_callback'),
-  createCallback: makeContextPlugin('createCallback', 'aws.durable.create_callback'),
-  map: makeContextPlugin('map', 'aws.durable.map'),
-  parallel: makeContextPlugin('parallel', 'aws.durable.parallel'),
+  waitForCallback: makeContextPlugin('waitForCallback', 'aws.durable.wait_for_callback', { retryable: false }),
+  createCallback: makeContextPlugin('createCallback', 'aws.durable.create_callback', { retryable: false }),
+  map: makeContextPlugin('map', 'aws.durable.map', { retryable: false }),
+  parallel: makeContextPlugin('parallel', 'aws.durable.parallel', { retryable: false }),
   runInChildContext: RunInChildContextPlugin,
 }
