@@ -1,6 +1,7 @@
 'use strict'
 
-const http = require('http')
+const http = require('node:http')
+const https = require('node:https')
 const { URL } = require('url')
 const log = require('../../log')
 const telemetryMetrics = require('../../telemetry/metrics')
@@ -45,7 +46,7 @@ class OtlpHttpExporterBase {
     this.setUrl(url)
 
     this.telemetryTags = [
-      'protocol:http',
+      `protocol:${this._transport === https ? 'https' : 'http'}`,
       `encoding:${isJson ? 'json' : 'protobuf'}`,
     ]
   }
@@ -81,7 +82,7 @@ class OtlpHttpExporterBase {
       },
     }
 
-    const req = http.request(options, (res) => {
+    const req = this._transport.request(options, (res) => {
       let data = ''
 
       res.on('data', (chunk) => {
@@ -124,6 +125,7 @@ class OtlpHttpExporterBase {
     this.options.hostname = parsedUrl.hostname
     this.options.port = parsedUrl.port
     this.options.path = parsedUrl.pathname + parsedUrl.search
+    this._transport = parsedUrl.protocol === 'https:' ? https : http
   }
 
   /**

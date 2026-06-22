@@ -1,7 +1,8 @@
 'use strict'
 
 const assert = require('assert')
-const http = require('http')
+const http = require('node:http')
+const https = require('node:https')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -886,6 +887,46 @@ describe('OpenTelemetry Traces', () => {
       exporter.setUrl('http://otel-collector:9999/v1/traces?token=abc')
 
       assert.strictEqual(exporter.options.path, '/v1/traces?token=abc')
+    })
+
+    it('selects http transport for http:// URLs', () => {
+      const exporter = new OtlpHttpTraceExporter('http://collector.example/v1/traces', {}, 1000, {})
+
+      assert.strictEqual(exporter._transport, http)
+    })
+
+    it('selects https transport for https:// URLs', () => {
+      const exporter = new OtlpHttpTraceExporter('https://collector.example/v1/traces', {}, 1000, {})
+
+      assert.strictEqual(exporter._transport, https)
+    })
+
+    it('switches transport when setUrl is called with a different scheme', () => {
+      const exporter = new OtlpHttpTraceExporter('http://collector.example/v1/traces', {}, 1000, {})
+
+      exporter.setUrl('https://secure-collector.example/v1/traces')
+
+      assert.strictEqual(exporter._transport, https)
+    })
+  })
+
+  describe('sendPayload HTTPS', () => {
+    it('uses https.request when endpoint is https://', (done) => {
+      const exporter = new OtlpHttpTraceExporter('https://collector.example/v1/traces', {}, 1000, {})
+
+      const mockReq = {
+        write: () => {},
+        end: () => {},
+        on: () => mockReq,
+        once: () => mockReq,
+      }
+      const httpsStub = sinon.stub(https, 'request').returns(mockReq)
+
+      exporter.sendPayload(Buffer.from('{}'), () => {})
+
+      assert.ok(httpsStub.calledOnce, 'https.request should have been called')
+      assert.ok(!sinon.stub(http, 'request').called, 'http.request should not have been called')
+      done()
     })
   })
 })
