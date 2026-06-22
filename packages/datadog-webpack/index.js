@@ -2,6 +2,7 @@
 
 const { execSync } = require('node:child_process')
 const fs = require('node:fs')
+const path = require('node:path')
 
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
@@ -10,6 +11,24 @@ const { isESMFile } = require('../datadog-esbuild/src/utils')
 const log = require('./src/log')
 
 const PLUGIN_NAME = 'DatadogWebpackPlugin'
+
+// Internal path of dd-trace's OpenFeature provider, identical in the repo layout and
+// inside `node_modules/dd-trace`. Used to target the loader that bundles the optional peer.
+const FLAGGING_PROVIDER_SUFFIX = 'packages/dd-trace/src/openfeature/flagging_provider.js'
+const OPENFEATURE_PEER = '@datadog/openfeature-node-server'
+
+/**
+ * @param {string} fromDir - Directory to resolve the optional peer from
+ * @returns {boolean} Whether `@datadog/openfeature-node-server` is installed and resolvable
+ */
+function isOpenFeaturePeerInstalled (fromDir) {
+  try {
+    require.resolve(OPENFEATURE_PEER, { paths: [fromDir] })
+    return true
+  } catch {
+    return false
+  }
+}
 
 for (const hook of Object.values(hooks)) {
   if (hook !== null && typeof hook === 'object') {
@@ -130,11 +149,26 @@ class DatadogWebpackPlugin {
       nmf.hooks.afterResolve.tap(PLUGIN_NAME, (resolveData) => {
         const { createData } = resolveData
         const resource = createData?.resource
-        if (!resource || !resource.includes('node_modules')) {
+        if (!resource) {
           return
         }
 
         const normalizedResource = resource.replaceAll('\\', '/')
+
+        // Bundle the optional OpenFeature peer when it is installed so the provider
+        // keeps working after the bundle is relocated without it on disk (#8980).
+        if (normalizedResource.endsWith(FLAGGING_PROVIDER_SUFFIX) &&
+            isOpenFeaturePeerInstalled(path.dirname(resource))) {
+          createData.loaders = createData.loaders || []
+          createData.loaders.push({ loader: require.resolve('./src/openfeature-loader') })
+          log.debug('INLINE: bundling %s', OPENFEATURE_PEER)
+          return
+        }
+
+        if (!resource.includes('node_modules')) {
+          return
+        }
+
         const { pkg, path: modulePath, pkgJson } = extractPackageAndModulePath(normalizedResource)
         if (!pkg) {
           return

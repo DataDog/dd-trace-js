@@ -3,126 +3,147 @@
 
 /* eslint-disable no-console */
 
-// Regression test for the OpenFeature optional peer load under webpack.
+// End-to-end coverage for the OpenFeature optional peer chain
+// `@datadog/openfeature-node-server` -> `@openfeature/server-sdk` -> `@openfeature/core`
+// under webpack. Two scenarios pin the two failure modes:
 //
-// Two failure modes are pinned here:
+// 1. #8635: without the dd-trace plugin, the require stays opaque so webpack never
+//    follows the optional chain. A user who bundles dd-trace without opting into
+//    feature flagging must not have their build fail on the missing chain.
 //
-// 1. #8635: customer apps that bundle `dd-trace` must not have their build follow
-//    the optional peer-of-peer chain `@datadog/openfeature-node-server` ->
-//    `@openfeature/server-sdk` -> `@openfeature/core`. A literal require lets webpack
-//    resolve the chain at build time and fails the build with
-//    `Module not found: Can't resolve '@openfeature/core'` when the user has not
-//    opted into feature flagging.
-//
-// 2. #8980: the require must reach dd-trace's installed provider, not whatever sits
-//    next to the bundle output. Resolving through a bare `require.resolve` is rewritten
-//    by webpack into an expression dependency (a `Critical dependency` warning plus a
-//    directory context module) and throws at runtime, leaving evaluations on the no-op
-//    provider. The resolve has to go through the `__non_webpack_require__` escape hatch.
-//
-// The build deliberately does not list `@datadog/openfeature-node-server` in externals —
-// the whole point is that dd-trace must not require users to do so. The peer is resolvable
-// at runtime from dd-trace's own location, which is what the run step exercises.
+// 2. #8980: with the dd-trace plugin and the peer installed, the plugin bundles the
+//    peer into the output. Feature flagging then survives the bundle being relocated
+//    to a tree where the peer is not on disk (e.g. a standalone deploy), instead of
+//    silently falling back to the no-op provider.
 
 const fs = require('fs')
+const os = require('os')
 const path = require('path')
 const assert = require('assert')
 const { execFileSync } = require('child_process')
 const webpack = require('webpack')
 const DatadogWebpackPlugin = require('../../webpack') // dd-trace/webpack
 
-const OUTFILE = path.join(__dirname, 'openfeature-out.js')
+const ENTRY = path.join(__dirname, 'openfeature-app.js')
 const FLAGGING_PROVIDER = path.join('openfeature', 'flagging_provider')
+const EXTERNALS = [
+  'diagnostics_channel',
+  'pg', 'mysql2', 'better-sqlite3', 'sqlite3', 'mysql', 'oracledb', 'pg-query-stream', 'tedious',
+  '@yaacovcr/transform',
+  // Optional native dd-trace modules (kept consistent with `build.js`).
+  '@datadog/native-appsec', '@datadog/native-iast-taint-tracking', '@datadog/native-metrics',
+  '@datadog/pprof', '@datadog/libdatadog',
+  // NOTE: `@datadog/openfeature-node-server` is deliberately absent. dd-trace must keep
+  // the require opaque without help from the user's webpack config.
+]
 
-const compiler = webpack({
-  mode: 'development',
-  entry: path.join(__dirname, 'openfeature-app.js'),
-  target: 'node',
-  externalsType: 'commonjs',
-  output: {
-    filename: 'openfeature-out.js',
-    path: __dirname,
-    hashFunction: 'sha256',
-  },
-  externals: [
-    'diagnostics_channel',
-    'pg',
-    'mysql2',
-    'better-sqlite3',
-    'sqlite3',
-    'mysql',
-    'oracledb',
-    'pg-query-stream',
-    'tedious',
-    '@yaacovcr/transform',
-    // Optional native dd-trace modules (kept consistent with `build.js`).
-    '@datadog/native-appsec',
-    '@datadog/native-iast-taint-tracking',
-    '@datadog/native-metrics',
-    '@datadog/pprof',
-    '@datadog/libdatadog',
-    // NOTE: `@datadog/openfeature-node-server` is deliberately absent. The
-    // whole point of this test is that the dd-trace source keeps the require
-    // opaque to webpack without help from the user's webpack config.
-  ],
-  plugins: [
-    new DatadogWebpackPlugin(),
-  ],
-})
+/**
+ * @param {string} outfile - Absolute path of the bundle to emit
+ * @param {Array<object>} plugins - Webpack plugins to apply
+ * @returns {Promise<object>} The webpack stats object
+ */
+function build (outfile, plugins) {
+  return new Promise((resolve, reject) => {
+    webpack({
+      mode: 'development',
+      entry: ENTRY,
+      target: 'node',
+      externalsType: 'commonjs',
+      output: { filename: path.basename(outfile), path: path.dirname(outfile), hashFunction: 'sha256' },
+      externals: EXTERNALS,
+      plugins,
+    }, (err, stats) => {
+      if (err) return reject(err)
+      if (stats.hasErrors()) return reject(new Error(stats.toString({ errors: true })))
+      resolve(stats)
+    })
+  })
+}
 
-compiler.run((err, stats) => {
+/**
+ * @param {object} stats - Webpack stats object
+ * @returns {Array<object>} `Critical dependency` warnings attributable to flagging_provider
+ */
+function flaggingProviderWarnings (stats) {
+  return stats.compilation.warnings.filter((warning) =>
+    /Critical dependency/.test(warning.message) &&
+    (String(warning.module?.resource).includes(FLAGGING_PROVIDER) || /flagging_provider/.test(warning.message))
+  )
+}
+
+async function main () {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-openfeature-'))
+
   try {
-    if (err) {
-      console.error(err)
-      process.exitCode = 1
-      return
-    }
-    if (stats.hasErrors()) {
-      console.error(stats.toString({ errors: true }))
-      process.exitCode = 1
-      return
+    // Scenario 1 (#8635): no dd-trace plugin -> the require stays opaque.
+    const opaqueOut = path.join(__dirname, 'openfeature-out-opaque.js')
+    const opaqueStats = await build(opaqueOut, [])
+    try {
+      assert.strictEqual(
+        flaggingProviderWarnings(opaqueStats).length,
+        0,
+        'flagging_provider tripped the webpack expression-dependency path; resolve through ' +
+        '`__non_webpack_require__`, not bare `require.resolve`'
+      )
+      const opaqueBundle = fs.readFileSync(opaqueOut).toString()
+      assert(
+        !opaqueBundle.includes('@datadog/flagging-core'),
+        'bundle leaked `@datadog/flagging-core`; webpack must not statically follow the optional peer'
+      )
+      assert(
+        !opaqueBundle.includes('node_modules/@openfeature/server-sdk'),
+        'bundle leaked `@openfeature/server-sdk` paths; webpack must not statically follow the optional peer'
+      )
+    } finally {
+      fs.rmSync(opaqueOut, { force: true })
     }
 
-    // #8980: a bare `require.resolve(<computed>)` trips webpack's expression-dependency
-    // path. Catch it at the source rather than waiting for the silent no-op at runtime.
-    const flaggingWarnings = stats.compilation.warnings.filter((warning) =>
-      /Critical dependency/.test(warning.message) &&
-      (String(warning.module?.resource).includes(FLAGGING_PROVIDER) || /flagging_provider/.test(warning.message))
-    )
+    // Scenario 2 (#8980): with the dd-trace plugin and the peer installed, the peer is
+    // bundled, so the relocated bundle loads the real provider instead of the no-op.
     assert.strictEqual(
-      flaggingWarnings.length,
-      0,
-      'flagging_provider tripped the webpack expression-dependency path; resolve through ' +
-      '`__non_webpack_require__`, not bare `require.resolve`:\n' +
-      flaggingWarnings.map((warning) => warning.message).join('\n')
+      isResolvable('@datadog/openfeature-node-server', __dirname),
+      true,
+      'the optional peer must be installed for this scenario; run `yarn install` with devDependencies'
+    )
+    const bundledOut = path.join(__dirname, 'openfeature-out-bundled.js')
+    await build(bundledOut, [new DatadogWebpackPlugin()])
+    const relocated = path.join(tmpDir, 'out.js')
+    fs.copyFileSync(bundledOut, relocated)
+    fs.rmSync(bundledOut, { force: true })
+
+    assert.strictEqual(
+      isResolvable('@datadog/openfeature-node-server', tmpDir),
+      false,
+      'the relocation dir must not resolve the peer, otherwise the test proves nothing'
     )
 
-    const output = fs.readFileSync(OUTFILE).toString()
-
-    // #8635: webpack must not follow the optional chain into either dependency.
-    // Both substrings only appear in the bundle when webpack resolves the
-    // chain into `@datadog/openfeature-node-server`'s own source.
-    assert(
-      !output.includes('@datadog/flagging-core'),
-      'bundle leaked `@datadog/flagging-core`; webpack must not statically ' +
-      'follow `@datadog/openfeature-node-server`'
-    )
-    assert(
-      !output.includes('node_modules/@openfeature/server-sdk'),
-      'bundle leaked `@openfeature/server-sdk` paths; webpack must not ' +
-      'statically follow `@datadog/openfeature-node-server`'
-    )
-
-    // #8980: run the bundle. The escape hatch must reach dd-trace's installed provider,
-    // so `tracer.openfeature` is the real `FlaggingProvider` and not the no-op fallback.
-    const runOutput = execFileSync(process.execPath, [OUTFILE], { encoding: 'utf8' })
+    const runOutput = execFileSync(process.execPath, [relocated], { encoding: 'utf8' })
     assert(
       runOutput.includes('PROVIDER_OK'),
-      `bundled app did not load the real OpenFeature provider:\n${runOutput}`
+      `relocated bundle did not load the real OpenFeature provider:\n${runOutput}`
     )
 
     console.log('ok')
   } finally {
-    fs.rmSync(OUTFILE, { force: true })
+    fs.rmSync(tmpDir, { recursive: true, force: true })
   }
+}
+
+/**
+ * @param {string} request - Module specifier
+ * @param {string} fromDir - Directory to resolve from
+ * @returns {boolean} Whether the module resolves from `fromDir`
+ */
+function isResolvable (request, fromDir) {
+  try {
+    require.resolve(request, { paths: [fromDir] })
+    return true
+  } catch {
+    return false
+  }
+}
+
+main().catch((error) => {
+  console.error(error)
+  process.exitCode = 1
 })

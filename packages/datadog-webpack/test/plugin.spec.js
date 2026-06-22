@@ -5,6 +5,7 @@ const { describe, it } = require('mocha')
 
 const DatadogWebpackPlugin = require('../index')
 const loader = require('../src/loader')
+const openFeatureLoader = require('../src/openfeature-loader')
 
 describe('DatadogWebpackPlugin', () => {
   describe('apply', () => {
@@ -49,6 +50,52 @@ describe('DatadogWebpackPlugin', () => {
       assert.equal(tapped[0], 'DatadogWebpackPlugin')
     })
   })
+
+  describe('openfeature peer bundling', () => {
+    function captureAfterResolve () {
+      const plugin = new DatadogWebpackPlugin()
+      let afterResolve
+      plugin.apply({
+        options: { optimization: {} },
+        hooks: {
+          environment: { tap: () => {} },
+          thisCompilation: { tap: () => {} },
+          normalModuleFactory: {
+            tap: (name, fn) => fn({ hooks: { afterResolve: { tap: (n, f) => { afterResolve = f } } } }),
+          },
+        },
+      })
+      return afterResolve
+    }
+
+    it('bundles the optional peer for flagging_provider when it is installed', () => {
+      const createData = { resource: require.resolve('../../dd-trace/src/openfeature/flagging_provider') }
+
+      captureAfterResolve()({ createData })
+
+      assert.ok(
+        createData.loaders?.some((entry) => entry.loader.includes('openfeature-loader')),
+        'the openfeature loader should be applied'
+      )
+    })
+
+    it('leaves flagging_provider opaque when the peer is not installed', () => {
+      // A flagging_provider path under a tree with no installed peer.
+      const createData = { resource: '/tmp/dd-trace-no-peer/packages/dd-trace/src/openfeature/flagging_provider.js' }
+
+      captureAfterResolve()({ createData })
+
+      assert.strictEqual(createData.loaders, undefined)
+    })
+
+    it('ignores modules without a resolved resource', () => {
+      const createData = {}
+
+      captureAfterResolve()({ createData })
+
+      assert.strictEqual(createData.loaders, undefined)
+    })
+  })
 })
 
 describe('loader', () => {
@@ -90,5 +137,31 @@ describe('loader', () => {
     assert.ok(result.includes('__dd_ch'), 'should use __dd_ch variable')
     assert.ok(result.includes('__dd_mod'), 'should use __dd_mod variable')
     assert.ok(result.includes('__dd_payload'), 'should use __dd_payload variable')
+  })
+})
+
+describe('openFeatureLoader', () => {
+  const context = { cacheable: () => {} }
+
+  it('rewrites the opaque peer require into a literal, bundleable require', () => {
+    const source = [
+      "const runtimeRequire = typeof __webpack_require__ === 'function' ? __non_webpack_require__ : require",
+      "const openfeatureNodeServer = ['@datadog/openfeature', 'node', 'server'].join('-')",
+      'const openfeatureNodeServerPath = runtimeRequire.resolve(openfeatureNodeServer, { paths: [__dirname] })',
+      'const { DatadogNodeServerProvider } = runtimeRequire(openfeatureNodeServerPath)',
+    ].join('\n')
+
+    const result = openFeatureLoader.call(context, source)
+
+    assert.ok(result.includes("require('@datadog/openfeature-node-server')"), 'should use a literal require')
+    assert.ok(!result.includes('runtimeRequire(openfeatureNodeServerPath)'), 'should drop the opaque require')
+    assert.ok(!result.includes('runtimeRequire.resolve('), 'should drop the opaque resolve so it cannot throw')
+  })
+
+  it('throws when the provider load shape no longer matches', () => {
+    assert.throws(
+      () => openFeatureLoader.call(context, "const x = require('something-else')"),
+      /OpenFeature provider load shape changed/
+    )
   })
 })
