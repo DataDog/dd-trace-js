@@ -23,6 +23,10 @@ updates:
       gh-actions-packages:
         patterns:
           - "*"
+      security-non-production:
+        applies-to: security-updates
+        patterns:
+          - "*"
     labels:
       - dependabot
       - dependencies
@@ -49,6 +53,10 @@ updates:
       - semver-patch
     groups:
       docker-images:
+        patterns:
+          - "*"
+      security-non-production:
+        applies-to: security-updates
         patterns:
           - "*"
 
@@ -112,6 +120,18 @@ updates:
         update-types:
           - "minor"
           - "patch"
+      # Security fixes for shipped (production) dependencies; a human reviews majors.
+      security-production:
+        applies-to: security-updates
+        dependency-type: "production"
+        patterns:
+          - "*"
+      # Security fixes for dev-only dependencies; auto-merges fully.
+      security-non-production:
+        applies-to: security-updates
+        dependency-type: "development"
+        patterns:
+          - "*"
 
   # Vendored dependencies
   - package-ecosystem: "npm"
@@ -159,6 +179,11 @@ updates:
         update-types:
           - "minor"
           - "patch"
+      # Vendored code is bundled into the shipped package, so it counts as production.
+      security-production:
+        applies-to: security-updates
+        patterns:
+          - "*"
 
   # Instrumented library support range
   - package-ecosystem: "npm"
@@ -182,7 +207,9 @@ updates:
       - dependency-name: "office-addin-mock"
         # Pinned to 2.x due to compatibility issues with newer major versions
         update-types: ["version-update:semver-major"]
-    # Cohort-based groups so a single breaking bump only blocks its own PR.
+    # Cohort-based groups so a single breaking bump only blocks its own PR. A dependency lands
+    # in the first cohort it matches; `test-versions` is the catch-all for the long tail
+    # (OpenTelemetry, OpenFeature, logging, templating, serialization, runtimes, misc).
     groups:
       ai-and-llm:
         patterns:
@@ -196,55 +223,146 @@ updates:
           - "ai"
           - "langchain"
           - "openai"
-      serverless:
+      cloud-and-messaging:
         patterns:
           - "@aws-sdk/*"
           - "@azure/*"
+          - "@confluentinc/kafka-javascript"
+          - "@google-cloud/*"
+          - "@nats-io/*"
           - "@smithy/*"
+          - "amqp10"
+          - "amqplib"
+          - "avsc"
           - "aws-sdk"
           - "azure-functions-core-tools"
+          - "bullmq"
           - "durable-functions"
-      opentelemetry:
+          - "kafkajs"
+          - "rhea"
+      databases:
         patterns:
-          - "@opentelemetry/*"
-          - "opentracing"
-      test-optimization:
+          - "@elastic/*"
+          - "@node-redis/*"
+          - "@opensearch-project/*"
+          - "@prisma/*"
+          - "@redis/*"
+          - "aerospike"
+          - "bson"
+          - "cassandra-driver"
+          - "couchbase"
+          - "elasticsearch"
+          - "generic-pool"
+          - "ioredis"
+          - "iovalkey"
+          - "knex"
+          - "mariadb"
+          - "memcached"
+          - "mongodb"
+          - "mongodb-core"
+          - "mongoose"
+          - "mquery"
+          - "mysql"
+          - "mysql2"
+          - "oracledb"
+          - "pg"
+          - "pg-cursor"
+          - "pg-native"
+          - "pg-query-stream"
+          - "prisma"
+          - "redis"
+          - "sequelize"
+          - "sharedb"
+          - "sqlite3"
+          - "tedious"
+      web-frameworks:
         patterns:
+          - "@apollo/*"
+          - "@fastify/*"
+          - "@graphql-tools/*"
+          - "@grpc/*"
+          - "@hapi/*"
+          - "@hono/*"
+          - "@koa/*"
+          - "apollo-server-core"
+          - "apollo-server-express"
+          - "apollo-server-fastify"
+          - "axios"
+          - "body-parser"
+          - "connect"
+          - "cookie"
+          - "cookie-parser"
+          - "ejs"
+          - "express"
+          - "express-mongo-sanitize"
+          - "express-session"
+          - "fastify"
+          - "find-my-way"
+          - "graphql"
+          - "graphql-tag"
+          - "graphql-tools"
+          - "graphql-yoga"
+          - "handlebars"
+          - "hapi"
+          - "hono"
+          - "koa"
+          - "koa-route"
+          - "koa-router"
+          - "koa-websocket"
+          - "ldapjs"
+          - "ldapjs-promise"
+          - "light-my-request"
+          - "loopback"
+          - "microgateway-core"
+          - "middie"
+          - "multer"
+          - "passport"
+          - "passport-http"
+          - "passport-local"
+          - "pug"
+          - "request"
+          - "restify"
+          - "router"
+          - "undici"
+          - "ws"
+      testing-and-build:
+        patterns:
+          - "@babel/*"
+          - "@cucumber/*"
+          - "@electron/*"
           - "@fast-check/jest"
           - "@happy-dom/jest-environment"
           - "@jest/*"
           - "@playwright/test"
           - "@vitest/*"
           - "babel-jest"
-          - "jest-*"
+          - "cypress"
+          - "cypress-fail-fast"
+          - "electron"
+          - "esbuild"
           - "jest"
-          - "mocha-each"
+          - "jest-*"
           - "mocha"
+          - "mocha-each"
+          - "next"
+          - "nock"
           - "nyc"
-          - "playwright-core"
+          - "office-addin-mock"
           - "playwright"
+          - "playwright-core"
+          - "react"
+          - "react-dom"
+          - "selenium-webdriver"
+          - "sinon"
           - "tinypool"
+          - "typescript"
           - "vitest"
-      databases:
-        patterns:
-          - "@node-redis/client"
-          - "@prisma/*"
-          - "@redis/client"
-          - "ioredis"
-          - "mongodb-core"
-          - "mongodb"
-          - "mongoose"
-          - "mysql"
-          - "mysql2"
-          - "pg-cursor"
-          - "pg-native"
-          - "pg-query-stream"
-          - "pg"
-          - "prisma"
-          - "redis"
-          - "sqlite3"
-          - "tedious"
+          - "workerpool"
       test-versions:
+        patterns:
+          - "*"
+      security-non-production:
+        applies-to: security-updates
         patterns:
           - "*"
 
@@ -272,5 +390,9 @@ updates:
         update-types: ["version-update:semver-major"]
     groups:
       test-versions:
+        patterns:
+          - "*"
+      security-non-production:
+        applies-to: security-updates
         patterns:
           - "*"
