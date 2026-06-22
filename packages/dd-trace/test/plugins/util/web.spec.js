@@ -176,6 +176,27 @@ describe('plugins/util/web', () => {
       })
   })
 
+  describe('OTel semantics network.peer.address', () => {
+    // The HTTP tag renames happen centrally in span_format; only network.peer.address
+    // is set here (the socket isn't available at serialization).
+    it('sets network.peer.address from the socket when OTel semantics are enabled', () => {
+      const otelConfig = web.normalizeConfig({ DD_TRACE_OTEL_SEMANTICS_ENABLED: true })
+      req.socket = { remoteAddress: '10.0.0.1' }
+
+      const span = web.startSpan(tracer, otelConfig, req, res, 'test.request')
+
+      assert.strictEqual(span.context().getTag('network.peer.address'), '10.0.0.1')
+    })
+
+    it('does not set network.peer.address when OTel semantics are disabled', () => {
+      req.socket = { remoteAddress: '10.0.0.1' }
+
+      const span = web.startSpan(tracer, config, req, res, 'test.request')
+
+      assert.strictEqual(span.context().hasTag('network.peer.address'), false)
+    })
+  })
+
   describe('root', () => {
     it('should return null when not yet instrumented', () => {
       assert.strictEqual(web.root(req), null)

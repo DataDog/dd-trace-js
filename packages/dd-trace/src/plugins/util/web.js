@@ -13,7 +13,8 @@ const { storage } = require('../../../../datadog-core')
 const legacyStorage = storage('legacy')
 const urlFilter = require('./urlfilter')
 const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
-const { extractURL, obfuscateQs, calculateHttpEndpoint } = require('./url')
+const { extractURL, obfuscateQs, getQsObfuscator, calculateHttpEndpoint } = require('./url')
+const { NETWORK_PEER_ADDRESS } = require('./http-otel-semantics')
 
 const WEB = types.WEB
 const SERVER = kinds.SERVER
@@ -389,6 +390,15 @@ function addRequestTags (context, spanType) {
     [HTTP_USERAGENT]: req.headers['user-agent'],
   })
 
+  // OTel `network.peer.address` is the immediate socket peer. It has no Datadog
+  // equivalent and the socket isn't available at serialization, so (unlike the
+  // other HTTP attributes, which are renamed centrally in span_format) it is set
+  // here directly when OTel semantics are enabled.
+  if (config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+    const peerAddress = req.socket?.remoteAddress
+    if (peerAddress) span.setTag(NETWORK_PEER_ADDRESS, peerAddress)
+  }
+
   // if client ip has already been set by appsec, no need to run it again
   if (config.extractIp && !spanContext.hasTag(HTTP_CLIENT_IP)) {
     const clientIp = config.extractIp(config, req)
@@ -538,32 +548,6 @@ function getMiddlewareSetting (config) {
     return config.middleware
   } else if (config && config.hasOwnProperty('middleware')) {
     log.error('Expected `middleware` to be a boolean.')
-  }
-
-  return true
-}
-
-function getQsObfuscator (config) {
-  const obfuscator = config.queryStringObfuscation
-
-  if (typeof obfuscator === 'boolean') {
-    return obfuscator
-  }
-
-  if (typeof obfuscator === 'string') {
-    if (obfuscator === '') return false // disable obfuscator
-
-    if (obfuscator === '.*') return true // optimize full redact
-
-    try {
-      return new RegExp(obfuscator, 'gi')
-    } catch (err) {
-      log.error('Web plugin error getting qs obfuscator', err)
-    }
-  }
-
-  if (config.hasOwnProperty('queryStringObfuscation')) {
-    log.error('Expected `queryStringObfuscation` to be a regex string or boolean.')
   }
 
   return true
