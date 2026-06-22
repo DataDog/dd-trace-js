@@ -10,7 +10,7 @@ describe('API Security domain', () => {
   describe('reportRequest', () => {
     let apiSecurity
     let sampler, web, telemetry, reporter
-    let req, res
+    let req
 
     beforeEach(() => {
       sampler = {
@@ -44,7 +44,6 @@ describe('API Security domain', () => {
       })
 
       req = {}
-      res = { statusCode: 200 }
     })
 
     it('emits nothing on SKIP decision', () => {
