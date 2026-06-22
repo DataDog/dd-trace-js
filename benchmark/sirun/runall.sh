@@ -121,7 +121,7 @@ if [[ -d /app/candidate/.git && -n "${COMMIT_SHA:-}" && -n "${CI_COMMIT_SHA:-}" 
   # diff actually succeeds and shows no node-<major> pin change.
   ASYNC_HOOKS_DIFF=""
   if ASYNC_HOOKS_DIFF=$(git -C /app/candidate diff "${COMMIT_SHA}..${CI_COMMIT_SHA}" -- \
-       packages/dd-trace/test/plugins/versions/package.json 2>/dev/null); then
+      packages/dd-trace/test/plugins/versions/package.json 2>/dev/null); then
     if grep -qE '^[-+][[:space:]]*"node-[0-9]+":' <<< "${ASYNC_HOOKS_DIFF}"; then
       echo "async_hooks: a node-<major> pin changed in this diff; running it."
     else
