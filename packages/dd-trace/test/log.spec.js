@@ -185,7 +185,7 @@ describe('log', () => {
         assert.strictEqual(loaded.log.configure({}), true)
       })
 
-      it('falls back to internal config.enabled when nothing else provided', () => {
+      it('does not retain a previously enabled state once the env is cleared', () => {
         const { log, logWriter } = reloadLog({
           fleetEntries: {},
           isServerless: false,
@@ -196,17 +196,17 @@ describe('log', () => {
         assert.strictEqual(log.configure({}), true)
 
         process.env = {}
-        assert.strictEqual(log.configure({}), true)
-        sinon.assert.calledWithExactly(logWriter.configure.secondCall, true, 'debug', undefined)
+        assert.strictEqual(log.configure({}), false)
+        sinon.assert.calledWithExactly(logWriter.configure.secondCall, false, 'debug', undefined)
       })
 
-      it('falls back to the previous log level when no override is provided', () => {
+      it('does not retain a previous log level once the override is gone', () => {
         const { log, logWriter } = reloadLog()
 
         log.configure({ logLevel: 'error' })
         log.configure({})
 
-        sinon.assert.calledWithExactly(logWriter.configure.secondCall, false, 'error', undefined)
+        sinon.assert.calledWithExactly(logWriter.configure.secondCall, false, 'debug', undefined)
       })
     })
   })
