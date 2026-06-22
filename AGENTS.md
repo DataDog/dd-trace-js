@@ -149,6 +149,7 @@ Use `node:assert/strict` for standard assertions. For partial deep object checks
 
 - Lint: `npm run lint` / `npm run lint:fix`
 - Files: kebab-case
+- Naming: the product is **Test Optimization**, not "CI Visibility". Name new dirs, benchmarks, docs and prose `test-optimization`; only keep the legacy `ci-visibility` / `CiVisibility` spelling where it is a pre-existing module path or class (e.g. `AgentlessCiVisibilityEncoder`).
 
 ### JSDoc
 

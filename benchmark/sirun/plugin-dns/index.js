@@ -80,6 +80,15 @@ assert.equal(lastResult, '127.0.0.1', 'dns lookup wrapper did not deliver the re
 assert.equal(storeInLookup?.span, span, 'start bind did not propagate the span store')
 assert.equal(storeInCallback, undefined, 'finish bind did not restore the parent store')
 
+// Drift guard: buildArgsContext mirrors buildCallbackArgsContext() in dns.js (not
+// exported). Assert it still drops the trailing callback and captures the rest, so
+// the mirror can't silently diverge from the production arg-capture shape.
+assert.deepEqual(
+  buildArgsContext(null, ['localhost', 4, () => {}]),
+  { args: ['localhost', 4] },
+  'buildArgsContext mirror drifted from buildCallbackArgsContext'
+)
+
 guard.loopStart()
 for (let i = 0; i < ITERATIONS; i++) {
   wrappedLookup('localhost', onLookup)
