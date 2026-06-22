@@ -82,16 +82,16 @@ Two ways to fetch the source locally:
 
 1. **Shallow clone** the installed version:
 
-   ```bash
-   git clone --depth 1 --branch v<x.y.z> https://github.com/<org>/<repo>.git /tmp/<lib>-versions/v<x.y.z>
-   ```
+  ```bash
+  git clone --depth 1 --branch v<x.y.z> https://github.com/<org>/<repo>.git /tmp/<lib>-versions/v<x.y.z>
+  ```
 
 2. **`npm pack`** when the published runtime artifact is what matters:
 
-   ```bash
-   cd /tmp/<lib>-versions && npm pack <lib>@<x.y.z>
-   tar -xzf <lib>-<x.y.z>.tgz -C v<x.y.z> --strip-components=1
-   ```
+  ```bash
+  cd /tmp/<lib>-versions && npm pack <lib>@<x.y.z>
+  tar -xzf <lib>-<x.y.z>.tgz -C v<x.y.z> --strip-components=1
+  ```
 
 Read the file the wrap hooks, the base classes the hooked methods inherit from, and files the wrap doesn't currently touch — a public method, an internal channel, or a metadata field the current instrumentation skipped often gives a cleaner hook (e.g., kafka `cluster.brokerPool.metadata.clusterId`, couchbase `tracingChannel`).
 
@@ -156,20 +156,20 @@ For the complete list by base class, see [Reference Plugins](references/referenc
 Follow these steps when creating or modifying an integration:
 
 1. **Investigate** — Read the upstream library's source (see [Read Upstream Source First](#read-upstream-source-first)). Read 1-2 reference integrations of the same type (see table above). Understand the instrumentation and plugin patterns before writing code.
-2. **Implement instrumentation** — Create the instrumentation in `packages/datadog-instrumentations/src/`. Use orchestrion for instrumentation. 
+2. **Implement instrumentation** — Create the instrumentation in `packages/datadog-instrumentations/src/`. Use orchestrion for instrumentation.
 3. **Implement plugin** — Create the plugin in `packages/datadog-plugin-<name>/src/`. Extend the correct base class.
 4. **Register** — Add entries in `packages/dd-trace/src/plugins/index.js`, `index.d.ts`, `docs/test.ts`, `docs/API.md`, and `.github/workflows/apm-integrations.yml`.
 5. **Write tests** — Add unit tests and ESM integration tests. See [Testing](references/testing.md) for templates.
 6. **Run tests** — Validate with:
-   ```bash
-   # Run plugin tests (preferred CI command — handles yarn services automatically)
-   PLUGINS="<name>" npm run test:plugins:ci
+  ```bash
+  # Run plugin tests (preferred CI command — handles yarn services automatically)
+  PLUGINS="<name>" npm run test:plugins:ci
 
-   # If the plugin needs external services (databases, message brokers, etc.),
-   # check docker-compose.yml for available service names, then:
+  # If the plugin needs external services (databases, message brokers, etc.),
+  # check docker-compose.yml for available service names, then:
   docker compose up -d <service>
-   PLUGINS="<name>" npm run test:plugins:ci
-   ```
+  PLUGINS="<name>" npm run test:plugins:ci
+  ```
 7. **Verify** — Confirm all tests pass before marking work as complete.
 
 ## Reference Files

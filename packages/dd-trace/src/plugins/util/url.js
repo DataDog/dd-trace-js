@@ -2,6 +2,8 @@
 
 const { URL } = require('url')
 
+const log = require('../../log')
+
 const HTTP2_HEADER_AUTHORITY = ':authority'
 const HTTP2_HEADER_SCHEME = ':scheme'
 const HTTP2_HEADER_PATH = ':path'
@@ -58,6 +60,69 @@ function obfuscateQs (config, url) {
   qs = qs.replace(queryStringObfuscation, '<redacted>')
 
   return `${path}?${qs}`
+}
+
+const qsObfuscatorCache = new Map()
+
+/**
+ * Compile the configured query-string obfuscator (a regex string, or a boolean)
+ * into the boolean / RegExp form that `obfuscateQs` consumes. The compiled regex
+ * is cached, since the configuration is stable for the process lifetime.
+ *
+ * @param {{ queryStringObfuscation?: boolean | string }} config
+ * @returns {boolean | RegExp}
+ */
+function getQsObfuscator (config) {
+  const obfuscator = config.queryStringObfuscation
+
+  if (typeof obfuscator === 'boolean') return obfuscator
+
+  if (typeof obfuscator === 'string') {
+    const cached = qsObfuscatorCache.get(obfuscator)
+    if (cached !== undefined) return cached
+
+    let compiled = true
+    if (obfuscator === '') {
+      compiled = false // disable obfuscator
+    } else if (obfuscator !== '.*') { // '.*' optimizes to a full redact (true)
+      try {
+        compiled = new RegExp(obfuscator, 'gi')
+      } catch (err) {
+        log.error('Error getting qs obfuscator', err)
+      }
+    }
+
+    qsObfuscatorCache.set(obfuscator, compiled)
+    return compiled
+  }
+
+  if (Object.hasOwn(config, 'queryStringObfuscation')) {
+    log.error('Expected `queryStringObfuscation` to be a regex string or boolean.')
+  }
+
+  return true
+}
+
+/**
+ * Build a client span's `http.url` with its query retained but obfuscated per
+ * `config.queryStringObfuscation` (OTel `url.full` is the absolute URL including
+ * the redacted query). Falls back to `strippedUrl` when there is no query.
+ * Callers gate this behind `DD_TRACE_OTEL_SEMANTICS_ENABLED`, so the default
+ * (flag off) hot path stays a plain tag assignment.
+ *
+ * @param {{ queryStringObfuscation?: boolean | string }} config
+ * @param {string} base `scheme://host[:port]`
+ * @param {string} [pathname] raw request path, may include `?query`
+ * @param {string} strippedUrl `base` + query-stripped path (used when there is no query)
+ * @returns {string}
+ */
+function buildClientHttpUrl (config, base, pathname, strippedUrl) {
+  if (pathname?.includes('?')) {
+    // `config.queryStringObfuscation` is the raw config value here (client plugins
+    // don't normalize it the way the server does), so compile it first.
+    return obfuscateQs({ queryStringObfuscation: getQsObfuscator(config) }, `${base}${pathname}`)
+  }
+  return strippedUrl
 }
 
 /**
@@ -139,7 +204,9 @@ function filterSensitiveInfoFromRepository (repositoryUrl) {
 module.exports = {
   extractURL,
   obfuscateQs,
+  getQsObfuscator,
+  buildClientHttpUrl,
   calculateHttpEndpoint,
   filterSensitiveInfoFromRepository,
-  extractPathFromUrl, // test only
+  extractPathFromUrl, // used by http-otel-semantics decomposeServerUrl fallback (and tests)
 }
