@@ -3,6 +3,7 @@
 const os = require('os')
 const { inspect } = require('util')
 const tracerVersion = require('../../../package.json').version
+const { flushFrameworkWarnings } = require('../../datadog-instrumentations/src/helpers/check-require-cache')
 const { warn } = require('./log/writer')
 
 const errors = {}
@@ -68,6 +69,22 @@ function logGenericError (message) {
   }
 
   warn('DATADOG TRACER DIAGNOSTIC - Generic Error: ' + message)
+}
+
+/**
+ * Surfaces the framework warnings collected by `checkForRequiredModules` (e.g.
+ * Next.js loaded before dd-trace, so its integration silently no-ops). Gated on
+ * startupLogs like the other diagnostics rather than behind DD_TRACE_DEBUG,
+ * since the affected users never have debug logging on. Draining makes repeat
+ * calls idempotent.
+ * @see https://github.com/DataDog/dd-trace-js/issues/5430
+ */
+function logLateLoadedFrameworks () {
+  if (!config?.startupLogs) {
+    return
+  }
+
+  flushFrameworkWarnings(message => warn('DATADOG TRACER DIAGNOSTIC - ' + message))
 }
 
 /**
@@ -145,6 +162,7 @@ module.exports = {
   startupLog,
   logIntegrations,
   logAgentError,
+  logLateLoadedFrameworks,
   setStartupLogConfig,
   setStartupLogPluginManager,
   setSamplingRules,

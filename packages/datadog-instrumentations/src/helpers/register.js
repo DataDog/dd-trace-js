@@ -37,8 +37,9 @@ if (!disabledInstrumentations.has('process')) {
   require('../process')
 }
 
-if (DD_TRACE_DEBUG) {
-  checkRequireCache.checkForRequiredModules()
+const debugEnabled = DD_TRACE_DEBUG
+checkRequireCache.checkForRequiredModules(debugEnabled)
+if (debugEnabled) {
   setImmediate(checkRequireCache.checkForPotentialConflicts)
 }
 
