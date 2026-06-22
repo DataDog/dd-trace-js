@@ -8,6 +8,10 @@ const proxyquire = require('proxyquire').noCallThru().noPreserveCache()
 require('./setup/core')
 
 describe('register.js', () => {
+  afterEach(() => {
+    sinon.restore()
+  })
+
   it('falls back to the async loader on unsupported Node.js versions', () => {
     const register = sinon.stub()
     const registerSyncLoaderHooks = sinon.stub().returns(true)
@@ -16,6 +20,20 @@ describe('register.js', () => {
       register,
       registerSyncLoaderHooks,
       version: { NODE_MAJOR: 24, NODE_MINOR: 11, NODE_PATCH: 0 },
+    })
+
+    sinon.assert.notCalled(registerSyncLoaderHooks)
+    sinon.assert.calledOnceWithExactly(register, './loader-hook.mjs', sinon.match.instanceOf(URL))
+  })
+
+  it('falls back to the async loader on Node.js versions predating module.registerHooks', () => {
+    const register = sinon.stub()
+    const registerSyncLoaderHooks = sinon.stub().returns(true)
+
+    loadRegister({
+      register,
+      registerSyncLoaderHooks,
+      version: { NODE_MAJOR: 20, NODE_MINOR: 19, NODE_PATCH: 0 },
     })
 
     sinon.assert.notCalled(registerSyncLoaderHooks)
@@ -36,20 +54,20 @@ describe('register.js', () => {
     sinon.assert.notCalled(register)
   })
 
-  it('throws on supported Node.js versions if sync loader registration returns false', () => {
+  it('warns and falls back to the async loader if sync loader registration returns false', () => {
     const register = sinon.stub()
     const registerSyncLoaderHooks = sinon.stub().returns(false)
+    const emitWarning = sinon.stub(process, 'emitWarning')
 
-    assert.throws(() => {
-      loadRegister({
-        register,
-        registerSyncLoaderHooks,
-        version: { NODE_MAJOR: 24, NODE_MINOR: 11, NODE_PATCH: 1 },
-      })
-    }, /Synchronous loader hooks are supported but dd-trace could not register them\./)
+    loadRegister({
+      register,
+      registerSyncLoaderHooks,
+      version: { NODE_MAJOR: 24, NODE_MINOR: 11, NODE_PATCH: 1 },
+    })
 
     sinon.assert.calledOnce(registerSyncLoaderHooks)
-    sinon.assert.notCalled(register)
+    sinon.assert.calledOnceWithMatch(emitWarning, /could not; falling back to the asynchronous loader/)
+    sinon.assert.calledOnceWithExactly(register, './loader-hook.mjs', sinon.match.instanceOf(URL))
   })
 
   it('throws sync loader registration errors on supported Node.js versions', () => {
