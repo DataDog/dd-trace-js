@@ -20,14 +20,14 @@ const legacyStorage = storage('legacy')
  * integration can resolve `model_provider`.
  *
  * The integration's `enabled` flag follows this plugin's configure()
- * lifecycle. Once registered, the processor stays inside agents-core for
- * the life of the process — flipping `enabled` is what re-engages tracing.
+ * lifecycle. Each loaded version of the agents package replaces all processors
+ * via setTraceProcessors() on module load, so the plugin re-registers a
+ * fresh DDOpenAIAgentsProcessor for each module version that fires the channel.
  */
 class OpenaiAgentsPlugin extends Plugin {
   static id = 'openai-agents'
 
   #integration
-  #processorRegistered = false
 
   constructor (tracer, tracerConfig) {
     super(tracer, tracerConfig)
@@ -36,9 +36,12 @@ class OpenaiAgentsPlugin extends Plugin {
       config: tracerConfig,
     })
 
+    // Register a new processor each time @openai/agents fires the channel.
+    // Each module version calls setTraceProcessors() on load (which replaces
+    // all processors), so we must re-register after every new version loads.
+    // The instrumentation's patchedMods WeakSet ensures each module instance
+    // fires the channel exactly once, so no duplicates accumulate.
     this.addSub('apm:openai-agents:agents-core:loaded', ({ mod }) => {
-      if (this.#processorRegistered) return
-      this.#processorRegistered = true
       const processor = new DDOpenAIAgentsProcessor(() => this.#integration)
       if (typeof mod?.addTraceProcessor === 'function') {
         mod.addTraceProcessor(processor)
