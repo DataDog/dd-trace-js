@@ -9,7 +9,7 @@ const normalizedFrameworkCache = new Map()
 function normalizeFramework (framework) {
   let normalized = normalizedFrameworkCache.get(framework)
   if (normalized === undefined) {
-    normalized = framework ? framework.toLowerCase().replaceAll(' ', '_') : ''
+    normalized = framework ? framework.toLowerCase().replaceAll(' ', '_') : 'unknown'
     normalizedFrameworkCache.set(framework, normalized)
   }
   return normalized

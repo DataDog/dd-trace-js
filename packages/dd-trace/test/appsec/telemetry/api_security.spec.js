@@ -49,10 +49,10 @@ describe('Appsec API Security Telemetry metrics', () => {
         sinon.assert.calledOnceWithExactly(count, 'api_security.request.schema', { framework: 'next_js' })
       })
 
-      it('should use empty framework tag when missing', () => {
+      it('should use "unknown" framework tag when framework is not available', () => {
         appsecTelemetry.incrementApiSecRequestSchemaMetric(undefined)
 
-        sinon.assert.calledOnceWithExactly(count, 'api_security.request.schema', { framework: '' })
+        sinon.assert.calledOnceWithExactly(count, 'api_security.request.schema', { framework: 'unknown' })
       })
     })
 
