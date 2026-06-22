@@ -231,6 +231,9 @@ class FakeCiVisIntake extends FakeAgent {
         headers: req.headers,
         media: {
           traceId: req.params.traceId,
+          contentType: req.headers['content-type'],
+          idempotencyKey: req.headers['x-dd-idempotency-key'],
+          capturedAt: req.headers['x-dd-media-captured-at'],
           content: req.body,
         },
         url: req.url,

@@ -915,5 +915,100 @@ moduleTypes.forEach(({
         fs.rmSync(subprojectDir, { recursive: true, force: true })
       }
     })
+
+    it('uploads failure screenshots and the spec video to the v2 media endpoint', async function () {
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+      const specToRun = 'cypress/e2e/basic-fail.js'
+      // Failure media is disabled by default in the sandbox config, so enable both the
+      // failure screenshot and the per-spec video for this run.
+      const command = version === '6.7.0'
+        ? './node_modules/.bin/cypress run ' +
+          '--config-file cypress-config.json ' +
+          `--config screenshotOnRunFailure=true,video=true --spec "${specToRun}"`
+        : `${testCommand} --config screenshotOnRunFailure=true,video=true`
+      let testOutput = ''
+
+      childProcess = exec(
+        command,
+        {
+          cwd,
+          env: {
+            ...envVars,
+            CYPRESS_BASE_URL: webAppBaseUrl,
+            SPEC_PATTERN: specToRun,
+          },
+        }
+      )
+      childProcess.stdout?.on('data', (d) => { testOutput += d.toString() })
+      childProcess.stderr?.on('data', (d) => { testOutput += d.toString() })
+
+      const receiverPromise = receiver
+        .gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.startsWith('/api/unstable/ci/test-runs/') || url.endsWith('/api/v2/citestcycle'),
+          (payloads) => {
+            const mediaPayloads = payloads.filter(({ url }) => url.startsWith('/api/unstable/ci/test-runs/'))
+            const failedTest = payloads
+              .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+              .flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test')
+              .find(event => event.content.resource === 'cypress/e2e/basic-fail.js.basic fail suite can fail')
+
+            assert.ok(failedTest, `failed test event should be reported\n${testOutput}`)
+            const expectedTraceId = failedTest.content.trace_id.toString()
+
+            const expectedUrl = `/api/unstable/ci/test-runs/${expectedTraceId}/media`
+            const screenshotPayload = mediaPayloads.find(({ media }) => media.contentType === 'image/png')
+            const videoPayload = mediaPayloads.find(({ media }) => media.contentType === 'video/mp4')
+
+            assert.ok(screenshotPayload, `a screenshot should be uploaded to the v2 media endpoint\n${testOutput}`)
+            assert.ok(videoPayload, `the spec video should be uploaded to the v2 media endpoint\n${testOutput}`)
+
+            for (const mediaPayload of [screenshotPayload, videoPayload]) {
+              assert.strictEqual(mediaPayload.url, expectedUrl)
+              assert.strictEqual(mediaPayload.media.traceId, expectedTraceId)
+              assert.strictEqual(mediaPayload.headers['dd-api-key'], '1')
+
+              // v2 idempotency key is `<traceId>:<filename>`, reused on retry so the
+              // media service overwrites instead of duplicating the stored object.
+              const idempotencyKey = mediaPayload.headers['x-dd-idempotency-key']
+              assert.ok(idempotencyKey, 'media upload should send an X-Dd-Idempotency-Key header')
+              assert.strictEqual(mediaPayload.media.idempotencyKey, idempotencyKey)
+              assert.ok(
+                idempotencyKey.startsWith(`${expectedTraceId}:`),
+                `idempotency key ${idempotencyKey} should start with the trace id`
+              )
+
+              // Capture time (epoch ms) is part of the stored object key and must be a positive integer.
+              const capturedAtHeader = mediaPayload.headers['x-dd-media-captured-at']
+              const capturedAt = Number(capturedAtHeader)
+              assert.ok(
+                Number.isInteger(capturedAt) && capturedAt > 0,
+                `X-Dd-Media-Captured-At should be a positive integer, got ${capturedAtHeader}`
+              )
+
+              // The v1 PoC sent this routing header; v2 must not.
+              assert.ok(
+                !('test-drive-test-failure-media-bucket' in mediaPayload.headers),
+                'v2 must not send the v1 test-drive-test-failure-media-bucket header'
+              )
+            }
+
+            // The screenshot body is a real PNG (magic bytes), not an empty/placeholder upload.
+            assert.deepStrictEqual(
+              [...screenshotPayload.media.content.subarray(0, 8)],
+              [137, 80, 78, 71, 13, 10, 26, 10]
+            )
+          }, { hardTimeout: 60000 })
+        .catch((error) => {
+          error.message += `\nCypress output:\n${testOutput}`
+          throw error
+        })
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+    })
   })
 })
