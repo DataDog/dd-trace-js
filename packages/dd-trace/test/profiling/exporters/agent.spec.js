@@ -36,7 +36,24 @@ function wait (ms) {
 
 async function createProfile (periodType) {
   const [type] = periodType
-  const profiler = type === 'wall' ? new WallProfiler() : new SpaceProfiler()
+  const config = {
+    profiling: {
+      codeHotspotsEnabled: false,
+      cpuProfilingEnabled: false,
+      endpointCollectionEnabled: false,
+      heapSamplingInterval: 512 * 1024,
+      timelineEnabled: false,
+      v8ProfilerBugWorkaroundEnabled: false,
+    },
+    telemetry: { heartbeatInterval: 60_000 },
+  }
+  const profiler = type === 'wall'
+    ? new WallProfiler(config, {
+      asyncContextFrameEnabled: false,
+      flushInterval: 60_000,
+      samplingInterval: 1e3 / 99,
+    })
+    : new SpaceProfiler(config)
   profiler.start({
     // Throw errors in test rather than logging them
     logger: {
@@ -190,11 +207,12 @@ describe('exporters/agent', function () {
     return new AgentExporter({
       url,
       logger,
-      uploadTimeout,
+      profiling: { uploadTimeout },
       env: ENV,
       service: SERVICE,
       version: APP_VERSION,
-      host: HOST,
+      reportHostname: true,
+      hostname: HOST,
     })
   }
 
@@ -333,7 +351,13 @@ describe('exporters/agent', function () {
         { '../../exporters/common/docker': docker, http, '../../log': logStub }
       )
       const exporter = new AgentExporterStubbed({
-        url, uploadTimeout: 100, env: ENV, service: SERVICE, version: APP_VERSION, host: HOST,
+        url,
+        profiling: { uploadTimeout: 100 },
+        env: ENV,
+        service: SERVICE,
+        version: APP_VERSION,
+        reportHostname: true,
+        hostname: HOST,
       })
       const start = new Date()
       const end = new Date()

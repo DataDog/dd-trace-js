@@ -30,8 +30,17 @@ describe('profilers/native/space', () => {
     })
   })
 
+  // Test adapter: bridges the legacy flat options shape these specs use to the
+  // (config, derived) shape the space profiler now expects.
+  function makeSpace ({ heapSamplingInterval = 512 * 1024, allocationProfilingEnabled = false, oomMonitoring } = {}) {
+    return new NativeSpaceProfiler(
+      { profiling: { heapSamplingInterval } },
+      { allocationProfilingEnabled, oomMonitoring }
+    )
+  }
+
   it('should start the internal space profiler', () => {
-    const profiler = new NativeSpaceProfiler({ allocationProfilingEnabled: false })
+    const profiler = makeSpace({ allocationProfilingEnabled: false })
 
     profiler.start()
 
@@ -40,7 +49,7 @@ describe('profilers/native/space', () => {
 
   it('should use the provided configuration options', () => {
     const heapSamplingInterval = 1024
-    const profiler = new NativeSpaceProfiler({ heapSamplingInterval, allocationProfilingEnabled: false })
+    const profiler = makeSpace({ heapSamplingInterval, allocationProfilingEnabled: false })
 
     profiler.start()
 
@@ -49,7 +58,7 @@ describe('profilers/native/space', () => {
   })
 
   it('should enable allocation profiling when configured', () => {
-    const profiler = new NativeSpaceProfiler({ allocationProfilingEnabled: true })
+    const profiler = makeSpace({ allocationProfilingEnabled: true })
 
     profiler.start()
 
@@ -57,7 +66,7 @@ describe('profilers/native/space', () => {
   })
 
   it('should stop the internal space profiler', () => {
-    const profiler = new NativeSpaceProfiler()
+    const profiler = makeSpace()
 
     assert.strictEqual(profiler.isStarted(), false)
     profiler.start()
@@ -69,14 +78,14 @@ describe('profilers/native/space', () => {
   })
 
   it('should provide info', () => {
-    const profiler = new NativeSpaceProfiler()
+    const profiler = makeSpace()
 
     const info = profiler.getInfo()
     assert.strictEqual(Object.keys(info).length, 0)
   })
 
   it('should collect profiles from the pprof space profiler', () => {
-    const profiler = new NativeSpaceProfiler()
+    const profiler = makeSpace()
 
     profiler.start()
 
@@ -89,7 +98,7 @@ describe('profilers/native/space', () => {
   })
 
   it('should collect profiles from the pprof space profiler and stop profiler if not restarted', () => {
-    const profiler = new NativeSpaceProfiler()
+    const profiler = makeSpace()
 
     profiler.start()
 
@@ -102,7 +111,7 @@ describe('profilers/native/space', () => {
   })
 
   it('should encode profiles using their encodeAsync method', () => {
-    const profiler = new NativeSpaceProfiler()
+    const profiler = makeSpace()
 
     profiler.start()
     const profile = profiler.profile(true)
@@ -112,7 +121,7 @@ describe('profilers/native/space', () => {
   })
 
   it('should use mapper if given', () => {
-    const profiler = new NativeSpaceProfiler()
+    const profiler = makeSpace()
 
     const mapper = {}
 

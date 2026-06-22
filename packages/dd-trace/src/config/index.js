@@ -601,14 +601,14 @@ class Config extends ConfigBase {
 
     if (process.platform === 'win32') {
       // OOM monitoring does not work properly on Windows, so it will be disabled.
-      deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED')
+      deactivateIfEnabledAndWarnOnWindows(this, 'profiling.experimentalOomMonitoringEnabled')
       // Profiler sampling contexts are not available on Windows, so features
       // depending on those (code hotspots and endpoint collection) need to be disabled on Windows.
-      deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_CODEHOTSPOTS_ENABLED')
-      deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_ENDPOINT_COLLECTION_ENABLED')
-      deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_CPU_ENABLED')
-      deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_TIMELINE_ENABLED')
-      deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED')
+      deactivateIfEnabledAndWarnOnWindows(this, 'profiling.codeHotspotsEnabled')
+      deactivateIfEnabledAndWarnOnWindows(this, 'profiling.endpointCollectionEnabled')
+      deactivateIfEnabledAndWarnOnWindows(this, 'profiling.cpuProfilingEnabled')
+      deactivateIfEnabledAndWarnOnWindows(this, 'profiling.timelineEnabled')
+      deactivateIfEnabledAndWarnOnWindows(this, 'profiling.asyncContextFrameEnabled')
     }
 
     // Single tags update is tracked as a calculated value.
@@ -620,15 +620,15 @@ class Config extends ConfigBase {
 
 /**
  * @param {Config} config
- * @param {ConfigKey} envVar
+ * @param {ConfigKey} name
  */
-function deactivateIfEnabledAndWarnOnWindows (config, envVar) {
-  if (config[envVar]) {
-    const source = trackedConfigOrigins.get(envVar)
-    setAndTrack(config, envVar, false)
+function deactivateIfEnabledAndWarnOnWindows (config, name) {
+  if (get(config, name)) {
+    const source = trackedConfigOrigins.get(name)
+    setAndTrack(config, name, false)
     // TODO: Should we log even for default values?
     if (source) {
-      log.warn('%s is not supported on Windows. Deactivating. (source: %s)', envVar, source)
+      log.warn('%s is not supported on Windows. Deactivating. (source: %s)', name, source)
     }
   }
 }

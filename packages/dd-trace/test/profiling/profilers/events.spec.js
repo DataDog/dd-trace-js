@@ -24,12 +24,10 @@ function collectLabels (sample, stringTable) {
 }
 
 function runOnceAndProfile (startChannel, finishChannel, ctx) {
-  const profiler = new EventsProfiler({
-    samplingInterval: 10_000,
-    flushInterval: 65_000,
-    timelineSamplingEnabled: false,
-    codeHotspotsEnabled: true,
-  })
+  const profiler = new EventsProfiler(
+    { profiling: { timelineSamplingEnabled: false, codeHotspotsEnabled: true } },
+    { samplingInterval: 10_000, flushInterval: 65_000 }
+  )
   const startTime = new Date()
   profiler.start()
   try {
@@ -43,11 +41,7 @@ function runOnceAndProfile (startChannel, finishChannel, ctx) {
 
 function getProfilerConfig (tracerOptions) {
   const tracerConfig = getConfigFresh(tracerOptions)
-  const ProfilingConfig = require('../../../src/profiling/config').Config
-  return new ProfilingConfig({
-    url: 'http://127.0.0.1:8126',
-    ...tracerConfig,
-  })
+  return { url: 'http://127.0.0.1:8126', ...tracerConfig }
 }
 
 describe('profilers/events', () => {
@@ -56,7 +50,11 @@ describe('profilers/events', () => {
   })
 
   it('should provide info', () => {
-    const info = new EventsProfiler(getProfilerConfig()).getInfo()
+    const config = getProfilerConfig()
+    const info = new EventsProfiler(config, {
+      flushInterval: config.profiling.uploadPeriod * 1000,
+      samplingInterval: 1e3 / 99,
+    }).getInfo()
     assert(info.maxSamples > 0, `Expected ${info.maxSamples} > 0`)
   })
 
@@ -74,12 +72,13 @@ describe('profilers/events', () => {
     }
     storage('legacy').enterWith({ span })
 
-    const profiler = new EventsProfiler({
-      samplingInterval,
-      flushInterval,
-      timelineSamplingEnabled: false, // don't discard any events
-      codeHotspotsEnabled: true, // DNS events are only observed when code hotspots are enabled
-    })
+    const profiler = new EventsProfiler(
+      {
+        // don't discard any events; DNS events only observed when code hotspots are enabled
+        profiling: { timelineSamplingEnabled: false, codeHotspotsEnabled: true },
+      },
+      { samplingInterval, flushInterval }
+    )
     const startTime = new Date()
     profiler.start()
 

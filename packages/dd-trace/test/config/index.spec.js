@@ -3972,8 +3972,9 @@ apm_configuration_default:
         llmobs: {
           mlApp: 'my-llm-app',
         },
-        DD_PROFILING_EXPORTERS: ['agent'],
-        profiling: {},
+        profiling: {
+          exporters: ['agent'],
+        },
         dynamicInstrumentation: {
           probeFile: '/tmp/probes',
         },

@@ -50,8 +50,8 @@ function labelFromStrStr (stringTable, keyStr, valStr) {
   return labelFromStr(stringTable, stringTable.dedup(keyStr), valStr)
 }
 
-function getMaxSamples (options) {
-  const maxCpuSamples = options.flushInterval / options.samplingInterval
+function getMaxSamples (flushInterval, samplingInterval) {
+  const maxCpuSamples = flushInterval / samplingInterval
 
   // The lesser of max parallelism and libuv thread pool size, plus one so we can detect
   // oversubscription on libuv thread pool, plus another one for GC.
@@ -439,14 +439,18 @@ class EventsProfiler {
 
   get type () { return 'events' }
 
-  constructor (options) {
-    this.#maxSamples = getMaxSamples(options)
-    this.#timelineSamplingEnabled = !!options.timelineSamplingEnabled
+  /**
+   * @param {import('../../config/config-base')} config
+   * @param {{ flushInterval?: number, samplingInterval?: number }} [derived]
+   */
+  constructor (config, { flushInterval, samplingInterval } = {}) {
+    this.#maxSamples = getMaxSamples(flushInterval, samplingInterval)
+    this.#timelineSamplingEnabled = config.profiling.timelineSamplingEnabled
     this.#eventSerializer = new EventSerializer(this.#maxSamples)
 
     const eventHandler = event => this.#eventSerializer.addEvent(event)
     const eventFilter = this.#timelineSamplingEnabled
-      ? createPoissonProcessSamplingFilter(options.samplingInterval)
+      ? createPoissonProcessSamplingFilter(samplingInterval)
       : () => true
     const filteringEventHandler = event => {
       if (eventFilter(event)) {
@@ -454,7 +458,7 @@ class EventsProfiler {
       }
     }
 
-    this.#eventSources = options.codeHotspotsEnabled
+    this.#eventSources = config.profiling.codeHotspotsEnabled
       // Use Datadog instrumentation to collect events with span IDs. Still use
       // Node API for GC events.
       ? [

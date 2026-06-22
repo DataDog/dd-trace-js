@@ -8,14 +8,21 @@ const version = require('../../../../../package.json').version
 const { availableParallelism, libuvThreadPoolSize } = require('../libuv-size')
 const processTags = require('../../process-tags')
 
+function getActivation (enabled) {
+  if (enabled === 'auto') return 'auto'
+  if (enabled === 'true') return 'manual'
+  return 'unknown'
+}
+
 class EventSerializer {
-  constructor ({ env, host, service, version, libraryInjected, activation } = {}) {
-    this._env = env
-    this._host = host
-    this._service = service
-    this._appVersion = version
-    this._libraryInjected = libraryInjected
-    this._activation = activation || 'unknown'
+  /** @param {import('../../config/config-base')} config */
+  constructor (config) {
+    this._env = config.env
+    this._host = config.reportHostname ? config.hostname : undefined
+    this._service = config.service
+    this._appVersion = config.version
+    this._libraryInjected = !!config.DD_INJECTION_ENABLED
+    this._activation = getActivation(config.profiling?.enabled)
   }
 
   typeToFile (type) {
@@ -92,4 +99,4 @@ class EventSerializer {
   }
 }
 
-module.exports = { EventSerializer }
+module.exports = { EventSerializer, getActivation }

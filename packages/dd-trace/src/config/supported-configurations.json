@@ -1184,7 +1184,8 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "true"
+        "default": "true",
+        "internalPropertyName": "profiling.timelineSamplingEnabled"
       }
     ],
     "DD_LAMBDA_HANDLER": [
@@ -1334,14 +1335,16 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "false"
+        "default": "false",
+        "internalPropertyName": "profiling.allocationEnabled"
       }
     ],
     "DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "true"
+        "default": "true",
+        "internalPropertyName": "profiling.asyncContextFrameEnabled"
       }
     ],
     "DD_PROFILING_CODEHOTSPOTS_ENABLED": [
@@ -1351,7 +1354,8 @@
         "default": "true",
         "aliases": [
           "DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED"
-        ]
+        ],
+        "internalPropertyName": "profiling.codeHotspotsEnabled"
       }
     ],
     "DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED": [
@@ -1372,7 +1376,8 @@
         "default": "true",
         "aliases": [
           "DD_PROFILING_EXPERIMENTAL_CPU_ENABLED"
-        ]
+        ],
+        "internalPropertyName": "profiling.cpuProfilingEnabled"
       }
     ],
     "DD_PROFILING_EXPERIMENTAL_CPU_ENABLED": [
@@ -1390,7 +1395,8 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "false"
+        "default": "false",
+        "internalPropertyName": "profiling.debugSourceMaps"
       }
     ],
     "DD_PROFILING_DEBUG_UPLOAD_COMPRESSION": [
@@ -1399,7 +1405,8 @@
         "type": "string",
         "default": "on",
         "allowed": "on|off|(gzip|zstd)(-[1-9][0-9]?)?",
-        "transform": "toLowerCase"
+        "transform": "toLowerCase",
+        "internalPropertyName": "profiling.debugUploadCompression"
       }
     ],
     "DD_PROFILING_ENABLED": [
@@ -1426,7 +1433,8 @@
         "default": "true",
         "aliases": [
           "DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED"
-        ]
+        ],
+        "internalPropertyName": "profiling.endpointCollectionEnabled"
       }
     ],
     "DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED": [
@@ -1444,70 +1452,80 @@
       {
         "implementation": "B",
         "type": "array",
-        "default": "process"
+        "default": "process",
+        "internalPropertyName": "profiling.experimentalOomExportStrategies"
       }
     ],
     "DD_PROFILING_EXPERIMENTAL_OOM_HEAP_LIMIT_EXTENSION_SIZE": [
       {
         "implementation": "A",
         "type": "int",
-        "default": "0"
+        "default": "0",
+        "internalPropertyName": "profiling.experimentalOomHeapLimitExtensionSize"
       }
     ],
     "DD_PROFILING_EXPERIMENTAL_OOM_MAX_HEAP_EXTENSION_COUNT": [
       {
         "implementation": "A",
         "type": "int",
-        "default": "0"
+        "default": "0",
+        "internalPropertyName": "profiling.experimentalOomMaxHeapExtensionCount"
       }
     ],
     "DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "true"
+        "default": "true",
+        "internalPropertyName": "profiling.experimentalOomMonitoringEnabled"
       }
     ],
     "DD_PROFILING_EXPORTERS": [
       {
         "implementation": "B",
         "type": "array",
-        "default": "agent"
+        "default": "agent",
+        "internalPropertyName": "profiling.exporters"
       }
     ],
     "DD_PROFILING_HEAP_ENABLED": [
       {
         "implementation": "B",
         "type": "boolean",
-        "default": null
+        "default": null,
+        "internalPropertyName": "profiling.heapEnabled"
       }
     ],
     "DD_PROFILING_HEAP_SAMPLING_INTERVAL": [
       {
         "implementation": "A",
         "type": "int",
-        "default": "524288"
+        "default": "524288",
+        "internalPropertyName": "profiling.heapSamplingInterval"
       }
     ],
     "DD_PROFILING_PPROF_PREFIX": [
       {
         "implementation": "A",
         "type": "string",
-        "default": ""
+        "default": "",
+        "internalPropertyName": "profiling.pprofPrefix"
       }
     ],
     "DD_PROFILING_PROFILERS": [
       {
         "implementation": "B",
         "type": "array",
-        "default": "space,wall"
+        "default": "space,wall",
+        "internalPropertyName": "profiling.profilers"
       }
     ],
     "DD_PROFILING_SOURCE_MAP": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "true"
+        "default": "true",
+        "internalPropertyName": "profiling.sourceMap"
       }
     ],
     "DD_PROFILING_TIMELINE_ENABLED": [
@@ -1517,7 +1535,8 @@
         "default": "true",
         "aliases": [
           "DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED"
-        ]
+        ],
+        "internalPropertyName": "profiling.timelineEnabled"
       }
     ],
     "DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED": [
@@ -1535,28 +1554,32 @@
       {
         "implementation": "B",
         "type": "int",
-        "default": "65"
+        "default": "65",
+        "internalPropertyName": "profiling.uploadPeriod"
       }
     ],
     "DD_PROFILING_UPLOAD_TIMEOUT": [
       {
         "implementation": "D",
         "type": "int",
-        "default": "60000"
+        "default": "60000",
+        "internalPropertyName": "profiling.uploadTimeout"
       }
     ],
     "DD_PROFILING_V8_PROFILER_BUG_WORKAROUND": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "true"
+        "default": "true",
+        "internalPropertyName": "profiling.v8ProfilerBugWorkaroundEnabled"
       }
     ],
     "DD_PROFILING_WALLTIME_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": null
+        "default": null,
+        "internalPropertyName": "profiling.walltimeEnabled"
       }
     ],
     "DD_REMOTE_CONFIGURATION_ENABLED": [

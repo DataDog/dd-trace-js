@@ -88,12 +88,11 @@ function computeRetries (uploadTimeout) {
 }
 
 class AgentExporter extends EventSerializer {
-  constructor (config = {}) {
+  constructor (config) {
     super(config)
-    const { url, uploadTimeout } = config
-    this._url = url
+    this._url = config.url
 
-    const [backoffTries, backoffTime] = computeRetries(uploadTimeout)
+    const [backoffTries, backoffTime] = computeRetries(config.profiling.uploadTimeout)
 
     this._backoffTime = backoffTime
     this._backoffTries = backoffTries

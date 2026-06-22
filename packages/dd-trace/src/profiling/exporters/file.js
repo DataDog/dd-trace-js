@@ -14,10 +14,9 @@ function formatDateTime (t) {
 }
 
 class FileExporter extends EventSerializer {
-  constructor (config = {}) {
+  constructor (config) {
     super(config)
-    const { pprofPrefix } = config
-    this._pprofPrefix = pprofPrefix || ''
+    this._pprofPrefix = config.profiling.pprofPrefix
   }
 
   export (exportSpec) {

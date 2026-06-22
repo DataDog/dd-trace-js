@@ -17,11 +17,14 @@ class NativeSpaceProfiler {
   #samplingInterval = 512 * 1024
   #started = false
 
-  constructor (options = {}) {
-    // TODO: Remove default value. It is only used in testing.
-    this.#samplingInterval = options.heapSamplingInterval || 512 * 1024
-    this.#allocationProfilingEnabled = options.allocationProfilingEnabled
-    this.#oomMonitoring = options.oomMonitoring || {}
+  /**
+   * @param {import('../../config/config-base')} config
+   * @param {{ oomMonitoring?: object, allocationProfilingEnabled?: boolean }} [derived]
+   */
+  constructor (config, { oomMonitoring, allocationProfilingEnabled } = {}) {
+    this.#samplingInterval = config.profiling.heapSamplingInterval
+    this.#allocationProfilingEnabled = allocationProfilingEnabled
+    this.#oomMonitoring = oomMonitoring || {}
   }
 
   get type () {
