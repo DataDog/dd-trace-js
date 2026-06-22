@@ -37,6 +37,7 @@ class Http2ClientPlugin extends ClientPlugin {
     const base = `${sessionDetails.protocol}//${sessionDetails.host}:${sessionDetails.port}`
     const uri = `${base}${pathname}`
     const allowed = this.config.filter(uri)
+    const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
 
     const store = storage('legacy').getStore()
     const childOf = store && allowed ? store.span : null
@@ -50,7 +51,7 @@ class Http2ClientPlugin extends ClientPlugin {
         'resource.name': method,
         'span.type': 'http',
         'http.method': method,
-        'http.url': buildClientHttpUrl(this.config, base, path, uri),
+        'http.url': otelSemantics ? buildClientHttpUrl(this.config, base, path, uri) : uri,
         'out.host': sessionDetails.host,
       },
       metrics: {

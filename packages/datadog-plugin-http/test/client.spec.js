@@ -80,21 +80,27 @@ describe('Plugin', () => {
 
           appListener = server(app, port => {
             agent.assertFirstTraceSpan(span => {
-              assert.strictEqual(span.type, 'http')
-              assert.strictEqual(span.resource, 'GET')
-              assert.strictEqual(span.meta['span.kind'], 'client')
               // OpenTelemetry attribute names are present...
-              assert.strictEqual(span.meta['http.request.method'], 'GET')
-              assert.strictEqual(span.meta['url.full'], `${protocol}://localhost:${port}/user`)
-              assert.strictEqual(span.meta['server.address'], 'localhost')
-              assert.strictEqual(span.metrics['http.response.status_code'], 200)
-              assert.strictEqual(span.metrics['server.port'], port)
+              assertObjectContains(span, {
+                type: 'http',
+                resource: 'GET',
+                meta: {
+                  'span.kind': 'client',
+                  'http.request.method': 'GET',
+                  'url.full': `${protocol}://localhost:${port}/user`,
+                  'server.address': 'localhost',
+                },
+                metrics: {
+                  'http.response.status_code': 200,
+                  'server.port': port,
+                },
+              })
               // ...and the Datadog ones are absent.
-              assert.strictEqual(span.meta['http.method'], undefined)
-              assert.strictEqual(span.meta['http.url'], undefined)
-              assert.strictEqual(span.meta['http.status_code'], undefined)
-              assert.strictEqual(span.meta['out.host'], undefined)
-              assert.strictEqual(span.meta['error.type'], undefined)
+              assert.ok(!Object.hasOwn(span.meta, 'http.method'))
+              assert.ok(!Object.hasOwn(span.meta, 'http.url'))
+              assert.ok(!Object.hasOwn(span.meta, 'http.status_code'))
+              assert.ok(!Object.hasOwn(span.meta, 'out.host'))
+              assert.ok(!Object.hasOwn(span.meta, 'error.type'))
             }).then(done).catch(done)
 
             const req = http.request(`${protocol}://localhost:${port}/user`, res => {
@@ -112,8 +118,10 @@ describe('Plugin', () => {
 
           appListener = server(app, port => {
             agent.assertFirstTraceSpan(span => {
-              assert.strictEqual(span.metrics['http.response.status_code'], 400)
-              assert.strictEqual(span.meta['error.type'], '400')
+              assertObjectContains(span, {
+                meta: { 'error.type': '400' },
+                metrics: { 'http.response.status_code': 400 },
+              })
             }).then(done).catch(done)
 
             const req = http.request(`${protocol}://localhost:${port}/bad`, res => {
@@ -131,7 +139,9 @@ describe('Plugin', () => {
 
           appListener = server(app, port => {
             agent.assertFirstTraceSpan(span => {
-              assert.strictEqual(span.meta['url.full'], `${protocol}://localhost:${port}/user?foo=bar`)
+              assertObjectContains(span, {
+                meta: { 'url.full': `${protocol}://localhost:${port}/user?foo=bar` },
+              })
             }).then(done).catch(done)
 
             const req = http.request(`${protocol}://localhost:${port}/user?foo=bar`, res => {

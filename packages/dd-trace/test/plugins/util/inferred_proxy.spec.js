@@ -226,9 +226,9 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
               'http.response.status_code': 200,
             },
           })
-          assert.ok(!('http.url' in proxySpan.meta))
-          assert.ok(!('http.method' in proxySpan.meta))
-          assert.ok(!('http.status_code' in proxySpan.meta))
+          assert.ok(!Object.hasOwn(proxySpan.meta, 'http.url'))
+          assert.ok(!Object.hasOwn(proxySpan.meta, 'http.method'))
+          assert.ok(!Object.hasOwn(proxySpan.meta, 'http.status_code'))
         })
       })
     })

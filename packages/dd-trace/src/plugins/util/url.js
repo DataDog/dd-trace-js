@@ -104,20 +104,20 @@ function getQsObfuscator (config) {
 }
 
 /**
- * Resolve the `http.url` tag for a client span. By default the query string is
- * dropped (the long-standing Datadog client behavior, preserved for the URL
- * filter). When OTel semantics are enabled, the query is retained but obfuscated
- * per `config.queryStringObfuscation`, since OTel `url.full` is the absolute URL
- * including the (redacted) query.
+ * Build a client span's `http.url` with its query retained but obfuscated per
+ * `config.queryStringObfuscation` (OTel `url.full` is the absolute URL including
+ * the redacted query). Falls back to `strippedUrl` when there is no query.
+ * Callers gate this behind `DD_TRACE_OTEL_SEMANTICS_ENABLED`, so the default
+ * (flag off) hot path stays a plain tag assignment.
  *
- * @param {{ DD_TRACE_OTEL_SEMANTICS_ENABLED?: boolean, queryStringObfuscation?: boolean | RegExp }} config
+ * @param {{ queryStringObfuscation?: boolean | string }} config
  * @param {string} base `scheme://host[:port]`
  * @param {string} [pathname] raw request path, may include `?query`
- * @param {string} strippedUrl `base` + query-stripped path (used unless OTel semantics are on)
+ * @param {string} strippedUrl `base` + query-stripped path (used when there is no query)
  * @returns {string}
  */
 function buildClientHttpUrl (config, base, pathname, strippedUrl) {
-  if (config.DD_TRACE_OTEL_SEMANTICS_ENABLED && pathname?.includes('?')) {
+  if (pathname?.includes('?')) {
     // `config.queryStringObfuscation` is the raw config value here (client plugins
     // don't normalize it the way the server does), so compile it first.
     return obfuscateQs({ queryStringObfuscation: getQsObfuscator(config) }, `${base}${pathname}`)

@@ -6,6 +6,7 @@ const axios = require('axios')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { incomingHttpRequestStart } = require('../../dd-trace/src/appsec/channels')
 const { storage } = require('../../datadog-core')
 const { getRequest } = require('../../dd-trace/src/appsec/store')
@@ -64,22 +65,28 @@ describe('Plugin', () => {
         it('emits OpenTelemetry server attributes and omits the Datadog ones', done => {
           agent.assertSomeTraces(traces => {
             const span = traces[0][0]
-            assert.strictEqual(span.name, 'web.request')
-            assert.strictEqual(span.type, 'web')
-            assert.strictEqual(span.resource, 'GET')
-            assert.strictEqual(span.meta['span.kind'], 'server')
             // OpenTelemetry attribute names are present...
-            assert.strictEqual(span.meta['http.request.method'], 'GET')
-            assert.strictEqual(span.meta['url.path'], '/user')
-            assert.strictEqual(span.meta['url.scheme'], 'http')
-            assert.strictEqual(span.meta['server.address'], 'localhost')
-            assert.strictEqual(span.metrics['server.port'], otelPort)
-            assert.strictEqual(span.metrics['http.response.status_code'], 200)
+            assertObjectContains(span, {
+              name: 'web.request',
+              type: 'web',
+              resource: 'GET',
+              meta: {
+                'span.kind': 'server',
+                'http.request.method': 'GET',
+                'url.path': '/user',
+                'url.scheme': 'http',
+                'server.address': 'localhost',
+              },
+              metrics: {
+                'server.port': otelPort,
+                'http.response.status_code': 200,
+              },
+            })
             // ...and the Datadog ones are absent.
-            assert.strictEqual(span.meta['http.method'], undefined)
-            assert.strictEqual(span.meta['http.url'], undefined)
-            assert.strictEqual(span.meta['http.status_code'], undefined)
-            assert.strictEqual(span.meta['http.useragent'], undefined)
+            assert.ok(!Object.hasOwn(span.meta, 'http.method'))
+            assert.ok(!Object.hasOwn(span.meta, 'http.url'))
+            assert.ok(!Object.hasOwn(span.meta, 'http.status_code'))
+            assert.ok(!Object.hasOwn(span.meta, 'http.useragent'))
           }).then(done).catch(done)
 
           axios.get(`http://localhost:${otelPort}/user`).catch(done)

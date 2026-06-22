@@ -12,6 +12,7 @@ const path = require('node:path')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 
 const tags = require('../../../ext/tags')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService } = require('../../dd-trace/test/setup/mocha')
 const key = fs.readFileSync(path.join(__dirname, './ssl/test.key'))
@@ -80,16 +81,22 @@ describe('Plugin', () => {
 
           appListener = server(app, port => {
             agent.assertFirstTraceSpan(span => {
-              assert.strictEqual(span.meta['span.kind'], 'client')
-              assert.strictEqual(span.meta['http.request.method'], 'GET')
-              assert.strictEqual(span.meta['url.full'], `${protocol}://localhost:${port}/user`)
-              assert.strictEqual(span.meta['server.address'], 'localhost')
-              assert.strictEqual(span.metrics['http.response.status_code'], 200)
-              assert.strictEqual(span.metrics['server.port'], port)
-              assert.strictEqual(span.meta['http.method'], undefined)
-              assert.strictEqual(span.meta['http.url'], undefined)
-              assert.strictEqual(span.meta['http.status_code'], undefined)
-              assert.strictEqual(span.meta['out.host'], undefined)
+              assertObjectContains(span, {
+                meta: {
+                  'span.kind': 'client',
+                  'http.request.method': 'GET',
+                  'url.full': `${protocol}://localhost:${port}/user`,
+                  'server.address': 'localhost',
+                },
+                metrics: {
+                  'http.response.status_code': 200,
+                  'server.port': port,
+                },
+              })
+              assert.ok(!Object.hasOwn(span.meta, 'http.method'))
+              assert.ok(!Object.hasOwn(span.meta, 'http.url'))
+              assert.ok(!Object.hasOwn(span.meta, 'http.status_code'))
+              assert.ok(!Object.hasOwn(span.meta, 'out.host'))
             }).then(done).catch(done)
 
             const client = http2.connect(`${protocol}://localhost:${port}`).on('error', done)

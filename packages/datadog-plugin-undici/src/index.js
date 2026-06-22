@@ -66,6 +66,7 @@ class UndiciPlugin extends HttpClientPlugin {
     const uri = `${base}${pathname}`
 
     const allowed = this.config.filter(uri)
+    const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
     const childOf = store && allowed ? store.span : null
 
     const span = this.startSpan(this.operationName(), {
@@ -73,7 +74,7 @@ class UndiciPlugin extends HttpClientPlugin {
       meta: {
         'span.kind': 'client',
         'http.method': method,
-        'http.url': buildClientHttpUrl(this.config, base, path, uri),
+        'http.url': otelSemantics ? buildClientHttpUrl(this.config, base, path, uri) : uri,
         'out.host': hostname,
       },
       metrics: {
