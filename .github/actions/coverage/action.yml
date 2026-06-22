@@ -1,9 +1,9 @@
 name: coverage
-description: Verify coverage output and upload it to Codecov and Datadog.
+description: Verify coverage output and upload it to Datadog.
 
 inputs:
   flags:
-    description: "Codecov flags value"
+    description: "Coverage flags value"
     required: false
   report-dir:
     description: "Coverage report directory (defaults to 'coverage')"
@@ -13,7 +13,7 @@ runs:
   using: composite
   steps:
     # Retry once on failure to work around transient issues (e.g. flaky
-    # Codecov upload network calls).
+    # network calls).
     - id: attempt
       uses: ./.github/actions/coverage/upload
       continue-on-error: true

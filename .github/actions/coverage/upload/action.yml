@@ -3,7 +3,7 @@ description: Internal implementation; verify and upload coverage. Use `./.github
 
 inputs:
   flags:
-    description: "Codecov flags value"
+    description: "Coverage flags value"
     required: false
   report-dir:
     description: "Coverage report directory (defaults to 'coverage')"
@@ -16,32 +16,6 @@ runs:
     - name: Verify coverage output
       shell: bash
       run: node scripts/verify-coverage.js --flags "${{ inputs.flags }}"
-
-    # `master-coverage` is the flag .codecov.yml gates codecov/patch on. Attach
-    # it only on PRs targeting master so release-branch PRs auto-pass.
-    - name: Compute Codecov flags
-      id: codecov-flags
-      shell: bash
-      env:
-        JOB_FLAGS: ${{ inputs.flags }}
-        EVENT_NAME: ${{ github.event_name }}
-        BASE_REF: ${{ github.base_ref }}
-      run: |
-        flags="$JOB_FLAGS"
-        if [ "$EVENT_NAME" = "pull_request" ] && [ "$BASE_REF" = "master" ]; then
-          flags="${flags:+$flags,}master-coverage"
-        fi
-        echo "value=$flags" >> "$GITHUB_OUTPUT"
-
-    - name: Install gpg for Codecov validation
-      if: runner.os == 'Linux'
-      shell: bash
-      run: command -v gpg || sudo apt-get install -y gpg
-
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
-      with:
-        flags: ${{ steps.codecov-flags.outputs.value }}
 
     - name: Upload coverage artifact
       if: always()
