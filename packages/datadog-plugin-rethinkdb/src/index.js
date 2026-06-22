@@ -10,7 +10,7 @@ class RethinkDBPlugin extends DatabasePlugin {
 
   bindStart (ctx) {
     const service = this.serviceName({ pluginConfig: this.config, system: this.system })
-    const span = this.startSpan(this.operationName(), {
+    this.startSpan(this.operationName(), {
       service,
       resource: ctx.query,
       type: 'sql',
@@ -19,8 +19,8 @@ class RethinkDBPlugin extends DatabasePlugin {
         'db.type': this.system,
         'db.name': ctx.db,
         'out.host': ctx.host,
-        [CLIENT_PORT_KEY]: ctx.port
-      }
+        [CLIENT_PORT_KEY]: ctx.port,
+      },
     }, ctx)
 
     return ctx.currentStore

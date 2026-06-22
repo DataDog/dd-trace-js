@@ -21,7 +21,7 @@ addHook({ name: 'rethinkdb', versions: ['>=2'], file: 'net.js' }, net => {
       query: term ? term.toString() : undefined,
       host: this.host,
       port: this.port,
-      db: this.db
+      db: this.db,
     }
 
     return startCh.runStores(ctx, () => {

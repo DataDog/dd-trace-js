@@ -208,6 +208,7 @@
     "redis": "5.12.1",
     "request": "2.88.2",
     "restify": "11.1.0",
+    "rethinkdb": "2.4.2",
     "rhea": "3.0.5",
     "router": "2.2.0",
     "selenium-webdriver": "4.44.0",

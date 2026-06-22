@@ -44,8 +44,8 @@ describe('Plugin', () => {
           type: 'sql',
           meta: {
             component: 'rethinkdb',
-            'db.type': 'rethinkdb'
-          }
+            'db.type': 'rethinkdb',
+          },
         })
 
         const conn = createMockConnection(r, { db: 'test' })
@@ -65,8 +65,8 @@ describe('Plugin', () => {
             component: 'rethinkdb',
             'db.type': 'rethinkdb',
             'db.name': 'testdb',
-            'out.host': 'db.example.com'
-          }
+            'out.host': 'db.example.com',
+          },
         })
 
         const conn = createMockConnection(r, { host: 'db.example.com', port: 28015, db: 'testdb' })
@@ -84,8 +84,8 @@ describe('Plugin', () => {
           type: 'sql',
           meta: {
             component: 'rethinkdb',
-            'db.type': 'rethinkdb'
-          }
+            'db.type': 'rethinkdb',
+          },
         })
 
         const conn = createMockConnection(r, { db: 'test' })
@@ -100,7 +100,7 @@ describe('Plugin', () => {
         conn._processResponse({
           t: 16,
           r: ['Test error'],
-          b: []
+          b: [],
         }, token)
       })
     })

@@ -377,6 +377,7 @@ export interface GeneratedConfig {
   DD_TRACE_REDIS_ENABLED: boolean;
   DD_TRACE_REQUEST_ENABLED: boolean;
   DD_TRACE_RESTIFY_ENABLED: boolean;
+  DD_TRACE_RETHINKDB_ENABLED: boolean;
   DD_TRACE_RHEA_ENABLED: boolean;
   DD_TRACE_ROUTER_ENABLED: boolean;
   DD_TRACE_SELENIUM_ENABLED: boolean;
