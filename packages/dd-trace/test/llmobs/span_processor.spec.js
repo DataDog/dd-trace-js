@@ -73,6 +73,8 @@ describe('span processor', () => {
         '_ml_obs.meta.input.messages': [{ role: 'user', content: 'hello' }],
         '_ml_obs.meta.output.messages': [{ role: 'assistant', content: 'world' }],
         '_ml_obs.llmobs_parent_id': '1234',
+        '_ml_obs.sample_rate': '1',
+        '_ml_obs.sampling_decision': '1',
       })
 
       processor.process(span)
@@ -112,6 +114,8 @@ describe('span processor', () => {
         _dd: {
           trace_id: '123',
           span_id: '456',
+          sample_rate: '1',
+          sampling_decision: '1',
         },
       })
 

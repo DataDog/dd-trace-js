@@ -1,6 +1,7 @@
 'use strict'
 
 const log = require('../log')
+const Sampler = require('../sampler')
 const {
   MODEL_NAME,
   MODEL_PROVIDER,
@@ -41,9 +42,16 @@ const {
   ROUTING_SITE,
   PROMPT_TRACKING_INSTRUMENTATION_METHOD,
   INSTRUMENTATION_METHOD_ANNOTATED,
+  SAMPLE_RATE,
+  SAMPLING_DECISION,
+  SAMPLING_DECISION_SAMPLED,
+  SAMPLING_DECISION_DROPPED,
+  PROPAGATED_SAMPLE_RATE_KEY,
+  PROPAGATED_SAMPLING_DECISION_KEY,
 } = require('./constants/tags')
 const { storage } = require('./storage')
-const { findGenAIAncestorSpanId, validateCostTags, writeBridgeTags, validateToolDefinitions } = require('./util')
+const { findGenAIAncestorSpanId, formatRate, validateCostTags, writeBridgeTags, validateToolDefinitions } =
+  require('./util')
 
 // global registry of LLMObs spans
 // maps LLMObs spans to their annotations
@@ -53,10 +61,18 @@ class LLMObsTagger {
   /** @type {import('../config/config-base')} */
   #config
 
+  /** @type {import('../sampler')} */
+  #sampler
+
   constructor (config, softFail = false) {
     this.#config = config
 
     this.softFail = softFail
+
+    // Sample rate is fixed for the process lifetime, so build the deterministic
+    // (trace-ID Knuth) sampler once. The shared APM `Sampler` clamps the rate to
+    // [0, 1] in its constructor, so an out-of-range config value is handled there.
+    this.#sampler = new Sampler(config.llmobs?.sampleRate ?? 1)
   }
 
   static get tagMap () {
@@ -124,6 +140,8 @@ class LLMObsTagger {
       ROOT_PARENT_ID
     this._setTag(span, PARENT_ID_KEY, parentId)
 
+    this.#tagSamplingDecision(span, parent)
+
     // apply annotation context
     const annotationContext = storage.getStore()?.annotationContext
 
@@ -151,6 +169,28 @@ class LLMObsTagger {
         this._setTag(span, ROUTING_SITE, routing.site)
       }
     }
+  }
+
+  // The sampling rate and decision are computed once on the root LLMObs span of
+  // a trace and inherited by every descendant — locally from the parent's
+  // registry entry, or across a service boundary from the propagated `_dd.p.*`
+  // trace tags. This keeps the whole (possibly distributed) trace on a single
+  // decision. Mirrors dd-trace-py's `_activate_llmobs_span`. The decision is
+  // recorded on the span event but never drops the span client-side; the
+  // backend honors `_dd.sampling_decision` so I/O is preserved for extrapolation.
+  #tagSamplingDecision (span, parent) {
+    const traceTags = span.context()._trace.tags
+    let sampleRate = registry.get(parent)?.[SAMPLE_RATE] ?? traceTags[PROPAGATED_SAMPLE_RATE_KEY]
+    let samplingDecision = registry.get(parent)?.[SAMPLING_DECISION] ?? traceTags[PROPAGATED_SAMPLING_DECISION_KEY]
+
+    if (samplingDecision == null) {
+      // Root span (no parent and nothing propagated): make a fresh decision.
+      sampleRate = formatRate(this.#sampler.rate())
+      samplingDecision = this.#sampler.isSampled(span) ? SAMPLING_DECISION_SAMPLED : SAMPLING_DECISION_DROPPED
+    }
+
+    this._setTag(span, SAMPLE_RATE, sampleRate)
+    this._setTag(span, SAMPLING_DECISION, samplingDecision)
   }
 
   // TODO: similarly for the following `tag` methods,

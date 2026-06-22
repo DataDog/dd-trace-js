@@ -33,6 +33,8 @@ const {
   ROUTING_API_KEY,
   ROUTING_SITE,
   LLMOBS_SUBMITTED_TAG_KEY,
+  SAMPLE_RATE,
+  SAMPLING_DECISION,
 } = require('./constants/tags')
 const { UNSERIALIZABLE_VALUE_TEXT } = require('./constants/text')
 const telemetry = require('./telemetry')
@@ -248,6 +250,11 @@ class LLMObsSpanProcessor {
       _dd: {
         span_id: span.context().toSpanId(),
         trace_id: span.context().toTraceId(true),
+        // Sampling decision + rate computed on the trace's root LLMObs span.
+        // Recorded on every event; the span is still shipped regardless of the
+        // decision so the backend can honor it without losing I/O.
+        sample_rate: mlObsTags[SAMPLE_RATE],
+        sampling_decision: mlObsTags[SAMPLING_DECISION],
       },
     }
 

@@ -6,7 +6,7 @@ const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 const { INPUT_PROMPT } = require('../../src/llmobs/constants/tags')
-const { writeBridgeTags, findGenAIAncestorSpanId } = require('../../src/llmobs/util')
+const { writeBridgeTags, findGenAIAncestorSpanId, formatRate } = require('../../src/llmobs/util')
 
 function unserializableObject () {
   const obj = {}
@@ -26,6 +26,7 @@ describe('tagger', () => {
     spanContext = {
       _tags: {},
       _trace: { tags: {} },
+      _traceId: { toBigInt () { return 0x1111111111111111n } },
       toTraceId () { return '00000000000000001111111111111111' },
       toSpanId () { return '2222222222222222' },
     }
@@ -44,6 +45,7 @@ describe('tagger', () => {
     util = {
       generateTraceId: sinon.stub().returns('0123'),
       writeBridgeTags,
+      formatRate,
       findGenAIAncestorSpanId: sinon.stub().returns(null),
     }
 
@@ -77,6 +79,8 @@ describe('tagger', () => {
           '_ml_obs.meta.span.kind': 'workflow',
           '_ml_obs.meta.ml_app': 'my-default-ml-app',
           '_ml_obs.llmobs_parent_id': 'undefined', // no parent id provided
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
         })
       })
 
@@ -96,6 +100,8 @@ describe('tagger', () => {
           '_ml_obs.session_id': 'my-session',
           '_ml_obs.meta.ml_app': 'my-app',
           '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
         })
       })
 
@@ -107,6 +113,8 @@ describe('tagger', () => {
           '_ml_obs.meta.ml_app': 'my-default-ml-app',
           '_ml_obs.llmobs_parent_id': 'undefined',
           '_ml_obs.name': 'my-span-name',
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
         })
       })
 
@@ -117,6 +125,8 @@ describe('tagger', () => {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'my-default-ml-app',
           '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
         })
       })
 
@@ -141,6 +151,8 @@ describe('tagger', () => {
           '_ml_obs.meta.ml_app': 'my-ml-app',
           '_ml_obs.session_id': 'my-session',
           '_ml_obs.llmobs_parent_id': '5678',
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
         })
       })
 
@@ -151,6 +163,8 @@ describe('tagger', () => {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'my-default-ml-app',
           '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
         })
       })
 
@@ -163,6 +177,8 @@ describe('tagger', () => {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'my-default-ml-app',
           '_ml_obs.llmobs_parent_id': '-567',
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
         })
       })
 
@@ -170,6 +186,60 @@ describe('tagger', () => {
         tagger.registerLLMObsSpan(span, { kind: false })
 
         assert.strictEqual(Tagger.tagMap.get(span), undefined)
+      })
+
+      describe('sampling', () => {
+        it('records a SAMPLED decision and the rate on a root span when sampleRate is 1', () => {
+          tagger.registerLLMObsSpan(span, { kind: 'llm' })
+
+          const tags = Tagger.tagMap.get(span)
+          assert.strictEqual(tags['_ml_obs.sample_rate'], '1')
+          assert.strictEqual(tags['_ml_obs.sampling_decision'], '1')
+        })
+
+        it('records a DROPPED decision on a root span when sampleRate is 0', () => {
+          tagger = new Tagger({ llmobs: { enabled: true, mlApp: 'my-default-ml-app', sampleRate: 0 } })
+          tagger.registerLLMObsSpan(span, { kind: 'llm' })
+
+          const tags = Tagger.tagMap.get(span)
+          assert.strictEqual(tags['_ml_obs.sample_rate'], '0')
+          assert.strictEqual(tags['_ml_obs.sampling_decision'], '0')
+        })
+
+        it('formats an intermediate rate to at most 6 decimals with trailing zeros stripped', () => {
+          tagger = new Tagger({ llmobs: { enabled: true, mlApp: 'my-default-ml-app', sampleRate: 0.5 } })
+          tagger.registerLLMObsSpan(span, { kind: 'llm' })
+
+          assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.sample_rate'], '0.5')
+        })
+
+        it('inherits the rate and decision from a local parent rather than re-sampling', () => {
+          const parentSpan = { context () { return { toSpanId () { return '5678' } } } }
+          // Parent was sampled out at 0.5; the child must keep that decision even
+          // though this tagger would otherwise sample everything (rate 1).
+          Tagger.tagMap.set(parentSpan, {
+            '_ml_obs.meta.ml_app': 'my-ml-app',
+            '_ml_obs.sample_rate': '0.5',
+            '_ml_obs.sampling_decision': '0',
+          })
+
+          tagger.registerLLMObsSpan(span, { kind: 'llm', parent: parentSpan })
+
+          const tags = Tagger.tagMap.get(span)
+          assert.strictEqual(tags['_ml_obs.sample_rate'], '0.5')
+          assert.strictEqual(tags['_ml_obs.sampling_decision'], '0')
+        })
+
+        it('inherits the rate and decision propagated from an upstream service', () => {
+          spanContext._trace.tags['_dd.p.llmobs_sr'] = '0.25'
+          spanContext._trace.tags['_dd.p.llmobs_sd'] = '0'
+
+          tagger.registerLLMObsSpan(span, { kind: 'llm' })
+
+          const tags = Tagger.tagMap.get(span)
+          assert.strictEqual(tags['_ml_obs.sample_rate'], '0.25')
+          assert.strictEqual(tags['_ml_obs.sampling_decision'], '0')
+        })
       })
 
       it('uses the propagated mlApp over the global mlApp if both are provided', () => {
@@ -297,7 +367,12 @@ describe('tagger', () => {
           before(() => {
             RealTagger = proxyquire('../../src/llmobs/tagger', {
               '../log': { warn () {} },
-              './util': { generateTraceId: sinon.stub().returns('0123'), writeBridgeTags, findGenAIAncestorSpanId },
+              './util': {
+                generateTraceId: sinon.stub().returns('0123'),
+                writeBridgeTags,
+                formatRate,
+                findGenAIAncestorSpanId,
+              },
             })
             realTagger = new RealTagger({ llmobs: { enabled: true, mlApp: 'test-app' } })
           })

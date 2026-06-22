@@ -9,6 +9,10 @@ const {
   ML_APP,
   PROPAGATED_ML_APP_KEY,
   PROPAGATED_PARENT_ID_KEY,
+  SAMPLE_RATE,
+  SAMPLING_DECISION,
+  PROPAGATED_SAMPLE_RATE_KEY,
+  PROPAGATED_SAMPLING_DECISION_KEY,
 } = require('./constants/tags')
 const { storage } = require('./storage')
 const telemetry = require('./telemetry')
@@ -122,7 +126,14 @@ function handleLLMObsParentIdInjection ({ carrier }) {
     parentContext?._trace?.tags?.[PROPAGATED_ML_APP_KEY] ||
     globalTracerConfig.llmobs.mlApp
 
-  if (!parentId && !mlApp) return
+  // Propagate the trace's sampling rate + decision so downstream services
+  // inherit them rather than computing a new (possibly different) decision.
+  const sampleRate =
+    mlObsSpanTags?.[SAMPLE_RATE] ?? parentContext?._trace?.tags?.[PROPAGATED_SAMPLE_RATE_KEY]
+  const samplingDecision =
+    mlObsSpanTags?.[SAMPLING_DECISION] ?? parentContext?._trace?.tags?.[PROPAGATED_SAMPLING_DECISION_KEY]
+
+  if (!parentId && !mlApp && samplingDecision == null) return
 
   // `_injectTags` only writes `x-datadog-tags` when the trace has `_dd.p.*`
   // tags, so it may be undefined here — coalesce before appending.
@@ -130,6 +141,8 @@ function handleLLMObsParentIdInjection ({ carrier }) {
   let tags = existing || ''
   if (parentId) tags += `${tags ? ',' : ''}${PROPAGATED_PARENT_ID_KEY}=${parentId}`
   if (mlApp) tags += `${tags ? ',' : ''}${PROPAGATED_ML_APP_KEY}=${mlApp}`
+  if (sampleRate != null) tags += `${tags ? ',' : ''}${PROPAGATED_SAMPLE_RATE_KEY}=${sampleRate}`
+  if (samplingDecision != null) tags += `${tags ? ',' : ''}${PROPAGATED_SAMPLING_DECISION_KEY}=${samplingDecision}`
   if (tags !== existing) carrier['x-datadog-tags'] = tags
 }
 

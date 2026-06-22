@@ -477,6 +477,7 @@ export interface GeneratedConfig {
     agentlessEnabled: boolean | undefined;
     enabled: boolean;
     mlApp: string | undefined;
+    sampleRate: number;
   };
   logInjection: boolean;
   logLevel: "debug" | "info" | "warn" | "error";
