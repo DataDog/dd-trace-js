@@ -34,10 +34,11 @@ function wrapProtocol (Protocol) {
 
         original.call(this, request, extra)
 
-        // MethodNotFound: _onrequest returns without calling a handler — finish immediately.
-        const hasHandler = this._requestHandlers?.has(request.method) || !!this.fallbackRequestHandler
-        if (!hasHandler) {
-          pendingContexts.get(this)?.delete(request.id)
+        // The SDK registers an AbortController only when it actually dispatches a handler.
+        // If none was registered (MethodNotFound path), no handler will run and our
+        // setRequestHandler wrapper will never fire — finish the span immediately.
+        if (!this._requestHandlerAbortControllers?.has(request.id)) {
+          pendingContexts.get(this).delete(request.id)
           serverRequestCh.asyncEnd.publish(ctx)
         }
       })
