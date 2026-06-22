@@ -243,7 +243,7 @@ function incomingHttpEndTranslator ({ req, res }) {
     wafResult = waf.run({ persistent }, req)
   }
 
-  apiSecurity.reportRequest(req, res, apiSecSamplingDecision, wafResult)
+  apiSecurity.reportRequest(req, apiSecSamplingDecision, wafResult)
 
   waf.disposeContext(req)
 

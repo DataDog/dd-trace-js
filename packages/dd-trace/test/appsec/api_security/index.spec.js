@@ -48,7 +48,7 @@ describe('API Security domain', () => {
     })
 
     it('emits nothing on SKIP decision', () => {
-      apiSecurity.reportRequest(req, res, SamplingDecision.SKIP, { attributes: { '_dd.appsec.s.req.body': [] } })
+      apiSecurity.reportRequest(req, SamplingDecision.SKIP, { attributes: { '_dd.appsec.s.req.body': [] } })
 
       sinon.assert.notCalled(telemetry.incrementApiSecRequestSchemaMetric)
       sinon.assert.notCalled(telemetry.incrementApiSecRequestNoSchemaMetric)
@@ -56,7 +56,7 @@ describe('API Security domain', () => {
     })
 
     it('emits missing_route with framework tag on MISSING_ROUTE decision', () => {
-      apiSecurity.reportRequest(req, res, SamplingDecision.MISSING_ROUTE, undefined)
+      apiSecurity.reportRequest(req, SamplingDecision.MISSING_ROUTE, undefined)
 
       sinon.assert.calledOnceWithExactly(telemetry.incrementApiSecMissingRouteMetric, 'express')
       sinon.assert.notCalled(telemetry.incrementApiSecRequestSchemaMetric)
@@ -64,7 +64,7 @@ describe('API Security domain', () => {
     })
 
     it('emits request.schema on SAMPLE decision when WAF returned schema attributes', () => {
-      apiSecurity.reportRequest(req, res, SamplingDecision.SAMPLE, {
+      apiSecurity.reportRequest(req, SamplingDecision.SAMPLE, {
         attributes: {
           '_dd.appsec.s.req.body': [],
           '_dd.appsec.s.req.headers': [],
@@ -77,7 +77,7 @@ describe('API Security domain', () => {
     })
 
     it('emits request.no_schema on SAMPLE decision when WAF returned attributes without any schema', () => {
-      apiSecurity.reportRequest(req, res, SamplingDecision.SAMPLE, { attributes: { 'some.other.attribute': 'value' } })
+      apiSecurity.reportRequest(req, SamplingDecision.SAMPLE, { attributes: { 'some.other.attribute': 'value' } })
 
       sinon.assert.calledOnceWithExactly(telemetry.incrementApiSecRequestNoSchemaMetric, 'express')
       sinon.assert.notCalled(telemetry.incrementApiSecRequestSchemaMetric)
@@ -85,13 +85,13 @@ describe('API Security domain', () => {
     })
 
     it('emits request.no_schema on SAMPLE decision when WAF returned no attributes', () => {
-      apiSecurity.reportRequest(req, res, SamplingDecision.SAMPLE, { attributes: undefined })
+      apiSecurity.reportRequest(req, SamplingDecision.SAMPLE, { attributes: undefined })
 
       sinon.assert.calledOnceWithExactly(telemetry.incrementApiSecRequestNoSchemaMetric, 'express')
     })
 
     it('emits request.no_schema on SAMPLE decision when wafResult is undefined', () => {
-      apiSecurity.reportRequest(req, res, SamplingDecision.SAMPLE, undefined)
+      apiSecurity.reportRequest(req, SamplingDecision.SAMPLE, undefined)
 
       sinon.assert.calledOnceWithExactly(telemetry.incrementApiSecRequestNoSchemaMetric, 'express')
     })
@@ -101,7 +101,7 @@ describe('API Security domain', () => {
         context: () => ({ _tags: { component: 'Next JS' }, getTag: (key) => ({ component: 'Next JS' })[key] }),
       })
 
-      apiSecurity.reportRequest(req, res, SamplingDecision.SAMPLE, { attributes: { '_dd.appsec.s.req.body': [] } })
+      apiSecurity.reportRequest(req, SamplingDecision.SAMPLE, { attributes: { '_dd.appsec.s.req.body': [] } })
 
       sinon.assert.calledOnceWithExactly(telemetry.incrementApiSecRequestSchemaMetric, 'Next JS')
     })

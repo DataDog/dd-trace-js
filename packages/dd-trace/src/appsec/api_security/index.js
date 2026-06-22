@@ -14,11 +14,10 @@ const sampler = require('./sampler')
  *   - SKIP: no metric emitted
  *
  * @param {import('http').IncomingMessage} req
- * @param {import('http').ServerResponse} res
- * @param {'sample' | 'missing_route' | 'skip'} samplingDecision Sampler decission
+ * @param {'sample' | 'missing_route' | 'skip'} samplingDecision Sampler decision
  * @param {{ attributes?: Record<string, unknown> } | undefined} wafResult WAF run result
  */
-function reportRequest (req, res, samplingDecision, wafResult) {
+function reportRequest (req, samplingDecision, wafResult) {
   switch (samplingDecision) {
     case sampler.SamplingDecision.SAMPLE: {
       const framework = getFramework(req)
