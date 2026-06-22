@@ -95,6 +95,7 @@
     "test:integration:selenium:coverage": "node ./integration-tests/coverage/run-suite.js --timeout 60000 \"integration-tests/selenium/*.spec.js\"",
     "test:integration:vitest": "mocha --timeout 60000 \"integration-tests/vitest/${SPEC:-vitest*}.spec.js\"",
     "test:integration:vitest:coverage": "node ./integration-tests/coverage/run-suite.js --timeout 60000 \"integration-tests/vitest/${SPEC:-vitest*}.spec.js\"",
+    "test:integration:log-capture-hooks-agent": "mocha --timeout 60000 \"integration-tests/log-capture-hooks-agent/*.spec.js\"",
     "test:integration:testopt": "mocha --timeout 120000 \"integration-tests/ci-visibility/*.spec.js\"",
     "test:integration:testopt:coverage": "node ./integration-tests/coverage/run-suite.js --timeout 120000 \"integration-tests/ci-visibility/*.spec.js\"",
     "test:integration:profiler": "mocha --timeout 180000 \"integration-tests/profiler/*.spec.js\"",

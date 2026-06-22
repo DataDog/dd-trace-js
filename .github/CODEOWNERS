@@ -343,6 +343,8 @@
 /integration-tests/package-guardrails/flush.js @DataDog/lang-platform-js
 /integration-tests/startup.spec.js @DataDog/lang-platform-js
 
+/integration-tests/log-capture-hooks-agent/ @DataDog/serverless-aws
+
 /scripts/mocha-parallel-files.js @DataDog/lang-platform-js
 
 /packages/datadog-core @DataDog/lang-platform-js

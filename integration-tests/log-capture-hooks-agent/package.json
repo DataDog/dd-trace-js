@@ -1,0 +1,11 @@
+{
+  "name": "dd-trace-log-capture-hooks-agent-tests",
+  "private": true,
+  "description": "Local dependencies for log-capture-hooks-agent integration tests.",
+  "dependencies": {
+    "bunyan": "^1.8.15",
+    "express": "^4.21.2",
+    "pino": "^9.6.0",
+    "winston": "^3.19.0"
+  }
+}

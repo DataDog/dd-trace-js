@@ -6,7 +6,6 @@ const { describe, it, beforeEach, afterEach } = require('mocha')
 const { channel } = require('dc-polyfill')
 
 require('../../dd-trace/test/setup/core')
-const PinoPlugin = require('../src/index')
 const Tracer = require('../../dd-trace/src/tracer')
 const getConfig = require('../../dd-trace/src/config')
 
@@ -30,10 +29,17 @@ describe('PinoPlugin', () => {
   describe('log capture (apm:pino:log:json channel)', () => {
     let captureSender
     let pinoPlugin
+    let PinoPlugin
 
     beforeEach(() => {
-      // Do NOT clear the require cache — log_plugin.js holds a top-level reference to the
-      // same sender module, so we must configure the same instance.
+      // sender.spec.js busts the sender require cache in its own beforeEach, which
+      // disconnects log_plugin.js's module-level sender reference from the instance
+      // the test configures. Bust all three caches together so they share one instance.
+      delete require.cache[require.resolve('../../dd-trace/src/log-capture/sender')]
+      delete require.cache[require.resolve('../../dd-trace/src/plugins/log_plugin')]
+      delete require.cache[require.resolve('../src/index')]
+
+      PinoPlugin = require('../src/index')
       captureSender = require('../../dd-trace/src/log-capture/sender')
       captureSender.stop() // reset any prior state
       captureSender.configure({
