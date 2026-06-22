@@ -660,25 +660,25 @@ declare namespace tracer {
      */
     runtimeMetrics?: boolean | {
 
-       /**
+      /**
        * @env DD_RUNTIME_METRICS_ENABLED
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
       enabled?: boolean,
 
-       /**
+      /**
        * @env DD_RUNTIME_METRICS_GC_ENABLED
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
       gc?: boolean,
 
-       /**
+      /**
        * @env DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
       eventLoop?: boolean,
 
-       /**
+      /**
        * Whether to use native metrics. When set to false, forces the JS implementation
        * @default true
        * @env DD_RUNTIME_METRICS_NATIVE
@@ -2435,7 +2435,21 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [bullmq](https://github.com/npmjs/package/bullmq) message queue library.
      */
-    interface bullmq extends Instrumentation {}
+    interface bullmq extends Instrumentation {
+      /**
+       * Filter applied to BullMQ producer operations (`Queue.add`, `Queue.addBulk`,
+       * `FlowProducer.add`). Return `false` to skip span creation, trace context
+       * injection, and DSM checkpoint handling for the matching job. Consumer-side
+       * (`Worker`) instrumentation is unaffected.
+       *
+       * @param job.name - The BullMQ job name.
+       * @param job.data - The BullMQ job data.
+       * @param job.opts - The BullMQ job options.
+       * @param job.queueName - The name of the queue the job is being added to.
+       * @returns true to instrument the producer operation, false to skip it.
+       */
+      producerFilter?: (job: { name?: string; data?: unknown; opts?: unknown; queueName?: string }) => boolean;
+    }
 
     interface bunyan extends Integration {}
 
@@ -2567,24 +2581,24 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [@google-cloud/vertexai](https://github.com/googleapis/nodejs-vertexai) module.
     */
-   interface google_cloud_vertexai extends Integration {}
+  interface google_cloud_vertexai extends Integration {}
 
-   /**
+  /**
     * This plugin automatically instruments the
     * [@google-genai](https://github.com/googleapis/js-genai) module.
     */
-   interface google_genai extends Integration {}
+  interface google_genai extends Integration {}
 
-   /** @hidden */
-   interface ExecutionArgs {
-     schema: any,
-     document: any,
-     rootValue?: any,
-     contextValue?: any,
-     variableValues?: any,
-     operationName?: string,
-     fieldResolver?: any,
-     typeResolver?: any,
+  /** @hidden */
+  interface ExecutionArgs {
+    schema: any,
+    document: any,
+    rootValue?: any,
+    contextValue?: any,
+    variableValues?: any,
+    operationName?: string,
+    fieldResolver?: any,
+    typeResolver?: any,
     }
 
     /**

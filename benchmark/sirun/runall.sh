@@ -8,12 +8,15 @@ CWD=$(pwd)
 # Background subshells can't share a bash variable, so failed variants
 # write their dir/variant name here and the parent counts lines after `wait`.
 FAILURES_FILE=$(mktemp)
+# Variants whose latest definition failed against the older baseline source;
+# tolerated there unless this PR also changes non-benchmark source (see below).
+SKIPPED_FILE=$(mktemp)
 
 function cleanup {
   for D in "${DIRS[@]}"; do
     rm -f "${CWD}/${D}/meta-temp.json"
   done
-  rm -f "$FAILURES_FILE"
+  rm -f "$FAILURES_FILE" "$SKIPPED_FILE"
 }
 
 trap cleanup EXIT
@@ -85,8 +88,54 @@ CPU_AFFINITY="${CPUSET_START}" # reset for each node.js version
 SPLITS=${SPLITS:-1}
 GROUP=${GROUP:-1}
 
+# With BENCHMARKS_FROM=candidate the baseline runs this PR's benchmark code on
+# the older source. Skip a baseline failure only when the same variant passed on
+# the candidate run -- proof the failure is specific to the older source, not a
+# broken benchmark. The candidate run records its passing variants below.
+SKIP_BASELINE_FAILURES=""
+RECORD_CANDIDATE_PASS=""
+# In /tmp, not ARTIFACTS_DIR: analyze_microbenchmarks ingests that dir as sirun
+# results and fails on this plain-text list; /tmp survives both runs.
+CANDIDATE_PASSED_FILE="/tmp/candidate-passed-variants.txt"
+if [[ "${TOLERATE_NEW_BENCHMARK_FAILURES:-}" == "1" ]]; then
+  if [[ "${BASELINE_OR_CANDIDATE:-}" == "candidate" ]]; then
+    RECORD_CANDIDATE_PASS="1"
+    : > "$CANDIDATE_PASSED_FILE"
+  elif [[ "${BASELINE_OR_CANDIDATE:-}" == "baseline" ]]; then
+    SKIP_BASELINE_FAILURES="1"
+  fi
+fi
+
+# async_hooks measures the Node async-hooks primitive floor, not tracer code, so it
+# only moves when the Node version changes. Skip it unless this PR's diff touches a
+# node-<major> pin in the versions manifest runall reads above (the single source of
+# truth for the benchmarked Node patch). Fail open -- run it -- when the diff can't be
+# determined, so a Node bump is never silently skipped. The same gate must apply in
+# both loops below, or the global variant-index shard math drops/misassigns variants.
+RUN_ASYNC_HOOKS="1"
+if [[ -d /app/candidate/.git && -n "${COMMIT_SHA:-}" && -n "${CI_COMMIT_SHA:-}" ]]; then
+  # Capture the diff and its status separately rather than piping straight into
+  # grep: a pipeline reports only grep's exit code, so a failed diff (shallow
+  # checkout, stale COMMIT_SHA, missing range) would look like "no match" and
+  # silently skip async_hooks -- the opposite of failing open. Only skip when the
+  # diff actually succeeds and shows no node-<major> pin change.
+  ASYNC_HOOKS_DIFF=""
+  if ASYNC_HOOKS_DIFF=$(git -C /app/candidate diff "${COMMIT_SHA}..${CI_COMMIT_SHA}" -- \
+      packages/dd-trace/test/plugins/versions/package.json 2>/dev/null); then
+    if grep -qE '^[-+][[:space:]]*"node-[0-9]+":' <<< "${ASYNC_HOOKS_DIFF}"; then
+      echo "async_hooks: a node-<major> pin changed in this diff; running it."
+    else
+      RUN_ASYNC_HOOKS=""
+      echo "async_hooks: no Node version change in this diff; skipping (Node-primitive floor)."
+    fi
+  else
+    echo "async_hooks: could not determine the diff; running it (fail open)."
+  fi
+fi
+
 BENCH_COUNT=0
 for D in "${DIRS[@]}"; do
+  if [[ "${D}" == "async_hooks" && -z "${RUN_ASYNC_HOOKS}" ]]; then continue; fi
   cd "${D}"
   variants="$(node ../get-variants.js)"
   for V in $variants; do BENCH_COUNT=$(($BENCH_COUNT+1)); done
@@ -112,6 +161,7 @@ BENCH_END=$(($GROUP_SIZE*$GROUP))
 BENCH_START=$(($BENCH_END-$GROUP_SIZE))
 
 for D in "${DIRS[@]}"; do
+  if [[ "${D}" == "async_hooks" && -z "${RUN_ASYNC_HOOKS}" ]]; then continue; fi
   cd "${D}"
   variants="$(node ../get-variants.js)"
 
@@ -126,10 +176,14 @@ for D in "${DIRS[@]}"; do
       (
         if time node ../run-one-variant.js >> ../results.ndjson; then
           echo "${D}/${V} finished."
-        else
-          echo "${D}/${V} FAILED on core ${CPU_AFFINITY}" >&2
+          if [[ -n "${RECORD_CANDIDATE_PASS}" ]]; then echo "${D}/${V}" >> "$CANDIDATE_PASSED_FILE"; fi
+        elif [[ -n "${SKIP_BASELINE_FAILURES}" ]] && grep -Fqx "${D}/${V}" "$CANDIDATE_PASSED_FILE" 2>/dev/null; then
+          echo "${D}/${V} skipped: passed on the candidate but failed on the older baseline source." >&2
           # Append-only writes to a single tempfile from parallel subshells are
           # atomic on Linux below PIPE_BUF (4 KiB); each line here is ~30 bytes.
+          echo "${D}/${V}" >> "$SKIPPED_FILE"
+        else
+          echo "${D}/${V} FAILED on core ${CPU_AFFINITY}" >&2
           echo "${D}/${V}" >> "$FAILURES_FILE"
         fi
       ) &
@@ -159,4 +213,27 @@ if [[ "${FAILED_COUNT}" -gt 0 ]]; then
   echo "${FAILED_COUNT} variant(s) failed:" >&2
   sed 's/^/  - /' "$FAILURES_FILE" >&2
   exit 1
+fi
+
+SKIPPED_COUNT=$(wc -l < "$SKIPPED_FILE" | tr -d ' ')
+if [[ "${SKIPPED_COUNT}" -gt 0 ]]; then
+  echo "" >&2
+  echo "${SKIPPED_COUNT} benchmark variant(s) failed on the baseline source and were skipped:" >&2
+  sed 's/^/  - /' "$SKIPPED_FILE" >&2
+
+  # We want to separate the source code change from a benchmark in case it is not
+  # possible to run the new benchmark on the baseline.
+  NON_BENCH_SOURCE_CHANGED=""
+  if [[ -d /app/candidate/.git && -n "${COMMIT_SHA:-}" && -n "${CI_COMMIT_SHA:-}" ]]; then
+    NON_BENCH_SOURCE_CHANGED="$(git -C /app/candidate diff --name-only "${COMMIT_SHA}..${CI_COMMIT_SHA}" \
+      | grep -vE '(^benchmark/|^docs/|^\.github/|^\.gitlab/|\.md$|(^|/)CODEOWNERS$|^test/|/test/|/__tests__/|\.spec\.[jt]s$|\.test\.[jt]s$)' || true)"
+  fi
+
+  if [[ -n "${NON_BENCH_SOURCE_CHANGED}" ]]; then
+    echo "" >&2
+    echo "This PR also changes non-benchmark source, so the A/B comparison is incomplete." >&2
+    echo "Land the benchmark change separately first, then rebase. Changed source files:" >&2
+    echo "${NON_BENCH_SOURCE_CHANGED}" | sed 's/^/  - /' >&2
+    exit 1
+  fi
 fi

@@ -3,9 +3,9 @@
 set -ex
 
 apt-get update && apt-get install --no-install-recommends -y \
-	wget curl ca-certificates valgrind \
-	git openssh-client hwinfo jq procps \
-	software-properties-common build-essential libnss3-dev
+  wget curl ca-certificates valgrind \
+  git openssh-client hwinfo jq procps \
+  software-properties-common build-essential libnss3-dev
 
 # Prebuilt, relocatable CPython from python-build-standalone (the same builds uv ships).
 # Avoids a slow from-source pyenv compile and stays version-pinned + checksum-verified.
@@ -18,8 +18,20 @@ echo "9038680028e006d13ea1ff68fdcab0a5494d2026cdd2dbdfb067c5b80b6272f1  /tmp/pyt
 tar -xzf /tmp/python.tar.gz -C /opt
 rm /tmp/python.tar.gz
 
-pip3 install awscli==1.45.21 virtualenv==21.4.2 setuptools==82.0.1
-curl -sSL https://install.python-poetry.org | POETRY_HOME=/etc/poetry python3 - --version 2.4.1
+# bp-install's install.sh runs `pyenv local 3.9` before `python3 -m venv`. CPython
+# 3.9 from python-build-standalone is already first on PATH, so selection is a no-op;
+# stub pyenv rather than compiling the full pyenv the fleet uses.
+cat > /usr/local/bin/pyenv <<'PYENV_STUB'
+#!/usr/bin/env bash
+exit 0
+PYENV_STUB
+chmod +x /usr/local/bin/pyenv
+
+# awscli 1.45+ dropped Python 3.9 (requires >=3.10); hold at the last 1.44.x until
+# the CPython pin above moves to 3.10+, or pip can't resolve awscli on this image.
+pip3 install awscli==1.44.87 virtualenv==21.4.2 setuptools==82.0.1
+# Poetry 2.3+ also requires Python >=3.10; 2.2.1 is the last 3.9-compatible release.
+curl -sSL https://install.python-poetry.org | POETRY_HOME=/etc/poetry python3 - --version 2.2.1
 
 # Bootstrap bp-install so the Dockerfile can install the Benchmarking Platform
 # packages (bp-runner, benchmark-analyzer, github-tools) the same way the rest of

@@ -596,4 +596,37 @@ describe('createWrapRouterMethod', () => {
       assert.ok(events.find(e => e.label === 'enter'), 'enterChannel should publish for __handle')
     })
   })
+
+  describe('re-entrant error subscriber', () => {
+    it('drops the re-entrant publish when an error subscriber re-runs the layer', () => {
+      // enterChannel needs a subscriber or the layer wrap takes the
+      // no-subscriber fast path and never reaches wrapNext.
+      const enterListener = () => {}
+      enterChannel.subscribe(enterListener)
+      subscriptions.push([enterChannel, enterListener])
+
+      const wrapMethod = createWrapRouterMethod(namespace, compileRegex)
+      const router = /** @type {FakeRouter} */ ({ stack: [] })
+
+      const wrappedUse = wrapMethod(makeFakeUse({ layerPath: '/foo' }))
+      wrappedUse.call(router, '/foo', (req, res, next) => next(new Error('boom')))
+      const handle = router.stack[0].handle
+
+      // A subscriber that re-runs the same layer while handling the error loops
+      // errorChannel -> subscriber -> next(error) -> errorChannel until the
+      // stack overflows. The guard runs the subscriber once.
+      let depth = 0
+      const errorListener = () => {
+        depth++
+        if (depth > 50) return // safety stop: a regressed guard fails the assert, not the runner
+        handle.call({}, {}, {}, () => {})
+      }
+      errorChannel.subscribe(errorListener)
+      subscriptions.push([errorChannel, errorListener])
+
+      handle.call({}, {}, {}, () => {})
+
+      assert.strictEqual(depth, 1)
+    })
+  })
 })

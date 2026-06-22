@@ -218,7 +218,7 @@ addHook({ name: 'electron', versions: ['>=37.0.0'] }, electron => {
     wrap(ipcRenderer, 'removeAllListeners', createWrapRemoveAllListeners(listeners))
 
     ipcRenderer.send('datadog:apm:renderer:patched')
-  } else {
+  } else if (ipcMain) {
     wrap(ipcMain, 'addListener', createWrapAddListener(mainReceiveCh, listeners))
     wrap(ipcMain, 'handle', createWrapAddListener(mainHandleCh, handlers))
     wrap(ipcMain, 'handleOnce', createWrapAddListener(mainHandleCh, handlers))

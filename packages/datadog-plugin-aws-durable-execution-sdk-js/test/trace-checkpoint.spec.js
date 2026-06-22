@@ -335,7 +335,7 @@ describe('trace-checkpoint', () => {
     assert.deepEqual(recordedActions, [])
   })
 
-  it('swallows checkpoint-manager errors instead of propagating them to customer code', async () => {
+  it('propagates checkpoint-manager errors (the fire-and-forget caller swallows them)', async () => {
     const checkpointManager = {
       checkpoint () { throw new Error('SDK checkpoint failure') },
     }
@@ -347,16 +347,20 @@ describe('trace-checkpoint', () => {
       trace: { started: [], finished: [], tags: {} },
     })
 
-    // Must resolve, never reject — the contract is "never break customer workloads".
-    await saveTraceContextCheckpointIfUpdated(
-      { _config: getConfigFresh() },
-      { context: () => spanContext },
-      { checkpoint: checkpointManager },
-      '999',
-      {
-        DurableExecutionArn: 'arn:aws:lambda:us-east-1:123456789012:durable-execution/test-exec',
-        InitialExecutionState: { Operations: [] },
-      },
+    // This helper does not swallow — its caller (handler.js maybeSaveCheckpoint) owns the
+    // best-effort boundary. We assert the error surfaces here so that contract stays explicit.
+    await assert.rejects(
+      saveTraceContextCheckpointIfUpdated(
+        { _config: getConfigFresh() },
+        { context: () => spanContext },
+        { checkpoint: checkpointManager },
+        '999',
+        {
+          DurableExecutionArn: 'arn:aws:lambda:us-east-1:123456789012:durable-execution/test-exec',
+          InitialExecutionState: { Operations: [] },
+        },
+      ),
+      { message: 'SDK checkpoint failure' },
     )
   })
 })

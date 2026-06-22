@@ -1,17 +1,5 @@
 'use strict'
 
-/**
- * Returns the value as a string, JSON-stringifying it when it is not already a string.
- * Returns the value unchanged when it is `null` or `undefined`.
- *
- * @param {unknown} value
- * @returns {string|undefined|null}
- */
-function stringifyIfNeeded (value) {
-  if (value == null) return value
-  return typeof value === 'string' ? value : JSON.stringify(value)
-}
-
 const FILE_FALLBACK = '[file]'
 const IMAGE_FALLBACK = '[image]'
 
@@ -39,6 +27,18 @@ const OPENAI_RESPONSE_TOOL_OUTPUT_TYPES = new Set([
 ])
 
 /**
+ * Returns the value as a string, JSON-stringifying it when it is not already a string.
+ * Returns the value unchanged when it is `null` or `undefined`.
+ *
+ * @param {unknown} value
+ * @returns {string|undefined|null}
+ */
+function stringifyIfNeeded (value) {
+  if (value == null) return value
+  return typeof value === 'string' ? value : JSON.stringify(value)
+}
+
+/**
  * Returns a stringified value, falling back to an empty string for absent values.
  *
  * @param {unknown} value
@@ -49,127 +49,7 @@ function stringifyOrEmpty (value) {
 }
 
 /**
- * Converts a LanguageModelV2FilePart with an image mediaType to an AI guard style image_url content part.
- *
- * @param {{type: 'file', data: URL|string|Uint8Array, mediaType: string}} part
- * @returns {{type: 'image_url', image_url: {url: string}}|undefined}
- */
-function convertFilePartToImageUrl (part) {
-  const { data, mediaType } = part
-
-  if (data instanceof URL) {
-    return { type: 'image_url', image_url: { url: data.toString() } }
-  }
-
-  if (typeof data === 'string') {
-    if (data.startsWith('http') || data.startsWith('data:')) {
-      return { type: 'image_url', image_url: { url: data } }
-    }
-    return { type: 'image_url', image_url: { url: `data:${mediaType};base64,${data}` } }
-  }
-
-  if (data instanceof Uint8Array) {
-    return { type: 'image_url', image_url: { url: `data:${mediaType};base64,${Buffer.from(data).toString('base64')}` } }
-  }
-}
-
-/**
- * Converts a LanguageModelV2Prompt to the AI guard style message format.
- *
- * Vercel AI v2 prompt entries use content arrays with typed parts (e.g. { type: 'text', text },
- * { type: 'file', data, mediaType }). This function converts them to AI guard style messages.
- * When file parts with image media types are present, the content is an array of text and
- * image_url parts; otherwise it is a plain string.
- *
- * @param {Array<{role: string, content: string|Array<{type: string}>}>} prompt
- * @returns {Array<{role: string, content?: string|Array<{type: string}>, tool_calls?: Array, tool_call_id?: string}>}
- */
-function convertVercelPromptToMessages (prompt) {
-  if (!Array.isArray(prompt)) return []
-
-  const messages = []
-  for (const msg of prompt) {
-    switch (msg.role) {
-      case 'system':
-        messages.push({ role: 'system', content: typeof msg.content === 'string' ? msg.content : '' })
-        break
-
-      case 'user': {
-        if (!Array.isArray(msg.content)) break
-
-        const contentParts = []
-        for (const part of msg.content) {
-          if (part.type === 'text') {
-            contentParts.push({ type: 'text', text: part.text })
-          } else if (part.type === 'file' && part.mediaType?.startsWith('image/')) {
-            const converted = convertFilePartToImageUrl(part)
-            if (converted) contentParts.push(converted)
-          }
-        }
-
-        if (contentParts.length === 0) break
-
-        const hasImages = contentParts.some(p => p.type === 'image_url')
-        if (hasImages) {
-          messages.push({ role: 'user', content: contentParts })
-        } else {
-          messages.push({ role: 'user', content: contentParts.map(p => p.text).join('\n') })
-        }
-        break
-      }
-
-      case 'assistant': {
-        const textParts = []
-        const toolCalls = []
-        if (!Array.isArray(msg.content)) break
-
-        for (const part of msg.content) {
-          if (part.type === 'text') {
-            textParts.push(part.text)
-          } else if (part.type === 'tool-call') {
-            toolCalls.push({
-              id: part.toolCallId,
-              function: {
-                name: part.toolName,
-                arguments: stringifyIfNeeded(part.args ?? part.input),
-              },
-            })
-          }
-        }
-
-        if (toolCalls.length > 0) {
-          messages.push({ role: 'assistant', tool_calls: toolCalls })
-        } else if (textParts.length > 0) {
-          messages.push({ role: 'assistant', content: textParts.join('\n') })
-        }
-        break
-      }
-
-      case 'tool': {
-        if (!Array.isArray(msg.content)) break
-
-        for (const part of msg.content) {
-          if (part.type === 'tool-result') {
-            messages.push({
-              role: 'tool',
-              tool_call_id: part.toolCallId,
-              content: stringifyIfNeeded(part.result ?? part.output),
-            })
-          }
-        }
-        break
-      }
-    }
-  }
-  return messages
-}
-
-/**
  * Converts OpenAI chat-completions messages to the message format expected by AI Guard.
- *
- * Modern `tool_calls` messages already match the expected shape. Deprecated chat
- * completions `function_call` and `function` role messages are normalized to the
- * equivalent tool-call shape so AI Guard can classify them as tool interactions.
  *
  * @param {Array<object>} messages
  * @returns {Array<object>|undefined}
@@ -217,55 +97,36 @@ function normalizeOpenAIChatMessage (message) {
 }
 
 /**
- * Converts LLM output tool calls to AI guard style message format.
+ * Extracts OpenAI input messages from a `chat.completions.create` call.
  *
- * @param {Array<object>} inputMessages - The input messages already in AI guard style format
- * @param {Array<{toolCallId: string, toolName: string, args?: unknown, input?: unknown}>} toolCalls
- * @returns {Array<object>}
+ * @param {object} callArgs - First argument passed to the wrapped method
+ * @returns {Array<object>|undefined}
  */
-function buildToolCallOutputMessages (inputMessages, toolCalls) {
-  return [
-    ...inputMessages,
-    {
-      role: 'assistant',
-      tool_calls: toolCalls.map(tc => ({
-        id: tc.toolCallId,
-        function: {
-          name: tc.toolName,
-          arguments: stringifyIfNeeded(tc.args ?? tc.input),
-        },
-      })),
-    },
-  ]
+function getChatCompletionsInputMessages (callArgs) {
+  return normalizeOpenAIChatMessages(callArgs?.messages)
 }
 
 /**
- * Builds OpenAI-style output messages for the assistant's text response.
+ * Extracts OpenAI output messages from a `chat.completions.create` parsed body.
  *
- * @param {Array<object>} inputMessages - The input messages already in AI guard style format
- * @param {string} text - The assistant's text response
+ * @param {object} body - Parsed response body
  * @returns {Array<object>}
  */
-function buildTextOutputMessages (inputMessages, text) {
-  return [
-    ...inputMessages,
-    { role: 'assistant', content: text },
-  ]
-}
-
-/**
- * Parses a Vercel AI content array and dispatches to the appropriate output message builder.
- *
- * @param {Array<object>} inputMessages - The input messages already in AI guard style format
- * @param {Array<{type: string}>} content - Vercel AI content array from doGenerate/doStream result
- * @returns {Array<object>}
- */
-function buildOutputMessages (inputMessages, content) {
-  const toolCalls = content.filter(c => c.type === 'tool-call')
-  const text = content.filter(c => c.type === 'text').map(c => c.text).join('\n')
-  if (toolCalls.length) return buildToolCallOutputMessages(inputMessages, toolCalls)
-  if (text) return buildTextOutputMessages(inputMessages, text)
-  return inputMessages
+function getChatCompletionsOutputMessages (body) {
+  const eligible = []
+  const choices = Array.isArray(body?.choices) ? body.choices : []
+  for (const choice of choices) {
+    const message = choice?.message
+    if (
+      message?.content != null ||
+      message?.tool_calls?.length ||
+      message?.refusal != null ||
+      message?.function_call != null
+    ) {
+      eligible.push(message)
+    }
+  }
+  return normalizeOpenAIChatMessages(eligible) ?? []
 }
 
 /**
@@ -294,11 +155,6 @@ function convertOpenAIResponseItemsToMessages (items, defaultRole) {
 /**
  * Converts OpenAI reusable prompt variables to user messages for AI Guard.
  *
- * The reusable prompt template body is not available on the request, but its
- * variables are user/application-provided content that OpenAI substitutes into
- * the prompt. Screening them closes prompt-only `responses.create({ prompt })`
- * calls and prompt variables used alongside `input`.
- *
  * @param {{variables?: Record<string, string|object>|null}|undefined|null} prompt
  * @returns {Array<object>}
  */
@@ -315,14 +171,55 @@ function convertOpenAIResponsePromptToMessages (prompt) {
 }
 
 /**
- * Converts one OpenAI reusable prompt variable value to message content.
+ * Extracts OpenAI input messages from a `responses.create` call.
  *
- * Routes every variable through `openAIResponseContentToMessageContent` so the
- * result follows the same string-when-text-only / array-when-multimodal shape
- * convention used elsewhere in this file. Media variables that produce no
- * usable content (e.g. an `input_image` with no URL or `file_id`) fall back to
- * a stable text marker so AI Guard still observes that a media variable was
- * attached.
+ * @param {object} callArgs - First argument passed to the wrapped method
+ * @returns {Array<object>|undefined}
+ */
+function getResponsesInputMessages (callArgs) {
+  const messages = [
+    ...convertOpenAIResponseItemsToMessages(callArgs?.input, 'user'),
+    ...convertOpenAIResponsePromptToMessages(callArgs?.prompt),
+  ]
+
+  const instructions = typeof callArgs?.instructions === 'string' && callArgs.instructions.length
+    ? callArgs.instructions
+    : undefined
+  if (!instructions) return messages.length ? messages : undefined
+
+  const first = messages[0]
+  if (first && (first.role === 'developer' || first.role === 'system')) {
+    const merged = { role: 'developer', content: mergeInstructionsWithContent(instructions, first.content) }
+    return [merged, ...messages.slice(1)]
+  }
+  return [{ role: 'developer', content: instructions }, ...messages]
+}
+
+/**
+ * Merges Responses API instructions with an existing leading developer/system content value.
+ *
+ * @param {string} instructions
+ * @param {string|Array<object>|undefined} content
+ * @returns {string|Array<object>}
+ */
+function mergeInstructionsWithContent (instructions, content) {
+  if (Array.isArray(content)) return [{ type: 'text', text: instructions }, ...content]
+  if (typeof content === 'string' && content.length) return `${instructions}\n\n${content}`
+  return instructions
+}
+
+/**
+ * Extracts OpenAI output messages from a `responses.create` parsed body.
+ *
+ * @param {object} body - Parsed response body
+ * @returns {Array<object>}
+ */
+function getResponsesOutputMessages (body) {
+  return convertOpenAIResponseItemsToMessages(body?.output, 'assistant')
+}
+
+/**
+ * Converts one OpenAI reusable prompt variable value to message content.
  *
  * @param {string|object} value
  * @returns {string|Array<{type: string, text?: string, image_url?: {url: string}}>|undefined}
@@ -365,10 +262,6 @@ function openAIResponseItemToMessage (item, defaultRole) {
 
 /**
  * Converts a Responses API tool-call item to one or more chat-style messages.
- *
- * Most tool-call items represent only the assistant's tool request. MCP and
- * image-generation items can also carry tool output on the same item, so include
- * a linked tool message when output-like fields are present.
  *
  * @param {object} item
  * @returns {object|Array<object>}
@@ -478,13 +371,12 @@ function openAIResponseFileContentPart (part) {
 }
 
 module.exports = {
-  convertVercelPromptToMessages,
-  convertFilePartToImageUrl,
   normalizeOpenAIChatMessages,
-  buildToolCallOutputMessages,
-  buildTextOutputMessages,
-  buildOutputMessages,
+  getChatCompletionsInputMessages,
+  getChatCompletionsOutputMessages,
   convertOpenAIResponseItemsToMessages,
   convertOpenAIResponsePromptToMessages,
+  getResponsesInputMessages,
+  getResponsesOutputMessages,
   openAIResponseContentToMessageContent,
 }

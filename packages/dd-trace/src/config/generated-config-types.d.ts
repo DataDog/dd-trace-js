@@ -11,6 +11,7 @@ export interface GeneratedConfig {
       enabled: boolean;
       endpointCollectionEnabled: boolean;
       endpointCollectionMessageLimit: number;
+      maxDownstreamBodyBytes: number;
       maxDownstreamRequestBodyAnalysis: number;
       sampleDelay: number;
     };
@@ -131,6 +132,7 @@ export interface GeneratedConfig {
   DD_MINI_AGENT_PATH: string | undefined;
   DD_PIPELINE_EXECUTION_ID: string | undefined;
   DD_PLAYWRIGHT_WORKER: string | undefined;
+  DD_PROFILING_ALLOCATION_ENABLED: boolean;
   DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED: boolean;
   DD_PROFILING_CODEHOTSPOTS_ENABLED: boolean;
   DD_PROFILING_CPU_ENABLED: boolean;
@@ -346,6 +348,7 @@ export interface GeneratedConfig {
   DD_TRACE_OPENTELEMETRY_SDK_TRACE_NODE_ENABLED: boolean;
   DD_TRACE_ORACLEDB_ENABLED: boolean;
   DD_TRACE_OTEL_ENABLED: boolean;
+  DD_TRACE_OTEL_SEMANTICS_ENABLED: boolean;
   DD_TRACE_PASSPORT_ENABLED: boolean;
   DD_TRACE_PASSPORT_HTTP_ENABLED: boolean;
   DD_TRACE_PASSPORT_LOCAL_ENABLED: boolean;

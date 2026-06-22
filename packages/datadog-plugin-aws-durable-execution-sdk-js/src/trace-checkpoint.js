@@ -170,6 +170,9 @@ async function saveCheckpoint (checkpointManager, executionArn, number, headers)
  * the SDK is about to return Status: PENDING (see PENDING_TERMINATION_REASONS in
  * handler.js). This function does not re-check that.
  *
+ * Errors (including a rejected checkpoint-manager call) propagate to the caller, which swallows
+ * them at the fire-and-forget boundary.
+ *
  * @param {object} tracer
  * @param {object} span - aws.durable.execute span
  * @param {object} durableContext - SDK's DurableContextImpl
@@ -185,39 +188,35 @@ async function saveCheckpoint (checkpointManager, executionArn, number, headers)
 async function saveTraceContextCheckpointIfUpdated (
   tracer, span, durableContext, firstExecutionSpanId, event,
 ) {
-  try {
-    const checkpointManager = durableContext.checkpoint ?? durableContext.checkpointManager
-    if (typeof checkpointManager?.checkpoint !== 'function') return
+  const checkpointManager = durableContext.checkpoint ?? durableContext.checkpointManager
+  if (typeof checkpointManager?.checkpoint !== 'function') return
 
-    const currentHeaders = injectHeaders(tracer, span)
-    if (currentHeaders['x-datadog-trace-id'] === undefined) return
+  const currentHeaders = injectHeaders(tracer, span)
+  if (currentHeaders['x-datadog-trace-id'] === undefined) return
 
-    const latest = findLastCheckpoint(event)
+  const latest = findLastCheckpoint(event)
 
-    let newNumber
-    if (latest) {
-      const previousHeaders = parseCheckpointPayload(latest.operation)
-      if (!previousHeaders) return
+  let newNumber
+  if (latest) {
+    const previousHeaders = parseCheckpointPayload(latest.operation)
+    if (!previousHeaders) return
 
-      // x-datadog-parent-id reflects the active span at save time and always differs, so exclude it
-      // from the comparison. Capture the previous anchor first to carry it forward on a real update.
-      // needsCheckpointUpdate only reads currentHeaders' keys, so deleting it from there is enough.
-      const anchoredSpanId = previousHeaders['x-datadog-parent-id']
-      delete currentHeaders['x-datadog-parent-id']
-      if (!needsCheckpointUpdate(currentHeaders, previousHeaders)) return
+    // x-datadog-parent-id reflects the active span at save time and always differs, so exclude it
+    // from the comparison. Capture the previous anchor first to carry it forward on a real update.
+    // needsCheckpointUpdate only reads currentHeaders' keys, so deleting it from there is enough.
+    const anchoredSpanId = previousHeaders['x-datadog-parent-id']
+    delete currentHeaders['x-datadog-parent-id']
+    if (!needsCheckpointUpdate(currentHeaders, previousHeaders)) return
 
-      newNumber = latest.checkpointNumber + 1
-      overrideParentId(currentHeaders, anchoredSpanId)
-    } else {
-      newNumber = 0
-      if (firstExecutionSpanId) overrideParentId(currentHeaders, firstExecutionSpanId)
-    }
-
-    const executionArn = event?.DurableExecutionArn || ''
-    await saveCheckpoint(checkpointManager, executionArn, newNumber, currentHeaders)
-  } catch (e) {
-    log.debug('Failed to save trace context checkpoint', e)
+    newNumber = latest.checkpointNumber + 1
+    overrideParentId(currentHeaders, anchoredSpanId)
+  } else {
+    newNumber = 0
+    if (firstExecutionSpanId) overrideParentId(currentHeaders, firstExecutionSpanId)
   }
+
+  const executionArn = event?.DurableExecutionArn || ''
+  await saveCheckpoint(checkpointManager, executionArn, newNumber, currentHeaders)
 }
 
 module.exports = {
