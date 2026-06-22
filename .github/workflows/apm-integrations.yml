@@ -1351,6 +1351,15 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
+    strategy:
+      fail-fast: false
+      # tedious spans 19 majors; installing and testing them all in one job exceeds the step time budget. Shard by
+      # major range so each job stays small. PACKAGE_VERSION_RANGE narrows both the install and the tested versions.
+      matrix:
+        range:
+          - ">=1.0.0 <7.0.0"
+          - ">=7.0.0 <13.0.0"
+          - ">=13.0.0"
     services:
       mssql:
         image: ghcr.io/datadog/dd-trace-js/mcr.microsoft.com/mssql/server@sha256:8bb7f2f0684104d98ef4cbedf574210f38ea0f00fc0713af9d3f962f7578a6a8 # 2019-latest
@@ -1363,19 +1372,22 @@ jobs:
     env:
       PLUGINS: tedious
       SERVICES: mssql
+      PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
+      # The upstream suite always exercises the latest version, so run it only on the shard that installs it.
       - run: yarn test:plugins:upstream
+        if: ${{ matrix.range == '>=13.0.0' }}
       - uses: ./.github/actions/coverage
         with:
-          flags: apm-integrations-tedious
+          flags: apm-integrations-tedious-${{ strategy.job-index }}
       - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          id: ${{ github.job }}
+          id: ${{ github.job }}-${{ strategy.job-index }}
 
   undici:
     runs-on: ubuntu-latest
