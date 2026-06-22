@@ -1195,6 +1195,9 @@ function deepFreeze (value) {
  *
  * When `withReceiver: true` is set, each test function receives
  * `(receiver, run)` arguments automatically — see `withReceiver` for details.
+ * An `afterEach` hook is registered per test so that the receiver and
+ * subprocess are force-cleaned up on Mocha timeout, not only when the test
+ * body settles naturally.
  *
  * @param {(name: string, fn: () => Promise<void>) => void} mochaIt
  * @param {{ concurrency?: number, withReceiver?: boolean }} [options]
@@ -1250,6 +1253,15 @@ function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver
     if (!entriesByTitle.has(name)) entriesByTitle.set(name, [])
     entriesByTitle.get(name).push(entry)
 
+    if (useReceiver) {
+      // Run cleanup when THIS test finishes (including on Mocha timeout).
+      // All afterEach hooks in a suite fire after every test, so guard by
+      // title to avoid cleaning up concurrently running sibling tests.
+      afterEach(function () {
+        if (this.currentTest.title === name) return wrappedFn.cleanup()
+      })
+    }
+
     mochaIt(name, function () {
       if (opts.retries !== undefined) {
         this.retries(opts.retries)
@@ -1276,30 +1288,42 @@ function createParallelIt (mochaIt, { concurrency = 2, withReceiver: useReceiver
 
 /**
  * Wraps a test body with FakeCiVisIntake lifecycle management. Starts a
- * receiver before the test, passes it (and an optional `run` exec helper that
- * auto-kills on cleanup) to `fn`, then stops the receiver in a finally block.
+ * receiver before the test and passes it (and an optional `run` exec helper)
+ * to `fn`. Cleanup is driven externally via `cleanup()` — call it from an
+ * `afterEach` hook so it runs on both normal completion and Mocha timeout.
+ * Double-calling `cleanup()` is safe; the second call is a no-op.
  *
  * @param {(
  *   receiver: FakeCiVisIntake,
  *   run: (cmd: string, opts?: object) => import('child_process').ChildProcess
  * ) => Promise<void>} fn
- * @returns {() => Promise<void>}
+ * @returns {(() => Promise<void>) & { cleanup: () => Promise<void> }}
  */
 function withReceiver (fn) {
-  return async () => {
-    const receiver = await new FakeCiVisIntake().start()
-    let lastProc
+  let receiver
+  let lastProc
+
+  const wrapped = async () => {
+    receiver = await new FakeCiVisIntake().start()
+    lastProc = undefined
     const run = (cmd, opts) => {
       lastProc = exec(cmd, opts)
       return lastProc
     }
-    try {
-      await fn(receiver, run)
-    } finally {
-      lastProc?.kill()
-      await receiver.stop()
-    }
+    await fn(receiver, run)
   }
+
+  // Nulls out references before stopping so double-calls are safe.
+  wrapped.cleanup = async () => {
+    const proc = lastProc
+    const rcvr = receiver
+    lastProc = undefined
+    receiver = undefined
+    proc?.kill()
+    await rcvr?.stop()
+  }
+
+  return wrapped
 }
 
 module.exports = {
