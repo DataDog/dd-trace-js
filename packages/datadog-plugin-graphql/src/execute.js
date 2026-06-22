@@ -1,10 +1,13 @@
 'use strict'
 
-const { AsyncLocalStorage } = require('node:async_hooks')
 const dc = require('dc-polyfill')
+
+const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const GraphQLParsePlugin = require('./parse')
 const { extractErrorIntoSpanEvent, getSignature } = require('./utils')
+
+const legacyStorage = storage('legacy')
 
 const types = new Set(['query', 'mutation', 'subscription'])
 
@@ -22,8 +25,6 @@ const updateFieldCh = dc.channel('apm:graphql:resolve:updateField')
 const startExecuteCh = dc.channel('apm:graphql:execute:start')
 
 const contexts = new WeakMap()
-// ALS fallback for non-WeakMap-keyable contextValues (primitives, Symbols on Node 18).
-const primitiveContextAls = new AsyncLocalStorage()
 
 const patchedResolvers = new WeakSet()
 const patchedTypes = new WeakSet()
@@ -160,6 +161,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
       source: docSource,
       config: this.config,
       fields: new Map(),
+      pathCache: new Map(),
       abortController,
       executeSpan: span,
       plugin: this,
@@ -169,9 +171,11 @@ class GraphQLExecutePlugin extends TracingPlugin {
       contexts.set(contextValue, rootCtx)
       ctx.ddContextValue = contextValue
     } else {
-      // Primitive / non-keyable contextValue: ALS so wrapped resolvers can
-      // still find rootCtx via getStore() in resolveAsync.
-      primitiveContextAls.enterWith(rootCtx)
+      // Primitive / non-keyable contextValue: stash rootCtx on the
+      // orchestrion-scoped store that runStores enters for execute. Wrapped
+      // resolvers read it via legacyStorage.getStore() and it unwinds with the
+      // frame — no enterWith store that leaks past execute.
+      ctx.currentStore.graphqlRootCtx = rootCtx
     }
 
     return ctx.currentStore
@@ -312,22 +316,22 @@ function wrapResolve (resolve) {
       return resolve.apply(this, arguments)
     }
 
-    const rootCtx = contexts.get(contextValue) ?? primitiveContextAls.getStore()
+    const rootCtx = contexts.get(contextValue) ?? legacyStorage.getStore()?.graphqlRootCtx
     if (!rootCtx) return resolve.apply(this, arguments)
 
     const infoPath = info?.path
     const config = rootCtx.config
 
-    // Compute pathString once — shared between the IAST publish (when
-    // subscribed) and the field record (when we create one). Collapse-aware:
-    // list indices become '*'.
+    // pathString built incrementally off the parent's cached value
+    // (rootCtx.pathCache, keyed by path node) — avoids re-walking the whole
+    // path linked-list on every resolver call, which is O(depth) per call for
+    // deeply nested resolvers. Shared between the IAST publish and the field
+    // record. Collapse-aware: list-index segments become '*'.
     let pathString
     let collapsedKey
-    if (config.collapse) {
-      collapsedKey = buildCollapsedPathStringFromNode(infoPath)
-      pathString = collapsedKey
-    } else {
-      pathString = buildPathStringFromNode(infoPath)
+    if (infoPath) {
+      pathString = buildCachedPathString(infoPath, rootCtx.pathCache, config.collapse)
+      if (config.collapse) collapsedKey = pathString
     }
 
     // IAST and AppSec subscribers see EVERY resolver call, regardless of
@@ -458,23 +462,25 @@ function pathToArray (path) {
   return flattened
 }
 
-function buildPathStringFromNode (path) {
-  let string = path.key
-  while (path.prev) {
-    path = path.prev
-    string = `${path.key}.${string}`
-  }
-  return string
-}
+// Build the dotted pathString for a resolver's path node, caching per node on
+// rootCtx.pathCache so each call reuses the parent's already-built string
+// instead of re-walking the whole path linked-list (O(1) amortized per call).
+// Collapse-aware: numeric (list-index) segments become '*'. The recursion
+// handles the cold path where a parent node never hit a resolver (graphql
+// inserts a synthetic array-index node between a list field and its items).
+function buildCachedPathString (path, cache, collapse) {
+  const cached = cache.get(path)
+  if (cached !== undefined) return cached
 
-// Number segments collapse to '*' (array indices share a representative slot).
-function buildCollapsedPathStringFromNode (path) {
-  let string = typeof path.key === 'number' ? '*' : path.key
-  while (path.prev) {
-    path = path.prev
-    string = `${typeof path.key === 'number' ? '*' : path.key}.${string}`
-  }
-  return string
+  const key = path.key
+  const segment = collapse && typeof key !== 'string' ? '*' : key
+  const prev = path.prev
+
+  const pathString = prev === undefined
+    ? String(segment)
+    : `${buildCachedPathString(prev, cache, collapse)}.${segment}`
+  cache.set(path, pathString)
+  return pathString
 }
 
 // Depth filtering directly on the linked-list node — no array allocation needed.
@@ -545,10 +551,16 @@ function getResolverInfo (info, args) {
 
 // --- arg / context normalization ---------------------------------------------
 
+// graphql.execute accepts either a single args object or positional arguments;
+// the object form is a lone non-array object in slot 0.
+function isObjectForm (args) {
+  return args.length === 1 && args[0] && typeof args[0] === 'object' && !Array.isArray(args[0])
+}
+
 function readArgs (args) {
   if (!args || args.length === 0) return {}
 
-  if (args.length === 1 && args[0] && typeof args[0] === 'object' && !Array.isArray(args[0])) {
+  if (isObjectForm(args)) {
     return args[0]
   }
 
@@ -570,7 +582,7 @@ function readArgs (args) {
 function setWrappedFieldResolver (rawArgs, defaultFieldResolver) {
   if (!rawArgs || rawArgs.length === 0) return {}
 
-  if (rawArgs.length === 1 && rawArgs[0] && typeof rawArgs[0] === 'object' && !Array.isArray(rawArgs[0])) {
+  if (isObjectForm(rawArgs)) {
     const original = rawArgs[0]
     const clone = {
       ...original,
