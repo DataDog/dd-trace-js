@@ -371,8 +371,8 @@ class TextMapPropagator {
 
   _hasTraceIdConflict (w3cSpanContext, firstSpanContext) {
     return w3cSpanContext !== undefined &&
-           firstSpanContext.toTraceId(true) === w3cSpanContext.toTraceId(true) &&
-           firstSpanContext.toSpanId() !== w3cSpanContext.toSpanId()
+          firstSpanContext.toTraceId(true) === w3cSpanContext.toTraceId(true) &&
+          firstSpanContext.toSpanId() !== w3cSpanContext.toSpanId()
   }
 
   _hasParentIdInTags (spanContext) {
@@ -875,7 +875,7 @@ class TextMapPropagator {
           (!tracestateSamplingPriority || tracestateSamplingPriority >= 0)) {
         samplingPriority = AUTO_REJECT
       } else if (traceparentSampled === 1 &&
-                 (!tracestateSamplingPriority || tracestateSamplingPriority < 0)) {
+                (!tracestateSamplingPriority || tracestateSamplingPriority < 0)) {
         samplingPriority = AUTO_KEEP
       }
     }
