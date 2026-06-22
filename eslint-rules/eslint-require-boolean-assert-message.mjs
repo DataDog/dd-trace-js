@@ -106,7 +106,7 @@ export default {
 
         if (isTrivialExpression(firstArg)) return
 
-        const sourceCode = context.getSourceCode()
+        const sourceCode = context.sourceCode
         const fixMessage = buildAutofixMessage(firstArg, sourceCode)
 
         context.report({

@@ -9,7 +9,7 @@ const CATEGORY_ORDER = [
   INTERNAL_CATEGORY,
 ]
 const CONVENTIONAL_PATTERN = new RegExp(
-  String.raw`^(?:(revert)(!)?: )?` +
+  '^(?:(revert)(!)?: )?' +
     String.raw`(feat|fix|docs|style|refactor|perf|test|bench|build|ci|chore)(?:\(([^)]+)\))?(!)?: (.+)$`
 )
 const PULL_REQUEST_PATTERN = /\s+\(#([0-9]+)\)$/
