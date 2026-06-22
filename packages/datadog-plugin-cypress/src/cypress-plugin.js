@@ -153,7 +153,7 @@ function getScreenshotFilePath (screenshot) {
  * @returns {number} Capture time in epoch milliseconds
  */
 function getScreenshotCapturedAtMs (screenshot, filePath) {
-  const takenAt = typeof screenshot === 'object' ? screenshot?.takenAt : undefined
+  const takenAt = screenshot !== null && typeof screenshot === 'object' ? screenshot.takenAt : undefined
   if (takenAt) {
     const parsedMs = new Date(takenAt).getTime()
     if (Number.isInteger(parsedMs) && parsedMs > 0) {

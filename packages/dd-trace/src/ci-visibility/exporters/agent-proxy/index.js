@@ -1,7 +1,5 @@
 'use strict'
 
-const URL = require('url').URL
-
 const AgentWriter = require('../../../exporters/agent/writer')
 const AgentlessWriter = require('../agentless/writer')
 const CoverageWriter = require('../agentless/coverage-writer')
