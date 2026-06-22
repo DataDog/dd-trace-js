@@ -6,7 +6,7 @@ import { readFileSync } from 'fs'
 import eslintPluginJs from '@eslint/js'
 import eslintPluginStylistic from '@stylistic/eslint-plugin'
 import eslintPluginCypress from 'eslint-plugin-cypress'
-import eslintPluginImport from 'eslint-plugin-import'
+import eslintPluginImport from 'eslint-plugin-import-x'
 import eslintPluginJSDoc from 'eslint-plugin-jsdoc'
 import eslintPluginMocha from 'eslint-plugin-mocha'
 import eslintPluginN from 'eslint-plugin-n'
@@ -265,7 +265,7 @@ export default [
       'import/no-self-import': 'error',
       'import/order': ['error', {
         // `dd-trace` must be allowed first (and is often intentionally required before any other module).
-        // eslint-plugin-import defaults can exclude some import types (notably `builtin`) from `pathGroups`,
+        // eslint-plugin-import-x defaults can exclude some import types (notably `builtin`) from `pathGroups`,
         // which would make the `dd-trace` exception below a no-op. Make this explicit.
         pathGroupsExcludedImportTypes: [],
         pathGroups: [
@@ -324,6 +324,9 @@ export default [
       'no-sequences': 'error',
       'no-template-curly-in-string': 'error',
       'no-throw-literal': 'error',
+      // Surfaces pre-existing latent bugs (always-undefined vars in tests/intake helpers)
+      // unrelated to this tooling bump; worth a focused follow-up.
+      'no-unassigned-vars': 'off',
       'no-undef-init': 'error',
       'no-unmodified-loop-condition': 'error',
       'no-unneeded-ternary': ['error', { defaultAssignment: false }],
@@ -353,6 +356,8 @@ export default [
       'prefer-const': ['error', { destructuring: 'all' }],
       'prefer-promise-reject-errors': 'error',
       'prefer-regex-literals': ['error', { disallowRedundantWrapping: true }],
+      // Newly enabled by the ESLint 10 bump; deferred with no-unassigned-vars above.
+      'preserve-caught-error': 'off',
       'promise/param-names': 'error',
       'symbol-description': 'error',
       'unicode-bom': ['error', 'never'],
@@ -580,42 +585,120 @@ export default [
 
       ...eslintPluginUnicorn.configs.recommended.rules,
 
-      // Overriding recommended unicorn rules
+      // Overriding recommended unicorn rules.
+      // Rules not listed here are left at the `recommended` default. The v65→v68 bump
+      // turned ~130 rules on in `recommended`; the entries below are the ones that fire
+      // on our source and are intentionally kept off (counts are from the v68 run).
       'unicorn/catch-error-name': ['off', { name: 'err' }], // Many errors
       'unicorn/expiring-todo-comments': 'off',
-      'unicorn/filename-case': ['off', { case: 'kebabCase' }], // // Many errors
+      'unicorn/filename-case': ['off', { case: 'kebabCase' }], // Many errors
+      'unicorn/name-replacements': 'off', // Many errors | naming churn (split out of prevent-abbreviations)
       'unicorn/prevent-abbreviations': 'off', // Many errors
 
       // These rules require a newer Node.js version than we support
       'unicorn/no-array-reverse': 'off', // Node.js 20
       'unicorn/no-array-sort': 'off', // Node.js 20
+      'unicorn/prefer-dispose': 'off', // Explicit resource management (newer Node.js)
+      'unicorn/prefer-iterator-to-array': 'off', // Iterator helpers (Node.js 22)
+      'unicorn/prefer-iterator-to-array-at-end': 'off', // Iterator helpers (Node.js 22)
+      'unicorn/prefer-promise-with-resolvers': 'off', // 6 errors | Promise.withResolvers (Node.js 22)
+      'unicorn/prefer-temporal': 'off', // Temporal is not stable on supported Node.js
+      'unicorn/prefer-uint8array-base64': 'off', // Uint8Array base64 (Node.js 22)
 
-      // These rules could potentially evaluated again at a much later point
+      // These rules could potentially be evaluated again at a much later point
+      'unicorn/class-reference-in-static-methods': 'off', // 6 errors
+      'unicorn/consistent-class-member-order': 'off', // 55 errors | ordering churn
+      'unicorn/consistent-conditional-object-spread': 'off', // 3 errors
+      'unicorn/consistent-optional-chaining': 'off', // 3 errors
       'unicorn/explicit-length-check': 'off', // Not a big advantage
+      'unicorn/explicit-timer-delay': 'off', // Covered by our own timer lint rules
       'unicorn/no-array-callback-reference': 'off',
+      'unicorn/no-computed-property-existence-check': 'off', // 160 errors | needs an audit
+      'unicorn/no-declarations-before-early-exit': 'off', // 62 errors
+      'unicorn/no-duplicate-if-branches': 'off', // 1 error | may surface real bugs
+      'unicorn/no-duplicate-logical-operands': 'off', // 2 errors | may surface real bugs
+      'unicorn/no-error-property-assignment': 'off', // 6 errors
       'unicorn/no-for-loop': 'off', // Activate if this is resolved https://github.com/sindresorhus/eslint-plugin-unicorn/issues/2664
+      'unicorn/no-incorrect-template-string-interpolation': 'off', // 3 errors | audit for real bugs first
+      'unicorn/no-invalid-argument-count': 'off', // 98 errors | high false-positive risk, worth a focused pass
+      'unicorn/no-loop-iterable-mutation': 'off', // 2 errors | may surface real bugs
+      'unicorn/no-nonstandard-builtin-properties': 'off', // 34 errors | needs an audit
       'unicorn/no-this-assignment': 'off', // This would need some further refactoring and the benefit is small
+      'unicorn/no-undeclared-class-members': 'off', // 272 errors | requires declaring every field
+      'unicorn/no-unreadable-array-destructuring': 'off', // 4 errors | not autofixable, needs manual rewrite
+      'unicorn/no-unreadable-for-of-expression': 'off', // 32 errors
+      'unicorn/no-unreadable-object-destructuring': 'off', // 57 errors
+      'unicorn/no-unsafe-string-replacement': 'off', // 6 errors
+      'unicorn/no-useless-recursion': 'off', // 2 errors
       'unicorn/prefer-code-point': 'off', // Should be activated, but needs a refactor of some code
-      'unicorn/prefer-queue-microtask': 'off', // No advantage for us
+      'unicorn/prefer-early-return': 'off', // 67 errors | tension with our positive-`if` style
+      'unicorn/prefer-hoisting-branch-code': 'off', // 2 errors | reshapes branch bodies
+      'unicorn/prefer-minimal-ternary': 'off', // 24 errors
+      'unicorn/prefer-number-is-safe-integer': 'off', // 17 errors
+      'unicorn/prefer-object-iterable-methods': 'off', // 56 errors
+      'unicorn/prefer-queue-microtask': 'off', // process.nextTick semantics differ
+      'unicorn/prefer-smaller-scope': 'off', // 3 errors
+      'unicorn/prefer-split-limit': 'off', // 23 errors
+      'unicorn/require-array-sort-compare': 'off', // 8 errors | may surface real default-sort bugs
 
       // The following rules should not be activated!
+      'unicorn/consistent-boolean-name': 'off', // Would rename public API and config booleans
       'unicorn/import-style': 'off', // Questionable benefit
+      'unicorn/max-nested-calls': 'off', // Questionable benefit
       'unicorn/no-array-reduce': 'off', // Questionable benefit
-      'unicorn/no-hex-escape': 'off', // Questionable benefit
+      'unicorn/no-array-splice': 'off', // toSpliced copies the whole array (perf)
+      'unicorn/no-break-in-nested-loop': 'off', // Conflicts with our performance-oriented loops
+      'unicorn/no-global-object-property-assignment': 'off', // We use globalThis[Symbol.for('dd-trace')]
       'unicorn/no-nested-ternary': 'off', // Not really an issue in the code and the benefit is small
       'unicorn/no-new-array': 'off', // new Array is often used for performance reasons
       'unicorn/no-null': 'off', // We do not control external APIs and it is hard to differentiate these
+      'unicorn/no-return-array-push': 'off', // Questionable benefit
       'unicorn/no-this-outside-of-class': 'off', // This will not work for us
+      'unicorn/no-top-level-assignment-in-function': 'off', // Module-level singletons are assigned from functions
+      'unicorn/no-useless-else': 'off', // Covered by core no-else-return
+      'unicorn/operator-assignment': 'off', // Covered by core operator-assignment
+      'unicorn/prefer-array-last-methods': 'off', // Questionable benefit
+      'unicorn/prefer-await': 'off', // We avoid async/await in production hot paths
       'unicorn/prefer-event-target': 'off', // Benefit only outside of Node.js
       'unicorn/prefer-global-this': 'off', // Questionable benefit in Node.js alone
       'unicorn/prefer-includes-over-repeated-comparisons': 'off', // Bad for performance
       'unicorn/prefer-math-trunc': 'off', // Math.trunc is not a 1-to-1 replacement for most of our usage
       'unicorn/prefer-module': 'off', // We use CJS
       'unicorn/prefer-node-protocol': 'off', // May not be used due to guardrails
+      'unicorn/prefer-number-coercion': 'off', // Number() is not a 1-to-1 replacement for parseInt/parseFloat
+      'unicorn/prefer-private-class-fields': 'off', // Many `_underscore` fields cross module boundaries
       'unicorn/prefer-reflect-apply': 'off', // Questionable benefit and more than 500 matches
+      'unicorn/prefer-short-arrow-method': 'off', // Method shorthand is intentional; arrow properties change `this`
       'unicorn/prefer-switch': 'off', // Questionable benefit
       'unicorn/prefer-top-level-await': 'off', // Only useful when using ESM
+      'unicorn/prefer-unicode-code-point-escapes': 'off', // Replaces the dropped no-hex-escape; questionable benefit
       'unicorn/switch-case-braces': 'off', // Questionable benefit
+
+      // Safe to enable in a follow-up: autofixable and aligned with our style. Kept off
+      // here only to keep this version bump free of source churn (counts from the v68 run).
+      'unicorn/logical-assignment-operators': 'off', // 42 errors | matches our ??=/||= usage
+      'unicorn/no-for-each': 'off', // 10 errors | we already prefer for-of in production
+      'unicorn/no-negated-array-predicate': 'off', // 2 errors
+      'unicorn/no-negated-comparison': 'off', // 1 error
+      'unicorn/no-subtraction-comparison': 'off', // 2 errors
+      'unicorn/no-unnecessary-boolean-comparison': 'off', // 6 errors
+      'unicorn/no-unnecessary-global-this': 'off', // 4 errors
+      'unicorn/no-unnecessary-splice': 'off', // 2 errors
+      'unicorn/no-useless-concat': 'off', // 4 errors
+      'unicorn/no-useless-continue': 'off', // 1 error
+      'unicorn/no-useless-delete-check': 'off', // 1 error
+      'unicorn/no-useless-fallback-in-spread': 'off', // 5 errors
+      'unicorn/no-useless-override': 'off', // 1 error
+      'unicorn/no-useless-template-literals': 'off', // 13 errors
+      'unicorn/prefer-array-from-map': 'off', // 6 errors
+      'unicorn/prefer-boolean-return': 'off', // 1 error
+      'unicorn/prefer-continue': 'off', // 52 errors
+      'unicorn/prefer-direct-iteration': 'off', // 5 errors
+      'unicorn/prefer-else-if': 'off', // 6 errors
+      'unicorn/prefer-global-number-constants': 'off', // 3 errors
+      'unicorn/prefer-logical-operator-over-ternary': 'off', // 3 errors
+      'unicorn/prefer-ternary': 'off', // 16 errors
+      'unicorn/prefer-unary-minus': 'off', // 1 error
     },
   },
   {

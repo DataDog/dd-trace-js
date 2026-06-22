@@ -1270,7 +1270,6 @@ function resetCoverage (coverage) {
 
   return coverageMap
     .files()
-    // eslint-disable-next-line unicorn/no-array-for-each
     .forEach(filename => {
       const fileCoverage = coverageMap.fileCoverageFor(filename)
       fileCoverage.resetHits()
@@ -1281,7 +1280,6 @@ function mergeCoverage (coverage, targetCoverage) {
   const coverageMap = istanbul.createCoverageMap(coverage)
   return coverageMap
     .files()
-    // eslint-disable-next-line unicorn/no-array-for-each
     .forEach(filename => {
       const fileCoverage = coverageMap.fileCoverageFor(filename)
 
