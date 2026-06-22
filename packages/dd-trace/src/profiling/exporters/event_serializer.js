@@ -34,7 +34,7 @@ class EventSerializer {
   /** @param {TracerConfig} config */
   constructor (config) {
     this.#env = config.env
-    this.#host = config.reportHostname ? config.hostname : undefined
+    this.#host = config.reportHostname ? os.hostname() : undefined
     this.#service = config.service
     this.#appVersion = config.version
     this.#libraryInjected = !!config.DD_INJECTION_ENABLED

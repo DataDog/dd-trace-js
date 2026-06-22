@@ -141,7 +141,7 @@ describe('exporters/agent', function () {
           version: APP_VERSION,
         },
         platform: {
-          hostname: HOST,
+          hostname: os.hostname(),
           kernel_name: os.type(),
           kernel_release: os.release(),
           kernel_version: os.version(),
