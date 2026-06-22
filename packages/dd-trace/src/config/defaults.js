@@ -1,6 +1,5 @@
 'use strict'
 
-const dns = require('dns')
 const util = require('util')
 
 const { DD_MAJOR } = require('../../../../version')
@@ -51,7 +50,6 @@ const defaults = {
   isServiceUserProvided: false,
   plugins: true,
   isCiVisibility: false,
-  lookup: dns.lookup,
   logger: undefined,
 }
 
@@ -347,3 +345,16 @@ module.exports = {
 
   generateTelemetry,
 }
+
+// `dns` is instrumented, so requiring it pulls in the dns plugin, which loads
+// `log`, whose bootstrap calls back into `require('./defaults')`. Resolve the
+// `lookup` default last — after the exports above are fully built — so that the
+// re-entrant require during that cascade sees the complete module instead of a
+// half-initialized one.
+defaults.lookup = require('dns').lookup
+configWithOrigin.set('lookupdefault', {
+  name: 'lookup',
+  value: defaults.lookup,
+  origin: 'default',
+  seq_id: seqId++,
+})
