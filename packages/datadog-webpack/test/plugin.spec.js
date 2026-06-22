@@ -141,27 +141,11 @@ describe('loader', () => {
 })
 
 describe('openFeatureLoader', () => {
-  const context = { cacheable: () => {} }
+  it('delegates to the shared rewrite so the bundled provider uses a literal require', () => {
+    const source = 'const { DatadogNodeServerProvider } = runtimeRequire(openfeatureNodeServerPath)'
 
-  it('rewrites the opaque peer require into a literal, bundleable require', () => {
-    const source = [
-      "const runtimeRequire = typeof __webpack_require__ === 'function' ? __non_webpack_require__ : require",
-      "const openfeatureNodeServer = ['@datadog/openfeature', 'node', 'server'].join('-')",
-      'const openfeatureNodeServerPath = runtimeRequire.resolve(openfeatureNodeServer, { paths: [__dirname] })',
-      'const { DatadogNodeServerProvider } = runtimeRequire(openfeatureNodeServerPath)',
-    ].join('\n')
-
-    const result = openFeatureLoader.call(context, source)
+    const result = openFeatureLoader.call({ cacheable: () => {} }, source)
 
     assert.ok(result.includes("require('@datadog/openfeature-node-server')"), 'should use a literal require')
-    assert.ok(!result.includes('runtimeRequire(openfeatureNodeServerPath)'), 'should drop the opaque require')
-    assert.ok(!result.includes('runtimeRequire.resolve('), 'should drop the opaque resolve so it cannot throw')
-  })
-
-  it('throws when the provider load shape no longer matches', () => {
-    assert.throws(
-      () => openFeatureLoader.call(context, "const x = require('something-else')"),
-      /OpenFeature provider load shape changed/
-    )
   })
 })

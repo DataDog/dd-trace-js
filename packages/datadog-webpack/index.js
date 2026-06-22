@@ -7,28 +7,15 @@ const path = require('node:path')
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
+const {
+  OPENFEATURE_PEER,
+  FLAGGING_PROVIDER_SUFFIX,
+  isOpenFeaturePeerInstalled,
+} = require('../datadog-instrumentations/src/helpers/openfeature-bundler')
 const { isESMFile } = require('../datadog-esbuild/src/utils')
 const log = require('./src/log')
 
 const PLUGIN_NAME = 'DatadogWebpackPlugin'
-
-// Internal path of dd-trace's OpenFeature provider, identical in the repo layout and
-// inside `node_modules/dd-trace`. Used to target the loader that bundles the optional peer.
-const FLAGGING_PROVIDER_SUFFIX = 'packages/dd-trace/src/openfeature/flagging_provider.js'
-const OPENFEATURE_PEER = '@datadog/openfeature-node-server'
-
-/**
- * @param {string} fromDir - Directory to resolve the optional peer from
- * @returns {boolean} Whether `@datadog/openfeature-node-server` is installed and resolvable
- */
-function isOpenFeaturePeerInstalled (fromDir) {
-  try {
-    require.resolve(OPENFEATURE_PEER, { paths: [fromDir] })
-    return true
-  } catch {
-    return false
-  }
-}
 
 for (const hook of Object.values(hooks)) {
   if (hook !== null && typeof hook === 'object') {

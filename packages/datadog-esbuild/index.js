@@ -8,6 +8,11 @@ const { pathToFileURL, fileURLToPath } = require('node:url')
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
+const {
+  FLAGGING_PROVIDER_SUFFIX,
+  isOpenFeaturePeerInstalled,
+  rewriteFlaggingProviderSource,
+} = require('../datadog-instrumentations/src/helpers/openfeature-bundler')
 const { processModule, isESMFile } = require('./src/utils')
 const log = require('./src/log')
 
@@ -171,6 +176,23 @@ ${build.initialOptions.banner.js}`
   } else {
     log.warn('No git metadata available - skipping injection')
   }
+
+  // Bundle the optional OpenFeature peer when it is installed so the provider keeps
+  // working after the bundle is relocated without it on disk (#8980). Registered before
+  // the generic onLoad so it wins for flagging_provider.js. Without the peer installed the
+  // file keeps its bundler-opaque require, so a build that does not use feature flagging
+  // does not follow the optional peer chain (#8635).
+  build.onLoad({ filter: /flagging_provider\.js$/ }, args => {
+    if (!args.path.replaceAll('\\', '/').endsWith(FLAGGING_PROVIDER_SUFFIX)) return
+    if (!isOpenFeaturePeerInstalled(path.dirname(args.path))) return
+
+    log.debug('INLINE: bundling %s', '@datadog/openfeature-node-server')
+    return {
+      contents: rewriteFlaggingProviderSource(fs.readFileSync(args.path, 'utf8')),
+      loader: 'js',
+      resolveDir: path.dirname(args.path),
+    }
+  })
 
   // first time is intercepted, proxy should be created, next time the original should be loaded
   const interceptedESMModules = new Set()
