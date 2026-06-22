@@ -137,7 +137,7 @@ function formatLanguageModelOutputMessages (content) {
 }
 
 class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
-  static id = 'ai'
+  static id = 'ai_llmobs_vercel_telemetry'
   static integration = 'ai'
   static prefix = 'tracing:ai:telemetry'
 

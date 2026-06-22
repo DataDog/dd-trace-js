@@ -5,7 +5,7 @@ const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const { getModelProvider, parseModelProvider } = require('./utils')
 
 class DdTelemetryPlugin extends TracingPlugin {
-  static id = 'ai'
+  static id = 'ai_tracing_dd_telemetry'
   static prefix = 'tracing:dd-trace:vercel-ai'
 
   bindStart (ctx) {
@@ -32,7 +32,7 @@ class DdTelemetryPlugin extends TracingPlugin {
 }
 
 class VercelAiTelemetryPlugin extends TracingPlugin {
-  static id = 'ai'
+  static id = 'ai_tracing_vercel_telemetry'
   static prefix = 'tracing:ai:telemetry'
 
   #streamedCalls = new Set()
@@ -82,7 +82,7 @@ class VercelAiTelemetryPlugin extends TracingPlugin {
 }
 
 class VercelAITracingPlugin extends CompositePlugin {
-  static id = 'ai'
+  static id = 'ai_tracing'
   static plugins = {
     dd: DdTelemetryPlugin,
     ai: VercelAiTelemetryPlugin,

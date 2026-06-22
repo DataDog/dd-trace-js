@@ -5,7 +5,7 @@ const DdTelemetryPlugin = require('./ddTelemetry')
 const VercelAiTelemetryPlugin = require('./vercelTelemetry')
 
 class VercelAILLMObsPlugin extends CompositePlugin {
-  static id = 'ai'
+  static id = 'ai_llmobs'
   static integration = 'ai'
   static plugins = {
     dd: DdTelemetryPlugin,

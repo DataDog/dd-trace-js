@@ -72,7 +72,7 @@ const SPAN_NAME_TO_KIND_MAPPING = {
 }
 
 class DdTelemetryPlugin extends BaseLLMObsPlugin {
-  static id = 'ai'
+  static id = 'ai_llmobs_dd_telemetry'
   static integration = 'ai'
   static prefix = 'tracing:dd-trace:vercel-ai'
 
