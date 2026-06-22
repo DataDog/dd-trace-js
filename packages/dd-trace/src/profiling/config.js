@@ -75,7 +75,7 @@ function getUploadCompression (config) {
 
 /** @param {TracerConfig} config */
 function getAsyncContextFrameEnabled (config) {
-  const enabled = config.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED ?? isACFActive
+  const enabled = config.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED
   if (enabled && !isACFActive) {
     let reason
     if (satisfies(process.versions.node, '>=24.0.0')) {
@@ -253,6 +253,51 @@ function getExporter (name, config) {
 }
 
 /**
+ * Assembles everything the profiler needs from the tracer config in one place: the derived values
+ * that need translation and the system info report sent with each profile. Both the runtime
+ * {@link import('./profiler').Profiler#start} and the config spec drive this, so the wiring has a
+ * single home and the test cannot drift from production.
+ *
+ * @param {TracerConfig} config
+ */
+function buildProfilingRuntime (config) {
+  const tags = getProfilingTags(config)
+  const exporters = createExporters(config)
+  const oomMonitoring = getOomMonitoring(config, exporters, tags)
+  const asyncContextFrameEnabled = getAsyncContextFrameEnabled(config)
+  const allocationProfilingEnabled = getAllocationProfilingEnabled(config)
+  const flushInterval = config.DD_PROFILING_UPLOAD_PERIOD * 1000
+  const profilers = createProfilers(config, {
+    oomMonitoring,
+    asyncContextFrameEnabled,
+    allocationProfilingEnabled,
+    flushInterval,
+  })
+  const uploadCompression = getUploadCompression(config)
+
+  const systemInfoReport = {
+    allocationProfilingEnabled,
+    asyncContextFrameEnabled,
+    codeHotspotsEnabled: config.DD_PROFILING_CODEHOTSPOTS_ENABLED,
+    cpuProfilingEnabled: config.DD_PROFILING_CPU_ENABLED,
+    debugSourceMaps: config.DD_PROFILING_DEBUG_SOURCE_MAPS,
+    endpointCollectionEnabled: config.DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
+    heapSamplingInterval: config.DD_PROFILING_HEAP_SAMPLING_INTERVAL,
+    oomMonitoring: { ...oomMonitoring },
+    profilerTypes: profilers.map(profiler => profiler.type),
+    sourceMap: config.DD_PROFILING_SOURCE_MAP,
+    timelineEnabled: config.DD_PROFILING_TIMELINE_ENABLED,
+    timelineSamplingEnabled: config.DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED,
+    uploadCompression: { ...uploadCompression },
+    v8ProfilerBugWorkaroundEnabled: config.DD_PROFILING_V8_PROFILER_BUG_WORKAROUND,
+  }
+  // The export command is an internal OOM detail, not part of the reported settings.
+  delete systemInfoReport.oomMonitoring.exportCommand
+
+  return { tags, exporters, flushInterval, oomMonitoring, profilers, uploadCompression, systemInfoReport }
+}
+
+/**
  * @param {TracerConfig} config
  * @param {ProfilingExporter[]} exporters
  * @param {Record<string, string>} tags
@@ -275,11 +320,5 @@ function buildExportCommand (config, exporters, tags) {
 
 module.exports = {
   SAMPLING_INTERVAL,
-  createExporters,
-  createProfilers,
-  getAllocationProfilingEnabled,
-  getAsyncContextFrameEnabled,
-  getOomMonitoring,
-  getProfilingTags,
-  getUploadCompression,
+  buildProfilingRuntime,
 }

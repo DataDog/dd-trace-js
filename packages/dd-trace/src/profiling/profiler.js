@@ -4,15 +4,7 @@ const { EventEmitter } = require('events')
 const dc = require('dc-polyfill')
 const crashtracker = require('../crashtracking')
 const log = require('../log')
-const {
-  createExporters,
-  createProfilers,
-  getAllocationProfilingEnabled,
-  getAsyncContextFrameEnabled,
-  getOomMonitoring,
-  getProfilingTags,
-  getUploadCompression,
-} = require('./config')
+const { buildProfilingRuntime } = require('./config')
 const { snapshotKinds } = require('./constants')
 const { threadNamePrefix } = require('./profilers/shared')
 const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('./webspan-utils')
@@ -180,36 +172,14 @@ class Profiler extends EventEmitter {
     if (this.enabled) return true
     this.#enabled = true
 
-    const tags = this.#tags = getProfilingTags(config)
-    const exporters = this.#exporters = createExporters(config)
-    const oomMonitoring = getOomMonitoring(config, exporters, tags)
-    const asyncContextFrameEnabled = getAsyncContextFrameEnabled(config)
-    const allocationProfilingEnabled = getAllocationProfilingEnabled(config)
-    const flushInterval = this.#flushInterval = config.DD_PROFILING_UPLOAD_PERIOD * 1000
-    const profilers = this.#profilers = createProfilers(config, {
-      oomMonitoring,
-      asyncContextFrameEnabled,
-      allocationProfilingEnabled,
-      flushInterval,
-    })
-    const uploadCompression = this.#uploadCompression = getUploadCompression(config)
-    this.#systemInfoReport = {
-      allocationProfilingEnabled,
-      asyncContextFrameEnabled,
-      codeHotspotsEnabled: config.DD_PROFILING_CODEHOTSPOTS_ENABLED,
-      cpuProfilingEnabled: config.DD_PROFILING_CPU_ENABLED,
-      debugSourceMaps: config.DD_PROFILING_DEBUG_SOURCE_MAPS,
-      endpointCollectionEnabled: config.DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
-      heapSamplingInterval: config.DD_PROFILING_HEAP_SAMPLING_INTERVAL,
-      oomMonitoring: { ...oomMonitoring },
-      profilerTypes: profilers.map(profiler => profiler.type),
-      sourceMap: config.DD_PROFILING_SOURCE_MAP,
-      timelineEnabled: config.DD_PROFILING_TIMELINE_ENABLED,
-      timelineSamplingEnabled: config.DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED,
-      uploadCompression: { ...uploadCompression },
-      v8ProfilerBugWorkaroundEnabled: config.DD_PROFILING_V8_PROFILER_BUG_WORKAROUND,
-    }
-    delete this.#systemInfoReport.oomMonitoring.exportCommand
+    const { tags, exporters, flushInterval, profilers, uploadCompression, systemInfoReport } =
+      buildProfilingRuntime(config)
+    this.#tags = tags
+    this.#exporters = exporters
+    this.#flushInterval = flushInterval
+    this.#profilers = profilers
+    this.#uploadCompression = uploadCompression
+    this.#systemInfoReport = systemInfoReport
 
     this._setInterval()
     // Log errors if the source map finder fails, but don't prevent the rest

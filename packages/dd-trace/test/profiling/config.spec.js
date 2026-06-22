@@ -53,48 +53,31 @@ describe('config', () => {
     const tracerConfig = getConfigFresh(tracerOptions)
 
     const gitMetadata = proxyquire.noPreserveCache()('../../src/git_metadata', {})
-    const profilingConfig = proxyquire.noPreserveCache()('../../src/profiling/config', {
+    const { buildProfilingRuntime } = proxyquire.noPreserveCache()('../../src/profiling/config', {
       '../git_metadata': gitMetadata,
       ...moduleStubs,
     })
 
-    const tags = profilingConfig.getProfilingTags(tracerConfig)
-    const activation = getActivation(tracerConfig.profiling.enabled)
-    const exporters = profilingConfig.createExporters(tracerConfig)
-    const oomMonitoring = profilingConfig.getOomMonitoring(tracerConfig, exporters, tags)
-    const asyncContextFrameEnabled = profilingConfig.getAsyncContextFrameEnabled(tracerConfig)
-    const allocationProfilingEnabled = profilingConfig.getAllocationProfilingEnabled(tracerConfig)
-    const flushInterval = tracerConfig.DD_PROFILING_UPLOAD_PERIOD * 1000
-    const profilers = profilingConfig.createProfilers(tracerConfig, {
-      oomMonitoring,
-      asyncContextFrameEnabled,
-      allocationProfilingEnabled,
-      flushInterval,
-    })
-    const uploadCompression = profilingConfig.getUploadCompression(tracerConfig)
+    const { tags, exporters, flushInterval, oomMonitoring, profilers, uploadCompression, systemInfoReport } =
+      buildProfilingRuntime(tracerConfig)
 
+    // The assertions read a flat view that mixes the reported settings with the
+    // Profiler-level fields and the raw passthrough values the exporters consume.
+    // oomMonitoring overrides the systemInfoReport copy, which has exportCommand stripped.
     const config = {
+      ...systemInfoReport,
+      oomMonitoring,
+      tags,
+      exporters,
+      profilers,
+      flushInterval,
+      uploadCompression,
       service: tracerConfig.service,
       version: tracerConfig.version,
       env: tracerConfig.env,
-      tags,
-      activation,
-      exporters,
-      profilers,
-      oomMonitoring,
-      asyncContextFrameEnabled,
-      uploadCompression,
-      flushInterval,
+      activation: getActivation(tracerConfig.profiling.enabled),
       uploadTimeout: tracerConfig.DD_PROFILING_UPLOAD_TIMEOUT,
-      allocationProfilingEnabled,
-      codeHotspotsEnabled: tracerConfig.DD_PROFILING_CODEHOTSPOTS_ENABLED,
-      cpuProfilingEnabled: tracerConfig.DD_PROFILING_CPU_ENABLED,
-      debugSourceMaps: tracerConfig.DD_PROFILING_DEBUG_SOURCE_MAPS,
-      endpointCollectionEnabled: tracerConfig.DD_PROFILING_ENDPOINT_COLLECTION_ENABLED,
-      heapSamplingInterval: tracerConfig.DD_PROFILING_HEAP_SAMPLING_INTERVAL,
       pprofPrefix: tracerConfig.DD_PROFILING_PPROF_PREFIX,
-      timelineEnabled: tracerConfig.DD_PROFILING_TIMELINE_ENABLED,
-      v8ProfilerBugWorkaroundEnabled: tracerConfig.DD_PROFILING_V8_PROFILER_BUG_WORKAROUND,
     }
 
     return {
@@ -200,6 +183,15 @@ describe('config', () => {
     assert.strictEqual(config.tags.host, os.hostname())
   })
 
+  it('should use azure function metadata for tags when running as an azure function', () => {
+    const { config } = getProfilerConfig(undefined, {
+      '../serverless': { getIsAzureFunction: () => true },
+      '../azure_metadata': { getAzureFunctionMetadata: () => ({ siteName: 'my-func' }) },
+    })
+
+    assert.strictEqual(config.tags['aas.site.name'], 'my-func')
+  })
+
   it('should filter out invalid profilers', () => {
     process.env = {
       DD_PROFILING_PROFILERS: 'nope,also_nope',
@@ -274,6 +266,21 @@ describe('config', () => {
     assert.strictEqual(
       /** @type {InstanceType<typeof WallProfiler>} */ (config.profilers[0]).codeHotspotsEnabled(),
       samplingContextsAvailable
+    )
+  })
+
+  it('should treat the cpu profiler alias as a wall profiler', () => {
+    process.env = {
+      DD_PROFILING_PROFILERS: 'cpu',
+    }
+
+    const { config } = getProfilerConfig()
+
+    assert.deepStrictEqual(
+      config.profilers.map(profiler => profiler.constructor),
+      samplingContextsAvailable
+        ? [WallProfiler, EventsProfiler]
+        : [WallProfiler]
     )
   })
 
@@ -680,6 +687,19 @@ describe('config', () => {
           assert.strictEqual(config.asyncContextFrameEnabled, false)
         }
       })
+
+      it('stays off when explicitly disabled by env var', function () {
+        if (isSupported) {
+          this.skip()
+        } else {
+          process.env = {
+            DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED: '0',
+          }
+
+          const { config } = getProfilerConfig()
+          assert.strictEqual(config.asyncContextFrameEnabled, false)
+        }
+      })
     })
   })
 
@@ -763,6 +783,15 @@ describe('config', () => {
       expectConfig('zstd-0', zstdOrGzip, undefined, "Invalid value: 'zstd-0'")
       expectConfig('zstd-23', 'zstd', 22, 'Invalid compression level 23. Will use 22.')
       expectConfig('zstd-3.14', zstdOrGzip, undefined, "Invalid value: 'zstd-3.14'")
+    })
+  })
+
+  describe('getActivation', () => {
+    it('should map the canonical profiling.enabled value to an activation', () => {
+      assert.strictEqual(getActivation('auto'), 'auto')
+      assert.strictEqual(getActivation('true'), 'manual')
+      assert.strictEqual(getActivation('false'), 'unknown')
+      assert.strictEqual(getActivation(undefined), 'unknown')
     })
   })
 })
