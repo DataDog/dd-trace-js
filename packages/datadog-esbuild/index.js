@@ -133,6 +133,11 @@ module.exports.setup = function (build) {
 ${build.initialOptions.banner.js}`
   }
 
+  // Keep the build from failing on the optional `@openfeature/core` peer of
+  // `@openfeature/server-sdk` when it is not installed (#8635). esbuild follows the chain
+  // whenever `@openfeature/server-sdk` is reachable -- the app importing it directly, or the
+  // bundled provider when the optional peer is present -- so mark `@openfeature/core` external
+  // when it is absent rather than erroring at bundle time.
   try {
     // eslint-disable-next-line n/no-unpublished-require
     require.resolve('@openfeature/core')
