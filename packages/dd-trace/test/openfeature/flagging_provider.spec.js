@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const path = require('node:path')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -233,22 +234,40 @@ describe('FlaggingProvider', () => {
       assert.strictEqual(ReloadedFlaggingProvider.name, 'FlaggingProvider')
     })
 
-    it('uses `__non_webpack_require__` under a webpack runtime with the resolved package path', () => {
-      const expectedPackagePath = require.resolve('@datadog/openfeature-node-server', {
-        paths: [require.resolve('../../src/openfeature/flagging_provider')],
-      })
+    it('resolves and loads through `__non_webpack_require__`, never `__webpack_require__`, under a bundler', () => {
+      const providerDir = path.dirname(modulePath)
+      const expectedPackagePath = require.resolve('@datadog/openfeature-node-server', { paths: [providerDir] })
+
+      const resolveCalls = []
+      const loadCalls = []
       globalThis.__webpack_require__ = () => {
         throw new Error('webpack require must not run for the optional peer')
       }
-      globalThis.__non_webpack_require__ = (request) => {
-        assert.strictEqual(request, expectedPackagePath)
+      // `__non_webpack_require__` is webpack's handle on the real Node `require`,
+      // so it carries `.resolve`. The fix relies on resolving through it, not the
+      // bare `require.resolve` webpack rewrites into an expression dependency.
+      const escapeHatch = (request) => {
+        loadCalls.push(request)
         return require(request)
       }
+      escapeHatch.resolve = (request, options) => {
+        resolveCalls.push({ request, options })
+        return require.resolve(request, options)
+      }
+      globalThis.__non_webpack_require__ = escapeHatch
       delete require.cache[modulePath]
 
       const ReloadedFlaggingProvider = require(modulePath)
 
-      assert.strictEqual(typeof ReloadedFlaggingProvider, 'function')
+      // Resolution runs through the escape hatch with the bare specifier anchored to
+      // the provider's own directory, so the path is dd-trace's installed copy and
+      // not whatever sits next to the bundle output.
+      assert.deepStrictEqual(resolveCalls, [{
+        request: '@datadog/openfeature-node-server',
+        options: { paths: [providerDir] },
+      }])
+      // The load uses the resolved absolute path, never the bare specifier.
+      assert.deepStrictEqual(loadCalls, [expectedPackagePath])
       assert.strictEqual(ReloadedFlaggingProvider.name, 'FlaggingProvider')
     })
 

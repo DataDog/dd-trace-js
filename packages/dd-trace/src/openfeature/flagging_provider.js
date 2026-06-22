@@ -13,7 +13,7 @@ const SpanEnrichmentHook = require('./span-enrichment-hook')
 // eslint-disable-next-line camelcase, no-undef
 const runtimeRequire = typeof __webpack_require__ === 'function' ? __non_webpack_require__ : require
 const openfeatureNodeServer = ['@datadog/openfeature', 'node', 'server'].join('-')
-const openfeatureNodeServerPath = require.resolve(openfeatureNodeServer, { paths: [__dirname] })
+const openfeatureNodeServerPath = runtimeRequire.resolve(openfeatureNodeServer, { paths: [__dirname] })
 const { DatadogNodeServerProvider } = runtimeRequire(openfeatureNodeServerPath)
 
 /**
