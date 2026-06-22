@@ -52,6 +52,7 @@ describe('SpanContext', () => {
       _spanSampling: undefined,
       _links: [],
       _baggageItems: { foo: 'bar' },
+      _baggageItemsShared: false,
       _noop: noop,
       _trace: {
         started: ['span1', 'span2'],
@@ -85,6 +86,7 @@ describe('SpanContext', () => {
       _spanSampling: undefined,
       _links: [],
       _baggageItems: {},
+      _baggageItemsShared: false,
       _noop: null,
       _trace: {
         started: [],
