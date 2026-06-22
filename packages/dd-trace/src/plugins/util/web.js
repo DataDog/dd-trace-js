@@ -4,6 +4,7 @@ const uniq = require('../../../../datadog-core/src/utils/src/uniq')
 const analyticsSampler = require('../../analytics_sampler')
 const FORMAT_HTTP_HEADERS = 'http_headers'
 const log = require('../../log')
+const { isSomethingUnderNDA } = require('../../serverless')
 const tags = require('../../../../../ext/tags')
 const types = require('../../../../../ext/types')
 const kinds = require('../../../../../ext/kinds')
@@ -31,6 +32,11 @@ const HTTP_RESPONSE_HEADERS = tags.HTTP_RESPONSE_HEADERS
 const HTTP_USERAGENT = tags.HTTP_USERAGENT
 const HTTP_CLIENT_IP = tags.HTTP_CLIENT_IP
 const MANUAL_DROP = tags.MANUAL_DROP
+
+// Auto-appended to config.headers by getHeadersToRecord when running under something-under-nda,
+// so the generated `something-under-nda-request-id` header is tagged on each HTTP span —
+// bridging platform logs to Datadog traces via the `something_under_nda.request_id` tag.
+const SOMETHING_UNDER_NDA_DEFAULT_HEADER = ['lambda-web-request-id', 'lambda.request_id']
 
 const contexts = new WeakMap()
 
@@ -498,9 +504,10 @@ function addResponseHeaders (context) {
 }
 
 function getHeadersToRecord (config) {
+  let userHeaders = []
   if (Array.isArray(config.headers)) {
     try {
-      return config.headers
+      userHeaders = config.headers
         .map(h => h.split(':'))
         .map(([key, tag]) => [key.toLowerCase(), tag])
     } catch (err) {
@@ -509,7 +516,13 @@ function getHeadersToRecord (config) {
   } else if (config.hasOwnProperty('headers')) {
     log.error('Expected `headers` to be an array of strings.')
   }
-  return []
+
+  if (isSomethingUnderNDA() &&
+      !userHeaders.some(([key]) => key === SOMETHING_UNDER_NDA_DEFAULT_HEADER[0])) {
+    userHeaders.push(SOMETHING_UNDER_NDA_DEFAULT_HEADER)
+  }
+
+  return userHeaders
 }
 
 function isNot500ErrorCode (code) {
