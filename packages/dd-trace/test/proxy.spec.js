@@ -578,7 +578,10 @@ describe('TracerProxy', () => {
         profilerImportFailureProxy.init()
 
         sinon.assert.calledOnce(log.error)
-        const expectedErr = sinon.match.instanceOf(Error).and(sinon.match.has('code', 'MODULE_NOT_FOUND'))
+        const expectedErr = sinon.match.instanceOf(Error)
+          .and(sinon.match.has('code', 'DD_PROFILER_INIT_ERROR'))
+          .and(sinon.match.has('cause', sinon.match.instanceOf(Error)
+            .and(sinon.match.has('code', 'MODULE_NOT_FOUND'))))
         sinon.assert.match(log.error.firstCall.lastArg, sinon.match(expectedErr))
       })
 
