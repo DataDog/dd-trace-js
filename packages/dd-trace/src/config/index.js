@@ -628,7 +628,7 @@ class Config extends ConfigBase {
       protocol += ':'
     }
     if (protocol !== 'http:' && protocol !== 'https:') {
-      log.warn('logCaptureProtocol: unsupported value %j, falling back to http:', rawProtocol)
+      log.warn('logCaptureProtocol: unsupported value %o, falling back to http:', rawProtocol)
       protocol = 'http:'
     }
     const origin = trackedConfigOrigins.get('logCaptureProtocol')
