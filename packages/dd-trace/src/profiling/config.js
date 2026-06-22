@@ -10,7 +10,7 @@ const log = require('../log')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const { getIsAzureFunction } = require('../serverless')
 const { getAzureTagsFromMetadata, getAzureAppMetadata, getAzureFunctionMetadata } = require('../azure_metadata')
-const { getEnvironmentVariable } = require('../config/helper')
+const { getEnvironmentVariable, getValueFromEnvSources } = require('../config/helper')
 const { isACFActive } = require('../../../datadog-core/src/storage')
 
 const { AgentExporter } = require('./exporters/agent')
@@ -77,15 +77,19 @@ function getUploadCompression (config) {
 function getAsyncContextFrameEnabled (config) {
   const enabled = config.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED
   if (enabled && !isACFActive) {
-    let reason
-    if (satisfies(process.versions.node, '>=24.0.0')) {
-      reason = 'with --no-async-context-frame'
-    } else if (satisfies(process.versions.node, '>=22.9.0')) {
-      reason = 'without --experimental-async-context-frame'
-    } else {
-      reason = 'but it requires at least Node.js 22.9.0'
+    // The default value already tracks runtime support, so an unset config landing
+    // here is expected; only an explicit opt-in the runtime can't honor is worth a warning.
+    if (getValueFromEnvSources('DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED', true)) {
+      let reason
+      if (satisfies(process.versions.node, '>=24.0.0')) {
+        reason = 'with --no-async-context-frame'
+      } else if (satisfies(process.versions.node, '>=22.9.0')) {
+        reason = 'without --experimental-async-context-frame'
+      } else {
+        reason = 'but it requires at least Node.js 22.9.0'
+      }
+      log.warn('DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED was set %s, it will have no effect.', reason)
     }
-    log.warn('DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED was set %s, it will have no effect.', reason)
     return false
   }
   return enabled

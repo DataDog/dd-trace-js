@@ -700,7 +700,43 @@ describe('config', () => {
           assert.strictEqual(config.asyncContextFrameEnabled, false)
         }
       })
+
+      it('does not warn when left at its default', function () {
+        if (isSupported) {
+          this.skip()
+        } else {
+          assert.deepStrictEqual(getAsyncContextFrameWarnings(), [])
+        }
+      })
+
+      it('warns only when explicitly opted in', function () {
+        if (isSupported) {
+          this.skip()
+        } else {
+          const warnings = getAsyncContextFrameWarnings({ DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED: '1' })
+          assert.strictEqual(warnings.length, 1)
+          assert.match(warnings[0], /DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED was set .*it will have no effect/)
+        }
+      })
     })
+
+    // Logging is only wired up when it is enabled, so capture the warning through
+    // a real logger with DD_TRACE_DEBUG on, the same way the upload compression
+    // tests do, rather than reaching into the unexported derivation function.
+    function getAsyncContextFrameWarnings (extraEnv = {}) {
+      process.env = { ...extraEnv, DD_TRACE_DEBUG: '1' }
+      const warnings = []
+      const logger = {
+        debug () {},
+        info () {},
+        error () {},
+        warn (message) { warnings.push(message) },
+      }
+      getProfilerConfig({ logger })
+      return warnings.filter(
+        message => typeof message === 'string' && message.includes('DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED')
+      )
+    }
   })
 
   describe('upload compression settings', () => {
