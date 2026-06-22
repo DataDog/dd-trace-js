@@ -60,6 +60,10 @@ if (VARIANT === 'extract-response-body') {
 } else if (VARIANT === 'eventbridge-inject-detail') {
   const plugin = Object.create(EventBridge.prototype)
   plugin._tracer = fakeTracer
+  plugin.config = {
+    dsmEnabled: false,
+    batchPropagationEnabled: false,
+  }
   const sanityRequest = {
     operation: 'putEvents',
     params: { Entries: [{ Detail: EVENTBRIDGE_DETAIL_JSON }] },
