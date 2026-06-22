@@ -7,7 +7,6 @@ const {
 } = require('../../../dd-trace/src/datastreams')
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
-const { isEmpty } = require('../util')
 
 const DEFAULT_EVENT_BUS = 'default'
 const DEFAULT_DETAIL_TYPE = 'unknown'
@@ -72,9 +71,11 @@ class EventBridge extends BaseAwsSdkPlugin {
   injectToEntry (span, entry, injectTraceContext, dsmEnabled) {
     if (!entry?.Detail) return
 
+    let hasDdInfo = false
     const ddInfo = {}
     if (injectTraceContext) {
       this.tracer.inject(span, 'text_map', ddInfo)
+      hasDdInfo = true
     }
 
     if (dsmEnabled) {
@@ -94,7 +95,7 @@ class EventBridge extends BaseAwsSdkPlugin {
       }
     }
 
-    if (isEmpty(ddInfo)) return
+    if (!hasDdInfo) return
 
     const finalData = this.injectDetail(entry.Detail, ddInfo)
     if (finalData) {
