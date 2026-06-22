@@ -9,7 +9,8 @@
       "run": "node server.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node server.js\"",
       "env": {
-        "DD_APPSEC_ENABLED": "0"
+        "DD_APPSEC_ENABLED": "0",
+        "REQS": "6000"
       }
     },
     "appsec-enabled": {
@@ -17,7 +18,8 @@
       "run": "node server.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node server.js\"",
       "env": {
-        "DD_APPSEC_ENABLED": "1"
+        "DD_APPSEC_ENABLED": "1",
+        "REQS": "7000"
       }
     },
     "appsec-enabled-with-attacks": {
@@ -28,7 +30,8 @@
         "DD_APPSEC_ENABLED": "1",
         "ATTACK_UA": "1",
         "ATTACK_404": "1",
-        "ATTACK_QS": "1"
+        "ATTACK_QS": "1",
+        "REQS": "5000"
       }
     },
     "startup-time-control": {

@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert')
+const { URL } = require('node:url')
 const { inspect } = require('node:util')
 const dc = require('dc-polyfill')
 const { describe, it, beforeEach, afterEach } = require('mocha')
@@ -16,6 +17,7 @@ describe('client', () => {
   const asyncStartChannel = dc.channel('apm:http:client:request:asyncStart')
   const errorChannel = dc.channel('apm:http:client:request:error')
   const responseFinishChannel = dc.channel('apm:http:client:response:finish')
+  const responseStartChannel = dc.channel('apm:http:client:response:start')
 
   before(async () => {
     await agent.load('http')
@@ -44,6 +46,15 @@ describe('client', () => {
     errorChannel.unsubscribe(errorChannelCb)
   })
 
+  // originalUrl is the raw http.request first arg (string, URL, or options); uri is always a string.
+  function getRequestUrlString (args) {
+    if (!args) return undefined
+    const { originalUrl, uri } = args
+    if (typeof originalUrl === 'string') return originalUrl
+    if (originalUrl instanceof URL) return originalUrl.href
+    return uri
+  }
+
   /*
    * Necessary because the tracer makes extra requests to the agent
    * and the same stub could be called multiple times
@@ -51,7 +62,7 @@ describe('client', () => {
   function getContextFromStubByUrl (url, stub) {
     for (const args of stub.args) {
       const arg = args[0]
-      if (arg.args?.originalUrl === url) {
+      if (getRequestUrlString(arg.args) === url) {
         return arg
       }
     }
@@ -60,9 +71,7 @@ describe('client', () => {
 
   function stubHasResponseForUrl (url, stub) {
     return stub.args.some(([payload]) => {
-      const ctx = payload?.ctx
-      const originalUrl = ctx?.args?.originalUrl || ctx?.args?.uri
-      return originalUrl === url
+      return getRequestUrlString(payload?.ctx?.args) === url
     })
   }
 
@@ -194,7 +203,7 @@ describe('client', () => {
       })
 
       describe('response finish channel', () => {
-        let responseFinishChannelCb
+        let responseFinishChannelCb, responseStartChannelCb
 
         before(() => {
           http = require(httpSchema)
@@ -204,23 +213,49 @@ describe('client', () => {
         beforeEach(() => {
           responseFinishChannelCb = sinon.stub()
           responseFinishChannel.subscribe(responseFinishChannelCb)
+
+          responseStartChannelCb = sinon.stub()
+          responseStartChannel.subscribe(responseStartChannelCb)
         })
 
         afterEach(() => {
           responseFinishChannel.unsubscribe(responseFinishChannelCb)
+          responseStartChannel.unsubscribe(responseStartChannelCb)
         })
 
+        it('publishes response:start before response:finish for the same request', (done) => {
+          http.get(url, (res) => {
+            res.resume()
+            res.on('end', () => {
+              try {
+                sinon.assert.called(responseStartChannelCb)
+                sinon.assert.called(responseFinishChannelCb)
+                assert.ok(responseStartChannelCb.calledBefore(responseFinishChannelCb))
+                done()
+              } catch (e) {
+                done(e)
+              }
+            })
+          })
+        })
+
+        function isLocalServerRequest (args) {
+          const requestUrl = getRequestUrlString(args)
+          return typeof requestUrl === 'string' && requestUrl.startsWith('http://127.0.0.1:')
+        }
+
         function setCollectBody (ctx) {
-          if (ctx.args.originalUrl === url) {
+          const requestUrl = getRequestUrlString(ctx.args)
+          // External tests use `url` (datadoghq); local server tests use 127.0.0.1 and never match it.
+          if (requestUrl === url || isLocalServerRequest(ctx.args)) {
             ctx.shouldCollectBody = true
           }
         }
 
-        function getResponseFinishPayload (url, stub) {
+        function getResponseFinishPayload (requestUrl, stub) {
           for (const args of stub.args) {
             const payload = args[0]
-            const originalUrl = payload?.ctx?.args?.originalUrl || payload?.ctx?.args?.uri
-            if (originalUrl === url) {
+            if (getRequestUrlString(payload?.ctx?.args) === requestUrl) {
               return payload
             }
           }
@@ -252,122 +287,153 @@ describe('client', () => {
           })
         })
 
-        it('collects and concatenates all chunks when ctx.shouldCollectBody is true', (done) => {
-          startChannelCb.callsFake(setCollectBody)
+        // Local server tests use plain http:// URLs; skip under the https schema loop.
+        const describeIfHttp = httpSchema === 'http' ? describe : describe.skip
 
-          const chunks = []
-          http.get(url, (res) => {
-            res.on('data', (chunk) => {
-              chunks.push(chunk)
-            })
-            res.on('end', () => {
-              try {
-                const payload = getResponseFinishPayload(url, responseFinishChannelCb)
-                assert(Buffer.isBuffer(payload.body), `Expected Buffer, got ${inspect(payload.body)}`)
-
-                const expectedBody = Buffer.concat(chunks)
-                assert(payload.body.equals(expectedBody), `Got: ${inspect(payload.body)}`)
-
-                done()
-              } catch (e) {
-                done(e)
+        describeIfHttp('with local http server', () => {
+          function requestWithLocalServer ({ responseHeaders, responseBody, onResponse }, done) {
+            const server = http.createServer((req, res) => {
+              res.writeHead(200, responseHeaders)
+              if (responseBody != null) {
+                res.end(responseBody)
+              } else {
+                res.end()
               }
             })
-          })
-        })
 
-        it('collects and concatenates string chunks when using setEncoding', (done) => {
-          startChannelCb.callsFake(setCollectBody)
+            server.listen(0, () => {
+              const localUrl = `http://127.0.0.1:${server.address().port}/`
+              startChannelCb.callsFake(setCollectBody)
 
-          const chunks = []
-          http.get(url, (res) => {
-            res.setEncoding('utf8')
-            const consume = () => {
-              let chunk
-              while ((chunk = res.read()) !== null) {
+              http.get(localUrl, (res) => {
+                onResponse(res, server, localUrl, done)
+              }).on('error', (err) => {
+                server.close(() => done(err))
+              })
+            })
+          }
+
+          function requestWithLocalJsonBody (onResponse, done) {
+            const body = JSON.stringify({ ok: true })
+            requestWithLocalServer({
+              responseHeaders: {
+                'content-type': 'application/json',
+                'content-length': String(Buffer.byteLength(body)),
+              },
+              responseBody: body,
+              onResponse,
+            }, done)
+          }
+
+          it('collects and concatenates all chunks when ctx.shouldCollectBody is true', (done) => {
+            const chunks = []
+            requestWithLocalJsonBody((res, server, localUrl, done) => {
+              res.on('data', (chunk) => {
                 chunks.push(chunk)
-              }
-            }
+              })
+              res.on('end', () => {
+                try {
+                  const payload = getResponseFinishPayload(localUrl, responseFinishChannelCb)
+                  assert(Buffer.isBuffer(payload.body), `Expected Buffer, got ${inspect(payload.body)}`)
 
-            res.on('readable', consume)
-            res.on('end', () => {
-              try {
-                const payload = getResponseFinishPayload(url, responseFinishChannelCb)
-                assert.strictEqual(typeof payload.body, 'string')
+                  const expectedBody = Buffer.concat(chunks)
+                  assert.deepStrictEqual(payload.body, expectedBody)
 
-                const expectedBody = chunks.join('')
-                assert.strictEqual(payload.body, expectedBody)
-
-                done()
-              } catch (e) {
-                done(e)
-              }
-            })
-          })
-        })
-
-        it('should collect data correctly when read and data are both used', (done) => {
-          startChannelCb.callsFake(setCollectBody)
-
-          const chunks = []
-          http.get(url, (res) => {
-            res.setEncoding('utf8')
-            // eslint-disable-next-line sonarjs/no-identical-functions -- per-test chunks buffer
-            const consume = () => {
-              let chunk
-              while ((chunk = res.read()) !== null) {
-                chunks.push(chunk)
-              }
-            }
-            res.on('data', () => {})
-
-            res.on('readable', consume)
-            res.on('end', () => {
-              try {
-                const payload = getResponseFinishPayload(url, responseFinishChannelCb)
-                assert.strictEqual(typeof payload.body, 'string')
-
-                const expectedBody = chunks.join('')
-                assert.strictEqual(payload.body, expectedBody)
-
-                done()
-              } catch (e) {
-                done(e)
-              }
-            })
-          })
-        })
-
-        it('should collect data correctly when read and data are both used in different order', (done) => {
-          startChannelCb.callsFake(setCollectBody)
-
-          const chunks = []
-          http.get(url, (res) => {
-            let onDataAdded = false
-            res.setEncoding('utf8')
-            const consume = () => {
-              let chunk
-              while ((chunk = res.read(100)) !== null) {
-                if (!onDataAdded) {
-                  onDataAdded = true
-                  res.on('data', () => {})
+                  server.close(() => done())
+                } catch (e) {
+                  server.close(() => done(e))
                 }
-                chunks.push(chunk)
-              }
-            }
-            res.on('readable', consume)
-            res.on('end', () => {
-              try {
-                const payload = getResponseFinishPayload(url, responseFinishChannelCb)
-                assert.strictEqual(typeof payload.body, 'string')
-                const expectedBody = chunks.join('')
-                assert.strictEqual(payload.body, expectedBody)
+              })
+            }, done)
+          })
 
-                done()
-              } catch (e) {
-                done(e)
+          it('collects and concatenates string chunks when using setEncoding', (done) => {
+            const chunks = []
+            requestWithLocalJsonBody((res, server, localUrl, done) => {
+              res.setEncoding('utf8')
+              const consume = () => {
+                let chunk
+                while ((chunk = res.read()) !== null) {
+                  chunks.push(chunk)
+                }
               }
-            })
+
+              res.on('readable', consume)
+              res.on('end', () => {
+                try {
+                  const payload = getResponseFinishPayload(localUrl, responseFinishChannelCb)
+                  assert.strictEqual(typeof payload.body, 'string')
+
+                  const expectedBody = chunks.join('')
+                  assert.strictEqual(payload.body, expectedBody)
+
+                  server.close(() => done())
+                } catch (e) {
+                  server.close(() => done(e))
+                }
+              })
+            }, done)
+          })
+
+          it('should collect data correctly when read and data are both used', (done) => {
+            const chunks = []
+            requestWithLocalJsonBody((res, server, localUrl, done) => {
+              res.setEncoding('utf8')
+              // eslint-disable-next-line sonarjs/no-identical-functions -- per-test chunks buffer
+              const consume = () => {
+                let chunk
+                while ((chunk = res.read()) !== null) {
+                  chunks.push(chunk)
+                }
+              }
+              res.on('data', () => {})
+
+              res.on('readable', consume)
+              res.on('end', () => {
+                try {
+                  const payload = getResponseFinishPayload(localUrl, responseFinishChannelCb)
+                  assert.strictEqual(typeof payload.body, 'string')
+
+                  const expectedBody = chunks.join('')
+                  assert.strictEqual(payload.body, expectedBody)
+
+                  server.close(() => done())
+                } catch (e) {
+                  server.close(() => done(e))
+                }
+              })
+            }, done)
+          })
+
+          it('should collect data correctly when read and data are both used in different order', (done) => {
+            const chunks = []
+            requestWithLocalJsonBody((res, server, localUrl, done) => {
+              let onDataAdded = false
+              res.setEncoding('utf8')
+              const consume = () => {
+                let chunk
+                while ((chunk = res.read(100)) !== null) {
+                  if (!onDataAdded) {
+                    onDataAdded = true
+                    res.on('data', () => {})
+                  }
+                  chunks.push(chunk)
+                }
+              }
+              res.on('readable', consume)
+              res.on('end', () => {
+                try {
+                  const payload = getResponseFinishPayload(localUrl, responseFinishChannelCb)
+                  assert.strictEqual(typeof payload.body, 'string')
+                  const expectedBody = chunks.join('')
+                  assert.strictEqual(payload.body, expectedBody)
+
+                  server.close(() => done())
+                } catch (e) {
+                  server.close(() => done(e))
+                }
+              })
+            }, done)
           })
         })
 

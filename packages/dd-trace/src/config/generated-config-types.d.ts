@@ -11,6 +11,7 @@ export interface GeneratedConfig {
       enabled: boolean;
       endpointCollectionEnabled: boolean;
       endpointCollectionMessageLimit: number;
+      maxDownstreamBodyBytes: number;
       maxDownstreamRequestBodyAnalysis: number;
       sampleDelay: number;
     };
@@ -73,7 +74,7 @@ export interface GeneratedConfig {
   DD_APP_KEY: string | undefined;
   DD_AZURE_RESOURCE_GROUP: string | undefined;
   DD_CIVISIBILITY_AGENTLESS_ENABLED: boolean;
-  DD_CIVISIBILITY_AGENTLESS_URL: string | undefined;
+  DD_CIVISIBILITY_AGENTLESS_URL: URL | undefined;
   DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER: string | undefined;
   DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE: boolean;
   DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING: boolean;
@@ -87,6 +88,7 @@ export interface GeneratedConfig {
   DD_CRASHTRACKING_ENABLED: boolean;
   DD_CUSTOM_PARENT_ID: string | undefined;
   DD_CUSTOM_TRACE_ID: string | undefined;
+  DD_DURABLE_CROSS_INVOCATION_TRACING_ENABLED: boolean;
   DD_ENABLE_LAGE_PACKAGE_NAME: boolean;
   DD_ENABLE_NX_SERVICE_NAME: boolean;
   DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: boolean;
@@ -130,6 +132,7 @@ export interface GeneratedConfig {
   DD_MINI_AGENT_PATH: string | undefined;
   DD_PIPELINE_EXECUTION_ID: string | undefined;
   DD_PLAYWRIGHT_WORKER: string | undefined;
+  DD_PROFILING_ALLOCATION_ENABLED: boolean;
   DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED: boolean;
   DD_PROFILING_CODEHOTSPOTS_ENABLED: boolean;
   DD_PROFILING_CPU_ENABLED: boolean;
@@ -176,6 +179,7 @@ export interface GeneratedConfig {
   DD_TRACE_APOLLO_SUBGRAPH_ENABLED: boolean;
   DD_TRACE_AVSC_ENABLED: boolean;
   DD_TRACE_AWS_ADD_SPAN_POINTERS: boolean;
+  DD_TRACE_AWS_DURABLE_EXECUTION_SDK_JS_ENABLED: boolean;
   DD_TRACE_AWS_SDK_AWS_BATCH_PROPAGATION_ENABLED: boolean;
   DD_TRACE_AWS_SDK_AWS_ENABLED: boolean;
   DD_TRACE_AWS_SDK_BATCH_PROPAGATION_ENABLED: boolean;
@@ -345,6 +349,7 @@ export interface GeneratedConfig {
   DD_TRACE_OPENTELEMETRY_SDK_TRACE_NODE_ENABLED: boolean;
   DD_TRACE_ORACLEDB_ENABLED: boolean;
   DD_TRACE_OTEL_ENABLED: boolean;
+  DD_TRACE_OTEL_SEMANTICS_ENABLED: boolean;
   DD_TRACE_PASSPORT_ENABLED: boolean;
   DD_TRACE_PASSPORT_HTTP_ENABLED: boolean;
   DD_TRACE_PASSPORT_LOCAL_ENABLED: boolean;

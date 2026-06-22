@@ -369,10 +369,11 @@ describe('OpenTelemetry Traces', () => {
 
     it('transforms span events', () => {
       const transformer = new OtlpTraceTransformer({})
+      // Raw events carry startTime; the transformer derives timeUnixNano = round(startTime * 1e6).
       const span = createMockSpan({
         span_events: [{
           name: 'exception',
-          time_unix_nano: 1700000000010000000,
+          startTime: 1700000000010,
           attributes: {
             'exception.message': 'test error',
             'exception.type': 'Error',
@@ -385,6 +386,7 @@ describe('OpenTelemetry Traces', () => {
 
       assert.strictEqual(otlpSpan.events.length, 1)
       assert.strictEqual(otlpSpan.events[0].name, 'exception')
+      assert.strictEqual(Number(otlpSpan.events[0].timeUnixNano), 1700000000010000000)
 
       const eventAttrs = extractAttrs(otlpSpan.events[0].attributes)
       assert.deepStrictEqual(
@@ -552,6 +554,63 @@ describe('OpenTelemetry Traces', () => {
         const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]
 
         assert.strictEqual(otlpSpan.traceId, '1234567890abcdef1234567890abcdef')
+      })
+    })
+
+    describe('otelTraceSemanticsEnabled', () => {
+      it('omits service.name, operation.name, resource.name, span.type, and span.kind from attributes', () => {
+        const transformer = new OtlpTraceTransformer({}, true)
+        const span = createMockSpan({ type: 'web', meta: { 'span.kind': 'server' } })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]
+        const attrs = extractAttrs(otlpSpan.attributes)
+
+        assert.strictEqual(attrs['service.name'], undefined)
+        assert.strictEqual(attrs['operation.name'], undefined)
+        assert.strictEqual(attrs['resource.name'], undefined)
+        assert.strictEqual(attrs['span.type'], undefined)
+        assert.strictEqual(attrs['span.kind'], undefined)
+
+        assert.strictEqual(otlpSpan.kind, 2) // SPAN_KIND_SERVER — kind field still set
+      })
+
+      it('still emits non-DD meta tags and metrics as attributes', () => {
+        const transformer = new OtlpTraceTransformer({}, true)
+        const span = createMockSpan({
+          meta: { 'span.kind': 'server', 'http.method': 'GET', 'http.url': 'http://localhost/api' },
+          metrics: { 'http.status_code': 200 },
+        })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const attrs = extractAttrs(decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes)
+
+        assert.strictEqual(attrs['http.method'], 'GET')
+        assert.strictEqual(attrs['http.url'], 'http://localhost/api')
+        assert.strictEqual(attrs['http.status_code'], 200)
+      })
+
+      it('excludes error.message from attributes but still populates OTLP status', () => {
+        const transformer = new OtlpTraceTransformer({}, true)
+        const span = createMockSpan({
+          error: 1,
+          meta: {
+            'error.message': 'cannot read properties',
+            'http.method': 'GET',
+          },
+        })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]
+        const attrs = extractAttrs(otlpSpan.attributes)
+
+        assert.strictEqual(attrs['error.message'], undefined, 'error.message must not appear as an attribute')
+        assert.strictEqual(attrs['http.method'], 'GET', 'non-error meta should still be present')
+
+        assert.deepStrictEqual(otlpSpan.status, {
+          code: 2,
+          message: 'cannot read properties',
+        }, 'OTLP status must still be populated from error.message')
       })
     })
   })

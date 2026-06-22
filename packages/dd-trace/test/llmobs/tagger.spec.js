@@ -403,9 +403,14 @@ describe('tagger', () => {
     })
 
     describe('tagToolDefinitions', () => {
-      it('tags a span with tool definitions', () => {
+      it('tags a span with a full tool definition', () => {
         const toolDefinitions = [
-          { name: 'get_weather', description: 'Get the weather for a city.', schema: { type: 'object' } },
+          {
+            name: 'get_weather',
+            description: 'Get the weather for a city.',
+            schema: { type: 'object' },
+            version: '1.0',
+          },
         ]
         tagger._register(span)
         tagger.tagToolDefinitions(span, toolDefinitions)
@@ -414,11 +419,48 @@ describe('tagger', () => {
         })
       })
 
-      it('throws for malformed tool definitions', () => {
+      it('tags a span with only a name', () => {
+        tagger._register(span)
+        tagger.tagToolDefinitions(span, [{ name: 'get_time' }])
+        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+          '_ml_obs.meta.tool_definitions': [{ name: 'get_time' }],
+        })
+      })
+
+      it('strips invalid optional fields but keeps the tool', () => {
+        tagger._register(span)
+        tagger.tagToolDefinitions(span, [
+          { name: 'get_weather', description: 123, schema: 'not-an-object', version: 456 },
+        ])
+        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+          '_ml_obs.meta.tool_definitions': [{ name: 'get_weather' }],
+        })
+      })
+
+      it('skips items missing a name but keeps valid tools', () => {
+        tagger._register(span)
+        tagger.tagToolDefinitions(span, [
+          { description: 'no name' },
+          { name: 'valid_tool' },
+        ])
+        assert.deepStrictEqual(Tagger.tagMap.get(span), {
+          '_ml_obs.meta.tool_definitions': [{ name: 'valid_tool' }],
+        })
+      })
+
+      it('throws for a non array input', () => {
         tagger._register(span)
         assert.throws(() => tagger.tagToolDefinitions(span, 'not an array'))
+      })
+
+      it('throws for an empty array', () => {
+        tagger._register(span)
         assert.throws(() => tagger.tagToolDefinitions(span, []))
-        assert.throws(() => tagger.tagToolDefinitions(span))
+      })
+
+      it('throws when all items are invalid', () => {
+        tagger._register(span)
+        assert.throws(() => tagger.tagToolDefinitions(span, [{ description: 'no name' }, 'not an object']))
       })
     })
 

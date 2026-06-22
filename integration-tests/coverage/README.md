@@ -20,27 +20,27 @@ All sources live in `integration-tests/coverage/`.
 
 ```md
 npm run test:integration:mocha:coverage
-   │
-   ▼
+  │
+  ▼
 integration-tests/coverage/run-suite.js
-   │  (spawns mocha with --require register.js)
-   ▼
+  │  (spawns mocha with --require register.js)
+  ▼
 register.js  ──▶ patch-child-process.js  (monkey-patches child_process)
-   │
-   ▼  createSandbox → packTarballWithLock
+  │
+  ▼  createSandbox → packTarballWithLock
 pack-instrumented-tarball.js
-   │  (bun pm pack → extract → istanbul instrument → sentinel → tar -czf)
-   ▼  each spawn/fork/exec of Node
+  │  (bun pm pack → extract → istanbul instrument → sentinel → tar -czf)
+  ▼  each spawn/fork/exec of Node
 child-bootstrap.js  ──▶ require('nyc').wrap() [hookRequire: false]
-   │  (child runs, writes raw coverage JSON to per-sandbox temp dir)
-   ▼
+  │  (child runs, writes raw coverage JSON to per-sandbox temp dir)
+  ▼
 useSandbox teardown
-   │
-   ▼
+  │
+  ▼
 finalize-sandbox.js  (reads sandbox JSON, rebases paths to repo root,
-                     writes coverage into the collector)
-   │
-   ▼
+                    writes coverage into the collector)
+  │
+  ▼
 merge-lcov.js  (called by run-suite.js after mocha exits; merges every
                 sandbox into coverage/node-<version>-<script>/lcov.info)
 ```

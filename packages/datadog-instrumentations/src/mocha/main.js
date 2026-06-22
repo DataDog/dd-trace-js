@@ -24,6 +24,7 @@ const {
   collectTestOptimizationSummariesFromTraces,
   logTestOptimizationSummary,
   getTestOptimizationRequestResults,
+  isModifiedTest,
 } = require('../../../dd-trace/src/plugins/util/test')
 
 const {
@@ -39,6 +40,7 @@ const {
   getOnPendingHandler,
   testFileToSuiteCtx,
   newTests,
+  efdTests,
   testsQuarantined,
   getTestFullName,
   getRunTestsWrapper,
@@ -191,6 +193,23 @@ function getCoverageRootDir () {
   return config.repositoryRoot || process.cwd()
 }
 
+/**
+ * Recomputes whether a parallel worker result belongs to a modified suite.
+ *
+ * In parallel mode, `_ddIsModified` is set on Mocha Test objects inside the worker.
+ * The main process receives `Test.prototype.serialize()` output for test events,
+ * and that fixed serialization drops custom properties. We still need modified-test
+ * bookkeeping in the main process for EFD failure suppression, so infer it again
+ * from the suite path.
+ *
+ * @param {string} testSuiteAbsolutePath
+ * @returns {boolean}
+ */
+function isModifiedTestSuite (testSuiteAbsolutePath) {
+  const testPath = getTestSuitePath(testSuiteAbsolutePath, getCoverageRootDir())
+  return isModifiedTest(testPath, null, null, config.modifiedFiles, 'mocha')
+}
+
 function shouldReportCodeCoverageLinesPct (hasBackfilledCoverage) {
   return !isSuitesSkipped || hasBackfilledCoverage
 }
@@ -252,12 +271,13 @@ function getOnEndHandler (isParallel) {
        * The rationale behind is the following: you may still be able to block your CI pipeline by gating
        * on flakiness (the test will be considered flaky), but you may choose to unblock the pipeline too.
        */
-      for (const tests of Object.values(newTests)) {
-        const failingNewTests = tests.filter(test => isTestFailed(test))
-        const areAllNewTestsFailing = failingNewTests.length === tests.length
-        if (failingNewTests.length && !areAllNewTestsFailing) {
-          this.stats.failures -= failingNewTests.length
-          this.failures -= failingNewTests.length
+      for (const tests of Object.values(efdTests)) {
+        const failingEfdTests = tests.filter(test => isTestFailed(test))
+        const areAllEfdTestsFailing = failingEfdTests.length === tests.length
+        const nonQuarantinedFailingEfdTests = failingEfdTests.filter(test => !testsQuarantined.has(test))
+        if (nonQuarantinedFailingEfdTests.length && !areAllEfdTestsFailing) {
+          this.stats.failures -= nonQuarantinedFailingEfdTests.length
+          this.failures -= nonQuarantinedFailingEfdTests.length
         }
       }
     }
@@ -1073,9 +1093,9 @@ addHook({
   shimmer.wrap(BufferedWorkerPool.prototype, 'run', run => async function (testSuiteAbsolutePath, workerArgs) {
     if (!testFinishCh.hasSubscribers ||
         (!config.isKnownTestsEnabled &&
-         !config.isTestManagementTestsEnabled &&
-         !config.isImpactedTestsEnabled &&
-         !config.isFlakyTestRetriesEnabled)) {
+        !config.isTestManagementTestsEnabled &&
+        !config.isImpactedTestsEnabled &&
+        !config.isFlakyTestRetriesEnabled)) {
       return run.apply(this, arguments)
     }
 
@@ -1139,10 +1159,15 @@ addHook({
       .events
       .filter(event => event.eventName === 'test end')
       .map(event => event.data)
+    const isModified = config.isImpactedTestsEnabled && isModifiedTestSuite(testSuiteAbsolutePath)
 
     for (const test of tests) {
+      const testProperties = getTestProperties(test, config.testManagementTests)
+      const isAttemptToFix = config.isTestManagementTestsEnabled && testProperties.isAttemptToFix
+
       // `newTests` is filled in the worker process, so we need to use the test results to fill it here too.
-      if (config.isKnownTestsEnabled && isNewTest(test, config.knownTests)) {
+      const isNew = config.isKnownTestsEnabled && isNewTest(test, config.knownTests)
+      if (isNew) {
         const testFullName = getTestFullName(test)
         const tests = newTests[testFullName]
 
@@ -1152,8 +1177,18 @@ addHook({
           newTests[testFullName] = [test]
         }
       }
+      // `efdTests` is filled in the worker process, so we need to use the test results to fill it here too.
+      if (!isAttemptToFix && (isNew || isModified)) {
+        const testFullName = getTestFullName(test)
+        const tests = efdTests[testFullName]
+
+        if (tests) {
+          tests.push(test)
+        } else {
+          efdTests[testFullName] = [test]
+        }
+      }
       // `testsQuarantined` is filled in the worker process, so we need to use the test results to fill it here too.
-      const testProperties = getTestProperties(test, config.testManagementTests)
       if (config.isTestManagementTestsEnabled && testProperties.isQuarantined && !testProperties.isAttemptToFix) {
         testsQuarantined.add(test)
       }

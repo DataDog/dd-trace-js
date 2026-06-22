@@ -8,6 +8,7 @@ const msgpack = require('@msgpack/msgpack')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
+const aiguardAutoInstrumentation = require('../../src/aiguard')
 const NoopAIGuard = require('../../src/aiguard/noop')
 const AIGuard = require('../../src/aiguard/sdk')
 const agent = require('../plugins/agent')
@@ -97,6 +98,7 @@ describe('AIGuard SDK', () => {
   afterEach(async () => {
     global.fetch = originalFetch
     sinon.restore()
+    aiguardAutoInstrumentation.disable()
     return agent.close()
   })
 
@@ -496,6 +498,25 @@ describe('AIGuard SDK', () => {
           assert.ok(!Object.hasOwn(span.meta, EVENT_TAG_KEY), `Available keys: ${inspect(Object.keys(span.meta))}`)
         }
       }
+    })
+  })
+
+  it('parents the ai_guard span under the explicit childOf span', async () => {
+    mockFetch({
+      body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } },
+    })
+
+    // Create the parent span and evaluate outside its active scope, so only the explicit
+    // `childOf` can establish the parent-child relationship (not the active async context).
+    const parent = tracer.startSpan('explicit-parent')
+    await aiguard.evaluate(prompt, { childOf: parent })
+    parent.finish()
+
+    await agent.assertSomeTraces(traces => {
+      const parentSpan = traces[0].find(span => span.name === 'explicit-parent')
+      const guardSpan = traces[0].find(span => span.name === 'ai_guard')
+      assert.ok(parentSpan && guardSpan, 'expected both explicit-parent and ai_guard spans')
+      assert.strictEqual(guardSpan.parent_id.toString(), parentSpan.span_id.toString())
     })
   })
 

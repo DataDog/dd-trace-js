@@ -13,8 +13,8 @@ const {
   installPlaywrightChromium,
   getCiVisAgentlessConfig,
   assertObjectContains,
+  createParallelIt,
 } = require('../helpers')
-const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { createWebAppServer } = require('../ci-visibility/web-app-server')
 const {
   TEST_SOURCE_FILE,
@@ -34,6 +34,13 @@ const latest = 'latest'
 const { oldest } = require('./versions')
 const versions = [oldest, latest]
 
+const DEFAULT_IMPACTED_KNOWN_TESTS = {
+  playwright: {
+    'ci-visibility/playwright-tests-impacted-tests/impacted-test.js':
+      ['impacted test should be impacted', 'impacted test 2 should be impacted 2'],
+  },
+}
+
 versions.forEach((version) => {
   if (PLAYWRIGHT_VERSION === 'oldest' && version !== oldest) return
   if (PLAYWRIGHT_VERSION === 'latest' && version !== latest) return
@@ -46,7 +53,9 @@ versions.forEach((version) => {
   }
 
   describe(`playwright@${version}`, function () {
-    let cwd, receiver, childProcess, webAppPort, webAppServer
+    const it = createParallelIt(global.it, { withReceiver: true })
+
+    let cwd, webAppPort, webAppServer
 
     this.timeout(80000)
 
@@ -75,25 +84,7 @@ versions.forEach((version) => {
       await new Promise(resolve => webAppServer.close(resolve))
     })
 
-    beforeEach(async function () {
-      receiver = await new FakeCiVisIntake().start()
-    })
-
-    afterEach(async () => {
-      childProcess.kill()
-      await receiver.stop()
-    })
-
     contextNewVersions('impacted tests', () => {
-      beforeEach(() => {
-        receiver.setKnownTests({
-          playwright: {
-            'ci-visibility/playwright-tests-impacted-tests/impacted-test.js':
-              ['impacted test should be impacted', 'impacted test 2 should be impacted 2'],
-          },
-        })
-      })
-
       // Add git setup before running impacted tests
       before(function () {
         execSync('git checkout -b feature-branch', { cwd, stdio: 'ignore' })
@@ -101,24 +92,24 @@ versions.forEach((version) => {
           path.join(cwd, 'ci-visibility/playwright-tests-impacted-tests/impacted-test.js'),
           `const { test, expect } = require('@playwright/test')
 
-           test.beforeEach(async ({ page }) => {
-             await page.goto(process.env.PW_BASE_URL)
-           })
+          test.beforeEach(async ({ page }) => {
+            await page.goto(process.env.PW_BASE_URL)
+          })
 
-           test.describe('impacted test', () => {
-             test('should be impacted', async ({ page }) => {
-               await expect(page.locator('.hello-world')).toHaveText([
-                 'Hello Worldd'
-               ])
-             })
-           })
-           test.describe('impacted test 2', () => {
-             test('should be impacted 2', async ({ page }) => {
-               await expect(page.locator('.hello-world')).toHaveText([
-                 'Hello World'
-               ])
-             })
-           })`
+          test.describe('impacted test', () => {
+            test('should be impacted', async ({ page }) => {
+              await expect(page.locator('.hello-world')).toHaveText([
+                'Hello Worldd'
+              ])
+            })
+          })
+          test.describe('impacted test 2', () => {
+            test('should be impacted 2', async ({ page }) => {
+              await expect(page.locator('.hello-world')).toHaveText([
+                'Hello World'
+              ])
+            })
+          })`
         )
         execSync('git add ci-visibility/playwright-tests-impacted-tests/impacted-test.js', { cwd, stdio: 'ignore' })
         execSync('git commit -m "modify impacted-test.js" --no-verify', { cwd, stdio: 'ignore' })
@@ -129,7 +120,7 @@ versions.forEach((version) => {
         execSync('git branch -D feature-branch', { cwd, stdio: 'ignore' })
       })
 
-      const getTestAssertions = ({ isModified, isEfd, isNew }) =>
+      const getTestAssertions = (receiver, { isModified, isEfd, isNew }) =>
         receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
@@ -200,49 +191,52 @@ versions.forEach((version) => {
           }, 60000)
 
       const runImpactedTest = async (
+        receiver,
         { isModified, isEfd = false, isNew = false },
         extraEnvVars = {}
       ) => {
-        const testAssertionsPromise = getTestAssertions({ isModified, isEfd, isNew })
+        const testAssertionsPromise = getTestAssertions(receiver, { isModified, isEfd, isNew })
+        let proc
+        try {
+          proc = exec(
+            './node_modules/.bin/playwright test -c playwright.config.js',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                PW_BASE_URL: `http://localhost:${webAppPort}`,
+                TEST_DIR: './ci-visibility/playwright-tests-impacted-tests',
+                GITHUB_BASE_REF: '',
+                ...extraEnvVars,
+              },
+            }
+          )
 
-        childProcess = exec(
-          './node_modules/.bin/playwright test -c playwright.config.js',
-          {
-            cwd,
-            env: {
-              ...getCiVisAgentlessConfig(receiver.port),
-              PW_BASE_URL: `http://localhost:${webAppPort}`,
-              TEST_DIR: './ci-visibility/playwright-tests-impacted-tests',
-              GITHUB_BASE_REF: '',
-              ...extraEnvVars,
-            },
-          }
-        )
-
-        await Promise.all([
-          once(childProcess, 'exit'),
-          testAssertionsPromise,
-        ])
+          await Promise.all([once(proc, 'exit'), testAssertionsPromise])
+        } finally {
+          proc?.kill()
+        }
       }
 
       context('test is not new', () => {
-        it('should be detected as impacted', async () => {
+        it('should be detected as impacted', async (receiver) => {
+          receiver.setKnownTests(DEFAULT_IMPACTED_KNOWN_TESTS)
           receiver.setSettings({ impacted_tests_enabled: true })
-
-          await runImpactedTest({ isModified: true })
+          await runImpactedTest(receiver, { isModified: true })
         })
 
-        it('should not be detected as impacted if disabled', async () => {
+        it('should not be detected as impacted if disabled', async (receiver) => {
+          receiver.setKnownTests(DEFAULT_IMPACTED_KNOWN_TESTS)
           receiver.setSettings({ impacted_tests_enabled: false })
-
-          await runImpactedTest({ isModified: false })
+          await runImpactedTest(receiver, { isModified: false })
         })
 
         it('should not be detected as impacted if DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED is false',
-          async () => {
+          async (receiver) => {
+            receiver.setKnownTests(DEFAULT_IMPACTED_KNOWN_TESTS)
             receiver.setSettings({ impacted_tests_enabled: true })
-
             await runImpactedTest(
+              receiver,
               { isModified: false },
               { DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: '0' }
             )
@@ -250,7 +244,7 @@ versions.forEach((version) => {
       })
 
       context('test is new', () => {
-        it('should be retried and marked both as new and modified', async () => {
+        it('should be retried and marked both as new and modified', async (receiver) => {
           receiver.setKnownTests({
             playwright: {},
           })
@@ -266,6 +260,7 @@ versions.forEach((version) => {
             known_tests_enabled: true,
           })
           await runImpactedTest(
+            receiver,
             { isModified: true, isEfd: true, isNew: true }
           )
         })

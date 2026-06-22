@@ -7,6 +7,13 @@ const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 
 const { sandboxCwd, useSandbox, FakeAgent, spawnProc, stopProc } = require('../helpers')
 const { assertObjectContains } = require('../helpers')
+const { USER_KEEP } = require('../../ext/priority')
+const {
+  APM_TRACING_ENABLED_KEY,
+  DECISION_MAKER_KEY,
+  SAMPLING_MECHANISM_AI_GUARD,
+  TRACE_SOURCE_PROPAGATION_KEY,
+} = require('../../packages/dd-trace/src/constants')
 const startApiMock = require('./api-mock')
 const startOpenAIMock = require('./openai-mock')
 const { executeRequest } = require('./util')
@@ -16,6 +23,32 @@ function assertHasGuardSpan (payload, predicate) {
   assert.ok(spans.length > 0, `Expected ${spans.length} > 0`)
   const matching = spans.find(predicate)
   assert.notStrictEqual(matching, undefined)
+}
+
+// Every `ai_guard` span produced by an auto-instrumented call must nest under the LLM
+// span (e.g. `openai.request`), matching the Vercel AI SDK behavior. This guards the
+// fix that binds the OpenAI lazy APIPromise `parse`/`asResponse` to the LLM span context.
+function assertGuardSpansChildOf (payload, parentName) {
+  const parent = payload[0].find(span => span.name === parentName)
+  assert.notStrictEqual(parent, undefined, `expected a ${parentName} span`)
+  const guardSpans = payload[0].filter(span => span.name === 'ai_guard')
+  assert.ok(guardSpans.length > 0, 'expected at least one ai_guard span')
+  for (const span of guardSpans) {
+    assert.strictEqual(
+      span.parent_id.toString(),
+      parent.span_id.toString(),
+      `ai_guard span ${span.span_id} should be a child of ${parentName} ${parent.span_id}`
+    )
+  }
+}
+
+// When AI Guard blocks (Before or After Model), the AIGuardAbortError must propagate to the
+// LLM span (e.g. `openai.request`) and mark it as errored, matching the dd-trace-py behavior.
+function assertLlmSpanErrored (payload, name) {
+  const span = payload[0].find(span => span.name === name)
+  assert.notStrictEqual(span, undefined, `expected a ${name} span`)
+  assert.strictEqual(span.error, 1, `${name} span should be errored when AI Guard blocks`)
+  assert.strictEqual(span.meta['error.type'], 'AIGuardAbortError')
 }
 
 function findMetric (series, metricName) {
@@ -30,6 +63,7 @@ function assertHasTags (metric, expectedTags) {
 
 describe('AIGuard SDK integration tests', () => {
   let cwd, appFile, agent, proc, api, openaiApi, url
+  let envOverrides = {}
 
   useSandbox(['express', 'ai@6.0.39', 'openai@6'])
 
@@ -65,6 +99,7 @@ describe('AIGuard SDK integration tests', () => {
       cwd,
       env: {
         ...baseEnv(),
+        ...envOverrides,
         OPENAI_BASE_URL: `http://127.0.0.1:${openaiApi.address().port}/v1`,
       },
     })
@@ -76,6 +111,21 @@ describe('AIGuard SDK integration tests', () => {
     await agent.stop()
   })
 
+  function assertStandaloneAiGuardTrace (headers, payload) {
+    assert.strictEqual(headers['datadog-client-computed-stats'], 'yes')
+
+    const requestSpan = payload[0].find(span => span.name === 'express.request')
+    const guardSpan = payload[0].find(span => span.name === 'ai_guard')
+
+    assert.notStrictEqual(requestSpan, undefined)
+    assert.notStrictEqual(guardSpan, undefined)
+    assert.strictEqual(requestSpan.metrics[APM_TRACING_ENABLED_KEY], 0)
+    assert.strictEqual(requestSpan.metrics._sampling_priority_v1, USER_KEEP)
+    assert.strictEqual(requestSpan.meta[TRACE_SOURCE_PROPAGATION_KEY], '20')
+    assert.strictEqual(requestSpan.meta[DECISION_MAKER_KEY], `-${SAMPLING_MECHANISM_AI_GUARD}`)
+    assert.strictEqual(requestSpan.meta['ai_guard.event'], 'true')
+  }
+
   it('test default options honors remote blocking', async () => {
     const response = await executeRequest(`${url}/deny-default-options`, 'GET')
     assert.strictEqual(response.status, 403)
@@ -86,6 +136,93 @@ describe('AIGuard SDK integration tests', () => {
       assert.notStrictEqual(span, undefined)
       assert.strictEqual(span.meta['ai_guard.action'], 'DENY')
       assert.strictEqual(span.meta['ai_guard.blocked'], 'true')
+    })
+  })
+
+  describe('with APM tracing disabled', () => {
+    before(() => {
+      envOverrides = {
+        DD_APM_TRACING_ENABLED: 'false',
+      }
+    })
+
+    after(() => {
+      envOverrides = {}
+    })
+
+    it('keeps direct SDK evaluations as AI Guard standalone traces', async () => {
+      const response = await executeRequest(`${url}/allow`, 'GET')
+      assert.strictEqual(response.status, 200)
+
+      await agent.assertMessageReceived(({ headers, payload }) => {
+        assertStandaloneAiGuardTrace(headers, payload)
+
+        const guardSpan = payload[0].find(span => span.name === 'ai_guard')
+        assert.strictEqual(guardSpan.meta['ai_guard.action'], 'ALLOW')
+      })
+    })
+
+    it('keeps auto-instrumented OpenAI evaluations as AI Guard standalone traces', async () => {
+      const response = await executeRequest(`${url}/openai-chat?deny=false`, 'GET')
+      assert.strictEqual(response.status, 200)
+      assert.strictEqual(response.body.blocked, false)
+
+      await agent.assertMessageReceived(({ headers, payload }) => {
+        assertStandaloneAiGuardTrace(headers, payload)
+        assertGuardSpansChildOf(payload, 'openai.request')
+      })
+    })
+
+    it('keeps auto-instrumented AI SDK evaluations as AI Guard standalone traces', async () => {
+      const response = await executeRequest(`${url}/auto?mode=point1&deny=false`, 'GET')
+      assert.strictEqual(response.status, 200)
+      assert.deepStrictEqual(response.body, { blocked: false })
+
+      await agent.assertMessageReceived(({ headers, payload }) => {
+        assertStandaloneAiGuardTrace(headers, payload)
+        assertGuardSpansChildOf(payload, 'ai.generateText.doGenerate')
+      })
+    })
+  })
+
+  describe('service entry tag mirroring', () => {
+    it('copies http.useragent to ai_guard.http.useragent on the guard span', async () => {
+      const response = await executeRequest(`${url}/allow`, 'GET', {
+        'user-agent': 'test-agent/1.0',
+      })
+      assert.strictEqual(response.status, 200)
+
+      await agent.assertMessageReceived(({ payload }) => {
+        const guardSpan = payload[0].find(span => span.name === 'ai_guard')
+        assert.notStrictEqual(guardSpan, undefined)
+        assert.strictEqual(guardSpan.meta['ai_guard.http.useragent'], 'test-agent/1.0')
+      })
+    })
+
+    it('copies http.client_ip and network.client.ip to ai_guard.* tags on the guard span', async () => {
+      const response = await executeRequest(`${url}/allow`, 'GET', {
+        'x-forwarded-for': '203.0.113.10, 10.0.0.1',
+      })
+      assert.strictEqual(response.status, 200)
+
+      await agent.assertMessageReceived(({ payload }) => {
+        const guardSpan = payload[0].find(span => span.name === 'ai_guard')
+        assert.notStrictEqual(guardSpan, undefined)
+        assert.strictEqual(guardSpan.meta['ai_guard.http.client_ip'], '203.0.113.10')
+        assert.ok(guardSpan.meta['ai_guard.network.client.ip'])
+      })
+    })
+
+    it('copies usr.id and usr.session_id to ai_guard.* tags on the guard span', async () => {
+      const response = await executeRequest(`${url}/allow-with-user`, 'GET')
+      assert.strictEqual(response.status, 200)
+
+      await agent.assertMessageReceived(({ payload }) => {
+        const guardSpan = payload[0].find(span => span.name === 'ai_guard')
+        assert.notStrictEqual(guardSpan, undefined)
+        assert.strictEqual(guardSpan.meta['ai_guard.usr.id'], 'user-123')
+        assert.strictEqual(guardSpan.meta['ai_guard.usr.session_id'], 'session-456')
+      })
     })
   })
 
@@ -212,6 +349,9 @@ describe('AIGuard SDK integration tests', () => {
   const openaiSuite = [
     { endpoint: '/openai-chat', name: 'chat.completions.create' },
     { endpoint: '/openai-responses', name: 'responses.create' },
+    // Structured output routes through the lazy APIPromise `_thenUnwrap`/`parse` path; the
+    // ai_guard spans must still nest under openai.request on it.
+    { endpoint: '/openai-chat-parse', name: 'chat.completions.parse' },
   ]
 
   for (const { endpoint, name } of openaiSuite) {
@@ -227,6 +367,8 @@ describe('AIGuard SDK integration tests', () => {
         for (const span of guardSpans) {
           assert.strictEqual(span.meta['ai_guard.action'], 'ALLOW')
         }
+        // Both Before and After Model spans must nest under the openai.request LLM span.
+        assertGuardSpansChildOf(payload, 'openai.request')
       })
     })
 
@@ -240,6 +382,8 @@ describe('AIGuard SDK integration tests', () => {
           span.meta['ai_guard.action'] === 'DENY' &&
           span.meta['ai_guard.blocked'] === 'true'
         )
+        assertGuardSpansChildOf(payload, 'openai.request')
+        assertLlmSpanErrored(payload, 'openai.request')
       })
     })
   }
@@ -247,6 +391,7 @@ describe('AIGuard SDK integration tests', () => {
   const openaiAfterModelSuite = [
     { endpoint: '/openai-chat-after-deny', name: 'chat.completions.create' },
     { endpoint: '/openai-responses-after-deny', name: 'responses.create' },
+    { endpoint: '/openai-chat-parse-after-deny', name: 'chat.completions.parse' },
   ]
 
   for (const { endpoint, name } of openaiAfterModelSuite) {
@@ -260,6 +405,10 @@ describe('AIGuard SDK integration tests', () => {
           span.meta['ai_guard.action'] === 'DENY' &&
           span.meta['ai_guard.blocked'] === 'true'
         )
+        // Before Model (ALLOW) and After Model (DENY) spans must nest under openai.request.
+        assertGuardSpansChildOf(payload, 'openai.request')
+        // An After Model block must still mark the openai.request LLM span as errored.
+        assertLlmSpanErrored(payload, 'openai.request')
       })
     })
   }

@@ -4,13 +4,13 @@ const path = require('path')
 const { pathToFileURL } = require('url')
 
 const satisfies = require('../../../../vendor/dist/semifies')
+const { NODE_MAJOR } = require('../../../../version')
 const getGitMetadata = require('../git_metadata')
 const log = require('../log')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../plugins/util/tags')
 const { getIsAzureFunction } = require('../serverless')
 const { getAzureTagsFromMetadata, getAzureAppMetadata, getAzureFunctionMetadata } = require('../azure_metadata')
 const { getEnvironmentVariable } = require('../config/helper')
-const { getAgentUrl } = require('../agent/url')
 const { isACFActive } = require('../../../datadog-core/src/storage')
 
 const { AgentExporter } = require('./exporters/agent')
@@ -54,7 +54,7 @@ class Config {
     this.pprofPrefix = options.DD_PROFILING_PPROF_PREFIX
     this.v8ProfilerBugWorkaroundEnabled = options.DD_PROFILING_V8_PROFILER_BUG_WORKAROUND
 
-    this.url = getAgentUrl(options)
+    this.url = options.url
 
     this.libraryInjected = !!options.DD_INJECTION_ENABLED
 
@@ -87,6 +87,7 @@ class Config {
 
     this.timelineEnabled = options.DD_PROFILING_TIMELINE_ENABLED
     this.timelineSamplingEnabled = options.DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED
+    this.allocationProfilingEnabled = isAllocationProfilingEnabled(options.DD_PROFILING_ALLOCATION_ENABLED)
     this.codeHotspotsEnabled = options.DD_PROFILING_CODEHOTSPOTS_ENABLED
     this.cpuProfilingEnabled = options.DD_PROFILING_CPU_ENABLED
     this.heapSamplingInterval = options.DD_PROFILING_HEAP_SAMPLING_INTERVAL
@@ -140,6 +141,7 @@ class Config {
 
   get systemInfoReport () {
     const report = {
+      allocationProfilingEnabled: this.allocationProfilingEnabled,
       asyncContextFrameEnabled: this.asyncContextFrameEnabled,
       codeHotspotsEnabled: this.codeHotspotsEnabled,
       cpuProfilingEnabled: this.cpuProfilingEnabled,
@@ -274,6 +276,10 @@ function ensureProfilers (profilers, options) {
   }
 
   return filteredProfilers
+}
+
+function isAllocationProfilingEnabled (enabled) {
+  return NODE_MAJOR >= 26 && enabled
 }
 
 function buildExportCommand (options) {
