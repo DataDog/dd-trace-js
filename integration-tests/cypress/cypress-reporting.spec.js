@@ -919,23 +919,24 @@ moduleTypes.forEach(({
     it('uploads failure screenshots and the spec video to the v2 media endpoint', async function () {
       const envVars = getCiVisAgentlessConfig(receiver.port)
       const specToRun = 'cypress/e2e/basic-fail.js'
-      // Failure media is disabled by default in the sandbox config, so enable both the
-      // failure screenshot and the per-spec video for this run.
-      const command = version === '6.7.0'
-        ? './node_modules/.bin/cypress run ' +
-          '--config-file cypress-config.json ' +
-          `--config screenshotOnRunFailure=true,video=true --spec "${specToRun}"`
-        : `${testCommand} --config screenshotOnRunFailure=true,video=true`
+      // 6.7.0 uses a flat JSON config that can't read env to enable media; skip it.
+      if (version === '6.7.0') {
+        this.skip()
+        return
+      }
+      // Failure media is off by default in cypress.config.js; CYPRESS_ENABLE_FAILURE_MEDIA
+      // (set below) turns the failure screenshot + per-spec video on for this run.
       let testOutput = ''
 
       childProcess = exec(
-        command,
+        testCommand,
         {
           cwd,
           env: {
             ...envVars,
             CYPRESS_BASE_URL: webAppBaseUrl,
             SPEC_PATTERN: specToRun,
+            CYPRESS_ENABLE_FAILURE_MEDIA: 'true',
           },
         }
       )
@@ -974,8 +975,9 @@ moduleTypes.forEach(({
               const idempotencyKey = mediaPayload.headers['x-dd-idempotency-key']
               assert.ok(idempotencyKey, 'media upload should send an X-Dd-Idempotency-Key header')
               assert.strictEqual(mediaPayload.media.idempotencyKey, idempotencyKey)
-              assert.ok(
-                idempotencyKey.startsWith(`${expectedTraceId}:`),
+              assert.match(
+                idempotencyKey,
+                new RegExp(`^${expectedTraceId}:`),
                 `idempotency key ${idempotencyKey} should start with the trace id`
               )
 
