@@ -2,7 +2,6 @@
 
 /* eslint-disable no-console */
 const tracer = require('../packages/dd-trace')
-const { isTrue, isFalse } = require('../packages/dd-trace/src/util')
 const log = require('../packages/dd-trace/src/log')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../packages/dd-trace/src/config/helper')
 
@@ -43,8 +42,10 @@ const baseOptions = {
   flushInterval: isJestWorker ? JEST_FLUSH_INTERVAL : DEFAULT_FLUSH_INTERVAL,
 }
 
-let shouldInit = !isFalse(getValueFromEnvSources('DD_CIVISIBILITY_ENABLED'))
-const isAgentlessEnabled = isTrue(getValueFromEnvSources('DD_CIVISIBILITY_AGENTLESS_ENABLED'))
+// skipDefault: CI visibility stays on unless DD_CIVISIBILITY_ENABLED is explicitly false; the
+// registered default (false) would otherwise turn it off whenever the variable is unset.
+let shouldInit = getValueFromEnvSources('DD_CIVISIBILITY_ENABLED', true) !== false
+const isAgentlessEnabled = getValueFromEnvSources('DD_CIVISIBILITY_AGENTLESS_ENABLED')
 
 if (!isTestWorker && isPackageManager()) {
   log.debug('dd-trace is not initialized in a package manager.')
