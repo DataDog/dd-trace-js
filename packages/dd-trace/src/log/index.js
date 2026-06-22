@@ -7,7 +7,7 @@ const { isTrue } = require('../util')
 const { getValueFromEnvSources } = require('../config/helper')
 const { traceChannel, debugChannel, infoChannel, warnChannel, errorChannel } = require('./channels')
 const logWriter = require('./writer')
-const { Log, LogConfig, NoTransmitError } = require('./log')
+const { Log } = require('./log')
 
 const config = {
   enabled: defaults.DD_TRACE_DEBUG,
@@ -15,14 +15,7 @@ const config = {
   logLevel: defaults.logLevel,
 }
 
-// In most places where we know we want to mute a log we use log.error() directly
-const NO_TRANSMIT = new LogConfig(false)
-
 const log = {
-  LogConfig,
-  NO_TRANSMIT,
-  NoTransmitError,
-
   trace (...args) {
     if (traceChannel.hasSubscribers) {
       const logRecord = {}
@@ -59,20 +52,16 @@ const log = {
   },
 
   error (...args) {
-    publishFormatted(errorChannel, formatted => {
-      const stackTraceLimitBackup = Error.stackTraceLimit
-      Error.stackTraceLimit = 0
-      const newError = new Error(formatted)
-      Error.stackTraceLimit = stackTraceLimitBackup
-      Error.captureStackTrace(newError, log.error)
-      return newError
-    }, ...args)
-    return log
-  },
-
-  errorWithoutTelemetry (...args) {
-    args.push(NO_TRANSMIT)
-    publishFormatted(errorChannel, null, ...args)
+    if (errorChannel.hasSubscribers) {
+      const { formatted, cause } = getErrorLog(Log.parse(...args))
+      if (formatted) {
+        const err = new Error(formatted, { cause })
+        Error.captureStackTrace(err, log.error)
+        errorChannel.publish(err)
+      } else if (cause) {
+        errorChannel.publish(cause)
+      }
+    }
     return log
   },
 

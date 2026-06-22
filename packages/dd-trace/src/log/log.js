@@ -2,16 +2,12 @@
 
 const { format } = require('util')
 
-// other times we produce an Error in a central location and log it several other places
-class NoTransmitError extends Error {}
-
 class Log {
-  constructor (message, args, cause, delegate, sendViaTelemetry = true) {
+  constructor (message, args, cause, delegate) {
     this.message = message
     this.args = args
     this.cause = cause
     this.delegate = delegate
-    this.sendViaTelemetry = sendViaTelemetry
   }
 
   get formatted () {
@@ -26,18 +22,10 @@ class Log {
 
   static parse (...args) {
     let message, cause, delegate
-    let sendViaTelemetry = true
-
-    const maybeLogConfig = args.at(-1)
-    if (maybeLogConfig instanceof LogConfig) {
-      args.pop()
-      sendViaTelemetry = maybeLogConfig.transmit
-    }
 
     const maybeError = args.at(-1)
-    if (maybeError && typeof maybeError === 'object' && maybeError.stack) { // maybeError instanceof Error?
+    if (maybeError && typeof maybeError === 'object' && maybeError.stack) {
       cause = args.pop()
-      if (cause instanceof NoTransmitError) sendViaTelemetry = false
     }
 
     const firstArg = args.shift()
@@ -55,22 +43,8 @@ class Log {
       message = String(firstArg)
     }
 
-    return new Log(message, args, cause, delegate, sendViaTelemetry)
+    return new Log(message, args, cause, delegate)
   }
 }
 
-/**
- * Pass instances of this class to logger methods when fine-grain control is needed
- * @property {boolean} transmit - Whether to send the log via telemetry.
- */
-class LogConfig {
-  constructor (transmit = true) {
-    this.transmit = transmit
-  }
-}
-
-module.exports = {
-  Log,
-  LogConfig,
-  NoTransmitError,
-}
+module.exports = { Log }

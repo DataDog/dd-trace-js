@@ -243,6 +243,7 @@ class Tracer extends NoopProxy {
         getDynamicInstrumentationClient(config)
       }
     } catch (e) {
+      e.code = 'DD_TRACER_INIT_ERROR'
       log.error('Error initializing tracer', e)
       // TODO: Should we stop everything started so far?
     }
@@ -258,6 +259,7 @@ class Tracer extends NoopProxy {
     try {
       return require('./profiler').start(config)
     } catch (error) {
+      error.code = 'DD_PROFILER_INIT_ERROR'
       log.error(
         'Error starting profiler. For troubleshooting tips, see <https://dtdg.co/nodejs-profiler-troubleshooting>',
         error
