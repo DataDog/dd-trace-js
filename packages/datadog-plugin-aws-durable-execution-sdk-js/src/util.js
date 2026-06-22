@@ -24,23 +24,14 @@ function addOpMeta (meta, ctxImpl) {
 }
 
 /**
- * Returns the 0-indexed attempt number for the op the DurableContextImpl is about to
- * run: 0 for the original attempt, 1 for the first retry, 2 for the second, etc.
- * Defaults to 0 when no checkpoint exists yet (the very first execution before any
- * prior failures, before the START checkpoint).
+ * Returns the 0-indexed attempt number for the op the DurableContextImpl is about to run
+ * (0 original, 1 first retry, …), defaulting to 0 before any checkpoint exists.
  *
- * On a pending/retry checkpoint (the live run of an op), the production AWS Lambda
- * Durable service stores StepDetails.Attempt as "number of prior failed attempts",
- * so passing it through directly yields the correct 0-indexed semantic. The SDK's
- * own internal use also matches this — it computes the current attempt count as
- * `(stepData.StepDetails.Attempt || 0) + 1`.
- *
- * On a SUCCEEDED checkpoint (an op being replayed from its stored result), the same
- * field instead holds the 1-indexed number of the attempt that ultimately succeeded
- * (a first-try success reads as 1). We subtract 1 in that case so a replay reports
- * the same 0-indexed attempt as the original run did. This 1-indexing is
- * server-maintained observed behavior, not an SDK guarantee, so we floor at 0 to
- * never emit a negative attempt if a SUCCEEDED checkpoint ever lacks an Attempt field.
+ * StepDetails.Attempt is indexed differently depending on checkpoint status: on a pending/retry
+ * checkpoint it's the count of prior failed attempts (already 0-indexed), but on a SUCCEEDED
+ * checkpoint (a replay) it's the 1-indexed attempt that succeeded. We subtract 1 in the latter
+ * case so a replay agrees with the original run, flooring at 0 since the 1-indexing is observed
+ * server behavior, not an SDK guarantee.
  *
  * @param {object} [ctxImpl]
  * @returns {number}
