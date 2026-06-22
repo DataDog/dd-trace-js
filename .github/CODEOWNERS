@@ -279,6 +279,7 @@
 /.github/workflows/custom-node-version-dispatch.yml @Datadog/lang-platform-js
 /.github/workflows/project.yml @Datadog/lang-platform-js
 /.github/workflows/stale.yml @Datadog/lang-platform-js
+/.github/workflows/version-coverage.yml @Datadog/lang-platform-js
 /scripts/check-no-mcr-images.js @Datadog/lang-platform-js
 
 /.github/workflows/apm-capabilities.yml @DataDog/apm-sdk-capabilities-js
