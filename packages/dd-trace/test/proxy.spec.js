@@ -6,6 +6,7 @@ const { inspect } = require('node:util')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
+const featureRegistry = require('../src/feature-registry')
 
 require('./setup/core')
 
@@ -253,8 +254,22 @@ describe('TracerProxy', () => {
       './dogstatsd': dogStatsD,
       './noop/dogstatsd': NoopDogStatsDClient,
       './flare': flare,
-      './openfeature': openfeature,
-      './openfeature/flagging_provider': OpenFeatureProvider,
+    })
+
+    const { enable: openfeatureRcEnable } = require('../src/openfeature/remote_config')
+    featureRegistry.registerFeature({
+      name: 'openfeature',
+      noop: {},
+      factory: () => openfeature,
+      remoteConfig (rc, config, proxy) {
+        openfeatureRcEnable(rc, config, () => proxy.openfeature)
+      },
+      enable (config, tracer, proxy, lazyProxy) {
+        if (config.experimental.flaggingProvider.enabled) {
+          proxy._modules.openfeature.enable(config)
+          lazyProxy(proxy, 'openfeature', () => OpenFeatureProvider, tracer, config)
+        }
+      },
     })
 
     proxy = new ProxyClass()

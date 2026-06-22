@@ -1,0 +1,11 @@
+{
+  "optionalDependencies": [
+    "@datadog/libdatadog",
+    "@datadog/native-appsec",
+    "@datadog/native-iast-taint-tracking",
+    "@datadog/native-metrics",
+    "@datadog/openfeature-node-server",
+    "@datadog/pprof",
+    "@datadog/wasm-js-rewriter"
+  ]
+}

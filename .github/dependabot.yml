@@ -52,6 +52,11 @@ updates:
         patterns:
           - "*"
 
+  # NOTE: package.electron.json is intentionally NOT listed here. It is gitignored
+  # and generated at prepare time by scripts/generate-electron-package.js.
+  # Dependabot bumps deps in package.json; the electron variant is always regenerated
+  # fresh on the next npm install / npm pack.
+
   # Regular npm packages that fall into our supported ranges besides OTEL
   - package-ecosystem: "npm"
     directories:

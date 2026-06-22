@@ -1,6 +1,7 @@
 'use strict'
 
 const NoopProxy = require('./noop/proxy')
+const { features } = require('./feature-registry')
 const DatadogTracer = require('./tracer')
 const getConfig = require('./config')
 const runtimeMetrics = require('./runtime_metrics')
@@ -91,7 +92,10 @@ class Tracer extends NoopProxy {
       iast: new LazyModule(() => require('./appsec/iast')),
       llmobs: new LazyModule(() => require('./llmobs')),
       rewriter: new LazyModule(() => require('./appsec/iast/taint-tracking/rewriter')),
-      openfeature: new LazyModule(() => require('./openfeature')),
+    }
+
+    for (const feature of Object.values(features)) {
+      this._modules[feature.name] = new LazyModule(feature.factory)
     }
   }
 
@@ -176,8 +180,9 @@ class Tracer extends NoopProxy {
           DynamicInstrumentation.start(config, rc)
         }
 
-        const openfeatureRemoteConfig = require('./openfeature/remote_config')
-        openfeatureRemoteConfig.enable(rc, config, () => this.openfeature)
+        for (const feature of Object.values(features)) {
+          feature.remoteConfig?.(rc, config, this)
+        }
       }
 
       if (config.profiling.enabled === 'true') {
@@ -292,9 +297,8 @@ class Tracer extends NoopProxy {
         }
         this._tracingInitialized = true
       }
-      if (config.experimental.flaggingProvider.enabled) {
-        this._modules.openfeature.enable(config)
-        lazyProxy(this, 'openfeature', () => require('./openfeature/flagging_provider'), this._tracer, config)
+      for (const feature of Object.values(features)) {
+        feature.enable?.(config, this._tracer, this, lazyProxy)
       }
       if (config.iast.enabled) {
         this._modules.iast.enable(config, this._tracer)
@@ -305,7 +309,9 @@ class Tracer extends NoopProxy {
       this._modules.aiguard.disable()
       this._modules.iast.disable()
       this._modules.llmobs.disable()
-      this._modules.openfeature.disable()
+      for (const feature of Object.values(features)) {
+        this._modules[feature.name].disable()
+      }
     }
 
     if (this._tracingInitialized) {
