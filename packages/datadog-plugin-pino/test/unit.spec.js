@@ -132,5 +132,18 @@ describe('PinoPlugin', () => {
         tracer.inject = originalInject
       }
     })
+
+    it('leaves the message untouched when logInjection is disabled (capture-only mode)', () => {
+      plugin.configure({ logInjection: false, logCaptureEnabled: true, enabled: true })
+      try {
+        const original = { msg: 'hello', level: 30 }
+        const data = { message: original }
+        messageCh.publish(data)
+        assert.strictEqual(data.message, original, 'message should not be wrapped in capture-only mode')
+        assert.ok(!('dd' in data.message), 'dd should not be injected when logInjection is false')
+      } finally {
+        plugin.configure({ logInjection: true, enabled: true })
+      }
+    })
   })
 })
