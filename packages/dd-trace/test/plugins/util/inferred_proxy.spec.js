@@ -48,6 +48,23 @@ const proxyConfigs = {
     expectedUrl: 'https://azure-example.com/test',
     expectedStartTime: '1729780025472999936',
   },
+  'azure-frontdoor': {
+    headers: {
+      'x-dd-proxy': 'azure-frontdoor',
+      'x-dd-proxy-request-time-ms': '1729780025473',
+      'x-dd-proxy-path': '/test',
+      'x-dd-proxy-httpmethod': 'GET',
+      'x-dd-proxy-domain-name': 'myapp.azurefd.net',
+      'x-dd-proxy-stagae': 'prod',
+      'x-dd-proxy-region': 'eastus',
+      // Add any other Azure-specific headers here
+    },
+    expectedSpanName: 'azure.frontdoor',
+    expectedService: 'myapp.azurefd.net',
+    expectedComponent: 'azure-frontdoor',
+    expectedUrl: 'https://myapp.azurefd.net/test',
+    expectedStartTime: '1729780025472999936',
+  }
 }
 
 Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
@@ -95,7 +112,7 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
         })
       })
 
-      return new Promise(/** @type {() => void} */ (resolve, reject) => {
+      return new Promise(/** @type {() => void} */(resolve, reject) => {
         appListener = server.listen(0, '127.0.0.1', () => {
           port = (/** @type {import('net').AddressInfo} */ (server.address())).port
           appListener._connections = connections
@@ -115,7 +132,7 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
           }
         }
 
-        await new Promise(/** @type {() => void} */ (resolve, reject) => {
+        await new Promise(/** @type {() => void} */(resolve, reject) => {
           appListener.close((err) => {
             if (err) {
               reject(err)

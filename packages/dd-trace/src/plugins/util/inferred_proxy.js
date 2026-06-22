@@ -35,9 +35,13 @@ const supportedProxies = {
     spanName: 'azure.apim',
     component: 'azure-apim',
   },
+  'azure-frontdoor': {
+    spanName: 'azure.frontdoor',
+    component: 'azure-frontdoor'
+  }
 }
 
-function createInferredProxySpan (headers, childOf, tracer, reqCtx, traceCtx, config, startSpanHelper) {
+function createInferredProxySpan(headers, childOf, tracer, reqCtx, traceCtx, config, startSpanHelper) {
   if (!headers) {
     return null
   }
@@ -88,7 +92,7 @@ function createInferredProxySpan (headers, childOf, tracer, reqCtx, traceCtx, co
   return childOf
 }
 
-function setInferredProxySpanTags (span, proxyContext) {
+function setInferredProxySpanTags(span, proxyContext) {
   const resourcePath = proxyContext.resourcePath || proxyContext.path
   span.setTag(RESOURCE_NAME, `${proxyContext.method} ${resourcePath}`)
   span.setTag('_dd.inferred_span', 1)
@@ -108,7 +112,7 @@ function setInferredProxySpanTags (span, proxyContext) {
   return span
 }
 
-function extractInferredProxyContext (headers) {
+function extractInferredProxyContext(headers) {
   if (!(PROXY_HEADER_START_TIME_MS in headers)) {
     return null
   }
@@ -135,7 +139,7 @@ function extractInferredProxyContext (headers) {
   }
 }
 
-function finishInferredProxySpan (context) {
+function finishInferredProxySpan(context) {
   const { req } = context
 
   if (!context.inferredProxySpan) return
