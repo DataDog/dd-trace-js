@@ -21,9 +21,9 @@ class NativeSpaceProfiler {
 
   /**
    * @param {TracerConfig} config
-   * @param {{ oomMonitoring?: object, allocationProfilingEnabled?: boolean }} [derived]
+   * @param {{ oomMonitoring?: object, allocationProfilingEnabled?: boolean }} derived
    */
-  constructor (config, { oomMonitoring, allocationProfilingEnabled } = {}) {
+  constructor (config, { oomMonitoring, allocationProfilingEnabled }) {
     this.#samplingInterval = config.DD_PROFILING_HEAP_SAMPLING_INTERVAL
     this.#allocationProfilingEnabled = allocationProfilingEnabled
     this.#oomMonitoring = oomMonitoring || {}

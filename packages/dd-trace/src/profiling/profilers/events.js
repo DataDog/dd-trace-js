@@ -443,9 +443,9 @@ class EventsProfiler {
 
   /**
    * @param {TracerConfig} config
-   * @param {{ flushInterval?: number, samplingInterval?: number }} [derived]
+   * @param {{ flushInterval: number, samplingInterval: number }} derived
    */
-  constructor (config, { flushInterval, samplingInterval } = {}) {
+  constructor (config, { flushInterval, samplingInterval }) {
     this.#maxSamples = getMaxSamples(flushInterval, samplingInterval)
     this.#timelineSamplingEnabled = config.DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED
     this.#eventSerializer = new EventSerializer(this.#maxSamples)

@@ -298,6 +298,9 @@ function buildProfilingRuntime (config) {
   // The export command is an internal OOM detail, not part of the reported settings.
   delete systemInfoReport.oomMonitoring.exportCommand
 
+  // The OOM wiring is already done above (createProfilers passes oomMonitoring to the space
+  // profiler), so Profiler#start ignores this copy. It is returned with exportCommand intact only
+  // so the config spec can assert the command systemInfoReport deliberately strips.
   return { tags, exporters, flushInterval, oomMonitoring, profilers, uploadCompression, systemInfoReport }
 }
 
