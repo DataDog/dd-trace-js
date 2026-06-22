@@ -76,7 +76,7 @@ describe('pino instrumentation', () => {
         assert.ok(record.pid, 'should have pid')
         assert.ok(record.hostname, 'should have hostname')
         assert.ok(record.time, 'should have time')
-        assert.ok(record.level !== undefined, 'should have level')
+        assert.notStrictEqual(record.level, undefined, 'should have level')
         assert.strictEqual(record.msg, 'full record test')
         done()
       })

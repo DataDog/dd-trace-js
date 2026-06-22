@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { describe, it, beforeEach } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 
 require('../../setup/core')
@@ -81,6 +81,84 @@ describe('plugins/util/web', () => {
       assert.strictEqual(config.validateStatus(200), false)
       assert.ok(Object.hasOwn(config, 'hooks'))
       assert.strictEqual(config.hooks.request(), 'test')
+    })
+
+    it('should return no header mappings when a headers entry cannot be parsed', () => {
+      const config = web.normalizeConfig({
+        headers: [null],
+      })
+
+      assert.deepStrictEqual(config.headers, [])
+    })
+
+    it('should return no header mappings when headers is not an array', () => {
+      const config = web.normalizeConfig({
+        headers: 'x-foo:tag',
+      })
+
+      assert.deepStrictEqual(config.headers, [])
+    })
+
+    describe('something-under-nda request id auto-tag', () => {
+      const SOMETHING_UNDER_NDA_ENV = 'SOMETHING_UNDER_NDA'
+      let priorSomethingUnderNDA
+
+      beforeEach(() => {
+        priorSomethingUnderNDA = process.env[SOMETHING_UNDER_NDA_ENV]
+        delete process.env[SOMETHING_UNDER_NDA_ENV]
+      })
+
+      afterEach(() => {
+        if (priorSomethingUnderNDA === undefined) delete process.env[SOMETHING_UNDER_NDA_ENV]
+        else process.env[SOMETHING_UNDER_NDA_ENV] = priorSomethingUnderNDA
+      })
+
+      it('should not auto-tag when not under something-under-nda', () => {
+        const config = web.normalizeConfig({})
+
+        assert.deepStrictEqual(config.headers, [])
+      })
+
+      it('should auto-tag under something-under-nda', () => {
+        process.env[SOMETHING_UNDER_NDA_ENV] = 'something-under-nda'
+
+        const config = web.normalizeConfig({})
+
+        assert.deepStrictEqual(config.headers, [['lambda-web-request-id', 'lambda.request_id']])
+      })
+
+      it('should auto-tag alongside user-provided headers', () => {
+        process.env[SOMETHING_UNDER_NDA_ENV] = 'something-under-nda'
+
+        const config = web.normalizeConfig({
+          headers: ['x-my-header:my.tag'],
+        })
+
+        assert.deepStrictEqual(config.headers, [
+          ['x-my-header', 'my.tag'],
+          ['lambda-web-request-id', 'lambda.request_id'],
+        ])
+      })
+
+      it('should defer to user override of the header tag name', () => {
+        process.env[SOMETHING_UNDER_NDA_ENV] = 'something-under-nda'
+
+        const config = web.normalizeConfig({
+          headers: ['lambda-web-request-id:custom.request_id'],
+        })
+
+        assert.deepStrictEqual(config.headers, [['lambda-web-request-id', 'custom.request_id']])
+      })
+
+      it('should match user override case-insensitively', () => {
+        process.env[SOMETHING_UNDER_NDA_ENV] = 'something-under-nda'
+
+        const config = web.normalizeConfig({
+          headers: ['Lambda-Web-Request-Id:custom.request_id'],
+        })
+
+        assert.deepStrictEqual(config.headers, [['lambda-web-request-id', 'custom.request_id']])
+      })
     })
 
     describe('queryStringObfuscation', () => {
