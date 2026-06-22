@@ -21,6 +21,7 @@ class WinstonPlugin extends LogPlugin {
    * @param {{ message: unknown }} arg
    */
   handleLog (arg) {
+    if (!this.config.logInjection) return
     const info = arg.message
     if (info === null || typeof info !== 'object' || Object.hasOwn(info, 'dd')) return
 

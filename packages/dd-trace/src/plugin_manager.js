@@ -153,6 +153,14 @@ module.exports = class PluginManager {
   #getSharedConfig (name) {
     const {
       logInjection,
+      logCaptureEnabled,
+      logCaptureHost,
+      logCapturePort,
+      logCaptureProtocol,
+      logCapturePath,
+      logCaptureFlushIntervalMs,
+      logCaptureMaxBufferSize,
+      logCaptureTimeoutMs,
       serviceMapping,
       queryStringObfuscation,
       site,
@@ -194,6 +202,14 @@ module.exports = class PluginManager {
       traceWebsocketMessagesSeparateTraces,
       experimental,
       resourceRenamingEnabled,
+      logCaptureEnabled,
+      logCaptureHost,
+      logCapturePort,
+      logCaptureProtocol,
+      logCapturePath,
+      logCaptureFlushIntervalMs,
+      logCaptureMaxBufferSize,
+      logCaptureTimeoutMs,
     }
 
     if (logInjection !== undefined) {
