@@ -26,7 +26,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:esbuild:ci
@@ -41,7 +41,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:webpack:ci
@@ -58,7 +58,7 @@ jobs:
     env:
       PLUGINS: ai
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-aws-sdk:
@@ -68,7 +68,7 @@ jobs:
     env:
       PLUGINS: aws-sdk
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-bluebird:
@@ -78,7 +78,7 @@ jobs:
     env:
       PLUGINS: bluebird
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-body-parser:
@@ -88,7 +88,7 @@ jobs:
     env:
       PLUGINS: body-parser
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-child_process:
@@ -98,7 +98,7 @@ jobs:
     env:
       PLUGINS: child_process
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-connect:
@@ -108,7 +108,7 @@ jobs:
     env:
       PLUGINS: connect
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-cookie-parser:
@@ -118,7 +118,7 @@ jobs:
     env:
       PLUGINS: cookie-parser
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   # The couchbase native binding ships libcouchbase: the 3.x line has no
@@ -142,7 +142,7 @@ jobs:
       PLUGINS: couchbase
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.node-version }}
@@ -164,7 +164,7 @@ jobs:
     env:
       PLUGINS: crypto
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-express-mongo-sanitize:
@@ -180,7 +180,7 @@ jobs:
       PLUGINS: express-mongo-sanitize
       SERVICES: mongo
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-express-session:
@@ -190,7 +190,7 @@ jobs:
     env:
       PLUGINS: express-session
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-express:
@@ -200,7 +200,7 @@ jobs:
     env:
       PLUGINS: express
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-express-multi-version:
@@ -210,7 +210,7 @@ jobs:
     env:
       PLUGINS: express-multi-version
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-fastify:
@@ -220,7 +220,7 @@ jobs:
     env:
       PLUGINS: fastify
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-fetch:
@@ -230,7 +230,7 @@ jobs:
     env:
       PLUGINS: fetch
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-fs:
@@ -240,7 +240,7 @@ jobs:
     env:
       PLUGINS: fs
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-generic-pool:
@@ -250,7 +250,7 @@ jobs:
     env:
       PLUGINS: generic-pool
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-hono:
@@ -260,7 +260,7 @@ jobs:
     env:
       PLUGINS: hono
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   # TODO: Retries below work around a flaky bug in Node.js http code. Revert to using
@@ -272,7 +272,7 @@ jobs:
     env:
       PLUGINS: http
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - name: Run instrumentation tests (oldest-maintenance, with retries)
@@ -305,7 +305,7 @@ jobs:
     env:
       PLUGINS: http-client-options
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-kafkajs:
@@ -315,7 +315,7 @@ jobs:
     env:
       PLUGINS: kafkajs
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-knex:
@@ -325,7 +325,7 @@ jobs:
     env:
       PLUGINS: knex
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-koa:
@@ -335,7 +335,7 @@ jobs:
     env:
       PLUGINS: koa
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-light-my-request:
@@ -345,7 +345,7 @@ jobs:
     env:
       PLUGINS: light-my-request
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-mongoose:
@@ -361,7 +361,7 @@ jobs:
       PLUGINS: mongoose
       SERVICES: mongo
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
         with:
           node-floor: newest-maintenance-lts
@@ -373,7 +373,7 @@ jobs:
     env:
       PLUGINS: multer
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-mysql2:
@@ -392,7 +392,7 @@ jobs:
       PLUGINS: mysql2
       SERVICES: mysql2
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-openai-lifecycle:
@@ -402,7 +402,7 @@ jobs:
     env:
       PLUGINS: openai-lifecycle
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-otel-sdk-trace:
@@ -412,7 +412,7 @@ jobs:
     env:
       PLUGINS: otel-sdk-trace
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-passport:
@@ -422,7 +422,7 @@ jobs:
     env:
       PLUGINS: passport
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-passport-http:
@@ -432,7 +432,7 @@ jobs:
     env:
       PLUGINS: passport-http
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-passport-local:
@@ -442,7 +442,7 @@ jobs:
     env:
       PLUGINS: passport-local
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-pg:
@@ -461,7 +461,7 @@ jobs:
       PLUGINS: pg
       SERVICES: postgres
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-promise-js:
@@ -471,7 +471,7 @@ jobs:
     env:
       PLUGINS: promise-js
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-promise:
@@ -481,7 +481,7 @@ jobs:
     env:
       PLUGINS: promise
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-q:
@@ -491,7 +491,7 @@ jobs:
     env:
       PLUGINS: q
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-stripe:
@@ -501,7 +501,7 @@ jobs:
     env:
       PLUGINS: stripe
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-restify:
@@ -511,7 +511,7 @@ jobs:
     env:
       PLUGINS: restify
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-router:
@@ -521,7 +521,7 @@ jobs:
     env:
       PLUGINS: router
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-url:
@@ -531,7 +531,7 @@ jobs:
     env:
       PLUGINS: url
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-when:
@@ -541,7 +541,7 @@ jobs:
     env:
       PLUGINS: when
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentation-zlib:
@@ -551,7 +551,7 @@ jobs:
     env:
       PLUGINS: zlib
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/instrumentations/test
 
   instrumentations-misc:
@@ -559,7 +559,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:instrumentations:misc:ci
@@ -592,7 +592,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -620,7 +620,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
