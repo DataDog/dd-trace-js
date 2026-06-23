@@ -1564,7 +1564,7 @@ class CypressPlugin {
   uploadTestVideo ({ videoPath, traceIds }) {
     const exporter = this.tracer?._tracer?._exporter
     if (!videoPath || !traceIds.length ||
-      !exporter?.canUploadTestScreenshots?.() ||
+      !exporter?.canUploadTestVideo?.() ||
       !exporter.uploadTestScreenshot) {
       return
     }

@@ -467,6 +467,8 @@ export interface GeneratedConfig {
   isImpactedTestsEnabled: boolean;
   isIntelligentTestRunnerEnabled: boolean;
   isTestDynamicInstrumentationEnabled: boolean;
+  isTestFailureScreenshotsEnabled: boolean;
+  isTestFailureVideoEnabled: boolean;
   isTestManagementEnabled: boolean;
   langchain: {
     spanCharLimit: number;

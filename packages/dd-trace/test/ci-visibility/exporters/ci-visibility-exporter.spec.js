@@ -1117,4 +1117,78 @@ describe('CI Visibility Exporter', () => {
       })
     })
   })
+
+  describe('canUploadTestScreenshots', () => {
+    it('should return false when there is no upload URL', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({ url, isTestFailureScreenshotsEnabled: true })
+      assert.strictEqual(ciVisibilityExporter.canUploadTestScreenshots(), false)
+    })
+
+    it('should return false when the URL is set but screenshots are disabled', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({ url, isTestFailureScreenshotsEnabled: false })
+      ciVisibilityExporter._testScreenshotUploadUrl = url
+      assert.strictEqual(ciVisibilityExporter.canUploadTestScreenshots(), false)
+    })
+
+    it('should return false when the URL is set but the screenshots flag is absent (default off)', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({ url })
+      ciVisibilityExporter._testScreenshotUploadUrl = url
+      assert.strictEqual(ciVisibilityExporter.canUploadTestScreenshots(), false)
+    })
+
+    it('should return true when the URL is set and screenshots are enabled', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({ url, isTestFailureScreenshotsEnabled: true })
+      ciVisibilityExporter._testScreenshotUploadUrl = url
+      assert.strictEqual(ciVisibilityExporter.canUploadTestScreenshots(), true)
+    })
+  })
+
+  describe('canUploadTestVideo', () => {
+    it('should return false when there is no upload URL', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({ url, isTestFailureVideoEnabled: true })
+      assert.strictEqual(ciVisibilityExporter.canUploadTestVideo(), false)
+    })
+
+    it('should return false when the URL is set but video is disabled', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({ url, isTestFailureVideoEnabled: false })
+      ciVisibilityExporter._testScreenshotUploadUrl = url
+      assert.strictEqual(ciVisibilityExporter.canUploadTestVideo(), false)
+    })
+
+    it('should return false when the URL is set but the video flag is absent (default off)', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({ url })
+      ciVisibilityExporter._testScreenshotUploadUrl = url
+      assert.strictEqual(ciVisibilityExporter.canUploadTestVideo(), false)
+    })
+
+    it('should return true when the URL is set and video is enabled', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({ url, isTestFailureVideoEnabled: true })
+      ciVisibilityExporter._testScreenshotUploadUrl = url
+      assert.strictEqual(ciVisibilityExporter.canUploadTestVideo(), true)
+    })
+  })
+
+  describe('media upload gate independence', () => {
+    it('should allow screenshots but not video when only screenshots are enabled', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({
+        url,
+        isTestFailureScreenshotsEnabled: true,
+        isTestFailureVideoEnabled: false,
+      })
+      ciVisibilityExporter._testScreenshotUploadUrl = url
+      assert.strictEqual(ciVisibilityExporter.canUploadTestScreenshots(), true)
+      assert.strictEqual(ciVisibilityExporter.canUploadTestVideo(), false)
+    })
+
+    it('should allow video but not screenshots when only video is enabled', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({
+        url,
+        isTestFailureScreenshotsEnabled: false,
+        isTestFailureVideoEnabled: true,
+      })
+      ciVisibilityExporter._testScreenshotUploadUrl = url
+      assert.strictEqual(ciVisibilityExporter.canUploadTestScreenshots(), false)
+      assert.strictEqual(ciVisibilityExporter.canUploadTestVideo(), true)
+    })
+  })
 })
