@@ -138,6 +138,64 @@ describe('plugins/util/url', () => {
     })
   })
 
+  describe('buildClientHttpUrl', () => {
+    const base = 'http://perdu.com'
+    const strippedUrl = 'http://perdu.com/path'
+
+    it('returns the stripped url when there is no query', () => {
+      const config = { queryStringObfuscation: 'secret' }
+
+      assert.strictEqual(url.buildClientHttpUrl(config, base, '/path', strippedUrl), strippedUrl)
+    })
+
+    it('includes the query with sensitive values obfuscated', () => {
+      const config = { queryStringObfuscation: 'secret' }
+
+      assert.strictEqual(
+        url.buildClientHttpUrl(config, base, '/path?data=secret', strippedUrl),
+        'http://perdu.com/path?data=<redacted>'
+      )
+    })
+
+    it('drops the query when query-string obfuscation is set to true', () => {
+      const config = { queryStringObfuscation: true }
+
+      assert.strictEqual(url.buildClientHttpUrl(config, base, '/path?data=secret', strippedUrl), strippedUrl)
+    })
+
+    it('keeps the raw query when query-string obfuscation is disabled', () => {
+      const config = { queryStringObfuscation: false }
+
+      assert.strictEqual(
+        url.buildClientHttpUrl(config, base, '/path?data=secret', strippedUrl),
+        'http://perdu.com/path?data=secret'
+      )
+    })
+  })
+
+  describe('getQsObfuscator', () => {
+    it('passes booleans through', () => {
+      assert.strictEqual(url.getQsObfuscator({ queryStringObfuscation: true }), true)
+      assert.strictEqual(url.getQsObfuscator({ queryStringObfuscation: false }), false)
+    })
+
+    it('treats an empty string as disabled and ".*" as a full redaction', () => {
+      assert.strictEqual(url.getQsObfuscator({ queryStringObfuscation: '' }), false)
+      assert.strictEqual(url.getQsObfuscator({ queryStringObfuscation: '.*' }), true)
+    })
+
+    it('compiles a regex string and caches the compiled result', () => {
+      const first = url.getQsObfuscator({ queryStringObfuscation: 'token' })
+      assert.ok(first instanceof RegExp)
+      assert.strictEqual(url.getQsObfuscator({ queryStringObfuscation: 'token' }), first)
+    })
+
+    it('falls back to full redaction on an invalid regex or a non-string/boolean value', () => {
+      assert.strictEqual(url.getQsObfuscator({ queryStringObfuscation: '[' }), true)
+      assert.strictEqual(url.getQsObfuscator({ queryStringObfuscation: 123 }), true)
+    })
+  })
+
   describe('extractPathFromUrl', () => {
     it('should return / for empty or missing url', () => {
       assert.strictEqual(url.extractPathFromUrl(''), '/')
