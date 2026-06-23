@@ -18,6 +18,16 @@ function storeConfig (config) {
       ? (processTags.serialized || null)
       : null
 
+    // OTEP-4947 thread-context writer's attribute_key_map, published as
+    // part of the process context so an out-of-process reader can decode
+    // the on-wire uint8 key indices back to attribute names. libdatadog
+    // prepends the implicit `datadog.local_root_span_id` entry at wire
+    // index 0, so we only supply our own additional keys here. Gated on
+    // the same config flag that activates the writer.
+    const threadlocalAttributeKeys = config.DD_TRACE_OTEL_CTX_ENABLED
+      ? require('./otel-thread-ctx').ATTRIBUTE_KEYS
+      : null
+
     const metadata = new processDiscovery.TracerMetadata(
       config.tags['runtime-id'],
       tracerVersion,
@@ -26,7 +36,8 @@ function storeConfig (config) {
       config.env || null,
       config.version || null,
       processTagsSerialized,
-      containerId || null
+      containerId || null,
+      threadlocalAttributeKeys
     )
 
     return processDiscovery.storeMetadata(metadata)

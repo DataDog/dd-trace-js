@@ -247,10 +247,10 @@
   dependencies:
     spark-md5 "^3.0.2"
 
-"@datadog/libdatadog@0.9.4":
-  version "0.9.4"
-  resolved "https://registry.yarnpkg.com/@datadog/libdatadog/-/libdatadog-0.9.4.tgz#3d39c3561fa11a702c0e5e7819c83f4e03c07b78"
-  integrity sha512-55wHHAuhHOOrBGoWV+fRuEDypN6PMJZq4LTOwExnhoDMvVcZKtqYT05xea/toRs0o75+A1IeNAQHsRLbJMf5oA==
+"@datadog/libdatadog@0.10.0":
+  version "0.10.0"
+  resolved "https://registry.yarnpkg.com/@datadog/libdatadog/-/libdatadog-0.10.0.tgz#3b835a4d87ffabd8798fbc37e5ef44e01de7e797"
+  integrity sha512-z1f4LovlEW7tstKCyqTdUfP0Kn+PNkdyRLv2ATUcOdha9yZSG5BEJfB2Hm1ns9jE4BSSKzeRyDcxzUoUTFeG/g==
 
 "@datadog/native-appsec@11.0.1":
   version "11.0.1"

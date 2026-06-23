@@ -44,11 +44,25 @@ const {
 // convention (mirrors libdatadog's libdd-otel-thread-ctx, where
 // `local_root_span_id` is always the first entry in
 // `threadlocal.attribute_key_map`), encoded as a 16-character lowercase
-// hex string. Endpoint, thread name, and thread id follow.
+// hex string. Endpoint, thread name, and thread id follow. Adding more
+// means assigning the next index and updating ATTRIBUTE_KEYS
+// accordingly.
 const LOCAL_ROOT_SPAN_ID_IDX = 0
 const ENDPOINT_IDX = 1
 const THREAD_NAME_IDX = 2
 const THREAD_ID_IDX = 3
+
+// The dd-trace-js-supplied subset of the OTEP-4719 attribute_key_map
+// (the implicit `datadog.local_root_span_id` at wire index 0 is
+// prepended by libdatadog when it publishes the process context, so it
+// is NOT listed here). Index N here corresponds to wire key index N+1.
+// Kept in sync with the positional indices above.
+// Also see https://docs.google.com/document/d/1IwjjVJzEChcFPcnVV2N5Kkjg-4_Q4v4Q3ojpxntbdvY/edit?pli=1&tab=t.efaosgjya44c#bookmark=id.700gvw31vb7h
+const ATTRIBUTE_KEYS = [
+  'datadog.trace_endpoint',
+  'datadog.thread_name',
+  'datadog.thread_id',
+]
 
 // Stable per-thread values baked into every record. Same shape as the
 // profiler's `eventLoopThreadName` in profiling/profilers/shared.js.
@@ -225,4 +239,4 @@ function start () {
   return true
 }
 
-module.exports = { start }
+module.exports = { start, ATTRIBUTE_KEYS }

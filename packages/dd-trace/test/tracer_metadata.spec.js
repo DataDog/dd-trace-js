@@ -21,6 +21,7 @@ describe('tracer_metadata', () => {
     env: 'test-env',
     version: '1.0.0',
     DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: false,
+    DD_TRACE_OTEL_CTX_ENABLED: false,
   }
 
   beforeEach(() => {
@@ -94,6 +95,19 @@ describe('tracer_metadata', () => {
 
     const args = TracerMetadataStub.firstCall.args
     assert.strictEqual(args[7], null)
+  })
+
+  it('passes null for threadlocal_attribute_keys when DD_TRACE_OTEL_CTX_ENABLED is false', () => {
+    storeConfig(baseConfig)
+    const args = TracerMetadataStub.firstCall.args
+    assert.strictEqual(args[8], null)
+  })
+
+  it('passes the OTEP-4947 writer key list when DD_TRACE_OTEL_CTX_ENABLED is true', () => {
+    storeConfig({ ...baseConfig, DD_TRACE_OTEL_CTX_ENABLED: true })
+    const args = TracerMetadataStub.firstCall.args
+    const { ATTRIBUTE_KEYS } = require('../src/otel-thread-ctx')
+    assert.deepStrictEqual(args[8], ATTRIBUTE_KEYS)
   })
 
   it('passes null for service when config.service is falsy', () => {
