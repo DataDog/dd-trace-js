@@ -715,7 +715,11 @@ describe('config', () => {
         } else {
           const warnings = getAsyncContextFrameWarnings({ DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED: '1' })
           assert.strictEqual(warnings.length, 1)
-          assert.match(warnings[0], /DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED was set .*it will have no effect/)
+          // On Windows the tracer config deactivates the option before the profiler reads it, so the
+          // warning comes from the config layer; elsewhere the profiler derivation owns it.
+          assert.match(warnings[0], process.platform === 'win32'
+            ? /DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED is not supported on Windows/
+            : /DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED was set .*it will have no effect/)
         }
       })
     })
