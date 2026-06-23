@@ -66,6 +66,8 @@
     "test:plugins:upstream": "node ./packages/dd-trace/test/plugins/suite.js",
     "test:profiler": "node scripts/mocha-parallel-files.js --expose-gc --timeout 30000 -- \"packages/dd-trace/test/profiling/**/*.spec.js\"",
     "test:profiler:ci": "node scripts/c8-ci.js test:profiler",
+    "test:otel-thread-ctx": "mocha --timeout 60000 packages/dd-trace/test/otel-thread-ctx.spec.js",
+    "test:docker:otel-thread-ctx": "./scripts/docker/run-otel-thread-ctx-spec.sh",
     "test:integration": "mocha --timeout 60000 \"integration-tests/*.spec.js\"",
     "test:integration:coverage": "node ./integration-tests/coverage/run-suite.js --timeout 60000 \"integration-tests/*.spec.js\"",
     "test:integration:aiguard": "mocha --timeout 60000 \"integration-tests/aiguard/*.spec.js\"",

@@ -195,6 +195,17 @@ class Tracer extends NoopProxy {
         }
       }
 
+      // Experimental: mirror the active trace ID, span ID and endpoint into
+      // an OTEP-4947 thread-local context record an out-of-process eBPF
+      // reader can consume.
+      if (config.DD_TRACE_OTEL_CTX_ENABLED) {
+        try {
+          require('./otel-thread-ctx').start()
+        } catch (e) {
+          log.error('Error starting OTEP-4947 thread context writer', e)
+        }
+      }
+
       // OTel logs/metrics pipelines must be initialized BEFORE runtimeMetrics.start so that
       // when the OTLP runtime metrics module calls metrics.getMeterProvider(), it gets the
       // real provider, otherwise instruments register on the noop provider and never export.
