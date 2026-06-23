@@ -14,6 +14,7 @@ const finishChannel = channel('apm:http:client:request:finish')
 const endChannel = channel('apm:http:client:request:end')
 const asyncStartChannel = channel('apm:http:client:request:asyncStart')
 const errorChannel = channel('apm:http:client:request:error')
+const responseStartChannel = channel('apm:http:client:response:start')
 const responseFinishChannel = channel('apm:http:client:response:finish')
 
 addHook({ name: 'http' }, hookFn)
@@ -78,10 +79,15 @@ function setupResponseInstrumentation (ctx, res) {
   let dataReadStarted = false
 
   const { shouldCollectBody } = ctx
-  const bodyChunks = shouldCollectBody ? [] : null
+
+  let bodyChunks = null
+
+  if (shouldCollectBody) {
+    bodyChunks = []
+  }
 
   const collectChunk = chunk => {
-    if (!shouldCollectBody || !chunk) return
+    if (!bodyChunks || !chunk) return
 
     if (typeof chunk === 'string') {
       bodyChunks.push(chunk)
@@ -228,6 +234,10 @@ function patch (http, methodName) {
                 ctx.res = res
                 res.once('end', finish)
                 res.once(errorMonitor, finish)
+
+                if (responseStartChannel.hasSubscribers) {
+                  responseStartChannel.publish({ ctx, res })
+                }
 
                 const instrumentation = setupResponseInstrumentation(ctx, res)
 

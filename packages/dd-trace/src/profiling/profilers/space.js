@@ -13,12 +13,14 @@ class NativeSpaceProfiler {
   #mapper
   #oomMonitoring
   #pprof
+  #allocationProfilingEnabled = false
   #samplingInterval = 512 * 1024
   #started = false
 
   constructor (options = {}) {
     // TODO: Remove default value. It is only used in testing.
     this.#samplingInterval = options.heapSamplingInterval || 512 * 1024
+    this.#allocationProfilingEnabled = options.allocationProfilingEnabled
     this.#oomMonitoring = options.oomMonitoring || {}
   }
 
@@ -31,7 +33,7 @@ class NativeSpaceProfiler {
 
     this.#mapper = mapper
     this.#pprof = require('@datadog/pprof')
-    this.#pprof.heap.start(this.#samplingInterval, STACK_DEPTH)
+    this.#pprof.heap.start(this.#samplingInterval, STACK_DEPTH, this.#allocationProfilingEnabled)
     if (this.#oomMonitoring.enabled) {
       const strategies = this.#oomMonitoring.exportStrategies
       this.#pprof.heap.monitorOutOfMemory(

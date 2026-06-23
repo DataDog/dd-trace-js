@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y curl git gnupg libatomic1 unzip wget \
 RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub \
     | gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg \
     && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" \
-       > /etc/apt/sources.list.d/google-chrome.list \
+      > /etc/apt/sources.list.d/google-chrome.list \
     && apt-get update \
     && apt-get install -y google-chrome-stable \
     && rm -rf /var/lib/apt/lists/*
@@ -17,7 +17,7 @@ RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub \
 # Install ChromeDriver matching the installed Chrome version
 RUN CHROME_VER=$(google-chrome --version | awk '{print $3}' | cut -d. -f1-3) \
     && curl -sf https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json \
-       > /tmp/chrome-versions.json \
+      > /tmp/chrome-versions.json \
     && DRIVER_URL=$(CHROME_VER="$CHROME_VER" node -e " \
         const d = JSON.parse(require('fs').readFileSync('/tmp/chrome-versions.json', 'utf8')); \
         const prefix = process.env.CHROME_VER; \

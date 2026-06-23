@@ -3,6 +3,13 @@
 const { DD_MAJOR } = require('../../../../version')
 
 module.exports = {
+  '@aws/durable-execution-sdk-js': [
+    {
+      name: '@aws/durable-execution-sdk-js-testing',
+      dep: true,
+      forced: true,
+    },
+  ],
   aerospike: [
     {
       name: 'aerospike',
@@ -150,7 +157,7 @@ module.exports = {
   'express-mongo-sanitize': [
     {
       name: 'mongodb',
-      versions: ['>=3.3 <5', '5', '>=6'],
+      versions: ['>=3.3 <5', '5', '6', '>=7'],
     },
     {
       name: 'mongodb-core',

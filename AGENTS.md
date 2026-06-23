@@ -149,6 +149,7 @@ Use `node:assert/strict` for standard assertions. For partial deep object checks
 
 - Lint: `npm run lint` / `npm run lint:fix`
 - Files: kebab-case
+- Naming: the product is **Test Optimization**, not "CI Visibility". Name new dirs, benchmarks, docs and prose `test-optimization`; only keep the legacy `ci-visibility` / `CiVisibility` spelling where it is a pre-existing module path or class (e.g. `AgentlessCiVisibilityEncoder`).
 
 ### JSDoc
 
@@ -323,7 +324,10 @@ Validate basic plugin structure with:
 ### Commit Messages
 
 Conventional format: `type(scope): description`
-Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`
+Types: `feat`, `fix`, `perf`, `refactor`, `test`, `bench`, `docs`, `chore`, `ci`
+Reserve `feat`/`fix`/`perf` for production code shipped in the npm package. A fix or new capability in
+tests, benchmarks, CI, or tooling uses the area type even so — a test-suite fix is `test(...)`, a benchmark
+fix `bench(...)`, a CI fix `ci(...)`; never `fix(...)`/`feat(...)`.
 Example: `feat(appsec): add new WAF rule`
 
 ### PR Requirements

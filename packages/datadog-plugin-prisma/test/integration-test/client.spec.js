@@ -2,8 +2,10 @@
 
 const assert = require('node:assert')
 const { execSync } = require('node:child_process')
+const fs = require('node:fs')
+const path = require('node:path')
 
-const { describe, it, beforeEach, afterEach } = require('mocha')
+const { describe, it, before, beforeEach, afterEach } = require('mocha')
 
 const semifies = require('semifies')
 const semver = require('semver')
@@ -246,15 +248,15 @@ describe('esm', () => {
   prismaClientConfigs.forEach(config => {
     describe(config.name, () => {
       const isNodeSupported = semifies(semver.clean(process.version), '>=20.19.0')
-      const isPrismaV7 = config.configFile
-      if (config.configFile && !isNodeSupported) {
+      const isPrismaV7 = Boolean(config.configFile)
+      if (isPrismaV7 && !isNodeSupported) {
         return
       }
       if (config.skip?.()) {
         return
       }
 
-      const supportedRange = config.configFile ? '>=7.0.0' : '<7.0.0'
+      const supportedRange = isPrismaV7 ? '>=7.0.0' : '<7.0.0'
 
       withVersions('prisma', '@prisma/client', supportedRange, version => {
         if (config.ts && version === '6.1.0') return
@@ -268,7 +270,7 @@ describe('esm', () => {
           if (ext.node && !semifies(semver.clean(process.version), ext.node)) continue
           if (ext.dep === '@prisma/client') {
             deps.push(`${ext.name}@${version}`)
-          } else if (ext.dep || isPrismaV7 && ext.node) {
+          } else if (ext.dep || (isPrismaV7 && ext.node)) {
             deps.push(ext.name)
           }
         }
@@ -285,23 +287,10 @@ describe('esm', () => {
           })
         }
 
-        beforeEach(async function () {
+        before(function () {
           this.timeout(60000)
-          if (config.waitForService) {
-            await config.waitForService(true)
-          }
-          if (config.env?.DATABASE_URL?.startsWith('mongodb')) {
-            await resetMongoDb(config.env.DATABASE_URL)
-          }
-          agent = await new FakeAgent().start()
-          const commands = [
-            './node_modules/.bin/prisma db push --accept-data-loss',
-            './node_modules/.bin/prisma generate',
-          ]
-          if (!config.skipMigrateReset) {
-            commands.unshift('./node_modules/.bin/prisma migrate reset --force')
-          }
           const cwd = sandboxCwd()
+          const commands = ['./node_modules/.bin/prisma generate']
 
           if (config.ts) {
             commands.push(
@@ -311,6 +300,7 @@ describe('esm', () => {
               ' --module ESNext' +
               ' --strict true' +
               ' --moduleResolution bundler' +
+              ' --skipLibCheck true' +
               ' --esModuleInterop true'
             )
           }
@@ -326,15 +316,33 @@ describe('esm', () => {
 
           // node v18 needs the package.json to have type module to treat .js files as esm
           if (config.ts && config.name.includes('v6')) {
-            const fs = require('fs')
-            const path = require('path')
             const distPath = path.join(cwd, 'dist')
-            try {
-              fs.mkdirSync(distPath, { recursive: true })
-            } catch {}
-            const distPkgJsonPath = path.join(distPath, 'package.json')
-            fs.writeFileSync(distPkgJsonPath, JSON.stringify({ type: 'module' }, null, 2))
+            fs.mkdirSync(distPath, { recursive: true })
+            fs.writeFileSync(path.join(distPath, 'package.json'), JSON.stringify({ type: 'module' }, null, 2))
           }
+        })
+
+        beforeEach(async function () {
+          this.timeout(60000)
+          if (config.waitForService) {
+            await config.waitForService(true)
+          }
+          if (config.env?.DATABASE_URL?.startsWith('mongodb')) {
+            await resetMongoDb(config.env.DATABASE_URL)
+          }
+          agent = await new FakeAgent().start()
+          const commands = ['./node_modules/.bin/prisma db push --accept-data-loss']
+          if (!config.skipMigrateReset) {
+            commands.unshift('./node_modules/.bin/prisma migrate reset --force')
+          }
+          execSync(commands.join(' && '), {
+            cwd: sandboxCwd(),
+            stdio: 'inherit',
+            env: {
+              ...process.env,
+              ...config.env,
+            },
+          })
         })
 
         afterEach(async () => {
