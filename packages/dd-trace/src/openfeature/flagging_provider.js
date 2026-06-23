@@ -3,10 +3,10 @@
 const { channel } = require('dc-polyfill')
 const log = require('../log')
 const { EXPOSURE_CHANNEL } = require('./constants/constants')
-const EvalMetricsHook = require('./eval-metrics-hook')
+const FlagEvalMetricsHook = require('./flag-eval-metrics-hook')
 const SpanEnrichmentHook = require('./span-enrichment-hook')
 const FlagEvaluationsWriter = require('./writers/flag_evaluations')
-const FlagEvalEVPHook = require('./writers/flag_eval_hook')
+const FlagEvalEVPHook = require('./writers/flag_eval_evp_hook')
 
 // Bundler-opaque require for the optional peer chain
 // `@datadog/openfeature-node-server` -> `@openfeature/server-sdk` ->
@@ -25,7 +25,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
   #spanEnrichmentHook
 
   /** @type {FlagEvaluationsWriter | undefined} */
-  #flagEvalWriter
+  #flagEvalEVPWriter
 
   /**
    * @param {import('../tracer')} tracer - Datadog tracer instance
@@ -42,13 +42,13 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     this._config = config
 
     // OTel feature_flag.evaluations hook — ALWAYS registered; untouched
-    this.hooks.push(new EvalMetricsHook(config))
+    this.hooks.push(new FlagEvalMetricsHook(config))
 
     // EVP flagevaluation hook — gated by killswitch DD_FLAGGING_EVALUATION_COUNTS_ENABLED
     // Default: enabled (only explicit false disables); routed through config system.
     if (config.experimental.flaggingProvider.evaluationCountsEnabled) {
-      this.#flagEvalWriter = new FlagEvaluationsWriter(config)
-      this.hooks.push(new FlagEvalEVPHook(this.#flagEvalWriter))
+      this.#flagEvalEVPWriter = new FlagEvaluationsWriter(config)
+      this.hooks.push(new FlagEvalEVPHook(this.#flagEvalEVPWriter))
       log.debug('%s EVP flagevaluation writer enabled', this.constructor.name)
     } else {
       log.debug('%s EVP flagevaluation writer disabled (DD_FLAGGING_EVALUATION_COUNTS_ENABLED=false)',
@@ -73,7 +73,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
    */
   onClose () {
     this.#spanEnrichmentHook?.destroy()
-    this.#flagEvalWriter?.destroy()
+    this.#flagEvalEVPWriter?.destroy()
   }
 
   /**

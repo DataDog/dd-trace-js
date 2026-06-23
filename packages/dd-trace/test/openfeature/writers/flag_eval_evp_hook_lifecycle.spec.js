@@ -8,7 +8,7 @@ const sinon = require('sinon')
 
 require('../../setup/core')
 
-const FlagEvalEVPHook = require('../../../src/openfeature/writers/flag_eval_hook')
+const FlagEvalEVPHook = require('../../../src/openfeature/writers/flag_eval_evp_hook')
 
 // Proves the EVP hook actually fires through the REAL OpenFeature server-SDK evaluation
 // lifecycle (not just a unit call of finally() in isolation), and that it covers the

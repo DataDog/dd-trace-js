@@ -7,7 +7,7 @@ const sinon = require('sinon')
 
 require('../../setup/core')
 
-const FlagEvalEVPHook = require('../../../src/openfeature/writers/flag_eval_hook')
+const FlagEvalEVPHook = require('../../../src/openfeature/writers/flag_eval_evp_hook')
 
 describe('FlagEvalEVPHook', () => {
   let writer

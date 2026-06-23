@@ -9,7 +9,7 @@
  * synchronously for the caller, so every nanosecond here is charged directly
  * to the user's flag evaluation.
  *
- * The existing EvalMetricsHook (OTel feature_flag.evaluations) is untouched —
+ * The existing FlagEvalMetricsHook (OTel feature_flag.evaluations) is untouched —
  * this hook is registered IN ADDITION to it, not as a replacement.
  */
 class FlagEvalEVPHook {
@@ -32,7 +32,7 @@ class FlagEvalEVPHook {
    *   - Read evaluationDetails.flagMetadata for allocationKey and eval-time stamp
    *   - Non-blocking enqueue to the writer's aggregation loop
    *
-   * Field sources mirror eval-metrics-hook.js (the OTel hook) exactly:
+   * Field sources mirror flag-eval-metrics-hook.js (the OTel hook) exactly:
    * variant and flagMetadata both come from evaluationDetails, not hookContext.
    * The OpenFeature HookContext carries no flagMetadata; only EvaluationDetails does.
    *
@@ -53,7 +53,7 @@ class FlagEvalEVPHook {
     const variant = evaluationDetails.variant ?? ''
 
     // allocationKey from evaluationDetails.flagMetadata (camelCase), the same source
-    // eval-metrics-hook.js reads for feature_flag.result.allocation_key.
+    // flag-eval-metrics-hook.js reads for feature_flag.result.allocation_key.
     const flagMetadata = evaluationDetails.flagMetadata
     const allocationKey = flagMetadata?.allocationKey ?? ''
 

@@ -10,12 +10,12 @@ if (!globalThis[ddTraceSymbol]?.beforeExitHandlers) {
 
 const proxyquire = require('proxyquire')
 const getConfig = require('../packages/dd-trace/src/config')
-const FlagEvalEVPHook = require('../packages/dd-trace/src/openfeature/writers/flag_eval_hook')
+const FlagEvalEVPHook = require('../packages/dd-trace/src/openfeature/writers/flag_eval_evp_hook')
 const benchmark = require('./benchmark')
 const {
   createSingleExposureEvent,
   createExposureEventArray,
-  createFlagEvalHookArgs,
+  createFlagEvalEVPHookArgs,
 } = require('./stubs/exposure-events')
 
 const ExposuresWriter = proxyquire('../packages/dd-trace/src/openfeature/writers/exposures', {
@@ -35,7 +35,7 @@ let writer
 let singleEvent
 let eventArray
 let flagEvalWriter
-let flagEvalHook
+let flagEvalEVPHook
 let flagEvalArgs
 
 suite
@@ -94,8 +94,8 @@ suite
   .add('FlagEvalEVPHook#finally (eval hot path)', {
     onStart () {
       flagEvalWriter = new FlagEvaluationsWriter(config)
-      flagEvalHook = new FlagEvalEVPHook(flagEvalWriter)
-      flagEvalArgs = createFlagEvalHookArgs()
+      flagEvalEVPHook = new FlagEvalEVPHook(flagEvalWriter)
+      flagEvalArgs = createFlagEvalEVPHookArgs()
     },
     fn () {
       // Keep the bounded queue from filling so we measure the steady-state enqueue cost,
@@ -103,7 +103,7 @@ suite
       if (flagEvalWriter._rawQueue.length >= flagEvalWriter._rawQueueCap) {
         flagEvalWriter._rawQueue.length = 0
       }
-      flagEvalHook.finally(flagEvalArgs.hookContext, flagEvalArgs.evaluationDetails)
+      flagEvalEVPHook.finally(flagEvalArgs.hookContext, flagEvalArgs.evaluationDetails)
     },
   })
   // Off-hot-path aggregator cost: the canonical-key + two-tier map work that runs in
@@ -111,7 +111,7 @@ suite
   .add('FlagEvaluationsWriter#_aggregate (deferred worker path)', {
     onStart () {
       flagEvalWriter = new FlagEvaluationsWriter(config)
-      flagEvalArgs = createFlagEvalHookArgs()
+      flagEvalArgs = createFlagEvalEVPHookArgs()
     },
     fn () {
       flagEvalWriter._aggregate({

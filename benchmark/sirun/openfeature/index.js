@@ -4,7 +4,7 @@
 //
 // Two variants, both exercising the real FlagEvalEVPHook + FlagEvaluationsWriter:
 //
-//   flag-eval-hook — the synchronous cost a flag evaluation pays for the Finally
+//   flag-eval-evp-hook — the synchronous cost a flag evaluation pays for the Finally
 //     hook. This is the only work charged to the caller's evaluation; it must stay
 //     cheap (scalar capture + bounded enqueue), with all aggregation deferred.
 //   aggregate — the off-hot-path aggregator cost (canonical-key + two-tier map work)
@@ -33,7 +33,7 @@ require.cache[requestPath] = {
 }
 
 const FlagEvaluationsWriter = require('../../../packages/dd-trace/src/openfeature/writers/flag_evaluations')
-const FlagEvalEVPHook = require('../../../packages/dd-trace/src/openfeature/writers/flag_eval_hook')
+const FlagEvalEVPHook = require('../../../packages/dd-trace/src/openfeature/writers/flag_eval_evp_hook')
 
 const {
   VARIANT,
