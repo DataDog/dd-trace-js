@@ -12,7 +12,7 @@
     "@apollo/gateway": "2.14.0",
     "@apollo/server": "5.5.1",
     "@apollo/subgraph": "2.14.0",
-    "@aws/durable-execution-sdk-js": "1.1.7",
+    "@aws/durable-execution-sdk-js": "2.0.0",
     "@aws/durable-execution-sdk-js-testing": "1.1.1",
     "@aws-sdk/client-bedrock-runtime": "3.1072.0",
     "@aws-sdk/client-dynamodb": "3.1072.0",
