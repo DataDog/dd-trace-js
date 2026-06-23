@@ -67,15 +67,17 @@ function done (maxShare = 0.07) {
  * @param {number} duration
  */
 function reportOps (duration) {
-  if (OPERATIONS !== undefined && duration !== 0) {
-    statsd ??= new (require('./statsd'))()
-    statsd.gauge(path.basename(process.cwd()) + '.ops', OPERATIONS * 1e9 / duration)
-    statsd.flush()
-  }
+  assert.ok(Number.isFinite(OPERATIONS) && OPERATIONS > 0,
+    'startup-guard: OPERATIONS must be set to a positive number')
+  assert.ok(duration !== 0, 'startup-guard: loop duration was zero')
+
+  statsd ??= new (require('./statsd'))()
+  statsd.gauge(path.basename(process.cwd()) + '.ops', OPERATIONS * 1e9 / duration)
+  statsd.flush()
 }
 
 function getOperations () {
-  return Number(process.env.OPERATIONS) || undefined
+  return Number(process.env.OPERATIONS)
 }
 
 module.exports = { loopStart, done }

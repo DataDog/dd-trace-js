@@ -8,10 +8,7 @@
   "variants": {
     "with-tracer": {
       "run": "node -r ../../../init.js client.js",
-      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node -r ../../../init.js client.js\"",
-      "env": {
-        "OPERATIONS": "600"
-      }
+      "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node -r ../../../init.js client.js\""
     }
   }
 }

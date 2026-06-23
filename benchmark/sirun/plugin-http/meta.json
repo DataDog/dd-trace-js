@@ -10,8 +10,7 @@
       "run": "node client.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node client.js\"",
       "env": {
-        "CLIENT_USE_TRACER": "1",
-        "OPERATIONS": "10000"
+        "CLIENT_USE_TRACER": "1"
       }
     },
     "server-with-tracer": {
@@ -21,7 +20,7 @@
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node client.js\"",
       "env": {
         "SERVER_USE_TRACER": "1",
-        "OPERATIONS": "20000"
+        "REQS": "20000"
       }
     },
     "server-querystring-obfuscation": {
@@ -32,7 +31,7 @@
       "env": {
         "SERVER_USE_TRACER": "1",
         "CLIENT_LONG_QUERYSTRING": "1",
-        "OPERATIONS": "14000"
+        "REQS": "14000"
       }
     }
   }

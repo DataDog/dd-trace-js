@@ -102,15 +102,17 @@ assert.ok(probeMatched, 'no filename matched any CODEOWNERS entry')
 assert.ok(probeMissed, 'every filename matched; corpus exercises no full-scan miss')
 
 const passSize = filenames.length
-const passes = Math.ceil(OPERATIONS / passSize)
 
 guard.loopStart()
 let sink = 0
-for (let p = 0; p < passes; p++) {
+let remaining = OPERATIONS
+while (remaining > 0) {
   const view = baseEntries.slice()
-  for (let f = 0; f < passSize; f++) {
+  const limit = remaining < passSize ? remaining : passSize
+  for (let f = 0; f < limit; f++) {
     if (getCodeOwnersForFilename(filenames[f], view) !== null) sink++
   }
+  remaining -= limit
 }
 guard.done()
 

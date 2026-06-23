@@ -6,6 +6,7 @@ const guard = require('../startup-guard')
 const tracer = require('../../..')
 
 const { PROFILER } = process.env
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 if (PROFILER !== 'wall' && PROFILER !== 'all') {
   process.env.DD_PROFILING_WALLTIME_ENABLED = 'false'
@@ -23,9 +24,8 @@ assert.equal(tracer._profilerStarted, true, 'profiler.start did not return true'
 // to stay under the 60s upload period, so no profile is exported and no agent
 // is required.
 guard.loopStart()
-const ROUNDS = 32_000
 let sink = 0
-for (let round = 0; round < ROUNDS; round++) {
+for (let round = 0; round < OPERATIONS; round++) {
   for (let i = 0; i < 20_000; i++) {
     sink += Math.sqrt(i) * Math.cos(i)
   }

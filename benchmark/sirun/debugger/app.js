@@ -8,20 +8,26 @@ const guard = require('../startup-guard')
 
 const OPERATIONS = Number(process.env.OPERATIONS)
 
-if (process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true') {
-  // The devtools worker and its ports are unref'd, so nothing holds the event
-  // loop open while the breakpoint installs. Keep it alive until the install
-  // ack, then run the loop so the probe fires on every iteration instead of
-  // racing its installation.
-  const keepAlive = setInterval(() => {}, 2 ** 31 - 1)
-  require('./start-devtools-client')(() => {
-    clearInterval(keepAlive)
-    // The not-hit variant only measures the passive cost of installing a probe,
-    // so it exits here instead of running the guarded work loop.
-    if (process.env.INSTALL_ONLY !== 'true') runWork()
-  })
+if (process.env.INSTALL_ONLY === 'true') {
+  require('./start-devtools-client')(() => {})
 } else {
-  runWork()
+  run()
+}
+
+function run () {
+  if (process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true') {
+    // The devtools worker and its ports are unref'd, so nothing holds the event
+    // loop open while the breakpoint installs. Keep it alive until the install
+    // ack, then run the loop so the probe fires on every iteration instead of
+    // racing its installation.
+    const keepAlive = setInterval(() => {}, 2 ** 31 - 1)
+    require('./start-devtools-client')(() => {
+      clearInterval(keepAlive)
+      runWork()
+    })
+  } else {
+    runWork()
+  }
 }
 
 function runWork () {

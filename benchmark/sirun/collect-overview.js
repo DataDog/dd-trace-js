@@ -54,7 +54,7 @@ function categoryOf (name) {
 }
 
 function innerCount (env = {}) {
-  return env.OPERATIONS || '-'
+  return env.OPERATIONS || (env.REQS ? `${env.REQS} reqs` : '-')
 }
 
 function stats (times) {

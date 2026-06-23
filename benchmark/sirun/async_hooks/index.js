@@ -6,7 +6,6 @@ const guard = require('../startup-guard')
 const ASYNC_HOOKS = process.env.ASYNC_HOOKS && process.env.ASYNC_HOOKS.split(',')
 const INTERVALS = Number(process.env.INTERVALS) || 10
 const OPERATIONS = Number(process.env.OPERATIONS)
-const PROMISES_PER_INTERVAL = OPERATIONS / INTERVALS
 
 if (ASYNC_HOOKS) {
   const { createHook } = require('async_hooks')
@@ -27,20 +26,25 @@ if (ASYNC_HOOKS) {
 // add scheduler variance while measuring nothing).
 async function run () {
   let intervalsRun = 0
+  let promisesRun = 0
 
-  while (intervalsRun < INTERVALS) {
+  while (promisesRun < OPERATIONS) {
     const promises = []
+    const intervalsLeft = INTERVALS - intervalsRun
+    const remaining = OPERATIONS - promisesRun
+    const promisesThisInterval = intervalsLeft > 1 ? Math.ceil(remaining / intervalsLeft) : remaining
 
-    for (let i = 0; i < PROMISES_PER_INTERVAL; i++) {
+    for (let i = 0; i < promisesThisInterval; i++) {
       promises.push(new Promise((resolve) => resolve()))
     }
 
     await Promise.all(promises)
 
     intervalsRun++
+    promisesRun += promisesThisInterval
   }
 
-  assert.equal(intervalsRun, INTERVALS, 'async_hooks bench did not run all intervals')
+  assert.equal(promisesRun, OPERATIONS, 'async_hooks bench did not create all promises')
   guard.done()
 }
 
