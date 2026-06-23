@@ -54,6 +54,21 @@ describe('mapWithConcurrency', () => {
     assert.equal(started, 2)
   })
 
+  it('stops in-flight workers from taking new items after a failure with concurrency > 1', async () => {
+    const started = []
+    await assert.rejects(
+      mapWithConcurrency([0, 1, 2, 3, 4, 5], 2, async item => {
+        started.push(item)
+        if (item === 0) throw new Error('boom')
+        await delay(10)
+      }),
+      /boom/
+    )
+    // Give any worker that ignored the failure flag time to schedule later items; none should.
+    await delay(50)
+    assert.deepEqual(started.sort((a, b) => a - b), [0, 1])
+  })
+
   it('rejects for an invalid concurrency', async () => {
     await assert.rejects(mapWithConcurrency([1], 0, () => {}), RangeError)
   })
