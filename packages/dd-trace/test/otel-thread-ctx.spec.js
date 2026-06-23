@@ -99,11 +99,19 @@ describe('otel-thread-ctx', () => {
         this.traceId = traceId
         this.spanId = spanId
         this.attributes = attributes
-        this.appendAttributes = sinon.stub()
-        this.invalidate = sinon.stub()
-        this.isTruncated = sinon.stub().returns(false)
+        // Spied per instance so tests can assert call history on the context,
+        // while the methods themselves stay on the prototype where start()'s
+        // compatibility check looks for them, as they are on the native class.
+        sinon.spy(this, 'appendAttributes')
+        sinon.spy(this, 'invalidate')
         constructedContexts.push(this)
       }
+
+      appendAttributes () {}
+
+      invalidate () {}
+
+      isTruncated () { return false }
 
       enter () { setActive(this) }
     }
@@ -114,6 +122,10 @@ describe('otel-thread-ctx', () => {
         ThreadContext: StubThreadContext,
         getContext: sinon.stub().callsFake(() => activeContext),
         clearContext: sinon.stub().callsFake(() => setActive()),
+        getProcessContextAttributes: sinon.stub().returns({
+          'threadlocal.schema_version': 'nodejs_v1_dev',
+          'threadlocal.attribute_key_map': [],
+        }),
       },
     }
 
@@ -186,6 +198,78 @@ describe('otel-thread-ctx', () => {
       assert.equal(m.start(), false)
       sinon.assert.calledWithMatch(log.warn, /otelThreadCtx API/)
     })
+
+    it('returns false when ThreadContext is missing a method the writer calls', () => {
+      // An older or overridden @datadog/pprof can expose the gated namespace
+      // without every ThreadContext method. Starting anyway would defer the
+      // failure to a diagnostic-channel subscriber: a missing invalidate() would
+      // throw out of the span-finish path and up through DatadogSpan#finish()
+      // into application code.
+      for (const method of ['appendAttributes', 'enter', 'invalidate']) {
+        const Incomplete = class extends StubThreadContext {}
+        Incomplete.prototype[method] = undefined
+        const m = loadModule({
+          pprof: {
+            '@noCallThru': true,
+            otelThreadCtx: { ...pprofStub.otelThreadCtx, ThreadContext: Incomplete },
+          },
+        })
+        assert.equal(m.start(), false, `expected start() to refuse a ThreadContext without ${method}`)
+        sinon.assert.calledWithMatch(log.warn, /otelThreadCtx API/, `ThreadContext.prototype.${method}`)
+        log.warn.resetHistory()
+      }
+    })
+
+    it('returns false when a context cannot be installed in this process', () => {
+      // @datadog/pprof infers AsyncContextFrame availability from process.execArgv
+      // and throws from enter() when it concludes it is unavailable, which
+      // disagrees with our own feature detection when the flag arrived via
+      // NODE_OPTIONS or a worker's execArgv was overridden. Subscribers run inline
+      // with storage.enterWith, so this must not be discovered on first activation.
+      const Throwing = class extends StubThreadContext {
+        enter () { throw new Error('async_context_frame support is unavailable') }
+      }
+      const m = loadModule({
+        pprof: {
+          '@noCallThru': true,
+          otelThreadCtx: { ...pprofStub.otelThreadCtx, ThreadContext: Throwing },
+        },
+      })
+      assert.equal(m.start(), false)
+      sinon.assert.calledWithMatch(log.warn, /cannot install a thread context/)
+      // No subscriber may be left behind, so a subsequent activation must not
+      // reach the writer — and so must not hit the throwing enter() either.
+      activeSpan = makeSpan()
+      enterCh.publish()
+      assert.equal(constructedContexts.length, 1) // just the failed probe
+    })
+
+    it('leaves no context installed after the start-up probe succeeds', () => {
+      const m = loadModule()
+      assert.equal(m.start(), true)
+      assert.equal(constructedContexts.length, 1)
+      sinon.assert.calledOnce(pprofStub.otelThreadCtx.clearContext)
+      assert.equal(activeContext, undefined)
+    })
+
+    it('returns false when otelThreadCtx is missing getProcessContextAttributes', () => {
+      // start() must refuse to install subscribers if the metadata publisher
+      // can't be produced — otherwise the writer emits records that no reader
+      // can decode.
+      const m = loadModule({
+        pprof: {
+          '@noCallThru': true,
+          otelThreadCtx: {
+            ThreadContext: StubThreadContext,
+            getContext: sinon.stub(),
+            clearContext: sinon.stub(),
+            // no getProcessContextAttributes
+          },
+        },
+      })
+      assert.equal(m.start(), false)
+      sinon.assert.calledWithMatch(log.warn, /otelThreadCtx API/)
+    })
   })
 
   describe('subscribed behavior', () => {
@@ -194,6 +278,11 @@ describe('otel-thread-ctx', () => {
     beforeEach(() => {
       otelThreadCtx = loadModule()
       assert.equal(otelThreadCtx.start(), true)
+      // start() installs and detaches one throwaway context to prove the process
+      // can; drop its traces so the tests below see only their own activity.
+      constructedContexts.length = 0
+      setActive.resetHistory()
+      pprofStub.otelThreadCtx.clearContext.resetHistory()
     })
 
     it('clearContext when no active span', () => {
@@ -514,6 +603,68 @@ describe('otel-thread-ctx', () => {
       endpointResolvedCh.publish(parent)
       webTagsResolvedCh.publish(parent)
       assert.equal(constructedContexts.length, 0)
+    })
+  })
+
+  describe('getThreadLocalMetadata()', () => {
+    // start() is always called before getThreadLocalMetadata() in the
+    // real init sequence (proxy.js kicks off the writer, then storeConfig()
+    // pulls the metadata). getThreadLocalMetadata is a no-op unless start
+    // succeeded, so every happy-path test runs start() first.
+    it('returns undefined when start() has not been called', () => {
+      pprofStub.otelThreadCtx.getProcessContextAttributes = sinon.stub()
+      const m = loadModule()
+      assert.equal(m.getThreadLocalMetadata(), undefined)
+      sinon.assert.notCalled(pprofStub.otelThreadCtx.getProcessContextAttributes)
+    })
+
+    it('returns the process-context snapshot in libdatadog-nodejs shape', () => {
+      pprofStub.otelThreadCtx.getProcessContextAttributes = sinon.stub().returns({
+        'threadlocal.schema_version': 'nodejs_v1_dev',
+        'threadlocal.attribute_key_map': ['datadog.trace_endpoint', 'datadog.thread_name'],
+        'threadlocal.wrapped_object_offset': 24,
+        'threadlocal.tagged_size': 8,
+      })
+      const m = loadModule()
+      assert.equal(m.start(), true)
+      const md = m.getThreadLocalMetadata()
+      sinon.assert.calledOnceWithExactly(
+        pprofStub.otelThreadCtx.getProcessContextAttributes,
+        m.ATTRIBUTE_KEYS
+      )
+      assert.deepEqual(md.attributeKeys, ['datadog.trace_endpoint', 'datadog.thread_name'])
+      assert.equal(md.schemaVersion, 'nodejs_v1_dev')
+      // Order isn't guaranteed since Object.entries is object-key ordered.
+      const byKey = Object.fromEntries(md.extraAttributes.map(a => [a.key, a]))
+      assert.deepEqual(byKey['threadlocal.wrapped_object_offset'],
+        { key: 'threadlocal.wrapped_object_offset', intValue: 24 })
+      assert.deepEqual(byKey['threadlocal.tagged_size'],
+        { key: 'threadlocal.tagged_size', intValue: 8 })
+    })
+
+    it('encodes string-valued extra attributes as stringValue', () => {
+      pprofStub.otelThreadCtx.getProcessContextAttributes = sinon.stub().returns({
+        'threadlocal.schema_version': 'nodejs_v1_dev',
+        'threadlocal.attribute_key_map': [],
+        'threadlocal.runtime.name': 'nodejs',
+      })
+      const m = loadModule()
+      assert.equal(m.start(), true)
+      const md = m.getThreadLocalMetadata()
+      assert.deepEqual(md.extraAttributes, [
+        { key: 'threadlocal.runtime.name', stringValue: 'nodejs' },
+      ])
+    })
+
+    it('throws on an extra attribute with an unsupported value type', () => {
+      pprofStub.otelThreadCtx.getProcessContextAttributes = sinon.stub().returns({
+        'threadlocal.schema_version': 'nodejs_v1_dev',
+        'threadlocal.attribute_key_map': [],
+        'threadlocal.weird': true, // booleans aren't wired through yet
+      })
+      const m = loadModule()
+      assert.equal(m.start(), true)
+      assert.throws(() => m.getThreadLocalMetadata(), /unsupported value type/)
     })
   })
 })

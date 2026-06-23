@@ -69,11 +69,25 @@ const pendingEndpoints = new WeakMap()
 // convention (mirrors libdatadog's libdd-otel-thread-ctx, where
 // `local_root_span_id` is always the first entry in
 // `threadlocal.attribute_key_map`), encoded as a 16-character lowercase
-// hex string. Endpoint, thread name, and thread id follow.
+// hex string. Endpoint, thread name, and thread id follow. Adding more
+// means assigning the next index and updating ATTRIBUTE_KEYS
+// accordingly.
 const LOCAL_ROOT_SPAN_ID_IDX = 0
 const ENDPOINT_IDX = 1
 const THREAD_NAME_IDX = 2
 const THREAD_ID_IDX = 3
+
+// The dd-trace-js-supplied subset of the OTEP-4719 attribute_key_map
+// (the implicit `datadog.local_root_span_id` at wire index 0 is
+// prepended by libdatadog when it publishes the process context, so it
+// is NOT listed here). Index N here corresponds to wire key index N+1.
+// Kept in sync with the positional indices above.
+// Also see https://docs.google.com/document/d/1IwjjVJzEChcFPcnVV2N5Kkjg-4_Q4v4Q3ojpxntbdvY/edit?pli=1&tab=t.efaosgjya44c#bookmark=id.700gvw31vb7h
+const ATTRIBUTE_KEYS = [
+  'datadog.trace_endpoint',
+  'datadog.thread_name',
+  'datadog.thread_id',
+]
 
 // Stable per-thread values baked into every record. Same shape as the
 // profiler's `eventLoopThreadName` in profiling/profilers/shared.js.
@@ -234,6 +248,51 @@ function onWebTagsResolved (span) {
   }
 }
 
+// Every otelThreadCtx member the writer calls, checked before it starts. Anything
+// missing would otherwise surface from inside a diagnostic-channel subscriber on
+// a hot path, where an exception lands in application code: a ThreadContext
+// without invalidate() would throw out of onSpanFinished and up through
+// DatadogSpan#finish() the first time an activated span finished.
+//
+// Returns the name of the first missing member, or undefined when the surface is
+// complete.
+function missingApiMember (ns) {
+  if (!ns) return 'otelThreadCtx'
+  for (const name of ['ThreadContext', 'getContext', 'clearContext', 'getProcessContextAttributes']) {
+    if (typeof ns[name] !== 'function') return name
+  }
+  for (const name of ['appendAttributes', 'enter', 'invalidate']) {
+    if (typeof ns.ThreadContext.prototype[name] !== 'function') return `ThreadContext.prototype.${name}`
+  }
+}
+
+// Install and detach one throwaway context, to establish that this process can
+// actually do it before any span depends on it.
+//
+// @datadog/pprof decides whether AsyncContextFrame is available by inspecting
+// `process.execArgv`, and throws from enter() when it concludes it isn't. That
+// disagrees with the feature detection behind `isACFActive` whenever the flag
+// reached Node by another route: `NODE_OPTIONS=--experimental-async-context-frame`
+// is accepted on Node 22 and 23 and leaves `execArgv` empty, and a worker thread
+// created with an explicit `execArgv` loses it too. Since our subscribers run
+// inline with `storage.enterWith`, letting that throw would put the exception in
+// application code on the first span activation, so find out here instead, where
+// declining to start is still an option.
+function canInstallContext (ns) {
+  try {
+    // Zero-filled ids: the record is only readable while it is installed, which
+    // is for the length of this function, and an all-zero trace id identifies
+    // nothing.
+    const probe = new ns.ThreadContext(new Uint8Array(16), new Uint8Array(8))
+    probe.enter()
+    ns.clearContext()
+    return true
+  } catch (e) {
+    log.warn('OTEP-4947 thread context writer: @datadog/pprof cannot install a thread context', e)
+    return false
+  }
+}
+
 function start () {
   if (started) return true
   if (process.platform !== 'linux') {
@@ -254,14 +313,15 @@ function start () {
     return false
   }
   const ns = pprofMod.otelThreadCtx
-  if (!ns || typeof ns.ThreadContext !== 'function' ||
-      typeof ns.getContext !== 'function' ||
-      typeof ns.clearContext !== 'function') {
+  const missing = missingApiMember(ns)
+  if (missing !== undefined) {
     log.warn(
-      'OTEP-4947 thread context writer: installed @datadog/pprof does not expose the otelThreadCtx API'
+      'OTEP-4947 thread context writer: installed @datadog/pprof does not expose the otelThreadCtx API (missing %s)',
+      missing
     )
     return false
   }
+  if (!canInstallContext(ns)) return false
   ThreadContext = ns.ThreadContext
   getContext = ns.getContext
   clearContext = ns.clearContext
@@ -285,4 +345,43 @@ function start () {
   return true
 }
 
-module.exports = { start }
+// Snapshot of the OTEP-4719 process-context attributes describing this
+// writer's on-the-wire record schema — schema-version string, the caller-side
+// attribute key map, and the V8 layout constants a reader needs to walk from
+// our discovery TLS symbol into the record. Returned in the shape libdatadog's
+// napi ThreadLocalMetadata expects:
+//
+//   { attributeKeys, schemaVersion, extraAttributes: [{ key, intValue|stringValue }] }
+//
+// Returns undefined unless start() succeeded. Callers should treat that as
+// "no threadlocal block" (equivalent to the flag being off) — otherwise we'd
+// publish process-context metadata advertising a decodable OTEP-4947 stream
+// while no writer is producing records.
+function getThreadLocalMetadata () {
+  if (!started) return
+  // start() verified @datadog/pprof.otelThreadCtx exposes the full API
+  // surface (ThreadContext/getContext/clearContext/getProcessContextAttributes),
+  // so this require is a cached lookup and the method is guaranteed present.
+  const pca = require('@datadog/pprof').otelThreadCtx
+    .getProcessContextAttributes(ATTRIBUTE_KEYS)
+  const extraAttributes = []
+  for (const [key, value] of Object.entries(pca)) {
+    if (key === 'threadlocal.schema_version' || key === 'threadlocal.attribute_key_map') continue
+    if (typeof value === 'number' && Number.isInteger(value)) {
+      extraAttributes.push({ key, intValue: value })
+    } else if (typeof value === 'string') {
+      extraAttributes.push({ key, stringValue: value })
+    } else {
+      throw new TypeError(
+        `OTEP-4947 process-context attribute ${JSON.stringify(key)} has unsupported value type: ${typeof value}`
+      )
+    }
+  }
+  return {
+    attributeKeys: [...pca['threadlocal.attribute_key_map']],
+    schemaVersion: pca['threadlocal.schema_version'],
+    extraAttributes,
+  }
+}
+
+module.exports = { start, ATTRIBUTE_KEYS, getThreadLocalMetadata }
