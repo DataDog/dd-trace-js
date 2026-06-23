@@ -1,7 +1,6 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const { randomBytes } = require('node:crypto')
 
 const { before, describe, it } = require('mocha')
 const sinon = require('sinon')
@@ -9,6 +8,35 @@ const sinon = require('sinon')
 const EventBridge = require('../src/services/eventbridge')
 const tracer = require('../../dd-trace')
 const { withAwsSdkVersions } = require('./spec_helpers')
+
+const EVENTBRIDGE_EVENT_MAX_BYTES = 1024 * 1024
+const TEST_TRACE_ID = '456853219676779160'
+const TEST_SPAN_ID = '456853219676779160'
+const TEST_PARENT_ID = '0000000000000000'
+const TEST_DATADOG_CONTEXT = {
+  'x-datadog-trace-id': TEST_TRACE_ID,
+  'x-datadog-parent-id': TEST_SPAN_ID,
+  'x-datadog-sampling-priority': '1',
+}
+const EVENTBRIDGE_CONTEXT_BYTES = Buffer.byteLength(`,"_datadog":${JSON.stringify(TEST_DATADOG_CONTEXT)}`)
+
+/**
+ * @param {number} size
+ * @returns {string}
+ */
+function makeEventDetail (size) {
+  const prefix = '{"myGreatData":"'
+  const suffix = '"}'
+  return `${prefix}${'a'.repeat(size - Buffer.byteLength(prefix) - Buffer.byteLength(suffix))}${suffix}`
+}
+
+/**
+ * @param {number} size
+ * @returns {string}
+ */
+function makeEventDetailForInjectedSize (size) {
+  return makeEventDetail(size - EVENTBRIDGE_CONTEXT_BYTES)
+}
 
 describe('EventBridge', () => {
   let span
@@ -90,9 +118,9 @@ describe('EventBridge', () => {
         operation: 'putEvents',
       }
 
-      traceId = '456853219676779160'
-      spanId = '456853219676779160'
-      parentId = '0000000000000000'
+      traceId = TEST_TRACE_ID
+      spanId = TEST_SPAN_ID
+      parentId = TEST_PARENT_ID
       eventbridge.requestInject(span.context(), request)
 
       assert.deepStrictEqual(request.params, {
@@ -106,24 +134,48 @@ describe('EventBridge', () => {
       })
     })
 
-    it('skips injecting trace context to Eventbridge if message is full', () => {
+    it('injects trace context to Eventbridge putEvents when payload stays below 1mb', () => {
       const eventbridge = new EventBridge(tracer)
       const request = {
         params: {
           Entries: [
             {
-              Detail: JSON.stringify({ myGreatData: randomBytes(256000).toString('base64') }),
+              Detail: makeEventDetailForInjectedSize(EVENTBRIDGE_EVENT_MAX_BYTES - 1),
             },
           ],
         },
         operation: 'putEvents',
       }
 
-      traceId = '456853219676779160'
-      spanId = '456853219676779160'
-      parentId = '0000000000000000'
+      traceId = TEST_TRACE_ID
+      spanId = TEST_SPAN_ID
+      parentId = TEST_PARENT_ID
       eventbridge.requestInject(span.context(), request)
-      assert.deepStrictEqual(request.params, request.params)
+
+      assert.strictEqual(Buffer.byteLength(request.params.Entries[0].Detail), EVENTBRIDGE_EVENT_MAX_BYTES - 1)
+      assert.deepStrictEqual(JSON.parse(request.params.Entries[0].Detail)._datadog, TEST_DATADOG_CONTEXT)
+    })
+
+    it('skips injecting trace context to Eventbridge if message is full', () => {
+      const eventbridge = new EventBridge(tracer)
+      const request = {
+        params: {
+          Entries: [
+            {
+              Detail: makeEventDetailForInjectedSize(EVENTBRIDGE_EVENT_MAX_BYTES),
+            },
+          ],
+        },
+        operation: 'putEvents',
+      }
+
+      traceId = TEST_TRACE_ID
+      spanId = TEST_SPAN_ID
+      parentId = TEST_PARENT_ID
+      const originalDetail = request.params.Entries[0].Detail
+      eventbridge.requestInject(span.context(), request)
+
+      assert.strictEqual(request.params.Entries[0].Detail, originalDetail)
     })
 
     it('returns undefined when params is null', () => {
