@@ -174,7 +174,9 @@ for D in "${DIRS[@]}"; do
       export SIRUN_VARIANT=$V
 
       (
-        if time node ../run-one-variant.js >> ../results.ndjson; then
+        # Capture output so we can surface it when the variant fails.
+        VARIANT_OUT=$(mktemp)
+        if time node ../run-one-variant.js >> ../results.ndjson 2>"${VARIANT_OUT}"; then
           echo "${D}/${V} finished."
           if [[ -n "${RECORD_CANDIDATE_PASS}" ]]; then echo "${D}/${V}" >> "$CANDIDATE_PASSED_FILE"; fi
         elif [[ -n "${SKIP_BASELINE_FAILURES}" ]] && grep -Fqx "${D}/${V}" "$CANDIDATE_PASSED_FILE" 2>/dev/null; then
@@ -184,8 +186,10 @@ for D in "${DIRS[@]}"; do
           echo "${D}/${V}" >> "$SKIPPED_FILE"
         else
           echo "${D}/${V} FAILED on core ${CPU_AFFINITY}" >&2
+          cat "${VARIANT_OUT}" >&2
           echo "${D}/${V}" >> "$FAILURES_FILE"
         fi
+        rm -f "${VARIANT_OUT}"
       ) &
       ((CPU_AFFINITY=CPU_AFFINITY+1))
     fi
@@ -221,15 +225,25 @@ if [[ "${SKIPPED_COUNT}" -gt 0 ]]; then
   echo "${SKIPPED_COUNT} benchmark variant(s) failed on the baseline source and were skipped:" >&2
   sed 's/^/  - /' "$SKIPPED_FILE" >&2
 
-  # We want to separate the source code change from a benchmark in case it is not
-  # possible to run the new benchmark on the baseline.
+  # A skipped variant means the new benchmark code cannot run on the older baseline
+  # source, which is expected for a PR that adds a new benchmark. That PR also
+  # changing non-benchmark source (loader, plugins, etc.) makes the A/B comparison
+  # incomplete: the candidate result may reflect both the benchmark change and the
+  # source change, so the comparison cannot attribute the delta to the benchmark
+  # alone. Only block when the PR changes *both* benchmark and non-benchmark source.
+  # A PR that changes only non-benchmark source cannot introduce a new benchmark,
+  # so any skipped variants are pre-existing baseline failures unrelated to this PR.
+  BENCH_SOURCE_CHANGED=""
   NON_BENCH_SOURCE_CHANGED=""
   if [[ -d /app/candidate/.git && -n "${COMMIT_SHA:-}" && -n "${CI_COMMIT_SHA:-}" ]]; then
-    NON_BENCH_SOURCE_CHANGED="$(git -C /app/candidate diff --name-only "${COMMIT_SHA}..${CI_COMMIT_SHA}" \
+    ALL_CHANGED="$(git -C /app/candidate diff --name-only "${COMMIT_SHA}..${CI_COMMIT_SHA}" || true)"
+    BENCH_SOURCE_CHANGED="$(echo "${ALL_CHANGED}" \
+      | grep -E '^benchmark/' | grep -vE '(^benchmark/sirun/runall\.sh$|\.md$)' || true)"
+    NON_BENCH_SOURCE_CHANGED="$(echo "${ALL_CHANGED}" \
       | grep -vE '(^benchmark/|^docs/|^\.github/|^\.gitlab/|\.md$|(^|/)CODEOWNERS$|^test/|/test/|/__tests__/|\.spec\.[jt]s$|\.test\.[jt]s$)' || true)"
   fi
 
-  if [[ -n "${NON_BENCH_SOURCE_CHANGED}" ]]; then
+  if [[ -n "${BENCH_SOURCE_CHANGED}" && -n "${NON_BENCH_SOURCE_CHANGED}" ]]; then
     UNAPPROVED_SKIPS="$(while read -r SKIPPED_VARIANT; do
       SKIPPED_DIR="${SKIPPED_VARIANT%%/*}"
       if ! node -e "const meta = require('./' + process.argv[1] + '/meta.json'); process.exit(meta.allow_baseline_skip_with_source_changes === true ? 0 : 1)" "${SKIPPED_DIR}"; then
@@ -244,7 +258,7 @@ if [[ "${SKIPPED_COUNT}" -gt 0 ]]; then
     fi
 
     echo "" >&2
-    echo "This PR also changes non-benchmark source, so the A/B comparison is incomplete." >&2
+    echo "This PR changes both benchmark and non-benchmark source, so the A/B comparison is incomplete." >&2
     echo "Skipped variants without explicit allow_baseline_skip_with_source_changes=true:" >&2
     echo "${UNAPPROVED_SKIPS}" | sed 's/^/  - /' >&2
     echo "Land the benchmark change separately first, then rebase. Changed source files:" >&2
