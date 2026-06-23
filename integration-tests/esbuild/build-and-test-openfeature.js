@@ -49,7 +49,7 @@ async function main () {
 
     const bundle = fs.readFileSync(OUTFILE).toString()
     assert(
-      !bundle.includes('runtimeRequire(openfeatureNodeServerPath)'),
+      !bundle.includes("requireOptionalPeer('@datadog/openfeature-node-server')"),
       'the opaque peer require survived; the plugin did not inline `@datadog/openfeature-node-server`'
     )
 

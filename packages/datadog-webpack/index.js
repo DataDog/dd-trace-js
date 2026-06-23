@@ -2,16 +2,11 @@
 
 const { execSync } = require('node:child_process')
 const fs = require('node:fs')
-const path = require('node:path')
 
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
-const {
-  OPENFEATURE_PEER,
-  FLAGGING_PROVIDER_SUFFIX,
-  isOpenFeaturePeerInstalled,
-} = require('../datadog-instrumentations/src/helpers/openfeature-bundler')
+const { matchesOptionalPeerFile } = require('../datadog-instrumentations/src/helpers/optional-peer-bundler')
 const { isESMFile } = require('../datadog-esbuild/src/utils')
 const log = require('./src/log')
 
@@ -142,13 +137,13 @@ class DatadogWebpackPlugin {
 
         const normalizedResource = resource.replaceAll('\\', '/')
 
-        // Bundle the optional OpenFeature peer when it is installed so the provider
-        // keeps working after the bundle is relocated without it on disk (#8980).
-        if (normalizedResource.endsWith(FLAGGING_PROVIDER_SUFFIX) &&
-            isOpenFeaturePeerInstalled(path.dirname(resource))) {
+        // Rewrite optional-peer loads so installed peers get bundled and survive relocation
+        // (#8980); absent peers stay opaque, so a build that does not opt into the feature does
+        // not follow their dependency chain (#8635).
+        if (matchesOptionalPeerFile(normalizedResource)) {
           createData.loaders = createData.loaders || []
-          createData.loaders.push({ loader: require.resolve('./src/openfeature-loader') })
-          log.debug('INLINE: bundling %s', OPENFEATURE_PEER)
+          createData.loaders.push({ loader: require.resolve('./src/optional-peer-loader') })
+          log.debug('INLINE: optional-peer loader applied to %s', normalizedResource)
           return
         }
 

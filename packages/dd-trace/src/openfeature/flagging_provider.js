@@ -1,20 +1,13 @@
 'use strict'
 
 const { channel } = require('dc-polyfill')
+const requireOptionalPeer = require('../../../datadog-instrumentations/src/helpers/require-optional-peer')
 const log = require('../log')
 const { EXPOSURE_CHANNEL } = require('./constants/constants')
 const EvalMetricsHook = require('./eval-metrics-hook')
 const SpanEnrichmentHook = require('./span-enrichment-hook')
 
-// Bundler-opaque require for the optional peer chain
-// `@datadog/openfeature-node-server` -> `@openfeature/server-sdk` ->
-// `@openfeature/core`. Same shape as `helpers/rewriter/compiler.js`.
-// Refs: https://github.com/DataDog/dd-trace-js/issues/8635
-// eslint-disable-next-line camelcase, no-undef
-const runtimeRequire = typeof __webpack_require__ === 'function' ? __non_webpack_require__ : require
-const openfeatureNodeServer = ['@datadog/openfeature', 'node', 'server'].join('-')
-const openfeatureNodeServerPath = runtimeRequire.resolve(openfeatureNodeServer, { paths: [__dirname] })
-const { DatadogNodeServerProvider } = runtimeRequire(openfeatureNodeServerPath)
+const { DatadogNodeServerProvider } = requireOptionalPeer('@datadog/openfeature-node-server')
 
 /**
  * OpenFeature provider that integrates with Datadog's feature flagging system.
