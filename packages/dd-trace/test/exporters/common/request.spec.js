@@ -431,6 +431,30 @@ describe('request', function () {
       })
   })
 
+  // Config always hands exporters a URL object (`new URL(...)`), not a string,
+  // so the object branch of parseUrl must apply the same named-pipe handling.
+  // The URL parser splits `unix://./pipe/foo` into authority `.` + path
+  // `/pipe/foo`; without folding `.` back the socket path collapses to
+  // `/pipe/foo` and misses the pipe.
+  it('should parse windows named pipes given as a URL object properly', (done) => {
+    const sandbox = sinon.createSandbox()
+    sandbox.spy(http, 'request')
+
+    maxAttempts = 1
+
+    request(
+      Buffer.from(''), {
+        url: new URL('unix://./pipe/datadogtrace'),
+        method: 'PUT',
+      },
+      () => {
+        const callOptions = http.request.getCall(0).args[0]
+        sandbox.restore()
+        assert.strictEqual(callOptions.socketPath, '//./pipe/datadogtrace')
+        done()
+      })
+  })
+
   it('should calculate correct Content-Length header for multi-byte characters', (done) => {
     const sandbox = sinon.createSandbox()
     sandbox.spy(http, 'request')
@@ -470,7 +494,7 @@ describe('request', function () {
     })
 
     afterEach(() => {
-      sandbox.reset()
+      sandbox.restore()
     })
 
     it('should properly set request host with IPv6', (done) => {

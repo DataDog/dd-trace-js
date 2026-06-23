@@ -104,7 +104,7 @@ describe('span-stats writer', () => {
     // http.request unmapped and throws ERR_INVALID_PROTOCOL, dropping span
     // stats. request.spec.js covers the URL -> socketPath mapping itself.
     it('should pass the agent URL through for a unix socket instead of forcing the protocol', (done) => {
-      url = { protocol: 'unix:', hostname: '.', port: '', pathname: '//./pipe/datadog' }
+      url = new URL('unix://./pipe/datadog')
       writer = new Writer({ url, tags: { 'runtime-id': 'runtime-id' } })
 
       encoder.count.returns(1)
