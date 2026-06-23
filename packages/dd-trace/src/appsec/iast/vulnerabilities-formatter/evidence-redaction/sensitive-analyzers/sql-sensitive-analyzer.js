@@ -24,8 +24,8 @@ const NUMERIC_LITERAL =
 const ORACLE_ESCAPED_LITERAL = String.raw`q'<.*?>'|q'\(.*?\)'|q'\{.*?\}'|q'\[.*?\]'|q'(?<ESCAPE>.).*?\k<ESCAPE>'`
 
 /* eslint-disable regexp/no-super-linear-move, regexp/optimal-quantifier-concatenation --
-   IAST SQL-evidence tokenizer; opt-in, bounded evidence per detected vuln. The ESCAPE
-   named group is consumed by the caller, so the quantifiers cannot be merged away. */
+  IAST SQL-evidence tokenizer; opt-in, bounded evidence per detected vuln. The ESCAPE
+  named group is consumed by the caller, so the quantifiers cannot be merged away. */
 const patterns = {
   ANSI: new RegExp( // Default
     [

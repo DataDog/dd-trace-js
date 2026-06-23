@@ -1476,7 +1476,7 @@ function getFileAndLineNumberFromError (error, repositoryRoot) {
   const topFrame = frames[topRelevantFrameIndex]
   // Regular expression to match the file path, line number, and column number
   /* eslint-disable-next-line regexp/no-super-linear-backtracking, regexp/no-super-linear-move --
-     V8-generated stack-trace line; trusted input. */
+    V8-generated stack-trace line; trusted input. */
   const regex = /\s*at\s+(?:.*\()?(.+):(\d+):(\d+)\)?/
   const match = topFrame.match(regex)
 
