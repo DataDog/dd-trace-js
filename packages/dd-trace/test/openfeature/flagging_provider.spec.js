@@ -21,8 +21,8 @@ describe('FlaggingProvider', () => {
   let mockSpanEnrichmentHookClass
   let mockFlagEvalWriter
   let mockFlagEvalWriterClass
-  let mockFlagEvalEVPHook
-  let mockFlagEvalEVPHookClass
+  let mockFlagEvalLoggingHook
+  let mockFlagEvalLoggingHookClass
 
   beforeEach(() => {
     mockTracer = {
@@ -73,8 +73,8 @@ describe('FlaggingProvider', () => {
     }
     mockFlagEvalWriterClass = sinon.stub().returns(mockFlagEvalWriter)
 
-    mockFlagEvalEVPHook = {}
-    mockFlagEvalEVPHookClass = sinon.stub().returns(mockFlagEvalEVPHook)
+    mockFlagEvalLoggingHook = {}
+    mockFlagEvalLoggingHookClass = sinon.stub().returns(mockFlagEvalLoggingHook)
 
     // evaluationCountsEnabled defaults to true in mockConfig; tests that need the killswitch
     // set mockConfig.experimental.flaggingProvider.evaluationCountsEnabled = false directly.
@@ -87,7 +87,7 @@ describe('FlaggingProvider', () => {
       './flag-eval-metrics-hook': mockFlagEvalMetricsHookClass,
       './span-enrichment-hook': mockSpanEnrichmentHookClass,
       './writers/flag_evaluations': mockFlagEvalWriterClass,
-      './writers/flag_eval_evp_hook': mockFlagEvalEVPHookClass,
+      './writers/flag_eval_logging_hook': mockFlagEvalLoggingHookClass,
     })
   })
 
@@ -171,29 +171,29 @@ describe('FlaggingProvider', () => {
       sinon.assert.notCalled(mockSpanEnrichmentHookClass)
     })
 
-    it('should register FlagEvalMetricsHook, FlagEvalEVPHook and SpanEnrichmentHook when all enabled', () => {
+    it('should register FlagEvalMetricsHook, FlagEvalLoggingHook and SpanEnrichmentHook when all enabled', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
       assert.strictEqual(provider.hooks.length, 3)
       assert.strictEqual(provider.hooks[0], mockFlagEvalMetricsHook)
-      assert.strictEqual(provider.hooks[1], mockFlagEvalEVPHook)
+      assert.strictEqual(provider.hooks[1], mockFlagEvalLoggingHook)
       assert.strictEqual(provider.hooks[2], mockSpanEnrichmentHook)
     })
 
-    it('should only register FlagEvalMetricsHook + FlagEvalEVPHook when span enrichment is disabled', () => {
+    it('should only register FlagEvalMetricsHook + FlagEvalLoggingHook when span enrichment is disabled', () => {
       mockConfig.experimental.flaggingProvider.spanEnrichment.enabled = false
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
       assert.strictEqual(provider.hooks.length, 2)
       assert.strictEqual(provider.hooks[0], mockFlagEvalMetricsHook)
-      assert.strictEqual(provider.hooks[1], mockFlagEvalEVPHook)
+      assert.strictEqual(provider.hooks[1], mockFlagEvalLoggingHook)
     })
 
-    it('should not register FlagEvalEVPHook when DD_FLAGGING_EVALUATION_COUNTS_ENABLED=false', () => {
+    it('should not register FlagEvalLoggingHook when DD_FLAGGING_EVALUATION_COUNTS_ENABLED=false', () => {
       mockConfig.experimental.flaggingProvider.evaluationCountsEnabled = false
       const provider = new FlaggingProvider(mockTracer, mockConfig)
-      assert.ok(!provider.hooks.includes(mockFlagEvalEVPHook),
-        'EVP hook must not be registered when killswitch is false')
+      assert.ok(!provider.hooks.includes(mockFlagEvalLoggingHook),
+        'logging hook must not be registered when killswitch is false')
       sinon.assert.notCalled(mockFlagEvalWriterClass)
     })
 

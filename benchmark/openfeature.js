@@ -10,12 +10,12 @@ if (!globalThis[ddTraceSymbol]?.beforeExitHandlers) {
 
 const proxyquire = require('proxyquire')
 const getConfig = require('../packages/dd-trace/src/config')
-const FlagEvalEVPHook = require('../packages/dd-trace/src/openfeature/writers/flag_eval_evp_hook')
+const FlagEvalLoggingHook = require('../packages/dd-trace/src/openfeature/writers/flag_eval_logging_hook')
 const benchmark = require('./benchmark')
 const {
   createSingleExposureEvent,
   createExposureEventArray,
-  createFlagEvalEVPHookArgs,
+  createFlagEvalLoggingHookArgs,
 } = require('./stubs/exposure-events')
 
 const ExposuresWriter = proxyquire('../packages/dd-trace/src/openfeature/writers/exposures', {
@@ -35,7 +35,7 @@ let writer
 let singleEvent
 let eventArray
 let flagEvalWriter
-let flagEvalEVPHook
+let flagEvalLoggingHook
 let flagEvalArgs
 
 suite
@@ -91,11 +91,11 @@ suite
   // EVP flagevaluation hot path: the cost a flag evaluation pays for the Finally hook.
   // This is the synchronous work charged to the caller's evaluation — it must stay cheap
   // (scalar capture + bounded enqueue), with all aggregation deferred to the drain below.
-  .add('FlagEvalEVPHook#finally (eval hot path)', {
+  .add('FlagEvalLoggingHook#finally (eval hot path)', {
     onStart () {
       flagEvalWriter = new FlagEvaluationsWriter(config)
-      flagEvalEVPHook = new FlagEvalEVPHook(flagEvalWriter)
-      flagEvalArgs = createFlagEvalEVPHookArgs()
+      flagEvalLoggingHook = new FlagEvalLoggingHook(flagEvalWriter)
+      flagEvalArgs = createFlagEvalLoggingHookArgs()
     },
     fn () {
       // Keep the bounded queue from filling so we measure the steady-state enqueue cost,
@@ -103,7 +103,7 @@ suite
       if (flagEvalWriter._rawQueue.length >= flagEvalWriter._rawQueueCap) {
         flagEvalWriter._rawQueue.length = 0
       }
-      flagEvalEVPHook.finally(flagEvalArgs.hookContext, flagEvalArgs.evaluationDetails)
+      flagEvalLoggingHook.finally(flagEvalArgs.hookContext, flagEvalArgs.evaluationDetails)
     },
   })
   // Off-hot-path aggregator cost: the canonical-key + two-tier map work that runs in
@@ -111,7 +111,7 @@ suite
   .add('FlagEvaluationsWriter#_aggregate (deferred worker path)', {
     onStart () {
       flagEvalWriter = new FlagEvaluationsWriter(config)
-      flagEvalArgs = createFlagEvalEVPHookArgs()
+      flagEvalArgs = createFlagEvalLoggingHookArgs()
     },
     fn () {
       flagEvalWriter._aggregate({

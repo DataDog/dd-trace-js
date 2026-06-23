@@ -6,7 +6,7 @@ const { EXPOSURE_CHANNEL } = require('./constants/constants')
 const FlagEvalMetricsHook = require('./flag-eval-metrics-hook')
 const SpanEnrichmentHook = require('./span-enrichment-hook')
 const FlagEvaluationsWriter = require('./writers/flag_evaluations')
-const FlagEvalEVPHook = require('./writers/flag_eval_evp_hook')
+const FlagEvalLoggingHook = require('./writers/flag_eval_logging_hook')
 
 // Bundler-opaque require for the optional peer chain
 // `@datadog/openfeature-node-server` -> `@openfeature/server-sdk` ->
@@ -25,7 +25,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
   #spanEnrichmentHook
 
   /** @type {FlagEvaluationsWriter | undefined} */
-  #flagEvalEVPWriter
+  #flagEvalLoggingWriter
 
   /**
    * @param {import('../tracer')} tracer - Datadog tracer instance
@@ -47,8 +47,8 @@ class FlaggingProvider extends DatadogNodeServerProvider {
     // EVP flagevaluation hook — gated by killswitch DD_FLAGGING_EVALUATION_COUNTS_ENABLED
     // Default: enabled (only explicit false disables); routed through config system.
     if (config.experimental.flaggingProvider.evaluationCountsEnabled) {
-      this.#flagEvalEVPWriter = new FlagEvaluationsWriter(config)
-      this.hooks.push(new FlagEvalEVPHook(this.#flagEvalEVPWriter))
+      this.#flagEvalLoggingWriter = new FlagEvaluationsWriter(config)
+      this.hooks.push(new FlagEvalLoggingHook(this.#flagEvalLoggingWriter))
       log.debug('%s EVP flagevaluation writer enabled', this.constructor.name)
     } else {
       log.debug('%s EVP flagevaluation writer disabled (DD_FLAGGING_EVALUATION_COUNTS_ENABLED=false)',
@@ -73,7 +73,7 @@ class FlaggingProvider extends DatadogNodeServerProvider {
    */
   onClose () {
     this.#spanEnrichmentHook?.destroy()
-    this.#flagEvalEVPWriter?.destroy()
+    this.#flagEvalLoggingWriter?.destroy()
   }
 
   /**

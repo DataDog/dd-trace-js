@@ -7,9 +7,9 @@
   "iterations": 10,
   "instructions": true,
   "variants": {
-    "flag-eval-evp-hook": {
+    "flag-eval-logging-hook": {
       "env": {
-        "VARIANT": "flag-eval-evp-hook",
+        "VARIANT": "flag-eval-logging-hook",
         "COUNT": "40000000"
       }
     },

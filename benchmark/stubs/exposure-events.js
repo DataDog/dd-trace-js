@@ -33,7 +33,7 @@ function createExposureEventArray (count = 10) {
 // evaluation: hookContext (flagKey + evaluation context) and evaluationDetails
 // (variant + reason + flagMetadata). Reason is present in OpenFeature details but
 // intentionally ignored by the EVP flagevaluation writer.
-function createFlagEvalEVPHookArgs () {
+function createFlagEvalLoggingHookArgs () {
   const hookContext = {
     flagKey: 'test-flag',
     context: {
@@ -56,5 +56,5 @@ function createFlagEvalEVPHookArgs () {
 module.exports = {
   createSingleExposureEvent,
   createExposureEventArray,
-  createFlagEvalEVPHookArgs,
+  createFlagEvalLoggingHookArgs,
 }

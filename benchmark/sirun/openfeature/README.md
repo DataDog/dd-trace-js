@@ -1,5 +1,5 @@
-Measures the EVP `flagevaluation` evaluation cost. The `flag-eval-evp-hook` variant
-times the synchronous work a flag evaluation pays for the `FlagEvalEVPHook.finally`
+Measures the EVP `flagevaluation` evaluation cost. The `flag-eval-logging-hook` variant
+times the synchronous work a flag evaluation pays for the `FlagEvalLoggingHook.finally`
 hook (scalar capture + bounded enqueue) — the only cost charged to the caller's
 evaluation. The `aggregate` variant times the off-hot-path aggregator
 (`FlagEvaluationsWriter._aggregate`: prune + canonical context key + two-tier map
