@@ -77,11 +77,14 @@ class DatadogSpanContext {
    * is otherwise computed at flush time, so the W3C sampled flag reads "drop"
    * for a freshly started, not-yet-flushed span — see
    * https://github.com/DataDog/dd-trace-js/issues/2547.
+   *
+   * The root span is only used to reach the priority sampler; `this` is passed
+   * to `sample()` so a manual sampling tag set directly on this context is
+   * honored, matching what `inject(this)` would decide.
    */
   _ensureSamplingPriority () {
     if (this._sampling.priority !== undefined) return
-    const root = this._trace.started[0]
-    root?._prioritySampler?.sample(root)
+    this._trace.started[0]?._prioritySampler?.sample(this)
   }
 
   /**
