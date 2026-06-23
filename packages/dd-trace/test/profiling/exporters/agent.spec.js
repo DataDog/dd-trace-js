@@ -54,7 +54,10 @@ async function createProfile (periodType) {
       flushInterval: 60 * 1e3,
       samplingInterval: 1e3 / 99,
     })
-    : new SpaceProfiler(profilerConfig)
+    : new SpaceProfiler(profilerConfig, {
+      oomMonitoring: { enabled: false },
+      allocationProfilingEnabled: false,
+    })
   profiler.start({
     // Throw errors in test rather than logging them
     logger: {
