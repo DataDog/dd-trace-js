@@ -58,6 +58,7 @@ jobs:
             aerospike-version: ce-6.4.0.3
             image: aerospike@sha256:f268d48f5075010ff268b29fbae28518418070dfb31935daa31f0b45c59f4da9 # ce-6.4.0.3
             test-image: ubuntu-latest
+
     runs-on: ${{ matrix.test-image }}
     permissions:
       id-token: write
@@ -72,15 +73,20 @@ jobs:
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/node
+      - id: node
+        uses: ./.github/actions/node
         with:
           version: ${{ matrix.node-version }}
-      - run: yarn config set ignore-engines true
-      - name: Install dependencies
+      - if: steps.node.outputs.supported != 'false'
+        run: yarn config set ignore-engines true
+      - if: steps.node.outputs.supported != 'false'
+        name: Install dependencies
         uses: ./.github/actions/install
-      - name: Run tests
+      - if: steps.node.outputs.supported != 'false'
+        name: Run tests
         run: yarn test:plugins:ci
-      - uses: ./.github/actions/coverage
+      - if: steps.node.outputs.supported != 'false'
+        uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-aerospike-${{ matrix.node-version }}-${{ matrix.range_clean }}
       - uses: ./.github/actions/upload-junit-artifacts
@@ -290,12 +296,16 @@ jobs:
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/node
+      - id: node
+        uses: ./.github/actions/node
         with:
           version: ${{ matrix.node-version }}
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - uses: ./.github/actions/coverage
+      - if: steps.node.outputs.supported != 'false'
+        uses: ./.github/actions/install
+      - if: steps.node.outputs.supported != 'false'
+        run: yarn test:plugins:ci
+      - if: steps.node.outputs.supported != 'false'
+        uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-confluentinc-kafka-javascript-${{ matrix.node-version }}
       - uses: ./.github/actions/upload-junit-artifacts
@@ -332,7 +342,7 @@ jobs:
           - "^3.0.7"
           - ">=4.0.0 <4.2.0"
         include:
-          - node-version: 18
+          - node-version: oldest
             range: ">=4.2.0"
     runs-on: ubuntu-latest
     permissions:
@@ -1122,7 +1132,7 @@ jobs:
           - node-version: 18
             range: ">=6.1.0 <7.0.0"
             range_clean: gte.6.16.0.and.lt.7.0.0
-          - node-version: "latest"
+          - node-version: latest
             range: ""
             range_clean: all
     runs-on: ubuntu-latest
@@ -1161,13 +1171,17 @@ jobs:
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/node
+      - id: node
+        uses: ./.github/actions/node
         with:
           version: ${{ matrix.node-version }}
-      - uses: ./.github/actions/install
-      - name: Run tests
+      - if: steps.node.outputs.supported != 'false'
+        uses: ./.github/actions/install
+      - if: steps.node.outputs.supported != 'false'
+        name: Run tests
         run: yarn test:plugins:ci
-      - uses: ./.github/actions/coverage
+      - if: steps.node.outputs.supported != 'false'
+        uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-prisma-${{ matrix.node-version }}-${{ matrix.range_clean }}
       - uses: ./.github/actions/upload-junit-artifacts

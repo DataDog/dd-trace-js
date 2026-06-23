@@ -5,6 +5,10 @@ inputs:
     description: "Version identifier of the version to use."
     required: false
     default: 'latest'
+outputs:
+  supported:
+    description: "Whether the installed Node.js version meets the minimum in engines.node."
+    value: ${{ steps.supported-check.outputs.supported }}
 runs:
   using: composite
   steps:
@@ -27,7 +31,8 @@ runs:
         }
         case "$VERSION" in
           eol)         version=16 ;;
-          oldest)      version=$(node_version 18) ;;
+          oldest)      oldest_major=$(node -p "require('./package.json').engines.node.match(/\d+/)[0]")
+                       version=$(node_version "$oldest_major") ;;
           maintenance) version=$(node_version 20) ;;
           active)      version=$(node_version 24) ;;
           latest)      version=${LATEST_VERSION:-$(node_version 26)}
@@ -42,6 +47,18 @@ runs:
       with:
         node-version: ${{ steps.node-version.outputs.version }}
         registry-url: ${{ inputs.registry-url || 'https://registry.npmjs.org' }}
+
+    - name: Check if Node.js version is supported
+      id: supported-check
+      shell: bash
+      run: |
+        min_major=$(node -p "require('./package.json').engines.node.match(/\d+/)[0]")
+        current_major=$(node -e "process.stdout.write(String(parseInt(process.versions.node)))")
+        if [ "$current_major" -lt "$min_major" ]; then
+          echo "supported=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "supported=true" >> "$GITHUB_OUTPUT"
+        fi
 
     # Persist the resolved version so subsequent runs within this 60-minute window can reuse it.
     - name: Save resolved version

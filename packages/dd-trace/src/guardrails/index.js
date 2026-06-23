@@ -15,9 +15,9 @@ function guard (fn) {
   var clobberBailout = false
   var forced = isTrue(process.env.DD_INJECT_FORCE)
   var engines = require('../../../../package.json').engines
-  var versions = engines.node.match(/^>=(\d+) <(\d+)$/)
+  var versions = engines.node.match(/^>=(\d+)$/)
   var minMajor = versions[1]
-  var nextMajor = versions[2]
+  var nextMajor = 27
   var version = process.versions.node
 
   if (process.env.DD_INJECTION_ENABLED) {

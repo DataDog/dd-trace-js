@@ -130,7 +130,7 @@
   },
   "homepage": "https://github.com/DataDog/dd-trace-js#readme",
   "engines": {
-    "node": ">=18 <27"
+    "node": ">=18"
   },
   "files": [
     "/package.json",

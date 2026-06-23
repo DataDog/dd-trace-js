@@ -5,6 +5,10 @@ inputs:
     description: "Version identifier of the version to use."
     required: false
     default: 'latest'
+outputs:
+  supported:
+    description: "Whether the installed Node.js version meets the minimum in engines.node."
+    value: ${{ steps.attempt.outputs.supported || steps.retry.outputs.supported }}
 runs:
   using: composite
   steps:
@@ -18,7 +22,8 @@ runs:
     - if: steps.attempt.outcome == 'failure'
       shell: bash
       run: sleep 60
-    - if: steps.attempt.outcome == 'failure'
+    - id: retry
+      if: steps.attempt.outcome == 'failure'
       uses: ./.github/actions/node/setup
       with:
         version: ${{ inputs.version }}
