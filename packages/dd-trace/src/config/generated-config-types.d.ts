@@ -677,6 +677,7 @@ export interface GeneratedEnvVarConfig {
   DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE: string;
   DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE: boolean;
   DD_EXTERNAL_ENV: string | undefined;
+  DD_FLAGGING_EVALUATION_COUNTS_ENABLED: boolean;
   DD_GIT_BRANCH: string | undefined;
   DD_GIT_COMMIT_AUTHOR_DATE: string | undefined;
   DD_GIT_COMMIT_AUTHOR_EMAIL: string | undefined;
