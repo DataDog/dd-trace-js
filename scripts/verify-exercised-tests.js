@@ -349,6 +349,7 @@ function findTestFiles (repoRoot) {
 
   const files = [
     ...globSyncCached('**/*.spec.js', commonGlobOpts),
+    ...globSyncCached('**/*.spec.mjs', commonGlobOpts),
     ...globSyncCached('**/*.test.mjs', commonGlobOpts),
   ]
 

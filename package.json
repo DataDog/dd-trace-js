@@ -46,7 +46,7 @@
     "test:webpack:ci": "nyc --silent node init && nyc -- npm run test:webpack",
     "test:instrumentations": "mocha \"packages/datadog-instrumentations/test/@(${PLUGINS}).spec.js\"",
     "test:instrumentations:ci": "yarn services && nyc --silent node init && nyc -- npm run test:instrumentations",
-    "test:instrumentations:misc": "mocha \"packages/datadog-instrumentations/test/*/**/*.spec.js\"",
+    "test:instrumentations:misc": "mocha \"packages/datadog-instrumentations/test/*/**/*.spec.{js,mjs}\"",
     "test:instrumentations:misc:ci": "nyc --silent node init && nyc -- npm run test:instrumentations:misc",
     "test:core": "node scripts/mocha-parallel-files.js --expose-gc --timeout 30000 -- \"packages/datadog-core/test/**/*.spec.js\"",
     "test:core:ci": "nyc --silent node init && nyc -- npm run test:core",
