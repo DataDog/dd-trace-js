@@ -891,42 +891,36 @@ describe('OpenTelemetry Traces', () => {
 
     it('selects http transport for http:// URLs', () => {
       const exporter = new OtlpHttpTraceExporter('http://collector.example/v1/traces', {}, 1000, {})
+      const mockReq = { write: () => {}, end: () => {}, on: () => mockReq, once: () => mockReq }
+      const httpStub = sinon.stub(http, 'request').returns(mockReq)
+      sinon.stub(https, 'request').returns(mockReq)
 
-      assert.strictEqual(exporter._transport, http)
+      exporter.sendPayload(Buffer.from('{}'), () => {})
+
+      assert.ok(httpStub.calledOnce, 'http.request should have been called')
     })
 
     it('selects https transport for https:// URLs', () => {
       const exporter = new OtlpHttpTraceExporter('https://collector.example/v1/traces', {}, 1000, {})
-
-      assert.strictEqual(exporter._transport, https)
-    })
-
-    it('switches transport when setUrl is called with a different scheme', () => {
-      const exporter = new OtlpHttpTraceExporter('http://collector.example/v1/traces', {}, 1000, {})
-
-      exporter.setUrl('https://secure-collector.example/v1/traces')
-
-      assert.strictEqual(exporter._transport, https)
-    })
-  })
-
-  describe('sendPayload HTTPS', () => {
-    it('uses https.request when endpoint is https://', (done) => {
-      const exporter = new OtlpHttpTraceExporter('https://collector.example/v1/traces', {}, 1000, {})
-
-      const mockReq = {
-        write: () => {},
-        end: () => {},
-        on: () => mockReq,
-        once: () => mockReq,
-      }
+      const mockReq = { write: () => {}, end: () => {}, on: () => mockReq, once: () => mockReq }
+      sinon.stub(http, 'request').returns(mockReq)
       const httpsStub = sinon.stub(https, 'request').returns(mockReq)
 
       exporter.sendPayload(Buffer.from('{}'), () => {})
 
       assert.ok(httpsStub.calledOnce, 'https.request should have been called')
-      assert.ok(!sinon.stub(http, 'request').called, 'http.request should not have been called')
-      done()
+    })
+
+    it('switches transport when setUrl is called with a different scheme', () => {
+      const exporter = new OtlpHttpTraceExporter('http://collector.example/v1/traces', {}, 1000, {})
+      const mockReq = { write: () => {}, end: () => {}, on: () => mockReq, once: () => mockReq }
+      sinon.stub(http, 'request').returns(mockReq)
+      const httpsStub = sinon.stub(https, 'request').returns(mockReq)
+
+      exporter.setUrl('https://secure-collector.example/v1/traces')
+      exporter.sendPayload(Buffer.from('{}'), () => {})
+
+      assert.ok(httpsStub.calledOnce, 'https.request should have been called after switching to https')
     })
   })
 })

@@ -2,7 +2,7 @@
 
 const http = require('node:http')
 const https = require('node:https')
-const { URL } = require('url')
+const { URL } = require('node:url')
 const log = require('../../log')
 const telemetryMetrics = require('../../telemetry/metrics')
 
@@ -17,6 +17,9 @@ const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
  * @class OtlpHttpExporterBase
  */
 class OtlpHttpExporterBase {
+
+  #transport = https
+
   /**
    * Creates a new OtlpHttpExporterBase instance.
    *
@@ -46,7 +49,7 @@ class OtlpHttpExporterBase {
     this.setUrl(url)
 
     this.telemetryTags = [
-      `protocol:${this._transport === https ? 'https' : 'http'}`,
+      `protocol:${this.#transport === https ? 'https' : 'http'}`,
       `encoding:${isJson ? 'json' : 'protobuf'}`,
     ]
   }
@@ -82,7 +85,7 @@ class OtlpHttpExporterBase {
       },
     }
 
-    const req = this._transport.request(options, (res) => {
+    const req = this.#transport.request(options, (res) => {
       let data = ''
 
       res.on('data', (chunk) => {
@@ -125,7 +128,7 @@ class OtlpHttpExporterBase {
     this.options.hostname = parsedUrl.hostname
     this.options.port = parsedUrl.port
     this.options.path = parsedUrl.pathname + parsedUrl.search
-    this._transport = parsedUrl.protocol === 'https:' ? https : http
+    this.#transport = parsedUrl.protocol === 'http:' ? http : https
   }
 
   /**
