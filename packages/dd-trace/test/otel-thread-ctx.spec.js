@@ -368,4 +368,80 @@ describe('otel-thread-ctx', () => {
       assert.equal(constructedContexts.length, 0)
     })
   })
+
+  describe('getThreadLocalMetadata()', () => {
+    it('returns the process-context snapshot in libdatadog-nodejs shape', () => {
+      pprofStub.otelThreadCtx.getProcessContextAttributes = sinon.stub().returns({
+        'threadlocal.schema_version': 'nodejs_v1_dev',
+        'threadlocal.attribute_key_map': ['datadog.trace_endpoint', 'datadog.thread_name'],
+        'threadlocal.wrapped_object_offset': 24,
+        'threadlocal.tagged_size': 8,
+      })
+      const m = loadModule()
+      const md = m.getThreadLocalMetadata()
+      sinon.assert.calledOnceWithExactly(
+        pprofStub.otelThreadCtx.getProcessContextAttributes,
+        m.ATTRIBUTE_KEYS
+      )
+      assert.deepEqual(md.attributeKeys, ['datadog.trace_endpoint', 'datadog.thread_name'])
+      assert.equal(md.schemaVersion, 'nodejs_v1_dev')
+      // Order isn't guaranteed since Object.entries is object-key ordered.
+      const byKey = Object.fromEntries(md.extraAttributes.map(a => [a.key, a]))
+      assert.deepEqual(byKey['threadlocal.wrapped_object_offset'],
+        { key: 'threadlocal.wrapped_object_offset', intValue: 24 })
+      assert.deepEqual(byKey['threadlocal.tagged_size'],
+        { key: 'threadlocal.tagged_size', intValue: 8 })
+    })
+
+    it('returns undefined when @datadog/pprof is not installed', () => {
+      const m = loadModule({ pprof: { '@noCallThru': true } })
+      assert.equal(m.getThreadLocalMetadata(), undefined)
+      sinon.assert.calledWithMatch(log.warn, /pprof unavailable|does not expose/)
+    })
+
+    it('returns undefined on non-Linux platforms', () => {
+      Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true })
+      const m = loadModule()
+      assert.equal(m.getThreadLocalMetadata(), undefined)
+    })
+
+    it('returns undefined when AsyncContextFrame is inactive', () => {
+      const m = loadModule({ storage: { '@noCallThru': true, isACFActive: false } })
+      assert.equal(m.getThreadLocalMetadata(), undefined)
+    })
+
+    it('returns undefined when otelThreadCtx.getProcessContextAttributes is missing', () => {
+      const m = loadModule({
+        pprof: {
+          '@noCallThru': true,
+          otelThreadCtx: { /* no getProcessContextAttributes */ },
+        },
+      })
+      assert.equal(m.getThreadLocalMetadata(), undefined)
+      sinon.assert.calledWithMatch(log.warn, /does not expose getProcessContextAttributes/)
+    })
+
+    it('encodes string-valued extra attributes as stringValue', () => {
+      pprofStub.otelThreadCtx.getProcessContextAttributes = sinon.stub().returns({
+        'threadlocal.schema_version': 'nodejs_v1_dev',
+        'threadlocal.attribute_key_map': [],
+        'threadlocal.runtime.name': 'nodejs',
+      })
+      const m = loadModule()
+      const md = m.getThreadLocalMetadata()
+      assert.deepEqual(md.extraAttributes, [
+        { key: 'threadlocal.runtime.name', stringValue: 'nodejs' },
+      ])
+    })
+
+    it('throws on an extra attribute with an unsupported value type', () => {
+      pprofStub.otelThreadCtx.getProcessContextAttributes = sinon.stub().returns({
+        'threadlocal.schema_version': 'nodejs_v1_dev',
+        'threadlocal.attribute_key_map': [],
+        'threadlocal.weird': true, // booleans aren't wired through yet
+      })
+      const m = loadModule()
+      assert.throws(() => m.getThreadLocalMetadata(), /unsupported value type/)
+    })
+  })
 })

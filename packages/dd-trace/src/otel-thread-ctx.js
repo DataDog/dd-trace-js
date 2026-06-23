@@ -61,11 +61,25 @@ function isEndpointFinal (tags) {
 // convention (mirrors libdatadog's libdd-otel-thread-ctx, where
 // `local_root_span_id` is always the first entry in
 // `threadlocal.attribute_key_map`), encoded as a 16-character lowercase
-// hex string. Endpoint, thread name, and thread id follow.
+// hex string. Endpoint, thread name, and thread id follow. Adding more
+// means assigning the next index and updating ATTRIBUTE_KEYS
+// accordingly.
 const LOCAL_ROOT_SPAN_ID_IDX = 0
 const ENDPOINT_IDX = 1
 const THREAD_NAME_IDX = 2
 const THREAD_ID_IDX = 3
+
+// The dd-trace-js-supplied subset of the OTEP-4719 attribute_key_map
+// (the implicit `datadog.local_root_span_id` at wire index 0 is
+// prepended by libdatadog when it publishes the process context, so it
+// is NOT listed here). Index N here corresponds to wire key index N+1.
+// Kept in sync with the positional indices above.
+// Also see https://docs.google.com/document/d/1IwjjVJzEChcFPcnVV2N5Kkjg-4_Q4v4Q3ojpxntbdvY/edit?pli=1&tab=t.efaosgjya44c#bookmark=id.700gvw31vb7h
+const ATTRIBUTE_KEYS = [
+  'datadog.trace_endpoint',
+  'datadog.thread_name',
+  'datadog.thread_id',
+]
 
 // Stable per-thread values baked into every record. Same shape as the
 // profiler's `eventLoopThreadName` in profiling/profilers/shared.js.
@@ -214,4 +228,56 @@ function start () {
   return true
 }
 
-module.exports = { start }
+// Snapshot of the OTEP-4719 process-context attributes describing this
+// writer's on-the-wire record schema — schema-version string, the caller-side
+// attribute key map, and the V8 layout constants a reader needs to walk from
+// our discovery TLS symbol into the record. Returned in the shape libdatadog's
+// napi ThreadLocalMetadata expects:
+//
+//   { attributeKeys, schemaVersion, extraAttributes: [{ key, intValue|stringValue }] }
+//
+// Returns undefined if @datadog/pprof isn't installed or doesn't expose the
+// otelThreadCtx.getProcessContextAttributes helper, or if the runtime
+// can't actually run the writer (non-Linux, or Linux without
+// AsyncContextFrame). Callers should treat that as "no threadlocal
+// block" (equivalent to the flag being off) — otherwise we'd publish
+// process-context metadata advertising a decodable OTEP-4947 stream
+// while no writer is producing records.
+function getThreadLocalMetadata () {
+  if (process.platform !== 'linux' || !isACFActive) return
+  let pprofMod
+  try {
+    pprofMod = require('@datadog/pprof')
+  } catch (e) {
+    log.warn('OTEP-4947 thread context: @datadog/pprof unavailable', e)
+    return
+  }
+  const ns = pprofMod.otelThreadCtx
+  if (!ns || typeof ns.getProcessContextAttributes !== 'function') {
+    log.warn(
+      'OTEP-4947 thread context: installed @datadog/pprof does not expose getProcessContextAttributes'
+    )
+    return
+  }
+  const pca = ns.getProcessContextAttributes(ATTRIBUTE_KEYS)
+  const extraAttributes = []
+  for (const [key, value] of Object.entries(pca)) {
+    if (key === 'threadlocal.schema_version' || key === 'threadlocal.attribute_key_map') continue
+    if (typeof value === 'number' && Number.isInteger(value)) {
+      extraAttributes.push({ key, intValue: value })
+    } else if (typeof value === 'string') {
+      extraAttributes.push({ key, stringValue: value })
+    } else {
+      throw new TypeError(
+        `OTEP-4947 process-context attribute ${JSON.stringify(key)} has unsupported value type: ${typeof value}`
+      )
+    }
+  }
+  return {
+    attributeKeys: [...pca['threadlocal.attribute_key_map']],
+    schemaVersion: pca['threadlocal.schema_version'],
+    extraAttributes,
+  }
+}
+
+module.exports = { start, ATTRIBUTE_KEYS, getThreadLocalMetadata }
