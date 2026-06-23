@@ -443,26 +443,25 @@ function applyRouteOrEndpointTag (context) {
   if (!span) return
   const spanContext = span.context()
 
-  // AppSec calls `web.setRouteOrEndpointTag` from a pre-finish hook so the
-  // route/endpoint tags are available for API Security sampling, and the
-  // normal finish-time path runs this again. Either tag being present
-  // means the work has already been done; paths are stable between the
-  // two calls, so the second pass has nothing to add.
-  if (spanContext.hasTag(HTTP_ROUTE) || spanContext.hasTag(HTTP_ENDPOINT)) return
+  // AppSec runs this from a pre-finish hook and the finish path runs it
+  // again. http.route is terminal once set; nothing supersedes it.
+  if (spanContext.hasTag(HTTP_ROUTE)) return
 
   // Skip the `Array.prototype.join` builtin in the empty / single-segment
   // cases; `paths[0]` covers both (`undefined` is falsy for the empty case).
   const route = paths.length > 1 ? paths.join('') : paths[0]
 
   if (route) {
-    // Use http.route from trusted framework instrumentation.
+    // A framework route supersedes any http.endpoint fallback a pre-finish
+    // call stamped before the route resolved; it must not be gated on
+    // HTTP_ENDPOINT.
     span.setTag(HTTP_ROUTE, route)
     return
   }
 
-  if (!config.resourceRenamingEnabled) return
+  // Route unavailable. Compute the http.endpoint fallback once across both calls.
+  if (!config.resourceRenamingEnabled || spanContext.hasTag(HTTP_ENDPOINT)) return
 
-  // Route is unavailable, compute http.endpoint once.
   const url = spanContext.getTag(HTTP_URL)
   const endpoint = url ? calculateHttpEndpoint(url) : '/'
   span.setTag(HTTP_ENDPOINT, endpoint)
