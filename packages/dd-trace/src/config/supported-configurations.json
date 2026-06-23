@@ -569,22 +569,6 @@
         "default": null
       }
     ],
-    "DD_CIVISIBILITY_TEST_FAILURE_SCREENSHOTS_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "default": "false",
-        "internalPropertyName": "isTestFailureScreenshotsEnabled"
-      }
-    ],
-    "DD_CIVISIBILITY_TEST_FAILURE_VIDEO_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "default": "false",
-        "internalPropertyName": "isTestFailureVideoEnabled"
-      }
-    ],
     "DD_CIVISIBILITY_TEST_MODULE_ID": [
       {
         "implementation": "A",
@@ -1801,6 +1785,22 @@
         "type": "boolean",
         "default": "true",
         "internalPropertyName": "isTestDynamicInstrumentationEnabled"
+      }
+    ],
+    "DD_TEST_FAILURE_SCREENSHOTS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false",
+        "internalPropertyName": "isTestFailureScreenshotsEnabled"
+      }
+    ],
+    "DD_TEST_FAILURE_VIDEO_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false",
+        "internalPropertyName": "isTestFailureVideoEnabled"
       }
     ],
     "DD_TEST_FLEET_CONFIG_PATH": [

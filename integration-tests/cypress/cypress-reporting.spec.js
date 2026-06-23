@@ -937,8 +937,8 @@ moduleTypes.forEach(({
             CYPRESS_BASE_URL: webAppBaseUrl,
             SPEC_PATTERN: specToRun,
             CYPRESS_ENABLE_FAILURE_MEDIA: 'true',
-            DD_CIVISIBILITY_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true',
-            DD_CIVISIBILITY_TEST_FAILURE_VIDEO_ENABLED: 'true',
+            DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true',
+            DD_TEST_FAILURE_VIDEO_ENABLED: 'true',
           },
         }
       )
