@@ -9,6 +9,7 @@ const {
   EVP_EVENT_SIZE_LIMIT,
 } = require('../constants/constants')
 const log = require('../../log')
+const telemetryMetrics = require('../../telemetry/metrics')
 const BaseFFEWriter = require('./base')
 
 const EVAL_SCALE_TARGET_FLAGS = 2500
@@ -27,6 +28,18 @@ const EVAL_SCALE_DEGRADED_BUCKET_TARGET = EVAL_SCALE_TARGET_FLAGS * EVAL_SCALE_D
 // Bounded hand-off queue between the eval hot path (enqueue) and the aggregator (drain).
 // On overflow we drop-and-count rather than block the user's evaluation.
 const RAW_QUEUE_CAP = 4096
+
+const FLAG_EVALUATION_DROPPED_METRIC = 'flagevaluation.rows.dropped'
+const FLAG_EVALUATION_DEGRADED_METRIC = 'flagevaluation.rows.degraded'
+const FLAG_EVALUATION_SPLITS_METRIC = 'flagevaluation.payload.splits'
+
+const DROP_REASON_QUEUE_OVERFLOW = 'queue_overflow'
+const DROP_REASON_DEGRADED_CAP = 'degraded_cap'
+const DROP_REASON_PAYLOAD_LIMIT = 'payload_limit'
+const DEGRADED_REASON_CARDINALITY_CAP = 'cardinality_cap'
+const DEGRADED_REASON_PAYLOAD_LIMIT = 'payload_limit'
+
+const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
 // Context pruning bounds — mirrors flageval-worker limits
 const MAX_CONTEXT_FIELDS = 256
@@ -185,6 +198,27 @@ function pruneContext (attrs) {
     count++
   }
   return out
+}
+
+/**
+ * @param {string} metric
+ * @param {number} value
+ * @param {string | undefined} reason
+ * @returns {void}
+ */
+function countMetric (metric, value, reason) {
+  if (value <= 0) return
+  const tags = reason === undefined ? undefined : { reason }
+  tracerMetrics.count(metric, tags).inc(value)
+}
+
+/**
+ * @param {object} event
+ * @returns {number}
+ */
+function eventEvaluationCount (event) {
+  const count = event.evaluation_count
+  return typeof count === 'number' && count > 0 ? count : 1
 }
 
 /**
@@ -498,11 +532,16 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
     this._drainQueue()
 
     const flushTimeMs = Date.now()
+    const degradedCardinalityCap = this._degradedEvaluationCount()
     const flagEvaluations = this._drainFlagEvaluations(flushTimeMs)
     const droppedQueueOverflow = this._droppedQueueOverflow
     const droppedDegradedOverflow = this._droppedDegradedOverflow
 
     this._resetAggregationState()
+
+    countMetric(FLAG_EVALUATION_DROPPED_METRIC, droppedQueueOverflow, DROP_REASON_QUEUE_OVERFLOW)
+    countMetric(FLAG_EVALUATION_DROPPED_METRIC, droppedDegradedOverflow, DROP_REASON_DEGRADED_CAP)
+    countMetric(FLAG_EVALUATION_DEGRADED_METRIC, degradedCardinalityCap, DEGRADED_REASON_CARDINALITY_CAP)
 
     if (droppedQueueOverflow > 0 || droppedDegradedOverflow > 0) {
       log.warn(
@@ -511,7 +550,12 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
       )
     }
 
-    this._flushPayloadBatches(flagEvaluations)
+    const payloadStats = this._flushPayloadBatches(flagEvaluations)
+    countMetric(FLAG_EVALUATION_DROPPED_METRIC, payloadStats.droppedPayloadLimit, DROP_REASON_PAYLOAD_LIMIT)
+    countMetric(FLAG_EVALUATION_DEGRADED_METRIC, payloadStats.degradedPayloadLimit, DEGRADED_REASON_PAYLOAD_LIMIT)
+    if (payloadStats.sentPayloads > 1) {
+      countMetric(FLAG_EVALUATION_SPLITS_METRIC, payloadStats.sentPayloads - 1)
+    }
   }
 
   /**
@@ -575,18 +619,30 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
     const payloadSuffix = ']}'
     const basePayloadSizeBytes = Buffer.byteLength(payloadPrefix) + Buffer.byteLength(payloadSuffix)
 
+    const stats = {
+      sentPayloads: 0,
+      droppedPayloadLimit: 0,
+      degradedPayloadLimit: 0,
+    }
     let batch = []
     let batchSizeBytes = basePayloadSizeBytes
 
     for (const event of flagEvaluations) {
       const encodedEvent = this._encodeEventForPayload(event, basePayloadSizeBytes)
-      if (encodedEvent === undefined) continue
+      if (encodedEvent === undefined) {
+        stats.droppedPayloadLimit += eventEvaluationCount(event)
+        continue
+      }
+      if (encodedEvent.degraded) {
+        stats.degradedPayloadLimit += eventEvaluationCount(event)
+      }
 
       const separatorBytes = batch.length > 0 ? 1 : 0
       const candidateSizeBytes = batchSizeBytes + separatorBytes + encodedEvent.sizeBytes
 
       if (this._payloadSizeLimit && candidateSizeBytes > this._payloadSizeLimit && batch.length > 0) {
         this._sendPayload(payloadPrefix + batch.join(',') + payloadSuffix, batch.length)
+        stats.sentPayloads++
         batch = []
         batchSizeBytes = basePayloadSizeBytes
       }
@@ -598,7 +654,10 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
 
     if (batch.length > 0) {
       this._sendPayload(payloadPrefix + batch.join(',') + payloadSuffix, batch.length)
+      stats.sentPayloads++
     }
+
+    return stats
   }
 
   /**
@@ -607,16 +666,20 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
    * @private
    * @param {object} event
    * @param {number} basePayloadSizeBytes
-   * @returns {{ json: string, sizeBytes: number } | undefined}
+   * @returns {{ json: string, sizeBytes: number, degraded: boolean } | undefined}
    */
   _encodeEventForPayload (event, basePayloadSizeBytes) {
     const encodedEvent = this._encodeEvent(event)
-    if (this._encodedEventFits(encodedEvent.sizeBytes, basePayloadSizeBytes)) return encodedEvent
+    if (this._encodedEventFits(encodedEvent.sizeBytes, basePayloadSizeBytes)) {
+      return { ...encodedEvent, degraded: false }
+    }
 
     const degradedEvent = this._degradeEventForPayloadLimit(event)
     if (degradedEvent !== undefined) {
       const encodedDegradedEvent = this._encodeEvent(degradedEvent)
-      if (this._encodedEventFits(encodedDegradedEvent.sizeBytes, basePayloadSizeBytes)) return encodedDegradedEvent
+      if (this._encodedEventFits(encodedDegradedEvent.sizeBytes, basePayloadSizeBytes)) {
+        return { ...encodedDegradedEvent, degraded: true }
+      }
       this._dropOversizedEvent(encodedDegradedEvent.sizeBytes, basePayloadSizeBytes)
       return
     }
@@ -702,6 +765,18 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
     this._globalCount = 0
     this._droppedDegradedOverflow = 0
     this._droppedQueueOverflow = 0
+  }
+
+  /**
+   * @private
+   * @returns {number}
+   */
+  _degradedEvaluationCount () {
+    let count = 0
+    for (const entry of this._degraded.values()) {
+      count += entry.count
+    }
+    return count
   }
 }
 

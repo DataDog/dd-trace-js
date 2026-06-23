@@ -31,6 +31,8 @@ describe('FlagEvaluationsWriter', () => {
   let config
   let log
   let clock
+  let telemetryMetricCalls
+  let telemetryMetrics
 
   const makeEvent = (overrides = {}) => ({
     flagKey: 'my-flag',
@@ -41,6 +43,12 @@ describe('FlagEvaluationsWriter', () => {
     attrs: { plan: 'premium', count: 5 },
     ...overrides,
   })
+
+  const metricSum = (metric, reason) => telemetryMetricCalls
+    .filter(call => call.metric === metric && (
+      reason === undefined ? call.tags === undefined : call.tags && call.tags.reason === reason
+    ))
+    .reduce((sum, call) => sum + call.value, 0)
 
   beforeEach(() => {
     request = sinon.stub().yieldsAsync(null, 'OK', 200)
@@ -61,11 +69,24 @@ describe('FlagEvaluationsWriter', () => {
       error: sinon.spy(),
       warn: sinon.spy(),
     }
+    telemetryMetricCalls = []
+    telemetryMetrics = {
+      manager: {
+        namespace: sinon.stub().callsFake(namespace => ({
+          count: sinon.stub().callsFake((metric, tags) => ({
+            inc: sinon.spy(value => {
+              telemetryMetricCalls.push({ namespace, metric, tags, value })
+            }),
+          })),
+        })),
+      },
+    }
 
     clock = sinon.useFakeTimers()
 
     FlagEvaluationsWriter = proxyquire('../../../src/openfeature/writers/flag_evaluations', {
       '../../log': log,
+      '../../telemetry/metrics': telemetryMetrics,
       './base': proxyquire('../../../src/openfeature/writers/base', {
         '../../exporters/common/request': request,
         '../../log': log,
@@ -245,6 +266,7 @@ describe('FlagEvaluationsWriter', () => {
       assert.strictEqual(ev.last_evaluation, 1760000003000)
       assert.ok(!ev.targeting_key, 'degraded tier must omit targeting_key')
       assert.ok(!ev.context, 'degraded tier must omit context')
+      assert.strictEqual(metricSum('flagevaluation.rows.degraded', 'cardinality_cap'), 3)
     })
   })
 
@@ -396,6 +418,7 @@ describe('FlagEvaluationsWriter', () => {
         assert.ok(Buffer.byteLength(call.args[0]) <= writer._payloadSizeLimit,
           `request payload exceeded configured limit: ${Buffer.byteLength(call.args[0])}`)
       }
+      assert.strictEqual(metricSum('flagevaluation.payload.splits'), request.callCount - 1)
     })
 
     it('degrades a full aggregate event before dropping it for the configured event size limit', () => {
@@ -410,6 +433,7 @@ describe('FlagEvaluationsWriter', () => {
       assert.ok(!Object.hasOwn(ev, 'targeting_key'))
       assert.ok(!Object.hasOwn(ev, 'context'))
       sinon.assert.notCalled(log.warn)
+      assert.strictEqual(metricSum('flagevaluation.rows.degraded', 'payload_limit'), 1)
     })
 
     it('drops a single aggregate event that exceeds the payload limit', () => {
@@ -421,6 +445,7 @@ describe('FlagEvaluationsWriter', () => {
       sinon.assert.notCalled(request)
       sinon.assert.calledWithMatch(log.warn, sinon.match(/payload size .* exceeds limit/))
       assert.strictEqual(writer._droppedEvents, 1)
+      assert.strictEqual(metricSum('flagevaluation.rows.dropped', 'payload_limit'), 1)
     })
 
     it('degrades a full aggregate event before dropping it for the configured payload limit', () => {
@@ -438,6 +463,7 @@ describe('FlagEvaluationsWriter', () => {
       assert.ok(Buffer.byteLength(request.getCall(0).args[0]) <= writer._payloadSizeLimit)
       sinon.assert.notCalled(log.warn)
       assert.strictEqual(writer._droppedEvents, 0)
+      assert.strictEqual(metricSum('flagevaluation.rows.degraded', 'payload_limit'), 1)
     })
 
     it('sends the current batch, then degrades the next event when it alone exceeds the payload limit', () => {
@@ -462,6 +488,7 @@ describe('FlagEvaluationsWriter', () => {
       }
       sinon.assert.notCalled(log.warn)
       assert.strictEqual(writer._droppedEvents, 0)
+      assert.strictEqual(metricSum('flagevaluation.rows.degraded', 'payload_limit'), 1)
     })
 
     it('drops an already-degraded aggregate event that still exceeds the configured event size limit', () => {
@@ -474,6 +501,7 @@ describe('FlagEvaluationsWriter', () => {
       sinon.assert.notCalled(request)
       sinon.assert.calledWithMatch(log.warn, sinon.match(/event size .* exceeds limit/))
       assert.strictEqual(writer._droppedEvents, 1)
+      assert.strictEqual(metricSum('flagevaluation.rows.dropped', 'payload_limit'), 1)
     })
   })
 
@@ -655,6 +683,7 @@ describe('FlagEvaluationsWriter', () => {
       writer.flush()
 
       sinon.assert.calledWithMatch(log.warn, sinon.match(/dropped evaluations/))
+      assert.strictEqual(metricSum('flagevaluation.rows.dropped', 'queue_overflow'), 1)
     })
 
     it('degraded-overflow drop count is reset only AFTER a flush emits it', () => {
@@ -672,6 +701,7 @@ describe('FlagEvaluationsWriter', () => {
       const warnCall = log.warn.getCalls().find(c => /dropped evaluations/.test(c.args[0]))
       assert.ok(warnCall, 'a drop warning must be emitted')
       assert.strictEqual(warnCall.args[3], 1, 'degraded-overflow count of 1 must be emitted')
+      assert.strictEqual(metricSum('flagevaluation.rows.dropped', 'degraded_cap'), 1)
     })
   })
 
