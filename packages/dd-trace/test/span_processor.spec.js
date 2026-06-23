@@ -229,4 +229,54 @@ describe('SpanProcessor', () => {
     sinon.assert.calledWith(spanFormat.getCall(2), finishedSpan, false, processor._processTags)
     sinon.assert.calledWith(spanFormat.getCall(3), finishedSpan, false, processor._processTags)
   })
+
+  describe('with DD_TRACE_OTEL_SEMANTICS_ENABLED', () => {
+    function formattedHttpSpan () {
+      return {
+        meta: {
+          'span.kind': 'server',
+          'http.method': 'GET',
+          'http.url': 'http://localhost:8080/u',
+          'http.status_code': '200',
+          'http.endpoint': '/u',
+        },
+        metrics: {},
+      }
+    }
+
+    it('applies the OTel HTTP rename to the exported span', () => {
+      spanFormat.returns(formattedHttpSpan())
+      const otelConfig = { flushMinSpans: 3, stats: { enabled: false }, DD_TRACE_OTEL_SEMANTICS_ENABLED: true }
+      const processor = new SpanProcessor(exporter, prioritySampler, otelConfig)
+      trace.started = [finishedSpan]
+      trace.finished = [finishedSpan]
+
+      processor.process(finishedSpan)
+
+      const exported = exporter.export.firstCall.args[0][0]
+      assert.strictEqual(exported.meta['http.request.method'], 'GET')
+      assert.strictEqual(exported.metrics['http.response.status_code'], 200)
+      assert.ok(!('http.method' in exported.meta))
+    })
+
+    it('records span stats from the Datadog tag names, before the export-only rename', () => {
+      spanFormat.returns(formattedHttpSpan())
+      const otelConfig = { flushMinSpans: 3, stats: { enabled: false }, DD_TRACE_OTEL_SEMANTICS_ENABLED: true }
+      const processor = new SpanProcessor(exporter, prioritySampler, otelConfig)
+      const statsView = {}
+      processor._stats = {
+        onSpanFinished: sinon.spy(span => {
+          statsView.method = span.meta['http.method']
+          statsView.statusCode = span.meta['http.status_code']
+          statsView.endpoint = span.meta['http.endpoint']
+        }),
+      }
+      trace.started = [finishedSpan]
+      trace.finished = [finishedSpan]
+
+      processor.process(finishedSpan)
+
+      assert.deepStrictEqual(statsView, { method: 'GET', statusCode: '200', endpoint: '/u' })
+    })
+  })
 })

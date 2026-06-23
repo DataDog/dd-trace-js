@@ -35,6 +35,7 @@ function execPrismaGenerate (config, cwd) {
         '--target esnext',
         '--module commonjs',
         '--allowJs true',
+        '--skipLibCheck true',
         '--moduleResolution node',
       ].join(' '),
     ].join(' && '), {
