@@ -211,6 +211,51 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with OTel semantics enabled', () => {
+        beforeEach(() => {
+          process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+          return agent.load('http2', { client: false })
+            .then(() => {
+              http2 = require(pluginToBeLoaded)
+            })
+        })
+
+        beforeEach(done => {
+          appListener = http2.createServer(listener).listen(0, 'localhost', () => {
+            port = appListener.address().port
+            done()
+          })
+        })
+
+        afterEach(() => {
+          delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+        })
+
+        it('emits OpenTelemetry server attributes and omits the Datadog ones', done => {
+          agent.assertSomeTraces(traces => {
+            const span = traces[0][0]
+            assertObjectContains(span, {
+              name: 'web.request',
+              meta: {
+                'span.kind': 'server',
+                'http.request.method': 'GET',
+                'url.path': '/user',
+                'url.scheme': 'http',
+                'server.address': 'localhost',
+              },
+              metrics: {
+                'http.response.status_code': 200,
+              },
+            })
+            assert.ok(!Object.hasOwn(span.meta, 'http.method'))
+            assert.ok(!Object.hasOwn(span.meta, 'http.url'))
+            assert.ok(!Object.hasOwn(span.meta, 'http.status_code'))
+          }).then(done).catch(done)
+
+          request(http2, `http://localhost:${port}/user`).catch(done)
+        })
+      })
+
       describe('without configuration', () => {
         beforeEach(() => {
           return agent.load('http2')
