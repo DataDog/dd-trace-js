@@ -3,11 +3,75 @@
 const assert = require('node:assert/strict')
 
 const { describe, it } = require('mocha')
+const sinon = require('sinon')
 
 const { storage } = require('../../../datadog-core')
-const { AsyncResource } = require('../../src/helpers/instrument')
+const { AsyncResource, channel, createErrorPublisher } = require('../../src/helpers/instrument')
 
 describe('helpers/instrument', () => {
+  describe('createErrorPublisher', () => {
+    it('drops a re-entrant publish through the same publisher', () => {
+      const errorChannel = channel('apm:test:publish-error:same')
+      const publishError = createErrorPublisher(errorChannel)
+      let depth = 0
+      const listener = () => {
+        depth++
+        if (depth > 10) return // a regressed guard fails the assert, not the runner
+        publishError({ error: new Error('boom') })
+      }
+
+      errorChannel.subscribe(listener)
+      try {
+        publishError({ error: new Error('boom') })
+      } finally {
+        errorChannel.unsubscribe(listener)
+      }
+
+      assert.strictEqual(depth, 1)
+    })
+
+    it('still publishes a nested error through a different publisher', () => {
+      const outerChannel = channel('apm:test:publish-error:outer')
+      const innerChannel = channel('apm:test:publish-error:inner')
+      const publishOuter = createErrorPublisher(outerChannel)
+      const publishInner = createErrorPublisher(innerChannel)
+      const innerListener = sinon.stub()
+      // A subscriber on one framework's error channel synchronously drives a
+      // different instrumented framework into its error path. A shared guard
+      // would drop the inner publish; a per-publisher flag must not.
+      const outerListener = () => {
+        publishInner({ error: new Error('inner') })
+      }
+
+      outerChannel.subscribe(outerListener)
+      innerChannel.subscribe(innerListener)
+      try {
+        publishOuter({ error: new Error('outer') })
+      } finally {
+        outerChannel.unsubscribe(outerListener)
+        innerChannel.unsubscribe(innerListener)
+      }
+
+      sinon.assert.calledOnce(innerListener)
+    })
+
+    it('clears the guard so the same publisher publishes again afterwards', () => {
+      const errorChannel = channel('apm:test:publish-error:reset')
+      const publishError = createErrorPublisher(errorChannel)
+      const listener = sinon.stub()
+
+      errorChannel.subscribe(listener)
+      try {
+        publishError({ error: new Error('first') })
+        publishError({ error: new Error('second') })
+      } finally {
+        errorChannel.unsubscribe(listener)
+      }
+
+      sinon.assert.calledTwice(listener)
+    })
+  })
+
   describe('AsyncResource', () => {
     it('should bind statically', () => {
       storage('legacy').run('test1', () => {

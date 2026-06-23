@@ -1,7 +1,13 @@
 Measures tracer startup overhead: how much the loader hooks add when wrapping a
 representative production dependency graph. `everything-fixture/` is a
 self-contained sub-project (own `package.json`/`package-lock.json`/`node_modules`)
-loaded via a single `require`, curated toward modules dd-trace instruments.
+curated toward modules dd-trace instruments. Both fixture entries read the same
+`dependencies`, so updating `package.json` covers both:
+
+- `index.js` loads them with CommonJS `require`, exercising require-in-the-middle.
+- `index.mjs` loads them with ESM `import`; the `with-tracer-everything-esm`
+  variant registers the iitm ESM loader via `--import ../../../register.js`, so
+  this is the variant that measures the synchronous-vs-asynchronous loader cost.
 
 ## Updating the fixture
 
