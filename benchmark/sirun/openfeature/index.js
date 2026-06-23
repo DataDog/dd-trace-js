@@ -2,7 +2,7 @@
 
 // EVP flagevaluation hot-path microbenchmark.
 //
-// Two variants, both exercising the real FlagEvalLoggingHook + FlagEvaluationsWriter:
+// Two variants, both exercising the real FlagEvalEVPHook + FlagEvaluationsWriter:
 //
 //   flag-eval-logging-hook — the synchronous cost a flag evaluation pays for the Finally
 //     hook. This is the only work charged to the caller's evaluation; it must stay
@@ -33,7 +33,7 @@ require.cache[requestPath] = {
 }
 
 const FlagEvaluationsWriter = require('../../../packages/dd-trace/src/openfeature/writers/flag_evaluations')
-const FlagEvalLoggingHook = require('../../../packages/dd-trace/src/openfeature/writers/flag_eval_logging_hook')
+const FlagEvalEVPHook = require('../../../packages/dd-trace/src/openfeature/writers/flag_eval_evp_hook')
 
 const {
   VARIANT,
@@ -111,7 +111,7 @@ if (VARIANT === 'aggregate') {
   // enqueue. Aggregation is deferred to the drain (not measured here).
   const writer = new FlagEvaluationsWriter(config)
   clearInterval(writer._periodic)
-  const hook = new FlagEvalLoggingHook(writer)
+  const hook = new FlagEvalEVPHook(writer)
 
   // Pre-flight: one finally() must enqueue exactly one bounded event. Catches a silent
   // breakage where the hook stopped enqueuing (which would make the loop measure a
