@@ -3334,6 +3334,13 @@
         "default": "false"
       }
     ],
+    "DD_TRACE_OTEL_CTX_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false"
+      }
+    ],
     "DD_TRACE_PARTIAL_FLUSH_MIN_SPANS": [
       {
         "implementation": "B",
