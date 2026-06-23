@@ -178,6 +178,76 @@ describe('EventBridge', () => {
       assert.strictEqual(request.params.Entries[0].Detail, originalDetail)
     })
 
+    it('skips injecting when the batched entries exceed 1mb in total', () => {
+      const eventbridge = new EventBridge(tracer)
+      const request = {
+        params: {
+          Entries: [
+            { Detail: makeEventDetailForInjectedSize(550 * 1024) },
+            { Detail: makeEventDetail(550 * 1024) },
+            { Detail: makeEventDetail(100 * 1024) },
+          ],
+        },
+        operation: 'putEvents',
+      }
+
+      traceId = TEST_TRACE_ID
+      spanId = TEST_SPAN_ID
+      parentId = TEST_PARENT_ID
+      const originalDetails = request.params.Entries.map((entry) => entry.Detail)
+      eventbridge.requestInject(span.context(), request)
+
+      assert.deepStrictEqual(request.params.Entries.map((entry) => entry.Detail), originalDetails)
+    })
+
+    it('accounts for Source, DetailType, Time, and Resources when sizing the request', () => {
+      const eventbridge = new EventBridge(tracer)
+      const request = {
+        params: {
+          Entries: [
+            {
+              Detail: makeEventDetailForInjectedSize(EVENTBRIDGE_EVENT_MAX_BYTES - 50),
+              Source: 'my.svc',
+              DetailType: 'my.type',
+              Time: new Date(),
+              Resources: ['a'.repeat(100), null],
+            },
+          ],
+        },
+        operation: 'putEvents',
+      }
+
+      traceId = TEST_TRACE_ID
+      spanId = TEST_SPAN_ID
+      parentId = TEST_PARENT_ID
+      const originalDetail = request.params.Entries[0].Detail
+      eventbridge.requestInject(span.context(), request)
+
+      assert.strictEqual(request.params.Entries[0].Detail, originalDetail)
+    })
+
+    it('injects trace context when the full batched request stays below 1mb', () => {
+      const eventbridge = new EventBridge(tracer)
+      const request = {
+        params: {
+          Entries: [
+            { Detail: makeEventDetailForInjectedSize(400 * 1024) },
+            { Detail: makeEventDetail(EVENTBRIDGE_EVENT_MAX_BYTES - 1 - 400 * 1024) },
+          ],
+        },
+        operation: 'putEvents',
+      }
+
+      traceId = TEST_TRACE_ID
+      spanId = TEST_SPAN_ID
+      parentId = TEST_PARENT_ID
+      const originalSecondDetail = request.params.Entries[1].Detail
+      eventbridge.requestInject(span.context(), request)
+
+      assert.deepStrictEqual(JSON.parse(request.params.Entries[0].Detail)._datadog, TEST_DATADOG_CONTEXT)
+      assert.strictEqual(request.params.Entries[1].Detail, originalSecondDetail)
+    })
+
     it('returns undefined when params is null', () => {
       const eventbridge = new EventBridge(tracer)
       assert.strictEqual(eventbridge.generateTags(null, 'putEvent', {}), undefined)
