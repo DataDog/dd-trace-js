@@ -1,13 +1,18 @@
 'use strict'
 
-const dc = require('dc-polyfill')
-
-const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
 const runtimeMetrics = require('../../runtime_metrics')
 const telemetryMetrics = require('../../telemetry/metrics')
 const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('../webspan-utils')
 const { SAMPLING_INTERVAL } = require('../constants')
+const {
+  enterCh,
+  beforeCh,
+  spanFinishCh,
+  tagsUpdateCh,
+  getActiveSpan,
+  ensureChannelsActivated,
+} = require('../../storage-channels')
 
 const {
   END_TIMESTAMP_LABEL,
@@ -21,20 +26,11 @@ const TRACE_ENDPOINT_LABEL = 'trace endpoint'
 
 /** @typedef {import('../../config/config-base')} TracerConfig */
 
-let beforeCh
-const enterCh = dc.channel('dd-trace:storage:enter')
-const spanFinishCh = dc.channel('dd-trace:span:finish')
-const tagsUpdateCh = dc.channel('dd-trace:span:tags:update')
 const profilerTelemetryMetrics = telemetryMetrics.manager.namespace('profilers')
 
 const ProfilingContext = Symbol('NativeWallProfiler.ProfilingContext')
 
 let kSampleCount
-
-function getActiveSpan () {
-  const store = storage('legacy').getStore()
-  return store && store.span
-}
 
 function toBigInt (spanId) {
   return spanId !== null && typeof spanId === 'object' ? spanId.toBigInt() : spanId
@@ -56,55 +52,6 @@ function updateContext (context) {
     // if tags are not available anymore during serialization
     context.endpoint = endpointNameFromTags(context.webTags)
   }
-}
-
-let channelsActivated = false
-function ensureChannelsActivated (asyncContextFrameEnabled) {
-  if (channelsActivated) return
-
-  const shimmer = require('../../../../datadog-shimmer')
-
-  // We need to instrument enterWith() on the legacy storage — that's the storage
-  // carrying span data and the only one the profiler cares about.
-  const legacyStorage = storage('legacy')
-  let inRun = false
-  shimmer.wrap(legacyStorage, 'enterWith', function (original) {
-    return function (store) {
-      const retVal = original.call(this, store)
-      if (!inRun) enterCh.publish()
-      return retVal
-    }
-  })
-
-  // When not using AsyncContextFrame, we need additional instrumentation.
-  if (!asyncContextFrameEnabled) {
-    // We need async_hooks.createHook to create a "before" callback.
-    const { createHook } = require('async_hooks')
-    beforeCh = dc.channel('dd-trace:storage:before')
-    createHook({ before: () => beforeCh.publish() }).enable()
-
-    // In ACF-based implementation run() delegates to enterWith()  so it doesn't
-    // need to be separately instrumented. in non-ACF implementation run()
-    // doesn't delegate to enterWith(), so separate instrumentation is necessary.
-    shimmer.wrap(legacyStorage, 'run', function (original) {
-      return function (store, callback, ...args) {
-        const wrappedCb = shimmer.wrapFunction(callback, cb => function (...args) {
-          inRun = false
-          enterCh.publish()
-          const retVal = cb.apply(this, args)
-          inRun = true
-          return retVal
-        })
-        inRun = true
-        const retVal = original.call(this, store, wrappedCb, ...args)
-        enterCh.publish()
-        inRun = false
-        return retVal
-      }
-    })
-  }
-
-  channelsActivated = true
 }
 
 class NativeWallProfiler {
