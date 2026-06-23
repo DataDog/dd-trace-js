@@ -1,20 +1,38 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { supportsSyncHooks } from 'import-in-the-middle/create-hook.mjs'
-import { describe, it } from 'mocha'
+import { before, describe, it } from 'mocha'
 
-import { load, loadSync } from '../../../src/helpers/rewriter/loader.mjs'
-
+const require = createRequire(import.meta.url)
 const source = 'export function getTracer () { return "tracer" }\n'
 const testDirectory = dirname(fileURLToPath(import.meta.url))
 const repositoryRoot = resolve(testDirectory, '../../../../..')
 
 describe('rewriter loader', () => {
+  let load
+  let loadSync
+
+  before(async () => {
+    // require(esm) keeps the loader on nyc's CommonJS instrumentation path so its
+    // transforms count as covered; runtimes without require(esm) fall back to a
+    // dynamic import and still exercise the behaviour.
+    let rewriterLoader
+    try {
+      rewriterLoader = require('../../../src/helpers/rewriter/loader.mjs')
+    } catch (error) {
+      if (error?.code !== 'ERR_REQUIRE_ESM') throw error
+      rewriterLoader = await import('../../../src/helpers/rewriter/loader.mjs')
+    }
+    load = rewriterLoader.load
+    loadSync = rewriterLoader.loadSync
+  })
+
   it('rewrites async loader results', async () => {
     const url = createAiModuleUrl()
     const result = await load(url, { format: 'module' }, () => ({ format: 'module', source }))
