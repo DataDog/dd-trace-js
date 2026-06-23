@@ -7,10 +7,10 @@
   "iterations": 24,
   "variants": {
     "init-only": {
-      "env": { "ASYNC_HOOKS": "init", "PROMISES": "1000000" }
+      "env": { "ASYNC_HOOKS": "init", "OPERATIONS": "1000000" }
     },
     "all-hooks": {
-      "env": { "ASYNC_HOOKS": "init,before,after,destroy,promiseResolve", "PROMISES": "1000000" }
+      "env": { "ASYNC_HOOKS": "init,before,after,destroy,promiseResolve", "OPERATIONS": "1000000" }
     }
   }
 }

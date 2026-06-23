@@ -9,7 +9,8 @@
       "run": "node --require ../../../init.js server-without-vulnerability.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../../../init.js server-without-vulnerability.js\"",
       "env": {
-        "DD_IAST_ENABLED": "0"
+        "DD_IAST_ENABLED": "0",
+        "OPERATIONS": "100"
       }
     },
     "no-vulnerability-iast-enabled-default-config": {
@@ -17,7 +18,8 @@
       "run": "node --require ../../../init.js server-without-vulnerability.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../../../init.js server-without-vulnerability.js\"",
       "env": {
-        "DD_IAST_ENABLED": "1"
+        "DD_IAST_ENABLED": "1",
+        "OPERATIONS": "100"
       }
     },
     "no-vulnerability-iast-enabled-always-active": {
@@ -28,7 +30,8 @@
         "DD_IAST_ENABLED": "1",
         "DD_IAST_REQUEST_SAMPLING": "100",
         "DD_IAST_MAX_CONCURRENT_REQUESTS": "1000",
-        "DD_IAST_MAX_CONTEXT_OPERATIONS": "100"
+        "DD_IAST_MAX_CONTEXT_OPERATIONS": "100",
+        "OPERATIONS": "100"
       }
     },
     "with-vulnerability-control": {
@@ -36,7 +39,8 @@
       "run": "node --require ../../../init.js server-with-vulnerability.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../../../init.js server-with-vulnerability.js\"",
       "env": {
-        "DD_IAST_ENABLED": "0"
+        "DD_IAST_ENABLED": "0",
+        "OPERATIONS": "100"
       }
     },
     "with-vulnerability-iast-enabled-default-config": {
@@ -44,7 +48,8 @@
       "run": "node --require ../../../init.js server-with-vulnerability.js",
       "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node --require ../../../init.js server-with-vulnerability.js\"",
       "env": {
-        "DD_IAST_ENABLED": "1"
+        "DD_IAST_ENABLED": "1",
+        "OPERATIONS": "100"
       }
     },
     "with-vulnerability-iast-enabled-always-active": {
@@ -55,7 +60,8 @@
         "DD_IAST_ENABLED": "1",
         "DD_IAST_REQUEST_SAMPLING": "100",
         "DD_IAST_MAX_CONCURRENT_REQUESTS": "1000",
-        "DD_IAST_MAX_CONTEXT_OPERATIONS": "100"
+        "DD_IAST_MAX_CONTEXT_OPERATIONS": "100",
+        "OPERATIONS": "100"
       }
     },
     "startup-time-control": {

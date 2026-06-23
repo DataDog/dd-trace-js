@@ -75,15 +75,7 @@ function reportOps (duration) {
 }
 
 function getOperations () {
-  return Number(
-    process.env.OPERATIONS ||
-    process.env.COUNT ||
-    process.env.ITERATIONS ||
-    process.env.REQS ||
-    process.env.QUERIES ||
-    process.env.ENCODE_COUNT ||
-    process.env.PROMISES
-  ) || undefined
+  return Number(process.env.OPERATIONS) || undefined
 }
 
 module.exports = { loopStart, done }
