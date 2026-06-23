@@ -8,12 +8,12 @@ const sinon = require('sinon')
 
 require('../../setup/core')
 
-const FlagEvalLoggingHook = require('../../../src/openfeature/writers/flag_eval_logging_hook')
+const FlagEvalEVPHook = require('../../../src/openfeature/writers/flag_eval_evp_hook')
 
-// Proves the logging hook actually fires through the REAL OpenFeature server-SDK evaluation
+// Proves the EVP hook actually fires through the REAL OpenFeature server-SDK evaluation
 // lifecycle (not just a unit call of finally() in isolation), and that it covers the
 // success, error, and runtime-default exit paths.
-describe('FlagEvalLoggingHook — real OpenFeature eval-path lifecycle', () => {
+describe('FlagEvalEVPHook - real OpenFeature eval-path lifecycle', () => {
   let writer
   let hook
   let client
@@ -24,7 +24,7 @@ describe('FlagEvalLoggingHook — real OpenFeature eval-path lifecycle', () => {
 
   beforeEach(async () => {
     writer = { enqueue: sinon.spy() }
-    hook = new FlagEvalLoggingHook(writer)
+    hook = new FlagEvalEVPHook(writer)
 
     await OpenFeature.setProviderAndWait(new InMemoryProvider(flags))
     client = OpenFeature.getClient()

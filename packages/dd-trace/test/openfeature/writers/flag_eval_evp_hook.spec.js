@@ -7,15 +7,15 @@ const sinon = require('sinon')
 
 require('../../setup/core')
 
-const FlagEvalLoggingHook = require('../../../src/openfeature/writers/flag_eval_logging_hook')
+const FlagEvalEVPHook = require('../../../src/openfeature/writers/flag_eval_evp_hook')
 
-describe('FlagEvalLoggingHook', () => {
+describe('FlagEvalEVPHook', () => {
   let writer
   let hook
 
   beforeEach(() => {
     writer = { enqueue: sinon.spy() }
-    hook = new FlagEvalLoggingHook(writer)
+    hook = new FlagEvalEVPHook(writer)
   })
 
   const lastEnqueued = () => writer.enqueue.firstCall.args[0]
@@ -31,7 +31,7 @@ describe('FlagEvalLoggingHook', () => {
     })
 
     it('is a no-op when the writer is absent', () => {
-      const noWriterHook = new FlagEvalLoggingHook(undefined)
+      const noWriterHook = new FlagEvalEVPHook(undefined)
       // Must not throw and must not attempt any enqueue.
       noWriterHook.finally({ flagKey: 'f' }, { variant: 'on' })
     })

@@ -1,7 +1,7 @@
 'use strict'
 
 /**
- * FlagEvalLoggingHook is a Finally-stage OpenFeature hook that does only a cheap
+ * FlagEvalEVPHook is a Finally-stage OpenFeature hook that does only a cheap
  * scalar extraction and a non-blocking enqueue to the FlagEvaluationsWriter.
  *
  * It MUST NOT perform inline aggregation, JSON.stringify, map lookups, or any
@@ -12,7 +12,7 @@
  * The existing FlagEvalMetricsHook (OTel feature_flag.evaluations) is untouched —
  * this hook is registered IN ADDITION to it, not as a replacement.
  */
-class FlagEvalLoggingHook {
+class FlagEvalEVPHook {
   /** @type {import('./flag_evaluations')} */
   _writer
 
@@ -72,4 +72,4 @@ class FlagEvalLoggingHook {
   }
 }
 
-module.exports = FlagEvalLoggingHook
+module.exports = FlagEvalEVPHook
