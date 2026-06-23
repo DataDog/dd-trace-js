@@ -60,7 +60,7 @@ describe('esm', () => {
           // special check for ai spans
           for (const spans of payload) {
             for (const span of spans) {
-              if (span.name.startsWith('ai')) {
+              if (span.name.includes('generateText')) {
                 return
               }
             }

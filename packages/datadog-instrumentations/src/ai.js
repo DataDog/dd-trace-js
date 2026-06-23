@@ -273,6 +273,7 @@ addHook({ name: 'ai', versions: ['>=7.0.0-0'] }, exports => {
       ctx.result.stream = ctx.result.stream.pipeThrough(transform)
     },
   })
+
   return exports
 })
 
