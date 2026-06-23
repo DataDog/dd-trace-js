@@ -14,7 +14,7 @@ const { getMessageSize } = require('../../../packages/dd-trace/src/datastreams/s
 
 const { VARIANT } = process.env
 
-const ITERATIONS = 1_200_000
+const ITERATIONS = Number(process.env.ITERATIONS) || 1_200_000
 
 const processor = new DataStreamsProcessor({
   dsmEnabled: true,

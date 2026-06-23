@@ -9,7 +9,7 @@ const TextMapPropagator = require('../../../packages/dd-trace/src/opentracing/pr
 
 const { VARIANT } = process.env
 
-const ITERATIONS = 300_000
+const ITERATIONS = Number(process.env.ITERATIONS) || 300_000
 
 // Duck-typed config keeps the bench out of the full `Config` singleton (telemetry
 // registration, env reads). The propagator only reads the fields below.

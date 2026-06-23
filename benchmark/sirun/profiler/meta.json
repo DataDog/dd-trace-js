@@ -8,22 +8,26 @@
   "variants": {
     "control": {
       "env": {
-        "PROFILER": ""
+        "PROFILER": "",
+        "OPERATIONS": "32000"
       }
     },
     "with-cpu-profiler": {
       "env": {
-        "PROFILER": "wall"
+        "PROFILER": "wall",
+        "OPERATIONS": "32000"
       }
     },
     "with-space-profiler": {
       "env": {
-        "PROFILER": "space"
+        "PROFILER": "space",
+        "OPERATIONS": "32000"
       }
     },
     "with-all-profilers": {
       "env": {
-        "PROFILER": "all"
+        "PROFILER": "all",
+        "OPERATIONS": "32000"
       }
     }
   }

@@ -15,9 +15,13 @@
 //   guard.done(0.15)        // relaxed ceiling when the loop legitimately can't dominate further
 
 const assert = require('node:assert/strict')
+const path = require('node:path')
 
 const START = process.hrtime.bigint()
+const OPERATIONS = getOperations()
+
 let loopStartedAt
+let statsd
 
 function loopStart () {
   loopStartedAt = process.hrtime.bigint()
@@ -28,12 +32,18 @@ function loopStart () {
   }
 }
 
+/**
+ * @param {number} [maxShare]
+ */
 function done (maxShare = 0.07) {
   const end = process.hrtime.bigint()
   assert.ok(loopStartedAt !== undefined, 'startup-guard: loopStart() was never called')
   const total = Number(end - START)
   const startup = Number(loopStartedAt - START)
   const share = total === 0 ? 1 : startup / total
+  const loop = Number(end - loopStartedAt)
+
+  reportOps(loop)
 
   // Report mode (used by the overview collector): write the share to the given
   // file and skip the assertion, so a high-startup variant still reports instead
@@ -51,6 +61,29 @@ function done (maxShare = 0.07) {
     `startup-guard: load+setup was ${(share * 100).toFixed(1)}% of the run ` +
     `(max ${(maxShare * 100).toFixed(0)}%); grow the loop or load fewer modules up front`
   )
+}
+
+/**
+ * @param {number} duration
+ */
+function reportOps (duration) {
+  if (OPERATIONS !== undefined && duration !== 0) {
+    statsd ??= new (require('./statsd'))()
+    statsd.gauge(path.basename(process.cwd()) + '.ops', OPERATIONS * 1e9 / duration)
+    statsd.flush()
+  }
+}
+
+function getOperations () {
+  return Number(
+    process.env.OPERATIONS ||
+    process.env.COUNT ||
+    process.env.ITERATIONS ||
+    process.env.REQS ||
+    process.env.QUERIES ||
+    process.env.ENCODE_COUNT ||
+    process.env.PROMISES
+  ) || undefined
 }
 
 module.exports = { loopStart, done }
