@@ -579,49 +579,110 @@ class FlagEvaluationsWriter extends BaseFFEWriter {
     let batchSizeBytes = basePayloadSizeBytes
 
     for (const event of flagEvaluations) {
-      const encodedEvent = this._encode(event)
-      const eventSizeBytes = Buffer.byteLength(encodedEvent)
-      if (this._eventSizeLimit && eventSizeBytes > this._eventSizeLimit) {
-        log.warn('%s event size %d bytes exceeds limit %d, dropping event',
-          this.constructor.name, eventSizeBytes, this._eventSizeLimit)
-        this._droppedEvents++
-        continue
-      }
+      const encodedEvent = this._encodeEventForPayload(event, basePayloadSizeBytes)
+      if (encodedEvent === undefined) continue
 
       const separatorBytes = batch.length > 0 ? 1 : 0
-      const candidateSizeBytes = batchSizeBytes + separatorBytes + eventSizeBytes
+      const candidateSizeBytes = batchSizeBytes + separatorBytes + encodedEvent.sizeBytes
 
       if (this._payloadSizeLimit && candidateSizeBytes > this._payloadSizeLimit && batch.length > 0) {
         this._sendPayload(payloadPrefix + batch.join(',') + payloadSuffix, batch.length)
         batch = []
         batchSizeBytes = basePayloadSizeBytes
-
-        const singleSizeBytes = batchSizeBytes + eventSizeBytes
-        if (this._payloadSizeLimit && singleSizeBytes > this._payloadSizeLimit) {
-          log.warn('%s payload size %d bytes exceeds limit %d, dropping event',
-            this.constructor.name, singleSizeBytes, this._payloadSizeLimit)
-          this._droppedEvents++
-        } else {
-          batch = [encodedEvent]
-          batchSizeBytes = singleSizeBytes
-        }
-        continue
       }
 
-      if (this._payloadSizeLimit && candidateSizeBytes > this._payloadSizeLimit) {
-        log.warn('%s payload size %d bytes exceeds limit %d, dropping event',
-          this.constructor.name, candidateSizeBytes, this._payloadSizeLimit)
-        this._droppedEvents++
-        continue
-      }
-
-      batch.push(encodedEvent)
-      batchSizeBytes = candidateSizeBytes
+      const nextSeparatorBytes = batch.length > 0 ? 1 : 0
+      batch.push(encodedEvent.json)
+      batchSizeBytes += nextSeparatorBytes + encodedEvent.sizeBytes
     }
 
     if (batch.length > 0) {
       this._sendPayload(payloadPrefix + batch.join(',') + payloadSuffix, batch.length)
     }
+  }
+
+  /**
+   * Encodes one event and applies the payload-limit fallback for oversized full-tier rows.
+   *
+   * @private
+   * @param {object} event
+   * @param {number} basePayloadSizeBytes
+   * @returns {{ json: string, sizeBytes: number } | undefined}
+   */
+  _encodeEventForPayload (event, basePayloadSizeBytes) {
+    const encodedEvent = this._encodeEvent(event)
+    if (this._encodedEventFits(encodedEvent.sizeBytes, basePayloadSizeBytes)) return encodedEvent
+
+    const degradedEvent = this._degradeEventForPayloadLimit(event)
+    if (degradedEvent !== undefined) {
+      const encodedDegradedEvent = this._encodeEvent(degradedEvent)
+      if (this._encodedEventFits(encodedDegradedEvent.sizeBytes, basePayloadSizeBytes)) return encodedDegradedEvent
+      this._dropOversizedEvent(encodedDegradedEvent.sizeBytes, basePayloadSizeBytes)
+      return
+    }
+
+    this._dropOversizedEvent(encodedEvent.sizeBytes, basePayloadSizeBytes)
+  }
+
+  /**
+   * Encodes one flag evaluation event and records its UTF-8 byte size.
+   *
+   * @private
+   * @param {object} event
+   * @returns {{ json: string, sizeBytes: number }}
+   */
+  _encodeEvent (event) {
+    const json = this._encode(event)
+    return { json, sizeBytes: Buffer.byteLength(json) }
+  }
+
+  /**
+   * Checks whether one already-encoded event can fit in an otherwise-empty payload.
+   *
+   * @private
+   * @param {number} eventSizeBytes
+   * @param {number} basePayloadSizeBytes
+   * @returns {boolean}
+   */
+  _encodedEventFits (eventSizeBytes, basePayloadSizeBytes) {
+    if (this._eventSizeLimit && eventSizeBytes > this._eventSizeLimit) return false
+    if (this._payloadSizeLimit && basePayloadSizeBytes + eventSizeBytes > this._payloadSizeLimit) return false
+    return true
+  }
+
+  /**
+   * Removes customer-identifying fields from a full-tier event before dropping it for size.
+   *
+   * @private
+   * @param {object} event
+   * @returns {object | undefined}
+   */
+  _degradeEventForPayloadLimit (event) {
+    if (!Object.hasOwn(event, 'targeting_key') && !Object.hasOwn(event, 'context')) return
+
+    const degraded = { ...event }
+    delete degraded.targeting_key
+    delete degraded.context
+    return degraded
+  }
+
+  /**
+   * Records and logs that one already-degraded event cannot fit within configured limits.
+   *
+   * @private
+   * @param {number} eventSizeBytes
+   * @param {number} basePayloadSizeBytes
+   * @returns {void}
+   */
+  _dropOversizedEvent (eventSizeBytes, basePayloadSizeBytes) {
+    if (this._eventSizeLimit && eventSizeBytes > this._eventSizeLimit) {
+      log.warn('%s event size %d bytes exceeds limit %d, dropping event',
+        this.constructor.name, eventSizeBytes, this._eventSizeLimit)
+    } else {
+      log.warn('%s payload size %d bytes exceeds limit %d, dropping event',
+        this.constructor.name, basePayloadSizeBytes + eventSizeBytes, this._payloadSizeLimit)
+    }
+    this._droppedEvents++
   }
 
   /**

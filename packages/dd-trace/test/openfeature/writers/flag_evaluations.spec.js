@@ -398,14 +398,18 @@ describe('FlagEvaluationsWriter', () => {
       }
     })
 
-    it('drops an aggregate event that exceeds the configured event size limit', () => {
-      writer._eventSizeLimit = 120
+    it('degrades a full aggregate event before dropping it for the configured event size limit', () => {
+      writer._eventSizeLimit = 240
 
       writer.enqueue(makeEvent({ attrs: { blob: 'x'.repeat(180) } }))
       writer.flush()
 
-      sinon.assert.notCalled(request)
-      sinon.assert.calledWithMatch(log.warn, sinon.match(/event size .* exceeds limit/))
+      sinon.assert.calledOnce(request)
+      const payload = JSON.parse(request.getCall(0).args[0])
+      const ev = payload.flagEvaluations[0]
+      assert.ok(!Object.hasOwn(ev, 'targeting_key'))
+      assert.ok(!Object.hasOwn(ev, 'context'))
+      sinon.assert.notCalled(log.warn)
     })
 
     it('drops a single aggregate event that exceeds the payload limit', () => {
@@ -419,18 +423,56 @@ describe('FlagEvaluationsWriter', () => {
       assert.strictEqual(writer._droppedEvents, 1)
     })
 
-    it('sends the current batch, then drops the next event when it alone exceeds the payload limit', () => {
+    it('degrades a full aggregate event before dropping it for the configured payload limit', () => {
+      writer._payloadSizeLimit = 350
+
+      writer.enqueue(makeEvent({ flagKey: 'large', attrs: { blob: 'x'.repeat(256) } }))
+      writer.flush()
+
+      sinon.assert.calledOnce(request)
+      const payload = JSON.parse(request.getCall(0).args[0])
+      const ev = payload.flagEvaluations[0]
+      assert.strictEqual(ev.flag.key, 'large')
+      assert.ok(!Object.hasOwn(ev, 'targeting_key'))
+      assert.ok(!Object.hasOwn(ev, 'context'))
+      assert.ok(Buffer.byteLength(request.getCall(0).args[0]) <= writer._payloadSizeLimit)
+      sinon.assert.notCalled(log.warn)
+      assert.strictEqual(writer._droppedEvents, 0)
+    })
+
+    it('sends the current batch, then degrades the next event when it alone exceeds the payload limit', () => {
       writer._payloadSizeLimit = 350
 
       writer.enqueue(makeEvent({ flagKey: 'small', attrs: {} }))
       writer.enqueue(makeEvent({ flagKey: 'large', attrs: { blob: 'x'.repeat(256) } }))
       writer.flush()
 
-      sinon.assert.calledOnce(request)
-      const payload = JSON.parse(request.getCall(0).args[0])
-      assert.strictEqual(payload.flagEvaluations.length, 1)
-      assert.strictEqual(payload.flagEvaluations[0].flag.key, 'small')
-      sinon.assert.calledWithMatch(log.warn, sinon.match(/payload size .* exceeds limit/))
+      sinon.assert.calledTwice(request)
+      const firstPayload = JSON.parse(request.getCall(0).args[0])
+      const secondPayload = JSON.parse(request.getCall(1).args[0])
+      assert.strictEqual(firstPayload.flagEvaluations.length, 1)
+      assert.strictEqual(firstPayload.flagEvaluations[0].flag.key, 'small')
+      assert.strictEqual(secondPayload.flagEvaluations.length, 1)
+      assert.strictEqual(secondPayload.flagEvaluations[0].flag.key, 'large')
+      assert.ok(!Object.hasOwn(secondPayload.flagEvaluations[0], 'targeting_key'))
+      assert.ok(!Object.hasOwn(secondPayload.flagEvaluations[0], 'context'))
+      for (const call of request.getCalls()) {
+        assert.ok(Buffer.byteLength(call.args[0]) <= writer._payloadSizeLimit,
+          `request payload exceeded configured limit: ${Buffer.byteLength(call.args[0])}`)
+      }
+      sinon.assert.notCalled(log.warn)
+      assert.strictEqual(writer._droppedEvents, 0)
+    })
+
+    it('drops an already-degraded aggregate event that still exceeds the configured event size limit', () => {
+      writer._globalCap = 0
+      writer._eventSizeLimit = 120
+
+      writer.enqueue(makeEvent({ flagKey: 'f'.repeat(180), attrs: {}, targetingKey: '' }))
+      writer.flush()
+
+      sinon.assert.notCalled(request)
+      sinon.assert.calledWithMatch(log.warn, sinon.match(/event size .* exceeds limit/))
       assert.strictEqual(writer._droppedEvents, 1)
     })
   })
