@@ -122,49 +122,7 @@ function testRuntimeVersionChecks (arg, filename) {
     it('should be able to use the engines field', () => {
       const engines = require(`${sandboxCwd()}/node_modules/dd-trace/package.json`).engines.node
 
-      assert.match(engines, /^>=\d+ <\d+$/)
-    })
-
-    context('when node version is too recent', () => {
-      useEnv({ NODE_OPTIONS })
-
-      before(() => {
-        const pkg = JSON.parse(pkgStr)
-        pkg.engines.node = `>=${NODE_MAJOR - 1} <${NODE_MAJOR}`
-        fs.writeFileSync(pkgPath, JSON.stringify(pkg))
-      })
-
-      it('should not initialize the tracer', () => doTest('false\n', []))
-
-      context('with DD_INJECTION_ENABLED', () => {
-        useEnv({ DD_INJECTION_ENABLED })
-
-        context('without debug', () => {
-          it('should not initialize the tracer', () => doTest('false\n', telemetryAbort))
-
-          it('should initialize the tracer, if DD_INJECT_FORCE', () => doTestForced('true\n', telemetryForced))
-        })
-
-        context('with debug', () => {
-          useEnv({ DD_TRACE_DEBUG })
-
-          it('should not initialize the tracer', () =>
-            doTest(`Aborting application instrumentation due to incompatible_runtime.
-Found incompatible runtime Node.js ${process.versions.node}, Supported runtimes: Node.js \
->=${NODE_MAJOR - 1} <${NODE_MAJOR}.
-false
-`, telemetryAbort))
-
-          it('should initialize the tracer, if DD_INJECT_FORCE', () =>
-            doTestForced(`Aborting application instrumentation due to incompatible_runtime.
-Found incompatible runtime Node.js ${process.versions.node}, Supported runtimes: Node.js \
->=${NODE_MAJOR - 1} <${NODE_MAJOR}.
-DD_INJECT_FORCE enabled, allowing unsupported runtimes and continuing.
-Application instrumentation bootstrapping complete
-true
-`, telemetryForced))
-        })
-      })
+      assert.match(engines, /^>=\d+$/)
     })
 
     context('when node version is too old', () => {
@@ -172,7 +130,7 @@ true
 
       before(() => {
         const pkg = JSON.parse(pkgStr)
-        pkg.engines.node = `>=${NODE_MAJOR + 1} <${NODE_MAJOR + 2}`
+        pkg.engines.node = `>=${NODE_MAJOR + 1}`
         fs.writeFileSync(pkgPath, JSON.stringify(pkg))
       })
 
@@ -193,14 +151,14 @@ true
           it('should not initialize the tracer', () =>
             doTest(`Aborting application instrumentation due to incompatible_runtime.
 Found incompatible runtime Node.js ${process.versions.node}, Supported runtimes: Node.js \
->=${NODE_MAJOR + 1} <${NODE_MAJOR + 2}.
+>=${NODE_MAJOR + 1}.
 false
 `, telemetryAbort))
 
           it('should initialize the tracer, if DD_INJECT_FORCE', () =>
             doTestForced(`Aborting application instrumentation due to incompatible_runtime.
 Found incompatible runtime Node.js ${process.versions.node}, Supported runtimes: Node.js \
->=${NODE_MAJOR + 1} <${NODE_MAJOR + 2}.
+>=${NODE_MAJOR + 1}.
 DD_INJECT_FORCE enabled, allowing unsupported runtimes and continuing.
 Application instrumentation bootstrapping complete
 true
@@ -215,7 +173,7 @@ true
 
         before(() => {
           const pkg = JSON.parse(pkgStr)
-          pkg.engines.node = '>=0 <1000'
+          pkg.engines.node = '>=0'
           fs.writeFileSync(pkgPath, JSON.stringify(pkg))
         })
 
