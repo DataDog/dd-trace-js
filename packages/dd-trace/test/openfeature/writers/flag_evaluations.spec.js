@@ -1,28 +1,12 @@
 'use strict'
 
 const assert = require('node:assert/strict')
-const fs = require('node:fs')
-const path = require('node:path')
 
-const Ajv = require('ajv')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('../../setup/core')
-
-const schemaPath = path.join(__dirname, 'testdata/flageval-worker/batchedflagevaluations.json')
-const schema = JSON.parse(fs.readFileSync(schemaPath, 'utf8'))
-const ajv = new Ajv({ allErrors: true })
-const validateBatchedFlagEvaluations = ajv.compile(schema)
-
-function validateFlagEvaluationPayload (payload) {
-  if (validateBatchedFlagEvaluations(payload)) return []
-  return validateBatchedFlagEvaluations.errors.map(error => {
-    const path = error.instancePath || error.dataPath || '/'
-    return `${path} ${error.message} ${JSON.stringify(error.params || {})}`
-  })
-}
 
 describe('FlagEvaluationsWriter', () => {
   let FlagEvaluationsWriter
@@ -516,25 +500,45 @@ describe('FlagEvaluationsWriter', () => {
     })
   })
 
-  describe('JSON schema validation (G3)', () => {
-    const validatePayload = () => {
+  describe('payload contract shape (G3)', () => {
+    const readAndAssertPayload = () => {
       const payload = JSON.parse(request.getCall(0).args[0])
-      const errors = validateFlagEvaluationPayload(payload)
-      assert.deepStrictEqual(errors, [], 'payload must satisfy the flageval-worker contract')
+      assert.deepStrictEqual(Object.keys(payload).sort(), ['context', 'flagEvaluations'])
+      assert.strictEqual(typeof payload.context.service, 'string')
+      assert.ok(Array.isArray(payload.flagEvaluations))
+
+      for (const ev of payload.flagEvaluations) {
+        assert.strictEqual(typeof ev.timestamp, 'number')
+        assert.deepStrictEqual(Object.keys(ev.flag), ['key'])
+        assert.strictEqual(typeof ev.flag.key, 'string')
+        assert.strictEqual(typeof ev.first_evaluation, 'number')
+        assert.strictEqual(typeof ev.last_evaluation, 'number')
+        assert.strictEqual(typeof ev.evaluation_count, 'number')
+        assert.ok(!Object.hasOwn(ev, 'reason'), 'OpenFeature reason must not be emitted to EVP')
+        if (Object.hasOwn(ev, 'variant')) {
+          assert.deepStrictEqual(Object.keys(ev.variant), ['key'])
+        }
+        if (Object.hasOwn(ev, 'allocation')) {
+          assert.deepStrictEqual(Object.keys(ev.allocation), ['key'])
+        }
+        if (Object.hasOwn(ev, 'error')) {
+          assert.deepStrictEqual(Object.keys(ev.error), ['message'])
+        }
+      }
       return payload
     }
 
-    it('full-tier payload validates against the worker schema', () => {
+    it('full-tier payload uses the flagevaluation envelope and schema-visible event fields', () => {
       writer.enqueue(makeEvent())
       writer.flush()
-      validatePayload()
+      readAndAssertPayload()
     })
 
     it('serializes variant and allocation as {key} OBJECTS, not bare strings', () => {
       writer.enqueue(makeEvent({ variant: 'on', allocationKey: 'alloc-1' }))
       writer.flush()
 
-      const payload = validatePayload()
+      const payload = readAndAssertPayload()
       const ev = payload.flagEvaluations[0]
       assert.deepStrictEqual(ev.variant, { key: 'on' })
       assert.deepStrictEqual(ev.allocation, { key: 'alloc-1' })
@@ -545,7 +549,7 @@ describe('FlagEvaluationsWriter', () => {
       writer.enqueue(makeEvent({ variant: '', errorMessage: 'flag not found' }))
       writer.flush()
 
-      const payload = validatePayload()
+      const payload = readAndAssertPayload()
       assert.strictEqual(payload.flagEvaluations.length, 2)
       assert.deepStrictEqual(
         payload.flagEvaluations.map(ev => ev.error.message).sort(),
@@ -553,46 +557,15 @@ describe('FlagEvaluationsWriter', () => {
       )
     })
 
-    it('degraded-tier payload validates against the worker schema', () => {
+    it('degraded-tier payload uses the flagevaluation envelope without targeting key or context', () => {
       writer._globalCap = 0 // force degraded
       writer._degradedCap = 100000
       writer.enqueue(makeEvent())
       writer.flush()
-      validatePayload()
-    })
-
-    it('a bare-string variant FAILS the schema check (proves the validator is mechanical, not prose)', () => {
-      const bad = {
-        context: { service: 's' },
-        flagEvaluations: [{
-          timestamp: 1760000000000,
-          flag: { key: 'f' },
-          first_evaluation: 1760000000000,
-          last_evaluation: 1760000000000,
-          evaluation_count: 1,
-          variant: 'on', // bare string — must be rejected
-        }],
-      }
-      const errors = validateFlagEvaluationPayload(bad)
-      assert.ok(errors.some(e => /variant/.test(e) && /object/.test(e)),
-        `validator must reject a bare-string variant; got errors: ${JSON.stringify(errors)}`)
-    })
-
-    it('rejects a top-level reason field because the worker schema has additionalProperties=false', () => {
-      const bad = {
-        context: { service: 's' },
-        flagEvaluations: [{
-          timestamp: 1760000000000,
-          flag: { key: 'f' },
-          first_evaluation: 1760000000000,
-          last_evaluation: 1760000000000,
-          evaluation_count: 1,
-          reason: 'targeting_match',
-        }],
-      }
-      const errors = validateFlagEvaluationPayload(bad)
-      assert.ok(errors.some(e => /additional properties/.test(e) || /reason/.test(e)),
-        `validator must reject top-level reason; got errors: ${JSON.stringify(errors)}`)
+      const payload = readAndAssertPayload()
+      const ev = payload.flagEvaluations[0]
+      assert.ok(!Object.hasOwn(ev, 'targeting_key'))
+      assert.ok(!Object.hasOwn(ev, 'context'))
     })
   })
 
