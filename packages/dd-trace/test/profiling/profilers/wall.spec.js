@@ -444,12 +444,13 @@ describe('profilers/native/wall', () => {
 
       WallProfiler = proxyquire('../../../src/profiling/profilers/wall', {
         '@datadog/pprof': localPprof,
-        '../../../../datadog-core': {
-          storage: () => ({
-            getStore: () => currentStore,
-            enterWith () {},
-            run (store, cb, ...args) { return cb(...args) },
-          }),
+        '../../storage-channels': {
+          enterCh,
+          beforeCh: dc.channel('dd-trace:storage:before'),
+          spanFinishCh: dc.channel('dd-trace:span:finish'),
+          tagsUpdateCh: dc.channel('dd-trace:span:tags:update'),
+          getActiveSpan: () => currentStore && currentStore.span,
+          ensureChannelsActivated: () => {},
         },
       })
     })
@@ -748,12 +749,13 @@ describe('profilers/native/wall', () => {
 
       WallProfiler = proxyquire('../../../src/profiling/profilers/wall', {
         '@datadog/pprof': localPprof,
-        '../../../../datadog-core': {
-          storage: () => ({
-            getStore: () => currentStore,
-            enterWith () {},
-            run (store, cb, ...args) { return cb(...args) },
-          }),
+        '../../storage-channels': {
+          enterCh,
+          beforeCh: dc.channel('dd-trace:storage:before'),
+          spanFinishCh: dc.channel('dd-trace:span:finish'),
+          tagsUpdateCh: dc.channel('dd-trace:span:tags:update'),
+          getActiveSpan: () => currentStore && currentStore.span,
+          ensureChannelsActivated: () => {},
         },
       })
     })
