@@ -14,18 +14,12 @@ module.exports = {
   PROPAGATED_PARENT_ID_KEY: '_dd.p.llmobs_parent_id',
   PROPAGATED_ML_APP_KEY: '_dd.p.llmobs_ml_app',
   PARENT_ID_KEY: '_ml_obs.llmobs_parent_id',
-
-  // Sampling. The decision and rate are computed once on the root LLMObs span,
-  // recorded on every span event's `_dd` block, and propagated across services
-  // via the `_dd.p.*` wire tags below so a whole distributed trace shares one
-  // decision. Wire format matches dd-trace-py exactly.
   PROPAGATED_SAMPLE_RATE_KEY: '_dd.p.llmobs_sr',
   PROPAGATED_SAMPLING_DECISION_KEY: '_dd.p.llmobs_sd',
-  SAMPLE_RATE: '_ml_obs.sample_rate', // internal registry tag
-  SAMPLING_DECISION: '_ml_obs.sampling_decision', // internal registry tag
+  SAMPLE_RATE: '_ml_obs.sample_rate',
+  SAMPLING_DECISION: '_ml_obs.sampling_decision',
   SAMPLING_DECISION_SAMPLED: '1',
   SAMPLING_DECISION_DROPPED: '0',
-  DEFAULT_SAMPLE_RATE: '1',
   TAGS: '_ml_obs.tags',
   NAME: '_ml_obs.name',
   TRACE_ID: '_ml_obs.trace_id',

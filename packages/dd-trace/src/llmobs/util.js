@@ -27,16 +27,6 @@ function encodeUnicode (str = '') {
   return str
 }
 
-// Format a sampling rate for the `_dd.p.llmobs_sr` wire tag: up to 6 decimal
-// digits with trailing zeros stripped. Mirrors dd-trace-py's `format_rate`
-// (ddtrace/internal/sampling.py) — uses `floor(x * 1e6 + 0.5)` rather than
-// `Math.round` so half-way values like 0.0000005 round up consistently with
-// Python instead of relying on banker's rounding.
-function formatRate (rate) {
-  const rounded = Math.floor(rate * 1e6 + 0.5) / 1e6
-  return rounded.toFixed(6).replace(/\.?0+$/, '')
-}
-
 function validateKind (kind) {
   if (!SPAN_KINDS.includes(kind)) {
     throw new Error(`
@@ -374,7 +364,6 @@ function findGenAIAncestorSpanId (span) {
 
 module.exports = {
   encodeUnicode,
-  formatRate,
   findGenAIAncestorSpanId,
   validateCostTags,
   validateKind,

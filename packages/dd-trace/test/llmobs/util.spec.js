@@ -8,7 +8,6 @@ const getConfig = require('../../src/config')
 const {
   encodeUnicode,
   findGenAIAncestorSpanId,
-  formatRate,
   getFunctionArguments,
   validateCostTags,
   safeJsonParse,
@@ -25,23 +24,6 @@ describe('util', () => {
 
     it('should encode only unicode characters in a string', () => {
       assert.strictEqual(encodeUnicode('test 😀'), 'test \\ud83d\\ude00')
-    })
-  })
-
-  describe('formatRate', () => {
-    it('renders whole rates without a decimal point', () => {
-      assert.strictEqual(formatRate(1), '1')
-      assert.strictEqual(formatRate(0), '0')
-    })
-
-    it('strips trailing zeros', () => {
-      assert.strictEqual(formatRate(0.5), '0.5')
-      assert.strictEqual(formatRate(0.25), '0.25')
-    })
-
-    it('caps at 6 decimal digits, rounding half up like dd-trace-py', () => {
-      assert.strictEqual(formatRate(0.123456789), '0.123457')
-      assert.strictEqual(formatRate(0.0000005), '0.000001')
     })
   })
 

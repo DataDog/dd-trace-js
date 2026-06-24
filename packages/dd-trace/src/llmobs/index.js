@@ -72,7 +72,7 @@ function enable (config) {
   spanFinishCh.subscribe(handleSpanProcess)
 
   // distributed tracing for llmobs
-  injectCh.subscribe(handleLLMObsParentIdInjection)
+  injectCh.subscribe(handleLLMObsInjection)
 
   setAgentStrategy(config, useAgentless => {
     if (useAgentless && !(config.apiKey && config.site)) {
@@ -96,7 +96,7 @@ function disable () {
   if (evalMetricAppendCh.hasSubscribers) evalMetricAppendCh.unsubscribe(handleEvalMetricAppend)
   if (flushCh.hasSubscribers) flushCh.unsubscribe(handleFlush)
   if (spanFinishCh.hasSubscribers) spanFinishCh.unsubscribe(handleSpanProcess)
-  if (injectCh.hasSubscribers) injectCh.unsubscribe(handleLLMObsParentIdInjection)
+  if (injectCh.hasSubscribers) injectCh.unsubscribe(handleLLMObsInjection)
   if (registerUserSpanProcessorCh.hasSubscribers) registerUserSpanProcessorCh.unsubscribe(handleRegisterProcessor)
 
   spanWriter?.destroy()
@@ -110,8 +110,8 @@ function disable () {
 }
 
 // since LLMObs traces can extend between services and be the same trace,
-// we need to propagate the parent id and mlApp.
-function handleLLMObsParentIdInjection ({ carrier }) {
+// we need to propagate the parent id, mlApp, and the trace's sampling decision.
+function handleLLMObsInjection ({ carrier }) {
   // Respect the standard propagator's gate: when trace tag propagation is
   // disabled, don't write `x-datadog-tags` for LLMObs either.
   if (globalTracerConfig.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH === 0) return
@@ -126,8 +126,6 @@ function handleLLMObsParentIdInjection ({ carrier }) {
     parentContext?._trace?.tags?.[PROPAGATED_ML_APP_KEY] ||
     globalTracerConfig.llmobs.mlApp
 
-  // Propagate the trace's sampling rate + decision so downstream services
-  // inherit them rather than computing a new (possibly different) decision.
   const sampleRate =
     mlObsSpanTags?.[SAMPLE_RATE] ?? parentContext?._trace?.tags?.[PROPAGATED_SAMPLE_RATE_KEY]
   const samplingDecision =

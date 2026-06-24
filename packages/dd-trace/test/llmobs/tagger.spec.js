@@ -6,7 +6,7 @@ const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 const { INPUT_PROMPT } = require('../../src/llmobs/constants/tags')
-const { writeBridgeTags, findGenAIAncestorSpanId, formatRate } = require('../../src/llmobs/util')
+const { writeBridgeTags, findGenAIAncestorSpanId } = require('../../src/llmobs/util')
 
 function unserializableObject () {
   const obj = {}
@@ -45,7 +45,6 @@ describe('tagger', () => {
     util = {
       generateTraceId: sinon.stub().returns('0123'),
       writeBridgeTags,
-      formatRate,
       findGenAIAncestorSpanId: sinon.stub().returns(null),
     }
 
@@ -146,13 +145,13 @@ describe('tagger', () => {
 
         tagger.registerLLMObsSpan(span, { kind: 'llm', parent: parentSpan })
 
+        // The parent carries no sampling decision, so the child inherits none
+        // (it does not start a fresh decision mid-trace).
         assert.deepStrictEqual(Tagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'my-ml-app',
           '_ml_obs.session_id': 'my-session',
           '_ml_obs.llmobs_parent_id': '5678',
-          '_ml_obs.sample_rate': '1',
-          '_ml_obs.sampling_decision': '1',
         })
       })
 
@@ -173,12 +172,11 @@ describe('tagger', () => {
 
         tagger.registerLLMObsSpan(span, { kind: 'llm' })
 
+        // Propagated parent with no propagated sampling info: inherit none.
         assert.deepStrictEqual(Tagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'my-default-ml-app',
           '_ml_obs.llmobs_parent_id': '-567',
-          '_ml_obs.sample_rate': '1',
-          '_ml_obs.sampling_decision': '1',
         })
       })
 
@@ -231,6 +229,7 @@ describe('tagger', () => {
         })
 
         it('inherits the rate and decision propagated from an upstream service', () => {
+          spanContext._trace.tags['_dd.p.llmobs_parent_id'] = '5678'
           spanContext._trace.tags['_dd.p.llmobs_sr'] = '0.25'
           spanContext._trace.tags['_dd.p.llmobs_sd'] = '0'
 
@@ -239,6 +238,19 @@ describe('tagger', () => {
           const tags = Tagger.tagMap.get(span)
           assert.strictEqual(tags['_ml_obs.sample_rate'], '0.25')
           assert.strictEqual(tags['_ml_obs.sampling_decision'], '0')
+        })
+
+        it('makes no decision when an upstream LLMObs trace propagated no sampling info', () => {
+          // Distributed trace from a service that predates sampling propagation:
+          // there is an LLMObs parent context but no rate/decision. We must not
+          // start a fresh (divergent) decision mid-trace — mirrors dd-trace-py.
+          spanContext._trace.tags['_dd.p.llmobs_parent_id'] = '5678'
+
+          tagger.registerLLMObsSpan(span, { kind: 'llm' })
+
+          const tags = Tagger.tagMap.get(span)
+          assert.strictEqual(tags['_ml_obs.sample_rate'], undefined)
+          assert.strictEqual(tags['_ml_obs.sampling_decision'], undefined)
         })
       })
 
@@ -370,7 +382,6 @@ describe('tagger', () => {
               './util': {
                 generateTraceId: sinon.stub().returns('0123'),
                 writeBridgeTags,
-                formatRate,
                 findGenAIAncestorSpanId,
               },
             })

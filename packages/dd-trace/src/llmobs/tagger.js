@@ -2,6 +2,7 @@
 
 const log = require('../log')
 const Sampler = require('../sampler')
+const { formatKnuthRate } = Sampler
 const {
   MODEL_NAME,
   MODEL_PROVIDER,
@@ -50,8 +51,7 @@ const {
   PROPAGATED_SAMPLING_DECISION_KEY,
 } = require('./constants/tags')
 const { storage } = require('./storage')
-const { findGenAIAncestorSpanId, formatRate, validateCostTags, writeBridgeTags, validateToolDefinitions } =
-  require('./util')
+const { findGenAIAncestorSpanId, validateCostTags, writeBridgeTags, validateToolDefinitions } = require('./util')
 
 // global registry of LLMObs spans
 // maps LLMObs spans to their annotations
@@ -69,9 +69,6 @@ class LLMObsTagger {
 
     this.softFail = softFail
 
-    // Sample rate is fixed for the process lifetime, so build the deterministic
-    // (trace-ID Knuth) sampler once. The shared APM `Sampler` clamps the rate to
-    // [0, 1] in its constructor, so an out-of-range config value is handled there.
     this.#sampler = new Sampler(config.llmobs?.sampleRate ?? 1)
   }
 
@@ -171,26 +168,29 @@ class LLMObsTagger {
     }
   }
 
-  // The sampling rate and decision are computed once on the root LLMObs span of
-  // a trace and inherited by every descendant — locally from the parent's
-  // registry entry, or across a service boundary from the propagated `_dd.p.*`
-  // trace tags. This keeps the whole (possibly distributed) trace on a single
-  // decision. Mirrors dd-trace-py's `_activate_llmobs_span`. The decision is
-  // recorded on the span event but never drops the span client-side; the
-  // backend honors `_dd.sampling_decision` so I/O is preserved for extrapolation.
   #tagSamplingDecision (span, parent) {
     const traceTags = span.context()._trace.tags
-    let sampleRate = registry.get(parent)?.[SAMPLE_RATE] ?? traceTags[PROPAGATED_SAMPLE_RATE_KEY]
-    let samplingDecision = registry.get(parent)?.[SAMPLING_DECISION] ?? traceTags[PROPAGATED_SAMPLING_DECISION_KEY]
+    const parentTags = registry.get(parent)
 
-    if (samplingDecision == null) {
-      // Root span (no parent and nothing propagated): make a fresh decision.
-      sampleRate = formatRate(this.#sampler.rate())
+    let sampleRate, samplingDecision
+    if (parentTags) {
+      // Local LLMObs parent: inherit its decision.
+      sampleRate = parentTags[SAMPLE_RATE]
+      samplingDecision = parentTags[SAMPLING_DECISION]
+    } else if (traceTags[PROPAGATED_PARENT_ID_KEY]) {
+      // Distributed LLMObs parent: inherit whatever was propagated. This may be
+      // absent if the upstream service predates sampling propagation, in which
+      // case we make no decision here rather than starting a divergent one.
+      sampleRate = traceTags[PROPAGATED_SAMPLE_RATE_KEY]
+      samplingDecision = traceTags[PROPAGATED_SAMPLING_DECISION_KEY]
+    } else {
+      // Root span: make the trace's one sampling decision.
+      sampleRate = formatKnuthRate(this.#sampler.rate())
       samplingDecision = this.#sampler.isSampled(span) ? SAMPLING_DECISION_SAMPLED : SAMPLING_DECISION_DROPPED
     }
 
-    this._setTag(span, SAMPLE_RATE, sampleRate)
-    this._setTag(span, SAMPLING_DECISION, samplingDecision)
+    if (sampleRate != null) this._setTag(span, SAMPLE_RATE, sampleRate)
+    if (samplingDecision != null) this._setTag(span, SAMPLING_DECISION, samplingDecision)
   }
 
   // TODO: similarly for the following `tag` methods,
