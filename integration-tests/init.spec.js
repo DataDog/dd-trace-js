@@ -122,7 +122,7 @@ function testRuntimeVersionChecks (arg, filename) {
     it('should be able to use the engines field', () => {
       const engines = require(`${sandboxCwd()}/node_modules/dd-trace/package.json`).engines.node
 
-      assert.match(engines, /^>=\d+ <\d+$/)
+      assert.match(engines, /^>=\d+( <\d+)?$/)
     })
 
     context('when node version is too recent', () => {

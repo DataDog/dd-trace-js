@@ -5,6 +5,10 @@ inputs:
     description: "Version identifier of the version to use."
     required: false
     default: 'latest'
+outputs:
+  supported:
+    description: "Whether the installed Node.js version matches engines.node."
+    value: ${{ steps.supported-check.outputs.supported }}
 runs:
   using: composite
   steps:
@@ -25,12 +29,30 @@ runs:
             "require('./${file}').dependencies['node-${1}'].replace('npm:node@','')" \
             || echo "${1}"
         }
+        node_range_min_major() {
+          awk '/"node"[[:space:]]*:/ {
+            if (match($0, />=[[:space:]]*[0-9]+/)) {
+              value = substr($0, RSTART, RLENGTH)
+              gsub(/[^0-9]/, "", value)
+              print value
+              exit
+            }
+          }' package.json
+        }
+        supported_lts() {
+          [ "$min_major" -gt "$1" ] && echo "$min_major" || echo "$1"
+        }
+        min_major=18
+        if [ -f package.json ]; then
+          parsed_min_major=$(node_range_min_major)
+          [ -n "$parsed_min_major" ] && min_major=$parsed_min_major
+        fi
         case "$VERSION" in
           eol)         version=16 ;;
-          oldest)      version=$(node_version 18) ;;
-          maintenance) version=$(node_version 20) ;;
-          active)      version=$(node_version 24) ;;
-          latest)      version=${LATEST_VERSION:-$(node_version 26)}
+          oldest)      version=$(node_version "$min_major") ;;
+          maintenance) version=$(node_version "$(supported_lts 20)") ;;
+          active)      version=$(node_version "$(supported_lts 24)") ;;
+          latest)      version=${LATEST_VERSION:-$(node_version "$(supported_lts 26)")}
                       # When a custom/nightly version is requested via latest,
                       # force tracer init past the engines upper-bound guard.
                       [ -n "$LATEST_VERSION" ] && echo "DD_INJECT_FORCE=true" >> "$GITHUB_ENV" || true ;;
@@ -42,6 +64,49 @@ runs:
       with:
         node-version: ${{ steps.node-version.outputs.version }}
         registry-url: ${{ inputs.registry-url || 'https://registry.npmjs.org' }}
+
+    - name: Check if Node.js version is supported
+      id: supported-check
+      shell: bash
+      run: |
+        node_range_min_major() {
+          awk '/"node"[[:space:]]*:/ {
+            if (match($0, />=[[:space:]]*[0-9]+/)) {
+              value = substr($0, RSTART, RLENGTH)
+              gsub(/[^0-9]/, "", value)
+              print value
+              exit
+            }
+          }' package.json
+        }
+        node_range_max_major() {
+          awk '/"node"[[:space:]]*:/ {
+            if (match($0, /<[[:space:]]*[0-9]+/)) {
+              value = substr($0, RSTART, RLENGTH)
+              gsub(/[^0-9]/, "", value)
+              print value
+              exit
+            }
+          }' package.json
+        }
+
+        if [ ! -f package.json ]; then
+          echo "supported=true" >> "$GITHUB_OUTPUT"
+        else
+          min_major=$(node_range_min_major)
+          max_major=$(node_range_max_major)
+          current_major=$(node -v)
+          current_major=${current_major#v}
+          current_major=${current_major%%.*}
+
+          supported=true
+          if [ -n "$min_major" ] && [ "$current_major" -lt "$min_major" ]; then
+            supported=false
+          elif [ -n "$max_major" ] && [ "$current_major" -ge "$max_major" ]; then
+            supported=false
+          fi
+          echo "supported=$supported" >> "$GITHUB_OUTPUT"
+        fi
 
     # Persist the resolved version so subsequent runs within this 60-minute window can reuse it.
     - name: Save resolved version
