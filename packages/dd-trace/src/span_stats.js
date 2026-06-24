@@ -166,7 +166,7 @@ class SpanStatsProcessor {
     tags,
     version: appVersion,
     OTEL_TRACES_SPAN_METRICS_ENABLED: otlpTraceMetricsEnabled,
-    '_DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL': flushIntervalMs,
+    _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: flushIntervalMs,
     OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: otelMetricsUrl,
     OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: otelMetricsProtocol,
     OTEL_EXPORTER_OTLP_METRICS_HEADERS: otelMetricsHeaders,

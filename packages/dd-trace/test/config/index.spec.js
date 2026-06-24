@@ -769,7 +769,7 @@ describe('Config', () => {
     assert.strictEqual(config.sampleRate, 0.5)
   })
 
-  it('should auto-enable OTEL_TRACES_SPAN_METRICS_ENABLED when both OTEL_TRACES_EXPORTER=otlp and DD_METRICS_OTEL_ENABLED=true', () => {
+  it('auto-enables OTEL_TRACES_SPAN_METRICS_ENABLED when OTEL_TRACES_EXPORTER=otlp and DD_METRICS_OTEL_ENABLED', () => {
     process.env.OTEL_TRACES_EXPORTER = 'otlp'
     process.env.DD_METRICS_OTEL_ENABLED = 'true'
     const config = getConfig()
