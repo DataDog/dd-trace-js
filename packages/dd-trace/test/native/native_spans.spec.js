@@ -18,9 +18,9 @@ describe('NativeSpansInterface', () => {
   let mockState
   let OpCode
   let fakeWasmMemory
-  // The slotIndex used by most queueOp tests. The native API addresses
-  // spans by u32 slot number, not by spanId buffer.
-  const slot = 7
+  // The op handle used by most queueOp tests. The native API addresses
+  // spans by their 8-byte LE span id, not by a u32 slot number.
+  const spanId = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8])
 
   beforeEach(() => {
     // Mock OpCode enum (mirrors the values exported by the pipeline crate).
@@ -152,7 +152,7 @@ describe('NativeSpansInterface', () => {
       const cases = [
         {
           name: 'opcode + count + header (string-only arg path)',
-          args: [OpCode.SetName, slot, 'test-name'],
+          args: [OpCode.SetName, spanId, 'test-name'],
           assert: () => {
             assert.strictEqual(nativeSpans._cqbCount, 1)
             // The first 8 bytes of the change queue store the count
@@ -163,7 +163,7 @@ describe('NativeSpansInterface', () => {
         },
         {
           name: 'string arguments resolved via string table',
-          args: [OpCode.SetMetaAttr, slot, 'key', 'value'],
+          args: [OpCode.SetMetaAttr, spanId, 'key', 'value'],
           assert: () => {
             assert.ok(nativeSpans._stringMap.has('key'))
             assert.ok(nativeSpans._stringMap.has('value'))
@@ -171,49 +171,49 @@ describe('NativeSpansInterface', () => {
         },
         {
           name: 'id128 with 8-byte buffer',
-          args: [OpCode.Create, slot, ['id128', id8]],
+          args: [OpCode.Create, spanId, ['id128', id8]],
           assert: () => {
             assert.strictEqual(nativeSpans._cqbCount, 1)
           },
         },
         {
           name: 'id128 with 16-byte buffer',
-          args: [OpCode.Create, slot, ['id128', id16]],
+          args: [OpCode.Create, spanId, ['id128', id16]],
           assert: () => {
             assert.strictEqual(nativeSpans._cqbCount, 1)
           },
         },
         {
           name: 'id64',
-          args: [OpCode.Create, slot, ['id64', id64Buf]],
+          args: [OpCode.Create, spanId, ['id64', id64Buf]],
           assert: () => {
             assert.strictEqual(nativeSpans._cqbCount, 1)
           },
         },
         {
           name: 'id64 with null value',
-          args: [OpCode.Create, slot, ['id64', null]],
+          args: [OpCode.Create, spanId, ['id64', null]],
           assert: () => {
             assert.strictEqual(nativeSpans._cqbCount, 1)
           },
         },
         {
           name: 'ns (ms -> nanoseconds)',
-          args: [OpCode.SetStart, slot, ['ns', 1000]],
+          args: [OpCode.SetStart, spanId, ['ns', 1000]],
           assert: () => {
             assert.strictEqual(nativeSpans._cqbCount, 1)
           },
         },
         {
           name: 'f64',
-          args: [OpCode.SetMetricAttr, slot, 'metric', ['f64', 3.14]],
+          args: [OpCode.SetMetricAttr, spanId, 'metric', ['f64', 3.14]],
           assert: () => {
             assert.strictEqual(nativeSpans._cqbCount, 1)
           },
         },
         {
           name: 'i32',
-          args: [OpCode.SetError, slot, ['i32', 1]],
+          args: [OpCode.SetError, spanId, ['i32', 1]],
           assert: () => {
             assert.strictEqual(nativeSpans._cqbCount, 1)
           },
@@ -240,7 +240,7 @@ describe('NativeSpansInterface', () => {
       // Write count to header so flushChangeQueue actually delegates to native.
       nativeSpans._cqbView.setUint32(0, 1, true)
 
-      nativeSpans.queueOp(OpCode.SetMetaAttr, slot, 'key', 'value')
+      nativeSpans.queueOp(OpCode.SetMetaAttr, spanId, 'key', 'value')
 
       sinon.assert.called(mockState.flushChangeQueue)
     })
@@ -248,7 +248,7 @@ describe('NativeSpansInterface', () => {
 
   describe('flushChangeQueue', () => {
     it('flushes to native and resets buffer state on success', () => {
-      nativeSpans.queueOp(OpCode.SetName, slot, 'test')
+      nativeSpans.queueOp(OpCode.SetName, spanId, 'test')
       nativeSpans.flushChangeQueue()
 
       sinon.assert.calledOnce(mockState.flushChangeQueue)
@@ -264,13 +264,17 @@ describe('NativeSpansInterface', () => {
   })
 
   describe('flushSpans', () => {
-    it('flushes change queue and calls prepareChunk + sendPreparedChunk with slot indices', async () => {
+    it('flushes change queue and calls prepareChunk + sendPreparedChunk with spanId indices', async () => {
       // Queue a pending op so flushSpans must drain the change queue
       // before delegating to prepareChunk.
-      nativeSpans.queueOp(OpCode.SetName, slot, 'test')
-      const slots = [0, 1, 2]
+      nativeSpans.queueOp(OpCode.SetName, spanId, 'test')
+      const spanIds = [
+        new Uint8Array([1, 0, 0, 0, 0, 0, 0, 0]),
+        new Uint8Array([2, 0, 0, 0, 0, 0, 0, 0]),
+        new Uint8Array([3, 0, 0, 0, 0, 0, 0, 0]),
+      ]
 
-      await nativeSpans.flushSpans(slots, true)
+      await nativeSpans.flushSpans(spanIds, true)
 
       sinon.assert.callOrder(
         mockState.flushChangeQueue,
@@ -298,13 +302,13 @@ describe('NativeSpansInterface', () => {
     })
 
     it('should expand flush buffer if needed', async () => {
-      // Slot indices are u32 LE (4 bytes each); FLUSH_BUFFER_SIZE starts at
-      // 10 KiB. 4000 slots = 16000 bytes => triggers reallocation.
-      const slots = Array.from({ length: 4000 }, (_, i) => i)
+      // Span ids are u64 LE (8 bytes each); FLUSH_BUFFER_SIZE starts at
+      // 10 KiB. 4000 ids = 32000 bytes => triggers reallocation.
+      const spanIds = Array.from({ length: 4000 }, () => new Uint8Array(8))
 
-      await nativeSpans.flushSpans(slots, false)
+      await nativeSpans.flushSpans(spanIds, false)
 
-      assert.ok(nativeSpans._flushBuffer.length >= slots.length * 4)
+      assert.ok(nativeSpans._flushBuffer.length >= spanIds.length * 8)
     })
 
     it('should reset queue state when prepareChunk throws', async () => {
@@ -312,7 +316,7 @@ describe('NativeSpansInterface', () => {
       // this isolates the catch arm of `flushSpans` as the only path that
       // could clean up. Without this, the success-path reset inside
       // `flushChangeQueue` would mask whether the catch arm runs.
-      nativeSpans.queueOp(OpCode.SetName, slot, 'test')
+      nativeSpans.queueOp(OpCode.SetName, spanId, 'test')
       assert.notStrictEqual(nativeSpans._cqbCount, 0)
       const cqbCountBeforeThrow = nativeSpans._cqbCount
       mockState.flushChangeQueue = sinon.stub() // succeeds without resetting JS state
@@ -332,7 +336,7 @@ describe('NativeSpansInterface', () => {
         origReset()
       }
 
-      await assert.rejects(nativeSpans.flushSpans([slot], true), /prep failed/)
+      await assert.rejects(nativeSpans.flushSpans([spanId], true), /prep failed/)
 
       assert.ok(mockState.prepareChunk.calledOnce, 'prepareChunk should have been called')
       assert.ok(resetCallCount >= 2, 'resetChangeQueue should run from the flushSpans catch arm')
@@ -342,19 +346,19 @@ describe('NativeSpansInterface', () => {
     })
 
     it('should reset queue state when sendPreparedChunk rejects', async () => {
-      nativeSpans.queueOp(OpCode.SetName, slot, 'test')
+      nativeSpans.queueOp(OpCode.SetName, spanId, 'test')
       assert.notStrictEqual(nativeSpans._cqbCount, 0)
       const err = new Error('send failed')
       mockState.sendPreparedChunk = sinon.stub().rejects(err)
 
-      await assert.rejects(nativeSpans.flushSpans([slot], true), err)
+      await assert.rejects(nativeSpans.flushSpans([spanId], true), err)
 
       assert.strictEqual(nativeSpans._cqbIndex, 8)
       assert.strictEqual(nativeSpans._cqbCount, 0)
     })
 
     it('should rethrow + recover when flushChangeQueue throws', () => {
-      nativeSpans.queueOp(OpCode.SetName, slot, 'test')
+      nativeSpans.queueOp(OpCode.SetName, spanId, 'test')
       mockState.flushChangeQueue = sinon.stub().throws(new Error('drain failed'))
 
       assert.throws(() => nativeSpans.flushChangeQueue(), /drain failed/)
@@ -373,7 +377,7 @@ describe('NativeSpansInterface', () => {
       assert.throws(() => nativeSpans.getStringId('boom'), /table full/)
 
       // The JS map must NOT carry the failed id — otherwise a later
-      // queueOp(SetMetaAttr, slot, 'boom', ...) would emit a dangling
+      // queueOp(SetMetaAttr, spanId, 'boom', ...) would emit a dangling
       // string-id reference into the wire format.
       assert.strictEqual(nativeSpans._stringMap.has('boom'), false)
     })
@@ -424,7 +428,7 @@ describe('NativeSpansInterface', () => {
 
   describe('resetChangeQueue', () => {
     it('should reset buffer index and count', () => {
-      nativeSpans.queueOp(OpCode.SetName, slot, 'test')
+      nativeSpans.queueOp(OpCode.SetName, spanId, 'test')
 
       nativeSpans.resetChangeQueue()
 
@@ -433,51 +437,45 @@ describe('NativeSpansInterface', () => {
     })
   })
 
-  describe('slot allocator', () => {
-    it('allocates sequentially and reuses freed slots before bumping', () => {
-      const a = nativeSpans.allocSlot()
-      const b = nativeSpans.allocSlot()
-      const c = nativeSpans.allocSlot()
+  describe('segment allocator', () => {
+    it('allocates segment ids sequentially', () => {
+      const a = nativeSpans.allocSegment()
+      const b = nativeSpans.allocSegment()
+      const c = nativeSpans.allocSegment()
       assert.deepStrictEqual([a, b, c], [0, 1, 2])
-      nativeSpans.freeSlots([b])
-      const d = nativeSpans.allocSlot()
-      const e = nativeSpans.allocSlot()
-      assert.strictEqual(d, b, 'reuses the freed slot first')
-      assert.strictEqual(e, 3, 'then bumps the counter')
     })
   })
 
   describe('queueCreateSpan', () => {
     it('should write a CreateSpan record (opcode 13) and bump count', () => {
-      const spanId = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8])
       const traceId = Buffer.alloc(8)
       traceId.writeBigUInt64BE(0xabcdn)
       const parentId = Buffer.alloc(8)
       parentId.writeBigUInt64BE(0x1234n)
 
-      nativeSpans.queueCreateSpan(slot, spanId, traceId, parentId, 'op', 1500)
+      nativeSpans.queueCreateSpan(spanId, traceId, 0, parentId, 'op', 1500)
 
       assert.strictEqual(nativeSpans._cqbCount, 1)
-      // The opcode is the first u64 LE after the 8-byte header.
-      assert.strictEqual(nativeSpans._cqbView.getUint32(8, true), 13)
+      // Op header is [opcode u16 LE][span_id u64 LE]; opcode sits at offset 8.
+      assert.strictEqual(nativeSpans._cqbView.getUint16(8, true), 13)
     })
   })
 
   describe('queueBatchMeta / queueBatchMetrics', () => {
     it('is a no-op for empty input', () => {
       const indexBefore = nativeSpans._cqbIndex
-      nativeSpans.queueBatchMeta(slot, [])
-      nativeSpans.queueBatchMetrics(slot, [])
+      nativeSpans.queueBatchMeta(spanId, [])
+      nativeSpans.queueBatchMetrics(spanId, [])
       assert.strictEqual(nativeSpans._cqbIndex, indexBefore)
       assert.strictEqual(nativeSpans._cqbCount, 0)
     })
 
     it('writes opcode + count + resolved string IDs for both meta (15) and metric (16)', () => {
       // queueBatchMeta -> opcode 15, both key and value interned as strings.
-      nativeSpans.queueBatchMeta(slot, [['k1', 'v1'], ['k2', 'v2']])
+      nativeSpans.queueBatchMeta(spanId, [['k1', 'v1'], ['k2', 'v2']])
 
       assert.strictEqual(nativeSpans._cqbCount, 1)
-      assert.strictEqual(nativeSpans._cqbView.getUint32(8, true), 15)
+      assert.strictEqual(nativeSpans._cqbView.getUint16(8, true), 15)
       assert.ok(nativeSpans._stringMap.has('k1'))
       assert.ok(nativeSpans._stringMap.has('v1'))
       assert.ok(nativeSpans._stringMap.has('k2'))
@@ -486,10 +484,10 @@ describe('NativeSpansInterface', () => {
       // queueBatchMetrics -> opcode 16, only the key is interned;
       // the value is written inline as an f64.
       const metaRecordEnd = nativeSpans._cqbIndex
-      nativeSpans.queueBatchMetrics(slot, [['m1', 1.5], ['m2', 2.5]])
+      nativeSpans.queueBatchMetrics(spanId, [['m1', 1.5], ['m2', 2.5]])
 
       assert.strictEqual(nativeSpans._cqbCount, 2)
-      assert.strictEqual(nativeSpans._cqbView.getUint32(metaRecordEnd, true), 16)
+      assert.strictEqual(nativeSpans._cqbView.getUint16(metaRecordEnd, true), 16)
       assert.ok(nativeSpans._stringMap.has('m1'))
       assert.ok(nativeSpans._stringMap.has('m2'))
     })

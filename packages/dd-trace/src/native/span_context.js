@@ -127,7 +127,6 @@ class NativeSpanContext extends DatadogSpanContext {
     leId[6] = beBuf[1]
     leId[7] = beBuf[0]
     this._nativeSpanId = leId
-    this._slotIndex = props.slotIndex
     this._tracerService = props.tracerService // Store for BASE_SERVICE check
     this[NATIVE_READY] = true
   }
@@ -163,7 +162,7 @@ class NativeSpanContext extends DatadogSpanContext {
     if (typeof value === 'string' && !SPECIAL_KEYS.has(key)) {
       this.#nativeSpans.queueOp(
         OpCode.SetMetaAttr,
-        this._slotIndex,
+        this._nativeSpanId,
         key,
         value,
       )
@@ -176,7 +175,7 @@ class NativeSpanContext extends DatadogSpanContext {
       if (!Number.isNaN(value)) {
         this.#nativeSpans.queueOp(
           OpCode.SetMetricAttr,
-          this._slotIndex,
+          this._nativeSpanId,
           key,
           ['f64', value],
         )
@@ -212,10 +211,10 @@ class NativeSpanContext extends DatadogSpanContext {
     }
 
     if (metaBatch.length > 0) {
-      this.#nativeSpans.queueBatchMeta(this._slotIndex, metaBatch)
+      this.#nativeSpans.queueBatchMeta(this._nativeSpanId, metaBatch)
     }
     if (metricBatch.length > 0) {
-      this.#nativeSpans.queueBatchMetrics(this._slotIndex, metricBatch)
+      this.#nativeSpans.queueBatchMetrics(this._nativeSpanId, metricBatch)
     }
   }
 
@@ -235,18 +234,18 @@ class NativeSpanContext extends DatadogSpanContext {
       this.#syncTagToNative(key, value)
     } else if (typeof value === 'number') {
       // NaN metrics are dropped to match the legacy formatter (see appendTag).
-      if (!Number.isNaN(value)) this.#nativeSpans.queueBatchMetrics(this._slotIndex, [[key, value]])
+      if (!Number.isNaN(value)) this.#nativeSpans.queueBatchMetrics(this._nativeSpanId, [[key, value]])
     } else if (typeof value === 'boolean') {
-      this.#nativeSpans.queueBatchMetrics(this._slotIndex, [[key, value ? 1 : 0]])
+      this.#nativeSpans.queueBatchMetrics(this._nativeSpanId, [[key, value ? 1 : 0]])
     } else if (typeof value === 'string') {
-      this.#nativeSpans.queueBatchMeta(this._slotIndex, [[key, value]])
+      this.#nativeSpans.queueBatchMeta(this._nativeSpanId, [[key, value]])
     } else {
       // Objects: flatten one level via the shared coercion helper.
       const meta = []
       const metrics = []
       appendTag(meta, metrics, key, value)
-      if (meta.length > 0) this.#nativeSpans.queueBatchMeta(this._slotIndex, meta)
-      if (metrics.length > 0) this.#nativeSpans.queueBatchMetrics(this._slotIndex, metrics)
+      if (meta.length > 0) this.#nativeSpans.queueBatchMeta(this._nativeSpanId, meta)
+      if (metrics.length > 0) this.#nativeSpans.queueBatchMetrics(this._nativeSpanId, metrics)
     }
   }
 
@@ -265,7 +264,7 @@ class NativeSpanContext extends DatadogSpanContext {
       case 'service.name':
         this.#nativeSpans.queueOp(
           OpCode.SetServiceName,
-          this._slotIndex,
+          this._nativeSpanId,
           String(value)
         )
         // Set _dd.base_service when the span's service differs from the
@@ -275,7 +274,7 @@ class NativeSpanContext extends DatadogSpanContext {
           super.setTag(BASE_SERVICE, this._tracerService)
           this.#nativeSpans.queueOp(
             OpCode.SetMetaAttr,
-            this._slotIndex,
+            this._nativeSpanId,
             BASE_SERVICE,
             String(this._tracerService)
           )
@@ -289,7 +288,7 @@ class NativeSpanContext extends DatadogSpanContext {
         // than queueing a meta tag.
         this.#nativeSpans.queueOp(
           OpCode.SetServiceName,
-          this._slotIndex,
+          this._nativeSpanId,
           String(value)
         )
         return
@@ -297,7 +296,7 @@ class NativeSpanContext extends DatadogSpanContext {
       case 'resource.name':
         this.#nativeSpans.queueOp(
           OpCode.SetResourceName,
-          this._slotIndex,
+          this._nativeSpanId,
           String(value)
         )
         return
@@ -305,7 +304,7 @@ class NativeSpanContext extends DatadogSpanContext {
       case 'span.type':
         this.#nativeSpans.queueOp(
           OpCode.SetType,
-          this._slotIndex,
+          this._nativeSpanId,
           String(value)
         )
         return
@@ -319,21 +318,21 @@ class NativeSpanContext extends DatadogSpanContext {
         }
         this.#nativeSpans.queueOp(
           OpCode.SetError,
-          this._slotIndex,
+          this._nativeSpanId,
           ['i32', value ? 1 : 0]
         )
         // Error objects: also extract error.type/message/stack as meta tags so
         // consumers don't need to introspect the underlying Error.
         if (value instanceof Error) {
           if (value.name) {
-            this.#nativeSpans.queueOp(OpCode.SetMetaAttr, this._slotIndex, 'error.type', String(value.name))
+            this.#nativeSpans.queueOp(OpCode.SetMetaAttr, this._nativeSpanId, 'error.type', String(value.name))
           }
           if (value.message || value.code) {
             const errMsg = String(value.message || value.code)
-            this.#nativeSpans.queueOp(OpCode.SetMetaAttr, this._slotIndex, 'error.message', errMsg)
+            this.#nativeSpans.queueOp(OpCode.SetMetaAttr, this._nativeSpanId, 'error.message', errMsg)
           }
           if (value.stack) {
-            this.#nativeSpans.queueOp(OpCode.SetMetaAttr, this._slotIndex, 'error.stack', String(value.stack))
+            this.#nativeSpans.queueOp(OpCode.SetMetaAttr, this._nativeSpanId, 'error.stack', String(value.stack))
           }
         }
         return
@@ -343,7 +342,7 @@ class NativeSpanContext extends DatadogSpanContext {
       case 'http.status_code':
         this.#nativeSpans.queueOp(
           OpCode.SetMetaAttr,
-          this._slotIndex,
+          this._nativeSpanId,
           key,
           String(value)
         )
@@ -355,14 +354,14 @@ class NativeSpanContext extends DatadogSpanContext {
         if (this._name !== 'fs.operation') {
           this.#nativeSpans.queueOp(
             OpCode.SetError,
-            this._slotIndex,
+            this._nativeSpanId,
             ['i32', 1]
           )
         }
         // Fall through to add the meta tag
         this.#nativeSpans.queueOp(
           OpCode.SetMetaAttr,
-          this._slotIndex,
+          this._nativeSpanId,
           key,
           String(value)
         )
@@ -374,7 +373,7 @@ class NativeSpanContext extends DatadogSpanContext {
         if (String(value) !== 'internal') {
           this.#nativeSpans.queueOp(
             OpCode.SetMetricAttr,
-            this._slotIndex,
+            this._nativeSpanId,
             MEASURED,
             ['f64', 1]
           )
@@ -382,7 +381,7 @@ class NativeSpanContext extends DatadogSpanContext {
         // Fall through to add the meta tag
         this.#nativeSpans.queueOp(
           OpCode.SetMetaAttr,
-          this._slotIndex,
+          this._nativeSpanId,
           key,
           String(value)
         )
@@ -393,22 +392,22 @@ class NativeSpanContext extends DatadogSpanContext {
         // booleans → 0/1. Primitives are dispatched inline to avoid array
         // allocation; objects are flattened one level via appendTag.
         if (typeof value === 'string') {
-          this.#nativeSpans.queueOp(OpCode.SetMetaAttr, this._slotIndex, key, value)
+          this.#nativeSpans.queueOp(OpCode.SetMetaAttr, this._nativeSpanId, key, value)
         } else if (typeof value === 'number') {
           if (!Number.isNaN(value)) {
-            this.#nativeSpans.queueOp(OpCode.SetMetricAttr, this._slotIndex, key, ['f64', value])
+            this.#nativeSpans.queueOp(OpCode.SetMetricAttr, this._nativeSpanId, key, ['f64', value])
           }
         } else if (typeof value === 'boolean') {
-          this.#nativeSpans.queueOp(OpCode.SetMetricAttr, this._slotIndex, key, ['f64', value ? 1 : 0])
+          this.#nativeSpans.queueOp(OpCode.SetMetricAttr, this._nativeSpanId, key, ['f64', value ? 1 : 0])
         } else {
           const meta = []
           const metrics = []
           appendTag(meta, metrics, key, value)
           for (const [k, v] of meta) {
-            this.#nativeSpans.queueOp(OpCode.SetMetaAttr, this._slotIndex, k, v)
+            this.#nativeSpans.queueOp(OpCode.SetMetaAttr, this._nativeSpanId, k, v)
           }
           for (const [k, v] of metrics) {
-            this.#nativeSpans.queueOp(OpCode.SetMetricAttr, this._slotIndex, k, ['f64', v])
+            this.#nativeSpans.queueOp(OpCode.SetMetricAttr, this._nativeSpanId, k, ['f64', v])
           }
         }
     }
@@ -431,7 +430,7 @@ class NativeSpanContext extends DatadogSpanContext {
   _syncNameToNative (name) {
     this.#nativeSpans.queueOp(
       OpCode.SetName,
-      this._slotIndex,
+      this._nativeSpanId,
       String(name)
     )
   }

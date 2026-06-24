@@ -77,18 +77,17 @@ describe('NativeDatadogSpan', () => {
       sample: sinon.stub(),
     }
 
-    // NativeSpansInterface allocates slot indices and uses
+    // NativeSpansInterface allocates a segment id per local trace and uses
     // queueCreateSpan for the combined Create+SetName+SetStart op. Stub
-    // both so the constructor can run without touching real WASM.
-    let nextSlot = 0
+    // these so the constructor can run without touching real WASM.
+    let nextSegment = 0
     nativeSpans = {
       queueOp: sinon.stub(),
       queueCreateSpan: sinon.stub(),
       queueBatchMeta: sinon.stub(),
       queueBatchMetrics: sinon.stub(),
       flushChangeQueue: sinon.stub(),
-      allocSlot: sinon.stub().callsFake(() => nextSlot++),
-      freeSlots: sinon.stub(),
+      allocSegment: sinon.stub().callsFake(() => nextSegment++),
       OpCode,
     }
 
@@ -104,7 +103,6 @@ describe('NativeDatadogSpan', () => {
       this._parentId = props.parentId || null
       this._sampling = props.sampling || {}
       this._baggageItems = props.baggageItems || {}
-      this._slotIndex = props.slotIndex
       this._trace = props.trace || {
         started: [],
         finished: [],
@@ -258,8 +256,9 @@ describe('NativeDatadogSpan', () => {
 
       sinon.assert.calledOnce(nativeSpans.queueCreateSpan)
       const args = nativeSpans.queueCreateSpan.getCall(0).args
-      // queueCreateSpan(slotIndex, spanId, traceId, parentId, name, startMs)
-      assert.strictEqual(typeof args[0], 'number') // slotIndex
+      // queueCreateSpan(spanId, traceId, segmentId, parentId, name, startMs)
+      assert.ok(args[0] instanceof Uint8Array) // spanId (8-byte LE handle)
+      assert.strictEqual(typeof args[2], 'number') // segmentId
       assert.strictEqual(args[4], 'test-operation') // name
       assert.strictEqual(typeof args[5], 'number') // startMs
     })
@@ -282,12 +281,11 @@ describe('NativeDatadogSpan', () => {
       assert.strictEqual(span.context()._name, 'test-operation')
     })
 
-    it('should free the slot and throw when wrapping an existing NativeSpanContext', () => {
-      // Re-wrapping a NativeSpanContext would either leak the just-allocated
-      // slot (early return) or duplicate the span across two slots. We free
-      // the slot and throw so callers get a loud error rather than silent
-      // resource exhaustion.
-      const nativeContext = { _nativeSpanId: new Uint8Array(8), _slotIndex: 7 }
+    it('should throw when wrapping an existing NativeSpanContext', () => {
+      // Re-wrapping a NativeSpanContext would duplicate the span under two
+      // span ids. Throw so callers get a loud error rather than a silent
+      // double-emit.
+      const nativeContext = { _nativeSpanId: new Uint8Array(8) }
       assert.throws(
         () => new NativeDatadogSpan(tracer, processor, prioritySampler, {
           operationName: 'test',
@@ -295,10 +293,7 @@ describe('NativeDatadogSpan', () => {
         }, false, nativeSpans),
         /cannot wrap an existing NativeSpanContext/
       )
-      sinon.assert.calledWith(nativeSpans.freeSlots, sinon.match.array)
-      const freedSlots = nativeSpans.freeSlots.getCall(0).args[0]
-      assert.strictEqual(freedSlots.length, 1, 'expected exactly one slot freed')
-      assert.strictEqual(typeof freedSlots[0], 'number')
+      sinon.assert.notCalled(nativeSpans.queueCreateSpan)
     })
   })
 

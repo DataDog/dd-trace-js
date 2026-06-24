@@ -136,18 +136,17 @@ class NativeExporter {
       this.#syncTraceTags(spans[0])
     }
 
-    // Collect slot indices for native export
+    // Collect span ids for native export (the op/flush handle is the span_id).
     // Note: flushChangeQueue is called inside flushSpans, no need to call it here
-    const slots = spans.map(span => span.context()._slotIndex)
+    const spanIds = spans.map(span => span.context()._nativeSpanId)
 
     // prepareChunk is synchronous — extract spans from native storage now.
     // sendPreparedChunk is async (HTTP send). We serialize sends so that
     // prepared chunks don't accumulate faster than they can be sent, which
     // would cause unbounded memory growth proportional to total requests.
-    this._nativeSpans.flushSpans(slots, firstIsLocalRoot)
+    this._nativeSpans.flushSpans(spanIds, firstIsLocalRoot)
       .then((response) => {
         this.#flushInFlight = false
-        this._nativeSpans.freeSlots(slots)
         // The agent's response carries per-service sampling rates. Feed them
         // back into the priority sampler so adaptive (agent-driven) sampling
         // works in native mode, matching the legacy AgentWriter behaviour.
@@ -162,7 +161,6 @@ class NativeExporter {
         }
       }, (err) => {
         this.#flushInFlight = false
-        this._nativeSpans.freeSlots(slots)
         log.error('Error sending spans to agent via native exporter:', err)
         // Drain on rejection too — otherwise a single transient failure
         // would leave spans buffered indefinitely (no signal beyond the

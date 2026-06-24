@@ -39,13 +39,14 @@ const FLUSH_BUFFER_SIZE = 10 * 1024 // 10KB
  * The change buffer is a contiguous WASM-memory region whose layout is:
  *
  *   header   : [count: u64 LE]                    @ offset 0
- *   per op   : [opcode: u64 LE][slotIndex: u32][...payload...]
+ *   per op   : [opcode: u16 LE][spanId: u64 LE][...payload...]
  *
+ * Spans are addressed by their span_id (the 8-byte LE handle), not a slot.
  * Each `queue*` method appends one op record and increments `count`.
  *
  * ### Generic queueOp args
  *
- * `queueOp(op, slot, ...args)` writes per-arg encodings after the header:
+ * `queueOp(op, spanId, ...args)` writes per-arg encodings after the header:
  *       number              → u32 string-id (pre-resolved)
  *       ['id64', value]     → u64 LE (8 bytes; byte-swapped from BE Identifier)
  *       ['id128', value]    → u128 LE (16 bytes; byte-swapped from BE Identifier;
@@ -56,10 +57,12 @@ const FLUSH_BUFFER_SIZE = 10 * 1024 // 10KB
  *
  * ### Method-specific record layouts
  *
- *   queueCreateSpan (op=13):     [spanId u64 LE][traceId u128 LE]
- *                                [parentId u64 LE][nameId u32][start u64 LE]
+ *   queueCreateSpan (op=13):     [traceId u128 LE][segmentId u64 LE]
+ *                                [parentId u64 LE][nameId u32][start i64 LE]
  *   queueBatchMeta (op=15):      [count: u32][keyId u32, valId u32] × count
  *   queueBatchMetrics (op=16):   [count: u32][keyId u32, value f64] × count
+ *
+ * (spanId is in the op header above; segmentId groups one local trace.)
  *
  * All u64 fields use the LE representation in WASM memory; spanId/traceId/
  * parentId payloads byte-swap from the JS-side BE Identifier buffers.
@@ -108,9 +111,11 @@ class NativeSpansInterface {
     this._cqbIndex = 8
     this._cqbCount = 0
 
-    // Slot allocator state
-    this._nextSlot = 0
-    this._freeSlots = []
+    // Segment allocator state. Spans are addressed by their span_id; a
+    // `segment_id` groups spans of one local trace so trace-level state and
+    // chunk flushing stay isolated. One id per local trace, shared by all its
+    // spans (stored on the shared `_trace` object by span.js).
+    this._nextSegment = 0
 
     // String table state
     this._stringMap = new Map()
@@ -206,21 +211,11 @@ class NativeSpansInterface {
   }
 
   /**
-   * Allocate a slot index for a new span.
-   * Reuses freed slots when available, otherwise increments the counter.
-   * @returns {number} The allocated slot index
+   * Allocate a fresh segment id for a new local trace.
+   * @returns {number} The allocated segment id
    */
-  allocSlot () {
-    if (this._freeSlots.length > 0) return this._freeSlots.pop()
-    return this._nextSlot++
-  }
-
-  /**
-   * Return slot indices to the free list after spans are flushed.
-   * @param {Array<number>} slots Array of slot indices to free
-   */
-  freeSlots (slots) {
-    for (let i = 0; i < slots.length; i++) this._freeSlots.push(slots[i])
+  allocSegment () {
+    return this._nextSegment++
   }
 
   /**
@@ -288,10 +283,10 @@ class NativeSpansInterface {
    * per-arg encoding table.
    *
    * @param {number} op The OpCode value
-   * @param {number} slotIndex The slot index (u32)
+   * @param {Uint8Array} spanId The 8-byte LE span id (op handle)
    * @param {...(string|Array)} args Operation arguments
    */
-  queueOp (op, slotIndex, ...args) {
+  queueOp (op, spanId, ...args) {
     // See class doc: no detach check at entry; getStringId loop refreshes if needed.
     let idx = this._cqbIndex
 
@@ -313,11 +308,12 @@ class NativeSpansInterface {
     const view = this._cqbView
     const buf = this._cqbBytes
 
-    view.setUint32(idx, op, true)
-    view.setUint32(idx + 4, 0, true)
+    // Op header: [opcode u16 LE][span_id u64 LE]. The span_id is the 8-byte
+    // LE handle; it replaces the old u32 slot index.
+    view.setUint16(idx, op, true)
+    idx += 2
+    buf.set(spanId, idx)
     idx += 8
-    view.setUint32(idx, slotIndex, true)
-    idx += 4
 
     for (let i = 0; i < resolvedArgs.length; i++) {
       const arg = resolvedArgs[i]
@@ -422,14 +418,14 @@ class NativeSpansInterface {
   /**
    * Queue a CreateSpan operation (combined Create + SetName + SetStart).
    *
-   * @param {number} slotIndex The slot index (u32)
-   * @param {Uint8Array} spanId LE span ID
+   * @param {Uint8Array} spanId The 8-byte LE span id (op handle)
    * @param {Uint8Array|number[]} traceId BE Identifier buffer (8 or 16 bytes)
+   * @param {number} segmentId The local-trace segment id (u64)
    * @param {Uint8Array|number[]|null} parentId BE Identifier buffer or null
    * @param {string} name Span name
    * @param {number} startMs Start time in milliseconds
    */
-  queueCreateSpan (slotIndex, spanId, traceId, parentId, name, startMs) {
+  queueCreateSpan (spanId, traceId, segmentId, parentId, name, startMs) {
     // See class doc: no detach check at entry; getStringId loop refreshes if needed.
     let idx = this._cqbIndex
 
@@ -445,13 +441,13 @@ class NativeSpansInterface {
     const view = this._cqbView
     const buf = this._cqbBytes
 
-    view.setUint32(idx, 13, true); view.setUint32(idx + 4, 0, true)
-    idx += 8
-    view.setUint32(idx, slotIndex, true)
-    idx += 4
+    // Header: [opcode u16 = CreateSpan(13)][span_id u64 LE]
+    view.setUint16(idx, 13, true)
+    idx += 2
     buf.set(spanId, idx)
     idx += 8
 
+    // Args: [trace_id u128][segment_id u64][parent_id u64][name_id u32][start i64]
     const tb = traceId._buffer ?? traceId
     if (tb.length > 8) {
       buf[idx] = tb[15]; buf[idx + 1] = tb[14]; buf[idx + 2] = tb[13]; buf[idx + 3] = tb[12]
@@ -467,6 +463,11 @@ class NativeSpansInterface {
       view.setUint32(idx, 0, true); view.setUint32(idx + 4, 0, true)
       idx += 8
     }
+
+    // segment_id u64 LE
+    view.setUint32(idx, segmentId % 0x1_00_00_00_00, true)
+    view.setUint32(idx + 4, Math.floor(segmentId / 0x1_00_00_00_00), true)
+    idx += 8
 
     if (parentId === null || parentId === undefined) {
       view.setUint32(idx, 0, true); view.setUint32(idx + 4, 0, true)
@@ -495,10 +496,10 @@ class NativeSpansInterface {
    * Queue multiple meta (string) tags using the BatchSetMeta opcode.
    * Single header, N key/value pairs. Written directly to WASM memory.
    *
-   * @param {number} slotIndex The slot index (u32)
+   * @param {Uint8Array} spanId The 8-byte LE span id (op handle)
    * @param {Array<[string, string]>} tags Array of [key, value] pairs
    */
-  queueBatchMeta (slotIndex, tags) {
+  queueBatchMeta (spanId, tags) {
     if (tags.length === 0) return
 
     // See class doc: no detach check at entry; getStringId loop refreshes if needed.
@@ -518,11 +519,12 @@ class NativeSpansInterface {
     }
 
     const view = this._cqbView
+    const buf = this._cqbBytes
 
-    view.setUint32(idx, 15, true); view.setUint32(idx + 4, 0, true)
+    view.setUint16(idx, 15, true)
+    idx += 2
+    buf.set(spanId, idx)
     idx += 8
-    view.setUint32(idx, slotIndex, true)
-    idx += 4
     view.setUint32(idx, tags.length, true)
     idx += 4
     for (let i = 0; i < tags.length; i++) {
@@ -542,10 +544,10 @@ class NativeSpansInterface {
    * Queue multiple metric tags using the BatchSetMetric opcode.
    * Single header, N key/value pairs. Written directly to WASM memory.
    *
-   * @param {number} slotIndex The slot index (u32)
+   * @param {Uint8Array} spanId The 8-byte LE span id (op handle)
    * @param {Array<[string, number]>} tags Array of [key, value] pairs
    */
-  queueBatchMetrics (slotIndex, tags) {
+  queueBatchMetrics (spanId, tags) {
     if (tags.length === 0) return
 
     // See class doc: no detach check at entry; getStringId loop refreshes if needed.
@@ -564,11 +566,12 @@ class NativeSpansInterface {
     }
 
     const view = this._cqbView
+    const buf = this._cqbBytes
 
-    view.setUint32(idx, 16, true); view.setUint32(idx + 4, 0, true)
+    view.setUint16(idx, 16, true)
+    idx += 2
+    buf.set(spanId, idx)
     idx += 8
-    view.setUint32(idx, slotIndex, true)
-    idx += 4
     view.setUint32(idx, tags.length, true)
     idx += 4
     for (let i = 0; i < tags.length; i++) {
@@ -587,33 +590,33 @@ class NativeSpansInterface {
   /**
    * Flush spans to the Datadog agent.
    *
-   * @param {Array<number>} slots Array of u32 slot indices
+   * @param {Array<Uint8Array>} spanIds Array of 8-byte LE span ids
    * @param {boolean} [firstIsLocalRoot] Whether the first span is the local root (defaults to true)
    * @returns {Promise<string>} Response from the agent
    */
-  flushSpans (slots, firstIsLocalRoot = true) {
+  flushSpans (spanIds, firstIsLocalRoot = true) {
     // Flush any pending change queue operations first
     this.flushChangeQueue()
 
-    if (slots.length === 0) {
+    if (spanIds.length === 0) {
       return Promise.resolve('no spans to flush')
     }
 
-    // Ensure flush buffer is large enough
-    const requiredSize = slots.length * 4
+    // Ensure flush buffer is large enough (8 bytes per u64 span id)
+    const requiredSize = spanIds.length * 8
     if (requiredSize > this._flushBuffer.length) {
       this._flushBuffer = Buffer.alloc(requiredSize)
     }
 
-    // Write slot indices to flush buffer as u32 LE
+    // Write span ids to the flush buffer as u64 LE (the ids are already LE)
     let index = 0
-    for (const slot of slots) {
-      this._flushBuffer.writeUInt32LE(slot, index)
-      index += 4
+    for (const spanId of spanIds) {
+      this._flushBuffer.set(spanId, index)
+      index += 8
     }
 
     try {
-      this._state.prepareChunk(slots.length, firstIsLocalRoot, this._flushBuffer)
+      this._state.prepareChunk(spanIds.length, firstIsLocalRoot, this._flushBuffer)
       // prepareChunk calls flush_change_buffer + flush_chunk in Rust which
       // can allocate (deferred_meta/metrics Vecs, spans Vec). Any of those
       // can trigger memory.grow which detaches our cached ArrayBuffer views.

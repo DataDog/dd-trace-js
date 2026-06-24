@@ -32,7 +32,6 @@ describe('NativeExporter', () => {
     nativeSpans = {
       flushChangeQueue: sinon.stub(),
       flushSpans: sinon.stub().resolves('unchanged'),
-      freeSlots: sinon.stub(),
       setAgentUrl: sinon.stub(),
     }
 
@@ -144,11 +143,11 @@ describe('NativeExporter', () => {
     // it() blocks paid for 5x mocha-overhead while testing the same flow.
     // This single test pins all five aspects: flushSpans is called with the
     // extracted slot indices, _pendingSpans drains, the done callback fires
-    // with no error, and freeSlots runs once the in-flight send settles.
-    it('end-to-end successful flush: calls flushSpans with slot indices, drains pending, frees slots, fires done',
+    // with no error, and pending spans drain once the in-flight send settles.
+    it('end-to-end successful flush: calls flushSpans with span ids, drains pending, fires done',
       async () => {
-        const span1 = createMockSpan(123n, 11)
-        const span2 = createMockSpan(456n, 22)
+        const span1 = createMockSpan(123n)
+        const span2 = createMockSpan(456n)
         exporter.export([span1, span2])
 
         // done() fires synchronously after flush() kicks off the async send.
@@ -156,18 +155,19 @@ describe('NativeExporter', () => {
         exporter.flush((err) => { cbErr = err })
         assert.strictEqual(cbErr, undefined)
 
-        // flushSpans called with the extracted slot-index array (u32 slot
-        // numbers) — the native pipeline addresses spans by slot.
+        // flushSpans called with the extracted span-id array — the native
+        // pipeline addresses spans by their span id.
         sinon.assert.called(nativeSpans.flushSpans)
         const call = nativeSpans.flushSpans.getCall(0)
-        assert.deepStrictEqual(call.args[0], [11, 22])
+        assert.deepStrictEqual(call.args[0], [
+          span1.context()._nativeSpanId,
+          span2.context()._nativeSpanId,
+        ])
         // Pending spans drain synchronously when the flush is dispatched.
         assert.strictEqual(exporter._pendingSpans.length, 0)
 
-        // freeSlots runs in the .then() handler on the resolved flushSpans
-        // promise — drain microtasks before asserting.
+        // Drain microtasks so the resolved-flush handler runs.
         await clock.tickAsync(0)
-        sinon.assert.called(nativeSpans.freeSlots)
       })
 
     it('should sync trace tags to first span', (done) => {
@@ -370,9 +370,8 @@ describe('NativeExporter', () => {
     it('should swallow flushSpans rejections (logged, not propagated to done)', async () => {
       // flush() calls done() immediately after kicking off the
       // async send, then log.error()s any rejection. Errors no longer
-      // surface through the done callback. Verify both: done is invoked
-      // without an argument, and freeSlots eventually runs in the catch
-      // handler (proves the rejection was actually observed).
+      // surface through the done callback. Verify done is invoked
+      // without an argument and the rejection is observed (logged).
       nativeSpans.flushSpans.rejects(new Error('Network error'))
 
       const span = createMockSpan(1n)
@@ -387,7 +386,7 @@ describe('NativeExporter', () => {
       // to the host promise queue via tickAsync.
       await clock.tickAsync(0)
 
-      sinon.assert.called(nativeSpans.freeSlots)
+      sinon.assert.called(logError)
     })
   })
 
@@ -440,10 +439,9 @@ describe('NativeExporter', () => {
       exporter.flush()
       await clock.tickAsync(0)
 
-      // No throw, sampler untouched, error logged, and slots still freed.
+      // No throw, sampler untouched, error logged.
       sinon.assert.notCalled(prioritySampler.update)
       sinon.assert.calledOnce(logError)
-      sinon.assert.called(nativeSpans.freeSlots)
     })
   })
 
@@ -462,12 +460,12 @@ describe('NativeExporter', () => {
     })
 
     it('publishes once on first successful flush and does not republish on subsequent flushes', async () => {
-      exporter.export([createMockSpan(1n, 11)])
+      exporter.export([createMockSpan(1n)])
       exporter.flush()
       await clock.tickAsync(0)
       sinon.assert.calledOnce(onFirstFlush)
 
-      exporter.export([createMockSpan(2n, 22)])
+      exporter.export([createMockSpan(2n)])
       exporter.flush()
       await clock.tickAsync(0)
       sinon.assert.calledOnce(onFirstFlush)
@@ -476,7 +474,7 @@ describe('NativeExporter', () => {
     it('does not publish when the flush rejects', async () => {
       nativeSpans.flushSpans.rejects(new Error('Network error'))
 
-      exporter.export([createMockSpan(1n, 11)])
+      exporter.export([createMockSpan(1n)])
       exporter.flush()
       await clock.tickAsync(0)
 
@@ -498,7 +496,7 @@ describe('NativeExporter', () => {
   })
 
   // Helper function to create mock spans
-  function createMockSpan (nativeSpanIdValue, slotIndex = 0) {
+  function createMockSpan (nativeSpanIdValue) {
     // Create an 8-byte buffer for the span ID (big-endian)
     const nativeSpanId = Buffer.alloc(8)
     nativeSpanId.writeBigUInt64BE(BigInt(nativeSpanIdValue))
@@ -516,9 +514,8 @@ describe('NativeExporter', () => {
       _spanId: spanId,
       _parentId: { toString: () => '0' },
       _isRemote: false,
-      // The exporter reads context._slotIndex to build the slot
+      // The exporter reads context._nativeSpanId to build the span-id
       // array passed to nativeSpans.flushSpans.
-      _slotIndex: slotIndex,
       _trace: {
         started: [],
         finished: [],

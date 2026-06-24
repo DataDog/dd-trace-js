@@ -310,7 +310,7 @@ describe('span sampler', () => {
       const spanContext = {
         _spanId: id('1234567812345678'),
         _sampling: {},
-        _slotIndex: 42,
+        _nativeSpanId: new Uint8Array([42, 0, 0, 0, 0, 0, 0, 0]),
         _trace: {
           started: [],
         },
@@ -330,7 +330,7 @@ describe('span sampler', () => {
 
       sinon.assert.calledOnce(nativeSpans.queueBatchMetrics)
       assert.deepStrictEqual(nativeSpans.queueBatchMetrics.args[0], [
-        42,
+        new Uint8Array([42, 0, 0, 0, 0, 0, 0, 0]),
         [
           [SPAN_SAMPLING_MECHANISM, SAMPLING_MECHANISM_SPAN],
           [SPAN_SAMPLING_RULE_RATE, 1.0],
@@ -362,7 +362,7 @@ describe('span sampler', () => {
       const spanContext = {
         _spanId: id('1234567812345678'),
         _sampling: {},
-        _slotIndex: 42,
+        _nativeSpanId: new Uint8Array([42, 0, 0, 0, 0, 0, 0, 0]),
         _trace: {
           started: [],
         },
@@ -403,7 +403,7 @@ describe('span sampler', () => {
       const spanContext = {
         _spanId: id('1234567812345678'),
         _sampling: {},
-        _slotIndex: 1,
+        _nativeSpanId: new Uint8Array([1, 0, 0, 0, 0, 0, 0, 0]),
         _trace: {
           started: [],
         },
@@ -423,7 +423,7 @@ describe('span sampler', () => {
 
       sinon.assert.calledOnce(nativeSpans.queueBatchMetrics)
       assert.deepStrictEqual(nativeSpans.queueBatchMetrics.args[0], [
-        1,
+        new Uint8Array([1, 0, 0, 0, 0, 0, 0, 0]),
         [
           [SPAN_SAMPLING_MECHANISM, SAMPLING_MECHANISM_SPAN],
           [SPAN_SAMPLING_RULE_RATE, 1.0],
@@ -431,7 +431,7 @@ describe('span sampler', () => {
       ])
     })
 
-    it('skips native ops when slotIndex is undefined', () => {
+    it('skips native ops when _nativeSpanId is undefined', () => {
       const nativeSpans = {
         queueBatchMetrics: sinon.stub(),
       }
@@ -450,7 +450,7 @@ describe('span sampler', () => {
       const spanContext = {
         _spanId: id('1234567812345678'),
         _sampling: {},
-        // No _slotIndex — noop span
+        // No _nativeSpanId — noop span
         _trace: {
           started: [],
         },
@@ -490,7 +490,7 @@ describe('span sampler', () => {
       const spanContext = {
         _spanId: id('1234567812345678'),
         _sampling: {},
-        _slotIndex: 7,
+        _nativeSpanId: new Uint8Array([7, 0, 0, 0, 0, 0, 0, 0]),
         _trace: {
           started: [],
         },
@@ -534,7 +534,7 @@ describe('span sampler', () => {
       const firstSpanContext = {
         _spanId: id('1234567812345678'),
         _sampling: {},
-        _slotIndex: 42,
+        _nativeSpanId: new Uint8Array([42, 0, 0, 0, 0, 0, 0, 0]),
         _trace: { started },
         _name: 'operation',
         _tags: {},
@@ -543,7 +543,7 @@ describe('span sampler', () => {
       const secondSpanContext = {
         _spanId: id('1234567812345679'),
         _sampling: {},
-        _slotIndex: 99,
+        _nativeSpanId: new Uint8Array([99, 0, 0, 0, 0, 0, 0, 0]),
         _trace: { started },
         _name: 'operation',
         _tags: {},
@@ -569,7 +569,7 @@ describe('span sampler', () => {
 
       sinon.assert.callCount(nativeSpans.queueBatchMetrics, 2)
       assert.deepStrictEqual(nativeSpans.queueBatchMetrics.args[0], [
-        42,
+        new Uint8Array([42, 0, 0, 0, 0, 0, 0, 0]),
         [
           [SPAN_SAMPLING_MECHANISM, SAMPLING_MECHANISM_SPAN],
           [SPAN_SAMPLING_RULE_RATE, 1.0],
@@ -577,7 +577,7 @@ describe('span sampler', () => {
         ],
       ])
       assert.deepStrictEqual(nativeSpans.queueBatchMetrics.args[1], [
-        99,
+        new Uint8Array([99, 0, 0, 0, 0, 0, 0, 0]),
         [
           [SPAN_SAMPLING_MECHANISM, SAMPLING_MECHANISM_SPAN],
           [SPAN_SAMPLING_RULE_RATE, 1.0],
@@ -606,7 +606,7 @@ describe('span sampler', () => {
       const matchingContext = {
         _spanId: id('1234567812345678'),
         _sampling: {},
-        _slotIndex: 42,
+        _nativeSpanId: new Uint8Array([42, 0, 0, 0, 0, 0, 0, 0]),
         _trace: { started },
         _name: 'operation',
         _tags: {},
@@ -615,7 +615,7 @@ describe('span sampler', () => {
       const nonMatchingContext = {
         _spanId: id('1234567812345679'),
         _sampling: {},
-        _slotIndex: 99,
+        _nativeSpanId: new Uint8Array([99, 0, 0, 0, 0, 0, 0, 0]),
         _trace: { started },
         _name: 'other_operation',
         _tags: {},
@@ -641,7 +641,7 @@ describe('span sampler', () => {
 
       sinon.assert.calledOnce(nativeSpans.queueBatchMetrics)
       assert.deepStrictEqual(nativeSpans.queueBatchMetrics.args[0], [
-        42,
+        new Uint8Array([42, 0, 0, 0, 0, 0, 0, 0]),
         [
           [SPAN_SAMPLING_MECHANISM, SAMPLING_MECHANISM_SPAN],
           [SPAN_SAMPLING_RULE_RATE, 1.0],
@@ -671,7 +671,7 @@ describe('span sampler', () => {
       const firstSpanContext = {
         _spanId: id('1234567812345678'),
         _sampling: {},
-        _slotIndex: 42,
+        _nativeSpanId: new Uint8Array([42, 0, 0, 0, 0, 0, 0, 0]),
         _trace: { started },
         _name: 'operation',
         _tags: {},
@@ -680,7 +680,7 @@ describe('span sampler', () => {
       const secondSpanContext = {
         _spanId: id('1234567812345679'),
         _sampling: {},
-        _slotIndex: 99,
+        _nativeSpanId: new Uint8Array([99, 0, 0, 0, 0, 0, 0, 0]),
         _trace: { started },
         _name: 'operation',
         _tags: {},
@@ -732,7 +732,7 @@ describe('span sampler', () => {
       const spanContext = {
         _spanId: id('1234567812345678'),
         _sampling: {},
-        _slotIndex: 42,
+        _nativeSpanId: new Uint8Array([42, 0, 0, 0, 0, 0, 0, 0]),
         _trace: { started },
         _name: 'operation',
         _tags: {},
@@ -741,7 +741,7 @@ describe('span sampler', () => {
       const otherSpanContext = {
         _spanId: id('1234567812345679'),
         _sampling: {},
-        _slotIndex: 99,
+        _nativeSpanId: new Uint8Array([99, 0, 0, 0, 0, 0, 0, 0]),
         _trace: { started },
         _name: 'other_operation',
         _tags: {},
@@ -768,7 +768,7 @@ describe('span sampler', () => {
       sinon.assert.notCalled(nativeSpans.queueBatchMetrics)
     })
 
-    it('queues native ops when slotIndex is 0 (falsy boundary)', () => {
+    it('queues native ops for a valid span id', () => {
       const nativeSpans = {
         queueBatchMetrics: sinon.stub(),
       }
@@ -787,7 +787,7 @@ describe('span sampler', () => {
       const spanContext = {
         _spanId: id('1234567812345678'),
         _sampling: {},
-        _slotIndex: 0,
+        _nativeSpanId: new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0]),
         _trace: {
           started: [],
         },
@@ -806,7 +806,10 @@ describe('span sampler', () => {
       sampler.sample(spanContext)
 
       sinon.assert.calledOnce(nativeSpans.queueBatchMetrics)
-      assert.strictEqual(nativeSpans.queueBatchMetrics.args[0][0], 0)
+      assert.deepStrictEqual(
+        nativeSpans.queueBatchMetrics.args[0][0],
+        new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0])
+      )
     })
   })
 })

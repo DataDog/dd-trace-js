@@ -68,17 +68,17 @@ class SpanProcessor {
       spanContext._sampling.mechanism = SAMPLING_MECHANISM_MANUAL
 
       // Sync manual decision to native storage
-      const slotIndex = spanContext._slotIndex
-      if (slotIndex !== undefined) {
-        this._syncSamplingToNative(spanContext, slotIndex)
+      const spanId = spanContext._nativeSpanId
+      if (spanId !== undefined) {
+        this._syncSamplingToNative(spanContext, spanId)
       }
     } else {
       // Use JS-side sampling
       this._prioritySampler.sample(spanContext)
 
       // Sync sampling decision to native storage if span is in native storage
-      if (spanContext._slotIndex !== undefined) {
-        this._syncSamplingToNative(spanContext, spanContext._slotIndex)
+      if (spanContext._nativeSpanId !== undefined) {
+        this._syncSamplingToNative(spanContext, spanContext._nativeSpanId)
       }
     }
 
@@ -90,14 +90,14 @@ class SpanProcessor {
    * Sync sampling decision from JS to native storage.
    *
    * @param {object} spanContext - The span context
-   * @param {number} slotIndex - The native slot index
+   * @param {number} spanId - The native span id (op handle)
    * @private
    */
-  _syncSamplingToNative (spanContext, slotIndex) {
+  _syncSamplingToNative (spanContext, spanId) {
     // Sync priority as trace metric
     this._nativeSpans.queueOp(
       native.OpCode.SetTraceMetricsAttr,
-      slotIndex,
+      spanId,
       '_sampling_priority_v1',
       ['f64', spanContext._sampling.priority]
     )
@@ -106,7 +106,7 @@ class SpanProcessor {
     if (spanContext._sampling.mechanism !== undefined) {
       this._nativeSpans.queueOp(
         native.OpCode.SetTraceMetaAttr,
-        slotIndex,
+        spanId,
         '_dd.p.dm',
         `-${spanContext._sampling.mechanism}`
       )
@@ -118,7 +118,7 @@ class SpanProcessor {
     if (typeof traceObj[SAMPLING_RULE_DECISION] === 'number') {
       this._nativeSpans.queueOp(
         native.OpCode.SetTraceMetricsAttr,
-        slotIndex,
+        spanId,
         SAMPLING_RULE_DECISION,
         ['f64', traceObj[SAMPLING_RULE_DECISION]]
       )
@@ -126,7 +126,7 @@ class SpanProcessor {
     if (typeof traceObj[SAMPLING_LIMIT_DECISION] === 'number') {
       this._nativeSpans.queueOp(
         native.OpCode.SetTraceMetricsAttr,
-        slotIndex,
+        spanId,
         SAMPLING_LIMIT_DECISION,
         ['f64', traceObj[SAMPLING_LIMIT_DECISION]]
       )
@@ -134,7 +134,7 @@ class SpanProcessor {
     if (typeof traceObj[SAMPLING_AGENT_DECISION] === 'number') {
       this._nativeSpans.queueOp(
         native.OpCode.SetTraceMetricsAttr,
-        slotIndex,
+        spanId,
         SAMPLING_AGENT_DECISION,
         ['f64', traceObj[SAMPLING_AGENT_DECISION]]
       )

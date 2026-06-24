@@ -11,7 +11,7 @@ const SamplingRule = require('./sampling_rule')
 
 /**
  * @typedef {{
- *   queueBatchMetrics: (slotIndex: number, metrics: Array<[string, number]>) => void
+ *   queueBatchMetrics: (spanId: Uint8Array, metrics: Array<[string, number]>) => void
  * }} NativeSpansQueue
  */
 
@@ -76,8 +76,8 @@ class SpanSampler {
         }
 
         // Queue single-span ingestion metric ops into native storage.
-        const slotIndex = spanCtx._slotIndex
-        if (nativeSpans && slotIndex !== undefined) {
+        const spanId = spanCtx._nativeSpanId
+        if (nativeSpans && spanId !== undefined) {
           let metrics = spanSamplingMetricsCache.get(rule)
           if (!metrics) {
             metrics = [
@@ -89,7 +89,7 @@ class SpanSampler {
             }
             spanSamplingMetricsCache.set(rule, metrics)
           }
-          nativeSpans.queueBatchMetrics(slotIndex, metrics)
+          nativeSpans.queueBatchMetrics(spanId, metrics)
         }
       }
     }

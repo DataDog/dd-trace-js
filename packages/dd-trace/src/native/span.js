@@ -87,7 +87,6 @@ class NativeDatadogSpan extends DatadogSpan {
    */
   _createContext (parent, fields) {
     const nativeSpans = pendingNativeSpans
-    const slotIndex = nativeSpans.allocSlot()
 
     const operationName = fields.operationName
     const tracer = this.tracer()
@@ -111,7 +110,6 @@ class NativeDatadogSpan extends DatadogSpan {
       // slots. Free the slot and throw loudly.
       const existingContext = fields.context
       if (existingContext._nativeSpanId !== undefined) {
-        nativeSpans.freeSlots([slotIndex])
         throw new Error('NativeDatadogSpan cannot wrap an existing NativeSpanContext')
       }
 
@@ -125,7 +123,6 @@ class NativeDatadogSpan extends DatadogSpan {
         trace: existingContext._trace,
         tracestate: existingContext._tracestate,
         tracerService,
-        slotIndex,
       })
 
       if (!spanContext._trace.startTime) startTime = dateNow()
@@ -142,7 +139,6 @@ class NativeDatadogSpan extends DatadogSpan {
         trace: parent._trace,
         tracestate: parent._tracestate,
         tracerService,
-        slotIndex,
       })
 
       if (!spanContext._trace.startTime) startTime = dateNow()
@@ -157,7 +153,6 @@ class NativeDatadogSpan extends DatadogSpan {
         traceId: spanId,
         spanId,
         tracerService,
-        slotIndex,
       })
       spanContext._trace.startTime = startTime
 
@@ -208,10 +203,15 @@ class NativeDatadogSpan extends DatadogSpan {
     spanContext._setNameLocal(operationName)
     spanContext._syncNameToNative = noopSyncName
 
+    // One segment id per local trace, shared by all its spans via the
+    // shared `_trace` object (the local root allocates; children reuse).
+    // Required by the native chunk flush, which keys a chunk by segment.
+    const segmentId = (spanContext._trace._nativeSegmentId ??= nativeSpans.allocSegment())
+
     nativeSpans.queueCreateSpan(
-      slotIndex,
       spanContext._nativeSpanId,
       traceId,
+      segmentId,
       parentId,
       operationName,
       createStartTime
@@ -311,7 +311,7 @@ class NativeDatadogSpan extends DatadogSpan {
 
     this._nativeSpans.queueOp(
       OpCode.SetDuration,
-      this._spanContext._slotIndex,
+      this._spanContext._nativeSpanId,
       ['ns', resolvedFinishTime - this._startTime]
     )
 
