@@ -204,7 +204,7 @@
     "eslint-plugin-n": "^18.1.0",
     "eslint-plugin-promise": "^7.3.0",
     "eslint-plugin-sonarjs": "^4.1.0",
-    "eslint-plugin-unicorn": "^64.0.0",
+    "eslint-plugin-unicorn": "^65.0.1",
     "express": "^5.1.0",
     "glob": "^10.4.5",
     "globals": "^17.2.0",
