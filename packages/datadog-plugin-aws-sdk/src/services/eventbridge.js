@@ -10,7 +10,31 @@ const BaseAwsSdkPlugin = require('../base')
 
 const DEFAULT_EVENT_BUS = 'default'
 const DEFAULT_DETAIL_TYPE = 'unknown'
-const MAX_EVENT_SIZE = 1024 * 256
+const MAX_PUT_EVENTS_BYTES = 1024 * 1024
+
+/**
+ * Size a single `PutEventsRequestEntry` the way EventBridge does server-side:
+ * the UTF-8 byte length of `Source`, `DetailType`, `Detail`, and each
+ * `Resources` ARN, plus a flat 14 bytes when `Time` is set.
+ *
+ * @param {object} entry a single PutEvents request entry
+ * @param {string} [detail] overrides `entry.Detail`, used to size the entry as
+ *   it would be sent with the injected `_datadog` context
+ * @returns {number}
+ * @see https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-putevents.html
+ */
+function putEventEntrySize (entry, detail = entry.Detail) {
+  let size = entry.Time == null ? 0 : 14
+  if (entry.Source != null) size += Buffer.byteLength(entry.Source)
+  if (entry.DetailType != null) size += Buffer.byteLength(entry.DetailType)
+  if (detail != null) size += Buffer.byteLength(detail)
+  if (entry.Resources != null) {
+    for (const resource of entry.Resources) {
+      if (resource != null) size += Buffer.byteLength(resource)
+    }
+  }
+  return size
+}
 
 class EventBridge extends BaseAwsSdkPlugin {
   static id = 'eventbridge'
@@ -37,26 +61,57 @@ class EventBridge extends BaseAwsSdkPlugin {
    * Docs: https://docs.aws.amazon.com/eventbridge/latest/APIReference/API_PutEventsRequestEntry.html
    * We cannot use the traceHeader field as that's reserved for X-Ray.
    * Detail must be a valid JSON string
-   * Max size per event is 256kb (https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-putevent-size.html)
+   * Max PutEvents request size is 1mb, summed over all entries
+   * (https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-putevent-size.html)
    */
   requestInject (span, request) {
     const { operation, params } = request
     if (operation !== 'putEvents' || !params?.Entries?.length) return
+
+    const entries = params.Entries
     const dsmEnabled = this.config.dsmEnabled
     const batchPropagationEnabled = this.config.batchPropagationEnabled
-    if (dsmEnabled || batchPropagationEnabled) {
-      for (let i = 0; i < params.Entries.length; i++) {
-        this.injectToEntry(
-          span,
-          params.Entries[i],
-          i === 0 || batchPropagationEnabled,
-          dsmEnabled,
-        )
+    const injectedDetails = new Array(entries.length)
+    let hasInjectedDetail = false
+
+    for (let i = 0; i < entries.length; i++) {
+      const injectTraceContext = i === 0 || batchPropagationEnabled
+      if (!dsmEnabled && !injectTraceContext) continue
+
+      const finalData = this.getInjectedEntryDetail(
+        span,
+        entries[i],
+        injectTraceContext,
+        dsmEnabled,
+      )
+
+      if (finalData !== undefined) {
+        injectedDetails[i] = finalData
+        hasInjectedDetail = true
       }
+    }
+
+    if (!hasInjectedDetail) return
+
+    // EventBridge applies the 1 MiB cap to the whole request, so size every
+    // entry as it would be sent (the injected entries with `_datadog`) and skip
+    // rather than tip a request AWS would otherwise accept over the limit. The
+    // running total only needs to clear the cap, so stop summing the moment it
+    // does instead of byte-counting the rest of a batch we already know is over.
+    let requestSize = 0
+    for (let i = 0; requestSize < MAX_PUT_EVENTS_BYTES && i < entries.length; i++) {
+      requestSize += putEventEntrySize(entries[i], injectedDetails[i] ?? entries[i].Detail)
+    }
+    if (requestSize >= MAX_PUT_EVENTS_BYTES) {
+      log.info('Payload size too large to pass context')
       return
     }
 
-    this.injectToEntry(span, params.Entries[0], true, false)
+    for (let i = 0; i < entries.length; i++) {
+      if (injectedDetails[i] !== undefined) {
+        entries[i].Detail = injectedDetails[i]
+      }
+    }
   }
 
   /**
@@ -69,6 +124,27 @@ class EventBridge extends BaseAwsSdkPlugin {
    * @returns {void}
    */
   injectToEntry (span, entry, injectTraceContext, dsmEnabled) {
+    const finalData = this.getInjectedEntryDetail(
+      span,
+      entry,
+      injectTraceContext,
+      dsmEnabled,
+    )
+    if (finalData !== undefined) {
+      entry.Detail = finalData
+    }
+  }
+
+  /**
+   * Build the injected detail string for a single EventBridge entry.
+   *
+   * @param {import('../../../..').Span} span
+   * @param {object} entry
+   * @param {boolean} injectTraceContext
+   * @param {boolean} dsmEnabled
+   * @returns {string|undefined}
+   */
+  getInjectedEntryDetail (span, entry, injectTraceContext, dsmEnabled) {
     if (!entry?.Detail) return
 
     let hasDdInfo = false
@@ -82,30 +158,25 @@ class EventBridge extends BaseAwsSdkPlugin {
       // Measure with the trace context so the reported payload size matches the
       // on-wire payload, then fold the encoded pathway into a copy. `ddInfo`
       // stays trace-only so we can fall back to it below if the combined
-      // payload no longer fits within the per-entry size limit.
+      // payload no longer fits or should not be propagated.
       const dataStreamsContext = this.setDSMCheckpoint(span, entry, ddInfo)
       if (dataStreamsContext) {
         const carrier = { ...ddInfo }
         DsmPathwayCodec.encode(dataStreamsContext, carrier)
         const finalData = this.injectDetail(entry.Detail, carrier)
-        if (finalData) {
-          entry.Detail = finalData
-          return
+        if (finalData !== undefined) {
+          return finalData
         }
       }
     }
 
     if (!hasDdInfo) return
 
-    const finalData = this.injectDetail(entry.Detail, ddInfo)
-    if (finalData) {
-      entry.Detail = finalData
-    }
+    return this.injectDetail(entry.Detail, ddInfo)
   }
 
   /**
-   * Inject the `_datadog` field into a JSON detail string and reject
-   * payloads that would exceed EventBridge's per-entry size limit.
+   * Inject the `_datadog` field into a JSON detail string.
    *
    * @param {string} detail
    * @param {object} ddInfo
@@ -121,11 +192,6 @@ class EventBridge extends BaseAwsSdkPlugin {
       )
     } catch (error) {
       log.error('EventBridge error injecting request', error)
-      return
-    }
-
-    if (Buffer.byteLength(finalData, 'utf8') >= MAX_EVENT_SIZE) {
-      log.info('Payload size too large to pass context')
       return
     }
 

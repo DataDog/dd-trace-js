@@ -10,6 +10,7 @@ const { getHeadersSize } = require('../../dd-trace/src/datastreams')
 const log = require('../../dd-trace/src/log')
 const EventBridge = require('../src/services/eventbridge')
 
+const EVENTBRIDGE_REQUEST_MAX_BYTES = 1024 * 1024
 const requestStartChannel = channel('apm:aws:request:start:eventbridge')
 const activePlugins = []
 const tracerConfig = {
@@ -47,6 +48,16 @@ function createSpan () {
       tags[key] = value
     },
   }
+}
+
+/**
+ * @param {number} size
+ * @returns {string}
+ */
+function makeEventDetail (size) {
+  const prefix = '{"myGreatData":"'
+  const suffix = '"}'
+  return `${prefix}${'a'.repeat(size - Buffer.byteLength(prefix) - Buffer.byteLength(suffix))}${suffix}`
 }
 
 /**
@@ -383,6 +394,37 @@ describe('EventBridge plugin requestInject', () => {
     })
   })
 
+  it('skips batch propagation when the injected request would exceed 1mb', () => {
+    const plugin = buildChannelPlugin({
+      batchPropagationEnabled: true,
+    })
+    const originalInfo = log.info
+    const calls = []
+    log.info = (...args) => calls.push(args)
+    plugin.getInjectedEntryDetail = () => makeEventDetail(550 * 1024)
+    const request = {
+      operation: 'putEvents',
+      params: {
+        Entries: [
+          { Detail: '{"id":1}' },
+          { Detail: '{"id":2}' },
+        ],
+      },
+    }
+    const originalDetails = request.params.Entries.map(entry => entry.Detail)
+
+    try {
+      publishRequest(plugin, request)
+    } finally {
+      log.info = originalInfo
+    }
+
+    assert.deepStrictEqual(request.params.Entries.map(entry => entry.Detail), originalDetails)
+    assert.strictEqual(calls.length, 1)
+    assert.ok(calls[0][0].includes('Payload size too large'))
+    assert.ok(2 * 550 * 1024 > EVENTBRIDGE_REQUEST_MAX_BYTES)
+  })
+
   it('uses the event bus and detail type in the DSM checkpoint tags', () => {
     const calls = []
     const plugin = buildHelperPlugin()
@@ -440,20 +482,13 @@ describe('EventBridge plugin injectDetail', () => {
     assert.strictEqual(calls.length, 1)
   })
 
-  it('logs and returns undefined when the payload is too large', () => {
+  it('returns injected detail and leaves size checks to requestInject', () => {
     const plugin = buildHelperPlugin()
-    const originalInfo = log.info
-    const calls = []
-    log.info = (...args) => calls.push(args)
 
-    try {
-      assert.strictEqual(plugin.injectDetail(JSON.stringify({
-        data: 'a'.repeat(1024 * 256),
-      }), {}), undefined)
-    } finally {
-      log.info = originalInfo
-    }
+    const finalData = plugin.injectDetail(JSON.stringify({
+      data: 'a'.repeat(1024 * 256),
+    }), { trace: '123' })
 
-    assert.strictEqual(calls.length, 1)
+    assert.deepStrictEqual(JSON.parse(finalData)._datadog, { trace: '123' })
   })
 })
