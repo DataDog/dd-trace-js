@@ -45,7 +45,7 @@ function makeTopLevelSpan (overrides = {}) {
 function makeBucket (spans) {
   const bucket = new SpanBuckets()
   for (const span of spans) {
-    bucket.forSpan(span).record(span)
+    bucket.forSpan(span, true).record(span)
   }
   return bucket
 }
