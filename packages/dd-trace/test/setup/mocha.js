@@ -14,6 +14,7 @@ const sinon = require('sinon')
 require('./core')
 
 const externals = require('../plugins/externals')
+const { resolvePluginVersions } = require('../plugins/versions')
 const runtimeMetrics = require('../../src/runtime_metrics')
 const Nomenclature = require('../../src/service-naming')
 const { SVC_SRC_KEY } = require('../../src/constants')
@@ -283,20 +284,17 @@ function withVersions (plugin, modules, range, cb) {
 
       // Some entries coming from `externals.js` are dependency-only (e.g. `dep: true`) and don't have `versions`.
       // Treat those as "not a test target" instead of crashing.
-      const versions = process.env.PACKAGE_VERSION_RANGE
-        ? [process.env.PACKAGE_VERSION_RANGE]
-        : normalizeVersions(instrumentation.versions)
+      // Share the install script's resolution so the tested folders exactly match the installed ones (lowest supported
+      // version, the latest of every major in between, and the newest supported version), de-duplicated by version.
+      const { versionList } = resolvePluginVersions({
+        name: moduleName,
+        declaredVersions: normalizeVersions(instrumentation.versions),
+      })
 
-      for (const version of versions) {
-        if (process.env.RANGE && !semver.subset(version, process.env.RANGE)) continue
-        if (version !== '*') {
-          const min = semver.coerce(version)?.version
-          if (!min) throw new Error(`Invalid version: ${version}`)
-          testVersions.set(min, { versionRange: version, versionKey: min, resolvedVersion: min })
-        }
-
-        const max = require(getModulePath(moduleName, version)).version()
-        testVersions.set(max, { versionRange: version, versionKey: version, resolvedVersion: max })
+      for (const { versionKey, range: declaredRange } of versionList) {
+        // Exact keys resolve to themselves; range keys (`*`, `>=2`, `>=3.0.0 <4.0.0`) resolve to what was installed.
+        const resolvedVersion = semver.valid(versionKey) ?? require(getModulePath(moduleName, versionKey)).version()
+        testVersions.set(resolvedVersion, { versionRange: declaredRange, versionKey, resolvedVersion })
       }
     }
 
