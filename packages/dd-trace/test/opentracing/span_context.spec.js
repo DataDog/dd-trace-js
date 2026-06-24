@@ -5,8 +5,11 @@ const assert = require('node:assert/strict')
 const { describe, it, beforeEach } = require('mocha')
 
 require('../setup/core')
+const getConfig = require('../../src/config')
 const id = require('../../src/id')
-const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../ext/priority')
+const Span = require('../../src/opentracing/span')
+const PrioritySampler = require('../../src/priority_sampler')
+const { MANUAL_KEEP, SAMPLING_PRIORITY } = require('../../../../ext/tags')
 
 describe('SpanContext', () => {
   let SpanContext
@@ -167,48 +170,47 @@ describe('SpanContext', () => {
       assert.strictEqual(spanContext.toTraceparent(), '00-00000000000007890000000000000123-0000000000000456-00')
     })
 
-    it('materializes the lazy sampling decision so the sampled flag is set before finish', () => {
-      const spanContext = withRootSampler(AUTO_KEEP)
+    it('materializes the lazy auto-keep decision so the sampled flag is set before finish', () => {
+      const span = startSpan(new PrioritySampler())
 
-      assert.match(spanContext.toTraceparent(), /-01$/)
+      assert.match(span.context().toTraceparent(), /-01$/)
     })
 
-    it('reflects a drop decision rather than defaulting the flag to keep', () => {
-      const spanContext = withRootSampler(AUTO_REJECT)
+    it('reflects an auto-drop decision rather than defaulting the flag to keep', () => {
+      const span = startSpan(new PrioritySampler(undefined, { sampleRate: 0 }))
 
-      assert.match(spanContext.toTraceparent(), /-00$/)
-      assert.strictEqual(spanContext._sampling.priority, AUTO_REJECT)
+      assert.match(span.context().toTraceparent(), /-00$/)
     })
 
-    it('does not re-sample once a priority is already decided', () => {
-      const spanContext = new SpanContext({ traceId: id('123', 16), spanId: id('456', 16) })
-      spanContext._sampling.priority = USER_KEEP
-      spanContext._trace.started.push({
-        context: () => spanContext,
-        _prioritySampler: { sample () { throw new Error('should not re-sample a decided trace') } },
-      })
+    it('honors a manual drop tag set directly on a non-root context', () => {
+      const prioritySampler = new PrioritySampler()
+      const root = startSpan(prioritySampler)
+      const child = startSpan(prioritySampler, root)
+      child.context().setTag(SAMPLING_PRIORITY, 0)
 
-      assert.match(spanContext.toTraceparent(), /-01$/)
+      assert.match(child.context().toTraceparent(), /-00$/)
+    })
+
+    it('does not override a priority that was already decided', () => {
+      const span = startSpan(new PrioritySampler(undefined, { sampleRate: 0 }))
+      span.setTag(MANUAL_KEEP, true)
+
+      assert.match(span.context().toTraceparent(), /-01$/)
     })
 
     /**
-     * Builds a context whose root span carries a priority sampler that records
-     * the given decision, mirroring the lazy auto-sampling path.
+     * Starts a real span backed by a real priority sampler — the collaborator
+     * toTraceparent() reaches through _ensureSamplingPriority() to settle the
+     * lazy decision.
      *
-     * @param {import('../../src/priority_sampler').SamplingPriority} priority
-     * @returns {SpanContext}
+     * @param {PrioritySampler} prioritySampler
+     * @param {Span} [parent] Root span to descend from; omit for a root span.
+     * @returns {Span}
      */
-    function withRootSampler (priority) {
-      const spanContext = new SpanContext({ traceId: id('123', 16), spanId: id('456', 16) })
-      spanContext._trace.started.push({
-        context: () => spanContext,
-        _prioritySampler: {
-          sample (span) {
-            span.context()._sampling.priority = priority
-          },
-        },
-      })
-      return spanContext
+    function startSpan (prioritySampler, parent) {
+      const tracer = { _config: getConfig() }
+      const processor = { process () {} }
+      return new Span(tracer, processor, prioritySampler, { operationName: 'test', parent: parent?.context() })
     }
   })
 
