@@ -132,6 +132,10 @@ services:
     image: cassandra@sha256:61cbfa672b254e8fc82ece6bfd434ef7a2000e39e32f8f03c9ee4700cd9973a5 # 3-focal
     ports:
       - "127.0.0.1:9042:9042"
+  rethinkdb:
+    image: rethinkdb@sha256:30e0235da35e645025ca755c50d9ba617765f7f186fd1b0879fe00177e14de6a # 2.4.3
+    ports:
+      - "127.0.0.1:28015:28015"
   limitd:
     image: ghcr.io/rochdev/limitd@sha256:3315deb2a9fba6d9753b26363947992c2c7b1465aba7352b4595c76a197aaeff # latest
     environment:

@@ -164,6 +164,14 @@ const storage = {
       },
     },
     redis: redisConfig,
+    rethinkdb: {
+      opName: () => 'rethinkdb.query',
+      serviceName: ({ tracerService, pluginConfig, system }) =>
+        pluginConfig.service || fromSystem(tracerService, system),
+      serviceSource: ({ tracerService, pluginConfig, connectionName }) => {
+        return optionServiceSource({ tracerService, pluginConfig, connectionName, integration: 'rethinkdb' })
+      },
+    },
     tedious: {
       opName: () => 'tedious.request',
       serviceName: ({ tracerService, pluginConfig, system }) =>

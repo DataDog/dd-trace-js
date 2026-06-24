@@ -398,6 +398,7 @@ tracer.use('prisma');
 tracer.use('protobufjs');
 tracer.use('redis');
 tracer.use('redis', redisOptions);
+tracer.use('rethinkdb');
 tracer.use('restify');
 tracer.use('restify', httpServerOptions);
 tracer.use('rhea');

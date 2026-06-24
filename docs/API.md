@@ -93,6 +93,7 @@ tracer.use('pg', {
 <h5 id="prisma"></h5>
 <h5 id="protobufjs"></h5>
 <h5 id="redis"></h5>
+<h5 id="rethinkdb"></h5>
 <h5 id="restify"></h5>
 <h5 id="rhea"></h5>
 <h5 id="router"></h5>
@@ -176,6 +177,7 @@ tracer.use('pg', {
 * [prisma](./interfaces/export_.plugins.prisma.html)
 * [protobufjs](./interfaces/export_.plugins.protobufjs.html)
 * [redis](./interfaces/export_.plugins.redis.html)
+* [rethinkdb](./interfaces/export_.plugins.rethinkdb.html)
 * [restify](./interfaces/export_.plugins.restify.html)
 * [rhea](./interfaces/export_.plugins.rhea.html)
 * [router](./interfaces/export_.plugins.router.html)
