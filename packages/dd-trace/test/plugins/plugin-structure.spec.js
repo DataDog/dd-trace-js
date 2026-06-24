@@ -56,7 +56,7 @@ function extractPluginIds (source, re, index) {
 }
 
 function extractPluginsInterfaceKeys (dtsSource) {
-  const m = dtsSource.match(/interface Plugins\s*\{([\s\S]*?)\n\}/m)
+  const m = dtsSource.match(/interface Plugins\s*\{([\s\S]*?)\n\}/)
   assert.ok(m, 'Could not find `interface Plugins { ... }` in index.d.ts')
 
   const body = m[1]

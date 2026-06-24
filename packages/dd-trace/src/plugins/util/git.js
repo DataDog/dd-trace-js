@@ -61,7 +61,7 @@ function sanitizedExec (
       let result = cachedExec(cmd, flags, { stdio: 'pipe' }).toString()
 
       if (shouldTrim) {
-        result = result.replaceAll(/(\r\n|\n|\r)/gm, '')
+        result = result.replaceAll(/(\r\n|\n|\r)/g, '')
       }
 
       if (durationMetric) {

@@ -8,7 +8,8 @@ const AUTHORITY = '^(?:[^:]+:)?//([^@]+)@'
 // boundaries), so excluding them preserves match semantics for valid URLs while keeping
 // the regex linear on arbitrary input.
 const QUERY_FRAGMENT = '[?#&]([^=&;?#]+)=([^?#&]+)'
-const pattern = new RegExp([AUTHORITY, QUERY_FRAGMENT].join('|'), 'gmi')
+// eslint-disable-next-line regexp/no-super-linear-move -- opt-in IAST evidence redaction, off the request hot path.
+const pattern = new RegExp([AUTHORITY, QUERY_FRAGMENT].join('|'), 'gm')
 
 module.exports = function extractSensitiveRanges (evidence) {
   try {

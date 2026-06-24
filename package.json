@@ -203,6 +203,7 @@
     "eslint-plugin-mocha": "^11.3.0",
     "eslint-plugin-n": "^18.1.0",
     "eslint-plugin-promise": "^7.3.0",
+    "eslint-plugin-regexp": "^3.1.0",
     "eslint-plugin-sonarjs": "^4.0.3",
     "eslint-plugin-unicorn": "^64.0.0",
     "express": "^5.1.0",

@@ -240,7 +240,7 @@ function splitPlugins (value) {
   const raw = unwrapLiteralEnvValue(value)
   if (!raw) return []
   return raw
-    .split(/[,\s|]+/g)
+    .split(/[,\s|]+/)
     .map(s => s.trim())
     .filter(Boolean)
 }
