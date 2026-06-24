@@ -336,6 +336,13 @@ Example: `feat(appsec): add new WAF rule`
 - Label: `semver-patch` (fixes only), `semver-minor` (new features), `semver-major` (breaking)
 - **All tests must pass - all-green policy, no exceptions**
 
+### Flaky tests
+
+A non-deterministic failure (timeout, test-ordering, port race, a stub asserted once but called twice) that surfaces
+while you work on an unrelated change is fixed in its **own** PR, not folded into the current one. Stabilize the test
+or skip it with a tracked reason — never weaken or delete an assertion to make it pass. A deterministic failure
+(assertion mismatch, missing fixture/cassette, stale path, version incompatibility) is **not** flaky; fix it inline.
+
 ## Vendoring Dependencies
 
 Using rspack: Run `yarn` in `vendor/` to install/bundle dependencies → `packages/node_modules/`
