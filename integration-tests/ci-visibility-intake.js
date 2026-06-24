@@ -351,7 +351,7 @@ class FakeCiVisIntake extends FakeAgent {
       this.server = http.createServer(app)
       this.server.on('error', reject)
       this.server.listen(this.port, () => {
-        this.port = this.server.address().port
+        this.port = (/** @type {import('net').AddressInfo} */ (this.server.address())).port
         clearTimeout(timeoutObj)
         resolve(this)
       })
@@ -473,7 +473,7 @@ class FakeCiVisIntake extends FakeAgent {
   // always be faster or as fast as gatherPayloads
   gatherPayloadsMaxTimeout (payloadMatch, onPayload, maxGatheringTime = 15000) {
     const payloads = []
-    return new Promise((resolve, reject) => {
+    return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
       const timeoutId = setTimeout(() => {
         try {
           onPayload(payloads)
@@ -499,7 +499,7 @@ class FakeCiVisIntake extends FakeAgent {
         }
       }
       this.on('message', messageHandler)
-    })
+    }))
   }
 
   gatherPayloads (payloadMatch, gatheringTime = 15000) {
@@ -540,37 +540,7 @@ class FakeCiVisIntake extends FakeAgent {
   }
 
   assertPayloadReceived (fn, messageMatch, timeout) {
-    let resultResolve
-    let resultReject
-    let error
-
-    const timeoutObj = setTimeout(() => {
-      resultReject([error, new Error('timeout')])
-    }, timeout || 15000)
-
-    const messageHandler = (message) => {
-      if (!messageMatch || messageMatch(message)) {
-        try {
-          fn(message)
-          resultResolve()
-        } catch (e) {
-          resultReject(e)
-        }
-        this.off('message', messageHandler)
-      }
-    }
-    this.on('message', messageHandler)
-
-    return new Promise((resolve, reject) => {
-      resultResolve = () => {
-        clearTimeout(timeoutObj)
-        resolve()
-      }
-      resultReject = (e) => {
-        clearTimeout(timeoutObj)
-        reject(e)
-      }
-    })
+    return this.payloadReceived(messageMatch, timeout).then(fn)
   }
 }
 
