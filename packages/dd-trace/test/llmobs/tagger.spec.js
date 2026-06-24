@@ -240,6 +240,24 @@ describe('tagger', () => {
           assert.strictEqual(tags['_ml_obs.sampling_decision'], '0')
         })
 
+        it('reflects a changed configured rate (e.g. disable then re-enable)', () => {
+          const config = { llmobs: { enabled: true, mlApp: 'my-default-ml-app', sampleRate: 1 } }
+          tagger = new Tagger(config)
+
+          tagger.registerLLMObsSpan(span, { kind: 'llm' })
+          assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.sampling_decision'], '1')
+
+          // Re-enabling with a different rate must take effect rather than
+          // reusing the sampler built at construction time.
+          config.llmobs.sampleRate = 0
+          const ctx2 = { _tags: {}, _trace: { tags: {} }, toTraceId () { return 'x' }, toSpanId () { return 'y' } }
+          const span2 = { context () { return ctx2 }, setTag (k, v) { ctx2._tags[k] = v } }
+
+          tagger.registerLLMObsSpan(span2, { kind: 'llm' })
+          assert.strictEqual(Tagger.tagMap.get(span2)['_ml_obs.sample_rate'], '0')
+          assert.strictEqual(Tagger.tagMap.get(span2)['_ml_obs.sampling_decision'], '0')
+        })
+
         it('makes no decision when an upstream LLMObs trace propagated no sampling info', () => {
           // Distributed trace from a service that predates sampling propagation:
           // there is an LLMObs parent context but no rate/decision. We must not

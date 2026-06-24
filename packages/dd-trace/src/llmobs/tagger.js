@@ -68,8 +68,17 @@ class LLMObsTagger {
     this.#config = config
 
     this.softFail = softFail
+  }
 
-    this.#sampler = new Sampler(config.llmobs?.sampleRate ?? 1)
+  // The configured sample rate can change when LLMObs is disabled and re-enabled
+  // in the same process, so (re)build the sampler whenever it diverges from the
+  // current config rather than caching one at construction.
+  #getSampler () {
+    const rate = Number(this.#config.llmobs?.sampleRate ?? 1)
+    if (this.#sampler?.rate() !== rate) {
+      this.#sampler = new Sampler(rate)
+    }
+    return this.#sampler
   }
 
   static get tagMap () {
@@ -185,8 +194,9 @@ class LLMObsTagger {
       samplingDecision = traceTags[PROPAGATED_SAMPLING_DECISION_KEY]
     } else {
       // Root span: make the trace's one sampling decision.
-      sampleRate = formatKnuthRate(this.#sampler.rate())
-      samplingDecision = this.#sampler.isSampled(span) ? SAMPLING_DECISION_SAMPLED : SAMPLING_DECISION_DROPPED
+      const sampler = this.#getSampler()
+      sampleRate = formatKnuthRate(sampler.rate())
+      samplingDecision = sampler.isSampled(span) ? SAMPLING_DECISION_SAMPLED : SAMPLING_DECISION_DROPPED
     }
 
     if (sampleRate != null) this._setTag(span, SAMPLE_RATE, sampleRate)
