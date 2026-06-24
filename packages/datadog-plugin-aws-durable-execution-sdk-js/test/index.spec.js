@@ -446,6 +446,33 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     return replayedCondition
   })
 
+  // Live multi-poll: the first check returns shouldContinue:true, forcing a second poll. Each poll
+  // is a separate retryable waitForCondition span, and the second carries operation_attempt=1. This
+  // is the only path that exercises getOperationAttempt's live (non-replay) branch at attempt>0 for
+  // waitForCondition — without it the op is only ever covered at attempt=0, so a future SDK that
+  // indexed waitForCondition's StepDetails.Attempt differently from step's would slip through.
+  it('checkpoint plugin: waitForCondition reports operation_attempt=1 on its second poll', async () => {
+    const secondPollSpan = agent.assertSomeTraces(traces => {
+      const span = traces.flat().find(s =>
+        s.name === 'aws.durable.wait_for_condition' &&
+        s.resource === 'multi-poll-condition' &&
+        s.metrics?.['aws.durable.operation_attempt'] === 1
+      )
+      assert.ok(span, 'expected a second-poll waitForCondition span with operation_attempt=1')
+    }, { timeoutMs: 5000 })
+
+    let polls = 0
+    await invokeHandler(async (event, ctx) => {
+      await ctx.waitForCondition('multi-poll-condition', async () => 'done', {
+        initialState: 'pending',
+        waitStrategy: () => ({ shouldContinue: polls++ < 1, delay: { seconds: 1 } }),
+      })
+    })
+    assert.equal(polls, 2, 'expected the condition to be polled twice (initial + one retry)')
+
+    return secondPollSpan
+  })
+
   // Regression coverage for the SDK "safe paths" the trace-checkpoint hook relies on
   // (see packages/datadog-plugin-aws-durable-execution-sdk-js/src/trace-checkpoint.js).
   // These exercise the real @aws/durable-execution-sdk-js + @aws/durable-execution-sdk-js-testing
