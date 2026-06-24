@@ -2,9 +2,10 @@
 
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
-const sinon = require('sinon')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const semver = require('semver')
+const sinon = require('sinon')
 
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const id = require('../../dd-trace/src/id')
@@ -56,6 +57,12 @@ describe('Plugin', () => {
       let v1
       let gax
 
+      // pubsub 2.x bundles its own @grpc/grpc-js, so the internal v1 client rejects credentials minted by the
+      // test-pinned google-gax@3.5.7 ("Channel credentials must be a ChannelCredentials object"). 1.x and 3.x+
+      // stay compatible, so gate only the low-level v1 tests on 2.x; the public-API tests still cover that major.
+      const pkgVersion = require(`../../../versions/@google-cloud/pubsub@${version}`).version()
+      const itInternalApi = semver.satisfies(pkgVersion, '2.x') ? it.skip : it
+
       describe('without configuration', () => {
         beforeEach(() => {
           return agent.load('google-cloud-pubsub', { dsmEnabled: false }, { flushMinSpans: 1 })
@@ -92,7 +99,7 @@ describe('Plugin', () => {
             return expectedSpanPromise
           })
 
-          it('should be instrumented when using the internal API', async () => {
+          itInternalApi('should be instrumented when using the internal API', async () => {
             const publisher = new v1.PublisherClient({
               grpc: gax.grpc,
               projectId: project,
@@ -117,7 +124,7 @@ describe('Plugin', () => {
             return expectedSpanPromise
           })
 
-          it('should be instrumented w/ error', async () => {
+          itInternalApi('should be instrumented w/ error', async () => {
             const expectedSpanPromise = expectSpanWithDefaults({
               name: expectedSchema.controlPlane.opName,
               service: expectedSchema.controlPlane.serviceName,
