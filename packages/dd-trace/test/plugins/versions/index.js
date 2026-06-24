@@ -1,6 +1,6 @@
 'use strict'
 
-const { clean, coerce, intersects, subset } = require('semver')
+const { clean, coerce, intersects, satisfies, subset } = require('semver')
 
 const latests = require('./package.json').dependencies
 
@@ -62,6 +62,12 @@ function capSubrange (name, subrange) {
  * registry lookup, so a major that was never published makes the install fail loudly — the signal to add the package
  * to `nonConsecutiveMajorPackages`.
  *
+ * A bare-major key resolves to that major's newest published version, so it can only be used where the declared range
+ * spans the major in full. When the range caps inside its top major (an upper bound below `<${major + 1}.0.0`), the
+ * top major keeps the declared range instead, which resolves to the newest version the range still allows — a bare
+ * key there would overshoot the ceiling (`>=2.1 <=3.0.0` keyed `3` installs the major's latest, a version above the
+ * declared `<=3.0.0` that the plugin never supported).
+ *
  * Notations that resolve to the same exact version (`1.2.3`, `=1.2.3`, `v1.2.3`) collapse to a single key, and `*`
  * collapses to the latest major (the same version an open-ended range resolves to), so a version is never installed
  * twice under different spellings. A floor that equals the pinned latest also drops the redundant top-major key,
@@ -105,14 +111,26 @@ function getVersionList (name, versions, nonConsecutiveMajors = nonConsecutiveMa
     add(floor.version, range)
 
     const topMajor = highestMajor(name, range, floor.major)
+
+    const addMajor = (major) => {
+      if (!intersects(`>=${major}.0.0 <${major + 1}.0.0`, range)) return
+      // The top major is the only one the range can cap inside; lower majors are always spanned in full. A capped top
+      // keeps the declared range so it resolves below the ceiling instead of jumping to the major's latest.
+      if (major === topMajor && !reachesMajorCeiling(major, range)) {
+        add(range, range)
+      } else {
+        add(String(major), range)
+      }
+    }
+
     if (nonConsecutiveMajors.has(name)) {
       // Only the in-between majors were never published. The floor major and the top major both exist, so add the
       // latest of each (skipping the uncertain middle, which is what would make the install fail).
-      add(String(floor.major), range)
-      if (topMajor > floor.major) add(String(topMajor), range)
+      addMajor(floor.major)
+      if (topMajor > floor.major) addMajor(topMajor)
     } else {
       for (let major = floor.major; major <= topMajor; major++) {
-        if (intersects(`>=${major}.0.0 <${major + 1}.0.0`, range)) add(String(major), range)
+        addMajor(major)
       }
     }
   }
@@ -124,6 +142,22 @@ function getVersionList (name, versions, nonConsecutiveMajors = nonConsecutiveMa
   if (pinned && entries.has(pinned.version)) entries.delete(String(pinned.major))
 
   return [...entries.values()]
+}
+
+// Higher than any real release within a major. A range that still admits it does not cap inside the major, so a
+// bare-major key is safe; a range that excludes it ends mid-major and must keep its own upper bound.
+const MAJOR_CEILING_PROBE = 999_999
+
+/**
+ * Whether `range` admits versions all the way to the top of `major` (a clean `<${major + 1}.0.0` upper bound, or none).
+ * When it does not, a bare-major key would resolve past the declared ceiling, so the caller keeps the declared range.
+ *
+ * @param {number} major
+ * @param {string} range
+ * @returns {boolean}
+ */
+function reachesMajorCeiling (major, range) {
+  return satisfies(`${major}.${MAJOR_CEILING_PROBE}.${MAJOR_CEILING_PROBE}`, range)
 }
 
 /**

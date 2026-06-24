@@ -38,6 +38,17 @@ describe('getVersionList', () => {
     assert.deepEqual(keys('mongodb', ['>=1 <6']), ['1.0.0', '1', '2', '3', '4', '5'])
   })
 
+  it('keeps the declared range for a top major the range caps mid-way', () => {
+    // `<=3.0.0` stops inside major 3, so a bare `3` (which resolves to the major's latest) would overshoot the
+    // ceiling; the declared range is kept instead so it resolves to the newest version `<=3.0.0`.
+    assert.deepEqual(keys('mongodb', ['>=2.1 <=3.0.0']), ['2.1.0', '2', '>=2.1 <=3.0.0'])
+  })
+
+  it('keeps a sub-major range as its own key', () => {
+    // `>=4.0.0 <4.3.0` never spans major 4 in full, so there is no safe bare major; the floor and the range cover it.
+    assert.deepEqual(keys('mongodb', ['>=4.0.0 <4.3.0']), ['4.0.0', '>=4.0.0 <4.3.0'])
+  })
+
   it('de-duplicates a shared floor across multiple ranges', () => {
     assert.deepEqual(keys('mongodb', ['>=2 <3', '^2.0.0']), ['2.0.0', '2'])
   })
