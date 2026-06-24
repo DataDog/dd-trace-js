@@ -245,11 +245,16 @@ async function patchPeerDependencies ({ folder, externalName }) {
         if (dep === externalName) {
           versionPkgJson.dependencies[name] = pkgJson.version
         } else {
-          versionPkgJson.dependencies[name] = pkgJson[section][name].includes('||')
-            // Use the first version in the list (as npm does by default)
-            ? pkgJson[section][name].split('||')[0].trim()
-            // Only one version available so use that.
-            : pkgJson[section][name]
+          const declared = pkgJson[section][name]
+          versionPkgJson.dependencies[name] = declared.startsWith('workspace:')
+            // A `workspace:` protocol leaked into the published manifest (some monorepo packages publish it raw); it
+            // cannot resolve outside the source repo, so fall back to the pinned compatible version.
+            ? (latests[name] ?? '*')
+            : declared.includes('||')
+              // Use the first version in the list (as npm does by default)
+              ? declared.split('||')[0].trim()
+              // Only one version available so use that.
+              : declared
         }
         break
       }
