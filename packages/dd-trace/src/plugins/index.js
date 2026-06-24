@@ -114,6 +114,7 @@ const plugins = {
   get protobufjs () { return require('../../../datadog-plugin-protobufjs/src') },
   get redis () { return require('../../../datadog-plugin-redis/src') },
   get restify () { return require('../../../datadog-plugin-restify/src') },
+  get rethinkdb () { return require('../../../datadog-plugin-rethinkdb/src') },
   get rhea () { return require('../../../datadog-plugin-rhea/src') },
   get router () { return require('../../../datadog-plugin-router/src') },
   get 'selenium-webdriver' () { return require('../../../datadog-plugin-selenium/src') },

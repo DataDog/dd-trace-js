@@ -136,6 +136,7 @@ module.exports = {
   pug: () => require('../pug'),
   q: () => require('../q'),
   redis: () => require('../redis'),
+  rethinkdb: () => require('../rethinkdb'),
   restify: () => require('../restify'),
   rhea: () => require('../rhea'),
   router: () => require('../router'),

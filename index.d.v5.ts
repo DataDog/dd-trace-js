@@ -301,6 +301,7 @@ interface Plugins {
   "protobufjs": tracer.plugins.protobufjs;
   "redis": tracer.plugins.redis;
   "restify": tracer.plugins.restify;
+  "rethinkdb": tracer.plugins.rethinkdb;
   "rhea": tracer.plugins.rhea;
   "router": tracer.plugins.router;
   "selenium": tracer.plugins.selenium;
@@ -3206,6 +3207,12 @@ declare namespace tracer {
      * [restify](http://restify.com/) module.
      */
     interface restify extends HttpServer {}
+
+    /**
+     * This plugin automatically instruments the
+     * [rethinkdb](https://rethinkdb.com/) module.
+     */
+    interface rethinkdb extends Instrumentation {}
 
     /**
      * This plugin automatically instruments the

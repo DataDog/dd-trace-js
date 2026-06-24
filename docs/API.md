@@ -93,6 +93,14 @@ tracer.use('pg', {
 <h5 id="prisma"></h5>
 <h5 id="protobufjs"></h5>
 <h5 id="redis"></h5>
+<h5 id="rethinkdb"></h5>
+
+This plugin automatically patches the [rethinkdb](https://rethinkdb.com/) module.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `service` | | Service name override. |
+
 <h5 id="restify"></h5>
 <h5 id="rhea"></h5>
 <h5 id="router"></h5>
@@ -177,6 +185,7 @@ tracer.use('pg', {
 * [protobufjs](./interfaces/export_.plugins.protobufjs.html)
 * [redis](./interfaces/export_.plugins.redis.html)
 * [restify](./interfaces/export_.plugins.restify.html)
+* [rethinkdb](./interfaces/export_.plugins.rethinkdb.html)
 * [rhea](./interfaces/export_.plugins.rhea.html)
 * [router](./interfaces/export_.plugins.router.html)
 * [selenium](./interfaces/export_.plugins.selenium.html)

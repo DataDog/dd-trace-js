@@ -299,6 +299,7 @@ interface Plugins {
   "protobufjs": tracer.plugins.protobufjs;
   "redis": tracer.plugins.redis;
   "restify": tracer.plugins.restify;
+  "rethinkdb": tracer.plugins.rethinkdb;
   "rhea": tracer.plugins.rhea;
   "router": tracer.plugins.router;
   "selenium": tracer.plugins.selenium;
@@ -3021,7 +3022,13 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
-     * [rhea](https://github.com/amqp/rhea) module.
+     * [rethinkdb](https://rethinkdb.com/) module.
+     */
+    interface rethinkdb extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
+     * [rhea](https://github.com/AmqpNetLite/rhea) module.
      */
     interface rhea extends Instrumentation {}
 

@@ -399,6 +399,7 @@ tracer.use('protobufjs');
 tracer.use('redis');
 tracer.use('redis', redisOptions);
 tracer.use('restify');
+tracer.use('rethinkdb');
 tracer.use('restify', httpServerOptions);
 tracer.use('rhea');
 tracer.use('router');
