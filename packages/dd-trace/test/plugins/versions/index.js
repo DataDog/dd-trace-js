@@ -55,17 +55,13 @@ function capSubrange (name, subrange) {
  * maps to a `versions/<name>@<key>` workspace folder; the install script and `withVersions()` share this so the set of
  * installed folders and the set of tested folders never drift apart.
  *
- * Per declared range this yields the lowest supported version (pinned exactly) and the newest version of every major
- * the range spans, keyed by the bare major so the key resolves to that major's latest. Covering each major explicitly
- * (rather than emitting the raw range, which resolves only to the newest version of the whole range) makes sure the
- * floor major's latest is tested too. The top major is derived from the pinned latest in `package.json` rather than a
- * registry lookup, so a major that was never published makes the install fail loudly — the signal to add the package
- * to `nonConsecutiveMajorPackages`.
+ * Per range, this yields the lowest supported version (pinned exactly), the latest of every major in between, and the
+ * range itself (which resolves to the newest supported version). The top major is derived from the pinned latest in
+ * `package.json` rather than a registry lookup, so a major that does not exist makes the install fail loudly instead of
+ * silently skipping versions — which is the signal to mark the range as non-consecutive (see `consecutiveMajors`).
  *
- * Notations that resolve to the same exact version (`1.2.3`, `=1.2.3`, `v1.2.3`) collapse to a single key, and `*`
- * collapses to the latest major (the same version an open-ended range resolves to), so a version is never installed
- * twice under different spellings. A floor that equals the pinned latest also drops the redundant top-major key,
- * since the pinned `package.json` proves they resolve to the same version.
+ * Notations that resolve to the same exact version (`1.2.3`, `=1.2.3`, `v1.2.3`) collapse to a single key, so a version
+ * is never installed twice under different spellings.
  *
  * @param {string} name The module name, e.g. `mongodb`.
  * @param {string[]} versions The declared version entries, e.g. `['>=3.3 <5', '5', '>=6']`.
@@ -82,13 +78,10 @@ function getVersionList (name, versions, nonConsecutiveMajors = nonConsecutiveMa
   }
 
   for (const range of versions) {
-    // An empty entry is a setup mistake (a stray comma or an undefined slot); fail loudly rather than skip silently.
-    if (!range) {
-      throw new Error(`Empty version entry declared for '${name}'. Each declared version must be a non-empty range.`)
-    }
+    if (!range) continue
 
     if (range === '*') {
-      add(latestMajor(name), range)
+      add('*', range)
       continue
     }
 
@@ -104,43 +97,17 @@ function getVersionList (name, versions, nonConsecutiveMajors = nonConsecutiveMa
 
     add(floor.version, range)
 
-    const topMajor = highestMajor(name, range, floor.major)
-    if (nonConsecutiveMajors.has(name)) {
-      // Only the in-between majors were never published. The floor major and the top major both exist, so add the
-      // latest of each (skipping the uncertain middle, which is what would make the install fail).
-      add(String(floor.major), range)
-      if (topMajor > floor.major) add(String(topMajor), range)
-    } else {
-      for (let major = floor.major; major <= topMajor; major++) {
-        if (intersects(`>=${major}.0.0 <${major + 1}.0.0`, range)) add(String(major), range)
+    if (!nonConsecutiveMajors.has(name)) {
+      const topMajor = highestMajor(name, range, floor.major)
+      for (let major = floor.major + 1; major < topMajor; major++) {
+        add(`>=${major}.0.0 <${major + 1}.0.0`, range)
       }
     }
-  }
 
-  // The bare-major key for the pinned latest's major resolves to the pin itself, so when a declared floor already pins
-  // that exact version the major key would install the same thing. Drop it. This is the only such redundancy the
-  // pinned upper bound lets us prove; for lower majors the newest published version is unknown without the registry.
-  const pinned = coerce(latests[name])
-  if (pinned && entries.has(pinned.version)) entries.delete(String(pinned.major))
+    add(range, range)
+  }
 
   return [...entries.values()]
-}
-
-/**
- * The latest major of `name` as a bare-major version key. `*` resolves here so it de-duplicates against an open-ended
- * range whose top resolves to the same newest version.
- *
- * @param {string} name
- * @returns {string}
- */
-function latestMajor (name) {
-  const latest = coerce(latests[name])
-  if (!latest) {
-    throw new Error(
-      `Latest version for '${name}' needs to be defined in 'packages/dd-trace/test/plugins/versions/package.json'.`
-    )
-  }
-  return String(latest.major)
 }
 
 /**
