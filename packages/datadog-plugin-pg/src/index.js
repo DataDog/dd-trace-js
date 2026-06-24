@@ -42,6 +42,10 @@ class PGPlugin extends DatabasePlugin {
       span.setTag('db.stream', 1)
     }
 
+    if (ctx.poolWaitTime !== undefined) {
+      span.setTag('pg.pool.wait_time', ctx.poolWaitTime)
+    }
+
     ctx.injected = this.injectDbmQuery(span, originalText, service.name, !!query.name)
 
     return ctx.currentStore

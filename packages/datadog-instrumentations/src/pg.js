@@ -1,6 +1,7 @@
 'use strict'
 
 const { errorMonitor } = require('node:events')
+const { performance } = require('node:perf_hooks')
 
 const shimmer = require('../../datadog-shimmer')
 const {
@@ -22,6 +23,10 @@ const poolConnectFinishCh = channel('apm:pg:pool:connect:finish')
 // the un-injected `text` so the wrap doesn't capture a previous DBM injection as the new original.
 const originalTextCache = new WeakMap()
 
+// Carry the time a pooled client spent being acquired from the connect callback over to the first
+// query run on that client, so the query span can report the pool wait the query actually paid for.
+const poolWaitTimes = new WeakMap()
+
 addHook({ name: 'pg', versions: ['>=8.0.3'], file: 'lib/native/client.js' }, Client => {
   shimmer.wrap(Client.prototype, 'query', query => wrapQuery(query))
   return Client
@@ -41,7 +46,12 @@ addHook({ name: 'pg', versions: ['>=8.0.3'] }, pg => {
     }
 
     const ctx = {}
+    const start = acquireStart(this)
     arguments[0] = function (...args) {
+      const client = args[1]
+      if (client !== undefined) {
+        poolWaitTimes.set(client, acquireWait(start))
+      }
       return poolConnectFinishCh.runStores(ctx, cb, this, ...args)
     }
 
@@ -82,6 +92,12 @@ function wrapQuery (query) {
       processId,
       abortController,
       stream,
+    }
+
+    const poolWaitTime = poolWaitTimes.get(this)
+    if (poolWaitTime !== undefined) {
+      poolWaitTimes.delete(this)
+      ctx.poolWaitTime = poolWaitTime
     }
     const finish = (error, res) => {
       if (error) {
@@ -184,6 +200,17 @@ function wrapQuery (query) {
 }
 const finish = (ctx) => {
   finishPoolQueryCh.publish(ctx)
+}
+// pg drains its pending queue FIFO on the next tick, so within a synchronous burst `idleCount` is
+// stale: an idle client is only ours when it outnumbers the already-waiting requests ahead of us.
+// `idleCount > waitingCount` means the handoff lands within a tick (zero wait, skip the clock);
+// otherwise we wait for a connection or a release and time it. Both getters are `undefined` on pg
+// builds that predate them, so the check is false and falls through to timing rather than crashing.
+function acquireStart (pool) {
+  return pool.idleCount > pool.waitingCount ? undefined : performance.now()
+}
+function acquireWait (start) {
+  return start === undefined ? 0 : performance.now() - start
 }
 function wrapPoolQuery (query) {
   return function (...args) {
