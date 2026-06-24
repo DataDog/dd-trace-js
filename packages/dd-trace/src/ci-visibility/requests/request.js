@@ -12,25 +12,9 @@ const {
   isRetriableNetworkError,
   singleJitteredDelay,
 } = require('../../exporters/common/retry')
-const { urlToHttpOptions } = require('../../exporters/common/url-to-http-options-polyfill')
+const { parseUrl } = require('../../exporters/common/url')
 
 const legacyStorage = storage('legacy')
-
-function parseUrl (urlObjOrString) {
-  if (urlObjOrString !== null && typeof urlObjOrString === 'object') {
-    return urlToHttpOptions(urlObjOrString)
-  }
-
-  const url = urlToHttpOptions(new URL(urlObjOrString))
-
-  if (url.protocol === 'unix:' && url.hostname === '.') {
-    const udsPath = urlObjOrString.slice(5)
-    url.path = udsPath
-    url.pathname = udsPath
-  }
-
-  return url
-}
 
 /**
  * Simplified HTTP request for test optimization (library config). Uses common HTTP agents.
