@@ -2,7 +2,7 @@
 
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const { addOpMeta, getOperationAttempt, unwrapDurableError } = require('./util')
+const { addOpMeta, getOperationAttempt, getStepDataForNext, unwrapDurableError } = require('./util')
 
 // Span names whose direct children must keep the default resource.
 // These can have very high cardinality which is undesireable in the resource.
@@ -41,10 +41,11 @@ class BaseContextPlugin extends TracingPlugin {
     if (operationName) {
       meta['aws.durable.operation_name'] = operationName
     }
-    addOpMeta(meta, ctx.self)
+    const stepInfo = getStepDataForNext(ctx.self)
+    addOpMeta(meta, stepInfo)
 
     const metrics = this.constructor.retryable
-      ? { 'aws.durable.operation_attempt': getOperationAttempt(ctx.self) }
+      ? { 'aws.durable.operation_attempt': getOperationAttempt(stepInfo.stepData) }
       : undefined
 
     this.startSpan(spanName, {
