@@ -89,6 +89,7 @@ class RunInChildContextPlugin extends BaseContextPlugin {
   static prefix = 'tracing:orchestrion:@aws/durable-execution-sdk-js:DurableContextImpl_runInChildContext'
   static settleChannel = 'apm:aws-durable-execution-sdk-js:runInChildContext:settle'
   static spanName = 'aws.durable.child_context'
+  static retryable = false
 
   bindStart (ctx) {
     if (SUPPRESSED_CHILD_CONTEXT_SUBTYPES.has(getRunInChildContextSubType(ctx))) {
