@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { once } = require('node:events')
+const net = require('node:net')
 
 const { afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
@@ -759,6 +760,52 @@ describe('mysql2 instrumentation', () => {
               sinon.assert.called(apmQueryStart)
 
               done()
+            })
+          })
+        })
+      })
+
+      describe('PoolNamespace.prototype.getConnection failover', () => {
+        it('treats the retried internal acquire as a pooled-query acquire, not an explicit one', (done) => {
+          // A pool cluster with `canRetry` (the default) retries `getConnection` on the next node when
+          // the first one fails. That retry is dispatched from the first acquire's async failure
+          // callback, after the synchronous pool-query flag is cleared, so without carrying the
+          // pool-query intent across it the failover acquire opens a standalone acquire span.
+          const acquireStartCh = channel('apm:mysql2:pool:acquire:start')
+          const acquireStart = sinon.stub()
+          acquireStartCh.subscribe(acquireStart)
+
+          const probe = net.createServer()
+          probe.listen(0, '127.0.0.1', () => {
+            const deadPort = probe.address().port
+
+            probe.close(() => {
+              const cluster = mysql2.createPoolCluster()
+              cluster.add('dead', { ...config, port: deadPort, connectionLimit: 1, connectTimeout: 500 })
+              cluster.add('live', { ...config, connectionLimit: 1 })
+              cluster.on('warn', () => {})
+              const namespace = cluster.of('*')
+
+              function cleanup (error) {
+                acquireStartCh.unsubscribe(acquireStart)
+                cluster.end(() => done(error))
+              }
+
+              namespace.query(sql, (error) => {
+                if (error) {
+                  cleanup(error)
+                  return
+                }
+
+                try {
+                  sinon.assert.notCalled(acquireStart)
+                } catch (assertionError) {
+                  cleanup(assertionError)
+                  return
+                }
+
+                cleanup()
+              })
             })
           })
         })
