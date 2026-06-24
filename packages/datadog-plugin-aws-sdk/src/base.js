@@ -220,8 +220,10 @@ class BaseAwsSdkPlugin extends ClientPlugin {
    * Resolve the span service. A string `service` config overrides every span;
    * a function `service` is called with the request params (`TableName`,
    * `Bucket`, `QueueUrl`, …) so a single resource can be mapped to its own
-   * service. A nullish function result falls back to the schema default, which
-   * lets callers rename only the resources they care about.
+   * service. The function result is used only when it is a non-empty string;
+   * anything else (nullish, empty, or a non-string the type does not permit)
+   * falls back to the schema default, which lets callers rename only the
+   * resources they care about.
    *
    * @param {{ params?: object }} request
    * @returns {string}
@@ -230,7 +232,7 @@ class BaseAwsSdkPlugin extends ClientPlugin {
     const { service } = this.config
     if (typeof service === 'function') {
       const custom = service(request.params)
-      if (custom) return custom
+      if (typeof custom === 'string' && custom) return custom
     } else if (service) {
       return service
     }

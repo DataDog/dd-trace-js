@@ -374,6 +374,44 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with a service function returning a non-string', () => {
+        before(() => {
+          return agent.load(['aws-sdk', 'http'], [{
+            service (params) {
+              return params?.Bucket ? params.Bucket.length : undefined
+            },
+          }, { server: false }])
+        })
+
+        before(() => {
+          AWS = require(`../../../versions/${s3ClientName}@${version}`).get()
+          s3 = new AWS.S3({ endpoint: 'http://127.0.0.1:4566', region: 'us-east-1', s3ForcePathStyle: true })
+          tracer = require('../../dd-trace')
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        it('falls back to the default service name', (done) => {
+          agent.assertSomeTraces(traces => {
+            const span = sort(traces[0])[0]
+
+            assertObjectContains(span, {
+              name: 'aws.request',
+              resource: 'completeMultipartUpload my-bucket',
+              service: 'test-aws-s3',
+            })
+          }).then(done, done)
+
+          s3.completeMultipartUpload({
+            Bucket: 'my-bucket',
+            Key: 'my-key',
+            UploadId: 'my-upload-id',
+          }, () => {})
+        })
+      })
+
       describe('with service configuration', () => {
         before(() => {
           return agent.load(['aws-sdk', 'http'], [{
