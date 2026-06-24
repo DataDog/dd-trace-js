@@ -17,6 +17,7 @@ const {
 
 const { getNumFromKnownTests } = require('../../plugins/util/test')
 const { buildCacheKey, writeToCache, withCache } = require('../requests/fs-cache')
+const { validateKnownTestsResponse } = require('../test-optimization-http-cache-schema')
 
 const MAX_KNOWN_TESTS_PAGES = 10_000
 
@@ -56,8 +57,12 @@ function parseJsonResponse (rawJson) {
   return typeof rawJson === 'string' ? JSON.parse(rawJson) : rawJson
 }
 
-function parseKnownTestsResponse (rawJson) {
-  const { data: { attributes: { tests } } } = parseJsonResponse(rawJson)
+function parseKnownTestsResponse (rawJson, options = {}) {
+  const parsedResponse = parseJsonResponse(rawJson)
+  if (options.validateRequiredFields) {
+    validateKnownTestsResponse(parsedResponse)
+  }
+  const { data: { attributes: { tests } } } = parsedResponse
   return tests
 }
 

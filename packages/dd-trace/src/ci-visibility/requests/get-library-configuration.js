@@ -12,6 +12,7 @@ const {
   TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE,
 } = require('../telemetry')
 const { writeSettingsToCache } = require('../test-optimization-cache')
+const { validateSettingsResponse } = require('../test-optimization-http-cache-schema')
 const request = require('./request')
 
 const DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES = 2
@@ -22,8 +23,11 @@ function parseJsonResponse (rawJson) {
   return typeof rawJson === 'string' ? JSON.parse(rawJson) : rawJson
 }
 
-function parseLibraryConfigurationResponse (rawJson, config = getConfig()) {
+function parseLibraryConfigurationResponse (rawJson, config = getConfig(), options = {}) {
   const parsedResponse = parseJsonResponse(rawJson)
+  if (options.validateRequiredFields) {
+    validateSettingsResponse(parsedResponse)
+  }
   const {
     code_coverage: isCodeCoverageEnabled,
     tests_skipping: isSuitesSkippingEnabled,

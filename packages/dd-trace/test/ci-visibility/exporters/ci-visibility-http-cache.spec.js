@@ -247,6 +247,47 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
     ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
   })
 
+  it('falls back to live settings when cached settings are missing required attributes', (done) => {
+    fs.writeFileSync(
+      path.join(tmpRoot, '.testoptimization', 'cache', 'http', 'settings.json'),
+      JSON.stringify({ data: { attributes: { itr_enabled: true } } })
+    )
+    const liveSettingsResponse = JSON.parse(JSON.stringify(SETTINGS_RESPONSE))
+    liveSettingsResponse.data.attributes.require_git = false
+    getConfig().apiKey = '1'
+
+    const settingsScope = nock(url)
+      .post('/api/v2/libraries/tests/services/setting')
+      .reply(200, JSON.stringify(liveSettingsResponse))
+
+    const ciVisibilityExporter = new CiVisibilityExporter({
+      url,
+      isEarlyFlakeDetectionEnabled: true,
+      isFlakyTestRetriesEnabled: true,
+      isImpactedTestsEnabled: true,
+      isIntelligentTestRunnerEnabled: true,
+      isTestDynamicInstrumentationEnabled: true,
+      isTestManagementEnabled: true,
+    })
+
+    ciVisibilityExporter.getLibraryConfiguration({
+      repositoryUrl: 'https://github.com/example/repo',
+    }, (err, libraryConfig) => {
+      assert.strictEqual(err, null)
+      assert.strictEqual(libraryConfig.requireGit, false)
+      assert.strictEqual(libraryConfig.isCodeCoverageEnabled, true)
+      assert.strictEqual(libraryConfig.isSuitesSkippingEnabled, true)
+      assert.strictEqual(libraryConfig.isEarlyFlakeDetectionEnabled, true)
+      assert.strictEqual(libraryConfig.isKnownTestsEnabled, true)
+      assert.strictEqual(libraryConfig.isTestManagementEnabled, true)
+      assert.strictEqual(libraryConfig.isImpactedTestsEnabled, true)
+      assert.strictEqual(libraryConfig.isCoverageReportUploadEnabled, true)
+      assert.strictEqual(settingsScope.isDone(), true)
+      done()
+    })
+    ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+  })
+
   it('skips git metadata upload after cached settings are read', (done) => {
     const gitScope = nock(url)
       .post('/api/v2/git/repository/search_commits')
@@ -362,6 +403,28 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
     })
   })
 
+  it('falls back to live known tests when cached known tests are malformed', (done) => {
+    fs.writeFileSync(
+      path.join(tmpRoot, '.testoptimization', 'cache', 'http', 'known_tests.json'),
+      JSON.stringify({ data: { attributes: {} } })
+    )
+    getConfig().apiKey = '1'
+    const knownTestsScope = nock(url)
+      .post('/api/v2/ci/libraries/tests')
+      .reply(200, JSON.stringify(KNOWN_TESTS_RESPONSE))
+
+    const ciVisibilityExporter = new CiVisibilityExporter({ url })
+    ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+    ciVisibilityExporter._libraryConfig = { isKnownTestsEnabled: true }
+
+    ciVisibilityExporter.getKnownTests({}, (err, knownTests) => {
+      assert.strictEqual(err, null)
+      assert.deepStrictEqual(knownTests, KNOWN_TESTS_RESPONSE.data.attributes.tests)
+      assert.strictEqual(knownTestsScope.isDone(), true)
+      done()
+    })
+  })
+
   it('uses cached skippable tests without waiting on git upload', (done) => {
     const skippableScope = nock(url)
       .post('/api/v2/ci/tests/skippable')
@@ -403,6 +466,31 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
     ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
   })
 
+  it('falls back to live skippable tests when cached skippable tests are malformed', (done) => {
+    fs.writeFileSync(
+      path.join(tmpRoot, '.testoptimization', 'cache', 'http', 'skippable_tests.json'),
+      JSON.stringify({ data: [{ type: 'suite', attributes: {} }] })
+    )
+    getConfig().apiKey = '1'
+    const skippableScope = nock(url)
+      .post('/api/v2/ci/tests/skippable')
+      .reply(200, JSON.stringify(SKIPPABLE_RESPONSE))
+
+    const ciVisibilityExporter = new CiVisibilityExporter({ url, isIntelligentTestRunnerEnabled: true })
+    ciVisibilityExporter.getLibraryConfiguration({}, (settingsErr) => {
+      assert.strictEqual(settingsErr, null)
+      ciVisibilityExporter.getSkippableSuites({}, (err, skippableSuites, correlationId, coverage) => {
+        assert.strictEqual(err, null)
+        assert.deepStrictEqual(skippableSuites, ['suite1.spec.js'])
+        assert.strictEqual(correlationId, 'corr-123')
+        assert.deepStrictEqual(coverage, { 'src/file.js': 'gA==' })
+        assert.strictEqual(skippableScope.isDone(), true)
+        done()
+      })
+    })
+    ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+  })
+
   it('uses cached test management tests without an API key or test-management HTTP request', (done) => {
     const testManagementScope = nock(url)
       .post('/api/v2/test/libraries/test-management/tests')
@@ -419,6 +507,31 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
       assert.strictEqual(err, null)
       assert.deepStrictEqual(tests, TEST_MANAGEMENT_RESPONSE.data.attributes.modules)
       assert.strictEqual(testManagementScope.isDone(), false)
+      done()
+    })
+  })
+
+  it('falls back to live test management tests when cached test management tests are malformed', (done) => {
+    fs.writeFileSync(
+      path.join(tmpRoot, '.testoptimization', 'cache', 'http', 'test_management.json'),
+      JSON.stringify({ data: { attributes: {} } })
+    )
+    getConfig().apiKey = '1'
+    const testManagementScope = nock(url)
+      .post('/api/v2/test/libraries/test-management/tests')
+      .reply(200, JSON.stringify(TEST_MANAGEMENT_RESPONSE))
+
+    const ciVisibilityExporter = new CiVisibilityExporter({
+      url,
+      isTestManagementEnabled: true,
+    })
+    ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
+    ciVisibilityExporter._libraryConfig = { isTestManagementEnabled: true }
+
+    ciVisibilityExporter.getTestManagementTests({}, (err, tests) => {
+      assert.strictEqual(err, null)
+      assert.deepStrictEqual(tests, TEST_MANAGEMENT_RESPONSE.data.attributes.modules)
+      assert.strictEqual(testManagementScope.isDone(), true)
       done()
     })
   })

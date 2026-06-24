@@ -14,6 +14,7 @@ const {
   TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_BYTES,
 } = require('../../ci-visibility/telemetry')
 const { buildCacheKey, writeToCache, withCache } = require('../requests/fs-cache')
+const { validateSkippableTestsResponse } = require('../test-optimization-http-cache-schema')
 
 function parseJsonResponse (rawJson) {
   return typeof rawJson === 'string' ? JSON.parse(rawJson) : rawJson
@@ -21,9 +22,12 @@ function parseJsonResponse (rawJson) {
 
 function parseSkippableSuitesResponse (
   rawJson,
-  { testLevel = 'suite', isCoverageReportUploadEnabled = false } = {}
+  { testLevel = 'suite', isCoverageReportUploadEnabled = false, validateRequiredFields = false } = {}
 ) {
   const parsedResponse = parseJsonResponse(rawJson)
+  if (validateRequiredFields) {
+    validateSkippableTestsResponse(parsedResponse)
+  }
   const coverage = parsedResponse.meta?.coverage || {}
 
   const skippableItems = parsedResponse

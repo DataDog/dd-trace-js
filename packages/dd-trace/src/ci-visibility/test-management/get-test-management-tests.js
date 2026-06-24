@@ -16,6 +16,7 @@ const {
 } = require('../telemetry')
 
 const { buildCacheKey, writeToCache, withCache } = require('../requests/fs-cache')
+const { validateTestManagementTestsResponse } = require('../test-optimization-http-cache-schema')
 
 // Calculate the number of tests from the test management tests response, which has a shape like:
 // { module: { suites: { suite: { tests: { testName: { properties: {...} } } } } } }
@@ -43,8 +44,12 @@ function parseJsonResponse (rawJson) {
   return typeof rawJson === 'string' ? JSON.parse(rawJson) : rawJson
 }
 
-function parseTestManagementTestsResponse (rawJson) {
-  const { data: { attributes: { modules: testManagementTests } } } = parseJsonResponse(rawJson)
+function parseTestManagementTestsResponse (rawJson, options = {}) {
+  const parsedResponse = parseJsonResponse(rawJson)
+  if (options.validateRequiredFields) {
+    validateTestManagementTestsResponse(parsedResponse)
+  }
+  const { data: { attributes: { modules: testManagementTests } } } = parsedResponse
   return testManagementTests
 }
 

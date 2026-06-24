@@ -299,4 +299,23 @@ describe('parseSkippableSuitesResponse', () => {
 
     assert.deepStrictEqual(result.skippableSuites, ['suite2.spec.js'])
   })
+
+  it('validates skippable tests response shape when requested', () => {
+    const result = parseSkippableSuitesResponse(JSON.stringify(SKIPPABLE_RESPONSE), {
+      validateRequiredFields: true,
+    })
+
+    assert.deepStrictEqual(result.skippableSuites, ['suite1.spec.js', 'suite2.spec.js'])
+    assert.throws(
+      () => parseSkippableSuitesResponse(JSON.stringify({}), { validateRequiredFields: true }),
+      /Invalid skippable tests response: data must be an array/
+    )
+    assert.throws(
+      () => parseSkippableSuitesResponse(
+        JSON.stringify({ data: [{ type: 'suite', attributes: {} }] }),
+        { validateRequiredFields: true }
+      ),
+      /Invalid skippable tests response: data entry suite must be a string/
+    )
+  })
 })

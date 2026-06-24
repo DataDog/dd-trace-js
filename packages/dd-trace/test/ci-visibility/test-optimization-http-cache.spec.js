@@ -21,7 +21,21 @@ const SETTINGS_RESPONSE = {
       tests_skipping: true,
       itr_enabled: true,
       require_git: false,
+      early_flake_detection: {
+        enabled: true,
+        slow_test_retries: {
+          '5s': 4,
+        },
+        faulty_session_threshold: 12,
+      },
+      flaky_test_retries_enabled: true,
+      di_enabled: true,
       known_tests_enabled: true,
+      test_management: {
+        enabled: true,
+        attempt_to_fix_retries: 8,
+      },
+      impacted_tests_enabled: true,
       coverage_report_upload_enabled: true,
     },
   },
@@ -34,7 +48,19 @@ const DISABLED_SETTINGS_RESPONSE = {
       tests_skipping: false,
       itr_enabled: false,
       require_git: false,
+      early_flake_detection: {
+        enabled: false,
+        slow_test_retries: {},
+        faulty_session_threshold: 0,
+      },
+      flaky_test_retries_enabled: false,
+      di_enabled: false,
       known_tests_enabled: false,
+      test_management: {
+        enabled: false,
+      },
+      impacted_tests_enabled: false,
+      coverage_report_upload_enabled: false,
     },
   },
 }
@@ -45,6 +71,33 @@ const KNOWN_TESTS_RESPONSE = {
       tests: {
         jest: {
           'suite1.spec.js': ['test1'],
+        },
+      },
+    },
+  },
+}
+
+const SKIPPABLE_RESPONSE = {
+  meta: {
+    correlation_id: 'corr-123',
+  },
+  data: [
+    { type: 'suite', attributes: { suite: 'suite1.spec.js' } },
+  ],
+}
+
+const TEST_MANAGEMENT_RESPONSE = {
+  data: {
+    attributes: {
+      modules: {
+        jest: {
+          suites: {
+            'suite1.spec.js': {
+              tests: {
+                test1: { properties: { disabled: true } },
+              },
+            },
+          },
         },
       },
     },
@@ -236,9 +289,13 @@ describe('test-optimization-http-cache', () => {
   it('reads endpoint files relative to the manifest directory', () => {
     writeCacheLayout(tmpRoot)
     writeHttpCacheFile(tmpRoot, 'known_tests.json', KNOWN_TESTS_RESPONSE)
+    writeHttpCacheFile(tmpRoot, 'skippable_tests.json', SKIPPABLE_RESPONSE)
+    writeHttpCacheFile(tmpRoot, 'test_management.json', TEST_MANAGEMENT_RESPONSE)
 
     const cache = new TestOptimizationHttpCache()
     assert.deepStrictEqual(cache.readKnownTests(), KNOWN_TESTS_RESPONSE.data.attributes.tests)
+    assert.deepStrictEqual(cache.readSkippableSuites().skippableSuites, ['suite1.spec.js'])
+    assert.deepStrictEqual(cache.readTestManagementTests(), TEST_MANAGEMENT_RESPONSE.data.attributes.modules)
   })
 
   it('returns cache miss for missing optional endpoint files', () => {
@@ -263,5 +320,50 @@ describe('test-optimization-http-cache', () => {
     assert.strictEqual(cache.readSkippableSuites(), CACHE_MISS)
     writeHttpCacheFile(tmpRoot, 'test_management.json', '{invalid json')
     assert.strictEqual(cache.readTestManagementTests(), CACHE_MISS)
+  })
+
+  it('returns cache miss for settings files missing required attributes', () => {
+    for (const settings of [
+      {},
+      { data: {} },
+      { data: { attributes: { code_coverage: true } } },
+    ]) {
+      fs.rmSync(path.join(tmpRoot, '.testoptimization'), { recursive: true, force: true })
+      writeCacheLayout(tmpRoot, { settings })
+
+      const cache = new TestOptimizationHttpCache()
+      assert.strictEqual(cache.readSettings(), CACHE_MISS)
+      assert.strictEqual(cache.isAvailable(), false)
+    }
+  })
+
+  it('ignores optional endpoint files after invalid settings disable the cache', () => {
+    writeCacheLayout(tmpRoot, { settings: { data: { attributes: { code_coverage: true } } } })
+    writeHttpCacheFile(tmpRoot, 'known_tests.json', KNOWN_TESTS_RESPONSE)
+
+    const cache = new TestOptimizationHttpCache()
+
+    assert.strictEqual(cache.readSettings(), CACHE_MISS)
+    assert.strictEqual(cache.readKnownTests(), CACHE_MISS)
+  })
+
+  it('returns per-file cache miss for optional files missing required attributes', () => {
+    writeCacheLayout(tmpRoot)
+
+    const cache = new TestOptimizationHttpCache()
+    writeHttpCacheFile(tmpRoot, 'known_tests.json', { data: { attributes: {} } })
+    assert.strictEqual(cache.readKnownTests(), CACHE_MISS)
+    assert.strictEqual(cache.isAvailable(), true)
+
+    writeHttpCacheFile(tmpRoot, 'skippable_tests.json', { data: [{ type: 'suite', attributes: {} }] })
+    assert.strictEqual(cache.readSkippableSuites(), CACHE_MISS)
+    assert.strictEqual(cache.isAvailable(), true)
+
+    writeHttpCacheFile(tmpRoot, 'test_management.json', { data: { attributes: {} } })
+    assert.strictEqual(cache.readTestManagementTests(), CACHE_MISS)
+    assert.strictEqual(cache.isAvailable(), true)
+
+    writeHttpCacheFile(tmpRoot, 'known_tests.json', KNOWN_TESTS_RESPONSE)
+    assert.deepStrictEqual(cache.readKnownTests(), KNOWN_TESTS_RESPONSE.data.attributes.tests)
   })
 })

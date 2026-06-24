@@ -73,14 +73,18 @@ class TestOptimizationHttpCache {
 
   readSettings () {
     const payload = this._readFile(SETTINGS_FILE_NAME)
-    if (payload === CACHE_MISS) return CACHE_MISS
+    if (payload === CACHE_MISS) {
+      this._disable()
+      return CACHE_MISS
+    }
 
     try {
-      const settings = parseLibraryConfigurationResponse(payload)
+      const settings = parseLibraryConfigurationResponse(payload, undefined, { validateRequiredFields: true })
       incrementCountMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE, settings)
       return settings
     } catch (err) {
       this._logInvalidCacheFile(SETTINGS_FILE_NAME, err)
+      this._disable()
       return CACHE_MISS
     }
   }
@@ -90,7 +94,7 @@ class TestOptimizationHttpCache {
     if (payload === CACHE_MISS) return CACHE_MISS
 
     try {
-      const knownTests = parseKnownTestsResponse(payload)
+      const knownTests = parseKnownTestsResponse(payload, { validateRequiredFields: true })
       distributionMetric(TELEMETRY_KNOWN_TESTS_RESPONSE_TESTS, {}, getNumFromKnownTests(knownTests))
       distributionMetric(TELEMETRY_KNOWN_TESTS_RESPONSE_BYTES, {}, payload.length)
       return knownTests
@@ -106,7 +110,7 @@ class TestOptimizationHttpCache {
 
     try {
       const parsedResponse = JSON.parse(payload)
-      const result = parseSkippableSuitesResponse(parsedResponse, options)
+      const result = parseSkippableSuitesResponse(parsedResponse, { ...options, validateRequiredFields: true })
       const testLevel = options.testLevel || 'suite'
       const skippableItems = parsedResponse.data.filter(({ type }) => type === testLevel)
       incrementCountMetric(
@@ -129,7 +133,7 @@ class TestOptimizationHttpCache {
     if (payload === CACHE_MISS) return CACHE_MISS
 
     try {
-      const testManagementTests = parseTestManagementTestsResponse(payload)
+      const testManagementTests = parseTestManagementTestsResponse(payload, { validateRequiredFields: true })
       distributionMetric(
         TELEMETRY_TEST_MANAGEMENT_TESTS_RESPONSE_TESTS,
         {},
@@ -258,6 +262,10 @@ class TestOptimizationHttpCache {
 
   _logInvalidCacheFile (fileName, err) {
     log.debug('Test Optimization HTTP cache file %s could not be parsed: %s', fileName, err.message)
+  }
+
+  _disable () {
+    this._available = false
   }
 }
 
