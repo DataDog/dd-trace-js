@@ -69,8 +69,6 @@ class LLMObsTagger {
 
     this.softFail = softFail
 
-    // The LLMObs sample rate is set at init (env or tracer.init) and isn't
-    // mutable at runtime, so the sampler is fixed for this tagger's lifetime.
     this.#sampler = new Sampler(config.llmobs?.sampleRate ?? 1)
   }
 
