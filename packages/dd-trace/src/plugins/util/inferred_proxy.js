@@ -113,7 +113,7 @@ function setInferredProxySpanTags(span, proxyContext) {
 }
 
 function extractInferredProxyContext(headers) {
-  if (headers[PROXY_HEADER_SYSTEM] == 'azure-gw') {
+  if (headers[PROXY_HEADER_SYSTEM] == 'azure-gw' && !headers[PROXY_HEADER_START_TIME_MS]) {
     headers[PROXY_HEADER_START_TIME_MS] = (Date.now()).toString()
   }
 
