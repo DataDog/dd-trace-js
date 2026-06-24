@@ -86,7 +86,6 @@ describe('Plugin', () => {
               .catch(done)
           })
         })
-
       })
 
       describe('without configuration', () => {
