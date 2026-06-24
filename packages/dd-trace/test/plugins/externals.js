@@ -237,7 +237,7 @@ module.exports = {
   'google-cloud-pubsub': [
     {
       name: 'google-gax',
-      versions: ['3.5.7'],
+      versions: ['5.0.7'],
     },
   ],
   genai: [

@@ -127,6 +127,7 @@
     "find-my-way": "9.6.0",
     "fs": "0.0.1-security",
     "generic-pool": "3.9.0",
+    "google-gax": "5.0.7",
     "graphql": "16.14.0",
     "graphql-tag": "2.12.6",
     "graphql-tools": "9.0.28",
