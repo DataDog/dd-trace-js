@@ -15,14 +15,20 @@ const nonConsecutiveMajorPackages = new Set([
   '@redis/client', // jumps from 2.x to 5.x (no 3.x–4.x)
 ])
 
-// Versions the matrix still installs but must not run, keyed by module name. `withVersions()` skips any resolved version
-// matching a range here and surfaces the reason as a pending test. Each entry is a stop-gap: keep the reason a TODO so a
-// fixed version drops the entry instead of letting it rot, and scope the range as narrowly as the break warrants.
+// Versions the matrix installs but must not run, keyed by module name. `withVersions()` skips any resolved
+// version matching a range here and surfaces the reason as a pending test. Each entry is a stop-gap: keep the reason
+// a TODO so a fixed version drops the entry instead of rotting, and scope the range as narrowly as the break warrants.
 /** @type {Record<string, Array<{ range: string, reason: string }>>} */
 const brokenVersions = {
   // TODO: record VCR cassettes for the ai 4.x line; `versions/ai@4` resolves to the newest 4.x, which has no cassette,
   // so the test would hit the live API. 4.0.x (cassetted) and 5.x/6.x stay covered.
   ai: [{ range: '>=4.1.0 <5.0.0', reason: 'no VCR cassette for the ai 4.x latest (TODO: record cassettes)' }],
+  // TODO: record VCR cassettes for the @langchain/core 0.x line above 0.1. `@langchain/core@0` resolves to the newest
+  // 0.x (0.3.x), which has no cassette, so the LLMObs langchain specs hit the live API. The 0.1.0 floor and the 1.x
+  // latest stay covered.
+  '@langchain/core': [
+    { range: '>=0.2.0 <1.0.0', reason: 'no VCR cassette for the @langchain/core 0.x latest (TODO: record cassettes)' },
+  ],
 }
 
 /**
