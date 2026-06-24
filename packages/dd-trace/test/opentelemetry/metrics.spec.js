@@ -315,6 +315,36 @@ describe('OpenTelemetry Meter Provider', () => {
       setTimeout(() => { validator(); done() }, 150)
     })
 
+    it('timestamps data points with UNIX-epoch nanoseconds, not the monotonic clock', (done) => {
+      // The delta counter pins the per-measurement timestamp; the UpDownCounter
+      // is always CUMULATIVE, so it pins the aggregator's start time too.
+      const lowerBoundNano = Date.now() * 1e6
+      const validator = mockOtlpExport((decoded) => {
+        const upperBoundNano = (Date.now() + 1000) * 1e6
+        const assertEpochNano = (label, value) => {
+          assert(
+            value >= lowerBoundNano && value <= upperBoundNano,
+            `${label} ${value} should be epoch nanoseconds within [${lowerBoundNano}, ${upperBoundNano}]`
+          )
+        }
+
+        const metricsList = decoded.resourceMetrics[0].scopeMetrics[0].metrics
+        const counter = metricsList.find(m => m.name === 'counter').sum.dataPoints[0]
+        assertEpochNano('counter.timeUnixNano', counter.timeUnixNano)
+
+        const updown = metricsList.find(m => m.name === 'updown').sum.dataPoints[0]
+        assertEpochNano('updown.timeUnixNano', updown.timeUnixNano)
+        assertEpochNano('updown.startTimeUnixNano', updown.startTimeUnixNano)
+      })
+
+      setupMetrics()
+      const meter = metrics.getMeter('app')
+      meter.createCounter('counter').add(5)
+      meter.createUpDownCounter('updown').add(3)
+
+      setTimeout(() => { validator(); done() }, 150)
+    })
+
     it('uses JSON with string timestamps when configured', (done) => {
       const validator = mockOtlpExport((decoded, headers) => {
         assert.strictEqual(headers['Content-Type'], 'application/json')

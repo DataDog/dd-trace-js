@@ -10,6 +10,8 @@ const BaseAwsSdkPlugin = require('../base')
 
 const DEFAULT_EVENT_BUS = 'default'
 const DEFAULT_DETAIL_TYPE = 'unknown'
+// EventBridge enforces this limit over the whole PutEvents request (the sum of
+// every entry), not over a single entry. 1 MiB == 1,048,576 bytes.
 const MAX_PUT_EVENTS_BYTES = 1024 * 1024
 
 /**

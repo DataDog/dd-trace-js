@@ -3,9 +3,9 @@
 set -ex
 
 apt-get update && apt-get install --no-install-recommends -y \
-	wget curl ca-certificates valgrind \
-	git openssh-client hwinfo jq procps \
-	software-properties-common build-essential libnss3-dev
+  wget curl ca-certificates valgrind \
+  git openssh-client hwinfo jq procps \
+  software-properties-common build-essential libnss3-dev
 
 # Prebuilt, relocatable CPython from python-build-standalone (the same builds uv ships).
 # Avoids a slow from-source pyenv compile and stays version-pinned + checksum-verified.

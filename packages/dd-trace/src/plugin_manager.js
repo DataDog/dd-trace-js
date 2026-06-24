@@ -60,7 +60,11 @@ function maybeEnable (Plugin) {
 
 function getEnabled (Plugin) {
   const envName = `DD_TRACE_${Plugin.id.toUpperCase()}_ENABLED`
-  return getValueFromEnvSources(normalizePluginEnvName(envName))
+  // skipDefault: only an explicitly configured value should drive enablement here. A registered
+  // default of `false` (e.g. an experimental plugin like `nats`) must not be read as an explicit
+  // "disabled via configuration option" — that path both logs a misleading line and nulls the
+  // plugin class, bypassing the experimental opt-in handled by `loadPlugin`.
+  return getValueFromEnvSources(normalizePluginEnvName(envName), true)
 }
 
 // TODO this must always be a singleton.
@@ -164,6 +168,7 @@ module.exports = class PluginManager {
       clientIpEnabled,
       clientIpHeader,
       DD_TRACE_MEMCACHED_COMMAND_ENABLED,
+      DD_TRACE_OTEL_SEMANTICS_ENABLED,
       DD_TEST_SESSION_NAME,
       DD_AGENTLESS_LOG_SUBMISSION_ENABLED,
       isTestDynamicInstrumentationEnabled,
@@ -181,6 +186,7 @@ module.exports = class PluginManager {
       dbmPropagationMode,
       dsmEnabled,
       DD_TRACE_MEMCACHED_COMMAND_ENABLED,
+      DD_TRACE_OTEL_SEMANTICS_ENABLED,
       site,
       url,
       headers: headerTags || [],
