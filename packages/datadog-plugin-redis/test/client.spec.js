@@ -27,13 +27,16 @@ describe('Plugin', () => {
         it('should support queue options', async () => {
           tracer = require('../../dd-trace')
           redis = require(`../../../versions/${moduleName}@${version}`).get()
-          const client = redis.createClient({ url: 'redis://127.0.0.1:6379', commandsQueueMaxLength: 1 })
-          const connectPromise = client.connect()
+          const client = redis.createClient({ url: 'redis://127.0.0.1:6379', commandsQueueMaxLength: 5 })
+          await client.connect()
           const passingPromise = client.get('foo')
           await assert.rejects(Promise.all([
             passingPromise,
-            client.get('bar'),
-            connectPromise,
+            client.get('a'),
+            client.get('b'),
+            client.get('c'),
+            client.get('d'),
+            client.get('e'),
           ]), {
             message: /queue/,
           })
@@ -352,7 +355,9 @@ describe('Plugin', () => {
       describe('with filter', () => {
         before(() => {
           return agent.load('redis', {
-            filter: (command) => command !== 'SET' && command !== 'CLIENT',
+            filter: (command) => {
+              return command !== 'SET' && command !== 'CLIENT' && command !== 'HELLO'
+            },
           })
         })
 

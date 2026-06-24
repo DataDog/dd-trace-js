@@ -41,6 +41,46 @@ describe('Plugin', function () {
       return agent.close()
     })
 
+    describe('with OTel semantics enabled', () => {
+      beforeEach(() => {
+        process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+        return agent.load('fetch')
+          .then(() => {
+            express = require('express')
+            fetch = globalThis.fetch
+          })
+      })
+
+      afterEach(() => {
+        delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+      })
+
+      // fetch passes a URL object, whose query lives in `search` (not `path`);
+      // url.full must still retain the (obfuscated) query under OTel semantics.
+      it('retains the query string in url.full', done => {
+        const app = express()
+        app.get('/user', (req, res) => {
+          res.status(200).send()
+        })
+        appListener = server(app, port => {
+          agent.assertFirstTraceSpan({
+            meta: {
+              'span.kind': 'client',
+              'http.request.method': 'GET',
+              'url.full': `http://localhost:${port}/user?foo=bar`,
+            },
+            metrics: {
+              'http.response.status_code': 200,
+            },
+          })
+            .then(done)
+            .catch(done)
+
+          fetch(`http://localhost:${port}/user?foo=bar`)
+        })
+      })
+    })
+
     describe('without configuration', () => {
       beforeEach(() => {
         return agent.load('fetch')
