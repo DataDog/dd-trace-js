@@ -1398,7 +1398,7 @@
         "implementation": "B",
         "type": "string",
         "default": "on",
-        "allowed": "on|off|(gzip|zstd)(-[1-9][0-9]?)?",
+        "allowed": "on|off|gzip(-[1-9])?|zstd(-([1-9]|1[0-9]|2[0-2]))?",
         "transform": "toLowerCase"
       }
     ],

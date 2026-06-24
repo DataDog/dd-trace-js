@@ -102,6 +102,10 @@ class AgentExporter extends EventSerializer {
     this.#backoffTries = backoffTries
   }
 
+  getExportUrl () {
+    return this._url
+  }
+
   export (exportSpec) {
     const { profiles } = exportSpec
     const fields = []

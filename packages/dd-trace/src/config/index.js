@@ -7,7 +7,7 @@ const { URL, format } = require('node:url')
 const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
 const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 const set = require('../../../datadog-core/src/utils/src/set')
-const { DD_MAJOR } = require('../../../../version')
+const { DD_MAJOR, NODE_MAJOR } = require('../../../../version')
 const log = require('../log')
 const pkg = require('../pkg')
 const { isTrue } = require('../util')
@@ -360,6 +360,14 @@ class Config extends ConfigBase {
 
     if (this.telemetry.heartbeatInterval) {
       setAndTrack(this, 'telemetry.heartbeatInterval', Math.floor(this.telemetry.heartbeatInterval * 1000))
+    }
+
+    // Allocation profiling needs a sampling hook only available on Node.js 26+.
+    setAndTrack(this, 'DD_PROFILING_ALLOCATION_ENABLED', NODE_MAJOR >= 26 && this.DD_PROFILING_ALLOCATION_ENABLED)
+    // Resolve the "on" upload-compression default to the codec used for the running Node.js version.
+    // 24+ has a built-in async zstd; earlier versions fall back to gzip (also async on libuv).
+    if (this.DD_PROFILING_DEBUG_UPLOAD_COMPRESSION === 'on') {
+      setAndTrack(this, 'DD_PROFILING_DEBUG_UPLOAD_COMPRESSION', NODE_MAJOR >= 24 ? 'zstd' : 'gzip')
     }
     if (this.telemetry.extendedHeartbeatInterval) {
       setAndTrack(this, 'telemetry.extendedHeartbeatInterval',

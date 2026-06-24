@@ -9,18 +9,20 @@ require('../../setup/core')
 const { storage } = require('../../../../datadog-core')
 const { getConfigFresh } = require('../../helpers/config')
 const { availableParallelism, effectiveLibuvThreadCount } = require('../../../src/profiling/libuv-size')
+const { SAMPLING_INTERVAL } = require('../../../src/profiling/constants')
 const EventsProfiler = require('../../../src/profiling/profilers/events')
 
 const startCh = dc.channel('apm:dns:lookup:start')
 const finishCh = dc.channel('apm:dns:lookup:finish')
 
-// Test adapter: the constructor now reads canonical DD_PROFILING_* names off the tracer
-// config plus the derived flush/sampling intervals. Map the legacy flat option names here.
-function makeEvents (Cls, { codeHotspotsEnabled, flushInterval, samplingInterval, timelineSamplingEnabled } = {}) {
+// Test adapter: the constructor reads canonical DD_PROFILING_* names off the tracer config plus the
+// derived flush interval. The sampling interval is a fixed constant the profiler imports directly,
+// so it is no longer a configurable option.
+function makeEvents (Cls, { codeHotspotsEnabled, flushInterval, timelineSamplingEnabled } = {}) {
   return new Cls({
     DD_PROFILING_CODEHOTSPOTS_ENABLED: codeHotspotsEnabled,
     DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED: timelineSamplingEnabled,
-  }, { flushInterval, samplingInterval })
+  }, { flushInterval })
 }
 
 function collectLabels (sample, stringTable) {
@@ -34,7 +36,6 @@ function collectLabels (sample, stringTable) {
 
 function runOnceAndProfile (startChannel, finishChannel, ctx) {
   const profiler = makeEvents(EventsProfiler, {
-    samplingInterval: 10_000,
     flushInterval: 65_000,
     timelineSamplingEnabled: false,
     codeHotspotsEnabled: true,
@@ -52,11 +53,9 @@ function runOnceAndProfile (startChannel, finishChannel, ctx) {
 
 function getProfilerConfig (tracerOptions) {
   const tracerConfig = getConfigFresh(tracerOptions)
-  const { SAMPLING_INTERVAL } = require('../../../src/profiling/config')
   return {
     codeHotspotsEnabled: tracerConfig.DD_PROFILING_CODEHOTSPOTS_ENABLED,
     flushInterval: tracerConfig.DD_PROFILING_UPLOAD_PERIOD * 1000,
-    samplingInterval: SAMPLING_INTERVAL,
     timelineSamplingEnabled: tracerConfig.DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED,
   }
 }
@@ -72,8 +71,11 @@ describe('profilers/events', () => {
   })
 
   it('should limit the number of events', async () => {
-    const samplingInterval = 1
-    const flushInterval = 2
+    // The sampling interval is a fixed constant now, so steer maxSamples through the flush interval:
+    // getMaxSamples divides flushInterval by the sampling interval, so a whole multiple keeps the
+    // expected count exact and small enough to test the reservoir cap deterministically.
+    const maxCpuSamples = 2
+    const flushInterval = SAMPLING_INTERVAL * maxCpuSamples
     // Set up a mock span to simulate tracing context
     const span = {
       context: () => ({
@@ -86,7 +88,6 @@ describe('profilers/events', () => {
     storage('legacy').enterWith({ span })
 
     const profiler = makeEvents(EventsProfiler, {
-      samplingInterval,
       flushInterval,
       timelineSamplingEnabled: false, // don't discard any events
       codeHotspotsEnabled: true, // DNS events are only observed when code hotspots are enabled
@@ -97,7 +98,7 @@ describe('profilers/events', () => {
     try {
       // This should match getMaxSamples() in events.js
       const factor = Math.max(1, Math.min(availableParallelism(), effectiveLibuvThreadCount)) + 2
-      const expectedSampleCount = flushInterval / samplingInterval * factor
+      const expectedSampleCount = maxCpuSamples * factor
       const eventsToEmit = expectedSampleCount + 2 // Emit a few more to ensure the limit is enforced
       // Do 2 rounds to verify the limit is reset after each profiler.profile() call.
       for (let rounds = 0; rounds < 2; rounds++) {

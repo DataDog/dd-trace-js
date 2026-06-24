@@ -7,6 +7,7 @@ const log = require('../../log')
 const runtimeMetrics = require('../../runtime_metrics')
 const telemetryMetrics = require('../../telemetry/metrics')
 const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('../webspan-utils')
+const { SAMPLING_INTERVAL } = require('../constants')
 
 const {
   END_TIMESTAMP_LABEL,
@@ -138,15 +139,15 @@ class NativeWallProfiler {
 
   /**
    * @param {TracerConfig} config
-   * @param {{ asyncContextFrameEnabled: boolean, flushInterval: number, samplingInterval: number }} derived
+   * @param {{ asyncContextFrameEnabled: boolean, flushInterval: number }} runtime
    */
-  constructor (config, { asyncContextFrameEnabled, flushInterval, samplingInterval }) {
+  constructor (config, { asyncContextFrameEnabled, flushInterval }) {
     this.#asyncContextFrameEnabled = asyncContextFrameEnabled
     this.#codeHotspotsEnabled = config.DD_PROFILING_CODEHOTSPOTS_ENABLED
     this.#cpuProfilingEnabled = config.DD_PROFILING_CPU_ENABLED
     this.#endpointCollectionEnabled = config.DD_PROFILING_ENDPOINT_COLLECTION_ENABLED
     this.#flushIntervalMillis = flushInterval
-    this.#samplingIntervalMicros = samplingInterval * 1000
+    this.#samplingIntervalMicros = SAMPLING_INTERVAL * 1000
     this.#telemetryHeartbeatIntervalMillis = config.telemetry.heartbeatInterval
     this.#timelineEnabled = config.DD_PROFILING_TIMELINE_ENABLED
     this.#v8ProfilerBugWorkaroundEnabled = config.DD_PROFILING_V8_PROFILER_BUG_WORKAROUND

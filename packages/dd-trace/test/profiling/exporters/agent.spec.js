@@ -52,12 +52,8 @@ async function createProfile (periodType) {
     ? new WallProfiler(profilerConfig, {
       asyncContextFrameEnabled: false,
       flushInterval: 60 * 1e3,
-      samplingInterval: 1e3 / 99,
     })
-    : new SpaceProfiler(profilerConfig, {
-      oomMonitoring: { enabled: false },
-      allocationProfilingEnabled: false,
-    })
+    : new SpaceProfiler(profilerConfig, { tags: {}, exporters: [] })
   profiler.start({
     // Throw errors in test rather than logging them
     logger: {

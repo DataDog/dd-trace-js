@@ -42,7 +42,6 @@ describe('profiler', function () {
         tags: { ...config.tags },
         exporters,
         flushInterval: config.DD_PROFILING_UPLOAD_PERIOD * 1000,
-        oomMonitoring: { enabled: false },
         profilers,
         uploadCompression: { method, level: Number.isNaN(level) ? undefined : level },
         systemInfoReport: { oomMonitoring: { enabled: false } },

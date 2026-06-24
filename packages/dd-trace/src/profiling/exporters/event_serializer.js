@@ -41,6 +41,14 @@ class EventSerializer {
     this.#activation = getActivation(config.profiling?.enabled)
   }
 
+  /**
+   * Returns the destination URL for the near-OOM export subprocess, or nothing when this exporter
+   * does not support OOM export. Overridden by {@link AgentExporter} and {@link FileExporter}.
+   *
+   * @returns {URL | undefined}
+   */
+  getExportUrl () {}
+
   typeToFile (type) {
     return `${type}.pprof`
   }

@@ -15,7 +15,7 @@ const timeoutMs = 15 * 1000
 
 function exporterFromURL (url) {
   if (url.protocol === 'file:') {
-    return new FileExporter({ DD_PROFILING_PPROF_PREFIX: fileURLToPath(url) })
+    return new FileExporter({}, fileURLToPath(url))
   }
   // The subprocess has no tracer config, so mirror the canonical config property
   // names the exporters read. Normalize the raw env to the parsed profiling.enabled

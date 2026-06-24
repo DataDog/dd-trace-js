@@ -12,6 +12,7 @@ const {
   ValueType,
 } = require('../../../../../vendor/dist/pprof-format')
 const { availableParallelism, effectiveLibuvThreadCount } = require('../libuv-size')
+const { SAMPLING_INTERVAL } = require('../constants')
 const { END_TIMESTAMP_LABEL, SPAN_ID_LABEL, LOCAL_ROOT_SPAN_ID_LABEL, encodeProfileAsync } = require('./shared')
 const PoissonProcessSamplingFilter = require('./poisson')
 // perf_hooks uses millis, with fractional part representing nanos. We emit nanos into the pprof file.
@@ -443,16 +444,16 @@ class EventsProfiler {
 
   /**
    * @param {TracerConfig} config
-   * @param {{ flushInterval: number, samplingInterval: number }} derived
+   * @param {{ flushInterval: number }} runtime
    */
-  constructor (config, { flushInterval, samplingInterval }) {
-    this.#maxSamples = getMaxSamples(flushInterval, samplingInterval)
+  constructor (config, { flushInterval }) {
+    this.#maxSamples = getMaxSamples(flushInterval, SAMPLING_INTERVAL)
     this.#timelineSamplingEnabled = config.DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED
     this.#eventSerializer = new EventSerializer(this.#maxSamples)
 
     const eventHandler = event => this.#eventSerializer.addEvent(event)
     const eventFilter = this.#timelineSamplingEnabled
-      ? createPoissonProcessSamplingFilter(samplingInterval)
+      ? createPoissonProcessSamplingFilter(SAMPLING_INTERVAL)
       : () => true
     const filteringEventHandler = event => {
       if (eventFilter(event)) {

@@ -11,8 +11,9 @@ const sinon = require('sinon')
 require('../../setup/core')
 
 // Test adapter: these specs predate the constructor reading canonical DD_PROFILING_*
-// names off the tracer config. Map the legacy flat option names to the (config, derived)
-// shape the wall profiler now expects.
+// names off the tracer config. Map the legacy flat option names to the (config, runtime)
+// shape the wall profiler now expects. The sampling interval is a fixed constant the
+// profiler imports directly, so it is no longer a configurable option.
 function makeWall (Cls, {
   asyncContextFrameEnabled = false,
   codeHotspotsEnabled = false,
@@ -20,7 +21,6 @@ function makeWall (Cls, {
   endpointCollectionEnabled = false,
   flushInterval = 60 * 1e3,
   heartbeatInterval = 60 * 1e3,
-  samplingInterval = 1e3 / 99,
   timelineEnabled = false,
   v8ProfilerBugWorkaroundEnabled = false,
 } = {}) {
@@ -31,7 +31,7 @@ function makeWall (Cls, {
     DD_PROFILING_TIMELINE_ENABLED: timelineEnabled,
     DD_PROFILING_V8_PROFILER_BUG_WORKAROUND: v8ProfilerBugWorkaroundEnabled,
     telemetry: { heartbeatInterval },
-  }, { asyncContextFrameEnabled, flushInterval, samplingInterval })
+  }, { asyncContextFrameEnabled, flushInterval })
 }
 
 describe('profilers/native/wall', () => {
@@ -109,16 +109,15 @@ describe('profilers/native/wall', () => {
   })
 
   it('should use the provided configuration options', () => {
-    const samplingInterval = 0.5
-    const profiler = makeWall(NativeWallProfiler, { samplingInterval })
+    const profiler = makeWall(NativeWallProfiler, { flushInterval: 30000 })
 
     profiler.start()
     profiler.stop()
 
     sinon.assert.calledWith(pprof.time.start,
       {
-        intervalMicros: 500,
-        durationMillis: 60000,
+        intervalMicros: 1e6 / 99,
+        durationMillis: 30000,
         sourceMapper: undefined,
         withContexts: false,
         lineNumbers: false,
