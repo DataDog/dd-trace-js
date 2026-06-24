@@ -35,4 +35,13 @@ describe('requireOptionalPeer', () => {
     assert.deepStrictEqual(loadCalls, [PEER])
     assert.strictEqual(peer, require(PEER))
   })
+
+  it('falls back to `require` when `__non_webpack_require__` is absent', () => {
+    globalThis.__webpack_require__ = () => {
+      throw new Error('webpack require must not run for an optional peer')
+    }
+
+    assert.strictEqual(typeof globalThis.__non_webpack_require__, 'undefined')
+    assert.strictEqual(requireOptionalPeer(PEER), require(PEER))
+  })
 })
