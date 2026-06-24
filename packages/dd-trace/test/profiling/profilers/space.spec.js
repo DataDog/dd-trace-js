@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const path = require('node:path')
+const { pathToFileURL } = require('node:url')
 
 const { describe, it, beforeEach } = require('mocha')
 const proxyquire = require('proxyquire')
@@ -202,7 +203,7 @@ describe('profilers/native/space', () => {
     assert.deepStrictEqual(exportCommand, [
       process.execPath,
       exporterCliPath,
-      'file:///tmp/profile-',
+      pathToFileURL('/tmp/profile-').toString(),
       'snapshot:on_oom',
       'space',
     ])
