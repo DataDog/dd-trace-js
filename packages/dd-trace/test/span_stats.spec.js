@@ -111,6 +111,11 @@ describe('SpanAggKey', () => {
 
   it('should make aggregation key for a synthetic span', () => {
     const key = new SpanAggKey(syntheticSpan)
+    assert.strictEqual(key.toString(), 'synthetic-span,service-name,resource-name,span-type,200,true,,,integration,,,,')
+  })
+
+  it('should include origin in aggregation key when otlp is enabled', () => {
+    const key = new SpanAggKey(syntheticSpan, true)
     assert.strictEqual(
       key.toString(), 'synthetic-span,service-name,resource-name,span-type,200,true,,,integration,synthetics,,,')
   })

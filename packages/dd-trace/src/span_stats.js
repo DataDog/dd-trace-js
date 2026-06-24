@@ -13,7 +13,6 @@ const {
   SPAN_KIND,
 } = require('../../../ext/tags')
 const { VERSION } = require('../../../version')
-const { getEnvironmentVariable } = require('./config/helper')
 const { ORIGIN_KEY, TOP_LEVEL_KEY, SVC_SRC_KEY } = require('./constants')
 const { version } = require('./pkg')
 const processTags = require('./process-tags')
@@ -91,22 +90,24 @@ class SpanAggStats {
 }
 
 class SpanAggKey {
-  constructor (span) {
+  constructor (span, otlpEnabled) {
     this.name = span.name || DEFAULT_SPAN_NAME
     this.service = span.service || DEFAULT_SERVICE_NAME
     this.resource = span.resource || ''
     this.type = span.type || ''
     this.statusCode = span.meta[HTTP_STATUS_CODE] || 0
     this.synthetics = span.meta[ORIGIN_KEY] === 'synthetics'
-    this.origin = span.meta[ORIGIN_KEY] || ''
     this.endpoint = span.meta[HTTP_ROUTE] || span.meta[HTTP_ENDPOINT] || ''
     this.method = span.meta[HTTP_METHOD] || ''
-    this.spanKind = span.meta[SPAN_KIND] || ''
-    this.rpcMethod = span.meta[GRPC_METHOD_NAME] || ''
+    this.srvSrc = span.meta[SVC_SRC_KEY] || ''
+    // OTLP trace metrics dimensions — omitted when OTLP trace metrics are disabled to
+    // avoid inflating aggregation key cardinality for the legacy span stats path.
+    this.origin = otlpEnabled ? (span.meta[ORIGIN_KEY] || '') : ''
+    this.spanKind = otlpEnabled ? (span.meta[SPAN_KIND] || '') : ''
+    this.rpcMethod = otlpEnabled ? (span.meta[GRPC_METHOD_NAME] || '') : ''
     // The gRPC plugin records the status code as a numeric tag, which span formatting routes into
     // metrics rather than meta; fall back to meta for string-valued tags (e.g. manual instrumentation).
-    this.rpcStatusCode = span.metrics?.[GRPC_STATUS_CODE] ?? span.meta[GRPC_STATUS_CODE] ?? ''
-    this.srvSrc = span.meta[SVC_SRC_KEY] || ''
+    this.rpcStatusCode = otlpEnabled ? (span.metrics?.[GRPC_STATUS_CODE] ?? span.meta[GRPC_STATUS_CODE] ?? '') : ''
   }
 
   toString () {
@@ -129,8 +130,8 @@ class SpanAggKey {
 }
 
 class SpanBuckets extends Map {
-  forSpan (span) {
-    const aggKey = new SpanAggKey(span)
+  forSpan (span, otlpEnabled) {
+    const aggKey = new SpanAggKey(span, otlpEnabled)
     const key = aggKey.toString()
 
     if (!this.has(key)) {
@@ -165,6 +166,7 @@ class SpanStatsProcessor {
     tags,
     version: appVersion,
     OTEL_TRACES_SPAN_METRICS_ENABLED: otlpTraceMetricsEnabled,
+    '_DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL': flushIntervalMs,
     OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: otelMetricsUrl,
     OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: otelMetricsProtocol,
     OTEL_EXPORTER_OTLP_METRICS_HEADERS: otelMetricsHeaders,
@@ -182,16 +184,13 @@ class SpanStatsProcessor {
     }
     // OTLP trace metrics flush on a fixed 10s cadence (not driven by OTEL_METRIC_EXPORT_INTERVAL).
     // _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL is internal and only overrides the cadence in tests.
-    let intervalMs = interval * 1e3
-    if (otlpTraceMetricsEnabled) {
-      const flushOverride = Number(getEnvironmentVariable('_DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL'))
-      intervalMs = Number.isFinite(flushOverride) && flushOverride > 0 ? flushOverride : 10_000
-    }
+    const intervalMs = otlpTraceMetricsEnabled ? (flushIntervalMs ?? 10_000) : interval * 1e3
     this.interval = intervalMs / 1e3
     this.bucketSizeNs = intervalMs * 1e6
     this.buckets = new TimeBuckets()
     this.hostname = os.hostname()
     this.enabled = enabled
+    this.otlpTraceMetricsEnabled = !!otlpTraceMetricsEnabled
     this.env = env
     this.tags = tags || {}
     this.sequence = 0
@@ -249,7 +248,7 @@ class SpanStatsProcessor {
     const bucketTime = spanEndNs - (spanEndNs % this.bucketSizeNs)
 
     this.buckets.forTime(bucketTime)
-      .forSpan(span)
+      .forSpan(span, this.otlpTraceMetricsEnabled)
       .record(span)
   }
 
