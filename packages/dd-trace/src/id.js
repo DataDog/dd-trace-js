@@ -1,6 +1,7 @@
 'use strict'
 
 const { randomFillSync } = require('crypto')
+const { openSync, readSync } = require('fs')
 
 const UINT_MAX = 4_294_967_296
 
@@ -9,18 +10,62 @@ const zeroId = new Uint8Array(8)
 
 let batch = 0
 
-// When running in a Lambda MicroVM environment (AWS_LAMBDA_MICROVM_IMAGE_ARN is
-// set by the platform), bypass the batch buffer and call randomFillSync on a
-// fresh 8-byte buffer per ID. The batch buffer is heap state serialised into
-// the Firecracker snapshot; all resumed clones would share identical contents
-// and produce duplicate IDs. Per-call kernel reads have no buffered state and
-// guarantee uniqueness regardless of when the snapshot was taken.
-// id.js is a foundational module loaded before config initialises, so we read
-// the env var directly. We cannot import siblings here because id.js is copied
-// standalone into sandbox environments (useSandbox in integration tests).
+// AWS Lambda MicroVM resumes many clones from one Firecracker memory snapshot.
+// The snapshot freezes the `data` batch buffer (pre-generated IDs in heap), so
+// every clone would replay the same trace/span IDs until the buffer wraps. When
+// the platform marks a MicroVM (AWS_LAMBDA_MICROVM_IMAGE_ARN is set in the
+// environment from process start), bypass the batch buffer and draw each ID per
+// call from the kernel CSPRNG (/dev/urandom) instead. The hypervisor reseeds the
+// kernel CSPRNG per clone on snapshot resume (VMGenID), so per-call output is
+// unique across clones (verified end to end: two clones of one snapshot produce
+// identical batched IDs but distinct per-call IDs). Nothing is cached, so there
+// is no frozen materialised state to collide, and no resume hook is needed. The
+// kernel read is both faster than randomFillSync in the MicroVM and safe
+// regardless of the base image (a custom base image's OpenSSL may not reseed on
+// resume; the kernel always does). The default non-MicroVM path keeps the batch
+// buffer and its per-ID hot path unchanged.
+// id.js loads before the config system initialises (proxy.js -> span.js ->
+// id.js), so the env var is read directly from process.env here.
 // eslint-disable-next-line eslint-rules/eslint-process-env
-const _secureRandom = !!process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
-const _secureBuf = _secureRandom ? new Uint8Array(8) : null
+const isMicroVm = Boolean(process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN)
+const microVmBuffer = isMicroVm ? new Uint8Array(8) : null
+// Open the kernel CSPRNG once for the per-call reads; -1 means fall back to
+// randomFillSync (non-Linux / no /dev/urandom).
+let urandomFd = -1
+if (isMicroVm) {
+  try {
+    urandomFd = openSync('/dev/urandom', 'r')
+  } catch {
+    // keep urandomFd = -1; fillFromKernel falls back to randomFillSync
+  }
+}
+
+// Fill `buffer` from the kernel CSPRNG (/dev/urandom). Fall back to
+// randomFillSync if the fd was never opened, a read throws, or a read returns
+// no bytes, and disable the fd so the hot path does not keep retrying a broken
+// read. dd-trace must never crash the app over id generation.
+/**
+ * @param {Uint8Array} buffer
+ */
+function fillFromKernel (buffer) {
+  if (urandomFd !== -1) {
+    try {
+      let offset = 0
+      while (offset < buffer.length) {
+        const bytesRead = readSync(urandomFd, buffer, offset, buffer.length - offset, null)
+        if (bytesRead <= 0) break // /dev/urandom should never short to 0; treat as failure
+        offset += bytesRead
+      }
+      if (offset === buffer.length) {
+        return
+      }
+    } catch {
+      // a kernel read failed -- fall through to randomFillSync
+    }
+    urandomFd = -1 // the fd will not recover; stop retrying it in the hot path
+  }
+  randomFillSync(buffer)
+}
 
 // Internal representation of a trace or span ID.
 class Identifier {
@@ -218,12 +263,12 @@ function toNumberString (buffer, radix) {
  * @returns {number[] | Uint8Array}
  */
 function pseudoRandom () {
-  if (_secureBuf) {
-    randomFillSync(_secureBuf)
+  if (microVmBuffer) {
+    fillFromKernel(microVmBuffer)
     return [
-      _secureBuf[0] & 0x7F,
-      _secureBuf[1], _secureBuf[2], _secureBuf[3],
-      _secureBuf[4], _secureBuf[5], _secureBuf[6], _secureBuf[7],
+      microVmBuffer[0] & 0x7F,
+      microVmBuffer[1], microVmBuffer[2], microVmBuffer[3],
+      microVmBuffer[4], microVmBuffer[5], microVmBuffer[6], microVmBuffer[7],
     ]
   }
   if (batch === 0) {

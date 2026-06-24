@@ -160,59 +160,140 @@ describe('id', () => {
 describe('AWS_LAMBDA_MICROVM_IMAGE_ARN activation', () => {
   const microVmArn = 'arn:aws:lambda:us-east-2:123456789012:microvm:my-app'
 
-  function loadWithMock (arn) {
-    let secureCalls = 0
-    let batchCalls = 0
+  function loadWithMock (arn, {
+    openThrows = false,
+    chunk = Infinity,
+    readThrows = false,
+    readReturnsZero = false,
+  } = {}) {
+    let opens = 0
+    let kernelReads = 0
+    let perCallFill = 0
+    let batchFill = 0
+    const mockFs = {
+      openSync () {
+        opens++
+        if (openThrows) throw new Error('ENOENT: no /dev/urandom')
+        return 42
+      },
+      readSync (fd, buf, offset, length) {
+        kernelReads++
+        if (readThrows) throw new Error('EIO: kernel read failed')
+        if (readReturnsZero) return 0
+        const n = Math.min(length, chunk)
+        for (let i = offset; i < offset + n; i++) buf[i] = 0xAB
+        return n
+      },
+    }
     const mockCrypto = {
       randomFillSync (buf) {
         if (buf.length === 8) {
-          secureCalls++
+          perCallFill++
         } else {
-          batchCalls++
+          batchFill++
         }
         for (let i = 0; i < buf.length; i++) buf[i] = 0xAB
       },
     }
+    const previousArn = process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
     if (arn !== undefined) {
       process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN = arn
     } else {
       delete process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
     }
-    const mod = proxyquire('../src/id', { crypto: mockCrypto })
-    delete process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
-    return { mod, secureCalls: () => secureCalls, batchCalls: () => batchCalls }
+    const mod = proxyquire('../src/id', { crypto: mockCrypto, fs: mockFs })
+    if (previousArn === undefined) {
+      delete process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
+    } else {
+      process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN = previousArn
+    }
+    return {
+      mod,
+      opens: () => opens,
+      kernelReads: () => kernelReads,
+      perCallFill: () => perCallFill,
+      batchFill: () => batchFill,
+    }
   }
 
-  it('should use per-call randomFillSync when AWS_LAMBDA_MICROVM_IMAGE_ARN is set', () => {
-    const { mod, secureCalls } = loadWithMock(microVmArn)
+  it('draws each id from the kernel CSPRNG when AWS_LAMBDA_MICROVM_IMAGE_ARN is set', () => {
+    const { mod, kernelReads, batchFill } = loadWithMock(microVmArn)
     mod()
-    assert.ok(secureCalls() > 0, 'expected 8-byte randomFillSync call when ARN is set')
+    assert.ok(kernelReads() > 0, 'expected a /dev/urandom read per id when ARN is set')
+    assert.strictEqual(batchFill(), 0, 'must not fill the batch buffer in MicroVM mode')
   })
 
-  it('should use batch randomFillSync when AWS_LAMBDA_MICROVM_IMAGE_ARN is unset', () => {
-    const { mod, batchCalls } = loadWithMock(undefined)
+  it('uses the batch buffer when AWS_LAMBDA_MICROVM_IMAGE_ARN is unset', () => {
+    const { mod, batchFill, kernelReads } = loadWithMock(undefined)
     mod()
-    assert.ok(batchCalls() > 0, 'expected batch randomFillSync call when ARN is unset')
+    assert.ok(batchFill() > 0, 'expected a batch randomFillSync when ARN is unset')
+    assert.strictEqual(kernelReads(), 0, 'must not read /dev/urandom outside a MicroVM')
   })
 
-  it('should use batch randomFillSync when AWS_LAMBDA_MICROVM_IMAGE_ARN is empty string', () => {
-    const { mod, batchCalls } = loadWithMock('')
+  it('uses the batch buffer when AWS_LAMBDA_MICROVM_IMAGE_ARN is empty string', () => {
+    const { mod, batchFill } = loadWithMock('')
     mod()
-    assert.ok(batchCalls() > 0, 'expected batch randomFillSync call when ARN is empty')
+    assert.ok(batchFill() > 0, 'expected a batch randomFillSync when ARN is empty')
+  })
+
+  it('falls back to per-call randomFillSync when /dev/urandom cannot be opened', () => {
+    const { mod, perCallFill, kernelReads } = loadWithMock(microVmArn, { openThrows: true })
+    mod()
+    assert.ok(perCallFill() > 0, 'expected per-call randomFillSync fallback')
+    assert.strictEqual(kernelReads(), 0, 'no kernel reads when the fd could not be opened')
+  })
+
+  it('opens /dev/urandom once and reads it once per id', () => {
+    const { mod, opens, kernelReads } = loadWithMock(microVmArn)
+    mod()
+    mod()
+    mod()
+    assert.strictEqual(opens(), 1, 'fd opened once at module load, not per id')
+    assert.strictEqual(kernelReads(), 3, 'one kernel read per id')
+  })
+
+  it('accumulates short /dev/urandom reads until the 8-byte buffer is full', () => {
+    const { mod, kernelReads } = loadWithMock(microVmArn, { chunk: 3 })
+    const spanId = mod()
+    assert.ok(kernelReads() > 1, `expected multiple short reads, got ${kernelReads()}`)
+    // mock fills every byte with 0xAB; the first byte has its MSB cleared
+    // (0xAB & 0x7F = 0x2B), so a fully-filled buffer is 2b then seven ab bytes.
+    assert.strictEqual(spanId.toString(), '2bababababababab')
+  })
+
+  it('falls back to randomFillSync if a kernel read returns 0 (no infinite loop)', () => {
+    const { mod, perCallFill } = loadWithMock(microVmArn, { readReturnsZero: true })
+    mod()
+    assert.ok(perCallFill() > 0, 'expected randomFillSync fallback when a read returns 0')
+  })
+
+  it('falls back and stops using the fd when a kernel read throws', () => {
+    const { mod, perCallFill, kernelReads } = loadWithMock(microVmArn, { readThrows: true })
+    mod()
+    const readsAfterFirst = kernelReads()
+    mod()
+    assert.ok(perCallFill() >= 2, 'both ids fall back to randomFillSync')
+    assert.strictEqual(kernelReads(), readsAfterFirst, 'fd disabled after the throw; no more kernel reads')
   })
 })
 
 describe('id in Lambda MicroVM environment', () => {
   let id
+  let previousArn
 
   beforeEach(() => {
+    previousArn = process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
     process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN = 'arn:aws:lambda:us-east-2:123456789012:microvm:my-app'
     delete require.cache[require.resolve('../src/id')]
     id = require('../src/id')
   })
 
   afterEach(() => {
-    delete process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
+    if (previousArn === undefined) {
+      delete process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
+    } else {
+      process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN = previousArn
+    }
     delete require.cache[require.resolve('../src/id')]
   })
 
