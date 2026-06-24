@@ -60,20 +60,4 @@ class Sampler {
   }
 }
 
-/**
- * Formats a sampling rate for propagation tags (`_dd.p.ksr`, `_dd.p.llmobs_sr`):
- * up to 6 decimal digits with trailing zeros (and a trailing dot) stripped.
- *
- * @param {number} rate
- * @returns {string}
- */
-function formatKnuthRate (rate) {
-  const string = Number(rate).toFixed(6)
-  for (let i = string.length - 1; i > 0; i--) {
-    if (string[i] === '0') continue
-    return string.slice(0, i + (string[i] === '.' ? 0 : 1))
-  }
-}
-
 module.exports = Sampler
-module.exports.formatKnuthRate = formatKnuthRate

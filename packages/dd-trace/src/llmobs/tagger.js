@@ -2,7 +2,7 @@
 
 const log = require('../log')
 const Sampler = require('../sampler')
-const { formatKnuthRate } = Sampler
+const { formatKnuthRate } = require('../priority_sampler')
 const {
   MODEL_NAME,
   MODEL_PROVIDER,
