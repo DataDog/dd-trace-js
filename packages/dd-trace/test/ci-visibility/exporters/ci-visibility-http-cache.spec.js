@@ -282,14 +282,15 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
     let hasUploadedGit = false
     let uploadedRepositoryUrl
     let secondSettingsRequestSawGitUploaded = false
-    const GitUploadingCiVisibilityExporter = loadCiVisibilityExporterWithGitUpload((_url, _options, repositoryUrl, callback) => {
-      gitUploadCalls++
-      uploadedRepositoryUrl = repositoryUrl
-      setImmediate(() => {
-        hasUploadedGit = true
-        callback()
+    const GitUploadingCiVisibilityExporter = loadCiVisibilityExporterWithGitUpload(
+      (_url, _options, repositoryUrl, callback) => {
+        gitUploadCalls++
+        uploadedRepositoryUrl = repositoryUrl
+        setImmediate(() => {
+          hasUploadedGit = true
+          callback()
+        })
       })
-    })
 
     const settingsScope = nock(url)
       .post('/api/v2/libraries/tests/services/setting')
