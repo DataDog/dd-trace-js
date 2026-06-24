@@ -27,7 +27,7 @@ describe('URI sourcing with fastify', () => {
     })
 
     after(() => {
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(() => {
@@ -62,12 +62,12 @@ describe('URI sourcing with fastify', () => {
         reply.code(200).send()
       })
 
-      await appInstance.listen({ port: 0 })
+      await appInstance.listen({ host: '127.0.0.1', port: 0 })
 
       const port = appInstance.server.address().port
 
       const response = await axios
-        .get(`http://localhost:${port}/path/vulnerable`)
+        .get(`http://127.0.0.1:${port}/path/vulnerable`)
       assert.strictEqual(response.status, 200)
     })
   })
@@ -83,7 +83,7 @@ describe('Path params sourcing with fastify', () => {
     })
 
     after(() => {
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(() => {
@@ -123,12 +123,12 @@ describe('Path params sourcing with fastify', () => {
         reply.code(200).send()
       })
 
-      await appInstance.listen({ port: 0 })
+      await appInstance.listen({ host: '127.0.0.1', port: 0 })
 
       const port = appInstance.server.address().port
 
       const response = await axios
-        .get(`http://localhost:${port}/tainted1/tainted2`)
+        .get(`http://127.0.0.1:${port}/tainted1/tainted2`)
       assert.strictEqual(response.status, 200)
     })
   })

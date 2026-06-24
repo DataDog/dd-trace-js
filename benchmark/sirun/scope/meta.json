@@ -6,13 +6,7 @@
   "iterations": 10,
   "instructions": true,
   "variants": {
-    "base": {
-      "env": {
-        "COUNT": "250000"
-      }
-    },
     "scope_enabled": {
-      "baseline": "base",
       "env": {
         "SCOPE_ENABLED": "true",
         "COUNT": "250000"

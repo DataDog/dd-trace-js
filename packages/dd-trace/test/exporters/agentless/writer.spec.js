@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { URL } = require('node:url')
+const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -81,6 +82,12 @@ describe('AgentlessWriter', () => {
       assert.strictEqual(writer._url.hostname, 'public-trace-http-intake.logs.datadoghq.com')
     })
 
+    it('should map a regional site to its data-center intake host', () => {
+      writer = new Writer({ site: 'ap1.datadoghq.com' })
+
+      assert.strictEqual(writer._url.hostname, 'browser-intake-ap1-datadoghq.com')
+    })
+
     it('should pass writer reference and metadata to encoder', () => {
       const metadata = {
         hostname: 'test-host',
@@ -131,7 +138,7 @@ describe('AgentlessWriter', () => {
         assert.deepStrictEqual(request.getCall(0).args[0], expectedData)
         assertObjectContains(request.getCall(0).args[1], {
           url,
-          path: '/v1/input',
+          path: '/api/v2/spans',
           method: 'POST',
           timeout: 15_000,
           headers: {
@@ -156,8 +163,8 @@ describe('AgentlessWriter', () => {
 
       sinon.assert.calledOnce(log.error)
       const call = log.error.getCall(0)
-      assert.ok(call.args[0].includes('DD_API_KEY is required'))
-      assert.ok(call.args[0].includes('Set DD_API_KEY'))
+      assert.ok(call.args[0].includes('DD_API_KEY is required'), `Got: ${inspect(call.args[0])}`)
+      assert.ok(call.args[0].includes('Set DD_API_KEY'), `Got: ${inspect(call.args[0])}`)
     })
 
     it('should skip sending when API key is missing', (done) => {
@@ -190,7 +197,7 @@ describe('AgentlessWriter', () => {
         sinon.assert.notCalled(request)
         sinon.assert.calledOnce(log.error)
         const call = log.error.getCall(0)
-        assert.ok(call.args[0].includes('No valid URL configured'))
+        assert.ok(call.args[0].includes('No valid URL configured'), `Got: ${inspect(call.args[0])}`)
         done()
       })
     })
@@ -216,8 +223,8 @@ describe('AgentlessWriter', () => {
       writer.flush(() => {
         sinon.assert.calledOnce(log.error)
         const call = log.error.getCall(0)
-        assert.ok(call.args[0].includes('Authentication failed'))
-        assert.ok(call.args[0].includes('Verify DD_API_KEY'))
+        assert.ok(call.args[0].includes('Authentication failed'), `Got: ${inspect(call.args[0])}`)
+        assert.ok(call.args[0].includes('Verify DD_API_KEY'), `Got: ${inspect(call.args[0])}`)
         done()
       })
     })
@@ -232,8 +239,8 @@ describe('AgentlessWriter', () => {
       writer.flush(() => {
         sinon.assert.calledOnce(log.error)
         const call = log.error.getCall(0)
-        assert.ok(call.args[0].includes('Authentication failed'))
-        assert.ok(call.args[0].includes('Verify DD_API_KEY'))
+        assert.ok(call.args[0].includes('Authentication failed'), `Got: ${inspect(call.args[0])}`)
+        assert.ok(call.args[0].includes('Verify DD_API_KEY'), `Got: ${inspect(call.args[0])}`)
         done()
       })
     })
@@ -248,8 +255,8 @@ describe('AgentlessWriter', () => {
       writer.flush(() => {
         sinon.assert.calledOnce(log.error)
         const call = log.error.getCall(0)
-        assert.ok(call.args[0].includes('endpoint not found'))
-        assert.ok(call.args[0].includes('DD_SITE'))
+        assert.ok(call.args[0].includes('endpoint not found'), `Got: ${inspect(call.args[0])}`)
+        assert.ok(call.args[0].includes('DD_SITE'), `Got: ${inspect(call.args[0])}`)
         done()
       })
     })
@@ -264,7 +271,7 @@ describe('AgentlessWriter', () => {
       writer.flush(() => {
         sinon.assert.calledOnce(log.error)
         const call = log.error.getCall(0)
-        assert.ok(call.args[0].includes('Rate limited'))
+        assert.ok(call.args[0].includes('Rate limited'), `Got: ${inspect(call.args[0])}`)
         done()
       })
     })
@@ -279,8 +286,8 @@ describe('AgentlessWriter', () => {
       writer.flush(() => {
         sinon.assert.calledOnce(log.error)
         const call = log.error.getCall(0)
-        assert.ok(call.args[0].includes('server error'))
-        assert.ok(call.args[0].includes('transient'))
+        assert.ok(call.args[0].includes('server error'), `Got: ${inspect(call.args[0])}`)
+        assert.ok(call.args[0].includes('transient'), `Got: ${inspect(call.args[0])}`)
         done()
       })
     })
@@ -295,7 +302,7 @@ describe('AgentlessWriter', () => {
       writer.flush(() => {
         sinon.assert.calledOnce(log.error)
         const call = log.error.getCall(0)
-        assert.ok(call.args[0].includes('Network error'))
+        assert.ok(call.args[0].includes('Network error'), `Got: ${inspect(call.args[0])}`)
         done()
       })
     })
@@ -310,7 +317,7 @@ describe('AgentlessWriter', () => {
       writer.flush(() => {
         sinon.assert.calledOnce(log.error)
         const call = log.error.getCall(0)
-        assert.ok(call.args[0].includes('Error sending agentless payload'))
+        assert.ok(call.args[0].includes('Error sending agentless payload'), `Got: ${inspect(call.args[0])}`)
         // Status code is passed as second argument (printf-style)
         assert.strictEqual(call.args[1], 400)
         done()
@@ -327,7 +334,7 @@ describe('AgentlessWriter', () => {
         sinon.assert.calledOnce(encoder.reset)
         sinon.assert.calledOnce(log.error)
         const call = log.error.getCall(0)
-        assert.ok(call.args[0].includes('Maximum number of active requests'))
+        assert.ok(call.args[0].includes('Maximum number of active requests'), `Got: ${inspect(call.args[0])}`)
         assert.strictEqual(call.args[1], 3)
         done()
       })

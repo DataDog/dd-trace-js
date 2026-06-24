@@ -2,6 +2,7 @@
 
 const { createHash } = require('crypto')
 const { lstat, mkdir, readdir, writeFile } = require('fs/promises')
+const { createRequire } = require('module')
 const { arch } = require('os')
 const { join } = require('path')
 
@@ -15,6 +16,7 @@ const latests = require('../packages/dd-trace/test/plugins/versions/package.json
 const { isRelativeRequire } = require('../packages/datadog-instrumentations/src/helpers/shared-utils')
 const exec = require('./helpers/exec')
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
+const requirePackageJson = require(requirePackageJsonPath)
 
 // Can remove aerospike after removing support for aerospike < 5.2.0 (for Node.js 22, v5.12.1 is required)
 // Can remove couchbase after removing support for couchbase < 3.2.2
@@ -67,7 +69,7 @@ async function assertPrerequisites () {
   for (const name of externalNames) {
     for (const inst of externals[name]) {
       // eslint-disable-next-line no-await-in-loop
-      await assertInstrumentation(inst, true)
+      await assertInstrumentation(inst, true, name)
     }
   }
 
@@ -77,9 +79,13 @@ async function assertPrerequisites () {
 /**
  * @param {object} instrumentation
  * @param {boolean} external
+ * @param {string} [pluginName] The plugin key the external entry belongs to. Same-name externals (e.g. the aerospike
+ *   externals entry that mirrors the addHook versions) honour `PACKAGE_VERSION_RANGE` so per-major CI matrices do not
+ *   force every major to install on every job.
  */
-async function assertInstrumentation (instrumentation, external) {
-  const versions = process.env.PACKAGE_VERSION_RANGE && !external
+async function assertInstrumentation (instrumentation, external, pluginName) {
+  const honourEnvRange = !external || instrumentation.name === pluginName
+  const versions = process.env.PACKAGE_VERSION_RANGE && honourEnvRange
     ? [process.env.PACKAGE_VERSION_RANGE]
     : (instrumentation.versions || [])
 
@@ -140,15 +146,13 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
     dependencies,
   }
 
-  if (!external) {
-    if (name === 'aerospike') {
-      pkg.installConfig = {
-        hoistingLimits: 'workspaces',
-      }
-    } else {
-      pkg.workspaces = {
-        nohoist: ['**/**'],
-      }
+  if (name === 'aerospike') {
+    pkg.installConfig = {
+      hoistingLimits: 'workspaces',
+    }
+  } else if (!external) {
+    pkg.workspaces = {
+      nohoist: ['**/**'],
     }
   }
 
@@ -188,16 +192,16 @@ async function assertPeerDependencies (rootFolder, parent = '') {
     const versionPkgJsonPath = join(folder, 'package.json')
     const versionPkgJson = require(versionPkgJsonPath)
 
-    let pkgJsonPath
     let pkgJson
 
     for (const { dep, name, node, forced } of externalDeps.get(externalName)) {
       if (node && !semver.satisfies(process.versions.node, node)) {
         continue
       }
-      if (!pkgJsonPath) {
-        pkgJsonPath = require(folder).pkgJsonPath()
-        pkgJson = require(pkgJsonPath)
+      if (!pkgJson) {
+        const requireFromWorkspace = createRequire(join(folder, 'package.json'))
+        const nodeModulesPaths = requireFromWorkspace.resolve.paths(externalName)
+        pkgJson = requirePackageJson(externalName, { paths: nodeModulesPaths })
       }
 
       for (const section of ['devDependencies', 'peerDependencies']) {

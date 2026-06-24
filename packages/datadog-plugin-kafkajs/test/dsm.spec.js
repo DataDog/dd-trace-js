@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { randomUUID } = require('crypto')
+const { inspect } = require('node:util')
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
@@ -14,6 +15,7 @@ const { computePathwayHash } = require('../../dd-trace/src/datastreams/pathway')
 const { ENTRY_PARENT_HASH, DataStreamsProcessor } = require('../../dd-trace/src/datastreams/processor')
 const propagationHash = require('../../dd-trace/src/propagation-hash')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { createTopicWithRetry } = require('./helpers')
 
 const testKafkaClusterId = '5L6g3nShT-eMCtK--X86sw'
 
@@ -31,7 +33,7 @@ describe('Plugin', () => {
     this.timeout(10000)
 
     afterEach(() => {
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     withVersions('kafkajs', 'kafkajs', (version) => {
@@ -56,8 +58,7 @@ describe('Plugin', () => {
 
         beforeEach(async () => {
           process.env.DD_DATA_STREAMS_ENABLED = 'true'
-          tracer = require('../../dd-trace')
-          await agent.load('kafkajs')
+          tracer = await agent.load('kafkajs')
           const lib = require(`../../../versions/kafkajs@${version}`).get()
           Kafka = lib.Kafka
           kafka = new Kafka({
@@ -71,7 +72,7 @@ describe('Plugin', () => {
           topicBIn = `topic-b-in-${randomUUID()}`
           topicBOut = `topic-b-out-${randomUUID()}`
           admin = kafka.admin()
-          await admin.createTopics({
+          await createTopicWithRetry(admin, {
             waitForLeaders: true,
             topics: [testTopic, topicAIn, topicAOut, topicBIn, topicBOut].map(topic => ({
               topic,
@@ -79,6 +80,7 @@ describe('Plugin', () => {
               replicationFactor: 1,
             })),
           })
+          await admin.disconnect()
           expectedProducerHash = getDsmPathwayHash(testTopic, true, ENTRY_PARENT_HASH)
           expectedConsumerHash = getDsmPathwayHash(testTopic, false, expectedProducerHash)
         })
@@ -105,6 +107,25 @@ describe('Plugin', () => {
             const messages = [{ key: 'consumerDSM1', value: 'test2' }]
             await sendMessages(kafka, testTopic, messages)
             assert.strictEqual(setDataStreamsContextSpy.args[0][0].hash, expectedProducerHash)
+          })
+
+          it('Should set one checkpoint per topic on sendBatch', async () => {
+            const expectedAHash = getDsmPathwayHash(topicAOut, true, ENTRY_PARENT_HASH)
+            const expectedBHash = getDsmPathwayHash(topicBOut, true, ENTRY_PARENT_HASH)
+
+            const producer = kafka.producer()
+            await producer.connect()
+            await producer.sendBatch({
+              topicMessages: [
+                { topic: topicAOut, messages: [{ key: 'a', value: 'va' }] },
+                { topic: topicBOut, messages: [{ key: 'b', value: 'vb' }] },
+              ],
+            })
+            await producer.disconnect()
+
+            const hashes = setDataStreamsContextSpy.getCalls().map(call => call.args[0].hash)
+            assert.ok(hashes.includes(expectedAHash), `missing DSM checkpoint for ${topicAOut}`)
+            assert.ok(hashes.includes(expectedBHash), `missing DSM checkpoint for ${topicBOut}`)
           })
 
           it('Should set a checkpoint on consume (eachMessage)', async () => {
@@ -142,7 +163,10 @@ describe('Plugin', () => {
             }
             const recordCheckpointSpy = sinon.spy(DataStreamsProcessor.prototype, 'recordCheckpoint')
             await sendMessages(kafka, testTopic, messages)
-            assert.ok(Object.hasOwn(recordCheckpointSpy.args[0][0], 'payloadSize'))
+            assert.ok(
+              Object.hasOwn(recordCheckpointSpy.args[0][0], 'payloadSize'),
+              `Available keys: ${inspect(Object.keys(recordCheckpointSpy.args[0][0]))}`
+            )
             recordCheckpointSpy.restore()
           })
 
@@ -155,7 +179,10 @@ describe('Plugin', () => {
             await sendMessages(kafka, testTopic, messages)
             await consumer.run({
               eachMessage: async () => {
-                assert.ok(Object.hasOwn(recordCheckpointSpy.args[0][0], 'payloadSize'))
+                assert.ok(
+                  Object.hasOwn(recordCheckpointSpy.args[0][0], 'payloadSize'),
+                  `Available keys: ${inspect(Object.keys(recordCheckpointSpy.args[0][0]))}`
+                )
                 recordCheckpointSpy.restore()
               },
             })
@@ -316,6 +343,23 @@ describe('Plugin', () => {
             const runArg = setOffsetSpy.lastCall.args[0]
             assert.strictEqual(runArg.topic, testTopic)
             assert.strictEqual(runArg.kafka_cluster_id, testKafkaClusterId)
+          })
+
+          it('Should add one backlog per response item on sendBatch (no N x M duplication)', async () => {
+            const producer = kafka.producer()
+            await producer.connect()
+            await producer.sendBatch({
+              topicMessages: [
+                { topic: topicAOut, messages: [{ key: 'a', value: 'va' }] },
+                { topic: topicBOut, messages: [{ key: 'b', value: 'vb' }] },
+              ],
+            })
+            await producer.disconnect()
+
+            const produceCalls = setOffsetSpy.getCalls()
+              .filter(call => call.args[0]?.type === 'kafka_produce')
+            const topics = produceCalls.map(call => call.args[0].topic).sort()
+            assert.deepStrictEqual(topics, [topicAOut, topicBOut].sort())
           })
         })
       })

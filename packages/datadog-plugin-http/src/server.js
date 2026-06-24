@@ -14,30 +14,40 @@ class HttpServerPlugin extends ServerPlugin {
 
   static prefix = 'apm:http:server:request'
 
+  /** @type {string | undefined} */
+  #operationName
+
+  /** @type {object | undefined} */
+  #startConfig
+
+  /** @type {string | undefined} */
+  #serviceSource
+
   constructor (...args) {
     super(...args)
     this.addTraceSub('exit', message => this.exit(message))
   }
 
-  start ({ req, res, abortController }) {
+  start (ctx) {
+    const { req, res } = ctx
     let store = legacyStorage.getStore()
-    const { name: schemaServiceName, source: schemaServiceSource } = this.serviceName()
-    const service = this.config.service || schemaServiceName
-    const serviceSource = (this.config.service && service !== this.tracer._service)
-      ? 'opt.plugin'
-      : (service === this.tracer._service ? undefined : schemaServiceSource)
+    if (this.#startConfig === undefined) {
+      this.#refreshStartCache()
+    }
+    // A fresh request has no span yet; web.startSpan creates and enters one.
+    // A reused context (HTTP/2 stream, serverless re-entry) returns the
+    // existing span without entering, so the explicit enter below is the only
+    // one in that case.
+    const spanCreated = !web.getContext(req)?.span
     const span = web.startSpan(
       this.tracer,
-      {
-        ...this.config,
-        service,
-      },
+      this.#startConfig,
       req,
       res,
-      this.operationName()
+      this.#operationName
     )
-    if (serviceSource !== undefined) {
-      span.setTag(SVC_SRC_KEY, serviceSource)
+    if (this.#serviceSource !== undefined) {
+      span.setTag(SVC_SRC_KEY, this.#serviceSource)
     }
     span.setTag(COMPONENT, this.constructor.id)
     span._integrationName = this.constructor.id
@@ -52,7 +62,12 @@ class HttpServerPlugin extends ServerPlugin {
       store = withRequest(store, req)
     }
 
-    this.enter(span, store)
+    // Skip the re-enter when web.startSpan already entered { ...store, span }
+    // and AppSec did not rebuild the store with req: the bind would be
+    // identical to the one startSpan just made.
+    if (!spanCreated || appsecActive) {
+      this.enter(span, store)
+    }
 
     if (!context.instrumented) {
       context.res.writeHead = web.wrapWriteHead(context)
@@ -60,7 +75,10 @@ class HttpServerPlugin extends ServerPlugin {
     }
 
     if (appsecActive) {
-      incomingHttpRequestStart.publish({ req, res, abortController }) // TODO: no need to make a new object here
+      // Reuse the ctx allocated by the HTTP server instrumentation rather
+      // than a fresh `{ req, res, abortController }` per request; the AppSec
+      // subscriber only reads from the message.
+      incomingHttpRequestStart.publish(ctx)
     }
   }
 
@@ -93,7 +111,24 @@ class HttpServerPlugin extends ServerPlugin {
   }
 
   configure (config) {
-    return super.configure(web.normalizeConfig(config))
+    const result = super.configure(web.normalizeConfig(config))
+    // Invalidate the start-cache; the next `start` refills it. Resolving
+    // service / operation eagerly here would pin nomenclature lookups to
+    // the order plugins and tracer initialise.
+    this.#startConfig = undefined
+    return result
+  }
+
+  #refreshStartCache () {
+    const { name: schemaServiceName, source: schemaServiceSource } = this.serviceName()
+    const tracerService = this.tracer._service
+    const configService = this.config.service
+    const service = configService || schemaServiceName
+    this.#serviceSource = (configService && service !== tracerService)
+      ? 'opt.plugin'
+      : (service === tracerService ? undefined : schemaServiceSource)
+    this.#operationName = this.operationName()
+    this.#startConfig = { ...this.config, service }
   }
 }
 

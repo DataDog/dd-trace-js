@@ -18,7 +18,12 @@ import globals from 'globals'
 import eslintConfigNamesSync from './eslint-rules/eslint-config-names-sync.mjs'
 import eslintEnvAliases from './eslint-rules/eslint-env-aliases.mjs'
 import eslintLogPrintfStyle from './eslint-rules/eslint-log-printf-style.mjs'
+import eslintNoPrivateTagsAccess from './eslint-rules/eslint-no-private-tags-access.mjs'
+import eslintNonPrefixEnvNames from './eslint-rules/eslint-non-prefix-env-names.mjs'
+import eslintPreferAssertMatch from './eslint-rules/eslint-prefer-assert-match.mjs'
+import eslintPreferSetServiceName from './eslint-rules/eslint-prefer-set-service-name.mjs'
 import eslintProcessEnv from './eslint-rules/eslint-process-env.mjs'
+import eslintRequireBooleanAssertMessage from './eslint-rules/eslint-require-boolean-assert-message.mjs'
 import eslintRequireExportExists from './eslint-rules/eslint-require-export-exists.mjs'
 import eslintSafeTypeOfObject from './eslint-rules/eslint-safe-typeof-object.mjs'
 import eslintTimerUnref from './eslint-rules/eslint-timer-unref.mjs'
@@ -85,6 +90,7 @@ export default [
       '!**/integration-tests/coverage/**',
       '**/dist', // Generated
       '**/docs', // Any JS here is for presentation only.
+      '**/.next', // Generated Next.js build output
       '**/out', // Generated
       '**/node_modules', // We don't own these.
       '**/versions', // This is effectively a node_modules tree.
@@ -379,8 +385,13 @@ export default [
           'eslint-process-env': eslintProcessEnv,
           'eslint-env-aliases': eslintEnvAliases,
           'eslint-config-names-sync': eslintConfigNamesSync,
+          'eslint-non-prefix-env-names': eslintNonPrefixEnvNames,
+          'eslint-prefer-assert-match': eslintPreferAssertMatch,
+          'eslint-prefer-set-service-name': eslintPreferSetServiceName,
           'eslint-safe-typeof-object': eslintSafeTypeOfObject,
           'eslint-log-printf-style': eslintLogPrintfStyle,
+          'eslint-no-private-tags-access': eslintNoPrivateTagsAccess,
+          'eslint-require-boolean-assert-message': eslintRequireBooleanAssertMessage,
           'eslint-require-export-exists': eslintRequireExportExists,
           'eslint-timer-unref': eslintTimerUnref,
         },
@@ -418,6 +429,37 @@ export default [
         dynamicImports: 'always-multiline',
       }],
       'eslint-rules/eslint-safe-typeof-object': 'error',
+      'eslint-rules/eslint-no-private-tags-access': ['error', {
+        allowFiles: [
+          // The span_context implementation defines and reads `_tags` directly.
+          'packages/dd-trace/src/opentracing/span_context.js',
+          // Unrelated `_tags` fields on other classes (not span contexts).
+          'packages/dd-trace/src/dogstatsd.js',
+          'packages/dd-trace/src/datastreams/processor.js',
+          // `LLMObservabilitySpan` (internal LLM-Obs DTO) has its own `_tags`
+          // field unrelated to the APM span context.
+          'packages/dd-trace/src/llmobs/span_processor.js',
+          // Test specs that intentionally mock the `_tags` field shape on a
+          // fake span context (their `getTag`/`getTags` mocks read `this._tags`).
+          'packages/dd-trace/test/opentracing/span_context.spec.js',
+          'packages/dd-trace/test/priority_sampler.spec.js',
+          'packages/dd-trace/test/sampling_rule.spec.js',
+          'packages/dd-trace/test/span_sampler.spec.js',
+          'packages/dd-trace/test/span_format.spec.js',
+          'packages/dd-trace/test/standalone/tracesource_priority_sampler.spec.js',
+          'packages/dd-trace/test/appsec/reporter.spec.js',
+          'packages/dd-trace/test/appsec/index.spec.js',
+          'packages/dd-trace/test/plugins/database-dbm-hash.spec.js',
+          'packages/dd-trace/test/plugins/outbound.spec.js',
+          'packages/dd-trace/test/llmobs/tagger.spec.js',
+          'packages/dd-trace/test/llmobs/span_processor.spec.js',
+          'packages/dd-trace/test/profiling/profilers/wall.spec.js',
+          // Benchmark stubs that mock the `_tags` field shape on a fake span
+          // context (their `getTag`/`getTags` mocks read from `_tags`).
+          'benchmark/stubs/span.js',
+          'benchmark/sirun/exporting-pipeline/index.js',
+        ],
+      }],
       'eslint-rules/eslint-require-export-exists': 'error',
       'import/no-extraneous-dependencies': 'error',
       'n/hashbang': 'error',
@@ -501,6 +543,8 @@ export default [
       'eslint-rules/eslint-process-env': 'error',
       'eslint-rules/eslint-env-aliases': 'error',
       'eslint-rules/eslint-log-printf-style': 'error',
+      'eslint-rules/eslint-non-prefix-env-names': 'error',
+      'eslint-rules/eslint-prefer-set-service-name': 'error',
       'eslint-rules/eslint-timer-unref': 'error',
 
       'no-restricted-syntax': ['error', {
@@ -612,6 +656,7 @@ export default [
       'packages/datadog-plugin-net/test/epipe-crash/**/*.js',
       'packages/datadog-plugin-openai/test/no-init.js',
       'packages/dd-trace/test/custom-metrics-app.js',
+      'packages/datadog-plugin-aws-durable-execution-sdk-js/test/integration-test/server.mjs',
       'packages/datadog-plugin-fastify/test/integration-test/helper.mjs',
       'packages/datadog-plugin-light-my-request/test/integration-test/server.mjs',
     ],
@@ -731,6 +776,9 @@ export default [
       n: eslintPluginN,
     },
     rules: {
+      'eslint-rules/eslint-prefer-assert-match': 'error',
+      // TODO: Re-enable this rule once we have a way to fix the false positives or have Node.js report better errors.
+      'eslint-rules/eslint-require-boolean-assert-message': 'off',
       'mocha/consistent-spacing-between-blocks': 'off',
       'mocha/max-top-level-suites': ['error', { limit: 1 }],
       'mocha/no-mocha-arrows': 'off',
@@ -747,6 +795,22 @@ export default [
       'no-restricted-syntax': ['error', {
         selector: "CallExpression:matches([callee.name='doesNotThrow'], [callee.property.name='doesNotThrow'])",
         message: 'Do not use `assert.doesNotThrow()`. Execute the expression directly instead.',
+      }, {
+        // `assert(a === b)` / `assert.ok(a === b)` → `assert.strictEqual(a, b)`
+        selector:
+          'CallExpression[arguments.length<=2]' +
+          ':matches([callee.name="assert"], [callee.object.name="assert"][callee.property.name="ok"])' +
+          ' > BinaryExpression[operator="==="]:first-child',
+        message: 'Use `assert.strictEqual(a, b)` instead of `assert(a === b)` / `assert.ok(a === b)`. ' +
+          'The strict variant includes both values in the failure message automatically.',
+      }, {
+        // `assert(a !== b)` / `assert.ok(a !== b)` → `assert.notStrictEqual(a, b)`
+        selector:
+          'CallExpression[arguments.length<=2]' +
+          ':matches([callee.name="assert"], [callee.object.name="assert"][callee.property.name="ok"])' +
+          ' > BinaryExpression[operator="!=="]:first-child',
+        message: 'Use `assert.notStrictEqual(a, b)` instead of `assert(a !== b)` / `assert.ok(a !== b)`. ' +
+          'The strict variant includes both values in the failure message automatically.',
       }],
       'n/no-missing-require': 'off',
       'require-await': 'off',
@@ -778,6 +842,15 @@ export default [
     rules: {
       'mocha/max-top-level-suites': 'off',
       'mocha/no-pending-tests': 'off',
+    },
+  },
+  {
+    // jest-docblock's `@datadog {"unskippable": true}` tag reads as a malformed
+    // JSDoc type to `jsdoc/valid-types`. The shape is required by the plugin.
+    name: 'dd-trace/datadog-plugin-jest/fixtures',
+    files: ['packages/datadog-plugin-jest/test/fixtures/**/*.js'],
+    rules: {
+      'jsdoc/valid-types': 'off',
     },
   },
   {
@@ -817,6 +890,24 @@ export default [
     ],
     rules: {
       'import/no-extraneous-dependencies': 'off',
+    },
+  },
+  {
+    // The Next.js fixture apps import dd-trace the way a customer does
+    // (`require('dd-trace')`). The package is supplied to the app at runtime via a
+    // stub written into node_modules (see test/index.spec.js), so it never appears
+    // in a manifest the extraneous-dependency rules can read.
+    name: 'dd-trace/datadog-plugin-next/fixtures',
+    plugins: {
+      import: eslintPluginImport,
+    },
+    files: [
+      'packages/datadog-plugin-next/test/app/**/*.js',
+      'packages/datadog-plugin-next/test/**/pages/**/*.js',
+    ],
+    rules: {
+      'import/no-extraneous-dependencies': 'off',
+      'n/no-extraneous-require': 'off',
     },
   },
 ]

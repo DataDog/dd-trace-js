@@ -19,6 +19,7 @@ const {
   collectTestOptimizationSummariesFromTraces,
   logAttemptToFixTestExecution,
   logTestOptimizationSummary,
+  getTestOptimizationRequestResults,
 } = require('../../dd-trace/src/plugins/util/test')
 const { addHook, channel } = require('./helpers/instrument')
 
@@ -43,6 +44,7 @@ const testSuiteErrorCh = channel('ci:vitest:test-suite:error')
 // test session hooks
 const testSessionStartCh = channel('ci:vitest:session:start')
 const testSessionFinishCh = channel('ci:vitest:session:finish')
+const testSessionConfigurationCh = channel('ci:vitest:session:configuration')
 const libraryConfigurationCh = channel('ci:vitest:library-configuration')
 const knownTestsCh = channel('ci:vitest:known-tests')
 const isEarlyFlakeDetectionFaultyCh = channel('ci:vitest:is-early-flake-detection-faulty')
@@ -55,6 +57,7 @@ const codeCoverageReportCh = channel('ci:vitest:coverage-report')
 
 const taskToCtx = new WeakMap()
 const taskToStatuses = new WeakMap()
+const taskToReportedErrorCount = new WeakMap()
 const attemptToFixTaskToStatuses = new WeakMap()
 const originalHookFns = new WeakMap()
 const newTasks = new WeakSet()
@@ -74,6 +77,9 @@ let isRetryReasonEfd = false
 let isRetryReasonAttemptToFix = false
 const switchedStatuses = new WeakSet()
 const workerProcesses = new WeakSet()
+const mainProcessSetupPromises = new WeakMap()
+const coverageWrappedProviders = new WeakSet()
+const finishWrappedContexts = new WeakSet()
 let isFlakyTestRetriesEnabled = false
 let flakyTestRetriesCount = 0
 let isEarlyFlakeDetectionEnabled = false
@@ -134,6 +140,11 @@ function getProvidedContext () {
       _ddFlakyTestRetriesCount: flakyTestRetriesCount,
       _ddIsImpactedTestsEnabled: isImpactedTestsEnabled,
       _ddModifiedFiles: modifiedFiles,
+      _ddTestSessionId: testSessionId,
+      _ddTestModuleId: testModuleId,
+      _ddTestCommand: testCommand,
+      _ddRepositoryRoot: repositoryRoot,
+      _ddCodeOwnersEntries: codeOwnersEntries,
     } = globalThis.__vitest_worker__.providedContext
 
     return {
@@ -150,6 +161,11 @@ function getProvidedContext () {
       flakyTestRetriesCount: flakyTestRetriesCount ?? 0,
       isImpactedTestsEnabled,
       modifiedFiles,
+      testSessionId,
+      testModuleId,
+      testCommand,
+      repositoryRoot,
+      codeOwnersEntries,
     }
   } catch {
     log.error('Vitest workers could not parse provided context, so some features will not work.')
@@ -167,6 +183,11 @@ function getProvidedContext () {
       flakyTestRetriesCount: 0,
       isImpactedTestsEnabled: false,
       modifiedFiles: {},
+      testSessionId: undefined,
+      testModuleId: undefined,
+      testCommand: undefined,
+      repositoryRoot: undefined,
+      codeOwnersEntries: undefined,
     }
   }
 }
@@ -215,6 +236,10 @@ function isCliApiPackage (vitestPackage) {
 
 function getTestRunnerExport (testPackage) {
   return findExportByName(testPackage, 'VitestTestRunner') || findExportByName(testPackage, 'TestRunner')
+}
+
+function getVitestExport (vitestPackage) {
+  return findExportByName(vitestPackage, 'Vitest')
 }
 
 function getForksPoolWorkerExport (vitestPackage) {
@@ -298,6 +323,27 @@ function recordFinalAttemptToFixExecution (task, status, providedContext) {
   })
 }
 
+function disableFrameworkRetries (task) {
+  task.retry = 0
+}
+
+/**
+ * Vitest accumulates retry and repeat errors on one task result. The first error added since
+ * the last reported attempt is the primary error for the failed attempt currently being reported.
+ *
+ * @param {object} task
+ * @param {Array<object> | undefined} errors
+ * @returns {object | undefined}
+ */
+function getCurrentAttemptTestError (task, errors) {
+  if (!errors?.length) return
+
+  const previousErrorCount = taskToReportedErrorCount.get(task) ?? 0
+  const testError = errors[previousErrorCount] ?? errors[0]
+  taskToReportedErrorCount.set(task, errors.length)
+  return testError
+}
+
 /**
  * Wraps a function so it runs inside the current test span context.
  * @param {object} task
@@ -329,170 +375,225 @@ function wrapBeforeEachCleanupResult (task, result) {
   return result
 }
 
-function getSortWrapper (sort, frameworkVersion) {
-  return async function () {
-    if (!testSessionFinishCh.hasSubscribers) {
-      return sort.apply(this, arguments)
-    }
-    // There isn't any other async function that we seem to be able to hook into
-    // So we will use the sort from BaseSequencer. This means that a custom sequencer
-    // will not work. This will be a known limitation.
+function getWorkspaceProject (ctx) {
+  return ctx.getCoreWorkspaceProject
+    ? ctx.getCoreWorkspaceProject()
+    : ctx.getRootProject()
+}
+
+function setProvidedContext (ctx, values, warningMessage) {
+  try {
+    Object.assign(getWorkspaceProject(ctx)._provided, values)
+  } catch {
+    log.warn(warningMessage)
+  }
+}
+
+function getTestFilepathsFromSpecifications (testSpecifications) {
+  if (!Array.isArray(testSpecifications) || !testSpecifications.length) {
+    return
+  }
+
+  return testSpecifications.map(testSpecification => {
+    const testFile = Array.isArray(testSpecification) ? testSpecification[1] : testSpecification
+    return testFile?.moduleId || testFile?.filepath || testFile
+  })
+}
+
+function getTestFilepaths (ctx, testSpecifications) {
+  const testFilepaths = getTestFilepathsFromSpecifications(testSpecifications)
+  if (testFilepaths) {
+    return testFilepaths
+  }
+
+  const getFilePaths = ctx.getTestFilepaths || ctx._globTestFilepaths
+  return getFilePaths.call(ctx)
+}
+
+function wrapCoverageProvider (ctx) {
+  const { coverageProvider } = ctx
+  if (!coverageProvider?.generateCoverage || coverageWrappedProviders.has(coverageProvider)) {
+    return
+  }
+  coverageWrappedProviders.add(coverageProvider)
+
+  // Capture coverage root directory from config (default is 'coverage' in cwd)
+  try {
+    const coverageConfig = ctx.config?.coverage
+    const reportsDirectory = coverageConfig?.reportsDirectory || 'coverage'
+    const rootDir = ctx.config?.root || process.cwd()
+    coverageRootDir = path.isAbsolute(reportsDirectory) ? reportsDirectory : path.join(rootDir, reportsDirectory)
+  } catch {
+    // Fallback to cwd if we can't get config
+    coverageRootDir = process.cwd()
+  }
+
+  shimmer.wrap(coverageProvider, 'generateCoverage', generateCoverage => async function () {
+    const totalCodeCoverage = await generateCoverage.apply(this, arguments)
 
     try {
-      const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh, frameworkVersion)
-      if (!err) {
-        isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
-        flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
-        isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
-        earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
-        earlyFlakeDetectionSlowTestRetries = libraryConfig.earlyFlakeDetectionSlowTestRetries ?? {}
-        isDiEnabled = libraryConfig.isDiEnabled
-        isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
-        isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
-        testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
-        isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
-      }
+      testCodeCoverageLinesTotal = totalCodeCoverage.getCoverageSummary().lines.pct
     } catch {
-      isFlakyTestRetriesEnabled = false
+      // ignore errors
+    }
+    return totalCodeCoverage
+  })
+}
+
+function wrapSessionFinish (ctx) {
+  if (finishWrappedContexts.has(ctx)) {
+    return
+  }
+  finishWrappedContexts.add(ctx)
+
+  shimmer.wrap(ctx, 'exit', getFinishWrapper)
+  shimmer.wrap(ctx, 'close', getFinishWrapper)
+}
+
+async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
+  if (!testSessionFinishCh.hasSubscribers) {
+    return
+  }
+
+  try {
+    const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh, frameworkVersion)
+    if (!err) {
+      isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
+      flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
+      isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
+      earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
+      earlyFlakeDetectionSlowTestRetries = libraryConfig.earlyFlakeDetectionSlowTestRetries ?? {}
+      isDiEnabled = libraryConfig.isDiEnabled
+      isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
+      isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
+      testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
+      isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
+    }
+  } catch {
+    isFlakyTestRetriesEnabled = false
+    isEarlyFlakeDetectionEnabled = false
+    isDiEnabled = false
+    isKnownTestsEnabled = false
+    isImpactedTestsEnabled = false
+  }
+
+  if (testSessionConfigurationCh.hasSubscribers) {
+    const { testSessionId, testModuleId, testCommand, repositoryRoot, codeOwnersEntries } = await getChannelPromise(
+      testSessionConfigurationCh,
+      frameworkVersion
+    )
+    setProvidedContext(ctx, {
+      _ddTestSessionId: testSessionId,
+      _ddTestModuleId: testModuleId,
+      _ddTestCommand: testCommand,
+      _ddRepositoryRoot: repositoryRoot,
+      _ddCodeOwnersEntries: codeOwnersEntries,
+    }, 'Could not send test session configuration to workers.')
+  }
+
+  const {
+    knownTestsResponse,
+    testManagementTestsResponse,
+  } = await getTestOptimizationRequestResults({
+    isKnownTestsEnabled,
+    isTestManagementTestsEnabled,
+    getKnownTests: () => getChannelPromise(knownTestsCh),
+    getTestManagementTests: () => getChannelPromise(testManagementTestsCh),
+  })
+
+  if (isFlakyTestRetriesEnabled && !ctx.config.retry && flakyTestRetriesCount > 0) {
+    ctx.config.retry = flakyTestRetriesCount
+    setProvidedContext(ctx, {
+      _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled,
+      _ddFlakyTestRetriesCount: flakyTestRetriesCount,
+    }, 'Could not send library configuration to workers.')
+  }
+
+  if (isKnownTestsEnabled) {
+    const currentKnownTestsResponse = knownTestsResponse || await getChannelPromise(knownTestsCh)
+    if (currentKnownTestsResponse.err) {
       isEarlyFlakeDetectionEnabled = false
-      isDiEnabled = false
-      isKnownTestsEnabled = false
-      isImpactedTestsEnabled = false
-    }
+    } else {
+      const knownTests = currentKnownTestsResponse.knownTests
+      const testFilepaths = await getTestFilepaths(ctx, testSpecifications)
 
-    if (isFlakyTestRetriesEnabled && !this.ctx.config.retry && flakyTestRetriesCount > 0) {
-      this.ctx.config.retry = flakyTestRetriesCount
-      try {
-        const workspaceProject = this.ctx.getCoreWorkspaceProject
-          ? this.ctx.getCoreWorkspaceProject()
-          : this.ctx.getRootProject()
-        workspaceProject._provided._ddIsFlakyTestRetriesEnabled = isFlakyTestRetriesEnabled
-        workspaceProject._provided._ddFlakyTestRetriesCount = flakyTestRetriesCount
-      } catch {
-        log.warn('Could not send library configuration to workers.')
-      }
-    }
-
-    if (isKnownTestsEnabled) {
-      const knownTestsResponse = await getChannelPromise(knownTestsCh)
-      if (knownTestsResponse.err) {
-        isEarlyFlakeDetectionEnabled = false
-      } else {
-        const knownTests = knownTestsResponse.knownTests
-        const getFilePaths = this.ctx.getTestFilepaths || this.ctx._globTestFilepaths
-
-        const testFilepaths = await getFilePaths.call(this.ctx)
-
-        if (isValidKnownTests(knownTests)) {
-          isEarlyFlakeDetectionFaultyCh.publish({
-            knownTests: knownTests.vitest,
-            testFilepaths,
-            onDone: (isFaulty) => {
-              isEarlyFlakeDetectionFaulty = isFaulty
-            },
-          })
-          if (isEarlyFlakeDetectionFaulty) {
-            isEarlyFlakeDetectionEnabled = false
-            log.warn('New test detection is disabled because the number of new tests is too high.')
-          } else {
-            // TODO: use this to pass session and module IDs to the worker, instead of polluting process.env
-            // Note: setting this.ctx.config.provide directly does not work because it's cached
-            try {
-              const workspaceProject = this.ctx.getCoreWorkspaceProject
-                ? this.ctx.getCoreWorkspaceProject()
-                : this.ctx.getRootProject()
-              workspaceProject._provided._ddIsKnownTestsEnabled = isKnownTestsEnabled
-              workspaceProject._provided._ddKnownTests = knownTests
-              workspaceProject._provided._ddIsEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
-              workspaceProject._provided._ddEarlyFlakeDetectionNumRetries =
-                getConfiguredEfdRetryCount(earlyFlakeDetectionSlowTestRetries, earlyFlakeDetectionNumRetries)
-              workspaceProject._provided._ddEarlyFlakeDetectionSlowTestRetries = earlyFlakeDetectionSlowTestRetries
-            } catch {
-              log.warn('Could not send known tests to workers so Early Flake Detection will not work.')
-            }
-          }
-        } else {
-          isEarlyFlakeDetectionFaulty = true
+      if (isValidKnownTests(knownTests)) {
+        isEarlyFlakeDetectionFaultyCh.publish({
+          knownTests: knownTests.vitest,
+          testFilepaths,
+          onDone: (isFaulty) => {
+            isEarlyFlakeDetectionFaulty = isFaulty
+          },
+        })
+        if (isEarlyFlakeDetectionFaulty) {
           isEarlyFlakeDetectionEnabled = false
+          log.warn('New test detection is disabled because the number of new tests is too high.')
+        } else {
+          setProvidedContext(ctx, {
+            _ddIsKnownTestsEnabled: isKnownTestsEnabled,
+            _ddKnownTests: knownTests,
+            _ddIsEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionEnabled,
+            _ddEarlyFlakeDetectionNumRetries:
+              getConfiguredEfdRetryCount(earlyFlakeDetectionSlowTestRetries, earlyFlakeDetectionNumRetries),
+            _ddEarlyFlakeDetectionSlowTestRetries: earlyFlakeDetectionSlowTestRetries,
+          }, 'Could not send known tests to workers so Early Flake Detection will not work.')
         }
-      }
-    }
-
-    if (isDiEnabled) {
-      try {
-        const workspaceProject = this.ctx.getCoreWorkspaceProject
-          ? this.ctx.getCoreWorkspaceProject()
-          : this.ctx.getRootProject()
-        workspaceProject._provided._ddIsDiEnabled = isDiEnabled
-      } catch {
-        log.warn('Could not send Dynamic Instrumentation configuration to workers.')
-      }
-    }
-
-    if (isTestManagementTestsEnabled) {
-      const { err, testManagementTests: receivedTestManagementTests } = await getChannelPromise(testManagementTestsCh)
-      if (err) {
-        isTestManagementTestsEnabled = false
-        log.error('Could not get test management tests.')
       } else {
-        const testManagementTests = receivedTestManagementTests
-        try {
-          const workspaceProject = this.ctx.getCoreWorkspaceProject
-            ? this.ctx.getCoreWorkspaceProject()
-            : this.ctx.getRootProject()
-          workspaceProject._provided._ddIsTestManagementTestsEnabled = isTestManagementTestsEnabled
-          workspaceProject._provided._ddTestManagementAttemptToFixRetries = testManagementAttemptToFixRetries
-          workspaceProject._provided._ddTestManagementTests = testManagementTests
-        } catch {
-          log.warn('Could not send test management tests to workers so Test Management will not work.')
-        }
+        isEarlyFlakeDetectionFaulty = true
+        isEarlyFlakeDetectionEnabled = false
       }
     }
+  }
 
-    if (isImpactedTestsEnabled) {
-      const { err, modifiedFiles } = await getChannelPromise(modifiedFilesCh)
-      if (err) {
-        log.error('Could not get modified tests.')
-      } else {
-        try {
-          const workspaceProject = this.ctx.getCoreWorkspaceProject
-            ? this.ctx.getCoreWorkspaceProject()
-            : this.ctx.getRootProject()
-          workspaceProject._provided._ddIsImpactedTestsEnabled = isImpactedTestsEnabled
-          workspaceProject._provided._ddModifiedFiles = modifiedFiles
-        } catch {
-          log.warn('Could not send modified tests to workers so Impacted Tests will not work.')
-        }
-      }
+  if (isDiEnabled) {
+    setProvidedContext(ctx, {
+      _ddIsDiEnabled: isDiEnabled,
+    }, 'Could not send Dynamic Instrumentation configuration to workers.')
+  }
+
+  if (isTestManagementTestsEnabled) {
+    const { err, testManagementTests: receivedTestManagementTests } =
+      testManagementTestsResponse || await getChannelPromise(testManagementTestsCh)
+    if (err) {
+      isTestManagementTestsEnabled = false
+      log.error('Could not get test management tests.')
+    } else {
+      setProvidedContext(ctx, {
+        _ddIsTestManagementTestsEnabled: isTestManagementTestsEnabled,
+        _ddTestManagementAttemptToFixRetries: testManagementAttemptToFixRetries,
+        _ddTestManagementTests: receivedTestManagementTests,
+      }, 'Could not send test management tests to workers so Test Management will not work.')
     }
+  }
 
-    if (this.ctx.coverageProvider?.generateCoverage) {
-      // Capture coverage root directory from config (default is 'coverage' in cwd)
-      try {
-        const coverageConfig = this.ctx.config?.coverage
-        const reportsDirectory = coverageConfig?.reportsDirectory || 'coverage'
-        const rootDir = this.ctx.config?.root || process.cwd()
-        coverageRootDir = path.isAbsolute(reportsDirectory) ? reportsDirectory : path.join(rootDir, reportsDirectory)
-      } catch {
-        // Fallback to cwd if we can't get config
-        coverageRootDir = process.cwd()
-      }
-
-      shimmer.wrap(this.ctx.coverageProvider, 'generateCoverage', generateCoverage => async function () {
-        const totalCodeCoverage = await generateCoverage.apply(this, arguments)
-
-        try {
-          testCodeCoverageLinesTotal = totalCodeCoverage.getCoverageSummary().lines.pct
-        } catch {
-          // ignore errors
-        }
-        return totalCodeCoverage
-      })
+  if (isImpactedTestsEnabled) {
+    const { err, modifiedFiles } = await getChannelPromise(modifiedFilesCh)
+    if (err) {
+      log.error('Could not get modified tests.')
+    } else {
+      setProvidedContext(ctx, {
+        _ddIsImpactedTestsEnabled: isImpactedTestsEnabled,
+        _ddModifiedFiles: modifiedFiles,
+      }, 'Could not send modified tests to workers so Impacted Tests will not work.')
     }
+  }
 
-    shimmer.wrap(this.ctx, 'exit', getFinishWrapper)
-    shimmer.wrap(this.ctx, 'close', getFinishWrapper)
+  wrapCoverageProvider(ctx)
+  wrapSessionFinish(ctx)
+}
 
+function ensureMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
+  let setupPromise = mainProcessSetupPromises.get(ctx)
+  if (!setupPromise) {
+    setupPromise = runMainProcessSetup(ctx, frameworkVersion, testSpecifications)
+    mainProcessSetupPromises.set(ctx, setupPromise)
+  }
+  return setupPromise
+}
+
+function getSortWrapper (sort, frameworkVersion) {
+  return async function () {
+    await ensureMainProcessSetup(this.ctx, frameworkVersion, arguments[0])
     return sort.apply(this, arguments)
   }
 }
@@ -504,6 +605,11 @@ function getFinishWrapper (exitOrClose) {
       return exitOrClose.apply(this, arguments)
     }
     isClosed = true
+
+    if (!testSessionFinishCh.hasSubscribers) {
+      return exitOrClose.apply(this, arguments)
+    }
+
     let onFinish
 
     const flushPromise = new Promise(resolve => {
@@ -552,6 +658,66 @@ function getCliOrStartVitestWrapper (frameworkVersion) {
       testSessionStartCh.publish({ command: getTestCommand(), frameworkVersion })
       return oldCliOrStartVitest.apply(this, args)
     }
+  }
+}
+
+function isForkPool (pool) {
+  return pool === 'forks' || pool === 'vmForks'
+}
+
+function isThreadPool (pool) {
+  return pool === 'threads' || pool === 'vmThreads'
+}
+
+function getTestSpecificationPool (testSpecification) {
+  const project = Array.isArray(testSpecification) ? testSpecification[0] : testSpecification?.project
+  return project?.config?.pool || project?.serializedConfig?.pool || project?.pool || testSpecification?.pool
+}
+
+function hasForkPoolTestSpecification (testSpecifications) {
+  if (!Array.isArray(testSpecifications)) {
+    return false
+  }
+
+  for (const testSpecification of testSpecifications) {
+    if (isForkPool(getTestSpecificationPool(testSpecification))) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function shouldMarkVitestWorkerEnv (pool, testSpecifications) {
+  return isForkPool(pool) || hasForkPoolTestSpecification(testSpecifications) ||
+    (!testSpecifications && !isThreadPool(pool))
+}
+
+function markVitestWorkerEnv (ctx, testSpecifications) {
+  const config = ctx?.config
+  if (!config || !shouldMarkVitestWorkerEnv(config.pool, testSpecifications)) {
+    return
+  }
+  config.env = config.env || {}
+  config.env.DD_VITEST_WORKER = '1'
+}
+
+function wrapVitestRunFiles (Vitest, frameworkVersion) {
+  if (!Vitest?.prototype?.runFiles) {
+    return
+  }
+
+  shimmer.wrap(Vitest.prototype, 'runFiles', runFiles => async function (testSpecifications) {
+    markVitestWorkerEnv(this, testSpecifications)
+    await ensureMainProcessSetup(this, frameworkVersion, testSpecifications)
+    return runFiles.apply(this, arguments)
+  })
+
+  if (Vitest.prototype.collectTests) {
+    shimmer.wrap(Vitest.prototype, 'collectTests', collectTests => function () {
+      markVitestWorkerEnv(this)
+      return collectTests.apply(this, arguments)
+    })
   }
 }
 
@@ -658,6 +824,11 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
   const startVitestExport = findExportByName(cliApiPackage, 'startVitest')
   shimmer.wrap(cliApiPackage, startVitestExport.key, getCliOrStartVitestWrapper(frameworkVersion))
 
+  const vitest = getVitestExport(cliApiPackage)
+  if (vitest) {
+    wrapVitestRunFiles(vitest.value, frameworkVersion)
+  }
+
   const forksPoolWorker = getForksPoolWorkerExport(cliApiPackage)
   if (forksPoolWorker) {
     // function is async
@@ -709,6 +880,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
         onDone: (isAttemptToFix) => {
           if (isAttemptToFix) {
             isRetryReasonAttemptToFix = task.repeats !== testManagementAttemptToFixRetries
+            disableFrameworkRetries(task)
             task.repeats = testManagementAttemptToFixRetries
             attemptToFixTasks.add(task)
             attemptToFixTaskToStatuses.set(task, [])
@@ -739,6 +911,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
           if (isImpacted) {
             if (isEarlyFlakeDetectionEnabled) {
               isRetryReasonEfd = true
+              disableFrameworkRetries(task)
               task.repeats = numRepeats
             }
             modifiedTasks.add(task)
@@ -757,6 +930,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
           if (isNew && !attemptToFixTasks.has(task)) {
             if (isEarlyFlakeDetectionEnabled && !modifiedTasks.has(task)) {
               isRetryReasonEfd = true
+              disableFrameworkRetries(task)
               task.repeats = numRepeats
             }
             newTasks.add(task)
@@ -894,7 +1068,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
       const promises = {}
       const shouldSetProbe = isDiEnabled && numAttempt === 1
       const ctx = taskToCtx.get(task)
-      const testError = task.result?.errors?.[0]
+      const testError = getCurrentAttemptTestError(task, task.result?.errors)
       if (ctx) {
         testErrorCh.publish({
           error: testError,
@@ -921,11 +1095,10 @@ function wrapVitestTestRunner (VitestTestRunner) {
       // Here we finish the earlier iteration,
       // as long as it's not the _last_ iteration (which will be finished normally)
 
-      // TODO: check test duration (not to repeat if it's too slow)
       const ctx = taskToCtx.get(task)
       if (ctx) {
         if (lastExecutionStatus === 'fail') {
-          const testError = task.result?.errors?.[0]
+          const testError = getCurrentAttemptTestError(task, task.result?.errors)
           testErrorCh.publish({ error: testError, ...ctx.currentStore })
         } else {
           testPassCh.publish({ task, ...ctx.currentStore })
@@ -949,7 +1122,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
 
       const ctx = taskToCtx.get(task)
       if (lastExecutionStatus === 'fail') {
-        const testError = task.result?.errors?.[0]
+        const testError = getCurrentAttemptTestError(task, task.result?.errors)
         testErrorCh.publish({ error: testError, ...ctx.currentStore })
       } else {
         testPassCh.publish({ task, ...ctx.currentStore })
@@ -1269,8 +1442,17 @@ addHook({
     }
     // From >=3.0.1, the first arguments changes from a string to an object containing the filepath
     const testSuiteAbsolutePath = testPaths[0]?.filepath || testPaths[0]
+    const providedContext = getProvidedContext()
 
-    const testSuiteCtx = { testSuiteAbsolutePath, frameworkVersion }
+    const testSuiteCtx = {
+      testSuiteAbsolutePath,
+      frameworkVersion,
+      testSessionId: providedContext.testSessionId,
+      testModuleId: providedContext.testModuleId,
+      testCommand: providedContext.testCommand,
+      repositoryRoot: providedContext.repositoryRoot,
+      codeOwnersEntries: providedContext.codeOwnersEntries,
+    }
     testSuiteStartCh.runStores(testSuiteCtx, () => {})
     const startTestsResponse = await startTests.apply(this, arguments)
 
@@ -1288,11 +1470,10 @@ addHook({
       // We have to trick vitest into thinking that the test has passed
       // but we want to report it as failed if it did fail
       const isSwitchedStatus = switchedStatuses.has(task)
-      const providedContext = getProvidedContext()
 
       if (result) {
         const { state, duration, errors } = result
-        const testError = errors?.[0]
+        const testError = getCurrentAttemptTestError(task, errors)
         if (attemptToFixTasks.has(task)) {
           const status = getFinalAttemptToFixStatus(task, state, isSwitchedStatus, testCtx)
           recordFinalAttemptToFixExecution(task, status, providedContext)

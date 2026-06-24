@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const path = require('node:path')
 const zlib = require('node:zlib')
+const { inspect } = require('node:util')
 const Axios = require('axios')
 const semver = require('semver')
 const sinon = require('sinon')
@@ -69,7 +70,7 @@ withVersions('express', 'express', version => {
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(async () => {
@@ -219,7 +220,7 @@ withVersions('express', 'express', version => {
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(async () => {
@@ -297,7 +298,7 @@ withVersions('express', 'express', version => {
 
     after(() => {
       server.close()
-      return agent.close({ ritmReset: false })
+      return agent.close()
     })
 
     beforeEach(() => {
@@ -333,7 +334,10 @@ withVersions('express', 'express', version => {
 
         await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
-          assert.ok(Object.hasOwn(span.meta, '_dd.appsec.s.req.body'))
+          assert.ok(
+            Object.hasOwn(span.meta, '_dd.appsec.s.req.body'),
+            `Available keys: ${inspect(Object.keys(span.meta))}`
+          )
           assert.ok(!('_dd.appsec.s.res.body' in span.meta))
           assert.equal(span.meta['_dd.appsec.s.req.body'], expectedRequestBodySchema)
         })
@@ -391,8 +395,8 @@ withVersions('express', 'express', version => {
 
       await agent.assertSomeTraces((traces) => {
         const span = traces[0][0]
-        assert(!Object.hasOwn(span.meta, '_dd.appsec.s.req.body'))
-        assert(!Object.hasOwn(span.meta, '_dd.appsec.s.res.body'))
+        assert(!Object.hasOwn(span.meta, '_dd.appsec.s.req.body'), `Available keys: ${inspect(Object.keys(span.meta))}`)
+        assert(!Object.hasOwn(span.meta, '_dd.appsec.s.res.body'), `Available keys: ${inspect(Object.keys(span.meta))}`)
       })
 
       assert.equal(res.status, 200)

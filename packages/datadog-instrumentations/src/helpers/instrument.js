@@ -42,6 +42,31 @@ exports.tracingChannel = function (name) {
   return tc
 }
 
+/**
+ * Build a guarded publisher for a public error channel. A subscriber that
+ * re-enters the same wrapped dispatch while handling the error would otherwise
+ * republish here and recurse until the stack overflows. Each framework binds
+ * its own publisher, so the in-flight flag stays private to one channel: a
+ * genuinely nested error on a different framework's channel (a Koa app mounted
+ * inside Express) still reaches its subscribers instead of being dropped, and
+ * the guard costs a closure read rather than a per-publish channel lookup.
+ *
+ * @param {Channel} errorChannel
+ */
+exports.createErrorPublisher = function createErrorPublisher (errorChannel) {
+  let publishing = false
+  /** @param {object} message */
+  return function publishError (message) {
+    if (publishing) return
+    publishing = true
+    try {
+      errorChannel.publish(message)
+    } finally {
+      publishing = false
+    }
+  }
+}
+
 exports.getHooks = function getHooks (names) {
   names = [names].flat()
 
@@ -58,7 +83,8 @@ exports.getHooks = function getHooks (names) {
  * @param {string} [args.file] path to file within package to instrument. Defaults to 'index.js'.
  * @param {string} [args.filePattern] pattern to match files within package to instrument
  * @param {boolean} [args.patchDefault] whether to patch the default export. Defaults to true.
- * @param {(moduleExports: unknown, version: string, isIitm?: boolean) => unknown} [hook] Patches module exports
+ * @param {(moduleExports: unknown, version: string, isIitm?: boolean, hookMeta?: object) => unknown} [hook]
+ * Patches module exports
  */
 exports.addHook = function addHook ({ name, versions, file, filePattern, patchDefault }, hook) {
   if (!instrumentations[name]) {

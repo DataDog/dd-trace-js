@@ -5,6 +5,8 @@ const { stableStringify } = require('../otlp/otlp_transformer_base')
 const {
   METRIC_TYPES, TEMPORALITY, DEFAULT_HISTOGRAM_BUCKETS, DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE,
 } = require('./constants')
+const { ObservableInstrument } = require('./instruments')
+const { nowUnixNano } = require('./time')
 
 /**
  * @typedef {import('@opentelemetry/api').Attributes} Attributes
@@ -102,6 +104,7 @@ class PeriodicMetricReader {
   #isShutdown = false
   #exportInterval
   #aggregator
+  #batchCallbacks = []
 
   /**
    * Creates a new PeriodicMetricReader instance.
@@ -130,6 +133,66 @@ class PeriodicMetricReader {
       return
     }
     this.#measurements.push(measurement)
+  }
+
+  /**
+   * Registers a batch observable callback. Mirrors
+   * `@opentelemetry/sdk-metrics` `ObservableRegistry.addBatchCallback`.
+   *
+   * @param {Function} callback
+   * @param {Array} observables
+   */
+  addBatchObservableCallback (callback, observables) {
+    if (typeof callback !== 'function') return
+    const instruments = new Set(observables?.filter(isObservableInstrument))
+    if (instruments.size === 0) return
+    if (this.#findBatchCallback(callback, instruments) !== -1) return
+    this.#batchCallbacks.push({ callback, instruments })
+  }
+
+  /**
+   * @param {Function} callback
+   * @param {Array} observables
+   */
+  removeBatchObservableCallback (callback, observables) {
+    const instruments = new Set(observables?.filter(isObservableInstrument))
+    const idx = this.#findBatchCallback(callback, instruments)
+    if (idx !== -1) this.#batchCallbacks.splice(idx, 1)
+  }
+
+  /**
+   * @param {Function} callback
+   * @param {Set} instruments
+   * @returns {number} index in #batchCallbacks, or -1
+   */
+  #findBatchCallback (callback, instruments) {
+    return this.#batchCallbacks.findIndex(record =>
+      record.callback === callback && setEquals(record.instruments, instruments))
+  }
+
+  /**
+   * Invokes batch observable callbacks and returns the produced measurements.
+   *
+   * @returns {Measurement[]}
+   */
+  #collectBatchObservables () {
+    if (this.#batchCallbacks.length === 0) return []
+    const out = []
+    for (const { callback, instruments } of this.#batchCallbacks) {
+      const result = {
+        observe: (instrument, value, attributes) => {
+          if (instruments.has(instrument)) {
+            out.push(instrument.createObservation(value, attributes))
+          }
+        },
+      }
+      try {
+        callback(result)
+      } catch (e) {
+        log.error('Error running batch observable callback', e)
+      }
+    }
+    return out
   }
 
   /**
@@ -210,6 +273,17 @@ class PeriodicMetricReader {
       }
     }
 
+    const batchMeasurements = this.#collectBatchObservables()
+    if (batchMeasurements.length > 0) {
+      const remainingCapacity = DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE - allMeasurements.length
+      if (batchMeasurements.length <= remainingCapacity) {
+        allMeasurements.push(...batchMeasurements)
+      } else {
+        allMeasurements.push(...batchMeasurements.slice(0, remainingCapacity))
+        this.#droppedCount += batchMeasurements.length - remainingCapacity
+      }
+    }
+
     if (this.#droppedCount > 0) {
       log.warn('Metric queue exceeded limit (max: %d). Dropping %d measurements.',
         DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE, this.#droppedCount)
@@ -236,7 +310,7 @@ class PeriodicMetricReader {
  *
  */
 class MetricAggregator {
-  #startTime = Number(process.hrtime.bigint())
+  #startTime = nowUnixNano()
   #temporalityPreference
   #maxBatchedQueueSize
 
@@ -336,7 +410,7 @@ class MetricAggregator {
       }
     }
 
-    this.#applyDeltaTemporality(metricsMap, lastExportedState)
+    this.#applyDeltaTemporality(metricsMap.values(), lastExportedState)
     return metricsMap
   }
 
@@ -371,8 +445,8 @@ class MetricAggregator {
    */
   #isDeltaType (type) {
     return type === METRIC_TYPES.COUNTER ||
-           type === METRIC_TYPES.OBSERVABLECOUNTER ||
-           type === METRIC_TYPES.HISTOGRAM
+          type === METRIC_TYPES.OBSERVABLECOUNTER ||
+          type === METRIC_TYPES.HISTOGRAM
   }
 
   /**
@@ -553,6 +627,25 @@ class MetricAggregator {
     dataPoint.bucketCounts = [...state.bucketCounts]
     dataPoint.timeUnixNano = timestamp
   }
+}
+
+/**
+ * @param {object} x
+ * @returns {boolean}
+ */
+function isObservableInstrument (x) {
+  return x instanceof ObservableInstrument
+}
+
+/**
+ * @param {Set} a
+ * @param {Set} b
+ * @returns {boolean}
+ */
+function setEquals (a, b) {
+  if (a.size !== b.size) return false
+  for (const x of a) if (!b.has(x)) return false
+  return true
 }
 
 module.exports = PeriodicMetricReader

@@ -2,7 +2,7 @@
 
 const { channel } = require('dc-polyfill')
 
-const { isError, isTrue } = require('../util')
+const { isError } = require('../util')
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
 const { getValueFromEnvSources } = require('../config/helper')
@@ -11,8 +11,6 @@ const {
   SPAN_KIND,
   OUTPUT_VALUE,
   INPUT_VALUE,
-  LLMOBS_TRACE_ID_BRIDGE_KEY,
-  LLMOBS_PARENT_ID_BRIDGE_KEY,
 } = require('./constants/tags')
 const {
   getFunctionArguments,
@@ -67,9 +65,11 @@ class LLMObs extends NoopLLMObs {
 
     logger.debug('Enabling LLMObs')
 
-    const DD_LLMOBS_ENABLED = getValueFromEnvSources('DD_LLMOBS_ENABLED')
+    // skipDefault: only an explicit DD_LLMOBS_ENABLED=false blocks enable(); an unset value
+    // (its default is false) must still allow this programmatic opt-in.
+    const DD_LLMOBS_ENABLED = getValueFromEnvSources('DD_LLMOBS_ENABLED', true)
 
-    if (DD_LLMOBS_ENABLED != null && !isTrue(DD_LLMOBS_ENABLED)) {
+    if (DD_LLMOBS_ENABLED === false) {
       logger.debug('LLMObs.enable() called when DD_LLMOBS_ENABLED is false. No action taken.')
       return
     }
@@ -261,7 +261,7 @@ class LLMObs extends NoopLLMObs {
         throw new Error('LLMObs span must have a span kind specified')
       }
 
-      const { inputData, outputData, metadata, metrics, tags, prompt, costTags } = options
+      const { inputData, outputData, metadata, metrics, tags, prompt, costTags, toolDefinitions } = options
 
       if (inputData || outputData) {
         if (spanKind === 'llm') {
@@ -290,6 +290,9 @@ class LLMObs extends NoopLLMObs {
       }
       if (prompt) {
         this._tagger.tagPrompt(span, prompt)
+      }
+      if (toolDefinitions != null) {
+        this._tagger.tagToolDefinitions(span, toolDefinitions)
       }
     } catch (e) {
       if (e.ddErrorTag) {
@@ -553,20 +556,6 @@ class LLMObs extends NoopLLMObs {
         ...options,
         parent: parentStore?.span,
       })
-
-      // Bridge tags read by the dd-go LLMObs trace-indexer to correlate OTel
-      // gen_ai.* spans with SDK LLMObs spans. Written once per local trace,
-      // on the first successful SDK LLMObs span registration. The shared
-      // _trace.tags bag is serialized to the first span in every flushed
-      // chunk's meta, so partial flush is covered automatically without a
-      // separate flush-time processor. Writing only after registerLLMObsSpan
-      // succeeds avoids poisoning _trace.tags with bridge tags pointing at a
-      // span that will never produce an LLMObs event.
-      const traceTags = span?.context?.()._trace?.tags
-      if (this.enabled && traceTags && !traceTags[LLMOBS_TRACE_ID_BRIDGE_KEY]) {
-        traceTags[LLMOBS_TRACE_ID_BRIDGE_KEY] = span.context().toTraceId(true)
-        traceTags[LLMOBS_PARENT_ID_BRIDGE_KEY] = span.context().toSpanId()
-      }
     }
 
     try {

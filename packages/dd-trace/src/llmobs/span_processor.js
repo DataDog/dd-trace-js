@@ -107,7 +107,7 @@ class LLMObsSpanProcessor {
       // those cases avoids dd-go reparenting OTel children under a span that
       // has no corresponding LLMObs event.
       if (enqueued) {
-        span.context()._tags[LLMOBS_SUBMITTED_TAG_KEY] = '1'
+        span.context().setTag(LLMOBS_SUBMITTED_TAG_KEY, '1')
       }
     } catch (e) {
       // this should be a rare case
@@ -123,7 +123,7 @@ class LLMObsSpanProcessor {
   format (span) {
     let inputType, outputType
 
-    const spanTags = span.context()._tags
+    const spanTags = span.context().getTags()
     const mlObsTags = LLMObsTagger.tagMap.get(span)
 
     const spanKind = mlObsTags[SPAN_KIND]
@@ -318,7 +318,7 @@ class LLMObsSpanProcessor {
       language: 'javascript',
     }
 
-    const errType = span.context()._tags[ERROR_TYPE] || error?.name
+    const errType = span.context().getTag(ERROR_TYPE) || error?.name
     if (errType) tags.error_type = errType
 
     if (sessionId) tags.session_id = sessionId
@@ -332,8 +332,24 @@ class LLMObsSpanProcessor {
     return tags
   }
 
+  /**
+   * @param {Record<string, unknown>} tags
+   */
   #objectTagsToStringArrayTags (tags) {
-    return Object.entries(tags).map(([key, value]) => `${key}:${value ?? ''}`)
+    const out = []
+    for (const [key, value] of Object.entries(tags)) {
+      // Comma is the intake-side tag delimiter, so a single `"key:v1,v2"`
+      // entry fans into two orphan tags. One-per-element keeps each value
+      // addressable; empty arrays fall through to the scalar branch and
+      // still emit `key:` so `_dd.cost_tags` references keep finding a
+      // wire entry.
+      if (Array.isArray(value) && value.length > 0) {
+        for (const item of value) out.push(`${key}:${item ?? ''}`)
+      } else {
+        out.push(`${key}:${value ?? ''}`)
+      }
+    }
+    return out
   }
 
   /**

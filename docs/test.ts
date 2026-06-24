@@ -25,7 +25,7 @@ import {
   SPAN_TYPE,
 } from '../ext/tags'
 import { HTTP, WEB } from '../ext/types'
-import * as opentracing from '../vendor/dist/opentracing';
+import * as opentracing from 'opentracing';
 import { IncomingMessage, OutgoingMessage } from 'http';
 
 opentracing.initGlobalTracer(tracer);
@@ -252,6 +252,11 @@ const awsSdkOptions: plugins.aws_sdk = {
   }
 };
 
+const bullmqOptions: plugins.bullmq = {
+  service: 'test',
+  producerFilter: ({ name, queueName }) => name !== 'skip' && queueName !== 'dead-letter',
+};
+
 const redisOptions: plugins.redis = {
   service: 'test',
   allowlist: ['info', /auth/i, command => true],
@@ -286,11 +291,14 @@ tracer.use('amqp10');
 tracer.use('amqplib');
 tracer.use('anthropic');
 tracer.use('avsc');
+tracer.use('aws-durable-execution-sdk-js');
 tracer.use('aws-sdk');
 tracer.use('aws-sdk', awsSdkOptions);
+tracer.use('azure-cosmos');
 tracer.use('azure-event-hubs')
 tracer.use('azure-functions');
 tracer.use('bullmq');
+tracer.use('bullmq', bullmqOptions);
 tracer.use('bunyan');
 tracer.use('couchbase');
 tracer.use('cassandra-driver');
@@ -312,7 +320,6 @@ tracer.use('fastify');
 tracer.use('fastify', httpServerOptions);
 tracer.use('fetch');
 tracer.use('fetch', httpClientOptions);
-tracer.use('generic-pool');
 tracer.use('google-cloud-pubsub');
 tracer.use('google-cloud-vertexai');
 tracer.use('google-genai');
@@ -354,7 +361,6 @@ tracer.use('iovalkey', { splitByInstance: true });
 tracer.use('jest');
 tracer.use('jest', { service: 'jest-service' });
 tracer.use('kafkajs');
-tracer.use('knex');
 tracer.use('koa');
 tracer.use('koa', httpServerOptions);
 tracer.use('langchain');
@@ -373,6 +379,7 @@ tracer.use('mysql');
 tracer.use('mysql', { service: () => `my-custom-mysql` });
 tracer.use('mysql2');
 tracer.use('mysql2', { service: () => `my-custom-mysql2` });
+tracer.use('nats');
 tracer.use('net');
 tracer.use('next');
 tracer.use('next', nextOptions);

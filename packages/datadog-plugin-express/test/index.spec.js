@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { AsyncLocalStorage } = require('node:async_hooks')
+const { inspect } = require('node:util')
 
 const axios = require('axios')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
@@ -48,7 +49,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -102,7 +103,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -1423,7 +1424,7 @@ describe('Plugin', () => {
             return layer.regexp.test('/users')
           })
 
-          assert.ok(Object.hasOwn(layer.handle, 'stack'))
+          assert.ok(Object.hasOwn(layer.handle, 'stack'), `Available keys: ${inspect(Object.keys(layer.handle))}`)
         })
 
         it('should keep user stores untouched', done => {
@@ -1578,7 +1579,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {
@@ -1703,7 +1704,7 @@ describe('Plugin', () => {
         })
 
         after(() => {
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         beforeEach(() => {

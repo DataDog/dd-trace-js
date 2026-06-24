@@ -12,22 +12,35 @@ const {
 } = require('../../dd-trace/src/config/supported-configurations.json')
 
 const SELF = Symbol('self')
-const supportedConfigurationsWithDdTraceApi = {
-  ...supportedConfigurations,
-  DD_TRACE_DD_TRACE_API_ENABLED: [
-    {
-      implementation: 'A',
-      type: 'boolean',
-      default: 'true',
-    },
-  ],
+
+// The dd-trace-api plugin is not released yet (the `before` hook fires its load event
+// manually below), so its DD_TRACE_DD_TRACE_API_ENABLED flag is intentionally absent from
+// the shipped supported-configurations.json and must never be added there. Register it in an
+// in-memory copy and reload both consumers of that file — config/helper and the config/defaults
+// table it reads — against the copy, so plugin_manager's getEnabled() resolves the flag through
+// real production code instead of throwing on an unknown DD_-prefixed name. Reloading helper
+// alone would leave the defaults table without the entry and only pass while getEnabled keeps
+// short-circuiting before the default lookup.
+const stubbedConfigurations = {
+  supportedConfigurations: {
+    ...supportedConfigurations,
+    DD_TRACE_DD_TRACE_API_ENABLED: [
+      {
+        implementation: 'A',
+        type: 'boolean',
+        default: 'true',
+      },
+    ],
+  },
 }
 
 const configHelperPath = require.resolve('../../dd-trace/src/config/helper')
+const reloadedDefaults = proxyquire.noPreserveCache()(require.resolve('../../dd-trace/src/config/defaults'), {
+  './supported-configurations.json': stubbedConfigurations,
+})
 const reloadedConfigHelper = proxyquire.noPreserveCache()(configHelperPath, {
-  './supported-configurations.json': {
-    supportedConfigurations: supportedConfigurationsWithDdTraceApi,
-  },
+  './supported-configurations.json': stubbedConfigurations,
+  './defaults': reloadedDefaults,
 })
 Object.assign(require(configHelperPath), reloadedConfigHelper)
 
@@ -74,7 +87,7 @@ describe('Plugin', () => {
       dc.channel('datadog-api:v1:tracerinit').publish(payload)
     })
 
-    after(() => agent.close({ ritmReset: false }))
+    after(() => agent.close())
 
     describe('scope', () => {
       let dummyScope

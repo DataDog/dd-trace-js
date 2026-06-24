@@ -176,7 +176,7 @@ function wrapConnection (Connection, version) {
         if (typeof this.onResult === 'function') {
           const onResult = this.onResult
 
-          this.onResult = shimmer.wrapFunction(onResult, onResult => function (error) {
+          this.onResult = shimmer.wrapCallback(onResult, onResult => function (error) {
             if (error) {
               ctx.error = error
               errorCh.publish(ctx)
@@ -207,6 +207,32 @@ function wrapConnection (Connection, version) {
   }
 }
 /**
+ * mysql2 defers a busy pool's `getConnection` callback and runs it in the releasing connection's
+ * async context; capture the caller's context and restore it around the callback so spans created
+ * by the queued query attach to the caller rather than the previous query that freed the connection.
+ *
+ * @param {Function} Pool
+ * @returns {Function}
+ */
+function wrapGetConnection (Pool) {
+  const connectionStartCh = channel('apm:mysql2:connection:start')
+  const connectionFinishCh = channel('apm:mysql2:connection:finish')
+
+  shimmer.wrap(Pool.prototype, 'getConnection', getConnection => function (cb) {
+    const ctx = {}
+    arguments[0] = function (...args) {
+      return connectionFinishCh.runStores(ctx, cb, this, ...args)
+    }
+
+    connectionStartCh.publish(ctx)
+
+    return getConnection.apply(this, arguments)
+  })
+
+  return Pool
+}
+
+/**
  * @param {Function} Pool
  * @param {string} version
  * @returns {Function}
@@ -214,6 +240,8 @@ function wrapConnection (Connection, version) {
 function wrapPool (Pool, version) {
   const startOuterQueryCh = channel('datadog:mysql2:outerquery:start')
   const shouldEmitEndAfterQueryAbort = satisfies(version, '>=1.3.3')
+
+  wrapGetConnection(Pool)
 
   shimmer.wrap(Pool.prototype, 'query', query => function (sql, values, cb) {
     if (!startOuterQueryCh.hasSubscribers) return query.apply(this, arguments)
@@ -371,6 +399,12 @@ addHook(
 addHook(
   { name: 'mysql2', file: 'lib/pool.js', versions: ['1 - 3.11.4'] },
   /** @type {(moduleExports: unknown, version: string) => unknown} */ (wrapPool)
+)
+
+// mysql2 >=3.11.5 moved the pool onto BasePool in lib/base/pool.js.
+addHook(
+  { name: 'mysql2', file: 'lib/base/pool.js', versions: ['>=3.11.5'] },
+  /** @type {(moduleExports: unknown, version: string) => unknown} */ (wrapGetConnection)
 )
 
 // PoolNamespace.prototype.query does not exist in mysql2<2.3.0

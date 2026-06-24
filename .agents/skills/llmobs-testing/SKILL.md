@@ -1,56 +1,27 @@
 ---
 name: llmobs-testing
 description: |
-  This skill should be used when the user asks to "write LLMObs tests", "add tests for LLM Observability",
-  "test an LLMObs plugin", "llmobs test", "llmobs spec", "test llm observability",
-  "assertLlmObsSpanEvent", "useLlmObs", "getEvents",
-  "MOCK_STRING", "MOCK_NOT_NULLISH", "MOCK_NUMBER", "MOCK_OBJECT",
-  "VCR cassette", "record cassette", "replay cassette", "vcr proxy", "llmobs cassette",
-  "test chat completions", "test streaming", "test embeddings", "test agent runs",
-  "test orchestration", "test workflow", "llmobs span event",
-  "LLMObs test strategy", "LlmObsCategory test",
-  "LLM_CLIENT test", "MULTI_PROVIDER test", "ORCHESTRATION test", "INFRASTRUCTURE test",
-  "span kind llm test", "span kind workflow test",
-  "inputMessages", "outputMessages", "token metrics", "llmobs span validation",
-  "cassette not generated", "re-record cassette", "127.0.0.1:9126",
-  or needs to write, modify, or debug tests for any LLMObs plugin in dd-trace-js.
+  Use when writing, modifying, or debugging tests for an LLMObs plugin in
+  dd-trace-js. Triggers: "write LLMObs tests", "test an LLMObs plugin",
+  "assertLlmObsSpanEvent", "useLlmObs", "getEvents", any MOCK_* matcher
+  ("MOCK_STRING" / "MOCK_NOT_NULLISH" / "MOCK_NUMBER" / "MOCK_OBJECT"),
+  "VCR cassette", "vcr proxy", "127.0.0.1:9126", any LlmObsCategory test
+  ("LLM_CLIENT" / "MULTI_PROVIDER" / "ORCHESTRATION" / "INFRASTRUCTURE").
 ---
 
 # LLM Observability Testing Skill
 
-## ⚠️ CRITICAL: Read This First ⚠️
+## Determine the package category first
 
-**BEFORE writing any test, you MUST determine the package category.**
+**Before writing any test, determine the package's `LlmObsCategory`.** Category picks the test strategy (VCR or not), the span kind, and the test structure. The wrong category produces tests that pass against the wrong contract — VCR cassettes for a workflow library produce empty recordings; pure-function tests for an HTTP-call wrapper miss the network surface entirely.
 
-**The category determines EVERYTHING:**
-- Whether to use VCR or not
-- What spanKind to use
-- What test structure to follow
-- What examples to study
+Quick check:
 
-**IF YOU USE THE WRONG CATEGORY STRATEGY, THE TEST WILL FAIL.**
+- Direct HTTP calls to an LLM provider? → `LLM_CLIENT` or `MULTI_PROVIDER` — VCR.
+- Workflow / graph orchestration with state? → `ORCHESTRATION` — no VCR, pure functions, real LLM as the orchestration node.
+- Protocol / server implementation? → `INFRASTRUCTURE` — mock server.
 
-**Categories are defined in the `LlmObsCategory` enum.**
-
-**Quick check:**
-- Does package make HTTP calls to LLM APIs? → `LLM_CLIENT` or `MULTI_PROVIDER` (use VCR)
-- Does package orchestrate workflows/graphs? → `ORCHESTRATION` (NO VCR, pure functions)
-- Does package implement protocols/servers? → `INFRASTRUCTURE` (mock servers)
-
-**See [references/category-strategies.md](references/category-strategies.md) for FORBIDDEN vs REQUIRED patterns per category.**
-
----
-
-## Purpose
-
-This skill helps you write comprehensive LLMObs tests that validate span events, messages, tokens, and metadata using category-appropriate strategies.
-
-## When to Use
-
-- Writing tests for a new LLMObs plugin (ALWAYS check category first)
-- Understanding category-specific test strategies
-- Learning VCR cassettes (for LLM_CLIENT/MULTI_PROVIDER only)
-- Learning assertion patterns for LLMObs spans
+See [references/category-strategies.md](references/category-strategies.md) for the FORBIDDEN-vs-REQUIRED matrix per category.
 
 ## Core Testing Concepts
 
@@ -98,52 +69,13 @@ See [references/vcr-cassettes.md](references/vcr-cassettes.md) for recording pro
 
 ### 3. Category-Specific Test Strategies
 
-Test strategy is determined by the `LlmObsCategory` enum.
+The category-determination block at the top maps category to strategy. Non-obvious bits per category:
 
-#### LlmObsCategory.LLM_CLIENT & LlmObsCategory.MULTI_PROVIDER
+- **LLM_CLIENT / MULTI_PROVIDER**: VCR proxy baseURL is `http://127.0.0.1:9126/vcr/{provider}`. Span kind: `'llm'`. Cassettes record once with real API keys; CI replays them.
+- **ORCHESTRATION**: Span kind: `'workflow'` or `'agent'`, never `'llm'`. No VCR, no real API calls — the orchestrator itself doesn't make HTTP calls, it coordinates libraries that do. Mock LLM responses as plain return values from the node so the test exercises the workflow execution, not the provider API.
+- **INFRASTRUCTURE**: Mock server, protocol-specific validation, no VCR.
 
-**Strategy:** VCR with real API calls via proxy
-
-**Characteristics:**
-- Use VCR proxy baseURL
-- Record cassettes with real API keys
-- Tests make actual HTTP calls (recorded once)
-- Validate LLM-specific data (messages, tokens, model info)
-
-**Span kind:** Usually `'llm'` for chat completions
-
-See [references/category-strategies.md](references/category-strategies.md) for detailed patterns.
-
-#### LlmObsCategory.ORCHESTRATION
-
-**Strategy:** Pure function tests, NO VCR, NO real API calls
-
-**Characteristics:**
-- NO VCR cassettes
-- NO HTTP calls to LLM providers
-- Use library's native APIs with mock/test LLM responses
-- Focus on workflow lifecycle, not API calls
-- **CRITICAL:** Still test with actual LLM as orchestration node (not mocked completely)
-
-**Span kind:** Usually `'workflow'` or `'agent'`, NOT `'llm'`
-
-**Example concept:**
-- LangGraph invokes nodes that call LLMs
-- LangGraph itself doesn't make HTTP calls
-- Test LangGraph's workflow execution, not the underlying LLM API
-
-See [references/category-strategies.md](references/category-strategies.md) for orchestration test patterns.
-
-#### LlmObsCategory.INFRASTRUCTURE
-
-**Strategy:** Mock server tests
-
-**Characteristics:**
-- Mock server implementation
-- Protocol-specific validation
-- NO VCR
-
-See [references/category-strategies.md](references/category-strategies.md) for infrastructure test patterns.
+See [references/category-strategies.md](references/category-strategies.md) for per-category patterns.
 
 ### 4. Assertion Patterns
 
@@ -221,38 +153,6 @@ On errors, validate:
 - Error object exists: `error: MOCK_OBJECT`
 - Span still created (not dropped)
 
-## Common Patterns by Category
-
-### LLM_CLIENT / MULTI_PROVIDER Pattern
-- Use VCR proxy baseURL
-- Test chat completions with various parameters
-- Validate real API response structure
-- Test streaming (if supported)
-- Test error responses
-
-### ORCHESTRATION Pattern
-- NO VCR
-- Test workflow lifecycle methods (invoke, stream, run)
-- Use mock LLM responses within workflow
-- Focus on workflow span, not LLM spans
-- Validate workflow-specific metadata (state, nodes, edges)
-
-### INFRASTRUCTURE Pattern
-- Mock server setup
-- Protocol-specific validation
-- Connection/transport testing
-
-## Best Practices
-
-1. **Use MOCK_* for non-deterministic values** - Output text, token counts, error objects
-2. **Use exact values for inputs** - You control input messages and parameters
-3. **Always validate spanKind** - Required for every span
-4. **Match category to test strategy** - VCR for clients, pure functions for orchestration
-5. **Test error paths** - Verify empty outputs and error objects on failures
-6. **Group by method** - Organize tests by instrumented method
-7. **Load modules fresh** - Use beforeEach() to avoid state leakage
-8. **Cover edge cases** - Empty messages, missing metadata, streaming
-
 ## References
 
 For detailed information, see:
@@ -261,11 +161,3 @@ For detailed information, see:
 - [references/vcr-cassettes.md](references/vcr-cassettes.md) - VCR recording process, cassette management, troubleshooting
 - [references/assertion-helpers.md](references/assertion-helpers.md) - Complete assertLlmObsSpanEvent API, matchers, patterns
 - [references/category-strategies.md](references/category-strategies.md) - Detailed test strategies for each LlmObsCategory
-
-## Key Principles
-
-1. **Category determines strategy** - Always check `LlmObsCategory` to pick test approach
-2. **Orchestrators don't use VCR** - They don't make direct API calls
-3. **Use matchers for variance** - Real API responses vary, use MOCK_* matchers
-4. **Validate message format** - Always check `{content, role}` structure
-5. **Test with real behavior** - For orchestrators, use actual LLM as node (not fully mocked)

@@ -23,12 +23,12 @@ const MESSAGE_SCHEMA_DEF = schemas.MESSAGE_SCHEMA_DEF
 const OTHER_MESSAGE_SCHEMA_DEF = schemas.OTHER_MESSAGE_SCHEMA_DEF
 const ALL_TYPES_MESSAGE_SCHEMA_DEF = schemas.ALL_TYPES_MESSAGE_SCHEMA_DEF
 
-const MESSAGE_SCHEMA_ID = '666607144722735562'
+const MESSAGE_SCHEMA_ID = '2700361977390526367'
 const OTHER_MESSAGE_SCHEMA_ID = '2691489402935632768'
 const ALL_TYPES_MESSAGE_SCHEMA_ID = '15890948796193489151'
 
 function compareJson (expected, span) {
-  const actual = JSON.parse(span.context()._tags[SCHEMA_DEFINITION])
+  const actual = JSON.parse(span.context().getTag(SCHEMA_DEFINITION))
   return JSON.stringify(actual) === JSON.stringify(expected)
 }
 
@@ -49,7 +49,7 @@ describe('Plugin', () => {
       })
 
       describe('without configuration', () => {
-        before(() => {
+        before(async () => {
           dateNowStub = sinon.stub(Date, 'now').callsFake(() => {
             const returnValue = mockTime
             mockTime += 50000 // Increment by 50000 ms to ensure each DSM schema is sampled
@@ -57,14 +57,13 @@ describe('Plugin', () => {
           })
           const cache = SchemaBuilder.getCache()
           cache.clear()
-          return agent.load('protobufjs').then(() => {
-            protobuf = require(`../../../versions/protobufjs@${version}`).get()
-          })
+          await agent.load('protobufjs')
+          protobuf = require(`../../../versions/protobufjs@${version}`).get()
         })
 
         after(() => {
           dateNowStub.restore()
-          return agent.close({ ritmReset: false })
+          return agent.close()
         })
 
         it('should serialize basic schema correctly', async () => {
@@ -76,11 +75,11 @@ describe('Plugin', () => {
             assert.strictEqual(span.context()._name, 'other_message.serialize')
 
             assert.strictEqual(compareJson(OTHER_MESSAGE_SCHEMA_DEF, span), true)
-            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
-            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'OtherMessage')
-            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'serialization')
-            assert.strictEqual(span.context()._tags[SCHEMA_ID], OTHER_MESSAGE_SCHEMA_ID)
-            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
+            assert.strictEqual(span.context().getTags()[SCHEMA_TYPE], 'protobuf')
+            assert.strictEqual(span.context().getTags()[SCHEMA_NAME], 'OtherMessage')
+            assert.strictEqual(span.context().getTags()[SCHEMA_OPERATION], 'serialization')
+            assert.strictEqual(span.context().getTags()[SCHEMA_ID], OTHER_MESSAGE_SCHEMA_ID)
+            assert.strictEqual(span.context().getTags()[SCHEMA_WEIGHT], 1)
           })
         })
 
@@ -92,11 +91,11 @@ describe('Plugin', () => {
               assert.strictEqual(span.context()._name, 'other_message.serialize')
 
               assert.strictEqual(compareJson(OTHER_MESSAGE_SCHEMA_DEF, span), true)
-              assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
-              assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'OtherMessage')
-              assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'serialization')
-              assert.strictEqual(span.context()._tags[SCHEMA_ID], OTHER_MESSAGE_SCHEMA_ID)
-              assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
+              assert.strictEqual(span.context().getTags()[SCHEMA_TYPE], 'protobuf')
+              assert.strictEqual(span.context().getTags()[SCHEMA_NAME], 'OtherMessage')
+              assert.strictEqual(span.context().getTags()[SCHEMA_OPERATION], 'serialization')
+              assert.strictEqual(span.context().getTags()[SCHEMA_ID], OTHER_MESSAGE_SCHEMA_ID)
+              assert.strictEqual(span.context().getTags()[SCHEMA_WEIGHT], 1)
             })
           })
         })
@@ -110,11 +109,11 @@ describe('Plugin', () => {
             assert.strictEqual(span.context()._name, 'message_pb2.serialize')
 
             assert.strictEqual(compareJson(MESSAGE_SCHEMA_DEF, span), true)
-            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
-            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'MyMessage')
-            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'serialization')
-            assert.strictEqual(span.context()._tags[SCHEMA_ID], MESSAGE_SCHEMA_ID)
-            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
+            assert.strictEqual(span.context().getTags()[SCHEMA_TYPE], 'protobuf')
+            assert.strictEqual(span.context().getTags()[SCHEMA_NAME], 'MyMessage')
+            assert.strictEqual(span.context().getTags()[SCHEMA_OPERATION], 'serialization')
+            assert.strictEqual(span.context().getTags()[SCHEMA_ID], MESSAGE_SCHEMA_ID)
+            assert.strictEqual(span.context().getTags()[SCHEMA_WEIGHT], 1)
           })
         })
 
@@ -127,11 +126,11 @@ describe('Plugin', () => {
             assert.strictEqual(span.context()._name, 'all_types.serialize')
 
             assert.strictEqual(compareJson(ALL_TYPES_MESSAGE_SCHEMA_DEF, span), true)
-            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
-            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'example.MainMessage')
-            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'serialization')
-            assert.strictEqual(span.context()._tags[SCHEMA_ID], ALL_TYPES_MESSAGE_SCHEMA_ID)
-            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
+            assert.strictEqual(span.context().getTags()[SCHEMA_TYPE], 'protobuf')
+            assert.strictEqual(span.context().getTags()[SCHEMA_NAME], 'example.MainMessage')
+            assert.strictEqual(span.context().getTags()[SCHEMA_OPERATION], 'serialization')
+            assert.strictEqual(span.context().getTags()[SCHEMA_ID], ALL_TYPES_MESSAGE_SCHEMA_ID)
+            assert.strictEqual(span.context().getTags()[SCHEMA_WEIGHT], 1)
           })
         })
 
@@ -146,11 +145,11 @@ describe('Plugin', () => {
             assert.strictEqual(span.context()._name, 'other_message.deserialize')
 
             assert.strictEqual(compareJson(OTHER_MESSAGE_SCHEMA_DEF, span), true)
-            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
-            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'OtherMessage')
-            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'deserialization')
-            assert.strictEqual(span.context()._tags[SCHEMA_ID], OTHER_MESSAGE_SCHEMA_ID)
-            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
+            assert.strictEqual(span.context().getTags()[SCHEMA_TYPE], 'protobuf')
+            assert.strictEqual(span.context().getTags()[SCHEMA_NAME], 'OtherMessage')
+            assert.strictEqual(span.context().getTags()[SCHEMA_OPERATION], 'deserialization')
+            assert.strictEqual(span.context().getTags()[SCHEMA_ID], OTHER_MESSAGE_SCHEMA_ID)
+            assert.strictEqual(span.context().getTags()[SCHEMA_WEIGHT], 1)
           })
         })
 
@@ -165,11 +164,11 @@ describe('Plugin', () => {
             assert.strictEqual(span.context()._name, 'my_message.deserialize')
 
             assert.strictEqual(compareJson(MESSAGE_SCHEMA_DEF, span), true)
-            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
-            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'MyMessage')
-            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'deserialization')
-            assert.strictEqual(span.context()._tags[SCHEMA_ID], MESSAGE_SCHEMA_ID)
-            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
+            assert.strictEqual(span.context().getTags()[SCHEMA_TYPE], 'protobuf')
+            assert.strictEqual(span.context().getTags()[SCHEMA_NAME], 'MyMessage')
+            assert.strictEqual(span.context().getTags()[SCHEMA_OPERATION], 'deserialization')
+            assert.strictEqual(span.context().getTags()[SCHEMA_ID], MESSAGE_SCHEMA_ID)
+            assert.strictEqual(span.context().getTags()[SCHEMA_WEIGHT], 1)
           })
         })
 
@@ -184,11 +183,11 @@ describe('Plugin', () => {
             assert.strictEqual(span.context()._name, 'all_types.deserialize')
 
             assert.strictEqual(compareJson(ALL_TYPES_MESSAGE_SCHEMA_DEF, span), true)
-            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
-            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'example.MainMessage')
-            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'deserialization')
-            assert.strictEqual(span.context()._tags[SCHEMA_ID], ALL_TYPES_MESSAGE_SCHEMA_ID)
-            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
+            assert.strictEqual(span.context().getTags()[SCHEMA_TYPE], 'protobuf')
+            assert.strictEqual(span.context().getTags()[SCHEMA_NAME], 'example.MainMessage')
+            assert.strictEqual(span.context().getTags()[SCHEMA_OPERATION], 'deserialization')
+            assert.strictEqual(span.context().getTags()[SCHEMA_ID], ALL_TYPES_MESSAGE_SCHEMA_ID)
+            assert.strictEqual(span.context().getTags()[SCHEMA_WEIGHT], 1)
           })
         })
 
@@ -209,11 +208,11 @@ describe('Plugin', () => {
             assert.strictEqual(span.context()._name, 'other_message.deserialize')
 
             assert.strictEqual(compareJson(OTHER_MESSAGE_SCHEMA_DEF, span), true)
-            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
-            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'OtherMessage')
-            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'deserialization')
-            assert.strictEqual(span.context()._tags[SCHEMA_ID], OTHER_MESSAGE_SCHEMA_ID)
-            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
+            assert.strictEqual(span.context().getTags()[SCHEMA_TYPE], 'protobuf')
+            assert.strictEqual(span.context().getTags()[SCHEMA_NAME], 'OtherMessage')
+            assert.strictEqual(span.context().getTags()[SCHEMA_OPERATION], 'deserialization')
+            assert.strictEqual(span.context().getTags()[SCHEMA_ID], OTHER_MESSAGE_SCHEMA_ID)
+            assert.strictEqual(span.context().getTags()[SCHEMA_WEIGHT], 1)
           })
         })
 
@@ -233,11 +232,11 @@ describe('Plugin', () => {
             assert.strictEqual(span.context()._name, 'other_message.deserialize')
 
             assert.strictEqual(compareJson(OTHER_MESSAGE_SCHEMA_DEF, span), true)
-            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
-            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'OtherMessage')
-            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'deserialization')
-            assert.strictEqual(span.context()._tags[SCHEMA_ID], OTHER_MESSAGE_SCHEMA_ID)
-            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
+            assert.strictEqual(span.context().getTags()[SCHEMA_TYPE], 'protobuf')
+            assert.strictEqual(span.context().getTags()[SCHEMA_NAME], 'OtherMessage')
+            assert.strictEqual(span.context().getTags()[SCHEMA_OPERATION], 'deserialization')
+            assert.strictEqual(span.context().getTags()[SCHEMA_ID], OTHER_MESSAGE_SCHEMA_ID)
+            assert.strictEqual(span.context().getTags()[SCHEMA_WEIGHT], 1)
           })
         })
 
@@ -259,11 +258,11 @@ describe('Plugin', () => {
             assert.strictEqual(span.context()._name, 'other_message.deserialize')
 
             assert.strictEqual(compareJson(OTHER_MESSAGE_SCHEMA_DEF, span), true)
-            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
-            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'OtherMessage')
-            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'deserialization')
-            assert.strictEqual(span.context()._tags[SCHEMA_ID], OTHER_MESSAGE_SCHEMA_ID)
-            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
+            assert.strictEqual(span.context().getTags()[SCHEMA_TYPE], 'protobuf')
+            assert.strictEqual(span.context().getTags()[SCHEMA_NAME], 'OtherMessage')
+            assert.strictEqual(span.context().getTags()[SCHEMA_OPERATION], 'deserialization')
+            assert.strictEqual(span.context().getTags()[SCHEMA_ID], OTHER_MESSAGE_SCHEMA_ID)
+            assert.strictEqual(span.context().getTags()[SCHEMA_WEIGHT], 1)
           })
         })
 
@@ -285,11 +284,11 @@ describe('Plugin', () => {
             assert.strictEqual(span.context()._name, 'other_message.deserialize')
 
             assert.strictEqual(compareJson(OTHER_MESSAGE_SCHEMA_DEF, span), true)
-            assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
-            assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'OtherMessage')
-            assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'deserialization')
-            assert.strictEqual(span.context()._tags[SCHEMA_ID], OTHER_MESSAGE_SCHEMA_ID)
-            assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
+            assert.strictEqual(span.context().getTags()[SCHEMA_TYPE], 'protobuf')
+            assert.strictEqual(span.context().getTags()[SCHEMA_NAME], 'OtherMessage')
+            assert.strictEqual(span.context().getTags()[SCHEMA_OPERATION], 'deserialization')
+            assert.strictEqual(span.context().getTags()[SCHEMA_ID], OTHER_MESSAGE_SCHEMA_ID)
+            assert.strictEqual(span.context().getTags()[SCHEMA_WEIGHT], 1)
           })
         })
 
@@ -318,11 +317,11 @@ describe('Plugin', () => {
               assert.strictEqual(span.context()._name, 'message_pb2.serialize')
 
               assert.strictEqual(compareJson(MESSAGE_SCHEMA_DEF, span), true)
-              assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
-              assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'MyMessage')
-              assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'serialization')
-              assert.strictEqual(span.context()._tags[SCHEMA_ID], MESSAGE_SCHEMA_ID)
-              assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
+              assert.strictEqual(span.context().getTags()[SCHEMA_TYPE], 'protobuf')
+              assert.strictEqual(span.context().getTags()[SCHEMA_NAME], 'MyMessage')
+              assert.strictEqual(span.context().getTags()[SCHEMA_OPERATION], 'serialization')
+              assert.strictEqual(span.context().getTags()[SCHEMA_ID], MESSAGE_SCHEMA_ID)
+              assert.strictEqual(span.context().getTags()[SCHEMA_WEIGHT], 1)
 
               // we sampled 1 schema with 1 subschema, so the constructor should've only been called twice
               assert.strictEqual(cacheSetSpy.callCount, 2)
@@ -335,11 +334,11 @@ describe('Plugin', () => {
               assert.strictEqual(span.context()._name, 'message_pb2.serialize')
 
               assert.strictEqual(compareJson(MESSAGE_SCHEMA_DEF, span), true)
-              assert.strictEqual(span.context()._tags[SCHEMA_TYPE], 'protobuf')
-              assert.strictEqual(span.context()._tags[SCHEMA_NAME], 'MyMessage')
-              assert.strictEqual(span.context()._tags[SCHEMA_OPERATION], 'serialization')
-              assert.strictEqual(span.context()._tags[SCHEMA_ID], MESSAGE_SCHEMA_ID)
-              assert.strictEqual(span.context()._tags[SCHEMA_WEIGHT], 1)
+              assert.strictEqual(span.context().getTags()[SCHEMA_TYPE], 'protobuf')
+              assert.strictEqual(span.context().getTags()[SCHEMA_NAME], 'MyMessage')
+              assert.strictEqual(span.context().getTags()[SCHEMA_OPERATION], 'serialization')
+              assert.strictEqual(span.context().getTags()[SCHEMA_ID], MESSAGE_SCHEMA_ID)
+              assert.strictEqual(span.context().getTags()[SCHEMA_WEIGHT], 1)
 
               // ensure schema was sampled and returned via the cache, so no extra cache set
               // calls were needed, only gets

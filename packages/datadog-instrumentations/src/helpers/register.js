@@ -13,8 +13,9 @@ const Hook = require('./hook')
 const { isRelativeRequire } = require('./shared-utils')
 const rewriter = require('./rewriter')
 
-const DD_TRACE_DISABLED_INSTRUMENTATIONS = getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS') || ''
-const DD_TRACE_DEBUG = getValueFromEnvSources('DD_TRACE_DEBUG') || ''
+const DD_TRACE_DISABLED_INSTRUMENTATIONS =
+  getValueFromEnvSources('DD_TRACE_DISABLED_INSTRUMENTATIONS')
+const DD_TRACE_DEBUG = getValueFromEnvSources('DD_TRACE_DEBUG')
 
 const hooks = require('./hooks')
 const instrumentations = require('./instrumentations')
@@ -36,8 +37,9 @@ if (!disabledInstrumentations.has('process')) {
   require('../process')
 }
 
-if (DD_TRACE_DEBUG && DD_TRACE_DEBUG.toLowerCase() !== 'false') {
-  checkRequireCache.checkForRequiredModules()
+const debugEnabled = DD_TRACE_DEBUG
+checkRequireCache.checkForRequiredModules(debugEnabled)
+if (debugEnabled) {
   setImmediate(checkRequireCache.checkForPotentialConflicts)
 }
 
@@ -133,7 +135,7 @@ for (const name of names) {
         try {
           loadChannel.publish({ name })
 
-          moduleExports = hook(moduleExports, moduleVersion, isIitm) ?? moduleExports
+          moduleExports = hook(moduleExports, moduleVersion, isIitm, { moduleBaseDir, moduleName }) ?? moduleExports
         } catch (error) {
           log.info('Error during ddtrace instrumentation of application, aborting.', error)
           telemetry('error', [

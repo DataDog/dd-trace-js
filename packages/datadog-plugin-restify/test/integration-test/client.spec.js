@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const {
   FakeAgent,
@@ -43,7 +44,7 @@ describe('esm', () => {
 
         return curlAndAssertMessage(agent, proc, ({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
-          assert.ok(Array.isArray(payload))
+          assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
           assert.strictEqual(checkSpansForServiceName(payload, 'restify.request'), true)
         })
       }).timeout(20000)

@@ -7,12 +7,22 @@ const {
   extractTextAndResponseReason,
   parseModelId,
   extractTextAndResponseReasonFromStream,
+  extractConverseToolDefinitions,
+  extractRequestParamsConverse,
+  extractTextAndResponseReasonConverse,
+  extractTextAndResponseReasonConverseFromStream,
 } = require('../../../../datadog-plugin-aws-sdk/src/services/bedrockruntime/utils')
 const BaseLLMObsPlugin = require('./base')
 
 const llmobsStore = storage('llmobs')
 
-const ENABLED_OPERATIONS = new Set(['invokeModel', 'invokeModelWithResponseStream'])
+const ENABLED_OPERATIONS = new Set([
+  'invokeModel',
+  'invokeModelWithResponseStream',
+  'converse',
+  'converseStream',
+])
+const CONVERSE_OPERATIONS = new Set(['converse', 'converseStream'])
 
 /**
  * @typedef {{
@@ -79,10 +89,18 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
   setLLMObsTags ({ ctx, request, span, response, modelProvider, modelName, tokensFromHeaders }) {
     const isStream = request?.operation?.toLowerCase().includes('stream')
     telemetry.incrementLLMObsSpanStartCount({ autoinstrumented: true, integration: 'bedrock' })
+    this.#registerSpan(span, request)
 
+    if (CONVERSE_OPERATIONS.has(request?.operation)) {
+      this.#tagConverseSpan({ ctx, request, span, response, tokensFromHeaders, isStream })
+    } else {
+      this.#tagInvokeModelSpan({ ctx, request, span, response, modelProvider, modelName, tokensFromHeaders, isStream })
+    }
+  }
+
+  #registerSpan (span, request) {
     const parent = llmobsStore.getStore()?.span
     // Use full modelId and unified provider for LLMObs (required for backend cost estimation).
-    // Split modelProvider/modelName from parseModelId() are still used below for response parsing.
     this._tagger.registerLLMObsSpan(span, {
       parent,
       modelName: request.params.modelId.toLowerCase(),
@@ -91,38 +109,42 @@ class BedrockRuntimeLLMObsPlugin extends BaseLLMObsPlugin {
       name: 'bedrock-runtime.command',
       integration: 'bedrock',
     })
+  }
 
+  #tagConverseSpan ({ ctx, request, span, response, tokensFromHeaders, isStream }) {
+    const requestParams = extractRequestParamsConverse(request.params)
+    const textAndResponseReason = isStream
+      ? extractTextAndResponseReasonConverseFromStream(ctx.chunks)
+      : extractTextAndResponseReasonConverse(response)
+
+    const toolDefinitions = extractConverseToolDefinitions(request.params)
+    if (toolDefinitions.length > 0) this._tagger.tagToolDefinitions(span, toolDefinitions)
+    if (textAndResponseReason.finishReason) {
+      this._tagger.tagMetadata(span, { stop_reason: textAndResponseReason.finishReason })
+    }
+    this.#tagCommon({ span, requestParams, textAndResponseReason, tokensFromHeaders })
+  }
+
+  #tagInvokeModelSpan ({ ctx, request, span, response, modelProvider, modelName, tokensFromHeaders, isStream }) {
     const requestParams = extractRequestParams(request.params, modelProvider)
     // for streamed responses, we'll use the coerced response object we formed in the stream handler
     const textAndResponseReason = isStream
       ? extractTextAndResponseReasonFromStream(ctx.chunks, modelProvider, modelName)
       : extractTextAndResponseReason(response, modelProvider, modelName)
 
-    // add metadata tags
+    this.#tagCommon({ span, requestParams, textAndResponseReason, tokensFromHeaders })
+  }
+
+  #tagCommon ({ span, requestParams, textAndResponseReason, tokensFromHeaders }) {
     this._tagger.tagMetadata(span, {
       temperature: Number.parseFloat(requestParams.temperature) || 0,
       max_tokens: Number.parseInt(requestParams.maxTokens) || 0,
     })
-
-    // add I/O tags
-    this._tagger.tagLLMIO(
-      span,
-      requestParams.prompt,
-      [{ content: textAndResponseReason.message, role: textAndResponseReason.role }]
-    )
-
-    // add token metrics
-    const { inputTokens, outputTokens, totalTokens, cacheReadTokens, cacheWriteTokens } = extractTokens({
+    this._tagger.tagLLMIO(span, requestParams.prompt, textAndResponseReason.messages)
+    this._tagger.tagMetrics(span, extractTokens({
       tokensFromHeaders,
       usage: textAndResponseReason.usage,
-    })
-    this._tagger.tagMetrics(span, {
-      inputTokens,
-      outputTokens,
-      totalTokens,
-      cacheReadTokens,
-      cacheWriteTokens,
-    })
+    }))
   }
 }
 

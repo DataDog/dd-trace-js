@@ -2,11 +2,13 @@
 
 const assert = require('node:assert/strict')
 const { rejects } = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const msgpack = require('@msgpack/msgpack')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
+const aiguardAutoInstrumentation = require('../../src/aiguard')
 const NoopAIGuard = require('../../src/aiguard/noop')
 const AIGuard = require('../../src/aiguard/sdk')
 const agent = require('../plugins/agent')
@@ -78,9 +80,8 @@ describe('AIGuard SDK', () => {
 
   let originalFetch
 
-  beforeEach(() => {
-    tracer = require('../../../dd-trace')
-    tracer.init(config)
+  beforeEach(async () => {
+    tracer = await agent.load(null, [], config)
 
     originalFetch = global.fetch
     global.fetch = sinon.stub()
@@ -92,13 +93,12 @@ describe('AIGuard SDK', () => {
     aiguardMetrics.metrics.clear()
 
     aiguard = new AIGuard(tracer, config)
-
-    return agent.load(null, [])
   })
 
-  afterEach(() => {
+  afterEach(async () => {
     global.fetch = originalFetch
     sinon.restore()
+    aiguardAutoInstrumentation.disable()
     return agent.close()
   })
 
@@ -490,25 +490,47 @@ describe('AIGuard SDK', () => {
       await aiguard.evaluate(prompt, { block: false })
     })
     await agent.assertSomeTraces(traces => {
-      assert.ok(traces[0].length === 2, 'Trace should contain two spans root + ai_guard')
+      assert.strictEqual(traces[0].length, 2, 'Trace should contain two spans root + ai_guard')
       for (const span of traces[0]) {
         if (span.name === 'root') {
           assert.strictEqual(span.meta[EVENT_TAG_KEY], 'true')
         } else {
-          assert.ok(!Object.hasOwn(span.meta, EVENT_TAG_KEY))
+          assert.ok(!Object.hasOwn(span.meta, EVENT_TAG_KEY), `Available keys: ${inspect(Object.keys(span.meta))}`)
         }
       }
+    })
+  })
+
+  it('parents the ai_guard span under the explicit childOf span', async () => {
+    mockFetch({
+      body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } },
+    })
+
+    // Create the parent span and evaluate outside its active scope, so only the explicit
+    // `childOf` can establish the parent-child relationship (not the active async context).
+    const parent = tracer.startSpan('explicit-parent')
+    await aiguard.evaluate(prompt, { childOf: parent })
+    parent.finish()
+
+    await agent.assertSomeTraces(traces => {
+      const parentSpan = traces[0].find(span => span.name === 'explicit-parent')
+      const guardSpan = traces[0].find(span => span.name === 'ai_guard')
+      assert.ok(parentSpan && guardSpan, 'expected both explicit-parent and ai_guard spans')
+      assert.strictEqual(guardSpan.parent_id.toString(), parentSpan.span_id.toString())
     })
   })
 
   const sites = [
     { site: 'datad0g.com', endpoint: 'https://app.datad0g.com/api/v2/ai-guard' },
     { site: 'datadoghq.com', endpoint: 'https://app.datadoghq.com/api/v2/ai-guard' },
+    { site: 'ddog-gov.com', endpoint: 'https://app.ddog-gov.com/api/v2/ai-guard' },
+    { site: 'us3.datadoghq.com', endpoint: 'https://us3.datadoghq.com/api/v2/ai-guard' },
+    { site: 'ap1.datadoghq.com', endpoint: 'https://ap1.datadoghq.com/api/v2/ai-guard' },
   ]
   for (const { site, endpoint } of sites) {
     it(`test endpoint discovery: ${site}`, async () => {
-      const newConfig = { site, ...config }
-      delete newConfig.experimental.aiguard.endpoint
+      const { endpoint: _discardedEndpoint, ...aiguard } = config.experimental.aiguard
+      const newConfig = { ...config, site, experimental: { ...config.experimental, aiguard } }
       const client = new AIGuard(tracer, newConfig)
       mockFetch({
         body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } },

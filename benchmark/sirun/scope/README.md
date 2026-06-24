@@ -1,2 +1,4 @@
-This test creates a number (`COUNT`) of promises, awaits, setImmediates and
-setTimeouts which a given scope manager (`DD_TRACE_SCOPE`).
+Measures the scope manager's per-hop async-context cost: chains `COUNT` promise
+continuations, each wrapped in `scope.activate()` -- the path the tracer drives
+under every traced async operation (an `AsyncLocalStorage` enterWith plus the
+parent store copy). Rendered commit-over-commit; there is no baseline variant.

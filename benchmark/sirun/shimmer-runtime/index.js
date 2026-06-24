@@ -1,70 +1,42 @@
 'use strict'
 
-/* eslint-disable require-await */
-
+const assert = require('node:assert/strict')
+const guard = require('../startup-guard')
 const shimmer = require('../../../packages/datadog-shimmer')
 
-const {
-  ENABLED,
-  WRAP_FUNCTION,
-  FUNCTION_NAME,
-} = process.env
-
-const ITERATIONS = 2e6
+// Measures the per-call cost of a shimmer-wrapped function. shimmer.wrap (object
+// property) and shimmer.wrapFunction (standalone) produce the same wrapper, so
+// the call cost is the same; WRAP_FUNCTION just selects which API created it,
+// and both are kept as a guard against the wrappers diverging. Only a sync
+// target is exercised on purpose: an async target would spend most of the loop
+// allocating promises (not shimmer's cost) and add GC jitter. The wrap-time
+// difference between the two APIs is covered by the shimmer-startup bench.
+const useWrapFunction = process.env.WRAP_FUNCTION === 'true'
+const ITERATIONS = Number(process.env.ITERATIONS) || 5e7
 
 let counter = 0
-function declared () {
+function target () {
   return ++counter // Do very little
 }
 
-const arrow = () => {
-  return ++counter // Do very little
+const passthrough = (original) => function (...args) {
+  return original.apply(this, args)
 }
 
-async function asyncDeclared () {
-  return ++counter // Do very little
-}
-
-const asyncArrow = async () => {
-  return ++counter // Do very little
-}
-
-const testedFn = {
-  declared,
-  arrow,
-  asyncDeclared,
-  asyncArrow,
-}[FUNCTION_NAME]
-if (!testedFn) {
-  throw new Error(`Function ${FUNCTION_NAME} not found`)
-}
-
-if (ENABLED !== 'true') {
-  for (let i = 0; i < ITERATIONS; i++) {
-    testedFn()
-  }
+let wrapped
+if (useWrapFunction) {
+  wrapped = shimmer.wrapFunction(target, passthrough)
 } else {
-  if (WRAP_FUNCTION === 'true') {
-    const wrapped = shimmer.wrapFunction(testedFn, (original) => {
-      return function (...args) {
-        return original.apply(this, args)
-      }
-    })
-    for (let i = 0; i < ITERATIONS; i++) {
-      wrapped()
-    }
-  } else {
-    const obj = {
-      testedFn,
-    }
-    shimmer.wrap(obj, 'testedFn', (original) => {
-      return function (...args) {
-        return original.apply(this, args)
-      }
-    })
-    const wrapped = obj.testedFn
-    for (let i = 0; i < ITERATIONS; i++) {
-      wrapped()
-    }
-  }
+  const obj = { target }
+  shimmer.wrap(obj, 'target', passthrough)
+  wrapped = obj.target
 }
+
+guard.loopStart()
+for (let i = 0; i < ITERATIONS; i++) {
+  wrapped()
+}
+guard.done()
+
+// Fail loudly if the wrapper stops delegating to the original function.
+assert.equal(counter, ITERATIONS, 'wrapped function did not run ITERATIONS times')

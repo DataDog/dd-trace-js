@@ -141,19 +141,19 @@ function instrument (req, res, handler, error) {
   requests.add(req)
 
   const ctx = { req, res }
-  // Parse query parameters from request URL
   if (queryParsedChannel.hasSubscribers && req.url) {
-    // req.url is only the relative path (/foo?bar=baz) and new URL() needs a full URL
-    // so we give it a dummy base
-    const { searchParams } = new URL(req.url, 'http://dummy')
-    const query = {}
-    for (const key of searchParams.keys()) {
-      if (!query[key]) {
-        query[key] = searchParams.getAll(key)
+    const queryIndex = req.url.indexOf('?')
+    if (queryIndex !== -1) {
+      const searchParams = new URLSearchParams(req.url.slice(queryIndex + 1))
+      const query = {}
+      for (const key of searchParams.keys()) {
+        if (!query[key]) {
+          query[key] = searchParams.getAll(key)
+        }
       }
-    }
 
-    queryParsedChannel.publish({ query })
+      queryParsedChannel.publish({ query })
+    }
   }
 
   return startChannel.runStores(ctx, () => {
@@ -219,6 +219,40 @@ addHook({
   })
   return NextRequestAdapter
 })
+
+// From next 15.4.1 each app-route build inlines its own copy of `fromNodeNextRequest`, so the hook
+// above no longer maps the node request to the app-route NextRequest and a thrown handler error
+// cannot reach `finish`. The app-route runtime reports real errors (redirect/notFound and other
+// control-flow signals excluded by next) through `RouteModule.onRequestError`, which next loads from
+// a precompiled `app-route*.runtime.{dev,prod}.js` bundle regardless of how the route chunk is
+// bundled. The bundler/experimental part of the name is matched with a pattern rather than
+// enumerated, so a variant next adds later is picked up without a code change.
+const patchedAppRouteModules = new WeakSet()
+
+function wrapOnRequestError (onRequestError) {
+  return function (req, error) {
+    if (error) {
+      errorChannel.publish({ error })
+    }
+    return onRequestError.apply(this, arguments)
+  }
+}
+
+function instrumentAppRouteRuntime (runtime) {
+  const AppRouteRouteModule = runtime.AppRouteRouteModule
+  const proto = AppRouteRouteModule?.prototype
+  if (proto && typeof proto.onRequestError === 'function' && !patchedAppRouteModules.has(AppRouteRouteModule)) {
+    patchedAppRouteModules.add(AppRouteRouteModule)
+    shimmer.wrap(proto, 'onRequestError', wrapOnRequestError)
+  }
+  return runtime
+}
+
+addHook({
+  name: 'next',
+  versions: ['>=15.4.1'],
+  filePattern: String.raw`dist/compiled/next-server/app-route[\w-]*\.runtime\.(?:dev|prod)\.js$`,
+}, instrumentAppRouteRuntime)
 
 addHook({
   name: 'next',

@@ -6,6 +6,9 @@ const fs = require('node:fs')
 const fsp = require('node:fs/promises')
 const os = require('node:os')
 const path = require('node:path')
+const { inspect } = require('node:util')
+
+const libCoverage = require('istanbul-lib-coverage')
 
 const { installPatch } = require('./coverage/patch-child-process')
 const { installLastExitHandler } = require('./coverage/pre-instrumented-writer')
@@ -122,8 +125,8 @@ process.send('ready')
     const workerDebug = JSON.parse(fs.readFileSync(path.join(fixturesDir, 'worker-debug.json'), 'utf8'))
     assert.strictEqual(parentDebug.hasNycConfig, true)
     assert.strictEqual(workerDebug.hasNycConfig, true)
-    assert.ok(parentDebug.nodeOptions.includes('child-bootstrap.js'))
-    assert.ok(workerDebug.nodeOptions.includes('child-bootstrap.js'))
+    assert.ok(parentDebug.nodeOptions.includes('child-bootstrap.js'), `Got: ${inspect(parentDebug.nodeOptions)}`)
+    assert.ok(workerDebug.nodeOptions.includes('child-bootstrap.js'), `Got: ${inspect(workerDebug.nodeOptions)}`)
     assert.ok(parentDebug.coverageKeys.length > 0, 'expected parent process coverage to be populated')
     assert.ok(workerDebug.coverageKeys.length > 0, 'expected worker process coverage to be populated')
 
@@ -536,5 +539,42 @@ describe('integration coverage last-exit handler', () => {
     process.removeAllListeners('beforeExit')
 
     assert.deepStrictEqual(fired, ['beforeExit'])
+  })
+})
+
+describe('istanbul-lib-coverage getLineCoverage patch', () => {
+  it('does not emit a line for an implicit else with no source location', () => {
+    // An `if` without an `else` still gets a branch location for the implicit
+    // else, and istanbul's `cloneLocation(undefined)` leaves its `start.line`
+    // undefined. The patch must skip it instead of recording a phantom line.
+    const fileCoverage = libCoverage.createFileCoverage({
+      path: '/fixture.js',
+      statementMap: {
+        0: { start: { line: 10, column: 0 }, end: { line: 12, column: 1 } },
+      },
+      s: { 0: 1 },
+      fnMap: {},
+      f: {},
+      branchMap: {
+        0: {
+          loc: { start: { line: 10, column: 0 }, end: { line: 12, column: 1 } },
+          type: 'if',
+          locations: [
+            { start: { line: 10, column: 0 }, end: { line: 12, column: 1 } },
+            { start: { line: undefined, column: undefined }, end: { line: undefined, column: undefined } },
+          ],
+          line: 10,
+        },
+      },
+      b: { 0: [1, 0] },
+    })
+
+    const lineCoverage = fileCoverage.getLineCoverage()
+
+    // The implicit-else location is skipped (its undefined line would surface as
+    // a NaN line); the consequent on line 10 is still recorded.
+    assert.deepStrictEqual(Object.keys(lineCoverage), ['10'],
+      `unexpected line keys in ${inspect(lineCoverage)}`)
+    assert.strictEqual(lineCoverage[10], 1)
   })
 })

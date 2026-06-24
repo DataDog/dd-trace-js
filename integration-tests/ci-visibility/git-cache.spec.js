@@ -5,6 +5,7 @@ const fs = require('fs')
 const assert = require('assert')
 const os = require('os')
 const path = require('path')
+const { inspect } = require('node:util')
 
 const { assertObjectContains, sandboxCwd, useSandbox } = require('../helpers')
 
@@ -16,9 +17,9 @@ function removeGitFromPath () {
     .split(path.delimiter)
     .filter(dir => {
       return !dir.includes('git') &&
-             !dir.includes('Git') &&
-             !dir.includes('usr/bin') &&
-             !dir.includes('bin')
+            !dir.includes('Git') &&
+            !dir.includes('usr/bin') &&
+            !dir.includes('bin')
     })
     .join(path.delimiter)
 }
@@ -187,7 +188,7 @@ describe('git-cache integration tests', () => {
 
     const cacheKey = defaultDirGitCache.getCacheKey('git', GET_COMMIT_MESSAGE_COMMAND_ARGS)
     const cacheFilePath = defaultDirGitCache.getCacheFilePath(cacheKey)
-    assert.ok(cacheFilePath.includes('dd-trace-git-cache'))
+    assert.ok(cacheFilePath.includes('dd-trace-git-cache'), `Got: ${inspect(cacheFilePath)}`)
     assert.strictEqual(fs.existsSync(cacheFilePath), true)
 
     removeGitFromPath()

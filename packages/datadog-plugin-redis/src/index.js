@@ -11,13 +11,24 @@ class RedisPlugin extends CachePlugin {
   static id = 'redis'
   static system = 'redis'
 
+  /** @type {string} */
+  #rawCommandKey
+  /** @type {Map<string | undefined, { name: string, source: string | undefined }>} */
+  #serviceByConnection = new Map()
+  // `nomenclature.config` identity at last cache fill. `withNamingSchema` swaps it without
+  // running this plugin's `configure`, so identity drives invalidation in `bindStart`.
+  /** @type {object | undefined} */
+  #lastNomenclatureConfig
+  /** @type {string | undefined} */
+  #cachedOperationName
+
   constructor (...args) {
     super(...args)
     this._spanType = 'redis'
   }
 
   bindStart (ctx) {
-    const { db, command, args, argsStartIndex, connectionOptions, connectionName } = ctx
+    const { command, args, argsStartIndex, connectionOptions, connectionName } = ctx
 
     const resource = command
     const normalizedCommand = command.toUpperCase()
@@ -25,14 +36,26 @@ class RedisPlugin extends CachePlugin {
       return { noop: true }
     }
 
+    const nomConfig = this._tracer._nomenclature.config
+    if (this.#lastNomenclatureConfig !== nomConfig) {
+      this.#lastNomenclatureConfig = nomConfig
+      this.#cachedOperationName = undefined
+      this.#serviceByConnection.clear()
+    }
+
+    let service = this.#serviceByConnection.get(connectionName)
+    if (service === undefined) {
+      service = this.serviceName({ pluginConfig: this.config, system: this.system, connectionName })
+      this.#serviceByConnection.set(connectionName, service)
+    }
+
     this.startSpan({
       resource,
-      service: this.serviceName({ pluginConfig: this.config, system: this.system, connectionName }),
+      service,
       type: this._spanType,
       meta: {
         'db.type': this._spanType,
-        'db.name': db || '0',
-        [`${this._spanType}.raw_command`]: formatCommand(normalizedCommand, args, argsStartIndex),
+        [this.#rawCommandKey]: formatCommand(normalizedCommand, args, argsStartIndex),
         'out.host': connectionOptions.host,
         [CLIENT_PORT_KEY]: connectionOptions.port,
       },
@@ -41,8 +64,19 @@ class RedisPlugin extends CachePlugin {
     return ctx.currentStore
   }
 
+  operationName () {
+    this.#cachedOperationName ??= super.operationName()
+    return this.#cachedOperationName
+  }
+
   configure (config) {
     super.configure(normalizeConfig(config))
+    // Subclasses (iovalkey) overwrite `_spanType` in their constructor, before any `configure`,
+    // so reading it here is stable.
+    this.#rawCommandKey = `${this._spanType}.raw_command`
+    this.#lastNomenclatureConfig = undefined
+    this.#cachedOperationName = undefined
+    this.#serviceByConnection.clear()
   }
 }
 

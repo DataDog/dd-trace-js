@@ -21,12 +21,14 @@
   "license": "ISC",
   "dependencies": {
     "@apollo/server": "5.5.1",
-    "@koa/router": "15.5.0",
+    "@koa/router": "15.6.0",
+    "@smithy/smithy-client": "4.14.1",
     "aws-sdk": "2.1693.0",
-    "axios": "1.16.0",
+    "axios": "1.18.0",
+    "esbuild": "^0.28.0",
     "express": "4.22.2",
     "knex": "3.2.10",
-    "koa": "3.2.0",
-    "openai": "6.37.0"
+    "koa": "3.2.1",
+    "openai": "6.44.0"
   }
 }

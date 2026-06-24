@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
@@ -98,7 +99,7 @@ describe('Sfn', () => {
           stateMachineArn = data.stateMachineArn
         })
 
-        afterEach(() => { return agent.close({ ritmReset: false }) })
+        afterEach(() => { return agent.close() })
 
         afterEach(async () => {
           await deleteStateMachine(stateMachineArn)
@@ -110,18 +111,25 @@ describe('Sfn', () => {
             input: JSON.stringify({ moduleName }),
           }
           const expectSpanPromise = agent.assertSomeTraces(traces => {
-            const span = traces[0][0]
+            const span = traces.flat().find(s => s.resource === 'startExecution')
+            assert.ok(span, 'expected startExecution span')
             assert.strictEqual(span.resource, 'startExecution')
             assert.strictEqual(span.meta.statemachinearn, stateMachineArn)
-          })
+          }, { spanResourceMatch: /startExecution/ })
 
           const resp = await client.startExecution(startExecInput)
 
           const result = await client.describeExecution({ executionArn: resp.executionArn })
           const sfInput = JSON.parse(result.input)
-          assert.ok(Object.hasOwn(sfInput, '_datadog'))
-          assert.ok(Object.hasOwn(sfInput._datadog, 'x-datadog-trace-id'))
-          assert.ok(Object.hasOwn(sfInput._datadog, 'x-datadog-parent-id'))
+          assert.ok(Object.hasOwn(sfInput, '_datadog'), `Available keys: ${inspect(Object.keys(sfInput))}`)
+          assert.ok(
+            Object.hasOwn(sfInput._datadog, 'x-datadog-trace-id'),
+            `Available keys: ${inspect(Object.keys(sfInput._datadog))}`
+          )
+          assert.ok(
+            Object.hasOwn(sfInput._datadog, 'x-datadog-parent-id'),
+            `Available keys: ${inspect(Object.keys(sfInput._datadog))}`
+          )
           return expectSpanPromise.then(() => {})
         })
       }

@@ -14,7 +14,12 @@ const id = require('../../src/id')
 /**
  * @typedef {{
  *   version: number,
- *   coverages: { test_session_id: number, test_suite_id: number, files: { filename: string }[] }[] }
+ *   coverages: {
+ *     test_session_id: number,
+ *     test_suite_id?: number,
+ *     span_id?: number,
+ *     files: { filename: string, bitmap?: Uint8Array }[]
+ *   }[] }
  * } CoverageObject
  */
 
@@ -35,7 +40,10 @@ describe('coverage-ci-visibility', () => {
     formattedCoverage = {
       sessionId: id('1'),
       suiteId: id('2'),
-      files: ['file.js'],
+      files: [{
+        filename: 'file.js',
+        bitmap: Buffer.from([0, 0, 0, 0x40, 0x01, 0x60]),
+      }],
     }
     formattedCoverage2 = {
       sessionId: id('3'),
@@ -56,7 +64,7 @@ describe('coverage-ci-visibility', () => {
 
     const form = encoder.makePayload()
 
-    assert.ok(form._data[0].startsWith('--'))
+    assert.match(form._data[0], /^--/)
     assertObjectContains(
       form._data,
       [
@@ -70,7 +78,8 @@ describe('coverage-ci-visibility', () => {
     assert.strictEqual(decodedCoverages.version, 2)
     assert.strictEqual(decodedCoverages.coverages.length, 2)
     assertObjectContains(decodedCoverages.coverages[0], { test_session_id: 1, test_suite_id: 2 })
-    assert.deepStrictEqual(decodedCoverages.coverages[0].files[0], { filename: 'file.js' })
+    assert.strictEqual(decodedCoverages.coverages[0].files[0].filename, 'file.js')
+    assert.strictEqual(Buffer.from(decodedCoverages.coverages[0].files[0].bitmap).toString('base64'), 'AAAAQAFg')
 
     assertObjectContains(decodedCoverages.coverages[1], { test_session_id: 3, test_suite_id: 4 })
     assert.deepStrictEqual(decodedCoverages.coverages[1].files[0], { filename: 'file2.js' })
@@ -117,7 +126,7 @@ describe('coverage-ci-visibility', () => {
 
     const form = encoder.makePayload()
 
-    assert.ok(form._data[0].startsWith('--'))
+    assert.match(form._data[0], /^--/)
     assertObjectContains(
       form._data,
       [
@@ -132,5 +141,24 @@ describe('coverage-ci-visibility', () => {
     assert.strictEqual(decodedCoverages.coverages.length, 1)
     assertObjectContains(decodedCoverages.coverages[0], { test_session_id: 5, test_suite_id: 6, span_id: 7 })
     assert.deepStrictEqual(decodedCoverages.coverages[0].files[0], { filename: 'file3.js' })
+  })
+
+  it('should be able to encode session executable line coverage', () => {
+    encoder.encode({
+      sessionId: id('8'),
+      files: [{
+        filename: 'file4.js',
+        bitmap: Buffer.from([0x80]),
+      }],
+    })
+
+    const form = encoder.makePayload()
+    const decodedCoverages = /** @type {CoverageObject} */ (msgpack.decode(form._data[3]))
+
+    assert.strictEqual(decodedCoverages.coverages.length, 1)
+    assertObjectContains(decodedCoverages.coverages[0], { test_session_id: 8 })
+    assert.ok(!('test_suite_id' in decodedCoverages.coverages[0]))
+    assert.strictEqual(decodedCoverages.coverages[0].files[0].filename, 'file4.js')
+    assert.strictEqual(Buffer.from(decodedCoverages.coverages[0].files[0].bitmap).toString('base64'), 'gA==')
   })
 })
