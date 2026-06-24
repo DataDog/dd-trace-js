@@ -74,10 +74,6 @@ class CiVisibilityExporter extends BufferingExporter {
       }
     })
 
-    if (this._testOptimizationHttpCache.isAvailable()) {
-      this._resolveGit()
-    }
-
     const flush = () => {
       if (this._writer) {
         this._writer.flush()
@@ -186,7 +182,6 @@ class CiVisibilityExporter extends BufferingExporter {
    */
   getLibraryConfiguration (testConfiguration, callback) {
     const { repositoryUrl } = testConfiguration
-    this.sendGitMetadata(repositoryUrl)
     this._canUseCiVisProtocolPromise.then((canUseCiVisProtocol) => {
       if (!canUseCiVisProtocol) {
         return callback(null, {})
@@ -194,11 +189,14 @@ class CiVisibilityExporter extends BufferingExporter {
       const configuration = this.getRequestConfiguration(testConfiguration)
       const cachedLibraryConfig = this._testOptimizationHttpCache.readSettings()
       if (cachedLibraryConfig !== CACHE_MISS) {
+        log.debug('Test Optimization HTTP cache settings found, git upload already done, skipping git upload')
+        this._resolveGit()
         writeSettingsToCache(cachedLibraryConfig)
         this._libraryConfig = this.filterConfiguration(cachedLibraryConfig)
         return callback(null, this._libraryConfig)
       }
 
+      this.sendGitMetadata(repositoryUrl)
       getLibraryConfigurationRequest(configuration, (err, libraryConfig) => {
         /**
          * **Important**: this._libraryConfig remains empty in testing frameworks
@@ -272,11 +270,6 @@ class CiVisibilityExporter extends BufferingExporter {
 
   sendGitMetadata (repositoryUrl) {
     if (!this._config.isGitUploadEnabled) {
-      return
-    }
-    if (this._testOptimizationHttpCache.isAvailable()) {
-      log.debug('Test Optimization HTTP cache found, git upload already done, skipping git upload')
-      this._resolveGit()
       return
     }
     this._canUseCiVisProtocolPromise.then((canUseCiVisProtocol) => {

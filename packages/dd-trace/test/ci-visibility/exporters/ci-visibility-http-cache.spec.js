@@ -7,6 +7,7 @@ const path = require('node:path')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const nock = require('nock')
+const proxyquire = require('proxyquire').noPreserveCache()
 
 require('../../setup/core')
 
@@ -105,6 +106,14 @@ function writeCacheLayout (root, options = {}) {
   if (testManagement !== undefined) {
     fs.writeFileSync(path.join(httpCachePath, 'test_management.json'), JSON.stringify(testManagement))
   }
+}
+
+function loadCiVisibilityExporterWithGitUpload (sendGitMetadata) {
+  return proxyquire('../../../src/ci-visibility/exporters/ci-visibility-exporter', {
+    './git/git_metadata': {
+      sendGitMetadata,
+    },
+  })
 }
 
 describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
@@ -238,7 +247,7 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
     ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
   })
 
-  it('skips git metadata upload when the HTTP cache is available', (done) => {
+  it('skips git metadata upload after cached settings are read', (done) => {
     const gitScope = nock(url)
       .post('/api/v2/git/repository/search_commits')
       .reply(200, { data: [] })
@@ -248,14 +257,72 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
       isGitUploadEnabled: true,
     })
 
+    ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
+      assert.strictEqual(err, null)
+      assert.strictEqual(libraryConfig.requireGit, true)
+      ciVisibilityExporter._gitUploadPromise.then((gitUploadError) => {
+        assert.strictEqual(gitUploadError, undefined)
+        assert.strictEqual(gitScope.isDone(), false)
+        done()
+      })
+    })
     ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
-    ciVisibilityExporter.sendGitMetadata('https://github.com/example/repo')
+  })
 
-    ciVisibilityExporter._gitUploadPromise.then((err) => {
-      assert.strictEqual(err, undefined)
-      assert.strictEqual(gitScope.isDone(), false)
+  it('uploads git metadata before retrying live settings when cached settings are malformed', (done) => {
+    fs.writeFileSync(path.join(tmpRoot, '.testoptimization', 'cache', 'http', 'settings.json'), '{invalid json')
+    getConfig().apiKey = '1'
+
+    const firstLiveSettingsResponse = JSON.parse(JSON.stringify(SETTINGS_RESPONSE))
+    firstLiveSettingsResponse.data.attributes.require_git = true
+    const finalLiveSettingsResponse = JSON.parse(JSON.stringify(SETTINGS_RESPONSE))
+    finalLiveSettingsResponse.data.attributes.require_git = false
+
+    let gitUploadCalls = 0
+    let hasUploadedGit = false
+    let uploadedRepositoryUrl
+    let secondSettingsRequestSawGitUploaded = false
+    const GitUploadingCiVisibilityExporter = loadCiVisibilityExporterWithGitUpload((_url, _options, repositoryUrl, callback) => {
+      gitUploadCalls++
+      uploadedRepositoryUrl = repositoryUrl
+      setImmediate(() => {
+        hasUploadedGit = true
+        callback()
+      })
+    })
+
+    const settingsScope = nock(url)
+      .post('/api/v2/libraries/tests/services/setting')
+      .reply(200, JSON.stringify(firstLiveSettingsResponse))
+      .post('/api/v2/libraries/tests/services/setting', () => {
+        secondSettingsRequestSawGitUploaded = hasUploadedGit
+        return true
+      })
+      .reply(200, JSON.stringify(finalLiveSettingsResponse))
+
+    const ciVisibilityExporter = new GitUploadingCiVisibilityExporter({
+      url,
+      isEarlyFlakeDetectionEnabled: true,
+      isFlakyTestRetriesEnabled: true,
+      isGitUploadEnabled: true,
+      isImpactedTestsEnabled: true,
+      isIntelligentTestRunnerEnabled: true,
+      isTestDynamicInstrumentationEnabled: true,
+      isTestManagementEnabled: true,
+    })
+
+    ciVisibilityExporter.getLibraryConfiguration({
+      repositoryUrl: 'https://github.com/example/repo',
+    }, (err, libraryConfig) => {
+      assert.strictEqual(err, null)
+      assert.strictEqual(libraryConfig.requireGit, false)
+      assert.strictEqual(gitUploadCalls, 1)
+      assert.strictEqual(uploadedRepositoryUrl, 'https://github.com/example/repo')
+      assert.strictEqual(secondSettingsRequestSawGitUploaded, true)
+      assert.strictEqual(settingsScope.isDone(), true)
       done()
     })
+    ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
   })
 
   it('uses cached known tests without an API key or known-tests HTTP request', (done) => {
@@ -321,17 +388,18 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
       .reply(200, JSON.stringify(SKIPPABLE_RESPONSE))
 
     const ciVisibilityExporter = new CiVisibilityExporter({ url, isIntelligentTestRunnerEnabled: true })
-    ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
-    ciVisibilityExporter._libraryConfig = { isSuitesSkippingEnabled: true }
-
-    ciVisibilityExporter.getSkippableSuites({}, (err, skippableSuites, correlationId, coverage) => {
-      assert.strictEqual(err, null)
-      assert.deepStrictEqual(skippableSuites, ['suite1.spec.js'])
-      assert.strictEqual(correlationId, 'corr-123')
-      assert.deepStrictEqual(coverage, { 'src/file.js': 'gA==' })
-      assert.strictEqual(skippableScope.isDone(), true)
-      done()
+    ciVisibilityExporter.getLibraryConfiguration({}, (settingsErr) => {
+      assert.strictEqual(settingsErr, null)
+      ciVisibilityExporter.getSkippableSuites({}, (err, skippableSuites, correlationId, coverage) => {
+        assert.strictEqual(err, null)
+        assert.deepStrictEqual(skippableSuites, ['suite1.spec.js'])
+        assert.strictEqual(correlationId, 'corr-123')
+        assert.deepStrictEqual(coverage, { 'src/file.js': 'gA==' })
+        assert.strictEqual(skippableScope.isDone(), true)
+        done()
+      })
     })
+    ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
   })
 
   it('uses cached test management tests without an API key or test-management HTTP request', (done) => {
