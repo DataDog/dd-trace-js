@@ -48,6 +48,20 @@ const proxyConfigs = {
     expectedUrl: 'https://azure-example.com/test',
     expectedStartTime: '1729780025472999936',
   },
+  'azure-gw': {
+    headers: {
+      'x-dd-proxy': 'azure-gw',
+      'x-dd-proxy-request-time-ms': '1729780025473',
+      'x-dd-proxy-path': '/test',
+      'x-dd-proxy-httpmethod': 'GET',
+      'x-dd-proxy-domain-name': 'azure-example.com',
+      // Add any other Azure-specific headers here
+    },
+    expectedSpanName: 'azure.app-gateway',
+    expectedService: 'azure-example.com',
+    expectedComponent: 'azure-gw',
+    expectedUrl: 'https://azure-example.com/test',
+  },
 }
 
 Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
@@ -95,7 +109,7 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
         })
       })
 
-      return new Promise(/** @type {() => void} */ (resolve, reject) => {
+      return new Promise(/** @type {() => void} */(resolve, reject) => {
         appListener = server.listen(0, '127.0.0.1', () => {
           port = (/** @type {import('net').AddressInfo} */ (server.address())).port
           appListener._connections = connections
@@ -115,7 +129,7 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
           }
         }
 
-        await new Promise(/** @type {() => void} */ (resolve, reject) => {
+        await new Promise(/** @type {() => void} */(resolve, reject) => {
           appListener.close((err) => {
             if (err) {
               reject(err)
@@ -225,8 +239,9 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
             },
           })
 
-          assert.strictEqual(spans[0].start.toString(), config.expectedStartTime)
-
+          if (config.expectedStartTime) {
+            assert.strictEqual(spans[0].start.toString(), config.expectedStartTime)
+          }
           assert.strictEqual(spans[0].span_id.toString(), spans[1].parent_id.toString())
 
           assertObjectContains(spans[1], {
@@ -376,7 +391,10 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
           })
 
           assert.strictEqual(spans[0].error, 1)
-          assert.strictEqual(spans[0].start.toString(), config.expectedStartTime)
+
+          if (config.expectedStartTime) {
+            assert.strictEqual(spans[0].start.toString(), config.expectedStartTime)
+          }
           assert.strictEqual(spans[0].span_id.toString(), spans[1].parent_id.toString())
 
           assertObjectContains(spans[1], {
