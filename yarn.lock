@@ -1998,10 +1998,10 @@ eslint-plugin-import@^2.32.0:
     string.prototype.trimend "^1.0.9"
     tsconfig-paths "^3.15.0"
 
-eslint-plugin-jsdoc@^63.0.5:
-  version "63.0.5"
-  resolved "https://registry.yarnpkg.com/eslint-plugin-jsdoc/-/eslint-plugin-jsdoc-63.0.5.tgz#0e8fe06952818a641cee58a148ab7155d2f83727"
-  integrity sha512-AzI9bgKhV9li049/mIblX0c41DeWMMfH9qNsRasc+fAxwURRKChIp03Pk57M7UTf+Y6hifTJ89kQyCOoOLtEDw==
+eslint-plugin-jsdoc@^63.0.6:
+  version "63.0.6"
+  resolved "https://registry.yarnpkg.com/eslint-plugin-jsdoc/-/eslint-plugin-jsdoc-63.0.6.tgz#ae504659abf5e01fd1afb1051adb8e4309cd899a"
+  integrity sha512-qXMUdwQf+igjSLe/DZqyY1baVR0+snEJ3l/+2odJjeoAG43PrcpA0tSaLw2dC1iHvfKzo1YnZLGvgxrvAViyfQ==
   dependencies:
     "@es-joy/jsdoccomment" "~0.87.0"
     "@es-joy/resolve.exports" "1.2.0"
@@ -2047,23 +2047,24 @@ eslint-plugin-promise@^7.3.0:
   dependencies:
     "@eslint-community/eslint-utils" "^4.4.0"
 
-eslint-plugin-sonarjs@^4.0.3:
-  version "4.0.3"
-  resolved "https://registry.yarnpkg.com/eslint-plugin-sonarjs/-/eslint-plugin-sonarjs-4.0.3.tgz#78bda46bd2f91d0f7445f974fd417dce088b2efa"
-  integrity sha512-5drkJKLC9qQddIiaATV0e8+ygbUc7b0Ti6VB7M2d3jmKNh3X0RaiIJYTs3dr9xnlhlrxo+/s1FoO3Jgv6O/c7g==
+eslint-plugin-sonarjs@^4.1.0:
+  version "4.1.0"
+  resolved "https://registry.yarnpkg.com/eslint-plugin-sonarjs/-/eslint-plugin-sonarjs-4.1.0.tgz#61879e5a8536a5e53b5240187cc113a683f7105e"
+  integrity sha512-rh+FlVz0yfd2RNIb6WqSkuGh0addX/Qi5scwQ5FphXDFrM6fZKcxP1+attJ78yUKcyYfiu6MTaISPpAFPzqRJw==
   dependencies:
     "@eslint-community/regexpp" "^4.12.2"
     builtin-modules "^3.3.0"
     bytes "^3.1.2"
     functional-red-black-tree "^1.0.1"
-    globals "^17.4.0"
+    globals "^17.6.0"
     jsx-ast-utils-x "^0.1.0"
     lodash.merge "^4.6.2"
     minimatch "^10.2.5"
     scslre "^0.3.0"
-    semver "^7.7.4"
+    semver "^7.8.4"
     ts-api-utils "^2.5.0"
     typescript ">=5"
+    yaml "^2.9.0"
 
 eslint-plugin-unicorn@^64.0.0:
   version "64.0.0"
@@ -4596,9 +4597,9 @@ undici-types@~5.26.4:
   integrity sha512-JlCMO+ehdEIKqlFxk6IfVoAUVmgz7cU7zD/h9XZ0qzeosSHmUJVOzSQvvYSYWXkFXC+IfLKSIffhv0sVZup6pA==
 
 undici@^6.23.0:
-  version "6.24.0"
-  resolved "https://registry.yarnpkg.com/undici/-/undici-6.24.0.tgz#ad36b879b4882d14addc13dd641da7ed7ac7623a"
-  integrity sha512-lVLNosgqo5EkGqh5XUDhGfsMSoO8K0BAN0TyJLvwNRSl4xWGZlCVYsAIpa/OpA3TvmnM01GWcoKmc3ZWo5wKKA==
+  version "6.27.0"
+  resolved "https://registry.yarnpkg.com/undici/-/undici-6.27.0.tgz#41f9e48f7c5a40d27376caaead8c9a9fc7bca9c4"
+  integrity sha512-YmfV3YnEDzXRC5lZ2jWtWWHKGUm1zIt8AhesR1tens+HTNv+YZlN/dp6G727LOvMJ8xjP9Be7Y2Sdr96LDm+pg==
 
 universal-github-app-jwt@^2.2.0:
   version "2.2.2"

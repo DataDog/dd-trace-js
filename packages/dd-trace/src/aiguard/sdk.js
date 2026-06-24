@@ -63,6 +63,18 @@ class AIGuardClientError extends Error {
   }
 }
 
+/**
+ * Resolves the AI Guard host for a given Datadog site. Sites with a single subdomain level
+ * (e.g. `datadoghq.com`, `ddog-gov.com`) are served from the `app.` subdomain, while regional
+ * sites (e.g. `us3.datadoghq.com`, `ap1.datadoghq.com`) are used as-is.
+ *
+ * @param {string} site - Datadog site (e.g. `datadoghq.com`, `us3.datadoghq.com`)
+ * @returns {string} The host to use for the AI Guard endpoint
+ */
+function aiGuardHost (site) {
+  return site.split('.').length === 2 ? `app.${site}` : site
+}
+
 class AIGuard extends NoopAIGuard {
   #initialized
   #tracer
@@ -94,7 +106,7 @@ class AIGuard extends NoopAIGuard {
       'DD-AI-GUARD-SOURCE': 'SDK',
       'DD-AI-GUARD-LANGUAGE': 'nodejs',
     }
-    const endpoint = config.experimental.aiguard.endpoint || `https://app.${config.site}/api/v2/ai-guard`
+    const endpoint = config.experimental.aiguard.endpoint || `https://${aiGuardHost(config.site)}/api/v2/ai-guard`
     this.#evaluateUrl = `${endpoint}/evaluate`
     this.#timeout = config.experimental.aiguard.timeout
     this.#maxMessagesLength = config.experimental.aiguard.maxMessagesLength
