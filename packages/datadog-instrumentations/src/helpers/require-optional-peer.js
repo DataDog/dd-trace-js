@@ -12,6 +12,6 @@
  */
 module.exports = function requireOptionalPeer (request) {
   // eslint-disable-next-line camelcase, no-undef
-  const runtimeRequire = typeof __webpack_require__ === 'function' ? __non_webpack_require__ : require
+  const runtimeRequire = typeof __non_webpack_require__ === 'function' ? __non_webpack_require__ : require
   return runtimeRequire(request)
 }
