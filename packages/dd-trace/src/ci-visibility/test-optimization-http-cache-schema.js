@@ -60,11 +60,11 @@ function validateKnownTestsResponse (response) {
     assertObject(suites, 'Invalid known tests response: module suites must be objects')
     for (const testNames of Object.values(suites)) {
       if (!Array.isArray(testNames)) {
-        throw new Error('Invalid known tests response: suite tests must be arrays')
+        throw new TypeError('Invalid known tests response: suite tests must be arrays')
       }
       for (const testName of testNames) {
         if (typeof testName !== 'string') {
-          throw new Error('Invalid known tests response: test names must be strings')
+          throw new TypeError('Invalid known tests response: test names must be strings')
         }
       }
     }
@@ -74,7 +74,7 @@ function validateKnownTestsResponse (response) {
 function validateSkippableTestsResponse (response) {
   assertObject(response, 'Invalid skippable tests response: response must be an object')
   if (!Array.isArray(response.data)) {
-    throw new Error('Invalid skippable tests response: data must be an array')
+    throw new TypeError('Invalid skippable tests response: data must be an array')
   }
   if (response.meta !== undefined) {
     assertObject(response.meta, 'Invalid skippable tests response: meta must be an object')
@@ -89,7 +89,7 @@ function validateSkippableTestsResponse (response) {
   for (const item of response.data) {
     assertObject(item, 'Invalid skippable tests response: data entries must be objects')
     if (typeof item.type !== 'string') {
-      throw new Error('Invalid skippable tests response: data entry type must be a string')
+      throw new TypeError('Invalid skippable tests response: data entry type must be a string')
     }
     assertObject(item.attributes, 'Invalid skippable tests response: data entry attributes must be an object')
     if ((item.type === 'suite' || item.type === 'test') && typeof item.attributes.suite !== 'string') {
