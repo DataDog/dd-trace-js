@@ -167,6 +167,7 @@ describe('AWS_LAMBDA_MICROVM_IMAGE_ARN activation', () => {
     readReturnsZero = false,
   } = {}) {
     let opens = 0
+    let closes = 0
     let kernelReads = 0
     let perCallFill = 0
     let batchFill = 0
@@ -183,6 +184,9 @@ describe('AWS_LAMBDA_MICROVM_IMAGE_ARN activation', () => {
         const n = Math.min(length, chunk)
         for (let i = offset; i < offset + n; i++) buf[i] = 0xAB
         return n
+      },
+      closeSync () {
+        closes++
       },
     }
     const mockCrypto = {
@@ -211,6 +215,7 @@ describe('AWS_LAMBDA_MICROVM_IMAGE_ARN activation', () => {
       mod,
       opens: () => opens,
       kernelReads: () => kernelReads,
+      closes: () => closes,
       perCallFill: () => perCallFill,
       batchFill: () => batchFill,
     }
@@ -237,19 +242,21 @@ describe('AWS_LAMBDA_MICROVM_IMAGE_ARN activation', () => {
   })
 
   it('falls back to per-call randomFillSync when /dev/urandom cannot be opened', () => {
-    const { mod, perCallFill, kernelReads } = loadWithMock(microVmArn, { openThrows: true })
+    const { mod, perCallFill, kernelReads, closes } = loadWithMock(microVmArn, { openThrows: true })
     mod()
     assert.ok(perCallFill() > 0, 'expected per-call randomFillSync fallback')
     assert.strictEqual(kernelReads(), 0, 'no kernel reads when the fd could not be opened')
+    assert.strictEqual(closes(), 0, 'nothing to close when open failed')
   })
 
   it('opens /dev/urandom once and reads it once per id', () => {
-    const { mod, opens, kernelReads } = loadWithMock(microVmArn)
+    const { mod, opens, kernelReads, closes } = loadWithMock(microVmArn)
     mod()
     mod()
     mod()
     assert.strictEqual(opens(), 1, 'fd opened once at module load, not per id')
     assert.strictEqual(kernelReads(), 3, 'one kernel read per id')
+    assert.strictEqual(closes(), 0, 'a healthy fd stays open')
   })
 
   it('accumulates short /dev/urandom reads until the 8-byte buffer is full', () => {
@@ -262,18 +269,20 @@ describe('AWS_LAMBDA_MICROVM_IMAGE_ARN activation', () => {
   })
 
   it('falls back to randomFillSync if a kernel read returns 0 (no infinite loop)', () => {
-    const { mod, perCallFill } = loadWithMock(microVmArn, { readReturnsZero: true })
+    const { mod, perCallFill, closes } = loadWithMock(microVmArn, { readReturnsZero: true })
     mod()
     assert.ok(perCallFill() > 0, 'expected randomFillSync fallback when a read returns 0')
+    assert.strictEqual(closes(), 1, 'the broken fd is closed once')
   })
 
   it('falls back and stops using the fd when a kernel read throws', () => {
-    const { mod, perCallFill, kernelReads } = loadWithMock(microVmArn, { readThrows: true })
+    const { mod, perCallFill, kernelReads, closes } = loadWithMock(microVmArn, { readThrows: true })
     mod()
     const readsAfterFirst = kernelReads()
     mod()
     assert.ok(perCallFill() >= 2, 'both ids fall back to randomFillSync')
     assert.strictEqual(kernelReads(), readsAfterFirst, 'fd disabled after the throw; no more kernel reads')
+    assert.strictEqual(closes(), 1, 'the broken fd is closed once')
   })
 })
 

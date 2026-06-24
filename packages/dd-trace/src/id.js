@@ -1,7 +1,7 @@
 'use strict'
 
 const { randomFillSync } = require('crypto')
-const { openSync, readSync } = require('fs')
+const { closeSync, openSync, readSync } = require('fs')
 
 const UINT_MAX = 4_294_967_296
 
@@ -61,6 +61,11 @@ function fillFromKernel (buffer) {
       }
     } catch {
       // a kernel read failed -- fall through to randomFillSync
+    }
+    try {
+      closeSync(urandomFd) // release the fd before abandoning it; never crash the app over a close error
+    } catch {
+      // ignore: the fd is already unusable and there is nothing actionable to do
     }
     urandomFd = -1 // the fd will not recover; stop retrying it in the hot path
   }
