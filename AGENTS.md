@@ -343,6 +343,16 @@ while you work on an unrelated change is fixed in its **own** PR, not folded int
 or skip it with a tracked reason — never weaken or delete an assertion to make it pass. A deterministic failure
 (assertion mismatch, missing fixture/cassette, stale path, version incompatibility) is **not** flaky; fix it inline.
 
+Every fix — flake or deterministic — resolves the **cause**, not the symptom. A loosened assertion, a filtered-out
+input, or a bumped timeout that hides the root problem is rejected. Concretely: if a spy fires twice because a stray
+request reaches the server, stop the stray request — do not filter the spy. If the cause is upstream of this repo,
+name it and escalate rather than patching around it.
+
+Every fix — flake or deterministic — resolves the **cause**, not the symptom. A loosened assertion, a filtered-out
+input, or a bumped timeout that hides the root problem is rejected. Concretely: if a spy fires twice because a stray
+request reaches the server, stop the stray request — do not filter the spy. If the cause is upstream of this repo,
+name it and escalate rather than patching around it.
+
 ## Vendoring Dependencies
 
 Using rspack: Run `yarn` in `vendor/` to install/bundle dependencies → `packages/node_modules/`
