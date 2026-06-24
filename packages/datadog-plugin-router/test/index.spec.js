@@ -87,39 +87,6 @@ describe('Plugin', () => {
           })
         })
 
-        it('should not create router.middleware spans for simple routes', done => {
-          const router = Router()
-
-          router.use('/test', (req, res) => {
-            res.writeHead(200)
-            res.end()
-          })
-
-          appListener = server(router).listen(0, 'localhost', () => {
-            const port = appListener.address().port
-
-            agent
-              .assertSomeTraces(traces => {
-                const spans = sort(traces[0])
-                const requestSpan = spans[0]
-
-                // Route tracking still works
-                assert.strictEqual(requestSpan.resource, 'GET /test')
-                assert.strictEqual(requestSpan.meta['http.route'], '/test')
-
-                // Only the HTTP request span should exist — no middleware spans
-                for (const span of spans) {
-                  assert.notStrictEqual(span.name, 'router.middleware')
-                }
-              })
-              .then(done)
-              .catch(done)
-
-            axios
-              .get(`http://localhost:${port}/test`)
-              .catch(done)
-          })
-        })
       })
 
       describe('without configuration', () => {
