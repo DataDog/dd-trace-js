@@ -88,6 +88,9 @@ function computeRetries (uploadTimeout) {
 }
 
 class AgentExporter extends EventSerializer {
+  #backoffTime
+  #backoffTries
+
   constructor (config = {}) {
     super(config)
     const { url, uploadTimeout } = config
@@ -95,8 +98,8 @@ class AgentExporter extends EventSerializer {
 
     const [backoffTries, backoffTime] = computeRetries(uploadTimeout)
 
-    this._backoffTime = backoffTime
-    this._backoffTries = backoffTries
+    this.#backoffTime = backoffTime
+    this.#backoffTries = backoffTries
   }
 
   export (exportSpec) {
@@ -128,8 +131,8 @@ class AgentExporter extends EventSerializer {
     return new Promise((resolve, reject) => {
       const operation = retry.operation({
         randomize: true,
-        minTimeout: this._backoffTime,
-        retries: this._backoffTries,
+        minTimeout: this.#backoffTime,
+        retries: this.#backoffTries,
         unref: true,
       })
 
@@ -148,7 +151,7 @@ class AgentExporter extends EventSerializer {
             'DD-EVP-ORIGIN-VERSION': version,
             ...form.getHeaders(),
           },
-          timeout: this._backoffTime * 2 ** attempt,
+          timeout: this.#backoffTime * 2 ** attempt,
         }
 
         docker.inject(options.headers)
