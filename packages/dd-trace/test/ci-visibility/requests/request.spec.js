@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const http = require('node:http')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const nock = require('nock')
@@ -75,6 +76,24 @@ describe('ci-visibility/requests/request', () => {
       assert.strictEqual(err, null)
       assert.strictEqual(res, 'ok')
       assert.strictEqual(statusCode, 200)
+      done()
+    })
+  })
+
+  // A Windows named pipe URL object must reach http.request as a single
+  // `//./pipe/<name>` socket path; the connection itself fails on the test host,
+  // which is fine — we only pin the options the request was built with.
+  it('derives the socket path for a Windows named pipe URL object', (done) => {
+    const requestSpy = sinon.spy(http, 'request')
+
+    request('{}', { url: new URL('unix://./pipe/datadog'), path: '/path' }, () => {
+      requestSpy.restore()
+      try {
+        assert.ok(requestSpy.called)
+        assert.strictEqual(requestSpy.getCall(0).args[0].socketPath, '//./pipe/datadog')
+      } catch (error) {
+        return done(error)
+      }
       done()
     })
   })
