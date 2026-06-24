@@ -23,7 +23,7 @@ export default {
         ) {
           // Get the expression being checked (x or x.y)
           const targetNode = node.left.argument
-          const targetExpression = context.getSourceCode().getText(targetNode)
+          const targetExpression = context.sourceCode.getText(targetNode)
 
           const hasNullCheck = isGuardedInLogicalExpression(node, targetNode) ||
             isGuardedInConditionalExpression(node, targetNode) ||
@@ -384,7 +384,7 @@ function isGuardedByIfStatement (node, targetNode) {
 }
 
 function walkAst (context, node, visitor) {
-  const visitorKeys = context.getSourceCode().visitorKeys
+  const visitorKeys = context.sourceCode.visitorKeys
 
   /** @type {unknown[]} */
   const stack = [node]

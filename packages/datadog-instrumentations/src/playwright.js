@@ -1259,7 +1259,7 @@ function runAllTestsWrapper (runAllTests, playwrightVersion) {
 
       for (const [fqn, testStatuses] of testsToTestStatuses.entries()) {
         // Only count as failed if the final status (after retries) is 'fail'
-        const lastStatus = testStatuses[testStatuses.length - 1]
+        const lastStatus = testStatuses.at(-1)
         if (lastStatus === 'fail') {
           totalFailedTestCount += 1
           if (quarantinedButNotAttemptToFixFqns.has(fqn)) {

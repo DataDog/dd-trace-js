@@ -770,10 +770,8 @@ function threadHandler (thread) {
 function wrapTinyPoolRun (TinyPool) {
   shimmer.wrap(TinyPool.prototype, 'run', run => async function () {
     // We have to do this before and after because the threads list gets recycled, that is, the processes are re-created
-    // eslint-disable-next-line unicorn/no-array-for-each
     this.threads.forEach(threadHandler)
     const runResult = await run.apply(this, arguments)
-    // eslint-disable-next-line unicorn/no-array-for-each
     this.threads.forEach(threadHandler)
     return runResult
   })

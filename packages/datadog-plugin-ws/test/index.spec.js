@@ -248,6 +248,20 @@ describe('Plugin', () => {
           client.on('error', done)
         })
 
+        it('should derive the wss protocol from the x-forwarded-proto header', () => {
+          wsServer.on('connection', (ws) => {
+            ws.send('echo')
+          })
+
+          connectClient(`/${route}?active=true`, { headers: { 'x-forwarded-proto': 'https' } })
+
+          return agent.assertSomeTraces(traces => {
+            const span = findSpan(traces, s => s.name === 'web.request' && s.type === 'websocket')
+            assert.ok(span, 'Should have a web.request websocket span')
+            assert.match(span.meta['http.url'], /^wss:\/\//)
+          })
+        })
+
         it('should instrument message sending once per message', () => {
           wsServer.on('connection', ws => {
             connectionReceived = true

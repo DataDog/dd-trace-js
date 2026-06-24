@@ -56,17 +56,11 @@ function wrapAddHook (addHook) {
     if (typeof fn !== 'function') return addHook.apply(this, arguments)
 
     arguments[arguments.length - 1] = shimmer.wrapFunction(fn, fn => function wrappedHook () {
-      // Fast path: every fastify request invokes each addHook'd handler, so the wrap
-      // runs in the user's hot path. The only side effects this wrapper carries are
-      // the three channels below; when none of them have a subscriber (the default
-      // plugin config, and the steady state once appsec / cookie subscribers detach),
-      // the wrap has nothing to do, and a `fn.apply(this, arguments)` forward keeps
-      // V8's CallApplyArguments fast path intact.
-      //
-      // The previous shape mutated `arguments[arguments.length - 1]` to swap `done`.
-      // That mutation materialises the magical arguments object and disables V8
-      // inlining of the enclosing function. The slow path below builds a fresh args
-      // array instead so the hot fast path keeps a clean forward.
+      // Every fastify request invokes each addHook'd handler, so this wrapper runs in the
+      // user's hot path. When none of the three channels below has a subscriber (the default
+      // plugin config, and the steady state once appsec / cookie subscribers detach), forward
+      // `arguments` untouched: no args array is materialised and V8's CallApplyArguments fast
+      // path stays intact. The slow path copies/indexes the args only when it has work to do.
       if (errorChannel.hasSubscribers || cookieParserReadCh.hasSubscribers || callbackFinishCh.hasSubscribers) {
         return invokeHookWithContext(name, fn, this, arguments)
       }
@@ -96,6 +90,8 @@ function invokeHookWithContext (name, fn, thisArg, args) {
   const ctx = { req }
 
   try {
+    // `args` is the wrapper's `arguments` object, which has no `Array#at`.
+    // eslint-disable-next-line unicorn/prefer-at
     const lastArg = args[args.length - 1]
 
     if (typeof lastArg === 'function') {

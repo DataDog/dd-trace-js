@@ -85,7 +85,7 @@ class RunInChildContextPlugin extends BaseContextPlugin {
   static spanName = 'aws.durable.child_context'
 
   bindStart (ctx) {
-    if (SUPPRESSED_CHILD_CONTEXT_SUBTYPES.has(getRunInChildContextSubType(ctx))) {
+    if (SUPPRESSED_CHILD_CONTEXT_SUBTYPES.has(getRunInChildContextSubtype(ctx))) {
       // Pass the active store through unchanged so any nested spans
       // remain parented to the surrounding map/parallel span
       ctx.suppressed = true
@@ -96,7 +96,7 @@ class RunInChildContextPlugin extends BaseContextPlugin {
 }
 
 // runInChildContext has two overloads: `(name, fn, options)` and `(fn, options)`.
-function getRunInChildContextSubType (ctx) {
+function getRunInChildContextSubtype (ctx) {
   const args = ctx.arguments || []
   const opts = typeof args[0] === 'function' ? args[1] : args[2]
   return opts?.subType
