@@ -364,11 +364,6 @@ class Config extends ConfigBase {
 
     // Allocation profiling needs a sampling hook only available on Node.js 26+.
     setAndTrack(this, 'DD_PROFILING_ALLOCATION_ENABLED', NODE_MAJOR >= 26 && this.DD_PROFILING_ALLOCATION_ENABLED)
-    // Resolve the "on" upload-compression default to the codec used for the running Node.js version.
-    // 24+ has a built-in async zstd; earlier versions fall back to gzip (also async on libuv).
-    if (this.DD_PROFILING_DEBUG_UPLOAD_COMPRESSION === 'on') {
-      setAndTrack(this, 'DD_PROFILING_DEBUG_UPLOAD_COMPRESSION', NODE_MAJOR >= 24 ? 'zstd' : 'gzip')
-    }
     if (this.telemetry.extendedHeartbeatInterval) {
       setAndTrack(this, 'telemetry.extendedHeartbeatInterval',
         Math.floor(this.telemetry.extendedHeartbeatInterval * 1000))

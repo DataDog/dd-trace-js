@@ -44,13 +44,6 @@ function getProfilingTags (config) {
 }
 
 /** @param {TracerConfig} config */
-function getUploadCompression (config) {
-  // The codec and level range are validated by the config `allowed` pattern; trust the value here.
-  const [method, level] = config.DD_PROFILING_DEBUG_UPLOAD_COMPRESSION.split('-')
-  return { method, level: level ? Number.parseInt(level, 10) : undefined }
-}
-
-/** @param {TracerConfig} config */
 function getAsyncContextFrameEnabled (config) {
   const enabled = config.DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED
   if (enabled && !isACFActive) {
@@ -197,7 +190,7 @@ function buildProfilingRuntime (config) {
   const asyncContextFrameEnabled = getAsyncContextFrameEnabled(config)
   const flushInterval = config.DD_PROFILING_UPLOAD_PERIOD * 1000
   const profilers = createProfilers(config, { asyncContextFrameEnabled, flushInterval, tags, exporters })
-  const uploadCompression = getUploadCompression(config)
+  const uploadCompression = config.DD_PROFILING_DEBUG_UPLOAD_COMPRESSION
 
   const oomMonitoringEnabled = config.DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED
   const systemInfoReport = {
