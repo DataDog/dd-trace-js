@@ -5,7 +5,7 @@ const assert = require('node:assert/strict')
 const { describe, it } = require('mocha')
 const { coerce, major } = require('semver')
 
-const { getVersionList, resolvePluginVersions } = require('./versions')
+const { getVersionList, resolvePluginVersions, brokenVersionReason } = require('./versions')
 
 const latests = require('./versions/package.json').dependencies
 
@@ -149,5 +149,18 @@ describe('resolvePluginVersions', () => {
 
     assert.deepEqual(result.versionList, [])
     assert.equal(result.unversioned, undefined)
+  })
+})
+
+describe('brokenVersionReason', () => {
+  const broken = { ai: [{ range: '>=4.1.0 <5.0.0', reason: 'no cassette' }] }
+
+  it('returns the reason for a version inside a broken range', () => {
+    assert.equal(brokenVersionReason('ai', '4.3.19', broken), 'no cassette')
+  })
+
+  it('returns undefined outside every broken range and for unlisted modules', () => {
+    assert.equal(brokenVersionReason('ai', '4.0.0', broken), undefined)
+    assert.equal(brokenVersionReason('mongodb', '4.3.19', broken), undefined)
   })
 })

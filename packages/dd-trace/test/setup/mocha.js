@@ -14,7 +14,7 @@ const sinon = require('sinon')
 require('./core')
 
 const externals = require('../plugins/externals')
-const { resolvePluginVersions } = require('../plugins/versions')
+const { resolvePluginVersions, brokenVersionReason } = require('../plugins/versions')
 const runtimeMetrics = require('../../src/runtime_metrics')
 const Nomenclature = require('../../src/service-naming')
 const { SVC_SRC_KEY } = require('../../src/constants')
@@ -303,6 +303,16 @@ function withVersions (plugin, modules, range, cb) {
       .sort(({ resolvedVersion }) => resolvedVersion.localeCompare(resolvedVersion))
 
     for (const testCase of testCases) {
+      const brokenReason = brokenVersionReason(moduleName, testCase.resolvedVersion)
+      if (brokenReason) {
+        // The version is installed but deliberately not exercised; surface it as a pending test so the skip is visible
+        // in CI rather than silently absent.
+        describe(`with ${moduleName} ${testCase.versionRange} (${testCase.resolvedVersion})`, () => {
+          it.skip(`skipped — known broken: ${brokenReason}`, () => {})
+        })
+        continue
+      }
+
       const absBasePath = path.resolve(__dirname, getModulePath(moduleName, testCase.versionKey))
       const absNodeModulesPath = `${absBasePath}/node_modules`
 

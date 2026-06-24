@@ -15,6 +15,16 @@ const nonConsecutiveMajorPackages = new Set([
   '@redis/client', // jumps from 2.x to 5.x (no 3.x–4.x)
 ])
 
+// Versions the matrix still installs but must not run, keyed by module name. `withVersions()` skips any resolved version
+// matching a range here and surfaces the reason as a pending test. Each entry is a stop-gap: keep the reason a TODO so a
+// fixed version drops the entry instead of letting it rot, and scope the range as narrowly as the break warrants.
+/** @type {Record<string, Array<{ range: string, reason: string }>>} */
+const brokenVersions = {
+  // TODO: record VCR cassettes for the ai 4.x line; `versions/ai@4` resolves to the newest 4.x, which has no cassette,
+  // so the test would hit the live API. 4.0.x (cassetted) and 5.x/6.x stay covered.
+  ai: [{ range: '>=4.1.0 <5.0.0', reason: 'no VCR cassette for the ai 4.x latest (TODO: record cassettes)' }],
+}
+
 /**
  * @param {string} name
  * @param {string} range
@@ -226,7 +236,22 @@ function resolvePluginVersions ({ name, declaredVersions, honourEnvRange = true,
   return { versionList, unversioned }
 }
 
+/**
+ * The reason `version` of `name` is marked broken (and must be skipped), or `undefined` when it is testable.
+ *
+ * @param {string} name
+ * @param {string} version A concrete, resolved version.
+ * @param {Record<string, Array<{ range: string, reason: string }>>} [broken] Injectable for testing.
+ * @returns {string|undefined}
+ */
+function brokenVersionReason (name, version, broken = brokenVersions) {
+  for (const { range, reason } of broken[name] ?? []) {
+    if (satisfies(version, range)) return reason
+  }
+}
+
 module.exports = {
+  brokenVersionReason,
   getCappedRange,
   getVersionList,
   resolvePluginVersions,
