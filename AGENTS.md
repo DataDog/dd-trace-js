@@ -338,15 +338,20 @@ Example: `feat(appsec): add new WAF rule`
 
 ### Flaky tests
 
-A non-deterministic failure (timeout, test-ordering, port race, a stub asserted once but called twice) that surfaces
-while you work on an unrelated change is fixed in its **own** PR, not folded into the current one. Stabilize the test
-or skip it with a tracked reason — never weaken or delete an assertion to make it pass. A deterministic failure
-(assertion mismatch, missing fixture/cassette, stale path, version incompatibility) is **not** flaky; fix it inline.
+**A failing test on your change is your change's fault until you can name the mechanism that proves otherwise.**
+"Flaky", "pre-existing", and "unrelated" are verdicts you earn with evidence — a rerun that passes, the same failure
+on `master`, a known-flaky entry — never the default you reach for when a log is missing or the cause is not yet
+obvious. Absence of evidence is not evidence of absence: "I can't see the cause" means dig harder (fresh logs, local
+repro, re-read the diff), never "there is no cause". The costs are asymmetric — a wrongly-dismissed failure ships a
+real bug for a reviewer to catch, while a wrongly-investigated flake costs only your time — so the bar for "flake" is
+high. Before labelling a failure, write its one-line mechanism ("X breaks because this change did Y"); if you can't,
+the label is "unknown, investigating", not "flake".
 
-Every fix — flake or deterministic — resolves the **cause**, not the symptom. A loosened assertion, a filtered-out
-input, or a bumped timeout that hides the root problem is rejected. Concretely: if a spy fires twice because a stray
-request reaches the server, stop the stray request — do not filter the spy. If the cause is upstream of this repo,
-name it and escalate rather than patching around it.
+A genuine non-deterministic failure (timeout, test-ordering, port race, a stub asserted once but called twice) that
+surfaces while you work on an unrelated change is fixed in its **own** PR, not folded into the current one. Stabilize
+the test or skip it with a tracked reason — never weaken or delete an assertion to make it pass. A deterministic
+failure (assertion mismatch, missing fixture/cassette, stale path, version incompatibility) is **not** flaky; fix it
+inline.
 
 Every fix — flake or deterministic — resolves the **cause**, not the symptom. A loosened assertion, a filtered-out
 input, or a bumped timeout that hides the root problem is rejected. Concretely: if a spy fires twice because a stray
