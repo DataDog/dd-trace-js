@@ -49,7 +49,7 @@ function addOpMeta (meta, { stepId, stepData }) {
  */
 function getOperationAttempt (stepData) {
   const attempt = stepData?.StepDetails?.Attempt
-  if (typeof attempt !== 'number') return 0
+  if (!Number.isFinite(attempt)) return 0
   return stepData.Status === 'SUCCEEDED' ? Math.max(0, attempt - 1) : attempt
 }
 
