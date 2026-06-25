@@ -1,14 +1,9 @@
 'use strict'
 
-// This code runs before the tracer is configured and before a logger is ready,
-// so we queue messages now and flush them once the tracer knows its config.
-// Conflict warnings ("package X may conflict") flush under DD_TRACE_DEBUG.
-const warnings = []
-// "package X was loaded before dd-trace" — startup diagnostics, flushed only
-// under startupLogs (with the DATADOG TRACER DIAGNOSTIC prefix).
-const loadOrderWarnings = []
-// Curated, high-signal framework warnings (e.g. Next.js) surfaced unconditionally.
-const frameworkWarnings = []
+// Queued before the logger is ready; flushed once the tracer knows its config.
+const warnings = [] // conflicts; flushed under DD_TRACE_DEBUG
+const loadOrderWarnings = [] // "loaded before dd-trace"; flushed under startupLogs
+const frameworkWarnings = [] // curated (e.g. Next.js); flushed unconditionally
 
 /**
  * Here we maintain a list of packages that an application

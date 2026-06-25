@@ -14,9 +14,8 @@ const { setStartupLogConfig } = require('./startup-log')
 const { DataStreamsCheckpointer, DataStreamsManager, DataStreamsProcessor } = require('./datastreams')
 const { IS_SERVERLESS } = require('./serverless')
 const log = require('./log')
-// Load-order warnings go through the always-on writer (console.warn by default), not the
-// channel-gated `log`, so they surface regardless of DD_TRACE_DEBUG. The shared prefix marks
-// them as tracer diagnostics.
+// Always-on writer (console.warn), not the channel-gated `log`: these surface regardless of
+// DD_TRACE_DEBUG.
 const { warn } = require('./log/writer')
 const logDiagnostic = message => warn('DATADOG TRACER DIAGNOSTIC - ' + message)
 
@@ -34,10 +33,8 @@ class DatadogTracer extends Tracer {
     this._scope = new Scope()
     setStartupLogConfig(config)
     flushStartupLogs(log)
-    // Curated frameworks (e.g. Next.js) silently no-op their integration, so they print
-    // unconditionally: the affected users run with no logging enabled (#5430 / #5432) and
-    // startupLogs defaults off on v5. The broad "package X loaded before dd-trace" list is
-    // lower-signal startup detail, gated on startupLogs.
+    // Curated frameworks (e.g. Next.js) silently no-op when loaded first and their users enable
+    // no logging (#5430 / #5432), so surface those unconditionally.
     flushFrameworkWarnings(logDiagnostic)
     if (config.startupLogs) {
       flushLoadOrderWarnings(logDiagnostic)

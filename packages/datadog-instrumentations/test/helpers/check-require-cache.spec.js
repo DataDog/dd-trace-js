@@ -33,6 +33,15 @@ describe('check-require-cache', () => {
     })
   })
 
+  it('stays silent about late-loaded packages when startupLogs is off', (done) => {
+    const off = { cwd: __dirname, env: { DD_TRACE_STARTUP_LOGS: 'false' } }
+    exec(`${process.execPath} ./check-require-cache/bad-order.js`, off, (error, stdout, stderr) => {
+      assert.strictEqual(error, null)
+      assert.doesNotMatch(stderr, /Package 'express' was loaded/)
+      done()
+    })
+  })
+
   describe('frameworks that must load before the tracer', () => {
     // No DD_TRACE_DEBUG here on purpose: the framework warning has to surface by
     // default, since the users hitting this (issues #5430 / #5432) never turned
@@ -46,6 +55,15 @@ describe('check-require-cache', () => {
         assert.match(stderr, /--require dd-trace\/init/)
         assert.match(stderr, /--import dd-trace\/initialize\.mjs/)
         assert.match(stderr, /serverExternalPackages/)
+        done()
+      })
+    })
+
+    it('warns about next even when startupLogs is off (the v5 default)', (done) => {
+      const off = { cwd: __dirname, env: { DD_TRACE_STARTUP_LOGS: 'false' } }
+      exec(`${process.execPath} ./check-require-cache/next-loaded-first.js`, off, (error, stdout, stderr) => {
+        assert.strictEqual(error, null)
+        assert.match(stderr, /DATADOG TRACER DIAGNOSTIC - 'next' was loaded before dd-trace/)
         done()
       })
     })
