@@ -13,7 +13,7 @@ describe('check-require-cache', () => {
   const opts = {
     cwd: __dirname,
     env: {
-      DD_TRACE_DEBUG: 'true',
+      DD_TRACE_STARTUP_LOGS: 'true',
     },
   }
 
@@ -90,7 +90,7 @@ describe('check-require-cache', () => {
         path.join('/app', 'node_modules', 'next', 'dist', 'server', 'next-server.js')
       )
       try {
-        checkForRequiredModules(false)
+        checkForRequiredModules()
         assert.ok(drainFrameworkWarnings().some(message => message.includes("'next' was loaded before dd-trace")))
       } finally {
         restore()
@@ -102,7 +102,7 @@ describe('check-require-cache', () => {
         path.join('/app', 'node_modules', 'next', 'dist', 'server', 'next-server.js')
       )
       try {
-        checkForRequiredModules(false)
+        checkForRequiredModules()
         assert.ok(drainFrameworkWarnings().some(message => message.includes("'next' was loaded before dd-trace")))
         assert.deepStrictEqual(drainFrameworkWarnings(), [])
       } finally {
@@ -114,7 +114,7 @@ describe('check-require-cache', () => {
       // Literal backslash key reproduces a Windows require.cache entry on any OS.
       const restore = cacheModule('C:\\app\\node_modules\\next\\dist\\server\\next-server.js')
       try {
-        checkForRequiredModules(false)
+        checkForRequiredModules()
         assert.ok(drainFrameworkWarnings().some(message => message.includes("'next' was loaded before dd-trace")))
       } finally {
         restore()
@@ -124,12 +124,12 @@ describe('check-require-cache', () => {
     it('ignores non-server files of a curated framework', () => {
       const nextWarnings = messages => messages.filter(message => message.includes("'next'")).length
 
-      checkForRequiredModules(false)
+      checkForRequiredModules()
       const before = nextWarnings(drainFrameworkWarnings())
 
       const restore = cacheModule(path.join('/app', 'node_modules', 'next', 'package.json'))
       try {
-        checkForRequiredModules(false)
+        checkForRequiredModules()
         // Caching only a non-server file must not add a warning, regardless of
         // whatever else is already in the real require.cache.
         assert.strictEqual(nextWarnings(drainFrameworkWarnings()), before)
@@ -141,7 +141,7 @@ describe('check-require-cache', () => {
     it('does not collect packages outside the curated set', () => {
       const restore = cacheModule(path.join('/app', 'node_modules', 'express', 'lib', 'express.js'))
       try {
-        checkForRequiredModules(false)
+        checkForRequiredModules()
         assert.ok(drainFrameworkWarnings().every(message => !message.includes("'express'")))
       } finally {
         restore()

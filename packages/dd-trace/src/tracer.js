@@ -5,6 +5,7 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const {
   flushStartupLogs,
   flushFrameworkWarnings,
+  flushLoadOrderWarnings,
 } = require('../../datadog-instrumentations/src/helpers/check-require-cache')
 const Tracer = require('./opentracing/tracer')
 const Scope = require('./scope')
@@ -32,10 +33,15 @@ class DatadogTracer extends Tracer {
     setStartupLogConfig(config)
     flushStartupLogs(log)
     // A curated framework (e.g. Next.js) already in require.cache means the tracer loaded too
-    // late to instrument it and its integration silently no-ops. Surface that on its own,
-    // independent of startupLogs and the gated startup-log diagnostics: the affected users run
-    // with no logging enabled (#5430 / #5432), so any such gate would hide it from them.
+    // late to instrument it and its integration silently no-ops. Surface that unconditionally:
+    // the affected users run with no logging enabled (#5430 / #5432), and startupLogs defaults
+    // off on v5, so any gate would hide it from exactly them.
     flushFrameworkWarnings(warn)
+    // The broad "package X was loaded before dd-trace" list is startup diagnostics: gate it on
+    // startupLogs and prefix it like the rest of that family.
+    if (config.startupLogs) {
+      flushLoadOrderWarnings(message => warn('DATADOG TRACER DIAGNOSTIC - ' + message))
+    }
 
     if (!IS_SERVERLESS) {
       const storeConfig = require('./tracer_metadata')
