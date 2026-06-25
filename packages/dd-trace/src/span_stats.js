@@ -98,7 +98,7 @@ class SpanAggKey {
     this.endpoint = span.meta[HTTP_ROUTE] || span.meta[HTTP_ENDPOINT] || ''
     this.method = span.meta[HTTP_METHOD] || ''
     this.srvSrc = span.meta[SVC_SRC_KEY] || ''
-    // TODO: origin and spanKind should also be included in legacy client stats aggregation.
+    // TODO: origin and spanKind should also be included in dd native client stats aggregation.
     this.origin = otlpEnabled ? (span.meta[ORIGIN_KEY] || '') : ''
     this.spanKind = otlpEnabled ? (span.meta[SPAN_KIND] || '') : ''
     // The gRPC plugin records the status code as a numeric tag, which span formatting routes into
