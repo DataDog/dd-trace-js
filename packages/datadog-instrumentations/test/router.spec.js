@@ -639,6 +639,80 @@ describe('createWrapRouterMethod', () => {
     })
   })
 
+  describe('express-async-errors on a prototype-dispatch host', () => {
+    // express-async-errors (on express 4.3.0+) redefines `handle` as a
+    // getter/setter that stores a wrapped fn in `__handle` and turns a rejected
+    // promise into `next(error)`. The wrap preserves the handler arity. It
+    // patches `handle` only, never `handle_request`, so the tracer's prototype
+    // dispatch wrap survives and the arity gate still sees the real handler.
+    function asyncErrorsWrap (fn) {
+      const wrapped = function (...args) {
+        const ret = fn.apply(this, args)
+        const next = args.at(-1)
+        if (typeof ret?.catch === 'function') ret.catch(error => next(error))
+        return ret
+      }
+      Object.defineProperty(wrapped, 'length', { value: fn.length, configurable: true })
+      return wrapped
+    }
+
+    // A host `.use` that builds a prototype-dispatch layer carrying the
+    // express-async-errors `handle` getter/setter, so `layer.handle = fn`
+    // stores the wrapped handler in `__handle`.
+    function asyncErrorsUse (path, handler) {
+      const layer = Object.create(FakeLayer.prototype)
+      layer.path = '/foo'
+      layer.regexp = {}
+      Object.defineProperty(layer, 'handle', {
+        enumerable: true,
+        get () { return this.__handle },
+        set (fn) { this.__handle = asyncErrorsWrap(fn) },
+      })
+      layer.handle = handler
+      this.stack.push(layer)
+    }
+
+    it('keeps the handle pristine and the arity gate intact', () => {
+      subscribeAll()
+      const wrapMethod = createWrapRouterMethod(namespace, compileRegex)
+      const router = { stack: [] }
+
+      const wrappedUse = wrapMethod(asyncErrorsUse)
+      wrappedUse.call(router, '/foo', function requestHandler (req, res, next) { next() })
+
+      const layer = router.stack[0]
+      // The async-errors wrap is a 3-arg function, so the request gate runs it.
+      assert.strictEqual(layer.handle.length, 3)
+
+      layer.handle_request({}, {}, () => {})
+      assert.ok(events.find(e => e.label === 'enter'), 'middleware:enter should publish')
+    })
+
+    it('routes a rejected promise through wrappedNext and publishes the error', async () => {
+      subscribeAll()
+      const wrapMethod = createWrapRouterMethod(namespace, compileRegex)
+      const router = { stack: [] }
+
+      const failure = new Error('async-boom')
+      const wrappedUse = wrapMethod(asyncErrorsUse)
+      wrappedUse.call(router, '/foo', async function asyncHandler () { throw failure })
+
+      const req = {}
+      let downstreamError
+      router.stack[0].handle_request(req, {}, (error) => { downstreamError = error })
+
+      // The rejection settles on a microtask; the async-errors wrap forwards it
+      // to `next`, which here is the tracer's wrappedNext.
+      await new Promise(resolve => setImmediate(resolve))
+
+      const errorEvent = events.find(e => e.label === 'error')
+      assert.ok(errorEvent, 'the rejected promise should reach wrappedNext -> error')
+      assert.strictEqual(errorEvent.data.error, failure)
+      assert.strictEqual(errorEvent.data.req, req)
+      assert.strictEqual(downstreamError, failure)
+    })
+  })
+
   describe('legacy handle replacement (host without prototype dispatch)', () => {
     // express <4.3.0 has no `Layer.prototype.handle_request`; the router calls
     // `layer.handle` directly, so the handle is replaced in place.

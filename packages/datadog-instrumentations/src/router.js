@@ -104,9 +104,12 @@ function createLayerDispatchWrappers (name) {
     })
   }
 
-  // A synchronous throw or a rejected promise is turned into `next(error)` by
-  // the host's own dispatch, so passing `wrappedNext` through captures both
-  // without a tracer-side try/catch; only `exit` needs the `finally`.
+  // Every host dispatch turns a synchronous throw into `next(error)`, and the
+  // hosts that await the handler (router >=2, express 5, express 4 +
+  // express-async-errors) do the same for a rejected promise. Passing
+  // `wrappedNext` through captures both without a tracer-side try/catch; only
+  // `exit` needs the `finally`. express 4's native dispatch converts only the
+  // synchronous throw — exactly what the pre-refactor handle wrap caught.
   function wrapLayerRequest (originalRequest) {
     return function (req, res, next) {
       if (!enterChannel.hasSubscribers) return originalRequest.call(this, req, res, next)
@@ -410,6 +413,10 @@ addHook({
 }, Layer => {
   const { wrapLayerRequest, wrapLayerError } = createLayerDispatchWrappers('router')
 
+  // `handleRequest` carries two concerns: the middleware dispatch span and the
+  // param-start publish (`wrapHandleRequest`). Wrap the dispatch first so it
+  // sits inner and param-start still fires before `middleware:enter`, matching
+  // the order from when the handle itself was wrapped.
   shimmer.wrap(Layer.prototype, 'handleRequest', wrapLayerRequest)
   shimmer.wrap(Layer.prototype, 'handleError', wrapLayerError)
   shimmer.wrap(Layer.prototype, 'handleRequest', wrapHandleRequest)
