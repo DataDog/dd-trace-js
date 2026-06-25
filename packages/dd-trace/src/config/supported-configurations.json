@@ -1245,7 +1245,7 @@
         "configurationNames": [
           "llmobs.sampleRate"
         ],
-        "default": "1"
+        "default": "1.0"
       }
     ],
     "DD_LOGS_INJECTION": [
