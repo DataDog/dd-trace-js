@@ -10,7 +10,7 @@ const PinoPlugin = require('../../../packages/datadog-plugin-pino/src/index')
 
 const legacyStorage = storage('legacy')
 
-const COUNT = Number(process.env.COUNT)
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 // Typical production config: 128-bit trace ids on, service/version/env set.
 const config = {
@@ -75,7 +75,7 @@ legacyStorage.run({ span: activeSpan }, () => {
   assert.ok(probe.line.includes('"trace_id":'), 'pino plugin did not inject the trace id into the line')
 
   guard.loopStart()
-  for (let i = 0; i < COUNT; i++) {
+  for (let i = 0; i < OPERATIONS; i++) {
     const payload = { line: baseLine }
     plugin.handleJsonLine(payload)
     sink += payload.line.length

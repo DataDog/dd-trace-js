@@ -22,7 +22,7 @@ require.cache[requestPath] = {
 const LLMObsEvalMetricsWriter = require('../../../packages/dd-trace/src/llmobs/writers/evaluations')
 
 const { VARIANT } = process.env
-const ITERATIONS = Number(process.env.ITERATIONS) || 30_000
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 const writer = new LLMObsEvalMetricsWriter({
   apiKey: 'placeholder-api-key',
@@ -85,7 +85,7 @@ writer.flush()
 assert.equal(writer._buffer.events.length, 0)
 
 guard.loopStart()
-for (let iteration = 0; iteration < ITERATIONS; iteration++) {
+for (let iteration = 0; iteration < OPERATIONS; iteration++) {
   for (const event of EVENTS) {
     writer.append(event)
   }

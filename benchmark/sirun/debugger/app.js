@@ -6,7 +6,7 @@
 
 const guard = require('../startup-guard')
 
-const ITERATIONS = Number(process.env.ITERATIONS) || 5000
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 if (process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true') {
   // The devtools worker and its ports are unref'd, so nothing holds the event
@@ -26,7 +26,7 @@ if (process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true') {
 
 function runWork () {
   guard.loopStart()
-  for (let i = 0; i < ITERATIONS; i++) {
+  for (let i = 0; i < OPERATIONS; i++) {
     doSomeWork(i)
   }
   guard.done(0.35)

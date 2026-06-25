@@ -7,10 +7,10 @@
   "instructions": true,
   "variants": {
     "request-lifecycle": {
-      "env": { "VARIANT": "request-lifecycle", "ITERATIONS": "8000" }
+      "env": { "VARIANT": "request-lifecycle", "OPERATIONS": "8000" }
     },
     "sink-check": {
-      "env": { "VARIANT": "sink-check", "ITERATIONS": "5000000" }
+      "env": { "VARIANT": "sink-check", "OPERATIONS": "5000000" }
     }
   }
 }
