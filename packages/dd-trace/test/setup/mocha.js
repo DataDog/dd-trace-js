@@ -413,6 +413,12 @@ function insertVersionDep (dir, pkgName, version) {
 
 const ORIGINAL_PROCESS_EXIT = process.exit
 
+// The watchdog fires if the process fails to exit after all suites have finished. The typical cause is a `before`
+// hook that throws after starting the tracer — the `agent.load` / RC socket stays open, mocha drains no further,
+// and the job silently times out. 120 s is well above the longest real per-suite teardown (≤30 s observed) so clean
+// runs always exit before it triggers; only a leaked handle — the actual bug — fires it.
+const EXIT_WATCHDOG_MS = 120_000
+
 exports.mochaHooks = {
   beforeAll () {
     process.exit = (code) => {
@@ -421,6 +427,20 @@ exports.mochaHooks = {
   },
   afterAll () {
     process.exit = ORIGINAL_PROCESS_EXIT
+
+    // Arm the watchdog after restoring process.exit so it can call it.
+    const watchdog = setTimeout(() => {
+      // eslint-disable-next-line no-console
+      console.error(
+        `[dd-trace test watchdog] Process did not exit ${EXIT_WATCHDOG_MS / 1000}s after all suites completed.`,
+        'Active handles keeping the event loop alive:',
+        process._getActiveHandles?.()?.map(h => h?.constructor?.name ?? String(h))
+      )
+      ORIGINAL_PROCESS_EXIT(1)
+    }, EXIT_WATCHDOG_MS)
+
+    // Unref so a clean run (no leak) always exits without waiting for the timer.
+    watchdog.unref()
   },
   afterEach () {
     if (_agent) _agent.reset()
