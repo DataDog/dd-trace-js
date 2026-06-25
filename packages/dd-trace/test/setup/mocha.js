@@ -260,7 +260,8 @@ function withVersions (plugin, modules, range, cb) {
     range = undefined
   }
 
-  if (!semver.satisfies(process.version, `${engines.node} <${nodeMaxMajor}`)) return
+  if (!process.env.DD_INJECT_FORCE &&
+      !semver.satisfies(process.version, `${engines.node} <${nodeMaxMajor}`)) return
 
   const instrumentations = typeof plugin === 'string' ? getInstrumentation(plugin) : [plugin]
   const names = new Set(instrumentations.map(instrumentation => instrumentation.name))
