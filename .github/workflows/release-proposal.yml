@@ -24,17 +24,30 @@ jobs:
         with:
           scope: DataDog/dd-trace-js
           policy: release-proposal
+      - id: check-branch
+        run: |
+          if git ls-remote --heads \
+            "https://x-access-token:${{ steps.octo-sts.outputs.token }}@github.com/DataDog/dd-trace-js.git" \
+            "refs/heads/v${{ matrix.release-line }}.x" | grep -q .; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        if: steps.check-branch.outputs.exists == 'true'
         with:
           fetch-depth: 0
           token: ${{ steps.octo-sts.outputs.token }}
       - uses: ./.github/actions/node
+        if: steps.check-branch.outputs.exists == 'true'
         with:
           version: ""
       - uses: ./.github/actions/install/branch-diff
+        if: steps.check-branch.outputs.exists == 'true'
         with:
           token: ${{ steps.octo-sts.outputs.token }}
       - id: proposal
+        if: steps.check-branch.outputs.exists == 'true'
         run: node scripts/release/proposal ${{ matrix.release-line }} -y ${{ github.event_name == 'workflow_dispatch' && '-f' || '' }}
         env:
           GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}

@@ -51,13 +51,6 @@ try {
 
   const currentBranch = capture('git rev-parse --abbrev-ref HEAD')
 
-  // Exit cleanly when the release branch has not been created yet.
-  const remoteBranch = capture(`git ls-remote --heads origin refs/heads/v${releaseLine}.x`)
-  if (!remoteBranch) {
-    pass(`skipped (v${releaseLine}.x does not exist yet)`)
-    process.exit(0)
-  }
-
   // Restore current branch on success.
   process.once('exit', code => {
     if (code !== 0) return
