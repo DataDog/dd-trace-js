@@ -35,7 +35,6 @@ function sketchToFixedHistogram (sketch) {
   return bucketCounts.map((weight) => Math.round(weight))
 }
 
-// Cached at module load time since protobuf types are initialized once.
 let _deltaTemporality
 
 function getDeltaTemporality () {
@@ -109,7 +108,6 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
   #buildScopeMetrics (drained, bucketSizeNs, isJson) {
     const temporality = isJson ? 'AGGREGATION_TEMPORALITY_DELTA' : getDeltaTemporality()
 
-    // Service identity lives on the resource, so all data points share a single scope.
     const dataPoints = []
 
     for (const { timeNs, bucket } of drained) {
@@ -171,8 +169,6 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
   #buildAttributes (aggKey) {
     const raw = { 'span.name': aggKey.resource }
 
-    // Service identity lives on the resource. Emit service.name on the data point only when the
-    // span's service differs from the configured default (custom/inferred service names).
     if (aggKey.service && aggKey.service !== this.#defaultService) {
       raw['service.name'] = aggKey.service
     }
