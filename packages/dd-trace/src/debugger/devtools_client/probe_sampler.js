@@ -2,6 +2,9 @@
 
 const { DD_TRACE_SYMBOL, PROBE_SAMPLER_SYMBOL } = require('../probe_sampler_constants')
 
+const SAMPLER_EXPRESSION = `globalThis[Symbol.for(${JSON.stringify(DD_TRACE_SYMBOL)})]?.` +
+  `[Symbol.for(${JSON.stringify(PROBE_SAMPLER_SYMBOL)})]`
+
 module.exports = {
   compileBreakpointCondition,
   getRemoveProbeExpression,
@@ -15,7 +18,7 @@ module.exports = {
  * @returns {string}
  */
 function getRemoveProbeExpression (id) {
-  return `${getSamplerExpression()}?.remove(${JSON.stringify(id)})`
+  return `${SAMPLER_EXPRESSION}?.remove(${JSON.stringify(id)})`
 }
 
 /**
@@ -43,7 +46,7 @@ function compileBreakpointCondition (probes) {
   // file-path filename) won't see it and will silently never fire. Known limitation: a breakpoint
   // condition has no realm-independent handle to reach, so we degrade rather than crash.
   return `(() => {
-    const $dd_sampler = ${getSamplerExpression()}
+    const $dd_sampler = ${SAMPLER_EXPRESSION}
     if ($dd_sampler === undefined) return false
     let $dd_sampled = false
     ${probeConditions.join('\n    ')}
@@ -77,9 +80,4 @@ function compileProbeCondition (probe) {
         $dd_sampled = ${sample} || $dd_sampled
       }
     } catch {}`
-}
-
-function getSamplerExpression () {
-  return `globalThis[Symbol.for(${JSON.stringify(DD_TRACE_SYMBOL)})]?.` +
-    `[Symbol.for(${JSON.stringify(PROBE_SAMPLER_SYMBOL)})]`
 }

@@ -320,11 +320,13 @@ function lock (fn) {
  * @returns {Promise<void>}
  */
 async function removeProbeFromSampler (id) {
-  await session.post('Runtime.evaluate', {
-    expression: getRemoveProbeExpression(id),
-  }).catch(err => {
+  try {
+    await session.post('Runtime.evaluate', {
+      expression: getRemoveProbeExpression(id),
+    })
+  } catch (err) {
     log.error('[debugger:devtools_client] Error removing probe %s from sampler', id, err)
-  })
+  }
 }
 
 function generateLocationKey (scriptId, lineNumber, columnNumber) {

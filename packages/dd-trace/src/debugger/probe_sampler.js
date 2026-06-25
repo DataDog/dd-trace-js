@@ -10,6 +10,10 @@ const {
   SAMPLED_PROBE_OVERFLOW_INDEX,
 } = require('./probe_sampler_constants')
 
+const ddTraceGlobal = /** @type {Record<symbol, SharedArrayBuffer | object | undefined>} */ (
+  /** @type {Record<symbol, unknown>} */ (globalThis)[Symbol.for(DD_TRACE_SYMBOL)]
+)
+
 module.exports = {
   installProbeSampler,
   uninstallProbeSampler,
@@ -21,7 +25,6 @@ module.exports = {
  * @returns {SharedArrayBuffer} The shared sampler buffer to pass to the debugger worker.
  */
 function installProbeSampler () {
-  const ddTrace = getDatadogGlobal()
   const buffer = createProbeSamplerBuffer()
 
   const lastCaptureNsByProbeId = new Map()
@@ -33,7 +36,7 @@ function installProbeSampler () {
   let globalSnapshotSamplingRateWindowStart = 0n
   let snapshotsSampledWithinTheLastSecond = 0
 
-  ddTrace[Symbol.for(PROBE_SAMPLER_SYMBOL)] = {
+  ddTraceGlobal[Symbol.for(PROBE_SAMPLER_SYMBOL)] = {
     /**
      * Decide if a probe should be sampled and store sampled probe indexes for the debugger worker.
      *
@@ -94,19 +97,7 @@ function installProbeSampler () {
  * Remove the runtime sampler from the debuggee context.
  */
 function uninstallProbeSampler () {
-  const ddTrace = getDatadogGlobal()
-  delete ddTrace[Symbol.for(PROBE_SAMPLER_SYMBOL)]
-}
-
-/**
- * Get the Datadog global object.
- *
- * @returns {Record<symbol, SharedArrayBuffer | object | undefined>}
- */
-function getDatadogGlobal () {
-  return /** @type {Record<symbol, SharedArrayBuffer | object | undefined>} */ (
-    /** @type {Record<symbol, unknown>} */ (globalThis)[Symbol.for(DD_TRACE_SYMBOL)]
-  )
+  delete ddTraceGlobal[Symbol.for(PROBE_SAMPLER_SYMBOL)]
 }
 
 /**
