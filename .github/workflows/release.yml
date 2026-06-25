@@ -89,6 +89,16 @@ jobs:
           echo "json=$content" >> $GITHUB_OUTPUT
       - name: Publish
         run: |
+          # Fetch the OIDC token up front so every npm registry call in
+          # this step uses the same Bearer token. npm publish exchanges
+          # the token internally but does not persist it, so npm dist-tag
+          # add would run unauthenticated without this.
+          oidc_token=$(curl -sS -fH \
+            "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=npm" \
+            | jq -r '.value')
+          export NODE_AUTH_TOKEN="$oidc_token"
+
           tags=(${{ matrix.npm_tags }})
           npm publish --tag "${tags[0]}"
           version="${{ fromJson(steps.pkg.outputs.json).version }}"
