@@ -67,6 +67,29 @@ const FLUSH_BUFFER_SIZE = 10 * 1024 // 10KB
  * All u64 fields use the LE representation in WASM memory; spanId/traceId/
  * parentId payloads byte-swap from the JS-side BE Identifier buffers.
  */
+
+/**
+ * Normalize an agent URL for the native (libdatadog) layer.
+ *
+ * dd-trace-js represents a Windows named pipe as `unix://./pipe/...` (protocol
+ * `unix:`, hostname `.`), matching the legacy agent exporter. libdatadog's
+ * ddcommon `parse_uri` instead expects the `windows:` scheme for pipes, where
+ * everything after `windows:` is the path. Rewriting the scheme makes the
+ * socket path decode to the same `//./pipe/...` value the legacy exporter
+ * hands to Node's `socketPath`. Plain Unix domain sockets (`unix:///path`)
+ * and http(s) URLs are already understood by `parse_uri` and pass through
+ * unchanged.
+ *
+ * @param {string} url Agent URL
+ * @returns {string} URL in the form libdatadog's `parse_uri` expects
+ */
+function normalizeAgentUrl (url) {
+  if (typeof url === 'string' && url.startsWith('unix://./')) {
+    return 'windows:' + url.slice('unix:'.length)
+  }
+  return url
+}
+
 class NativeSpansInterface {
   /**
    * @param {object} options Configuration options
@@ -398,7 +421,7 @@ class NativeSpansInterface {
   #createWasmState (url) {
     const opts = this._options
     return new WasmSpanState(
-      url,
+      normalizeAgentUrl(url),
       opts.tracerVersion,
       opts.lang,
       opts.langVersion,

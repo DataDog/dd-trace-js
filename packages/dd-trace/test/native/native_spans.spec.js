@@ -423,6 +423,60 @@ describe('NativeSpansInterface', () => {
     })
   })
 
+  describe('agent URL normalization', () => {
+    const baseOpts = {
+      tracerVersion: '1.0.0',
+      lang: 'nodejs',
+      langVersion: 'v20.0.0',
+      langInterpreter: 'v8',
+      pid: 1,
+      tracerService: 's',
+    }
+
+    it('passes a Unix domain socket URL through to the native layer unchanged', () => {
+      const ns = new NativeSpansInterface({ ...baseOpts, agentUrl: 'unix:///var/run/datadog/apm.socket' })
+      assert.ok(ns)
+      // ddcommon parse_uri understands `unix:///path` directly.
+      assert.strictEqual(WasmSpanState.lastCall.args[0], 'unix:///var/run/datadog/apm.socket')
+    })
+
+    it('rewrites a Windows named-pipe URL to the windows: scheme', () => {
+      const ns = new NativeSpansInterface({ ...baseOpts, agentUrl: 'unix://./pipe/datadog/foo' })
+      assert.ok(ns)
+      // `unix://./pipe/...` (legacy pipe form) must become `windows://./pipe/...`
+      // so ddcommon decodes the socket path to `//./pipe/...`.
+      assert.strictEqual(WasmSpanState.lastCall.args[0], 'windows://./pipe/datadog/foo')
+    })
+
+    it('leaves http(s) URLs unchanged', () => {
+      const ns = new NativeSpansInterface({ ...baseOpts, agentUrl: 'http://localhost:8126' })
+      assert.ok(ns)
+      assert.strictEqual(WasmSpanState.lastCall.args[0], 'http://localhost:8126')
+    })
+
+    it('applies the same normalization on setAgentUrl', () => {
+      nativeSpans.setAgentUrl('unix://./pipe/datadog/bar')
+      assert.strictEqual(WasmSpanState.lastCall.args[0], 'windows://./pipe/datadog/bar')
+    })
+
+    it('is idempotent on already-normalized windows: URLs', () => {
+      // Normalizing a successfully rewritten URL should not change it.
+      const ns = new NativeSpansInterface({ ...baseOpts, agentUrl: 'windows://./pipe/idempotent' })
+      assert.ok(ns)
+      assert.strictEqual(WasmSpanState.lastCall.args[0], 'windows://./pipe/idempotent')
+    })
+
+    it('properly handles a plain Unix socket path with trailing/edge forms', () => {
+      // Any variation that is `unix:///`-syntax should be passed through unchanged.
+      const cases = ['unix:///var/run/datadog/apm.socket', 'unix:///path/to/socket', 'unix:///tmp/my.sock']
+      for (const url of cases) {
+        const ns = new NativeSpansInterface({ ...baseOpts, agentUrl: url })
+        assert.ok(ns)
+        assert.strictEqual(WasmSpanState.lastCall.args[0], url)
+      }
+    })
+  })
+
   // Sampling happens in the JS-side priority sampler — `nativeSpans.sample()`
   // is intentionally not exposed by the WASM pipeline. See the trailing
   // comment in native_spans.js.
