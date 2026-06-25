@@ -15,7 +15,6 @@ const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
-const plugin = require('../src')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
@@ -2322,7 +2321,7 @@ describe('Plugin', () => {
         })
       })
 
-      withVersions(plugin, 'apollo-server-core', apolloVersion => {
+      withVersions('graphql', 'apollo-server-core', apolloVersion => {
         // The precense of graphql@^15.2.0 in the /versions folder causes graphql-tools@3.1.1
         // to break in the before() hook. This test tests a library version that had its release occur 5 years ago
         // updating the test would require using newer version of apollo-core which have a completely different syntax
