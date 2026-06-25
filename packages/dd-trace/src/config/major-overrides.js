@@ -4,95 +4,40 @@
  * @typedef {import('./helper').SupportedConfigurationsJson['supportedConfigurations']} SupportedConfigurations
  */
 
-const EXPERIMENTAL_APPSEC_PREFIX = 'experimental.appsec'
-const EXPERIMENTAL_IAST_PREFIX = 'experimental.iast'
-const INGESTION_PREFIX = 'ingestion.'
-
 /**
+ * Collapses each configuration's per-major entries to the single entry that applies to
+ * `majorVersion`. An entry's optional `major` selector is either an exact major ("5") or a
+ * lower-bounded range (">5"); an entry without a selector applies to every major. A configuration
+ * left without any matching entry is dropped for this major.
+ *
  * @param {SupportedConfigurations} supportedConfigurations Mutated in place.
  * @param {number} majorVersion
  */
 function applyMajorOverrides (supportedConfigurations, majorVersion) {
-  if (majorVersion < 6) {
-    applyV5Overrides(supportedConfigurations)
-    return
-  }
-
-  for (const entries of Object.values(supportedConfigurations)) {
-    for (const entry of entries) {
-      if (Array.isArray(entry.configurationNames)) {
-        entry.configurationNames = entry.configurationNames.filter(
-          (name) =>
-            name !== EXPERIMENTAL_APPSEC_PREFIX &&
-            name !== EXPERIMENTAL_IAST_PREFIX &&
-            !name.startsWith(`${EXPERIMENTAL_APPSEC_PREFIX}.`) &&
-            !name.startsWith(`${EXPERIMENTAL_IAST_PREFIX}.`) &&
-            !name.startsWith(INGESTION_PREFIX)
-        )
-        if (entry.configurationNames.length === 0) delete entry.configurationNames
-      }
+  for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) {
+    const selected = entries.filter((entry) => entry.major === undefined || majorMatches(entry.major, majorVersion))
+    if (selected.length === 0) {
+      delete supportedConfigurations[canonicalName]
+      continue
+    }
+    for (const entry of selected) {
+      delete entry.major
+    }
+    if (selected.length !== entries.length) {
+      supportedConfigurations[canonicalName] = selected
     }
   }
-  delete supportedConfigurations.DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED
-  delete supportedConfigurations.DD_TRACE_EXPERIMENTAL_B3_ENABLED
-
-  /* eslint-disable eslint-rules/eslint-env-aliases */
-  for (const name of [
-    'DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED',
-    'DD_PROFILING_EXPERIMENTAL_CPU_ENABLED',
-    'DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED',
-    'DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED',
-  ]) {
-    delete supportedConfigurations[name]
-  }
-  /* eslint-enable eslint-rules/eslint-env-aliases */
-  for (const canonical of [
-    'DD_PROFILING_CODEHOTSPOTS_ENABLED',
-    'DD_PROFILING_CPU_ENABLED',
-    'DD_PROFILING_ENDPOINT_COLLECTION_ENABLED',
-    'DD_PROFILING_TIMELINE_ENABLED',
-  ]) {
-    dropAlias(supportedConfigurations[canonical], (alias) => alias.startsWith('DD_PROFILING_EXPERIMENTAL_'))
-  }
-
-  delete supportedConfigurations.DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED
-  // eslint-disable-next-line eslint-rules/eslint-env-aliases
-  dropAlias(supportedConfigurations.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED, 'DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED')
 }
 
 /**
- * @param {SupportedConfigurations} supportedConfigurations Mutated in place.
+ * @param {string} selector Exact major ("5") or a lower-bounded range (">5").
+ * @param {number} majorVersion
  */
-function applyV5Overrides (supportedConfigurations) {
-  const startupLogsEntry = supportedConfigurations.DD_TRACE_STARTUP_LOGS?.[0]
-  if (startupLogsEntry) {
-    startupLogsEntry.default = 'false'
+function majorMatches (selector, majorVersion) {
+  if (selector[0] === '>') {
+    return majorVersion > Number(selector.slice(1))
   }
-
-  const iastEntry = supportedConfigurations.DD_IAST_SECURITY_CONTROLS_CONFIGURATION?.[0]
-  if (!iastEntry) return
-
-  iastEntry.configurationNames = [
-    iastEntry.internalPropertyName || iastEntry.configurationNames?.[0],
-    `${EXPERIMENTAL_IAST_PREFIX}.securityControlsConfiguration`,
-  ]
-  delete iastEntry.internalPropertyName
-}
-
-/**
- * @param {import('./helper').SupportedConfigurationEntry[] | undefined} entries
- * @param {string | ((alias: string) => boolean)} dropPredicate
- */
-function dropAlias (entries, dropPredicate) {
-  const entry = entries?.[0]
-  if (entry?.aliases === undefined) return
-  const matches = typeof dropPredicate === 'string'
-    ? (alias) => alias === dropPredicate
-    : dropPredicate
-  entry.aliases = entry.aliases.filter((alias) => !matches(alias))
-  if (entry.aliases.length === 0) {
-    delete entry.aliases
-  }
+  return majorVersion === Number(selector)
 }
 
 module.exports = applyMajorOverrides

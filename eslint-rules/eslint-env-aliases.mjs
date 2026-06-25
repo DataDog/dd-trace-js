@@ -17,7 +17,10 @@ for (const [canonical, entries] of Object.entries(supportedConfigurations)) {
     if (entry.aliases && !entry.deprecated) {
       for (const alias of entry.aliases) {
         aliasToCanonical[alias] ??= []
-        aliasToCanonical[alias].push(canonical)
+        // Per-major entries repeat a shared alias, so only the distinct canonical counts.
+        if (!aliasToCanonical[alias].includes(canonical)) {
+          aliasToCanonical[alias].push(canonical)
+        }
       }
     }
   }

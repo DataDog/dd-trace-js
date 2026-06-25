@@ -270,18 +270,12 @@ function generateConfigTypes () {
   const root = createTreeNode()
 
   for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) {
-    if (entries.length !== 1) {
-      throw new Error(
-        `Multiple entries found for canonical name: ${canonicalName}. ` +
-        'This is currently not supported and must be implemented, if needed.'
-      )
+    for (const entry of entries) {
+      const propertyName = getPropertyName(canonicalName, entry)
+      const type = getTypeForEntry(propertyName, entry)
+
+      addProperty(root, propertyName, type)
     }
-
-    const [entry] = entries
-    const propertyName = getPropertyName(canonicalName, entry)
-    const type = getTypeForEntry(propertyName, entry)
-
-    addProperty(root, propertyName, type)
   }
 
   return (

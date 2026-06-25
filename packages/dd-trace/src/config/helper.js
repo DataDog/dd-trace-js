@@ -14,6 +14,7 @@
  * @property {string} [allowed]
  * @property {string|boolean} [deprecated]
  * @property {boolean} [sensitive] Excludes the configuration value from configuration telemetry.
+ * @property {string} [major] Restricts the entry to a major selector ("5" or ">5"); resolved by major-overrides.
  */
 
 /**
