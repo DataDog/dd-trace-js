@@ -261,13 +261,6 @@ addHook({ name: 'ai', versions: ['>=7.0.0'] }, exports => {
 
           controller.enqueue(chunk) // pass through value
         },
-
-        cancel (reason) {
-          ctx.error = reason
-
-          aiSdkTelemetryChannel.error.publish(ctx)
-          aiSdkTelemetryChannel.asyncEnd.publish(ctx)
-        },
       })
 
       ctx.result.stream = ctx.result.stream.pipeThrough(transform)
