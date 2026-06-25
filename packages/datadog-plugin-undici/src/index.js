@@ -6,6 +6,7 @@ const tags = require('../../../ext/tags')
 const formats = require('../../../ext/formats')
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const log = require('../../dd-trace/src/log')
+const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 
 const {
@@ -60,10 +61,12 @@ class UndiciPlugin extends HttpClientPlugin {
     }
 
     const host = port ? `${hostname}:${port}` : hostname
+    const base = `${protocol}//${host}`
     const pathname = path.split(/[?#]/)[0]
-    const uri = `${protocol}//${host}${pathname}`
+    const uri = `${base}${pathname}`
 
     const allowed = this.config.filter(uri)
+    const otelSemantics = this.config.DD_TRACE_OTEL_SEMANTICS_ENABLED
     const childOf = store && allowed ? store.span : null
 
     const span = this.startSpan(this.operationName(), {
@@ -71,7 +74,7 @@ class UndiciPlugin extends HttpClientPlugin {
       meta: {
         'span.kind': 'client',
         'http.method': method,
-        'http.url': uri,
+        'http.url': otelSemantics ? buildClientHttpUrl(this.config, base, path, uri) : uri,
         'out.host': hostname,
       },
       metrics: {

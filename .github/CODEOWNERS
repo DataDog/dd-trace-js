@@ -141,6 +141,7 @@
 /integration-tests/playwright/ @DataDog/ci-app-libraries
 /integration-tests/vitest/ @DataDog/ci-app-libraries
 /integration-tests/vitest.config.mjs @DataDog/ci-app-libraries
+/integration-tests/vitest.second-project.config.mjs @DataDog/ci-app-libraries
 /integration-tests/ci-visibility-intake.js @DataDog/ci-app-libraries
 /integration-tests/ci-visibility-intake.spec.js @DataDog/ci-app-libraries
 /integration-tests/CODEOWNERS @DataDog/ci-app-libraries
@@ -346,7 +347,7 @@
 /packages/datadog-core @DataDog/lang-platform-js
 /packages/datadog-shimmer @DataDog/lang-platform-js
 /packages/dd-trace/*/crashtracking @DataDog/lang-platform-js
-/packages/dd-trace/src/exporters/common/retry.js @DataDog/lang-platform-js
+/packages/dd-trace/src/exporters/common/ @DataDog/lang-platform-js
 /packages/dd-trace/test/agent/ @DataDog/lang-platform-js
 /packages/dd-trace/test/dd-trace.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/dogstatsd.spec.js @DataDog/lang-platform-js

@@ -6122,38 +6122,38 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       fs.writeFileSync(
         path.join(cwd, 'ci-visibility/test-impacted-test/test-impacted-1.js'),
         `const assert = require('assert')
-         let manualRetryAttempts = 0
-         describe('impacted tests', () => {
-           it('can pass normally', function () {
-             if (process.env.SKIP_IMPACTED_NON_MANUAL_RETRY_TESTS) {
-               this.skip()
-             }
-             assert.strictEqual(2 + 2, 3)
-           })
+        let manualRetryAttempts = 0
+        describe('impacted tests', () => {
+          it('can pass normally', function () {
+            if (process.env.SKIP_IMPACTED_NON_MANUAL_RETRY_TESTS) {
+              this.skip()
+            }
+            assert.strictEqual(2 + 2, 3)
+          })
 
-           it('can fail', function () {
-             if (process.env.SKIP_IMPACTED_NON_MANUAL_RETRY_TESTS) {
-               this.skip()
-             }
-             assert.strictEqual(1 + 2, 4)
-           })
+          it('can fail', function () {
+            if (process.env.SKIP_IMPACTED_NON_MANUAL_RETRY_TESTS) {
+              this.skip()
+            }
+            assert.strictEqual(1 + 2, 4)
+          })
 
-           it('${manualRetryTestTitle}', function () {
-             if (process.env.SET_RETRIES_INSIDE_TEST) {
-               this.retries(2)
-             }
-             assert.strictEqual(manualRetryAttempts++ > 0, true)
-           })
-         })`
+          it('${manualRetryTestTitle}', function () {
+            if (process.env.SET_RETRIES_INSIDE_TEST) {
+              this.retries(2)
+            }
+            assert.strictEqual(manualRetryAttempts++ > 0, true)
+          })
+        })`
       )
       fs.writeFileSync(
         path.join(cwd, 'ci-visibility/test-impacted-test/parallel-helper.js'),
         `const assert = require('assert')
-         describe('impacted tests parallel helper', () => {
-           it('can pass normally', () => {
-             assert.strictEqual(1 + 2, 3)
-           })
-         })`
+        describe('impacted tests parallel helper', () => {
+          it('can pass normally', () => {
+            assert.strictEqual(1 + 2, 3)
+          })
+        })`
       )
       execSync('git add ci-visibility/test-impacted-test/test-impacted-1.js', { cwd, stdio: 'ignore' })
       execSync('git commit -m "modify test-impacted-1.js"', { cwd, stdio: 'ignore' })

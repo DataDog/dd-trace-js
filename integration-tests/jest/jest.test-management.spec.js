@@ -2147,14 +2147,14 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         path.join(cwd, 'ci-visibility/test-impacted-test/test-impacted-1.js'),
         `const assert = require('assert')
 
-         describe('impacted tests', () => {
+        describe('impacted tests', () => {
           it('can pass normally', () => {
             assert.strictEqual(1 + 2, 4)
           })
           it('can fail', () => {
             assert.strictEqual(1 + 2, 4)
           })
-         })`
+        })`
       )
       execSync('git add ci-visibility/test-impacted-test/test-impacted-1.js', { cwd, stdio: 'ignore' })
 
@@ -2163,15 +2163,15 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         path.join(cwd, 'ci-visibility/test-impacted-test/test-impacted-with-mock.js'),
         `'use strict'
 
-         const mockFn = jest.fn()
+        const mockFn = jest.fn()
 
-         describe('impacted tests with mock', () => {
-           it('resets mock state between retries', () => {
-             console.log('I am running impacted test with mock')
-             mockFn()
-             expect(mockFn).toHaveBeenCalledTimes(1)
-           })
-         })`
+        describe('impacted tests with mock', () => {
+          it('resets mock state between retries', () => {
+            console.log('I am running impacted test with mock')
+            mockFn()
+            expect(mockFn).toHaveBeenCalledTimes(1)
+          })
+        })`
       )
       execSync('git add ci-visibility/test-impacted-test/test-impacted-with-mock.js', { cwd, stdio: 'ignore' })
 
@@ -2393,11 +2393,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         fs.writeFileSync(
           path.join(cwd, 'ci-visibility/test-management/test-worker-restart-z-impacted.js'),
           `const assert = require('assert')
-           describe('worker restart impacted tests', () => {
-             it('can pass normally', () => {
-               assert.strictEqual(1 + 2, 3)
-             })
-           })`
+          describe('worker restart impacted tests', () => {
+            it('can pass normally', () => {
+              assert.strictEqual(1 + 2, 3)
+            })
+          })`
         )
         execSync('git add ci-visibility/test-management/test-worker-restart-z-impacted.js', { cwd, stdio: 'ignore' })
         execSync('git commit --amend --no-edit', { cwd, stdio: 'ignore' })

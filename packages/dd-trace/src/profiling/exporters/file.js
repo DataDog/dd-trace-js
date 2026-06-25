@@ -10,14 +10,16 @@ const pad = (n) => String(n).padStart(2, '0')
 
 function formatDateTime (t) {
   return `${t.getUTCFullYear()}${pad(t.getUTCMonth() + 1)}${pad(t.getUTCDate())}` +
-         `T${pad(t.getUTCHours())}${pad(t.getUTCMinutes())}${pad(t.getUTCSeconds())}Z`
+    `T${pad(t.getUTCHours())}${pad(t.getUTCMinutes())}${pad(t.getUTCSeconds())}Z`
 }
 
 class FileExporter extends EventSerializer {
+  #pprofPrefix
+
   constructor (config = {}) {
     super(config)
     const { pprofPrefix } = config
-    this._pprofPrefix = pprofPrefix || ''
+    this.#pprofPrefix = pprofPrefix || ''
   }
 
   export (exportSpec) {
@@ -25,7 +27,7 @@ class FileExporter extends EventSerializer {
     const types = Object.keys(profiles)
     const dateStr = formatDateTime(end)
     const tasks = types.map(type => {
-      return writeFile(`${this._pprofPrefix}${type}_worker_${threadId}_${dateStr}.pprof`, profiles[type])
+      return writeFile(`${this.#pprofPrefix}${type}_worker_${threadId}_${dateStr}.pprof`, profiles[type])
     })
     tasks.push(writeFile(`event_worker_${threadId}_${dateStr}.json`, this.getEventJSON(exportSpec)))
     return Promise.all(tasks)
