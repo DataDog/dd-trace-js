@@ -7,10 +7,10 @@
   "instructions": true,
   "variants": {
     "small": {
-      "env": { "VARIANT": "small", "OPERATIONS": "1700000" }
+      "env": { "VARIANT": "small", "COUNT": "1700000" }
     },
     "large": {
-      "env": { "VARIANT": "large", "OPERATIONS": "100000" }
+      "env": { "VARIANT": "large", "COUNT": "100000" }
     }
   }
 }

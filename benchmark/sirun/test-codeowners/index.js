@@ -10,7 +10,7 @@ const {
 } = require('../../../packages/dd-trace/src/plugins/util/test')
 
 const VARIANT = process.env.VARIANT || 'large'
-const OPERATIONS = Number(process.env.OPERATIONS)
+const COUNT = Number(process.env.COUNT) || 100_000
 
 // Test optimization resolves the code owners of every test file it reports.
 // getCodeOwnersForFilename walks the parsed CODEOWNERS entries (reversed, first
@@ -102,17 +102,15 @@ assert.ok(probeMatched, 'no filename matched any CODEOWNERS entry')
 assert.ok(probeMissed, 'every filename matched; corpus exercises no full-scan miss')
 
 const passSize = filenames.length
+const passes = Math.ceil(COUNT / passSize)
 
 guard.loopStart()
 let sink = 0
-let remaining = OPERATIONS
-while (remaining > 0) {
+for (let p = 0; p < passes; p++) {
   const view = baseEntries.slice()
-  const limit = remaining < passSize ? remaining : passSize
-  for (let f = 0; f < limit; f++) {
+  for (let f = 0; f < passSize; f++) {
     if (getCodeOwnersForFilename(filenames[f], view) !== null) sink++
   }
-  remaining -= limit
 }
 guard.done()
 

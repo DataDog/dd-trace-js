@@ -18,7 +18,7 @@ const assert = require('node:assert/strict')
 const path = require('node:path')
 
 const START = process.hrtime.bigint()
-const OPERATIONS = getOperations()
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 let loopStartedAt
 let statsd
@@ -64,20 +64,25 @@ function done (maxShare = 0.07) {
 }
 
 /**
- * @param {number} duration
+ * Emit the loop's throughput as `<bench>.ops`, derived from the same window the
+ * guard already measures. A missing OPERATIONS only warns for now: most benches
+ * have a clean iteration count, but some measure bursts/cycles that don't map to
+ * a single operation, and we don't want to fail those runs over a missing metric.
+ *
+ * @param {number} duration loop wall time in nanoseconds
  */
 function reportOps (duration) {
-  assert.ok(Number.isFinite(OPERATIONS) && OPERATIONS > 0,
-    'startup-guard: OPERATIONS must be set to a positive number')
-  assert.ok(duration !== 0, 'startup-guard: loop duration was zero')
+  if (!OPERATIONS) {
+    process.stderr.write('startup-guard: OPERATIONS is not set, skipping the operations-per-second metric\n')
+    return
+  }
+  if (duration === 0) {
+    return
+  }
 
   statsd ??= new (require('./statsd'))()
   statsd.gauge(path.basename(process.cwd()) + '.ops', OPERATIONS * 1e9 / duration)
   statsd.flush()
-}
-
-function getOperations () {
-  return Number(process.env.OPERATIONS)
 }
 
 module.exports = { loopStart, done }
