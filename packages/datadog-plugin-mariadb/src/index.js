@@ -1,20 +1,40 @@
 'use strict'
 
-const { storage } = require('../../datadog-core')
-const MySQLPlugin = require('../../datadog-plugin-mysql/src')
+const CompositePlugin = require('../../dd-trace/src/plugins/composite')
+const connectionPlugins = require('./connection')
+const queryPlugins = require('./query')
 
-class MariadbPlugin extends MySQLPlugin {
+const [
+  CreateConnectionPlugin,
+  CreatePoolPlugin,
+  PoolGetConnectionPlugin,
+  PoolCreateConnectionPlugin,
+  V2ConnectionPlugin,
+  V2PoolBasePlugin,
+  V2PoolBaseGetConnectionPlugin,
+] = connectionPlugins
+
+const [
+  MariadbQueryContextPlugin,
+  QueryCommandPlugin,
+  V2QueryCommandPlugin,
+  CommandCompletionPlugin,
+] = queryPlugins
+
+class MariadbPlugin extends CompositePlugin {
   static id = 'mariadb'
-  static system = 'mariadb'
-
-  constructor (...args) {
-    super(...args)
-
-    this.addBind(`apm:${this.component}:pool:skip`, () => ({ noop: true }))
-
-    this.addSub(`apm:${this.component}:command:add`, ctx => {
-      ctx.parentStore = storage('legacy').getStore()
-    })
+  static plugins = {
+    createConnection: CreateConnectionPlugin,
+    createPool: CreatePoolPlugin,
+    poolGetConnection: PoolGetConnectionPlugin,
+    poolCreateConnection: PoolCreateConnectionPlugin,
+    v2Connection: V2ConnectionPlugin,
+    v2PoolBase: V2PoolBasePlugin,
+    v2PoolGetConnection: V2PoolBaseGetConnectionPlugin,
+    queryContext: MariadbQueryContextPlugin,
+    queryCommand: QueryCommandPlugin,
+    v2QueryCommand: V2QueryCommandPlugin,
+    commandCompletion: CommandCompletionPlugin,
   }
 }
 
