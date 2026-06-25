@@ -138,6 +138,7 @@ function getProvidedContext () {
       _ddTestManagementTests: testManagementTests,
       _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled,
       _ddFlakyTestRetriesCount: flakyTestRetriesCount,
+      _ddFlakyTestRetriesIncludesUnnamedProject: flakyTestRetriesIncludesUnnamedProject,
       _ddFlakyTestRetriesProjectNames: flakyTestRetriesProjectNames,
       _ddIsImpactedTestsEnabled: isImpactedTestsEnabled,
       _ddModifiedFiles: modifiedFiles,
@@ -160,6 +161,7 @@ function getProvidedContext () {
       testManagementTests,
       isFlakyTestRetriesEnabled,
       flakyTestRetriesCount: flakyTestRetriesCount ?? 0,
+      flakyTestRetriesIncludesUnnamedProject,
       flakyTestRetriesProjectNames,
       isImpactedTestsEnabled,
       modifiedFiles,
@@ -183,6 +185,7 @@ function getProvidedContext () {
       testManagementTests: {},
       isFlakyTestRetriesEnabled: false,
       flakyTestRetriesCount: 0,
+      flakyTestRetriesIncludesUnnamedProject: false,
       flakyTestRetriesProjectNames: undefined,
       isImpactedTestsEnabled: false,
       modifiedFiles: {},
@@ -509,6 +512,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
     setProvidedContext(ctx, {
       _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled,
       _ddFlakyTestRetriesCount: flakyTestRetriesCount,
+      _ddFlakyTestRetriesIncludesUnnamedProject: flakyTestRetriesConfiguration.includesUnnamedProject,
       _ddFlakyTestRetriesProjectNames: flakyTestRetriesConfiguration.projectNames,
     }, 'Could not send library configuration to workers.')
   }
@@ -600,23 +604,22 @@ function ensureMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
  *
  * @param {object} ctx
  * @param {unknown[]|undefined} testSpecifications
- * @returns {{ projectNames?: string[] }|undefined}
+ * @returns {{ projectNames: string[], includesUnnamedProject: boolean }|undefined}
  */
 function configureFlakyTestRetries (ctx, testSpecifications) {
   if (!isFlakyTestRetriesEnabled || flakyTestRetriesCount <= 0) return
 
   let configured = false
-  let hasNamedProject = false
+  let includesUnnamedProject = false
   const projectNames = []
   for (const { config, projectName } of getVitestProjectConfigs(ctx, testSpecifications)) {
-    if (projectName) {
-      hasNamedProject = true
-    }
     if (!config.retry) {
       config.retry = flakyTestRetriesCount
       configured = true
       if (projectName) {
         projectNames.push(projectName)
+      } else {
+        includesUnnamedProject = true
       }
     }
   }
@@ -624,7 +627,8 @@ function configureFlakyTestRetries (ctx, testSpecifications) {
   if (!configured) return
 
   return {
-    projectNames: hasNamedProject ? projectNames : undefined,
+    includesUnnamedProject,
+    projectNames,
   }
 }
 
@@ -643,7 +647,9 @@ function getVitestProjectConfigs (ctx, testSpecifications) {
     return entries
   }
 
-  addSelectedInlineProjectConfigs(entries, safeConfig(ctx))
+  const selectedProjectNames = getSelectedProjectNames()
+  addSelectedInlineProjectConfigs(entries, safeConfig(ctx), selectedProjectNames)
+  addSelectedRuntimeProjectConfigs(entries, ctx?.projects, selectedProjectNames)
   if (entries.length > 0) {
     return entries
   }
@@ -683,9 +689,9 @@ function addTestSpecificationConfigs (entries, testSpecifications) {
  *
  * @param {{ config: object, projectName?: string }[]} entries
  * @param {object|undefined} rootConfig
+ * @param {string[]} selectedProjectNames
  */
-function addSelectedInlineProjectConfigs (entries, rootConfig) {
-  const selectedProjectNames = getSelectedProjectNames()
+function addSelectedInlineProjectConfigs (entries, rootConfig, selectedProjectNames) {
   if (selectedProjectNames.length === 0 || !Array.isArray(rootConfig?.projects)) return
 
   for (const project of rootConfig.projects) {
@@ -693,6 +699,24 @@ function addSelectedInlineProjectConfigs (entries, rootConfig) {
     const projectName = getProjectName(project)
     if (selectedProjectNames.includes(projectName)) {
       addConfig(entries, config, projectName)
+    }
+  }
+}
+
+/**
+ * Add selected resolved project configs once.
+ *
+ * @param {{ config: object, projectName?: string }[]} entries
+ * @param {unknown[]|undefined} projects
+ * @param {string[]} selectedProjectNames
+ */
+function addSelectedRuntimeProjectConfigs (entries, projects, selectedProjectNames) {
+  if (selectedProjectNames.length === 0 || !Array.isArray(projects)) return
+
+  for (const project of projects) {
+    const projectName = getProjectName(project)
+    if (selectedProjectNames.includes(projectName)) {
+      addConfig(entries, safeConfig(project), projectName)
     }
   }
 }
@@ -757,7 +781,7 @@ function normalizeProjectName (name) {
  * @param {string|undefined} projectName
  */
 function addConfig (entries, config, projectName) {
-  if (config && !entries.some(entry => entry.config === config)) {
+  if (config && !entries.some(entry => entry.config === config || (projectName && entry.projectName === projectName))) {
     entries.push({ config, projectName })
   }
 }
@@ -803,7 +827,12 @@ function isFlakyTestRetriesEnabledForTask (providedContext, task) {
   const { flakyTestRetriesProjectNames } = providedContext
   if (!Array.isArray(flakyTestRetriesProjectNames)) return true
 
-  return flakyTestRetriesProjectNames.includes(task.file?.projectName)
+  const projectName = task.file?.projectName
+  if (!projectName) {
+    return providedContext.flakyTestRetriesIncludesUnnamedProject === true
+  }
+
+  return flakyTestRetriesProjectNames.includes(projectName)
 }
 
 function getSortWrapper (sort, frameworkVersion) {

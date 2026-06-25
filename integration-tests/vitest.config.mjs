@@ -46,7 +46,9 @@ if (process.env.PROJECT_POOL_CONFIG) {
   }
   projectConfigs.push({ test: firstProjectConfig })
 
-  if (process.env.SECOND_PROJECT_POOL_CONFIG) {
+  if (process.env.SECOND_PROJECT_CONFIG_FILE) {
+    projectConfigs.push('vitest.second-project.config.mjs')
+  } else if (process.env.SECOND_PROJECT_POOL_CONFIG) {
     const secondProjectConfig = {
       include: [
         process.env.SECOND_PROJECT_TEST_DIR || 'ci-visibility/vitest-tests/test-visibility*',
@@ -58,6 +60,9 @@ if (process.env.PROJECT_POOL_CONFIG) {
     }
     if (process.env.SECOND_PROJECT_RETRY_CONFIG) {
       secondProjectConfig.retry = Number(process.env.SECOND_PROJECT_RETRY_CONFIG)
+    }
+    if (process.env.SECOND_PROJECT_UNNAMED) {
+      delete secondProjectConfig.name
     }
     projectConfigs.push({ test: secondProjectConfig })
   }
