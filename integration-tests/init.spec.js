@@ -14,7 +14,7 @@ const telemetryAbort = ['abort', 'reason:incompatible_runtime', 'abort.runtime',
 const telemetryForced = ['complete', 'injection_forced:true']
 const telemetryGood = ['complete', 'injection_forced:false']
 
-const { engines } = require('../package.json')
+const { engines, nodeMaxMajor: MAX_NODE_MAJOR } = require('../package.json')
 const {
   runAndCheckWithTelemetry: testFile,
   useEnv,
@@ -151,14 +151,56 @@ function testRuntimeVersionChecks (arg, filename) {
           it('should not initialize the tracer', () =>
             doTest(`Aborting application instrumentation due to incompatible_runtime.
 Found incompatible runtime Node.js ${process.versions.node}, Supported runtimes: Node.js \
->=${NODE_MAJOR + 1}.
+>=${NODE_MAJOR + 1} <${MAX_NODE_MAJOR}.
 false
 `, telemetryAbort))
 
           it('should initialize the tracer, if DD_INJECT_FORCE', () =>
             doTestForced(`Aborting application instrumentation due to incompatible_runtime.
 Found incompatible runtime Node.js ${process.versions.node}, Supported runtimes: Node.js \
->=${NODE_MAJOR + 1}.
+>=${NODE_MAJOR + 1} <${MAX_NODE_MAJOR}.
+DD_INJECT_FORCE enabled, allowing unsupported runtimes and continuing.
+Application instrumentation bootstrapping complete
+true
+`, telemetryForced))
+        })
+      })
+    })
+
+    context('when node version is too recent', () => {
+      useEnv({ NODE_OPTIONS })
+
+      before(() => {
+        const pkg = JSON.parse(pkgStr)
+        pkg.nodeMaxMajor = NODE_MAJOR
+        fs.writeFileSync(pkgPath, JSON.stringify(pkg))
+      })
+
+      it('should not initialize the tracer', () => doTest('false\n', []))
+
+      context('with DD_INJECTION_ENABLED', () => {
+        useEnv({ DD_INJECTION_ENABLED })
+
+        context('without debug', () => {
+          it('should not initialize the tracer', () => doTest('false\n', telemetryAbort))
+
+          it('should initialize the tracer, if DD_INJECT_FORCE', () => doTestForced('true\n', telemetryForced))
+        })
+
+        context('with debug', () => {
+          useEnv({ DD_TRACE_DEBUG })
+
+          it('should not initialize the tracer', () =>
+            doTest(`Aborting application instrumentation due to incompatible_runtime.
+Found incompatible runtime Node.js ${process.versions.node}, Supported runtimes: Node.js \
+${engines.node} <${NODE_MAJOR}.
+false
+`, telemetryAbort))
+
+          it('should initialize the tracer, if DD_INJECT_FORCE', () =>
+            doTestForced(`Aborting application instrumentation due to incompatible_runtime.
+Found incompatible runtime Node.js ${process.versions.node}, Supported runtimes: Node.js \
+${engines.node} <${NODE_MAJOR}.
 DD_INJECT_FORCE enabled, allowing unsupported runtimes and continuing.
 Application instrumentation bootstrapping complete
 true

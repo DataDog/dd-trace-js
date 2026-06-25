@@ -132,6 +132,7 @@
   "engines": {
     "node": ">=18"
   },
+  "nodeMaxMajor": 27,
   "files": [
     "/package.json",
     "ci/**/*",
