@@ -29,6 +29,8 @@ try {
 
 /** @type {Record<string, string>} map of module base name to version */
 const moduleVersions = {}
+/** @type {Record<string, string>} map of module base name to package.json "type" field */
+const moduleTypes = {}
 const disabled = new Set()
 const matcherCjs = create(instrumentations, dcPolyfillCjs)
 const matcherEsm = create(instrumentations, dcPolyfillEsm)
@@ -43,13 +45,21 @@ function rewrite (content, filename, format) {
 
   filename = filename.replace('file://', '')
 
-  const moduleType = format === 'module' ? 'esm' : 'cjs'
   const [modulePath] = filename.split('/node_modules/').reverse()
   const moduleParts = modulePath.split('/')
   const splitIndex = moduleParts[0].startsWith('@') ? 2 : 1
   const moduleName = moduleParts.slice(0, splitIndex).join('/')
   const filePath = moduleParts.slice(splitIndex).join('/')
-  const version = getVersion(filename, filePath)
+  const { version, type: pkgType } = getPackageInfo(filename, filePath)
+
+  // Some loaders (e.g. nyc's `append-transform`) call `Module.prototype._compile`
+  // without forwarding the `format` argument that newer Node versions pass for
+  // ESM modules loaded via `require()`. Fall back to the file extension and
+  // package.json `"type"` field so we still pick the right transformer.
+  const isEsm = format === 'module' ||
+    filename.endsWith('.mjs') ||
+    (!filename.endsWith('.cjs') && pkgType === 'module')
+  const moduleType = isEsm ? 'esm' : 'cjs'
 
   if (disabled.has(moduleName)) return content
 
@@ -78,7 +88,7 @@ function disable (instrumentation) {
   disabled.add(instrumentation)
 }
 
-function getVersion (filename, filePath) {
+function getPackageInfo (filename, filePath) {
   const [basename] = filename.split(filePath)
 
   if (!moduleVersions[basename]) {
@@ -88,10 +98,11 @@ function getVersion (filename, filePath) {
       ))
 
       moduleVersions[basename] = pkg.version
+      moduleTypes[basename] = pkg.type
     } catch {}
   }
 
-  return moduleVersions[basename]
+  return { version: moduleVersions[basename], type: moduleTypes[basename] }
 }
 
 module.exports = { rewrite, disable }
