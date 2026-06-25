@@ -30,9 +30,6 @@ try {
 /** @type {Record<string, string>} map of module base name to version */
 const moduleVersions = {}
 const disabled = new Set()
-// Matches top-level `import`/`export` declarations so we can detect ESM source
-// when callers don't forward the `format` argument to `Module._compile`.
-const esmSyntax = /^\s*(?:import|export)[\s{*]/m
 const matcherCjs = create(instrumentations, dcPolyfillCjs)
 const matcherEsm = create(instrumentations, dcPolyfillEsm)
 
@@ -46,19 +43,13 @@ function rewrite (content, filename, format) {
 
   filename = filename.replace('file://', '')
 
+  const moduleType = format === 'module' ? 'esm' : 'cjs'
   const [modulePath] = filename.split('/node_modules/').reverse()
   const moduleParts = modulePath.split('/')
   const splitIndex = moduleParts[0].startsWith('@') ? 2 : 1
   const moduleName = moduleParts.slice(0, splitIndex).join('/')
   const filePath = moduleParts.slice(splitIndex).join('/')
   const version = getVersion(filename, filePath)
-
-  // `format` isn't forwarded by every `Module._compile` caller (e.g. nyc's
-  // `append-transform`); when it's missing, sniff the source for top-level
-  // `import`/`export` so we still pick the right transformer.
-  const moduleType = format === 'module' || (format === undefined && esmSyntax.test(content))
-    ? 'esm'
-    : 'cjs'
 
   if (disabled.has(moduleName)) return content
 
