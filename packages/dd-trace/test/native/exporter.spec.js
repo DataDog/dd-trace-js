@@ -14,6 +14,7 @@ describe('NativeExporter', () => {
   let prioritySampler
   let nativeSpans
   let logError
+  let metricsIncrement
   let clock
 
   beforeEach(() => {
@@ -36,11 +37,13 @@ describe('NativeExporter', () => {
     }
 
     logError = sinon.stub()
+    metricsIncrement = sinon.stub()
     NativeExporter = proxyquire('../../src/exporters/native', {
       '../../log': {
         warn: sinon.stub(),
         error: logError,
       },
+      '../../runtime_metrics': { increment: metricsIncrement },
     })
   })
 
@@ -492,6 +495,33 @@ describe('NativeExporter', () => {
       exporter.setUrl('http://new-agent:9999')
 
       assert.notStrictEqual(exporter._url.toString(), originalUrl)
+    })
+  })
+
+  describe('health metrics', () => {
+    const P = 'datadog.tracer.node.exporter.agent'
+
+    it('increments request + response counters on a successful flush', async () => {
+      exporter = new NativeExporter(config, prioritySampler, nativeSpans)
+      exporter.export([createMockSpan(1n)])
+      exporter.flush(() => {})
+      await clock.tickAsync(0)
+      sinon.assert.calledWith(metricsIncrement, `${P}.requests`, true)
+      sinon.assert.calledWith(metricsIncrement, `${P}.responses`, true)
+    })
+
+    it('increments error counters (name + code) on a failed flush', async () => {
+      const err = new Error('boom')
+      err.code = 'ECONNREFUSED'
+      nativeSpans.flushSpans.rejects(err)
+      exporter = new NativeExporter(config, prioritySampler, nativeSpans)
+      exporter.export([createMockSpan(1n)])
+      exporter.flush(() => {})
+      await clock.tickAsync(0)
+      sinon.assert.calledWith(metricsIncrement, `${P}.requests`, true)
+      sinon.assert.calledWith(metricsIncrement, `${P}.errors`, true)
+      sinon.assert.calledWith(metricsIncrement, `${P}.errors.by.name`, 'name:Error', true)
+      sinon.assert.calledWith(metricsIncrement, `${P}.errors.by.code`, 'code:ECONNREFUSED', true)
     })
   })
 

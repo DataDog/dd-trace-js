@@ -7,8 +7,16 @@ const { channel } = require('dc-polyfill')
 const defaults = require('../../config/defaults')
 const log = require('../../log')
 const processTags = require('../../process-tags')
+const runtimeMetrics = require('../../runtime_metrics')
 
 const firstFlushChannel = channel('dd-trace:exporter:first-flush')
+
+// Mirrors the legacy AgentWriter so operators see the same tracer-health
+// metrics on the native export path. The native `sendPreparedChunk` does not
+// surface the HTTP status code, so `.responses.by.status` is intentionally
+// omitted (libdatadog handles the transport); requests/responses/errors are
+// emitted around each send attempt.
+const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
 
 /**
  * NativeExporter sends spans to the Datadog agent via the native
@@ -144,9 +152,11 @@ class NativeExporter {
     // sendPreparedChunk is async (HTTP send). We serialize sends so that
     // prepared chunks don't accumulate faster than they can be sent, which
     // would cause unbounded memory growth proportional to total requests.
+    runtimeMetrics.increment(`${METRIC_PREFIX}.requests`, true)
     this._nativeSpans.flushSpans(spanIds, firstIsLocalRoot)
       .then((response) => {
         this.#flushInFlight = false
+        runtimeMetrics.increment(`${METRIC_PREFIX}.responses`, true)
         // The agent's response carries per-service sampling rates. Feed them
         // back into the priority sampler so adaptive (agent-driven) sampling
         // works in native mode, matching the legacy AgentWriter behaviour.
@@ -161,6 +171,11 @@ class NativeExporter {
         }
       }, (err) => {
         this.#flushInFlight = false
+        runtimeMetrics.increment(`${METRIC_PREFIX}.errors`, true)
+        runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.name`, `name:${err.name}`, true)
+        if (err.code) {
+          runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.code`, `code:${err.code}`, true)
+        }
         log.error('Error sending spans to agent via native exporter:', err)
         // Drain on rejection too — otherwise a single transient failure
         // would leave spans buffered indefinitely (no signal beyond the
