@@ -53,6 +53,7 @@ const versions = NODE_MAJOR <= 18 ? ['1.6.0', '3.2.6'] : ['1.6.0', 'latest']
 versions.forEach((version) => {
   describe(`vitest@${version}`, () => {
     let cwd, receiver, childProcess, testOutput
+    const vitestProjectsIt = version === 'latest' && NODE_MAJOR >= 20 ? it : it.skip
 
     useSandbox([
       `vitest@${version}`,
@@ -66,11 +67,11 @@ versions.forEach((version) => {
     })
 
     beforeEach(async function () {
+      testOutput = ''
       receiver = await new FakeCiVisIntake().start()
     })
 
     afterEach(async () => {
-      testOutput = ''
       childProcess.kill()
       await receiver.stop()
     })
@@ -142,11 +143,11 @@ versions.forEach((version) => {
         fs.writeFileSync(
           path.join(cwd, 'ci-visibility/vitest-tests/impacted-test.mjs'),
           `import { describe, test, expect } from 'vitest'
-           describe('impacted test', () => {
-             test('can impacted test', () => {
-               assert.strictEqual(1 + 2, 4)
-             })
-           })`
+          describe('impacted test', () => {
+            test('can impacted test', () => {
+              assert.strictEqual(1 + 2, 4)
+            })
+          })`
         )
         execSync('git add ci-visibility/vitest-tests/impacted-test.mjs', { cwd, stdio: 'ignore' })
         execSync('git commit -m "modify impacted-test.mjs"', { cwd, stdio: 'ignore' })
@@ -588,6 +589,240 @@ versions.forEach((version) => {
               },
             }
           )
+
+          await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        })
+
+      vitestProjectsIt('applies ATR retry configuration to Vitest projects',
+        async () => {
+          receiver.setSettings({
+            itr_enabled: false,
+            code_coverage: false,
+            tests_skipping: false,
+            flaky_test_retries_enabled: true,
+            early_flake_detection: { enabled: false },
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const retriedTestName = 'flaky test retries can retry tests that eventually pass'
+              const retriedTests = tests
+                .filter(test => test.meta[TEST_NAME] === retriedTestName)
+                .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+              assert.strictEqual(retriedTests.length, 4)
+              assert.ok(!(TEST_IS_RETRY in retriedTests[0].meta))
+              for (const test of retriedTests.slice(1)) {
+                assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
+                assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+              }
+              assert.strictEqual(retriedTests[3].meta[TEST_FINAL_STATUS], 'pass')
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run --project project-pool',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '3',
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+                PROJECT_POOL_CONFIG: 'forks',
+                TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries.mjs',
+              },
+            }
+          )
+
+          await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        })
+
+      vitestProjectsIt('does not enable ATR metadata from a non-runnable root project config',
+        async () => {
+          receiver.setSettings({
+            itr_enabled: false,
+            code_coverage: false,
+            tests_skipping: false,
+            flaky_test_retries_enabled: true,
+            early_flake_detection: { enabled: false },
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const retriedTestName = 'flaky test retries can retry tests that eventually pass'
+              const retriedTests = tests
+                .filter(test => test.meta[TEST_NAME] === retriedTestName)
+                .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+              assert.strictEqual(retriedTests.length, 2)
+              assert.ok(!(TEST_IS_RETRY in retriedTests[0].meta), inspect(retriedTests[0].meta))
+              assert.ok(!(TEST_RETRY_REASON in retriedTests[0].meta), inspect(retriedTests[0].meta))
+              assert.strictEqual(retriedTests[1].meta[TEST_IS_RETRY], 'true')
+              assert.strictEqual(retriedTests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+              assert.strictEqual(retriedTests[1].meta[TEST_FINAL_STATUS], 'fail')
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run --project project-pool',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '3',
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+                PROJECT_POOL_CONFIG: 'forks',
+                PROJECT_RETRY_CONFIG: '1',
+                TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries.mjs',
+              },
+            }
+          )
+
+          await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        })
+
+      vitestProjectsIt('does not mark user-configured retries as ATR in mixed project runs',
+        async () => {
+          receiver.setSettings({
+            itr_enabled: false,
+            code_coverage: false,
+            tests_skipping: false,
+            flaky_test_retries_enabled: true,
+            early_flake_detection: { enabled: false },
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const projectWithExistingRetry = tests
+                .filter(test => test.meta[TEST_NAME] === 'flaky test retries can retry tests that eventually pass')
+                .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+              const projectWithAtrRetry = tests
+                .filter(test =>
+                  test.meta[TEST_NAME] === 'flaky test retries with hooks can retry tests that eventually pass'
+                )
+                .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+              const receivedTestNames = inspect(tests.map(test => test.meta[TEST_NAME]))
+
+              assert.strictEqual(projectWithExistingRetry.length, 2, `${receivedTestNames}\n${testOutput}`)
+              assert.ok(!(TEST_IS_RETRY in projectWithExistingRetry[0].meta), inspect(projectWithExistingRetry[0].meta))
+              assert.ok(
+                !(TEST_RETRY_REASON in projectWithExistingRetry[0].meta),
+                inspect(projectWithExistingRetry[0].meta)
+              )
+              assert.strictEqual(projectWithExistingRetry[1].meta[TEST_IS_RETRY], 'true')
+              assert.strictEqual(projectWithExistingRetry[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+              assert.strictEqual(projectWithExistingRetry[1].meta[TEST_FINAL_STATUS], 'fail')
+
+              assert.strictEqual(projectWithAtrRetry.length, 4)
+              assert.ok(!(TEST_IS_RETRY in projectWithAtrRetry[0].meta), inspect(projectWithAtrRetry[0].meta))
+              for (const test of projectWithAtrRetry.slice(1)) {
+                assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
+                assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+              }
+              assert.strictEqual(projectWithAtrRetry[3].meta[TEST_FINAL_STATUS], 'pass')
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run --project project-pool --project second-project-pool',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '3',
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+                PROJECT_POOL_CONFIG: 'forks',
+                PROJECT_RETRY_CONFIG: '1',
+                SECOND_PROJECT_CONFIG_FILE: 'true',
+                SECOND_PROJECT_POOL_CONFIG: 'forks',
+                SECOND_PROJECT_NAME_COLOR: 'blue',
+                SECOND_PROJECT_TEST_DIR: 'ci-visibility/vitest-tests/hooks-flaky-test-retries.mjs',
+                TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries.mjs',
+              },
+            }
+          )
+          childProcess.stdout?.on('data', (chunk) => {
+            testOutput += chunk.toString()
+          })
+          childProcess.stderr?.on('data', (chunk) => {
+            testOutput += chunk.toString()
+          })
+
+          await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        })
+
+      vitestProjectsIt('marks unnamed project retries as ATR in mixed project runs',
+        async () => {
+          receiver.setSettings({
+            itr_enabled: false,
+            code_coverage: false,
+            tests_skipping: false,
+            flaky_test_retries_enabled: true,
+            early_flake_detection: { enabled: false },
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const projectWithExistingRetry = tests
+                .filter(test => test.meta[TEST_NAME] === 'flaky test retries can retry tests that eventually pass')
+                .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+              const unnamedProjectWithAtrRetry = tests
+                .filter(test =>
+                  test.meta[TEST_NAME] === 'flaky test retries with hooks can retry tests that eventually pass'
+                )
+                .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+              const receivedTestNames = inspect(tests.map(test => test.meta[TEST_NAME]))
+
+              assert.strictEqual(projectWithExistingRetry.length, 2, `${receivedTestNames}\n${testOutput}`)
+              assert.ok(!(TEST_IS_RETRY in projectWithExistingRetry[0].meta), inspect(projectWithExistingRetry[0].meta))
+              assert.ok(
+                !(TEST_RETRY_REASON in projectWithExistingRetry[0].meta),
+                inspect(projectWithExistingRetry[0].meta)
+              )
+              assert.strictEqual(projectWithExistingRetry[1].meta[TEST_IS_RETRY], 'true')
+              assert.strictEqual(projectWithExistingRetry[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+              assert.strictEqual(projectWithExistingRetry[1].meta[TEST_FINAL_STATUS], 'fail')
+
+              assert.strictEqual(unnamedProjectWithAtrRetry.length, 4, `${receivedTestNames}\n${testOutput}`)
+              assert.ok(
+                !(TEST_IS_RETRY in unnamedProjectWithAtrRetry[0].meta),
+                inspect(unnamedProjectWithAtrRetry[0].meta)
+              )
+              for (const test of unnamedProjectWithAtrRetry.slice(1)) {
+                assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
+                assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+              }
+              assert.strictEqual(unnamedProjectWithAtrRetry[3].meta[TEST_FINAL_STATUS], 'pass')
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '3',
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+                PROJECT_POOL_CONFIG: 'forks',
+                PROJECT_RETRY_CONFIG: '1',
+                SECOND_PROJECT_POOL_CONFIG: 'forks',
+                SECOND_PROJECT_TEST_DIR: 'ci-visibility/vitest-tests/hooks-flaky-test-retries.mjs',
+                SECOND_PROJECT_UNNAMED: 'true',
+                TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries.mjs',
+              },
+            }
+          )
+          childProcess.stdout?.on('data', (chunk) => {
+            testOutput += chunk.toString()
+          })
+          childProcess.stderr?.on('data', (chunk) => {
+            testOutput += chunk.toString()
+          })
 
           await Promise.all([once(childProcess, 'exit'), eventsPromise])
         })

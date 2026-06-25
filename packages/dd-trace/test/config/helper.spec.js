@@ -137,6 +137,32 @@ describe('config-helper env resolution', () => {
     assert.strictEqual(value, undefined)
   })
 
+  it('applies the registered default when the value is unset', () => {
+    delete process.env.DD_TRACE_ENABLED
+
+    // DD_TRACE_ENABLED's registered default is true.
+    assert.strictEqual(getValueFromEnvSources('DD_TRACE_ENABLED'), true)
+  })
+
+  it('returns undefined for an unset value when skipDefault is set', () => {
+    delete process.env.DD_TRACE_ENABLED
+
+    assert.strictEqual(getValueFromEnvSources('DD_TRACE_ENABLED', true), undefined)
+  })
+
+  it('returns the configured value rather than the default when set', () => {
+    process.env.DD_TRACE_ENABLED = 'false'
+
+    assert.strictEqual(getValueFromEnvSources('DD_TRACE_ENABLED'), false)
+    assert.strictEqual(getValueFromEnvSources('DD_TRACE_ENABLED', true), false)
+  })
+
+  it('throws for an unset variable without a configuration entry', () => {
+    delete process.env.SOME_UNREGISTERED_VAR
+
+    assert.throws(() => getValueFromEnvSources('SOME_UNREGISTERED_VAR'))
+  })
+
   it('prefers canonical name over alias', () => {
     process.env.DD_AGENT_HOST = 'canonical-hostname'
     process.env.DD_TRACE_AGENT_HOSTNAME = 'alias-hostname'
@@ -177,12 +203,40 @@ describe('config-helper env resolution', () => {
     )
   })
 
-  it('returns value for non-DD/OTEL environment variables', () => {
+  it('throws for a non-DD/OTEL environment variable without a configuration entry', () => {
     process.env.NODE_ENV = 'production'
 
-    const value = getValueFromEnvSources('NODE_ENV')
+    assert.throws(() => getValueFromEnvSources('NODE_ENV'))
+  })
 
-    assert.strictEqual(value, 'production')
+  it('parses boolean configuration values', () => {
+    process.env.DD_TRACE_ENABLED = 'false'
+    assert.strictEqual(getValueFromEnvSources('DD_TRACE_ENABLED'), false)
+
+    process.env.DD_TRACE_ENABLED = 'true'
+    assert.strictEqual(getValueFromEnvSources('DD_TRACE_ENABLED'), true)
+  })
+
+  it('ignores values the parser rejects and falls back to the registered default', () => {
+    process.env.DD_TRACE_ENABLED = 'maybe'
+
+    // A rejected value must not mask the registered default; only `skipDefault`
+    // yields `undefined` for a value that resolves to nothing.
+    assert.strictEqual(getValueFromEnvSources('DD_TRACE_ENABLED'), true)
+    assert.strictEqual(getValueFromEnvSources('DD_TRACE_ENABLED', true), undefined)
+  })
+
+  it('parses numeric configuration values', () => {
+    process.env.DD_TRACE_SAMPLE_RATE = '0.5'
+
+    assert.strictEqual(getValueFromEnvSources('DD_TRACE_SAMPLE_RATE'), 0.5)
+  })
+
+  it('parses and validates values resolved through an alias', () => {
+    process.env.OTEL_LOG_LEVEL = 'debug'
+
+    assert.strictEqual(getValueFromEnvSources('OTEL_LOG_LEVEL'), 'debug')
+    assert.strictEqual(getValueFromEnvSources('DD_TRACE_LOG_LEVEL'), 'debug')
   })
 
   describe('with stable config and env vars', () => {
@@ -238,9 +292,35 @@ describe('config-helper env resolution', () => {
 
       getValueFromEnvSources = mod.getValueFromEnvSources
 
-      assert.strictEqual(getValueFromEnvSources('DD_TRACE_SAMPLE_RATE'), '0.9')
+      assert.strictEqual(getValueFromEnvSources('DD_TRACE_SAMPLE_RATE'), 0.9)
       assert.strictEqual(getValueFromEnvSources('DD_SERVICE'), 'fleet')
-      assert.strictEqual(getValueFromEnvSources('DD_TRACE_ENABLED'), 'true')
+      assert.strictEqual(getValueFromEnvSources('DD_TRACE_ENABLED'), true)
+    })
+
+    it('ignores a rejected higher-priority value and uses the next valid source', () => {
+      process.env.DD_TRACE_ENABLED = 'true'
+
+      const StableConfigStub = sinon.stub()
+      StableConfigStub.callsFake(function () {
+        this.localEntries = {}
+        this.fleetEntries = {
+          DD_TRACE_ENABLED: 'maybe',
+        }
+        this.warnings = []
+      })
+
+      const mod = proxyquire('../../src/config/helper', {
+        '../serverless': {
+          IS_SERVERLESS: false,
+        },
+        './stable': StableConfigStub,
+      })
+
+      getValueFromEnvSources = mod.getValueFromEnvSources
+
+      // The malformed fleet value (highest priority) is ignored so the valid env
+      // value wins, rather than masking it and falling back to the default.
+      assert.strictEqual(getValueFromEnvSources('DD_TRACE_ENABLED'), true)
     })
 
     it('does not override defined values with undefined', () => {
