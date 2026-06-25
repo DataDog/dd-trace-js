@@ -462,6 +462,7 @@ function finishResolvers ({ fields }) {
 // Under iitm (ESM) the namespace is settable and the inner-file hook never
 // matches the `esm/` path, so the root wrap is the only option there.
 addHook({ name: '@graphql-tools/executor', versions: ['>=0.0.14'] }, (executor, _version, isIitm) => {
+  /* istanbul ignore if: covered only by the graphql-yoga ESM integration test (subprocess) */
   if (isIitm) {
     shimmer.wrap(executor, 'execute', wrapExecute(executor))
     shimmer.wrap(executor, 'normalizedExecutor', wrapExecute(executor))
