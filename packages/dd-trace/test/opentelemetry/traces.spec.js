@@ -845,6 +845,18 @@ describe('OpenTelemetry Traces', () => {
   })
 
   describe('Telemetry Metrics', () => {
+    it('sets protocol:http tag for http:// endpoint', () => {
+      const exporter = new OtlpHttpTraceExporter('http://collector.example/v1/traces', {}, 1000, {})
+
+      assert.ok(exporter.telemetryTags.includes('protocol:http'))
+    })
+
+    it('sets protocol:https tag for https:// endpoint', () => {
+      const exporter = new OtlpHttpTraceExporter('https://collector.example/v1/traces', {}, 1000, {})
+
+      assert.ok(exporter.telemetryTags.includes('protocol:https'))
+    })
+
     it('tracks telemetry metrics for exported traces', () => {
       const telemetryMetrics = {
         manager: { namespace: sinon.stub().returns({ count: sinon.stub().returns({ inc: sinon.spy() }) }) },
