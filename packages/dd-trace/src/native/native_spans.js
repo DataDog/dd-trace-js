@@ -588,6 +588,30 @@ class NativeSpansInterface {
   }
 
   /**
+   * Set a `meta_struct` entry on a span. `meta_struct` carries msgpack-encoded
+   * structured data (AppSec, Code Origin, Dynamic Instrumentation) and has no
+   * change-buffer opcode, so the WASM binding writes it directly onto the span
+   * after draining its own change queue. We must therefore drain the JS-tracked
+   * queue first, otherwise `_cqbIndex`/`_cqbCount` would fall out of sync with
+   * the now-zeroed WASM header and the next `queueOp` would re-apply stale ops.
+   *
+   * @param {Uint8Array} spanId The 8-byte LE span id handle
+   * @param {string} key The meta_struct key
+   * @param {Uint8Array} bytes The msgpack-encoded value
+   */
+  setMetaStruct (spanId, key, bytes) {
+    this.flushChangeQueue()
+    // WasmSpanState addresses spans by their numeric u64 id (a BigInt across
+    // the wasm boundary). The 8-byte handle folds big-endian to that id, the
+    // same interpretation the change buffer uses when keying spans by span_id.
+    const id = new DataView(spanId.buffer, spanId.byteOffset, 8).getBigUint64(0, false)
+    this._state.setMetaStruct(id, key, bytes)
+    // setMetaStruct inserts into a Vec, which can grow WASM memory and detach
+    // our cached views — refresh before the next queueOp.
+    this.#checkDetach()
+  }
+
+  /**
    * Flush spans to the Datadog agent.
    *
    * @param {Array<Uint8Array>} spanIds Array of 8-byte LE span ids

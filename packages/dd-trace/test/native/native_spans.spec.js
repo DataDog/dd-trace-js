@@ -64,6 +64,7 @@ describe('NativeSpansInterface', () => {
       getTraceMetaAttr: sinon.stub().returns('trace-value'),
       getTraceMetricAttr: sinon.stub().returns(100),
       getTraceOrigin: sinon.stub().returns('synthetics'),
+      setMetaStruct: sinon.stub(),
     }
 
     WasmSpanState = sinon.stub().returns(mockState)
@@ -490,6 +491,41 @@ describe('NativeSpansInterface', () => {
       assert.strictEqual(nativeSpans._cqbView.getUint16(metaRecordEnd, true), 16)
       assert.ok(nativeSpans._stringMap.has('m1'))
       assert.ok(nativeSpans._stringMap.has('m2'))
+    })
+  })
+
+  describe('setMetaStruct', () => {
+    it('drains the queue, folds the handle big-endian to a u64, and forwards bytes', () => {
+      // Queue an op so there is pending work to drain.
+      const spanId = new Uint8Array([1, 0, 0, 0, 0, 0, 0, 0])
+      nativeSpans.queueOp(OpCode.SetError, spanId, ['i32', 1])
+      assert.strictEqual(nativeSpans._cqbCount, 1)
+
+      const handle = new Uint8Array([0, 0, 0, 0, 0, 0, 0, 2]) // BE => 2n
+      const bytes = new Uint8Array([0x81, 0xa1, 0x61, 0x01])
+      nativeSpans.setMetaStruct(handle, 'appsec', bytes)
+
+      // Queue was flushed first (kept in sync with the WASM-internal flush).
+      sinon.assert.called(mockState.flushChangeQueue)
+      assert.strictEqual(nativeSpans._cqbCount, 0)
+      // Handle folds big-endian to the numeric id the WASM state expects.
+      sinon.assert.calledOnceWithExactly(mockState.setMetaStruct, 2n, 'appsec', bytes)
+    })
+    it('folds the all-ones handle correctly with no sign/wrap error', () => {
+      // Queue an op so there is pending work to drain.
+      const spanId = new Uint8Array([1, 0, 0, 0, 0, 0, 0, 0])
+      nativeSpans.queueOp(OpCode.SetError, spanId, ['i32', 1])
+      assert.strictEqual(nativeSpans._cqbCount, 1)
+
+      const handle = Uint8Array.from([0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]) // BE => (2n ** 64n) - 1n
+      const bytes = new Uint8Array([0x81, 0xa1, 0x61, 0x01])
+      nativeSpans.setMetaStruct(handle, 'appsec', bytes)
+
+      // Queue was flushed first, and the all-ones handle folded to the correct u64 value.
+      sinon.assert.called(mockState.flushChangeQueue)
+      assert.strictEqual(nativeSpans._cqbCount, 0)
+      const expectedId = (2n ** 64n) - 1n
+      sinon.assert.calledOnceWithExactly(mockState.setMetaStruct, expectedId, 'appsec', bytes)
     })
   })
 })

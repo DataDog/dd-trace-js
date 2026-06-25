@@ -8,8 +8,13 @@ const DatadogSpan = require('../opentracing/span')
 const id = require('../id')
 const tagger = require('../tagger')
 const { MAX_META_VALUE_LENGTH } = require('../encode/tags-processors')
+const { MsgpackEncoder } = require('../msgpack')
 const NativeSpanContext = require('./span_context')
 const { OpCode } = require('./index')
+
+// Reused across spans to encode meta_struct values to msgpack bytes, matching
+// the legacy encoder's `meta_struct` map<string, bin> wire shape.
+const metaStructEncoder = new MsgpackEncoder()
 
 // `_createContext` is invoked by the parent constructor via `super(...)`
 // BEFORE the subclass can touch `this`, so we cannot thread
@@ -303,6 +308,7 @@ class NativeDatadogSpan extends DatadogSpan {
 
     this.#serializeSpanLinks()
     this.#serializeSpanEvents()
+    this.#serializeMetaStruct()
 
     // Mirror the parent's normalization (opentracing/span.js line 292).
     const resolvedFinishTime = finishTime === undefined
@@ -376,6 +382,30 @@ class NativeDatadogSpan extends DatadogSpan {
       serialized = `${serialized.slice(0, MAX_META_VALUE_LENGTH)}...`
     }
     this._spanContext.setTag('_dd.span_events', serialized)
+  }
+
+  /**
+   * Forward `meta_struct` entries (set ad-hoc on the span by products such as
+   * AppSec, Code Origin and Dynamic Instrumentation) to native storage. Each
+   * value is msgpack-encoded to bytes, matching how the legacy encoder writes
+   * the v0.4 `meta_struct` map<string, bin> field. The value filter mirrors the
+   * legacy `#encodeMetaStruct` (strings, numbers and non-null objects only).
+   */
+  #serializeMetaStruct () {
+    const metaStruct = this.meta_struct
+    if (!metaStruct || typeof metaStruct !== 'object') return
+
+    for (const key of Object.keys(metaStruct)) {
+      const value = metaStruct[key]
+      if (typeof value === 'string' || typeof value === 'number' ||
+        (value !== null && typeof value === 'object')) {
+        this._nativeSpans.setMetaStruct(
+          this._spanContext._nativeSpanId,
+          key,
+          metaStructEncoder.encode(value)
+        )
+      }
+    }
   }
 }
 

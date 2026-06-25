@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire').noCallThru()
+const { MsgpackEncoder } = require('../../src/msgpack')
 
 require('../setup/core')
 
@@ -87,6 +88,7 @@ describe('NativeDatadogSpan', () => {
       queueBatchMeta: sinon.stub(),
       queueBatchMetrics: sinon.stub(),
       flushChangeQueue: sinon.stub(),
+      setMetaStruct: sinon.stub(),
       allocSegment: sinon.stub().callsFake(() => nextSegment++),
       OpCode,
     }
@@ -380,6 +382,27 @@ describe('NativeDatadogSpan', () => {
         sinon.match.any,
         ['ns', sinon.match.number]
       )
+    })
+
+    it('forwards qualifying meta_struct entries as msgpack bytes, skipping null/boolean', () => {
+      span.meta_struct = { obj: { a: 1 }, str: 'x', num: 5, nil: null, bool: true }
+
+      span.finish()
+
+      // string, number and non-null object are forwarded; null and boolean are
+      // dropped (mirrors the legacy #encodeMetaStruct value filter).
+      sinon.assert.calledThrice(nativeSpans.setMetaStruct)
+      const keys = nativeSpans.setMetaStruct.getCalls().map(c => c.args[1])
+      assert.deepEqual(keys.sort(), ['num', 'obj', 'str'])
+
+      const expected = new MsgpackEncoder().encode({ a: 1 })
+      const objCall = nativeSpans.setMetaStruct.getCalls().find(c => c.args[1] === 'obj')
+      assert.deepEqual(Uint8Array.from(objCall.args[2]), Uint8Array.from(expected))
+    })
+
+    it('does not call setMetaStruct when the span has no meta_struct', () => {
+      span.finish()
+      sinon.assert.notCalled(nativeSpans.setMetaStruct)
     })
   })
 })
