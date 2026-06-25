@@ -4,7 +4,7 @@
 "@datadog/libdatadog","https://github.com/DataDog/libdatadog-nodejs","['Apache-2.0']","['Datadog Inc.']"
 "@datadog/native-appsec","https://github.com/DataDog/dd-native-appsec-js","['Apache-2.0']","['Datadog Inc.']"
 "@datadog/native-iast-taint-tracking","https://github.com/DataDog/dd-native-iast-taint-tracking-js","['Apache-2.0']","['Datadog Inc.']"
-"@datadog/native-metrics","https://github.com/DataDog/dd-native-metrics-js","['Apache-2.0']","['Datadog Inc.']"
+"@datadog/native-metrics","npm:@datadog/native-metrics","[]","[]"
 "@datadog/openfeature-node-server","https://github.com/DataDog/openfeature-js-client","['Apache-2.0']","['DataDog']"
 "@datadog/pprof","https://github.com/DataDog/pprof-nodejs","['Apache-2.0']","['Google Inc.']"
 "@datadog/sketches-js","https://github.com/DataDog/sketches-js","['Apache-2.0']","['DataDog']"
