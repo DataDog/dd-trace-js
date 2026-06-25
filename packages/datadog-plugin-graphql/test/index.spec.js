@@ -232,7 +232,7 @@ describe('Plugin', () => {
       })
 
       describe('graphql-yoga', () => {
-        withVersions(plugin, 'graphql-yoga', version => {
+        withVersions('graphql', 'graphql-yoga', version => {
           let graphqlYoga
           let server
           let port

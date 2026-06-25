@@ -455,13 +455,23 @@ function finishResolvers ({ fields }) {
   }
 }
 
-addHook({ name: '@graphql-tools/executor', versions: ['>=0.0.14'] }, executor => {
-  // graphql-yoga uses the normalizedExecutor function, so we need to wrap both. There is no risk in wrapping both
-  // since the functions are closely related, and our wrappedExecute function prevents double calls with the
-  // contexts.has(contextValue) check.
-  shimmer.wrap(executor, 'execute', wrapExecute(executor))
-  shimmer.wrap(executor, 'normalizedExecutor', wrapExecute(executor))
+// The CJS package root re-exports `execute` and `normalizedExecutor` as
+// non-configurable tslib `__exportStar` getters that shimmer cannot rewrite in
+// place, so the inner execute.js hook below carries CJS instead: graphql-yoga
+// (`normalizedExecutor`) and direct callers both funnel through that `execute`.
+// Under iitm (ESM) the namespace is settable and the inner-file hook never
+// matches the `esm/` path, so the root wrap is the only option there.
+addHook({ name: '@graphql-tools/executor', versions: ['>=0.0.14'] }, (executor, _version, isIitm) => {
+  if (isIitm) {
+    shimmer.wrap(executor, 'execute', wrapExecute(executor))
+    shimmer.wrap(executor, 'normalizedExecutor', wrapExecute(executor))
+  }
   return executor
+})
+
+addHook({ name: '@graphql-tools/executor', file: 'cjs/execution/execute.js', versions: ['>=0.0.14'] }, execute => {
+  shimmer.wrap(execute, 'execute', wrapExecute(execute))
+  return execute
 })
 
 // TODO(BridgeAR): graphql >=17.0.0-alpha.9 routes execute() through
