@@ -237,75 +237,74 @@ describe('Plugin', () => {
           let server
           let port
 
-          before(() => {
+          // A generous hook timeout absorbs the one-off cost of loading the
+          // graphql-yoga tree and building the envelop execution pipeline under
+          // coverage on CI, keeping the assertion below on a fast hot path.
+          before(async function () {
+            this.timeout(10000)
+
             tracer = require('../../dd-trace')
-            return agent.load('graphql')
-              .then(() => {
-                graphqlYoga = require(`../../../versions/graphql-yoga@${version}`).get()
+            await agent.load('graphql')
 
-                const typeDefs = `
-                  type Query {
-                    hello(name: String): String
-                  }
-                `
+            graphqlYoga = require(`../../../versions/graphql-yoga@${version}`).get()
 
-                const resolvers = {
-                  Query: {
-                    hello: (_, { name }) => {
-                      return `Hello, ${name || 'world'}!`
-                    },
-                  },
-                }
+            const typeDefs = `
+              type Query {
+                hello(name: String): String
+              }
+            `
 
-                const schema = graphqlYoga.createSchema({
-                  typeDefs, resolvers,
-                })
+            const resolvers = {
+              Query: {
+                hello: (_, { name }) => {
+                  return `Hello, ${name || 'world'}!`
+                },
+              },
+            }
 
-                const yoga = graphqlYoga.createYoga({ schema })
+            const schema = graphqlYoga.createSchema({ typeDefs, resolvers })
+            const yoga = graphqlYoga.createYoga({ schema })
 
-                server = http.createServer(yoga)
-              })
-          })
+            server = http.createServer(yoga)
+            await new Promise(resolve => server.listen(0, resolve))
+            port = (/** @type {import('net').AddressInfo} */ (server.address())).port
 
-          before(done => {
-            server.listen(0, () => {
-              port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-              done()
+            // The first request primes the lazily built execution pipeline so
+            // the timed assertion does not race a cold request on CI.
+            await axios.post(`http://localhost:${port}/graphql`, {
+              query: 'query Warmup { hello(name: "warmup") }',
             })
           })
 
-          after(() => {
+          after(async () => {
             server.close()
-            return agent.close()
+            await agent.close()
           })
 
-          it('should instrument graphql-yoga execution', done => {
-            agent
-              .assertSomeTraces(traces => {
-                const spans = sort(traces[0])
-
-                assert.strictEqual(spans[0].service, expectedSchema.server.serviceName)
-                assert.strictEqual(spans[0].name, expectedSchema.server.opName)
-                assert.strictEqual(spans[0].resource, 'query MyQuery{hello(name:"")}')
-                assert.strictEqual(spans[0].type, 'graphql')
-                assert.strictEqual(spans[0].error, 0)
-                assert.ok(!('graphql.source' in spans[0].meta))
-                assert.strictEqual(spans[0].meta['graphql.operation.type'], 'query')
-                assert.strictEqual(spans[0].meta['graphql.operation.name'], 'MyQuery')
-                assert.strictEqual(spans[0].meta.component, 'graphql')
-                assert.strictEqual(spans[0].meta['_dd.integration'], 'graphql')
-              })
-              .then(done)
-
+          it('should instrument graphql-yoga execution', async () => {
             const query = `
               query MyQuery {
                 hello(name: "world")
               }
             `
 
-            axios.post(`http://localhost:${port}/graphql`, {
-              query,
-            }).catch(done)
+            const assertion = agent.assertSomeTraces(traces => {
+              const spans = sort(traces[0])
+
+              assert.strictEqual(spans[0].service, expectedSchema.server.serviceName)
+              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+              assert.strictEqual(spans[0].resource, 'query MyQuery{hello(name:"")}')
+              assert.strictEqual(spans[0].type, 'graphql')
+              assert.strictEqual(spans[0].error, 0)
+              assert.ok(!('graphql.source' in spans[0].meta))
+              assert.strictEqual(spans[0].meta['graphql.operation.type'], 'query')
+              assert.strictEqual(spans[0].meta['graphql.operation.name'], 'MyQuery')
+              assert.strictEqual(spans[0].meta.component, 'graphql')
+              assert.strictEqual(spans[0].meta['_dd.integration'], 'graphql')
+            }, { spanResourceMatch: /MyQuery/ })
+
+            await axios.post(`http://localhost:${port}/graphql`, { query })
+            await assertion
           })
         })
       })
