@@ -24,42 +24,41 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
   onConfigure () {
     this.configureSanitizers()
 
-    // Anything that accesses the storage is context dependent
+    // Track filter objects already analyzed so mquery doesn't re-analyze the same
+    // filter object that mongoose's Model wrapper already handled. Uses object
+    // identity: mongoose passes the same filter reference down to mquery internally.
+    // This replaces the previous AsyncLocalStorage.enterWith() approach, which leaked
+    // the nosqlAnalyzed flag to sibling async contexts in Node.js >= 20.
+    const analyzedFilterObjects = new WeakSet()
+
     const onStart = ({ filters }) => {
       const store = storage('legacy').getStore()
-      if (store && !store.nosqlAnalyzed && filters?.length) {
+      if (store && filters?.length) {
         for (const filter of filters) {
-          this.analyze({ filter }, store)
+          if (filter == null || typeof filter !== 'object' || !analyzedFilterObjects.has(filter)) {
+            this.analyze({ filter }, store)
+          }
         }
       }
-
       return store
     }
 
-    const onStartAndEnterWithStore = (message) => {
-      const store = onStart(message || {})
-      if (store) {
-        storage('legacy').enterWith({ ...store, nosqlAnalyzed: true, nosqlParentStore: store })
-      }
-    }
-
-    // Anything that accesses the storage is context dependent
-    // eslint-disable-next-line unicorn/consistent-function-scoping
-    const onFinish = () => {
-      const store = storage('legacy').getStore()
-      if (store?.nosqlParentStore) {
-        storage('legacy').enterWith(store.nosqlParentStore)
+    const onStartAndMarkFilters = (message) => {
+      onStart(message || {})
+      if (message?.filters) {
+        for (const filter of message.filters) {
+          if (filter && typeof filter === 'object') {
+            analyzedFilterObjects.add(filter)
+          }
+        }
       }
     }
 
     this.addSub('datadog:mongodb:collection:filter:start', onStart)
 
-    this.addSub('datadog:mongoose:model:filter:start', onStartAndEnterWithStore)
-    this.addSub('datadog:mongoose:model:filter:finish', onFinish)
-
+    this.addSub('datadog:mongoose:model:filter:start', onStartAndMarkFilters)
     this.addSub('datadog:mquery:filter:prepare', onStart)
-    this.addSub('tracing:datadog:mquery:filter:start', onStartAndEnterWithStore)
-    this.addSub('tracing:datadog:mquery:filter:asyncEnd', onFinish)
+    this.addSub('tracing:datadog:mquery:filter:start', onStartAndMarkFilters)
   }
 
   configureSanitizers () {
