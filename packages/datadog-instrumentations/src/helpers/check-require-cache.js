@@ -154,8 +154,9 @@ module.exports.flushStartupLogs = function (log) {
 
 /**
  * Drains the framework warnings collected by `checkForRequiredModules`. The
- * caller surfaces them by default (gated on startupLogs), unlike the
- * DD_TRACE_DEBUG-only `flushStartupLogs` queue.
+ * tracer surfaces these unconditionally (not gated on startupLogs or
+ * DD_TRACE_DEBUG), unlike the DD_TRACE_DEBUG-only `flushStartupLogs` queue,
+ * because the affected users run with neither enabled (#5430 / #5432).
  * @param {(message: string) => void} warn
  */
 module.exports.flushFrameworkWarnings = function (warn) {
