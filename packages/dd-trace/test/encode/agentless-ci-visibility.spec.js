@@ -406,7 +406,7 @@ describe('agentless-ci-visibility-encode', () => {
       })
     })
 
-    it('moves matching git and ci tags from test level events to test levels metadata', () => {
+    it('moves allowlisted git and ci tags from test level events to test levels metadata', () => {
       trace[0].type = 'test'
       trace[0].meta = {
         'git.repository_url': 'https://github.com/DataDog/dd-trace-js.git',
@@ -454,6 +454,31 @@ describe('agentless-ci-visibility-encode', () => {
       })
       assert.deepStrictEqual(testEvent.content.meta, {
         'git.branch': 'feature',
+      })
+    })
+
+    it('keeps custom git and ci tags event local', () => {
+      trace[0].type = 'test'
+      trace[0].meta = {
+        'git.repository_url': 'https://github.com/DataDog/dd-trace-js.git',
+        'ci.provider.name': 'github',
+        'git.custom': 'one-off-git-tag',
+        'ci.custom': 'one-off-ci-tag',
+      }
+
+      encoder.encode(trace)
+
+      const buffer = encoder.makePayload()
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
+      const testEvent = decoded.events[0]
+
+      assert.deepStrictEqual(decoded.metadata.test_levels, {
+        'git.repository_url': 'https://github.com/DataDog/dd-trace-js.git',
+        'ci.provider.name': 'github',
+      })
+      assert.deepStrictEqual(testEvent.content.meta, {
+        'git.custom': 'one-off-git-tag',
+        'ci.custom': 'one-off-ci-tag',
       })
     })
 
