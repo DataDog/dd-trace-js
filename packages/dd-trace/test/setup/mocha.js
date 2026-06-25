@@ -13,6 +13,8 @@ const semver = require('semver')
 const sinon = require('sinon')
 require('./core')
 
+const { engines, nodeMaxMajor } = require('../../../../package.json')
+
 const externals = require('../plugins/externals')
 const runtimeMetrics = require('../../src/runtime_metrics')
 const Nomenclature = require('../../src/service-naming')
@@ -257,6 +259,8 @@ function withVersions (plugin, modules, range, cb) {
     cb = range
     range = undefined
   }
+
+  if (!semver.satisfies(process.version, `${engines.node} <${nodeMaxMajor}`)) return
 
   const instrumentations = typeof plugin === 'string' ? getInstrumentation(plugin) : [plugin]
   const names = new Set(instrumentations.map(instrumentation => instrumentation.name))
