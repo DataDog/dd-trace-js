@@ -639,6 +639,119 @@ describe('createWrapRouterMethod', () => {
     })
   })
 
+  describe('legacy handle replacement (host without prototype dispatch)', () => {
+    // express <4.3.0 has no `Layer.prototype.handle_request`; the router calls
+    // `layer.handle` directly, so the handle is replaced in place.
+    function legacyUse (path, handler) {
+      this.stack.push({ handle: handler, path: '/foo', regexp: {} })
+    }
+
+    it('replaces layer.handle, preserves request arity, and traces the dispatch', () => {
+      subscribeAll()
+      const { wrapLegacyHandle } = createLayerDispatchWrappers(namespace)
+      const wrapMethod = createWrapRouterMethod(namespace, compileRegex, wrapLegacyHandle)
+      const router = { stack: [] }
+
+      function originalHandler (req, res, next) { next() }
+      const wrappedUse = wrapMethod(legacyUse)
+      wrappedUse.call(router, '/foo', originalHandler)
+
+      const layer = router.stack[0]
+      assert.notStrictEqual(layer.handle, originalHandler)
+      assert.strictEqual(layer.handle.length, 3)
+
+      const req = {}
+      const downstreamNext = () => events.push({ label: 'downstream-next' })
+      layer.handle(req, {}, downstreamNext)
+
+      assert.deepStrictEqual(events.map(e => e.label), [
+        'enter', 'next', 'finish', 'downstream-next', 'exit',
+      ])
+      assertObjectContains(events[0].data, { name: 'originalHandler', req, route: '/foo', layer })
+    })
+
+    it('preserves error-handler arity (4) so the host still routes errors', () => {
+      subscribeAll()
+      const { wrapLegacyHandle } = createLayerDispatchWrappers(namespace)
+      const wrapMethod = createWrapRouterMethod(namespace, compileRegex, wrapLegacyHandle)
+      const router = { stack: [] }
+
+      const wrappedUse = wrapMethod(legacyUse)
+      wrappedUse.call(router, '/foo', function errorHandler (error, req, res, next) { next() })
+
+      const layer = router.stack[0]
+      assert.strictEqual(layer.handle.length, 4)
+
+      const req = {}
+      layer.handle(new Error('e'), req, {}, () => {})
+
+      const enterEvent = events.find(e => e.label === 'enter')
+      assert.strictEqual(enterEvent.data.name, 'errorHandler')
+      assert.strictEqual(enterEvent.data.req, req)
+    })
+
+    it('leaves handle pristine when the layer has a prototype dispatch method', () => {
+      const { wrapLegacyHandle } = createLayerDispatchWrappers(namespace)
+      const wrapMethod = createWrapRouterMethod(namespace, compileRegex, wrapLegacyHandle)
+      const router = { stack: [] }
+
+      function originalHandler (req, res, next) { next() }
+      // `makeFakeUse` produces layers with `handle_request`, so the legacy
+      // fallback must not touch them even though it is available.
+      const wrappedUse = wrapMethod(makeFakeUse({ layerPath: '/foo' }))
+      wrappedUse.call(router, '/foo', originalHandler)
+
+      assert.strictEqual(router.stack[0].handle, originalHandler)
+    })
+
+    it('forwards through without tracing when enterChannel has no subscribers', () => {
+      const { wrapLegacyHandle } = createLayerDispatchWrappers(namespace)
+      const wrapMethod = createWrapRouterMethod(namespace, compileRegex, wrapLegacyHandle)
+      const router = { stack: [] }
+
+      let handlerRan = false
+      const wrappedUse = wrapMethod(legacyUse)
+      wrappedUse.call(router, '/foo', function (req, res, next) {
+        handlerRan = true
+        next()
+      })
+
+      let nextCalled = false
+      router.stack[0].handle({}, {}, () => { nextCalled = true })
+
+      assert.strictEqual(handlerRan, true)
+      assert.strictEqual(nextCalled, true)
+      assert.strictEqual(events.length, 0)
+    })
+
+    it('wraps __handle instead of handle for express-async-errors layers', () => {
+      subscribeAll()
+      const { wrapLegacyHandle } = createLayerDispatchWrappers(namespace)
+      const wrapMethod = createWrapRouterMethod(namespace, compileRegex, wrapLegacyHandle)
+      const router = { stack: [] }
+
+      const originalHandle = (req, res, next) => next()
+      function underscoreHandle (req, res, next) {
+        events.push({ label: '__handle-called' })
+        next()
+      }
+
+      const wrappedUse = wrapMethod(function use (path, handler) {
+        this.stack.push({ handle: originalHandle, __handle: underscoreHandle, path: '/foo', regexp: {} })
+      })
+      wrappedUse.call(router, '/foo', () => {})
+
+      const layer = router.stack[0]
+      assert.strictEqual(layer.handle, originalHandle)
+      assert.notStrictEqual(layer.__handle, underscoreHandle)
+
+      layer.__handle({}, {}, () => {})
+
+      assert.ok(events.find(e => e.label === '__handle-called'))
+      assert.ok(events.find(e => e.label === 'enter'))
+    })
+  })
+
   describe('re-entrant error subscriber', () => {
     it('drops the re-entrant publish when an error subscriber re-runs the layer', () => {
       // enterChannel needs a subscriber or the layer dispatch takes the

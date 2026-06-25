@@ -143,7 +143,41 @@ function createLayerDispatchWrappers (name) {
     }
   }
 
-  return { wrapLayerRequest, wrapLayerError }
+  // express <4.3.0 has no `Layer` prototype dispatch: the router invokes
+  // `layer.handle` directly and routes errors by its arity. There the handle is
+  // replaced in place, with the arity preserved so the host still routes
+  // correctly. Newer express, express 5, and the router package keep `handle`
+  // pristine and are traced through the prototype wraps above.
+  function wrapLegacyHandle (layer, original) {
+    // `annotateLayer` always runs first in `wrapStack`, so the captured meta is
+    // never undefined here (unlike the prototype wraps, where `this` can be any
+    // layer the host dispatches).
+    const meta = getLayerMeta(layer)
+    const wrapped = shimmer.wrapFunction(original, inner => function (...args) {
+      if (!enterChannel.hasSubscribers) return inner.apply(this, args)
+
+      const isErrorHandler = original.length === 4
+      const req = args[isErrorHandler ? 1 : 0]
+      const nextIndex = isErrorHandler ? 3 : 2
+      if (typeof args[nextIndex] === 'function') args[nextIndex] = wrapNext(req, args[nextIndex])
+
+      enterChannel.publish({ name: meta.name, req, route: resolveLayerRoute(meta, layer), layer })
+
+      try {
+        return inner.apply(this, args)
+      } finally {
+        exitChannel.publish({ req })
+      }
+    })
+    Object.defineProperty(wrapped, 'length', { value: original.length, configurable: true })
+    return wrapped
+  }
+
+  return { wrapLayerRequest, wrapLayerError, wrapLegacyHandle }
+}
+
+function hasLayerDispatch (layer) {
+  return typeof layer.handle_request === 'function' || typeof layer.handleRequest === 'function'
 }
 
 // TODO: Move this function to a shared file between Express and Router
@@ -153,13 +187,24 @@ function createLayerDispatchWrappers (name) {
  *   Host-resolved path-to-regexp compile adapter, or undefined when the host
  *   instance ships no path-to-regexp. Captured here so each express/router
  *   instance keeps the dialect it actually loaded.
+ * @param {((layer: object, original: Function) => Function) | undefined} [wrapLegacyHandle]
+ *   Fallback that replaces `layer.handle` for hosts without a `Layer` prototype
+ *   dispatch (express <4.3.0). Omitted for hosts that always ship one.
  */
-function createWrapRouterMethod (name, compile) {
+function createWrapRouterMethod (name, compile, wrapLegacyHandle) {
   const routeAddedChannel = channel(`apm:${name}:route:added`)
 
   function wrapStack (layers, matchers) {
     for (const layer of layers) {
       annotateLayer(layer, matchers)
+
+      if (wrapLegacyHandle !== undefined && !hasLayerDispatch(layer)) {
+        if (layer.__handle) { // express-async-errors
+          layer.__handle = wrapLegacyHandle(layer, layer.__handle)
+        } else {
+          layer.handle = wrapLegacyHandle(layer, layer.handle)
+        }
+      }
 
       if (layer.route) {
         for (const method of METHODS) {

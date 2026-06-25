@@ -18,7 +18,7 @@ const {
   extractMountPaths,
   hasRouterCycle,
   collectRoutesFromRouter,
-  setLayerMatchers,
+  setLayerMeta,
   isAppMounted,
 } = require('../../src/helpers/router-helper')
 
@@ -273,7 +273,7 @@ describe('helpers/router-helper', () => {
         path: undefined,
       }
 
-      setLayerMatchers(layer, [{ path: '/dynamic' }])
+      setLayerMeta(layer, { matchers: [{ path: '/dynamic' }] })
 
       const parentRouter = {
         stack: [layer],
@@ -285,6 +285,29 @@ describe('helpers/router-helper', () => {
         { method: '*', path: '/root/dynamic/details' },
       ])
       assert.deepStrictEqual(getRouterMountPaths(childRouter), ['/root/dynamic'])
+    })
+
+    it('falls back to an empty mount path when the layer has no matcher metadata', () => {
+      const childRouter = {
+        stack: [{
+          route: {
+            path: '/details',
+            methods: { all: true },
+          },
+        }],
+      }
+
+      // Non-string layer path and nothing in the side table: the mount path
+      // resolves to '' and the nested route publishes under the parent prefix.
+      const parentRouter = {
+        stack: [{ handle: childRouter, path: undefined }],
+      }
+
+      collectRoutesFromRouter(parentRouter, '/root')
+
+      assert.deepStrictEqual(published, [
+        { method: '*', path: '/root/details' },
+      ])
     })
   })
 
