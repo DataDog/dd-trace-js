@@ -216,6 +216,7 @@ true
         before(() => {
           const pkg = JSON.parse(pkgStr)
           pkg.engines.node = '>=0'
+          pkg.nodeMaxMajor = 1000
           fs.writeFileSync(pkgPath, JSON.stringify(pkg))
         })
 
