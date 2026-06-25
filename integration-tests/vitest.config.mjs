@@ -31,15 +31,20 @@ if (process.env.CUSTOM_SEQUENCER) {
 }
 
 if (process.env.PROJECT_POOL_CONFIG) {
+  const projectConfig = {
+    include: [
+      process.env.TEST_DIR || 'ci-visibility/vitest-tests/test-visibility*',
+    ],
+    name: 'project-pool',
+    pool: process.env.PROJECT_POOL_CONFIG,
+  }
+  if (process.env.PROJECT_RETRY_CONFIG) {
+    projectConfig.retry = Number(process.env.PROJECT_RETRY_CONFIG)
+  }
+
   config.test.projects = [
     {
-      test: {
-        include: [
-          process.env.TEST_DIR || 'ci-visibility/vitest-tests/test-visibility*',
-        ],
-        name: 'project-pool',
-        pool: process.env.PROJECT_POOL_CONFIG,
-      },
+      test: projectConfig,
     },
   ]
 }

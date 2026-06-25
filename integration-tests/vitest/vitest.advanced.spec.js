@@ -638,6 +638,51 @@ versions.forEach((version) => {
           await Promise.all([once(childProcess, 'exit'), eventsPromise])
         })
 
+      vitestProjectsIt('does not enable ATR metadata from a non-runnable root project config',
+        async () => {
+          receiver.setSettings({
+            itr_enabled: false,
+            code_coverage: false,
+            tests_skipping: false,
+            flaky_test_retries_enabled: true,
+            early_flake_detection: { enabled: false },
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const retriedTestName = 'flaky test retries can retry tests that eventually pass'
+              const retriedTests = tests
+                .filter(test => test.meta[TEST_NAME] === retriedTestName)
+                .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+              assert.strictEqual(retriedTests.length, 2)
+              assert.ok(!(TEST_IS_RETRY in retriedTests[0].meta), inspect(retriedTests[0].meta))
+              assert.ok(!(TEST_RETRY_REASON in retriedTests[0].meta), inspect(retriedTests[0].meta))
+              assert.strictEqual(retriedTests[1].meta[TEST_IS_RETRY], 'true')
+              assert.strictEqual(retriedTests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+              assert.strictEqual(retriedTests[1].meta[TEST_FINAL_STATUS], 'fail')
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run --project project-pool',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '3',
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+                PROJECT_POOL_CONFIG: 'forks',
+                PROJECT_RETRY_CONFIG: '1',
+                TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries.mjs',
+              },
+            }
+          )
+
+          await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        })
+
       it('sets final_status tag to test status reported to test framework on last retry (EFD active only)',
         async () => {
           receiver.setKnownTests({

@@ -501,7 +501,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
     getTestManagementTests: () => getChannelPromise(testManagementTestsCh),
   })
 
-  if (configureFlakyTestRetries(ctx)) {
+  if (configureFlakyTestRetries(ctx, testSpecifications)) {
     setProvidedContext(ctx, {
       _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled,
       _ddFlakyTestRetriesCount: flakyTestRetriesCount,
@@ -594,13 +594,14 @@ function ensureMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
  * Configure Vitest retries for the root project and resolved workspace projects.
  *
  * @param {object} ctx
+ * @param {unknown[]|undefined} testSpecifications
  * @returns {boolean}
  */
-function configureFlakyTestRetries (ctx) {
+function configureFlakyTestRetries (ctx, testSpecifications) {
   if (!isFlakyTestRetriesEnabled || flakyTestRetriesCount <= 0) return false
 
   let configured = false
-  for (const config of getVitestProjectConfigs(ctx)) {
+  for (const config of getVitestProjectConfigs(ctx, testSpecifications)) {
     if (!config.retry) {
       config.retry = flakyTestRetriesCount
       configured = true
@@ -614,21 +615,96 @@ function configureFlakyTestRetries (ctx) {
  * Return unique Vitest configs that can be used to run tests.
  *
  * @param {object} ctx
+ * @param {unknown[]|undefined} testSpecifications
  * @returns {object[]}
  */
-function getVitestProjectConfigs (ctx) {
+function getVitestProjectConfigs (ctx, testSpecifications) {
   const configs = []
 
-  addConfig(configs, safeConfig(ctx))
-  addConfig(configs, safeConfig(safeWorkspaceProject(ctx)))
+  addTestSpecificationConfigs(configs, testSpecifications)
+  if (configs.length > 0) {
+    return configs
+  }
+
+  addSelectedInlineProjectConfigs(configs, safeConfig(ctx))
+  if (configs.length > 0) {
+    return configs
+  }
 
   if (Array.isArray(ctx?.projects)) {
     for (const project of ctx.projects) {
       addConfig(configs, safeConfig(project))
     }
+    if (configs.length > 0) {
+      return configs
+    }
   }
 
+  addConfig(configs, safeConfig(ctx))
+  addConfig(configs, safeConfig(safeWorkspaceProject(ctx)))
+
   return configs
+}
+
+/**
+ * Add configs from runnable test specifications once.
+ *
+ * @param {object[]} configs
+ * @param {unknown[]|undefined} testSpecifications
+ */
+function addTestSpecificationConfigs (configs, testSpecifications) {
+  if (!Array.isArray(testSpecifications)) return
+
+  for (const testSpecification of testSpecifications) {
+    addConfig(configs, safeConfig(getTestSpecificationProject(testSpecification)))
+  }
+}
+
+/**
+ * Add selected inline project configs from the root Vitest config once.
+ *
+ * @param {object[]} configs
+ * @param {object|undefined} rootConfig
+ */
+function addSelectedInlineProjectConfigs (configs, rootConfig) {
+  const selectedProjectNames = getSelectedProjectNames()
+  if (selectedProjectNames.length === 0 || !Array.isArray(rootConfig?.projects)) return
+
+  for (const project of rootConfig.projects) {
+    const config = getInlineProjectConfig(project)
+    if (selectedProjectNames.includes(config?.name)) {
+      addConfig(configs, config)
+    }
+  }
+}
+
+/**
+ * Return selected project names from the Vitest CLI arguments.
+ *
+ * @returns {string[]}
+ */
+function getSelectedProjectNames () {
+  const names = []
+  for (let index = 0; index < process.argv.length; index++) {
+    const argument = process.argv[index]
+    if (argument === '--project' && process.argv[index + 1]) {
+      names.push(process.argv[index + 1])
+      index++
+    } else if (argument.startsWith('--project=')) {
+      names.push(argument.slice('--project='.length))
+    }
+  }
+  return names
+}
+
+/**
+ * Return the test config from an inline Vitest project entry.
+ *
+ * @param {unknown} project
+ * @returns {object|undefined}
+ */
+function getInlineProjectConfig (project) {
+  return project?.test || project
 }
 
 /**
@@ -749,8 +825,21 @@ function isThreadPool (pool) {
   return pool === 'threads' || pool === 'vmThreads'
 }
 
+/**
+ * Return the project object attached to a Vitest test specification.
+ *
+ * @param {unknown} testSpecification
+ * @returns {object|undefined}
+ */
+function getTestSpecificationProject (testSpecification) {
+  if (Array.isArray(testSpecification)) {
+    return testSpecification[0]
+  }
+  return testSpecification?.project
+}
+
 function getTestSpecificationPool (testSpecification) {
-  const project = Array.isArray(testSpecification) ? testSpecification[0] : testSpecification?.project
+  const project = getTestSpecificationProject(testSpecification)
   return project?.config?.pool || project?.serializedConfig?.pool || project?.pool || testSpecification?.pool
 }
 
