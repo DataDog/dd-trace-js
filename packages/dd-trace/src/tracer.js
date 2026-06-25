@@ -14,9 +14,11 @@ const { setStartupLogConfig } = require('./startup-log')
 const { DataStreamsCheckpointer, DataStreamsManager, DataStreamsProcessor } = require('./datastreams')
 const { IS_SERVERLESS } = require('./serverless')
 const log = require('./log')
-// The always-on writer (console.warn by default), not the channel-gated `log` above:
-// `flushFrameworkWarnings` must surface regardless of DD_TRACE_DEBUG / startupLogs.
+// Load-order warnings go through the always-on writer (console.warn by default), not the
+// channel-gated `log`, so they surface regardless of DD_TRACE_DEBUG. The shared prefix marks
+// them as tracer diagnostics.
 const { warn } = require('./log/writer')
+const logDiagnostic = message => warn('DATADOG TRACER DIAGNOSTIC - ' + message)
 
 const SPAN_TYPE = tags.SPAN_TYPE
 const RESOURCE_NAME = tags.RESOURCE_NAME
@@ -32,15 +34,13 @@ class DatadogTracer extends Tracer {
     this._scope = new Scope()
     setStartupLogConfig(config)
     flushStartupLogs(log)
-    // A curated framework (e.g. Next.js) already in require.cache means the tracer loaded too
-    // late to instrument it and its integration silently no-ops. Surface that unconditionally:
-    // the affected users run with no logging enabled (#5430 / #5432), and startupLogs defaults
-    // off on v5, so any gate would hide it from exactly them.
-    flushFrameworkWarnings(warn)
-    // The broad "package X was loaded before dd-trace" list is startup diagnostics: gate it on
-    // startupLogs and prefix it like the rest of that family.
+    // Curated frameworks (e.g. Next.js) silently no-op their integration, so they print
+    // unconditionally: the affected users run with no logging enabled (#5430 / #5432) and
+    // startupLogs defaults off on v5. The broad "package X loaded before dd-trace" list is
+    // lower-signal startup detail, gated on startupLogs.
+    flushFrameworkWarnings(logDiagnostic)
     if (config.startupLogs) {
-      flushLoadOrderWarnings(message => warn('DATADOG TRACER DIAGNOSTIC - ' + message))
+      flushLoadOrderWarnings(logDiagnostic)
     }
 
     if (!IS_SERVERLESS) {
