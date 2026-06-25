@@ -358,6 +358,14 @@ input, or a bumped timeout that hides the root problem is rejected. Concretely: 
 request reaches the server, stop the stray request — do not filter the spy. If the cause is upstream of this repo,
 name it and escalate rather than patching around it.
 
+Fix the pattern, not the one instance CI surfaced. When a failure traces to a shape — a stale version-folder path,
+a renamed key, a string compare that should be semver — grep the whole repo for siblings and fix them in the same
+change. CI runs one file and shows you that bug; it does not show you the other three carrying the identical one.
+
+A hang is a masked failure, never "just slow". A timed-out job is almost always an error thrown early plus a leaked
+handle (a tracer/RC timer, an open socket) that kept the process from exiting and reporting it. The real error is the
+last meaningful line before the stall — find and fix that, don't raise the timeout.
+
 ## Vendoring Dependencies
 
 Using rspack: Run `yarn` in `vendor/` to install/bundle dependencies → `packages/node_modules/`
