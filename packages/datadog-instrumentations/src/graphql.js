@@ -364,7 +364,7 @@ function assertField (rootCtx, info, args) {
     returnType: info.returnType,
     fieldNode: info.fieldNodes[0],
     // graphql v17 changed variableValues to { sources, coerced }; normalize to flat object
-    variableValues: (rv != null && typeof rv.coerced === 'object' && rv.coerced !== null) ? rv.coerced : rv,
+    variableValues: (rv != null && rv.coerced !== null && typeof rv.coerced === 'object') ? rv.coerced : rv,
   }
   // Publish per resolver call, before the collapse / depth dedupe below.
   // IAST mutates each call's own args object; if siblings 2..N skip the
