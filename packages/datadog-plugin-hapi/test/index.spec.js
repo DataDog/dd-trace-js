@@ -11,8 +11,11 @@ const semver = require('semver')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
+// hapi 19.x and 20.x are EOL and hang CI: on error and 404 replies they crash inside their own
+// `Request._finalize` (null `response.statusCode`) and never finish the request, stalling the
+// worker until the job is cancelled. 21.x fixed it, so the matrix covers 16.x and 21+.
 const versionRange = parseInt(process.versions.node.split('.')[0]) > 14
-  ? '<17 || >18'
+  ? '<17 || >=21'
   : ''
 
 describe('Plugin', () => {
