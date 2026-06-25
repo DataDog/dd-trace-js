@@ -7,16 +7,16 @@
   "instructions": true,
   "variants": {
     "llm-chat": {
-      "env": { "VARIANT": "llm-chat", "ITERATIONS": "2000000" }
+      "env": { "VARIANT": "llm-chat", "OPERATIONS": "2000000" }
     },
     "embedding": {
-      "env": { "VARIANT": "embedding", "ITERATIONS": "2000000" }
+      "env": { "VARIANT": "embedding", "OPERATIONS": "2000000" }
     },
     "retrieval": {
-      "env": { "VARIANT": "retrieval", "ITERATIONS": "2000000" }
+      "env": { "VARIANT": "retrieval", "OPERATIONS": "2000000" }
     },
     "agent": {
-      "env": { "VARIANT": "agent", "ITERATIONS": "950000" }
+      "env": { "VARIANT": "agent", "OPERATIONS": "950000" }
     }
   }
 }

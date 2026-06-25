@@ -9,7 +9,7 @@ const DatadogSpanContext = require('../../../packages/dd-trace/src/opentracing/s
 const id = require('../../../packages/dd-trace/src/id')
 
 const { VARIANT } = process.env
-const ITERATIONS = Number(process.env.ITERATIONS) || 6_000_000
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 // Every traced websocket message walks the plugin's bindStart (split the resource
 // path, build the meta literal, startSpan) and end (add the span link plus, when the
@@ -70,7 +70,7 @@ assert.ok(lastMeta && lastMeta['resource.name'] === 'websocket /v2/chat',
 assert.ok(lastLink?.attributes['ptr.hash'], 'end did not build the span-pointer link')
 
 guard.loopStart()
-for (let i = 0; i < ITERATIONS; i++) {
+for (let i = 0; i < OPERATIONS; i++) {
   messageOnce()
 }
 guard.done()

@@ -17,7 +17,7 @@ const id = require('../../../packages/dd-trace/src/id')
 // bench, and the real flush is a deferred unref'd timer that barely fires in a
 // short run. A no-op exporter keeps the loop CPU-bound, leaves memory flat (the
 // formatted chunk is discarded each pass) and drops the agent dependency.
-const COUNT = Number(process.env.COUNT) || 200_000
+const OPERATIONS = Number(process.env.OPERATIONS)
 const WITH_STATS = process.env.WITH_STATS === '1'
 const WITH_LINKS = process.env.WITH_LINKS === '1'
 
@@ -101,7 +101,7 @@ if (WITH_LINKS) {
 
 guard.loopStart()
 exported = 0
-for (let i = 0; i < COUNT; i++) {
+for (let i = 0; i < OPERATIONS; i++) {
   // process() erases trace.finished each pass; restore the chunk so every
   // iteration formats the full set.
   trace.started = finished
