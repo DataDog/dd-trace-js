@@ -14,6 +14,7 @@ const { installPatch } = require('./coverage/patch-child-process')
 const { installLastExitHandler } = require('./coverage/pre-instrumented-writer')
 const finalizeSandboxCoverage = require('./coverage/finalize-sandbox')
 const {
+  BOOTSTRAP_REQUIRE_ARG,
   DISABLE_ENV,
   FLUSH_SIGNAL_KEY,
   ROOT_ENV,
@@ -21,6 +22,7 @@ const {
   getCollectorRoot,
   getMergedReportDir,
   getSandboxCollectorDir,
+  mergeBootstrapIntoEnvPairs,
   resolveCoverageRoot,
 } = require('./coverage/runtime')
 
@@ -186,6 +188,61 @@ process.disconnect()
       JSON.parse(fs.readFileSync(outputPath, 'utf8')),
       { marker: 'two-arg', bootstrap: true }
     )
+  })
+
+  it('instruments an async child spawned via a fork reference captured before the patch', async () => {
+    const fixtureDir = path.join(appRoot, 'captured-ref-fixtures')
+    await fsp.mkdir(fixtureDir, { recursive: true })
+    const outPath = path.join(fixtureDir, 'worker-env.json')
+    const workerPath = path.join(fixtureDir, 'worker.js')
+    const parentPath = path.join(fixtureDir, 'parent.js')
+    const patchModule = path.join(process.cwd(), 'integration-tests', 'coverage', 'patch-child-process.js')
+
+    await fsp.writeFile(workerPath, `
+'use strict'
+require('node:fs').writeFileSync(${JSON.stringify(outPath)}, JSON.stringify({
+  bootstrap: (process.env.NODE_OPTIONS || '').includes('child-bootstrap.js'),
+}))
+`)
+    // The parent grabs \`fork\` before installing the patch, then overwrites NODE_OPTIONS. The
+    // public-method wrappers can't see this call (the original \`fork\` delegates to the module's
+    // local \`spawn\`, not the patched export), so only the shared ChildProcess.prototype.spawn
+    // junction can re-inject the bootstrap. The parent is launched with the opt-out so our own
+    // patched \`execFileSync\` doesn't preload child-bootstrap into it (which would make the
+    // "captured" fork already-patched). It clears the opt-out before forking the worker.
+    await fsp.writeFile(parentPath, `
+'use strict'
+const cp = require('node:child_process')
+const capturedFork = cp.fork
+delete process.env[${JSON.stringify(DISABLE_ENV)}]
+process.env[${JSON.stringify(ROOT_ENV)}] = ${JSON.stringify(coverageRoot)}
+require(${JSON.stringify(patchModule)}).installPatch()
+capturedFork(${JSON.stringify(workerPath)}, { env: { ...process.env, NODE_OPTIONS: '--title=captured' } })
+  .on('exit', code => process.exit(code))
+`)
+
+    childProcess.execFileSync(process.execPath, [parentPath], {
+      cwd: appRoot,
+      env: { ...process.env, NODE_OPTIONS: '', [DISABLE_ENV]: '1' },
+      stdio: 'pipe',
+    })
+
+    assert.deepStrictEqual(JSON.parse(fs.readFileSync(outPath, 'utf8')), { bootstrap: true })
+  })
+
+  it('keeps util.promisify.custom on wrapped exec/execFile so promisified calls resolve { stdout }', async () => {
+    const util = require('node:util')
+    const custom = util.promisify.custom
+
+    assert.strictEqual(typeof childProcess.execFile[custom], 'function',
+      'execFile must keep its promisify.custom symbol after wrapping')
+    assert.strictEqual(typeof childProcess.exec[custom], 'function',
+      'exec must keep its promisify.custom symbol after wrapping')
+
+    const execFileAsync = util.promisify(childProcess.execFile)
+    const result = await execFileAsync(process.execPath, ['-e', 'process.stdout.write("ok")'])
+    assert.strictEqual(result.stdout, 'ok',
+      'a dropped promisify.custom would resolve the raw stdout string instead of { stdout, stderr }')
   })
 
   it('propagates the bootstrap through exec/execSync shell commands', async () => {
@@ -576,5 +633,40 @@ describe('istanbul-lib-coverage getLineCoverage patch', () => {
     assert.deepStrictEqual(Object.keys(lineCoverage), ['10'],
       `unexpected line keys in ${inspect(lineCoverage)}`)
     assert.strictEqual(lineCoverage[10], 1)
+  })
+})
+
+describe('mergeBootstrapIntoEnvPairs', () => {
+  const nodeOptionsEntries = envPairs =>
+    envPairs.filter(pair => pair.slice(0, pair.indexOf('=')).toUpperCase() === 'NODE_OPTIONS')
+
+  it('rewrites a case-insensitive NODE_OPTIONS entry in place without duplicating it', () => {
+    // Windows env keys are case-insensitive, so a `Node_Options` entry is the same variable —
+    // a second `NODE_OPTIONS` would last-win and clobber the bootstrap we just injected.
+    const envPairs = ['Node_Options=--enable-source-maps', 'PATH=/usr/bin']
+    mergeBootstrapIntoEnvPairs(envPairs)
+
+    const entries = nodeOptionsEntries(envPairs)
+    assert.strictEqual(entries.length, 1, `expected one NODE_OPTIONS entry, got ${inspect(envPairs)}`)
+    assert.match(entries[0], /^Node_Options=/, 'original key casing must be preserved')
+    assert.ok(entries[0].includes('child-bootstrap.js'), `missing bootstrap in ${inspect(entries[0])}`)
+    assert.ok(entries[0].includes('--enable-source-maps'), `dropped caller flags in ${inspect(entries[0])}`)
+  })
+
+  it('appends a NODE_OPTIONS entry when none exists', () => {
+    const envPairs = ['PATH=/usr/bin']
+    mergeBootstrapIntoEnvPairs(envPairs)
+
+    assert.deepStrictEqual(envPairs, ['PATH=/usr/bin', `NODE_OPTIONS=${BOOTSTRAP_REQUIRE_ARG}`])
+  })
+
+  it('is idempotent across repeated passes', () => {
+    const envPairs = ['NODE_OPTIONS=--enable-source-maps']
+    mergeBootstrapIntoEnvPairs(envPairs)
+    const afterFirst = envPairs[0]
+    mergeBootstrapIntoEnvPairs(envPairs)
+
+    assert.strictEqual(envPairs.length, 1)
+    assert.strictEqual(envPairs[0], afterFirst)
   })
 })
