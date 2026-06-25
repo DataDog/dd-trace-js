@@ -51,6 +51,13 @@ try {
 
   const currentBranch = capture('git rev-parse --abbrev-ref HEAD')
 
+  // Exit cleanly when the release branch has not been created yet.
+  const remoteBranch = capture(`git ls-remote --heads origin refs/heads/v${releaseLine}.x`)
+  if (!remoteBranch) {
+    pass(`skipped (v${releaseLine}.x does not exist yet)`)
+    process.exit(0)
+  }
+
   // Restore current branch on success.
   process.once('exit', code => {
     if (code !== 0) return
@@ -67,16 +74,19 @@ try {
 
   pass(`v${releaseLine}.x`)
 
+  const { DD_MAJOR, DD_MINOR, DD_PATCH, VERSION } = require('../../version')
+  const stableVersion = `${DD_MAJOR}.${DD_MINOR}.${DD_PATCH}`
+  const isPreRelease = VERSION !== stableVersion
+
   // Notes exclude semver-major (gated behind a flag, not user-visible).
-  // Cherry-pick includes semver-major; only only-land-on-next is fully excluded.
+  // Cherry-pick includes semver-major; only only-land-on-next is fully excluded,
+  // except when promoting a pre-release to stable (that's what "next" means).
   const notesDiffCmd = 'branch-diff --user DataDog --repo dd-trace-js' +
-    ' --exclude-label=semver-major --exclude-label=only-land-on-next'
+    (isPreRelease ? '' : ' --exclude-label=semver-major --exclude-label=only-land-on-next')
   const cherryPickDiffCmd = 'branch-diff --user DataDog --repo dd-trace-js' +
-    ' --exclude-label=only-land-on-next'
+    (isPreRelease ? '' : ' --exclude-label=only-land-on-next')
 
   start('Determine version increment')
-
-  const { DD_MAJOR, DD_MINOR, DD_PATCH } = require('../../version')
 
   // GitHub rebase limit is 100 commits; reserve one slot for the version bump.
   const MAX_CHERRY_PICKS = 99
@@ -116,11 +126,12 @@ try {
   const isMinor = notes.isMinor
   const newPatch = `${releaseLine}.${DD_MINOR}.${DD_PATCH + 1}`
   const newMinor = `${releaseLine}.${DD_MINOR + 1}.0`
-  const newVersion = isMinor ? newMinor : newPatch
+  const newVersion = isPreRelease ? stableVersion : (isMinor ? newMinor : newPatch)
   const notesDir = path.join(tmpdir, 'release_notes')
   const notesFile = path.join(notesDir, `v${newVersion}.md`)
 
-  pass(`${isMinor ? 'minor' : 'patch'} (${DD_MAJOR}.${DD_MINOR}.${DD_PATCH} -> ${newVersion})`)
+  const incrementType = isPreRelease ? 'release' : (isMinor ? 'minor' : 'patch')
+  pass(`${incrementType} (${VERSION} -> ${newVersion})`)
 
   start('Checkout release proposal branch')
 
@@ -211,19 +222,27 @@ try {
 
   let previousPullRequest
 
-  if (isMinor) {
+  if (isPreRelease) {
     try {
-      previousPullRequest = JSON.parse(capture(`gh pr view ${newMinor} --json isDraft,url`))
+      previousPullRequest = JSON.parse(capture(`gh pr view ${newVersion} --json isDraft,url`))
     } catch {
-      // No existing PR for minor release proposal.
+      // No existing PR for release proposal.
     }
-  }
+  } else {
+    if (isMinor) {
+      try {
+        previousPullRequest = JSON.parse(capture(`gh pr view ${newMinor} --json isDraft,url`))
+      } catch {
+        // No existing PR for minor release proposal.
+      }
+    }
 
-  if (!previousPullRequest) {
-    try {
-      previousPullRequest = JSON.parse(capture(`gh pr view ${newPatch} --json isDraft,url`))
-    } catch {
-      // No existing PR for patch release proposal.
+    if (!previousPullRequest) {
+      try {
+        previousPullRequest = JSON.parse(capture(`gh pr view ${newPatch} --json isDraft,url`))
+      } catch {
+        // No existing PR for patch release proposal.
+      }
     }
   }
 
@@ -259,7 +278,7 @@ try {
   const pullRequest = JSON.parse(capture('gh pr view --json number,url'))
 
   // Close PR and delete branch for any patch proposal if new proposal is minor.
-  if (isMinor) {
+  if (!isPreRelease && isMinor) {
     try {
       run(`gh pr close v${newPatch}-proposal --delete-branch --comment "Superseded by #${pullRequest.number}."`)
     } catch {
