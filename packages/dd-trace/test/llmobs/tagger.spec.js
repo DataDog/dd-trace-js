@@ -240,6 +240,25 @@ describe('tagger', () => {
           assert.strictEqual(tags['_ml_obs.sampling_decision'], '0')
         })
 
+        it('rebuilds the sampler when the config rate changes at runtime (e.g. remote config)', () => {
+          // The tagger reads sampleRate from config on each root decision, so a
+          // mutation (such as a future remote config update) takes effect without
+          // re-instantiating the tagger.
+          const config = { llmobs: { enabled: true, mlApp: 'my-default-ml-app', sampleRate: 1 } }
+          tagger = new Tagger(config)
+
+          tagger.registerLLMObsSpan(span, { kind: 'llm' })
+          assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.sampling_decision'], '1')
+
+          config.llmobs.sampleRate = 0
+          const nextSpan = { context () { return spanContext } }
+          tagger.registerLLMObsSpan(nextSpan, { kind: 'llm' })
+
+          const tags = Tagger.tagMap.get(nextSpan)
+          assert.strictEqual(tags['_ml_obs.sample_rate'], '0')
+          assert.strictEqual(tags['_ml_obs.sampling_decision'], '0')
+        })
+
         it('makes no decision when an upstream LLMObs trace propagated no sampling info', () => {
           // Distributed trace from a service that predates sampling propagation:
           // there is an LLMObs parent context but no rate/decision. We must not

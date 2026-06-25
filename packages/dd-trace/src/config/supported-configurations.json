@@ -1240,7 +1240,7 @@
     ],
     "DD_LLMOBS_SAMPLE_RATE": [
       {
-        "implementation": "B",
+        "implementation": "A",
         "type": "decimal",
         "configurationNames": [
           "llmobs.sampleRate"

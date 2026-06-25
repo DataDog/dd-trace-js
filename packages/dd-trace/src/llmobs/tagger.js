@@ -61,15 +61,33 @@ class LLMObsTagger {
   /** @type {import('../config/config-base')} */
   #config
 
-  /** @type {import('../sampler')} */
-  #sampler
+  /** @type {import('../sampler') | null} */
+  #sampler = null
+
+  /** @type {number | undefined} The rate `#sampler` was built with. */
+  #samplerRate
 
   constructor (config, softFail = false) {
     this.#config = config
 
     this.softFail = softFail
+  }
 
-    this.#sampler = new Sampler(config.llmobs?.sampleRate ?? 1)
+  /**
+   * The sampler reads its rate from `config.llmobs.sampleRate`, which can change
+   * at runtime (e.g. via remote config). Rebuild the sampler whenever the rate
+   * changes so decisions reflect the current config, while reusing the existing
+   * sampler when it hasn't.
+   *
+   * @returns {import('../sampler')}
+   */
+  #getSampler () {
+    const rate = this.#config.llmobs?.sampleRate ?? 1
+    if (this.#sampler === null || rate !== this.#samplerRate) {
+      this.#sampler = new Sampler(rate)
+      this.#samplerRate = rate
+    }
+    return this.#sampler
   }
 
   static get tagMap () {
@@ -185,8 +203,9 @@ class LLMObsTagger {
       samplingDecision = traceTags[PROPAGATED_SAMPLING_DECISION_KEY]
     } else {
       // Root span: make the trace's one sampling decision.
-      sampleRate = formatKnuthRate(this.#sampler.rate())
-      samplingDecision = this.#sampler.isSampled(span) ? SAMPLING_DECISION_SAMPLED : SAMPLING_DECISION_DROPPED
+      const sampler = this.#getSampler()
+      sampleRate = formatKnuthRate(sampler.rate())
+      samplingDecision = sampler.isSampled(span) ? SAMPLING_DECISION_SAMPLED : SAMPLING_DECISION_DROPPED
     }
 
     if (sampleRate != null) this._setTag(span, SAMPLE_RATE, sampleRate)

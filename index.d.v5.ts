@@ -4201,6 +4201,15 @@ declare namespace tracer {
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
       agentlessEnabled?: boolean,
+
+      /**
+       * The proportion of LLM Observability traces to sample, between `0` and `1` (inclusive).
+       * The decision is computed once per trace, propagated across services, and recorded on every
+       * span; spans are always sent and the backend honors the decision. Defaults to `1`.
+       * @env DD_LLMOBS_SAMPLE_RATE
+       * Programmatic configuration takes precedence over the environment variables listed above.
+       */
+      sampleRate?: number,
     }
     /** @hidden */
     type spanKind = 'agent' | 'workflow' | 'task' | 'tool' | 'retrieval' | 'embedding' | 'llm'
