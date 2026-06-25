@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
+import { supportsSyncHooks } from 'import-in-the-middle/create-hook.mjs'
 import { describe, it } from 'mocha'
 
 import { load, loadSync } from '../../../src/helpers/rewriter/loader.mjs'
@@ -105,7 +106,7 @@ describe('rewriter loader', () => {
   })
 
   it('rewrites ESM modules loaded from CommonJS in the sync loader hook', function () {
-    if (!supportsSyncLoaderHooks()) {
+    if (!supportsSyncHooks()) {
       this.skip()
     }
 
@@ -138,19 +139,6 @@ describe('rewriter loader', () => {
     assert.strictEqual(result.stdout.trim(), '1')
   })
 })
-
-function supportsSyncLoaderHooks () {
-  const version = process.versions.node.split('.')
-  const major = Number(version[0])
-  const minor = Number(version[1])
-  const patch = Number(version[2])
-
-  if (major >= 26) return true
-  if (major === 25) return minor >= 1
-  if (major === 24) return minor > 11 || (minor === 11 && patch >= 1)
-  if (major === 22) return minor > 22 || (minor === 22 && patch >= 3)
-  return false
-}
 
 function createAiModuleUrl () {
   const root = mkdtempSync(join(tmpdir(), 'dd-rewriter-loader-'))
