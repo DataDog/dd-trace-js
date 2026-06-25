@@ -9,13 +9,13 @@
     "declared-wrap": {
       "env": {
         "WRAP_FUNCTION": "false",
-        "ITERATIONS": "1000000"
+        "OPERATIONS": "1000000"
       }
     },
     "declared-wrapfn": {
       "env": {
         "WRAP_FUNCTION": "true",
-        "ITERATIONS": "1000000"
+        "OPERATIONS": "1000000"
       }
     }
   }
