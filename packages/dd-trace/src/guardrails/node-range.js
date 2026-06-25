@@ -4,20 +4,19 @@
  * Parses the Node.js major-version bounds from the package engines range.
  *
  * @param {string} range The package.json engines.node range.
- * @returns {{ minMajor: number, maxMajor: number | undefined }}
+ * @returns {{ minMajor: number, maxMajor: number }}
  */
 function parseNodeRange (range) {
-  var min = range.match(/(?:^|\s)>=\s*(\d+)/)
-  var max = range.match(/(?:^|\s)<\s*(\d+)/)
+  var versions = range.match(/^>=\s*(\d+)\s+<\s*(\d+)$/)
 
-  if (!min) {
+  if (!versions) {
     // eslint-disable-next-line n/no-unsupported-features/es-builtins
     throw new Error('Unsupported engines.node range: ' + range)
   }
 
   return {
-    minMajor: Number(min[1]),
-    maxMajor: max ? Number(max[1]) : undefined
+    minMajor: Number(versions[1]),
+    maxMajor: Number(versions[2])
   }
 }
 
@@ -31,8 +30,7 @@ function parseNodeRange (range) {
 function isNodeRangeSupported (major, range) {
   var parsed = parseNodeRange(range)
 
-  return major >= parsed.minMajor &&
-    (parsed.maxMajor === undefined || major < parsed.maxMajor)
+  return major >= parsed.minMajor && major < parsed.maxMajor
 }
 
 module.exports = {

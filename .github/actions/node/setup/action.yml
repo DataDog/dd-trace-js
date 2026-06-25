@@ -99,10 +99,15 @@ runs:
           current_major=${current_major#v}
           current_major=${current_major%%.*}
 
+          if [ -z "$min_major" ] || [ -z "$max_major" ]; then
+            echo "Unsupported engines.node range" >&2
+            exit 1
+          fi
+
           supported=true
-          if [ -n "$min_major" ] && [ "$current_major" -lt "$min_major" ]; then
+          if [ "$current_major" -lt "$min_major" ]; then
             supported=false
-          elif [ -n "$max_major" ] && [ "$current_major" -ge "$max_major" ]; then
+          elif [ "$current_major" -ge "$max_major" ]; then
             supported=false
           fi
           echo "supported=$supported" >> "$GITHUB_OUTPUT"

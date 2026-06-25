@@ -18,16 +18,13 @@ describe('guardrails/node-range', () => {
       })
     })
 
-    it('parses a lower-bound-only range', () => {
-      assert.deepStrictEqual(parseNodeRange('>=22'), {
-        minMajor: 22,
-        maxMajor: undefined,
-      })
-    })
-
     it('throws for unsupported range shapes', () => {
       assert.throws(() => parseNodeRange('^22'), {
         message: 'Unsupported engines.node range: ^22',
+      })
+
+      assert.throws(() => parseNodeRange('>=22'), {
+        message: 'Unsupported engines.node range: >=22',
       })
     })
   })
@@ -41,10 +38,6 @@ describe('guardrails/node-range', () => {
     it('checks the upper bound exclusively when present', () => {
       assert.strictEqual(isNodeRangeSupported(26, '>=18 <27'), true)
       assert.strictEqual(isNodeRangeSupported(27, '>=18 <27'), false)
-    })
-
-    it('allows future majors when no upper bound is present', () => {
-      assert.strictEqual(isNodeRangeSupported(27, '>=22'), true)
     })
   })
 })
