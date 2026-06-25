@@ -181,7 +181,6 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
     if (aggKey.statusCode) raw['http.response.status_code'] = Number(aggKey.statusCode)
     if (aggKey.method) raw['http.request.method'] = aggKey.method
     if (aggKey.endpoint) raw['http.route'] = aggKey.endpoint
-    if (aggKey.rpcMethod) raw['rpc.method'] = aggKey.rpcMethod
     if (aggKey.rpcStatusCode !== undefined && aggKey.rpcStatusCode !== '') {
       const code = Number(aggKey.rpcStatusCode)
       raw['rpc.response.status_code'] = Number.isNaN(code) ? aggKey.rpcStatusCode : code

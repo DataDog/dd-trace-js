@@ -102,7 +102,6 @@ describe('OtlpStatsTransformer', () => {
           [HTTP_METHOD]: 'POST',
           [HTTP_ROUTE]: '/users/:id',
           [SPAN_KIND]: 'server',
-          'grpc.method.name': 'GetUser',
           'grpc.status.code': '0',
           [ORIGIN_KEY]: 'synthetics',
         },
@@ -115,7 +114,6 @@ describe('OtlpStatsTransformer', () => {
         'http.response.status_code': 404,
         'http.request.method': 'POST',
         'http.route': '/users/:id',
-        'rpc.method': 'GetUser',
         'rpc.response.status_code': 0,
         'datadog.operation.name': 'test.op',
         'datadog.span.type': 'web',
@@ -139,7 +137,7 @@ describe('OtlpStatsTransformer', () => {
       )
       const keys = dataPointsOf(payload)[0].attributes.map(a => a.key)
 
-      for (const key of ['http.response.status_code', 'http.request.method', 'http.route', 'span.kind', 'rpc.method']) {
+      for (const key of ['http.response.status_code', 'http.request.method', 'http.route', 'span.kind']) {
         assert.ok(!keys.includes(key), `${key} should be omitted`)
       }
     })

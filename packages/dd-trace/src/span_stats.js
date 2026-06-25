@@ -19,8 +19,6 @@ const processTags = require('./process-tags')
 
 const { SpanStatsExporter } = require('./exporters/span-stats')
 
-// Datadog gRPC instrumentation tags translated to OTel rpc.* semantic-convention attributes.
-const GRPC_METHOD_NAME = 'grpc.method.name'
 const GRPC_STATUS_CODE = 'grpc.status.code'
 
 const {
@@ -104,7 +102,6 @@ class SpanAggKey {
     // avoid inflating aggregation key cardinality for the legacy span stats path.
     this.origin = otlpEnabled ? (span.meta[ORIGIN_KEY] || '') : ''
     this.spanKind = otlpEnabled ? (span.meta[SPAN_KIND] || '') : ''
-    this.rpcMethod = otlpEnabled ? (span.meta[GRPC_METHOD_NAME] || '') : ''
     // The gRPC plugin records the status code as a numeric tag, which span formatting routes into
     // metrics rather than meta; fall back to meta for string-valued tags (e.g. manual instrumentation).
     this.rpcStatusCode = otlpEnabled ? (span.metrics?.[GRPC_STATUS_CODE] ?? span.meta[GRPC_STATUS_CODE] ?? '') : ''
@@ -123,7 +120,6 @@ class SpanAggKey {
       this.srvSrc,
       this.origin,
       this.spanKind,
-      this.rpcMethod,
       this.rpcStatusCode,
     ].join(',')
   }
