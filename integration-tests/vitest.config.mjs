@@ -36,7 +36,9 @@ if (process.env.PROJECT_POOL_CONFIG) {
     include: [
       process.env.TEST_DIR || 'ci-visibility/vitest-tests/test-visibility*',
     ],
-    name: 'project-pool',
+    name: process.env.PROJECT_NAME_COLOR
+      ? { label: 'project-pool', color: process.env.PROJECT_NAME_COLOR }
+      : 'project-pool',
     pool: process.env.PROJECT_POOL_CONFIG,
   }
   if (process.env.PROJECT_RETRY_CONFIG) {
@@ -49,7 +51,9 @@ if (process.env.PROJECT_POOL_CONFIG) {
       include: [
         process.env.SECOND_PROJECT_TEST_DIR || 'ci-visibility/vitest-tests/test-visibility*',
       ],
-      name: 'second-project-pool',
+      name: process.env.SECOND_PROJECT_NAME_COLOR
+        ? { label: 'second-project-pool', color: process.env.SECOND_PROJECT_NAME_COLOR }
+        : 'second-project-pool',
       pool: process.env.SECOND_PROJECT_POOL_CONFIG,
     }
     if (process.env.SECOND_PROJECT_RETRY_CONFIG) {

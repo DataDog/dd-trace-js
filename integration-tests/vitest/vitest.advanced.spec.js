@@ -736,6 +736,7 @@ versions.forEach((version) => {
                 PROJECT_POOL_CONFIG: 'forks',
                 PROJECT_RETRY_CONFIG: '1',
                 SECOND_PROJECT_POOL_CONFIG: 'forks',
+                SECOND_PROJECT_NAME_COLOR: 'blue',
                 SECOND_PROJECT_TEST_DIR: 'ci-visibility/vitest-tests/hooks-flaky-test-retries.mjs',
                 TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries.mjs',
               },

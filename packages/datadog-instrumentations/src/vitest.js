@@ -690,8 +690,9 @@ function addSelectedInlineProjectConfigs (entries, rootConfig) {
 
   for (const project of rootConfig.projects) {
     const config = getInlineProjectConfig(project)
-    if (selectedProjectNames.includes(config?.name)) {
-      addConfig(entries, config, getProjectName(project))
+    const projectName = getProjectName(project)
+    if (selectedProjectNames.includes(projectName)) {
+      addConfig(entries, config, projectName)
     }
   }
 }
@@ -732,7 +733,20 @@ function getInlineProjectConfig (project) {
  * @returns {string|undefined}
  */
 function getProjectName (project) {
-  return project?.name || project?.config?.name || project?.test?.name
+  return normalizeProjectName(project?.name || project?.config?.name || project?.test?.name)
+}
+
+/**
+ * Return a normalized Vitest project name.
+ *
+ * @param {unknown} name
+ * @returns {string|undefined}
+ */
+function normalizeProjectName (name) {
+  if (typeof name === 'string') return name
+
+  const label = name?.label
+  return typeof label === 'string' ? label : undefined
 }
 
 /**
