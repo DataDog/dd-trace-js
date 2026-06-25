@@ -31,6 +31,7 @@ const Plugin = require('./plugin')
 const { getRepositoryRoot } = require('./util/git')
 const {
   getTestEnvironmentMetadata,
+  getTestLevelsMetadataTags,
   getTestSessionName,
   getCodeOwnersFileEntries,
   getTestParentSpan,
@@ -221,7 +222,11 @@ module.exports = class CiPlugin extends Plugin {
       )
 
       const metadataTags = {
-        [TEST_LEVELS_METADATA]: { [TEST_COMMAND]: command, [TEST_SESSION_NAME]: testSessionName },
+        [TEST_LEVELS_METADATA]: {
+          [TEST_COMMAND]: command,
+          [TEST_SESSION_NAME]: testSessionName,
+          ...getTestLevelsMetadataTags(this.testEnvironmentMetadata),
+        },
       }
       // tracer might not be initialized correctly
       if (this.tracer._exporter.addMetadataTags) {

@@ -406,7 +406,13 @@ describe('agentless-ci-visibility-encode', () => {
       })
     })
 
-    it('moves allowlisted git and ci tags from test level events to test levels metadata', () => {
+    it('removes matching test levels metadata tags from test level events', () => {
+      encoder.addMetadataTags({
+        test_levels: {
+          'git.repository_url': 'https://github.com/DataDog/dd-trace-js.git',
+          'ci.provider.name': 'github',
+        },
+      })
       trace[0].type = 'test'
       trace[0].meta = {
         'git.repository_url': 'https://github.com/DataDog/dd-trace-js.git',
@@ -426,6 +432,26 @@ describe('agentless-ci-visibility-encode', () => {
       })
       assert.deepStrictEqual(testEvent.content.meta, {
         'test.name': 'does not move',
+      })
+    })
+
+    it('keeps git and ci tags event local when test levels metadata is not set', () => {
+      trace[0].type = 'test'
+      trace[0].meta = {
+        'git.repository_url': 'https://github.com/DataDog/dd-trace-js.git',
+        'ci.provider.name': 'github',
+      }
+
+      encoder.encode(trace)
+
+      const buffer = encoder.makePayload()
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
+      const testEvent = decoded.events[0]
+
+      assert.strictEqual(decoded.metadata.test_levels, undefined)
+      assert.deepStrictEqual(testEvent.content.meta, {
+        'git.repository_url': 'https://github.com/DataDog/dd-trace-js.git',
+        'ci.provider.name': 'github',
       })
     })
 
@@ -458,6 +484,12 @@ describe('agentless-ci-visibility-encode', () => {
     })
 
     it('keeps custom git and ci tags event local', () => {
+      encoder.addMetadataTags({
+        test_levels: {
+          'git.repository_url': 'https://github.com/DataDog/dd-trace-js.git',
+          'ci.provider.name': 'github',
+        },
+      })
       trace[0].type = 'test'
       trace[0].meta = {
         'git.repository_url': 'https://github.com/DataDog/dd-trace-js.git',
@@ -482,7 +514,13 @@ describe('agentless-ci-visibility-encode', () => {
       })
     })
 
-    it('does not move git and ci tags from non-test-level spans', () => {
+    it('does not remove test levels metadata tags from non-test-level spans', () => {
+      encoder.addMetadataTags({
+        test_levels: {
+          'git.repository_url': 'https://github.com/DataDog/dd-trace-js.git',
+          'ci.provider.name': 'github',
+        },
+      })
       trace[0].type = 'worker'
       trace[0].meta = {
         'git.repository_url': 'https://github.com/DataDog/dd-trace-js.git',
@@ -495,7 +533,10 @@ describe('agentless-ci-visibility-encode', () => {
       const decoded = msgpack.decode(buffer, { useBigInt64: true })
       const spanEvent = decoded.events[0]
 
-      assert.strictEqual(decoded.metadata.test_levels, undefined)
+      assert.deepStrictEqual(decoded.metadata.test_levels, {
+        'git.repository_url': 'https://github.com/DataDog/dd-trace-js.git',
+        'ci.provider.name': 'github',
+      })
       assert.deepStrictEqual(spanEvent.content.meta, {
         'git.repository_url': 'https://github.com/DataDog/dd-trace-js.git',
         'ci.provider.name': 'github',

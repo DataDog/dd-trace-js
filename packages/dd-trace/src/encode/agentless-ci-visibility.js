@@ -1,42 +1,6 @@
 'use strict'
 const { version: ddTraceVersion } = require('../../../../package.json')
 const { ITR_CORRELATION_ID, TEST_LEVELS_METADATA } = require('../../src/plugins/util/test')
-const {
-  CI_JOB_ID,
-  CI_JOB_NAME,
-  CI_JOB_URL,
-  CI_NODE_LABELS,
-  CI_NODE_NAME,
-  CI_PIPELINE_ID,
-  CI_PIPELINE_NAME,
-  CI_PIPELINE_NUMBER,
-  CI_PIPELINE_URL,
-  CI_PROVIDER_NAME,
-  CI_STAGE_NAME,
-  CI_WORKSPACE_PATH,
-  GIT_BRANCH,
-  GIT_COMMIT_AUTHOR_DATE,
-  GIT_COMMIT_AUTHOR_EMAIL,
-  GIT_COMMIT_AUTHOR_NAME,
-  GIT_COMMIT_COMMITTER_DATE,
-  GIT_COMMIT_COMMITTER_EMAIL,
-  GIT_COMMIT_COMMITTER_NAME,
-  GIT_COMMIT_HEAD_AUTHOR_DATE,
-  GIT_COMMIT_HEAD_AUTHOR_EMAIL,
-  GIT_COMMIT_HEAD_AUTHOR_NAME,
-  GIT_COMMIT_HEAD_COMMITTER_DATE,
-  GIT_COMMIT_HEAD_COMMITTER_EMAIL,
-  GIT_COMMIT_HEAD_COMMITTER_NAME,
-  GIT_COMMIT_HEAD_MESSAGE,
-  GIT_COMMIT_HEAD_SHA,
-  GIT_COMMIT_MESSAGE,
-  GIT_COMMIT_SHA,
-  GIT_PULL_REQUEST_BASE_BRANCH,
-  GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA,
-  GIT_PULL_REQUEST_BASE_BRANCH_SHA,
-  GIT_REPOSITORY_URL,
-  GIT_TAG,
-} = require('../../src/plugins/util/tags')
 const id = require('../../src/id')
 const {
   distributionMetric,
@@ -64,43 +28,6 @@ const INTAKE_SOFT_LIMIT = 2 * 1024 * 1024 // 2MB
 
 // Prefix is ~1 KB in practice; `MsgpackChunk` resizes on overflow.
 const PREFIX_CHUNK_INITIAL_SIZE = 2048
-const COMMON_TEST_LEVEL_METADATA_TAGS = new Set([
-  CI_JOB_ID,
-  CI_JOB_NAME,
-  CI_JOB_URL,
-  CI_NODE_LABELS,
-  CI_NODE_NAME,
-  CI_PIPELINE_ID,
-  CI_PIPELINE_NAME,
-  CI_PIPELINE_NUMBER,
-  CI_PIPELINE_URL,
-  CI_PROVIDER_NAME,
-  CI_STAGE_NAME,
-  CI_WORKSPACE_PATH,
-  GIT_BRANCH,
-  GIT_COMMIT_AUTHOR_DATE,
-  GIT_COMMIT_AUTHOR_EMAIL,
-  GIT_COMMIT_AUTHOR_NAME,
-  GIT_COMMIT_COMMITTER_DATE,
-  GIT_COMMIT_COMMITTER_EMAIL,
-  GIT_COMMIT_COMMITTER_NAME,
-  GIT_COMMIT_HEAD_AUTHOR_DATE,
-  GIT_COMMIT_HEAD_AUTHOR_EMAIL,
-  GIT_COMMIT_HEAD_AUTHOR_NAME,
-  GIT_COMMIT_HEAD_COMMITTER_DATE,
-  GIT_COMMIT_HEAD_COMMITTER_EMAIL,
-  GIT_COMMIT_HEAD_COMMITTER_NAME,
-  GIT_COMMIT_HEAD_MESSAGE,
-  GIT_COMMIT_HEAD_SHA,
-  GIT_COMMIT_MESSAGE,
-  GIT_COMMIT_SHA,
-  GIT_PULL_REQUEST_BASE_BRANCH,
-  GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA,
-  GIT_PULL_REQUEST_BASE_BRANCH_SHA,
-  GIT_REPOSITORY_URL,
-  GIT_TAG,
-])
-const hasOwn = Object.prototype.hasOwnProperty
 
 function formatSpan (span) {
   let encodingVersion = ENCODING_VERSION
@@ -116,10 +43,6 @@ function formatSpan (span) {
 
 function isAllowedMetadataTarget (target) {
   return ALLOWED_METADATA_TARGETS.has(target)
-}
-
-function isCommonTestLevelMetadataTag (key) {
-  return COMMON_TEST_LEVEL_METADATA_TAGS.has(key)
 }
 
 function isEncodableMetadataValue (value) {
@@ -158,6 +81,7 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
 
     this.metadataTags = {}
     this.wildcardMetadataTags = {}
+    this.testLevelsMetadataKeys = []
 
     this.reset()
   }
@@ -182,42 +106,26 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
         ...this.metadataTags[target],
         ...targetTags,
       }
+
+      if (target === TEST_LEVELS_METADATA) {
+        this.testLevelsMetadataKeys = Object.keys(this.metadataTags[target])
+      }
     }
   }
 
-  _getTestLevelsMetadataTags () {
-    let testLevelsMetadataTags = this.metadataTags[TEST_LEVELS_METADATA]
-    if (!testLevelsMetadataTags) {
-      testLevelsMetadataTags = {}
-      this.metadataTags[TEST_LEVELS_METADATA] = testLevelsMetadataTags
-    }
-    return testLevelsMetadataTags
-  }
-
-  _promoteCommonTestLevelMetadata (event) {
+  _removeDuplicateTestLevelsMetadata (event) {
     if (!ALLOWED_CONTENT_TYPES.has(event.type)) return
 
     const meta = event.content.meta
     if (!meta) return
 
-    let testLevelsMetadataTags
-    for (const key of Object.keys(meta)) {
-      if (!isCommonTestLevelMetadataTag(key)) continue
+    const testLevelsMetadataTags = this.metadataTags[TEST_LEVELS_METADATA]
+    const testLevelsMetadataKeys = this.testLevelsMetadataKeys
 
-      const value = truncateTestLevelMetadataValue(meta[key])
-      if (!isEncodableMetadataValue(value)) continue
-
-      if (!testLevelsMetadataTags) {
-        testLevelsMetadataTags = this._getTestLevelsMetadataTags()
-      }
-
-      if (!hasOwn.call(testLevelsMetadataTags, key)) {
-        testLevelsMetadataTags[key] = value
+    for (let i = 0; i < testLevelsMetadataKeys.length; i++) {
+      const key = testLevelsMetadataKeys[i]
+      if (meta[key] === testLevelsMetadataTags[key]) {
         delete meta[key]
-      } else if (testLevelsMetadataTags[key] === value) {
-        delete meta[key]
-      } else {
-        meta[key] = value
       }
     }
   }
@@ -428,8 +336,11 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
 
     this._eventCount += events.length
 
+    const hasTestLevelsMetadata = this.testLevelsMetadataKeys.length !== 0
     for (const event of events) {
-      this._promoteCommonTestLevelMetadata(event)
+      if (hasTestLevelsMetadata) {
+        this._removeDuplicateTestLevelsMetadata(event)
+      }
       this._encodeEvent(bytes, event)
     }
     distributionMetric(

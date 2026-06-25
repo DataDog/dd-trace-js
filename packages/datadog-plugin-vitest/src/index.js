@@ -9,6 +9,7 @@ const {
   finishAllTraceSpans,
   getTestSuitePath,
   getTestSuiteCommonTags,
+  getTestLevelsMetadataTags,
   getTestSessionName,
   getIsFaultyEarlyFlakeDetection,
   TEST_SOURCE_FILE,
@@ -329,7 +330,11 @@ class VitestPlugin extends CiPlugin {
       const testSessionName = getTestSessionName(this.config, trimmedCommand, this.testEnvironmentMetadata)
       if (this.tracer._exporter.addMetadataTags) {
         this.tracer._exporter.addMetadataTags({
-          [TEST_LEVELS_METADATA]: { [TEST_COMMAND]: testCommand, [TEST_SESSION_NAME]: testSessionName },
+          [TEST_LEVELS_METADATA]: {
+            [TEST_COMMAND]: testCommand,
+            [TEST_SESSION_NAME]: testSessionName,
+            ...getTestLevelsMetadataTags(this.testEnvironmentMetadata),
+          },
           test: getLibraryCapabilitiesTags(this.constructor.id),
         })
       }
