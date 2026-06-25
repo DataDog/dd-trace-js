@@ -5,6 +5,12 @@ const proxyquire = require('proxyquire').noCallThru().noPreserveCache()
 
 require('./setup/core')
 
+const SUPPORTED_SYNC_HOOKS_NODE_VERSION = {
+  NODE_MAJOR: 24,
+  NODE_MINOR: 11,
+  NODE_PATCH: 1,
+}
+
 describe('register.js', () => {
   let emitWarning
 
@@ -19,14 +25,21 @@ describe('register.js', () => {
   it('falls back to the async loader on unsupported Node.js versions', () => {
     const register = sinon.stub()
     const registerSyncLoaderHooks = sinon.stub().returns(true)
+    const supportsSyncHooks = sinon.stub().throws(new Error('should not be called'))
 
     loadRegister({
       register,
       registerSyncLoaderHooks,
-      supportsSyncHooks: () => false,
+      supportsSyncHooks,
+      version: {
+        NODE_MAJOR: 24,
+        NODE_MINOR: 11,
+        NODE_PATCH: 0,
+      },
     })
 
     sinon.assert.notCalled(registerSyncLoaderHooks)
+    sinon.assert.notCalled(supportsSyncHooks)
     sinon.assert.calledOnceWithExactly(register, './loader-hook.mjs', sinon.match.instanceOf(URL))
     sinon.assert.notCalled(emitWarning)
   })
@@ -140,10 +153,11 @@ function createThrowingLoaderHook (error) {
   })
 }
 
-function loadRegister ({ register, registerSyncLoaderHooks, loaderHook, supportsSyncHooks }) {
+function loadRegister ({ register, registerSyncLoaderHooks, loaderHook, supportsSyncHooks, version }) {
   proxyquire('../../../register.js', {
     'node:module': { register },
     'import-in-the-middle/create-hook.mjs': { supportsSyncHooks },
     './loader-hook.mjs': loaderHook || { registerSyncLoaderHooks },
+    './version': version || SUPPORTED_SYNC_HOOKS_NODE_VERSION,
   })
 }
