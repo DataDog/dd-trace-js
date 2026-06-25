@@ -238,7 +238,7 @@ const aiSdkTelemetryStreamedChunkChannel = channel('dd-trace:vercel-ai:chunk')
 
 // as of the v7 release, the ai sdk does not automatically aggregate streamed responses
 // we will handle emitting the chunks directly for products to handle
-addHook({ name: 'ai', versions: ['>=7.0.0-0'] }, exports => {
+addHook({ name: 'ai', versions: ['>=7.0.0'] }, exports => {
   // ai sdk v7 only supported on node.js 22+
   // inlining this import here so we only import in those cases
   // eslint-disable-next-line n/no-unsupported-features/node-builtins
