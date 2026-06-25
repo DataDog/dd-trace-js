@@ -91,12 +91,14 @@ class Sqs extends BaseAwsSdkPlugin {
       // means this consumer is disabled — gate on it instead of paying isEnabled again here.
       const requestTags = this.requestTags.get(request)
       if (requestTags !== undefined) {
-        // A receive can return messages from many producers. The first carrier becomes the
-        // parent; every additional one fans in as a span link, the shape dd-trace-java and
-        // dd-trace-py use for batch SQS receives.
+        // A receive can return messages from many producers; fanning the extra ones in as span
+        // links is the shape dd-trace-java and dd-trace-py use for batch SQS receives.
         for (const carrier of carriers) {
           if (carrier === undefined) continue
           const datadogContext = this.tracer.extract('text_map', carrier)
+          // A DSM-only carrier (a non-first sendMessageBatch entry when batchPropagationEnabled
+          // is off) extracts to null; span.addLink dereferences the context and would throw on it.
+          if (datadogContext === null) continue
           if (span === undefined) {
             ctx.needsFinish = true
             span = this.startSpan('aws.response', {
