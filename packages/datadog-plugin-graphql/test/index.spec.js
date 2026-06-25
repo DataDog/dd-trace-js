@@ -209,7 +209,7 @@ describe('Plugin', () => {
   }
 
   describe('graphql', () => {
-    withVersions('graphql', 'graphql', version => {
+    withVersions('graphql', 'graphql', (version, moduleName, graphqlVersion) => {
       before(() => {
         sort = spans => spans.sort((a, b) => {
           const order = [
@@ -232,6 +232,11 @@ describe('Plugin', () => {
       })
 
       describe('graphql-yoga', () => {
+        // graphql-yoga 3.x lists graphql as a `^15.2.0 || ^16.0.0` peer and ships no nested copy, so under an
+        // older outer graphql version it resolves an incompatible graphql off NODE_PATH and never executes,
+        // timing out the assertion. Only register the suite for a graphql release graphql-yoga supports.
+        if (!semver.satisfies(graphqlVersion, '^15.2.0 || ^16.0.0')) return
+
         withVersions('graphql', 'graphql-yoga', version => {
           let graphqlYoga
           let server
