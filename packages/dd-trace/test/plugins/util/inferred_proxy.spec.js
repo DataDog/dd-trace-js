@@ -63,6 +63,21 @@ const proxyConfigs = {
     expectedUrl: 'https://azure-example.com/test',
     expectedStartTime: '1729780025472999936',
   },
+  'azure-fd': {
+    headers: {
+      'x-dd-proxy': 'azure-fd',
+      'x-dd-proxy-request-time-ms': '1729780025473',
+      'x-dd-proxy-path': '/test',
+      'x-dd-proxy-httpmethod': 'GET',
+      'x-dd-proxy-domain-name': 'myapp.azure-fd.org',
+      // Add any other Azure-specific headers here
+    },
+    expectedSpanName: 'azure.frontdoor',
+    expectedService: 'myapp.azure-fd.org',
+    expectedComponent: 'azure-fd',
+    expectedUrl: 'https://myapp.azure-fd.org/test',
+    expectedStartTime: '1729780025472999936',
+  },
 }
 
 Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
