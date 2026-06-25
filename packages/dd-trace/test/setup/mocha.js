@@ -279,8 +279,10 @@ function withVersions (plugin, modules, range, cb) {
     /** @type {Map<string, {versionRange: string, versionKey: string, resolvedVersion: string}>} */
     const testVersions = new Map()
 
+    let moduleMatched = false
     for (const instrumentation of instrumentations) {
       if (instrumentation.name !== moduleName) continue
+      moduleMatched = true
 
       // Some entries coming from `externals.js` are dependency-only (e.g. `dep: true`) and don't have `versions`.
       // Treat those as "not a test target" instead of crashing.
@@ -296,6 +298,12 @@ function withVersions (plugin, modules, range, cb) {
         const resolvedVersion = semver.valid(versionKey) ?? require(getModulePath(moduleName, versionKey)).version()
         testVersions.set(resolvedVersion, { versionRange: declaredRange, versionKey, resolvedVersion })
       }
+    }
+
+    // A module no instrumentation declares would silently run zero tests instead of failing.
+    if (!moduleMatched) {
+      throw new Error(`withVersions: no instrumentation declares the module "${moduleName}". Pass the integration ` +
+        `name as the first argument (e.g. 'express'), or register "${moduleName}" in test/plugins/externals.js.`)
     }
 
     const testCases = Array.from(testVersions.values())
