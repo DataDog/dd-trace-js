@@ -1,6 +1,6 @@
 'use strict'
 
-const { gt, subset } = require('semver')
+const { subset } = require('semver')
 const latests = require('./package.json').dependencies
 
 const exactVersionExp = /^=?\d+\.\d+\.\d+/
@@ -21,13 +21,7 @@ function getCappedRange (name, range) {
  * @param {string} subrange
  */
 function capSubrange (name, subrange) {
-  if (exactVersionExp.test(subrange)) {
-    const exactVersion = subrange.replace(/^=/, '')
-    if (latests[name] && gt(exactVersion, latests[name])) {
-      return latests[name]
-    }
-    return subrange
-  }
+  if (exactVersionExp.test(subrange)) return subrange
 
   if (!latests[name]) {
     throw new Error(
