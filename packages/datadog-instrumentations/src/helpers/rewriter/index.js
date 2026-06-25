@@ -29,9 +29,10 @@ try {
 
 /** @type {Record<string, string>} map of module base name to version */
 const moduleVersions = {}
-/** @type {Record<string, string>} map of module base name to package.json "type" field */
-const moduleTypes = {}
 const disabled = new Set()
+// Matches top-level `import`/`export` declarations so we can detect ESM source
+// when callers don't forward the `format` argument to `Module._compile`.
+const esmSyntax = /^\s*(?:import|export)[\s{*]/m
 const matcherCjs = create(instrumentations, dcPolyfillCjs)
 const matcherEsm = create(instrumentations, dcPolyfillEsm)
 
@@ -50,16 +51,14 @@ function rewrite (content, filename, format) {
   const splitIndex = moduleParts[0].startsWith('@') ? 2 : 1
   const moduleName = moduleParts.slice(0, splitIndex).join('/')
   const filePath = moduleParts.slice(splitIndex).join('/')
-  const { version, type: pkgType } = getPackageInfo(filename, filePath)
+  const version = getVersion(filename, filePath)
 
-  // Some loaders (e.g. nyc's `append-transform`) call `Module.prototype._compile`
-  // without forwarding the `format` argument that newer Node versions pass for
-  // ESM modules loaded via `require()`. Fall back to the file extension and
-  // package.json `"type"` field so we still pick the right transformer.
-  const isEsm = format === 'module' ||
-    filename.endsWith('.mjs') ||
-    (!filename.endsWith('.cjs') && pkgType === 'module')
-  const moduleType = isEsm ? 'esm' : 'cjs'
+  // `format` isn't forwarded by every `Module._compile` caller (e.g. nyc's
+  // `append-transform`); when it's missing, sniff the source for top-level
+  // `import`/`export` so we still pick the right transformer.
+  const moduleType = format === 'module' || (format === undefined && esmSyntax.test(content))
+    ? 'esm'
+    : 'cjs'
 
   if (disabled.has(moduleName)) return content
 
@@ -88,7 +87,7 @@ function disable (instrumentation) {
   disabled.add(instrumentation)
 }
 
-function getPackageInfo (filename, filePath) {
+function getVersion (filename, filePath) {
   const [basename] = filename.split(filePath)
 
   if (!moduleVersions[basename]) {
@@ -98,11 +97,10 @@ function getPackageInfo (filename, filePath) {
       ))
 
       moduleVersions[basename] = pkg.version
-      moduleTypes[basename] = pkg.type
     } catch {}
   }
 
-  return { version: moduleVersions[basename], type: moduleTypes[basename] }
+  return moduleVersions[basename]
 }
 
 module.exports = { rewrite, disable }
