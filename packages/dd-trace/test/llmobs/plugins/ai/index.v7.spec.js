@@ -137,6 +137,7 @@ describe('Plugin', () => {
       })
     })
 
+    // eslint-disable-next-line mocha/no-pending-tests
     it.skip('creates a span for embedMany', async () => {
       await ai.embedMany({
         model: openai.embedding('text-embedding-ada-002'),
