@@ -177,8 +177,6 @@ class SpanStatsProcessor {
         url,
       })
     }
-    // OTLP trace metrics flush on a fixed 10s cadence (not driven by OTEL_METRIC_EXPORT_INTERVAL).
-    // _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL is internal and only overrides the cadence in tests.
     const intervalMs = otlpTraceMetricsEnabled ? (flushIntervalMs ?? 10_000) : interval * 1e3
     this.interval = intervalMs / 1e3
     this.bucketSizeNs = intervalMs * 1e6
@@ -293,7 +291,6 @@ function buildResourceAttributes (tags, { reportHostname, otelSemanticsEnabled, 
     'telemetry.sdk.language': 'nodejs',
     'telemetry.sdk.version': VERSION,
   }
-  // Service identity (OTel attributes, emitted in both modes).
   if (service) attrs['service.name'] = service
   if (serviceVersion) attrs['service.version'] = serviceVersion
   if (env) attrs['deployment.environment.name'] = env
@@ -301,10 +298,8 @@ function buildResourceAttributes (tags, { reportHostname, otelSemanticsEnabled, 
   // signals (metrics/logs). DD_HOSTNAME is not supported in dd-trace-js, so use os.hostname().
   if (reportHostname) attrs['host.name'] = os.hostname()
 
-  // Datadog-specific resource attributes are emitted only in default mode.
   if (!otelSemanticsEnabled) {
     if (tags?.['runtime-id']) attrs['datadog.runtime_id'] = tags['runtime-id']
-    // Emit each process tag (key:value) as an individual datadog.<key> resource attribute.
     const processTagsObject = processTags.tagsObject
     if (processTagsObject) {
       for (const key of Object.keys(processTagsObject)) {

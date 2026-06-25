@@ -61,9 +61,8 @@ const ERROR_STATUS_ATTR = { key: 'status.code', value: { intValue: 2 } }
  * all dd.* attributes) is omitted in OTel-semantics mode. Data points with count=0 are omitted.
  *
  * Service identity (service.name/service.version/deployment.environment.name) is carried on the
- * resource. No InstrumentationScope is emitted (it would be redundant with the resource's
- * telemetry.sdk.* attributes). A span whose service differs from the configured default service
- * additionally carries service.name on its data point.
+ * resource. A span whose service differs from the configured default service additionally carries
+ * service.name on its data point.
  *
  * @class OtlpStatsTransformer
  * @augments OtlpTransformerBase
@@ -129,8 +128,6 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
     }
 
     if (dataPoints.length === 0) return []
-    // No InstrumentationScope: a `dd-trace` scope is redundant with the resource's telemetry.sdk.*
-    // attributes, so the scope field is omitted.
     return [{
       metrics: [
         {
