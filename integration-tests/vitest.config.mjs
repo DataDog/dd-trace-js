@@ -31,7 +31,8 @@ if (process.env.CUSTOM_SEQUENCER) {
 }
 
 if (process.env.PROJECT_POOL_CONFIG) {
-  const projectConfig = {
+  const projectConfigs = []
+  const firstProjectConfig = {
     include: [
       process.env.TEST_DIR || 'ci-visibility/vitest-tests/test-visibility*',
     ],
@@ -39,14 +40,25 @@ if (process.env.PROJECT_POOL_CONFIG) {
     pool: process.env.PROJECT_POOL_CONFIG,
   }
   if (process.env.PROJECT_RETRY_CONFIG) {
-    projectConfig.retry = Number(process.env.PROJECT_RETRY_CONFIG)
+    firstProjectConfig.retry = Number(process.env.PROJECT_RETRY_CONFIG)
+  }
+  projectConfigs.push({ test: firstProjectConfig })
+
+  if (process.env.SECOND_PROJECT_POOL_CONFIG) {
+    const secondProjectConfig = {
+      include: [
+        process.env.SECOND_PROJECT_TEST_DIR || 'ci-visibility/vitest-tests/test-visibility*',
+      ],
+      name: 'second-project-pool',
+      pool: process.env.SECOND_PROJECT_POOL_CONFIG,
+    }
+    if (process.env.SECOND_PROJECT_RETRY_CONFIG) {
+      secondProjectConfig.retry = Number(process.env.SECOND_PROJECT_RETRY_CONFIG)
+    }
+    projectConfigs.push({ test: secondProjectConfig })
   }
 
-  config.test.projects = [
-    {
-      test: projectConfig,
-    },
-  ]
+  config.test.projects = projectConfigs
 }
 
 if (process.env.COVERAGE_PROVIDER) {

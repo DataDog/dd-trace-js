@@ -138,6 +138,7 @@ function getProvidedContext () {
       _ddTestManagementTests: testManagementTests,
       _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled,
       _ddFlakyTestRetriesCount: flakyTestRetriesCount,
+      _ddFlakyTestRetriesProjectNames: flakyTestRetriesProjectNames,
       _ddIsImpactedTestsEnabled: isImpactedTestsEnabled,
       _ddModifiedFiles: modifiedFiles,
       _ddTestSessionId: testSessionId,
@@ -159,6 +160,7 @@ function getProvidedContext () {
       testManagementTests,
       isFlakyTestRetriesEnabled,
       flakyTestRetriesCount: flakyTestRetriesCount ?? 0,
+      flakyTestRetriesProjectNames,
       isImpactedTestsEnabled,
       modifiedFiles,
       testSessionId,
@@ -181,6 +183,7 @@ function getProvidedContext () {
       testManagementTests: {},
       isFlakyTestRetriesEnabled: false,
       flakyTestRetriesCount: 0,
+      flakyTestRetriesProjectNames: undefined,
       isImpactedTestsEnabled: false,
       modifiedFiles: {},
       testSessionId: undefined,
@@ -501,10 +504,12 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
     getTestManagementTests: () => getChannelPromise(testManagementTestsCh),
   })
 
-  if (configureFlakyTestRetries(ctx, testSpecifications)) {
+  const flakyTestRetriesConfiguration = configureFlakyTestRetries(ctx, testSpecifications)
+  if (flakyTestRetriesConfiguration) {
     setProvidedContext(ctx, {
       _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled,
       _ddFlakyTestRetriesCount: flakyTestRetriesCount,
+      _ddFlakyTestRetriesProjectNames: flakyTestRetriesConfiguration.projectNames,
     }, 'Could not send library configuration to workers.')
   }
 
@@ -595,20 +600,32 @@ function ensureMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
  *
  * @param {object} ctx
  * @param {unknown[]|undefined} testSpecifications
- * @returns {boolean}
+ * @returns {{ projectNames?: string[] }|undefined}
  */
 function configureFlakyTestRetries (ctx, testSpecifications) {
-  if (!isFlakyTestRetriesEnabled || flakyTestRetriesCount <= 0) return false
+  if (!isFlakyTestRetriesEnabled || flakyTestRetriesCount <= 0) return
 
   let configured = false
-  for (const config of getVitestProjectConfigs(ctx, testSpecifications)) {
+  let hasNamedProject = false
+  const projectNames = []
+  for (const { config, projectName } of getVitestProjectConfigs(ctx, testSpecifications)) {
+    if (projectName) {
+      hasNamedProject = true
+    }
     if (!config.retry) {
       config.retry = flakyTestRetriesCount
       configured = true
+      if (projectName) {
+        projectNames.push(projectName)
+      }
     }
   }
 
-  return configured
+  if (!configured) return
+
+  return {
+    projectNames: hasNamedProject ? projectNames : undefined,
+  }
 }
 
 /**
@@ -616,64 +633,65 @@ function configureFlakyTestRetries (ctx, testSpecifications) {
  *
  * @param {object} ctx
  * @param {unknown[]|undefined} testSpecifications
- * @returns {object[]}
+ * @returns {{ config: object, projectName?: string }[]}
  */
 function getVitestProjectConfigs (ctx, testSpecifications) {
-  const configs = []
+  const entries = []
 
-  addTestSpecificationConfigs(configs, testSpecifications)
-  if (configs.length > 0) {
-    return configs
+  addTestSpecificationConfigs(entries, testSpecifications)
+  if (entries.length > 0) {
+    return entries
   }
 
-  addSelectedInlineProjectConfigs(configs, safeConfig(ctx))
-  if (configs.length > 0) {
-    return configs
+  addSelectedInlineProjectConfigs(entries, safeConfig(ctx))
+  if (entries.length > 0) {
+    return entries
   }
 
   if (Array.isArray(ctx?.projects)) {
     for (const project of ctx.projects) {
-      addConfig(configs, safeConfig(project))
+      addConfig(entries, safeConfig(project), getProjectName(project))
     }
-    if (configs.length > 0) {
-      return configs
+    if (entries.length > 0) {
+      return entries
     }
   }
 
-  addConfig(configs, safeConfig(ctx))
-  addConfig(configs, safeConfig(safeWorkspaceProject(ctx)))
+  addConfig(entries, safeConfig(ctx))
+  addConfig(entries, safeConfig(safeWorkspaceProject(ctx)))
 
-  return configs
+  return entries
 }
 
 /**
  * Add configs from runnable test specifications once.
  *
- * @param {object[]} configs
+ * @param {{ config: object, projectName?: string }[]} entries
  * @param {unknown[]|undefined} testSpecifications
  */
-function addTestSpecificationConfigs (configs, testSpecifications) {
+function addTestSpecificationConfigs (entries, testSpecifications) {
   if (!Array.isArray(testSpecifications)) return
 
   for (const testSpecification of testSpecifications) {
-    addConfig(configs, safeConfig(getTestSpecificationProject(testSpecification)))
+    const project = getTestSpecificationProject(testSpecification)
+    addConfig(entries, safeConfig(project), getProjectName(project))
   }
 }
 
 /**
  * Add selected inline project configs from the root Vitest config once.
  *
- * @param {object[]} configs
+ * @param {{ config: object, projectName?: string }[]} entries
  * @param {object|undefined} rootConfig
  */
-function addSelectedInlineProjectConfigs (configs, rootConfig) {
+function addSelectedInlineProjectConfigs (entries, rootConfig) {
   const selectedProjectNames = getSelectedProjectNames()
   if (selectedProjectNames.length === 0 || !Array.isArray(rootConfig?.projects)) return
 
   for (const project of rootConfig.projects) {
     const config = getInlineProjectConfig(project)
     if (selectedProjectNames.includes(config?.name)) {
-      addConfig(configs, config)
+      addConfig(entries, config, getProjectName(project))
     }
   }
 }
@@ -708,14 +726,25 @@ function getInlineProjectConfig (project) {
 }
 
 /**
+ * Return a Vitest project name from runtime or inline project objects.
+ *
+ * @param {unknown} project
+ * @returns {string|undefined}
+ */
+function getProjectName (project) {
+  return project?.name || project?.config?.name || project?.test?.name
+}
+
+/**
  * Add a config object once.
  *
- * @param {object[]} configs
+ * @param {{ config: object, projectName?: string }[]} entries
  * @param {object|undefined} config
+ * @param {string|undefined} projectName
  */
-function addConfig (configs, config) {
-  if (config && !configs.includes(config)) {
-    configs.push(config)
+function addConfig (entries, config, projectName) {
+  if (config && !entries.some(entry => entry.config === config)) {
+    entries.push({ config, projectName })
   }
 }
 
@@ -745,6 +774,22 @@ function safeWorkspaceProject (ctx) {
     project = getWorkspaceProject(ctx)
   } catch {}
   return project
+}
+
+/**
+ * Return whether Datadog configured ATR retries for a task.
+ *
+ * @param {object} providedContext
+ * @param {object} task
+ * @returns {boolean}
+ */
+function isFlakyTestRetriesEnabledForTask (providedContext, task) {
+  if (!providedContext.isFlakyTestRetriesEnabled) return false
+
+  const { flakyTestRetriesProjectNames } = providedContext
+  if (!Array.isArray(flakyTestRetriesProjectNames)) return true
+
+  return flakyTestRetriesProjectNames.includes(task.file?.projectName)
 }
 
 function getSortWrapper (sort, frameworkVersion) {
@@ -1164,15 +1209,15 @@ function wrapVitestTestRunner (VitestTestRunner) {
     let isNew = false
     let isQuarantined = false
 
+    const providedContext = getProvidedContext()
     const {
       isKnownTestsEnabled,
       isEarlyFlakeDetectionEnabled,
       isDiEnabled,
       isTestManagementTestsEnabled,
       testManagementTests,
-      isFlakyTestRetriesEnabled,
       slowTestRetries,
-    } = getProvidedContext()
+    } = providedContext
 
     if (isKnownTestsEnabled) {
       isNew = newTasks.has(task)
@@ -1302,7 +1347,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
     }
 
     const isRetryReasonAtr = numAttempt > 0 &&
-      isFlakyTestRetriesEnabled &&
+      isFlakyTestRetriesEnabledForTask(providedContext, task) &&
       !isRetryReasonAttemptToFix &&
       !isRetryReasonEfd
 
@@ -1693,7 +1738,7 @@ addHook({
           }
 
           // ATR: set hasFailedAllRetries when all auto test retries were exhausted and every attempt failed
-          const isAtrRetry = providedContext.isFlakyTestRetriesEnabled && !attemptToFixTasks.has(task) &&
+          const isAtrRetry = isFlakyTestRetriesEnabledForTask(providedContext, task) && !attemptToFixTasks.has(task) &&
             !newTasks.has(task) && !modifiedTasks.has(task)
           if (isAtrRetry) {
             const maxRetries = providedContext.flakyTestRetriesCount ?? 0
