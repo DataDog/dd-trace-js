@@ -10,11 +10,37 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  check-branches:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    outputs:
+      release-lines: ${{ steps.check.outputs.release-lines }}
+    steps:
+      - uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
+        id: octo-sts
+        with:
+          scope: DataDog/dd-trace-js
+          policy: release-proposal
+      - id: check
+        run: |
+          lines=()
+          for line in 5 6; do
+            if git ls-remote --heads \
+              "https://x-access-token:${{ steps.octo-sts.outputs.token }}@github.com/DataDog/dd-trace-js.git" \
+              "refs/heads/v${line}.x" | grep -q .; then
+              lines+=("\"${line}\"")
+            fi
+          done
+          echo "release-lines=[$(IFS=,; echo "${lines[*]}")]" >> "$GITHUB_OUTPUT"
+
   create-proposal:
+    needs: check-branches
+    if: needs.check-branches.outputs.release-lines != '[]'
     strategy:
       fail-fast: false
       matrix:
-        release-line: ["5", "6"]
+        release-line: ${{ fromJSON(needs.check-branches.outputs.release-lines) }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -24,30 +50,17 @@ jobs:
         with:
           scope: DataDog/dd-trace-js
           policy: release-proposal
-      - id: check-branch
-        run: |
-          if git ls-remote --heads \
-            "https://x-access-token:${{ steps.octo-sts.outputs.token }}@github.com/DataDog/dd-trace-js.git" \
-            "refs/heads/v${{ matrix.release-line }}.x" | grep -q .; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        if: steps.check-branch.outputs.exists == 'true'
         with:
           fetch-depth: 0
           token: ${{ steps.octo-sts.outputs.token }}
       - uses: ./.github/actions/node
-        if: steps.check-branch.outputs.exists == 'true'
         with:
           version: ""
       - uses: ./.github/actions/install/branch-diff
-        if: steps.check-branch.outputs.exists == 'true'
         with:
           token: ${{ steps.octo-sts.outputs.token }}
       - id: proposal
-        if: steps.check-branch.outputs.exists == 'true'
         run: node scripts/release/proposal ${{ matrix.release-line }} -y ${{ github.event_name == 'workflow_dispatch' && '-f' || '' }}
         env:
           GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
