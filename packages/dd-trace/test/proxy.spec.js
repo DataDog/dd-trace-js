@@ -40,6 +40,7 @@ describe('TracerProxy', () => {
   let RemoteConfig
   let handlers
   let rc
+  let id
   let dogStatsD
   let noopDogStatsDClient
   let NoopDogStatsDClient
@@ -146,6 +147,7 @@ describe('TracerProxy', () => {
 
     config = {
       tracing: true,
+      tags: { 'runtime-id': 'original-runtime-id' },
       experimental: {
         flaggingProvider: {},
         aiguard: {
@@ -170,6 +172,7 @@ describe('TracerProxy', () => {
       llmobs: {},
     }
     Config = sinon.stub().returns(config)
+    Config.refreshRuntimeId = sinon.spy()
 
     runtimeMetrics = {
       start: sinon.spy(),
@@ -228,6 +231,9 @@ describe('TracerProxy', () => {
     }
 
     RemoteConfig = sinon.stub().returns(rc)
+    RemoteConfig.refreshClientId = sinon.spy()
+
+    id = { reseedBatchBuffer: sinon.spy() }
 
     NoopProxy = proxyquire('../src/noop/proxy', {
       './tracer': NoopTracer,
@@ -248,6 +254,7 @@ describe('TracerProxy', () => {
       './appsec/iast': iast,
       './telemetry': telemetry,
       './remote_config': RemoteConfig,
+      './id': id,
       './aiguard/sdk': AIGuardSdk,
       './appsec/sdk': AppsecSdk,
       './dogstatsd': dogStatsD,
@@ -977,6 +984,118 @@ describe('TracerProxy', () => {
           proxy.aiguard.evaluate(messages)
           sinon.assert.calledOnceWithExactly(aiguardSdk.evaluate, messages)
         })
+      })
+    })
+  })
+
+  describe('MicroVM identity reset', () => {
+    const dc = require('diagnostics_channel')
+    const runChannel = dc.channel('http.server.request.start')
+
+    afterEach(() => {
+      delete process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
+    })
+
+    describe('resetRuntimeId', () => {
+      it('should be a no-op and return this before init', () => {
+        const result = proxy.resetRuntimeId()
+        assert.strictEqual(result, proxy)
+        sinon.assert.notCalled(Config.refreshRuntimeId)
+        sinon.assert.notCalled(RemoteConfig.refreshClientId)
+        sinon.assert.notCalled(id.reseedBatchBuffer)
+      })
+
+      it('should be a no-op outside a MicroVM context even after init', () => {
+        proxy.init()
+        const result = proxy.resetRuntimeId()
+        assert.strictEqual(result, proxy)
+        sinon.assert.notCalled(Config.refreshRuntimeId)
+        sinon.assert.notCalled(RemoteConfig.refreshClientId)
+        sinon.assert.notCalled(id.reseedBatchBuffer)
+      })
+
+      it('should refresh both identities and reseed the ID batch buffer in MicroVM context', () => {
+        process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN = 'arn:aws:lambda:us-east-1:123:microvm-image/img:1'
+        proxy.init()
+        const result = proxy.resetRuntimeId()
+        assert.strictEqual(result, proxy)
+        sinon.assert.calledOnceWithExactly(Config.refreshRuntimeId, config)
+        sinon.assert.calledOnceWithExactly(RemoteConfig.refreshClientId, config)
+        sinon.assert.calledOnce(id.reseedBatchBuffer)
+      })
+    })
+
+    describe('_registerMicroVmRunHook', () => {
+      it('should not register when AWS_LAMBDA_MICROVM_IMAGE_ARN is unset', () => {
+        proxy.init()
+        runChannel.publish({ request: { method: 'POST', url: '/run' } })
+        sinon.assert.notCalled(Config.refreshRuntimeId)
+      })
+
+      it('should reset identity on POST /run via http.server.request.start', () => {
+        process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN = 'arn:aws:lambda:us-east-1:123:microvm-image/img:1'
+        proxy.init()
+
+        runChannel.publish({ request: { method: 'POST', url: '/run' } })
+
+        sinon.assert.calledOnceWithExactly(Config.refreshRuntimeId, config)
+        sinon.assert.calledOnceWithExactly(RemoteConfig.refreshClientId, config)
+        sinon.assert.calledOnce(id.reseedBatchBuffer)
+      })
+
+      it('should not reset on non-POST requests to /run', () => {
+        process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN = 'arn:aws:lambda:us-east-1:123:microvm-image/img:1'
+        proxy.init()
+
+        runChannel.publish({ request: { method: 'GET', url: '/run' } })
+
+        sinon.assert.notCalled(Config.refreshRuntimeId)
+      })
+
+      it('should not reset on POST requests to other paths', () => {
+        process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN = 'arn:aws:lambda:us-east-1:123:microvm-image/img:1'
+        proxy.init()
+
+        runChannel.publish({ request: { method: 'POST', url: '/ready' } })
+
+        sinon.assert.notCalled(Config.refreshRuntimeId)
+      })
+
+      it('should reset identity on SIGUSR2', async () => {
+        process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN = 'arn:aws:lambda:us-east-1:123:microvm-image/img:1'
+        proxy.init()
+
+        process.kill(process.pid, 'SIGUSR2')
+        await new Promise(resolve => setImmediate(resolve))
+
+        sinon.assert.calledOnceWithExactly(Config.refreshRuntimeId, config)
+        sinon.assert.calledOnceWithExactly(RemoteConfig.refreshClientId, config)
+      })
+
+      it('should reset identity only once when both triggers fire', async () => {
+        process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN = 'arn:aws:lambda:us-east-1:123:microvm-image/img:1'
+        proxy.init()
+
+        runChannel.publish({ request: { method: 'POST', url: '/run' } })
+        process.kill(process.pid, 'SIGUSR2')
+        await new Promise(resolve => setImmediate(resolve))
+
+        sinon.assert.calledOnce(Config.refreshRuntimeId)
+        sinon.assert.calledOnce(RemoteConfig.refreshClientId)
+      })
+
+      it('should reset only once even when both triggers fire repeatedly', async () => {
+        process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN = 'arn:aws:lambda:us-east-1:123:microvm-image/img:1'
+        proxy.init()
+
+        // HTTP channel fires first; SIGUSR2 handler stays registered (not removed)
+        // so a late signal does not revert to the OS default (process termination).
+        runChannel.publish({ request: { method: 'POST', url: '/run' } })
+        runChannel.publish({ request: { method: 'POST', url: '/run' } })
+        process.kill(process.pid, 'SIGUSR2')
+        await new Promise(resolve => setImmediate(resolve))
+
+        sinon.assert.calledOnce(Config.refreshRuntimeId)
       })
     })
   })

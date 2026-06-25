@@ -3037,6 +3037,41 @@ describe('Config', () => {
     assert.strictEqual(config.tags['runtime-id'], runtimeId)
   })
 
+  describe('refreshRuntimeId', () => {
+    it('should regenerate the runtime-id tag to a new valid UUID', () => {
+      const { refreshRuntimeId } = require('../../src/config')
+      const cfg = { tags: { 'runtime-id': 'original-id' } }
+
+      refreshRuntimeId(cfg)
+
+      assert.match(cfg.tags['runtime-id'], /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/)
+      assert.notStrictEqual(cfg.tags['runtime-id'], 'original-id')
+    })
+
+    it('should update only the runtime-id tag, leaving other tags untouched', () => {
+      const { refreshRuntimeId } = require('../../src/config')
+      const cfg = { tags: { 'runtime-id': 'original-id', service: 'my-service', env: 'prod' } }
+
+      refreshRuntimeId(cfg)
+
+      assert.strictEqual(cfg.tags.service, 'my-service')
+      assert.strictEqual(cfg.tags.env, 'prod')
+      assert.notStrictEqual(cfg.tags['runtime-id'], 'original-id')
+    })
+
+    it('should produce a different UUID on each call', () => {
+      const { refreshRuntimeId } = require('../../src/config')
+      const cfg = { tags: { 'runtime-id': 'original-id' } }
+
+      refreshRuntimeId(cfg)
+      const first = cfg.tags['runtime-id']
+      refreshRuntimeId(cfg)
+      const second = cfg.tags['runtime-id']
+
+      assert.notStrictEqual(first, second)
+    })
+  })
+
   it('should ignore invalid iast.requestSampling', () => {
     const config = getConfig({
       iast: {

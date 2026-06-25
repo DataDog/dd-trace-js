@@ -242,12 +242,70 @@ class Tracer extends NoopProxy {
         // We instantiate the client but do not start the Worker here. The worker is started lazily
         getDynamicInstrumentationClient(config)
       }
+
+      // eslint-disable-next-line eslint-rules/eslint-process-env
+      if (Boolean(process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN)) {
+        this._registerMicroVmRunHook(config)
+      }
     } catch (e) {
       log.error('Error initializing tracer', e)
       // TODO: Should we stop everything started so far?
     }
 
     return this
+  }
+
+  /**
+   * Registers two listeners that each trigger a one-time identity reset when
+   * the Lambda MicroVM `/run` lifecycle hook fires (post-snapshot, per clone):
+   *
+   *   1. `http.server.request.start` diagnostics channel — fires before the
+   *      user's handler for apps using Node.js's built-in `http` module.
+   *   2. `SIGUSR2` — fired by serverless-init when it receives the `/run` hook,
+   *      covering apps whose HTTP transport does not emit the channel above.
+   *
+   * A shared `done` flag prevents the reset from running twice when both
+   * signals arrive (e.g. serverless-init sends SIGUSR2 and the forwarded
+   * request also reaches the http.Server). Node.js's single-threaded event
+   * loop ensures the flag check-and-set is atomic — no concurrent execution
+   * is possible between the two callbacks.
+   *
+   * The HTTP channel subscriber is removed after the first reset (per-request
+   * overhead). The SIGUSR2 listener is intentionally kept registered for the
+   * VM's lifetime: removing the only SIGUSR2 handler reverts to the OS default
+   * action (process termination), so a late signal from serverless-init would
+   * kill the process. The `done` flag makes it a fast no-op after the first fire.
+   *
+   * @param {import('./config/config-base')} config
+   */
+  _registerMicroVmRunHook (config) {
+    const { channel } = require('diagnostics_channel')
+    const ch = channel('http.server.request.start')
+    let done = false
+
+    const resetIdentity = () => {
+      if (done) return
+      done = true
+      // Unsubscribe the HTTP channel immediately: it fires on every incoming
+      // request and must not run after the first reset.
+      ch.unsubscribe(onHttpRequest)
+      // Do NOT remove the SIGUSR2 listener. Removing the only SIGUSR2 handler
+      // reverts to the OS default action for that signal, which terminates the
+      // process. If serverless-init sends a late SIGUSR2 (e.g. after the HTTP
+      // channel already fired), the process would die. The `done` flag already
+      // makes this a fast no-op on any subsequent signal, so the listener is
+      // safe to leave registered for the VM's lifetime.
+      this.#refreshIdentity(config)
+    }
+
+    const onHttpRequest = ({ request }) => {
+      if (request.method === 'POST' && request.url === '/run') {
+        resetIdentity()
+      }
+    }
+
+    ch.subscribe(onHttpRequest)
+    process.on('SIGUSR2', resetIdentity)
   }
 
   /**
@@ -378,6 +436,36 @@ class Tracer extends NoopProxy {
   use () {
     this._pluginManager.configurePlugin(...arguments)
     return this
+  }
+
+  /**
+   * Regenerates the runtime ID for this tracer instance.
+   *
+   * In Lambda MicroVM deployments this is called automatically when the
+   * platform's `POST /run` lifecycle hook is received (via the built-in HTTP
+   * diagnostics channel). Call it manually only if your application does not
+   * expose an HTTP server or you need to trigger the reset from non-HTTP code.
+   *
+   * Intentionally a no-op outside a MicroVM context: resetting the runtime ID
+   * in a non-clone scenario breaks span correlation — the backend treats spans
+   * before and after the call as coming from different process instances.
+   *
+   * @returns {this}
+   */
+  resetRuntimeId () {
+    // eslint-disable-next-line eslint-rules/eslint-process-env
+    if (!this._initialized || !Boolean(process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN)) return this
+    this.#refreshIdentity(getConfig())
+    return this
+  }
+
+  /**
+   * @param {import('./config/config-base')} config
+   */
+  #refreshIdentity (config) {
+    getConfig.refreshRuntimeId(config)
+    require('./remote_config').refreshClientId(config)
+    require('./id').reseedBatchBuffer()
   }
 
   /**
