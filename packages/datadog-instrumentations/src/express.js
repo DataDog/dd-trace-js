@@ -1,7 +1,7 @@
 'use strict'
 
 const shimmer = require('../../datadog-shimmer')
-const { createWrapRouterMethod } = require('./router')
+const { createWrapRouterMethod, createLayerDispatchWrappers } = require('./router')
 const { addHook, channel, tracingChannel } = require('./helpers/instrument')
 const { getCompileToRegexp } = require('./path-to-regexp')
 const {
@@ -170,6 +170,18 @@ addHook({ name: 'express', versions: ['4'], file: 'lib/express.js' }, express =>
   shimmer.wrap(express.Router, 'route', wrapRouterMethod)
 
   return express
+})
+
+// Express 4 bundles its own Layer; express 5 delegates to the `router` package
+// (wrapped in router.js). Both keep `layer.handle` the user's function and trace
+// via the prototype dispatch instead.
+addHook({ name: 'express', file: 'lib/router/layer.js', versions: ['4'] }, Layer => {
+  const { wrapLayerRequest, wrapLayerError } = createLayerDispatchWrappers('express')
+
+  shimmer.wrap(Layer.prototype, 'handle_request', wrapLayerRequest)
+  shimmer.wrap(Layer.prototype, 'handle_error', wrapLayerError)
+
+  return Layer
 })
 
 const queryParserReadCh = channel('datadog:query:read:finish')
