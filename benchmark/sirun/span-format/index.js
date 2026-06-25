@@ -8,7 +8,7 @@ const DatadogSpanContext = require('../../../packages/dd-trace/src/opentracing/s
 const id = require('../../../packages/dd-trace/src/id')
 
 const { VARIANT } = process.env
-const ITERATIONS = Number(process.env.ITERATIONS) || 3_000_000
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 // Every finished span runs through span_format.format() before the msgpack
 // encoder sees it: the per-tag switch splits the tag bag into meta/metrics,
@@ -100,7 +100,7 @@ if (VARIANT === 'error') assert.equal(sample.error, 1, 'error span should set er
 // so V8 cannot dead-store-eliminate the split this bench is meant to measure.
 guard.loopStart()
 let sink = 0
-for (let i = 0; i < ITERATIONS; i++) {
+for (let i = 0; i < OPERATIONS; i++) {
   const formatted = format(span, true, '-1')
   sink += formatted.error + formatted.meta['http.method'].length + formatted.metrics._sampling_priority_v1
 }

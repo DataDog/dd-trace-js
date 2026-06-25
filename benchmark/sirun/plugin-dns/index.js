@@ -16,7 +16,7 @@ const { createCallbackInstrumentor } =
 const { channel } = require('../../../packages/datadog-instrumentations/src/helpers/instrument')
 const { storage } = require('../../../packages/datadog-core')
 
-const ITERATIONS = Number(process.env.ITERATIONS) || 8_000_000
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 // Mirrors buildCallbackArgsContext() in datadog-instrumentations/src/dns.js for the
 // lookup shape (no rrtype): drop the trailing callback and capture the rest.
@@ -90,9 +90,9 @@ assert.deepEqual(
 )
 
 guard.loopStart()
-for (let i = 0; i < ITERATIONS; i++) {
+for (let i = 0; i < OPERATIONS; i++) {
   wrappedLookup('localhost', onLookup)
 }
 guard.done()
 
-assert.ok(started > ITERATIONS && finished > ITERATIONS, 'dns lookup wrapper produced no work')
+assert.ok(started > OPERATIONS && finished > OPERATIONS, 'dns lookup wrapper produced no work')
