@@ -128,6 +128,9 @@ class OtlpHttpExporterBase {
     this.options.port = parsedUrl.port
     this.options.path = parsedUrl.pathname + parsedUrl.search
     this.#transport = parsedUrl.protocol === 'http:' ? http : https
+    if (this.telemetryTags !== undefined) {
+      this.telemetryTags[0] = `protocol:${this.#transport === https ? 'https' : 'http'}`
+    }
   }
 
   /**
