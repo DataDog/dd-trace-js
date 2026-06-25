@@ -13,65 +13,59 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  publish-v3:
-    if: github.event_name == 'push' && github.event.ref == 'refs/heads/v3.x'
+  setup:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    environment:
-      name: npm
-      url: https://npmjs.com/package/dd-trace
-    permissions:
-      id-token: write
+    # Space-separated npm dist-tags for each release line.
+    # The latest branch always gets "latest" prepended automatically.
+    # Add a line here when creating a new release branch.
     env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      DIST_TAGS: |
+        v3.x latest-node14
+        v4.x latest-node16
+        v5.x latest-node18 latest-node20
+    outputs:
+      matrix: ${{ steps.compute.outputs.matrix }}
+      is_latest: ${{ steps.compute.outputs.is_latest }}
     steps:
-      - uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
-        id: octo-sts
-        with:
-          scope: DataDog/dd-trace-js
-          policy: self.github.release.push-tags
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/node
-      - run: npm publish --tag latest-node14
-      - id: pkg
+      - id: compute
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          content=`cat ./package.json | tr '\n' ' '`
-          echo "json=$content" >> $GITHUB_OUTPUT
-      - run: |
-          git tag v${{ fromJson(steps.pkg.outputs.json).version }}
-          git push https://x-access-token:${{ steps.octo-sts.outputs.token }}@github.com/${{ github.repository }}.git v${{ fromJson(steps.pkg.outputs.json).version }}
-      - run: node scripts/release/notes
+          branch="${{ github.ref_name }}"
 
-  publish-v4:
-    if: github.event_name == 'push' && github.event.ref == 'refs/heads/v4.x'
-    runs-on: ubuntu-latest
-    environment:
-      name: npm
-      url: https://npmjs.com/package/dd-trace
-    permissions:
-      id-token: write
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
-        id: octo-sts
-        with:
-          scope: DataDog/dd-trace-js
-          policy: self.github.release.push-tags
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/node
-      - run: npm publish --tag latest-node16
-      - id: pkg
-        run: |
-          content=`cat ./package.json | tr '\n' ' '`
-          echo "json=$content" >> $GITHUB_OUTPUT
-      - run: |
-          git tag v${{ fromJson(steps.pkg.outputs.json).version }}
-          git push https://x-access-token:${{ steps.octo-sts.outputs.token }}@github.com/${{ github.repository }}.git v${{ fromJson(steps.pkg.outputs.json).version }}
-      - run: node scripts/release/notes
+          # List all v*.x release line branches and find the highest one
+          latest=$(gh api "repos/${{ github.repository }}/branches" \
+            --paginate \
+            --jq '.[].name' \
+            | grep -E '^v[0-9]+\.x$' \
+            | sort -V \
+            | tail -1)
 
-  publish-latest:
-    if: github.event_name == 'push' && github.event.ref == 'refs/heads/v5.x'
+          # Collect the tags defined for this branch (everything after the branch name)
+          branch_tags=$(echo "$DIST_TAGS" | awk -v b="$branch" '$1==b{$1=""; sub(/^ /,""); print}')
+
+          if [ "$branch" = "$latest" ]; then
+            npm_tags="latest ${branch_tags:-latest-${branch%.x}}"
+            is_latest="true"
+          else
+            npm_tags="${branch_tags:-latest-${branch%.x}}"
+            is_latest="false"
+          fi
+
+          matrix=$(jq -cn \
+            --arg branch "$branch" \
+            --arg npm_tags "$npm_tags" \
+            '{"include":[{"branch":$branch,"npm_tags":$npm_tags}]}')
+
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "is_latest=$is_latest" >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: setup
     runs-on: ubuntu-latest
+    strategy:
+      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
     environment:
       name: npm
       url: https://npmjs.com/package/dd-trace
@@ -89,20 +83,34 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/node
-      - run: npm publish
       - id: pkg
         run: |
           content=`cat ./package.json | tr '\n' ' '`
           echo "json=$content" >> $GITHUB_OUTPUT
+      - name: Publish
+        run: |
+          tags=(${{ matrix.npm_tags }})
+          npm publish --tag "${tags[0]}"
+          version="${{ fromJson(steps.pkg.outputs.json).version }}"
+          for tag in "${tags[@]:1}"; do
+            npm dist-tag add "dd-trace@$version" "$tag"
+          done
       - run: |
           git tag v${{ fromJson(steps.pkg.outputs.json).version }}
           git push https://x-access-token:${{ steps.octo-sts.outputs.token }}@github.com/${{ github.repository }}.git v${{ fromJson(steps.pkg.outputs.json).version }}
-      - run: node scripts/release/notes --latest
+      - name: Release notes
+        run: |
+          if [ "${{ needs.setup.outputs.is_latest }}" = "true" ]; then
+            node scripts/release/notes --latest
+          else
+            node scripts/release/notes
+          fi
         env:
           GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
 
   docs:
-    needs: "publish-latest"
+    needs: [setup, publish]
+    if: needs.setup.outputs.is_latest == 'true'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
