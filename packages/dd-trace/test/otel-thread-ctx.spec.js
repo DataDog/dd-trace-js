@@ -41,8 +41,13 @@ describe('otel-thread-ctx', () => {
   // isTruncated, debugBytes).
   let StubThreadContext
   let constructedContexts
-  // Backs setContext/getContext.
+  // Tracks every activation of a context (or detach via clearContext).
+  // ThreadContext.prototype.enter delegates to setActive(this); the stub's
+  // clearContext delegates to setActive(undefined). getContext returns
+  // activeContext. This is the test-side equivalent of the
+  // AsyncLocalStorage that the real implementation uses.
   let activeContext
+  let setActive
 
   function loadModule (overrides = {}) {
     return proxyquire.noPreserveCache()('../src/otel-thread-ctx', {
@@ -64,6 +69,7 @@ describe('otel-thread-ctx', () => {
     activeSpan = null
     activeContext = undefined
     constructedContexts = []
+    setActive = sinon.stub().callsFake(c => { activeContext = c })
 
     StubThreadContext = class StubThreadContext {
       constructor (traceId, spanId, attributes) {
@@ -74,14 +80,15 @@ describe('otel-thread-ctx', () => {
         this.isTruncated = sinon.stub().returns(false)
         constructedContexts.push(this)
       }
+      enter () { setActive(this) }
     }
 
     pprofStub = {
       '@noCallThru': true,
       otelThreadCtx: {
         ThreadContext: StubThreadContext,
-        setContext: sinon.stub().callsFake(w => { activeContext = w }),
         getContext: sinon.stub().callsFake(() => activeContext),
+        clearContext: sinon.stub().callsFake(() => setActive(undefined)),
       },
     }
 
@@ -120,7 +127,7 @@ describe('otel-thread-ctx', () => {
       Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true })
       const m = loadModule()
       assert.equal(m.start(), false)
-      sinon.assert.notCalled(pprofStub.otelThreadCtx.setContext)
+      sinon.assert.notCalled(setActive)
     })
 
     it('returns false when AsyncContextFrame is inactive', () => {
@@ -135,11 +142,11 @@ describe('otel-thread-ctx', () => {
       sinon.assert.calledWithMatch(log.warn, /otelThreadCtx API/)
     })
 
-    it('returns false when otelThreadCtx is missing setContext/getContext/ThreadContext', () => {
+    it('returns false when otelThreadCtx is missing getContext/clearContext/ThreadContext', () => {
       const m = loadModule({
         pprof: {
           '@noCallThru': true,
-          otelThreadCtx: { ThreadContext: StubThreadContext /* no setContext/getContext */ },
+          otelThreadCtx: { ThreadContext: StubThreadContext /* no getContext/clearContext */ },
         },
       })
       assert.equal(m.start(), false)
@@ -155,9 +162,10 @@ describe('otel-thread-ctx', () => {
       assert.equal(otelThreadCtx.start(), true)
     })
 
-    it('setContext(undefined) when no active span', () => {
+    it('clearContext when no active span', () => {
       enterCh.publish()
-      sinon.assert.calledOnceWithExactly(pprofStub.otelThreadCtx.setContext, undefined)
+      sinon.assert.calledOnce(pprofStub.otelThreadCtx.clearContext)
+      sinon.assert.calledOnceWithExactly(setActive, undefined)
       assert.equal(constructedContexts.length, 0)
     })
 
@@ -180,7 +188,7 @@ describe('otel-thread-ctx', () => {
       expected[2] = THREAD_NAME
       expected[3] = THREAD_ID_STR
       assert.deepEqual(context.attributes, expected)
-      sinon.assert.calledOnceWithExactly(pprofStub.otelThreadCtx.setContext, context)
+      sinon.assert.calledOnceWithExactly(setActive, context)
     })
 
     it('builds a ThreadContext with the endpoint attribute for a web-server span', () => {
@@ -212,16 +220,16 @@ describe('otel-thread-ctx', () => {
       assert.equal(constructedContexts[0].attributes[0], rootHex)
     })
 
-    it('skips setContext on re-entry when the same context is already active', () => {
+    it('skips re-entering on re-entry when the same context is already active', () => {
       activeSpan = makeSpan()
       enterCh.publish()
-      sinon.assert.calledOnce(pprofStub.otelThreadCtx.setContext)
+      sinon.assert.calledOnce(setActive)
       assert.equal(constructedContexts.length, 1)
 
       // Second enter for the same span: getContext returns the same context,
-      // setContext should not fire again.
+      // enter() should not fire again.
       enterCh.publish()
-      sinon.assert.calledOnce(pprofStub.otelThreadCtx.setContext)
+      sinon.assert.calledOnce(setActive)
       assert.equal(constructedContexts.length, 1)
     })
 
@@ -242,19 +250,21 @@ describe('otel-thread-ctx', () => {
       enterCh.publish()
       // No new context built — the cache on span1 returned the original.
       assert.equal(constructedContexts.length, 2)
-      // setContext was called three times total.
-      assert.equal(pprofStub.otelThreadCtx.setContext.callCount, 3)
-      assert.equal(pprofStub.otelThreadCtx.setContext.thirdCall.args[0], context1)
+      // enter() was called three times total.
+      assert.equal(setActive.callCount, 3)
+      assert.equal(setActive.thirdCall.args[0], context1)
     })
 
     it('spanFinish clears the writer when the finishing span is the active record', () => {
       activeSpan = makeSpan()
       enterCh.publish()
-      sinon.assert.calledOnce(pprofStub.otelThreadCtx.setContext)
+      sinon.assert.calledOnce(setActive)
 
-      pprofStub.otelThreadCtx.setContext.resetHistory()
+      pprofStub.otelThreadCtx.clearContext.resetHistory()
+      setActive.resetHistory()
       spanFinishCh.publish(activeSpan)
-      sinon.assert.calledOnceWithExactly(pprofStub.otelThreadCtx.setContext, undefined)
+      sinon.assert.calledOnce(pprofStub.otelThreadCtx.clearContext)
+      sinon.assert.calledOnceWithExactly(setActive, undefined)
     })
 
     it('spanFinish does not clear the writer when the record belongs to a different span', () => {
@@ -266,14 +276,17 @@ describe('otel-thread-ctx', () => {
       activeSpan = span2
       enterCh.publish()
       // Writer's record is now span2's context; finishing span1 should leave it alone.
-      pprofStub.otelThreadCtx.setContext.resetHistory()
+      pprofStub.otelThreadCtx.clearContext.resetHistory()
+      setActive.resetHistory()
       spanFinishCh.publish(span1)
-      sinon.assert.notCalled(pprofStub.otelThreadCtx.setContext)
+      sinon.assert.notCalled(pprofStub.otelThreadCtx.clearContext)
+      sinon.assert.notCalled(setActive)
     })
 
     it('spanFinish is a no-op for a span that was never the active record', () => {
       spanFinishCh.publish(makeSpan())
-      sinon.assert.notCalled(pprofStub.otelThreadCtx.setContext)
+      sinon.assert.notCalled(pprofStub.otelThreadCtx.clearContext)
+      sinon.assert.notCalled(setActive)
     })
 
     it('tagsUpdate appends endpoint to the cached context when one was already built', () => {

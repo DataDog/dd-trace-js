@@ -85,8 +85,8 @@ const CachedSym = Symbol('OtelThreadCtx.cached')
 
 let started = false
 let ThreadContext
-let setContext
 let getContext
+let clearContext
 
 function getOrCreateCache (span) {
   let cached = span[CachedSym]
@@ -150,14 +150,14 @@ function onEnter () {
   if (!started) return
   const span = getActiveSpan()
   if (!span) {
-    setContext(undefined)
+    clearContext()
     return
   }
   const context = getOrBuildContext(span)
   // Skip if this CPED already holds the same context. Same allocation-churn
   // fix as the wall profiler in dd-trace-js#8638.
   if (getContext() === context) return
-  setContext(context)
+  context.enter()
 }
 
 function onSpanFinished (span) {
@@ -170,7 +170,7 @@ function onSpanFinished (span) {
   // record on its own, but with enterWith-style activation (sticky storage)
   // no such fire follows the span finish, leaving stale state.
   if (cached.context !== undefined && getContext() === cached.context) {
-    setContext(undefined)
+    clearContext()
   }
   span[CachedSym] = undefined
 }
@@ -218,16 +218,16 @@ function start () {
   }
   const ns = pprofMod.otelThreadCtx
   if (!ns || typeof ns.ThreadContext !== 'function' ||
-      typeof ns.setContext !== 'function' ||
-      typeof ns.getContext !== 'function') {
+      typeof ns.getContext !== 'function' ||
+      typeof ns.clearContext !== 'function') {
     log.warn(
       'OTEP-4947 thread context writer: installed @datadog/pprof does not expose the otelThreadCtx API'
     )
     return false
   }
   ThreadContext = ns.ThreadContext
-  setContext = ns.setContext
   getContext = ns.getContext
+  clearContext = ns.clearContext
 
   ensureChannelsActivated(isACFActive)
   enterCh.subscribe(onEnter)
