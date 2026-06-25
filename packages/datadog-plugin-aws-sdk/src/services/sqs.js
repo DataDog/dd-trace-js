@@ -54,7 +54,7 @@ class Sqs extends BaseAwsSdkPlugin {
     // in the base class
     this.requestTags = new WeakMap()
 
-    this.addBind('apm:aws:response:start:sqs', ctx => this.startResponseSpan(ctx))
+    this.addBind('apm:aws:response:start:sqs', ctx => this.#startResponseSpan(ctx))
 
     // No-callback receives (promises, event emitters) never publish response:start, so link and
     // finish the consumer span here instead. Callback paths reach the same logic via the bind above.
@@ -62,7 +62,7 @@ class Sqs extends BaseAwsSdkPlugin {
       if (ctx.cbExists) return
       // v2 nests the SDK payload under response.data; v3 spreads the output onto response.
       const responseCtx = { request: ctx.request, response: ctx.response?.data ?? ctx.response }
-      this.startResponseSpan(responseCtx)
+      this.#startResponseSpan(responseCtx)
       if (responseCtx.needsFinish) this.finish(responseCtx)
     })
 
@@ -72,14 +72,7 @@ class Sqs extends BaseAwsSdkPlugin {
     })
   }
 
-  /**
-   * Start the consumer (`aws.response`) span for a receive. The first message carrying trace
-   * context becomes the parent; every additional one fans in as a span link.
-   *
-   * @param {{ request: object, response: object, needsFinish?: boolean, currentStore?: object }} ctx
-   * @returns {object | undefined} The store to activate for the consumer span, else the parent store.
-   */
-  startResponseSpan (ctx) {
+  #startResponseSpan (ctx) {
     const { request, response } = ctx
     const carriers = this.responseExtract(request.params, request.operation, response)
 
