@@ -14,6 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
+    env:
+      RELEASE_LINES: 5 6
     outputs:
       release-lines: ${{ steps.check.outputs.release-lines }}
     steps:
@@ -25,7 +27,7 @@ jobs:
       - id: check
         run: |
           lines=()
-          for line in 5 6; do
+          for line in $RELEASE_LINES; do
             if git ls-remote --heads \
               "https://x-access-token:${{ steps.octo-sts.outputs.token }}@github.com/DataDog/dd-trace-js.git" \
               "refs/heads/v${line}.x" | grep -q .; then
