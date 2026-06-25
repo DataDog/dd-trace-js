@@ -8,8 +8,8 @@ class ExpressTracingPlugin extends RouterPlugin {
   constructor (...args) {
     super(...args)
 
-    this.addSub('apm:express:request:handle', ({ req }) => {
-      this.setFramework(req, 'express', this.config)
+    this.addSub('apm:express:request:handle', ({ req, expressMajor }) => {
+      this.setFramework(req, 'express', this.config, expressMajor)
     })
   }
 }
