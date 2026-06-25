@@ -1,5 +1,10 @@
 'use strict'
 
+const {
+  incrementApiSecMissingRoute,
+  incrementApiSecRequestNoSchema,
+  incrementApiSecRequestSchema,
+} = require('./api_security')
 const { DD_TELEMETRY_REQUEST_METRICS } = require('./common')
 const { incrementMissingUserId, incrementMissingUserLogin, incrementSdkEvent } = require('./user')
 const {
@@ -155,6 +160,24 @@ function incrementSdkEventMetric (eventType, sdkVersion) {
   incrementSdkEvent(eventType, sdkVersion)
 }
 
+function incrementApiSecRequestSchemaMetric (framework) {
+  if (!enabled) return
+
+  incrementApiSecRequestSchema(framework)
+}
+
+function incrementApiSecRequestNoSchemaMetric (framework) {
+  if (!enabled) return
+
+  incrementApiSecRequestNoSchema(framework)
+}
+
+function incrementApiSecMissingRouteMetric (framework) {
+  if (!enabled) return
+
+  incrementApiSecMissingRoute(framework)
+}
+
 function getRequestMetrics (req) {
   if (req) {
     const store = getStore(req)
@@ -179,6 +202,9 @@ module.exports = {
   incrementMissingUserLoginMetric,
   incrementMissingUserIdMetric,
   incrementSdkEventMetric,
+  incrementApiSecRequestSchemaMetric,
+  incrementApiSecRequestNoSchemaMetric,
+  incrementApiSecMissingRouteMetric,
 
   getRequestMetrics,
 }
