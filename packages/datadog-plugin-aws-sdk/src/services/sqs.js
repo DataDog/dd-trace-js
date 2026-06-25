@@ -72,6 +72,13 @@ class Sqs extends BaseAwsSdkPlugin {
     })
   }
 
+  /**
+   * Start the consumer (`aws.response`) span for a receive. The first message carrying trace
+   * context becomes the parent; every additional one fans in as a span link.
+   *
+   * @param {{ request: object, response: object, needsFinish?: boolean, currentStore?: object }} ctx
+   * @returns {object | undefined} The store to activate for the consumer span, else the parent store.
+   */
   #startResponseSpan (ctx) {
     const { request, response } = ctx
     const carriers = this.responseExtract(request.params, request.operation, response)
