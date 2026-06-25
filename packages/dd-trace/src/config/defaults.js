@@ -216,6 +216,14 @@ for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) 
     )
   }
   for (const entry of entries) {
+    // A deprecated entry that only aliases a canonical option must not surface as
+    // its own Config property/default: the canonical entry already owns the value
+    // and the alias is resolved by helper.js. helper.js drops these from the shared
+    // supported-configurations object (after registering the deprecation), but that
+    // mutation is order-dependent on which module loads first. Skip here too so
+    // `defaults` is identical regardless of load order (it differed in v5, where
+    // major-overrides keeps these entries instead of deleting them outright).
+    if (entry.deprecated && entry.aliases) continue
     if (entry.sensitive) {
       sensitiveConfigurations.add(canonicalName)
     }
@@ -283,7 +291,7 @@ for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) 
 
 // Replace the alias with the canonical property name.
 for (const [fullPropertyName, alias] of fallbackConfigurations) {
-  if (configurationsTable[alias].property) {
+  if (configurationsTable[alias]?.property) {
     fallbackConfigurations.set(fullPropertyName, configurationsTable[alias].property)
   }
 }
