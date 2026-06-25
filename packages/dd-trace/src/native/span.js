@@ -16,6 +16,75 @@ const { OpCode } = require('./index')
 // the legacy encoder's `meta_struct` map<string, bin> wire shape.
 const metaStructEncoder = new MsgpackEncoder()
 
+// Empty span-event attribute buffer (shared; the decoder treats an empty
+// buffer as "no attributes").
+const EMPTY_ATTRS = Buffer.alloc(0)
+
+// `[len:u32 LE][utf8]`.
+function encodeLenPrefixedStr (s) {
+  const body = Buffer.from(s, 'utf8')
+  const out = Buffer.allocUnsafe(4 + body.length)
+  out.writeUInt32LE(body.length >>> 0, 0)
+  body.copy(out, 4)
+  return out
+}
+
+// `[tag:u8] + value` for a scalar span-event attribute. Tags match
+// libdatadog's AttributeArrayValue discriminants: String=0, Boolean=1,
+// Integer=2, Double=3.
+function encodeAttrScalar (value) {
+  if (typeof value === 'string') {
+    const body = encodeLenPrefixedStr(value)
+    const out = Buffer.allocUnsafe(1 + body.length)
+    out.writeUInt8(0, 0)
+    body.copy(out, 1)
+    return out
+  }
+  if (typeof value === 'boolean') {
+    return Buffer.from([1, value ? 1 : 0])
+  }
+  // number: a *safe* integer -> i64 (tag 2), otherwise f64 (tag 3). Only
+  // `Number.isSafeInteger` values are guaranteed to be exact and within i64
+  // range; a larger integer-valued float (e.g. 1e21) would overflow
+  // `writeBigInt64LE` (RangeError) and isn't exactly representable anyway, so
+  // it goes to double — which is also what its JS value already is.
+  const out = Buffer.allocUnsafe(9)
+  if (Number.isSafeInteger(value)) {
+    out.writeUInt8(2, 0)
+    out.writeBigInt64LE(BigInt(value), 1)
+  } else {
+    out.writeUInt8(3, 0)
+    out.writeDoubleLE(value, 1)
+  }
+  return out
+}
+
+// Encode sanitized span-event attributes (`_sanitizeEventAttributes` leaves
+// scalars or arrays of scalars) into the flat little-endian buffer the native
+// `addSpanEvent` decodes (`decode_span_event_attributes` in the pipeline
+// crate): repeated `[key_len:u32][key][tag:u8] + value`, where an array value
+// is `[4][count:u32]` followed by `count` `[item_tag:u8] + scalar` items.
+function encodeSpanEventAttrs (attributes) {
+  if (!attributes) return EMPTY_ATTRS
+  const keys = Object.keys(attributes)
+  if (keys.length === 0) return EMPTY_ATTRS
+  const chunks = []
+  for (const key of keys) {
+    chunks.push(encodeLenPrefixedStr(key))
+    const value = attributes[key]
+    if (Array.isArray(value)) {
+      const head = Buffer.allocUnsafe(5)
+      head.writeUInt8(4, 0)
+      head.writeUInt32LE(value.length >>> 0, 1)
+      chunks.push(head)
+      for (const item of value) chunks.push(encodeAttrScalar(item))
+    } else {
+      chunks.push(encodeAttrScalar(value))
+    }
+  }
+  return Buffer.concat(chunks)
+}
+
 // `_createContext` is invoked by the parent constructor via `super(...)`
 // BEFORE the subclass can touch `this`, so we cannot thread
 // `nativeSpans` through the instance. Stash it module-locally; JS's
@@ -365,6 +434,22 @@ class NativeDatadogSpan extends DatadogSpan {
    */
   #serializeSpanEvents () {
     if (!this._events?.length) return
+
+    // When native span events are enabled (matching the legacy encoder's
+    // `DD_TRACE_NATIVE_SPAN_EVENTS` gate), append each event to the top-level
+    // v0.4 `span_events` field via the native setter — no truncation, typed
+    // attributes. Otherwise fall back to the `_dd.span_events` meta tag.
+    if (this.tracer()._config.DD_TRACE_NATIVE_SPAN_EVENTS) {
+      for (const event of this._events) {
+        this._nativeSpans.addSpanEvent(
+          this._spanContext._nativeSpanId,
+          event.name,
+          BigInt(Math.round(event.startTime * 1e6)),
+          encodeSpanEventAttrs(event.attributes)
+        )
+      }
+      return
+    }
 
     const events = this._events.map(event => {
       const formatted = {

@@ -89,6 +89,7 @@ describe('NativeDatadogSpan', () => {
       queueBatchMetrics: sinon.stub(),
       flushChangeQueue: sinon.stub(),
       setMetaStruct: sinon.stub(),
+      addSpanEvent: sinon.stub(),
       allocSegment: sinon.stub().callsFake(() => nextSegment++),
       OpCode,
     }
@@ -404,5 +405,105 @@ describe('NativeDatadogSpan', () => {
       span.finish()
       sinon.assert.notCalled(nativeSpans.setMetaStruct)
     })
+
+    it('forwards each span event to the native setter when DD_TRACE_NATIVE_SPAN_EVENTS is enabled', () => {
+      tracer._config.DD_TRACE_NATIVE_SPAN_EVENTS = true
+      span._events.push({
+        name: 'exception',
+        startTime: 2,
+        attributes: { msg: 'boom', code: 42, ratio: 0.5, ok: true, tags: ['a', 'b'] },
+      })
+      span._events.push({ name: 'plain', startTime: 3 })
+
+      span.finish()
+
+      sinon.assert.calledTwice(nativeSpans.addSpanEvent)
+      const first = nativeSpans.addSpanEvent.getCall(0)
+      assert.strictEqual(first.args[0], span._spanContext._nativeSpanId)
+      assert.strictEqual(first.args[1], 'exception')
+      assert.strictEqual(first.args[2], BigInt(Math.round(2 * 1e6)))
+      assert.deepStrictEqual(decodeSpanEventAttrs(first.args[3]), {
+        msg: 'boom', code: 42n, ratio: 0.5, ok: true, tags: ['a', 'b'],
+      })
+
+      const second = nativeSpans.addSpanEvent.getCall(1)
+      assert.strictEqual(second.args[1], 'plain')
+      assert.strictEqual(second.args[3].length, 0) // no attributes
+
+      // The meta-tag fallback must NOT be written on the native path.
+      assert.strictEqual(span._spanContext.getTag('_dd.span_events'), undefined)
+    })
+
+    it('falls back to the _dd.span_events meta tag when the flag is disabled', () => {
+      tracer._config.DD_TRACE_NATIVE_SPAN_EVENTS = false
+      span._events.push({ name: 'evt', startTime: 1, attributes: { k: 'v' } })
+
+      span.finish()
+
+      sinon.assert.notCalled(nativeSpans.addSpanEvent)
+      const parsed = JSON.parse(span._spanContext.getTag('_dd.span_events'))
+      assert.strictEqual(parsed[0].name, 'evt')
+      assert.strictEqual(parsed[0].time_unix_nano, Math.round(1 * 1e6))
+      assert.deepStrictEqual(parsed[0].attributes, { k: 'v' })
+    })
+
+    it('does not touch either span-events path when there are no events', () => {
+      tracer._config.DD_TRACE_NATIVE_SPAN_EVENTS = true
+      span.finish()
+      sinon.assert.notCalled(nativeSpans.addSpanEvent)
+      assert.strictEqual(span._spanContext.getTag('_dd.span_events'), undefined)
+    })
+
+    it('encodes an integer beyond i64/safe range as a double instead of throwing', () => {
+      tracer._config.DD_TRACE_NATIVE_SPAN_EVENTS = true
+      // 1e21 is an integer-valued float but exceeds i64 range; writeBigInt64LE
+      // would throw, so it must be encoded as a double (tag 3), not i64.
+      span._events.push({ name: 'big', startTime: 1, attributes: { n: 1e21 } })
+
+      span.finish() // must not throw on the i64-overflow value
+
+      const attrs = decodeSpanEventAttrs(nativeSpans.addSpanEvent.getCall(0).args[3])
+      assert.strictEqual(typeof attrs.n, 'number') // double, not BigInt
+      assert.strictEqual(attrs.n, 1e21)
+    })
   })
 })
+
+// Mirror of `decode_span_event_attributes` (libdatadog-nodejs pipeline crate):
+// decodes the flat attribute buffer the production encoder produces so tests
+// can assert the typed round-trip. Integers come back as BigInt (i64).
+function decodeSpanEventAttrs (buf) {
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength)
+  let i = 0
+  const u32 = () => { const v = dv.getUint32(i, true); i += 4; return v }
+  const u8 = () => buf[i++]
+  const str = () => {
+    const len = u32()
+    const s = Buffer.from(buf.buffer, buf.byteOffset + i, len).toString('utf8')
+    i += len
+    return s
+  }
+  const scalar = (tag) => {
+    switch (tag) {
+      case 0: return str()
+      case 1: return u8() !== 0
+      case 2: { const v = dv.getBigInt64(i, true); i += 8; return v }
+      case 3: { const v = dv.getFloat64(i, true); i += 8; return v }
+      default: throw new Error(`bad span-event attr tag: ${tag}`)
+    }
+  }
+  const out = {}
+  while (i < buf.length) {
+    const key = str()
+    const tag = u8()
+    if (tag === 4) {
+      const count = u32()
+      const arr = []
+      for (let n = 0; n < count; n++) arr.push(scalar(u8()))
+      out[key] = arr
+    } else {
+      out[key] = scalar(tag)
+    }
+  }
+  return out
+}

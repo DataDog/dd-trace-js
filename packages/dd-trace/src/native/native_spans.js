@@ -635,6 +635,26 @@ class NativeSpansInterface {
   }
 
   /**
+   * Append an OpenTelemetry-style span event to a span's top-level v0.4
+   * `span_events` field. Like meta_struct there is no change-buffer opcode, so
+   * the queue is drained first and the event appended directly (ordering-safe).
+   *
+   * @param {Uint8Array} spanId - the 8-byte span handle (`_nativeSpanId`).
+   * @param {string} name - event name.
+   * @param {bigint} timeUnixNano - event timestamp in nanoseconds (u64).
+   * @param {Uint8Array} attrsBuf - flat typed attribute buffer (see
+   *   `decode_span_event_attributes` in the pipeline crate).
+   */
+  addSpanEvent (spanId, name, timeUnixNano, attrsBuf) {
+    this.flushChangeQueue()
+    const id = new DataView(spanId.buffer, spanId.byteOffset, 8).getBigUint64(0, false)
+    this._state.addSpanEvent(id, name, timeUnixNano, attrsBuf)
+    // addSpanEvent appends to a Vec, which can grow WASM memory and detach
+    // our cached views — refresh before the next queueOp.
+    this.#checkDetach()
+  }
+
+  /**
    * Flush spans to the Datadog agent.
    *
    * @param {Array<Uint8Array>} spanIds Array of 8-byte LE span ids
