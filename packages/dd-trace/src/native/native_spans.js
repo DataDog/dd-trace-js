@@ -145,6 +145,10 @@ class NativeSpansInterface {
     this._stringIdCounter = 0
 
     // Initialize the WASM state (buffers are allocated in WASM memory)
+    // Tracks whether v0.5 output has been negotiated, so it survives a
+    // setAgentUrl() that rebuilds the WASM state (which would otherwise reset
+    // to the v0.4 default).
+    this._useV05 = false
     this._state = this.#createWasmState(options.agentUrl)
 
     // Get the WASM memory views for writing to the change queue buffer
@@ -182,6 +186,18 @@ class NativeSpansInterface {
   }
 
   /**
+   * Select v0.5 output on the native exporter. Must be called before the first
+   * flush (the WASM exporter fixes its output format at first send). v0.5
+   * silently drops meta_struct/top-level span_events — callers must only enable
+   * it after confirming the agent advertises /v0.5/traces.
+   * @param {boolean} useV05
+   */
+  setUseV05 (useV05) {
+    this._useV05 = useV05
+    this._state.setUseV05(useV05)
+  }
+
+  /**
    * Update the agent URL by reinitializing the native state.
    * Warning: This will discard any buffered but unflushed span data.
    * @param {string} url New agent URL
@@ -196,6 +212,14 @@ class NativeSpansInterface {
     // `_stringIdCounter` continue to agree, so subsequent `getStringId`
     // calls don't collide with already-interned ids in the old WASM table.
     const newState = this.#createWasmState(url)
+    // Preserve a previously-negotiated v0.5 selection across the rebuild
+    // (the format must be set before the new state's first send). NOTE: this
+    // assumes the new agent also supports v0.5 — we do not re-run /info
+    // negotiation here. setAgentUrl is rare and v0.5 is an explicit opt-in, so
+    // we keep the user's selection rather than silently downgrading; if the
+    // new agent lacks v0.5 the sends will fail loudly (404) rather than lose
+    // data silently.
+    if (this._useV05) newState.setUseV05(true)
 
     // Atomic swap: only after the new state is fully constructed do we
     // commit to it and reset JS-side counters.

@@ -15,6 +15,7 @@ describe('NativeExporter', () => {
   let nativeSpans
   let logError
   let metricsIncrement
+  let fetchAgentInfo
   let clock
 
   beforeEach(() => {
@@ -34,21 +35,72 @@ describe('NativeExporter', () => {
       flushChangeQueue: sinon.stub(),
       flushSpans: sinon.stub().resolves('unchanged'),
       setAgentUrl: sinon.stub(),
+      setUseV05: sinon.stub(),
     }
 
     logError = sinon.stub()
     metricsIncrement = sinon.stub()
+    fetchAgentInfo = sinon.stub()
     NativeExporter = proxyquire('../../src/exporters/native', {
       '../../log': {
         warn: sinon.stub(),
         error: logError,
+        debug: sinon.stub(),
       },
       '../../runtime_metrics': { increment: metricsIncrement },
+      '../../agent/info': { fetchAgentInfo },
     })
   })
 
   afterEach(() => {
     clock.restore()
+  })
+
+  describe('v0.5 negotiation', () => {
+    it('enables v0.5 when protocol is 0.5 and the agent advertises /v0.5/traces', () => {
+      config.protocolVersion = '0.5'
+      fetchAgentInfo.callsArgWith(1, null, { endpoints: ['/v0.4/traces', '/v0.5/traces'] })
+      // eslint-disable-next-line no-new
+      new NativeExporter(config, prioritySampler, nativeSpans)
+      sinon.assert.calledOnceWithExactly(nativeSpans.setUseV05, true)
+    })
+
+    it('stays on v0.4 when protocol is 0.5 but the agent lacks /v0.5/traces', () => {
+      config.protocolVersion = '0.5'
+      fetchAgentInfo.callsArgWith(1, null, { endpoints: ['/v0.4/traces'] })
+      // eslint-disable-next-line no-new
+      new NativeExporter(config, prioritySampler, nativeSpans)
+      sinon.assert.notCalled(nativeSpans.setUseV05)
+    })
+
+    it('stays on v0.4 when /info omits or malforms endpoints', () => {
+      config.protocolVersion = '0.5'
+      // No `endpoints` key, and a non-array value — neither may enable v0.5
+      // or throw in the async callback.
+      fetchAgentInfo.callsArgWith(1, null, {})
+      // eslint-disable-next-line no-new
+      new NativeExporter(config, prioritySampler, nativeSpans)
+      fetchAgentInfo.callsArgWith(1, null, { endpoints: '/v0.5/traces' })
+      // eslint-disable-next-line no-new
+      new NativeExporter(config, prioritySampler, nativeSpans)
+      sinon.assert.notCalled(nativeSpans.setUseV05)
+    })
+
+    it('stays on v0.4 when /info fails', () => {
+      config.protocolVersion = '0.5'
+      fetchAgentInfo.callsArgWith(1, new Error('connection refused'))
+      // eslint-disable-next-line no-new
+      new NativeExporter(config, prioritySampler, nativeSpans)
+      sinon.assert.notCalled(nativeSpans.setUseV05)
+    })
+
+    it('does not fetch /info at all when protocol is not 0.5', () => {
+      config.protocolVersion = '0.4'
+      // eslint-disable-next-line no-new
+      new NativeExporter(config, prioritySampler, nativeSpans)
+      sinon.assert.notCalled(fetchAgentInfo)
+      sinon.assert.notCalled(nativeSpans.setUseV05)
+    })
   })
 
   describe('constructor', () => {

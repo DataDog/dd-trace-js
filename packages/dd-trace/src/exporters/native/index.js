@@ -8,6 +8,7 @@ const defaults = require('../../config/defaults')
 const log = require('../../log')
 const processTags = require('../../process-tags')
 const runtimeMetrics = require('../../runtime_metrics')
+const { fetchAgentInfo } = require('../../agent/info')
 
 const firstFlushChannel = channel('dd-trace:exporter:first-flush')
 
@@ -47,6 +48,15 @@ class NativeExporter {
       port,
     }))
 
+    // v0.5 output is opt-in via DD_TRACE_AGENT_PROTOCOL_VERSION=0.5 AND requires
+    // the agent to advertise /v0.5/traces. The v0.5 wire schema has no slot for
+    // meta_struct (or top-level span_events/span_links), so libdatadog silently
+    // drops them in v0.5 mode — matching the legacy v0.5 encoder. It must never
+    // be enabled implicitly, hence the explicit-opt-in + capability check.
+    if (config.protocolVersion === '0.5') {
+      this.#negotiateV05()
+    }
+
     // Register on the dd-trace shared beforeExit handler list rather than
     // attaching directly to `process` — repeated tracer instantiation (tests,
     // hot reload, lambda re-init) would otherwise leak listeners and trip
@@ -57,6 +67,36 @@ class NativeExporter {
     } else {
       process.once('beforeExit', () => this.flush())
     }
+  }
+
+  /**
+   * Confirm the agent supports v0.5 before switching the native exporter to it.
+   * Asynchronous: until /info resolves the exporter stays on v0.4 (the safe
+   * default), so an early first flush may go out as v0.4 — acceptable, since
+   * v0.4 loses no data. The native output format is fixed at the first send,
+   * so this must resolve before then (it normally does: /info is fast and the
+   * first flush is on a timer).
+   */
+  #negotiateV05 () {
+    let infoUrl
+    try {
+      infoUrl = typeof this._url === 'string' ? new URL(this._url) : this._url
+    } catch (e) {
+      log.warn('Native exporter: cannot parse agent URL for /info v0.5 check: %s', e.message)
+      return
+    }
+    fetchAgentInfo(infoUrl, (err, info) => {
+      if (err) {
+        log.debug('Native exporter: /info fetch failed, staying on v0.4: %s', err.message)
+        return
+      }
+      // `endpoints` is untrusted agent input: guard the type so a malformed
+      // response (non-array, or a string that substring-matches) can't throw
+      // in this async callback or false-positive into v0.5.
+      if (Array.isArray(info?.endpoints) && info.endpoints.includes('/v0.5/traces')) {
+        this._nativeSpans.setUseV05(true)
+      }
+    })
   }
 
   /**

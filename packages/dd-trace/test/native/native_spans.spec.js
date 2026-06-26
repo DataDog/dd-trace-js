@@ -65,6 +65,7 @@ describe('NativeSpansInterface', () => {
       getTraceMetricAttr: sinon.stub().returns(100),
       getTraceOrigin: sinon.stub().returns('synthetics'),
       setMetaStruct: sinon.stub(),
+      setUseV05: sinon.stub(),
     }
 
     WasmSpanState = sinon.stub().returns(mockState)
@@ -420,6 +421,24 @@ describe('NativeSpansInterface', () => {
       assert.strictEqual(nativeSpans._stringIdCounter, counterBefore)
       assert.strictEqual(nativeSpans._stringMap.size, mapSize)
       assert.ok(nativeSpans._stringMap.has('keep-me'))
+    })
+  })
+
+  describe('setUseV05 re-apply across setAgentUrl', () => {
+    it('re-applies a negotiated v0.5 selection to the rebuilt state', () => {
+      nativeSpans.setUseV05(true)
+      const newState = { ...mockState, setUseV05: sinon.stub(), change_queue_ptr: sinon.stub().returns(0) }
+      WasmSpanState.returns(newState)
+      nativeSpans.setAgentUrl('http://localhost:9999')
+      // The rebuilt state must have the format re-applied before its first send.
+      sinon.assert.calledOnceWithExactly(newState.setUseV05, true)
+    })
+
+    it('does not enable v0.5 on the rebuilt state when none was negotiated', () => {
+      const newState = { ...mockState, setUseV05: sinon.stub(), change_queue_ptr: sinon.stub().returns(0) }
+      WasmSpanState.returns(newState)
+      nativeSpans.setAgentUrl('http://localhost:9999')
+      sinon.assert.notCalled(newState.setUseV05)
     })
   })
 
