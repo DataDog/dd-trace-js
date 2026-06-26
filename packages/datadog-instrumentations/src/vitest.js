@@ -415,7 +415,7 @@ function isVitestNoWorkerInitRequested () {
   return value === 'true' || value === '1'
 }
 
-function shouldUseVitestNoWorkerInit (ctx) {
+function shouldUseVitestNoWorkerInit (ctx, testSpecifications) {
   if (!isVitestNoWorkerInitRequested()) {
     return false
   }
@@ -430,11 +430,11 @@ function shouldUseVitestNoWorkerInit (ctx) {
     return false
   }
 
-  if (config.pool === 'threads' || config.pool === 'vmThreads') {
-    return false
+  if (Array.isArray(testSpecifications)) {
+    return hasForkPoolTestSpecification(testSpecifications, config.pool)
   }
 
-  return true
+  return !isThreadPool(config.pool)
 }
 
 function warnVitestNoWorkerInitWithIsolationDisabled () {
@@ -552,7 +552,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
     isImpactedTestsEnabled = false
   }
 
-  const shouldInstallNoWorkerInit = shouldUseVitestNoWorkerInit(ctx)
+  const shouldInstallNoWorkerInit = shouldUseVitestNoWorkerInit(ctx, testSpecifications)
   isVitestNoWorkerInitActive = shouldInstallNoWorkerInit
   const shouldSendWorkerInstrumentationContext = !shouldInstallNoWorkerInit ||
     hasThreadPoolTestSpecification(ctx.config?.pool, testSpecifications)
@@ -694,14 +694,14 @@ function configureMainProcessExecutionHooks (
   ctx,
   testSessionConfiguration = {},
   testOptimizationData = {},
-  shouldInstallNoWorkerInit = shouldUseVitestNoWorkerInit(ctx),
+  shouldInstallNoWorkerInit,
   testSpecifications
 ) {
-  if (
-    !shouldInstallNoWorkerInit ||
-    ctx.config?.pool === 'threads' ||
-    ctx.config?.pool === 'vmThreads'
-  ) {
+  if (shouldInstallNoWorkerInit === undefined) {
+    shouldInstallNoWorkerInit = shouldUseVitestNoWorkerInit(ctx, testSpecifications)
+  }
+
+  if (!shouldInstallNoWorkerInit) {
     return
   }
 
@@ -823,9 +823,7 @@ function installMainProcessReporter (
   if (
     !shouldInstallNoWorkerInit ||
     forkPoolTestModules?.isEmpty ||
-    mainProcessReporterContexts.has(ctx) ||
-    ctx.config?.pool === 'threads' ||
-    ctx.config?.pool === 'vmThreads'
+    mainProcessReporterContexts.has(ctx)
   ) {
     return
   }
@@ -861,7 +859,8 @@ function createMainProcessReporter (
       return reportTestModule(testModule)
     },
 
-    onTestCaseResult (task) {
+    onTestCaseResult (testCase) {
+      const task = getTestCaseTask(testCase)
       if (!shouldReportTestTask(task)) return
 
       recordFinalTaskAttemptResult(task)
@@ -937,9 +936,11 @@ function createMainProcessReporter (
   }
 
   function reportTestModule (testModule) {
-    finishedTestModules.add(testModule.id)
-    const testSuiteCtx = testSuiteContexts.get(testModule.id) || startTestSuite(testModule)
-    const testTasks = getTypeTasks(testModule.task.tasks)
+    const testModuleId = getTestModuleId(testModule)
+    const testModuleTask = getTestModuleTask(testModule)
+    finishedTestModules.add(testModuleId)
+    const testSuiteCtx = testSuiteContexts.get(testModuleId) || startTestSuite(testModule)
+    const testTasks = getTypeTasks(testModuleTask.tasks)
     const testReports = []
     let testSuiteError
 
@@ -957,9 +958,9 @@ function createMainProcessReporter (
       testSuiteError ||= error
     }
 
-    const suiteTaskError = getSuiteTaskError(testModule.task)
-    recomputeTaskState(testModule.task)
-    const testSuiteResult = testModule.task.result
+    const suiteTaskError = getSuiteTaskError(testModuleTask)
+    recomputeTaskState(testModuleTask)
+    const testSuiteResult = testModuleTask.result
     if (testSuiteResult?.errors?.length) {
       testSuiteError = testSuiteResult.errors[0]
     } else if (suiteTaskError) {
@@ -977,12 +978,13 @@ function createMainProcessReporter (
       onFinish: noop,
       ...testSuiteCtx.currentStore,
     })
-    testSuiteContexts.delete(testModule.id)
+    testSuiteContexts.delete(testModuleId)
   }
 
   function startTestSuite (testModule) {
+    const testModuleId = getTestModuleId(testModule)
     const testSuiteCtx = {
-      testSuiteAbsolutePath: testModule.moduleId || testModule.task.filepath,
+      testSuiteAbsolutePath: getTestModuleFilepath(testModule),
       frameworkVersion,
       testSessionId: testSessionConfiguration.testSessionId,
       testModuleId: testSessionConfiguration.testModuleId,
@@ -993,7 +995,7 @@ function createMainProcessReporter (
       requestErrorTags: testOptimizationRequestErrorTags,
     }
     testSuiteStartCh.runStores(testSuiteCtx, () => {})
-    testSuiteContexts.set(testModule.id, testSuiteCtx)
+    testSuiteContexts.set(testModuleId, testSuiteCtx)
     return testSuiteCtx
   }
 
@@ -1131,13 +1133,119 @@ function createTestModuleFromFile (file) {
   }
 }
 
+function getTestModuleId (testModule) {
+  return testModule.id || getTestModuleFilepath(testModule)
+}
+
+function getTestModuleTask (testModule) {
+  if (testModule.task?.tasks) {
+    return testModule.task
+  }
+
+  const task = createTaskFromReportedTask(testModule)
+  task.file = task
+  return task
+}
+
+function getTestCaseTask (testCase) {
+  if (testCase.task) {
+    return testCase.task
+  }
+
+  return createTaskFromReportedTask(testCase, {
+    filepath: getTestModuleFilepath(testCase.module),
+    projectName: getTestModuleProjectName(testCase.module),
+  })
+}
+
+function createTaskFromReportedTask (reportedTask, file, suite) {
+  const task = {
+    id: reportedTask.id,
+    type: reportedTask.type,
+    name: reportedTask.name || reportedTask.relativeModuleId || reportedTask.moduleId,
+    mode: reportedTask.options?.mode,
+    meta: getReportedTaskMeta(reportedTask),
+    result: getReportedTaskResult(reportedTask),
+    file,
+    suite,
+  }
+
+  if (reportedTask.type === 'module') {
+    task.filepath = reportedTask.moduleId
+    task.projectName = getTestModuleProjectName(reportedTask)
+  }
+
+  const children = getReportedTaskChildren(reportedTask)
+  if (children) {
+    task.tasks = []
+    const taskFile = file || task
+    const childSuite = task.type === 'suite' ? task : undefined
+    for (const child of children) {
+      task.tasks.push(createTaskFromReportedTask(child, taskFile, childSuite))
+    }
+  }
+
+  return task
+}
+
+function getReportedTaskChildren (reportedTask) {
+  const children = reportedTask.children
+  if (!children) return
+
+  if (typeof children.array === 'function') {
+    return children.array()
+  }
+
+  if (Array.isArray(children)) {
+    return children
+  }
+
+  return [...children]
+}
+
+function getReportedTaskMeta (reportedTask) {
+  if (typeof reportedTask.meta === 'function') {
+    return reportedTask.meta()
+  }
+
+  return reportedTask.meta || {}
+}
+
+function getReportedTaskResult (reportedTask) {
+  let result
+  if (typeof reportedTask.result === 'function') {
+    result = reportedTask.result()
+  } else if (typeof reportedTask.state === 'function') {
+    result = {
+      errors: typeof reportedTask.errors === 'function' ? reportedTask.errors() : undefined,
+      state: reportedTask.state(),
+    }
+  } else {
+    result = reportedTask.result
+  }
+
+  const diagnostic = typeof reportedTask.diagnostic === 'function'
+    ? reportedTask.diagnostic()
+    : undefined
+
+  return {
+    duration: diagnostic?.duration,
+    errors: result?.errors,
+    note: result?.note,
+    repeatCount: diagnostic?.repeatCount,
+    retryCount: diagnostic?.retryCount,
+    state: result?.state,
+  }
+}
+
 function getTestModuleFilepath (testModule) {
   return testModule.moduleId || testModule.task?.filepath || testModule.filepath
 }
 
 function getTestModuleProjectName (testModule) {
   return normalizeProjectName(
-    testModule.projectName || testModule.task?.projectName || testModule.task?.file?.projectName
+    testModule.projectName || getProjectName(testModule.project) || testModule.task?.projectName ||
+      testModule.task?.file?.projectName
   )
 }
 
@@ -1807,7 +1915,7 @@ function shouldMarkVitestWorkerEnv (pool, testSpecifications) {
 
 function markVitestWorkerEnv (ctx, testSpecifications) {
   const config = ctx?.config
-  isVitestNoWorkerInitActive = shouldUseVitestNoWorkerInit(ctx)
+  isVitestNoWorkerInitActive = shouldUseVitestNoWorkerInit(ctx, testSpecifications)
   if (!config || !shouldMarkVitestWorkerEnv(config.pool, testSpecifications)) {
     return
   }
