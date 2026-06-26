@@ -6,6 +6,7 @@ const INPUT_TYPE_TEXT = 'input_text'
 
 const IMAGE_FALLBACK = '[image]'
 const FILE_FALLBACK = '[file]'
+const AUDIO_FALLBACK = '[audio]'
 
 module.exports = {
   INPUT_TYPE_IMAGE,
@@ -13,4 +14,5 @@ module.exports = {
   INPUT_TYPE_TEXT,
   IMAGE_FALLBACK,
   FILE_FALLBACK,
+  AUDIO_FALLBACK,
 }

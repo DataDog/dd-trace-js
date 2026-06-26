@@ -1,10 +1,12 @@
 'use strict'
 
+const { audioMimeTypeFromFormat, formatAudioPart } = require('../../util')
 const {
   INPUT_TYPE_IMAGE,
   INPUT_TYPE_FILE,
   IMAGE_FALLBACK,
   FILE_FALLBACK,
+  AUDIO_FALLBACK,
 } = require('./constants')
 
 const REGEX_SPECIAL_CHARS = /[.*+?^${}()|[\]\\]/g
@@ -118,9 +120,49 @@ function hasMultimodalInputs (variables) {
   )
 }
 
+/**
+ * Flattens an array of OpenAI chat message content parts into readable text plus structured audio.
+ *
+ * Text parts are concatenated (newline-joined),
+ * images collapse to an `[image]` marker, and `input_audio` parts with data are captured as audio
+ * parts (rendered as a player). The `[audio]` marker is only emitted as a fallback when an audio
+ * part carries no data.
+ *
+ * @param {Array<object>} parts - Array of content parts from a chat message `content`
+ * @returns {{ content: string, audioParts: Array<{ mimeType: string, content: string }> }}
+ */
+function extractContentParts (parts) {
+  const extracted = []
+  const audioParts = []
+
+  for (const part of parts) {
+    const partType = part?.type ?? ''
+    if (partType === 'text') {
+      extracted.push(String(part.text ?? ''))
+    } else if (partType === 'image_url') {
+      extracted.push(IMAGE_FALLBACK)
+    } else if (partType === 'input_audio') {
+      const inputAudio = part.input_audio ?? {}
+      const data = inputAudio.data
+      if (data) {
+        // Audio is captured as a structured audio part (rendered as a player), so no text marker
+        // is needed. Only fall back to "[audio]" when there's no audio to capture.
+        audioParts.push(formatAudioPart(data, audioMimeTypeFromFormat(inputAudio.format)))
+      } else {
+        extracted.push(AUDIO_FALLBACK)
+      }
+    } else {
+      extracted.push(`[${partType}]`)
+    }
+  }
+
+  return { content: extracted.join('\n'), audioParts }
+}
+
 module.exports = {
   extractChatTemplateFromInstructions,
   normalizePromptVariables,
   extractTextFromContentItem,
+  extractContentParts,
   hasMultimodalInputs,
 }

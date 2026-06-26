@@ -612,6 +612,65 @@ class LLMObsTagger {
     return filteredToolResults
   }
 
+  // Validates audio segments on a message and emits the snake_case wire shape
+  // `{ mime_type, content | attachment_key }`. Mirrors dd-trace-py's
+  // `_extract_audio_part`: a part requires `mimeType` and exactly one of
+  // `content` (inline base64) or `attachmentKey` (backend-offloaded).
+  #filterAudioParts (audioParts) {
+    if (!Array.isArray(audioParts)) {
+      audioParts = [audioParts]
+    }
+
+    const filteredAudioParts = []
+    for (const audioPart of audioParts) {
+      if (audioPart == null || typeof audioPart !== 'object') {
+        this.#handleFailure('Audio part must be an object.', 'invalid_io_messages')
+        continue
+      }
+
+      const { mimeType, content, attachmentKey } = audioPart
+
+      if (typeof mimeType !== 'string' || !mimeType) {
+        this.#handleFailure('Audio part mimeType must be a non-empty string.', 'invalid_io_messages')
+        continue
+      }
+
+      if (content == null && attachmentKey == null) {
+        this.#handleFailure("Audio part must have either 'content' or 'attachmentKey'.", 'invalid_io_messages')
+        continue
+      }
+
+      if (content != null && attachmentKey != null) {
+        this.#handleFailure(
+          "Audio part must have only one of 'content' or 'attachmentKey', not both.", 'invalid_io_messages'
+        )
+        continue
+      }
+
+      const audioPartObj = { mime_type: mimeType }
+
+      // Exactly one of content / attachmentKey is set here (guarded above). Validate its type
+      // explicitly so the failure carries the `invalid_io_messages` tag for telemetry, instead
+      // of routing through `#tagConditionalString` which omits it.
+      if (content == null) {
+        if (typeof attachmentKey !== 'string') {
+          this.#handleFailure('Audio part attachmentKey must be a string.', 'invalid_io_messages')
+          continue
+        }
+        audioPartObj.attachment_key = attachmentKey
+      } else {
+        if (typeof content !== 'string') {
+          this.#handleFailure('Audio part content must be a base64-encoded string.', 'invalid_io_messages')
+          continue
+        }
+        audioPartObj.content = content
+      }
+
+      filteredAudioParts.push(audioPartObj)
+    }
+    return filteredAudioParts
+  }
+
   #tagMessages (span, data, key) {
     if (!data) {
       return
@@ -638,6 +697,7 @@ class LLMObsTagger {
         toolCalls,
         toolResults,
         toolId,
+        audioParts,
       } = message
       const messageObj = {}
 
@@ -668,6 +728,14 @@ class LLMObsTagger {
 
         if (filteredToolResults.length) {
           messageObj.tool_results = filteredToolResults
+        }
+      }
+
+      if (audioParts != null) {
+        const filteredAudioParts = this.#filterAudioParts(audioParts)
+
+        if (filteredAudioParts.length) {
+          messageObj.audio_parts = filteredAudioParts
         }
       }
 

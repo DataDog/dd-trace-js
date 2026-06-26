@@ -1,0 +1,22 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.openai.com/v1/chat/completions",
+    "headers": {
+      "Accept": "application/json, text/plain, */*",
+      "Content-Type": "application/json",
+      "User-Agent": "OpenAI/NodeJS/4.0.0"
+    },
+    "body": "{\"model\":\"gpt-audio\",\"modalities\":[\"text\",\"audio\"],\"audio\":{\"voice\":\"alloy\",\"format\":\"wav\"},\"messages\":[{\"role\":\"user\",\"content\":\"Say hi\"}]}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\n  \"id\": \"chatcmpl-audionodata1\",\n  \"object\": \"chat.completion\",\n  \"created\": 1730000003,\n  \"model\": \"gpt-audio-2025-08-28\",\n  \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\": \"assistant\",\n        \"content\": null,\n        \"audio\": {\n          \"id\": \"audio_nodata\",\n          \"data\": \"\",\n          \"transcript\": \"Hi there!\",\n          \"expires_at\": 1730003603\n        }\n      },\n      \"finish_reason\": \"stop\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 8,\n    \"completion_tokens\": 5,\n    \"total_tokens\": 13,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\": 0\n    }\n  }\n}"
+  }
+}

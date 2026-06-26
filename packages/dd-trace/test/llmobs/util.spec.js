@@ -6,8 +6,10 @@ const { before, describe, it } = require('mocha')
 
 const getConfig = require('../../src/config')
 const {
+  audioMimeTypeFromFormat,
   encodeUnicode,
   findGenAIAncestorSpanId,
+  formatAudioPart,
   getFunctionArguments,
   validateCostTags,
   safeJsonParse,
@@ -346,6 +348,55 @@ describe('util', () => {
     it('is a no-op-safe when span has no context', () => {
       assert.strictEqual(findGenAIAncestorSpanId(undefined), null)
       assert.strictEqual(findGenAIAncestorSpanId({}), null)
+    })
+  })
+
+  describe('audioMimeTypeFromFormat', () => {
+    it('maps mp3 to audio/mpeg', () => {
+      assert.strictEqual(audioMimeTypeFromFormat('mp3'), 'audio/mpeg')
+    })
+
+    it('maps other formats to audio/<format>', () => {
+      assert.strictEqual(audioMimeTypeFromFormat('wav'), 'audio/wav')
+      assert.strictEqual(audioMimeTypeFromFormat('opus'), 'audio/opus')
+    })
+
+    it('normalizes whitespace and case', () => {
+      assert.strictEqual(audioMimeTypeFromFormat('  MP3 '), 'audio/mpeg')
+      assert.strictEqual(audioMimeTypeFromFormat('WAV'), 'audio/wav')
+    })
+
+    it('defaults to audio/wav for missing or non-string formats', () => {
+      assert.strictEqual(audioMimeTypeFromFormat(''), 'audio/wav')
+      assert.strictEqual(audioMimeTypeFromFormat('   '), 'audio/wav')
+      assert.strictEqual(audioMimeTypeFromFormat(undefined), 'audio/wav')
+      assert.strictEqual(audioMimeTypeFromFormat(5), 'audio/wav')
+    })
+  })
+
+  describe('formatAudioPart', () => {
+    it('passes through an existing base64 string', () => {
+      assert.deepStrictEqual(
+        formatAudioPart('aGVsbG8=', 'audio/wav'),
+        { mimeType: 'audio/wav', content: 'aGVsbG8=' }
+      )
+    })
+
+    it('base64-encodes Buffer and Uint8Array input', () => {
+      const expected = Buffer.from('hello').toString('base64')
+      assert.deepStrictEqual(
+        formatAudioPart(Buffer.from('hello'), 'audio/mpeg'),
+        { mimeType: 'audio/mpeg', content: expected }
+      )
+      assert.deepStrictEqual(
+        formatAudioPart(new Uint8Array([104, 101, 108, 108, 111]), 'audio/mpeg'),
+        { mimeType: 'audio/mpeg', content: expected }
+      )
+    })
+
+    it('passes through non-binary, non-string input unchanged (tagger soft-skips it)', () => {
+      const result = formatAudioPart(5, 'audio/wav')
+      assert.deepStrictEqual(result, { mimeType: 'audio/wav', content: 5 })
     })
   })
 })

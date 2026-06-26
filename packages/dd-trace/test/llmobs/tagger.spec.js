@@ -891,6 +891,114 @@ describe('tagger', () => {
           sinon.assert.calledOnce(logger.warn)
         })
       })
+
+      describe('tagging audio parts appropriately', () => {
+        it('tags a span with inline base64 and attachment_key audio parts', () => {
+          const inputData = [
+            {
+              role: 'user',
+              content: 'transcribe this',
+              audioParts: [{ mimeType: 'audio/wav', content: 'aGVsbG8=' }],
+            },
+          ]
+          const outputData = [
+            {
+              role: 'assistant',
+              content: 'sure',
+              audioParts: [{ mimeType: 'audio/mpeg', attachmentKey: 'key-123' }],
+            },
+          ]
+
+          tagger._register(span)
+          tagger.tagLLMIO(span, inputData, outputData)
+          assert.deepStrictEqual(Tagger.tagMap.get(span), {
+            '_ml_obs.meta.input.messages': [
+              {
+                role: 'user',
+                content: 'transcribe this',
+                audio_parts: [{ mime_type: 'audio/wav', content: 'aGVsbG8=' }],
+              },
+            ],
+            '_ml_obs.meta.output.messages': [
+              {
+                role: 'assistant',
+                content: 'sure',
+                audio_parts: [{ mime_type: 'audio/mpeg', attachment_key: 'key-123' }],
+              },
+            ],
+          })
+        })
+
+        it('throws for a non-object audio part', () => {
+          const messages = [
+            { content: 'a', audioParts: [5] },
+          ]
+
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            { message: 'Audio part must be an object.' }
+          )
+        })
+
+        it('throws for a missing mimeType', () => {
+          const messages = [
+            { content: 'a', audioParts: [{ content: 'aGVsbG8=' }] },
+          ]
+
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            { message: 'Audio part mimeType must be a non-empty string.' }
+          )
+        })
+
+        it('throws when neither content nor attachmentKey is present', () => {
+          const messages = [
+            { content: 'a', audioParts: [{ mimeType: 'audio/wav' }] },
+          ]
+
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            { message: "Audio part must have either 'content' or 'attachmentKey'." }
+          )
+        })
+
+        it('throws when both content and attachmentKey are present', () => {
+          const messages = [
+            { content: 'a', audioParts: [{ mimeType: 'audio/wav', content: 'aGVsbG8=', attachmentKey: 'key-1' }] },
+          ]
+
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            { message: "Audio part must have only one of 'content' or 'attachmentKey', not both." }
+          )
+        })
+
+        it('throws with an invalid_io_messages tag for a non-string content', () => {
+          const messages = [
+            { content: 'a', audioParts: [{ mimeType: 'audio/wav', content: 5 }] },
+          ]
+
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            err =>
+              err.message === 'Audio part content must be a base64-encoded string.' &&
+              err.ddErrorTag === 'invalid_io_messages'
+          )
+        })
+
+        it('throws with an invalid_io_messages tag for a non-string attachmentKey', () => {
+          const messages = [
+            { content: 'a', audioParts: [{ mimeType: 'audio/wav', attachmentKey: 5 }] },
+          ]
+
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            err =>
+              err.message === 'Audio part attachmentKey must be a string.' &&
+              err.ddErrorTag === 'invalid_io_messages'
+          )
+        })
+      })
     })
 
     describe('tagEmbeddingIO', () => {
