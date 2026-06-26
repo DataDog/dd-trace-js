@@ -292,6 +292,7 @@ tracer.use('ai', true)
 tracer.use('amqp10');
 tracer.use('amqplib');
 tracer.use('anthropic');
+tracer.use('claude-agent-sdk');
 tracer.use('avsc');
 tracer.use('aws-durable-execution-sdk-js');
 tracer.use('aws-sdk');
