@@ -25,11 +25,20 @@ runs:
             "require('./${file}').dependencies['node-${1}'].replace('npm:node@','')" \
             || echo "${1}"
         }
+        min_node_major() {
+          [ -f package.json ] && awk '/"node"/{match($0,/[0-9]+/);print substr($0,RSTART,RLENGTH);exit}' package.json \
+            || echo 18
+        }
         case "$VERSION" in
           eol)         version=16 ;;
-          oldest)      oldest_major=$(awk '/"node"/{match($0,/[0-9]+/);print substr($0,RSTART,RLENGTH);exit}' package.json)
+          oldest)      oldest_major=$(min_node_major)
                       version=$(node_version "$oldest_major") ;;
-          maintenance) version=$(node_version 20) ;;
+          maintenance) oldest_major=$(min_node_major)
+                      if [ "$oldest_major" -gt 20 ]; then
+                        version=$(node_version "$oldest_major")
+                      else
+                        version=$(node_version 20)
+                      fi ;;
           active)      version=$(node_version 24) ;;
           latest)      version=${LATEST_VERSION:-$(node_version 26)}
                       # When a custom/nightly version is requested via latest,
