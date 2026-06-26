@@ -519,6 +519,30 @@ describe('Plugin', () => {
             'instrumentation must not overwrite the caller-supplied fieldResolver')
         })
 
+        it('publishes caller-owned execute args before installing the wrapped fieldResolver', async () => {
+          const startChannel = dc.channel('apm:graphql:execute:start')
+          const document = graphql.parse('query MyQuery { hello(name: "world") }')
+          const callerFieldResolver = (source, args, contextValue, info) => 'caller-resolved'
+          const args = { schema, document, contextValue: {}, fieldResolver: callerFieldResolver }
+
+          let publishedArgs
+          const handler = ({ args: channelArgs }) => {
+            publishedArgs = channelArgs
+            assert.strictEqual(channelArgs, args)
+            assert.strictEqual(channelArgs.fieldResolver, callerFieldResolver)
+          }
+          startChannel.subscribe(handler)
+
+          try {
+            assert.ok(await graphql.execute(args), 'execute returned a result')
+          } finally {
+            startChannel.unsubscribe(handler)
+          }
+
+          assert.strictEqual(publishedArgs, args)
+          assert.strictEqual(args.fieldResolver, callerFieldResolver)
+        })
+
         describe('preserves the caller-supplied contextValue', () => {
           let recordingSchema
           let recordedContext
@@ -977,11 +1001,15 @@ describe('Plugin', () => {
 
           const [, result] = await Promise.all([
             agent.assertSomeTraces(traces => {
-              const paths = sort(traces[0])
-                .filter(span => span.name === 'graphql.resolve')
-                .map(span => span.meta['graphql.field.path'])
-                .sort()
+              const resolveSpans = sort(traces[0]).filter(span => span.name === 'graphql.resolve')
+              const paths = resolveSpans.map(span => span.meta['graphql.field.path']).sort()
               assert.deepStrictEqual(paths, ['matrix', 'matrix.*.*.value'])
+
+              const matrix = resolveSpans.find(span => span.meta['graphql.field.path'] === 'matrix')
+              const value = resolveSpans.find(span => span.meta['graphql.field.path'] === 'matrix.*.*.value')
+              assert.ok(matrix, 'expected matrix span')
+              assert.ok(value, 'expected matrix.*.*.value span')
+              assert.strictEqual(value.parent_id.toString(), matrix.span_id.toString())
             }),
             graphql.graphql({ schema: matrixSchema, source, rootValue }),
           ])
@@ -1588,6 +1616,27 @@ describe('Plugin', () => {
           } finally {
             dc.channel('datadog:graphql:resolver:start').unsubscribe(noop)
           }
+        })
+
+        it('should publish empty resolver args with subscription to datadog:graphql:resolver:start', async () => {
+          const source = 'query MyQuery { human { name } }'
+          const document = graphql.parse(source)
+          const resolverInfo = []
+
+          const handler = ({ resolverInfo: info }) => {
+            resolverInfo.push(info)
+          }
+          dc.channel('datadog:graphql:resolver:start').subscribe(handler)
+
+          try {
+            await graphql.execute({ schema, document })
+          } finally {
+            dc.channel('datadog:graphql:resolver:start').unsubscribe(handler)
+          }
+
+          const humanResolverInfo = resolverInfo.find(info => info?.human)
+          assert.deepStrictEqual(humanResolverInfo, { human: {} },
+            `Expected empty human resolver args. Got ${inspect(resolverInfo)}`)
         })
 
         it('should support multiple validations on a pre-parsed document', () => {

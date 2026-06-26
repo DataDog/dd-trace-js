@@ -86,13 +86,15 @@ class GraphQLExecutePlugin extends TracingPlugin {
   }
 
   bindStart (ctx) {
-    const args = readArgs(ctx.arguments)
+    const rawArgs = ctx.arguments
+    const objectForm = isObjectForm(rawArgs)
+    const args = readArgs(rawArgs, objectForm)
 
     // Re-entrant execute() short-circuit (yoga's normalizedExecutor calls
     // execute internally with the same arguments object — without this we'd
     // double-span). The contextValue check catches object contexts; the args
     // check also catches primitive contexts.
-    if (instrumentedArgs.has(ctx.arguments?.[0])) {
+    if (instrumentedArgs.has(rawArgs?.[0])) {
       ctx.ddSkipped = true
       return ctx.currentStore
     }
@@ -155,7 +157,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
       }
     }
 
-    ctx.ddArgs = setWrappedFieldResolver(ctx.arguments, defaultFieldResolver)
+    ctx.ddArgs = setWrappedFieldResolver(rawArgs, args, objectForm, defaultFieldResolver)
     if (ctx.ddArgs && typeof ctx.ddArgs === 'object') {
       instrumentedArgs.add(ctx.ddArgs)
       ctx.ddInstrumentedArgs = ctx.ddArgs
@@ -173,6 +175,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
       config: this.config,
       fields: new Map(),
       pathCache: new Map(),
+      collapsedPathCache: this.config.collapse ? { byPath: new Map(), byParent: new Map() } : undefined,
       abortController,
       executeSpan: span,
       plugin: this,
@@ -364,8 +367,8 @@ function wrapResolve (resolve) {
       return resolve.apply(this, arguments)
     }
 
-    const mapKey = config.collapse ? collapsedKey : infoPath
-    let field = rootCtx.fields.get(mapKey)
+    const fieldKey = config.collapse ? buildCachedCollapsedPath(infoPath, rootCtx.collapsedPathCache) : infoPath
+    let field = rootCtx.fields.get(fieldKey)
     const isFirst = !field
 
     if (isFirst) {
@@ -377,11 +380,12 @@ function wrapResolve (resolve) {
         variableValues: info.variableValues,
         args,
         infoPath,
+        fieldKey,
         pathString,
         collapsedKey: collapsedKey ?? pathString,
         span: null,
       }
-      rootCtx.fields.set(mapKey, field)
+      rootCtx.fields.set(fieldKey, field)
     }
 
     // Collapsed siblings still publish updateField (master's contract: one
@@ -497,6 +501,33 @@ function buildCachedPathString (path, cache, collapse) {
   return pathString
 }
 
+function buildCachedCollapsedPath (path, cache) {
+  if (!path) return
+
+  const cached = cache.byPath.get(path)
+  if (cached !== undefined) return cached
+
+  const segment = typeof path.key === 'string' ? path.key : '*'
+  const prev = path.prev === undefined
+    ? undefined
+    : buildCachedCollapsedPath(path.prev, cache)
+
+  let siblings = cache.byParent.get(prev)
+  if (siblings === undefined) {
+    siblings = new Map()
+    cache.byParent.set(prev, siblings)
+  }
+
+  let collapsedPath = siblings.get(segment)
+  if (collapsedPath === undefined) {
+    collapsedPath = { key: segment, prev }
+    siblings.set(segment, collapsedPath)
+  }
+
+  cache.byPath.set(path, collapsedPath)
+  return collapsedPath
+}
+
 // Depth filtering directly on the linked-list node — no array allocation needed.
 // config.depth < 0 means no limit. In non-collapse mode only string segments
 // count toward depth (array indices are transparent). In collapse mode every
@@ -517,33 +548,18 @@ function shouldInstrumentNode (config, path) {
 }
 
 function getParentField (rootCtx, field) {
-  if (!rootCtx.config.collapse) {
-    for (let curr = field.infoPath?.prev; curr; curr = curr.prev) {
-      const innerField = rootCtx.fields.get(curr)
-      if (innerField) return innerField
-    }
-    return null
-  }
-
-  let current = field.collapsedKey
-  while (current) {
-    const last = current.lastIndexOf('.')
-    if (last === -1) break
-    current = current.slice(0, last)
-    const innerField = rootCtx.fields.get(current)
+  for (let curr = field.fieldKey?.prev; curr; curr = curr.prev) {
+    const innerField = rootCtx.fields.get(curr)
     if (innerField) return innerField
   }
+
   return null
 }
 
 // Build the resolverInfo payload that AppSec's datadog:graphql:resolver:start
 // subscriber expects: { [fieldName]: { ...args, ...directives } }.
 function getResolverInfo (info, args) {
-  let resolverVars
-
-  if (args && Object.keys(args).length > 0) {
-    resolverVars = { ...args }
-  }
+  let resolverVars = args ? { ...args } : undefined
 
   const directives = info.fieldNodes?.[0]?.directives
   if (Array.isArray(directives)) {
@@ -568,13 +584,13 @@ function getResolverInfo (info, args) {
 // graphql.execute accepts either a single args object or positional arguments;
 // the object form is a lone non-array object in slot 0.
 function isObjectForm (args) {
-  return args.length === 1 && args[0] && typeof args[0] === 'object' && !Array.isArray(args[0])
+  return args?.length === 1 && args[0] && typeof args[0] === 'object' && !Array.isArray(args[0])
 }
 
-function readArgs (args) {
+function readArgs (args, objectForm) {
   if (!args || args.length === 0) return {}
 
-  if (isObjectForm(args)) {
+  if (objectForm) {
     return args[0]
   }
 
@@ -593,30 +609,22 @@ function readArgs (args) {
 // form rewrites its own arguments slots (no caller-observable mutation).
 // Returns the readArgs-shaped view of the (possibly cloned) args so the caller
 // doesn't have to re-readArgs after the swap.
-function setWrappedFieldResolver (rawArgs, defaultFieldResolver) {
-  if (!rawArgs || rawArgs.length === 0) return {}
+function setWrappedFieldResolver (rawArgs, args, objectForm, defaultFieldResolver) {
+  if (!rawArgs || rawArgs.length === 0) return args
 
-  if (isObjectForm(rawArgs)) {
-    const original = rawArgs[0]
+  if (objectForm) {
     const clone = {
-      ...original,
-      fieldResolver: wrapResolve(original.fieldResolver || defaultFieldResolver),
+      ...args,
+      fieldResolver: wrapResolve(args.fieldResolver || defaultFieldResolver),
     }
     rawArgs[0] = clone
     return clone
   }
 
-  rawArgs[6] = wrapResolve(rawArgs[6] || defaultFieldResolver)
+  rawArgs[6] = wrapResolve(args.fieldResolver || defaultFieldResolver)
   if (rawArgs.length < 7) rawArgs.length = 7
-  return {
-    schema: rawArgs[0],
-    document: rawArgs[1],
-    rootValue: rawArgs[2],
-    contextValue: rawArgs[3],
-    variableValues: rawArgs[4],
-    operationName: rawArgs[5],
-    fieldResolver: rawArgs[6],
-  }
+  args.fieldResolver = rawArgs[6]
+  return args
 }
 
 function isWeakMapKey (value) {
