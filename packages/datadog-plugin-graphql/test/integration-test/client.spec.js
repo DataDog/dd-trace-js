@@ -3,6 +3,8 @@
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
+const semver = require('semver')
+
 const {
   FakeAgent,
   sandboxCwd,
@@ -18,7 +20,10 @@ describe('esm', () => {
   let proc
   let variants
 
-  withVersions('graphql', 'graphql', version => {
+  withVersions('graphql', 'graphql', (version, _, resolvedVersion) => {
+    // graphql v17 removed the default export; skip the default-import variant for those versions
+    const supportsDefaultExport = !semver.satisfies(resolvedVersion, '>=17.0.0')
+
     useSandbox([`'graphql@${version}'`], false, [
       './packages/datadog-plugin-graphql/test/integration-test/*'])
 
@@ -37,6 +42,8 @@ describe('esm', () => {
     })
 
     for (const variant of varySandbox.VARIANTS) {
+      if (variant === 'default' && !supportsDefaultExport) continue
+
       it(`is instrumented ${variant}`, async () => {
         const res = agent.assertMessageReceived(({ headers, payload }) => {
           assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)

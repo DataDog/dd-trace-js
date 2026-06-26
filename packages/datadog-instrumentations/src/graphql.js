@@ -354,6 +354,7 @@ function assertField (rootCtx, info, args) {
     : (cache.get(prev) ?? buildCachedPathString(prev, cache, collapse)) + '.' + segment
   cache.set(path, pathString)
 
+  const rv = info.variableValues
   const fieldCtx = {
     rootCtx,
     args,
@@ -362,7 +363,8 @@ function assertField (rootCtx, info, args) {
     fieldName: info.fieldName,
     returnType: info.returnType,
     fieldNode: info.fieldNodes[0],
-    variableValues: info.variableValues,
+    // graphql v17 changed variableValues to { sources, coerced }; normalize to flat object
+    variableValues: (rv != null && rv.coerced !== null && typeof rv.coerced === 'object') ? rv.coerced : rv,
   }
   // Publish per resolver call, before the collapse / depth dedupe below.
   // IAST mutates each call's own args object; if siblings 2..N skip the
