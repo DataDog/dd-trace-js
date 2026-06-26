@@ -76,6 +76,10 @@ class VercelAiTelemetryPlugin extends TracingPlugin {
     // this event will fire multiple times for the same channel
     if (ctx.isStream && ctx.result?.stream && !ctx.streamConsumed) return
 
+    if (ctx.type?.includes('stream')) {
+      this.#streamedCalls.add(ctx.event?.callId)
+    }
+
     const span = ctx.currentStore?.span
     span?.finish()
   }

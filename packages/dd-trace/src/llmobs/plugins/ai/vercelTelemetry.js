@@ -9,11 +9,10 @@ const {
   getToolCallResultContent,
 } = require('./util')
 
-// TODO: support rerank
+// TODO: add in embedMany once it has tracingChannel support
 const SPAN_NAME_TO_KIND_MAPPING = {
   // embeddings
   embed: 'embedding',
-  embedMany: 'workflow',
   // text generation
   generateText: 'workflow',
   streamText: 'workflow',
