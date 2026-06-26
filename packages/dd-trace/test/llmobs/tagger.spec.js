@@ -204,11 +204,20 @@ describe('tagger', () => {
           assert.strictEqual(tags['_ml_obs.sampling_decision'], '0')
         })
 
-        it('formats an intermediate rate to at most 6 decimals with trailing zeros stripped', () => {
-          tagger = new Tagger({ llmobs: { enabled: true, mlApp: 'my-default-ml-app', sampleRate: 0.5 } })
+        it('truncates a longer rate to at most 6 decimals', () => {
+          // 1/3 = 0.3333... which must be capped at 6 decimal places.
+          tagger = new Tagger({ llmobs: { enabled: true, mlApp: 'my-default-ml-app', sampleRate: 1 / 3 } })
           tagger.registerLLMObsSpan(span, { kind: 'llm' })
 
-          assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.sample_rate'], '0.5')
+          assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.sample_rate'], '0.333333')
+        })
+
+        it('strips trailing zeros from a fractional rate', () => {
+          // 0.25 -> "0.250000" via toFixed(6), which must be stripped back to "0.25".
+          tagger = new Tagger({ llmobs: { enabled: true, mlApp: 'my-default-ml-app', sampleRate: 0.25 } })
+          tagger.registerLLMObsSpan(span, { kind: 'llm' })
+
+          assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.sample_rate'], '0.25')
         })
 
         it('inherits the rate and decision from a local parent rather than re-sampling', () => {

@@ -2,7 +2,7 @@
 
 const log = require('../log')
 const Sampler = require('../sampler')
-const { formatKnuthRate } = require('../priority_sampler')
+const { formatKnuthRate } = require('../util')
 const {
   MODEL_NAME,
   MODEL_PROVIDER,
@@ -64,9 +64,6 @@ class LLMObsTagger {
   /** @type {import('../sampler') | null} */
   #sampler = null
 
-  /** @type {number | undefined} The rate `#sampler` was built with. */
-  #samplerRate
-
   constructor (config, softFail = false) {
     this.#config = config
 
@@ -83,9 +80,8 @@ class LLMObsTagger {
    */
   #getSampler () {
     const rate = this.#config.llmobs?.sampleRate ?? 1
-    if (this.#sampler === null || rate !== this.#samplerRate) {
+    if (this.#sampler === null || rate !== this.#sampler.rate()) {
       this.#sampler = new Sampler(rate)
-      this.#samplerRate = rate
     }
     return this.#sampler
   }
