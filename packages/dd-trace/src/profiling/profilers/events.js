@@ -12,12 +12,15 @@ const {
   ValueType,
 } = require('../../../../../vendor/dist/pprof-format')
 const { availableParallelism, effectiveLibuvThreadCount } = require('../libuv-size')
+const { SAMPLING_INTERVAL } = require('../constants')
 const { END_TIMESTAMP_LABEL, SPAN_ID_LABEL, LOCAL_ROOT_SPAN_ID_LABEL, encodeProfileAsync } = require('./shared')
 const PoissonProcessSamplingFilter = require('./poisson')
 // perf_hooks uses millis, with fractional part representing nanos. We emit nanos into the pprof file.
 const MS_TO_NS = 1_000_000
 // The number of sampling intervals that need to pass before we reset the Poisson process sampling instant.
 const POISSON_RESET_FACTOR = 2
+
+/** @typedef {import('../../config/config-base')} TracerConfig */
 
 // While this is an "events profiler", meaning it emits a pprof file based on events observed as
 // perf_hooks events, the emitted pprof file uses the type "timeline".
@@ -50,8 +53,8 @@ function labelFromStrStr (stringTable, keyStr, valStr) {
   return labelFromStr(stringTable, stringTable.dedup(keyStr), valStr)
 }
 
-function getMaxSamples (options) {
-  const maxCpuSamples = options.flushInterval / options.samplingInterval
+function getMaxSamples (flushInterval, samplingInterval) {
+  const maxCpuSamples = flushInterval / samplingInterval
 
   // The lesser of max parallelism and libuv thread pool size, plus one so we can detect
   // oversubscription on libuv thread pool, plus another one for GC.
@@ -439,14 +442,18 @@ class EventsProfiler {
 
   get type () { return 'events' }
 
-  constructor (options) {
-    this.#maxSamples = getMaxSamples(options)
-    this.#timelineSamplingEnabled = !!options.timelineSamplingEnabled
+  /**
+   * @param {TracerConfig} config
+   * @param {{ flushInterval: number }} runtime
+   */
+  constructor (config, { flushInterval }) {
+    this.#maxSamples = getMaxSamples(flushInterval, SAMPLING_INTERVAL)
+    this.#timelineSamplingEnabled = config.DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED
     this.#eventSerializer = new EventSerializer(this.#maxSamples)
 
     const eventHandler = event => this.#eventSerializer.addEvent(event)
     const eventFilter = this.#timelineSamplingEnabled
-      ? createPoissonProcessSamplingFilter(options.samplingInterval)
+      ? createPoissonProcessSamplingFilter(SAMPLING_INTERVAL)
       : () => true
     const filteringEventHandler = event => {
       if (eventFilter(event)) {
@@ -454,7 +461,7 @@ class EventsProfiler {
       }
     }
 
-    this.#eventSources = options.codeHotspotsEnabled
+    this.#eventSources = config.DD_PROFILING_CODEHOTSPOTS_ENABLED
       // Use Datadog instrumentation to collect events with span IDs. Still use
       // Node API for GC events.
       ? [
