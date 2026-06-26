@@ -82,6 +82,8 @@ const TRACKED_NON_PREFIX_ENV_NAMES = new Set([
   // GitHub Actions CI plugin metadata
   'GITHUB_EVENT_PATH',
   'RUNNER_TEMP',
+  // serverless feature-flag (isSomethingUnderNDA detection)
+  'SOMETHING_UNDER_NDA',
   // misc CI provider / build tooling reads
   'HOME',
   'LAGE_PACKAGE_NAME',
