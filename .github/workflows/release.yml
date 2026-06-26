@@ -34,11 +34,16 @@ jobs:
         run: |
           branch="${{ github.ref_name }}"
 
-          # List all v*.x release line branches and find the highest one
+          # Find the latest release line by intersecting the GitHub branch
+          # list with DIST_TAGS. This ensures a branch that exists in the
+          # repo but is not yet wired into the config cannot steal the
+          # latest tag before triggers and dist-tag mappings are updated.
+          configured=$(echo "$DIST_TAGS" | awk '{print $1}')
           latest=$(gh api "repos/${{ github.repository }}/branches" \
             --paginate \
             --jq '.[].name' \
             | grep -E '^v[0-9]+\.x$' \
+            | grep -Fx -f <(echo "$configured") \
             | sort -V \
             | tail -1)
 
