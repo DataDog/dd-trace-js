@@ -1486,7 +1486,8 @@
       {
         "implementation": "A",
         "type": "int",
-        "default": "524288"
+        "default": "524288",
+        "allowed": "[1-9]\\d*"
       }
     ],
     "DD_PROFILING_PPROF_PREFIX": [

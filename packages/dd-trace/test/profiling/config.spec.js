@@ -351,6 +351,16 @@ describe('config', () => {
     })
   })
 
+  it('should reject a non-positive heap sampling interval and keep the default', () => {
+    process.env = {
+      DD_PROFILING_HEAP_SAMPLING_INTERVAL: '0',
+    }
+
+    const { config } = getProfilerConfig()
+
+    assert.strictEqual(config.heapSamplingInterval, 524_288)
+  })
+
   it('should disable allocation profiling on unsupported Node.js versions', () => {
     process.env = {
       DD_PROFILING_ALLOCATION_ENABLED: 'true',
