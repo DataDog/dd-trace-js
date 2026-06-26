@@ -86,7 +86,7 @@ module.exports = [
     },
     functionQuery: {
       functionName: 'execute',
-      kind: 'Async',
+      kind: 'Sync',
     },
     channelName: 'apm:graphql:execute',
   },
@@ -98,7 +98,31 @@ module.exports = [
     },
     functionQuery: {
       functionName: 'execute',
-      kind: 'Async',
+      kind: 'Sync',
+    },
+    channelName: 'apm:graphql:execute',
+  },
+  {
+    module: {
+      name: '@graphql-tools/executor',
+      versionRange: '>=0.0.14',
+      filePath: 'cjs/execution/normalizedExecutor.js',
+    },
+    functionQuery: {
+      functionName: 'normalizedExecutor',
+      kind: 'Sync',
+    },
+    channelName: 'apm:graphql:execute',
+  },
+  {
+    module: {
+      name: '@graphql-tools/executor',
+      versionRange: '>=0.0.14',
+      filePath: 'esm/execution/normalizedExecutor.js',
+    },
+    functionQuery: {
+      functionName: 'normalizedExecutor',
+      kind: 'Sync',
     },
     channelName: 'apm:graphql:execute',
   },

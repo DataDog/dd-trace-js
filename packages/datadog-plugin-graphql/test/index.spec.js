@@ -232,7 +232,7 @@ describe('Plugin', () => {
       })
 
       describe('graphql-yoga', () => {
-        withVersions(plugin, 'graphql-yoga', version => {
+        withVersions('graphql', 'graphql-yoga', version => {
           let graphqlYoga
           let server
           let port
@@ -246,6 +246,10 @@ describe('Plugin', () => {
                 const typeDefs = `
                   type Query {
                     hello(name: String): String
+                    error: String
+                  }
+                  type Subscription {
+                    count: Int
                   }
                 `
 
@@ -253,6 +257,16 @@ describe('Plugin', () => {
                   Query: {
                     hello: (_, { name }) => {
                       return `Hello, ${name || 'world'}!`
+                    },
+                    error: async () => {
+                      throw new Error('Yoga query failed')
+                    },
+                  },
+                  Subscription: {
+                    count: {
+                      subscribe: async function * () {
+                        yield { count: 1 }
+                      },
                     },
                   },
                 }
@@ -294,6 +308,7 @@ describe('Plugin', () => {
                 assert.strictEqual(spans[0].meta['graphql.operation.name'], 'MyQuery')
                 assert.strictEqual(spans[0].meta.component, 'graphql')
                 assert.strictEqual(spans[0].meta['_dd.integration'], 'graphql')
+                assert.strictEqual(spans.filter(span => span.name === expectedSchema.server.opName).length, 1)
               })
               .then(done)
 
@@ -305,6 +320,58 @@ describe('Plugin', () => {
 
             axios.post(`http://localhost:${port}/graphql`, {
               query,
+            }).catch(done)
+          })
+
+          it('should instrument graphql-yoga async execution errors', done => {
+            agent
+              .assertSomeTraces(traces => {
+                const spans = sort(traces[0])
+
+                assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+                assert.strictEqual(spans[0].resource, 'query ErrorQuery{error}')
+                assert.strictEqual(spans[0].error, 1)
+                assert.strictEqual(spans[0].meta['graphql.operation.type'], 'query')
+                assert.strictEqual(spans[0].meta['graphql.operation.name'], 'ErrorQuery')
+              })
+              .then(done)
+
+            const query = `
+              query ErrorQuery {
+                error
+              }
+            `
+
+            axios.post(`http://localhost:${port}/graphql`, {
+              query,
+            }).catch(done)
+          })
+
+          it('should instrument graphql-yoga subscriptions', done => {
+            agent
+              .assertSomeTraces(traces => {
+                const spans = sort(traces[0])
+
+                assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+                assert.strictEqual(spans[0].resource, 'subscription CountSubscription{count}')
+                assert.strictEqual(spans[0].error, 0)
+                assert.strictEqual(spans[0].meta['graphql.operation.type'], 'subscription')
+                assert.strictEqual(spans[0].meta['graphql.operation.name'], 'CountSubscription')
+              })
+              .then(done)
+
+            const query = `
+              subscription CountSubscription {
+                count
+              }
+            `
+
+            axios.post(`http://localhost:${port}/graphql`, {
+              query,
+            }, {
+              headers: {
+                accept: 'text/event-stream',
+              },
             }).catch(done)
           })
         })

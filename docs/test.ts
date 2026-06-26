@@ -228,7 +228,8 @@ const graphqlOptions: plugins.graphql = {
   hooks: {
     execute: (span?: Span, args?, res?) => { },
     validate: (span?: Span, document?, errors?) => { },
-    parse: (span?: Span, source?, document?) => { }
+    parse: (span?: Span, source?, document?) => { },
+    resolve: (span?: Span, field?) => { }
   }
 };
 

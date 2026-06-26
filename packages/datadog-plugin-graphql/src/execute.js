@@ -25,6 +25,7 @@ const updateFieldCh = dc.channel('apm:graphql:resolve:updateField')
 const startExecuteCh = dc.channel('apm:graphql:execute:start')
 
 const contexts = new WeakMap()
+const instrumentedArgs = new WeakSet()
 
 const patchedResolvers = new WeakSet()
 const patchedTypes = new WeakSet()
@@ -88,8 +89,14 @@ class GraphQLExecutePlugin extends TracingPlugin {
     const args = readArgs(ctx.arguments)
 
     // Re-entrant execute() short-circuit (yoga's normalizedExecutor calls
-    // execute internally with the same contextValue — without this we'd
-    // double-span).
+    // execute internally with the same arguments object — without this we'd
+    // double-span). The contextValue check catches object contexts; the args
+    // check also catches primitive contexts.
+    if (instrumentedArgs.has(ctx.arguments?.[0])) {
+      ctx.ddSkipped = true
+      return ctx.currentStore
+    }
+
     const { contextValue } = args
     if (contextValue && typeof contextValue === 'object' && contexts.has(contextValue)) {
       ctx.ddSkipped = true
@@ -149,6 +156,10 @@ class GraphQLExecutePlugin extends TracingPlugin {
     }
 
     ctx.ddArgs = setWrappedFieldResolver(ctx.arguments, defaultFieldResolver)
+    if (ctx.ddArgs && typeof ctx.ddArgs === 'object') {
+      instrumentedArgs.add(ctx.ddArgs)
+      ctx.ddInstrumentedArgs = ctx.ddArgs
+    }
 
     const schema = args.schema
     if (schema) {
@@ -238,6 +249,9 @@ class GraphQLExecutePlugin extends TracingPlugin {
     span.finish()
     if (ctx.ddContextValue) {
       contexts.delete(ctx.ddContextValue)
+    }
+    if (ctx.ddInstrumentedArgs) {
+      instrumentedArgs.delete(ctx.ddInstrumentedArgs)
     }
   }
 

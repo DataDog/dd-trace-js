@@ -3,8 +3,8 @@
 const { addHook, getHooks } = require('./helpers/instrument')
 
 // Orchestrion rewriter handles wrapping of:
-// - graphql: execute, executeField, parse, validate (CJS + ESM)
-// - @graphql-tools/executor: execute, normalizedExecutor (index + CJS sub-path)
+// - graphql: execute, parse, validate (CJS + ESM)
+// - @graphql-tools/executor: execute, normalizedExecutor (CJS + ESM)
 // See helpers/rewriter/instrumentations/graphql.js for the full config.
 //
 // The plugin (packages/datadog-plugin-graphql/src/execute.js) handles the
