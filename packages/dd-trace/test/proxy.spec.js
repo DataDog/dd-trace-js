@@ -989,7 +989,6 @@ describe('TracerProxy', () => {
     let MicroVmProxy
     let microProxy
     let origEnv
-    let processSpy
 
     beforeEach(() => {
       origEnv = process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
@@ -1008,8 +1007,6 @@ describe('TracerProxy', () => {
 
       Config.refreshRuntimeId = sinon.stub()
       RemoteConfig.refreshClientId = sinon.stub()
-
-      processSpy = sinon.spy(process, 'on')
 
       MicroVmProxy = proxyquire('../src/proxy', {
         './tracer': DatadogTracer,
@@ -1043,8 +1040,6 @@ describe('TracerProxy', () => {
       } else {
         process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN = origEnv
       }
-      process.removeAllListeners('SIGUSR2')
-      processSpy.restore()
     })
 
     it('should register the MicroVM hook when env var is set', () => {
@@ -1062,11 +1057,11 @@ describe('TracerProxy', () => {
       sinon.assert.notCalled(channelMock.subscribe)
     })
 
-    it('should fire refreshIdentity on POST /run via HTTP channel', () => {
+    it('should fire refreshIdentity on POST /aws/lambda-microvms/runtime/v1/run via HTTP channel', () => {
       microProxy.init()
 
       const subscriber = channelMock.subscribe.firstCall.args[0]
-      subscriber({ request: { method: 'POST', url: '/run' } })
+      subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
 
       sinon.assert.calledOnce(idMock.reseed)
       sinon.assert.calledOnce(Config.refreshRuntimeId)
@@ -1074,11 +1069,11 @@ describe('TracerProxy', () => {
       sinon.assert.calledOnce(tracer.refreshMetadata)
     })
 
-    it('should NOT fire refreshIdentity on GET /run', () => {
+    it('should NOT fire refreshIdentity on GET /aws/lambda-microvms/runtime/v1/run', () => {
       microProxy.init()
 
       const subscriber = channelMock.subscribe.firstCall.args[0]
-      subscriber({ request: { method: 'GET', url: '/run' } })
+      subscriber({ request: { method: 'GET', url: '/aws/lambda-microvms/runtime/v1/run' } })
 
       sinon.assert.notCalled(idMock.reseed)
     })
@@ -1096,50 +1091,16 @@ describe('TracerProxy', () => {
       microProxy.init()
 
       const subscriber = channelMock.subscribe.firstCall.args[0]
-      subscriber({ request: { method: 'POST', url: '/run' } })
+      subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
 
       sinon.assert.calledOnceWithExactly(channelMock.unsubscribe, subscriber)
-    })
-
-    it('should fire refreshIdentity on SIGUSR2', () => {
-      microProxy.init()
-
-      // Find the SIGUSR2 listener registered on process
-      const sigusr2Call = processSpy.getCalls().find(call => call.args[0] === 'SIGUSR2')
-      assert.ok(sigusr2Call, 'expected SIGUSR2 listener to be registered')
-      const sigusr2Listener = sigusr2Call.args[1]
-
-      sigusr2Listener()
-
-      sinon.assert.calledOnce(idMock.reseed)
-      sinon.assert.calledOnce(Config.refreshRuntimeId)
-      sinon.assert.calledOnce(RemoteConfig.refreshClientId)
-      sinon.assert.calledOnce(tracer.refreshMetadata)
-    })
-
-    it('should not fire refreshIdentity twice when HTTP fires first then SIGUSR2', () => {
-      microProxy.init()
-
-      const subscriber = channelMock.subscribe.firstCall.args[0]
-      subscriber({ request: { method: 'POST', url: '/run' } })
-
-      const sigusr2Call = processSpy.getCalls().find(call => call.args[0] === 'SIGUSR2')
-      assert.ok(sigusr2Call, 'expected SIGUSR2 listener to be registered')
-      const sigusr2Listener = sigusr2Call.args[1]
-
-      sigusr2Listener()
-
-      sinon.assert.calledOnce(idMock.reseed)
-      sinon.assert.calledOnce(Config.refreshRuntimeId)
-      sinon.assert.calledOnce(RemoteConfig.refreshClientId)
-      sinon.assert.calledOnce(tracer.refreshMetadata)
     })
 
     it('should call reseed then refreshRuntimeId then refreshClientId in order', () => {
       microProxy.init()
 
       const subscriber = channelMock.subscribe.firstCall.args[0]
-      subscriber({ request: { method: 'POST', url: '/run' } })
+      subscriber({ request: { method: 'POST', url: '/aws/lambda-microvms/runtime/v1/run' } })
 
       assert.ok(idMock.reseed.calledBefore(Config.refreshRuntimeId))
       assert.ok(Config.refreshRuntimeId.calledBefore(RemoteConfig.refreshClientId))
