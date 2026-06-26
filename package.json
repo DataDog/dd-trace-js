@@ -233,7 +233,7 @@
     "test-exclude": "^8.0.0",
     "tiktoken": "^1.0.21",
     "typescript": "^6.0.3",
-    "v8-to-istanbul": "^9.3.0",
+    "v8-to-istanbul": "^9.0.0",
     "workerpool": "^10.0.2",
     "yaml": "^2.9.0",
     "yarn-deduplicate": "^6.0.2"
