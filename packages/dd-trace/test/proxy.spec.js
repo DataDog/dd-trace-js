@@ -74,6 +74,7 @@ describe('TracerProxy', () => {
       extract: sinon.stub().returns('spanContext'),
       setUrl: sinon.stub(),
       configure: sinon.spy(),
+      refreshMetadata: sinon.stub(),
     }
 
     noop = {
@@ -1188,6 +1189,7 @@ describe('TracerProxy', () => {
       sinon.assert.calledOnce(idMock.reseed)
       sinon.assert.calledOnce(Config.refreshRuntimeId)
       sinon.assert.calledOnce(RemoteConfig.refreshClientId)
+      sinon.assert.calledOnce(tracer.refreshMetadata)
     })
 
     it('should NOT fire refreshIdentity on GET /run', () => {
@@ -1230,6 +1232,7 @@ describe('TracerProxy', () => {
       sinon.assert.calledOnce(idMock.reseed)
       sinon.assert.calledOnce(Config.refreshRuntimeId)
       sinon.assert.calledOnce(RemoteConfig.refreshClientId)
+      sinon.assert.calledOnce(tracer.refreshMetadata)
     })
 
     it('should not fire refreshIdentity twice when HTTP fires first then SIGUSR2', () => {
@@ -1247,6 +1250,7 @@ describe('TracerProxy', () => {
       sinon.assert.calledOnce(idMock.reseed)
       sinon.assert.calledOnce(Config.refreshRuntimeId)
       sinon.assert.calledOnce(RemoteConfig.refreshClientId)
+      sinon.assert.calledOnce(tracer.refreshMetadata)
     })
 
     it('should call reseed then refreshRuntimeId then refreshClientId in order', () => {
@@ -1257,6 +1261,7 @@ describe('TracerProxy', () => {
 
       assert.ok(idMock.reseed.calledBefore(Config.refreshRuntimeId))
       assert.ok(Config.refreshRuntimeId.calledBefore(RemoteConfig.refreshClientId))
+      assert.ok(RemoteConfig.refreshClientId.calledBefore(tracer.refreshMetadata))
     })
 
     it('should call refreshIdentity from resetRuntimeId when initialized and env var set', () => {
@@ -1264,12 +1269,14 @@ describe('TracerProxy', () => {
       idMock.reseed.resetHistory()
       Config.refreshRuntimeId.resetHistory()
       RemoteConfig.refreshClientId.resetHistory()
+      tracer.refreshMetadata.resetHistory()
 
       microProxy.resetRuntimeId()
 
       sinon.assert.calledOnce(idMock.reseed)
       sinon.assert.calledOnce(Config.refreshRuntimeId)
       sinon.assert.calledOnce(RemoteConfig.refreshClientId)
+      sinon.assert.calledOnce(tracer.refreshMetadata)
     })
 
     it('should be a no-op from resetRuntimeId when not initialized', () => {
