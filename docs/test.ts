@@ -70,7 +70,9 @@ tracer.init({
   rateLimit: 1000,
   samplingRules: [
     { sampleRate: 0.5, service: 'foo', name: 'foo.request' },
-    { sampleRate: 0.1, service: /foo/, name: /foo\.request/ }
+    { sampleRate: 0.1, service: /foo/, name: /foo\.request/ },
+    { sampleRate: 0, resource: 'GET /health', maxPerSecond: 5 },
+    { sampleRate: 0, tags: { 'http.url': '*/spam*', 'span.kind': /server/ } }
   ],
   spanSamplingRules: [
     { sampleRate: 1.0, service: 'foo', name: 'foo.request', maxPerSecond: 5 },
@@ -402,6 +404,7 @@ tracer.use('restify');
 tracer.use('restify', httpServerOptions);
 tracer.use('rhea');
 tracer.use('router');
+tracer.use('router', { middleware: false });
 tracer.use('selenium');
 tracer.use('sharedb');
 tracer.use('sharedb', sharedbOptions);

@@ -95,6 +95,12 @@ esbuildVersions.forEach((version) => {
       })
     })
 
+    it('bundles the optional OpenFeature peer so it survives bundle relocation', () => {
+      execSync('node ./build-and-test-openfeature.js', {
+        timeout,
+      })
+    })
+
     it('injects Git metadata into bundled applications', () => {
       execSync('node ./build-and-test-git-tags.js', {
         timeout,

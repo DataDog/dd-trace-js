@@ -14,8 +14,8 @@ const { NODE_MAJOR } = require('../../../version')
 const { storage } = require('../../datadog-core')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { temporaryWarningExceptions } = require('../../dd-trace/test/setup/core')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
-const plugin = require('../src')
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
 
 describe('Plugin', () => {
@@ -1492,12 +1492,15 @@ describe('Plugin', () => {
           })
         })
 
-        withVersions(plugin, 'loopback', loopbackVersion => {
+        withVersions('express', 'loopback', loopbackVersion => {
           let loopback
 
           beforeEach(function () {
             this.timeout(5000)
 
+            // Legacy loopback emits the deprecated `util._extend` at module
+            // load; allow it so the harness deprecation guard does not throw.
+            temporaryWarningExceptions.add('The `util._extend` API is deprecated. Please use Object.assign() instead.')
             loopback = require(`../../../versions/loopback@${loopbackVersion}`).get()
           })
 

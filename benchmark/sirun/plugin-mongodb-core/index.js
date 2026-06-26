@@ -7,7 +7,7 @@ const MongodbCorePlugin = require('../../../packages/datadog-plugin-mongodb-core
 
 const { VARIANT } = process.env
 
-const ITERATIONS = Number(process.env.ITERATIONS) || 2_000_000
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 // Every traced mongo op walks `bindStart` -> `getQuery` ->
 // `sanitiseAndStringify`, builds the meta literal, calls `serviceName` /
@@ -131,7 +131,7 @@ if (VARIANT === 'mixed-ops') {
   for (const ctx of ctxs) preflight(ctx)
   lastMeta = undefined
   const len = ctxs.length
-  for (let i = 0; i < ITERATIONS; i++) {
+  for (let i = 0; i < OPERATIONS; i++) {
     plugin.bindStart(ctxs[i % len])
   }
 } else {
@@ -140,7 +140,7 @@ if (VARIANT === 'mixed-ops') {
   const ctx = makeCtx(ops)
   preflight(ctx)
   lastMeta = undefined
-  for (let i = 0; i < ITERATIONS; i++) {
+  for (let i = 0; i < OPERATIONS; i++) {
     plugin.bindStart(ctx)
   }
 }

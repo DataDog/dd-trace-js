@@ -327,6 +327,7 @@ describe('telemetry app-heartbeat', () => {
       },
       './send-data': sendDataRequest,
     })
+    pluginsByName = {}
 
     telemetry.start({
       telemetry: {
@@ -344,9 +345,7 @@ describe('telemetry app-heartbeat', () => {
       tags: {
         'runtime-id': '1a2b3c',
       },
-    }, {
-      _pluginsByName: pluginsByName,
-    })
+    }, { _pluginsByName: pluginsByName })
     clock.tick(HEARTBEAT_INTERVAL)
     assert.strictEqual(beats, 1)
     clock.tick(HEARTBEAT_INTERVAL)
@@ -357,8 +356,8 @@ describe('telemetry app-heartbeat', () => {
 
 describe('Telemetry extended heartbeat', () => {
   const HEARTBEAT_INTERVAL = 43200000
+  const pluginManager = { _pluginsByName: {} }
   let telemetry
-  let pluginsByName
   let clock
 
   beforeEach(() => {
@@ -414,9 +413,7 @@ describe('Telemetry extended heartbeat', () => {
       tags: {
         'runtime-id': '1a2b3c',
       },
-    }, {
-      _pluginsByName: pluginsByName,
-    })
+    }, pluginManager)
     clock.tick(DEFAULT_EXTENDED_HEARTBEAT_INTERVAL)
     assert.strictEqual(extendedHeartbeatRequest, 'app-extended-heartbeat')
     assert.strictEqual(beats, 1)
@@ -463,7 +460,7 @@ describe('Telemetry extended heartbeat', () => {
       },
     }
 
-    telemetry.start(config, { _pluginsByName: pluginsByName })
+    telemetry.start(config, pluginManager)
 
     clock.tick(DEFAULT_EXTENDED_HEARTBEAT_INTERVAL)
     assert.deepStrictEqual(configuration, [])
@@ -570,7 +567,7 @@ describe('Telemetry extended heartbeat', () => {
       },
     }
 
-    telemetry.start(config, { _pluginsByName: pluginsByName })
+    telemetry.start(config, pluginManager)
 
     clock.tick(DEFAULT_EXTENDED_HEARTBEAT_INTERVAL)
     assert.deepStrictEqual(configuration, [])
