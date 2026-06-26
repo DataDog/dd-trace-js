@@ -746,6 +746,15 @@ versions.forEach((version) => {
             runDisableTest(done, true)
           })
 
+          newerVitestIt('can disable tests when no-worker init is enabled', (done) => {
+            receiver.setSettings({ test_management: { enabled: true } })
+
+            runDisableTest(done, true, {
+              DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+              POOL_CONFIG: 'forks',
+            })
+          })
+
           it('fails if disable is not enabled', (done) => {
             receiver.setSettings({ test_management: { enabled: false } })
 

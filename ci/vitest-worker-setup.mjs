@@ -85,6 +85,8 @@ function applyExecutionChanges (suite) {
       task.retry = 0
       task.repeats = attemptToFixRetries
       task.meta.__ddTestOptAtfRetries = attemptToFixRetries
+    } else if (disabledTests[testSuite]?.[testName]) {
+      task.mode = 'skip'
     } else if (isEarlyFlakeDetectionTest(testSuite, testName)) {
       task.retry = 0
       task.repeats = earlyFlakeDetectionRetries
