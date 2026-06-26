@@ -40,6 +40,10 @@ jobs:
           GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
           POLLING_INTERVAL: 1
           RETRIES: 20
+      # Fold every downloaded per-cell `coverage-*` artifact into one merged LCOV per integration
+      # under `coverage-upload/<group>/`. Both backends then upload the same grouped reports.
+      - if: "!cancelled()"
+        run: node scripts/merge-coverage-groups.mjs
       - if: "!cancelled()"
         uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
@@ -49,7 +53,45 @@ jobs:
         run: datadog-ci junit upload --service dd-trace-js-tests --auto-discovery junit-results
         env:
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+      # One Datadog upload per integration, flagged with the integration name so coverage is
+      # attributable in the Datadog UI the same way the Codecov flags attribute it.
       - if: "!cancelled()"
-        run: datadog-ci coverage upload coverage-results
+        run: |
+          for dir in coverage-upload/*/; do
+            [ -e "$dir/lcov.info" ] || continue
+            datadog-ci coverage upload "$dir" --flags "$(basename "$dir")"
+          done
         env:
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
+      # Upload one report per integration to Codecov with the CLI directly — the codecov-action would
+      # re-validate and re-download the uploader once per group (~100×). `master-coverage` is the flag
+      # `.codecov.yml` gates `codecov/patch` on; attach it only on PRs targeting master so
+      # release-branch PRs auto-pass. The SHA/branch/PR are passed explicitly because All Green checks
+      # out the merge ref, not the head the other workflows reported coverage for.
+      - if: "!cancelled()"
+        run: |
+          commit_args=(--sha "$HEAD_SHA" --branch "$HEAD_BRANCH")
+          upload_args=(--disable-search --sha "$HEAD_SHA")
+          if [ -n "$PR_NUMBER" ]; then
+            commit_args+=(--pr "$PR_NUMBER")
+            upload_args+=(--pr "$PR_NUMBER")
+          fi
+          master_flag=()
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ "$BASE_REF" = "master" ]; then
+            master_flag=(-F master-coverage)
+          fi
+          pip install --quiet codecov-cli
+          codecovcli create-commit "${commit_args[@]}"
+          codecovcli create-report --sha "$HEAD_SHA"
+          for dir in coverage-upload/*/; do
+            [ -e "$dir/lcov.info" ] || continue
+            codecovcli do-upload "${upload_args[@]}" \
+              --file "$dir/lcov.info" -F "$(basename "$dir")" "${master_flag[@]}"
+          done
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          HEAD_BRANCH: ${{ github.head_ref || github.ref_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
