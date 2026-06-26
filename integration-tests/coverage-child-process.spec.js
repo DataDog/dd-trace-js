@@ -19,6 +19,7 @@ const {
   getCollectorRoot,
   getMergedReportDir,
   getV8CoverageDir,
+  isCoverageActive,
   resolveCoverageRoot,
 } = require('./coverage/runtime')
 
@@ -120,22 +121,38 @@ fs.writeFileSync(path.join(__dirname, 'worker-debug.json'), JSON.stringify({
     assert.ok(workerDebug.nodeOptions.includes('child-bootstrap.js'), `Got: ${inspect(workerDebug.nodeOptions)}`)
   })
 
-  it('writes raw V8 profiles into the collector that merge-lcov converts to lcov', async () => {
+  it('converts raw V8 profiles in a directory into a merged lcov report', async () => {
+    // Generate a real V8 profile, then exercise the shared converter directly against the directory
+    // that actually received it. When this spec runs inside the integration coverage harness the
+    // patched child_process rewrites NODE_V8_COVERAGE to the ambient collector; otherwise our
+    // explicit dir is used. Either way we convert from the directory that has the profile.
+    const explicitDir = path.join(appRoot, 'v8-profiles')
+    await fsp.mkdir(explicitDir, { recursive: true })
     childProcess.execFileSync(process.execPath, [path.join(appRoot, 'coverage-fixtures', 'parent.js')], {
       cwd: appRoot,
-      env: process.env,
+      env: { ...process.env, [V8_COVERAGE_ENV]: explicitDir },
       stdio: 'pipe',
     })
 
-    const v8Dir = getV8CoverageDir()
+    const v8Dir = isCoverageActive() ? getV8CoverageDir() : explicitDir
     const profiles = fs.existsSync(v8Dir) ? fs.readdirSync(v8Dir).filter(n => n.endsWith('.json')) : []
     assert.ok(profiles.length > 0, `expected raw V8 coverage profiles in ${v8Dir}`)
 
-    const mergeScript = path.join(process.cwd(), 'integration-tests', 'coverage', 'merge-lcov.js')
-    childProcess.execFileSync(process.execPath, [mergeScript], { stdio: 'pipe' })
+    // The converter reads every profile in the directory and reports how many it processed. We
+    // assert on that count rather than on a specific source file: the fake sandbox's dd-trace sits
+    // outside REPO_ROOT (so it's correctly excluded), and the set of in-scope files depends on
+    // whether the ambient harness mixed real repo profiles in.
+    const outputDir = path.join(appRoot, 'merged-report')
+    const { convertV8DirToReport } = require('./coverage/merge-lcov')
+    const result = await convertV8DirToReport(v8Dir, outputDir)
+    assert.ok(result.profiles > 0, 'converter should read the raw profiles')
+    // A non-empty report is written iff at least one in-scope file was covered; an all-excluded run
+    // drops a `.skipped` sentinel instead. Exactly one of the two must exist.
+    const wroteLcov = fs.existsSync(path.join(outputDir, 'lcov.info'))
+    const wroteSkipped = fs.existsSync(path.join(outputDir, '.skipped'))
+    assert.ok(wroteLcov || wroteSkipped, `converter wrote neither lcov.info nor .skipped under ${outputDir}`)
+    assert.equal(wroteLcov, result.files > 0, 'lcov.info presence must match the in-scope file count')
 
-    const mergedLcovPath = path.join(getMergedReportDir(), 'lcov.info')
-    assert.ok(fs.existsSync(mergedLcovPath), `expected merged coverage report at ${mergedLcovPath}`)
     assert.ok(getCollectorRoot().includes(path.join('.nyc_output', 'integration-tests-collector')),
       'collector scratch should live under .nyc_output/ so it does not collide with final reports in coverage/')
   })
@@ -493,18 +510,26 @@ describe('v8-to-istanbul line-coverage over-report patch', () => {
       ].join('\n'))
 
       const covDir = path.join(dir, 'cov')
+      await fsp.mkdir(covDir, { recursive: true })
       const driver = path.join(dir, 'driver.js')
       await fsp.writeFile(driver, `require(${JSON.stringify(file)})(true)\n`)
+      // When this spec runs inside the integration coverage harness, the patched child_process
+      // rewrites NODE_V8_COVERAGE to the ambient collector; otherwise our explicit covDir is used.
+      // Read from whichever directory actually received the profile.
       childProcess.execFileSync(process.execPath, [driver], {
         env: { ...process.env, [V8_COVERAGE_ENV]: covDir },
         stdio: 'pipe',
       })
 
       let block
-      for (const name of fs.readdirSync(covDir)) {
-        const data = JSON.parse(fs.readFileSync(path.join(covDir, name), 'utf8'))
-        for (const entry of data.result) {
-          if (entry.url.endsWith('ternary.js')) block = entry
+      const searchDirs = [covDir, isCoverageActive() ? getV8CoverageDir() : undefined].filter(Boolean)
+      for (const searchDir of searchDirs) {
+        for (const name of fs.existsSync(searchDir) ? fs.readdirSync(searchDir) : []) {
+          if (!name.endsWith('.json')) continue
+          const data = JSON.parse(fs.readFileSync(path.join(searchDir, name), 'utf8'))
+          for (const entry of data.result) {
+            if (entry.url.endsWith('ternary.js')) block = entry
+          }
         }
       }
       assert.ok(block, 'expected a V8 coverage entry for the fixture')
