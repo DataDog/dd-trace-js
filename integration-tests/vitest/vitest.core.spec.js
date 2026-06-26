@@ -365,6 +365,48 @@ versions.forEach((version) => {
       assert.strictEqual(exitCode, 0, testOutput)
     })
 
+    newerVitestIt('reports suite hook failures when no-worker init is enabled', async () => {
+      const payloadsPromise = receiver.gatherPayloadsMaxTimeout(
+        ({ url }) => url === '/api/v2/citestcycle',
+        payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSuiteEvent = events.find(event => event.type === 'test_suite_end')
+
+          assert.ok(
+            testSuiteEvent,
+            `should have test suite event, got events: ${inspect(events.map(event => event.type))}`
+          )
+          assert.strictEqual(testSuiteEvent.content.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(testSuiteEvent.content.meta[ERROR_MESSAGE], 'failed before all')
+        }
+      )
+
+      childProcess = exec(
+        './node_modules/.bin/vitest run',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--no-warnings --import dd-trace/register.js -r dd-trace/ci/init',
+            TEST_DIR: 'ci-visibility/vitest-tests/test-visibility-failed-suite-hook.mjs',
+            POOL_CONFIG: 'forks',
+            DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+            DD_SERVICE: undefined,
+          },
+        }
+      )
+
+      childProcess.stdout.on('data', data => { testOutput += data })
+      childProcess.stderr.on('data', data => { testOutput += data })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        payloadsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 1, testOutput)
+    })
+
     latestVitestIt('does not duplicate thread project events when no-worker init is enabled', async () => {
       const payloadsPromise = receiver.gatherPayloadsMaxTimeout(
         ({ url }) => url === '/api/v2/citestcycle',
@@ -892,6 +934,56 @@ versions.forEach((version) => {
         )
 
         await Promise.all([once(childProcess, 'exit'), eventsPromise])
+      })
+
+      newerVitestIt('marks user-configured retries as external when no-worker init is enabled', async () => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: true,
+          flaky_test_retries_count: 2,
+          early_flake_detection: {
+            enabled: false,
+          },
+        })
+
+        const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+          ({ url }) => url === '/api/v2/citestcycle',
+          payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+            assert.ok(
+              retriedTests.length > 0,
+              `Expected retried tests. Got: ${inspect(tests.map(test => test.meta))}`
+            )
+            retriedTests.forEach(test => {
+              assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+            })
+          }
+        )
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              POOL_CONFIG: 'forks',
+              PROJECT_POOL_CONFIG: 'forks',
+              PROJECT_RETRY_CONFIG: '1',
+              DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+              DD_SERVICE: undefined,
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, 1)
       })
     })
 
@@ -1811,6 +1903,58 @@ versions.forEach((version) => {
             done()
           }).catch(done)
         })
+      })
+
+      newerVitestIt('reports real statuses for Vitest repeats when no-worker init is enabled', async () => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: false,
+          },
+          flaky_test_retries_enabled: false,
+          known_tests_enabled: false,
+        })
+
+        const testName = 'early flake detection can retry tests that eventually pass'
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events
+              .filter(event => event.type === 'test')
+              .map(test => test.content)
+              .filter(test => test.meta[TEST_NAME] === testName)
+              .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+            assert.deepStrictEqual(
+              tests.map(test => ({
+                status: test.meta[TEST_STATUS],
+                isRetry: test.meta[TEST_IS_RETRY],
+                retryReason: test.meta[TEST_RETRY_REASON],
+              })),
+              [
+                { status: 'fail', isRetry: undefined, retryReason: undefined },
+                { status: 'fail', isRetry: 'true', retryReason: TEST_RETRY_REASON_TYPES.ext },
+                { status: 'pass', isRetry: 'true', retryReason: TEST_RETRY_REASON_TYPES.ext },
+              ]
+            )
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run -t "can retry tests that eventually pass"',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              SHOULD_REPEAT: '1',
+              DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+              DD_SERVICE: undefined,
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, 1)
       })
 
       it('disables early flake detection if known tests should not be requested', (done) => {

@@ -105,6 +105,8 @@ function recordTestOptimizationStatus (task, attemptIndex = task.result?.repeatC
     recordAttemptToFixStatus(task, attemptIndex, onlyIfNewErrors)
   } else if (isEarlyFlakeDetectionTest(testSuite, testName)) {
     recordEarlyFlakeDetectionStatus(task, attemptIndex, onlyIfNewErrors)
+  } else if (task.repeats > 0) {
+    recordManualRepeatStatus(task, attemptIndex)
   }
 }
 
@@ -176,6 +178,17 @@ function recordEarlyFlakeDetectionStatus (task, attemptIndex, onlyIfNewErrors) {
   }
 }
 
+function recordManualRepeatStatus (task, attemptIndex) {
+  task.meta.__ddTestOptRepeatStatuses ||= []
+  task.meta.__ddTestOptRepeatErrorCounts ||= []
+  task.meta.__ddTestOptRepeatStatuses[attemptIndex] = getManualRepeatStatus(
+    task,
+    task.meta.__ddTestOptRepeatErrorCounts,
+    attemptIndex
+  )
+  task.meta.__ddTestOptRepeatErrorCounts[attemptIndex] = task.result?.errors?.length || 0
+}
+
 function hasNewErrors (errorCounts, attemptIndex, task) {
   const recordedErrorCount = errorCounts?.[attemptIndex]
   const previousErrorCount = recordedErrorCount ?? getPreviousErrorCount(errorCounts, attemptIndex)
@@ -209,6 +222,11 @@ function getAttemptStatus (task, errorCounts, repeatCount) {
     return 'fail'
   }
   return task.result?.state === 'fail' ? 'fail' : 'pass'
+}
+
+function getManualRepeatStatus (task, errorCounts, repeatCount) {
+  const errorCount = task.result?.errors?.length || 0
+  return errorCount > getPreviousErrorCount(errorCounts, repeatCount) ? 'fail' : 'pass'
 }
 
 function getPreviousErrorCount (errorCounts, repeatCount) {

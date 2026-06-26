@@ -673,6 +673,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
   }
 
   installMainProcessReporter(ctx, frameworkVersion, testSessionConfiguration, {
+    flakyTestRetriesConfiguration,
     knownTests,
     testManagementTests,
     modifiedFiles,
@@ -709,7 +710,6 @@ function configureMainProcessExecutionHooks (
   const disabledTests = testManagementTests && getMainProcessDisabledTests(testManagementTests)
   const shouldConfigureEarlyFlakeDetection =
     isEarlyFlakeDetectionEnabled && knownTests?.vitest && !isEarlyFlakeDetectionFaulty
-  if (!attemptToFixTests && !disabledTests && !shouldConfigureEarlyFlakeDetection) return
 
   const setupFile = path.join(__dirname, '..', '..', '..', 'ci', 'vitest-worker-setup.mjs')
   addSetupFileToVitestConfigs(ctx, setupFile, testSpecifications)
@@ -840,6 +840,7 @@ function createMainProcessReporter (
 ) {
   const testSuiteContexts = new Map()
   const finishedTestModules = new Set()
+  const taskAttemptStatuses = new Map()
 
   return {
     onTestModuleStart (testModule) {
@@ -852,6 +853,22 @@ function createMainProcessReporter (
       if (!shouldReportTestModule(testModule)) return
 
       return reportTestModule(testModule)
+    },
+
+    onTestCaseResult (task) {
+      if (!shouldReportTestTask(task)) return
+
+      recordFinalTaskAttemptResult(task)
+    },
+
+    onTaskUpdate (packs, events) {
+      if (!events) return
+
+      for (const event of events) {
+        if (event[1] === 'test-retried') {
+          recordTaskAttemptStatus(event[0], 'fail')
+        }
+      }
     },
 
     onFinished (files) {
@@ -881,6 +898,38 @@ function createMainProcessReporter (
     return forkPoolTestModules.filepaths.has(normalizedFilepath)
   }
 
+  function shouldReportTestTask (task) {
+    if (!forkPoolTestModules) return true
+
+    const file = task.file
+    if (!file) return false
+
+    return shouldReportTestModule({
+      moduleId: file.filepath,
+      projectName: file.projectName,
+      task: file,
+    })
+  }
+
+  function recordTaskAttemptStatus (taskId, status) {
+    let statuses = taskAttemptStatuses.get(taskId)
+    if (!statuses) {
+      statuses = []
+      taskAttemptStatuses.set(taskId, statuses)
+    }
+    statuses.push(status)
+  }
+
+  function recordFinalTaskAttemptResult (task) {
+    const statuses = taskAttemptStatuses.get(task.id)
+    if (!statuses) return
+
+    const attemptCount = getRepeatedAttemptCount(task, statuses)
+    if (statuses.length < attemptCount) {
+      statuses.push('pass')
+    }
+  }
+
   function reportTestModule (testModule) {
     finishedTestModules.add(testModule.id)
     const testSuiteCtx = testSuiteContexts.get(testModule.id) || startTestSuite(testModule)
@@ -902,10 +951,13 @@ function createMainProcessReporter (
       testSuiteError ||= error
     }
 
+    const suiteTaskError = getSuiteTaskError(testModule.task)
     recomputeTaskState(testModule.task)
     const testSuiteResult = testModule.task.result
     if (testSuiteResult?.errors?.length) {
       testSuiteError = testSuiteResult.errors[0]
+    } else if (suiteTaskError) {
+      testSuiteError = suiteTaskError
     }
 
     if (testSuiteError) {
@@ -943,7 +995,7 @@ function createMainProcessReporter (
     const result = task.result
     const testSuiteAbsolutePath = task.file?.filepath
     const testName = getTestName(task)
-    const testProperties = getMainProcessTestProperties(testSuiteAbsolutePath, testName)
+    const testProperties = getMainProcessTestProperties(task, testSuiteAbsolutePath, testName)
     let status = getDatadogStatus(result)
 
     if (testProperties.isAttemptToFix && task.meta?.__ddTestOptAtfStatuses?.length) {
@@ -961,6 +1013,24 @@ function createMainProcessReporter (
         finalStatus: getEarlyFlakeDetectionFinalStatus,
         statuses: task.meta.__ddTestOptEfdStatuses,
         type: 'early_flake_detection',
+      })
+    }
+
+    if (!testProperties.isAttemptToFix && task.meta?.__ddTestOptRepeatStatuses?.length) {
+      return getRepeatedTestReport(task, testName, testSuiteAbsolutePath, testProperties, status, {
+        errorCounts: task.meta.__ddTestOptRepeatErrorCounts,
+        finalStatus: () => status,
+        statuses: task.meta.__ddTestOptRepeatStatuses,
+        type: 'external',
+      })
+    }
+
+    const attemptStatuses = taskAttemptStatuses.get(task.id)
+    if (!testProperties.isAttemptToFix && !testProperties.isEarlyFlakeDetection && attemptStatuses?.length > 1) {
+      return getRepeatedTestReport(task, testName, testSuiteAbsolutePath, testProperties, status, {
+        finalStatus: () => status,
+        statuses: attemptStatuses,
+        type: 'external',
       })
     }
 
@@ -1009,7 +1079,7 @@ function createMainProcessReporter (
     }
   }
 
-  function getMainProcessTestProperties (testSuiteAbsolutePath, testName) {
+  function getMainProcessTestProperties (task, testSuiteAbsolutePath, testName) {
     const testSuite = getTestSuitePath(
       testSuiteAbsolutePath,
       testSessionConfiguration.repositoryRoot || process.cwd()
@@ -1026,11 +1096,18 @@ function createMainProcessReporter (
       testOptimizationData.testManagementTests?.vitest?.suites?.[testSuite]?.tests?.[testName]?.properties || {}
     const isModified = !!(isImpactedTestsEnabled && testOptimizationData.modifiedFiles &&
       isModifiedTest(testSuite, 0, 0, testOptimizationData.modifiedFiles, 'vitest'))
+    const { flakyTestRetriesConfiguration } = testOptimizationData
+    const isFlakyTestRetries = !!flakyTestRetriesConfiguration && isFlakyTestRetriesEnabledForTask({
+      isFlakyTestRetriesEnabled,
+      flakyTestRetriesIncludesUnnamedProject: flakyTestRetriesConfiguration.includesUnnamedProject,
+      flakyTestRetriesProjectNames: flakyTestRetriesConfiguration.projectNames,
+    }, task)
 
     return {
       isAttemptToFix: testManagementProperties.attempt_to_fix,
       isDisabled: testManagementProperties.disabled,
       isEarlyFlakeDetection: isNew && isEarlyFlakeDetectionEnabled,
+      isFlakyTestRetries,
       isQuarantined: testManagementProperties.quarantined,
       isModified,
       isNew,
@@ -1202,7 +1279,7 @@ function reportTestAttempt (testReport, attempt) {
     isRetryReasonEfd: attempt.isRetryReasonEfd,
     isRetryReasonAttemptToFix: testProperties.isAttemptToFix && attempt.isRetry,
     isRetryReasonAtr: !testProperties.isAttemptToFix && !testProperties.isEarlyFlakeDetection &&
-      isFlakyTestRetriesEnabled,
+      testProperties.isFlakyTestRetries,
     isTestFrameworkWorker: true,
     requestErrorTags: testOptimizationRequestErrorTags,
   }
@@ -1268,11 +1345,21 @@ function getDatadogStatus (result) {
   return 'skip'
 }
 
+function getSuiteTaskError (task) {
+  const suiteTasks = getTypeTasks(task.tasks || [], 'suite')
+  for (const suiteTask of suiteTasks) {
+    if (suiteTask.result?.state === 'fail' && suiteTask.result?.errors?.length) {
+      return suiteTask.result.errors[0]
+    }
+  }
+}
+
 function recomputeTaskState (task) {
   if (!task.tasks) {
     return getDatadogStatus(task.result)
   }
 
+  const hasErrors = task.result?.errors?.length > 0
   let hasFailed = false
   let hasPassed = false
 
@@ -1282,7 +1369,7 @@ function recomputeTaskState (task) {
     hasPassed ||= childStatus === 'pass'
   }
 
-  const status = hasFailed ? 'fail' : hasPassed ? 'pass' : 'skip'
+  const status = hasErrors || hasFailed ? 'fail' : hasPassed ? 'pass' : 'skip'
   task.result ||= {}
   task.result.state = status
   return status
