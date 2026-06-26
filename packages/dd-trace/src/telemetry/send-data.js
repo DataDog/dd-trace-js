@@ -87,7 +87,7 @@ function getHeaders (config, application, reqType) {
   if (config.DD_ROOT_JS_SESSION_ID) {
     headers['dd-root-session-id'] = config.DD_ROOT_JS_SESSION_ID
   }
-  const debug = config.telemetry && config.telemetry.debug
+  const debug = config.telemetry && config.telemetry.DD_TELEMETRY_DEBUG
   if (debug) {
     headers['dd-telemetry-debug-enabled'] = 'true'
   }

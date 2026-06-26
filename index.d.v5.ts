@@ -2380,6 +2380,14 @@ declare namespace tracer {
      */
     interface aws_sdk extends Instrumentation {
       /**
+       * The service name to be used for this plugin. When a function is used it is called with the AWS
+       * request parameters (e.g. `{ TableName }` for DynamoDB, `{ Bucket }` for S3) and its return value
+       * is used as the service name. Returning a nullish value falls back to the default service name, so
+       * individual resources can be mapped without renaming every call to the service.
+       */
+      service?: string | ((params: anyObject) => string | undefined | null);
+
+      /**
        * Whether to inject all messages during batch AWS SQS, Kinesis, and SNS send operations. Normal
        * behavior is to inject the first message in batch send operations.
        * @default false
@@ -4239,6 +4247,15 @@ declare namespace tracer {
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
       agentlessEnabled?: boolean,
+
+      /**
+       * The proportion of LLM Observability traces to sample, between `0` and `1` (inclusive).
+       * The decision is computed once per trace, propagated across services, and recorded on every
+       * span; spans are always sent and the decision is honored at ingestion time. Defaults to `1`.
+       * @env DD_LLMOBS_SAMPLE_RATE
+       * Programmatic configuration takes precedence over the environment variables listed above.
+       */
+      sampleRate?: number,
     }
     /** @hidden */
     type spanKind = 'agent' | 'workflow' | 'task' | 'tool' | 'retrieval' | 'embedding' | 'llm'

@@ -18,7 +18,7 @@ function exporterFromURL (url) {
     return new FileExporter({}, fileURLToPath(url))
   }
   // The subprocess has no tracer config, so mirror the canonical config property
-  // names the exporters read. Normalize the raw env to the parsed profiling.enabled
+  // names the exporters read. Normalize the raw env to the parsed profiling.DD_PROFILING_ENABLED
   // values ('true' | 'false' | 'auto') the main process would have produced.
   const profilingEnabled = (getValueFromEnvSources('DD_PROFILING_ENABLED') ?? '').toLowerCase()
   const enabled = profilingEnabled === 'auto'
@@ -28,7 +28,7 @@ function exporterFromURL (url) {
     url,
     DD_PROFILING_UPLOAD_TIMEOUT: timeoutMs,
     DD_INJECTION_ENABLED: getValueFromEnvSources('DD_INJECTION_ENABLED'),
-    profiling: { enabled },
+    profiling: { DD_PROFILING_ENABLED: enabled },
   })
 }
 

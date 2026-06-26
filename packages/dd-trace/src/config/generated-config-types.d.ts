@@ -6,18 +6,17 @@ export interface GeneratedConfig {
   apiKey: string | undefined;
   apmTracingEnabled: boolean;
   appsec: {
-    apiSecurity: {
-      downstreamBodyAnalysisSampleRate: number;
-      enabled: boolean;
-      endpointCollectionEnabled: boolean;
-      endpointCollectionMessageLimit: number;
-      maxDownstreamBodyBytes: number;
-      maxDownstreamRequestBodyAnalysis: number;
-      sampleDelay: number;
-    };
     blockedTemplateGraphql: string | undefined;
     blockedTemplateHtml: string | undefined;
     blockedTemplateJson: string | undefined;
+    DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: number;
+    DD_API_SECURITY_ENABLED: boolean;
+    DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: boolean;
+    DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT: number;
+    DD_API_SECURITY_MAX_DOWNSTREAM_BODY_BYTES: number;
+    DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: number;
+    DD_API_SECURITY_SAMPLE_DELAY: number;
+    DD_APPSEC_SCA_ENABLED: boolean | undefined;
     enabled: boolean | undefined;
     eventTracking: {
       mode: string;
@@ -35,9 +34,6 @@ export interface GeneratedConfig {
     };
     rateLimit: number;
     rules: string | undefined;
-    sca: {
-      enabled: boolean | undefined;
-    };
     stackTrace: {
       enabled: boolean;
       maxDepth: number;
@@ -446,6 +442,7 @@ export interface GeneratedConfig {
   hostname: string;
   iast: {
     dbRowsToTaint: number;
+    DD_IAST_SECURITY_CONTROLS_CONFIGURATION: string | undefined;
     deduplicationEnabled: boolean;
     enabled: boolean;
     maxConcurrentRequests: number;
@@ -454,7 +451,6 @@ export interface GeneratedConfig {
     redactionNamePattern: string;
     redactionValuePattern: string;
     requestSampling: number;
-    securityControlsConfiguration: string | undefined;
     stackTrace: {
       enabled: boolean;
     };
@@ -469,20 +465,21 @@ export interface GeneratedConfig {
   isTestDynamicInstrumentationEnabled: boolean;
   isTestManagementEnabled: boolean;
   langchain: {
-    spanCharLimit: number;
-    spanPromptCompletionSampleRate: number;
+    DD_LANGCHAIN_SPAN_CHAR_LIMIT: number;
+    DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE: number;
   };
   legacyBaggageEnabled: boolean;
   llmobs: {
     agentlessEnabled: boolean | undefined;
-    enabled: boolean;
+    DD_LLMOBS_ENABLED: boolean;
     mlApp: string | undefined;
+    sampleRate: number;
   };
   logInjection: boolean;
   logLevel: "debug" | "info" | "warn" | "error";
   middlewareTracingEnabled: boolean;
   openai: {
-    spanCharLimit: number;
+    DD_OPENAI_SPAN_CHAR_LIMIT: number;
   };
   openAiLogsEnabled: boolean;
   OTEL_BSP_MAX_EXPORT_BATCH_SIZE: number;
@@ -517,13 +514,13 @@ export interface GeneratedConfig {
   peerServiceMapping: Record<string, string>;
   port: string | number;
   profiling: {
-    enabled: 'true' | 'false' | 'auto';
+    DD_PROFILING_ENABLED: 'true' | 'false' | 'auto';
   };
   protocolVersion: string;
   queryStringObfuscation: string;
   rateLimit: number;
   remoteConfig: {
-    enabled: boolean;
+    DD_REMOTE_CONFIGURATION_ENABLED: boolean;
     pollInterval: number;
   };
   reportHostname: boolean;
@@ -547,17 +544,17 @@ export interface GeneratedConfig {
   spanSamplingRules: import('../../../../index').SpanSamplingRule[] | undefined;
   startupLogs: boolean;
   stats: {
-    enabled: boolean;
+    DD_TRACE_STATS_COMPUTATION_ENABLED: boolean;
   };
   tags: Record<string, string>;
   telemetry: {
-    debug: boolean;
-    dependencyCollection: boolean;
-    enabled: boolean;
-    extendedHeartbeatInterval: number;
-    heartbeatInterval: number;
-    logCollection: boolean;
-    metrics: boolean;
+    DD_INSTRUMENTATION_TELEMETRY_ENABLED: boolean;
+    DD_TELEMETRY_DEBUG: boolean;
+    DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED: boolean;
+    DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: number;
+    DD_TELEMETRY_HEARTBEAT_INTERVAL: number;
+    DD_TELEMETRY_LOG_COLLECTION_ENABLED: boolean;
+    DD_TELEMETRY_METRICS_ENABLED: boolean;
   };
   testManagementAttemptToFixRetries: number;
   traceId128BitGenerationEnabled: boolean;
@@ -573,8 +570,8 @@ export interface GeneratedConfig {
   url: string | URL;
   version: string | undefined;
   vertexai: {
-    spanCharLimit: number;
-    spanPromptCompletionSampleRate: number;
+    DD_VERTEXAI_SPAN_CHAR_LIMIT: number;
+    DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE: number;
   };
 }
 
@@ -724,6 +721,7 @@ export interface GeneratedEnvVarConfig {
   DD_LLMOBS_AGENTLESS_ENABLED: boolean | undefined;
   DD_LLMOBS_ENABLED: boolean;
   DD_LLMOBS_ML_APP: string | undefined;
+  DD_LLMOBS_SAMPLE_RATE: number;
   DD_LOG_LEVEL: "debug" | "info" | "warn" | "error";
   DD_LOGS_INJECTION: boolean;
   DD_LOGS_OTEL_ENABLED: boolean;
