@@ -235,6 +235,29 @@ describe('id', () => {
       sinon.assert.notCalled(readSyncStub)
       sinon.assert.called(randomFillSyncStub)
     })
+
+    it('should close the fd and fall back to randomFillSync when readSync returns 0 bytes', () => {
+      freshId.reseed()
+      // Override readSync to simulate a zero-byte read (broken fd after it opened)
+      readSyncStub.callsFake(() => 0)
+      randomFillSyncStub.resetHistory()
+
+      freshId()
+
+      sinon.assert.called(closeSyncStub)
+      sinon.assert.called(randomFillSyncStub)
+    })
+
+    it('should close the fd and fall back to randomFillSync when readSync throws', () => {
+      freshId.reseed()
+      readSyncStub.throws(new Error('EIO'))
+      randomFillSyncStub.resetHistory()
+
+      freshId()
+
+      sinon.assert.called(closeSyncStub)
+      sinon.assert.called(randomFillSyncStub)
+    })
   })
 
   describe('kernelUUID()', () => {
