@@ -305,6 +305,7 @@ class Tracer extends NoopProxy {
     require('./id').reseed()
     getConfig.refreshRuntimeId(config)
     require('./remote_config').refreshClientId(config)
+    this._tracer?.refreshMetadata(config)
   }
 
   /**
