@@ -4,6 +4,7 @@ var path = require('path')
 var Module = require('module')
 
 var nodeVersion = require('../../../../version')
+var pkg = require('../../../../package.json')
 var isTrue = require('./util').isTrue
 var log = require('./log')
 var telemetry = require('./telemetry')
@@ -14,7 +15,6 @@ function guard (fn) {
   var initBailout = false
   var clobberBailout = false
   var forced = isTrue(process.env.DD_INJECT_FORCE)
-  var pkg = require('../../../../package.json')
   var engines = pkg.engines
   var versions = engines.node.match(/^>=(\d+)$/)
   var minMajor = versions[1]
