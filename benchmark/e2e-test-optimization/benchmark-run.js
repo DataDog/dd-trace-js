@@ -5,6 +5,10 @@
 const https = require('https')
 const { setTimeout } = require('timers/promises')
 
+const semver = require('semver')
+
+const { engines } = require('../../package.json')
+
 const API_REPOSITORY_URL = 'https://api.github.com/repos/DataDog/test-environment'
 const DISPATCH_WORKFLOW_URL = `${API_REPOSITORY_URL}/actions/workflows/dd-trace-js-tests.yml/dispatches`
 const GET_WORKFLOWS_URL = `${API_REPOSITORY_URL}/actions/runs`
@@ -54,6 +58,10 @@ function getRefName () {
   return process.env.TEST_ENVIRONMENT_REF_NAME || getRefToTest()
 }
 
+function getMinimumNodeMajor () {
+  return String(semver.minVersion(engines.node).major)
+}
+
 const getCommonHeaders = () => {
   return {
     'Content-Type': 'application/json',
@@ -72,7 +80,7 @@ const triggerWorkflow = () => {
       ref: 'main',
       inputs: {
         sha: getRefToTest(),
-        node_version: '22',
+        node_version: getMinimumNodeMajor(),
       },
     })
     const request = https.request(
