@@ -225,7 +225,6 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
     }
 
     // Output audio (non-streamed) is returned in the requested format; chat-completions
-    // streaming carries no audio, so this only applies to the non-streamed branch here.
     const outputAudioFormat = inputs.audio?.format
 
     for (const choice of choices) {

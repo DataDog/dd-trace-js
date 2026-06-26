@@ -123,7 +123,7 @@ function hasMultimodalInputs (variables) {
 /**
  * Flattens an array of OpenAI chat message content parts into readable text plus structured audio.
  *
- * Mirrors dd-trace-py's `_extract_content_parts`. Text parts are concatenated (newline-joined),
+ * Text parts are concatenated (newline-joined),
  * images collapse to an `[image]` marker, and `input_audio` parts with data are captured as audio
  * parts (rendered as a player). The `[audio]` marker is only emitted as a fallback when an audio
  * part carries no data.
