@@ -1,8 +1,11 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = require('node:fs')
+const { tmpdir } = require('node:os')
+const { join } = require('node:path')
 
-const { describe, it } = require('mocha')
+const { describe, it, after } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
@@ -54,8 +57,9 @@ function buildLoader ({
     'node:fs': {
       // The package's own package.json only lives at the package root, so the loader
       // must walk up from the nested entrypoint; everything in between throws ENOENT.
+      // path.join normalizes to the platform separator, so match on '/' after a rewrite.
       readFileSync (path) {
-        if (versionReadable && path.endsWith(PACKAGE_JSON_SUFFIX)) {
+        if (versionReadable && path.replaceAll('\\', '/').endsWith(PACKAGE_JSON_SUFFIX)) {
           return JSON.stringify({ name: '@opentelemetry/api', version })
         }
         throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
@@ -136,5 +140,55 @@ describe('opentelemetry/api loader', () => {
     loader.load()
     loader.isAvailable()
     assert.ok(warn.calledOnce)
+  })
+})
+
+// The stubbed suite above fakes node:fs, so it cannot catch a separator mismatch between
+// path.join (platform-native) and the version walk. This suite writes a real package tree
+// and lets the production node:fs/node:path run, so the walk is exercised on every platform.
+describe('opentelemetry/api loader version walk on disk', () => {
+  const root = mkdtempSync(join(tmpdir(), 'dd-trace-otel-api-'))
+  const packageDir = join(root, 'node_modules', '@opentelemetry', 'api')
+  const entry = join(packageDir, 'build', 'src', 'index.js')
+
+  after(() => {
+    rmSync(root, { recursive: true, force: true })
+  })
+
+  /**
+   * Builds the loader pointed at a real `@opentelemetry/api` tree, faking only the
+   * application `require` and the supported range. node:fs and node:path stay real.
+   *
+   * @param {string} version - Version written to the on-disk package.json.
+   * @returns {{ loader: { load: () => object }, warn: sinon.SinonSpy }}
+   */
+  function buildDiskLoader (version) {
+    mkdirSync(join(packageDir, 'build', 'src'), { recursive: true })
+    writeFileSync(join(packageDir, 'package.json'), JSON.stringify({ name: '@opentelemetry/api', version }))
+    writeFileSync(entry, '')
+
+    const warn = sinon.spy()
+    const appApi = { copy: 'app', '@noCallThru': true }
+    const loader = proxyquire(LOADER_PATH, {
+      '../../../../version': { DD_MAJOR: 5 },
+      '../log': { warn },
+      '../../../../package.json': { peerDependencies: { '@opentelemetry/api': '>=1.0.0 <1.10.0' } },
+      'node:module': { createRequire: sinon.stub().returns(fakeRequire(appApi, entry)) },
+      '@opentelemetry/api': appApi,
+    })
+    return { loader, warn }
+  }
+
+  it('reads the version from a nested entrypoint and warns when unsupported', () => {
+    const { loader, warn } = buildDiskLoader('1.10.0')
+    loader.load()
+    assert.ok(warn.calledOnce)
+    assert.match(warn.firstCall.args[0], /newer than dd-trace supports/)
+  })
+
+  it('reads the version from a nested entrypoint and stays silent when supported', () => {
+    const { loader, warn } = buildDiskLoader('1.9.0')
+    loader.load()
+    assert.ok(warn.notCalled)
   })
 })
