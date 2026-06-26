@@ -16,17 +16,18 @@ const LOADER_PATH = '../../src/opentelemetry/api'
 
 // A nested entrypoint (build/src/index.js, as the real package ships) so the version
 // reader has to walk up directories to find the package's own package.json.
-const NESTED_ENTRY = '/app/node_modules/@opentelemetry/api/build/src/index.js'
-const PACKAGE_JSON_SUFFIX = '@opentelemetry/api/package.json'
+function nestedEntry (packageName) {
+  return `/app/node_modules/${packageName}/build/src/index.js`
+}
 
 /**
- * Builds a `require`-like stub that resolves `@opentelemetry/api` to `api`.
+ * Builds a `require`-like stub that resolves a package to `api`.
  *
- * @param {object} api - The module object to return for `@opentelemetry/api`.
- * @param {string} [resolvePath] - Path returned by `require.resolve`.
+ * @param {object} api - The module object to return for the package.
+ * @param {string} resolvePath - Path returned by `require.resolve`.
  * @returns {sinon.SinonStub}
  */
-function fakeRequire (api, resolvePath = NESTED_ENTRY) {
+function fakeRequire (api, resolvePath) {
   const req = sinon.stub().returns(api)
   req.resolve = sinon.stub().returns(resolvePath)
   return req
@@ -34,34 +35,36 @@ function fakeRequire (api, resolvePath = NESTED_ENTRY) {
 
 /**
  * @param {object} [options]
+ * @param {string} [options.packageName] - The OTel API package the loader resolves.
  * @param {number} [options.ddMajor] - Value of the mocked `DD_MAJOR` constant.
  * @param {sinon.SinonStub} [options.appRequire] - `require` returned by `createRequire`.
  * @param {object} [options.ddApi] - Copy returned by dd-trace's own `require`.
  * @param {string} [options.version] - Version reported for the resolved copy.
- * @param {string} [options.range] - Declared `@opentelemetry/api` range.
+ * @param {string} [options.range] - Declared package range.
  * @param {string} [options.depField] - package.json field that declares the range.
  * @param {boolean} [options.versionReadable] - When false, no package.json can be read.
- * @param {boolean} [options.missing] - When true, requiring `@opentelemetry/api` throws.
+ * @param {boolean} [options.missing] - When true, requiring the package throws.
  */
 function buildLoader ({
-  ddMajor = 6, appRequire, ddApi = { copy: 'dd-trace' }, version = '1.9.0',
+  packageName = '@opentelemetry/api', ddMajor = 6, appRequire, ddApi = { copy: 'dd-trace' }, version = '1.9.0',
   range = '>=1.0.0 <1.10.0', depField = 'peerDependencies', versionReadable = true, missing = false,
 } = {}) {
   const warn = sinon.spy()
   const createRequire = sinon.stub()
   if (appRequire) createRequire.returns(appRequire)
 
+  const packageJsonSuffix = `${packageName}/package.json`
   const stubs = {
     '../../../../version': { DD_MAJOR: ddMajor },
     '../log': { warn },
-    '../../../../package.json': { [depField]: { '@opentelemetry/api': range } },
+    '../../../../package.json': { [depField]: { [packageName]: range } },
     'node:fs': {
       // The package's own package.json only lives at the package root, so the loader
       // must walk up from the nested entrypoint; everything in between throws ENOENT.
       // path.join normalizes to the platform separator, so match on '/' after a rewrite.
       readFileSync (path) {
-        if (versionReadable && path.replaceAll('\\', '/').endsWith(PACKAGE_JSON_SUFFIX)) {
-          return JSON.stringify({ name: '@opentelemetry/api', version })
+        if (versionReadable && path.replaceAll('\\', '/').endsWith(packageJsonSuffix)) {
+          return JSON.stringify({ name: packageName, version })
         }
         throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
       },
@@ -70,9 +73,10 @@ function buildLoader ({
   }
 
   // A `null` stub makes proxyquire throw MODULE_NOT_FOUND for that require.
-  stubs['@opentelemetry/api'] = missing ? null : Object.assign(ddApi, { '@noCallThru': true })
+  stubs[packageName] = missing ? null : Object.assign(ddApi, { '@noCallThru': true })
 
-  return { loader: proxyquire(LOADER_PATH, stubs), warn, createRequire, ddApi }
+  const otelApi = proxyquire(LOADER_PATH, stubs)
+  return { loader: otelApi.forPackage(packageName), warn, createRequire, ddApi }
 }
 
 describe('opentelemetry/api loader', () => {
@@ -85,7 +89,8 @@ describe('opentelemetry/api loader', () => {
 
   it('prefers the application copy on v5', () => {
     const appApi = { copy: 'app' }
-    const { loader, createRequire } = buildLoader({ ddMajor: 5, appRequire: fakeRequire(appApi) })
+    const appRequire = fakeRequire(appApi, nestedEntry('@opentelemetry/api'))
+    const { loader, createRequire } = buildLoader({ ddMajor: 5, appRequire })
     assert.strictEqual(loader.load(), appApi)
     assert.ok(createRequire.calledOnce)
   })
@@ -141,6 +146,48 @@ describe('opentelemetry/api loader', () => {
     loader.load()
     loader.isAvailable()
     assert.ok(warn.calledOnce)
+  })
+})
+
+// The logs pipeline shares @opentelemetry/api-logs the same way, through forPackage().
+// Its declared range is the pre-1.0 `<1.0.0`, and its unsupported-version consequence
+// is dropped log records rather than no-op spans.
+describe('opentelemetry/api loader for @opentelemetry/api-logs', () => {
+  const packageName = '@opentelemetry/api-logs'
+
+  it('resolves dd-trace\'s own copy on v6', () => {
+    const { loader, createRequire, ddApi } = buildLoader({ packageName, range: '<1.0.0', version: '0.212.0' })
+    assert.strictEqual(loader.load(), ddApi)
+    assert.strictEqual(loader.isAvailable(), true)
+    assert.ok(createRequire.notCalled)
+  })
+
+  it('prefers the application copy on v5', () => {
+    const appApi = { copy: 'app-logs' }
+    const appRequire = fakeRequire(appApi, nestedEntry(packageName))
+    const { loader } = buildLoader({ packageName, ddMajor: 5, range: '<1.0.0', appRequire })
+    assert.strictEqual(loader.load(), appApi)
+  })
+
+  it('throws a clear error and reports unavailable when not installed', () => {
+    const { loader } = buildLoader({ packageName, range: '<1.0.0', missing: true })
+    assert.strictEqual(loader.isAvailable(), false)
+    assert.throws(() => loader.load(), { message: /@opentelemetry\/api-logs is not installed/ })
+  })
+
+  it('warns about dropped log records at the first unsupported version', () => {
+    const { loader, warn } = buildLoader({ packageName, range: '<1.0.0', version: '1.0.0' })
+    loader.load()
+    assert.ok(warn.calledOnce)
+    assert.match(warn.firstCall.args[0], /outside the range dd-trace supports/)
+    assert.ok(warn.firstCall.args.includes('1.0.0'))
+    assert.ok(warn.firstCall.args.includes('OpenTelemetry log records may be dropped.'))
+  })
+
+  it('does not warn at the last supported version', () => {
+    const { loader, warn } = buildLoader({ packageName, range: '<1.0.0', version: '0.999.0' })
+    loader.load()
+    assert.ok(warn.notCalled)
   })
 })
 

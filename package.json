@@ -168,10 +168,14 @@
     "opentracing": ">=0.14.7"
   },
   "peerDependencies": {
-    "@opentelemetry/api": ">=1.0.0 <1.10.0"
+    "@opentelemetry/api": ">=1.0.0 <1.10.0",
+    "@opentelemetry/api-logs": "<1.0.0"
   },
   "peerDependenciesMeta": {
     "@opentelemetry/api": {
+      "optional": true
+    },
+    "@opentelemetry/api-logs": {
       "optional": true
     }
   },
@@ -183,7 +187,6 @@
     "@datadog/openfeature-node-server": "2.0.0",
     "@datadog/pprof": "5.15.0",
     "@datadog/wasm-js-rewriter": "5.0.1",
-    "@opentelemetry/api-logs": "<1.0.0",
     "oxc-parser": "^0.132.0"
   },
   "devDependencies": {
@@ -196,6 +199,7 @@
     "@openfeature/core": "^1.11.0",
     "@openfeature/server-sdk": "~1.22.0",
     "@opentelemetry/api": ">=1.0.0 <1.10.0",
+    "@opentelemetry/api-logs": "<1.0.0",
     "@stylistic/eslint-plugin": "^5.10.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^18.19.106",
