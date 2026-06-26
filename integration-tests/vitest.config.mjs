@@ -74,6 +74,10 @@ if (process.env.NO_ISOLATE) {
   config.test.isolate = false
 }
 
+if (process.env.VITEST_SETUP_FILE) {
+  config.test.setupFiles = process.env.VITEST_SETUP_FILE
+}
+
 if (process.env.COVERAGE_PROVIDER) {
   config.test.coverage = {
     provider: process.env.COVERAGE_PROVIDER || 'v8',

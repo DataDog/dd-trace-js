@@ -388,7 +388,7 @@ versions.forEach((version) => {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             NODE_OPTIONS: '--no-warnings --import dd-trace/register.js -r dd-trace/ci/init',
-            TEST_DIR: 'ci-visibility/vitest-tests/test-visibility-failed-suite-hook.mjs',
+            TEST_DIR: 'ci-visibility/vitest-tests/failed-suite-hook.mjs',
             POOL_CONFIG: 'forks',
             DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
             DD_SERVICE: undefined,
@@ -405,6 +405,45 @@ versions.forEach((version) => {
       ])
 
       assert.strictEqual(exitCode, 1, testOutput)
+    })
+
+    newerVitestIt('preserves string setupFiles when no-worker init is enabled', async () => {
+      const payloadsPromise = receiver.gatherPayloadsMaxTimeout(
+        ({ url }) => url === '/api/v2/citestcycle',
+        payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testEvent = events.find(event => event.type === 'test')
+
+          assert.ok(testEvent, `should have test event, got events: ${inspect(events.map(event => event.type))}`)
+          assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'pass')
+        }
+      )
+
+      childProcess = exec(
+        './node_modules/.bin/vitest run',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--no-warnings --import dd-trace/register.js -r dd-trace/ci/init',
+            TEST_DIR: 'ci-visibility/vitest-tests/uses-string-setup-file.mjs',
+            VITEST_SETUP_FILE: 'ci-visibility/vitest-tests/string-setup-file.mjs',
+            POOL_CONFIG: 'forks',
+            DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+            DD_SERVICE: undefined,
+          },
+        }
+      )
+
+      childProcess.stdout.on('data', data => { testOutput += data })
+      childProcess.stderr.on('data', data => { testOutput += data })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        payloadsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0, testOutput)
     })
 
     latestVitestIt('does not duplicate thread project events when no-worker init is enabled', async () => {

@@ -763,7 +763,13 @@ function addSetupFileToVitestConfigs (ctx, setupFile, testSpecifications) {
 
   for (const config of configs) {
     if (!config) continue
-    config.setupFiles ||= []
+
+    if (config.setupFiles === undefined) {
+      config.setupFiles = []
+    } else if (typeof config.setupFiles === 'string') {
+      config.setupFiles = [config.setupFiles]
+    }
+
     if (!config.setupFiles.includes(setupFile)) {
       config.setupFiles.push(setupFile)
     }
