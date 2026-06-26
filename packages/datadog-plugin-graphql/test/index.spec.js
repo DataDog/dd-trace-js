@@ -519,6 +519,32 @@ describe('Plugin', () => {
             'instrumentation must not overwrite the caller-supplied fieldResolver')
         })
 
+        it('should preserve graphql defaultFieldResolver behavior for primitive sources', async () => {
+          const Box = new graphql.GraphQLObjectType({
+            name: 'Box',
+            fields: {
+              length: {
+                type: graphql.GraphQLInt,
+              },
+            },
+          })
+          const query = new graphql.GraphQLObjectType({
+            name: 'Query',
+            fields: {
+              box: {
+                type: Box,
+                resolve: () => 'abc',
+              },
+            },
+          })
+          const localSchema = new graphql.GraphQLSchema({ query })
+          const document = graphql.parse('{ box { length } }')
+
+          const result = await graphql.execute({ schema: localSchema, document })
+
+          assert.strictEqual(result.data.box.length, null)
+        })
+
         it('publishes caller-owned execute args before installing the wrapped fieldResolver', async () => {
           const startChannel = dc.channel('apm:graphql:execute:start')
           const document = graphql.parse('query MyQuery { hello(name: "world") }')
@@ -1981,6 +2007,26 @@ describe('Plugin', () => {
 
           graphql.graphql({ schema, source, rootValue }).catch(done)
         })
+
+        it('should publish resolver start for depth 0 AppSec subscribers', async () => {
+          const startCh = dc.channel('datadog:graphql:resolver:start')
+          const fields = []
+          const handler = ({ resolverInfo }) => {
+            fields.push(...Object.keys(resolverInfo || {}))
+          }
+
+          startCh.subscribe(handler)
+
+          try {
+            const source = '{ human { name } }'
+            const result = await graphql.graphql({ schema, source })
+
+            assert.ok(!result.errors || result.errors.length === 0, `Expected [${result.errors}] to be empty`)
+            assert.deepStrictEqual(fields.sort(), ['human', 'name'])
+          } finally {
+            startCh.unsubscribe(handler)
+          }
+        })
       })
 
       describe('with a depth >=1', () => {
@@ -2029,6 +2075,61 @@ describe('Plugin', () => {
           })
 
           return Promise.all([assertion, graphql.graphql({ schema, source })])
+        })
+
+        it('should honor resolver abort for fields gated by depth', async () => {
+          let streetResolverRan = false
+          const startCh = dc.channel('datadog:graphql:resolver:start')
+          const handler = ({ abortController, resolverInfo }) => {
+            if (resolverInfo?.street) abortController.abort()
+          }
+
+          const Address = new graphql.GraphQLObjectType({
+            name: 'DepthAbortAddress',
+            fields: {
+              street: {
+                type: graphql.GraphQLString,
+                resolve () {
+                  streetResolverRan = true
+                  return 'foo street'
+                },
+              },
+            },
+          })
+          const Human = new graphql.GraphQLObjectType({
+            name: 'DepthAbortHuman',
+            fields: {
+              address: {
+                type: Address,
+                resolve: () => ({}),
+              },
+            },
+          })
+          const query = new graphql.GraphQLObjectType({
+            name: 'DepthAbortQuery',
+            fields: {
+              human: {
+                type: Human,
+                resolve: () => ({}),
+              },
+            },
+          })
+          const localSchema = new graphql.GraphQLSchema({ query })
+
+          startCh.subscribe(handler)
+
+          try {
+            const result = await graphql.graphql({
+              schema: localSchema,
+              source: '{ human { address { street } } }',
+            })
+
+            assert.strictEqual(streetResolverRan, false)
+            assert.strictEqual(result.errors.length, 1)
+            assert.strictEqual(result.errors[0].originalError?.name, 'AbortError')
+          } finally {
+            startCh.unsubscribe(handler)
+          }
         })
 
         it('publishes apm:graphql:resolve:start for every resolver, including depth-gated ones', async () => {

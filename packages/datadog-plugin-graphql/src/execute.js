@@ -364,6 +364,10 @@ function wrapResolve (resolve) {
     }
 
     if (depthDisabled || !shouldInstrumentNode(config, infoPath)) {
+      if (rootCtx.abortController?.signal.aborted) {
+        throw new AbortError('Aborted')
+      }
+
       return resolve.apply(this, arguments)
     }
 
@@ -646,10 +650,11 @@ function getBaseTypeName (type) {
 // recreates globalThis[Symbol.for('dd-trace')], so capturing defaultFieldResolver
 // via ddGlobal at IITM hook time would lose the reference across test suites).
 function defaultFieldResolver (source, args, contextValue, info) {
-  if (source == null) return
-  const property = source[info.fieldName]
-  if (typeof property === 'function') return source[info.fieldName](args, contextValue, info)
-  return property
+  if ((typeof source === 'object' && source !== null) || typeof source === 'function') {
+    const property = source[info.fieldName]
+    if (typeof property === 'function') return source[info.fieldName](args, contextValue, info)
+    return property
+  }
 }
 
 function getOperation (document, operationName) {
