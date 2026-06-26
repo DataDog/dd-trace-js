@@ -384,6 +384,12 @@ function audioMimeTypeFromFormat (fmt) {
 // binary inputs are base64-encoded; any other shape is passed through so a
 // malformed auto-instrumented payload can't throw (the tagger soft-skips a
 // non-string `content` instead of disabling the plugin).
+//
+// NOTE: supported binary inputs are `Buffer` and `Uint8Array` (what providers
+// hand us). A bare `ArrayBuffer`, or a non-`Uint8Array` typed-array view (e.g.
+// `Uint16Array`), is not byte-encoded correctly here — pass a `Buffer`/
+// `Uint8Array` view of the bytes if you need those. OpenAI always passes base64
+// strings, so this is not hit in practice today.
 /**
  * @param {Buffer | Uint8Array | string} data
  * @param {string} mimeType

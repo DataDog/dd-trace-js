@@ -313,6 +313,71 @@ describe('integrations', () => {
         })
       })
 
+      it('submits a chat completion span with multimodal image input', async () => {
+        await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'What is in this image?' },
+                { type: 'image_url', image_url: { url: 'https://example.com/cat.png' } },
+              ],
+            },
+          ],
+        })
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'OpenAI.createChatCompletion',
+          modelName: 'gpt-4o-2024-08-06',
+          modelProvider: 'openai',
+          inputMessages: [{ role: 'user', content: 'What is in this image?\n[image]' }],
+          outputMessages: [{ role: 'assistant', content: MOCK_STRING }],
+          metadata: {},
+          tags: { ml_app: 'test', integration: 'openai' },
+          metrics: {
+            cache_read_input_tokens: 0,
+            reasoning_output_tokens: 0,
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+          },
+        })
+      })
+
+      it('submits a chat completion span with audio output that has no data (transcript only)', async () => {
+        await openai.chat.completions.create({
+          model: 'gpt-audio',
+          modalities: ['text', 'audio'],
+          audio: { voice: 'alloy', format: 'wav' },
+          messages: [{ role: 'user', content: 'Say hi' }],
+        })
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'OpenAI.createChatCompletion',
+          modelName: 'gpt-audio-2025-08-28',
+          modelProvider: 'openai',
+          inputMessages: [{ role: 'user', content: 'Say hi' }],
+          // No data on the audio object: no audio_parts emitted, transcript surfaced as content.
+          outputMessages: [{ role: 'assistant', content: 'Hi there!' }],
+          metadata: { modalities: ['text', 'audio'], audio: { voice: 'alloy', format: 'wav' } },
+          tags: { ml_app: 'test', integration: 'openai' },
+          metrics: {
+            cache_read_input_tokens: 0,
+            reasoning_output_tokens: 0,
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+          },
+        })
+      })
+
       describe('stream', function () {
         beforeEach(function () {
           if (semifies(realVersion, '<=4.1.0')) {

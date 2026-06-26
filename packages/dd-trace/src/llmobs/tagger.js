@@ -594,13 +594,24 @@ class LLMObsTagger {
 
       const audioPartObj = { mime_type: mimeType }
 
-      const condition1 = this.#tagConditionalString(content, 'Audio part content', audioPartObj, 'content')
-      const condition2 = this.#tagConditionalString(attachmentKey, 'Audio part attachmentKey', audioPartObj,
-        'attachment_key')
-
-      if (condition1 && condition2) {
-        filteredAudioParts.push(audioPartObj)
+      // Exactly one of content / attachmentKey is set here (guarded above). Validate its type
+      // explicitly so the failure carries the `invalid_io_messages` tag for telemetry, instead
+      // of routing through `#tagConditionalString` which omits it.
+      if (content == null) {
+        if (typeof attachmentKey !== 'string') {
+          this.#handleFailure('Audio part attachmentKey must be a string.', 'invalid_io_messages')
+          continue
+        }
+        audioPartObj.attachment_key = attachmentKey
+      } else {
+        if (typeof content !== 'string') {
+          this.#handleFailure('Audio part content must be a base64-encoded string.', 'invalid_io_messages')
+          continue
+        }
+        audioPartObj.content = content
       }
+
+      filteredAudioParts.push(audioPartObj)
     }
     return filteredAudioParts
   }

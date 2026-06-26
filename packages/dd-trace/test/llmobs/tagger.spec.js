@@ -858,6 +858,32 @@ describe('tagger', () => {
             { message: "Audio part must have only one of 'content' or 'attachmentKey', not both." }
           )
         })
+
+        it('throws with an invalid_io_messages tag for a non-string content', () => {
+          const messages = [
+            { content: 'a', audioParts: [{ mimeType: 'audio/wav', content: 5 }] },
+          ]
+
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            err =>
+              err.message === 'Audio part content must be a base64-encoded string.' &&
+              err.ddErrorTag === 'invalid_io_messages'
+          )
+        })
+
+        it('throws with an invalid_io_messages tag for a non-string attachmentKey', () => {
+          const messages = [
+            { content: 'a', audioParts: [{ mimeType: 'audio/wav', attachmentKey: 5 }] },
+          ]
+
+          assert.throws(
+            () => tagger.tagLLMIO(span, messages, undefined),
+            err =>
+              err.message === 'Audio part attachmentKey must be a string.' &&
+              err.ddErrorTag === 'invalid_io_messages'
+          )
+        })
       })
     })
 
