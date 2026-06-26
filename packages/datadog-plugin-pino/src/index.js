@@ -13,23 +13,59 @@ class PinoPlugin extends LogPlugin {
   }
 
   /**
-   * Splice `,"dd":<json>` into the JSON line pino has already produced.
+   * Disable the generic apm:${id}:log capture path for pino.
+   *
+   * Pino's apm:pino:log:json channel provides the fully-serialized JSON line
+   * and is used for both injection and capture in handleJsonLine.
+   * This prevents double-capture from the LogPlugin base class subscriber.
+   *
+   * @returns {false}
+   */
+  get _captureEnabled () {
+    return false
+  }
+
+  /**
+   * Splice `,"dd":<json>` into the JSON line pino has already produced,
+   * and optionally capture the complete record for log forwarding.
    * The caller-owned message object is never observed -- user Proxies and
    * custom serialisers see nothing because there is no mutation to see.
    *
    * @param {{ line: string }} payload
    */
   handleJsonLine (payload) {
+    const shouldInject = this.config.logInjection
+    const shouldCapture = this.config.logCaptureEnabled
+
+    if (!shouldInject && !shouldCapture) return
+
     const logHolder = buildLogHolder(this.tracer)
-    if (!logHolder) return
 
-    const line = payload.line
-    const lastClose = line.lastIndexOf('}')
-    if (lastClose < 1) return
+    if (shouldInject && logHolder) {
+      const line = payload.line
+      const lastClose = line.lastIndexOf('}')
+      if (lastClose >= 1) {
+        const ddJson = JSON.stringify(logHolder.dd)
+        const sep = line.charCodeAt(lastClose - 1) === 0x7B ? '' : ','
+        payload.line = line.slice(0, lastClose) + sep + '"dd":' + ddJson + line.slice(lastClose)
+      }
+    }
 
-    const ddJson = JSON.stringify(logHolder.dd)
-    const sep = line.charCodeAt(lastClose - 1) === 0x7B ? '' : ','
-    payload.line = line.slice(0, lastClose) + sep + '"dd":' + ddJson + line.slice(lastClose)
+    if (shouldCapture) {
+      if (!shouldInject && logHolder) {
+        // Enrich the captured record with dd context without modifying the actual log line.
+        const line = payload.line
+        const lastClose = line.lastIndexOf('}')
+        if (lastClose >= 1) {
+          const ddJson = JSON.stringify(logHolder.dd)
+          const sep = line.charCodeAt(lastClose - 1) === 0x7B ? '' : ','
+          this.capture(line.slice(0, lastClose) + sep + '"dd":' + ddJson + line.slice(lastClose))
+          return
+        }
+      }
+      // If injection already happened, payload.line includes dd; otherwise capture raw.
+      this.capture(payload.line)
+    }
   }
 
   /**

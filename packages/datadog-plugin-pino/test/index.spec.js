@@ -47,6 +47,16 @@ describe('Plugin', () => {
             const pretty = require('../../../versions/pino-pretty@8.0.0').get()
 
             stream = pretty().pipe(stream)
+          } else if (semver.intersects(version, '>=5 <8') && options.prettyPrint) {
+            // pino 5-7 supports prettyPrint internally by calling require('pino-pretty').
+            // In this test environment, that resolves to pino-pretty@8 which exports an
+            // abstractTransport-based Transform stream — incompatible with pino 5-7's
+            // expectation of a sync factory function. pino-pretty@8 also creates a
+            // SonicBoom (writing to stdout) that registers with on-exit-leak-free,
+            // leaving async resources that prevent mocha from exiting after the test.
+            // Provide pino-pretty@3 via the `prettifier` option so pino uses its
+            // synchronous factory interface and avoids the leaked resources.
+            options.prettifier = require('../../../versions/pino-pretty@3.0.0').get()
           }
 
           logger = pino(options, stream)
@@ -246,6 +256,41 @@ describe('Plugin', () => {
               })
             })
           }
+        })
+
+        describe('log capture channel (apm:pino:log:json)', () => {
+          beforeEach(() => {
+            return agent.load('pino')
+          })
+
+          beforeEach(function () {
+            setupTest()
+
+            if (!logger) {
+              this.skip()
+            }
+          })
+
+          it('should emit a complete JSON record including pid, hostname, level, time, msg', (done) => {
+            const { channel } = require('dc-polyfill')
+            const captureCh = channel('apm:pino:log:json')
+            let captured
+            const sub = (payload) => { captured = payload }
+            captureCh.subscribe(sub)
+
+            logger.info('hello capture')
+
+            setImmediate(() => {
+              captureCh.unsubscribe(sub)
+              assert.ok(captured, 'json channel should have fired')
+              const record = JSON.parse(captured.line)
+              assert.ok(record.pid, 'should have pid')
+              assert.ok(record.hostname, 'should have hostname')
+              assert.ok(record.time, 'should have time')
+              assert.strictEqual(record.msg, 'hello capture')
+              done()
+            })
+          })
         })
       })
     })

@@ -17,6 +17,7 @@ const {
   IS_SERVERLESS,
   getIsGCPFunction,
   getIsAzureFunction,
+  isSomethingUnderNDA,
 } = require('../serverless')
 const { ORIGIN_KEY, DATADOG_MINI_AGENT_PATH } = require('../constants')
 const { appendRules } = require('../payload-tagging/config')
@@ -215,6 +216,7 @@ class Config extends ConfigBase {
   }
 
   #applyDefaults () {
+    defaults.logCaptureEnabled = isSomethingUnderNDA()
     for (const [name, value] of Object.entries(defaults)) {
       set(this, name, value)
     }
@@ -612,6 +614,15 @@ class Config extends ConfigBase {
       deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_CPU_ENABLED')
       deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_TIMELINE_ENABLED')
       deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED')
+    }
+
+    // Normalize logCaptureProtocol to lowercase with trailing colon.
+    if (this.logCaptureProtocol) {
+      let protocol = this.logCaptureProtocol.toLowerCase()
+      if (!protocol.endsWith(':')) {
+        protocol += ':'
+      }
+      setAndTrack(this, 'logCaptureProtocol', protocol)
     }
 
     // Single tags update is tracked as a calculated value.

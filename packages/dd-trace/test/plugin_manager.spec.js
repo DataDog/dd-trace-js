@@ -387,6 +387,30 @@ describe('Plugin Manager', () => {
         clientIpEnabled: true,
       })
     })
+
+    it('forwards logCapture* options to plugins', () => {
+      pm.configure(makeTracerConfig({
+        logCaptureEnabled: true,
+        logCaptureHost: 'intake.example.com',
+        logCapturePort: 8443,
+        logCaptureProtocol: 'https:',
+        logCapturePath: '/custom-logs',
+        logCaptureFlushIntervalMs: 3000,
+        logCaptureMaxBufferSize: 500,
+        logCaptureTimeoutMs: 2000,
+      }))
+      loadChannel.publish({ name: 'two' })
+      sinon.assert.calledWithMatch(Two.prototype.configure, {
+        logCaptureEnabled: true,
+        logCaptureHost: 'intake.example.com',
+        logCapturePort: 8443,
+        logCaptureProtocol: 'https:',
+        logCapturePath: '/custom-logs',
+        logCaptureFlushIntervalMs: 3000,
+        logCaptureMaxBufferSize: 500,
+        logCaptureTimeoutMs: 2000,
+      })
+    })
   })
 
   describe('destroy', () => {
