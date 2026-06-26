@@ -1,6 +1,6 @@
 'use strict'
 
-// Long-workload graphql bench. Runs QUERIES queries per process (default 1500)
+// Long-workload graphql bench. Runs OPERATIONS queries per process (default 1500)
 // so the fixed startup cost (tracer load plus graphql require) stays a small
 // fraction of the run.
 
@@ -47,13 +47,13 @@ const variableValues = { who: 'world' }
 // the sequential loop already saturates the core (~96% CPU, measured). Keeping
 // several in flight only adds promise scheduling, live memory and GC, which made
 // the run slower and noisier, never faster.
-const QUERIES = process.env.QUERIES ? Number(process.env.QUERIES) : 1500
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 let checked = false
 
 guard.loopStart()
 ;(async () => {
-  for (let i = 0; i < QUERIES; i++) {
+  for (let i = 0; i < OPERATIONS; i++) {
     const result = await graphql.graphql({ schema, source, variableValues })
     if (!checked) {
       // Fail loudly if the schema/resolvers stop producing a result: a broken
@@ -63,7 +63,7 @@ guard.loopStart()
     }
   }
   // Node 26 runs this loop ~2x faster than Node 20, so the fixed tracer.init()
-  // plus graphql-load setup is a larger share of the run there. Sizing QUERIES to
+  // plus graphql-load setup is a larger share of the run there. Sizing OPERATIONS to
   // keep it under the default 7% would push the Node 20 run past ~110s, so allow 10%.
   guard.done(0.1)
 })()

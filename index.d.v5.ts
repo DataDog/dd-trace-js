@@ -426,7 +426,7 @@ declare namespace tracer {
    */
   export interface SamplingRule {
     /**
-     * Sampling rate for this rule.
+     * Sampling rate for this rule. A range between 0 and 1 representing the percent of traces sampled.
      */
     sampleRate: number
 
@@ -439,6 +439,22 @@ declare namespace tracer {
      * Operation name on which to apply this rule. The rule will apply to all operation names if not provided.
      */
     name?: string | RegExp
+
+    /**
+     * Resource name on which to apply this rule. The rule will apply to all resource names if not provided.
+     */
+    resource?: string | RegExp
+
+    /**
+     * Span tags on which to apply this rule, keyed by tag name. Each value is a glob pattern or regular
+     * expression, and the rule only applies when every entry matches the span's tags.
+     */
+    tags?: { [key: string]: string | RegExp }
+
+    /**
+     * Maximum number of traces matching this rule to sample per second.
+     */
+    maxPerSecond?: number
   }
 
   /**
@@ -620,10 +636,10 @@ declare namespace tracer {
     rateLimit?: number,
 
     /**
-     * Sampling rules to apply to priority sampling. Each rule is a JSON,
-     * consisting of `service` and `name`, which are regexes to match against
-     * a trace's `service` and `name`, and a corresponding `sampleRate`. If not
-     * specified, will defer to global sampling rate for all spans.
+     * Sampling rules to apply to priority sampling. Each rule matches against a trace's
+     * `service`, `name`, `resource`, and `tags`, and applies the rule's `sampleRate`. Use a
+     * `sampleRate` of `0` to drop matching traces (for example to filter out unwanted resources).
+     * If not specified, will defer to global sampling rate for all spans.
      * @default []
      * @env DD_TRACE_SAMPLING_RULES
      * Programmatic configuration takes precedence over the environment variables listed above.
@@ -3217,7 +3233,16 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [router](https://github.com/pillarjs/router) module.
      */
-    interface router extends Integration {}
+    interface router extends Integration {
+      /**
+       * Whether to enable instrumentation of router.middleware spans.
+       * When set to `false`, middleware spans are suppressed but route
+       * tracking (resource name, `http.route` tag) is still performed.
+       *
+       * @default true
+       */
+      middleware?: boolean;
+    }
 
     /**
     * This plugin automatically instruments the

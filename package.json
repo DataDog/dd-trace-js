@@ -104,6 +104,7 @@
     "test:integration:plugins:coverage": "yarn services && node ./integration-tests/coverage/run-suite.js \"packages/datadog-plugin-@(${PLUGINS})/test/integration-test/**/${SPEC:-*}*.spec.js\"",
     "test:unit:plugins": "mocha \"packages/datadog-instrumentations/test/@(${PLUGINS}).spec.js\" \"packages/datadog-plugin-@(${PLUGINS})/test/**/*.spec.js\" --exclude \"packages/datadog-plugin-@(${PLUGINS})/test/integration-test/**/*.spec.js\"",
     "test:release": "mocha \"scripts/release/**/*.spec.js\"",
+    "test:scripts": "mocha \"scripts/helpers/**/*.spec.js\"",
     "test:shimmer": "mocha \"packages/datadog-shimmer/test/**/*.spec.js\"",
     "test:shimmer:ci": "nyc --silent node init && nyc -- npm run test:shimmer",
     "verify:workflow-job-names": "node scripts/verify-workflow-job-names.js",
@@ -130,8 +131,9 @@
   },
   "homepage": "https://github.com/DataDog/dd-trace-js#readme",
   "engines": {
-    "node": ">=18 <27"
+    "node": ">=18"
   },
+  "nodeMaxMajor": 27,
   "files": [
     "/package.json",
     "ci/**/*",
@@ -199,11 +201,11 @@
     "eslint": "^9.39.2",
     "eslint-plugin-cypress": "^6.4.1",
     "eslint-plugin-import": "^2.32.0",
-    "eslint-plugin-jsdoc": "^63.0.5",
+    "eslint-plugin-jsdoc": "^63.0.6",
     "eslint-plugin-mocha": "^11.3.0",
     "eslint-plugin-n": "^18.1.0",
     "eslint-plugin-promise": "^7.3.0",
-    "eslint-plugin-sonarjs": "^4.0.3",
+    "eslint-plugin-sonarjs": "^4.1.0",
     "eslint-plugin-unicorn": "^64.0.0",
     "express": "^5.1.0",
     "glob": "^10.4.5",
