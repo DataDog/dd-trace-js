@@ -83,7 +83,7 @@ describe('sendData', () => {
     sendDataModule.sendData({
       url: '/test',
       tags: { 'runtime-id': '123' },
-      telemetry: { debug: true },
+      telemetry: { DD_TELEMETRY_DEBUG: true },
     }, application, host, 'req-type')
 
     sinon.assert.calledOnce(request)

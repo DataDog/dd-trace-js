@@ -138,7 +138,7 @@ class Tracer extends NoopProxy {
         spanleak.startScrubber()
       }
 
-      if (config.remoteConfig.enabled && !config.isCiVisibility) {
+      if (config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED && !config.isCiVisibility) {
         const RemoteConfig = require('./remote_config')
         const rc = new RemoteConfig(config)
 
@@ -180,11 +180,11 @@ class Tracer extends NoopProxy {
         openfeatureRemoteConfig.enable(rc, config, () => this.openfeature)
       }
 
-      if (config.profiling.enabled === 'true') {
+      if (config.profiling.DD_PROFILING_ENABLED === 'true') {
         this._profilerStarted = this._startProfiler(config)
       } else {
         this._profilerStarted = false
-        if (config.profiling.enabled === 'auto') {
+        if (config.profiling.DD_PROFILING_ENABLED === 'auto') {
           const { SSIHeuristics } = require('./profiling/ssi-heuristics')
           const ssiHeuristics = new SSIHeuristics(config)
           ssiHeuristics.start()
@@ -274,7 +274,7 @@ class Tracer extends NoopProxy {
       if (config.appsec.enabled) {
         this._modules.appsec.enable(config)
       }
-      if (config.llmobs.enabled) {
+      if (config.llmobs.DD_LLMOBS_ENABLED) {
         this._modules.llmobs.enable(config)
       }
       if (!this._tracingInitialized) {

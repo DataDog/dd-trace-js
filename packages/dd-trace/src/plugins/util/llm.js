@@ -37,7 +37,12 @@ function isPromptCompletionSampled (sampler, span) {
 
 module.exports = function makeUtilities (integrationName, tracerConfig) {
   const integrationConfig = tracerConfig[integrationName] || {}
-  const { spanCharLimit, spanPromptCompletionSampleRate } = integrationConfig
+  // The per-integration config is keyed by the canonical environment variable
+  // names (e.g. `DD_LANGCHAIN_SPAN_CHAR_LIMIT`), nested under the integration's
+  // namespace. Derive those leaf names from the integration name.
+  const prefix = `DD_${integrationName.toUpperCase()}_`
+  const spanCharLimit = integrationConfig[`${prefix}SPAN_CHAR_LIMIT`]
+  const spanPromptCompletionSampleRate = integrationConfig[`${prefix}SPAN_PROMPT_COMPLETION_SAMPLE_RATE`]
 
   const sampler = new Sampler(spanPromptCompletionSampleRate ?? 1)
 
