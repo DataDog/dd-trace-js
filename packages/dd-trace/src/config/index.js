@@ -38,7 +38,7 @@ const {
 const { normalizeService } = require('./normalize-service')
 const { transformers } = require('./parsers')
 
-const RUNTIME_ID = uuid()
+let runtimeId = uuid()
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -148,6 +148,7 @@ function setAndTrack (config, name, value, rawValue = value, source = 'calculate
 }
 
 module.exports = getConfig
+module.exports.refreshRuntimeId = refreshRuntimeId
 
 // We extend from ConfigBase to make our types work
 class Config extends ConfigBase {
@@ -545,7 +546,7 @@ class Config extends ConfigBase {
     if (this.version) {
       this.tags.version = this.version
     }
-    this.tags['runtime-id'] = RUNTIME_ID
+    this.tags['runtime-id'] = runtimeId
 
     if (IS_SERVERLESS) {
       setAndTrack(this, 'telemetry.enabled', false)
@@ -713,4 +714,22 @@ function getConfig (options) {
     configInstance = new Config(options)
   }
   return configInstance
+}
+
+/**
+ * Regenerates the runtime ID from the kernel CSPRNG and updates the config's
+ * tags in-place. Must be called after id.reseed() so that kernelUUID() draws
+ * from post-resume /dev/urandom rather than the frozen OpenSSL DRBG.
+ *
+ * Called by proxy.js#refreshIdentity() when the Lambda MicroVM `/run`
+ * lifecycle hook fires, giving each clone a distinct runtime identity.
+ *
+ * Known limitation: the process-discovery metadata written at tracer init
+ * (tracer_metadata.js) is not refreshed and will still carry the original ID.
+ *
+ * @param {import('./config-base')} config
+ */
+function refreshRuntimeId (config) {
+  runtimeId = require('../id').kernelUUID()
+  config.tags['runtime-id'] = runtimeId
 }

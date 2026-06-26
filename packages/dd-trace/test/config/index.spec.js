@@ -4737,4 +4737,95 @@ rules:
       assert.strictEqual(config.service, 'node')
     })
   })
+
+  describe('refreshRuntimeId', () => {
+    const loadConfigModule = (idOverride = {}) => {
+      const kernelUUID = idOverride.kernelUUID || require('../../src/id').kernelUUID
+      const parsers = proxyquire.noPreserveCache()('../../src/config/parsers', {})
+      const supportedConfigurations = proxyquire.noPreserveCache()('../../src/config/supported-configurations.json', {})
+      const configDefaults = proxyquire.noPreserveCache()('../../src/config/defaults', {
+        './supported-configurations.json': supportedConfigurations,
+        '../log': log,
+        './parsers': parsers,
+        '../../../../version': { DD_MAJOR },
+      })
+      const configHelper = proxyquire.noPreserveCache()('../../src/config/helper', {
+        './supported-configurations.json': supportedConfigurations,
+      })
+      const serverless = proxyquire.noPreserveCache()('../../src/serverless', {})
+      return proxyquire.noPreserveCache()('../../src/config', {
+        './defaults': configDefaults,
+        '../log': log,
+        '../telemetry': { updateConfig },
+        '../serverless': serverless,
+        'node:fs': fs,
+        './helper': configHelper,
+        '../pkg': pkg,
+        '../../../../version': { DD_MAJOR },
+        '../id': { kernelUUID },
+      })
+    }
+
+    beforeEach(() => {
+      log = proxyquire('../../src/log', {})
+      sinon.spy(log, 'info')
+      sinon.spy(log, 'warn')
+      sinon.spy(log, 'error')
+    })
+
+    it('should export refreshRuntimeId as a function', () => {
+      const configModule = loadConfigModule()
+      assert.strictEqual(typeof configModule.refreshRuntimeId, 'function')
+    })
+
+    it('should update config.tags[runtime-id] to a new UUID', () => {
+      const configModule = loadConfigModule()
+      const config = configModule()
+      const originalId = config.tags['runtime-id']
+
+      configModule.refreshRuntimeId(config)
+
+      assert.ok(config.tags['runtime-id'])
+      assert.strictEqual(typeof config.tags['runtime-id'], 'string')
+      // runtime-id should have been set
+      assert.notStrictEqual(config.tags['runtime-id'], originalId)
+    })
+
+    it('should set config.tags[runtime-id] to the value returned by kernelUUID', () => {
+      const fixedUUID = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
+      const kernelUUID = sinon.stub().returns(fixedUUID)
+      const configModule = loadConfigModule({ kernelUUID })
+      const config = configModule()
+
+      configModule.refreshRuntimeId(config)
+
+      assert.strictEqual(config.tags['runtime-id'], fixedUUID)
+    })
+
+    it('should call kernelUUID from id.js', () => {
+      const kernelUUID = sinon.stub().returns('11111111-2222-4333-8444-555555555555')
+      const configModule = loadConfigModule({ kernelUUID })
+      const config = configModule()
+
+      configModule.refreshRuntimeId(config)
+
+      sinon.assert.calledOnce(kernelUUID)
+    })
+
+    it('should store new value that differs from original runtimeId', () => {
+      const kernelUUID = sinon.stub()
+      kernelUUID.onFirstCall().returns('00000000-0000-4000-8000-000000000001')
+      kernelUUID.onSecondCall().returns('00000000-0000-4000-8000-000000000002')
+      const configModule = loadConfigModule({ kernelUUID })
+      const config = configModule()
+
+      configModule.refreshRuntimeId(config)
+      const firstRefresh = config.tags['runtime-id']
+
+      configModule.refreshRuntimeId(config)
+      const secondRefresh = config.tags['runtime-id']
+
+      assert.notStrictEqual(firstRefresh, secondRefresh)
+    })
+  })
 })

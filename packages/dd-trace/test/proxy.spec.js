@@ -980,6 +980,198 @@ describe('TracerProxy', () => {
       })
     })
   })
+
+  describe('MicroVM identity reset', () => {
+    let idMock
+    let channelMock
+    let diagnosticsChannelMock
+    let MicroVmProxy
+    let microProxy
+    let origEnv
+    let processSpy
+
+    beforeEach(() => {
+      origEnv = process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
+      process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN = 'arn:aws:lambda:us-east-1:123456789012:function:test'
+
+      idMock = { reseed: sinon.stub() }
+
+      channelMock = {
+        subscribe: sinon.stub(),
+        unsubscribe: sinon.stub(),
+      }
+
+      diagnosticsChannelMock = {
+        channel: sinon.stub().returns(channelMock),
+      }
+
+      Config.refreshRuntimeId = sinon.stub()
+      RemoteConfig.refreshClientId = sinon.stub()
+
+      processSpy = sinon.spy(process, 'on')
+
+      MicroVmProxy = proxyquire('../src/proxy', {
+        './tracer': DatadogTracer,
+        './noop/proxy': NoopProxy,
+        './config': Config,
+        './plugin_manager': PluginManager,
+        './runtime_metrics': runtimeMetrics,
+        './log': log,
+        './profiler': profiler,
+        './appsec': appsec,
+        './appsec/iast': iast,
+        './telemetry': telemetry,
+        './remote_config': RemoteConfig,
+        './aiguard/sdk': AIGuardSdk,
+        './appsec/sdk': AppsecSdk,
+        './dogstatsd': dogStatsD,
+        './noop/dogstatsd': NoopDogStatsDClient,
+        './flare': flare,
+        './openfeature': openfeature,
+        './openfeature/flagging_provider': OpenFeatureProvider,
+        './id': idMock,
+        'diagnostics_channel': diagnosticsChannelMock,
+      })
+
+      microProxy = new MicroVmProxy()
+    })
+
+    afterEach(() => {
+      if (origEnv === undefined) {
+        delete process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
+      } else {
+        process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN = origEnv
+      }
+      process.removeAllListeners('SIGUSR2')
+      processSpy.restore()
+    })
+
+    it('should register the MicroVM hook when env var is set', () => {
+      microProxy.init()
+
+      sinon.assert.calledWith(diagnosticsChannelMock.channel, 'http.server.request.start')
+      sinon.assert.calledOnce(channelMock.subscribe)
+    })
+
+    it('should NOT register the hook when env var is absent', () => {
+      delete process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
+
+      microProxy.init()
+
+      sinon.assert.notCalled(channelMock.subscribe)
+    })
+
+    it('should fire refreshIdentity on POST /run via HTTP channel', () => {
+      microProxy.init()
+
+      const subscriber = channelMock.subscribe.firstCall.args[0]
+      subscriber({ request: { method: 'POST', url: '/run' } })
+
+      sinon.assert.calledOnce(idMock.reseed)
+      sinon.assert.calledOnce(Config.refreshRuntimeId)
+      sinon.assert.calledOnce(RemoteConfig.refreshClientId)
+    })
+
+    it('should NOT fire refreshIdentity on GET /run', () => {
+      microProxy.init()
+
+      const subscriber = channelMock.subscribe.firstCall.args[0]
+      subscriber({ request: { method: 'GET', url: '/run' } })
+
+      sinon.assert.notCalled(idMock.reseed)
+    })
+
+    it('should NOT fire refreshIdentity on POST /other', () => {
+      microProxy.init()
+
+      const subscriber = channelMock.subscribe.firstCall.args[0]
+      subscriber({ request: { method: 'POST', url: '/other' } })
+
+      sinon.assert.notCalled(idMock.reseed)
+    })
+
+    it('should unsubscribe HTTP channel after first fire', () => {
+      microProxy.init()
+
+      const subscriber = channelMock.subscribe.firstCall.args[0]
+      subscriber({ request: { method: 'POST', url: '/run' } })
+
+      sinon.assert.calledOnceWithExactly(channelMock.unsubscribe, subscriber)
+    })
+
+    it('should fire refreshIdentity on SIGUSR2', () => {
+      microProxy.init()
+
+      // Find the SIGUSR2 listener registered on process
+      const sigusr2Call = processSpy.getCalls().find(call => call.args[0] === 'SIGUSR2')
+      assert.ok(sigusr2Call, 'expected SIGUSR2 listener to be registered')
+      const sigusr2Listener = sigusr2Call.args[1]
+
+      sigusr2Listener()
+
+      sinon.assert.calledOnce(idMock.reseed)
+      sinon.assert.calledOnce(Config.refreshRuntimeId)
+      sinon.assert.calledOnce(RemoteConfig.refreshClientId)
+    })
+
+    it('should not fire refreshIdentity twice when HTTP fires first then SIGUSR2', () => {
+      microProxy.init()
+
+      const subscriber = channelMock.subscribe.firstCall.args[0]
+      subscriber({ request: { method: 'POST', url: '/run' } })
+
+      const sigusr2Call = processSpy.getCalls().find(call => call.args[0] === 'SIGUSR2')
+      assert.ok(sigusr2Call, 'expected SIGUSR2 listener to be registered')
+      const sigusr2Listener = sigusr2Call.args[1]
+
+      sigusr2Listener()
+
+      sinon.assert.calledOnce(idMock.reseed)
+      sinon.assert.calledOnce(Config.refreshRuntimeId)
+      sinon.assert.calledOnce(RemoteConfig.refreshClientId)
+    })
+
+    it('should call reseed then refreshRuntimeId then refreshClientId in order', () => {
+      microProxy.init()
+
+      const subscriber = channelMock.subscribe.firstCall.args[0]
+      subscriber({ request: { method: 'POST', url: '/run' } })
+
+      assert.ok(idMock.reseed.calledBefore(Config.refreshRuntimeId))
+      assert.ok(Config.refreshRuntimeId.calledBefore(RemoteConfig.refreshClientId))
+    })
+
+    it('should call refreshIdentity from resetRuntimeId when initialized and env var set', () => {
+      microProxy.init()
+      idMock.reseed.resetHistory()
+      Config.refreshRuntimeId.resetHistory()
+      RemoteConfig.refreshClientId.resetHistory()
+
+      microProxy.resetRuntimeId()
+
+      sinon.assert.calledOnce(idMock.reseed)
+      sinon.assert.calledOnce(Config.refreshRuntimeId)
+      sinon.assert.calledOnce(RemoteConfig.refreshClientId)
+    })
+
+    it('should be a no-op from resetRuntimeId when not initialized', () => {
+      // do not call init()
+      microProxy.resetRuntimeId()
+
+      sinon.assert.notCalled(idMock.reseed)
+    })
+
+    it('should be a no-op from resetRuntimeId when env var not set', () => {
+      delete process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN
+
+      microProxy.init()
+      idMock.reseed.resetHistory()
+
+      microProxy.resetRuntimeId()
+
+      sinon.assert.notCalled(idMock.reseed)
+    })
+  })
 })
 
 // Helper function to create APM_TRACING batch transaction objects
