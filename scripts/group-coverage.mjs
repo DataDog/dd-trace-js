@@ -39,6 +39,9 @@ const VERSION_RE = /^(?:gte|gt|lte|lt|eq)?\.?\d+(?:\.\d+)*(?:\.(?:and|or|gte|gt|
 // Keep a busy area's one-cell libraries from each becoming their own upload: pack them into buckets
 // of at most this many libraries, named for their members so the flag still points at a library.
 const MAX_LIBS_PER_BUCKET = 3
+// Codecov validates flags against `^[\w\.\-]{1,45}$` and silently drops any that fail. `+` is out, so
+// members join with `_`; a name longer than this falls back to a numbered bucket that stays valid.
+const MAX_FLAG_LENGTH = 45
 
 /**
  * @param {string} token
@@ -117,8 +120,8 @@ function collectCoverageFiles (dir, out = [], context = {}) {
 
 /**
  * Assign each integration to an upload group. Integrations exercised by more than one cell stay on
- * their own; the one-cell tail of a busy area is packed into buckets named for their libraries so a
- * flag still reads as a set of integrations rather than an opaque index.
+ * their own; the one-cell tail of a busy area is packed into buckets named for their libraries, or a
+ * numbered bucket when those names would overrun Codecov's flag length limit.
  *
  * @param {Map<string, string[]>} cellsByIntegration  Integration → artifact names feeding it.
  * @returns {Map<string, string[]>}  Group flag → integrations it owns.
@@ -149,10 +152,12 @@ function planGroups (cellsByIntegration) {
       }
       continue
     }
+    let bucket = 0
     for (let i = 0; i < integrations.length; i += MAX_LIBS_PER_BUCKET) {
       const chunk = integrations.slice(i, i + MAX_LIBS_PER_BUCKET)
-      const suffix = chunk.map(integration => integration.slice(area.length + 1)).join('+')
-      groups.set(`${area}-${suffix}`, chunk)
+      const named = `${area}-${chunk.map(integration => integration.slice(area.length + 1)).join('_')}`
+      groups.set(named.length <= MAX_FLAG_LENGTH ? named : `${area}-bucket-${bucket}`, chunk)
+      bucket++
     }
   }
 
@@ -173,7 +178,7 @@ function planCoverageGroups (files) {
   const newestRunByArtifact = new Map()
   for (const { runId, name } of files) {
     const previous = newestRunByArtifact.get(name)
-    if (previous === undefined || runId > previous) {
+    if (previous === undefined || Number(runId) > Number(previous)) {
       newestRunByArtifact.set(name, runId)
     }
   }

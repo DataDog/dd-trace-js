@@ -89,11 +89,33 @@ describe('group-coverage', () => {
     it('buckets a busy singleton tail into library-named groups of at most three', () => {
       const singletons = ['plugins-axios', 'plugins-redis', 'plugins-pino', 'plugins-fs', 'plugins-net']
       const groups = planGroups(new Map(singletons.map(name => [name, ['cell']])))
-      assert.deepEqual([...groups.keys()].sort(), ['plugins-axios+fs+net', 'plugins-pino+redis'])
-      assert.deepEqual(groups.get('plugins-axios+fs+net'), ['plugins-axios', 'plugins-fs', 'plugins-net'])
+      assert.deepEqual([...groups.keys()].sort(), ['plugins-axios_fs_net', 'plugins-pino_redis'])
+      assert.deepEqual(groups.get('plugins-axios_fs_net'), ['plugins-axios', 'plugins-fs', 'plugins-net'])
       for (const integrations of groups.values()) {
         assert.ok(integrations.length <= 3, 'no bucket exceeds three integrations')
       }
+    })
+
+    it('keeps every generated bucket flag valid for Codecov and within its length limit', () => {
+      // Codecov rejects any flag that does not match `^[\w\.\-]{1,45}$`, so a bucket name may carry
+      // only word characters, `.` and `-`, and must stay <= 45 chars. The verbose `apm-integrations`
+      // tail blows past 45 once three members join, so the overflow path must fall back to a valid
+      // bounded name rather than ship a flag Codecov drops.
+      const singletons = [
+        'apm-integrations-aerospike', 'apm-integrations-couchbase', 'apm-integrations-elasticsearch',
+        'apm-integrations-mongodb', 'apm-integrations-opensearch',
+      ]
+      const groups = planGroups(new Map(singletons.map(name => [name, ['cell']])))
+      for (const flag of groups.keys()) {
+        assert.match(flag, /^[\w.-]{1,45}$/, `flag ${flag} is a valid Codecov flag`)
+      }
+    })
+
+    it('joins short bucket members with an underscore so the flag stays valid', () => {
+      const groups = planGroups(new Map([
+        ['plugins-a', ['cell']], ['plugins-b', ['cell']], ['plugins-c', ['cell']],
+      ]))
+      assert.deepEqual([...groups.keys()], ['plugins-a_b_c'])
     })
   })
 
@@ -105,6 +127,17 @@ describe('group-coverage', () => {
       ])
       const reports = reportsByArtifact.get('coverage-plugins-axios__a-0')
       assert.ok(reports.every(report => report.reportPath.includes('/205/')), 'only the newest run survives')
+    })
+
+    it('compares run ids numerically across a digit-length boundary', () => {
+      // A lexicographic compare keeps the older run when the rerun crosses a power-of-ten boundary
+      // (`'9' > '10'` is true as strings), silently uploading the stale failed run's coverage.
+      const { reportsByArtifact } = planCoverageGroups([
+        ...files('coverage-plugins-axios__a-0', { runId: '9' }),
+        ...files('coverage-plugins-axios__a-0', { runId: '10' }),
+      ])
+      const reports = reportsByArtifact.get('coverage-plugins-axios__a-0')
+      assert.ok(reports.every(report => report.reportPath.includes('/10/')), 'the newer run wins numerically')
     })
 
     it('keeps both formats across every Node.js version a single artifact carries', () => {
