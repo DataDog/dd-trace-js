@@ -29,7 +29,10 @@ let warned = false
  */
 function applicationRequire () {
   const { createRequire } = require('node:module')
-  const entrypoint = process.argv[1] || require.main?.filename
+  // `require.main.filename` is the resolved main file; `process.argv[1]` can be a
+  // directory (`node .`, `node path/to/app`), and `createRequire` rooted at a
+  // directory resolves from its parent, missing the app's own node_modules.
+  const entrypoint = require.main?.filename ?? process.argv[1]
   return entrypoint ? createRequire(entrypoint) : undefined
 }
 

@@ -1,11 +1,12 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { execFileSync } = require('node:child_process')
 const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = require('node:fs')
 const { tmpdir } = require('node:os')
 const { join } = require('node:path')
 
-const { describe, it, after } = require('mocha')
+const { describe, it, before, after } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
@@ -140,6 +141,57 @@ describe('opentelemetry/api loader', () => {
     loader.load()
     loader.isAvailable()
     assert.ok(warn.calledOnce)
+  })
+})
+
+// The v5 path roots application resolution at the entrypoint. A directory entrypoint
+// (`node .`, `node path/to/app`) sets process.argv[1] to the directory while
+// require.main.filename holds the resolved file; createRequire rooted at the directory
+// resolves from its parent and misses the app's own @opentelemetry/api (issue #6882).
+// require.main can't be faked per-module in-process, so a real child launched with each
+// entrypoint shape is the only place the two globals diverge as they do in production.
+describe('opentelemetry/api loader application entrypoint (v5)', () => {
+  const root = mkdtempSync(join(tmpdir(), 'dd-trace-otel-entry-'))
+  const appDir = join(root, 'app')
+  const appEntry = join(appDir, 'index.js')
+  const apiDir = join(appDir, 'node_modules', '@opentelemetry', 'api')
+
+  after(() => {
+    rmSync(root, { recursive: true, force: true })
+  })
+
+  before(() => {
+    mkdirSync(apiDir, { recursive: true })
+    writeFileSync(join(apiDir, 'package.json'), JSON.stringify({ name: '@opentelemetry/api', version: '1.9.0' }))
+    writeFileSync(join(apiDir, 'index.js'), 'module.exports = { COPY: \'app\' }\n')
+    // Forces the v5 path (DD_MAJOR mocked) so applicationRequire actually runs; the real
+    // require.main / process.argv[1] of this child drive the resolution base under test.
+    writeFileSync(appEntry, [
+      'const proxyquire = require(' + JSON.stringify(require.resolve('proxyquire')) + ')',
+      'const { load } = proxyquire(' + JSON.stringify(require.resolve('../../src/opentelemetry/api')) + ', {',
+      '  \'../../../../version\': { DD_MAJOR: 5, \'@noCallThru\': true },',
+      '})',
+      'try { process.stdout.write(load().COPY ?? \'no-copy\') } catch { process.stdout.write(\'threw\') }',
+    ].join('\n') + '\n')
+  })
+
+  /**
+   * Launches the fixture app with a given entrypoint argument and returns what copy of
+   * `@opentelemetry/api` the loader resolved (`'app'` when the application's copy won).
+   *
+   * @param {string} entrypoint - The path passed to `node` (directory or file).
+   * @returns {string}
+   */
+  function resolvedCopy (entrypoint) {
+    return execFileSync(process.execPath, [entrypoint], { encoding: 'utf8' })
+  }
+
+  it('resolves the application copy for a directory entrypoint (node path/to/app)', () => {
+    assert.strictEqual(resolvedCopy(appDir), 'app')
+  })
+
+  it('resolves the application copy for a file entrypoint (node path/to/app/index.js)', () => {
+    assert.strictEqual(resolvedCopy(appEntry), 'app')
   })
 })
 
