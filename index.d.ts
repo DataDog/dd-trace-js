@@ -224,8 +224,8 @@ interface Tracer extends opentracing.Tracer {
   removeAllBaggageItems (): Record<string, string>;
 }
 
-// left out of the namespace, so it
-// is doesn't need to be exported for Tracer
+// Left out of the namespace, so it doesn't need to be exported for Tracer.
+// Only include plugins here that can be either disabled or configured.
 /** @hidden */
 interface Plugins {
   "aerospike": tracer.plugins.aerospike;
@@ -235,6 +235,7 @@ interface Plugins {
   "anthropic": tracer.plugins.anthropic;
   "apollo": tracer.plugins.apollo;
   "avsc": tracer.plugins.avsc;
+  "aws-durable-execution-sdk-js": tracer.plugins.aws_durable_execution_sdk_js;
   "aws-sdk": tracer.plugins.aws_sdk;
   "azure-cosmos": tracer.plugins.azure_cosmos;
   "azure-event-hubs": tracer.plugins.azure_event_hubs;
@@ -258,7 +259,6 @@ interface Plugins {
   "fetch": tracer.plugins.fetch;
   "find-my-way": tracer.plugins.find_my_way;
   "fs": tracer.plugins.fs;
-  "generic-pool": tracer.plugins.generic_pool;
   "google-cloud-pubsub": tracer.plugins.google_cloud_pubsub;
   "google-cloud-vertexai": tracer.plugins.google_cloud_vertexai;
   "google-genai": tracer.plugins.google_genai;
@@ -272,7 +272,6 @@ interface Plugins {
   "iovalkey": tracer.plugins.iovalkey;
   "jest": tracer.plugins.jest;
   "kafkajs": tracer.plugins.kafkajs;
-  "knex": tracer.plugins.knex;
   "koa": tracer.plugins.koa;
   "langchain": tracer.plugins.langchain;
   "langgraph": tracer.plugins.langgraph;
@@ -414,7 +413,7 @@ declare namespace tracer {
    */
   export interface SamplingRule {
     /**
-     * Sampling rate for this rule.
+     * Sampling rate for this rule. A range between 0 and 1 representing the percent of traces sampled.
      */
     sampleRate: number
 
@@ -427,6 +426,22 @@ declare namespace tracer {
      * Operation name on which to apply this rule. The rule will apply to all operation names if not provided.
      */
     name?: string | RegExp
+
+    /**
+     * Resource name on which to apply this rule. The rule will apply to all resource names if not provided.
+     */
+    resource?: string | RegExp
+
+    /**
+     * Span tags on which to apply this rule, keyed by tag name. Each value is a glob pattern or regular
+     * expression, and the rule only applies when every entry matches the span's tags.
+     */
+    tags?: { [key: string]: string | RegExp }
+
+    /**
+     * Maximum number of traces matching this rule to sample per second.
+     */
+    maxPerSecond?: number
   }
 
   /**
@@ -608,10 +623,10 @@ declare namespace tracer {
     rateLimit?: number,
 
     /**
-     * Sampling rules to apply to priority sampling. Each rule is a JSON,
-     * consisting of `service` and `name`, which are regexes to match against
-     * a trace's `service` and `name`, and a corresponding `sampleRate`. If not
-     * specified, will defer to global sampling rate for all spans.
+     * Sampling rules to apply to priority sampling. Each rule matches against a trace's
+     * `service`, `name`, `resource`, and `tags`, and applies the rule's `sampleRate`. Use a
+     * `sampleRate` of `0` to drop matching traces (for example to filter out unwanted resources).
+     * If not specified, will defer to global sampling rate for all spans.
      * @default []
      * @env DD_TRACE_SAMPLING_RULES
      * Programmatic configuration takes precedence over the environment variables listed above.
@@ -648,25 +663,25 @@ declare namespace tracer {
      */
     runtimeMetrics?: boolean | {
 
-       /**
+      /**
        * @env DD_RUNTIME_METRICS_ENABLED
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
       enabled?: boolean,
 
-       /**
+      /**
        * @env DD_RUNTIME_METRICS_GC_ENABLED
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
       gc?: boolean,
 
-       /**
+      /**
        * @env DD_RUNTIME_METRICS_EVENT_LOOP_ENABLED
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
       eventLoop?: boolean,
 
-       /**
+      /**
        * Whether to use native metrics. When set to false, forces the JS implementation
        * @default true
        * @env DD_RUNTIME_METRICS_NATIVE
@@ -2227,6 +2242,12 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
+     * [aws-durable-execution-sdk-js](https://github.com/aws/aws-durable-execution-sdk-js) module.
+     */
+    interface aws_durable_execution_sdk_js extends Integration {}
+
+    /**
+     * This plugin automatically instruments the
      * [aws-sdk](https://github.com/aws/aws-sdk-js) module.
      */
     interface aws_sdk extends Instrumentation {
@@ -2302,7 +2323,21 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [bullmq](https://github.com/npmjs/package/bullmq) message queue library.
      */
-    interface bullmq extends Instrumentation {}
+    interface bullmq extends Instrumentation {
+      /**
+       * Filter applied to BullMQ producer operations (`Queue.add`, `Queue.addBulk`,
+       * `FlowProducer.add`). Return `false` to skip span creation, trace context
+       * injection, and DSM checkpoint handling for the matching job. Consumer-side
+       * (`Worker`) instrumentation is unaffected.
+       *
+       * @param job.name - The BullMQ job name.
+       * @param job.data - The BullMQ job data.
+       * @param job.opts - The BullMQ job options.
+       * @param job.queueName - The name of the queue the job is being added to.
+       * @returns true to instrument the producer operation, false to skip it.
+       */
+      producerFilter?: (job: { name?: string; data?: unknown; opts?: unknown; queueName?: string }) => boolean;
+    }
 
     interface bunyan extends Integration {}
 
@@ -2419,12 +2454,6 @@ declare namespace tracer {
     interface fs extends Instrumentation {}
 
     /**
-     * This plugin patches the [generic-pool](https://github.com/coopernurse/node-pool)
-     * module to bind the callbacks the the caller context.
-     */
-    interface generic_pool extends Integration {}
-
-    /**
      * This plugin automatically instruments the
      * [@google-cloud/pubsub](https://github.com/googleapis/nodejs-pubsub) module.
      */
@@ -2434,24 +2463,24 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [@google-cloud/vertexai](https://github.com/googleapis/nodejs-vertexai) module.
     */
-   interface google_cloud_vertexai extends Integration {}
+  interface google_cloud_vertexai extends Integration {}
 
-   /**
+  /**
     * This plugin automatically instruments the
     * [@google-genai](https://github.com/googleapis/js-genai) module.
     */
-   interface google_genai extends Integration {}
+  interface google_genai extends Integration {}
 
-   /** @hidden */
-   interface ExecutionArgs {
-     schema: any,
-     document: any,
-     rootValue?: any,
-     contextValue?: any,
-     variableValues?: any,
-     operationName?: string,
-     fieldResolver?: any,
-     typeResolver?: any,
+  /** @hidden */
+  interface ExecutionArgs {
+    schema: any,
+    document: any,
+    rootValue?: any,
+    contextValue?: any,
+    variableValues?: any,
+    operationName?: string,
+    fieldResolver?: any,
+    typeResolver?: any,
     }
 
     /** Context object passed to the `hooks.resolve` callback for each instrumented field. */
@@ -2717,12 +2746,6 @@ declare namespace tracer {
      * [jest](https://github.com/jestjs/jest) module.
      */
     interface jest extends Integration {}
-
-    /**
-     * This plugin patches the [knex](https://knexjs.org/)
-     * module to bind the promise callback the the caller context.
-     */
-    interface knex extends Integration {}
 
     /**
      * This plugin automatically instruments the
@@ -3035,7 +3058,16 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [router](https://github.com/pillarjs/router) module.
      */
-    interface router extends Integration {}
+    interface router extends Integration {
+      /**
+       * Whether to enable instrumentation of router.middleware spans.
+       * When set to `false`, middleware spans are suppressed but route
+       * tracking (resource name, `http.route` tag) is still performed.
+       *
+       * @default true
+       */
+      middleware?: boolean;
+    }
 
     /**
     * This plugin automatically instruments the

@@ -6,10 +6,10 @@ const guard = require('../startup-guard')
 const {
   SCOPE_ENABLED,
   MODE,
-  COUNT,
+  OPERATIONS,
 } = process.env
 
-const count = Number(COUNT)
+const count = Number(OPERATIONS)
 
 // Build a span whose `_store` is a real legacy-storage handle, exactly as a span
 // created under an active parent captures one. activate() resolves the parent
@@ -52,10 +52,11 @@ if (MODE === 'bind') {
   assert.ok(sink > 0, 'scope.bind loop produced no work')
 } else {
   // The microtask shape the tracer rides under each traced async operation: a
-  // continuation that resolves, schedules the next, and so on. When enabled, every
-  // hop is wrapped in scope.activate() exactly as the tracer does; the delta
-  // against the base variant is the per-hop AsyncLocalStorage enterWith plus
-  // store-copy cost.
+  // continuation that resolves, schedules the next, and so on. When SCOPE_ENABLED is
+  // set, every hop is wrapped in scope.activate() exactly as the tracer does (the
+  // per-hop AsyncLocalStorage enterWith plus parent store copy); unset, the hop runs
+  // bare. CI runs only the enabled variant -- there is no baseline wiring -- but the
+  // bare path stays available for a local A/B.
   let activate
   if (SCOPE_ENABLED === 'true') {
     const Scope = require('../../../packages/dd-trace/src/scope')

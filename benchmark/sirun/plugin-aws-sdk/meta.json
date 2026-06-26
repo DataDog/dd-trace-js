@@ -9,17 +9,25 @@
     "extract-response-body": {
       "env": {
         "VARIANT": "extract-response-body",
-        "ITERATIONS": "8000000"
+        "OPERATIONS": "8000000"
       }
     },
     "eventbridge-inject-detail": {
       "env": {
-        "VARIANT": "eventbridge-inject-detail"
+        "VARIANT": "eventbridge-inject-detail",
+        "OPERATIONS": "3000000"
       }
     },
     "lambda-inject-no-context": {
       "env": {
-        "VARIANT": "lambda-inject-no-context"
+        "VARIANT": "lambda-inject-no-context",
+        "OPERATIONS": "4000000"
+      }
+    },
+    "lambda-inject-with-context": {
+      "env": {
+        "VARIANT": "lambda-inject-with-context",
+        "OPERATIONS": "2000000"
       }
     }
   }

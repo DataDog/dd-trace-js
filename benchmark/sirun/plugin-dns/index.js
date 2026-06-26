@@ -16,7 +16,7 @@ const { createCallbackInstrumentor } =
 const { channel } = require('../../../packages/datadog-instrumentations/src/helpers/instrument')
 const { storage } = require('../../../packages/datadog-core')
 
-const ITERATIONS = Number(process.env.ITERATIONS) || 8_000_000
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 // Mirrors buildCallbackArgsContext() in datadog-instrumentations/src/dns.js for the
 // lookup shape (no rrtype): drop the trailing callback and capture the rest.
@@ -80,10 +80,19 @@ assert.equal(lastResult, '127.0.0.1', 'dns lookup wrapper did not deliver the re
 assert.equal(storeInLookup?.span, span, 'start bind did not propagate the span store')
 assert.equal(storeInCallback, undefined, 'finish bind did not restore the parent store')
 
+// Drift guard: buildArgsContext mirrors buildCallbackArgsContext() in dns.js (not
+// exported). Assert it still drops the trailing callback and captures the rest, so
+// the mirror can't silently diverge from the production arg-capture shape.
+assert.deepEqual(
+  buildArgsContext(null, ['localhost', 4, () => {}]),
+  { args: ['localhost', 4] },
+  'buildArgsContext mirror drifted from buildCallbackArgsContext'
+)
+
 guard.loopStart()
-for (let i = 0; i < ITERATIONS; i++) {
+for (let i = 0; i < OPERATIONS; i++) {
   wrappedLookup('localhost', onLookup)
 }
 guard.done()
 
-assert.ok(started > ITERATIONS && finished > ITERATIONS, 'dns lookup wrapper produced no work')
+assert.ok(started > OPERATIONS && finished > OPERATIONS, 'dns lookup wrapper produced no work')

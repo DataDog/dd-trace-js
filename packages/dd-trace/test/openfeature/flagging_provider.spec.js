@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict')
 
-const { describe, it, beforeEach } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
@@ -208,6 +208,39 @@ describe('FlaggingProvider', () => {
       const provider = new FlaggingProvider(mockTracer, mockConfig)
 
       assert.ok(provider instanceof DatadogNodeServerProvider)
+    })
+  })
+
+  // Pins the optional-peer gate against accidental regression to a direct
+  // `require('@datadog/openfeature-node-server')`, which would leak the optional peer chain
+  // into customer bundles (see #8635). The opaque-load mechanism is covered by
+  // `datadog-instrumentations/test/helpers/require-optional-peer.spec.js`.
+  describe('optional-peer gate', () => {
+    const modulePath = require.resolve('../../src/openfeature/flagging_provider')
+
+    afterEach(() => {
+      delete require.cache[modulePath]
+    })
+
+    it('uses `require` outside a bundler', () => {
+      assert.strictEqual(typeof globalThis.__webpack_require__, 'undefined')
+      delete require.cache[modulePath]
+
+      const ReloadedFlaggingProvider = require(modulePath)
+
+      assert.strictEqual(typeof ReloadedFlaggingProvider, 'function')
+      assert.strictEqual(ReloadedFlaggingProvider.name, 'FlaggingProvider')
+    })
+
+    it('does not statically require `@datadog/openfeature-node-server`', () => {
+      const fs = require('node:fs')
+      const source = fs.readFileSync(modulePath, 'utf8')
+
+      assert.doesNotMatch(
+        source,
+        /require\(\s*['"]@datadog\/openfeature-node-server['"]\s*\)/,
+        'a literal require would let bundlers resolve the optional peer chain at build time'
+      )
     })
   })
 })

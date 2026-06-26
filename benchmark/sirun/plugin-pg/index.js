@@ -9,7 +9,7 @@ const id = require('../../../packages/dd-trace/src/id')
 const { AUTO_KEEP } = require('../../../ext/priority')
 
 const { VARIANT } = process.env
-const ITERATIONS = Number(process.env.ITERATIONS) || 6_000_000
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 // Every traced pg query reaches injectDbmQuery -> createDbmComment, which builds
 // the Datadog Block Monitoring SQL comment and splices it onto the query. This
@@ -32,7 +32,7 @@ const plugin = new BenchedPGPlugin(tracer, tracerConfig)
 plugin.configure({
   enabled: true,
   service: 'pg-prod',
-  dbmPropagationMode: VARIANT === 'disabled' ? 'disabled' : (VARIANT === 'full' ? 'full' : 'service'),
+  dbmPropagationMode: VARIANT === 'full' ? 'full' : 'service',
   appendComment: false,
   truncate: 5000,
 })
@@ -61,15 +61,11 @@ function injectOnce () {
   return plugin.injectDbmQuery(span, QUERY, 'pg-prod', false)
 }
 
-// Preflight: confirm the comment was actually spliced (or, for disabled, that
-// the query is returned untouched), so a refactor cannot silently no-op it.
+// Preflight: confirm the comment was actually spliced, so a refactor cannot
+// silently no-op it.
 const sample = injectOnce()
-if (VARIANT === 'disabled') {
-  assert.equal(sample, QUERY, 'disabled mode should return the query untouched')
-} else {
-  assert.ok(sample.includes("dddb='orders'") && sample.length > QUERY.length,
-    'injectDbmQuery did not splice the dbm comment')
-}
+assert.ok(sample.includes("dddb='orders'") && sample.length > QUERY.length,
+  'injectDbmQuery did not splice the dbm comment')
 
 guard.loopStart()
 let sink = 0
@@ -78,13 +74,13 @@ if (VARIANT === 'full') {
   // generated identifiers each time. Swapping in new ids per iteration keeps the
   // hex computation unwarmed; a single reused context would memoize toString(16)
   // after the first call and measure cached lookups instead of the real cost.
-  for (let i = 0; i < ITERATIONS; i++) {
+  for (let i = 0; i < OPERATIONS; i++) {
     spanContext._traceId = id()
     spanContext._spanId = id()
     sink += injectOnce().length
   }
 } else {
-  for (let i = 0; i < ITERATIONS; i++) {
+  for (let i = 0; i < OPERATIONS; i++) {
     sink += injectOnce().length
   }
 }

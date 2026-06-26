@@ -17,6 +17,7 @@ const {
   start,
   run,
 } = require('./helpers/terminal')
+const { createReleaseChangelog } = require('./changelog')
 const { checkAll } = require('./helpers/requirements')
 
 const tmpdir = process.env.RUNNER_TEMP || os.tmpdir()
@@ -66,16 +67,19 @@ try {
 
   pass(`v${releaseLine}.x`)
 
+  const { DD_MAJOR, DD_MINOR, DD_PATCH, VERSION } = require('../../version')
+  const stableVersion = `${DD_MAJOR}.${DD_MINOR}.${DD_PATCH}`
+  const isPreRelease = VERSION !== stableVersion
+
   // Notes exclude semver-major (gated behind a flag, not user-visible).
-  // Cherry-pick includes semver-major; only only-land-on-next is fully excluded.
+  // Cherry-pick includes semver-major; only only-land-on-next is fully excluded,
+  // except when promoting a pre-release to stable (that's what "next" means).
   const notesDiffCmd = 'branch-diff --user DataDog --repo dd-trace-js' +
-    ' --exclude-label=semver-major --exclude-label=only-land-on-next'
+    (isPreRelease ? '' : ' --exclude-label=semver-major --exclude-label=only-land-on-next')
   const cherryPickDiffCmd = 'branch-diff --user DataDog --repo dd-trace-js' +
-    ' --exclude-label=only-land-on-next'
+    (isPreRelease ? '' : ' --exclude-label=only-land-on-next')
 
   start('Determine version increment')
-
-  const { DD_MAJOR, DD_MINOR, DD_PATCH } = require('../../version')
 
   // GitHub rebase limit is 100 commits; reserve one slot for the version bump.
   const MAX_CHERRY_PICKS = 99
@@ -97,18 +101,30 @@ try {
     process.exit(0)
   }
 
-  // notesDiff is scoped to upperBoundSha so isMinor and release notes only reflect
+  // notesShas is scoped to upperBoundSha so isMinor and release notes only reflect
   // the capped commits actually included in the proposal, not deferred ones.
   // Excludes semver-major (gated behind a flag, not user-visible).
-  const notesDiff = capture(`${notesDiffCmd} --format=markdown v${releaseLine}.x ${upperBoundSha}`)
-  const isMinor = notesDiff.includes('SEMVER-MINOR')
+  const notesShas = capture(`${notesDiffCmd} --format=sha --reverse v${releaseLine}.x ${upperBoundSha}`)
+    .split('\n').filter(Boolean)
+  const contributorBySha = getContributorsBySha(`v${releaseLine}.x`, upperBoundSha)
+  const notesEntries = []
+  for (const sha of notesShas) {
+    notesEntries.push({
+      sha,
+      subject: capture(`git show -s --format=%s ${sha}`),
+      author: contributorBySha.get(sha),
+    })
+  }
+  const notes = createReleaseChangelog(notesEntries)
+  const isMinor = notes.isMinor
   const newPatch = `${releaseLine}.${DD_MINOR}.${DD_PATCH + 1}`
   const newMinor = `${releaseLine}.${DD_MINOR + 1}.0`
-  const newVersion = isMinor ? newMinor : newPatch
+  const newVersion = isPreRelease ? stableVersion : (isMinor ? newMinor : newPatch)
   const notesDir = path.join(tmpdir, 'release_notes')
   const notesFile = path.join(notesDir, `v${newVersion}.md`)
 
-  pass(`${isMinor ? 'minor' : 'patch'} (${DD_MAJOR}.${DD_MINOR}.${DD_PATCH} -> ${newVersion})`)
+  const incrementType = isPreRelease ? 'release' : (isMinor ? 'minor' : 'patch')
+  pass(`${incrementType} (${VERSION} -> ${newVersion})`)
 
   start('Checkout release proposal branch')
 
@@ -181,9 +197,13 @@ try {
   start('Save release notes draft')
 
   fs.mkdirSync(notesDir, { recursive: true })
-  fs.writeFileSync(notesFile, notesDiff)
+  fs.writeFileSync(notesFile, notes.markdown)
 
   pass(notesFile)
+
+  for (const warning of notes.warnings) {
+    log(`Warning: ${warning}`)
+  }
 
   if (flags.n) process.exit(0)
   if (!flags.y) {
@@ -195,19 +215,27 @@ try {
 
   let previousPullRequest
 
-  if (isMinor) {
+  if (isPreRelease) {
     try {
-      previousPullRequest = JSON.parse(capture(`gh pr view ${newMinor} --json isDraft,url`))
+      previousPullRequest = JSON.parse(capture(`gh pr view ${newVersion} --json isDraft,url`))
     } catch {
-      // No existing PR for minor release proposal.
+      // No existing PR for release proposal.
     }
-  }
+  } else {
+    if (isMinor) {
+      try {
+        previousPullRequest = JSON.parse(capture(`gh pr view ${newMinor} --json isDraft,url`))
+      } catch {
+        // No existing PR for minor release proposal.
+      }
+    }
 
-  if (!previousPullRequest) {
-    try {
-      previousPullRequest = JSON.parse(capture(`gh pr view ${newPatch} --json isDraft,url`))
-    } catch {
-      // No existing PR for patch release proposal.
+    if (!previousPullRequest) {
+      try {
+        previousPullRequest = JSON.parse(capture(`gh pr view ${newPatch} --json isDraft,url`))
+      } catch {
+        // No existing PR for patch release proposal.
+      }
     }
   }
 
@@ -243,7 +271,7 @@ try {
   const pullRequest = JSON.parse(capture('gh pr view --json number,url'))
 
   // Close PR and delete branch for any patch proposal if new proposal is minor.
-  if (isMinor) {
+  if (!isPreRelease && isMinor) {
     try {
       run(`gh pr close v${newPatch}-proposal --delete-branch --comment "Superseded by #${pullRequest.number}."`)
     } catch {
@@ -266,4 +294,34 @@ try {
   }
 } catch (e) {
   fail(e)
+}
+
+/**
+ * Map each release commit SHA to its GitHub contributor handle (`@login`), or
+ * the git author name when the commit author is not a GitHub user. Bot accounts
+ * (dependabot, github-actions) are skipped so the Contributors list stays human.
+ *
+ * @param {string} base Release branch the proposal lands on, e.g. `v5.x`.
+ * @param {string} head Upper-bound commit the proposal is capped at.
+ */
+function getContributorsBySha (base, head) {
+  const contributors = new Map()
+  const jq = '.commits[] | [.sha, (.author.login // ""), (.author.type // ""), .commit.author.name] | @tsv'
+
+  let output
+  try {
+    output = capture(`gh api "repos/DataDog/dd-trace-js/compare/${base}...${head}" --paginate --jq '${jq}'`)
+  } catch {
+    log('Warning: unable to fetch contributors from GitHub; skipping the Contributors section.')
+    return contributors
+  }
+
+  for (const line of output.split('\n')) {
+    if (!line) continue
+    const [sha, login, type, name] = line.split('\t')
+    if (type === 'Bot') continue
+    contributors.set(sha, login ? `@${login}` : name)
+  }
+
+  return contributors
 }

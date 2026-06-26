@@ -58,7 +58,11 @@ describe('extended data collection', () => {
         reply.send('DONE')
       })
 
-      app.listen(port, (err, address) => {
+      // Fastify 1.x already accepts the options-object form, while the variadic `listen(port, cb)` signature is a
+      // throwing deprecation in 4.x and removed in 5.x. Use the object form so every tested major starts cleanly.
+      // Bind to the loopback IP rather than `localhost`: a hostname makes fastify resolve every address it maps to
+      // (`dns.lookup(..., { all: true })`) and bind a server per address, which is slow and races teardown.
+      app.listen({ host: '127.0.0.1', port: 0 }, (err) => {
         if (err) {
           throw err
         }
@@ -95,7 +99,7 @@ describe('extended data collection', () => {
         },
       }
       await axios.post(
-        `http://localhost:${port}/`,
+        `http://127.0.0.1:${port}/`,
         requestBody,
         {
           headers: {
@@ -126,7 +130,7 @@ describe('extended data collection', () => {
         bodyParam: 'collect-standard',
       }
       await axios.post(
-        `http://localhost:${port}/redacted-headers`,
+        `http://127.0.0.1:${port}/redacted-headers`,
         requestBody,
         {
           headers: {
@@ -175,7 +179,7 @@ describe('extended data collection', () => {
         },
       }
       await axios.post(
-        `http://localhost:${port}/`,
+        `http://127.0.0.1:${port}/`,
         requestBody,
         {
           headers: {
@@ -230,7 +234,7 @@ describe('extended data collection', () => {
         bodyParam: 'collect-standard',
         deepObject: expectedDeepTruncatedObject,
       }
-      await axios.post(`http://localhost:${port}/`, requestBody)
+      await axios.post(`http://127.0.0.1:${port}/`, requestBody)
 
       await agent.assertSomeTraces((traces) => {
         const span = traces[0][0]
@@ -251,7 +255,7 @@ describe('extended data collection', () => {
         bodyParam: 'collect-standard',
         longValue: Array(4096).fill('A').join(''),
       }
-      await axios.post(`http://localhost:${port}/`, requestBody)
+      await axios.post(`http://127.0.0.1:${port}/`, requestBody)
 
       await agent.assertSomeTraces((traces) => {
         const span = traces[0][0]
@@ -273,7 +277,7 @@ describe('extended data collection', () => {
         bodyParam: 'collect-standard',
         children: children.slice(0, 256),
       }
-      await axios.post(`http://localhost:${port}/`, requestBody)
+      await axios.post(`http://127.0.0.1:${port}/`, requestBody)
 
       await agent.assertSomeTraces((traces) => {
         const span = traces[0][0]

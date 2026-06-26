@@ -12,7 +12,7 @@ const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor'
 const propagationHash = require('../../dd-trace/src/propagation-hash')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
-const { setup, withAwsSdkVersions } = require('./spec_helpers')
+const { callViaPromise, setup, withAwsSdkVersions } = require('./spec_helpers')
 
 const getQueueParams = (queueName) => {
   return {
@@ -28,7 +28,7 @@ describe('Plugin', () => {
     this.timeout(10000)
     setup()
 
-    withAwsSdkVersions((version, moduleName) => {
+    withAwsSdkVersions((version, moduleName, resolvedVersion) => {
       let AWS
       let sqs
       let queueNameDSM
@@ -40,6 +40,8 @@ describe('Plugin', () => {
       let tracer
 
       const sqsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sqs' : 'aws-sdk'
+      // AWS SDK v2 added `.promise()` in 2.3.0; older v2 releases have no promise API to exercise.
+      const promisesSupported = moduleName === '@aws-sdk/smithy-client' || semver.gte(resolvedVersion, '2.3.0')
 
       beforeEach(() => {
         const id = randomUUID()
@@ -176,14 +178,14 @@ describe('Plugin', () => {
           })
         })
 
-        if (sqsClientName === 'aws-sdk' && semver.intersects(version, '>=2.3')) {
-          it('Should set pathway hash tag on a span when consuming and promise() was used over a callback',
+        if (promisesSupported) {
+          it('Should set pathway hash tag on the consumer span when promises are used over a callback',
             async () => {
               let consumeSpanMeta = {}
               const tracePromise = agent.assertSomeTraces(traces => {
                 const span = traces[0][0]
 
-                if (span.name === 'aws.request' && span.meta['aws.operation'] === 'receiveMessage') {
+                if (span.name === 'aws.response') {
                   consumeSpanMeta = span.meta
                 }
 
@@ -192,10 +194,13 @@ describe('Plugin', () => {
                 })
               })
 
-              await sqs.sendMessage({ MessageBody: 'test DSM', QueueUrl: QueueUrlDsm }).promise()
-              await sqs.receiveMessage({ QueueUrl: QueueUrlDsm }).promise()
-
-              return tracePromise
+              await Promise.all([
+                tracePromise,
+                (async () => {
+                  await callViaPromise(sqs, 'sendMessage', { MessageBody: 'test DSM', QueueUrl: QueueUrlDsm })
+                  await callViaPromise(sqs, 'receiveMessage', { QueueUrl: QueueUrlDsm, MessageAttributeNames: ['.*'] })
+                })(),
+              ])
             })
         }
 
@@ -304,6 +309,45 @@ describe('Plugin', () => {
               nowStub.restore()
             })
         })
+
+        it('starts the consumer span for a batch receive whose later entries carry only DSM context',
+          async () => {
+            // With batchPropagationEnabled off (the default) only the first sendMessageBatch entry
+            // carries trace context; the rest carry a DSM-only `_datadog` that extracts to null. The
+            // multi-message receive must skip those rather than pass a null context to span.addLink,
+            // which previously threw and dropped the consumer span.
+            const consumerPromise = agent.assertSomeTraces(traces => {
+              let consumerSpan
+              for (const trace of traces) {
+                for (const span of trace) {
+                  if (span.name === 'aws.response') consumerSpan = span
+                }
+              }
+              if (consumerSpan === undefined) throw new Error('no consumer span yet')
+              assert.strictEqual(consumerSpan.meta['span.kind'], 'server')
+            }, { timeoutMs: 5000 })
+
+            const drive = (async () => {
+              await new Promise((resolve, reject) => {
+                sqs.sendMessageBatch({
+                  Entries: [
+                    { Id: '1', MessageBody: 'dsm batch 1' },
+                    { Id: '2', MessageBody: 'dsm batch 2' },
+                    { Id: '3', MessageBody: 'dsm batch 3' },
+                  ],
+                  QueueUrl: QueueUrlDsm,
+                }, error => error ? reject(error) : resolve())
+              })
+              await new Promise((resolve, reject) => {
+                sqs.receiveMessage(
+                  { QueueUrl: QueueUrlDsm, MaxNumberOfMessages: 10, WaitTimeSeconds: 1 },
+                  error => error ? reject(error) : resolve()
+                )
+              })
+            })()
+
+            await Promise.all([consumerPromise, drive])
+          })
       })
     })
   })

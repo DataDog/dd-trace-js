@@ -5,7 +5,9 @@
 // TODO: Stop depending on `@openfeature/server-sdk` and `@openfeature/core` and
 //       instead intercept the user version with an instrumentation.
 // TODO: Vendor `@datadog/openfeature-node-server` when the above has been
-//       addressed.
+//       addressed. Until then, `packages/dd-trace/src/openfeature/flagging_provider.js`
+//       loads it through a bundler-opaque require so customer bundles do not
+//       follow the optional peer-of-peer chain (see #8635).
 // TODO: Fix `import-in-the-middle` so that it doesn't interfere with the global
 //       object or switch to our own internal loader and remove the dependency.
 // TODO: Vendor `dc-polyfill` and figure out why it fails the tests.

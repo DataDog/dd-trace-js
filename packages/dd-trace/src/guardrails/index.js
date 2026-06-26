@@ -14,11 +14,13 @@ function guard (fn) {
   var initBailout = false
   var clobberBailout = false
   var forced = isTrue(process.env.DD_INJECT_FORCE)
-  var engines = require('../../../../package.json').engines
-  var versions = engines.node.match(/^>=(\d+) <(\d+)$/)
+  var pkg = require('../../../../package.json')
+  var engines = pkg.engines
+  var versions = engines.node.match(/^>=(\d+)$/)
   var minMajor = versions[1]
-  var nextMajor = versions[2]
+  var nextMajor = pkg.nodeMaxMajor
   var version = process.versions.node
+  var supportedRange = engines.node + ' <' + nextMajor
 
   if (process.env.DD_INJECTION_ENABLED) {
     // If we're running via single-step install, and we're in the app's
@@ -45,16 +47,17 @@ function guard (fn) {
   // should not initialize the tracer.
   if (!clobberBailout && (NODE_MAJOR < minMajor || NODE_MAJOR >= nextMajor)) {
     initBailout = true
+    var runtimeInfo = 'Incompatible runtime Node.js ' + version + ', supported runtimes: Node.js ' + supportedRange
     telemetry([
       { name: 'abort', tags: ['reason:incompatible_runtime'] },
       { name: 'abort.runtime', tags: [] }
     ], undefined, {
       result: 'abort',
       result_class: 'incompatible_runtime',
-      result_reason: 'Incompatible runtime Node.js ' + version + ', supported runtimes: Node.js ' + engines.node
+      result_reason: runtimeInfo
     })
     log.info('Aborting application instrumentation due to incompatible_runtime.')
-    log.info('Found incompatible runtime Node.js %s, Supported runtimes: Node.js %s.', version, engines.node)
+    log.info('Found incompatible runtime Node.js %s, Supported runtimes: Node.js %s.', version, supportedRange)
     if (forced) {
       log.info('DD_INJECT_FORCE enabled, allowing unsupported runtimes and continuing.')
     }

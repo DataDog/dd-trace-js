@@ -10,14 +10,15 @@
       "env": {
         "DD_TRACE_SCOPE": "noop",
         "FINISH": "now",
-        "COUNT": "2000000"
+        "OPERATIONS": "2000000"
       }
     },
     "finish-later": {
+      "iterations": 16,
       "env": {
         "DD_TRACE_SCOPE": "noop",
         "FINISH": "later",
-        "COUNT": "2000000"
+        "OPERATIONS": "3000000"
       }
     },
     "finish-immediately-with-tags": {
@@ -25,7 +26,7 @@
         "DD_TRACE_SCOPE": "noop",
         "FINISH": "now",
         "SHAPE": "tags",
-        "COUNT": "2000000"
+        "OPERATIONS": "2000000"
       }
     },
     "finish-immediately-with-many-tags": {
@@ -33,7 +34,7 @@
         "DD_TRACE_SCOPE": "noop",
         "FINISH": "now",
         "SHAPE": "many-tags",
-        "COUNT": "2000000"
+        "OPERATIONS": "2000000"
       }
     },
     "finish-immediately-with-tags-and-otel": {
@@ -41,7 +42,7 @@
         "DD_TRACE_SCOPE": "noop",
         "FINISH": "now",
         "SHAPE": "tags-and-otel",
-        "COUNT": "2000000"
+        "OPERATIONS": "2000000"
       }
     }
   }

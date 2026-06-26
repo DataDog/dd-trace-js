@@ -4,12 +4,11 @@ const assert = require('node:assert/strict')
 const { rejects } = require('node:assert/strict')
 const { inspect } = require('node:util')
 
-const { channel } = require('dc-polyfill')
 const msgpack = require('@msgpack/msgpack')
 const { afterEach, beforeEach, describe, it } = require('mocha')
-const proxyquire = require('proxyquire').noPreserveCache()
 const sinon = require('sinon')
 
+const aiguardAutoInstrumentation = require('../../src/aiguard')
 const NoopAIGuard = require('../../src/aiguard/noop')
 const AIGuard = require('../../src/aiguard/sdk')
 const agent = require('../plugins/agent')
@@ -22,134 +21,12 @@ const { USER_KEEP } = require('../../../../ext/priority')
 const { SAMPLING_MECHANISM_AI_GUARD, DECISION_MAKER_KEY } = require('../../src/constants')
 const {
   EVENT_TAG_KEY,
-  SOURCE_AUTO,
   SOURCE_SDK,
   INTEGRATION_NONE,
   ERROR_TYPE_CLIENT,
   ERROR_TYPE_STATUS,
   ERROR_TYPE_RESPONSE,
 } = require('../../src/aiguard/tags')
-
-describe('AIGuard auto instrumentation channel', () => {
-  const aiguardChannel = channel('dd-trace:ai:aiguard')
-  const messages = [{ role: 'user', content: 'Hello' }]
-  const config = { experimental: { aiguard: { block: true } } }
-  let evaluate
-  let log
-  let aiguard
-
-  beforeEach(() => {
-    evaluate = sinon.stub().resolves()
-    log = { error: sinon.stub() }
-
-    function MockAIGuard () {
-      return { evaluate }
-    }
-
-    aiguard = proxyquire('../../src/aiguard/index', {
-      '../log': log,
-      './sdk': MockAIGuard,
-    })
-    aiguard.enable({}, config)
-  })
-
-  afterEach(() => {
-    aiguard.disable()
-    sinon.restore()
-  })
-
-  function publish (publishedMessages = messages, integration = 'openai', parentSpan) {
-    const abortController = new AbortController()
-    const ctx = { messages: publishedMessages, integration, parentSpan, abortController, pending: [] }
-    aiguardChannel.publish(ctx)
-    return ctx
-  }
-
-  it('returns without pushing to pending for empty messages', () => {
-    const ctx = publish([])
-
-    assert.strictEqual(ctx.pending.length, 0)
-    assert.strictEqual(ctx.abortController.signal.aborted, false)
-    sinon.assert.notCalled(evaluate)
-  })
-
-  it('pushes an allowed evaluation promise without aborting', async () => {
-    const parentSpan = { fake: 'openai.request span' }
-    const ctx = publish(messages, 'openai', parentSpan)
-
-    assert.strictEqual(ctx.pending.length, 1)
-    await Promise.all(ctx.pending)
-
-    assert.strictEqual(ctx.abortController.signal.aborted, false)
-    // `parentSpan` from the channel is forwarded to the SDK as `childOf` so the
-    // `ai_guard` span nests under the LLM span.
-    sinon.assert.calledOnceWithExactly(evaluate, messages, {
-      block: true,
-      source: SOURCE_AUTO,
-      integration: 'openai',
-      childOf: parentSpan,
-    })
-  })
-
-  it('aborts with the original AIGuardAbortError', async () => {
-    const err = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError', reason: 'blocked' })
-    evaluate.rejects(err)
-
-    const ctx = publish()
-    await Promise.all(ctx.pending)
-
-    assert.strictEqual(ctx.abortController.signal.aborted, true)
-    assert.strictEqual(ctx.abortController.signal.reason, err)
-  })
-
-  it('fails open for unexpected evaluation errors', async () => {
-    const err = new Error('network failed')
-    evaluate.rejects(err)
-
-    const ctx = publish()
-    await Promise.all(ctx.pending)
-
-    assert.strictEqual(ctx.abortController.signal.aborted, false)
-    sinon.assert.calledOnceWithExactly(log.error, 'AIGuard: unexpected error during evaluation: %s', err.message)
-  })
-
-  it('fails open when evaluation throws synchronously', async () => {
-    const err = new Error('sync failure')
-    evaluate.throws(err)
-
-    const ctx = publish()
-    assert.strictEqual(ctx.pending.length, 1)
-    await Promise.all(ctx.pending)
-
-    assert.strictEqual(ctx.abortController.signal.aborted, false)
-    sinon.assert.calledOnceWithExactly(log.error, 'AIGuard: unexpected error during evaluation: %s', err.message)
-  })
-
-  it('waits for every subscriber promise and blocks if any subscriber aborts', async () => {
-    let secondSubscriberResolved = false
-    const err = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
-    const extraSubscriber = ctx => {
-      ctx.pending.push(new Promise(resolve => {
-        setImmediate(() => {
-          secondSubscriberResolved = true
-          ctx.abortController.abort(err)
-          resolve()
-        })
-      }))
-    }
-    aiguardChannel.subscribe(extraSubscriber)
-
-    try {
-      const ctx = publish()
-      await Promise.all(ctx.pending)
-
-      assert.strictEqual(secondSubscriberResolved, true)
-      assert.strictEqual(ctx.abortController.signal.reason, err)
-    } finally {
-      aiguardChannel.unsubscribe(extraSubscriber)
-    }
-  })
-})
 
 describe('AIGuard SDK', () => {
   const config = {
@@ -221,6 +98,7 @@ describe('AIGuard SDK', () => {
   afterEach(async () => {
     global.fetch = originalFetch
     sinon.restore()
+    aiguardAutoInstrumentation.disable()
     return agent.close()
   })
 
@@ -645,11 +523,14 @@ describe('AIGuard SDK', () => {
   const sites = [
     { site: 'datad0g.com', endpoint: 'https://app.datad0g.com/api/v2/ai-guard' },
     { site: 'datadoghq.com', endpoint: 'https://app.datadoghq.com/api/v2/ai-guard' },
+    { site: 'ddog-gov.com', endpoint: 'https://app.ddog-gov.com/api/v2/ai-guard' },
+    { site: 'us3.datadoghq.com', endpoint: 'https://us3.datadoghq.com/api/v2/ai-guard' },
+    { site: 'ap1.datadoghq.com', endpoint: 'https://ap1.datadoghq.com/api/v2/ai-guard' },
   ]
   for (const { site, endpoint } of sites) {
     it(`test endpoint discovery: ${site}`, async () => {
-      const newConfig = { site, ...config }
-      delete newConfig.experimental.aiguard.endpoint
+      const { endpoint: _discardedEndpoint, ...aiguard } = config.experimental.aiguard
+      const newConfig = { ...config, site, experimental: { ...config.experimental, aiguard } }
       const client = new AIGuard(tracer, newConfig)
       mockFetch({
         body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } },

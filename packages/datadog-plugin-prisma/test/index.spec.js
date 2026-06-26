@@ -35,6 +35,7 @@ function execPrismaGenerate (config, cwd) {
         '--target esnext',
         '--module commonjs',
         '--allowJs true',
+        '--skipLibCheck true',
         '--moduleResolution node',
       ].join(' '),
     ].join(' && '), {
@@ -356,9 +357,6 @@ describe('Plugin', () => {
         describe(`without configuration ${config.schema}`, () => {
           before(async function () {
             this.timeout(10000)
-            clearPrismaEnv()
-            setPrismaEnv(config)
-
             await agent.load(['prisma', 'pg'])
             prisma = loadPrismaModule(config, range)
 
@@ -444,25 +442,33 @@ describe('Plugin', () => {
               }
             )
 
-            await Promise.all([
-              tracingPromise,
-            ])
+            await tracingPromise
           })
 
           it('should generate engine span from array of spans', async () => {
             const tracingPromise = agent.assertSomeTraces(traces => {
-              assert.strictEqual(traces[0].length, 2)
-              assert.strictEqual(traces[0][0].span_id, traces[0][1].parent_id)
-              assert.strictEqual(traces[0][0].name, 'prisma.engine')
-              assert.strictEqual(traces[0][0].resource, 'query')
-              assert.strictEqual(traces[0][0].meta['prisma.type'], 'engine')
-              assert.strictEqual(traces[0][0].meta['prisma.name'], 'query')
-              assert.strictEqual(traces[0][1].name, 'prisma.engine')
-              assert.strictEqual(traces[0][1].resource, 'SELECT 1')
-              assert.strictEqual(traces[0][1].type, 'sql')
-              assert.strictEqual(traces[0][1].meta['prisma.type'], 'engine')
-              assert.strictEqual(traces[0][1].meta['prisma.name'], 'db_query')
-              assert.strictEqual(traces[0][1].meta['db.type'], 'postgres')
+              assertObjectContains(traces[0], {
+                length: 2,
+                0: {
+                  name: 'prisma.engine',
+                  resource: 'query',
+                  meta: {
+                    'prisma.type': 'engine',
+                    'prisma.name': 'query',
+                  },
+                },
+                1: {
+                  parent_id: traces[0][0].span_id,
+                  name: 'prisma.engine',
+                  resource: 'SELECT 1',
+                  type: 'sql',
+                  meta: {
+                    'prisma.type': 'engine',
+                    'prisma.name': 'db_query',
+                    'db.type': 'postgres',
+                  },
+                },
+              })
             })
 
             const engineSpans = [
@@ -488,9 +494,7 @@ describe('Plugin', () => {
               },
             ]
             tracingHelper.dispatchEngineSpans(engineSpans)
-            await Promise.all([
-              tracingPromise,
-            ])
+            await tracingPromise
           })
 
           it('should include database connection attributes in db_query spans', async () => {
@@ -515,9 +519,7 @@ describe('Plugin', () => {
               ...createEngineDbQuerySpan('SELECT 1'),
             ]
             tracingHelper.dispatchEngineSpans(engineSpans)
-            await Promise.all([
-              tracingPromise,
-            ])
+            await tracingPromise
           })
 
           if (config.v7) {
@@ -574,9 +576,6 @@ describe('Plugin', () => {
         describe('without tracer initialization', () => {
           before(async function () {
             this.timeout(10000)
-            clearPrismaEnv()
-            setPrismaEnv(config)
-
             require('../../dd-trace')
 
             prisma = loadPrismaModule(config, range)
@@ -593,9 +592,6 @@ describe('Plugin', () => {
           describe('with custom service name', () => {
             before(async function () {
               this.timeout(10000)
-              clearPrismaEnv()
-              setPrismaEnv(config)
-
               const pluginConfig = {
                 service: 'custom',
               }

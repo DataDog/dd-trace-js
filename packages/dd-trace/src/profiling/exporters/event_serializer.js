@@ -8,15 +8,46 @@ const version = require('../../../../../package.json').version
 const { availableParallelism, libuvThreadPoolSize } = require('../libuv-size')
 const processTags = require('../../process-tags')
 
+/** @typedef {import('../../config/config-base')} TracerConfig */
+
+/**
+ * Maps the canonical profiling.enabled value to the activation reported in the
+ * profile event.
+ *
+ * @param {string} [enabled] - config.profiling.enabled ('true' | 'false' | 'auto')
+ * @returns {string}
+ */
+function getActivation (enabled) {
+  if (enabled === 'auto') return 'auto'
+  if (enabled === 'true') return 'manual'
+  return 'unknown'
+}
+
 class EventSerializer {
-  constructor ({ env, host, service, version, libraryInjected, activation } = {}) {
-    this._env = env
-    this._host = host
-    this._service = service
-    this._appVersion = version
-    this._libraryInjected = libraryInjected
-    this._activation = activation || 'unknown'
+  #activation
+  #appVersion
+  #env
+  #host
+  #libraryInjected
+  #service
+
+  /** @param {TracerConfig} config */
+  constructor (config) {
+    this.#env = config.env
+    this.#host = config.reportHostname ? os.hostname() : undefined
+    this.#service = config.service
+    this.#appVersion = config.version
+    this.#libraryInjected = !!config.DD_INJECTION_ENABLED
+    this.#activation = getActivation(config.profiling?.enabled)
   }
+
+  /**
+   * Returns the destination URL for the near-OOM export subprocess, or nothing when this exporter
+   * does not support OOM export. Overridden by {@link AgentExporter} and {@link FileExporter}.
+   *
+   * @returns {URL | undefined}
+   */
+  getExportUrl () {}
 
   typeToFile (type) {
     return `${type}.pprof`
@@ -43,21 +74,21 @@ class EventSerializer {
       endpoint_counts: endpointCounts,
       info: {
         application: {
-          env: this._env,
-          service: this._service,
+          env: this.#env,
+          service: this.#service,
           start_time: new Date(perf.nodeTiming.nodeStart + perf.timeOrigin).toISOString(),
-          version: this._appVersion,
+          version: this.#appVersion,
         },
         platform: {
-          hostname: this._host,
+          hostname: this.#host,
           kernel_name: os.type(),
           kernel_release: os.release(),
           kernel_version: os.version(),
         },
         profiler: {
-          activation: this._activation,
+          activation: this.#activation,
           ssi: {
-            mechanism: this._libraryInjected ? 'injected_agent' : 'none',
+            mechanism: this.#libraryInjected ? 'injected_agent' : 'none',
           },
           version,
           ...infos,
@@ -92,4 +123,4 @@ class EventSerializer {
   }
 }
 
-module.exports = { EventSerializer }
+module.exports = { EventSerializer, getActivation }

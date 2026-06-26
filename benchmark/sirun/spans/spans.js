@@ -14,14 +14,19 @@ const { FINISH, SHAPE = 'plain' } = process.env
 
 // Total spans created per process. The fixed tracer load (~75 ms) must be a small
 // fraction of the run so the bench measures span construction, not startup; at
-// 2M it is well under 10%. COUNT keeps it tunable per variant.
-const COUNT = Number(process.env.COUNT) || 2_000_000
+// 2M it is well under 10%. OPERATIONS keeps it tunable per variant: finish-later (the
+// noisiest variant) runs a heavier 3M over more sirun iterations (meta.json) so its
+// deferred-finish GC jitter averages out run-to-run, within the one-minute budget.
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 // finish-later defers the finish so it runs off the active-span path. Holding all
-// COUNT spans live at once would blow the heap (a 1M array of spans is ~1.6 GB);
+// OPERATIONS spans live at once would blow the heap (a 1M array of spans is ~1.6 GB);
 // instead run in fixed-size batches so the deferred-finish path is still exercised
-// while live memory stays flat.
-const BATCH = 10_000
+// while live memory stays flat. The batch size sets peak live spans, hence major-GC
+// pause size: 10k drove run-to-run jitter (the major share of finish-later's noise),
+// 500 added loop/reset overhead and got noisy again, 2000 sits in the valley (lower
+// stddev and ~10% faster locally). Overridable to re-sweep if the span shape changes.
+const BATCH = Number(process.env.BATCH) || 2000
 
 const spans = []
 
@@ -93,13 +98,13 @@ function startOne () {
 
 guard.loopStart()
 if (FINISH === 'now') {
-  for (let iteration = 0; iteration < COUNT; iteration++) {
+  for (let iteration = 0; iteration < OPERATIONS; iteration++) {
     startOne().finish()
   }
 } else {
   // Deferred finish in batches: start BATCH spans, finish them after the batch is
   // built (so each finishes off the active path), then drop the references.
-  let remaining = COUNT
+  let remaining = OPERATIONS
   while (remaining > 0) {
     const size = remaining < BATCH ? remaining : BATCH
     for (let i = 0; i < size; i++) {

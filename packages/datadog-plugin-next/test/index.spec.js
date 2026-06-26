@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 /* eslint import/no-extraneous-dependencies: ["error", {"packageDir": ['./']}] */
 
 const path = require('node:path')
+const http = require('node:http')
 const { execSync, spawn } = require('node:child_process')
 const { mkdirSync, writeFileSync, readdirSync } = require('node:fs')
 const axios = require('axios')
@@ -30,7 +31,11 @@ describe('Plugin', function () {
     withVersions('next', 'next', min, version => {
       const pkg = require(`../../../versions/next@${version}/node_modules/next/package.json`)
 
-      const startServer = ({ withConfig, standalone }, schemaVersion = 'v0', defaultToGlobalService = false) => {
+      const startServer = (
+        { withConfig, standalone, serverFile = 'server' },
+        schemaVersion = 'v0',
+        defaultToGlobalService = false
+      ) => {
         before(async () => {
           return agent.load('next')
         })
@@ -41,7 +46,7 @@ describe('Plugin', function () {
             ? path.join(__dirname, '.next/standalone')
             : __dirname
 
-          server = spawn('node', ['server'], {
+          server = spawn('node', [serverFile], {
             cwd,
             env: {
               ...process.env,
@@ -639,6 +644,32 @@ describe('Plugin', function () {
                 if (err.response.status !== 500) done(err)
               })
           })
+        } else if (satisfies(pkg.version, '>=15.4.1')) {
+          it('should attach a thrown app-route error to the span via onRequestError', done => {
+            agent
+              .assertSomeTraces(traces => {
+                const spans = traces[0]
+
+                assertObjectContains(spans[1], {
+                  name: 'next.request',
+                  error: 1,
+                  meta: {
+                    'error.message': 'thrown app dir error',
+                    'error.type': 'Error',
+                  },
+                })
+
+                assert.ok(spans[1].meta['error.stack'])
+              })
+              .then(done)
+              .catch(done)
+
+            axios
+              .get(`http://127.0.0.1:${port}/api/appDir/throw`)
+              .catch(err => {
+                if (err.response.status !== 500) done(err)
+              })
+          })
         }
       })
 
@@ -684,6 +715,27 @@ describe('Plugin', function () {
           })
         })
       }
+
+      describe('with a custom server that forwards raw req.url', () => {
+        startServer({ withConfig: false, standalone: false, serverFile: 'server-raw' })
+
+        const sendPath = path => new Promise((resolve, reject) => {
+          const req = http.request({ host: '127.0.0.1', port, path, method: 'GET' }, res => {
+            res.on('data', () => {})
+            res.on('end', resolve)
+          })
+          req.on('error', reject)
+          req.end()
+        })
+
+        for (const path of ['http://[:::1]', '//[::1']) {
+          it(`keeps serving requests after a request with path "${path}"`, async () => {
+            await sendPath(path).catch(() => {})
+            const response = await axios.get(`http://127.0.0.1:${port}/api/hello/world`)
+            assert.strictEqual(response.status, 200)
+          })
+        }
+      })
     })
   })
 })

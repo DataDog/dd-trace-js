@@ -1,5 +1,11 @@
 # TODO: Restructure the project by product and clean up this file.
 
+# Default recursive ownership
+/.agents/ @DataDog/lang-platform-js
+/.claude/ @DataDog/lang-platform-js
+/.github/actions/ @DataDog/lang-platform-js
+/scripts/ @DataDog/lang-platform-js
+
 # AppSec
 /benchmark/sirun/appsec/ @DataDog/asm-js
 /benchmark/sirun/appsec-iast/ @DataDog/asm-js
@@ -15,7 +21,7 @@
 
 /packages/dd-trace/*/standalone @DataDog/asm-js
 
-# Dynamic Instrumentation
+# Debugger
 /benchmark/sirun/debugger/ @DataDog/debugger-nodejs
 
 /integration-tests/code-origin/ @DataDog/debugger-nodejs
@@ -43,15 +49,21 @@
 /benchmark/sirun/child_process/ @DataDog/apm-idm-js
 /benchmark/sirun/fs/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-aws-sdk/ @DataDog/apm-idm-js
+/benchmark/sirun/plugin-cassandra-driver/ @DataDog/apm-idm-js
+/benchmark/sirun/plugin-couchbase/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-dns/ @DataDog/apm-idm-js
-/benchmark/sirun/plugin-graphql/ @DataDog/apm-idm-js
+/benchmark/sirun/plugin-elasticsearch/ @DataDog/apm-idm-js
+/benchmark/sirun/plugin-graphql-long/ @DataDog/apm-idm-js
+/benchmark/sirun/plugin-grpc/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-http/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-kafkajs/ @DataDog/apm-idm-js
+/benchmark/sirun/plugin-memcached/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-mongodb-core/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-net/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-pg/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-pino/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-redis/ @DataDog/apm-idm-js
+/benchmark/sirun/plugin-redis-traced/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-ws/ @DataDog/apm-idm-js
 /benchmark/sirun/url/ @DataDog/apm-idm-js
 
@@ -60,10 +72,8 @@
 /integration-tests/webpack/ @DataDog/apm-idm-js
 /integration-tests/pino.spec.js @DataDog/apm-idm-js
 
-/benchmark/sirun/plugin-graphql-long/ @DataDog/apm-idm-js
-
-/packages/datadog-esbuild @DataDog/apm-idm-js
-/packages/datadog-webpack @DataDog/apm-idm-js
+/packages/datadog-esbuild/ @DataDog/apm-idm-js
+/packages/datadog-webpack/ @DataDog/apm-idm-js
 /packages/datadog-plugin-*/ @DataDog/apm-idm-js
 /packages/datadog-instrumentations/ @DataDog/apm-idm-js
 /packages/dd-trace/src/exporters/electron/ @DataDog/apm-idm-js
@@ -77,7 +87,7 @@
 /packages/dd-trace/test/tracer_metadata.spec.js @DataDog/apm-idm-js
 
 # Test Optimization
-/ci @DataDog/ci-app-libraries
+/ci/ @DataDog/ci-app-libraries
 
 /integration-tests/selenium/ @DataDog/ci-app-libraries
 
@@ -135,6 +145,7 @@
 /integration-tests/playwright/ @DataDog/ci-app-libraries
 /integration-tests/vitest/ @DataDog/ci-app-libraries
 /integration-tests/vitest.config.mjs @DataDog/ci-app-libraries
+/integration-tests/vitest.second-project.config.mjs @DataDog/ci-app-libraries
 /integration-tests/ci-visibility-intake.js @DataDog/ci-app-libraries
 /integration-tests/ci-visibility-intake.spec.js @DataDog/ci-app-libraries
 /integration-tests/CODEOWNERS @DataDog/ci-app-libraries
@@ -169,6 +180,8 @@
 /.claude/skills/llmobs-integration @DataDog/ml-observability
 /.claude/skills/llmobs-testing @DataDog/ml-observability
 /benchmark/sirun/llmobs/ @DataDog/ml-observability
+/benchmark/sirun/llmobs-evaluations/ @DataDog/ml-observability
+/benchmark/sirun/llmobs-span-processor/ @DataDog/ml-observability
 /packages/datadog-instrumentations/src/ai.js @DataDog/ml-observability
 /packages/datadog-instrumentations/src/anthropic.js @DataDog/ml-observability
 /packages/datadog-instrumentations/src/google-cloud-vertexai.js @DataDog/ml-observability
@@ -176,7 +189,7 @@
 /packages/datadog-instrumentations/src/openai.js @DataDog/ml-observability
 /packages/datadog-plugin-ai/ @DataDog/ml-observability
 /packages/datadog-plugin-anthropic/ @DataDog/ml-observability
-/packages/datadog-plugin-aws-sdk/src/services/bedrockruntime @DataDog/ml-observability
+/packages/datadog-plugin-aws-sdk/src/services/bedrockruntime/ @DataDog/ml-observability
 /packages/datadog-plugin-aws-sdk/test/bedrockruntime.spec.js @DataDog/ml-observability
 /packages/datadog-plugin-google-cloud-vertexai/ @DataDog/ml-observability
 /packages/datadog-plugin-langchain/ @DataDog/ml-observability
@@ -196,7 +209,11 @@
 /eslint-rules/ @DataDog/apm-sdk-capabilities-js
 
 /benchmark/sirun/propagation/ @DataDog/apm-sdk-capabilities-js
+/benchmark/sirun/sampling/ @DataDog/apm-sdk-capabilities-js
+/benchmark/sirun/span-format/ @DataDog/apm-sdk-capabilities-js
 /benchmark/sirun/spans/ @DataDog/apm-sdk-capabilities-js
+/benchmark/sirun/test-codeowners/ @DataDog/ci-app-libraries
+/benchmark/sirun/test-optimization/ @DataDog/ci-app-libraries
 
 /integration-tests/log_injection.spec.js @DataDog/apm-sdk-capabilities-js
 /integration-tests/opentelemetry/ @DataDog/apm-sdk-capabilities-js
@@ -253,13 +270,11 @@
 /packages/dd-trace/test/openfeature/ @DataDog/feature-flagging-and-experimentation-sdk
 
 # CI
-/.github/actions/dd-sts-app-key/action.yml @Datadog/lang-platform-js
-/.github/actions/dd-sts-api-key/action.yml @Datadog/lang-platform-js
-/.github/actions/push_to_test_optimization/ @DataDog/ci-app-libraries
+/.github/actions/upload-coverage-artifact/ @DataDog/ci-app-libraries
+/.github/actions/upload-junit-artifacts/ @DataDog/ci-app-libraries
 /.github/playwright/ @DataDog/ci-app-libraries
 /.github/selenium/ @DataDog/ci-app-libraries
-/.github/actions/upload-node-reports/action.yml @Datadog/lang-platform-js
-/.github/chainguard @DataDog/sdlc-security
+/.github/chainguard/ @DataDog/sdlc-security
 /.github/codeql_config.yml @DataDog/sdlc-security
 /.github/workflows/codeql-analysis.yml @DataDog/sdlc-security
 /.github/workflows/mirror-image.yml @Datadog/lang-platform-js
@@ -267,7 +282,6 @@
 /.github/workflows/custom-node-version-dispatch.yml @Datadog/lang-platform-js
 /.github/workflows/project.yml @Datadog/lang-platform-js
 /.github/workflows/stale.yml @Datadog/lang-platform-js
-/scripts/check-no-mcr-images.js @Datadog/lang-platform-js
 
 /.github/workflows/apm-capabilities.yml @DataDog/apm-sdk-capabilities-js
 /.github/workflows/apm-integrations.yml @DataDog/apm-idm-js
@@ -287,22 +301,19 @@
 # Profiling
 /benchmark/sirun/profiler/ @DataDog/profiling-js
 
-/integration-tests/profiler @DataDog/profiling-js
+/integration-tests/profiler/ @DataDog/profiling-js
 
-/packages/dd-trace/*/profiling @DataDog/profiling-js
+/packages/dd-trace/*/profiling/ @DataDog/profiling-js
 /packages/dd-trace/test/exporters/common/form-data.spec.js @DataDog/profiling-js
 
 # Language Platform
 /* @DataDog/lang-platform-js
 
-/.github/actions/ @DataDog/lang-platform-js
-
-/.gitlab/benchmarks/ @DataDog/lang-platform-js @DataDog/ecosystems-performance
-
 /benchmark/* @DataDog/lang-platform-js
 /benchmark/sirun/* @DataDog/lang-platform-js
 /benchmark/stubs/ @DataDog/lang-platform-js
 /benchmark/sirun/async_hooks/ @DataDog/lang-platform-js
+/benchmark/sirun/dogstatsd/ @DataDog/lang-platform-js
 /benchmark/sirun/encoding/ @DataDog/lang-platform-js
 /benchmark/sirun/exporting-pipeline/ @DataDog/lang-platform-js
 /benchmark/sirun/id/ @DataDog/lang-platform-js
@@ -317,9 +328,7 @@
 /integration-tests/bun/ @DataDog/lang-platform-js
 /integration-tests/coverage/ @DataDog/lang-platform-js
 /integration-tests/coverage-child-process.spec.js @DataDog/lang-platform-js
-/integration-tests/coverage-fixtures/parent.js @DataDog/lang-platform-js
-/integration-tests/coverage-fixtures/worker.js @DataDog/lang-platform-js
-/integration-tests/coverage-manual-process.spec.js @DataDog/lang-platform-js
+/integration-tests/coverage-fixtures/ @DataDog/lang-platform-js
 /integration-tests/crashtracking/ @DataDog/lang-platform-js
 /integration-tests/init.spec.js @DataDog/lang-platform-js
 /integration-tests/mocha-parallel-files-fixtures/ @DataDog/lang-platform-js
@@ -328,12 +337,10 @@
 /integration-tests/package-guardrails/flush.js @DataDog/lang-platform-js
 /integration-tests/startup.spec.js @DataDog/lang-platform-js
 
-/scripts/mocha-parallel-files.js @DataDog/lang-platform-js
-
-/packages/datadog-core @DataDog/lang-platform-js
-/packages/datadog-shimmer @DataDog/lang-platform-js
-/packages/dd-trace/*/crashtracking @DataDog/lang-platform-js
-/packages/dd-trace/src/exporters/common/retry.js @DataDog/lang-platform-js
+/packages/datadog-core/ @DataDog/lang-platform-js
+/packages/datadog-shimmer/ @DataDog/lang-platform-js
+/packages/dd-trace/*/crashtracking/ @DataDog/lang-platform-js
+/packages/dd-trace/src/exporters/common/ @DataDog/lang-platform-js
 /packages/dd-trace/test/agent/ @DataDog/lang-platform-js
 /packages/dd-trace/test/dd-trace.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/dogstatsd.spec.js @DataDog/lang-platform-js
@@ -357,13 +364,13 @@
 /packages/dd-trace/test/plugins/plugin.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/plugins/util/env.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/proxy.spec.js @DataDog/lang-platform-js
+/packages/dd-trace/test/register.spec.js @DataDog/lang-platform-js
 /packages/dd-trace/test/require-package-json.spec.js @DataDog/lang-platform-js
-/packages/dd-trace/test/ritm-tests @DataDog/lang-platform-js
+/packages/dd-trace/test/ritm-tests/ @DataDog/lang-platform-js
 /packages/dd-trace/test/ritm.spec.js @DataDog/lang-platform-js
-/packages/dd-trace/test/setup @DataDog/lang-platform-js
+/packages/dd-trace/test/setup/ @DataDog/lang-platform-js
 /packages/dd-trace/test/util.spec.js @DataDog/lang-platform-js
 
-/scripts/** @DataDog/lang-platform-js
-
 # Multiple teams
+/.gitlab/benchmarks/ @DataDog/lang-platform-js @DataDog/ecosystems-performance
 /eslint-rules/* @DataDog/apm-sdk-capabilities-js @DataDog/lang-platform-js

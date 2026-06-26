@@ -7,19 +7,19 @@
   "instructions": true,
   "variants": {
     "plain-find": {
-      "env": { "VARIANT": "plain-find", "ITERATIONS": "11000000" }
+      "env": { "VARIANT": "plain-find", "OPERATIONS": "8200000" }
     },
     "deep-aggregate": {
-      "env": { "VARIANT": "deep-aggregate", "ITERATIONS": "1600000" }
+      "env": { "VARIANT": "deep-aggregate", "OPERATIONS": "1170000" }
     },
     "bigint-id": {
-      "env": { "VARIANT": "bigint-id", "ITERATIONS": "5500000" }
+      "env": { "VARIANT": "bigint-id", "OPERATIONS": "5500000" }
     },
     "binary-hash": {
-      "env": { "VARIANT": "binary-hash", "ITERATIONS": "4500000" }
+      "env": { "VARIANT": "binary-hash", "OPERATIONS": "4500000" }
     },
     "mixed-ops": {
-      "env": { "VARIANT": "mixed-ops", "ITERATIONS": "5000000" }
+      "env": { "VARIANT": "mixed-ops", "OPERATIONS": "5000000" }
     }
   }
 }

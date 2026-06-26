@@ -12,7 +12,7 @@ require('../../../packages/datadog-instrumentations/src/fs')
 const { channel } = require('../../../packages/datadog-instrumentations/src/helpers/instrument')
 
 const { VARIANT } = process.env
-const ITERATIONS = Number(process.env.ITERATIONS) || 6_000_000
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 const startChannel = channel('apm:fs:operation:start')
 const finishChannel = channel('apm:fs:operation:finish')
@@ -79,12 +79,21 @@ if (VARIANT === 'subscribed') {
 assert.equal(VARIANT === 'subscribed', startChannel.hasSubscribers,
   'subscriber state does not match variant')
 
+// Drift guard: getMessage + the wrapper body mirror fs.js (neither is exported), so
+// assert the mirror still produces the production per-call message shape -- otherwise
+// a refactor on either side diverges silently while the loop keeps "passing".
+assert.deepEqual(
+  getMessage('statSync', PARAMS, ARGS),
+  { operation: 'statSync', path: '/var/app/data/file.txt', options: { encoding: 'utf8' } },
+  'getMessage mirror drifted from the fs.js per-call message shape'
+)
+
 guard.loopStart()
 let sink = 0
-for (let i = 0; i < ITERATIONS; i++) {
+for (let i = 0; i < OPERATIONS; i++) {
   sink += instrumentedCall()
 }
 guard.done()
 
 // orphan-guard variant returns 0 each call; subscribed returns 1.
-assert.equal(sink, VARIANT === 'subscribed' ? ITERATIONS : 0, 'unexpected sink')
+assert.equal(sink, VARIANT === 'subscribed' ? OPERATIONS : 0, 'unexpected sink')

@@ -6,7 +6,7 @@ const guard = require('../startup-guard')
 const RedisPlugin = require('../../../packages/datadog-plugin-redis/src/index')
 
 const { VARIANT } = process.env
-const ITERATIONS = Number(process.env.ITERATIONS) || 8_000_000
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 // Every traced redis command walks `bindStart`: command.toUpperCase(), the
 // config filter, the per-connection service cache, then formatCommand to build
@@ -74,12 +74,22 @@ function preflight (ctx) {
 }
 
 guard.loopStart()
-if (VARIANT === 'mixed') {
+if (VARIANT === 'churn') {
+  // Rebuild the ctx getStartCtx allocates per command instead of reusing one:
+  // the only variant that pays that per-command allocation, isolating the GC
+  // cost the reuse variants hoist out of the loop.
+  const cmd = COMMANDS.get
+  preflight(makeCtx(cmd))
+  lastMeta = undefined
+  for (let i = 0; i < OPERATIONS; i++) {
+    plugin.bindStart(makeCtx(cmd))
+  }
+} else if (VARIANT === 'mixed') {
   const ctxs = MIXED.map(makeCtx)
   for (const ctx of ctxs) preflight(ctx)
   lastMeta = undefined
   const len = ctxs.length
-  for (let i = 0; i < ITERATIONS; i++) {
+  for (let i = 0; i < OPERATIONS; i++) {
     plugin.bindStart(ctxs[i % len])
   }
 } else {
@@ -92,7 +102,7 @@ if (VARIANT === 'mixed') {
       'mset-wide should hit MAX_COMMAND_LENGTH truncation (raw_command capped at 1000)')
   }
   lastMeta = undefined
-  for (let i = 0; i < ITERATIONS; i++) {
+  for (let i = 0; i < OPERATIONS; i++) {
     plugin.bindStart(ctx)
   }
 }

@@ -179,7 +179,7 @@ describe('AppsecFsPlugin', () => {
       afterEach(() => agent.close())
 
       beforeEach(async () => {
-        await agent.load('fs', undefined, { flushInterval: 1 })
+        await agent.load([], undefined, { flushInterval: 1 })
         fs = require('fs')
       })
 
