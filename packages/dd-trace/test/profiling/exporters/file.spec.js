@@ -21,7 +21,7 @@ describe('exporters/file', () => {
   })
 
   it('should export to a file per profile type', async () => {
-    const exporter = new FileExporter()
+    const exporter = new FileExporter({ DD_PROFILING_PPROF_PREFIX: '' })
     const buffer = Buffer.from('profile')
     const profiles = {
       test: buffer,
@@ -37,7 +37,7 @@ describe('exporters/file', () => {
   })
 
   it('should export to a file per profile type with given prefix', async () => {
-    const exporter = new FileExporter({ pprofPrefix: 'myprefix_' })
+    const exporter = new FileExporter({ DD_PROFILING_PPROF_PREFIX: 'myprefix_' })
     const buffer = Buffer.from('profile')
     const profiles = {
       test: buffer,
