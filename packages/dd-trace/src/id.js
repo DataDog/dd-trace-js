@@ -1,6 +1,7 @@
 'use strict'
 
 const { randomFillSync } = require('crypto')
+const { closeSync, openSync, readSync } = require('fs')
 
 const UINT_MAX = 4_294_967_296
 
@@ -8,6 +9,44 @@ const data = new Uint8Array(8 * 8192)
 const zeroId = new Uint8Array(8)
 
 let batch = 0
+
+// Swappable fill source. Default: OpenSSL DRBG via randomFillSync.
+// reseed() permanently replaces this with fillFromKernel once the MicroVM /run
+// hook fires, so every subsequent batch refill draws from the kernel CSPRNG.
+let fill = randomFillSync
+
+// File descriptor for /dev/urandom; opened once by reseed(). -1 means not yet
+// opened or unavailable (non-Linux), causing fillFromKernel to fall back to randomFillSync.
+let urandomFd = -1
+
+// Fill `buffer` from the kernel CSPRNG (/dev/urandom). Falls back to
+// randomFillSync and disables the fd permanently on any read failure so the
+// hot path never keeps retrying a broken fd. dd-trace must never crash the app.
+/**
+ * @param {Uint8Array | Buffer} buffer
+ */
+function fillFromKernel (buffer) {
+  if (urandomFd !== -1) {
+    try {
+      let offset = 0
+      while (offset < buffer.length) {
+        const bytesRead = readSync(urandomFd, buffer, offset, buffer.length - offset, null)
+        if (bytesRead <= 0) break
+        offset += bytesRead
+      }
+      if (offset === buffer.length) return
+    } catch {
+      // fall through to randomFillSync
+    }
+    try {
+      closeSync(urandomFd)
+    } catch {
+      // ignore
+    }
+    urandomFd = -1
+  }
+  randomFillSync(buffer)
+}
 
 // Internal representation of a trace or span ID.
 class Identifier {
@@ -206,7 +245,7 @@ function toNumberString (buffer, radix) {
  */
 function pseudoRandom () {
   if (batch === 0) {
-    randomFillSync(data)
+    fill(data)
   }
 
   batch = (batch + 1) % 8192
@@ -255,6 +294,46 @@ function writeUInt32BE (buffer, value, offset) {
 }
 
 /**
+ * Switches the batch fill source permanently from OpenSSL's DRBG to the kernel
+ * CSPRNG (/dev/urandom) and resets the batch cursor, forcing the next
+ * pseudoRandom() call to refill from post-resume kernel entropy.
+ *
+ * Called once by proxy.js#refreshIdentity() when the Lambda MicroVM `/run`
+ * lifecycle hook fires. At that point VMGenID has already reseeded the kernel
+ * CSPRNG, so the next batch and all subsequent batches are unique per clone.
+ * Idempotent: a second call from a late SIGUSR2 is a fast no-op.
+ */
+function reseed () {
+  if (fill === fillFromKernel) return
+  try {
+    urandomFd = openSync('/dev/urandom', 'r')
+  } catch {
+    // Keep urandomFd = -1; fillFromKernel falls back to randomFillSync.
+  }
+  fill = fillFromKernel
+  batch = 0
+}
+
+/**
+ * Generates a RFC 4122 v4 UUID using the kernel CSPRNG (/dev/urandom).
+ * Falls back to randomFillSync if /dev/urandom is unavailable.
+ *
+ * Use this instead of crypto.randomUUID() when entropy must be kernel-derived
+ * (e.g. after a Firecracker snapshot restore where OpenSSL's DRBG state is
+ * frozen and may not yet have reseeded from the post-VMGenID kernel entropy).
+ *
+ * @returns {string}
+ */
+function kernelUUID () {
+  const buf = Buffer.allocUnsafe(16)
+  fillFromKernel(buf)
+  buf[6] = (buf[6] & 0x0f) | 0x40 // version 4
+  buf[8] = (buf[8] & 0x3f) | 0x80 // variant 10xx
+  const h = buf.toString('hex')
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`
+}
+
+/**
  * @param {string} [value]
  * @param {number} [radix]
  * @returns {Identifier}
@@ -264,3 +343,5 @@ module.exports = function createIdentifier (value, radix) {
 }
 
 module.exports.Identifier = Identifier
+module.exports.reseed = reseed
+module.exports.kernelUUID = kernelUUID

@@ -820,6 +820,100 @@ describe('RemoteConfig', () => {
       assert.strictEqual(rc.appliedConfigs.size, 0)
     })
   })
+
+  describe('refreshClientId', () => {
+    let kernelUUIDStub
+    let RemoteConfigWithId
+
+    beforeEach(() => {
+      kernelUUIDStub = sinon.stub().returns('new-client-id-uuid')
+
+      RemoteConfigWithId = proxyquire('../../src/remote_config', {
+        '../../../../vendor/dist/crypto-randomuuid': uuid,
+        './scheduler': Scheduler,
+        '../../../../package.json': { version: '3.0.0' },
+        '../exporters/common/request': request,
+        '../log': log,
+        '../tagger': tagger,
+        '../git_metadata': getGitMetadata,
+        '../service-naming/extra-services': {
+          getExtraServices: () => extraServices,
+        },
+        '../id': { kernelUUID: kernelUUIDStub },
+      })
+    })
+
+    it('should export refreshClientId as a function', () => {
+      assert.strictEqual(typeof RemoteConfig.refreshClientId, 'function')
+    })
+
+    it('should update module-level clientId so new RC instances use the refreshed id', () => {
+      // state.client.id is a plain value property set at construction time, so
+      // verifying the module-level update requires constructing a new instance
+      // after the refresh and checking its id.
+      RemoteConfigWithId.refreshClientId(config)
+
+      const rcAfter = new RemoteConfigWithId(config)
+      assert.strictEqual(rcAfter.state.client.id, 'new-client-id-uuid')
+    })
+
+    it('should set clientId to the value returned by kernelUUID', () => {
+      const rcConfig = {
+        url: new URL('http://127.0.0.1:1337'),
+        tags: { 'runtime-id': 'runtimeId', '_dd.rc.client_id': 'old' },
+        service: 'serviceName',
+        env: 'serviceEnv',
+        version: 'appVersion',
+        remoteConfig: { pollInterval: 5 },
+      }
+      new RemoteConfigWithId(rcConfig)
+
+      RemoteConfigWithId.refreshClientId(rcConfig)
+
+      assert.strictEqual(rcConfig.tags['_dd.rc.client_id'], 'new-client-id-uuid')
+    })
+
+    it('should update config.tags[_dd.rc.client_id] when it exists', () => {
+      const rcConfig = {
+        url: new URL('http://127.0.0.1:1337'),
+        tags: {
+          'runtime-id': 'runtimeId',
+          '_dd.rc.client_id': 'old-client-id',
+        },
+        service: 'serviceName',
+        env: 'serviceEnv',
+        version: 'appVersion',
+        remoteConfig: { pollInterval: 5 },
+      }
+      new RemoteConfigWithId(rcConfig)
+
+      RemoteConfigWithId.refreshClientId(rcConfig)
+
+      assert.strictEqual(rcConfig.tags['_dd.rc.client_id'], 'new-client-id-uuid')
+    })
+
+    it('should not update config.tags[_dd.rc.client_id] when tag is absent', () => {
+      const rcConfig = {
+        url: new URL('http://127.0.0.1:1337'),
+        tags: { 'runtime-id': 'runtimeId' },
+        service: 'serviceName',
+        env: 'serviceEnv',
+        version: 'appVersion',
+        remoteConfig: { pollInterval: 5 },
+      }
+      new RemoteConfigWithId(rcConfig)
+
+      RemoteConfigWithId.refreshClientId(rcConfig)
+
+      assert.strictEqual(rcConfig.tags['_dd.rc.client_id'], undefined)
+    })
+
+    it('should call kernelUUID to generate the new ID', () => {
+      RemoteConfigWithId.refreshClientId(config)
+
+      sinon.assert.calledOnce(kernelUUIDStub)
+    })
+  })
 })
 
 function toBase64 (data) {
