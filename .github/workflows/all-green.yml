@@ -60,10 +60,11 @@ jobs:
       # lcov reports; it does not ingest istanbul's JSON.
       - if: "!cancelled()"
         run: |
+          set -o pipefail
           shopt -s nullglob
-          for dir in coverage-upload/*/lcov/; do
-            datadog-ci coverage upload "$dir" --flags "$(basename "$(dirname "$dir")")"
-          done
+          # shellcheck disable=SC2016 # the inner shell must expand "$1", not the template.
+          printf '%s\0' coverage-upload/*/lcov/ | xargs -0 -r -P 10 -I {} \
+            bash -c 'datadog-ci coverage upload "$1" --flags "$(basename "$(dirname "$1")")"' _ {}
         env:
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
       # One Codecov upload per integration via the CLI directly — the codecov-action would re-validate
@@ -90,11 +91,15 @@ jobs:
           groups=(coverage-upload/*/json/)
           [ ${#groups[@]} -gt 0 ] || exit 0
           pip install --quiet codecov-cli
+          # create-commit and create-report set up the report once and must finish before any upload;
+          # only the do-upload fan-out is safe to parallelize.
           codecovcli create-commit "${commit_args[@]}"
           codecovcli create-report --sha "$HEAD_SHA"
-          for dir in "${groups[@]}"; do
-            codecovcli do-upload "${upload_args[@]}" --dir "$dir" -F "$(basename "$(dirname "$dir")")" "${master_flag[@]}"
-          done
+          set -o pipefail
+          # shellcheck disable=SC2016 # the inner shell must expand "$@"/"$dir", not the template.
+          printf '%s\0' "${groups[@]}" | xargs -0 -r -P 10 -I {} \
+            bash -c 'dir="$1"; shift; codecovcli do-upload "$@" --dir "$dir" -F "$(basename "$(dirname "$dir")")"' \
+              _ {} "${upload_args[@]}" "${master_flag[@]}"
         env:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           BASE_REF: ${{ github.base_ref }}
