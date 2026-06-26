@@ -40,10 +40,11 @@ jobs:
           GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
           POLLING_INTERVAL: 1
           RETRIES: 20
-      # Fold every downloaded per-cell `coverage-*` artifact into one merged LCOV per integration
-      # under `coverage-upload/<group>/`. Both backends then upload the same grouped reports.
+      # Sort every downloaded per-cell `coverage-*` artifact into one directory per integration under
+      # `coverage-upload/<group>/`. The reports are not merged here — both backends merge same-flag
+      # uploads server-side — so each cell's already-patched lcov passes through byte-for-byte.
       - if: "!cancelled()"
-        run: node scripts/merge-coverage-groups.mjs
+        run: node scripts/group-coverage.mjs
       - if: "!cancelled()"
         uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
@@ -57,21 +58,22 @@ jobs:
       # attributable in the Datadog UI the same way the Codecov flags attribute it.
       - if: "!cancelled()"
         run: |
+          shopt -s nullglob
           for dir in coverage-upload/*/; do
-            [ -e "$dir/lcov.info" ] || continue
             datadog-ci coverage upload "$dir" --flags "$(basename "$dir")"
           done
         env:
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
-      # Upload one report per integration to Codecov with the CLI directly — the codecov-action would
-      # re-validate and re-download the uploader once per group (~100×). `master-coverage` is the flag
+      # One Codecov upload per integration via the CLI directly — the codecov-action would re-validate
+      # and re-download the uploader once per group (~100×). `master-coverage` is the flag
       # `.codecov.yml` gates `codecov/patch` on; attach it only on PRs targeting master so
       # release-branch PRs auto-pass. The SHA/branch/PR are passed explicitly because All Green checks
-      # out the merge ref, not the head the other workflows reported coverage for.
+      # out the merge ref, not the head the other workflows reported coverage for. No token: the repo
+      # uploads tokenless (a Codecov token would have to be an org secret, which forks can't read).
       - if: "!cancelled()"
         run: |
           commit_args=(--sha "$HEAD_SHA" --branch "$HEAD_BRANCH")
-          upload_args=(--disable-search --sha "$HEAD_SHA")
+          upload_args=(--sha "$HEAD_SHA")
           if [ -n "$PR_NUMBER" ]; then
             commit_args+=(--pr "$PR_NUMBER")
             upload_args+=(--pr "$PR_NUMBER")
@@ -80,16 +82,16 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ "$BASE_REF" = "master" ]; then
             master_flag=(-F master-coverage)
           fi
+          shopt -s nullglob
+          groups=(coverage-upload/*/)
+          [ ${#groups[@]} -gt 0 ] || exit 0
           pip install --quiet codecov-cli
           codecovcli create-commit "${commit_args[@]}"
           codecovcli create-report --sha "$HEAD_SHA"
-          for dir in coverage-upload/*/; do
-            [ -e "$dir/lcov.info" ] || continue
-            codecovcli do-upload "${upload_args[@]}" \
-              --file "$dir/lcov.info" -F "$(basename "$dir")" "${master_flag[@]}"
+          for dir in "${groups[@]}"; do
+            codecovcli do-upload "${upload_args[@]}" --dir "$dir" -F "$(basename "$dir")" "${master_flag[@]}"
           done
         env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           BASE_REF: ${{ github.base_ref }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}

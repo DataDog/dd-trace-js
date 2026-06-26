@@ -1,5 +1,5 @@
 name: Upload Coverage Artifact
-description: Upload the merged LCOV report as a GitHub Actions artifact for All Green to collect.
+description: Upload a job's LCOV report as a GitHub Actions artifact for All Green to collect and group.
 
 inputs:
   flags:
