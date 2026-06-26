@@ -57,8 +57,10 @@ function createTreeNode () {
 }
 
 function getPropertyName (canonicalName, entry) {
-  const configurationNames = entry.internalPropertyName ? [entry.internalPropertyName] : entry.configurationNames
-  return configurationNames?.[0] ?? canonicalName
+  if (entry.namespace) {
+    return `${entry.namespace}.${canonicalName}`
+  }
+  return entry.internalPropertyName ?? entry.configurationNames?.[0] ?? canonicalName
 }
 
 const FALLBACK_PATTERN =
