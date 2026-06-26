@@ -27,7 +27,10 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
     // Anything that accesses the storage is context dependent
     const onStart = ({ filters }) => {
       const store = storage('legacy').getStore()
-      if (store && !store.nosqlAnalyzed && filters?.length) {
+      const iastContext = getIastContext(store)
+      // `nosqlAnalyzed` holds the IAST context being analyzed, not a boolean: a marker
+      // stranded in the async context by a previous request must not match this one.
+      if (iastContext && store.nosqlAnalyzed !== iastContext && filters?.length) {
         for (const filter of filters) {
           this.analyze({ filter }, store)
         }
@@ -38,8 +41,9 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
 
     const onStartAndEnterWithStore = (message) => {
       const store = onStart(message || {})
-      if (store) {
-        storage('legacy').enterWith({ ...store, nosqlAnalyzed: true, nosqlParentStore: store })
+      const iastContext = store && getIastContext(store)
+      if (iastContext) {
+        storage('legacy').enterWith({ ...store, nosqlAnalyzed: iastContext, nosqlParentStore: store })
       }
     }
 

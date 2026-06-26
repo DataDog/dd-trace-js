@@ -4,7 +4,9 @@ const assert = require('node:assert/strict')
 
 const { afterEach, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
+const sinon = require('sinon')
 
+const { storage } = require('../../../../../datadog-core')
 const { channel } = require('../../../../../datadog-instrumentations/src/helpers/instrument')
 const {
   createTransaction,
@@ -12,6 +14,7 @@ const {
   removeTransaction,
   getRanges,
 } = require('../../../../src/appsec/iast/taint-tracking/operations')
+const { IAST_CONTEXT_KEY } = require('../../../../src/appsec/iast/iast-context')
 const { NOSQL_MONGODB_INJECTION_MARK } = require('../../../../src/appsec/iast/taint-tracking/secure-marks')
 
 const sanitizeMiddlewareFinished = channel('datadog:express-mongo-sanitize:filter:finish')
@@ -125,6 +128,52 @@ describe('nosql injection detection in mongodb', () => {
           assert.strictEqual(notSanitizedRanges[0].secureMarks, 0)
         })
       })
+    })
+  })
+
+  describe('cross-request context isolation', () => {
+    const nosqlAnalyzer = require('../../../../src/appsec/iast/analyzers/nosql-injection-mongodb-analyzer')
+    const mongooseFilterStart = channel('datadog:mongoose:model:filter:start')
+    const mongodbFilterStart = channel('datadog:mongodb:collection:filter:start')
+
+    beforeEach(() => {
+      nosqlAnalyzer.configure({ enabled: true })
+    })
+
+    afterEach(() => {
+      nosqlAnalyzer.configure({ enabled: false })
+    })
+
+    it('analyzes a query when a previous request left a nosqlAnalyzed marker in the async context', () => {
+      const iastContext = {}
+      const store = { [IAST_CONTEXT_KEY]: iastContext, nosqlAnalyzed: {} }
+      const analyze = sinon.spy(nosqlAnalyzer, 'analyze')
+
+      try {
+        storage('legacy').run(store, () => {
+          mongooseFilterStart.publish({ filters: [{ name: 'value' }] })
+        })
+
+        assert.strictEqual(analyze.callCount, 1)
+      } finally {
+        analyze.restore()
+      }
+    })
+
+    it('skips the nested driver analysis of the query already analyzed in this request', () => {
+      const iastContext = {}
+      const store = { [IAST_CONTEXT_KEY]: iastContext, nosqlAnalyzed: iastContext }
+      const analyze = sinon.spy(nosqlAnalyzer, 'analyze')
+
+      try {
+        storage('legacy').run(store, () => {
+          mongodbFilterStart.publish({ filters: [{ name: 'value' }] })
+        })
+
+        assert.strictEqual(analyze.callCount, 0)
+      } finally {
+        analyze.restore()
+      }
     })
   })
 })
