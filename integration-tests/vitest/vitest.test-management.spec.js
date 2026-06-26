@@ -36,6 +36,7 @@ const versions = NODE_MAJOR <= 18 ? ['1.6.0', '3.2.6'] : ['1.6.0', 'latest']
 versions.forEach((version) => {
   describe(`vitest@${version}`, () => {
     let cwd, receiver, childProcess
+    const newerVitestIt = version === '1.6.0' ? it.skip : it
 
     useSandbox([
       `vitest@${version}`,
@@ -855,6 +856,14 @@ versions.forEach((version) => {
             receiver.setSettings({ test_management: { enabled: true } })
 
             runQuarantineTest(done, true)
+          })
+
+          newerVitestIt('can quarantine tests when no-worker init is enabled', (done) => {
+            receiver.setSettings({ test_management: { enabled: true } })
+
+            runQuarantineTest(done, true, {
+              DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+            })
           })
 
           it('can quarantine tests retried by Vitest', async () => {

@@ -713,6 +713,7 @@ function configureMainProcessExecutionHooks (
   const { knownTests, modifiedFiles, testManagementTests } = testOptimizationData
   const attemptToFixTests = testManagementTests && getMainProcessAttemptToFixTests(testManagementTests)
   const disabledTests = testManagementTests && getMainProcessDisabledTests(testManagementTests)
+  const quarantinedTests = testManagementTests && getMainProcessQuarantinedTests(testManagementTests)
   const shouldConfigureEarlyFlakeDetection =
     isEarlyFlakeDetectionEnabled && knownTests?.vitest && !isEarlyFlakeDetectionFaulty
 
@@ -731,6 +732,7 @@ function configureMainProcessExecutionHooks (
       isEarlyFlakeDetectionEnabled: shouldConfigureEarlyFlakeDetection,
       knownTests: knownTests?.vitest || {},
       modifiedFiles: modifiedFiles || {},
+      quarantinedTests: quarantinedTests || {},
       repositoryRoot: testSessionConfiguration.repositoryRoot || process.cwd(),
     },
   }, 'Could not send Vitest worker setup context, so no-worker execution changes will not work.')
@@ -789,6 +791,12 @@ function getMainProcessAttemptToFixTests (testManagementTests) {
 function getMainProcessDisabledTests (testManagementTests) {
   return getMainProcessTestManagementTests(testManagementTests, properties =>
     properties.disabled && !properties.attempt_to_fix
+  )
+}
+
+function getMainProcessQuarantinedTests (testManagementTests) {
+  return getMainProcessTestManagementTests(testManagementTests, properties =>
+    properties.quarantined && !properties.attempt_to_fix
   )
 }
 
@@ -1011,6 +1019,10 @@ function createMainProcessReporter (
     const testName = getTestName(task)
     const testProperties = getMainProcessTestProperties(task, testSuiteAbsolutePath, testName)
     let status = getDatadogStatus(result)
+
+    if (task.meta?.__ddTestOptQuarantinedFailed && testProperties.isQuarantined && !testProperties.isAttemptToFix) {
+      status = 'fail'
+    }
 
     if (testProperties.isAttemptToFix && task.meta?.__ddTestOptAtfStatuses?.length) {
       return getRepeatedTestReport(task, testName, testSuiteAbsolutePath, testProperties, status, {

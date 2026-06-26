@@ -21,6 +21,7 @@ const hasEarlyFlakeDetectionSlowRetries = Object.keys(earlyFlakeDetectionSlowRet
 const isEarlyFlakeDetectionEnabled = providedContext.isEarlyFlakeDetectionEnabled === true
 const knownTests = providedContext.knownTests || {}
 const modifiedFiles = providedContext.modifiedFiles || {}
+const quarantinedTests = providedContext.quarantinedTests || {}
 const repositoryRoot = realpath(providedContext.repositoryRoot || process.cwd())
 const setVitestTaskFn = vitestRunner.setFn
 const earlyFlakeDetectionRetriesByTask = new WeakMap()
@@ -68,6 +69,7 @@ afterEach(function ({ task }) {
   if (attemptIndex === getFinalAttemptIndex(task)) {
     recordTestOptimizationStatus(task, attemptIndex)
   }
+  switchQuarantinedFinalFailure(task, attemptIndex)
 })
 
 function applyExecutionChanges (suite) {
@@ -207,6 +209,27 @@ function getFinalAttemptIndex (task) {
     return getEarlyFlakeDetectionRetryCountForTask(task)
   }
   return task.repeats
+}
+
+function switchQuarantinedFinalFailure (task, attemptIndex) {
+  const testSuite = getTestSuite(task)
+  const testName = getTestName(task)
+  if (
+    !quarantinedTests[testSuite]?.[testName] ||
+    attemptToFixTests[testSuite]?.[testName] ||
+    task.result?.state !== 'fail'
+  ) {
+    return
+  }
+
+  const retryCount = task.result?.retryCount || 0
+  const retryLimit = task.retry || 0
+  if (retryCount < retryLimit || attemptIndex < getFinalAttemptIndex(task)) {
+    return
+  }
+
+  task.meta.__ddTestOptQuarantinedFailed = true
+  task.result.state = 'pass'
 }
 
 function getAttemptToFixRetryCount (task) {
