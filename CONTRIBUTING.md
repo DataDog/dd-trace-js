@@ -551,6 +551,30 @@ Important fields:
 - `deprecated`: emits a deprecation warning when used.
 - `description`: developer-facing note in the JSON.
 - `implementation`: metadata only in the current flow.
+- `major`: restricts the entry to a major selector. See [Version-specific entries](#version-specific-entries).
+
+## Version-specific entries
+
+Most configurations share a single entry across all majors. When an entry has to differ between release lines, add one entry per major and tag each with a `major` selector rather than branching on `DD_MAJOR` at runtime. The selector is either an exact major (`"5"`) or a lower bound (`">5"`); an entry without a selector applies to every major. At load time only the entry matching the running major survives, so the rest of the config system keeps seeing exactly one entry per name.
+
+```json
+"DD_TRACE_STARTUP_LOGS": [
+  {
+    "major": ">5",
+    "type": "boolean",
+    "configurationNames": ["startupLogs"],
+    "default": "true"
+  },
+  {
+    "major": "5",
+    "type": "boolean",
+    "configurationNames": ["startupLogs"],
+    "default": "false"
+  }
+]
+```
+
+An entry tagged `"major": "5"` with no `">5"` counterpart exists on v5 and is dropped entirely on v6 and later.
 
 ## Runtime Flow
 

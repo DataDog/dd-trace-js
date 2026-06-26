@@ -32,5 +32,15 @@ ruleTester.run('eslint-env-aliases', rule, {
           "instead of alias 'DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED'",
       }],
     },
+    {
+      // Shared by both per-major entries of DD_API_SECURITY_ENABLED: the canonical must appear once,
+      // not duplicated into the message and autofix.
+      code: "const env = 'DD_EXPERIMENTAL_API_SECURITY_ENABLED'",
+      output: "const env = 'DD_API_SECURITY_ENABLED'",
+      errors: [{
+        message: "Use canonical environment variable name 'DD_API_SECURITY_ENABLED' " +
+          "instead of alias 'DD_EXPERIMENTAL_API_SECURITY_ENABLED'",
+      }],
+    },
   ],
 })

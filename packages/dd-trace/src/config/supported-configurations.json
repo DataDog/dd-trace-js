@@ -1,5 +1,4 @@
 {
-  "version": "2",
   "supportedConfigurations": {
     "DD_ACTION_EXECUTION_ID": [
       {
@@ -117,6 +116,19 @@
     ],
     "DD_API_SECURITY_ENABLED": [
       {
+        "major": ">5",
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "appsec.apiSecurity.enabled"
+        ],
+        "default": "true",
+        "aliases": [
+          "DD_EXPERIMENTAL_API_SECURITY_ENABLED"
+        ]
+      },
+      {
+        "major": "5",
         "implementation": "A",
         "type": "boolean",
         "configurationNames": [
@@ -131,6 +143,16 @@
     ],
     "DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED": [
       {
+        "major": ">5",
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "appsec.apiSecurity.endpointCollectionEnabled"
+        ],
+        "default": "true"
+      },
+      {
+        "major": "5",
         "implementation": "A",
         "type": "boolean",
         "configurationNames": [
@@ -142,6 +164,16 @@
     ],
     "DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT": [
       {
+        "major": ">5",
+        "implementation": "A",
+        "type": "int",
+        "configurationNames": [
+          "appsec.apiSecurity.endpointCollectionMessageLimit"
+        ],
+        "default": "300"
+      },
+      {
+        "major": "5",
         "implementation": "A",
         "type": "int",
         "configurationNames": [
@@ -206,6 +238,19 @@
     ],
     "DD_APPSEC_AUTO_USER_INSTRUMENTATION_MODE": [
       {
+        "major": ">5",
+        "implementation": "E",
+        "type": "string",
+        "configurationNames": [
+          "appsec.eventTracking.mode"
+        ],
+        "default": "identification",
+        "aliases": [
+          "DD_APPSEC_AUTOMATED_USER_EVENTS_TRACKING"
+        ]
+      },
+      {
+        "major": "5",
         "implementation": "E",
         "type": "string",
         "configurationNames": [
@@ -220,6 +265,17 @@
     ],
     "DD_APPSEC_COLLECT_ALL_HEADERS": [
       {
+        "major": ">5",
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "appsec.extendedHeadersCollection.enabled"
+        ],
+        "default": "false",
+        "deprecated": true
+      },
+      {
+        "major": "5",
         "implementation": "A",
         "type": "boolean",
         "configurationNames": [
@@ -232,6 +288,17 @@
     ],
     "DD_APPSEC_ENABLED": [
       {
+        "major": ">5",
+        "implementation": "C",
+        "type": "boolean",
+        "configurationNames": [
+          "appsec.enabled",
+          "appsec"
+        ],
+        "default": null
+      },
+      {
+        "major": "5",
         "implementation": "C",
         "type": "boolean",
         "configurationNames": [
@@ -245,6 +312,17 @@
     ],
     "DD_APPSEC_GRAPHQL_BLOCKED_TEMPLATE_JSON": [
       {
+        "major": ">5",
+        "implementation": "A",
+        "type": "string",
+        "configurationNames": [
+          "appsec.blockedTemplateGraphql"
+        ],
+        "default": null,
+        "transform": "readFilePath"
+      },
+      {
+        "major": "5",
         "implementation": "A",
         "type": "string",
         "configurationNames": [
@@ -257,6 +335,17 @@
     ],
     "DD_APPSEC_HEADER_COLLECTION_REDACTION_ENABLED": [
       {
+        "major": ">5",
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "appsec.extendedHeadersCollection.redaction"
+        ],
+        "default": "true",
+        "deprecated": true
+      },
+      {
+        "major": "5",
         "implementation": "A",
         "type": "boolean",
         "configurationNames": [
@@ -269,6 +358,17 @@
     ],
     "DD_APPSEC_HTTP_BLOCKED_TEMPLATE_HTML": [
       {
+        "major": ">5",
+        "implementation": "B",
+        "type": "string",
+        "configurationNames": [
+          "appsec.blockedTemplateHtml"
+        ],
+        "default": null,
+        "transform": "readFilePath"
+      },
+      {
+        "major": "5",
         "implementation": "B",
         "type": "string",
         "configurationNames": [
@@ -281,6 +381,17 @@
     ],
     "DD_APPSEC_HTTP_BLOCKED_TEMPLATE_JSON": [
       {
+        "major": ">5",
+        "implementation": "B",
+        "type": "string",
+        "configurationNames": [
+          "appsec.blockedTemplateJson"
+        ],
+        "default": null,
+        "transform": "readFilePath"
+      },
+      {
+        "major": "5",
         "implementation": "B",
         "type": "string",
         "configurationNames": [
@@ -293,6 +404,17 @@
     ],
     "DD_APPSEC_MAX_COLLECTED_HEADERS": [
       {
+        "major": ">5",
+        "implementation": "A",
+        "type": "int",
+        "configurationNames": [
+          "appsec.extendedHeadersCollection.maxHeaders"
+        ],
+        "default": "50",
+        "deprecated": true
+      },
+      {
+        "major": "5",
         "implementation": "A",
         "type": "int",
         "configurationNames": [
@@ -305,6 +427,19 @@
     ],
     "DD_APPSEC_MAX_STACK_TRACES": [
       {
+        "major": ">5",
+        "implementation": "A",
+        "type": "int",
+        "configurationNames": [
+          "appsec.stackTrace.maxStackTraces"
+        ],
+        "aliases": [
+          "DD_APPSEC_MAX_STACKTRACES"
+        ],
+        "default": "2"
+      },
+      {
+        "major": "5",
         "implementation": "A",
         "type": "int",
         "configurationNames": [
@@ -319,6 +454,19 @@
     ],
     "DD_APPSEC_MAX_STACK_TRACE_DEPTH": [
       {
+        "major": ">5",
+        "implementation": "A",
+        "type": "int",
+        "configurationNames": [
+          "appsec.stackTrace.maxDepth"
+        ],
+        "aliases": [
+          "DD_APPSEC_MAX_STACKTRACE_DEPTH"
+        ],
+        "default": "32"
+      },
+      {
+        "major": "5",
         "implementation": "A",
         "type": "int",
         "configurationNames": [
@@ -333,6 +481,16 @@
     ],
     "DD_APPSEC_OBFUSCATION_PARAMETER_KEY_REGEXP": [
       {
+        "major": ">5",
+        "implementation": "B",
+        "type": "string",
+        "configurationNames": [
+          "appsec.obfuscatorKeyRegex"
+        ],
+        "default": "(?i)pass|pw(?:or)?d|secret|(?:api|private|public|access)[_-]?key|token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)|bearer|authorization|jsessionid|phpsessid|asp\\.net[_-]sessionid|sid|jwt"
+      },
+      {
+        "major": "5",
         "implementation": "B",
         "type": "string",
         "configurationNames": [
@@ -344,6 +502,16 @@
     ],
     "DD_APPSEC_OBFUSCATION_PARAMETER_VALUE_REGEXP": [
       {
+        "major": ">5",
+        "implementation": "G",
+        "type": "string",
+        "configurationNames": [
+          "appsec.obfuscatorValueRegex"
+        ],
+        "default": "(?i)(?:p(?:ass)?w(?:or)?d|pass(?:[_-]?phrase)?|secret(?:[_-]?key)?|(?:(?:api|private|public|access)[_-]?)key(?:[_-]?id)?|(?:(?:auth|access|id|refresh)[_-]?)?token|consumer[_-]?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?|jsessionid|phpsessid|asp\\.net(?:[_-]|-)sessionid|sid|jwt)(?:\\s*=([^;&]+)|\"\\s*:\\s*(\"[^\"]+\"|\\d+))|bearer\\s+([a-z0-9\\._\\-]+)|token\\s*:\\s*([a-z0-9]{13})|gh[opsu]_([0-9a-zA-Z]{36})|ey[I-L][\\w=-]+\\.(ey[I-L][\\w=-]+(?:\\.[\\w.+\\/=-]+)?)|[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}([^\\-]+)[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY|ssh-rsa\\s*([a-z0-9\\/\\.+]{100,})"
+      },
+      {
+        "major": "5",
         "implementation": "G",
         "type": "string",
         "configurationNames": [
@@ -355,6 +523,17 @@
     ],
     "DD_APPSEC_RASP_COLLECT_REQUEST_BODY": [
       {
+        "major": ">5",
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "appsec.rasp.bodyCollection"
+        ],
+        "default": "false",
+        "deprecated": true
+      },
+      {
+        "major": "5",
         "implementation": "A",
         "type": "boolean",
         "configurationNames": [
@@ -367,6 +546,16 @@
     ],
     "DD_APPSEC_RASP_ENABLED": [
       {
+        "major": ">5",
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "appsec.rasp.enabled"
+        ],
+        "default": "true"
+      },
+      {
+        "major": "5",
         "implementation": "A",
         "type": "boolean",
         "configurationNames": [
@@ -378,6 +567,16 @@
     ],
     "DD_APPSEC_RULES": [
       {
+        "major": ">5",
+        "implementation": "B",
+        "type": "string",
+        "configurationNames": [
+          "appsec.rules"
+        ],
+        "default": null
+      },
+      {
+        "major": "5",
         "implementation": "B",
         "type": "string",
         "configurationNames": [
@@ -397,6 +596,16 @@
     ],
     "DD_APPSEC_STACK_TRACE_ENABLED": [
       {
+        "major": ">5",
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "appsec.stackTrace.enabled"
+        ],
+        "default": "true"
+      },
+      {
+        "major": "5",
         "implementation": "A",
         "type": "boolean",
         "configurationNames": [
@@ -408,6 +617,16 @@
     ],
     "DD_APPSEC_TRACE_RATE_LIMIT": [
       {
+        "major": ">5",
+        "implementation": "A",
+        "type": "int",
+        "configurationNames": [
+          "appsec.rateLimit"
+        ],
+        "default": "100"
+      },
+      {
+        "major": "5",
         "implementation": "A",
         "type": "int",
         "configurationNames": [
@@ -419,6 +638,16 @@
     ],
     "DD_APPSEC_WAF_TIMEOUT": [
       {
+        "major": ">5",
+        "implementation": "E",
+        "type": "int",
+        "configurationNames": [
+          "appsec.wafTimeout"
+        ],
+        "default": "5000"
+      },
+      {
+        "major": "5",
         "implementation": "E",
         "type": "int",
         "configurationNames": [
@@ -758,6 +987,7 @@
     ],
     "DD_EXPERIMENTAL_APPSEC_STANDALONE_ENABLED": [
       {
+        "major": "5",
         "implementation": "B",
         "type": "boolean",
         "default": "false",
@@ -989,6 +1219,16 @@
     ],
     "DD_IAST_DB_ROWS_TO_TAINT": [
       {
+        "major": ">5",
+        "implementation": "A",
+        "type": "int",
+        "configurationNames": [
+          "iast.dbRowsToTaint"
+        ],
+        "default": "1"
+      },
+      {
+        "major": "5",
         "implementation": "A",
         "type": "int",
         "configurationNames": [
@@ -1000,6 +1240,16 @@
     ],
     "DD_IAST_DEDUPLICATION_ENABLED": [
       {
+        "major": ">5",
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "iast.deduplicationEnabled"
+        ],
+        "default": "true"
+      },
+      {
+        "major": "5",
         "implementation": "A",
         "type": "boolean",
         "configurationNames": [
@@ -1011,6 +1261,17 @@
     ],
     "DD_IAST_ENABLED": [
       {
+        "major": ">5",
+        "implementation": "B",
+        "type": "boolean",
+        "configurationNames": [
+          "iast.enabled",
+          "iast"
+        ],
+        "default": "false"
+      },
+      {
+        "major": "5",
         "implementation": "B",
         "type": "boolean",
         "configurationNames": [
@@ -1024,6 +1285,16 @@
     ],
     "DD_IAST_MAX_CONCURRENT_REQUESTS": [
       {
+        "major": ">5",
+        "implementation": "A",
+        "type": "int",
+        "configurationNames": [
+          "iast.maxConcurrentRequests"
+        ],
+        "default": "2"
+      },
+      {
+        "major": "5",
         "implementation": "A",
         "type": "int",
         "configurationNames": [
@@ -1035,6 +1306,16 @@
     ],
     "DD_IAST_MAX_CONTEXT_OPERATIONS": [
       {
+        "major": ">5",
+        "implementation": "A",
+        "type": "int",
+        "configurationNames": [
+          "iast.maxContextOperations"
+        ],
+        "default": "2"
+      },
+      {
+        "major": "5",
         "implementation": "A",
         "type": "int",
         "configurationNames": [
@@ -1046,6 +1327,16 @@
     ],
     "DD_IAST_REDACTION_ENABLED": [
       {
+        "major": ">5",
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "iast.redactionEnabled"
+        ],
+        "default": "true"
+      },
+      {
+        "major": "5",
         "implementation": "A",
         "type": "boolean",
         "configurationNames": [
@@ -1057,6 +1348,16 @@
     ],
     "DD_IAST_REDACTION_NAME_PATTERN": [
       {
+        "major": ">5",
+        "implementation": "A",
+        "type": "string",
+        "configurationNames": [
+          "iast.redactionNamePattern"
+        ],
+        "default": "(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?|(?:sur|last)name|user(?:name)?|address|e?mail)"
+      },
+      {
+        "major": "5",
         "implementation": "A",
         "type": "string",
         "configurationNames": [
@@ -1068,6 +1369,16 @@
     ],
     "DD_IAST_REDACTION_VALUE_PATTERN": [
       {
+        "major": ">5",
+        "implementation": "A",
+        "type": "string",
+        "configurationNames": [
+          "iast.redactionValuePattern"
+        ],
+        "default": "(?:bearer\\s+[a-z0-9\\._\\-]+|glpat-[\\w\\-]{20}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L][\\w=\\-]+\\.ey[I-L][\\w=\\-]+(?:\\.[\\w.+/=\\-]+)?|(?:[\\-]{5}BEGIN[a-z\\s]+PRIVATE\\sKEY[\\-]{5}[^\\-]+[\\-]{5}END[a-z\\s]+PRIVATE\\sKEY[\\-]{5}|ssh-rsa\\s*[a-z0-9/\\.+]{100,})|[\\w\\.-]+@[a-zA-Z\\d\\.-]+\\.[a-zA-Z]{2,})"
+      },
+      {
+        "major": "5",
         "implementation": "A",
         "type": "string",
         "configurationNames": [
@@ -1079,6 +1390,18 @@
     ],
     "DD_IAST_REQUEST_SAMPLING": [
       {
+        "major": ">5",
+        "implementation": "A",
+        "type": "int",
+        "configurationNames": [
+          "iast.requestSampling"
+        ],
+        "default": "30",
+        "allowed": "100|[1-9]?\\d",
+        "transform": "iastRequestSampling"
+      },
+      {
+        "major": "5",
         "implementation": "A",
         "type": "int",
         "configurationNames": [
@@ -1092,14 +1415,35 @@
     ],
     "DD_IAST_SECURITY_CONTROLS_CONFIGURATION": [
       {
+        "major": ">5",
         "implementation": "B",
         "type": "string",
         "internalPropertyName": "iast.securityControlsConfiguration",
         "default": null
+      },
+      {
+        "major": "5",
+        "implementation": "B",
+        "type": "string",
+        "default": null,
+        "configurationNames": [
+          "iast.securityControlsConfiguration",
+          "experimental.iast.securityControlsConfiguration"
+        ]
       }
     ],
     "DD_IAST_STACK_TRACE_ENABLED": [
       {
+        "major": ">5",
+        "implementation": "B",
+        "type": "boolean",
+        "configurationNames": [
+          "iast.stackTrace.enabled"
+        ],
+        "default": "true"
+      },
+      {
+        "major": "5",
         "implementation": "B",
         "type": "boolean",
         "configurationNames": [
@@ -1111,6 +1455,16 @@
     ],
     "DD_IAST_TELEMETRY_VERBOSITY": [
       {
+        "major": ">5",
+        "implementation": "B",
+        "type": "string",
+        "configurationNames": [
+          "iast.telemetryVerbosity"
+        ],
+        "default": "INFORMATION"
+      },
+      {
+        "major": "5",
         "implementation": "B",
         "type": "string",
         "configurationNames": [
@@ -1346,6 +1700,13 @@
     ],
     "DD_PROFILING_CODEHOTSPOTS_ENABLED": [
       {
+        "major": ">5",
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      },
+      {
+        "major": "5",
         "implementation": "A",
         "type": "boolean",
         "default": "true",
@@ -1356,6 +1717,7 @@
     ],
     "DD_PROFILING_EXPERIMENTAL_CODEHOTSPOTS_ENABLED": [
       {
+        "major": "5",
         "implementation": "A",
         "type": "boolean",
         "default": "true",
@@ -1367,6 +1729,13 @@
     ],
     "DD_PROFILING_CPU_ENABLED": [
       {
+        "major": ">5",
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      },
+      {
+        "major": "5",
         "implementation": "A",
         "type": "boolean",
         "default": "true",
@@ -1377,6 +1746,7 @@
     ],
     "DD_PROFILING_EXPERIMENTAL_CPU_ENABLED": [
       {
+        "major": "5",
         "implementation": "A",
         "type": "boolean",
         "default": "true",
@@ -1421,6 +1791,13 @@
     ],
     "DD_PROFILING_ENDPOINT_COLLECTION_ENABLED": [
       {
+        "major": ">5",
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      },
+      {
+        "major": "5",
         "implementation": "A",
         "type": "boolean",
         "default": "true",
@@ -1431,6 +1808,7 @@
     ],
     "DD_PROFILING_EXPERIMENTAL_ENDPOINT_COLLECTION_ENABLED": [
       {
+        "major": "5",
         "implementation": "A",
         "type": "boolean",
         "default": "true",
@@ -1513,6 +1891,13 @@
     ],
     "DD_PROFILING_TIMELINE_ENABLED": [
       {
+        "major": ">5",
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      },
+      {
+        "major": "5",
         "implementation": "A",
         "type": "boolean",
         "default": "true",
@@ -1523,6 +1908,7 @@
     ],
     "DD_PROFILING_EXPERIMENTAL_TIMELINE_ENABLED": [
       {
+        "major": "5",
         "implementation": "A",
         "type": "boolean",
         "default": "true",
@@ -1631,6 +2017,16 @@
     ],
     "DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED": [
       {
+        "major": ">5",
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "runtimeMetricsRuntimeId"
+        ],
+        "default": "false"
+      },
+      {
+        "major": "5",
         "implementation": "A",
         "type": "boolean",
         "configurationNames": [
@@ -1652,6 +2048,7 @@
     ],
     "DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED": [
       {
+        "major": "5",
         "implementation": "B",
         "type": "boolean",
         "default": "false",
@@ -2560,6 +2957,7 @@
     ],
     "DD_TRACE_EXPERIMENTAL_B3_ENABLED": [
       {
+        "major": "5",
         "implementation": "A",
         "type": "boolean",
         "configurationNames": [
@@ -3555,6 +3953,16 @@
     ],
     "DD_TRACE_RATE_LIMIT": [
       {
+        "major": ">5",
+        "implementation": "A",
+        "type": "int",
+        "configurationNames": [
+          "rateLimit"
+        ],
+        "default": "100"
+      },
+      {
+        "major": "5",
         "implementation": "A",
         "type": "int",
         "configurationNames": [
@@ -3650,6 +4058,17 @@
     ],
     "DD_TRACE_SAMPLE_RATE": [
       {
+        "major": ">5",
+        "implementation": "B",
+        "type": "decimal",
+        "configurationNames": [
+          "sampleRate"
+        ],
+        "default": null,
+        "transform": "sampleRate"
+      },
+      {
+        "major": "5",
         "implementation": "B",
         "type": "decimal",
         "configurationNames": [
@@ -3742,12 +4161,22 @@
     ],
     "DD_TRACE_STARTUP_LOGS": [
       {
+        "major": ">5",
         "implementation": "C",
         "type": "boolean",
         "configurationNames": [
           "startupLogs"
         ],
         "default": "true"
+      },
+      {
+        "major": "5",
+        "implementation": "C",
+        "type": "boolean",
+        "configurationNames": [
+          "startupLogs"
+        ],
+        "default": "false"
       }
     ],
     "DD_TRACE_STATS_COMPUTATION_ENABLED": [

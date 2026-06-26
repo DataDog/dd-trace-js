@@ -206,44 +206,77 @@ describe('Config', () => {
       )
     })
 
-    itV6Filter('applyMajorOverrides is idempotent on the same supportedConfigurations object', () => {
-      const fresh = proxyquire.noPreserveCache()('../../src/config/supported-configurations.json', {})
+    const applyMajorOverridesForMajor = (major) => {
+      const { supportedConfigurations } =
+        proxyquire.noPreserveCache()('../../src/config/supported-configurations.json', {})
       const applyMajorOverrides = proxyquire.noPreserveCache()('../../src/config/major-overrides', {})
-      const supported = fresh.supportedConfigurations
-      assert.ok('DD_PROFILING_EXPERIMENTAL_CPU_ENABLED' in supported)
-      supported.DD_PROFILING_CPU_ENABLED[0].aliases.push('DD_PROFILING_TEST_ALIAS')
-      applyMajorOverrides(supported, 6)
-      assert.strictEqual('DD_PROFILING_EXPERIMENTAL_CPU_ENABLED' in supported, false)
-      assert.strictEqual('DD_TRACE_EXPERIMENTAL_B3_ENABLED' in supported, false)
-      assert.strictEqual('DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED' in supported, false)
-      const cpuEntry = supported.DD_PROFILING_CPU_ENABLED[0]
-      assert.ok(
-        !cpuEntry.aliases?.some((alias) => alias.startsWith('DD_PROFILING_EXPERIMENTAL_')),
-        `Got: ${inspect(cpuEntry.aliases)}`
-      )
-      assert.deepStrictEqual(cpuEntry.aliases, ['DD_PROFILING_TEST_ALIAS'])
-      const runtimeIdEntry = supported.DD_RUNTIME_METRICS_RUNTIME_ID_ENABLED[0]
-      assert.strictEqual(runtimeIdEntry.aliases, undefined)
+      applyMajorOverrides(supportedConfigurations, major)
+      return supportedConfigurations
+    }
 
-      const beforeKeyCount = Object.keys(supported).length
-      applyMajorOverrides(supported, 6)
-      assert.strictEqual(Object.keys(supported).length, beforeKeyCount)
-    })
+    it('selects the v5 entry for each diverging configuration', () => {
+      const v5 = applyMajorOverridesForMajor(5)
 
-    it('applyMajorOverrides is idempotent for v5 security controls', () => {
-      const fresh = proxyquire.noPreserveCache()('../../src/config/supported-configurations.json', {})
-      const applyMajorOverrides = proxyquire.noPreserveCache()('../../src/config/major-overrides', {})
-      const supported = fresh.supportedConfigurations
-      const iastEntry = supported.DD_IAST_SECURITY_CONTROLS_CONFIGURATION[0]
-
-      applyMajorOverrides(supported, 5)
-      applyMajorOverrides(supported, 5)
-
-      assert.deepStrictEqual(iastEntry.configurationNames, [
+      // Every surviving entry has its selector stripped and resolves to a single entry.
+      for (const [name, entries] of Object.entries(v5)) {
+        assert.strictEqual(entries.length, 1, `${name} should resolve to a single entry`)
+        assert.strictEqual(entries[0].major, undefined, `${name} should not keep its major selector`)
+      }
+      // Default override.
+      assert.strictEqual(v5.DD_TRACE_STARTUP_LOGS[0].default, 'false')
+      // configurationNames keep the experimental alias.
+      assert.deepStrictEqual(v5.DD_API_SECURITY_ENABLED[0].configurationNames, [
+        'appsec.apiSecurity.enabled',
+        'experimental.appsec.apiSecurity.enabled',
+      ])
+      // Canonical keeps its deprecated alias.
+      assert.deepStrictEqual(v5.DD_PROFILING_CPU_ENABLED[0].aliases, ['DD_PROFILING_EXPERIMENTAL_CPU_ENABLED'])
+      // Security controls expose configurationNames rather than internalPropertyName.
+      assert.deepStrictEqual(v5.DD_IAST_SECURITY_CONTROLS_CONFIGURATION[0].configurationNames, [
         'iast.securityControlsConfiguration',
         'experimental.iast.securityControlsConfiguration',
       ])
-      assert.strictEqual(iastEntry.internalPropertyName, undefined)
+      assert.strictEqual(v5.DD_IAST_SECURITY_CONTROLS_CONFIGURATION[0].internalPropertyName, undefined)
+      // v5-only experimental keys stay registered.
+      assert.ok('DD_TRACE_EXPERIMENTAL_B3_ENABLED' in v5)
+      assert.ok('DD_PROFILING_EXPERIMENTAL_CPU_ENABLED' in v5)
+    })
+
+    it('selects the v6 entry and drops v5-only configurations', () => {
+      const v6 = applyMajorOverridesForMajor(6)
+
+      for (const [name, entries] of Object.entries(v6)) {
+        assert.strictEqual(entries.length, 1, `${name} should resolve to a single entry`)
+        assert.strictEqual(entries[0].major, undefined, `${name} should not keep its major selector`)
+      }
+      assert.strictEqual(v6.DD_TRACE_STARTUP_LOGS[0].default, 'true')
+      assert.deepStrictEqual(v6.DD_API_SECURITY_ENABLED[0].configurationNames, ['appsec.apiSecurity.enabled'])
+      assert.strictEqual(v6.DD_PROFILING_CPU_ENABLED[0].aliases, undefined)
+      assert.strictEqual(v6.DD_IAST_SECURITY_CONTROLS_CONFIGURATION[0].internalPropertyName,
+        'iast.securityControlsConfiguration')
+      assert.strictEqual(v6.DD_IAST_SECURITY_CONTROLS_CONFIGURATION[0].configurationNames, undefined)
+      assert.strictEqual('DD_TRACE_EXPERIMENTAL_B3_ENABLED' in v6, false)
+      assert.strictEqual('DD_PROFILING_EXPERIMENTAL_CPU_ENABLED' in v6, false)
+      assert.strictEqual('DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED' in v6, false)
+    })
+
+    it('treats a ">5" selector as forward-compatible for the next major', () => {
+      const v6 = applyMajorOverridesForMajor(6)
+      const v7 = applyMajorOverridesForMajor(7)
+      assert.deepStrictEqual(v7, v6)
+    })
+
+    it('is idempotent when applied repeatedly to the shared object', () => {
+      // helper.js and defaults.js call applyMajorOverrides on the same cached require, so a
+      // second pass must be a no-op rather than re-collapsing already-resolved entries.
+      const { supportedConfigurations } =
+        proxyquire.noPreserveCache()('../../src/config/supported-configurations.json', {})
+      const applyMajorOverrides = proxyquire.noPreserveCache()('../../src/config/major-overrides', {})
+
+      applyMajorOverrides(supportedConfigurations, 6)
+      const afterFirst = structuredClone(supportedConfigurations)
+      applyMajorOverrides(supportedConfigurations, 6)
+      assert.deepStrictEqual(supportedConfigurations, afterFirst)
     })
 
     it('loads v5 config repeatedly after security controls are restored', () => {
