@@ -25,6 +25,43 @@ class RedisPlugin extends CachePlugin {
   constructor (...args) {
     super(...args)
     this._spanType = 'redis'
+    // Only bind node-redis built-in channels for the redis plugin itself, not subclasses
+    // (e.g. ioredis, iovalkey). When both @redis/client and a subclass are loaded, the
+    // base-class constructor runs for each plugin instance; without this guard the subclass
+    // would also handle @redis/client spans and tag them with the wrong component/integration.
+    if (this.constructor === RedisPlugin) {
+      // @redis/client >= 5.12.0 emits built-in TracingChannel events on Node.js >= 19.9 / 20.2.
+      // Subscribe directly so no shimmer is needed for those version combinations.
+      this.addBind('tracing:node-redis:command:start', ctx => this.#bindBuiltinRedisStart(ctx))
+      // Use asyncEnd (not end) because tracePromise fires end before error.
+      this.addSub('tracing:node-redis:command:asyncEnd', ctx => this.finish(ctx))
+      this.addSub('tracing:node-redis:command:error', ctx => this.error(ctx))
+    }
+  }
+
+  /**
+   * Normalizes the `@redis/client` built-in TracingChannel context to the format
+   * expected by RedisPlugin.bindStart.
+   *
+   * Built-in context: { command (uppercase), args (includes command name at [0]),
+   *   database, clientId, serverAddress, serverPort }
+   *
+   * @param {{ command: string, args: string[], database: number,
+   *   serverAddress: string, serverPort: number | undefined }} builtinCtx
+   * @returns {object}
+   */
+  #bindBuiltinRedisStart (builtinCtx) {
+    const ctx = {
+      db: builtinCtx.database,
+      command: builtinCtx.command,
+      args: builtinCtx.args,
+      argsStartIndex: 1, // args[0] is the command name; skip it in formatting
+      connectionOptions: {
+        host: builtinCtx.serverAddress,
+        port: builtinCtx.serverPort,
+      },
+    }
+    return this.bindStart(ctx)
   }
 
   bindStart (ctx) {

@@ -72,14 +72,34 @@ addHook({ name: '@node-redis/client', file: 'dist/lib/client/index.js', versions
   return redis
 })
 
-addHook({ name: '@redis/client', file: 'dist/lib/client/index.js', versions: ['>=1.1'] }, redis => {
+addHook({ name: '@redis/client', file: 'dist/lib/client/index.js', versions: ['>=1.1 <5.12.0'] }, (redis) => {
   shimmer.wrap(redis.default, 'create', wrapCreateClient)
   return redis
 })
 
-addHook({ name: '@redis/client', file: 'dist/lib/client/commands-queue.js', versions: ['>=1.1'] }, redis => {
+addHook({ name: '@redis/client', file: 'dist/lib/client/commands-queue.js', versions: ['>=1.1 <5.12.0'] }, (redis) => {
   redis.default = wrapCommandQueueClass(redis.default)
   shimmer.wrap(redis.default.prototype, 'addCommand', wrapAddCommand)
+  return redis
+})
+
+// @redis/client >= 5.12.0 emits built-in TracingChannel events (tracing:node-redis:command).
+// On Node.js >= 19.9 / 20.2 the plugin subscribes directly; on Node.js 18 the native
+// diagnostics_channel lacks tracingChannel so @redis/client skips it — fall back to the shimmer.
+addHook({ name: '@redis/client', file: 'dist/lib/client/index.js', versions: ['>=5.12.0'] }, (redis) => {
+  // eslint-disable-next-line n/no-unsupported-features/node-builtins
+  if (typeof require('node:diagnostics_channel').tracingChannel !== 'function') {
+    shimmer.wrap(redis.default, 'create', wrapCreateClient)
+  }
+  return redis
+})
+
+addHook({ name: '@redis/client', file: 'dist/lib/client/commands-queue.js', versions: ['>=5.12.0'] }, (redis) => {
+  // eslint-disable-next-line n/no-unsupported-features/node-builtins
+  if (typeof require('node:diagnostics_channel').tracingChannel !== 'function') {
+    redis.default = wrapCommandQueueClass(redis.default)
+    shimmer.wrap(redis.default.prototype, 'addCommand', wrapAddCommand)
+  }
   return redis
 })
 
