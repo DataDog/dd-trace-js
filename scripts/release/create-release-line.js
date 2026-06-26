@@ -34,6 +34,8 @@ if (!releaseLine || releaseLine === 'help' || flags.help) {
 }
 
 const releaseBranch = `v${releaseLine}.x`
+const prevReleaseLine = String(Number(releaseLine) - 1)
+const prevReleaseBranch = `v${prevReleaseLine}.x`
 
 try {
   start('Check for requirements')
@@ -49,12 +51,14 @@ try {
 
   pass()
 
-  start('Find open release proposal PRs')
+  start(`Find open release proposal PRs for ${prevReleaseBranch}`)
 
-  // Release proposal PRs have head branches matching v{major}.*.*-proposal.
+  // Release proposal PRs for the previous release line have head branches
+  // matching v{prev}.*.*-proposal. We look at the previous line because
+  // the new release line doesn't have proposals yet.
   const proposalPRsJson = capture(
     'gh pr list --repo DataDog/dd-trace-js --state open --json headRefName,number,title' +
-    String.raw` --jq '[.[] | select(.headRefName | test("^v${releaseLine}\\.[0-9]+\\.[0-9]+-proposal$"))]'`
+    String.raw` --jq '[.[] | select(.headRefName | test("^v${prevReleaseLine}\\.[0-9]+\\.[0-9]+-proposal$"))]'`
   )
 
   const proposalPRs = JSON.parse(proposalPRsJson)
@@ -70,54 +74,35 @@ try {
 
     pass(titles)
 
-    start('Resolve base commit from proposal branches')
+    start('Resolve base commit before proposal commits on master')
 
-    // Fetch all proposal branches so we can compute merge-bases.
-    for (const pr of proposalPRs) {
-      try {
-        run(`git fetch origin ${pr.headRefName}`)
-      } catch {
-        // Branch may not exist on origin yet; skip it.
-      }
+    // Fetch the previous release line so we can compare against master.
+    run(`git fetch origin ${prevReleaseBranch}`)
+
+    // Find the oldest master commit not yet reflected in the previous release
+    // line (by patch-id matching). Commits cherry-picked to the release line
+    // are excluded; those still pending — including the ones in the open
+    // proposal — are included. The first (oldest) is where the proposal cycle
+    // started on master.
+    const firstProposalSha = capture(
+      'git log --cherry-pick --right-only --format=%H --reverse' +
+      ` origin/${prevReleaseBranch}...origin/${main} | head -1`
+    )
+
+    if (firstProposalSha) {
+      // Branch the new release line from the parent of the first proposal
+      // commit, so it starts before any proposal-cycle work.
+      baseCommit = capture(`git rev-parse ${firstProposalSha}^`)
+
+      const shortSha = baseCommit.slice(0, 12)
+      const commitMsg = capture(`git log -1 --format=%s ${baseCommit}`)
+
+      pass(`${shortSha} "${commitMsg}"`)
+    } else {
+      pass(`${prevReleaseBranch} is fully up to date — using HEAD of ${main}`)
+
+      baseCommit = capture(`git rev-parse origin/${main}`)
     }
-
-    // For each proposal branch, compute its merge-base with master. Then pick
-    // the oldest one (the commit with the most subsequent commits on master),
-    // which is the last clean commit before the first proposal diverged.
-    let oldestCommit = null
-    let oldestDistance = -1
-
-    for (const pr of proposalPRs) {
-      let mergeBase
-      try {
-        mergeBase = capture(`git merge-base origin/${main} origin/${pr.headRefName}`)
-      } catch {
-        continue
-      }
-
-      // Count commits on master that come after this merge-base.
-      // A larger count means the merge-base is older.
-      const distance = Number.parseInt(
-        capture(`git rev-list --count ${mergeBase}..origin/${main}`),
-        10
-      )
-
-      if (distance > oldestDistance) {
-        oldestDistance = distance
-        oldestCommit = mergeBase
-      }
-    }
-
-    if (!oldestCommit) {
-      fatal('Could not determine a merge-base for any of the proposal branches.')
-    }
-
-    baseCommit = oldestCommit
-
-    const shortSha = baseCommit.slice(0, 12)
-    const commitMsg = capture(`git log -1 --format=%s ${baseCommit}`)
-
-    pass(`${shortSha} "${commitMsg}"`)
   }
 
   start(`Check whether ${releaseBranch} already exists on remote`)
