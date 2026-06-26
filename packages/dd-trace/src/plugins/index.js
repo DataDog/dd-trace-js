@@ -85,6 +85,8 @@ const plugins = {
   get 'microgateway-core' () { return require('../../../datadog-plugin-microgateway-core/src') },
   get mocha () { return require('../../../datadog-plugin-mocha/src') },
   get 'mocha-each' () { return require('../../../datadog-plugin-mocha/src') },
+  get h3 () { return require('../../../datadog-plugin-nitro/src') },
+  get nitro () { return require('../../../datadog-plugin-nitro/src') },
   get vitest () { return require('../../../datadog-plugin-vitest/src') },
   get workerpool () { return require('../../../datadog-plugin-mocha/src') },
   get tinypool () { return require('../../../datadog-plugin-vitest/src') },
