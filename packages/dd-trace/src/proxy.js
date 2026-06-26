@@ -265,10 +265,8 @@ class Tracer extends NoopProxy {
   }
 
   /**
-   * Listens for the MicroVM /run lifecycle event (http channel + SIGUSR2
-   * fallback) and triggers a one-time identity reset on first fire.
-   * SIGUSR2 is kept registered after reset: removing the only handler reverts
-   * to the OS default (process termination) on a late signal.
+   * Listens for the MicroVM /run lifecycle event and triggers a one-time
+   * identity reset on first fire.
    *
    * @param {import('./config/config-base')} config
    */
@@ -285,13 +283,12 @@ class Tracer extends NoopProxy {
     }
 
     const onHttpRequest = ({ request }) => {
-      if (request.method === 'POST' && request.url === '/run') {
+      if (request.method === 'POST' && request.url === '/aws/lambda-microvms/runtime/v1/run') {
         resetIdentity()
       }
     }
 
     ch.subscribe(onHttpRequest)
-    process.on('SIGUSR2', resetIdentity)
   }
 
   /**
