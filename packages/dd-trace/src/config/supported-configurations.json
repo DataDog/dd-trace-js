@@ -1238,6 +1238,16 @@
         "default": null
       }
     ],
+    "DD_LLMOBS_SAMPLE_RATE": [
+      {
+        "implementation": "A",
+        "type": "decimal",
+        "configurationNames": [
+          "llmobs.sampleRate"
+        ],
+        "default": "1.0"
+      }
+    ],
     "DD_LOGS_INJECTION": [
       {
         "implementation": "B",
@@ -1398,8 +1408,8 @@
         "implementation": "B",
         "type": "string",
         "default": "on",
-        "allowed": "on|off|(gzip|zstd)(-[1-9][0-9]?)?",
-        "transform": "toLowerCase"
+        "allowed": "on|off|gzip(-[1-9])?|zstd(-([1-9]|1[0-9]|2[0-2]))?",
+        "transform": "normalizeProfilingUploadCompression"
       }
     ],
     "DD_PROFILING_ENABLED": [
@@ -1486,7 +1496,8 @@
       {
         "implementation": "A",
         "type": "int",
-        "default": "524288"
+        "default": "524288",
+        "allowed": "[1-9]\\d*"
       }
     ],
     "DD_PROFILING_PPROF_PREFIX": [

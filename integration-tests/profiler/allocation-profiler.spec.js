@@ -81,7 +81,7 @@ describe('allocation profiler', () => {
     const cases = [
       {
         allocationProfilingEnabled: false,
-        sampleTypes: ['objects', 'space'],
+        sampleTypes: ['inuse_objects', 'inuse_space'],
       },
       {
         allocationProfilingEnabled: true,

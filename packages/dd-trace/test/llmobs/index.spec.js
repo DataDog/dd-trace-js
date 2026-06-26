@@ -9,6 +9,8 @@ const sinon = require('sinon')
 
 const { DD_MAJOR } = require('../../../../version')
 const { INCOMPATIBLE_INITIALIZATION } = require('../../src/llmobs/constants/text')
+const LLMObsTagger = require('../../src/llmobs/tagger')
+const { SAMPLE_RATE, SAMPLING_DECISION } = require('../../src/llmobs/constants/tags')
 const { getConfigFresh } = require('../helpers/config')
 const { removeDestroyHandler } = require('./util')
 
@@ -108,6 +110,33 @@ describe('module', () => {
       injectCh.publish({ carrier })
 
       assert.strictEqual(carrier['x-datadog-tags'], '_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test')
+    })
+
+    it('injects the sampling rate and decision from the parent LLMObs span', () => {
+      llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+      store.span = {
+        context () {
+          return {
+            toSpanId () {
+              return 'parent-id'
+            },
+          }
+        },
+      }
+      LLMObsTagger.tagMap.set(store.span, {
+        [SAMPLE_RATE]: '0.5',
+        [SAMPLING_DECISION]: '0',
+      })
+
+      const carrier = {
+        'x-datadog-tags': '',
+      }
+      injectCh.publish({ carrier })
+
+      assert.strictEqual(
+        carrier['x-datadog-tags'],
+        '_dd.p.llmobs_parent_id=parent-id,_dd.p.llmobs_ml_app=test,_dd.p.llmobs_sr=0.5,_dd.p.llmobs_sd=0'
+      )
     })
 
     it('does not inject LLMObs parent ID info when there is no parent LLMObs span', () => {
