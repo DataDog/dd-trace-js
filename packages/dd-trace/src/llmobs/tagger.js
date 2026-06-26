@@ -105,7 +105,7 @@ class LLMObsTagger {
     integration,
     _decorator,
   } = {}) {
-    if (!this.#config.llmobs.enabled) return
+    if (!this.#config.llmobs.DD_LLMOBS_ENABLED) return
     if (!kind) return // do not register it in the map if it doesn't have an llmobs span kind
 
     const spanMlApp =
@@ -734,7 +734,7 @@ class LLMObsTagger {
   }
 
   _register (span) {
-    if (!this.#config.llmobs.enabled) return
+    if (!this.#config.llmobs.DD_LLMOBS_ENABLED) return
     if (registry.has(span)) {
       this.#handleFailure(`LLMObs Span "${span._name}" already registered.`)
       return
@@ -744,7 +744,7 @@ class LLMObsTagger {
   }
 
   _setTag (span, key, value) {
-    if (!this.#config.llmobs.enabled) return
+    if (!this.#config.llmobs.DD_LLMOBS_ENABLED) return
     if (!registry.has(span)) {
       this.#handleFailure(`Span "${span._name}" must be an LLMObs generated span.`)
       return
