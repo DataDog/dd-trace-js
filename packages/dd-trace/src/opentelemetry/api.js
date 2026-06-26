@@ -1,11 +1,10 @@
 'use strict'
 
 const { DD_MAJOR } = require('../../../../version')
+const satisfies = require('../../../../vendor/dist/semifies')
 const log = require('../log')
 
 const PACKAGE_NAME = '@opentelemetry/api'
-
-/** @typedef {{ major: number, minor: number }} VersionParts */
 
 // undefined: not resolved yet; null: resolved and absent; object: resolved api.
 /** @type {typeof import('@opentelemetry/api') | null | undefined} */
@@ -72,7 +71,10 @@ function ensureResolved () {
 /**
  * Reads the package version by walking up from the resolved entrypoint. The
  * package blocks `require('@opentelemetry/api/package.json')` through its
- * `exports` map, so the version is read from disk instead.
+ * `exports` map, so the version is read from disk instead. `require-package-json`
+ * resolves against a module's `module.paths`, which on v5 points at dd-trace's copy
+ * rather than the application copy this entrypoint was resolved from, so it cannot
+ * answer "which copy did we share"; the walk anchors on the resolved entry instead.
  *
  * @param {string} entry - Absolute path to the resolved package entrypoint.
  * @returns {string | undefined}
@@ -92,50 +94,20 @@ function readVersionNear (entry) {
 }
 
 /**
+ * Warns when the resolved version is outside dd-trace's declared range, read from
+ * dd-trace's own package.json so the threshold stays in lockstep with the declaration.
+ *
  * @param {string | undefined} version - Resolved `@opentelemetry/api` version.
  */
 function warnIfUnsupported (version) {
-  const supportedMax = supportedUpperBound()
-  const parsed = parseMajorMinor(version)
-  if (!supportedMax || !parsed) return
-  // The declared range is `<major.minor.0`, so anything at or above is unsupported.
-  if (parsed.major > supportedMax.major ||
-      (parsed.major === supportedMax.major && parsed.minor >= supportedMax.minor)) {
-    log.warn(
-      '@opentelemetry/api@%s is newer than dd-trace supports (<%d.%d.0); OpenTelemetry spans may run as no-ops.',
-      version, supportedMax.major, supportedMax.minor
-    )
-  }
-}
-
-/**
- * The supported upper bound is read from dd-trace's own declared range so the
- * warning threshold stays in lockstep with the dependency declaration.
- *
- * @returns {VersionParts | undefined}
- */
-function supportedUpperBound () {
   const pkg = require('../../../../package.json')
   const range = pkg.peerDependencies?.[PACKAGE_NAME] ?? pkg.optionalDependencies?.[PACKAGE_NAME]
-  return parseUpperBound(range)
-}
-
-/**
- * @param {string | undefined} range - A semver range such as `>=1.0.0 <1.10.0`.
- * @returns {VersionParts | undefined}
- */
-function parseUpperBound (range) {
-  const match = typeof range === 'string' ? /<\s*(\d+)\.(\d+)\.\d+/.exec(range) : null
-  return match ? { major: Number(match[1]), minor: Number(match[2]) } : undefined
-}
-
-/**
- * @param {string | undefined} version - A semver version such as `1.9.0`.
- * @returns {VersionParts | undefined}
- */
-function parseMajorMinor (version) {
-  const match = typeof version === 'string' ? /^(\d+)\.(\d+)\./.exec(version) : null
-  return match ? { major: Number(match[1]), minor: Number(match[2]) } : undefined
+  if (version && range && !satisfies(version, range)) {
+    log.warn(
+      '@opentelemetry/api@%s is outside the range dd-trace supports (%s); OpenTelemetry spans may run as no-ops.',
+      version, range
+    )
+  }
 }
 
 /**

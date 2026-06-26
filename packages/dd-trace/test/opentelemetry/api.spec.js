@@ -106,7 +106,7 @@ describe('opentelemetry/api loader', () => {
     const { loader, warn } = buildLoader({ version: '1.10.0' })
     loader.load()
     assert.ok(warn.calledOnce)
-    assert.match(warn.firstCall.args[0], /newer than dd-trace supports/)
+    assert.match(warn.firstCall.args[0], /outside the range dd-trace supports/)
     assert.ok(warn.firstCall.args.includes('1.10.0'))
   })
 
@@ -183,7 +183,7 @@ describe('opentelemetry/api loader version walk on disk', () => {
     const { loader, warn } = buildDiskLoader('1.10.0')
     loader.load()
     assert.ok(warn.calledOnce)
-    assert.match(warn.firstCall.args[0], /newer than dd-trace supports/)
+    assert.match(warn.firstCall.args[0], /outside the range dd-trace supports/)
   })
 
   it('reads the version from a nested entrypoint and stays silent when supported', () => {
