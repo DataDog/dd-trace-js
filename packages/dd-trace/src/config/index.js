@@ -717,15 +717,9 @@ function getConfig (options) {
 }
 
 /**
- * Regenerates the runtime ID from the kernel CSPRNG and updates the config's
- * tags in-place. Must be called after id.reseed() so that kernelUUID() draws
- * from post-resume /dev/urandom rather than the frozen OpenSSL DRBG.
+ * Regenerates the runtime ID from the kernel CSPRNG.
  *
- * Called by proxy.js#refreshIdentity() when the Lambda MicroVM `/run`
- * lifecycle hook fires, giving each clone a distinct runtime identity.
- *
- * Known limitation: the process-discovery metadata written at tracer init
- * (tracer_metadata.js) is not refreshed and will still carry the original ID.
+ * Used for Lambda MicroVM `/run` lifecycle hooks, giving each clone a distinct runtime identity.
  *
  * @param {import('./config-base')} config
  */

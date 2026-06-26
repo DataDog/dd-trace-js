@@ -576,14 +576,8 @@ function supportsAckCallback (handler) {
 }
 
 /**
- * Regenerates the RC client ID from the kernel CSPRNG and updates the config
- * tag in-place. Must be called after id.reseed() so that kernelUUID() draws
- * from post-resume /dev/urandom rather than the frozen OpenSSL DRBG.
- *
- * `state.client.id` is a live getter that reads `clientId` on every
- * `getPayload()` call, so the update is reflected in all subsequent RC polls
- * without restarting RC. Only updates `_dd.rc.client_id` in config.tags
- * when RC is enabled (i.e. the RemoteConfig constructor has already run).
+ * Regenerates the RC client ID from the kernel CSPRNG and updates config tags.
+ * `state.client.id` is a live getter, so subsequent RC polls pick up the new value.
  *
  * @param {import('../config/config-base')} config
  */

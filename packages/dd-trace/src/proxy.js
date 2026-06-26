@@ -244,8 +244,8 @@ class Tracer extends NoopProxy {
       }
 
       // eslint-disable-next-line eslint-rules/eslint-process-env
-      if (Boolean(process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN)) {
-        this._registerMicroVmRunHook(config)
+      if (process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN) {
+        this.#registerMicroVmRunHook(config)
       }
     } catch (e) {
       log.error('Error initializing tracer', e)
@@ -256,28 +256,14 @@ class Tracer extends NoopProxy {
   }
 
   /**
-   * Registers two listeners that each trigger a one-time identity reset when
-   * the Lambda MicroVM `/run` lifecycle hook fires (post-snapshot, per clone):
-   *
-   *   1. `http.server.request.start` diagnostics channel — fires before the
-   *      user's handler for apps using Node.js's built-in `http` module.
-   *   2. `SIGUSR2` — fired by serverless-init when it receives the `/run` hook,
-   *      covering apps whose HTTP transport does not emit the channel above.
-   *
-   * A shared `done` flag prevents the reset from running twice when both
-   * signals arrive. Node.js's single-threaded event loop ensures the flag
-   * check-and-set is atomic — no concurrent execution is possible between the
-   * two callbacks.
-   *
-   * The HTTP channel subscriber is removed after the first reset. The SIGUSR2
-   * listener is intentionally kept registered for the VM's lifetime: removing
-   * the only SIGUSR2 handler reverts to the OS default action (process
-   * termination), so a late signal from serverless-init would kill the process.
-   * The `done` flag makes it a fast no-op after the first fire.
+   * Listens for the MicroVM /run lifecycle event (http channel + SIGUSR2
+   * fallback) and triggers a one-time identity reset on first fire.
+   * SIGUSR2 is kept registered after reset: removing the only handler reverts
+   * to the OS default (process termination) on a late signal.
    *
    * @param {import('./config/config-base')} config
    */
-  _registerMicroVmRunHook (config) {
+  #registerMicroVmRunHook (config) {
     const { channel } = require('diagnostics_channel')
     const ch = channel('http.server.request.start')
     let done = false
@@ -300,31 +286,19 @@ class Tracer extends NoopProxy {
   }
 
   /**
-   * Regenerates the runtime ID for this tracer instance.
-   *
-   * In Lambda MicroVM deployments this is called automatically when the
-   * platform's `POST /run` lifecycle hook is received. Call it manually only
-   * if your application does not expose an HTTP server or you need to trigger
-   * the reset from non-HTTP code.
-   *
-   * Intentionally a no-op outside a MicroVM context: resetting the runtime ID
-   * in a non-clone scenario breaks span correlation — the backend treats spans
-   * before and after the call as coming from different process instances.
+   * Regenerates all clone-specific identities (runtime ID, RC client ID).
+   * No-op outside a MicroVM environment to avoid breaking span correlation.
    *
    * @returns {this}
    */
   resetRuntimeId () {
     // eslint-disable-next-line eslint-rules/eslint-process-env
-    if (!this._initialized || !Boolean(process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN)) return this
+    if (!this._initialized || !process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN) return this
     this.#refreshIdentity(getConfig())
     return this
   }
 
   /**
-   * Refreshes all clone-specific identities from the kernel CSPRNG.
-   * Must call reseed() first so that kernelUUID() in the refresh functions
-   * draws from the post-resume /dev/urandom, not the frozen OpenSSL DRBG.
-   *
    * @param {import('./config/config-base')} config
    */
   #refreshIdentity (config) {

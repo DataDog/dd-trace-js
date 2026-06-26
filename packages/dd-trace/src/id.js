@@ -10,19 +10,15 @@ const zeroId = new Uint8Array(8)
 
 let batch = 0
 
-// Swappable fill source. Default: OpenSSL DRBG via randomFillSync.
-// reseed() permanently replaces this with fillFromKernel once the MicroVM /run
-// hook fires, so every subsequent batch refill draws from the kernel CSPRNG.
+// Replaced by fillFromKernel after reseed() on MicroVM clone resume.
 let fill = randomFillSync
 
-// File descriptor for /dev/urandom; opened once by reseed(). -1 means not yet
-// opened or unavailable (non-Linux), causing fillFromKernel to fall back to randomFillSync.
+// -1 = not yet opened or unavailable; fillFromKernel falls back to randomFillSync.
 let urandomFd = -1
 
-// Fill `buffer` from the kernel CSPRNG (/dev/urandom). Falls back to
-// randomFillSync and disables the fd permanently on any read failure so the
-// hot path never keeps retrying a broken fd. dd-trace must never crash the app.
 /**
+ * Reads from /dev/urandom, falling back to randomFillSync on any error.
+ * Permanently closes and clears the fd on failure so the hot path never retries.
  * @param {Uint8Array | Buffer} buffer
  */
 function fillFromKernel (buffer) {
@@ -294,14 +290,9 @@ function writeUInt32BE (buffer, value, offset) {
 }
 
 /**
- * Switches the batch fill source permanently from OpenSSL's DRBG to the kernel
- * CSPRNG (/dev/urandom) and resets the batch cursor, forcing the next
- * pseudoRandom() call to refill from post-resume kernel entropy.
- *
- * Called once by proxy.js#refreshIdentity() when the Lambda MicroVM `/run`
- * lifecycle hook fires. At that point VMGenID has already reseeded the kernel
- * CSPRNG, so the next batch and all subsequent batches are unique per clone.
- * Idempotent: a second call from a late SIGUSR2 is a fast no-op.
+ * Permanently switches the batch fill source to /dev/urandom and resets the
+ * batch cursor, forcing the next ID batch to draw from post-resume kernel
+ * entropy. Idempotent.
  */
 function reseed () {
   if (fill === fillFromKernel) return
@@ -315,12 +306,9 @@ function reseed () {
 }
 
 /**
- * Generates a RFC 4122 v4 UUID using the kernel CSPRNG (/dev/urandom).
- * Falls back to randomFillSync if /dev/urandom is unavailable.
- *
- * Use this instead of crypto.randomUUID() when entropy must be kernel-derived
- * (e.g. after a Firecracker snapshot restore where OpenSSL's DRBG state is
- * frozen and may not yet have reseeded from the post-VMGenID kernel entropy).
+ * UUID v4 from /dev/urandom (falls back to randomFillSync).
+ * Use instead of crypto.randomUUID() after a MicroVM snapshot restore, where
+ * OpenSSL's DRBG may still be frozen from the pre-snapshot state.
  *
  * @returns {string}
  */
