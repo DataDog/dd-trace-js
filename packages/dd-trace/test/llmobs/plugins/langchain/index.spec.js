@@ -164,7 +164,7 @@ describe('integrations', () => {
             .tool
 
           if (semifies(realVersion, '>=1.0')) {
-            MemoryVectorStore = require('../../../../../../versions/@langchain/classic@>=1.0')
+            MemoryVectorStore = require('../../../../../../versions/@langchain/classic@1')
               .get('@langchain/classic/vectorstores/memory')
               .MemoryVectorStore
           } else {
