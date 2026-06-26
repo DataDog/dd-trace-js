@@ -164,8 +164,8 @@ addHook({ name: 'express', versions: ['>=4'], file: 'lib/express.js' }, express 
 // It would otherwise produce spans for router and express, and so duplicating them.
 // We now fall back to router instrumentation
 addHook({ name: 'express', versions: ['4'], file: 'lib/express.js' }, express => {
-  // `wrapLegacyHandle` only fires for express <4.3.0 layers, which have no
-  // prototype dispatch; 4.3.0+ keeps `handle` pristine (wrapped below).
+  // `wrapLegacyHandle` only fires for express <4.6.0 layers, which have no
+  // prototype dispatch; 4.6.0+ keeps `handle` pristine (wrapped below).
   const { wrapLegacyHandle } = createLayerDispatchWrappers('express')
   const wrapRouterMethod = createWrapRouterMethod('express', getCompileToRegexp(), wrapLegacyHandle)
 
@@ -177,7 +177,7 @@ addHook({ name: 'express', versions: ['4'], file: 'lib/express.js' }, express =>
 
 // Express 4 bundles its own Layer; express 5 delegates to the `router` package
 // (wrapped in router.js). Both keep `layer.handle` the user's function and trace
-// via the prototype dispatch. express <4.3.0 has no such dispatch and is traced
+// via the prototype dispatch. express <4.6.0 has no such dispatch and is traced
 // by the legacy handle wrap instead.
 addHook({ name: 'express', file: 'lib/router/layer.js', versions: ['4'] }, Layer => {
   if (typeof Layer.prototype.handle_request !== 'function') return Layer

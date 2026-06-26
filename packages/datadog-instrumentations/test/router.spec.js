@@ -714,10 +714,28 @@ describe('createWrapRouterMethod', () => {
   })
 
   describe('legacy handle replacement (host without prototype dispatch)', () => {
-    // express <4.3.0 has no `Layer.prototype.handle_request`; the router calls
+    // express <4.6.0 has no `Layer.prototype.handle_request`; the router calls
     // `layer.handle` directly, so the handle is replaced in place.
     function legacyUse (path, handler) {
       this.stack.push({ handle: handler, path: '/foo', regexp: {} })
+    }
+
+    // Mirror express <4.6.0's `router.handle`: it runs `layer.handle` itself and,
+    // on a synchronous throw, catches *outside* the layer and calls its own
+    // `next(error)` — never the `next` the layer was handed. The tracer cannot
+    // observe the throw through `wrappedNext`, so the legacy handle wrap has to
+    // catch and publish error/next/finish itself before rethrowing.
+    function legacyDispatch (layer, { req = {}, res = {}, error } = {}) {
+      const hostNext = (nextError) => events.push({ label: 'host-next', error: nextError })
+      try {
+        if (error === undefined) {
+          layer.handle(req, res, hostNext)
+        } else {
+          layer.handle(error, req, res, hostNext)
+        }
+      } catch (caught) {
+        hostNext(caught)
+      }
     }
 
     it('replaces layer.handle, preserves request arity, and traces the dispatch', () => {
@@ -762,6 +780,50 @@ describe('createWrapRouterMethod', () => {
       const enterEvent = events.find(e => e.label === 'enter')
       assert.strictEqual(enterEvent.data.name, 'errorHandler')
       assert.strictEqual(enterEvent.data.req, req)
+    })
+
+    it('publishes error/next/finish/exit when a request handler throws and rethrows to the host', () => {
+      subscribeAll()
+      const { wrapLegacyHandle } = createLayerDispatchWrappers(namespace)
+      const wrapMethod = createWrapRouterMethod(namespace, compileRegex, wrapLegacyHandle)
+      const router = { stack: [] }
+
+      const failure = new Error('boom')
+      const wrappedUse = wrapMethod(legacyUse)
+      wrappedUse.call(router, '/foo', function thrower (req, res, next) { throw failure })
+
+      const req = {}
+      legacyDispatch(router.stack[0], { req })
+
+      // The host catches the rethrown error and routes it through its own next,
+      // but the tracer has already tagged and finished the throwing layer.
+      assert.deepStrictEqual(events.map(e => e.label), [
+        'enter', 'error', 'next', 'finish', 'exit', 'host-next',
+      ])
+      assert.strictEqual(events[1].data.error, failure)
+      assert.strictEqual(events[1].data.req, req)
+      assert.strictEqual(events.at(-1).error, failure)
+    })
+
+    it('publishes error/next/finish/exit when an error handler throws and rethrows to the host', () => {
+      subscribeAll()
+      const { wrapLegacyHandle } = createLayerDispatchWrappers(namespace)
+      const wrapMethod = createWrapRouterMethod(namespace, compileRegex, wrapLegacyHandle)
+      const router = { stack: [] }
+
+      const failure = new Error('throws-in-error-handler')
+      const wrappedUse = wrapMethod(legacyUse)
+      wrappedUse.call(router, '/foo', function errorHandler (error, req, res, next) { throw failure })
+
+      const req = {}
+      legacyDispatch(router.stack[0], { req, error: new Error('upstream') })
+
+      assert.deepStrictEqual(events.map(e => e.label), [
+        'enter', 'error', 'next', 'finish', 'exit', 'host-next',
+      ])
+      assert.strictEqual(events[1].data.error, failure)
+      assert.strictEqual(events[1].data.req, req)
+      assert.strictEqual(events.at(-1).error, failure)
     })
 
     it('leaves handle pristine when the layer has a prototype dispatch method', () => {

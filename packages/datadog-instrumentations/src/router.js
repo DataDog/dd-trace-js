@@ -146,7 +146,7 @@ function createLayerDispatchWrappers (name) {
     }
   }
 
-  // express <4.3.0 has no `Layer` prototype dispatch: the router invokes
+  // express <4.6.0 has no `Layer` prototype dispatch: the router invokes
   // `layer.handle` directly and routes errors by its arity. There the handle is
   // replaced in place, with the arity preserved so the host still routes
   // correctly. Newer express, express 5, and the router package keep `handle`
@@ -168,6 +168,16 @@ function createLayerDispatchWrappers (name) {
 
       try {
         return inner.apply(this, args)
+      } catch (error) {
+        // Unlike the prototype hosts, this router catches a synchronous throw
+        // outside the layer and calls its own `next(error)`, never `wrappedNext`.
+        // Mirror `wrapNext` here so the throwing layer still tags its error and
+        // finishes, rather than lingering on the stack until request finish.
+        publishError({ req, error })
+        nextChannel.publish({ req })
+        finishChannel.publish({ req })
+
+        throw error
       } finally {
         exitChannel.publish({ req })
       }
@@ -192,7 +202,7 @@ function hasLayerDispatch (layer) {
  *   instance keeps the dialect it actually loaded.
  * @param {((layer: object, original: Function) => Function) | undefined} [wrapLegacyHandle]
  *   Fallback that replaces `layer.handle` for hosts without a `Layer` prototype
- *   dispatch (express <4.3.0). Omitted for hosts that always ship one.
+ *   dispatch (express <4.6.0). Omitted for hosts that always ship one.
  */
 function createWrapRouterMethod (name, compile, wrapLegacyHandle) {
   const routeAddedChannel = channel(`apm:${name}:route:added`)
