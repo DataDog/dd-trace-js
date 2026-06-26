@@ -705,20 +705,29 @@ versions.forEach((version) => {
                 }
               })
 
-          const runDisableTest = (done, isDisabling, extraEnvVars = {}) => {
+          const runDisableTest = (
+            done,
+            isDisabling,
+            extraEnvVars = {},
+            command = './node_modules/.bin/vitest run',
+            testDir = 'ci-visibility/vitest-tests/test-disabled*'
+          ) => {
             let stdout = ''
             const testAssertionsPromise = getTestAssertions(isDisabling)
+            const env = {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+              ...extraEnvVars,
+            }
+            if (testDir) {
+              env.TEST_DIR = testDir
+            }
 
             childProcess = exec(
-              './node_modules/.bin/vitest run',
+              command,
               {
                 cwd,
-                env: {
-                  ...getCiVisAgentlessConfig(receiver.port),
-                  TEST_DIR: 'ci-visibility/vitest-tests/test-disabled*',
-                  NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
-                  ...extraEnvVars,
-                },
+                env,
               }
             )
 
@@ -753,6 +762,21 @@ versions.forEach((version) => {
               DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
               POOL_CONFIG: 'forks',
             })
+          })
+
+          newerVitestIt('can disable explicit file tests when no-worker init is enabled', (done) => {
+            receiver.setSettings({ test_management: { enabled: true } })
+
+            runDisableTest(
+              done,
+              true,
+              {
+                DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+                POOL_CONFIG: 'forks',
+              },
+              './node_modules/.bin/vitest run ci-visibility/vitest-tests/test-disabled.mjs',
+              undefined
+            )
           })
 
           it('fails if disable is not enabled', (done) => {

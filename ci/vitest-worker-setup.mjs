@@ -2,7 +2,6 @@ import { realpathSync } from 'node:fs'
 import { relative } from 'node:path'
 import { performance } from 'node:perf_hooks'
 
-import * as vitestRunner from '@vitest/runner'
 import { afterEach, beforeAll, beforeEach, onTestFinished } from 'vitest'
 
 const providedContext = getProvidedContext()
@@ -23,7 +22,12 @@ const knownTests = providedContext.knownTests || {}
 const modifiedFiles = providedContext.modifiedFiles || {}
 const quarantinedTests = providedContext.quarantinedTests || {}
 const repositoryRoot = realpath(providedContext.repositoryRoot || process.cwd())
-const setVitestTaskFn = vitestRunner.setFn
+let setVitestTaskFn
+try {
+  // Vitest does not expose setFn from the public setup API; keep this optional for strict installers.
+  const vitestRunner = await import('@vitest/runner')
+  setVitestTaskFn = vitestRunner.setFn
+} catch {}
 const earlyFlakeDetectionRetriesByTask = new WeakMap()
 const earlyFlakeDetectionSkippedResults = new WeakMap()
 const earlyFlakeDetectionStartByTask = new WeakMap()

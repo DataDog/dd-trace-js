@@ -743,27 +743,40 @@ function getVitestConfigs (ctx, testSpecifications) {
 
   if (Array.isArray(testSpecifications)) {
     const defaultPool = ctx.config?.pool
+    let hasRootConfigForkSpecification = false
     for (const testSpecification of testSpecifications) {
       if (!isForkPool(getEffectiveTestSpecificationPool(testSpecification, defaultPool))) continue
 
       const config = safeConfig(getTestSpecificationProject(testSpecification))
       if (config) {
         configs.add(config)
+      } else {
+        hasRootConfigForkSpecification = true
       }
+    }
+
+    if (hasRootConfigForkSpecification) {
+      addRootVitestConfigs(configs, ctx)
     }
 
     return configs
   }
 
-  configs.add(ctx.config)
-
-  try {
-    configs.add(getWorkspaceProject(ctx).config)
-  } catch {
-    // best effort: ctx.config is enough for newer Vitest versions
-  }
+  addRootVitestConfigs(configs, ctx)
 
   return configs
+}
+
+/**
+ * Add root-level configs used when Vitest reports file-only test specifications.
+ *
+ * @param {Set<object|undefined>} configs
+ * @param {object} ctx
+ * @returns {void}
+ */
+function addRootVitestConfigs (configs, ctx) {
+  configs.add(ctx.config)
+  configs.add(safeWorkspaceProject(ctx)?.config)
 }
 
 function addSetupFileToVitestConfigs (ctx, setupFile, testSpecifications) {
