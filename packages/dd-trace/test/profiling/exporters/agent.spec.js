@@ -504,7 +504,7 @@ describe('exporters/agent', function () {
 
   describe('using a Windows named pipe', () => {
     it('builds the request with the folded socket path from a URL object', async () => {
-      const exporter = newAgentExporter({ url: new URL('unix://./pipe/datadog'), uploadTimeout: 1, logger })
+      const exporter = newAgentExporter({ url: new URL('unix://./pipe/datadog'), uploadTimeout: 1 })
       const start = new Date()
       const end = new Date()
       const tags = {
