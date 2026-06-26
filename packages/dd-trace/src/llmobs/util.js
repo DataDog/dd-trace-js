@@ -362,9 +362,45 @@ function findGenAIAncestorSpanId (span) {
   return null
 }
 
+// OpenAI audio `format` values that don't map cleanly to `audio/<format>`.
+const OPENAI_AUDIO_MIME_TYPES = {
+  mp3: 'audio/mpeg',
+}
+
+// Maps an audio `format` (e.g. "wav", "mp3") to a MIME type. Defaults to
+// `audio/wav` when the format is missing. Mirrors the dd-trace-py helper so
+// the emitted `audio_parts[].mime_type` stays identical across SDKs. A
+// non-string `format` is treated as missing so a malformed auto-instrumented
+// payload can't throw and disable the plugin.
+function audioMimeTypeFromFormat (fmt) {
+  fmt = typeof fmt === 'string' ? fmt.trim().toLowerCase() : ''
+  if (!fmt) return 'audio/wav'
+  return OPENAI_AUDIO_MIME_TYPES[fmt] ?? `audio/${fmt}`
+}
+
+// Builds an audio part from raw audio bytes (base64-encoded) or an existing
+// base64 string. Returns the camelCase shape the tagger validates and
+// serializes to the snake_case `{ mime_type, content }` wire format. Only
+// binary inputs are base64-encoded; any other shape is passed through so a
+// malformed auto-instrumented payload can't throw (the tagger soft-skips a
+// non-string `content` instead of disabling the plugin).
+/**
+ * @param {Buffer | Uint8Array | string} data
+ * @param {string} mimeType
+ * @returns {{ mimeType: string, content: string }}
+ */
+function formatAudioPart (data, mimeType) {
+  const content = Buffer.isBuffer(data) || ArrayBuffer.isView(data)
+    ? Buffer.from(data).toString('base64')
+    : data
+  return { mimeType, content }
+}
+
 module.exports = {
+  audioMimeTypeFromFormat,
   encodeUnicode,
   findGenAIAncestorSpanId,
+  formatAudioPart,
   validateCostTags,
   validateKind,
   getFunctionArguments,

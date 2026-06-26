@@ -1,0 +1,22 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.openai.com/v1/chat/completions",
+    "headers": {
+      "Accept": "application/json, text/plain, */*",
+      "Content-Type": "application/json",
+      "User-Agent": "OpenAI/NodeJS/4.0.0"
+    },
+    "body": "{\"model\":\"gpt-audio\",\"modalities\":[\"text\",\"audio\"],\"audio\":{\"voice\":\"alloy\",\"format\":\"mp3\"},\"messages\":[{\"role\":\"user\",\"content\":\"Say hello\"}]}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": "{\n  \"id\": \"chatcmpl-audioout1\",\n  \"object\": \"chat.completion\",\n  \"created\": 1730000001,\n  \"model\": \"gpt-audio-2025-08-28\",\n  \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\": \"assistant\",\n        \"content\": null,\n        \"audio\": {\n          \"id\": \"audio_abc123\",\n          \"data\": \"SUQzBAAAAAABAFRYWFgAAAASAAADbWFqb3JfYnJhbmQAaXNvbQ==\",\n          \"transcript\": \"Hello there! How can I help you today?\",\n          \"expires_at\": 1730003601\n        }\n      },\n      \"finish_reason\": \"stop\"\n    }\n  ],\n  \"usage\": {\n    \"prompt_tokens\": 10,\n    \"completion_tokens\": 20,\n    \"total_tokens\": 30,\n    \"prompt_tokens_details\": {\n      \"cached_tokens\": 0\n    },\n    \"completion_tokens_details\": {\n      \"audio_tokens\": 18,\n      \"text_tokens\": 2\n    }\n  }\n}"
+  }
+}

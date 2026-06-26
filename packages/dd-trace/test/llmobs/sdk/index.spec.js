@@ -988,6 +988,39 @@ describe('sdk', () => {
       })
     })
 
+    it('annotates llm io with audio parts for an llm span', () => {
+      const inputData = [
+        { role: 'user', content: 'transcribe this', audioParts: [{ mimeType: 'audio/wav', content: 'aGVsbG8=' }] },
+      ]
+      const outputData = [
+        { role: 'assistant', content: 'sure', audioParts: [{ mimeType: 'audio/mpeg', attachmentKey: 'key-123' }] },
+      ]
+
+      llmobs.trace({ kind: 'llm', name: 'test' }, span => {
+        llmobs.annotate({ inputData, outputData })
+
+        assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.meta.span.kind': 'llm',
+          '_ml_obs.meta.ml_app': 'mlApp',
+          '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.meta.input.messages': [
+            {
+              role: 'user',
+              content: 'transcribe this',
+              audio_parts: [{ mime_type: 'audio/wav', content: 'aGVsbG8=' }],
+            },
+          ],
+          '_ml_obs.meta.output.messages': [
+            {
+              role: 'assistant',
+              content: 'sure',
+              audio_parts: [{ mime_type: 'audio/mpeg', attachment_key: 'key-123' }],
+            },
+          ],
+        })
+      })
+    })
+
     it('annotates embedding io for an embedding span', () => {
       const inputData = [{ text: 'input text' }]
       const outputData = 'documents embedded'

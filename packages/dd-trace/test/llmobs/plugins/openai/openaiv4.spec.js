@@ -236,6 +236,83 @@ describe('integrations', () => {
         })
       })
 
+      it('submits a chat completion span with audio input', async () => {
+        await openai.chat.completions.create({
+          model: 'gpt-audio',
+          modalities: ['text'],
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'What do you hear?' },
+                { type: 'input_audio', input_audio: { data: 'aGVsbG8=', format: 'wav' } },
+              ],
+            },
+          ],
+        })
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'OpenAI.createChatCompletion',
+          modelName: 'gpt-audio-2025-08-28',
+          modelProvider: 'openai',
+          inputMessages: [
+            {
+              role: 'user',
+              content: 'What do you hear?',
+              audio_parts: [{ mime_type: 'audio/wav', content: 'aGVsbG8=' }],
+            },
+          ],
+          outputMessages: [{ role: 'assistant', content: MOCK_STRING }],
+          metadata: { modalities: ['text'] },
+          tags: { ml_app: 'test', integration: 'openai' },
+          metrics: {
+            cache_read_input_tokens: 0,
+            reasoning_output_tokens: 0,
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+          },
+        })
+      })
+
+      it('submits a chat completion span with audio output', async () => {
+        await openai.chat.completions.create({
+          model: 'gpt-audio',
+          modalities: ['text', 'audio'],
+          audio: { voice: 'alloy', format: 'mp3' },
+          messages: [{ role: 'user', content: 'Say hello' }],
+        })
+
+        const { apmSpans, llmobsSpans } = await getEvents()
+        assertLlmObsSpanEvent(llmobsSpans[0], {
+          span: apmSpans[0],
+          spanKind: 'llm',
+          name: 'OpenAI.createChatCompletion',
+          modelName: 'gpt-audio-2025-08-28',
+          modelProvider: 'openai',
+          inputMessages: [{ role: 'user', content: 'Say hello' }],
+          outputMessages: [
+            {
+              role: 'assistant',
+              content: 'Hello there! How can I help you today?',
+              audio_parts: [{ mime_type: 'audio/mpeg', content: MOCK_STRING }],
+            },
+          ],
+          metadata: { modalities: ['text', 'audio'], audio: { voice: 'alloy', format: 'mp3' } },
+          tags: { ml_app: 'test', integration: 'openai' },
+          metrics: {
+            cache_read_input_tokens: 0,
+            reasoning_output_tokens: 0,
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+          },
+        })
+      })
+
       describe('stream', function () {
         beforeEach(function () {
           if (semifies(realVersion, '<=4.1.0')) {
