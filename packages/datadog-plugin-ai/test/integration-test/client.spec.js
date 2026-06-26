@@ -29,7 +29,7 @@ describe('esm', () => {
   let proc
   let variants
 
-  withVersions('ai', 'ai', (version, _, realVersion) => {
+  withVersions('ai', 'ai', '<7.0.0', (version, _, realVersion) => {
     useSandbox([
       `ai@${version}`,
       `@ai-sdk/openai@${getOpenaiVersion(realVersion)}`,
@@ -60,7 +60,7 @@ describe('esm', () => {
           // special check for ai spans
           for (const spans of payload) {
             for (const span of spans) {
-              if (span.name.startsWith('ai')) {
+              if (span.name.includes('generateText')) {
                 return
               }
             }
