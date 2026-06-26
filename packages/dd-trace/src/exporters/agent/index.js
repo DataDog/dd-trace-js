@@ -10,10 +10,13 @@ class AgentExporter {
   constructor (config, prioritySampler) {
     this._config = config
     const { lookup, protocolVersion, stats = {}, apmTracingEnabled } = config
+    const otlpTraceMetricsEnabled = config.OTEL_TRACES_SPAN_METRICS_ENABLED
     this._url = config.url
 
     const headers = {}
-    if (stats.enabled || apmTracingEnabled === false) {
+    // Tell the Agent to skip server-side stats computation whenever the client computes stats
+    // itself: native /v0.6/stats, OTLP trace metrics, or when APM tracing is disabled.
+    if (stats.enabled || otlpTraceMetricsEnabled || apmTracingEnabled === false) {
       headers['Datadog-Client-Computed-Stats'] = 'yes'
     }
 
