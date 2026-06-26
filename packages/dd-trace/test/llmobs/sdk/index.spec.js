@@ -1026,6 +1026,8 @@ describe('sdk', () => {
         llmobs.annotate({ inputData, outputData })
 
         assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
