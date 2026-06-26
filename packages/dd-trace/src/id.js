@@ -315,8 +315,8 @@ function reseed () {
 function kernelUUID () {
   const buf = Buffer.allocUnsafe(16)
   fillFromKernel(buf)
-  buf[6] = (buf[6] & 0x0f) | 0x40 // version 4
-  buf[8] = (buf[8] & 0x3f) | 0x80 // variant 10xx
+  buf[6] = (buf[6] & 0x0F) | 0x40 // version 4
+  buf[8] = (buf[8] & 0x3F) | 0x80 // variant 10xx
   const h = buf.toString('hex')
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`
 }
