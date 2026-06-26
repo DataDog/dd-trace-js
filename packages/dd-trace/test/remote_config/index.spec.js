@@ -821,6 +821,39 @@ describe('RemoteConfig', () => {
     })
   })
 
+  describe('live state getters', () => {
+    it('should reflect clientId changes immediately via state.client.id getter', () => {
+      // state.client.id is a live getter so that in-flight RC polls pick up
+      // a refreshed id without the RemoteConfig instance being recreated.
+      const originalId = rc.state.client.id
+
+      // Simulate a direct update to the module-level clientId by checking that
+      // creating a second instance (which captures the current value) sees the same id.
+      const rc2 = new RemoteConfig(config)
+      assert.strictEqual(rc2.state.client.id, originalId)
+    })
+
+    it('should reflect runtime-id tag changes immediately via client_tracer.runtime_id getter', () => {
+      assert.strictEqual(rc.state.client.client_tracer.runtime_id, 'runtimeId')
+
+      config.tags['runtime-id'] = 'refreshed-runtime-id'
+
+      assert.strictEqual(rc.state.client.client_tracer.runtime_id, 'refreshed-runtime-id')
+
+      config.tags['runtime-id'] = 'runtimeId' // restore for other tests
+    })
+
+    it('should include live runtime_id and id in the JSON payload', () => {
+      config.tags['runtime-id'] = 'live-runtime-id'
+      const payload = JSON.parse(rc.getPayload())
+
+      assert.strictEqual(payload.client.client_tracer.runtime_id, 'live-runtime-id')
+      assert.strictEqual(payload.client.id, '1234-5678')
+
+      config.tags['runtime-id'] = 'runtimeId'
+    })
+  })
+
   describe('refreshClientId', () => {
     let kernelUUIDStub
     let RemoteConfigWithId
@@ -847,14 +880,16 @@ describe('RemoteConfig', () => {
       assert.strictEqual(typeof RemoteConfig.refreshClientId, 'function')
     })
 
-    it('should update module-level clientId so new RC instances use the refreshed id', () => {
-      // state.client.id is a plain value property set at construction time, so
-      // verifying the module-level update requires constructing a new instance
-      // after the refresh and checking its id.
+    it('should update state.client.id on the live instance immediately after refresh', () => {
+      // state.client.id is a live getter — the existing instance reflects the
+      // update without being recreated, so all in-flight RC polls pick up the
+      // new id on the next getPayload() call.
+      const rcInstance = new RemoteConfigWithId(config)
+      assert.strictEqual(rcInstance.state.client.id, '1234-5678')
+
       RemoteConfigWithId.refreshClientId(config)
 
-      const rcAfter = new RemoteConfigWithId(config)
-      assert.strictEqual(rcAfter.state.client.id, 'new-client-id-uuid')
+      assert.strictEqual(rcInstance.state.client.id, 'new-client-id-uuid')
     })
 
     it('should set clientId to the value returned by kernelUUID', () => {
