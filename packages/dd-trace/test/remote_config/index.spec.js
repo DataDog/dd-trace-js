@@ -901,8 +901,6 @@ describe('RemoteConfig', () => {
         version: 'appVersion',
         remoteConfig: { pollInterval: 5 },
       }
-      new RemoteConfigWithId(rcConfig)
-
       RemoteConfigWithId.refreshClientId(rcConfig)
 
       assert.strictEqual(rcConfig.tags['_dd.rc.client_id'], 'new-client-id-uuid')
@@ -920,8 +918,6 @@ describe('RemoteConfig', () => {
         version: 'appVersion',
         remoteConfig: { pollInterval: 5 },
       }
-      new RemoteConfigWithId(rcConfig)
-
       RemoteConfigWithId.refreshClientId(rcConfig)
 
       assert.strictEqual(rcConfig.tags['_dd.rc.client_id'], 'new-client-id-uuid')
@@ -936,8 +932,6 @@ describe('RemoteConfig', () => {
         version: 'appVersion',
         remoteConfig: { pollInterval: 5 },
       }
-      new RemoteConfigWithId(rcConfig)
-
       RemoteConfigWithId.refreshClientId(rcConfig)
 
       assert.strictEqual(rcConfig.tags['_dd.rc.client_id'], undefined)

@@ -1148,7 +1148,7 @@ describe('TracerProxy', () => {
         './openfeature': openfeature,
         './openfeature/flagging_provider': OpenFeatureProvider,
         './id': idMock,
-        'diagnostics_channel': diagnosticsChannelMock,
+        'dc-polyfill': diagnosticsChannelMock,
       })
 
       microProxy = new MicroVmProxy()
