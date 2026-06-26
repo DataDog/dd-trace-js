@@ -12,7 +12,7 @@ const processTags = require('../process-tags')
 const Scheduler = require('./scheduler')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('./apply_states')
 
-const clientId = uuid()
+let clientId = uuid()
 
 const DEFAULT_CAPABILITY = Buffer.alloc(1).toString('base64') // 0x00
 
@@ -73,11 +73,11 @@ class RemoteConfig {
           error: '',
           backend_client_state: '',
         },
-        id: clientId,
+        get id () { return clientId },
         products: /** @type {string[]} */ ([]), // updated by `updateProducts()`
         is_tracer: true,
         client_tracer: {
-          runtime_id: config.tags['runtime-id'],
+          get runtime_id () { return config.tags['runtime-id'] },
           language: 'node',
           tracer_version: tracerVersion,
           service: config.service,
@@ -575,4 +575,25 @@ function supportsAckCallback (handler) {
   return result
 }
 
+/**
+ * Regenerates the RC client ID and updates the config span tag in-place.
+ *
+ * The RC client ID is generated once at module load. In a Lambda MicroVM all
+ * clones share the same frozen ID from the snapshot, causing the RC backend to
+ * treat them as one client. Call this from the `/run` hook (alongside
+ * `tracer.resetRuntimeId()`) to give each clone a distinct RC identity.
+ *
+ * Only updates `config.tags['_dd.rc.client_id']` when the tag already exists
+ * (i.e. when RC is enabled and the RemoteConfig constructor has run).
+ *
+ * @param {import('../config/config-base')} config
+ */
+function refreshClientId (config) {
+  clientId = uuid()
+  if (config.tags['_dd.rc.client_id']) {
+    config.tags['_dd.rc.client_id'] = clientId
+  }
+}
+
 module.exports = RemoteConfig
+module.exports.refreshClientId = refreshClientId

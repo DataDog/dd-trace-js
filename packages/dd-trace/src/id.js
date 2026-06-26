@@ -1,6 +1,7 @@
 'use strict'
 
 const { randomFillSync } = require('crypto')
+const { closeSync, openSync, readSync } = require('fs')
 
 const UINT_MAX = 4_294_967_296
 
@@ -8,6 +9,64 @@ const data = new Uint8Array(8 * 8192)
 const zeroId = new Uint8Array(8)
 
 let batch = 0
+
+// AWS Lambda MicroVM resumes many clones from one Firecracker memory snapshot.
+// The snapshot freezes the `data` batch buffer, so every clone would replay the
+// same trace/span IDs until the buffer wraps. When the platform marks a MicroVM
+// (AWS_LAMBDA_MICROVM_IMAGE_ARN is set), bypass the batch buffer and draw each
+// ID per call from the kernel CSPRNG (/dev/urandom) until the `/run` lifecycle
+// hook fires. The hypervisor reseeds the kernel CSPRNG via VMGenID before the
+// process resumes, so per-call output is unique across clones during the init
+// window. On the first `reseedBatchBuffer()` call (triggered by the `/run` hook
+// handler in proxy.js), the batch buffer is refilled with post-resume entropy
+// and the fast batch path is restored for the rest of the VM's lifetime.
+// eslint-disable-next-line eslint-rules/eslint-process-env
+const isMicroVm = Boolean(process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN)
+const microVmBuffer = isMicroVm ? new Uint8Array(8) : null
+// Open the kernel CSPRNG once for the per-call reads; -1 means fall back to
+// randomFillSync (non-Linux / no /dev/urandom).
+let urandomFd = -1
+if (isMicroVm) {
+  try {
+    urandomFd = openSync('/dev/urandom', 'r')
+  } catch {
+    // keep urandomFd = -1; fillFromKernel falls back to randomFillSync
+  }
+}
+// Flipped to true by reseedBatchBuffer() after the /run hook fires.
+let batchReseeded = !isMicroVm
+
+// Fill `buffer` from the kernel CSPRNG (/dev/urandom). Fall back to
+// randomFillSync if the fd was never opened, a read throws, or a read returns
+// no bytes, and disable the fd so the hot path does not keep retrying a broken
+// read. dd-trace must never crash the app over id generation.
+/**
+ * @param {Uint8Array} buffer
+ */
+function fillFromKernel (buffer) {
+  if (urandomFd !== -1) {
+    try {
+      let offset = 0
+      while (offset < buffer.length) {
+        const bytesRead = readSync(urandomFd, buffer, offset, buffer.length - offset, null)
+        if (bytesRead <= 0) break // /dev/urandom should never short to 0; treat as failure
+        offset += bytesRead
+      }
+      if (offset === buffer.length) {
+        return
+      }
+    } catch {
+      // a kernel read failed -- fall through to randomFillSync
+    }
+    try {
+      closeSync(urandomFd) // release the fd before abandoning it; never crash the app over a close error
+    } catch {
+      // ignore: the fd is already unusable and there is nothing actionable to do
+    }
+    urandomFd = -1 // the fd will not recover; stop retrying it in the hot path
+  }
+  randomFillSync(buffer)
+}
 
 // Internal representation of a trace or span ID.
 class Identifier {
@@ -205,6 +264,19 @@ function toNumberString (buffer, radix) {
  * @returns {number[] | Uint8Array}
  */
 function pseudoRandom () {
+  if (microVmBuffer && !batchReseeded) {
+    // MicroVM init window: per-call kernel read until the /run hook triggers
+    // reseedBatchBuffer(). This covers spans generated between snapshot restore
+    // and the first /run hook completion, where the batch buffer still holds
+    // frozen pre-snapshot data.
+    fillFromKernel(microVmBuffer)
+    return [
+      microVmBuffer[0] & 0x7F,
+      microVmBuffer[1], microVmBuffer[2], microVmBuffer[3],
+      microVmBuffer[4], microVmBuffer[5], microVmBuffer[6], microVmBuffer[7],
+    ]
+  }
+
   if (batch === 0) {
     randomFillSync(data)
   }
@@ -259,8 +331,26 @@ function writeUInt32BE (buffer, value, offset) {
  * @param {number} [radix]
  * @returns {Identifier}
  */
+/**
+ * Switches pseudoRandom() from per-call kernel reads back to the fast batch
+ * path, resetting the batch cursor so the first subsequent call refills the
+ * buffer from the post-resume kernel CSPRNG.
+ *
+ * Called by proxy.js#refreshIdentity() when the Lambda MicroVM `/run`
+ * lifecycle hook fires. At that point the hypervisor has already reseeded the
+ * kernel CSPRNG via VMGenID, so the lazy randomFillSync(data) triggered by
+ * the next pseudoRandom() call produces entropy unique to this clone.
+ * Resetting lazily (rather than eagerly calling randomFillSync here) avoids a
+ * redundant fill: pseudoRandom always refills when batch === 0.
+ */
+function reseedBatchBuffer () {
+  batch = 0
+  batchReseeded = true
+}
+
 module.exports = function createIdentifier (value, radix) {
   return new Identifier(value ?? '', radix)
 }
 
 module.exports.Identifier = Identifier
+module.exports.reseedBatchBuffer = reseedBatchBuffer

@@ -820,6 +820,68 @@ describe('RemoteConfig', () => {
       assert.strictEqual(rc.appliedConfigs.size, 0)
     })
   })
+
+  describe('id getter', () => {
+    it('should reflect updated clientId after refreshClientId', () => {
+      assert.strictEqual(rc.state.client.id, '1234-5678')
+
+      uuid.returns('refreshed-client-id')
+      RemoteConfig.refreshClientId(config)
+
+      assert.strictEqual(rc.state.client.id, 'refreshed-client-id')
+    })
+
+    it('should be serialised by getPayload', () => {
+      uuid.returns('payload-client-id')
+      RemoteConfig.refreshClientId(config)
+
+      const payload = JSON.parse(rc.getPayload())
+      assert.strictEqual(payload.client.id, 'payload-client-id')
+    })
+  })
+
+  describe('runtime_id getter', () => {
+    it('should reflect the current value of config.tags[runtime-id]', () => {
+      assert.strictEqual(rc.state.client.client_tracer.runtime_id, 'runtimeId')
+
+      config.tags['runtime-id'] = 'updated-runtime-id'
+
+      assert.strictEqual(rc.state.client.client_tracer.runtime_id, 'updated-runtime-id')
+    })
+
+    it('should be serialised by getPayload', () => {
+      config.tags['runtime-id'] = 'payload-runtime-id'
+
+      const payload = JSON.parse(rc.getPayload())
+      assert.strictEqual(payload.client.client_tracer.runtime_id, 'payload-runtime-id')
+    })
+  })
+
+  describe('refreshClientId', () => {
+    it('should regenerate the client id', () => {
+      uuid.returns('new-client-id')
+      RemoteConfig.refreshClientId(config)
+
+      assert.strictEqual(rc.state.client.id, 'new-client-id')
+    })
+
+    it('should update _dd.rc.client_id tag when the tag already exists', () => {
+      config.tags['_dd.rc.client_id'] = 'old-tag-value'
+      uuid.returns('new-client-id')
+
+      RemoteConfig.refreshClientId(config)
+
+      assert.strictEqual(config.tags['_dd.rc.client_id'], 'new-client-id')
+    })
+
+    it('should not add _dd.rc.client_id tag when it was never set', () => {
+      assert.ok(!Object.hasOwn(config.tags, '_dd.rc.client_id'))
+
+      RemoteConfig.refreshClientId(config)
+
+      assert.ok(!Object.hasOwn(config.tags, '_dd.rc.client_id'))
+    })
+  })
 })
 
 function toBase64 (data) {

@@ -38,7 +38,7 @@ const {
 const { normalizeService } = require('./normalize-service')
 const { transformers } = require('./parsers')
 
-const RUNTIME_ID = uuid()
+let runtimeId = uuid()
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
 
@@ -148,6 +148,7 @@ function setAndTrack (config, name, value, rawValue = value, source = 'calculate
 }
 
 module.exports = getConfig
+module.exports.refreshRuntimeId = refreshRuntimeId
 
 // We extend from ConfigBase to make our types work
 class Config extends ConfigBase {
@@ -548,7 +549,7 @@ class Config extends ConfigBase {
     if (this.version) {
       this.tags.version = this.version
     }
-    this.tags['runtime-id'] = RUNTIME_ID
+    this.tags['runtime-id'] = runtimeId
 
     if (IS_SERVERLESS) {
       setAndTrack(this, 'telemetry.enabled', false)
@@ -716,4 +717,24 @@ function getConfig (options) {
     configInstance = new Config(options)
   }
   return configInstance
+}
+
+/**
+ * Regenerates the runtime ID and updates the config's tags in-place.
+ *
+ * Call this from the Lambda MicroVM `/run` hook so each clone receives a
+ * distinct identity. The kernel CSPRNG is re-seeded by the hypervisor (via
+ * VMGenID) before the cloned process resumes, so the new UUID will be unique
+ * across all clones from the same snapshot. The update propagates immediately
+ * to all subsequent span tags, payload headers, and telemetry without
+ * restarting the tracer.
+ *
+ * Known limitation: the process-discovery metadata written at tracer init
+ * (tracer_metadata.js) is not refreshed and will still carry the original ID.
+ *
+ * @param {import('./config-base')} config
+ */
+function refreshRuntimeId (config) {
+  runtimeId = uuid()
+  config.tags['runtime-id'] = runtimeId
 }
