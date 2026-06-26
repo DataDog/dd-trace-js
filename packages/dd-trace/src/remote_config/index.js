@@ -73,11 +73,11 @@ class RemoteConfig {
           error: '',
           backend_client_state: '',
         },
-        id: clientId,
+        get id () { return clientId },
         products: /** @type {string[]} */ ([]), // updated by `updateProducts()`
         is_tracer: true,
         client_tracer: {
-          runtime_id: config.tags['runtime-id'],
+          get runtime_id () { return config.tags['runtime-id'] },
           language: 'node',
           tracer_version: tracerVersion,
           service: config.service,
@@ -580,9 +580,10 @@ function supportsAckCallback (handler) {
  * tag in-place. Must be called after id.reseed() so that kernelUUID() draws
  * from post-resume /dev/urandom rather than the frozen OpenSSL DRBG.
  *
- * The RC client reads `clientId` through a getter on every poll, so the update
- * takes effect immediately without restarting RC. Only updates the
- * `_dd.rc.client_id` tag when RC is enabled (constructor has run).
+ * `state.client.id` is a live getter that reads `clientId` on every
+ * `getPayload()` call, so the update is reflected in all subsequent RC polls
+ * without restarting RC. Only updates `_dd.rc.client_id` in config.tags
+ * when RC is enabled (i.e. the RemoteConfig constructor has already run).
  *
  * @param {import('../config/config-base')} config
  */
