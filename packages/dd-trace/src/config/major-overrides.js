@@ -72,11 +72,13 @@ function applyV5Overrides (supportedConfigurations) {
   const iastEntry = supportedConfigurations.DD_IAST_SECURITY_CONTROLS_CONFIGURATION?.[0]
   if (!iastEntry) return
 
+  // v5 kept this configurable through the (experimental) iast.* programmatic API. The entry
+  // still carries `namespace: "iast"`, so these names route to iast.DD_IAST_SECURITY_CONTROLS_CONFIGURATION
+  // and the property path stays canonical across majors.
   iastEntry.configurationNames = [
-    iastEntry.internalPropertyName || iastEntry.configurationNames?.[0],
+    'iast.securityControlsConfiguration',
     `${EXPERIMENTAL_IAST_PREFIX}.securityControlsConfiguration`,
   ]
-  delete iastEntry.internalPropertyName
 }
 
 /**

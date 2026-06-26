@@ -60,12 +60,12 @@ describe('tagger', () => {
 
   describe('without softFail', () => {
     beforeEach(() => {
-      tagger = new Tagger({ llmobs: { enabled: true, mlApp: 'my-default-ml-app' } })
+      tagger = new Tagger({ llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'my-default-ml-app' } })
     })
 
     describe('registerLLMObsSpan', () => {
       it('will not set tags if llmobs is not enabled', () => {
-        tagger = new Tagger({ llmobs: { enabled: false } })
+        tagger = new Tagger({ llmobs: { DD_LLMOBS_ENABLED: false } })
         tagger.registerLLMObsSpan(span, 'llm')
 
         assert.deepStrictEqual(Tagger.tagMap.get(span), undefined)
@@ -293,7 +293,7 @@ describe('tagger', () => {
 
       describe('with no global mlApp configured', () => {
         beforeEach(() => {
-          tagger = new Tagger({ llmobs: { enabled: true } })
+          tagger = new Tagger({ llmobs: { DD_LLMOBS_ENABLED: true } })
         })
 
         it('uses the mlApp from the propagated mlApp if no mlApp is provided', () => {
@@ -310,7 +310,7 @@ describe('tagger', () => {
         })
 
         it('uses the service name if no mlApp is provided and no propagated mlApp is provided', () => {
-          tagger = new Tagger({ llmobs: { enabled: true }, service: 'my-service' })
+          tagger = new Tagger({ llmobs: { DD_LLMOBS_ENABLED: true }, service: 'my-service' })
           tagger.registerLLMObsSpan(span, { kind: 'llm' })
 
           const tags = Tagger.tagMap.get(span)
@@ -344,7 +344,7 @@ describe('tagger', () => {
         })
 
         it('does not write bridge tags when llmobs is disabled', () => {
-          tagger = new Tagger({ llmobs: { enabled: false } })
+          tagger = new Tagger({ llmobs: { DD_LLMOBS_ENABLED: false } })
           tagger.registerLLMObsSpan(span, { kind: 'workflow' })
 
           assert.strictEqual(spanContext._trace.tags.llmobs_trace_id, undefined)
@@ -413,7 +413,7 @@ describe('tagger', () => {
                 findGenAIAncestorSpanId,
               },
             })
-            realTagger = new RealTagger({ llmobs: { enabled: true, mlApp: 'test-app' } })
+            realTagger = new RealTagger({ llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'test-app' } })
           })
 
           it('detects a real gen_ai.* ancestor, suppresses llmobs_parent_id, and uses ancestor as event parent', () => {
@@ -1233,7 +1233,7 @@ describe('tagger', () => {
 
   describe('with softFail', () => {
     beforeEach(() => {
-      tagger = new Tagger({ llmobs: { enabled: true, mlApp: 'my-default-ml-app' } }, true)
+      tagger = new Tagger({ llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'my-default-ml-app' } }, true)
     })
 
     it('logs a warning when an unexpected value is encountered for text tagging', () => {

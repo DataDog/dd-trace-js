@@ -161,7 +161,7 @@ describe('TracerProxy', () => {
       DD_CRASHTRACKING_ENABLED: false,
       dynamicInstrumentation: {},
       remoteConfig: {
-        enabled: true,
+        DD_REMOTE_CONFIGURATION_ENABLED: true,
       },
       runtimeMetrics: {
         enabled: false,
@@ -285,7 +285,7 @@ describe('TracerProxy', () => {
       })
 
       it('should not enable remote config when disabled', () => {
-        config.remoteConfig.enabled = false
+        config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED = false
 
         proxy.init()
 
@@ -536,7 +536,7 @@ describe('TracerProxy', () => {
       })
 
       it('should not load the profiler when not configured', () => {
-        config.profiling = { enabled: false }
+        config.profiling = { DD_PROFILING_ENABLED: false }
 
         proxy.init()
 
@@ -552,7 +552,7 @@ describe('TracerProxy', () => {
       })
 
       it('should load profiler when configured', () => {
-        config.profiling = { enabled: 'true' }
+        config.profiling = { DD_PROFILING_ENABLED: 'true' }
 
         proxy.init()
 
@@ -560,7 +560,7 @@ describe('TracerProxy', () => {
       })
 
       it('should throw an error since profiler fails to be imported', () => {
-        config.profiling = { enabled: 'true' }
+        config.profiling = { DD_PROFILING_ENABLED: 'true' }
 
         const ProfilerImportFailureProxy = proxyquire('../src/proxy', {
           './tracer': DatadogTracer,

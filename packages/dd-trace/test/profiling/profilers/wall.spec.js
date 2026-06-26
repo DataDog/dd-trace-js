@@ -30,7 +30,7 @@ function makeWall (Cls, {
     DD_PROFILING_ENDPOINT_COLLECTION_ENABLED: endpointCollectionEnabled,
     DD_PROFILING_TIMELINE_ENABLED: timelineEnabled,
     DD_PROFILING_V8_PROFILER_BUG_WORKAROUND: v8ProfilerBugWorkaroundEnabled,
-    telemetry: { heartbeatInterval },
+    telemetry: { DD_TELEMETRY_HEARTBEAT_INTERVAL: heartbeatInterval },
   }, { asyncContextFrameEnabled, flushInterval })
 }
 
