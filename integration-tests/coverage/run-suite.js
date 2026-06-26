@@ -5,7 +5,7 @@ const { rmSync } = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
-const { ROOT_ENV, canonicalizePath, scriptLabel } = require('./runtime')
+const { ROOT_ENV, canonicalizePath, getSandboxNycPaths, scriptLabel } = require('./runtime')
 const finalizeSandbox = require('./finalize-sandbox')
 
 const repoRoot = path.resolve(__dirname, '..', '..')
@@ -59,6 +59,13 @@ if (classicNyc) {
   const { status } = spawnSync(nycBin, ['--', process.execPath, '--expose-gc', mochaBin, ...mochaArgs], spawnOptions)
   process.exitCode = status ?? 1
   return
+}
+
+// Unlike a sandbox's throwaway temp dir, the repo-root temp dir persists across runs, and
+// `finalizeSandbox` below merges every JSON it finds. Clear it so a second run in the same
+// checkout doesn't fold the previous run's raw coverage into this run's report.
+if (instrumentMain) {
+  rmSync(getSandboxNycPaths(repoRoot).tempDir, { force: true, recursive: true })
 }
 
 void (async () => {
