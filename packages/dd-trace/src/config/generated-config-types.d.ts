@@ -477,6 +477,7 @@ export interface GeneratedConfig {
     agentlessEnabled: boolean | undefined;
     enabled: boolean;
     mlApp: string | undefined;
+    sampleRate: number;
   };
   logInjection: boolean;
   logLevel: "debug" | "info" | "warn" | "error";
@@ -724,6 +725,7 @@ export interface GeneratedEnvVarConfig {
   DD_LLMOBS_AGENTLESS_ENABLED: boolean | undefined;
   DD_LLMOBS_ENABLED: boolean;
   DD_LLMOBS_ML_APP: string | undefined;
+  DD_LLMOBS_SAMPLE_RATE: number;
   DD_LOG_LEVEL: "debug" | "info" | "warn" | "error";
   DD_LOGS_INJECTION: boolean;
   DD_LOGS_OTEL_ENABLED: boolean;

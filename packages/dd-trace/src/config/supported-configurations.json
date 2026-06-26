@@ -1238,6 +1238,16 @@
         "default": null
       }
     ],
+    "DD_LLMOBS_SAMPLE_RATE": [
+      {
+        "implementation": "A",
+        "type": "decimal",
+        "configurationNames": [
+          "llmobs.sampleRate"
+        ],
+        "default": "1.0"
+      }
+    ],
     "DD_LOGS_INJECTION": [
       {
         "implementation": "B",

@@ -1,6 +1,8 @@
 'use strict'
 
 const log = require('../log')
+const Sampler = require('../sampler')
+const { formatKnuthRate } = require('../util')
 const {
   MODEL_NAME,
   MODEL_PROVIDER,
@@ -41,6 +43,12 @@ const {
   ROUTING_SITE,
   PROMPT_TRACKING_INSTRUMENTATION_METHOD,
   INSTRUMENTATION_METHOD_ANNOTATED,
+  SAMPLE_RATE,
+  SAMPLING_DECISION,
+  SAMPLING_DECISION_SAMPLED,
+  SAMPLING_DECISION_DROPPED,
+  PROPAGATED_SAMPLE_RATE_KEY,
+  PROPAGATED_SAMPLING_DECISION_KEY,
 } = require('./constants/tags')
 const { storage } = require('./storage')
 const { findGenAIAncestorSpanId, validateCostTags, writeBridgeTags, validateToolDefinitions } = require('./util')
@@ -53,10 +61,29 @@ class LLMObsTagger {
   /** @type {import('../config/config-base')} */
   #config
 
+  /** @type {import('../sampler') | null} */
+  #sampler = null
+
   constructor (config, softFail = false) {
     this.#config = config
 
     this.softFail = softFail
+  }
+
+  /**
+   * The sampler reads its rate from `config.llmobs.sampleRate`, which can change
+   * at runtime (e.g. via remote config). Rebuild the sampler whenever the rate
+   * changes so decisions reflect the current config, while reusing the existing
+   * sampler when it hasn't.
+   *
+   * @returns {import('../sampler')}
+   */
+  #getSampler () {
+    const rate = this.#config.llmobs?.sampleRate ?? 1
+    if (this.#sampler === null || rate !== this.#sampler.rate()) {
+      this.#sampler = new Sampler(rate)
+    }
+    return this.#sampler
   }
 
   static get tagMap () {
@@ -124,6 +151,8 @@ class LLMObsTagger {
       ROOT_PARENT_ID
     this._setTag(span, PARENT_ID_KEY, parentId)
 
+    this.#tagSamplingDecision(span, parent)
+
     // apply annotation context
     const annotationContext = storage.getStore()?.annotationContext
 
@@ -151,6 +180,32 @@ class LLMObsTagger {
         this._setTag(span, ROUTING_SITE, routing.site)
       }
     }
+  }
+
+  #tagSamplingDecision (span, parent) {
+    const traceTags = span.context()._trace.tags
+    const parentTags = registry.get(parent)
+
+    let sampleRate, samplingDecision
+    if (parentTags) {
+      // Local LLMObs parent: inherit its decision.
+      sampleRate = parentTags[SAMPLE_RATE]
+      samplingDecision = parentTags[SAMPLING_DECISION]
+    } else if (traceTags[PROPAGATED_PARENT_ID_KEY]) {
+      // Distributed LLMObs parent: inherit whatever was propagated. This may be
+      // absent if the upstream service predates sampling propagation, in which
+      // case we make no decision here rather than starting a divergent one.
+      sampleRate = traceTags[PROPAGATED_SAMPLE_RATE_KEY]
+      samplingDecision = traceTags[PROPAGATED_SAMPLING_DECISION_KEY]
+    } else {
+      // Root span: make the trace's one sampling decision.
+      const sampler = this.#getSampler()
+      sampleRate = formatKnuthRate(sampler.rate())
+      samplingDecision = sampler.isSampled(span) ? SAMPLING_DECISION_SAMPLED : SAMPLING_DECISION_DROPPED
+    }
+
+    if (sampleRate != null) this._setTag(span, SAMPLE_RATE, sampleRate)
+    if (samplingDecision != null) this._setTag(span, SAMPLING_DECISION, samplingDecision)
   }
 
   // TODO: similarly for the following `tag` methods,
