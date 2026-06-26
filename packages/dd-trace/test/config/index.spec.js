@@ -58,6 +58,10 @@ describe('Config', () => {
     const {
       ddMajor = DD_MAJOR,
       otelApi = require('../../src/opentelemetry/api'),
+      // Merged into the resolved defaults to exercise a default-on flag (the "if we
+      // change a default later" path) through the real #applyDefaults, which sets
+      // defaults untracked.
+      defaultsOverride,
     } = overrides
 
     log = proxyquire('../../src/log', {})
@@ -72,6 +76,7 @@ describe('Config', () => {
       './parsers': parsers,
       '../../../../version': { DD_MAJOR: ddMajor },
     })
+    if (defaultsOverride) Object.assign(configDefaults.defaults, defaultsOverride)
     const configHelper = proxyquire.noPreserveCache()('../../src/config/helper', {
       './supported-configurations.json': supportedConfigurations,
     })
@@ -409,6 +414,32 @@ describe('Config', () => {
     const config = getConfig({}, { otelApi: { isAvailable: () => true } })
 
     assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, true)
+  })
+
+  it('silently disables a default-on OTel flag when @opentelemetry/api is not installed', () => {
+    const config = getConfig({}, {
+      otelApi: { isAvailable: () => false },
+      defaultsOverride: { DD_METRICS_OTEL_ENABLED: true, DD_LOGS_OTEL_ENABLED: true },
+    })
+
+    assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, false)
+    assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, false)
+    assert.ok(log.warn.getCalls().every((call) => !/@opentelemetry\/api is not installed/.test(call.args[0])))
+  })
+
+  it('warns only for the customer-set flag when a sibling is default-on', () => {
+    process.env.DD_LOGS_OTEL_ENABLED = 'true'
+
+    const config = getConfig({}, {
+      otelApi: { isAvailable: () => false },
+      defaultsOverride: { DD_METRICS_OTEL_ENABLED: true },
+    })
+
+    assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, false)
+    assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, false)
+    const warnings = log.warn.getCalls().filter((call) => /@opentelemetry\/api is not installed/.test(call.args[0]))
+    assert.strictEqual(warnings.length, 1)
+    assert.ok(warnings[0].args.includes('DD_LOGS_OTEL_ENABLED'))
   })
 
   it('should initialize with OTEL environment variables when DD env vars are not set', () => {

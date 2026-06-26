@@ -344,15 +344,17 @@ class Config extends ConfigBase {
     }
     // Both OTel pipelines require the optional @opentelemetry/api peer dep. Disable them before
     // the log-injection mutual exclusion below, so a missing module leaves DD log injection on.
+    // Warn only when the customer turned the flag on; a default-on flag is disabled silently so
+    // changing a default later does not warn every app that never opted in.
     if ((this.DD_LOGS_OTEL_ENABLED || this.DD_METRICS_OTEL_ENABLED) &&
         !require('../opentelemetry/api').isAvailable()) {
-      if (this.DD_LOGS_OTEL_ENABLED) {
-        log.warn('@opentelemetry/api is not installed; disabling DD_LOGS_OTEL_ENABLED')
-        setAndTrack(this, 'DD_LOGS_OTEL_ENABLED', false)
-      }
-      if (this.DD_METRICS_OTEL_ENABLED) {
-        log.warn('@opentelemetry/api is not installed; disabling DD_METRICS_OTEL_ENABLED')
-        setAndTrack(this, 'DD_METRICS_OTEL_ENABLED', false)
+      for (const name of ['DD_LOGS_OTEL_ENABLED', 'DD_METRICS_OTEL_ENABLED']) {
+        if (this[name]) {
+          if (trackedConfigOrigins.has(name)) {
+            log.warn('@opentelemetry/api is not installed; disabling %s', name)
+          }
+          setAndTrack(this, name, false)
+        }
       }
     }
     // Disable log injection when OTEL logs are enabled
