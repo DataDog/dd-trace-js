@@ -3,7 +3,14 @@
 const childProcess = require('node:child_process')
 const workerThreads = require('node:worker_threads')
 
-const { BOOTSTRAP_REQUIRE_ARG, applyCoverageEnv, isCoverageActive, resolveCoverageRoot } = require('./runtime')
+const shimmer = require('../../packages/datadog-shimmer/src/shimmer')
+const {
+  BOOTSTRAP_REQUIRE_ARG,
+  applyCoverageEnv,
+  applyCoverageEnvPairs,
+  isCoverageActive,
+  resolveCoverageRoot,
+} = require('./runtime')
 
 const PATCHED = Symbol.for('dd-trace.integration-coverage.child-process-patched')
 
@@ -68,28 +75,22 @@ function installWorkerPatch () {
 function installPatch () {
   if (!isCoverageActive() || childProcess[PATCHED]) return
 
-  const originalFork = childProcess.fork
-  const originalSpawn = childProcess.spawn
-  const originalSpawnSync = childProcess.spawnSync
-  const originalExecFile = childProcess.execFile
-  const originalExecFileSync = childProcess.execFileSync
-  const originalExec = childProcess.exec
-  const originalExecSync = childProcess.execSync
-
-  childProcess.fork = function (modulePath, args, options) {
-    const n = normalizeArgs(args, options)
-    return originalFork.call(this, modulePath, n.args, patchOptions(n.options, modulePath))
-  }
-
+  // shimmer copies the original's own properties onto each wrapper, so the wrapping stays
+  // observationally invisible. That matters for `exec`/`execFile`, which carry a
+  // `util.promisify.custom` symbol that `util.promisify` prefers over the callback form.
   const wrapSpawnLike = original => function (command, args, options) {
     const n = normalizeArgs(args, options)
     return original.call(this, command, n.args, patchSpawnOptions(n.options, command, n.args))
   }
 
-  childProcess.spawn = wrapSpawnLike(originalSpawn)
-  childProcess.spawnSync = wrapSpawnLike(originalSpawnSync)
-  childProcess.execFileSync = wrapSpawnLike(originalExecFileSync)
-  function execFile (file, args, options, callback) {
+  shimmer.wrap(childProcess, 'fork', original => function (modulePath, args, options) {
+    const n = normalizeArgs(args, options)
+    return original.call(this, modulePath, n.args, patchOptions(n.options, modulePath))
+  })
+  shimmer.wrap(childProcess, 'spawn', wrapSpawnLike)
+  shimmer.wrap(childProcess, 'spawnSync', wrapSpawnLike)
+  shimmer.wrap(childProcess, 'execFileSync', wrapSpawnLike)
+  shimmer.wrap(childProcess, 'execFile', original => function (file, args, options, callback) {
     if (typeof args === 'function') {
       callback = args
       args = []
@@ -99,25 +100,34 @@ function installPatch () {
       options = {}
     }
     const n = normalizeArgs(args, options)
-    return originalExecFile.call(this, file, n.args, patchSpawnOptions(n.options, file, n.args), callback)
-  }
-  execFile.__promisify__ = originalExecFile.__promisify__
-  childProcess.execFile = execFile
-  function exec (command, options, callback) {
+    return original.call(this, file, n.args, patchSpawnOptions(n.options, file, n.args), callback)
+  })
+  shimmer.wrap(childProcess, 'exec', original => function (command, options, callback) {
     if (typeof options === 'function') {
       callback = options
       options = undefined
     }
-    return originalExec.call(this, command, patchExecOptions(options), callback)
-  }
-  exec.__promisify__ = originalExec.__promisify__
-  childProcess.exec = exec
-
-  childProcess.execSync = function (command, options) {
-    return originalExecSync.call(this, command, patchExecOptions(options))
-  }
+    return original.call(this, command, patchExecOptions(options), callback)
+  })
+  shimmer.wrap(childProcess, 'execSync', original => function (command, options) {
+    return original.call(this, command, patchExecOptions(options))
+  })
 
   installWorkerPatch()
+
+  // fork / spawn / exec / execFile all funnel through ChildProcess.prototype.spawn after the env
+  // is normalized into `options.envPairs`. Patching that one shared junction catches a spawn whose
+  // caller captured a public method before this patch installed, which the public wrappers can't,
+  // because the original `fork`/`exec` delegate to the module's local `spawn`, not the patched
+  // export. Sync spawns don't pass through it, so they stay covered by the public wrappers above.
+  if (typeof childProcess.ChildProcess?.prototype?.spawn === 'function') {
+    shimmer.wrap(childProcess.ChildProcess.prototype, 'spawn', original => function (options) {
+      if (Array.isArray(options?.envPairs)) {
+        applyCoverageEnvPairs(options.envPairs, { cwd: options.cwd })
+      }
+      return original.call(this, options)
+    })
+  }
 
   childProcess[PATCHED] = true
 }

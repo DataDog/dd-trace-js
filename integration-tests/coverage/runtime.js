@@ -223,6 +223,73 @@ function applyCoverageEnv (env, options = {}) {
   }
 }
 
+/**
+ * Case-insensitive index of `key` in a `KEY=VALUE` envPairs array. Windows env keys are
+ * case-insensitive, so `NODE_OPTIONS` and `Node_Options` are the same variable.
+ *
+ * @param {string[]} envPairs
+ * @param {string} key
+ * @returns {number}
+ */
+function findEnvPairIndex (envPairs, key) {
+  const upperKey = key.toUpperCase()
+  for (let i = 0; i < envPairs.length; i++) {
+    const pair = envPairs[i]
+    const equals = pair.indexOf('=')
+    if (equals !== -1 && pair.slice(0, equals).toUpperCase() === upperKey) return i
+  }
+  return -1
+}
+
+/**
+ * Inject the coverage bootstrap into a `KEY=VALUE` envPairs array — the env representation Node
+ * hands to `ChildProcess.prototype.spawn` after a caller may have replaced `NODE_OPTIONS`.
+ * Rewrites the existing entry in place (preserving its key casing) or appends one.
+ *
+ * @param {string[]} envPairs
+ * @returns {void}
+ */
+function mergeBootstrapIntoEnvPairs (envPairs) {
+  const index = findEnvPairIndex(envPairs, 'NODE_OPTIONS')
+  if (index === -1) {
+    envPairs.push(`NODE_OPTIONS=${BOOTSTRAP_REQUIRE_ARG}`)
+    return
+  }
+  const pair = envPairs[index]
+  const equals = pair.indexOf('=')
+  envPairs[index] = `${pair.slice(0, equals)}=${prependBootstrapRequire(pair.slice(equals + 1))}`
+}
+
+/**
+ * envPairs sibling of {@link applyCoverageEnv}: mutate the array in place so the spawned child
+ * carries the coverage root and bootstrap. Same decision logic; only the env representation
+ * differs, so both share `resolveCoverageRoot` and `prependBootstrapRequire`.
+ *
+ * @param {string[]} envPairs
+ * @param {object} [options]
+ * @param {string} [options.cwd]
+ * @param {string | URL} [options.scriptPath]
+ * @returns {void}
+ */
+function applyCoverageEnvPairs (envPairs, options = {}) {
+  if (!isCoverageActive()) return
+  if (findEnvPairIndex(envPairs, DISABLE_ENV) !== -1) {
+    const rootIndex = findEnvPairIndex(envPairs, ROOT_ENV)
+    if (rootIndex !== -1) envPairs.splice(rootIndex, 1)
+    return
+  }
+  const root = resolveCoverageRoot(options)
+  if (!root) return
+  const rootIndex = findEnvPairIndex(envPairs, ROOT_ENV)
+  const rootPair = `${ROOT_ENV}=${canonicalizePath(root)}`
+  if (rootIndex === -1) {
+    envPairs.push(rootPair)
+  } else {
+    envPairs[rootIndex] = rootPair
+  }
+  mergeBootstrapIntoEnvPairs(envPairs)
+}
+
 module.exports = {
   BOOTSTRAP_REQUIRE_ARG,
   CHILD_BOOTSTRAP_PATH,
@@ -234,6 +301,7 @@ module.exports = {
   REPO_ROOT,
   ROOT_ENV,
   applyCoverageEnv,
+  applyCoverageEnvPairs,
   canonicalizePath,
   getCollectorRoot,
   getMergedReportDir,
@@ -241,6 +309,7 @@ module.exports = {
   getSandboxNycPaths,
   isCoverageActive,
   isPreInstrumentedSandbox,
+  mergeBootstrapIntoEnvPairs,
   prependBootstrapRequire,
   resetCollectorRoot,
   resolveCoverageRoot,
