@@ -77,9 +77,16 @@ async function mergeV8File (into, v8File) {
   return merged
 }
 
-async function main () {
-  const v8Dir = getV8CoverageDir()
-  const outputDir = getMergedReportDir()
+/**
+ * Convert every raw V8 profile in `v8Dir` into a merged istanbul report (lcov + html + json) under
+ * `outputDir`. Shared by the integration harness (this script's `main`) and the in-process
+ * `scripts/c8-ci.js`, so both produce identical reports from the same patched converter.
+ *
+ * @param {string} v8Dir directory of raw `NODE_V8_COVERAGE` JSON files
+ * @param {string} outputDir report destination (`coverage/node-<version>-<label>`)
+ * @returns {Promise<{scripts: number, profiles: number, files: number}>}
+ */
+async function convertV8DirToReport (v8Dir, outputDir) {
   await fs.mkdir(outputDir, { recursive: true })
 
   let files
@@ -101,8 +108,7 @@ async function main () {
   if (coverageMap.files().length === 0) {
     // Sentinel for `verify-coverage.js` to skip upload when matrix filters drop every test.
     await fs.writeFile(path.join(outputDir, '.skipped'), '')
-    process.stdout.write('No V8 coverage data found to merge.\n')
-    return
+    return { scripts: 0, profiles: v8Files.length, files: 0 }
   }
 
   const context = libReport.createContext({ coverageMap, dir: outputDir, defaultSummarizer: 'nested' })
@@ -112,13 +118,27 @@ async function main () {
 
   await fs.writeFile(path.join(outputDir, 'coverage-final.json'), JSON.stringify(coverageMap.toJSON()))
 
+  return { scripts, profiles: v8Files.length, files: coverageMap.files().length }
+}
+
+async function main () {
+  const outputDir = getMergedReportDir()
+  const { scripts, profiles, files } = await convertV8DirToReport(getV8CoverageDir(), outputDir)
+  if (files === 0) {
+    process.stdout.write('No V8 coverage data found to merge.\n')
+    return
+  }
   process.stdout.write(
-    `Converted ${scripts} V8 script entries across ${v8Files.length} process profile(s) into ` +
-    `${coverageMap.files().length} file section(s). HTML report: ${path.join(outputDir, 'html', 'index.html')}\n`
+    `Converted ${scripts} V8 script entries across ${profiles} process profile(s) into ` +
+    `${files} file section(s). HTML report: ${path.join(outputDir, 'html', 'index.html')}\n`
   )
 }
 
-main().catch(err => {
-  process.stderr.write(`${err.stack || err.message}\n`)
-  process.exitCode = 1
-})
+module.exports = { convertV8DirToReport }
+
+if (require.main === module) {
+  main().catch(err => {
+    process.stderr.write(`${err.stack || err.message}\n`)
+    process.exitCode = 1
+  })
+}
