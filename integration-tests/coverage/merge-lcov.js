@@ -2,65 +2,106 @@
 
 const fs = require('node:fs/promises')
 const path = require('node:path')
+const { fileURLToPath } = require('node:url')
 
 const libCoverage = require('istanbul-lib-coverage')
 const libReport = require('istanbul-lib-report')
 const reports = require('istanbul-reports')
+const v8toIstanbul = require('v8-to-istanbul')
+const TestExclude = require('test-exclude')
 
-const { REPO_ROOT, getCollectorRoot, getMergedReportDir } = require('./runtime')
+const baseNycConfig = require('../../nyc.config')
+const { REPO_ROOT, getMergedReportDir, getV8CoverageDir } = require('./runtime')
 
-async function loadMergedCoverage (sandboxesDir) {
-  const merged = libCoverage.createCoverageMap({})
+// Same include/exclude as the istanbul reporters used, so the file set is identical regardless of
+// which tool collected. c8's own `excludeAfterRemap` semantics are reproduced here: we decide
+// inclusion on the resolved on-disk path, after mapping the V8 url back to a real file.
+const exclude = new TestExclude({
+  cwd: REPO_ROOT,
+  include: baseNycConfig.include,
+  exclude: baseNycConfig.exclude,
+  excludeNodeModules: true,
+  extension: ['.js', '.mjs'],
+})
 
-  let entries
-  try {
-    entries = await fs.readdir(sandboxesDir, { withFileTypes: true })
-  } catch {
-    return { coverageMap: merged, sandboxCount: 0 }
-  }
-
-  const reads = []
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue
-    reads.push(readSandboxCoverage(path.join(sandboxesDir, entry.name, 'coverage-final.json')))
-  }
-
-  let sandboxCount = 0
-  for (const data of await Promise.all(reads)) {
-    if (!data) continue
-    merged.merge(data)
-    sandboxCount++
-  }
-
-  return { coverageMap: merged, sandboxCount }
+/**
+ * @param {string} filePath
+ * @returns {boolean}
+ */
+function shouldInclude (filePath) {
+  if (!filePath.startsWith(REPO_ROOT + path.sep)) return false
+  if (filePath.includes(`${path.sep}node_modules${path.sep}`)) return false
+  if (filePath.includes(`${path.sep}versions${path.sep}`)) return false
+  return exclude.shouldInstrument(filePath)
 }
 
-async function readSandboxCoverage (jsonPath) {
-  let content
+/**
+ * Convert one process' raw V8 coverage file into an istanbul coverage map and merge it into `into`.
+ * Each entry whose source is an in-scope repo file is run through `v8-to-istanbul` (patched to fix
+ * the multi-line-statement over-report) and folded in; everything else (node internals, deps,
+ * test files) is skipped.
+ *
+ * @param {import('istanbul-lib-coverage').CoverageMap} into
+ * @param {string} v8File absolute path to a raw V8 coverage JSON file
+ * @returns {Promise<number>} count of in-scope script entries merged
+ */
+async function mergeV8File (into, v8File) {
+  let parsed
   try {
-    content = await fs.readFile(jsonPath, 'utf8')
+    parsed = JSON.parse(await fs.readFile(v8File, 'utf8'))
   } catch {
-    return
+    return 0
   }
-  try {
-    return JSON.parse(content)
-  } catch (err) {
-    process.stderr.write(`Skipping unreadable coverage file ${jsonPath}: ${err.message}\n`)
+  let merged = 0
+  for (const entry of parsed.result ?? []) {
+    if (!entry.url || !entry.url.startsWith('file://')) continue
+    let filePath
+    try {
+      filePath = fileURLToPath(entry.url)
+    } catch {
+      continue
+    }
+    if (!shouldInclude(filePath)) continue
+
+    const converter = v8toIstanbul(filePath, 0)
+    try {
+      await converter.load()
+      converter.applyCoverage(entry.functions)
+      into.merge(converter.toIstanbul())
+      merged++
+    } catch {
+      // A file that changed on disk since the run, or a source map we can't resolve, is skipped
+      // rather than failing the whole merge.
+    }
   }
+  return merged
 }
 
 async function main () {
-  const sandboxesDir = path.join(getCollectorRoot(), 'sandboxes')
+  const v8Dir = getV8CoverageDir()
   const outputDir = getMergedReportDir()
-
   await fs.mkdir(outputDir, { recursive: true })
 
-  const { coverageMap, sandboxCount } = await loadMergedCoverage(sandboxesDir)
+  let files
+  try {
+    files = await fs.readdir(v8Dir)
+  } catch {
+    files = []
+  }
+  const v8Files = files.filter(f => f.endsWith('.json'))
 
-  if (sandboxCount === 0) {
+  const coverageMap = libCoverage.createCoverageMap({})
+  let scripts = 0
+  // Sequential rather than parallel: v8-to-istanbul reads + parses each source, and a wide fan-out
+  // across thousands of entries spikes memory; the merge is not the slow part of a coverage run.
+  for (const file of v8Files) {
+    scripts += await mergeV8File(coverageMap, path.join(v8Dir, file))
+  }
+
+  if (coverageMap.files().length === 0) {
     // Sentinel for `verify-coverage.js` to skip upload when matrix filters drop every test.
     await fs.writeFile(path.join(outputDir, '.skipped'), '')
-    process.stdout.write('No sandbox coverage reports found to merge.\n')
+    process.stdout.write('No V8 coverage data found to merge.\n')
     return
   }
 
@@ -72,8 +113,8 @@ async function main () {
   await fs.writeFile(path.join(outputDir, 'coverage-final.json'), JSON.stringify(coverageMap.toJSON()))
 
   process.stdout.write(
-    `Merged ${sandboxCount} sandbox report(s) across ${coverageMap.files().length} file section(s). ` +
-    `HTML report: ${path.join(outputDir, 'html', 'index.html')}\n`
+    `Converted ${scripts} V8 script entries across ${v8Files.length} process profile(s) into ` +
+    `${coverageMap.files().length} file section(s). HTML report: ${path.join(outputDir, 'html', 'index.html')}\n`
   )
 }
 
