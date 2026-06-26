@@ -959,7 +959,7 @@ function createMainProcessReporter (
     let testSuiteError
 
     for (const task of testTasks) {
-      const testReport = getTestReport(task)
+      const testReport = getTestReport(task, testSuiteCtx.currentStore)
       testReports.push(testReport)
 
       for (const attempt of testReport.nonFinalAttempts) {
@@ -1013,7 +1013,7 @@ function createMainProcessReporter (
     return testSuiteCtx
   }
 
-  function getTestReport (task) {
+  function getTestReport (task, testSuiteStore) {
     const result = task.result
     const testSuiteAbsolutePath = task.file?.filepath
     const testName = getTestName(task)
@@ -1029,6 +1029,7 @@ function createMainProcessReporter (
         errorCounts: task.meta.__ddTestOptAtfErrorCounts,
         finalStatus: getAttemptToFixFinalStatus,
         statuses: task.meta.__ddTestOptAtfStatuses,
+        testSuiteStore,
         type: 'attempt_to_fix',
       })
     }
@@ -1038,6 +1039,7 @@ function createMainProcessReporter (
         errorCounts: task.meta.__ddTestOptEfdErrorCounts,
         finalStatus: getEarlyFlakeDetectionFinalStatus,
         statuses: task.meta.__ddTestOptEfdStatuses,
+        testSuiteStore,
         type: 'early_flake_detection',
       })
     }
@@ -1047,6 +1049,7 @@ function createMainProcessReporter (
         errorCounts: task.meta.__ddTestOptRepeatErrorCounts,
         finalStatus: () => status,
         statuses: task.meta.__ddTestOptRepeatStatuses,
+        testSuiteStore,
         type: 'external',
       })
     }
@@ -1056,6 +1059,7 @@ function createMainProcessReporter (
       return getRepeatedTestReport(task, testName, testSuiteAbsolutePath, testProperties, status, {
         finalStatus: () => status,
         statuses: attemptStatuses,
+        testSuiteStore,
         type: 'external',
       })
     }
@@ -1064,6 +1068,7 @@ function createMainProcessReporter (
       return getRepeatedTestReport(task, testName, testSuiteAbsolutePath, testProperties, status, {
         finalStatus: () => status,
         statuses: getRepeatedTaskStatuses(task, status),
+        testSuiteStore,
         type: 'external',
       })
     }
@@ -1102,6 +1107,7 @@ function createMainProcessReporter (
       testName,
       testProperties,
       testSuiteAbsolutePath,
+      testSuiteStore,
     }
   }
 
@@ -1270,7 +1276,7 @@ function getTestModuleProjectName (testModule) {
 function getRepeatedTestReport (task, testName, testSuiteAbsolutePath, testProperties, status, options) {
   const result = task.result
   const errors = result?.errors || []
-  const { errorCounts, finalStatus, statuses, type } = options
+  const { errorCounts, finalStatus, statuses, testSuiteStore, type } = options
   const finalAttemptStatus = finalStatus(statuses)
   const hasFailure = finalAttemptStatus === 'fail'
   const attempts = []
@@ -1320,6 +1326,7 @@ function getRepeatedTestReport (task, testName, testSuiteAbsolutePath, testPrope
     testName,
     testProperties,
     testSuiteAbsolutePath,
+    testSuiteStore,
   }
 }
 
@@ -1353,6 +1360,7 @@ function reportFinalTestAttempt (testReport) {
     testName,
     testProperties,
     testSuiteAbsolutePath,
+    testSuiteStore,
   } = testReport
 
   if (status === 'skip') {
@@ -1362,6 +1370,7 @@ function reportFinalTestAttempt (testReport) {
       isNew: testProperties.isNew,
       isDisabled: testProperties.isDisabled,
       isTestFrameworkWorker: true,
+      ...testSuiteStore,
     })
     return
   }
@@ -1395,10 +1404,12 @@ function reportTestAttempt (testReport, attempt) {
     testName,
     testProperties,
     testSuiteAbsolutePath,
+    testSuiteStore,
   } = testReport
   const result = task.result
   const status = attempt.status
   const testCtx = {
+    currentStore: testSuiteStore,
     testName,
     testSuiteAbsolutePath,
     isRetry: attempt.isRetry,

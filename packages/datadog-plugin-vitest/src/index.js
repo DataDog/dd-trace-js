@@ -145,7 +145,8 @@ class VitestPlugin extends CiPlugin {
       } = ctx
 
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
-      const store = storage('legacy').getStore()
+      const store = ctx.currentStore || storage('legacy').getStore()
+      const testSuiteSpan = store?.testSuiteSpan || this.testSuiteSpan
 
       const extraTags = {
         ...requestErrorTags,
@@ -188,7 +189,7 @@ class VitestPlugin extends CiPlugin {
       const span = this.startTestSpan(
         testName,
         testSuite,
-        this.testSuiteSpan,
+        testSuiteSpan,
         extraTags
       )
 
@@ -302,12 +303,13 @@ class VitestPlugin extends CiPlugin {
       isNew,
       isDisabled,
       isTestFrameworkWorker,
+      testSuiteSpan,
     }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const testSpan = this.startTestSpan(
         testName,
         testSuite,
-        this.testSuiteSpan,
+        testSuiteSpan || this.testSuiteSpan,
         {
           [TEST_SOURCE_FILE]: testSuite,
           [TEST_SOURCE_START]: 1, // we can't get the proper start line in vitest

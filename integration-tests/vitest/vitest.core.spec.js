@@ -28,6 +28,7 @@ const {
   TEST_COMMAND,
   TEST_SOURCE_FILE,
   TEST_SOURCE_START,
+  TEST_SUITE_ID,
   TEST_IS_NEW,
   TEST_NAME,
   TEST_EARLY_FLAKE_ENABLED,
@@ -390,6 +391,65 @@ versions.forEach((version) => {
             PROJECT_POOL_CONFIG: 'forks',
             DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
             EXPECT_DD_NODE_OPTIONS_STRIPPED: '1',
+            DD_SERVICE: undefined,
+          },
+        }
+      )
+
+      childProcess.stdout.on('data', data => { testOutput += data })
+      childProcess.stderr.on('data', data => { testOutput += data })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        payloadsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+
+    newerVitestIt('parents no-worker test events to their own suite when fork modules overlap', async () => {
+      const payloadsPromise = receiver.gatherPayloadsMaxTimeout(
+        ({ url }) => url === '/api/v2/citestcycle',
+        payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSuiteEvents = events
+            .filter(event => event.type === 'test_suite_end')
+            .map(event => event.content)
+            .filter(testSuite => testSuite.meta[TEST_SOURCE_FILE].startsWith(
+              'ci-visibility/vitest-tests/no-worker-suite-context-'
+            ))
+          const testEvents = events
+            .filter(event => event.type === 'test')
+            .map(event => event.content)
+            .filter(test => test.meta[TEST_SOURCE_FILE].startsWith(
+              'ci-visibility/vitest-tests/no-worker-suite-context-'
+            ))
+          const testSuiteIdsBySourceFile = new Map(testSuiteEvents.map(testSuite => [
+            testSuite.meta[TEST_SOURCE_FILE],
+            testSuite[TEST_SUITE_ID].toString(),
+          ]))
+
+          assert.strictEqual(testSuiteEvents.length, 2, inspect(testSuiteEvents.map(testSuite => testSuite.resource)))
+          assert.strictEqual(testEvents.length, 2, inspect(testEvents.map(test => test.resource)))
+          for (const test of testEvents) {
+            assert.strictEqual(
+              test[TEST_SUITE_ID].toString(),
+              testSuiteIdsBySourceFile.get(test.meta[TEST_SOURCE_FILE])
+            )
+          }
+        }
+      )
+
+      childProcess = exec(
+        './node_modules/.bin/vitest run',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--no-warnings --import dd-trace/register.js -r dd-trace/ci/init',
+            TEST_DIR: 'ci-visibility/vitest-tests/no-worker-suite-context-*.mjs',
+            POOL_CONFIG: 'forks',
+            DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
             DD_SERVICE: undefined,
           },
         }
