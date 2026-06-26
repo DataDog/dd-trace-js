@@ -27,19 +27,21 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
     // Anything that accesses the storage is context dependent
     const onStart = ({ filters }) => {
       const store = storage('legacy').getStore()
-      if (store && !store.nosqlAnalyzed && filters?.length) {
+      const iastContext = getIastContext(store)
+      if (store && iastContext && !iastContext.nosqlAnalyzed && filters?.length) {
         for (const filter of filters) {
           this.analyze({ filter }, store)
         }
       }
-
       return store
     }
 
-    const onStartAndEnterWithStore = (message) => {
-      const store = onStart(message || {})
-      if (store) {
-        storage('legacy').enterWith({ ...store, nosqlAnalyzed: true, nosqlParentStore: store })
+    const onStartAndSetAnalyzed = (message) => {
+      onStart(message || {})
+      const store = storage('legacy').getStore()
+      const iastContext = getIastContext(store)
+      if (iastContext) {
+        iastContext.nosqlAnalyzed = true
       }
     }
 
@@ -47,18 +49,19 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
     // eslint-disable-next-line unicorn/consistent-function-scoping
     const onFinish = () => {
       const store = storage('legacy').getStore()
-      if (store?.nosqlParentStore) {
-        storage('legacy').enterWith(store.nosqlParentStore)
+      const iastContext = getIastContext(store)
+      if (iastContext) {
+        iastContext.nosqlAnalyzed = false
       }
     }
 
     this.addSub('datadog:mongodb:collection:filter:start', onStart)
 
-    this.addSub('datadog:mongoose:model:filter:start', onStartAndEnterWithStore)
+    this.addSub('datadog:mongoose:model:filter:start', onStartAndSetAnalyzed)
     this.addSub('datadog:mongoose:model:filter:finish', onFinish)
 
     this.addSub('datadog:mquery:filter:prepare', onStart)
-    this.addSub('tracing:datadog:mquery:filter:start', onStartAndEnterWithStore)
+    this.addSub('tracing:datadog:mquery:filter:start', onStartAndSetAnalyzed)
     this.addSub('tracing:datadog:mquery:filter:asyncEnd', onFinish)
   }
 
