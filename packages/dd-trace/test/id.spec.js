@@ -155,4 +155,188 @@ describe('id', () => {
     assert.strictEqual(spanId.toString(16), '000000000000abcd')
     assert.strictEqual(spanId.toString(10), '43981')
   })
+
+  describe('reseed()', () => {
+    let freshId
+    let randomFillSyncStub
+    let openSyncStub
+    let readSyncStub
+    let closeSyncStub
+
+    beforeEach(() => {
+      randomFillSyncStub = sinon.stub().callsFake(buf => {
+        for (let i = 0; i < buf.length; i++) {
+          buf[i] = 0xAB
+        }
+      })
+      openSyncStub = sinon.stub().returns(7)
+      readSyncStub = sinon.stub().callsFake((fd, buf, offset, len) => {
+        for (let i = 0; i < len; i++) {
+          buf[offset + i] = 0xCD
+        }
+        return len
+      })
+      closeSyncStub = sinon.stub()
+
+      freshId = proxyquire('../src/id', {
+        crypto: { randomFillSync: randomFillSyncStub },
+        fs: { openSync: openSyncStub, readSync: readSyncStub, closeSync: closeSyncStub },
+      })
+    })
+
+    it('should open /dev/urandom once on first call', () => {
+      freshId.reseed()
+
+      sinon.assert.calledOnce(openSyncStub)
+      sinon.assert.calledWithExactly(openSyncStub, '/dev/urandom', 'r')
+    })
+
+    it('should switch pseudoRandom to use kernel (readSync called, randomFillSync not called after reset)', () => {
+      freshId.reseed()
+      randomFillSyncStub.resetHistory()
+
+      // Force a batch refill by calling id() which calls pseudoRandom
+      // batch starts at 0 after reseed, so first call triggers fill
+      freshId()
+
+      sinon.assert.called(readSyncStub)
+      sinon.assert.notCalled(randomFillSyncStub)
+    })
+
+    it('should reset batch to 0 so next pseudoRandom triggers kernel fill', () => {
+      // Call id() several times to advance the batch counter
+      freshId()
+      freshId()
+      freshId()
+      readSyncStub.resetHistory()
+
+      freshId.reseed()
+      // After reseed, batch = 0, so next call must refill
+      freshId()
+
+      sinon.assert.called(readSyncStub)
+    })
+
+    it('should be idempotent — second call does not reopen fd', () => {
+      freshId.reseed()
+      freshId.reseed()
+
+      sinon.assert.calledOnce(openSyncStub)
+    })
+
+    it('should fall back to randomFillSync when openSync throws and not call readSync', () => {
+      openSyncStub.throws(new Error('no /dev/urandom'))
+
+      freshId.reseed()
+
+      // After failed open, fill falls back to randomFillSync
+      freshId()
+
+      sinon.assert.notCalled(readSyncStub)
+      sinon.assert.called(randomFillSyncStub)
+    })
+
+    it('should close the fd and fall back to randomFillSync when readSync returns 0 bytes', () => {
+      freshId.reseed()
+      // Override readSync to simulate a zero-byte read (broken fd after it opened)
+      readSyncStub.callsFake(() => 0)
+      randomFillSyncStub.resetHistory()
+
+      freshId()
+
+      sinon.assert.called(closeSyncStub)
+      sinon.assert.called(randomFillSyncStub)
+    })
+
+    it('should close the fd and fall back to randomFillSync when readSync throws', () => {
+      freshId.reseed()
+      readSyncStub.throws(new Error('EIO'))
+      randomFillSyncStub.resetHistory()
+
+      freshId()
+
+      sinon.assert.called(closeSyncStub)
+      sinon.assert.called(randomFillSyncStub)
+    })
+  })
+
+  describe('kernelUUID()', () => {
+    let freshId
+    let randomFillSyncStub
+    let openSyncStub
+    let readSyncStub
+    let closeSyncStub
+
+    beforeEach(() => {
+      let counter = 0
+      randomFillSyncStub = sinon.stub().callsFake(buf => {
+        for (let i = 0; i < buf.length; i++) {
+          buf[i] = (counter++ * 37 + 17) & 0xFF
+        }
+      })
+      openSyncStub = sinon.stub().returns(7)
+      readSyncStub = sinon.stub().callsFake((fd, buf, offset, len) => {
+        for (let i = 0; i < len; i++) {
+          buf[offset + i] = (counter++ * 53 + 7) & 0xFF
+        }
+        return len
+      })
+      closeSyncStub = sinon.stub()
+
+      freshId = proxyquire('../src/id', {
+        crypto: { randomFillSync: randomFillSyncStub },
+        fs: { openSync: openSyncStub, readSync: readSyncStub, closeSync: closeSyncStub },
+      })
+    })
+
+    it('should return a valid RFC 4122 v4 UUID', () => {
+      const result = freshId.kernelUUID()
+
+      assert.match(result, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+    })
+
+    it('should set version digit to 4 (UUID[14])', () => {
+      const result = freshId.kernelUUID()
+
+      assert.strictEqual(result[14], '4')
+    })
+
+    it('should set variant to 8/9/a/b (UUID[19])', () => {
+      const result = freshId.kernelUUID()
+
+      assert.match(result[19], /[89ab]/)
+    })
+
+    it('should generate unique UUIDs across 10 calls', () => {
+      const uuids = new Set()
+      for (let i = 0; i < 10; i++) {
+        uuids.add(freshId.kernelUUID())
+      }
+
+      assert.strictEqual(uuids.size, 10)
+    })
+
+    it('should read from kernel (readSync) after reseed, not randomFillSync', () => {
+      freshId.reseed()
+      randomFillSyncStub.resetHistory()
+      readSyncStub.resetHistory()
+
+      freshId.kernelUUID()
+
+      sinon.assert.called(readSyncStub)
+      sinon.assert.notCalled(randomFillSyncStub)
+    })
+
+    it('should fall back to randomFillSync when fd unavailable (openSync throws + reseed called)', () => {
+      openSyncStub.throws(new Error('no /dev/urandom'))
+      freshId.reseed()
+      randomFillSyncStub.resetHistory()
+      readSyncStub.resetHistory()
+
+      freshId.kernelUUID()
+
+      sinon.assert.called(randomFillSyncStub)
+      sinon.assert.notCalled(readSyncStub)
+    })
+  })
 })

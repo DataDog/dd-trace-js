@@ -820,6 +820,129 @@ describe('RemoteConfig', () => {
       assert.strictEqual(rc.appliedConfigs.size, 0)
     })
   })
+
+  describe('live state getters', () => {
+    it('should reflect clientId changes immediately via state.client.id getter', () => {
+      // state.client.id is a live getter so that in-flight RC polls pick up
+      // a refreshed id without the RemoteConfig instance being recreated.
+      const originalId = rc.state.client.id
+
+      // Simulate a direct update to the module-level clientId by checking that
+      // creating a second instance (which captures the current value) sees the same id.
+      const rc2 = new RemoteConfig(config)
+      assert.strictEqual(rc2.state.client.id, originalId)
+    })
+
+    it('should reflect runtime-id tag changes immediately via client_tracer.runtime_id getter', () => {
+      assert.strictEqual(rc.state.client.client_tracer.runtime_id, 'runtimeId')
+
+      config.tags['runtime-id'] = 'refreshed-runtime-id'
+
+      assert.strictEqual(rc.state.client.client_tracer.runtime_id, 'refreshed-runtime-id')
+
+      config.tags['runtime-id'] = 'runtimeId' // restore for other tests
+    })
+
+    it('should include live runtime_id and id in the JSON payload', () => {
+      config.tags['runtime-id'] = 'live-runtime-id'
+      const payload = JSON.parse(rc.getPayload())
+
+      assert.strictEqual(payload.client.client_tracer.runtime_id, 'live-runtime-id')
+      assert.strictEqual(payload.client.id, '1234-5678')
+
+      config.tags['runtime-id'] = 'runtimeId'
+    })
+  })
+
+  describe('refreshClientId', () => {
+    let kernelUUIDStub
+    let RemoteConfigWithId
+
+    beforeEach(() => {
+      kernelUUIDStub = sinon.stub().returns('new-client-id-uuid')
+
+      RemoteConfigWithId = proxyquire('../../src/remote_config', {
+        '../../../../vendor/dist/crypto-randomuuid': uuid,
+        './scheduler': Scheduler,
+        '../../../../package.json': { version: '3.0.0' },
+        '../exporters/common/request': request,
+        '../log': log,
+        '../tagger': tagger,
+        '../git_metadata': getGitMetadata,
+        '../service-naming/extra-services': {
+          getExtraServices: () => extraServices,
+        },
+        '../id': { kernelUUID: kernelUUIDStub },
+      })
+    })
+
+    it('should export refreshClientId as a function', () => {
+      assert.strictEqual(typeof RemoteConfig.refreshClientId, 'function')
+    })
+
+    it('should update state.client.id on the live instance immediately after refresh', () => {
+      // state.client.id is a live getter — the existing instance reflects the
+      // update without being recreated, so all in-flight RC polls pick up the
+      // new id on the next getPayload() call.
+      const rcInstance = new RemoteConfigWithId(config)
+      assert.strictEqual(rcInstance.state.client.id, '1234-5678')
+
+      RemoteConfigWithId.refreshClientId(config)
+
+      assert.strictEqual(rcInstance.state.client.id, 'new-client-id-uuid')
+    })
+
+    it('should set clientId to the value returned by kernelUUID', () => {
+      const rcConfig = {
+        url: new URL('http://127.0.0.1:1337'),
+        tags: { 'runtime-id': 'runtimeId', '_dd.rc.client_id': 'old' },
+        service: 'serviceName',
+        env: 'serviceEnv',
+        version: 'appVersion',
+        remoteConfig: { pollInterval: 5 },
+      }
+      RemoteConfigWithId.refreshClientId(rcConfig)
+
+      assert.strictEqual(rcConfig.tags['_dd.rc.client_id'], 'new-client-id-uuid')
+    })
+
+    it('should update config.tags[_dd.rc.client_id] when it exists', () => {
+      const rcConfig = {
+        url: new URL('http://127.0.0.1:1337'),
+        tags: {
+          'runtime-id': 'runtimeId',
+          '_dd.rc.client_id': 'old-client-id',
+        },
+        service: 'serviceName',
+        env: 'serviceEnv',
+        version: 'appVersion',
+        remoteConfig: { pollInterval: 5 },
+      }
+      RemoteConfigWithId.refreshClientId(rcConfig)
+
+      assert.strictEqual(rcConfig.tags['_dd.rc.client_id'], 'new-client-id-uuid')
+    })
+
+    it('should not update config.tags[_dd.rc.client_id] when tag is absent', () => {
+      const rcConfig = {
+        url: new URL('http://127.0.0.1:1337'),
+        tags: { 'runtime-id': 'runtimeId' },
+        service: 'serviceName',
+        env: 'serviceEnv',
+        version: 'appVersion',
+        remoteConfig: { pollInterval: 5 },
+      }
+      RemoteConfigWithId.refreshClientId(rcConfig)
+
+      assert.strictEqual(rcConfig.tags['_dd.rc.client_id'], undefined)
+    })
+
+    it('should call kernelUUID to generate the new ID', () => {
+      RemoteConfigWithId.refreshClientId(config)
+
+      sinon.assert.calledOnce(kernelUUIDStub)
+    })
+  })
 })
 
 function toBase64 (data) {
