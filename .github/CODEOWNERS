@@ -265,7 +265,9 @@
 /supported_versions_table.csv @DataDog/apm-sdk-capabilities-js
 
 # Feature Flagging
+/benchmark/sirun/openfeature/ @DataDog/feature-flagging-and-experimentation-sdk
 /integration-tests/openfeature/ @DataDog/feature-flagging-and-experimentation-sdk
+/packages/dd-trace/src/evp_proxy/ @DataDog/feature-flagging-and-experimentation-sdk
 /packages/dd-trace/src/openfeature/ @DataDog/feature-flagging-and-experimentation-sdk
 /packages/dd-trace/test/openfeature/ @DataDog/feature-flagging-and-experimentation-sdk
 

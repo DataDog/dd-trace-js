@@ -1,0 +1,23 @@
+{
+  "name": "openfeature",
+  "run": "node index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "allow_baseline_skip_with_source_changes": true,
+  "cachegrind": false,
+  "iterations": 10,
+  "instructions": true,
+  "variants": {
+    "flag-eval-logging-hook": {
+      "env": {
+        "VARIANT": "flag-eval-logging-hook",
+        "COUNT": "40000000"
+      }
+    },
+    "aggregate": {
+      "env": {
+        "VARIANT": "aggregate",
+        "COUNT": "1000000"
+      }
+    }
+  }
+}
