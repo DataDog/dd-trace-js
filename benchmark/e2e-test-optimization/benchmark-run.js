@@ -70,7 +70,10 @@ const triggerWorkflow = () => {
     let response = ''
     const body = JSON.stringify({
       ref: 'main',
-      inputs: { sha: getRefToTest() },
+      inputs: {
+        sha: getRefToTest(),
+        node_version: '22',
+      },
     })
     const request = https.request(
       DISPATCH_WORKFLOW_URL,
