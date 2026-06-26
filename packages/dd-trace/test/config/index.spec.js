@@ -57,6 +57,7 @@ describe('Config', () => {
   const getConfig = (options, overrides = {}) => {
     const {
       ddMajor = DD_MAJOR,
+      otelApi = require('../../src/opentelemetry/api'),
     } = overrides
 
     log = proxyquire('../../src/log', {})
@@ -83,6 +84,7 @@ describe('Config', () => {
       'node:fs': fs,
       './helper': configHelper,
       '../pkg': pkg,
+      '../opentelemetry/api': otelApi,
       '../../../../version': { DD_MAJOR: ddMajor },
     })(options)
   }
@@ -371,6 +373,42 @@ describe('Config', () => {
     const indexFile = require('../../src/index')
     const proxy = require('../../src/proxy')
     assert.strictEqual(indexFile, proxy)
+  })
+
+  it('disables DD_METRICS_OTEL_ENABLED when @opentelemetry/api is not installed', () => {
+    process.env.DD_METRICS_OTEL_ENABLED = 'true'
+
+    const config = getConfig({}, { otelApi: { isAvailable: () => false } })
+
+    assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, false)
+    assert.ok(log.warn.getCalls().some((call) => /@opentelemetry\/api is not installed/.test(call.args[0])))
+  })
+
+  it('keeps DD_METRICS_OTEL_ENABLED when @opentelemetry/api is installed', () => {
+    process.env.DD_METRICS_OTEL_ENABLED = 'true'
+
+    const config = getConfig({}, { otelApi: { isAvailable: () => true } })
+
+    assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, true)
+  })
+
+  it('disables DD_LOGS_OTEL_ENABLED but keeps log injection when @opentelemetry/api is not installed', () => {
+    process.env.DD_LOGS_OTEL_ENABLED = 'true'
+
+    const config = getConfig({ logInjection: true }, { otelApi: { isAvailable: () => false } })
+
+    assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, false)
+    // Disabling OTel logs must re-enable DD log injection (the two are mutually exclusive).
+    assert.strictEqual(config.logInjection, true)
+    assert.ok(log.warn.getCalls().some((call) => /@opentelemetry\/api is not installed/.test(call.args[0])))
+  })
+
+  it('keeps DD_LOGS_OTEL_ENABLED when @opentelemetry/api is installed', () => {
+    process.env.DD_LOGS_OTEL_ENABLED = 'true'
+
+    const config = getConfig({}, { otelApi: { isAvailable: () => true } })
+
+    assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, true)
   })
 
   it('should initialize with OTEL environment variables when DD env vars are not set', () => {

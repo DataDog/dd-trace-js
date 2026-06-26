@@ -1,7 +1,6 @@
 'use strict'
 
 const { performance } = require('perf_hooks')
-const api = require('@opentelemetry/api')
 
 const { timeOrigin } = performance
 
@@ -13,6 +12,7 @@ const { SERVICE_NAME, RESOURCE_NAME, SPAN_KIND } = require('../../../../ext/tags
 const kinds = require('../../../../ext/kinds')
 
 const id = require('../id')
+const api = require('./api').load()
 const BridgeSpanBase = require('./bridge-span-base')
 const SpanContext = require('./span_context')
 const { setOtelOperationName, setOtelResource } = require('./span-helpers')

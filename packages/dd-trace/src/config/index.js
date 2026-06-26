@@ -342,6 +342,19 @@ class Config extends ConfigBase {
     if (!trackedConfigOrigins.has('dogstatsd.hostname')) {
       setAndTrack(this, 'dogstatsd.hostname', agentHostname)
     }
+    // Both OTel pipelines require the optional @opentelemetry/api peer dep. Disable them before
+    // the log-injection mutual exclusion below, so a missing module leaves DD log injection on.
+    if ((this.DD_LOGS_OTEL_ENABLED || this.DD_METRICS_OTEL_ENABLED) &&
+        !require('../opentelemetry/api').isAvailable()) {
+      if (this.DD_LOGS_OTEL_ENABLED) {
+        log.warn('@opentelemetry/api is not installed; disabling DD_LOGS_OTEL_ENABLED')
+        setAndTrack(this, 'DD_LOGS_OTEL_ENABLED', false)
+      }
+      if (this.DD_METRICS_OTEL_ENABLED) {
+        log.warn('@opentelemetry/api is not installed; disabling DD_METRICS_OTEL_ENABLED')
+        setAndTrack(this, 'DD_METRICS_OTEL_ENABLED', false)
+      }
+    }
     // Disable log injection when OTEL logs are enabled
     // OTEL logs and DD log injection are mutually exclusive
     if (this.DD_LOGS_OTEL_ENABLED) {

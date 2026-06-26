@@ -3,7 +3,7 @@
 const v8 = require('node:v8')
 const process = require('node:process')
 const { performance, monitorEventLoopDelay, PerformanceObserver, constants } = require('node:perf_hooks')
-const { metrics } = require('@opentelemetry/api')
+const { metrics } = require('../opentelemetry/api').load()
 const log = require('../log')
 const { createMetricsClient } = require('./client')
 

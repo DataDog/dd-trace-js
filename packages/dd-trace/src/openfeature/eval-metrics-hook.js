@@ -53,7 +53,7 @@ class EvalMetricsHook {
     if (this.#counter) return this.#counter
 
     try {
-      const { metrics } = require('@opentelemetry/api')
+      const { metrics } = require('../opentelemetry/api').load()
       const meter = metrics.getMeter(METER_NAME)
       this.#counter = meter.createCounter(COUNTER_NAME, {
         description: COUNTER_DESCRIPTION,
