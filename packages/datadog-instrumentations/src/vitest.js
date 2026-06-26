@@ -431,7 +431,11 @@ function shouldUseVitestNoWorkerInit (ctx, testSpecifications) {
   }
 
   if (Array.isArray(testSpecifications)) {
-    return hasForkPoolTestSpecification(testSpecifications, config.pool)
+    if (hasNonIsolatedForkPoolTestSpecification(testSpecifications, config.pool, config.isolate)) {
+      warnVitestNoWorkerInitWithIsolationDisabled()
+      return false
+    }
+    return hasIsolatedForkPoolTestSpecification(testSpecifications, config.pool, config.isolate)
   }
 
   return !isThreadPool(config.pool)
@@ -680,6 +684,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
   }, shouldInstallNoWorkerInit, testSpecifications)
   configureMainProcessExecutionHooks(ctx, testSessionConfiguration, {
     knownTests,
+    modifiedFiles,
     testManagementTests,
   }, shouldInstallNoWorkerInit, testSpecifications)
   wrapCoverageProvider(ctx)
@@ -705,7 +710,7 @@ function configureMainProcessExecutionHooks (
     return
   }
 
-  const { knownTests, testManagementTests } = testOptimizationData
+  const { knownTests, modifiedFiles, testManagementTests } = testOptimizationData
   const attemptToFixTests = testManagementTests && getMainProcessAttemptToFixTests(testManagementTests)
   const disabledTests = testManagementTests && getMainProcessDisabledTests(testManagementTests)
   const shouldConfigureEarlyFlakeDetection =
@@ -725,6 +730,7 @@ function configureMainProcessExecutionHooks (
       earlyFlakeDetectionSlowRetries: earlyFlakeDetectionSlowTestRetries,
       isEarlyFlakeDetectionEnabled: shouldConfigureEarlyFlakeDetection,
       knownTests: knownTests?.vitest || {},
+      modifiedFiles: modifiedFiles || {},
       repositoryRoot: testSessionConfiguration.repositoryRoot || process.cwd(),
     },
   }, 'Could not send Vitest worker setup context, so no-worker execution changes will not work.')
@@ -1114,7 +1120,7 @@ function createMainProcessReporter (
     return {
       isAttemptToFix: testManagementProperties.attempt_to_fix,
       isDisabled: testManagementProperties.disabled,
-      isEarlyFlakeDetection: isNew && isEarlyFlakeDetectionEnabled,
+      isEarlyFlakeDetection: (isNew || isModified) && isEarlyFlakeDetectionEnabled,
       isFlakyTestRetries,
       isQuarantined: testManagementProperties.quarantined,
       isModified,
@@ -1839,6 +1845,17 @@ function getEffectiveTestSpecificationPool (testSpecification, defaultPool) {
   return getTestSpecificationPool(testSpecification) || defaultPool
 }
 
+function getTestSpecificationIsolate (testSpecification) {
+  const project = getTestSpecificationProject(testSpecification)
+  return project?.config?.isolate ?? project?.serializedConfig?.isolate ?? project?.isolate ??
+    testSpecification?.isolate
+}
+
+function getEffectiveTestSpecificationIsolate (testSpecification, defaultIsolate) {
+  const isolate = getTestSpecificationIsolate(testSpecification)
+  return isolate === undefined ? defaultIsolate : isolate
+}
+
 function getTestSpecificationFilepath (testSpecification) {
   const testFile = Array.isArray(testSpecification) ? testSpecification[1] : testSpecification
   return testFile?.moduleId || testFile?.filepath || testFile
@@ -1855,6 +1872,40 @@ function hasForkPoolTestSpecification (testSpecifications, defaultPool) {
 
   for (const testSpecification of testSpecifications) {
     if (isForkPool(getEffectiveTestSpecificationPool(testSpecification, defaultPool))) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function hasIsolatedForkPoolTestSpecification (testSpecifications, defaultPool, defaultIsolate) {
+  if (!Array.isArray(testSpecifications)) {
+    return false
+  }
+
+  for (const testSpecification of testSpecifications) {
+    if (
+      isForkPool(getEffectiveTestSpecificationPool(testSpecification, defaultPool)) &&
+      getEffectiveTestSpecificationIsolate(testSpecification, defaultIsolate) !== false
+    ) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function hasNonIsolatedForkPoolTestSpecification (testSpecifications, defaultPool, defaultIsolate) {
+  if (!Array.isArray(testSpecifications)) {
+    return false
+  }
+
+  for (const testSpecification of testSpecifications) {
+    if (
+      isForkPool(getEffectiveTestSpecificationPool(testSpecification, defaultPool)) &&
+      getEffectiveTestSpecificationIsolate(testSpecification, defaultIsolate) === false
+    ) {
       return true
     }
   }

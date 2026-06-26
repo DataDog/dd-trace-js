@@ -20,6 +20,7 @@ const earlyFlakeDetectionRetryThresholds = [
 const hasEarlyFlakeDetectionSlowRetries = Object.keys(earlyFlakeDetectionSlowRetries).length > 0
 const isEarlyFlakeDetectionEnabled = providedContext.isEarlyFlakeDetectionEnabled === true
 const knownTests = providedContext.knownTests || {}
+const modifiedFiles = providedContext.modifiedFiles || {}
 const repositoryRoot = realpath(providedContext.repositoryRoot || process.cwd())
 const setVitestTaskFn = vitestRunner.setFn
 const earlyFlakeDetectionRetriesByTask = new WeakMap()
@@ -290,8 +291,13 @@ function noopTest () {}
 
 function isEarlyFlakeDetectionTest (testSuite, testName) {
   if (!isEarlyFlakeDetectionEnabled || earlyFlakeDetectionRetries <= 0) return false
+  if (isModifiedTest(testSuite)) return true
   const testsForSuite = knownTests[testSuite] || []
   return !testsForSuite.includes(testName)
+}
+
+function isModifiedTest (testSuite) {
+  return modifiedFiles[testSuite]?.length > 0
 }
 
 function getTestSuite (task) {
