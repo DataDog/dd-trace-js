@@ -72,14 +72,17 @@ function enterInApolloServerCoreRequest () {
 
 function enterInApolloRequest () {
   const req = getActiveRequest()
+  if (!req) return
 
-  const requestData = graphqlRequestData.get(req)
-  if (requestData) {
-    // Set isInGraphqlRequest=true since this function only runs for GraphQL requests
-    // This works for both Apollo v4 (middleware) and v5 (HTTP server) contexts
-    requestData.isInGraphqlRequest = true
-    addSpecificEndpoint(req, specificBlockingTypes.GRAPHQL)
+  let requestData = graphqlRequestData.get(req)
+  if (!requestData) {
+    // executeHTTPGraphQLRequest is the GraphQL request boundary, so seed here
+    // when no upstream hook (express4 middleware, drainHttpServer) has run.
+    requestData = { blocked: false }
+    graphqlRequestData.set(req, requestData)
   }
+  requestData.isInGraphqlRequest = true
+  addSpecificEndpoint(req, specificBlockingTypes.GRAPHQL)
 }
 
 function beforeWriteApolloGraphqlResponse ({ abortController, abortData }) {

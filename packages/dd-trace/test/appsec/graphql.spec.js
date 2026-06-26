@@ -276,5 +276,34 @@ describe('GraphQL', () => {
       sinon.assert.calledOnceWithExactly(rootSpan.setTag, '_dd.appsec.block.failed', 1)
       sinon.assert.calledOnceWithExactly(telemetry.updateBlockFailureMetric, req)
     })
+
+    it('Should call abort when apolloChannel is the only seeder (Apollo v5 external Express integration)', () => {
+      // Reproduces Apollo v5 + @as-integrations/express{4,5} without drainHttpServer:
+      // neither graphqlMiddlewareChannel nor apolloHttpServerChannel seeds graphqlRequestData,
+      // so enterInApolloRequest must seed it itself.
+      graphql.disable()
+      graphql.enable()
+      apolloChannel.start.publish()
+
+      const abortController = context.abortController
+
+      sinon.stub(waf, 'run').returns({
+        actions: {
+          block_request: blockParameters,
+        },
+      })
+
+      sinon.stub(web, 'root').returns(rootSpan)
+
+      startGraphqlResolve.publish({ context, resolverInfo })
+
+      sinon.assert.called(context.abortController.abort)
+
+      const abortData = {}
+      apolloChannel.asyncEnd.publish({ abortController, abortData })
+
+      sinon.assert.calledWithExactly(blocking.getBlockingData, req, 'graphqlJson', blockParameters)
+      sinon.assert.calledWithExactly(rootSpan.setTag, 'appsec.blocked', 'true')
+    })
   })
 })
