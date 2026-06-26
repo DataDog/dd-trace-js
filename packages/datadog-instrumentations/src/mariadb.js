@@ -160,14 +160,16 @@ addHook({ name, file: 'lib/cmd/execute.js', versions: ['>=3'] }, (Execute) => {
   return wrapCommand(Execute)
 })
 
-// in 3.4.1 getConnection method start to use callbacks instead of promises
+// mariadb 3.4.1 refactored the pool: getConnection switched from promises to
+// callbacks and _createConnection was renamed to _createPoolConnection.
 addHook({ name, file: 'lib/pool.js', versions: ['>=3.4.1'] }, (Pool) => {
   shimmer.wrap(Pool.prototype, 'getConnection', wrapPoolGetConnectionMethod)
+  shimmer.wrap(Pool.prototype, '_createPoolConnection', wrapPoolMethod)
 
   return Pool
 })
 
-addHook({ name, file: 'lib/pool.js', versions: ['>=3'] }, (Pool) => {
+addHook({ name, file: 'lib/pool.js', versions: ['>=3 <3.4.1'] }, (Pool) => {
   shimmer.wrap(Pool.prototype, '_createConnection', wrapPoolMethod)
 
   return Pool

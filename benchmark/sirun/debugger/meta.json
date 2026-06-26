@@ -25,7 +25,7 @@
         "DD_DYNAMIC_INSTRUMENTATION_ENABLED": "true",
         "BREAKPOINT_FILE": "app.js",
         "BREAKPOINT_LINE": "37",
-        "ITERATIONS": "3500"
+        "OPERATIONS": "3500"
       }
     },
     "line-probe-with-snapshot-default": {
@@ -40,7 +40,7 @@
         "BREAKPOINT_LINE": "37",
         "CAPTURE_SNAPSHOT": "true",
         "MAX_SNAPSHOTS_PER_SECOND_GLOBALLY": "1000000",
-        "ITERATIONS": "2450"
+        "OPERATIONS": "2450"
       }
     },
     "line-probe-with-snapshot-minimal": {
@@ -59,7 +59,7 @@
         "MAX_COLLECTION_SIZE": "0",
         "MAX_FIELD_COUNT": "0",
         "MAX_LENGTH": "9007199254740991",
-        "ITERATIONS": "3500"
+        "OPERATIONS": "3500"
       }
     }
   }

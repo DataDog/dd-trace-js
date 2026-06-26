@@ -501,6 +501,26 @@ describe('exporters/agent', function () {
       }))
     })
   })
+
+  describe('using a Windows named pipe', () => {
+    it('builds the request with the folded socket path from a URL object', async () => {
+      const exporter = newAgentExporter({ url: new URL('unix://./pipe/datadog'), uploadTimeout: 1, logger })
+      const start = new Date()
+      const end = new Date()
+      const tags = {
+        'runtime-id': RUNTIME_ID,
+      }
+
+      const profiles = await createProfiles()
+
+      // The pipe does not exist on the test host, so the upload fails; we only
+      // pin the socket path the request was built with, captured by the spy.
+      await exporter.export({ profiles, start, end, tags }).catch(() => {})
+
+      assert.ok(http.request.called)
+      assert.strictEqual(http.request.getCall(0).args[0].socketPath, '//./pipe/datadog')
+    })
+  })
 })
 
 function assertIsProfile (obj, msg) {

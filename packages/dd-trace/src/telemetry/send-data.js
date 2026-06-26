@@ -182,7 +182,13 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
         agentTelemetry = false
       }
       // figure out which data center to send to
-      const backendUrl = getAgentlessTelemetryEndpoint(config.site)
+      let backendUrl
+      try {
+        backendUrl = new URL(getAgentlessTelemetryEndpoint(config.site))
+      } catch {
+        log.error('Invalid Telemetry URL')
+        return
+      }
       const backendHeader = { ...options.headers, 'DD-API-KEY': config.apiKey }
       const backendOptions = {
         ...options,
@@ -190,15 +196,11 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
         headers: backendHeader,
         path: '/api/v2/apmtelemetry',
       }
-      if (backendUrl) {
-        request(data, backendOptions, (error) => {
-          if (error) {
-            log.error('Error sending telemetry data', error)
-          }
-        })
-      } else {
-        log.error('Invalid Telemetry URL')
-      }
+      request(data, backendOptions, (error) => {
+        if (error) {
+          log.error('Error sending telemetry data', error)
+        }
+      })
     }
 
     if (!error && !agentTelemetry) {

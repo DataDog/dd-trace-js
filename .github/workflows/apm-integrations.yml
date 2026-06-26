@@ -58,6 +58,7 @@ jobs:
             aerospike-version: ce-6.4.0.3
             image: aerospike@sha256:f268d48f5075010ff268b29fbae28518418070dfb31935daa31f0b45c59f4da9 # ce-6.4.0.3
             test-image: ubuntu-latest
+
     runs-on: ${{ matrix.test-image }}
     permissions:
       id-token: write
@@ -332,7 +333,7 @@ jobs:
           - "^3.0.7"
           - ">=4.0.0 <4.2.0"
         include:
-          - node-version: 18
+          - node-version: oldest
             range: ">=4.2.0"
     runs-on: ubuntu-latest
     permissions:
@@ -1122,7 +1123,7 @@ jobs:
           - node-version: 18
             range: ">=6.1.0 <7.0.0"
             range_clean: gte.6.16.0.and.lt.7.0.0
-          - node-version: "latest"
+          - node-version: latest
             range: ""
             range_clean: all
     runs-on: ubuntu-latest

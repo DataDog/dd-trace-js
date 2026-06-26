@@ -58,7 +58,7 @@ describe('Plugin', () => {
       let gax
 
       // pubsub 2.x bundles its own @grpc/grpc-js, so the internal v1 client rejects credentials minted by the
-      // test-pinned google-gax@3.5.7 ("Channel credentials must be a ChannelCredentials object"). 1.x and 3.x+
+      // test-pinned google-gax ("Channel credentials must be a ChannelCredentials object"). 1.x and 3.x+
       // stay compatible, so gate only the low-level v1 tests on 2.x; the public-API tests still cover that major.
       const pkgVersion = require(`../../../versions/@google-cloud/pubsub@${version}`).version()
       const itInternalApi = semver.satisfies(pkgVersion, '2.x') ? it.skip : it
@@ -70,7 +70,7 @@ describe('Plugin', () => {
 
         beforeEach(() => {
           tracer = require('../../dd-trace')
-          gax = require('../../../versions/google-gax@3.5.7').get()
+          gax = require('../../../versions/google-gax@5.0.7').get()
           const lib = require(`../../../versions/@google-cloud/pubsub@${version}`).get()
           project = getProjectId()
           topicName = getTopic()
