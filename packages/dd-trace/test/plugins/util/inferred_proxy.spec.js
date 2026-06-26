@@ -178,6 +178,20 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
         expectedComponent: 'aws-httpapi',
         expectedStartTime: '1729780025472999936',
       },
+      'azure-missingtimestamp': {
+        headers: {
+          'x-dd-proxy': 'azure-gw',
+          'x-dd-proxy-path': '/test',
+          'x-dd-proxy-httpmethod': 'GET',
+          'x-dd-proxy-domain-name': 'example.com',
+          'x-dd-proxy-stage': 'dev',
+        },
+        expectedSpanName: 'azure.app-gateway',
+        expectedService: 'example.com',
+        expectedResource: 'GET /test',
+        expectedUrl: 'https://example.com/test',
+        expectedComponent: 'azure-gw',
+      },
       'with-route': {
         headers: {
           'x-dd-proxy': 'aws-apigateway',
@@ -324,6 +338,56 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
         })
       })
 
+      it('should create a timestamp if it is an Azure Application Gateway proxy', async () => {
+        const testCase = additionalTestCases['azure-missingtimestamp']
+        await loadTest({})
+
+        await httpClient.get(`http://127.0.0.1:${port}/`, {
+          headers: testCase.headers,
+        })
+
+        await agent.assertSomeTraces(traces => {
+          const spans = traces[0]
+
+          assert.strictEqual(spans.length, 2)
+
+          assert.strictEqual(spans[0].name, testCase.expectedSpanName)
+          assert.strictEqual(spans[0].service, testCase.expectedService)
+          assert.strictEqual(spans[0].resource, testCase.expectedResource)
+          assert.strictEqual(spans[0].type, 'web')
+          assertObjectContains(spans[0], {
+            meta: {
+              'span.kind': 'server',
+              'http.url': testCase.expectedUrl,
+              'http.method': 'GET',
+              'http.status_code': '200',
+              component: testCase.expectedComponent,
+              '_dd.integration': testCase.expectedComponent,
+            },
+            metrics: {
+              '_dd.inferred_span': 1,
+            },
+          })
+          assert.notStrictEqual(spans[0].start.toString(), null)
+
+          assert.strictEqual(spans[0].span_id.toString(), spans[1].parent_id.toString())
+
+          assertObjectContains(spans[1], {
+            name: 'web.request',
+            service: 'aws-server',
+            type: 'web',
+            resource: 'GET',
+            meta: {
+              component: 'http',
+              'span.kind': 'server',
+              'http.url': `http://127.0.0.1:${port}/`,
+              'http.method': 'GET',
+              'http.status_code': '200',
+            },
+          })
+        })
+      })
+
       it('should include http.route when x-dd-proxy-resource-path header is present', async () => {
         const testCase = additionalTestCases['with-route']
         await loadTest({})
@@ -406,7 +470,6 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
           })
 
           assert.strictEqual(spans[0].error, 1)
-
           assert.strictEqual(spans[0].start.toString(), config.expectedStartTime)
           assert.strictEqual(spans[0].span_id.toString(), spans[1].parent_id.toString())
 
