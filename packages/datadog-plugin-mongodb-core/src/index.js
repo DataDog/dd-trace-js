@@ -14,6 +14,15 @@ class MongodbCorePlugin extends DatabasePlugin {
    */
   static peerServicePrecursors = []
 
+  constructor (...args) {
+    super(...args)
+
+    // bulkWrite is higher-level than the wire commands `query` traces, so it has its own channel.
+    this.addBind('apm:mongodb:bulkwrite:start', ctx => this.bindBulkWriteStart(ctx))
+    this.addSub('apm:mongodb:bulkwrite:finish', ctx => this.finish(ctx))
+    this.addSub('apm:mongodb:bulkwrite:error', ctx => this.error(ctx))
+  }
+
   /**
    * @override
    */
@@ -53,6 +62,30 @@ class MongodbCorePlugin extends DatabasePlugin {
     if (comment) {
       ops.comment = comment
     }
+
+    return ctx.currentStore
+  }
+
+  /**
+   * Open the parent span for a `Collection#bulkWrite`. The per-type wire commands nest as
+   * children and carry the statements, host, and DBM comment, so this span only records
+   * the namespace and resource.
+   *
+   * @param {{ ns: string }} ctx
+   */
+  bindBulkWriteStart (ctx) {
+    const { ns } = ctx
+    const serviceResult = this.serviceName({ pluginConfig: this.config })
+
+    this.startSpan(this.operationName(), {
+      service: serviceResult,
+      resource: truncate(`bulkWrite ${ns}`),
+      type: 'mongodb',
+      kind: 'client',
+      meta: {
+        'db.name': ns,
+      },
+    }, ctx)
 
     return ctx.currentStore
   }
