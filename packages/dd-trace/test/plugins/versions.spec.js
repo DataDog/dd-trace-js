@@ -3,61 +3,78 @@
 const assert = require('node:assert/strict')
 
 const { describe, it } = require('mocha')
+const { coerce, major } = require('semver')
 
-const { getVersionList, resolvePluginVersions } = require('./versions')
+const { getVersionList, resolvePluginVersions, brokenVersionReason } = require('./versions')
+
+const latests = require('./versions/package.json').dependencies
 
 const keys = (name, versions, nonConsecutive) =>
   getVersionList(name, versions, nonConsecutive).map(({ versionKey }) => versionKey)
 
+const latestMajorKey = name => String(major(coerce(latests[name])))
+
 describe('getVersionList', () => {
-  it('returns the wildcard untouched', () => {
-    assert.deepEqual(keys('mongodb', ['*']), ['*'])
+  it('collapses the wildcard to the latest major', () => {
+    assert.deepEqual(keys('mongodb', ['*']), [latestMajorKey('mongodb')])
   })
 
   it('collapses equivalent exact-version notations to a single key', () => {
     assert.deepEqual(keys('mongodb', ['1.2.3', '=1.2.3', 'v1.2.3']), ['1.2.3'])
   })
 
-  it('pins the floor and keeps the range for a single-major range', () => {
-    // `<3` caps the range below any plausible pinned latest, so there is no in-between major to fill.
-    assert.deepEqual(keys('mongodb', ['>=2 <3']), ['2.0.0', '>=2 <3'])
+  it('pins the floor and the major for a single-major range', () => {
+    // `<3` caps the range to major 2, so only the pinned floor and the latest of major 2 are keys.
+    assert.deepEqual(keys('mongodb', ['>=2 <3']), ['2.0.0', '2'])
   })
 
-  it('fills every in-between major between the floor and the range top', () => {
-    // `<5` caps the top at major 4, so only major 3 sits strictly in between major 2 and major 4.
-    assert.deepEqual(keys('mongodb', ['>=2 <5']), ['2.0.0', '>=3.0.0 <4.0.0', '>=2 <5'])
+  it('covers the floor major and every major up to the range top', () => {
+    // `<5` caps the top at major 4; the floor (2.0.0) is pinned and majors 2-4 each resolve to their latest.
+    assert.deepEqual(keys('mongodb', ['>=2 <5']), ['2.0.0', '2', '3', '4'])
   })
 
-  it('orders fills ascending and keeps the declared range last (the top major is covered by the range itself)', () => {
-    // `<6` caps the top at major 5, which the `>=1 <6` range resolves to; only majors 2-4 are filled in between.
-    assert.deepEqual(keys('mongodb', ['>=1 <6']), [
-      '1.0.0',
-      '>=2.0.0 <3.0.0',
-      '>=3.0.0 <4.0.0',
-      '>=4.0.0 <5.0.0',
-      '>=1 <6',
-    ])
+  it('covers every major from the floor to the capped top', () => {
+    // `<6` caps the top at major 5; the floor major's latest (1) is covered too, not only the newest of the range.
+    assert.deepEqual(keys('mongodb', ['>=1 <6']), ['1.0.0', '1', '2', '3', '4', '5'])
+  })
+
+  it('keeps the declared range for a top major the range caps mid-way', () => {
+    // `<=3.0.0` stops inside major 3, so a bare `3` (which resolves to the major's latest) would overshoot the
+    // ceiling; the declared range is kept instead so it resolves to the newest version `<=3.0.0`.
+    assert.deepEqual(keys('mongodb', ['>=2.1 <=3.0.0']), ['2.1.0', '2', '>=2.1 <=3.0.0'])
+  })
+
+  it('keeps a sub-major range as its own key', () => {
+    // `>=4.0.0 <4.3.0` never spans major 4 in full, so there is no safe bare major; the floor and the range cover it.
+    assert.deepEqual(keys('mongodb', ['>=4.0.0 <4.3.0']), ['4.0.0', '>=4.0.0 <4.3.0'])
   })
 
   it('de-duplicates a shared floor across multiple ranges', () => {
-    assert.deepEqual(keys('mongodb', ['>=2 <3', '^2.0.0']), ['2.0.0', '>=2 <3', '^2.0.0'])
+    assert.deepEqual(keys('mongodb', ['>=2 <3', '^2.0.0']), ['2.0.0', '2'])
   })
 
-  it('does not fill in-between majors for non-consecutive packages', () => {
-    assert.deepEqual(keys('mongodb', ['>=1 <6'], new Set(['mongodb'])), ['1.0.0', '>=1 <6'])
+  it('consolidates the floor with the top major when the floor is the pinned latest', () => {
+    // `>=<pinned latest>` floors at the newest version, so the bare top-major key resolves to that same version and is
+    // dropped; the pinned package.json is what proves the two keys identical.
+    assert.deepEqual(keys('mongodb', [`>=${latests.mongodb}`]), [latests.mongodb])
   })
 
-  it('treats the built-in non-consecutive packages as floor + range only', () => {
-    // graphql jumps from 0.x to 14.x; auto-filling 1.x–13.x would fail the install.
-    assert.deepEqual(keys('graphql', ['>=0.10']), ['0.10.0', '>=0.10'])
+  it('adds the floor, the floor major and the top major for non-consecutive packages', () => {
+    // The middle majors may be unpublished, but the floor major (1) and the top major (5) both exist and are tested.
+    assert.deepEqual(keys('mongodb', ['>=1 <6'], new Set(['mongodb'])), ['1.0.0', '1', '5'])
+  })
+
+  it('treats the built-in non-consecutive packages as floor + floor major + top major', () => {
+    // graphql jumps from 0.x to 14.x; 1.x–13.x are skipped, but the latest 0.x and the newest major are still tested.
+    assert.deepEqual(keys('graphql', ['>=0.10']), ['0.10.0', '0', latestMajorKey('graphql')])
   })
 
   it('throws on an unparseable range', () => {
     assert.throws(() => getVersionList('mongodb', ['not-a-version']), /Invalid version range/)
   })
 
-  it('ignores empty entries', () => {
-    assert.deepEqual(keys('mongodb', ['', undefined, '>=2 <3']), ['2.0.0', '>=2 <3'])
+  it('throws on an empty entry', () => {
+    assert.throws(() => getVersionList('mongodb', ['', '>=2 <3']), /Empty version entry/)
   })
 })
 
@@ -67,8 +84,8 @@ describe('resolvePluginVersions', () => {
   it('expands the declared versions and points the unversioned folder at the newest in-scope key', () => {
     const result = resolvePluginVersions({ name: 'mongodb', declaredVersions: ['>=2 <5'], env: {} })
 
-    assert.deepEqual(versionKeys(result), ['2.0.0', '>=3.0.0 <4.0.0', '>=2 <5'])
-    assert.equal(result.unversioned, '>=2 <5')
+    assert.deepEqual(versionKeys(result), ['2.0.0', '2', '3', '4'])
+    assert.equal(result.unversioned, '4')
   })
 
   it('filters the installed keys by RANGE and follows the filtered tail', () => {
@@ -78,8 +95,8 @@ describe('resolvePluginVersions', () => {
       env: { RANGE: '>=2.0.0 <4.0.0' },
     })
 
-    assert.deepEqual(versionKeys(result), ['>=2.0.0 <3.0.0', '>=3.0.0 <4.0.0'])
-    assert.equal(result.unversioned, '>=3.0.0 <4.0.0')
+    assert.deepEqual(versionKeys(result), ['2', '3'])
+    assert.equal(result.unversioned, '3')
   })
 
   it('replaces the declared versions with PACKAGE_VERSION_RANGE when the module is honoured', () => {
@@ -89,7 +106,7 @@ describe('resolvePluginVersions', () => {
       env: { PACKAGE_VERSION_RANGE: '>=3 <4' },
     })
 
-    assert.deepEqual(versionKeys(result), ['3.0.0', '>=3 <4'])
+    assert.deepEqual(versionKeys(result), ['3.0.0', '3'])
     assert.equal(result.unversioned, '>=3 <4')
   })
 
@@ -101,8 +118,8 @@ describe('resolvePluginVersions', () => {
       env: { PACKAGE_VERSION_RANGE: '>=3 <4' },
     })
 
-    assert.deepEqual(versionKeys(result), ['2.0.0', '>=3.0.0 <4.0.0', '>=2 <5'])
-    assert.equal(result.unversioned, '>=2 <5')
+    assert.deepEqual(versionKeys(result), ['2.0.0', '2', '3', '4'])
+    assert.equal(result.unversioned, '4')
   })
 
   it('keeps the unversioned folder on the raw shard while RANGE narrows the installed keys', () => {
@@ -112,7 +129,7 @@ describe('resolvePluginVersions', () => {
       env: { PACKAGE_VERSION_RANGE: '>=2 <5', RANGE: '>=3.0.0 <4.0.0' },
     })
 
-    assert.deepEqual(versionKeys(result), ['>=3.0.0 <4.0.0'])
+    assert.deepEqual(versionKeys(result), ['3'])
     assert.equal(result.unversioned, '>=2 <5')
   })
 
@@ -132,5 +149,18 @@ describe('resolvePluginVersions', () => {
 
     assert.deepEqual(result.versionList, [])
     assert.equal(result.unversioned, undefined)
+  })
+})
+
+describe('brokenVersionReason', () => {
+  const broken = { ai: [{ range: '>=4.1.0 <5.0.0', reason: 'no cassette' }] }
+
+  it('returns the reason for a version inside a broken range', () => {
+    assert.equal(brokenVersionReason('ai', '4.3.19', broken), 'no cassette')
+  })
+
+  it('returns undefined outside every broken range and for unlisted modules', () => {
+    assert.equal(brokenVersionReason('ai', '4.0.0', broken), undefined)
+    assert.equal(brokenVersionReason('mongodb', '4.3.19', broken), undefined)
   })
 })
