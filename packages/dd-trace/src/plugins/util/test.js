@@ -22,17 +22,40 @@ const { SAMPLING_RULE_DECISION } = require('../../constants')
 const { AUTO_KEEP } = require('../../../../../ext/priority')
 const { version: ddTraceVersion } = require('../../../../../package.json')
 const {
+  CI_JOB_ID,
   GIT_BRANCH,
   GIT_COMMIT_SHA,
   GIT_REPOSITORY_URL,
   GIT_TAG,
+  GIT_COMMIT_AUTHOR_DATE,
   GIT_COMMIT_AUTHOR_EMAIL,
   GIT_COMMIT_AUTHOR_NAME,
+  GIT_COMMIT_COMMITTER_DATE,
+  GIT_COMMIT_COMMITTER_EMAIL,
+  GIT_COMMIT_COMMITTER_NAME,
   GIT_COMMIT_MESSAGE,
+  GIT_COMMIT_HEAD_AUTHOR_DATE,
+  GIT_COMMIT_HEAD_AUTHOR_EMAIL,
+  GIT_COMMIT_HEAD_AUTHOR_NAME,
+  GIT_COMMIT_HEAD_COMMITTER_DATE,
+  GIT_COMMIT_HEAD_COMMITTER_EMAIL,
+  GIT_COMMIT_HEAD_COMMITTER_NAME,
+  GIT_COMMIT_HEAD_MESSAGE,
   CI_WORKSPACE_PATH,
+  CI_PIPELINE_ID,
+  CI_PIPELINE_NAME,
+  CI_PIPELINE_NUMBER,
   CI_PIPELINE_URL,
   CI_JOB_NAME,
+  CI_JOB_URL,
+  CI_NODE_LABELS,
+  CI_NODE_NAME,
+  CI_PROVIDER_NAME,
+  CI_STAGE_NAME,
   GIT_COMMIT_HEAD_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH,
+  GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH_SHA,
 } = require('./tags')
 const { getRuntimeAndOSMetadata } = require('./env')
 const { getCIMetadata } = require('./ci')
@@ -197,6 +220,43 @@ const TEST_LEVEL_EVENT_TYPES = [
   'test_suite_end',
   'test_module_end',
   'test_session_end',
+]
+const TEST_LEVELS_METADATA = 'test_levels'
+const TEST_LEVELS_METADATA_TAGS = [
+  CI_JOB_ID,
+  CI_JOB_NAME,
+  CI_JOB_URL,
+  CI_NODE_LABELS,
+  CI_NODE_NAME,
+  CI_PIPELINE_ID,
+  CI_PIPELINE_NAME,
+  CI_PIPELINE_NUMBER,
+  CI_PIPELINE_URL,
+  CI_PROVIDER_NAME,
+  CI_STAGE_NAME,
+  CI_WORKSPACE_PATH,
+  GIT_BRANCH,
+  GIT_COMMIT_AUTHOR_DATE,
+  GIT_COMMIT_AUTHOR_EMAIL,
+  GIT_COMMIT_AUTHOR_NAME,
+  GIT_COMMIT_COMMITTER_DATE,
+  GIT_COMMIT_COMMITTER_EMAIL,
+  GIT_COMMIT_COMMITTER_NAME,
+  GIT_COMMIT_HEAD_AUTHOR_DATE,
+  GIT_COMMIT_HEAD_AUTHOR_EMAIL,
+  GIT_COMMIT_HEAD_AUTHOR_NAME,
+  GIT_COMMIT_HEAD_COMMITTER_DATE,
+  GIT_COMMIT_HEAD_COMMITTER_EMAIL,
+  GIT_COMMIT_HEAD_COMMITTER_NAME,
+  GIT_COMMIT_HEAD_MESSAGE,
+  GIT_COMMIT_HEAD_SHA,
+  GIT_COMMIT_MESSAGE,
+  GIT_COMMIT_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH,
+  GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH_SHA,
+  GIT_REPOSITORY_URL,
+  GIT_TAG,
 ]
 const TEST_RETRY_REASON_TYPES = {
   efd: 'early_flake_detection',
@@ -398,6 +458,7 @@ module.exports = {
   getCodeOwnersFileEntries,
   getCodeOwnersForFilename,
   getTestCommonTags,
+  getTestLevelsMetadataTags,
   getTestSessionCommonTags,
   getTestModuleCommonTags,
   getTestSuiteCommonTags,
@@ -448,6 +509,7 @@ module.exports = {
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
   DD_CAPABILITIES_FAILED_TEST_REPLAY,
   TEST_LEVEL_EVENT_TYPES,
+  TEST_LEVELS_METADATA,
   TEST_RETRY_REASON_TYPES,
   getNumFromKnownTests,
   getFileAndLineNumberFromError,
@@ -698,6 +760,24 @@ function getTestParametersString (parametersByTestName, testName) {
     // so we ignore the test parameters and move on
     return ''
   }
+}
+
+/**
+ * Extracts CI and Git tags that apply to every test level.
+ *
+ * @param {TestEnvironmentMetadata} testEnvironmentMetadata
+ * @returns {Record<string, string|number>}
+ */
+function getTestLevelsMetadataTags (testEnvironmentMetadata) {
+  const testLevelsMetadataTags = {}
+  for (let i = 0; i < TEST_LEVELS_METADATA_TAGS.length; i++) {
+    const key = TEST_LEVELS_METADATA_TAGS[i]
+    const value = testEnvironmentMetadata[key]
+    if (value !== undefined) {
+      testLevelsMetadataTags[key] = value
+    }
+  }
+  return testLevelsMetadataTags
 }
 
 function getTestTypeFromFramework (testFramework) {

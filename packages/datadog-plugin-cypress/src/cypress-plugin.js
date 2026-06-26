@@ -11,6 +11,7 @@ const {
   TEST_IS_RUM_ACTIVE,
   TEST_CODE_OWNERS,
   getTestEnvironmentMetadata,
+  getTestLevelsMetadataTags,
   CI_APP_ORIGIN,
   getTestParentSpan,
   getCodeOwnersFileEntries,
@@ -23,6 +24,7 @@ const {
   TEST_MODULE_ID,
   TEST_SESSION_ID,
   TEST_COMMAND,
+  TEST_LEVELS_METADATA,
   TEST_MODULE,
   TEST_SOURCE_START,
   finishAllTraceSpans,
@@ -1043,7 +1045,13 @@ class CypressPlugin {
     )
 
     if (this.tracer._tracer._exporter?.addMetadataTags) {
-      const metadataTags = { '*': { [TEST_COMMAND]: this.command, [TEST_SESSION_NAME]: testSessionName } }
+      const metadataTags = {
+        [TEST_LEVELS_METADATA]: {
+          [TEST_COMMAND]: this.command,
+          [TEST_SESSION_NAME]: testSessionName,
+          ...getTestLevelsMetadataTags(this.testEnvironmentMetadata),
+        },
+      }
       const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id, this.frameworkVersion)
       metadataTags.test = {
         ...libraryCapabilitiesTags,

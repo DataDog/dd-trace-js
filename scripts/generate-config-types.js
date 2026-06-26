@@ -41,6 +41,7 @@ const PROPERTY_TYPE_OVERRIDES = {
 }
 const TRANSFORM_TYPE_OVERRIDES = {
   normalizeProfilingEnabled: "'true' | 'false' | 'auto'",
+  normalizeProfilingUploadCompression: '{ method: string; level: number | undefined }',
   parseOtelTags: 'Record<string, string>',
   sampleRate: 'number',
   setGRPCRange: 'number[]',
