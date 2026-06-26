@@ -81,7 +81,7 @@ describe('sdk', () => {
       [false, 'disabled'],
     ]) {
       it(`returns ${value} when llmobs is ${label}`, () => {
-        const enabledOrDisabledLLMObs = new LLMObsSDK(null, { disable () {} }, { llmobs: { enabled: value } })
+        const enabledOrDisabledLLMObs = new LLMObsSDK(null, { disable () {} }, { llmobs: { DD_LLMOBS_ENABLED: value } })
 
         assert.strictEqual(enabledOrDisabledLLMObs.enabled, value)
         enabledOrDisabledLLMObs.disable() // unsubscribe
@@ -163,7 +163,7 @@ describe('sdk', () => {
 
     it('does not disable llmobs if it is already disabled', () => {
       // do not fully enable a disabled llmobs
-      const disabledLLMObs = new LLMObsSDK(null, { disable () {} }, { llmobs: { enabled: false } })
+      const disabledLLMObs = new LLMObsSDK(null, { disable () {} }, { llmobs: { DD_LLMOBS_ENABLED: false } })
       sinon.spy(disabledLLMObs._llmobsModule, 'disable')
 
       disabledLLMObs.disable()
@@ -177,7 +177,7 @@ describe('sdk', () => {
     describe('trace', () => {
       describe('tracing behavior', () => {
         it('starts a span if llmobs is disabled but does not process it in the LLMObs span processor', () => {
-          tracer._tracer._config.llmobs.enabled = false
+          tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = false
 
           llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, (span, cb) => {
             const tag = LLMObsTagger.tagMap.get(span)
@@ -189,7 +189,7 @@ describe('sdk', () => {
           sinon.assert.called(llmobs._tracer._processor.process)
           sinon.assert.notCalled(LLMObsSpanProcessor.prototype.format)
 
-          tracer._tracer._config.llmobs.enabled = true
+          tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = true
         })
 
         it('throws if the kind is invalid', () => {
@@ -358,6 +358,8 @@ describe('sdk', () => {
         })
 
         assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
           '_ml_obs.meta.span.kind': 'workflow',
           '_ml_obs.meta.ml_app': 'override',
           '_ml_obs.meta.model_name': 'modelName',
@@ -424,7 +426,7 @@ describe('sdk', () => {
     describe('wrap', () => {
       describe('tracing behavior', () => {
         it('starts a span if llmobs is disabled but does not process it in the LLMObs span processor', () => {
-          tracer._tracer._config.llmobs.enabled = false
+          tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = false
 
           const fn = llmobs.wrap({ kind: 'workflow' }, (a) => {
             assert.strictEqual(a, 1)
@@ -437,7 +439,7 @@ describe('sdk', () => {
           sinon.assert.called(llmobs._tracer._processor.process)
           sinon.assert.notCalled(LLMObsSpanProcessor.prototype.format)
 
-          tracer._tracer._config.llmobs.enabled = true
+          tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = true
         })
 
         it('throws if the kind is invalid', () => {
@@ -487,6 +489,8 @@ describe('sdk', () => {
           wrappedMyLLM('input')
 
           assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+            '_ml_obs.sample_rate': '1',
+            '_ml_obs.sampling_decision': '1',
             '_ml_obs.meta.span.kind': 'llm',
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
@@ -505,6 +509,8 @@ describe('sdk', () => {
           wrappedMyEmbedding('input')
 
           assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+            '_ml_obs.sample_rate': '1',
+            '_ml_obs.sampling_decision': '1',
             '_ml_obs.meta.span.kind': 'embedding',
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
@@ -524,6 +530,8 @@ describe('sdk', () => {
           wrappedMyRetrieval('input')
 
           assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+            '_ml_obs.sample_rate': '1',
+            '_ml_obs.sampling_decision': '1',
             '_ml_obs.meta.span.kind': 'retrieval',
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
@@ -549,6 +557,8 @@ describe('sdk', () => {
           wrappedMyWorkflow(circular)
 
           assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+            '_ml_obs.sample_rate': '1',
+            '_ml_obs.sampling_decision': '1',
             '_ml_obs.meta.span.kind': 'workflow',
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
@@ -569,6 +579,8 @@ describe('sdk', () => {
           assert.throws(() => wrappedMyTask('foo', 'bar'))
 
           assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+            '_ml_obs.sample_rate': '1',
+            '_ml_obs.sampling_decision': '1',
             '_ml_obs.meta.span.kind': 'task',
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
@@ -588,6 +600,8 @@ describe('sdk', () => {
           return wrappedMyTask('foo', 'bar')
             .catch(() => {
               assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+                '_ml_obs.sample_rate': '1',
+                '_ml_obs.sampling_decision': '1',
                 '_ml_obs.meta.span.kind': 'task',
                 '_ml_obs.meta.ml_app': 'mlApp',
                 '_ml_obs.llmobs_parent_id': 'undefined',
@@ -614,6 +628,8 @@ describe('sdk', () => {
           clock.tick(1000)
 
           assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+            '_ml_obs.sample_rate': '1',
+            '_ml_obs.sampling_decision': '1',
             '_ml_obs.meta.span.kind': 'workflow',
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
@@ -640,6 +656,8 @@ describe('sdk', () => {
           clock.tick(1000)
 
           assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+            '_ml_obs.sample_rate': '1',
+            '_ml_obs.sampling_decision': '1',
             '_ml_obs.meta.span.kind': 'workflow',
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
@@ -666,6 +684,8 @@ describe('sdk', () => {
           clock.tick(1000)
 
           assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+            '_ml_obs.sample_rate': '1',
+            '_ml_obs.sampling_decision': '1',
             '_ml_obs.meta.span.kind': 'workflow',
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
@@ -868,6 +888,8 @@ describe('sdk', () => {
         fn()
 
         assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
           '_ml_obs.meta.span.kind': 'workflow',
           '_ml_obs.meta.ml_app': 'override',
           '_ml_obs.meta.model_name': 'modelName',
@@ -881,14 +903,14 @@ describe('sdk', () => {
 
   describe('annotate', () => {
     it('returns if llmobs is disabled', () => {
-      tracer._tracer._config.llmobs.enabled = false
+      tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = false
       sinon.spy(llmobs, '_active')
       llmobs.annotate()
 
       sinon.assert.notCalled(llmobs._active)
       llmobs._active.restore()
 
-      tracer._tracer._config.llmobs.enabled = true
+      tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = true
     })
 
     it('throws if no arguments are provided', () => {
@@ -901,6 +923,8 @@ describe('sdk', () => {
 
         // span should still exist in the registry, just with no annotations
         assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
@@ -979,6 +1003,8 @@ describe('sdk', () => {
         llmobs.annotate({ inputData, outputData })
 
         assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
@@ -1029,6 +1055,8 @@ describe('sdk', () => {
         llmobs.annotate({ inputData, outputData })
 
         assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
           '_ml_obs.meta.span.kind': 'embedding',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
@@ -1046,6 +1074,8 @@ describe('sdk', () => {
         llmobs.annotate({ inputData, outputData })
 
         assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
           '_ml_obs.meta.span.kind': 'retrieval',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
@@ -1062,6 +1092,8 @@ describe('sdk', () => {
         llmobs.annotate({ metadata })
 
         assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
@@ -1077,6 +1109,8 @@ describe('sdk', () => {
         llmobs.annotate({ metrics })
 
         assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
@@ -1092,6 +1126,8 @@ describe('sdk', () => {
         llmobs.annotate({ tags })
 
         assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
@@ -1107,6 +1143,8 @@ describe('sdk', () => {
         llmobs.annotate({ tags, costTags: ['team', 'feature'] })
 
         assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
@@ -1128,6 +1166,8 @@ describe('sdk', () => {
         })
 
         assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
@@ -1142,6 +1182,8 @@ describe('sdk', () => {
         llmobs.annotate({ tags: { team: 'ml' }, costTags: ['team', 'missing', 123] })
 
         assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
@@ -1156,6 +1198,8 @@ describe('sdk', () => {
         llmobs.annotate({ tags: { team: 'ml' }, costTags: 'team' })
 
         assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
@@ -1169,6 +1213,8 @@ describe('sdk', () => {
         llmobs.annotate({ tags: { team: 'ml' }, costTags: [] })
 
         assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
@@ -1182,6 +1228,8 @@ describe('sdk', () => {
         llmobs.annotate({ tags: { team: 'ml' }, costTags: null })
 
         assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
@@ -1200,6 +1248,8 @@ describe('sdk', () => {
         llmobs.annotate({ toolDefinitions })
 
         assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
@@ -1217,6 +1267,8 @@ describe('sdk', () => {
         llmobs.annotate({ toolDefinitions })
 
         assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
@@ -1235,6 +1287,8 @@ describe('sdk', () => {
         llmobs.annotate({ toolDefinitions })
 
         assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'mlApp',
           '_ml_obs.llmobs_parent_id': 'undefined',
@@ -1267,6 +1321,8 @@ describe('sdk', () => {
       llmobs.annotationContext({ tags: { team: 'ml', feature: 'chatbot' }, costTags: ['team', 'feature'] }, () => {
         llmobs.trace({ kind: 'llm', name: 'test' }, span => {
           assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+            '_ml_obs.sample_rate': '1',
+            '_ml_obs.sampling_decision': '1',
             '_ml_obs.meta.span.kind': 'llm',
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
@@ -1283,6 +1339,8 @@ describe('sdk', () => {
           llmobs.annotate({ tags: { team: 'ml' } })
 
           assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+            '_ml_obs.sample_rate': '1',
+            '_ml_obs.sampling_decision': '1',
             '_ml_obs.meta.span.kind': 'llm',
             '_ml_obs.meta.ml_app': 'mlApp',
             '_ml_obs.llmobs_parent_id': 'undefined',
@@ -1302,6 +1360,8 @@ describe('sdk', () => {
     llmobs.trace({ kind: 'llm', name: 'test' }, span => {
       llmobs.annotate({ toolDefinitions })
       assert.deepStrictEqual(LLMObsTagger.tagMap.get(span), {
+        '_ml_obs.sample_rate': '1',
+        '_ml_obs.sampling_decision': '1',
         '_ml_obs.meta.span.kind': 'llm',
         '_ml_obs.meta.ml_app': 'mlApp',
         '_ml_obs.llmobs_parent_id': 'undefined',
@@ -1400,12 +1460,12 @@ describe('sdk', () => {
     })
 
     it('does not submit an evaluation if llmobs is disabled', () => {
-      tracer._tracer._config.llmobs.enabled = false
+      tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = false
       llmobs.submitEvaluation()
 
       sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
 
-      tracer._tracer._config.llmobs.enabled = true
+      tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = true
     })
 
     it('throws for an invalid span context', () => {
@@ -1695,7 +1755,7 @@ describe('sdk', () => {
         process.env.DD_TRACE_OTEL_ENABLED = 'true'
         const config = getConfigFresh({ llmobs: { mlApp: 'mlApp', agentlessEnabled: false } })
         delete process.env.DD_TRACE_OTEL_ENABLED
-        config.llmobs.enabled = true
+        config.llmobs.DD_LLMOBS_ENABLED = true
         otelLLMObs = new LLMObsSDK(tracer._tracer, llmobsModule, config)
       })
 
@@ -1716,12 +1776,12 @@ describe('sdk', () => {
 
   describe('flush', () => {
     it('does not flush if llmobs is disabled', () => {
-      tracer._tracer._config.llmobs.enabled = false
+      tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = false
       llmobs.flush()
 
       sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.flush)
       sinon.assert.notCalled(LLMObsSpanWriter.prototype.flush)
-      tracer._tracer._config.llmobs.enabled = true
+      tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = true
     })
 
     it('flushes the evaluation writer and span writer', () => {
@@ -1739,7 +1799,7 @@ describe('sdk', () => {
   })
 
   describe('distributed', () => {
-    it('adds the current llmobs span id to the injection context', () => {
+    it('adds the current llmobs span id and sampling decision to the injection context', () => {
       const carrier = { 'x-datadog-tags': '' }
       let parentId, span
       llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, _span => {
@@ -1751,7 +1811,10 @@ describe('sdk', () => {
         injectCh.publish({ carrier })
       })
 
-      assert.strictEqual(carrier['x-datadog-tags'], `_dd.p.llmobs_parent_id=${parentId},_dd.p.llmobs_ml_app=mlApp`)
+      assert.strictEqual(
+        carrier['x-datadog-tags'],
+        `_dd.p.llmobs_parent_id=${parentId},_dd.p.llmobs_ml_app=mlApp,_dd.p.llmobs_sr=1,_dd.p.llmobs_sd=1`
+      )
     })
   })
 })

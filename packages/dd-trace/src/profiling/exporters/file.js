@@ -2,6 +2,7 @@
 
 const fs = require('fs')
 const { promisify } = require('util')
+const { pathToFileURL } = require('url')
 const { threadId } = require('worker_threads')
 const writeFile = promisify(fs.writeFile)
 const { EventSerializer } = require('./event_serializer')
@@ -16,10 +17,18 @@ function formatDateTime (t) {
 class FileExporter extends EventSerializer {
   #pprofPrefix
 
-  constructor (config = {}) {
+  /**
+   * @param {import('./event_serializer').TracerConfig} config
+   * @param {string} [pprofPrefix] - File path prefix. Defaults to the config value, but the OOM
+   *   export subprocess passes a path derived from a `file:` URL, which is not a config value.
+   */
+  constructor (config, pprofPrefix = config.DD_PROFILING_PPROF_PREFIX) {
     super(config)
-    const { pprofPrefix } = config
-    this.#pprofPrefix = pprofPrefix || ''
+    this.#pprofPrefix = pprofPrefix
+  }
+
+  getExportUrl () {
+    return pathToFileURL(this.#pprofPrefix)
   }
 
   export (exportSpec) {

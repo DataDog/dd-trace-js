@@ -26,6 +26,7 @@ describe('tagger', () => {
     spanContext = {
       _tags: {},
       _trace: { tags: {} },
+      _traceId: { toBigInt () { return 0x1111111111111111n } },
       toTraceId () { return '00000000000000001111111111111111' },
       toSpanId () { return '2222222222222222' },
     }
@@ -59,12 +60,12 @@ describe('tagger', () => {
 
   describe('without softFail', () => {
     beforeEach(() => {
-      tagger = new Tagger({ llmobs: { enabled: true, mlApp: 'my-default-ml-app' } })
+      tagger = new Tagger({ llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'my-default-ml-app' } })
     })
 
     describe('registerLLMObsSpan', () => {
       it('will not set tags if llmobs is not enabled', () => {
-        tagger = new Tagger({ llmobs: { enabled: false } })
+        tagger = new Tagger({ llmobs: { DD_LLMOBS_ENABLED: false } })
         tagger.registerLLMObsSpan(span, 'llm')
 
         assert.deepStrictEqual(Tagger.tagMap.get(span), undefined)
@@ -77,6 +78,8 @@ describe('tagger', () => {
           '_ml_obs.meta.span.kind': 'workflow',
           '_ml_obs.meta.ml_app': 'my-default-ml-app',
           '_ml_obs.llmobs_parent_id': 'undefined', // no parent id provided
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
         })
       })
 
@@ -96,6 +99,8 @@ describe('tagger', () => {
           '_ml_obs.session_id': 'my-session',
           '_ml_obs.meta.ml_app': 'my-app',
           '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
         })
       })
 
@@ -107,6 +112,8 @@ describe('tagger', () => {
           '_ml_obs.meta.ml_app': 'my-default-ml-app',
           '_ml_obs.llmobs_parent_id': 'undefined',
           '_ml_obs.name': 'my-span-name',
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
         })
       })
 
@@ -117,6 +124,8 @@ describe('tagger', () => {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'my-default-ml-app',
           '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
         })
       })
 
@@ -136,6 +145,8 @@ describe('tagger', () => {
 
         tagger.registerLLMObsSpan(span, { kind: 'llm', parent: parentSpan })
 
+        // The parent carries no sampling decision, so the child inherits none
+        // (it does not start a fresh decision mid-trace).
         assert.deepStrictEqual(Tagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'my-ml-app',
@@ -151,6 +162,8 @@ describe('tagger', () => {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'my-default-ml-app',
           '_ml_obs.llmobs_parent_id': 'undefined',
+          '_ml_obs.sample_rate': '1',
+          '_ml_obs.sampling_decision': '1',
         })
       })
 
@@ -159,6 +172,7 @@ describe('tagger', () => {
 
         tagger.registerLLMObsSpan(span, { kind: 'llm' })
 
+        // Propagated parent with no propagated sampling info: inherit none.
         assert.deepStrictEqual(Tagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'llm',
           '_ml_obs.meta.ml_app': 'my-default-ml-app',
@@ -172,6 +186,102 @@ describe('tagger', () => {
         assert.strictEqual(Tagger.tagMap.get(span), undefined)
       })
 
+      describe('sampling', () => {
+        it('records a SAMPLED decision and the rate on a root span when sampleRate is 1', () => {
+          tagger.registerLLMObsSpan(span, { kind: 'llm' })
+
+          const tags = Tagger.tagMap.get(span)
+          assert.strictEqual(tags['_ml_obs.sample_rate'], '1')
+          assert.strictEqual(tags['_ml_obs.sampling_decision'], '1')
+        })
+
+        it('records a DROPPED decision on a root span when sampleRate is 0', () => {
+          tagger = new Tagger({ llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'my-default-ml-app', sampleRate: 0 } })
+          tagger.registerLLMObsSpan(span, { kind: 'llm' })
+
+          const tags = Tagger.tagMap.get(span)
+          assert.strictEqual(tags['_ml_obs.sample_rate'], '0')
+          assert.strictEqual(tags['_ml_obs.sampling_decision'], '0')
+        })
+
+        it('truncates a longer rate to at most 6 decimals', () => {
+          // 1/3 = 0.3333... which must be capped at 6 decimal places.
+          tagger = new Tagger({ llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'my-default-ml-app', sampleRate: 1 / 3 } })
+          tagger.registerLLMObsSpan(span, { kind: 'llm' })
+
+          assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.sample_rate'], '0.333333')
+        })
+
+        it('strips trailing zeros from a fractional rate', () => {
+          // 0.25 -> "0.250000" via toFixed(6), which must be stripped back to "0.25".
+          tagger = new Tagger({ llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'my-default-ml-app', sampleRate: 0.25 } })
+          tagger.registerLLMObsSpan(span, { kind: 'llm' })
+
+          assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.sample_rate'], '0.25')
+        })
+
+        it('inherits the rate and decision from a local parent rather than re-sampling', () => {
+          const parentSpan = { context () { return { toSpanId () { return '5678' } } } }
+          // Parent was sampled out at 0.5; the child must keep that decision even
+          // though this tagger would otherwise sample everything (rate 1).
+          Tagger.tagMap.set(parentSpan, {
+            '_ml_obs.meta.ml_app': 'my-ml-app',
+            '_ml_obs.sample_rate': '0.5',
+            '_ml_obs.sampling_decision': '0',
+          })
+
+          tagger.registerLLMObsSpan(span, { kind: 'llm', parent: parentSpan })
+
+          const tags = Tagger.tagMap.get(span)
+          assert.strictEqual(tags['_ml_obs.sample_rate'], '0.5')
+          assert.strictEqual(tags['_ml_obs.sampling_decision'], '0')
+        })
+
+        it('inherits the rate and decision propagated from an upstream service', () => {
+          spanContext._trace.tags['_dd.p.llmobs_parent_id'] = '5678'
+          spanContext._trace.tags['_dd.p.llmobs_sr'] = '0.25'
+          spanContext._trace.tags['_dd.p.llmobs_sd'] = '0'
+
+          tagger.registerLLMObsSpan(span, { kind: 'llm' })
+
+          const tags = Tagger.tagMap.get(span)
+          assert.strictEqual(tags['_ml_obs.sample_rate'], '0.25')
+          assert.strictEqual(tags['_ml_obs.sampling_decision'], '0')
+        })
+
+        it('rebuilds the sampler when the config rate changes at runtime (e.g. remote config)', () => {
+          // The tagger reads sampleRate from config on each root decision, so a
+          // mutation (such as a future remote config update) takes effect without
+          // re-instantiating the tagger.
+          const config = { llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'my-default-ml-app', sampleRate: 1 } }
+          tagger = new Tagger(config)
+
+          tagger.registerLLMObsSpan(span, { kind: 'llm' })
+          assert.strictEqual(Tagger.tagMap.get(span)['_ml_obs.sampling_decision'], '1')
+
+          config.llmobs.sampleRate = 0
+          const nextSpan = { context () { return spanContext } }
+          tagger.registerLLMObsSpan(nextSpan, { kind: 'llm' })
+
+          const tags = Tagger.tagMap.get(nextSpan)
+          assert.strictEqual(tags['_ml_obs.sample_rate'], '0')
+          assert.strictEqual(tags['_ml_obs.sampling_decision'], '0')
+        })
+
+        it('makes no decision when an upstream LLMObs trace propagated no sampling info', () => {
+          // Distributed trace from a service that predates sampling propagation:
+          // there is an LLMObs parent context but no rate/decision. We must not
+          // start a fresh (divergent) decision mid-trace — mirrors dd-trace-py.
+          spanContext._trace.tags['_dd.p.llmobs_parent_id'] = '5678'
+
+          tagger.registerLLMObsSpan(span, { kind: 'llm' })
+
+          const tags = Tagger.tagMap.get(span)
+          assert.strictEqual(tags['_ml_obs.sample_rate'], undefined)
+          assert.strictEqual(tags['_ml_obs.sampling_decision'], undefined)
+        })
+      })
+
       it('uses the propagated mlApp over the global mlApp if both are provided', () => {
         spanContext._trace.tags['_dd.p.llmobs_ml_app'] = 'my-propagated-ml-app'
 
@@ -183,7 +293,7 @@ describe('tagger', () => {
 
       describe('with no global mlApp configured', () => {
         beforeEach(() => {
-          tagger = new Tagger({ llmobs: { enabled: true } })
+          tagger = new Tagger({ llmobs: { DD_LLMOBS_ENABLED: true } })
         })
 
         it('uses the mlApp from the propagated mlApp if no mlApp is provided', () => {
@@ -200,7 +310,7 @@ describe('tagger', () => {
         })
 
         it('uses the service name if no mlApp is provided and no propagated mlApp is provided', () => {
-          tagger = new Tagger({ llmobs: { enabled: true }, service: 'my-service' })
+          tagger = new Tagger({ llmobs: { DD_LLMOBS_ENABLED: true }, service: 'my-service' })
           tagger.registerLLMObsSpan(span, { kind: 'llm' })
 
           const tags = Tagger.tagMap.get(span)
@@ -234,7 +344,7 @@ describe('tagger', () => {
         })
 
         it('does not write bridge tags when llmobs is disabled', () => {
-          tagger = new Tagger({ llmobs: { enabled: false } })
+          tagger = new Tagger({ llmobs: { DD_LLMOBS_ENABLED: false } })
           tagger.registerLLMObsSpan(span, { kind: 'workflow' })
 
           assert.strictEqual(spanContext._trace.tags.llmobs_trace_id, undefined)
@@ -297,9 +407,13 @@ describe('tagger', () => {
           before(() => {
             RealTagger = proxyquire('../../src/llmobs/tagger', {
               '../log': { warn () {} },
-              './util': { generateTraceId: sinon.stub().returns('0123'), writeBridgeTags, findGenAIAncestorSpanId },
+              './util': {
+                generateTraceId: sinon.stub().returns('0123'),
+                writeBridgeTags,
+                findGenAIAncestorSpanId,
+              },
             })
-            realTagger = new RealTagger({ llmobs: { enabled: true, mlApp: 'test-app' } })
+            realTagger = new RealTagger({ llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'test-app' } })
           })
 
           it('detects a real gen_ai.* ancestor, suppresses llmobs_parent_id, and uses ancestor as event parent', () => {
@@ -1227,7 +1341,7 @@ describe('tagger', () => {
 
   describe('with softFail', () => {
     beforeEach(() => {
-      tagger = new Tagger({ llmobs: { enabled: true, mlApp: 'my-default-ml-app' } }, true)
+      tagger = new Tagger({ llmobs: { DD_LLMOBS_ENABLED: true, mlApp: 'my-default-ml-app' } }, true)
     })
 
     it('logs a warning when an unexpected value is encountered for text tagging', () => {
