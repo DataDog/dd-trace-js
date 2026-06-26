@@ -378,18 +378,9 @@ function audioMimeTypeFromFormat (fmt) {
   return OPENAI_AUDIO_MIME_TYPES[fmt] ?? `audio/${fmt}`
 }
 
-// Builds an audio part from raw audio bytes (base64-encoded) or an existing
-// base64 string. Returns the camelCase shape the tagger validates and
-// serializes to the snake_case `{ mime_type, content }` wire format. Only
-// binary inputs are base64-encoded; any other shape is passed through so a
-// malformed auto-instrumented payload can't throw (the tagger soft-skips a
-// non-string `content` instead of disabling the plugin).
-//
-// NOTE: supported binary inputs are `Buffer` and `Uint8Array` (what providers
-// hand us). A bare `ArrayBuffer`, or a non-`Uint8Array` typed-array view (e.g.
-// `Uint16Array`), is not byte-encoded correctly here — pass a `Buffer`/
-// `Uint8Array` view of the bytes if you need those. OpenAI always passes base64
-// strings, so this is not hit in practice today.
+// Builds an audio part from raw audio bytes (base64-encoded) or an existing base64 string. Only
+// Buffer/Uint8Array inputs are base64-encoded; any other shape is passed through so a malformed
+// auto-instrumented payload can't throw (the tagger soft-skips a non-string `content`).
 /**
  * @param {Buffer | Uint8Array | string} data
  * @param {string} mimeType
