@@ -25,7 +25,7 @@ jobs:
         v4.x latest-node16
         v5.x latest-node18 latest-node20
     outputs:
-      matrix: ${{ steps.compute.outputs.matrix }}
+      npm_tags: ${{ steps.compute.outputs.npm_tags }}
       is_latest: ${{ steps.compute.outputs.is_latest }}
     steps:
       - id: compute
@@ -58,19 +58,12 @@ jobs:
             is_latest="false"
           fi
 
-          matrix=$(jq -cn \
-            --arg branch "$branch" \
-            --arg npm_tags "$npm_tags" \
-            '{"include":[{"branch":$branch,"npm_tags":$npm_tags}]}')
-
-          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "npm_tags=$npm_tags" >> "$GITHUB_OUTPUT"
           echo "is_latest=$is_latest" >> "$GITHUB_OUTPUT"
 
   publish:
     needs: setup
     runs-on: ubuntu-latest
-    strategy:
-      matrix: ${{ fromJson(needs.setup.outputs.matrix) }}
     environment:
       name: npm
       url: https://npmjs.com/package/dd-trace
@@ -95,7 +88,7 @@ jobs:
       - name: Publish
         run: |
           version="${{ fromJson(steps.pkg.outputs.json).version }}"
-          tags=(${{ matrix.npm_tags }})
+          tags=(${{ needs.setup.outputs.npm_tags }})
 
           # Exchange the GitHub OIDC token for an npm registry token so
           # that npm publish and npm dist-tag add share the same auth.
