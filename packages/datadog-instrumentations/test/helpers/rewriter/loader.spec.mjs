@@ -20,15 +20,13 @@ describe('rewriter loader', () => {
 
   before(async () => {
     // require(esm) keeps the loader on nyc's CommonJS instrumentation path so its
-    // transforms count as covered; runtimes without require(esm) fall back to a
-    // dynamic import and still exercise the behaviour.
-    let rewriterLoader
-    try {
-      rewriterLoader = require('../../../src/helpers/rewriter/loader.mjs')
-    } catch (error) {
-      if (error?.code !== 'ERR_REQUIRE_ESM') throw error
-      rewriterLoader = await import('../../../src/helpers/rewriter/loader.mjs')
-    }
+    // transforms count as covered. Without require(esm), nyc's .mjs require extension
+    // feeds the module to the CommonJS compiler, which throws on its ESM `import`.
+    // The property is absent (undefined) before Node 20.19/22.10, which is the false branch.
+    // eslint-disable-next-line n/no-unsupported-features/node-builtins
+    const rewriterLoader = process.features.require_module
+      ? require('../../../src/helpers/rewriter/loader.mjs')
+      : await import('../../../src/helpers/rewriter/loader.mjs')
     load = rewriterLoader.load
     loadSync = rewriterLoader.loadSync
   })
