@@ -14,6 +14,7 @@ require('../../setup/core')
 
 const {
   getTestParametersString,
+  getTestLevelsMetadataTags,
   getTestSuitePath,
   getCodeOwnersFileEntries,
   getCodeOwnersForFilename,
@@ -43,7 +44,13 @@ const {
   getTestOptimizationRequestResults,
 } = require('../../../src/plugins/util/test')
 
-const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA, CI_PIPELINE_URL } = require('../../../src/plugins/util/tags')
+const {
+  CI_JOB_NAME,
+  CI_PIPELINE_URL,
+  CI_PROVIDER_NAME,
+  GIT_COMMIT_SHA,
+  GIT_REPOSITORY_URL,
+} = require('../../../src/plugins/util/tags')
 const {
   TELEMETRY_GIT_COMMIT_SHA_DISCREPANCY,
   TELEMETRY_GIT_SHA_MATCH,
@@ -192,6 +199,29 @@ describe('getTestParametersString', () => {
     assert.strictEqual(getTestParametersString(input, 'test_stuff'),
       JSON.stringify({ arguments: ['params2'], metadata: {} })
     )
+  })
+})
+
+describe('getTestLevelsMetadataTags', () => {
+  it('keeps only allowlisted CI and Git tags', () => {
+    const testLevelsMetadataTags = getTestLevelsMetadataTags({
+      [CI_JOB_NAME]: 'test',
+      [CI_PIPELINE_URL]: 'https://github.com/DataDog/dd-trace-js/actions/runs/1',
+      [CI_PROVIDER_NAME]: 'github',
+      [GIT_COMMIT_SHA]: '1234567890abcdef',
+      [GIT_REPOSITORY_URL]: 'https://github.com/DataDog/dd-trace-js.git',
+      'ci.custom': 'custom-ci-value',
+      'git.custom': 'custom-git-value',
+      'test.command': 'npm test',
+    })
+
+    assert.deepStrictEqual(testLevelsMetadataTags, {
+      [CI_JOB_NAME]: 'test',
+      [CI_PIPELINE_URL]: 'https://github.com/DataDog/dd-trace-js/actions/runs/1',
+      [CI_PROVIDER_NAME]: 'github',
+      [GIT_COMMIT_SHA]: '1234567890abcdef',
+      [GIT_REPOSITORY_URL]: 'https://github.com/DataDog/dd-trace-js.git',
+    })
   })
 })
 

@@ -663,7 +663,7 @@ describe('Api Security - Fastify', () => {
     let config, app, server, axios
 
     before(() => {
-      return agent.load(['fastify', 'http'], { client: false })
+      return agent.load(['fastify', 'http'], { client: false }, { appsec: { enabled: true } })
     })
 
     before((done) => {
@@ -717,7 +717,6 @@ describe('Api Security - Fastify', () => {
           rules: path.join(__dirname, 'api_security_rules.json'),
           apiSecurity: {
             enabled: true,
-            sampleDelay: 10,
           },
         },
       })

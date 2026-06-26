@@ -70,7 +70,9 @@ tracer.init({
   rateLimit: 1000,
   samplingRules: [
     { sampleRate: 0.5, service: 'foo', name: 'foo.request' },
-    { sampleRate: 0.1, service: /foo/, name: /foo\.request/ }
+    { sampleRate: 0.1, service: /foo/, name: /foo\.request/ },
+    { sampleRate: 0, resource: 'GET /health', maxPerSecond: 5 },
+    { sampleRate: 0, tags: { 'http.url': '*/spam*', 'span.kind': /server/ } }
   ],
   spanSamplingRules: [
     { sampleRate: 1.0, service: 'foo', name: 'foo.request', maxPerSecond: 5 },
@@ -252,6 +254,10 @@ const awsSdkOptions: plugins.aws_sdk = {
   }
 };
 
+const awsSdkServiceFunctionOptions: plugins.aws_sdk = {
+  service: (params): string | undefined => params.TableName ? String(params.TableName) : undefined,
+};
+
 const bullmqOptions: plugins.bullmq = {
   service: 'test',
   producerFilter: ({ name, queueName }) => name !== 'skip' && queueName !== 'dead-letter',
@@ -291,9 +297,9 @@ tracer.use('amqp10');
 tracer.use('amqplib');
 tracer.use('anthropic');
 tracer.use('avsc');
-tracer.use('aws-durable-execution-sdk-js');
 tracer.use('aws-sdk');
 tracer.use('aws-sdk', awsSdkOptions);
+tracer.use('aws-sdk', awsSdkServiceFunctionOptions);
 tracer.use('azure-cosmos');
 tracer.use('azure-event-hubs')
 tracer.use('azure-functions');

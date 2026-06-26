@@ -13,8 +13,10 @@ const semver = require('semver')
 const sinon = require('sinon')
 require('./core')
 
+const { engines, nodeMaxMajor } = require('../../../../package.json')
+
 const externals = require('../plugins/externals')
-const { resolvePluginVersions } = require('../plugins/versions')
+const { resolvePluginVersions, brokenVersionReason } = require('../plugins/versions')
 const runtimeMetrics = require('../../src/runtime_metrics')
 const Nomenclature = require('../../src/service-naming')
 const { SVC_SRC_KEY } = require('../../src/constants')
@@ -259,6 +261,9 @@ function withVersions (plugin, modules, range, cb) {
     range = undefined
   }
 
+  if (!process.env.DD_INJECT_FORCE &&
+      !semver.satisfies(process.version, `${engines.node} <${nodeMaxMajor}`)) return
+
   const instrumentations = typeof plugin === 'string' ? getInstrumentation(plugin) : [plugin]
   const names = new Set(instrumentations.map(instrumentation => instrumentation.name))
 
@@ -279,8 +284,10 @@ function withVersions (plugin, modules, range, cb) {
     /** @type {Map<string, {versionRange: string, versionKey: string, resolvedVersion: string}>} */
     const testVersions = new Map()
 
+    let moduleMatched = false
     for (const instrumentation of instrumentations) {
       if (instrumentation.name !== moduleName) continue
+      moduleMatched = true
 
       // Some entries coming from `externals.js` are dependency-only (e.g. `dep: true`) and don't have `versions`.
       // Treat those as "not a test target" instead of crashing.
@@ -298,11 +305,27 @@ function withVersions (plugin, modules, range, cb) {
       }
     }
 
+    // A module no instrumentation declares would silently run zero tests instead of failing.
+    if (!moduleMatched) {
+      throw new Error(`withVersions: no instrumentation declares the module "${moduleName}". Pass the integration ` +
+        `name as the first argument (e.g. 'express'), or register "${moduleName}" in test/plugins/externals.js.`)
+    }
+
     const testCases = Array.from(testVersions.values())
       .filter(({ resolvedVersion }) => !range || semver.satisfies(resolvedVersion, range))
       .sort(({ resolvedVersion }) => resolvedVersion.localeCompare(resolvedVersion))
 
     for (const testCase of testCases) {
+      const brokenReason = brokenVersionReason(moduleName, testCase.resolvedVersion)
+      if (brokenReason) {
+        // The version is installed but deliberately not exercised; surface it as a pending test so the skip is visible
+        // in CI rather than silently absent.
+        describe(`with ${moduleName} ${testCase.versionRange} (${testCase.resolvedVersion})`, () => {
+          it.skip(`skipped — known broken: ${brokenReason}`, () => {})
+        })
+        continue
+      }
+
       const absBasePath = path.resolve(__dirname, getModulePath(moduleName, testCase.versionKey))
       const absNodeModulesPath = `${absBasePath}/node_modules`
 
@@ -413,6 +436,12 @@ function insertVersionDep (dir, pkgName, version) {
 
 const ORIGINAL_PROCESS_EXIT = process.exit
 
+// The watchdog fires if the process fails to exit after all suites have finished. The typical cause is a `before`
+// hook that throws after starting the tracer — the `agent.load` / RC socket stays open, mocha drains no further,
+// and the job silently times out. 120 s is well above the longest real per-suite teardown (≤30 s observed) so clean
+// runs always exit before it triggers; only a leaked handle — the actual bug — fires it.
+const EXIT_WATCHDOG_MS = 120_000
+
 exports.mochaHooks = {
   beforeAll () {
     process.exit = (code) => {
@@ -421,6 +450,20 @@ exports.mochaHooks = {
   },
   afterAll () {
     process.exit = ORIGINAL_PROCESS_EXIT
+
+    // Arm the watchdog after restoring process.exit so it can call it.
+    const watchdog = setTimeout(() => {
+      // eslint-disable-next-line no-console
+      console.error(
+        `[dd-trace test watchdog] Process did not exit ${EXIT_WATCHDOG_MS / 1000}s after all suites completed.`,
+        'Active handles keeping the event loop alive:',
+        process._getActiveHandles?.()?.map(h => h?.constructor?.name ?? String(h))
+      )
+      ORIGINAL_PROCESS_EXIT(1)
+    }, EXIT_WATCHDOG_MS)
+
+    // Unref so a clean run (no leak) always exits without waiting for the timer.
+    watchdog.unref()
   },
   afterEach () {
     if (_agent) _agent.reset()

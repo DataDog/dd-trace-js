@@ -67,9 +67,20 @@ function createWrapRouterMethod (name, compile) {
     // `Layer.handleError`. Specialising lets the per-call body use named
     // parameters and `.call`, avoiding the rest-spread Array allocation that
     // the unified shape forced on every middleware invocation.
-    return original.length === 4
+    const wrapped = original.length === 4
       ? shimmer.wrapFunction(original, errorHandlerLayerWrap(layer, name, captureRoute, needMultiMatch, matchers))
       : shimmer.wrapFunction(original, requestHandlerLayerWrap(layer, name, captureRoute, needMultiMatch, matchers))
+
+    // Workaround for loopback's phase-based middleware sorting. Its
+    // `_findLayerByHandler` maps a layer back to the user handler by scanning
+    // the layer handle's enumerable properties for the original function.
+    // Replacing `layer.handle` with this wrapper hides that handler, so without
+    // the back-reference loopback cannot tag the layer with its phase and
+    // `app.middleware(phase, ...)` handlers run in insertion order instead of
+    // phase order. The property name is part of that contract; keep it stable.
+    wrapped._datadog_orig = original
+
+    return wrapped
   }
 
   function requestHandlerLayerWrap (layer, name, captureRoute, needMultiMatch, matchers) {

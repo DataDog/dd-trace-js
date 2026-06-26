@@ -7,10 +7,10 @@
   "instructions": true,
   "variants": {
     "get": {
-      "env": { "VARIANT": "get", "ITERATIONS": "39500000" }
+      "env": { "VARIANT": "get", "OPERATIONS": "39500000" }
     },
     "hashring": {
-      "env": { "VARIANT": "hashring", "ITERATIONS": "38000000" }
+      "env": { "VARIANT": "hashring", "OPERATIONS": "38000000" }
     }
   }
 }

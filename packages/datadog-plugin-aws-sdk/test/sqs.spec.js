@@ -280,6 +280,51 @@ describe('Plugin', () => {
           await receiveAndAssertMessage()
         })
 
+        it('links every message of a multi-message receive to its producer', async () => {
+          // Three independent sends produce three distinct producer traces. A single receive
+          // then fans them into one consumer span: the first message is the parent, every other
+          // received message becomes a span link.
+          let receivedCount = 0
+
+          const sendMessage = body => new Promise((resolve, reject) => {
+            sqs.sendMessage({ MessageBody: body, QueueUrl }, error => error ? reject(error) : resolve())
+          })
+
+          const consumerPromise = agent.assertSomeTraces(traces => {
+            let consumerSpan
+            for (const trace of traces) {
+              for (const span of trace) {
+                if (span.name === 'aws.response') {
+                  consumerSpan = span
+                }
+              }
+            }
+            if (consumerSpan === undefined) throw new Error('no consumer span yet')
+
+            const links = consumerSpan.meta['_dd.span_links']
+              ? JSON.parse(consumerSpan.meta['_dd.span_links'])
+              : []
+            assert.ok(receivedCount > 1, `expected a multi-message receive, got ${receivedCount}`)
+            assert.strictEqual(links.length, receivedCount - 1)
+          }, { timeoutMs: 10000 })
+
+          const drive = (async () => {
+            await sendMessage('multi receive 1')
+            await sendMessage('multi receive 2')
+            await sendMessage('multi receive 3')
+
+            const data = await new Promise((resolve, reject) => {
+              sqs.receiveMessage(
+                { QueueUrl, MaxNumberOfMessages: 10, WaitTimeSeconds: 1 },
+                (error, result) => error ? reject(error) : resolve(result)
+              )
+            })
+            receivedCount = data.Messages.length
+          })()
+
+          await Promise.all([consumerPromise, drive])
+        })
+
         it('should run the consumer in the context of its span', (done) => {
           sqs.sendMessage({
             MessageBody: 'test body',
