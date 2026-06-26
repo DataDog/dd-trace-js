@@ -53,6 +53,7 @@ const versions = NODE_MAJOR <= 18 ? ['1.6.0', '3.2.6'] : ['1.6.0', 'latest']
 versions.forEach((version) => {
   describe(`vitest@${version}`, () => {
     let cwd, receiver, childProcess, testOutput
+    const newerVitestIt = version === '1.6.0' ? it.skip : it
     const vitestProjectsIt = version === 'latest' && NODE_MAJOR >= 20 ? it : it.skip
 
     useSandbox([
@@ -258,6 +259,25 @@ versions.forEach((version) => {
           receiver.setSettings({ impacted_tests_enabled: true })
 
           runImpactedTest(done, { isModified: true })
+        })
+
+        newerVitestIt('should be retried by EFD in no-worker mode when modified', (done) => {
+          receiver.setSettings({
+            impacted_tests_enabled: true,
+            early_flake_detection: {
+              enabled: true,
+              slow_test_retries: {
+                '5s': NUM_RETRIES_EFD,
+              },
+            },
+            known_tests_enabled: true,
+          })
+
+          runImpactedTest(
+            done,
+            { isModified: true, isEfd: true },
+            { DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true' }
+          )
         })
 
         it('should not be detected as impacted if disabled', (done) => {

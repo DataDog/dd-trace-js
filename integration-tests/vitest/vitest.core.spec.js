@@ -28,6 +28,7 @@ const {
   TEST_COMMAND,
   TEST_SOURCE_FILE,
   TEST_SOURCE_START,
+  TEST_SUITE_ID,
   TEST_IS_NEW,
   TEST_NAME,
   TEST_EARLY_FLAKE_ENABLED,
@@ -69,6 +70,8 @@ versions.forEach((version) => {
   describe(`vitest@${version}`, () => {
     let cwd, receiver, childProcess, testOutput
     const newerVitestIt = version === '1.6.0' ? it.skip : it
+    const latestVitestIt = version === 'latest' ? it : it.skip
+    const noWorkerUnsupportedIt = process.env.DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT ? it.skip : it
 
     useSandbox([
       `vitest@${version}`,
@@ -323,7 +326,372 @@ versions.forEach((version) => {
       assert.strictEqual(code, 0)
     })
 
-    it('propagates test span context to HTTP requests and hooks during test execution', async () => {
+    newerVitestIt('strips Datadog NODE_OPTIONS from fork workers when no-worker init is enabled', async () => {
+      const payloadsPromise = receiver.gatherPayloadsMaxTimeout(
+        ({ url }) => url === '/api/v2/citestcycle',
+        payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testEvent = events.find(event => event.type === 'test')
+
+          assert.ok(testEvent, `should have test event, got events: ${inspect(events.map(event => event.type))}`)
+          assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(testEvent.content.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
+        }
+      )
+
+      childProcess = exec(
+        './node_modules/.bin/vitest run',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--no-warnings --import dd-trace/register.js -r dd-trace/ci/init',
+            TEST_DIR: 'ci-visibility/vitest-tests/vitest-worker-env.mjs',
+            POOL_CONFIG: 'forks',
+            DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+            EXPECT_DD_NODE_OPTIONS_STRIPPED: '1',
+            DD_SERVICE: undefined,
+          },
+        }
+      )
+
+      childProcess.stdout.on('data', data => { testOutput += data })
+      childProcess.stderr.on('data', data => { testOutput += data })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        payloadsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+
+    newerVitestIt('strips Datadog NODE_OPTIONS from fork project workers when root pool is threads', async () => {
+      const payloadsPromise = receiver.gatherPayloadsMaxTimeout(
+        ({ url }) => url === '/api/v2/citestcycle',
+        payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testEvent = events.find(event => event.type === 'test')
+
+          assert.ok(testEvent, `should have test event, got events: ${inspect(events.map(event => event.type))}`)
+          assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(testEvent.content.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
+        }
+      )
+
+      childProcess = exec(
+        './node_modules/.bin/vitest run',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--no-warnings --import dd-trace/register.js -r dd-trace/ci/init',
+            TEST_DIR: 'ci-visibility/vitest-tests/vitest-worker-env.mjs',
+            POOL_CONFIG: 'threads',
+            PROJECT_POOL_CONFIG: 'forks',
+            DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+            EXPECT_DD_NODE_OPTIONS_STRIPPED: '1',
+            DD_SERVICE: undefined,
+          },
+        }
+      )
+
+      childProcess.stdout.on('data', data => { testOutput += data })
+      childProcess.stderr.on('data', data => { testOutput += data })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        payloadsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+
+    newerVitestIt('parents no-worker test events to their own suite when fork modules overlap', async () => {
+      const payloadsPromise = receiver.gatherPayloadsMaxTimeout(
+        ({ url }) => url === '/api/v2/citestcycle',
+        payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSuiteEvents = events
+            .filter(event => event.type === 'test_suite_end')
+            .map(event => event.content)
+            .filter(testSuite => testSuite.meta[TEST_SOURCE_FILE].startsWith(
+              'ci-visibility/vitest-tests/no-worker-suite-context-'
+            ))
+          const testEvents = events
+            .filter(event => event.type === 'test')
+            .map(event => event.content)
+            .filter(test => test.meta[TEST_SOURCE_FILE].startsWith(
+              'ci-visibility/vitest-tests/no-worker-suite-context-'
+            ))
+          const testSuiteIdsBySourceFile = new Map(testSuiteEvents.map(testSuite => [
+            testSuite.meta[TEST_SOURCE_FILE],
+            testSuite[TEST_SUITE_ID].toString(),
+          ]))
+
+          assert.strictEqual(testSuiteEvents.length, 2, inspect(testSuiteEvents.map(testSuite => testSuite.resource)))
+          assert.strictEqual(testEvents.length, 2, inspect(testEvents.map(test => test.resource)))
+          for (const test of testEvents) {
+            assert.strictEqual(
+              test[TEST_SUITE_ID].toString(),
+              testSuiteIdsBySourceFile.get(test.meta[TEST_SOURCE_FILE])
+            )
+          }
+        }
+      )
+
+      childProcess = exec(
+        './node_modules/.bin/vitest run',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--no-warnings --import dd-trace/register.js -r dd-trace/ci/init',
+            TEST_DIR: 'ci-visibility/vitest-tests/no-worker-suite-context-*.mjs',
+            POOL_CONFIG: 'forks',
+            DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+            DD_SERVICE: undefined,
+          },
+        }
+      )
+
+      childProcess.stdout.on('data', data => { testOutput += data })
+      childProcess.stderr.on('data', data => { testOutput += data })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        payloadsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+
+    newerVitestIt('reports suite hook failures when no-worker init is enabled', async () => {
+      const payloadsPromise = receiver.gatherPayloadsMaxTimeout(
+        ({ url }) => url === '/api/v2/citestcycle',
+        payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSuiteEvent = events.find(event => event.type === 'test_suite_end')
+
+          assert.ok(
+            testSuiteEvent,
+            `should have test suite event, got events: ${inspect(events.map(event => event.type))}`
+          )
+          assert.strictEqual(testSuiteEvent.content.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(testSuiteEvent.content.meta[ERROR_MESSAGE], 'failed before all')
+        }
+      )
+
+      childProcess = exec(
+        './node_modules/.bin/vitest run',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--no-warnings --import dd-trace/register.js -r dd-trace/ci/init',
+            TEST_DIR: 'ci-visibility/vitest-tests/failed-suite-hook.mjs',
+            POOL_CONFIG: 'forks',
+            DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+            DD_SERVICE: undefined,
+          },
+        }
+      )
+
+      childProcess.stdout.on('data', data => { testOutput += data })
+      childProcess.stderr.on('data', data => { testOutput += data })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        payloadsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 1, testOutput)
+    })
+
+    newerVitestIt('preserves string setupFiles when no-worker init is enabled', async () => {
+      const payloadsPromise = receiver.gatherPayloadsMaxTimeout(
+        ({ url }) => url === '/api/v2/citestcycle',
+        payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testEvent = events.find(event => event.type === 'test')
+
+          assert.ok(testEvent, `should have test event, got events: ${inspect(events.map(event => event.type))}`)
+          assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'pass')
+        }
+      )
+
+      childProcess = exec(
+        './node_modules/.bin/vitest run',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--no-warnings --import dd-trace/register.js -r dd-trace/ci/init',
+            TEST_DIR: 'ci-visibility/vitest-tests/uses-string-setup-file.mjs',
+            VITEST_SETUP_FILE: 'ci-visibility/vitest-tests/string-setup-file.mjs',
+            POOL_CONFIG: 'forks',
+            DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+            DD_SERVICE: undefined,
+          },
+        }
+      )
+
+      childProcess.stdout.on('data', data => { testOutput += data })
+      childProcess.stderr.on('data', data => { testOutput += data })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        payloadsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+
+    latestVitestIt('does not duplicate thread project events when no-worker init is enabled', async () => {
+      const payloadsPromise = receiver.gatherPayloadsMaxTimeout(
+        ({ url }) => url === '/api/v2/citestcycle',
+        payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testEvents = events.filter(event => event.type === 'test')
+
+          assert.strictEqual(testEvents.length, 2, inspect(testEvents.map(event => event.content.meta)))
+          testEvents.forEach(testEvent => {
+            assert.strictEqual(testEvent.content.meta[TEST_NAME], 'vitest worker env sets DD_VITEST_WORKER')
+            assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'pass')
+          })
+        }
+      )
+
+      childProcess = exec(
+        './node_modules/.bin/vitest run',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--no-warnings --import dd-trace/register.js -r dd-trace/ci/init',
+            TEST_DIR: 'ci-visibility/vitest-tests/vitest-worker-env.mjs',
+            SECOND_PROJECT_TEST_DIR: 'ci-visibility/vitest-tests/vitest-worker-env.mjs',
+            POOL_CONFIG: 'forks',
+            PROJECT_POOL_CONFIG: 'forks',
+            SECOND_PROJECT_POOL_CONFIG: 'threads',
+            DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+            DD_SERVICE: undefined,
+          },
+        }
+      )
+
+      childProcess.stdout.on('data', data => { testOutput += data })
+      childProcess.stderr.on('data', data => { testOutput += data })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        payloadsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+
+    newerVitestIt('ignores no-worker init when isolate is disabled', async () => {
+      const payloadsPromise = receiver.gatherPayloadsMaxTimeout(
+        ({ url }) => url === '/api/v2/citestcycle',
+        payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSessionEvent = events.find(event => event.type === 'test_session_end')
+          const testModuleEvent = events.find(event => event.type === 'test_module_end')
+
+          assert.ok(
+            testSessionEvent,
+            `should have test session event, got events: ${inspect(events.map(event => event.type))}`
+          )
+          assert.ok(
+            testModuleEvent,
+            `should have test module event, got events: ${inspect(events.map(event => event.type))}`
+          )
+        }
+      )
+
+      childProcess = exec(
+        './node_modules/.bin/vitest run',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--no-warnings --import dd-trace/register.js -r dd-trace/ci/init',
+            TEST_DIR: 'ci-visibility/vitest-tests/vitest-worker-env.mjs',
+            POOL_CONFIG: 'forks',
+            NO_ISOLATE: '1',
+            DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+            EXPECT_DD_NODE_OPTIONS_PRESENT: '1',
+            DD_TRACE_DEBUG: 'true',
+            DD_TRACE_LOG_LEVEL: 'warn',
+            DD_SERVICE: undefined,
+          },
+        }
+      )
+
+      childProcess.stdout.on('data', data => { testOutput += data })
+      childProcess.stderr.on('data', data => { testOutput += data })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        payloadsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0, testOutput)
+      assert.match(
+        testOutput,
+        /DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT is ignored because Vitest isolate is disabled/
+      )
+    })
+
+    newerVitestIt('ignores no-worker init when a fork project disables isolate', async () => {
+      const payloadsPromise = receiver.gatherPayloadsMaxTimeout(
+        ({ url }) => url === '/api/v2/citestcycle',
+        payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testEvent = events.find(event => event.type === 'test')
+
+          assert.ok(testEvent, `should have test event, got events: ${inspect(events.map(event => event.type))}`)
+          assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'pass')
+        }
+      )
+
+      childProcess = exec(
+        './node_modules/.bin/vitest run',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--no-warnings --import dd-trace/register.js -r dd-trace/ci/init',
+            TEST_DIR: 'ci-visibility/vitest-tests/vitest-worker-env.mjs',
+            POOL_CONFIG: 'threads',
+            PROJECT_POOL_CONFIG: 'forks',
+            PROJECT_NO_ISOLATE: '1',
+            DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+            EXPECT_DD_NODE_OPTIONS_PRESENT: '1',
+            DD_TRACE_DEBUG: 'true',
+            DD_TRACE_LOG_LEVEL: 'warn',
+            DD_SERVICE: undefined,
+          },
+        }
+      )
+
+      childProcess.stdout.on('data', data => { testOutput += data })
+      childProcess.stderr.on('data', data => { testOutput += data })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        payloadsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0, testOutput)
+      assert.match(
+        testOutput,
+        /DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT is ignored because Vitest isolate is disabled/
+      )
+    })
+
+    noWorkerUnsupportedIt('propagates test span context to HTTP requests and hooks during test execution', async () => {
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -754,6 +1122,56 @@ versions.forEach((version) => {
 
         await Promise.all([once(childProcess, 'exit'), eventsPromise])
       })
+
+      newerVitestIt('marks user-configured retries as external when no-worker init is enabled', async () => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: true,
+          flaky_test_retries_count: 2,
+          early_flake_detection: {
+            enabled: false,
+          },
+        })
+
+        const eventsPromise = receiver.gatherPayloadsMaxTimeout(
+          ({ url }) => url === '/api/v2/citestcycle',
+          payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+            assert.ok(
+              retriedTests.length > 0,
+              `Expected retried tests. Got: ${inspect(tests.map(test => test.meta))}`
+            )
+            retriedTests.forEach(test => {
+              assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+            })
+          }
+        )
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              POOL_CONFIG: 'forks',
+              PROJECT_POOL_CONFIG: 'forks',
+              PROJECT_RETRY_CONFIG: '1',
+              DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+              DD_SERVICE: undefined,
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, 1)
+      })
     })
 
     it('correctly calculates test code owners when working directory is not repository root', (done) => {
@@ -1057,6 +1475,56 @@ versions.forEach((version) => {
 
         const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
         assert.strictEqual(exitCode, 0)
+      })
+
+      newerVitestIt('keeps failed status for slow EFD tests when no-worker init skips extra repeats', async () => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': 1,
+              '10s': 0,
+            },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
+        })
+
+        receiver.setKnownTests({
+          vitest: {},
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(test => test.content)
+            const slowTests = tests.filter(test =>
+              test.meta[TEST_NAME] === 'early flake detection slightly slow duration bucket test'
+            )
+
+            assert.strictEqual(slowTests.length, 1)
+            assert.strictEqual(slowTests[0].meta[TEST_STATUS], 'fail')
+            assert.strictEqual(slowTests[0].meta[TEST_IS_NEW], 'true')
+            assert.strictEqual(slowTests[0].meta[TEST_EARLY_FLAKE_ABORT_REASON], 'slow')
+          }, 55_000)
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run -t "slightly slow duration bucket test"',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              SHOULD_ADD_SLOW_DURATION_TEST: '1',
+              SLOW_DURATION_ALWAYS_FAIL: '1',
+              DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, 1)
       })
 
       it('reports the error from each failed EFD attempt', async () => {
@@ -1624,6 +2092,58 @@ versions.forEach((version) => {
         })
       })
 
+      newerVitestIt('reports real statuses for Vitest repeats when no-worker init is enabled', async () => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: false,
+          },
+          flaky_test_retries_enabled: false,
+          known_tests_enabled: false,
+        })
+
+        const testName = 'early flake detection can retry tests that eventually pass'
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events
+              .filter(event => event.type === 'test')
+              .map(test => test.content)
+              .filter(test => test.meta[TEST_NAME] === testName)
+              .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+            assert.deepStrictEqual(
+              tests.map(test => ({
+                status: test.meta[TEST_STATUS],
+                isRetry: test.meta[TEST_IS_RETRY],
+                retryReason: test.meta[TEST_RETRY_REASON],
+              })),
+              [
+                { status: 'fail', isRetry: undefined, retryReason: undefined },
+                { status: 'fail', isRetry: 'true', retryReason: TEST_RETRY_REASON_TYPES.ext },
+                { status: 'pass', isRetry: 'true', retryReason: TEST_RETRY_REASON_TYPES.ext },
+              ]
+            )
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run -t "can retry tests that eventually pass"',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              SHOULD_REPEAT: '1',
+              DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+              DD_SERVICE: undefined,
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, 1)
+      })
+
       it('disables early flake detection if known tests should not be requested', (done) => {
         receiver.setSettings({
           early_flake_detection: {
@@ -1899,7 +2419,7 @@ versions.forEach((version) => {
           })
         })
 
-        it('runs retries with dynamic instrumentation', (done) => {
+        noWorkerUnsupportedIt('runs retries with dynamic instrumentation', (done) => {
           receiver.setSettings({
             flaky_test_retries_enabled: true,
             di_enabled: true,

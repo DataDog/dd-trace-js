@@ -44,6 +44,9 @@ if (process.env.PROJECT_POOL_CONFIG) {
   if (process.env.PROJECT_RETRY_CONFIG) {
     firstProjectConfig.retry = Number(process.env.PROJECT_RETRY_CONFIG)
   }
+  if (process.env.PROJECT_NO_ISOLATE) {
+    firstProjectConfig.isolate = false
+  }
   projectConfigs.push({ test: firstProjectConfig })
 
   if (process.env.SECOND_PROJECT_CONFIG_FILE) {
@@ -68,6 +71,14 @@ if (process.env.PROJECT_POOL_CONFIG) {
   }
 
   config.test.projects = projectConfigs
+}
+
+if (process.env.NO_ISOLATE) {
+  config.test.isolate = false
+}
+
+if (process.env.VITEST_SETUP_FILE) {
+  config.test.setupFiles = process.env.VITEST_SETUP_FILE
 }
 
 if (process.env.COVERAGE_PROVIDER) {
