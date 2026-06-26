@@ -89,25 +89,49 @@ jobs:
           echo "json=$content" >> $GITHUB_OUTPUT
       - name: Publish
         run: |
-          # Fetch the OIDC token up front so every npm registry call in
-          # this step uses the same Bearer token. npm publish exchanges
-          # the token internally but does not persist it, so npm dist-tag
-          # add would run unauthenticated without this.
+          version="${{ fromJson(steps.pkg.outputs.json).version }}"
+          tags=(${{ matrix.npm_tags }})
+
+          # Exchange the GitHub OIDC token for an npm registry token so
+          # that npm publish and npm dist-tag add share the same auth.
+          # npm only runs this exchange internally for publish (oidc.js:141)
+          # and does not persist the token, so dist-tag add would fail
+          # without doing it explicitly here.
+          # Audience format and exchange endpoint from npm/lib/utils/oidc.js.
           oidc_token=$(curl -sS -fH \
             "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=npm" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=npm:registry.npmjs.org" \
             | jq -r '.value')
-          export NODE_AUTH_TOKEN="$oidc_token"
+          npm_token=$(curl -sS -fX POST \
+            -H "Authorization: Bearer $oidc_token" \
+            -H "Content-Type: application/json" \
+            "https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/dd-trace" \
+            | jq -r '.token')
+          export NODE_AUTH_TOKEN="$npm_token"
 
-          tags=(${{ matrix.npm_tags }})
-          npm publish --tag "${tags[0]}"
-          version="${{ fromJson(steps.pkg.outputs.json).version }}"
+          # Idempotent: skip publish if this version already exists so
+          # that a rerun after a partial failure can still repair dist-tags,
+          # git tags, release notes, and docs.
+          if npm view "dd-trace@$version" version 2>/dev/null | grep -qF "$version"; then
+            echo "Version $version already published, skipping npm publish"
+          else
+            npm publish --tag "${tags[0]}"
+          fi
+
+          # Always reconcile all expected dist-tags.
           for tag in "${tags[@]:1}"; do
             npm dist-tag add "dd-trace@$version" "$tag"
           done
-      - run: |
-          git tag v${{ fromJson(steps.pkg.outputs.json).version }}
-          git push https://x-access-token:${{ steps.octo-sts.outputs.token }}@github.com/${{ github.repository }}.git v${{ fromJson(steps.pkg.outputs.json).version }}
+      - name: Tag release
+        run: |
+          version="${{ fromJson(steps.pkg.outputs.json).version }}"
+          remote="https://x-access-token:${{ steps.octo-sts.outputs.token }}@github.com/${{ github.repository }}.git"
+          if git ls-remote --tags "$remote" "v$version" | grep -q "v$version"; then
+            echo "Tag v$version already exists, skipping"
+          else
+            git tag "v$version"
+            git push "$remote" "v$version"
+          fi
       - name: Release notes
         run: |
           if [ "${{ needs.setup.outputs.is_latest }}" = "true" ]; then
