@@ -70,16 +70,21 @@ try {
   const proposalCommits = capture(
     `git --no-pager log --pretty=format:"%H" v${releaseLine}.x..${proposalBranch}`
   ).split('\n')
+  const versionCommit = capture(`git --no-pager log -1 --pretty=format:"%s" ${proposalBranch}`)
+
+  if (versionCommit !== `v${newVersion}`) {
+    fatal(`Validation failed because ${proposalBranch} does not have v${newVersion} as its latest commit.`)
+  }
 
   run(`git checkout -b ${tempBranch}`)
 
-  const versionCommit = proposalCommits[0]
+  const versionCommitSha = proposalCommits[0]
   const tempCommits = capture(`${diffCmd} --format=sha --reverse v${releaseLine}.x ${main}`)
     .split('\n')
     .slice(0, proposalCommits.length - 1)
     .join(' ')
 
-  run(`git cherry-pick ${tempCommits} ${versionCommit}`)
+  run(`git cherry-pick ${tempCommits} ${versionCommitSha}`)
 
   const diff = capture(`git --no-pager diff ${proposalBranch}..${tempBranch}`)
 

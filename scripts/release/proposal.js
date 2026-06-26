@@ -142,12 +142,25 @@ try {
 
   pass(`v${newVersion}-proposal`)
 
+  start('Normalize release proposal branch')
+
+  const versionCommit = getVersionCommit(`v${releaseLine}.x`, newVersion)
+  if (versionCommit) {
+    if (versionCommit === capture('git rev-parse HEAD')) {
+      run('git reset --hard HEAD~1')
+    } else {
+      run(`git rebase --onto ${versionCommit}^ ${versionCommit}`)
+    }
+
+    pass(versionCommit)
+  } else {
+    pass('none')
+  }
+
   start('Check for new changes')
 
   // Get the hashes of the last version and the commits to add.
-  const lastCommit = capture('git log -1 --pretty=%B')
-  const branchCommitCount = Number.parseInt(capture(`git rev-list --count v${releaseLine}.x..HEAD`), 10)
-  const existingCherryPicked = lastCommit === `v${newVersion}` ? branchCommitCount - 1 : branchCommitCount
+  const existingCherryPicked = countExistingCherryPicks(`v${releaseLine}.x`, allMainShas)
   const proposalShas = allMainShas.slice(existingCherryPicked)
   const shasToApply = proposalShas.slice(0, Math.max(0, MAX_CHERRY_PICKS - existingCherryPicked))
   const truncated = shasToApply.length < proposalShas.length
@@ -164,11 +177,6 @@ try {
     pass(`\n${newChanges}${truncationNote}`)
 
     start('Apply changes from the main branch')
-
-    // We have new commits to add, so revert the version commit if it exists.
-    if (lastCommit === `v${newVersion}`) {
-      run('git reset --hard HEAD~1')
-    }
 
     // Cherry pick commits up to the GitHub rebase limit.
     try {
@@ -324,4 +332,71 @@ function getContributorsBySha (base, head) {
   }
 
   return contributors
+}
+
+/**
+ * Find the existing version bump commit on a proposal branch.
+ *
+ * @param {string} base Release branch the proposal lands on, e.g. `v5.x`.
+ * @param {string} version Release version without the leading `v`.
+ * @returns {string|undefined} Commit hash for the version bump, if present.
+ */
+function getVersionCommit (base, version) {
+  const commits = capture(`git log --format=%H%x00%s ${base}..HEAD`)
+    .split('\n')
+    .filter(Boolean)
+
+  for (const commit of commits) {
+    const [sha, subject] = commit.split('\x00')
+    if (subject === `v${version}`) return sha
+  }
+}
+
+/**
+ * Count the contiguous main commits already cherry-picked onto the proposal.
+ *
+ * @param {string} base Release branch the proposal lands on, e.g. `v5.x`.
+ * @param {string[]} mainShas Main branch commits eligible for the release.
+ * @returns {number} Count of already-applied main commits from the start of `mainShas`.
+ */
+function countExistingCherryPicks (base, mainShas) {
+  const proposalShas = capture(`git log --format=%H ${base}..HEAD`)
+    .split('\n')
+    .filter(Boolean)
+
+  const proposalPatchIds = new Set(getPatchIdsBySha(proposalShas).values())
+  const mainPatchIds = getPatchIdsBySha(mainShas)
+  let count = 0
+
+  for (const sha of mainShas) {
+    const patchId = mainPatchIds.get(sha)
+    if (!patchId || !proposalPatchIds.has(patchId)) break
+    count++
+  }
+
+  return count
+}
+
+/**
+ * Map commit hashes to their stable Git patch IDs.
+ *
+ * @param {string[]} shas Commit hashes to inspect.
+ * @returns {Map<string, string>} Stable patch ID by commit hash.
+ */
+function getPatchIdsBySha (shas) {
+  const patchIdsBySha = new Map()
+  const chunkSize = 50
+
+  for (let i = 0; i < shas.length; i += chunkSize) {
+    const chunk = shas.slice(i, i + chunkSize)
+    const output = capture(`git show --format=medium --no-ext-diff ${chunk.join(' ')} | git patch-id --stable`)
+
+    for (const line of output.split('\n')) {
+      if (!line) continue
+      const [patchId, sha] = line.split(' ')
+      patchIdsBySha.set(sha, patchId)
+    }
+  }
+
+  return patchIdsBySha
 }
