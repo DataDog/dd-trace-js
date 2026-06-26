@@ -99,8 +99,8 @@ versions.forEach((version) => {
                 [DD_CAPABILITIES_FAILED_TEST_REPLAY]: '1',
               })
               // capabilities logic does not overwrite test session name
-              assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session-name')
-              assert.strictEqual(metadata['*'][TEST_COMMAND], 'vitest run')
+              assert.strictEqual(metadata.test_levels[TEST_SESSION_NAME], 'my-test-session-name')
+              assert.strictEqual(metadata.test_levels[TEST_COMMAND], 'vitest run')
             })
           })
 
