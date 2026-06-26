@@ -13,12 +13,37 @@ import { isRelativeRequire } from './packages/datadog-instrumentations/src/helpe
 
 // This file must support Node.js 12.0.0 syntax
 
+const { builtinModules } = Module
 const regexpEscape = regexpEscapeModule.default
 const require = Module.createRequire(import.meta.url)
 let syncImportInTheMiddleHook
 
-// For some reason `getEnvironmentVariable` is not otherwise available to ESM.
-const env = configHelper.getEnvironmentVariable
+// The config helper's named exports aren't visible to ESM; destructure the default.
+const { getValueFromEnvSources } = configHelper
+
+// Substrings of resolved URLs that import-in-the-middle must never wrap: re-export
+// shims and internal helper graphs that break when proxied, plus iitm's own files
+// (via `middle`). One alternation so a single test() covers every excluded load.
+export const iitmExclusionRegExp = /middle|langsmith|openai\/_shims|openai\/resources\/chat\/completions\/messages|openai\/agents-core\/dist\/shims|@anthropic-ai\/sdk\/_shims/
+
+// Instrumented bare specifiers (`import 'express'`, builtins, symlinked or
+// workspace packages) match against the specifier (the Set); their files inside
+// node_modules match against the URL (the alternation). regexpEscape guards
+// against a regex metacharacter entering a package name.
+const includeModuleNames = new Set()
+let moduleNameAlternation = ''
+for (const moduleName of Object.keys(hooks)) {
+  // Relative hooks resolve outside node_modules and are not instrumented here.
+  if (isRelativeRequire(moduleName)) continue
+  includeModuleNames.add(moduleName)
+  // iitm matches a built-in by its node: specifier too, so mirror that and
+  // wrap `import 'node:crypto'` as well as `import 'crypto'`.
+  if (builtinModules.includes(moduleName)) includeModuleNames.add(`node:${moduleName}`)
+  if (moduleNameAlternation !== '') moduleNameAlternation += '|'
+  moduleNameAlternation += regexpEscape(moduleName)
+}
+
+const nodeModulesIncludeSource = `node_modules/(?:${moduleNameAlternation})/(?!node_modules).+`
 
 function initialize (data = {}) {
   prepareImportInTheMiddleOptions(data)
@@ -26,14 +51,57 @@ function initialize (data = {}) {
 }
 
 function prepareImportInTheMiddleOptions (data = {}) {
-  if (data.include == null) data.include = []
-  if (data.exclude == null) data.exclude = []
-
-  addInstrumentations(data)
-  addSecurityControls(data)
-  addExclusions(data)
+  // A consumer-owned shouldInclude predicate takes over the wrapping decision, so
+  // iitm ignores the include/exclude arrays. Building the matcher here keeps the
+  // synchronous and asynchronous loaders on one matching implementation.
+  data.shouldInclude = createShouldInclude(getValueFromEnvSources('DD_IAST_SECURITY_CONTROLS_CONFIGURATION'))
 
   return data
+}
+
+/**
+ * Builds the import-in-the-middle `shouldInclude(url, specifier)` predicate. iitm
+ * calls it for every resolved module and wraps the module when the result is
+ * truthy; supplying it replaces iitm's include/exclude list scan.
+ *
+ * @param {string} [securityControlsConfig] Raw `DD_IAST_SECURITY_CONTROLS_CONFIGURATION`;
+ *   each entry's module path is instrumented in addition to the hook table.
+ */
+function createShouldInclude (securityControlsConfig) {
+  const includeRegExp = new RegExp(buildIncludeSource(securityControlsConfig))
+
+  /**
+   * @param {string} url Resolved module URL (`file:`, `node:`, ...).
+   * @param {string} specifier Original import specifier.
+   */
+  return function shouldInclude (url, specifier) {
+    return (includeModuleNames.has(specifier) || includeRegExp.test(url)) && !iitmExclusionRegExp.test(url)
+  }
+}
+
+/**
+ * Appends each `DD_IAST_SECURITY_CONTROLS_CONFIGURATION` module path — the third
+ * `:`-separated segment of every `;`-separated `<type>:<marks>:<module>:<...>` entry —
+ * to the include alternation, escaped.
+ *
+ * @param {string} [securityControlsConfig] Raw `DD_IAST_SECURITY_CONTROLS_CONFIGURATION`.
+ */
+function buildIncludeSource (securityControlsConfig) {
+  if (!securityControlsConfig) return nodeModulesIncludeSource
+
+  let includeSource = nodeModulesIncludeSource
+  for (const entry of securityControlsConfig.split(';')) {
+    if (!entry) continue
+    const first = entry.indexOf(':')
+    if (first === -1) continue
+    const second = entry.indexOf(':', first + 1)
+    if (second === -1) continue
+    const third = entry.indexOf(':', second + 1)
+
+    const subpath = entry.slice(second + 1, third === -1 ? undefined : third).trim()
+    if (subpath) includeSource += `|${regexpEscape(subpath)}`
+  }
+  return includeSource
 }
 
 function load (url, context, nextLoad) {
@@ -112,52 +180,5 @@ function registerSyncLoaderHooks (data = {}) {
 
   return true
 }
-
-function addInstrumentations (data) {
-  const instrumentations = Object.keys(hooks)
-
-  for (const moduleName of instrumentations) {
-    // Skip instrumentation hooks with relative module names
-    // since there is no current business need of instrumenting imports outside of the node_modules folder
-    if (!isRelativeRequire(moduleName)) {
-      data.include.push(new RegExp(`node_modules/${moduleName}/(?!node_modules).+`), moduleName)
-    }
-  }
-}
-
-function addSecurityControls (data) {
-  const raw = env('DD_IAST_SECURITY_CONTROLS_CONFIGURATION')
-  if (!raw) return
-  // Parse `;`-separated entries and take the 3rd `:`-separated segment.
-  // Expected form (per entry): `<...>:<...>:<subpath>:<...>`
-  const entries = raw.split(';')
-  for (const entry of entries) {
-    if (entry) {
-      const first = entry.indexOf(':')
-      if (first === -1) continue
-      const second = entry.indexOf(':', first + 1)
-      if (second === -1) continue
-      const third = entry.indexOf(':', second + 1)
-
-      const subpath = entry.slice(second + 1, third === -1 ? undefined : third).trim()
-      if (subpath) {
-        data.include.push(new RegExp(regexpEscape(subpath)))
-      }
-    }
-  }
-}
-
-function addExclusions (data) {
-  data.exclude.push(...iitmExclusions)
-}
-
-export const iitmExclusions = [
-  /middle/,
-  /langsmith/,
-  /openai\/_shims/,
-  /openai\/resources\/chat\/completions\/messages/,
-  /openai\/agents-core\/dist\/shims/,
-  /@anthropic-ai\/sdk\/_shims/,
-]
 
 export { initialize, load, registerSyncLoaderHooks, resolve }
