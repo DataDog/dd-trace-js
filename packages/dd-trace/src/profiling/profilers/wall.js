@@ -148,7 +148,7 @@ class NativeWallProfiler {
     this.#endpointCollectionEnabled = config.DD_PROFILING_ENDPOINT_COLLECTION_ENABLED
     this.#flushIntervalMillis = flushInterval
     this.#samplingIntervalMicros = SAMPLING_INTERVAL * 1000
-    this.#telemetryHeartbeatIntervalMillis = config.telemetry.heartbeatInterval
+    this.#telemetryHeartbeatIntervalMillis = config.telemetry.DD_TELEMETRY_HEARTBEAT_INTERVAL
     this.#timelineEnabled = config.DD_PROFILING_TIMELINE_ENABLED
     this.#v8ProfilerBugWorkaroundEnabled = config.DD_PROFILING_V8_PROFILER_BUG_WORKAROUND
 

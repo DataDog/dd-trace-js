@@ -27,8 +27,8 @@ describe('Appsec User Telemetry metrics', () => {
   describe('if enabled', () => {
     beforeEach(() => {
       const config = getConfig()
-      config.telemetry.enabled = true
-      config.telemetry.metrics = true
+      config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED = true
+      config.telemetry.DD_TELEMETRY_METRICS_ENABLED = true
 
       appsecTelemetry.enable(config)
     })
