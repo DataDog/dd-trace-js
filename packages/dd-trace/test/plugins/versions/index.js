@@ -1,6 +1,6 @@
 'use strict'
 
-const { clean, coerce, intersects, subset } = require('semver')
+const { clean, coerce, intersects, satisfies, subset } = require('semver')
 
 const latests = require('./package.json').dependencies
 
@@ -14,6 +14,22 @@ const nonConsecutiveMajorPackages = new Set([
   'graphql', // jumps from 0.x straight to 14.x (no 1.x–13.x); 14.x–17.x are covered via the apollo externals entries
   '@redis/client', // jumps from 2.x to 5.x (no 3.x–4.x)
 ])
+
+// Versions the matrix installs but must not run, keyed by module name. `withVersions()` skips any resolved
+// version matching a range here and surfaces the reason as a pending test. Each entry is a stop-gap: keep the reason
+// a TODO so a fixed version drops the entry instead of rotting, and scope the range as narrowly as the break warrants.
+/** @type {Record<string, Array<{ range: string, reason: string }>>} */
+const brokenVersions = {
+  // TODO: record VCR cassettes for the ai 4.x line; `versions/ai@4` resolves to the newest 4.x, which has no cassette,
+  // so the test would hit the live API. 4.0.x (cassetted) and 5.x/6.x stay covered.
+  ai: [{ range: '>=4.1.0 <5.0.0', reason: 'no VCR cassette for the ai 4.x latest (TODO: record cassettes)' }],
+  // TODO: record VCR cassettes for the @langchain/core 0.x line above 0.1. `@langchain/core@0` resolves to the newest
+  // 0.x (0.3.x), which has no cassette, so the LLMObs langchain specs hit the live API. The 0.1.0 floor and the 1.x
+  // latest stay covered.
+  '@langchain/core': [
+    { range: '>=0.2.0 <1.0.0', reason: 'no VCR cassette for the @langchain/core 0.x latest (TODO: record cassettes)' },
+  ],
+}
 
 /**
  * @param {string} name
@@ -55,13 +71,23 @@ function capSubrange (name, subrange) {
  * maps to a `versions/<name>@<key>` workspace folder; the install script and `withVersions()` share this so the set of
  * installed folders and the set of tested folders never drift apart.
  *
- * Per range, this yields the lowest supported version (pinned exactly), the latest of every major in between, and the
- * range itself (which resolves to the newest supported version). The top major is derived from the pinned latest in
- * `package.json` rather than a registry lookup, so a major that does not exist makes the install fail loudly instead of
- * silently skipping versions — which is the signal to mark the range as non-consecutive (see `consecutiveMajors`).
+ * Per declared range this yields the lowest supported version (pinned exactly) and the newest version of every major
+ * the range spans, keyed by the bare major so the key resolves to that major's latest. Covering each major explicitly
+ * (rather than emitting the raw range, which resolves only to the newest version of the whole range) makes sure the
+ * floor major's latest is tested too. The top major is derived from the pinned latest in `package.json` rather than a
+ * registry lookup, so a major that was never published makes the install fail loudly — the signal to add the package
+ * to `nonConsecutiveMajorPackages`.
  *
- * Notations that resolve to the same exact version (`1.2.3`, `=1.2.3`, `v1.2.3`) collapse to a single key, so a version
- * is never installed twice under different spellings.
+ * A bare-major key resolves to that major's newest published version, so it can only be used where the declared range
+ * spans the major in full. When the range caps inside its top major (an upper bound below `<${major + 1}.0.0`), the
+ * top major keeps the declared range instead, which resolves to the newest version the range still allows — a bare
+ * key there would overshoot the ceiling (`>=2.1 <=3.0.0` keyed `3` installs the major's latest, a version above the
+ * declared `<=3.0.0` that the plugin never supported).
+ *
+ * Notations that resolve to the same exact version (`1.2.3`, `=1.2.3`, `v1.2.3`) collapse to a single key, and `*`
+ * collapses to the latest major (the same version an open-ended range resolves to), so a version is never installed
+ * twice under different spellings. A floor that equals the pinned latest also drops the redundant top-major key,
+ * since the pinned `package.json` proves they resolve to the same version.
  *
  * @param {string} name The module name, e.g. `mongodb`.
  * @param {string[]} versions The declared version entries, e.g. `['>=3.3 <5', '5', '>=6']`.
@@ -78,10 +104,13 @@ function getVersionList (name, versions, nonConsecutiveMajors = nonConsecutiveMa
   }
 
   for (const range of versions) {
-    if (!range) continue
+    // An empty entry is a setup mistake (a stray comma or an undefined slot); fail loudly rather than skip silently.
+    if (!range) {
+      throw new Error(`Empty version entry declared for '${name}'. Each declared version must be a non-empty range.`)
+    }
 
     if (range === '*') {
-      add('*', range)
+      add(latestMajor(name), range)
       continue
     }
 
@@ -97,17 +126,71 @@ function getVersionList (name, versions, nonConsecutiveMajors = nonConsecutiveMa
 
     add(floor.version, range)
 
-    if (!nonConsecutiveMajors.has(name)) {
-      const topMajor = highestMajor(name, range, floor.major)
-      for (let major = floor.major + 1; major < topMajor; major++) {
-        add(`>=${major}.0.0 <${major + 1}.0.0`, range)
+    const topMajor = highestMajor(name, range, floor.major)
+
+    const addMajor = (major) => {
+      if (!intersects(`>=${major}.0.0 <${major + 1}.0.0`, range)) return
+      // The top major is the only one the range can cap inside; lower majors are always spanned in full. A capped top
+      // keeps the declared range so it resolves below the ceiling instead of jumping to the major's latest.
+      if (major === topMajor && !reachesMajorCeiling(major, range)) {
+        add(range, range)
+      } else {
+        add(String(major), range)
       }
     }
 
-    add(range, range)
+    if (nonConsecutiveMajors.has(name)) {
+      // Only the in-between majors were never published. The floor major and the top major both exist, so add the
+      // latest of each (skipping the uncertain middle, which is what would make the install fail).
+      addMajor(floor.major)
+      if (topMajor > floor.major) addMajor(topMajor)
+    } else {
+      for (let major = floor.major; major <= topMajor; major++) {
+        addMajor(major)
+      }
+    }
   }
 
+  // The bare-major key for the pinned latest's major resolves to the pin itself, so when a declared floor already pins
+  // that exact version the major key would install the same thing. Drop it. This is the only such redundancy the
+  // pinned upper bound lets us prove; for lower majors the newest published version is unknown without the registry.
+  const pinned = coerce(latests[name])
+  if (pinned && entries.has(pinned.version)) entries.delete(String(pinned.major))
+
   return [...entries.values()]
+}
+
+// Higher than any real release within a major. A range that still admits it does not cap inside the major, so a
+// bare-major key is safe; a range that excludes it ends mid-major and must keep its own upper bound.
+const MAJOR_CEILING_PROBE = 999_999
+
+/**
+ * Whether `range` admits versions all the way to the top of `major` (a clean `<${major + 1}.0.0` upper bound, or none).
+ * When it does not, a bare-major key would resolve past the declared ceiling, so the caller keeps the declared range.
+ *
+ * @param {number} major
+ * @param {string} range
+ * @returns {boolean}
+ */
+function reachesMajorCeiling (major, range) {
+  return satisfies(`${major}.${MAJOR_CEILING_PROBE}.${MAJOR_CEILING_PROBE}`, range)
+}
+
+/**
+ * The latest major of `name` as a bare-major version key. `*` resolves here so it de-duplicates against an open-ended
+ * range whose top resolves to the same newest version.
+ *
+ * @param {string} name
+ * @returns {string}
+ */
+function latestMajor (name) {
+  const latest = coerce(latests[name])
+  if (!latest) {
+    throw new Error(
+      `Latest version for '${name}' needs to be defined in 'packages/dd-trace/test/plugins/versions/package.json'.`
+    )
+  }
+  return String(latest.major)
 }
 
 /**
@@ -159,7 +242,22 @@ function resolvePluginVersions ({ name, declaredVersions, honourEnvRange = true,
   return { versionList, unversioned }
 }
 
+/**
+ * The reason `version` of `name` is marked broken (and must be skipped), or `undefined` when it is testable.
+ *
+ * @param {string} name
+ * @param {string} version A concrete, resolved version.
+ * @param {Record<string, Array<{ range: string, reason: string }>>} [broken] Injectable for testing.
+ * @returns {string|undefined}
+ */
+function brokenVersionReason (name, version, broken = brokenVersions) {
+  for (const { range, reason } of broken[name] ?? []) {
+    if (satisfies(version, range)) return reason
+  }
+}
+
 module.exports = {
+  brokenVersionReason,
   getCappedRange,
   getVersionList,
   resolvePluginVersions,
