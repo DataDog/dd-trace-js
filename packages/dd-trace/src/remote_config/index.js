@@ -12,7 +12,7 @@ const processTags = require('../process-tags')
 const Scheduler = require('./scheduler')
 const { UNACKNOWLEDGED, ACKNOWLEDGED, ERROR } = require('./apply_states')
 
-const clientId = uuid()
+let clientId = uuid()
 
 const DEFAULT_CAPABILITY = Buffer.alloc(1).toString('base64') // 0x00
 
@@ -575,4 +575,23 @@ function supportsAckCallback (handler) {
   return result
 }
 
+/**
+ * Regenerates the RC client ID from the kernel CSPRNG and updates the config
+ * tag in-place. Must be called after id.reseed() so that kernelUUID() draws
+ * from post-resume /dev/urandom rather than the frozen OpenSSL DRBG.
+ *
+ * The RC client reads `clientId` through a getter on every poll, so the update
+ * takes effect immediately without restarting RC. Only updates the
+ * `_dd.rc.client_id` tag when RC is enabled (constructor has run).
+ *
+ * @param {import('../config/config-base')} config
+ */
+function refreshClientId (config) {
+  clientId = require('../id').kernelUUID()
+  if (config.tags['_dd.rc.client_id']) {
+    config.tags['_dd.rc.client_id'] = clientId
+  }
+}
+
 module.exports = RemoteConfig
+module.exports.refreshClientId = refreshClientId
