@@ -13,64 +13,56 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  publish-v3:
-    if: github.event_name == 'push' && github.event.ref == 'refs/heads/v3.x'
+  setup:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    environment:
-      name: npm
-      url: https://npmjs.com/package/dd-trace
-    permissions:
-      id-token: write
+    # Space-separated npm dist-tags for each release line.
+    # The latest branch always gets "latest" prepended automatically.
+    # Add a line here when creating a new release branch.
     env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      DIST_TAGS: |
+        v3.x latest-node14
+        v4.x latest-node16
+        v5.x latest-node18 latest-node20
+    outputs:
+      npm_tags: ${{ steps.compute.outputs.npm_tags }}
+      is_latest: ${{ steps.compute.outputs.is_latest }}
     steps:
-      - uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
-        id: octo-sts
-        with:
-          scope: DataDog/dd-trace-js
-          policy: self.github.release.push-tags
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/node
-      - run: npm publish --tag latest-node14
-      - id: pkg
+      - id: compute
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          content=`cat ./package.json | tr '\n' ' '`
-          echo "json=$content" >> $GITHUB_OUTPUT
-      - run: |
-          git tag v${{ fromJson(steps.pkg.outputs.json).version }}
-          git push https://x-access-token:${{ steps.octo-sts.outputs.token }}@github.com/${{ github.repository }}.git v${{ fromJson(steps.pkg.outputs.json).version }}
-      - run: node scripts/release/notes
+          branch="${{ github.ref_name }}"
 
-  publish-v4:
-    if: github.event_name == 'push' && github.event.ref == 'refs/heads/v4.x'
-    runs-on: ubuntu-latest
-    environment:
-      name: npm
-      url: https://npmjs.com/package/dd-trace
-    permissions:
-      id-token: write
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
-        id: octo-sts
-        with:
-          scope: DataDog/dd-trace-js
-          policy: self.github.release.push-tags
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-      - uses: ./.github/actions/node
-      - run: npm publish --tag latest-node16
-      - id: pkg
-        run: |
-          content=`cat ./package.json | tr '\n' ' '`
-          echo "json=$content" >> $GITHUB_OUTPUT
-      - run: |
-          git tag v${{ fromJson(steps.pkg.outputs.json).version }}
-          git push https://x-access-token:${{ steps.octo-sts.outputs.token }}@github.com/${{ github.repository }}.git v${{ fromJson(steps.pkg.outputs.json).version }}
-      - run: node scripts/release/notes
+          # Find the latest release line by intersecting the GitHub branch
+          # list with DIST_TAGS. This ensures a branch that exists in the
+          # repo but is not yet wired into the config cannot steal the
+          # latest tag before triggers and dist-tag mappings are updated.
+          configured=$(echo "$DIST_TAGS" | awk '{print $1}')
+          latest=$(gh api "repos/${{ github.repository }}/branches" \
+            --paginate \
+            --jq '.[].name' \
+            | grep -E '^v[0-9]+\.x$' \
+            | grep -Fx -f <(echo "$configured") \
+            | sort -V \
+            | tail -1)
 
-  publish-latest:
-    if: github.event_name == 'push' && github.event.ref == 'refs/heads/v5.x'
+          # Collect the tags defined for this branch (everything after the branch name)
+          branch_tags=$(echo "$DIST_TAGS" | awk -v b="$branch" '$1==b{$1=""; sub(/^ /,""); print}')
+
+          if [ "$branch" = "$latest" ]; then
+            npm_tags="latest ${branch_tags:-latest-${branch%.x}}"
+            is_latest="true"
+          else
+            npm_tags="${branch_tags:-latest-${branch%.x}}"
+            is_latest="false"
+          fi
+
+          echo "npm_tags=$npm_tags" >> "$GITHUB_OUTPUT"
+          echo "is_latest=$is_latest" >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: setup
     runs-on: ubuntu-latest
     environment:
       name: npm
@@ -89,20 +81,76 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/node
-      - run: npm publish
       - id: pkg
         run: |
           content=`cat ./package.json | tr '\n' ' '`
           echo "json=$content" >> $GITHUB_OUTPUT
-      - run: |
-          git tag v${{ fromJson(steps.pkg.outputs.json).version }}
-          git push https://x-access-token:${{ steps.octo-sts.outputs.token }}@github.com/${{ github.repository }}.git v${{ fromJson(steps.pkg.outputs.json).version }}
-      - run: node scripts/release/notes --latest
+      - name: Publish
+        run: |
+          version="${{ fromJson(steps.pkg.outputs.json).version }}"
+          tags=(${{ needs.setup.outputs.npm_tags }})
+
+          # Exchange the GitHub OIDC token for an npm registry token so
+          # that npm publish and npm dist-tag add share the same auth.
+          # npm only runs this exchange internally for publish (oidc.js:141)
+          # and does not persist the token, so dist-tag add would fail
+          # without doing it explicitly here.
+          # Audience format and exchange endpoint from npm/lib/utils/oidc.js.
+          oidc_token=$(curl -sS -fH \
+            "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=npm:registry.npmjs.org" \
+            | jq -r '.value')
+          npm_token=$(curl -sS -fX POST \
+            -H "Authorization: Bearer $oidc_token" \
+            -H "Content-Type: application/json" \
+            "https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/dd-trace" \
+            | jq -r '.token')
+          export NODE_AUTH_TOKEN="$npm_token"
+
+          # Idempotent: skip publish if this version already exists so
+          # that a rerun after a partial failure can still repair dist-tags,
+          # git tags, release notes, and docs.
+          if npm view "dd-trace@$version" version 2>/dev/null | grep -qF "$version"; then
+            local_integrity=$(npm pack --dry-run --json 2>/dev/null | jq -r '.[0].integrity')
+            published_integrity=$(npm view "dd-trace@$version" dist.integrity 2>/dev/null)
+            if [ "$local_integrity" != "$published_integrity" ]; then
+              echo "ERROR: package content at current HEAD differs from dd-trace@$version on the registry" >&2
+              echo "  Published: $published_integrity" >&2
+              echo "  Current:   $local_integrity" >&2
+              exit 1
+            fi
+            echo "Version $version already published with identical content, skipping npm publish"
+          else
+            npm publish --tag "${tags[0]}"
+          fi
+
+          # Always reconcile all expected dist-tags.
+          for tag in "${tags[@]:1}"; do
+            npm dist-tag add "dd-trace@$version" "$tag"
+          done
+      - name: Tag release
+        run: |
+          version="${{ fromJson(steps.pkg.outputs.json).version }}"
+          remote="https://x-access-token:${{ steps.octo-sts.outputs.token }}@github.com/${{ github.repository }}.git"
+          if git ls-remote --tags "$remote" "v$version" | grep -q "v$version"; then
+            echo "Tag v$version already exists, skipping"
+          else
+            git tag "v$version"
+            git push "$remote" "v$version"
+          fi
+      - name: Release notes
+        run: |
+          if [ "${{ needs.setup.outputs.is_latest }}" = "true" ]; then
+            node scripts/release/notes --latest
+          else
+            node scripts/release/notes
+          fi
         env:
           GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
 
   docs:
-    needs: "publish-latest"
+    needs: [setup, publish]
+    if: needs.setup.outputs.is_latest == 'true'
     runs-on: ubuntu-latest
     permissions:
       id-token: write
