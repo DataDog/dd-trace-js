@@ -11,10 +11,10 @@ const processTags = require('../../process-tags')
 /** @typedef {import('../../config/config-base')} TracerConfig */
 
 /**
- * Maps the canonical profiling.enabled value to the activation reported in the
+ * Maps the canonical profiling.DD_PROFILING_ENABLED value to the activation reported in the
  * profile event.
  *
- * @param {string} [enabled] - config.profiling.enabled ('true' | 'false' | 'auto')
+ * @param {string} [enabled] - config.profiling.DD_PROFILING_ENABLED ('true' | 'false' | 'auto')
  * @returns {string}
  */
 function getActivation (enabled) {
@@ -38,7 +38,7 @@ class EventSerializer {
     this.#service = config.service
     this.#appVersion = config.version
     this.#libraryInjected = !!config.DD_INJECTION_ENABLED
-    this.#activation = getActivation(config.profiling?.enabled)
+    this.#activation = getActivation(config.profiling?.DD_PROFILING_ENABLED)
   }
 
   /**

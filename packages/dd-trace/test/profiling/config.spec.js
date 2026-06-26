@@ -76,7 +76,7 @@ describe('config', () => {
       service: tracerConfig.service,
       version: tracerConfig.version,
       env: tracerConfig.env,
-      activation: getActivation(tracerConfig.profiling.enabled),
+      activation: getActivation(tracerConfig.profiling.DD_PROFILING_ENABLED),
       uploadTimeout: tracerConfig.DD_PROFILING_UPLOAD_TIMEOUT,
       pprofPrefix: tracerConfig.DD_PROFILING_PPROF_PREFIX,
     }
@@ -828,7 +828,7 @@ describe('config', () => {
   })
 
   describe('getActivation', () => {
-    it('should map the canonical profiling.enabled value to an activation', () => {
+    it('should map the canonical profiling.DD_PROFILING_ENABLED value to an activation', () => {
       assert.strictEqual(getActivation('auto'), 'auto')
       assert.strictEqual(getActivation('true'), 'manual')
       assert.strictEqual(getActivation('false'), 'unknown')

@@ -55,7 +55,7 @@ function onErrorLog (msg) {
 }
 
 function start (config) {
-  if (!config.telemetry.logCollection || enabled) return
+  if (!config.telemetry.DD_TELEMETRY_LOG_COLLECTION_ENABLED || enabled) return
 
   enabled = true
 
