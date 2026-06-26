@@ -264,7 +264,7 @@ class Tracer extends NoopProxy {
    * @param {import('./config/config-base')} config
    */
   #registerMicroVmRunHook (config) {
-    const { channel } = require('diagnostics_channel')
+    const { channel } = require('dc-polyfill')
     const ch = channel('http.server.request.start')
     let done = false
 
