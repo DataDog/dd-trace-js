@@ -112,6 +112,19 @@ validator injects Test Optimization initialization itself.
   runtime managers such as Volta, Mise, asdf, nvm, or fnm. If the default shell Node violates the
   declared runtime and a compatible local runtime is available, run preflights and manifest commands
   through that runtime and record the reason in `notes`.
+- Preserve the repository's declared package-manager version before judging a command failure.
+  Check `package.json` `packageManager`, lockfiles, and workspace metadata. For pnpm and Yarn
+  projects, prefer the repository's Corepack/package-manager resolution over a bare package-manager
+  binary from the agent runtime. Do not wrap a package-manager command with a runtime manager such
+  as `mise x node@22 -- pnpm ...` unless you first verify that command uses the repository's
+  declared package-manager version. If it does not, use the Corepack-backed command shape that
+  matches `packageManager`, or mark the framework `requires_manual_setup` with the observed version
+  mismatch.
+- Prefer direct framework runner commands over broad package-script wrappers when both are
+  equivalent and safe. For example, if `scripts.test` is only `vitest run`, prefer the package
+  manager's direct runner form such as `pnpm vitest run <file>` over `pnpm test <file>`. This keeps
+  validation focused on the test process and avoids package-script wrappers that can receive
+  `NODE_OPTIONS` without propagating Test Optimization initialization to the final runner.
 - Do not use benchmark or performance commands as representative test commands. For Vitest,
   `vitest bench`, benchmark package scripts, and `*.bench.*` files that use `bench` are not normal
   test runs and may emit session/module/suite events without per-test events. If no normal
@@ -185,6 +198,14 @@ or Datadog-specific environment variables in the manifest's `NODE_OPTIONS`. Reco
 package script and the direct equivalent in `notes`. If the package script is the only runnable
 form, record that the inline `NODE_OPTIONS` may prevent validation and mark the framework
 `requires_manual_setup`.
+
+Do not use a test framework's own source-tree runner as customer validation evidence. For example,
+inside the Mocha repository, `node ./bin/mocha.js ...` runs Mocha's local source files rather than
+an installed `mocha` package from `node_modules`; that is not the same shape as a customer project
+using Mocha. If the repository package is the framework itself and the command invokes its local
+`bin/` or `src/` runner, prefer another real project framework in the repository. If none exists,
+mark that framework `detected_not_runnable` and explain that the available command runs the
+framework source tree.
 
 ## Manifest Writing Checkpoint
 
@@ -376,6 +397,16 @@ Respect the repository's declared runtime before classifying a command as broken
 metadata. If the required Node version is available through the local toolchain, use it in the
 selected command. If the required runtime is unavailable, mark the framework `requires_manual_setup`
 and record the expected runtime and the observed failure.
+
+Respect the repository's declared package-manager version before classifying a command as broken.
+If `package.json` declares `packageManager`, verify that the selected command resolves that package
+manager to the declared version, especially when using Codex-managed runtimes, Volta, Mise, asdf,
+nvm, fnm, or Corepack. A command that passes without Datadog can still fail under validation if
+`NODE_OPTIONS` reaches a package-manager wrapper from a different toolchain instead of the final
+test runner. When a runtime manager is needed only to select Node, avoid `runtime-manager -- pnpm`
+or `runtime-manager -- yarn` shapes unless the package-manager version was verified. Prefer a
+Corepack-backed command that preserves the declared package manager, or a direct runner command
+using the package manager that the repository normally uses.
 
 If the selected command lives in a workspace package, prefer the repository's workspace-aware test
 entry point. Do not install that package independently unless the repository documents that workflow.
