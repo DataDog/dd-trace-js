@@ -41,8 +41,9 @@ jobs:
           POLLING_INTERVAL: 1
           RETRIES: 20
       # Sort every downloaded per-cell `coverage-*` artifact into one directory per integration under
-      # `coverage-upload/<group>/`. The reports are not merged here — both backends merge same-flag
-      # uploads server-side — so each cell's already-patched lcov passes through byte-for-byte.
+      # `coverage-upload/<group>/{lcov,json}/`. The reports are not merged here — both backends merge
+      # same-flag uploads server-side — so each cell's report passes through byte-for-byte. Codecov
+      # gets the istanbul JSON (carries branch/function coverage), Datadog gets the lcov.
       - if: "!cancelled()"
         run: node scripts/group-coverage.mjs
       - if: "!cancelled()"
@@ -55,21 +56,24 @@ jobs:
         env:
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
       # One Datadog upload per integration, flagged with the integration name so coverage is
-      # attributable in the Datadog UI the same way the Codecov flags attribute it.
+      # attributable in the Datadog UI the same way the Codecov flags attribute it. Datadog reads the
+      # lcov reports; it does not ingest istanbul's JSON.
       - if: "!cancelled()"
         run: |
           shopt -s nullglob
-          for dir in coverage-upload/*/; do
-            datadog-ci coverage upload "$dir" --flags "$(basename "$dir")"
+          for dir in coverage-upload/*/lcov/; do
+            datadog-ci coverage upload "$dir" --flags "$(basename "$(dirname "$dir")")"
           done
         env:
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
       # One Codecov upload per integration via the CLI directly — the codecov-action would re-validate
-      # and re-download the uploader once per group (~100×). `master-coverage` is the flag
-      # `.codecov.yml` gates `codecov/patch` on; attach it only on PRs targeting master so
-      # release-branch PRs auto-pass. The SHA/branch/PR are passed explicitly because All Green checks
-      # out the merge ref, not the head the other workflows reported coverage for. No token: the repo
-      # uploads tokenless (a Codecov token would have to be an org secret, which forks can't read).
+      # and re-download the uploader once per group (~100×). Codecov reads branch/function coverage
+      # from the istanbul JSON, so the upload points at each group's `json/` subdirectory.
+      # `master-coverage` is the flag `.codecov.yml` gates `codecov/patch` on; attach it only on PRs
+      # targeting master so release-branch PRs auto-pass. The SHA/branch/PR are passed explicitly
+      # because All Green checks out the merge ref, not the head the other workflows reported coverage
+      # for. No token: the repo uploads tokenless (a Codecov token would have to be an org secret,
+      # which forks can't read).
       - if: "!cancelled()"
         run: |
           commit_args=(--sha "$HEAD_SHA" --branch "$HEAD_BRANCH")
@@ -83,13 +87,13 @@ jobs:
             master_flag=(-F master-coverage)
           fi
           shopt -s nullglob
-          groups=(coverage-upload/*/)
+          groups=(coverage-upload/*/json/)
           [ ${#groups[@]} -gt 0 ] || exit 0
           pip install --quiet codecov-cli
           codecovcli create-commit "${commit_args[@]}"
           codecovcli create-report --sha "$HEAD_SHA"
           for dir in "${groups[@]}"; do
-            codecovcli do-upload "${upload_args[@]}" --dir "$dir" -F "$(basename "$dir")" "${master_flag[@]}"
+            codecovcli do-upload "${upload_args[@]}" --dir "$dir" -F "$(basename "$(dirname "$dir")")" "${master_flag[@]}"
           done
         env:
           GITHUB_EVENT_NAME: ${{ github.event_name }}

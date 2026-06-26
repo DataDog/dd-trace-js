@@ -5,18 +5,24 @@ import { describe, it } from 'mocha'
 import { flagOf, integrationOf, planCoverageGroups, planGroups } from './group-coverage.mjs'
 
 /**
+ * One cell's discovered report set: a `lcov` and a `json` entry per Node.js version the cell ran.
+ *
  * @param {string} name
  * @param {object} [options]
  * @param {string} [options.runId]
- * @param {number} [options.lcovCount]  Number of per-Node-version lcov files the artifact carries.
- * @returns {Array<{ runId: string, name: string, lcovPath: string }>}
+ * @param {number} [options.versions]  Number of Node.js versions the cell ran (one report set each).
+ * @returns {Array<{ runId: string, name: string, format: string, reportPath: string }>}
  */
-function files (name, { runId = '1', lcovCount = 1 } = {}) {
-  return Array.from({ length: lcovCount }, (_, index) => ({
-    runId,
-    name,
-    lcovPath: `coverage-results/${runId}/${name}/node-2${index}-x/lcov.info`,
-  }))
+function files (name, { runId = '1', versions = 1 } = {}) {
+  const out = []
+  for (let version = 0; version < versions; version++) {
+    const dir = `coverage-results/${runId}/${name}/node-2${version}-x`
+    out.push(
+      { runId, name, format: 'lcov', reportPath: `${dir}/lcov.info` },
+      { runId, name, format: 'json', reportPath: `${dir}/coverage-final.json` }
+    )
+  }
+  return out
 }
 
 describe('group-coverage', () => {
@@ -93,17 +99,19 @@ describe('group-coverage', () => {
 
   describe('planCoverageGroups', () => {
     it('keeps only the newest run when a rerun reuploads the same artifact name', () => {
-      const { lcovPathsByArtifact } = planCoverageGroups([
+      const { reportsByArtifact } = planCoverageGroups([
         ...files('coverage-plugins-axios__a-0', { runId: '100' }),
         ...files('coverage-plugins-axios__a-0', { runId: '205' }),
       ])
-      assert.deepEqual(lcovPathsByArtifact.get('coverage-plugins-axios__a-0'),
-        ['coverage-results/205/coverage-plugins-axios__a-0/node-20-x/lcov.info'])
+      const reports = reportsByArtifact.get('coverage-plugins-axios__a-0')
+      assert.ok(reports.every(report => report.reportPath.includes('/205/')), 'only the newest run survives')
     })
 
-    it('keeps every per-Node-version lcov a single artifact carries', () => {
-      const { lcovPathsByArtifact } = planCoverageGroups(files('coverage-plugins-axios__a-0', { lcovCount: 2 }))
-      assert.equal(lcovPathsByArtifact.get('coverage-plugins-axios__a-0').length, 2)
+    it('keeps both formats across every Node.js version a single artifact carries', () => {
+      const { reportsByArtifact } = planCoverageGroups(files('coverage-plugins-axios__a-0', { versions: 2 }))
+      const reports = reportsByArtifact.get('coverage-plugins-axios__a-0')
+      assert.equal(reports.filter(report => report.format === 'lcov').length, 2)
+      assert.equal(reports.filter(report => report.format === 'json').length, 2)
     })
 
     it('folds cells that share a flag but carry distinct uniqueness suffixes', () => {

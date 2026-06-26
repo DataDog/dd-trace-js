@@ -13,32 +13,38 @@ inputs:
 runs:
   using: composite
   steps:
-    # The LCOV lives at `<report-dir>/node-<version>-<label>/lcov.info`, one level below
-    # `report-dir`, so the presence check has to recurse — a top-level-only probe finds nothing and
-    # silently skips the upload, which is what starved the Datadog coverage upload of every report.
+    # The reports live at `<report-dir>/node-<version>-<label>/{lcov.info,coverage-final.json}`, one
+    # level below `report-dir`, so the presence check has to recurse — a top-level-only probe finds
+    # nothing and silently skips the upload, which is what starved the Datadog coverage upload.
+    # Both formats ship: Codecov reads branch/function coverage from the istanbul JSON, Datadog from
+    # the lcov.
     - id: check
       shell: bash
       run: |
-        count=$(find "${{ inputs.report-dir }}" -name lcov.info -type f 2>/dev/null | wc -l | tr -d ' ')
-        echo "has_lcov=$([ "$count" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+        count=$(find "${{ inputs.report-dir }}" \( -name lcov.info -o -name coverage-final.json \) -type f 2>/dev/null | wc -l | tr -d ' ')
+        echo "has_coverage=$([ "$count" -gt 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
     # The artifact name carries the grouping flag plus a per-cell suffix (`__<job>-<matrix-index>`)
     # so matrix cells that share a flag — cypress varies `spec` outside its flag — upload distinct
     # artifacts instead of clobbering each other under one name.
-    - if: github.actor != 'dependabot[bot]' && steps.check.outputs.has_lcov == 'true'
+    - if: github.actor != 'dependabot[bot]' && steps.check.outputs.has_coverage == 'true'
       id: upload
       continue-on-error: true
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: coverage-${{ inputs.flags }}__${{ github.job }}-${{ strategy.job-index }}
-        path: ${{ inputs.report-dir }}/**/lcov.info
+        path: |
+          ${{ inputs.report-dir }}/**/lcov.info
+          ${{ inputs.report-dir }}/**/coverage-final.json
         retention-days: 1
-    - if: github.actor != 'dependabot[bot]' && steps.check.outputs.has_lcov == 'true' && steps.upload.outcome == 'failure'
+    - if: github.actor != 'dependabot[bot]' && steps.check.outputs.has_coverage == 'true' && steps.upload.outcome == 'failure'
       shell: bash
       run: sleep 10
-    - if: github.actor != 'dependabot[bot]' && steps.check.outputs.has_lcov == 'true' && steps.upload.outcome == 'failure'
+    - if: github.actor != 'dependabot[bot]' && steps.check.outputs.has_coverage == 'true' && steps.upload.outcome == 'failure'
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: coverage-${{ inputs.flags }}__${{ github.job }}-${{ strategy.job-index }}
-        path: ${{ inputs.report-dir }}/**/lcov.info
+        path: |
+          ${{ inputs.report-dir }}/**/lcov.info
+          ${{ inputs.report-dir }}/**/coverage-final.json
         retention-days: 1
         overwrite: true
