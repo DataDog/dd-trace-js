@@ -25,6 +25,7 @@
       }
     },
     "lambda-inject-with-context": {
+      "iterations": 16,
       "env": {
         "VARIANT": "lambda-inject-with-context",
         "OPERATIONS": "2000000"
