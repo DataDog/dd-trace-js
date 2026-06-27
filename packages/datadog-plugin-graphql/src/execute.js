@@ -271,6 +271,10 @@ class GraphQLExecutePlugin extends TracingPlugin {
     const loc = this.config.source && document && fieldNode && fieldNode.loc
     const source = loc && document.slice(loc.start, loc.end)
 
+    // ctx form: startSpan records field.currentStore = { ...activeStore, span }
+    // (reused for legacyStorage.run) without entering it — an enterWith here
+    // would leak the scope past the synchronous resolver body. callInAsyncScope
+    // runs the resolver in that store so the resolve span is its active scope.
     const span = this.startSpan('graphql.resolve', {
       service: this.config.service,
       resource: `${fieldName}:${returnType}`,
@@ -283,7 +287,9 @@ class GraphQLExecutePlugin extends TracingPlugin {
         'graphql.field.type': baseTypeName,
         'graphql.source': source,
       },
-    }, false)
+    }, field)
+
+    field.span = span
 
     if (fieldNode && this.config.variables && fieldNode.arguments) {
       const variables = this.config.variables(variableValues)
@@ -388,15 +394,20 @@ function wrapResolve (resolve) {
         pathString,
         collapsedKey: collapsedKey ?? pathString,
         span: null,
+        // Populated by startResolveSpan via startSpan's ctx form: currentStore is
+        // the resolve span's store, reused for legacyStorage.run on every sibling.
+        parentStore: null,
+        currentStore: null,
       }
       rootCtx.fields.set(fieldKey, field)
     }
 
     // Collapsed siblings still publish updateField (master's contract: one
     // publish per resolver call, even when the span is collapsed) and route
-    // through callInAsyncScope so the abort signal stops them mid-flight.
+    // through callInAsyncScope so the abort signal stops them mid-flight and
+    // they re-enter the first sibling's store (shared graphql.resolve scope).
     if (!isFirst) {
-      return callInAsyncScope(resolve, this, arguments, rootCtx.abortController, (err) => {
+      return callInAsyncScope(resolve, this, arguments, rootCtx.abortController, field.currentStore, (err) => {
         if (updateFieldCh.hasSubscribers) {
           updateFieldCh.publish({ rootCtx, field, error: err, pathString: field.pathString })
         }
@@ -406,9 +417,8 @@ function wrapResolve (resolve) {
     const executeSpan = rootCtx.executeSpan
     const startTime = executeSpan._getTime()
     const span = rootCtx.plugin.startResolveSpan(field, rootCtx, executeSpan, startTime)
-    field.span = span
 
-    return callInAsyncScope(resolve, this, arguments, rootCtx.abortController, (err, res) => {
+    return callInAsyncScope(resolve, this, arguments, rootCtx.abortController, field.currentStore, (err, res) => {
       const endTime = executeSpan._getTime()
       rootCtx.plugin.finishResolveSpan(span, field, err, res, endTime || startTime)
       if (updateFieldCh.hasSubscribers) {
@@ -446,16 +456,18 @@ function wrapFieldType (field) {
   wrapFields(unwrapped)
 }
 
-function callInAsyncScope (fn, thisArg, args, abortController, cb) {
-  cb ??= () => {}
-
+// Runs the resolver inside `store` (the resolve span's store) so
+// `tracer.scope().active()` inside the resolver is the graphql.resolve span.
+// legacyStorage.run scopes only the synchronous resolver body: a returned
+// promise unwinds the frame, so its continuation runs in the parent scope.
+function callInAsyncScope (fn, thisArg, args, abortController, store, cb) {
   if (abortController?.signal.aborted) {
     cb(null, null)
     throw new AbortError('Aborted')
   }
 
   try {
-    const result = fn.apply(thisArg, args)
+    const result = legacyStorage.run(store, () => fn.apply(thisArg, args))
     if (typeof result?.then === 'function') {
       return result.then(
         res => { cb(null, res); return res },

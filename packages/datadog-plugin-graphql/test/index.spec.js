@@ -1203,6 +1203,46 @@ describe('Plugin', () => {
           graphql.graphql({ schema, source, rootValue }).catch(done)
         })
 
+        it('should make the resolve span the active scope inside resolvers', async () => {
+          const localSchema = graphql.buildSchema(`
+            type Query { outer: Outer }
+            type Outer { inner: String }
+          `)
+
+          const captures = {}
+          const captureActive = label => {
+            const span = tracer.scope().active()
+            captures[label] = {
+              name: span?.context()._name,
+              resource: span?.context().getTag('resource.name'),
+            }
+          }
+
+          const rootValue = {
+            outer () {
+              captureActive('outer')
+              return {
+                inner () {
+                  captureActive('inner')
+                  return 'value'
+                },
+              }
+            },
+          }
+
+          const result = await graphql.graphql({
+            schema: localSchema,
+            source: '{ outer { inner } }',
+            rootValue,
+          })
+
+          assert.strictEqual(result.data?.outer?.inner, 'value')
+          assert.deepStrictEqual(captures, {
+            outer: { name: 'graphql.resolve', resource: 'outer:Outer' },
+            inner: { name: 'graphql.resolve', resource: 'inner:String' },
+          })
+        })
+
         it('should run returned promise in the parent context', () => {
           const schema = graphql.buildSchema(`
             type Query {
@@ -2175,6 +2215,50 @@ describe('Plugin', () => {
           } finally {
             startCh.unsubscribe(handler)
           }
+        })
+
+        it('should run depth-gated resolvers in the parent scope and still resolve the data', async () => {
+          const localSchema = graphql.buildSchema(`
+            type Query { outer: Outer }
+            type Outer { middle: Middle }
+            type Middle { inner: String }
+          `)
+
+          const captures = {}
+          const captureActive = label => {
+            captures[label] = tracer.scope().active()?.context()._name
+          }
+
+          const rootValue = {
+            outer () {
+              captureActive('outer')
+              return {
+                middle () {
+                  captureActive('middle')
+                  return {
+                    inner () {
+                      captureActive('inner')
+                      return 'value'
+                    },
+                  }
+                },
+              }
+            },
+          }
+
+          const result = await graphql.graphql({
+            schema: localSchema,
+            source: '{ outer { middle { inner } } }',
+            rootValue,
+          })
+
+          assert.ok(!('errors' in result), `Unexpected per-field errors: ${JSON.stringify(result.errors)}`)
+          assert.strictEqual(result.data?.outer?.middle?.inner, 'value')
+          assert.deepStrictEqual(captures, {
+            outer: 'graphql.resolve',
+            middle: 'graphql.resolve',
+            inner: expectedSchema.server.opName,
+          })
         })
       })
 
