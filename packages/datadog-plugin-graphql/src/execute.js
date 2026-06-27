@@ -404,10 +404,12 @@ function wrapResolve (resolve) {
 
     // Collapsed siblings still publish updateField (master's contract: one
     // publish per resolver call, even when the span is collapsed) and route
-    // through callInAsyncScope so the abort signal stops them mid-flight and
-    // they re-enter the first sibling's store (shared graphql.resolve scope).
+    // through callInAsyncScope so the abort signal stops them mid-flight. They
+    // run in the parent store, not field.currentStore: the first sibling's
+    // synchronous resolver already finished the shared graphql.resolve span, so
+    // re-entering its store would parent user spans to a closed span.
     if (!isFirst) {
-      return callInAsyncScope(resolve, this, arguments, rootCtx.abortController, field.currentStore, (err) => {
+      return callInAsyncScope(resolve, this, arguments, rootCtx.abortController, field.parentStore, (err) => {
         if (updateFieldCh.hasSubscribers) {
           updateFieldCh.publish({ rootCtx, field, error: err, pathString: field.pathString })
         }

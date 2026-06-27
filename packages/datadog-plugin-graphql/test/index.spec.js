@@ -948,6 +948,60 @@ describe('Plugin', () => {
           }
         })
 
+        it('parents user spans from every sibling of a collapsed list under a live span', async () => {
+          const Item = new graphql.GraphQLObjectType({
+            name: 'Item',
+            fields: {
+              name: {
+                type: graphql.GraphQLString,
+                resolve () {
+                  tracer.trace('user.work', () => {})
+                  return 'value'
+                },
+              },
+            },
+          })
+          const localSchema = new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'Query',
+              fields: {
+                items: {
+                  type: new graphql.GraphQLList(Item),
+                  resolve: () => [{}, {}],
+                },
+              },
+            }),
+          })
+
+          const [, result] = await Promise.all([
+            agent.assertSomeTraces(traces => {
+              const spans = sort(traces[0])
+              const collapsed = spans.find(span => span.meta?.['graphql.field.path'] === 'items.*.name')
+              const userSpans = spans.filter(span => span.name === 'user.work')
+              const byId = new Map(spans.map(span => [span.span_id.toString(), span]))
+
+              assert.ok(collapsed, 'expected one collapsed items.*.name span')
+              assert.strictEqual(userSpans.length, 2, 'expected one user span per sibling resolver')
+
+              for (const userSpan of userSpans) {
+                const parent = byId.get(userSpan.parent_id.toString())
+                assert.ok(parent, 'user span must parent to a span in the same trace, not an orphaned closed span')
+                const parentStart = BigInt(parent.start)
+                const parentEnd = parentStart + BigInt(parent.duration)
+                const childStart = BigInt(userSpan.start)
+                const childEnd = childStart + BigInt(userSpan.duration)
+                assert.ok(
+                  childStart >= parentStart && childEnd <= parentEnd,
+                  'user span must be contained within its live parent, not start after it finished',
+                )
+              }
+            }, { spanResourceMatch: /items:\[Item]/ }),
+            graphql.graphql({ schema: localSchema, source: '{ items { name } }' }),
+          ])
+
+          assert.ok(!('errors' in result), `Unexpected per-field errors: ${JSON.stringify(result.errors)}`)
+        })
+
         it('should instrument list field resolvers', () => {
           const source = `{
             friends {
