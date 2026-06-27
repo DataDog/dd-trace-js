@@ -389,20 +389,23 @@ describe('Child process plugin', () => {
     let originalPromise
     let Bluebird
 
-    beforeEach(async () => {
+    before(async () => {
       tracer = await agent.load('child_process', undefined, { flushInterval: 1 })
       childProcess = require('child_process')
       util = require('util')
       tracer.use('child_process', { enabled: true })
       Bluebird = require('../../../versions/bluebird').get()
+    })
 
+    after(() => agent.close())
+
+    beforeEach(() => {
       originalPromise = global.Promise
       global.Promise = Bluebird
     })
 
     afterEach(() => {
       global.Promise = originalPromise
-      return agent.close()
     })
 
     it('should not crash with "this._then is not a function" when using Bluebird promises', async () => {
@@ -494,13 +497,14 @@ describe('Child process plugin', () => {
       const execSyncMethods = ['execSync']
       let childProcess, tracer
 
-      beforeEach(async () => {
+      before(async () => {
         tracer = await agent.load('child_process', undefined, { flushInterval: 1 })
         childProcess = require('child_process')
         tracer.use('child_process', { enabled: true })
       })
 
-      afterEach(() => agent.close())
+      after(() => agent.close())
+
       const parentSpanList = [true, false]
       parentSpanList.forEach(hasParentSpan => {
         let parentSpan
@@ -637,13 +641,14 @@ describe('Child process plugin', () => {
       const execSyncMethods = ['execFileSync', 'spawnSync']
       let childProcess, tracer
 
-      beforeEach(async () => {
+      before(async () => {
         tracer = await agent.load('child_process', undefined, { flushInterval: 1 })
         childProcess = require('child_process')
         tracer.use('child_process', { enabled: true })
       })
 
-      afterEach(() => agent.close())
+      after(() => agent.close())
+
       const parentSpanList = [true, false]
       parentSpanList.forEach(parentSpan => {
         describe(`${parentSpan ? 'with' : 'without'} parent span`, () => {
