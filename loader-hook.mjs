@@ -127,6 +127,13 @@ function resolveSync (specifier, context, nextResolve) {
 
 function loadSync (url, context, nextLoad) {
   if (isCommonJSLoad(context)) {
+    // When the synchronous loader owns CommonJS (RITM disabled on this Node),
+    // run the rewriter loader for CJS too: it rewrites orchestrion targets and
+    // appends the export-wrapping shim. Otherwise leave CJS to RITM +
+    // Module._compile and only let iitm see it (which it skips for require()).
+    if (cjsOwnedBySyncLoader) {
+      return rewriterLoader.loadSync(url, context, nextLoad)
+    }
     return getSyncImportInTheMiddleHook().loadSync(url, context, nextLoad)
   }
 
@@ -134,6 +141,8 @@ function loadSync (url, context, nextLoad) {
     return getSyncImportInTheMiddleHook().loadSync(url, context, nextLoad)
   })
 }
+
+let cjsOwnedBySyncLoader = false
 
 function isCommonJSLoad (context) {
   if (context.format) return context.format === 'commonjs'
@@ -195,6 +204,13 @@ function registerSyncLoaderHooks (data = {}) {
     resolve: resolveSync,
     load: loadSync,
   })
+
+  // The synchronous loader now owns CommonJS instrumentation too: it rewrites
+  // CJS source and appends the export-wrapping shim, replacing RITM's
+  // per-require interception and the Module._compile rewrite on this Node.
+  cjsOwnedBySyncLoader = true
+  rewriterLoader.setOwnsCjsSync(true)
+  globalThis[Symbol.for('dd-trace:sync-loader-owns-cjs')] = true
 
   return true
 }
