@@ -1,6 +1,6 @@
 'use strict'
 
-// Startup-share guard. Require this FIRST in a loop benchmark so START captures
+// Benchmark guard. Require this FIRST in a loop benchmark so START captures
 // the file's load time (the heavy requires that follow, especially the tracer).
 // Call loopStart() right before the measured loop and done() right after it (for
 // async loops, call done() from the completion callback). done() fails the run
@@ -28,7 +28,7 @@ function loopStart () {
   if (process.env.SIRUN_READY_FD) {
     require('fs').writeSync(parseInt(process.env.SIRUN_READY_FD), 'x')
   } else {
-    process.stderr.write('startup-guard: SIRUN_READY_FD is not set, startup time will be included in measurements\n')
+    process.stderr.write('benchmark-guard: SIRUN_READY_FD is not set, startup time will be included in measurements\n')
   }
 }
 
@@ -37,13 +37,17 @@ function loopStart () {
  */
 function done (maxShare = 0.07) {
   const end = process.hrtime.bigint()
-  assert.ok(loopStartedAt !== undefined, 'startup-guard: loopStart() was never called')
+  assert.ok(loopStartedAt !== undefined, 'benchmark-guard: loopStart() was never called')
   const total = Number(end - START)
   const startup = Number(loopStartedAt - START)
   const share = total === 0 ? 1 : startup / total
-  const loop = Number(end - loopStartedAt)
+  const duration = Number(end - loopStartedAt)
 
-  reportOps(loop)
+  if (duration < 2e9) {
+    assert.fail('benchmark-guard: the loop duration is too short (<5s)')
+  }
+
+  reportOps(duration)
 
   // Report mode (used by the overview collector): write the share to the given
   // file and skip the assertion, so a high-startup variant still reports instead
@@ -56,11 +60,18 @@ function done (maxShare = 0.07) {
     return
   }
 
-  assert.ok(
-    share <= maxShare,
-    `startup-guard: load+setup was ${(share * 100).toFixed(1)}% of the run ` +
-    `(max ${(maxShare * 100).toFixed(0)}%); grow the loop or load fewer modules up front`
-  )
+  if (share > maxShare) {
+    assert.fail(
+      `benchmark-guard: load+setup was ${(share * 100).toFixed(1)}% of the run ` +
+      `(max ${(maxShare * 100).toFixed(0)}%); grow the loop or load fewer modules up front`
+    )
+  }
+  if (maxShare - share > 0.05) {
+    assert.fail(
+      `benchmark-guard: the startup share is ${((maxShare - share) * 100 - 5).toFixed(0)} ` +
+      `too high (effectively ${(maxShare * 100).toFixed(0)}%) - ${(share * 100).toFixed(1)}%`
+    )
+  }
 }
 
 /**
@@ -73,10 +84,7 @@ function done (maxShare = 0.07) {
  */
 function reportOps (duration) {
   if (!OPERATIONS) {
-    process.stderr.write('startup-guard: OPERATIONS is not set, skipping the operations-per-second metric\n')
-    return
-  }
-  if (duration === 0) {
+    process.stderr.write('benchmark-guard: OPERATIONS is not set, skipping the operations-per-second metric\n')
     return
   }
 

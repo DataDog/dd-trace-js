@@ -118,6 +118,11 @@ module.exports = function startDebugger (onProbeInstalled) {
           maxFieldCount: intEnv('MAX_FIELD_COUNT'),
           maxLength: intEnv('MAX_LENGTH'),
         },
+        // Capture on every hit: a rate above 1e9 rounds nsBetweenSampling down to 0n,
+        // disabling the per-probe limiter (generateProbeConfig defaults it to 5000/sec) so the
+        // captured count tracks OPERATIONS instead of wall-clock time. The raised global cap
+        // (MAX_SNAPSHOTS_PER_SECOND_GLOBALLY) still bounds it.
+        sampling: { snapshotsPerSecond: 1e10 },
       })
       cb(action, conf, 'id', (error) => {
         if (error) throw error

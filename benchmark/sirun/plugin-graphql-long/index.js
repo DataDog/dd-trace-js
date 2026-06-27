@@ -10,12 +10,14 @@ const guard = require('../startup-guard')
 if (process.env.WITH_TRACER) {
   const tracer = require('../../..').init()
 
-  if (process.env.WITH_DEPTH) {
-    tracer.use('graphql', { depth: Number(process.env.WITH_DEPTH) })
-  } else if (process.env.WITH_DEPTH_AND_COLLAPSE) {
-    const [depth, collapse] = process.env.WITH_DEPTH_AND_COLLAPSE.split(',')
-    tracer.use('graphql', { depth: Number(depth), collapse: Number(collapse) > 0 })
+  const options = {}
+  if (process.env.DEPTH) {
+    options.depth = Number(process.env.DEPTH)
   }
+  if (process.env.COLLAPSE) {
+    options.collapse = process.env.COLLAPSE === '1'
+  }
+  tracer.use('graphql', options)
 }
 
 const graphql = require('../../../versions/graphql').get()
