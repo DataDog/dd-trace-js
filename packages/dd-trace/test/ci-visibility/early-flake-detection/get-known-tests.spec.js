@@ -8,7 +8,11 @@ const nock = require('nock')
 
 require('../../setup/core')
 
-const { getKnownTests } = require('../../../src/ci-visibility/early-flake-detection/get-known-tests')
+const {
+  getKnownTests,
+  parseKnownTestsResponse,
+} = require('../../../src/ci-visibility/early-flake-detection/get-known-tests')
+const getConfig = require('../../../src/config')
 const {
   buildCacheKey,
   getCachePath,
@@ -72,13 +76,17 @@ function cleanup (params) {
 describe('get-known-tests', () => {
   beforeEach(() => {
     process.env.DD_API_KEY = 'test-api-key'
+    getConfig().apiKey = 'test-api-key'
     process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE = 'true'
+    getConfig().DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE = true
     cleanup(DEFAULT_PARAMS)
   })
 
   afterEach(() => {
     delete process.env.DD_API_KEY
+    getConfig().apiKey = undefined
     delete process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE
+    getConfig().DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE = false
     cleanup(DEFAULT_PARAMS)
     nock.cleanAll()
   })
@@ -327,5 +335,36 @@ describe('get-known-tests', () => {
       assert.strictEqual(fs.existsSync(getLockPath(key)), false, 'lock should be cleaned up on error')
       done()
     })
+  })
+})
+
+describe('parseKnownTestsResponse', () => {
+  it('returns tests from a raw backend response', () => {
+    assert.deepStrictEqual(
+      parseKnownTestsResponse(JSON.stringify(KNOWN_TESTS_RESPONSE)),
+      KNOWN_TESTS_RESPONSE.data.attributes.tests
+    )
+  })
+
+  it('preserves null tests from a raw backend response', () => {
+    assert.strictEqual(parseKnownTestsResponse(JSON.stringify(EMPTY_KNOWN_TESTS_RESPONSE)), null)
+  })
+
+  it('validates known tests response shape when requested', () => {
+    assert.deepStrictEqual(
+      parseKnownTestsResponse(JSON.stringify(KNOWN_TESTS_RESPONSE), { validateRequiredFields: true }),
+      KNOWN_TESTS_RESPONSE.data.attributes.tests
+    )
+    assert.throws(
+      () => parseKnownTestsResponse(JSON.stringify({ data: { attributes: {} } }), { validateRequiredFields: true }),
+      /Invalid known tests response: missing tests/
+    )
+    assert.throws(
+      () => parseKnownTestsResponse(
+        JSON.stringify({ data: { attributes: { tests: { jest: { 'suite.js': 'test' } } } } }),
+        { validateRequiredFields: true }
+      ),
+      /Invalid known tests response: suite tests must be arrays/
+    )
   })
 })
