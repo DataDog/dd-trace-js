@@ -41,9 +41,13 @@ function done (maxShare = 0.07) {
   const total = Number(end - START)
   const startup = Number(loopStartedAt - START)
   const share = total === 0 ? 1 : startup / total
-  const loop = Number(end - loopStartedAt)
+  const duration = Number(end - loopStartedAt)
 
-  reportOps(loop)
+  if (duration < 5e9) {
+    assert.fail('startup-guard: the loop duration is too short (<5s)')
+  }
+
+  reportOps(duration)
 
   // Report mode (used by the overview collector): write the share to the given
   // file and skip the assertion, so a high-startup variant still reports instead
@@ -56,11 +60,18 @@ function done (maxShare = 0.07) {
     return
   }
 
-  assert.ok(
-    share <= maxShare,
-    `startup-guard: load+setup was ${(share * 100).toFixed(1)}% of the run ` +
-    `(max ${(maxShare * 100).toFixed(0)}%); grow the loop or load fewer modules up front`
-  )
+  if (share > maxShare) {
+    assert.fail(
+      `startup-guard: load+setup was ${(share * 100).toFixed(1)}% of the run ` +
+      `(max ${(maxShare * 100).toFixed(0)}%); grow the loop or load fewer modules up front`
+    )
+  }
+  if (maxShare - share > 0.05) {
+    assert.fail(
+      `startup-guard: the startup share is too high: ${(share * 100).toFixed(1)}% ` +
+      `(max ${(maxShare * 100 + 5).toFixed(0)}%)`
+    )
+  }
 }
 
 /**
@@ -74,9 +85,6 @@ function done (maxShare = 0.07) {
 function reportOps (duration) {
   if (!OPERATIONS) {
     process.stderr.write('startup-guard: OPERATIONS is not set, skipping the operations-per-second metric\n')
-    return
-  }
-  if (duration === 0) {
     return
   }
 
