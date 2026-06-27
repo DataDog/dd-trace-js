@@ -110,16 +110,16 @@ function load (url, context, nextLoad) {
 
 let resolveSyncHook
 
-// Short-circuit builtins before import-in-the-middle resolve sees them. iitm
-// otherwise wraps a builtin and later reads its source via getExports; a builtin
-// resolved synchronously without builtin format (e.g. require("util") compiled
-// into a Debugger.evaluateOnCallFrame expression, or a CJS re-export of a
-// builtin) then reaches readFileSync("util") and throws ENOENT. Builtins are
-// instrumented separately (iitm getBuiltinModule / RITM), so leave them for
-// Node to resolve natively.
+// import-in-the-middle's resolve hook wraps a builtin and later reads its source
+// via getExports; a builtin resolved without builtin format (global.require(
+// "node:util") from Debugger.evaluateOnCallFrame, or a CJS re-export of a builtin)
+// reaches readFileSync("util") and throws ENOENT. Only ESM imports of builtins
+// need iitm — require() is covered by RITM/getBuiltinModule and Node omits the
+// "import" condition there — so hand those to Node and keep wrapping ESM imports.
 function resolveSync (specifier, context, nextResolve) {
   if (typeof specifier === 'string' &&
-      (specifier.startsWith('node:') || builtinModules.includes(specifier))) {
+      (specifier.startsWith('node:') || builtinModules.includes(specifier)) &&
+      !context.conditions?.includes('import')) {
     return nextResolve(specifier, context)
   }
   return resolveSyncHook(specifier, context, nextResolve)
