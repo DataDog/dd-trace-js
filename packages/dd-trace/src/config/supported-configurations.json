@@ -498,7 +498,8 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "false"
+        "default": "false",
+        "namespace": "testOptimization"
       }
     ],
     "DD_CIVISIBILITY_FLAKY_RETRY_COUNT": [
@@ -576,21 +577,24 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": null
+        "default": null,
+        "namespace": "testOptimization"
       }
     ],
     "DD_CIVISIBILITY_TEST_MODULE_ID": [
       {
         "implementation": "A",
         "type": "string",
-        "default": null
+        "default": null,
+        "namespace": "testOptimization"
       }
     ],
     "DD_CIVISIBILITY_TEST_SESSION_ID": [
       {
         "implementation": "A",
         "type": "string",
-        "default": null
+        "default": null,
+        "namespace": "testOptimization"
       }
     ],
     "DD_CODE_ORIGIN_FOR_SPANS_ENABLED": [
@@ -1812,14 +1816,16 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": null
+        "default": null,
+        "namespace": "testOptimization"
       }
     ],
     "DD_TEST_LOCAL_CONFIG_PATH": [
       {
         "implementation": "A",
         "type": "string",
-        "default": null
+        "default": null,
+        "namespace": "testOptimization"
       }
     ],
     "DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES": [

@@ -69,10 +69,6 @@ export interface GeneratedConfig {
   DD_APM_FLUSH_DEADLINE_MILLISECONDS: number;
   DD_APP_KEY: string | undefined;
   DD_AZURE_RESOURCE_GROUP: string | undefined;
-  DD_CIVISIBILITY_ENABLED: boolean;
-  DD_CIVISIBILITY_TEST_COMMAND: string | undefined;
-  DD_CIVISIBILITY_TEST_MODULE_ID: string | undefined;
-  DD_CIVISIBILITY_TEST_SESSION_ID: string | undefined;
   DD_CRASHTRACKING_ENABLED: boolean;
   DD_CUSTOM_PARENT_ID: string | undefined;
   DD_CUSTOM_TRACE_ID: string | undefined;
@@ -150,8 +146,6 @@ export interface GeneratedConfig {
   DD_RUNTIME_METRICS_FLUSH_INTERVAL: number;
   DD_SPAN_SAMPLING_RULES_FILE: string | undefined;
   DD_TELEMETRY_FORWARDER_PATH: string | undefined;
-  DD_TEST_FLEET_CONFIG_PATH: string | undefined;
-  DD_TEST_LOCAL_CONFIG_PATH: string | undefined;
   DD_TEST_SESSION_NAME: string | undefined;
   DD_TRACE_AEROSPIKE_ENABLED: boolean;
   DD_TRACE_AI_ENABLED: boolean;
@@ -548,6 +542,7 @@ export interface GeneratedConfig {
     DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE: boolean;
     DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING: boolean;
     DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: boolean;
+    DD_CIVISIBILITY_ENABLED: boolean;
     DD_CIVISIBILITY_FLAKY_RETRY_COUNT: number;
     DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: boolean;
     DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED: boolean;
@@ -556,7 +551,12 @@ export interface GeneratedConfig {
     DD_CIVISIBILITY_ITR_ENABLED: boolean;
     DD_CIVISIBILITY_MANUAL_API_ENABLED: boolean;
     DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS: number;
+    DD_CIVISIBILITY_TEST_COMMAND: string | undefined;
+    DD_CIVISIBILITY_TEST_MODULE_ID: string | undefined;
+    DD_CIVISIBILITY_TEST_SESSION_ID: string | undefined;
     DD_TEST_FAILED_TEST_REPLAY_ENABLED: boolean;
+    DD_TEST_FLEET_CONFIG_PATH: string | undefined;
+    DD_TEST_LOCAL_CONFIG_PATH: string | undefined;
     DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES: number;
     DD_TEST_MANAGEMENT_ENABLED: boolean;
   };
