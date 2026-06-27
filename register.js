@@ -7,6 +7,12 @@ const { pathToFileURL } = require('node:url')
 const { NODE_MAJOR, NODE_MINOR, NODE_PATCH } = require('./version')
 
 const parentURL = pathToFileURL(__filename)
+
+// Node caches this module, so its body runs once per process even when both the
+// `--import` entry and the CommonJS init path load it. Record that the loader
+// hooks were registered here so initialize.mjs does not also register the async
+// loader (it reaches Module.register on a separate path, which the module cache
+// can't dedupe for us).
 let isSyncLoaderRegistered = false
 
 if (shouldRegisterSyncLoaderHooks()) {
@@ -29,6 +35,8 @@ if (shouldRegisterSyncLoaderHooks()) {
 if (!isSyncLoaderRegistered) {
   register('./loader-hook.mjs', parentURL)
 }
+
+globalThis[Symbol.for('dd-trace:loader-hooks-registered')] = true
 
 function shouldRegisterSyncLoaderHooks () {
   if (!isSyncLoaderHookVersionSupported()) {
