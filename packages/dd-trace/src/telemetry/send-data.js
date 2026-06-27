@@ -137,16 +137,16 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
     hostname,
     port,
     isCiVisibility,
-    DD_CIVISIBILITY_AGENTLESS_ENABLED,
+    testOptimization,
   } = config
 
   let url = config.url
 
-  const isCiVisibilityAgentlessMode = isCiVisibility && DD_CIVISIBILITY_AGENTLESS_ENABLED
+  const isCiVisibilityAgentlessMode = isCiVisibility && testOptimization.DD_CIVISIBILITY_AGENTLESS_ENABLED
 
   if (isCiVisibilityAgentlessMode) {
     try {
-      url = config.DD_CIVISIBILITY_AGENTLESS_URL ?? new URL(getAgentlessTelemetryEndpoint(config.site))
+      url = testOptimization.DD_CIVISIBILITY_AGENTLESS_URL ?? new URL(getAgentlessTelemetryEndpoint(config.site))
     } catch (err) {
       log.error('Telemetry endpoint url is invalid', err)
       // No point to do the request if the URL is invalid

@@ -61,7 +61,7 @@ describe('CI Visibility Agentless Exporter', () => {
 
   it('can use CI Vis protocol right away', () => {
     const agentlessExporter = new AgentlessCiVisibilityExporter({
-      DD_CIVISIBILITY_AGENTLESS_URL: url, testOptimization: { DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true }, tags: {},
+      testOptimization: { DD_CIVISIBILITY_AGENTLESS_URL: url, DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true }, tags: {},
     })
     assert.strictEqual(agentlessExporter.canReportSessionTraces(), true)
   })
@@ -142,8 +142,8 @@ describe('CI Visibility Agentless Exporter', () => {
           },
         }))
       const agentlessExporter = new AgentlessCiVisibilityExporter({
-        DD_CIVISIBILITY_AGENTLESS_URL: url,
         testOptimization: {
+          DD_CIVISIBILITY_AGENTLESS_URL: url,
           DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true,
           DD_CIVISIBILITY_ITR_ENABLED: true,
         },
@@ -170,8 +170,8 @@ describe('CI Visibility Agentless Exporter', () => {
           },
         }))
       const agentlessExporter = new AgentlessCiVisibilityExporter({
-        DD_CIVISIBILITY_AGENTLESS_URL: url,
         testOptimization: {
+          DD_CIVISIBILITY_AGENTLESS_URL: url,
           DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true,
           DD_CIVISIBILITY_ITR_ENABLED: true,
         },
@@ -201,8 +201,8 @@ describe('CI Visibility Agentless Exporter', () => {
         }))
 
       const agentlessExporter = new AgentlessCiVisibilityExporter({
-        DD_CIVISIBILITY_AGENTLESS_URL: url,
         testOptimization: {
+          DD_CIVISIBILITY_AGENTLESS_URL: url,
           DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true,
           DD_CIVISIBILITY_ITR_ENABLED: true,
         },
@@ -264,7 +264,7 @@ describe('CI Visibility Agentless Exporter', () => {
 
     it('uses DD_CIVISIBILITY_AGENTLESS_URL as the intake override for every endpoint', () => {
       const agentlessExporter = new AgentlessCiVisibilityExporter({
-        DD_CIVISIBILITY_AGENTLESS_URL: url, site: 'd4tad0g.com', tags: {},
+        testOptimization: { DD_CIVISIBILITY_AGENTLESS_URL: url }, site: 'd4tad0g.com', tags: {},
       })
       assert.strictEqual(agentlessExporter._url.href, 'http://www.example.com/')
       assert.strictEqual(agentlessExporter._coverageUrl.href, 'http://www.example.com/')

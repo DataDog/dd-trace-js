@@ -121,12 +121,12 @@ function fetchFromApi ({
     options.path = `${evpProxyPrefix}/api/v2/test/libraries/test-management/tests`
     options.headers['X-Datadog-EVP-Subdomain'] = 'api'
   } else {
-    const { DD_API_KEY: apiKey } = getConfig()
-    if (!apiKey) {
+    const { DD_API_KEY } = getConfig()
+    if (!DD_API_KEY) {
       return done(new Error('Test management tests were not fetched because Datadog API key is not defined.'))
     }
 
-    options.headers['dd-api-key'] = apiKey
+    options.headers['dd-api-key'] = DD_API_KEY
   }
 
   const data = JSON.stringify({

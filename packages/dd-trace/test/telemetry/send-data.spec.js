@@ -161,7 +161,7 @@ describe('sendData', () => {
     sendDataModule.sendData(
       {
         isCiVisibility: true,
-        DD_CIVISIBILITY_AGENTLESS_ENABLED: true,
+        testOptimization: { DD_CIVISIBILITY_AGENTLESS_ENABLED: true },
         tags: { 'runtime-id': '123' },
         site: 'datadoghq.eu',
       },
@@ -184,8 +184,10 @@ describe('sendData', () => {
     sendDataModule.sendData(
       {
         isCiVisibility: true,
-        DD_CIVISIBILITY_AGENTLESS_ENABLED: true,
-        DD_CIVISIBILITY_AGENTLESS_URL: new URL('https://my-intake.example/'),
+        testOptimization: {
+          DD_CIVISIBILITY_AGENTLESS_ENABLED: true,
+          DD_CIVISIBILITY_AGENTLESS_URL: new URL('https://my-intake.example/'),
+        },
         tags: { 'runtime-id': '123' },
         site: 'datadoghq.eu',
       },

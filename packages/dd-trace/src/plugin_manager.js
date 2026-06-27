@@ -158,7 +158,7 @@ module.exports = class PluginManager {
     const {
       logInjection,
       serviceMapping,
-      DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP: queryStringObfuscation,
+      DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,
       site,
       url,
       headerTags,
@@ -178,7 +178,7 @@ module.exports = class PluginManager {
       traceWebsocketMessagesInheritSampling,
       traceWebsocketMessagesSeparateTraces,
       experimental,
-      DD_TRACE_RESOURCE_RENAMING_ENABLED: resourceRenamingEnabled,
+      DD_TRACE_RESOURCE_RENAMING_ENABLED,
     } = /** @type {import('./config/config-base')} */ (this._tracerConfig)
 
     const sharedConfig = {
@@ -199,15 +199,15 @@ module.exports = class PluginManager {
       traceWebsocketMessagesInheritSampling,
       traceWebsocketMessagesSeparateTraces,
       experimental,
-      resourceRenamingEnabled,
+      resourceRenamingEnabled: DD_TRACE_RESOURCE_RENAMING_ENABLED,
     }
 
     if (logInjection !== undefined) {
       sharedConfig.logInjection = logInjection
     }
 
-    if (queryStringObfuscation !== undefined) {
-      sharedConfig.queryStringObfuscation = queryStringObfuscation
+    if (DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP !== undefined) {
+      sharedConfig.queryStringObfuscation = DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP
     }
 
     if (serviceMapping && serviceMapping[name]) {

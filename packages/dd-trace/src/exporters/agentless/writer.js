@@ -109,8 +109,8 @@ class AgentlessWriter extends BaseWriter {
       return
     }
 
-    const apiKey = getConfig().DD_API_KEY
-    if (!apiKey) {
+    const { DD_API_KEY } = getConfig()
+    if (!DD_API_KEY) {
       if (!this.#apiKeyMissing) {
         this.#apiKeyMissing = true
         log.error('DD_API_KEY is required for agentless trace intake. Set DD_API_KEY. Traces will not be sent.')
@@ -126,7 +126,7 @@ class AgentlessWriter extends BaseWriter {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'dd-api-key': apiKey,
+        'dd-api-key': DD_API_KEY,
         'X-Datadog-Trace-Count': String(count),
         'Datadog-Meta-Lang': 'nodejs',
         'Datadog-Meta-Lang-Version': process.version,

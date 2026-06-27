@@ -3233,7 +3233,7 @@ describe('Config', () => {
         const config = getConfig()
 
         assert.strictEqual(config.url.toString(), 'http://127.0.0.1:8126/')
-        assert.strictEqual(config.DD_CIVISIBILITY_AGENTLESS_URL, undefined)
+        assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_AGENTLESS_URL, undefined)
       })
 
       it('should resolve url to the agent and expose DD_CIVISIBILITY_AGENTLESS_URL as the intake override', () => {
@@ -3243,7 +3243,7 @@ describe('Config', () => {
         const config = getConfig()
 
         assert.strictEqual(config.url.toString(), 'http://127.0.0.1:8126/')
-        assert.strictEqual(config.DD_CIVISIBILITY_AGENTLESS_URL.toString(), 'https://my-intake.example/')
+        assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_AGENTLESS_URL.toString(), 'https://my-intake.example/')
       })
     })
 
@@ -3332,7 +3332,7 @@ describe('Config', () => {
         } else {
           assert.strictEqual(config.url.toString(), 'unix:///var/run/datadog/apm.socket')
         }
-        assert.strictEqual(config.DD_CIVISIBILITY_AGENTLESS_URL, undefined)
+        assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_AGENTLESS_URL, undefined)
       })
     })
   })
@@ -3376,12 +3376,12 @@ describe('Config', () => {
       })
       it('should enable manual testing API by default', () => {
         const config = getConfig(options)
-        assert.strictEqual(config.DD_CIVISIBILITY_MANUAL_API_ENABLED, true)
+        assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_MANUAL_API_ENABLED, true)
       })
       it('should disable manual testing API if DD_CIVISIBILITY_MANUAL_API_ENABLED is set to false', () => {
         process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED = 'false'
         const config = getConfig(options)
-        assert.strictEqual(config.DD_CIVISIBILITY_MANUAL_API_ENABLED, false)
+        assert.strictEqual(config.testOptimization.DD_CIVISIBILITY_MANUAL_API_ENABLED, false)
       })
       it('should disable memcached command tagging by default', () => {
         const config = getConfig(options)
@@ -3476,7 +3476,7 @@ describe('Config', () => {
     it('should accept all values for DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER', () => {
       for (const provider of ['github', 'gitlab', 'circleci', 'jenkins']) {
         process.env.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER = provider
-        assert.strictEqual(getConfig(options).DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER, provider)
+        assert.strictEqual(getConfig(options).testOptimization.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER, provider)
       }
     })
 

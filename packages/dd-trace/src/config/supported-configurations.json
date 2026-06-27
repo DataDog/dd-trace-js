@@ -449,7 +449,8 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "false"
+        "default": "false",
+        "namespace": "testOptimization"
       }
     ],
     "DD_CIVISIBILITY_AGENTLESS_URL": [
@@ -457,28 +458,32 @@
         "implementation": "A",
         "type": "string",
         "transform": "toURL",
-        "default": null
+        "default": null,
+        "namespace": "testOptimization"
       }
     ],
     "DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER": [
       {
         "implementation": "A",
         "type": "string",
-        "default": null
+        "default": null,
+        "namespace": "testOptimization"
       }
     ],
     "DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "false"
+        "default": "false",
+        "namespace": "testOptimization"
       }
     ],
     "DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "false"
+        "default": "false",
+        "namespace": "testOptimization"
       }
     ],
     "DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED": [
@@ -516,7 +521,8 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "true"
+        "default": "true",
+        "namespace": "testOptimization"
       }
     ],
     "DD_CIVISIBILITY_GIT_UPLOAD_ENABLED": [
@@ -554,14 +560,16 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "true"
+        "default": "true",
+        "namespace": "testOptimization"
       }
     ],
     "DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS": [
       {
         "implementation": "A",
         "type": "int",
-        "default": "500"
+        "default": "500",
+        "namespace": "testOptimization"
       }
     ],
     "DD_CIVISIBILITY_TEST_COMMAND": [

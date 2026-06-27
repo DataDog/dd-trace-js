@@ -216,7 +216,7 @@ class Tracer extends NoopProxy {
 
       this._modules.rewriter.enable(config)
 
-      if (config.DD_TRACE_ENABLED && config.DD_CIVISIBILITY_MANUAL_API_ENABLED) {
+      if (config.DD_TRACE_ENABLED && config.testOptimization.DD_CIVISIBILITY_MANUAL_API_ENABLED) {
         const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
         this._testApiManualPlugin = new TestApiManualPlugin(this)
         // `shouldGetEnvironmentData` is passed as false so that we only lazily calculate it

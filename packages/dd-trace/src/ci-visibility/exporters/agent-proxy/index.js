@@ -42,7 +42,6 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
       headers,
       testOptimization,
     } = config
-    const isTestDynamicInstrumentationEnabled = testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED
 
     fetchAgentInfo(this._url, (err, agentInfo) => {
       this._isInitialized = true
@@ -69,7 +68,7 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
           evpProxyPrefix,
         })
         this._codeCoverageReportUrl = this._url
-        if (isTestDynamicInstrumentationEnabled) {
+        if (testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED) {
           const canFowardLogs = getCanForwardDebuggerLogs(err, agentInfo)
           if (canFowardLogs) {
             const DynamicInstrumentationLogsWriter = require('../agentless/di-logs-writer')

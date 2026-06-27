@@ -132,11 +132,11 @@ function getLibraryConfiguration ({
 
         log.debug('Remote settings: %j', settings)
 
-        if (config.DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE) {
+        if (config.testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE) {
           settings.isCodeCoverageEnabled = true
           log.debug('Dangerously set code coverage to true')
         }
-        if (config.DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING) {
+        if (config.testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING) {
           settings.isSuitesSkippingEnabled = true
           log.debug('Dangerously set test skipping to true')
         }
