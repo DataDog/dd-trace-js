@@ -13,16 +13,6 @@ const { withNamingSchema, withPeerService, withVersions } = require('../../dd-tr
 const { temporaryWarningExceptions } = require('../../dd-trace/test/setup/core')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
-// `Collection#bulkWrite` now opens a parent `bulkWrite` span with the per-type wire
-// commands nested as children, so the write command is no longer `traces[0][0]`.
-function findSpanByResource (traces, resource) {
-  for (const trace of traces) {
-    for (const span of trace) {
-      if (span.resource === resource) return span
-    }
-  }
-}
-
 const withTopologies = fn => {
   withVersions('mongodb-core', 'mongodb', '>=2', (version, moduleName, resolvedVersion) => {
     describe('using the default topology', () => {
@@ -206,7 +196,7 @@ describe('Plugin', () => {
             ])
 
             return agent.assertSomeTraces(traces => {
-              const parent = findSpanByResource(traces, `bulkWrite test.${collectionName}`)
+              const parent = traces[0].find(span => span.resource === `bulkWrite test.${collectionName}`)
               assert.ok(parent, 'expected a bulkWrite span')
               assert.strictEqual(parent.name, expectedSchema.outbound.opName)
               assert.strictEqual(parent.service, expectedSchema.outbound.serviceName)
@@ -225,29 +215,27 @@ describe('Plugin', () => {
                 `insert test.${collectionName}`,
                 `update test.${collectionName}`,
               ].sort())
-            })
+            }, { spanResourceMatch: /^bulkWrite test\./ })
           })
 
           it('should tag the bulkWrite span when the operation fails', async () => {
             await collection.insertOne({ _id: 1 })
 
             await Promise.all([
-              agent.assertSomeTraces(traces => {
-                const parent = findSpanByResource(traces, `bulkWrite test.${collectionName}`)
-                assert.ok(parent, 'expected a bulkWrite span')
-                assert.strictEqual(parent.error, 1)
-              }),
+              agent.assertFirstTraceSpan({
+                error: 1,
+              }, { spanResourceMatch: /^bulkWrite test\./ }),
               assert.rejects(collection.bulkWrite([{ insertOne: { document: { _id: 1 } } }])),
             ])
           })
 
           it('should finish the bulkWrite span when a trailing callback is passed', async () => {
             await Promise.all([
-              agent.assertSomeTraces(traces => {
-                const parent = findSpanByResource(traces, `bulkWrite test.${collectionName}`)
-                assert.ok(parent, 'expected a bulkWrite span')
-                assert.strictEqual(parent.meta['db.name'], `test.${collectionName}`)
-              }),
+              agent.assertFirstTraceSpan({
+                meta: {
+                  'db.name': `test.${collectionName}`,
+                },
+              }, { spanResourceMatch: /^bulkWrite test\./ }),
               // Pre-v5 returns undefined and invokes the callback; v5+ ignores it and returns a promise.
               Promise.resolve(collection.bulkWrite([{ insertOne: { document: { a: 1 } } }], {}, () => {})),
             ])
@@ -258,11 +246,9 @@ describe('Plugin', () => {
           if (version && semver.intersects(version, '<5')) {
             it('should tag the bulkWrite span when the legacy callback form fails', done => {
               collection.insertOne({ _id: 1 }, {}, () => {
-                agent.assertSomeTraces(traces => {
-                  const parent = findSpanByResource(traces, `bulkWrite test.${collectionName}`)
-                  assert.ok(parent, 'expected a bulkWrite span')
-                  assert.strictEqual(parent.error, 1)
-                }).then(done, done)
+                agent.assertFirstTraceSpan({
+                  error: 1,
+                }, { spanResourceMatch: /^bulkWrite test\./ }).then(done, done)
 
                 collection.bulkWrite([{ insertOne: { document: { _id: 1 } } }], {}, () => {})
               })
@@ -271,11 +257,9 @@ describe('Plugin', () => {
             it('should finish and tag the bulkWrite span when arguments throw synchronously', () => {
               assert.throws(() => collection.bulkWrite('not-an-array'))
 
-              return agent.assertSomeTraces(traces => {
-                const parent = findSpanByResource(traces, `bulkWrite test.${collectionName}`)
-                assert.ok(parent, 'expected a bulkWrite span')
-                assert.strictEqual(parent.error, 1)
-              })
+              return agent.assertFirstTraceSpan({
+                error: 1,
+              }, { spanResourceMatch: /^bulkWrite test\./ })
             })
           }
 
@@ -285,21 +269,23 @@ describe('Plugin', () => {
               { updateOne: { filter: { b: 2 }, update: { $set: { b: 2 } } } },
             ])
 
-            return agent.assertSomeTraces(traces => {
-              const span = findSpanByResource(traces, `update test.${collectionName}`)
-              assert.ok(span, 'expected an update span')
-              assert.strictEqual(span.meta['mongodb.query'], '[{"a":1},{"b":2}]')
-            })
+            return agent.assertFirstTraceSpan({
+              resource: `update test.${collectionName}`,
+              meta: {
+                'mongodb.query': '[{"a":1},{"b":2}]',
+              },
+            }, { spanResourceMatch: /^update test\./ })
           })
 
           it('should have the statement tag when doing a multi statement delete', async () => {
             collection.bulkWrite([{ deleteOne: { filter: { a: 1 } } }, { deleteOne: { filter: { b: 2 } } }])
 
-            return agent.assertSomeTraces(traces => {
-              const span = findSpanByResource(traces, (usesDelete ? 'delete' : 'remove') + ` test.${collectionName}`)
-              assert.ok(span, 'expected a delete span')
-              assert.strictEqual(span.meta['mongodb.query'], '[{"a":1},{"b":2}]')
-            })
+            return agent.assertFirstTraceSpan({
+              resource: (usesDelete ? 'delete' : 'remove') + ` test.${collectionName}`,
+              meta: {
+                'mongodb.query': '[{"a":1},{"b":2}]',
+              },
+            }, { spanResourceMatch: usesDelete ? /^delete test\./ : /^remove test\./ })
           })
 
           it('should sanitize buffers as values and not as objects when doing multi statement operations', async () => {
@@ -308,11 +294,12 @@ describe('Plugin', () => {
               { updateOne: { filter: { _id: Buffer.from('1234') }, update: { $set: { a: 2 } } } },
             ])
 
-            return agent.assertSomeTraces(traces => {
-              const span = findSpanByResource(traces, `update test.${collectionName}`)
-              assert.ok(span, 'expected an update span')
-              assert.strictEqual(span.meta['mongodb.query'], '[{"_id":"?"},{"_id":"?"}]')
-            })
+            return agent.assertFirstTraceSpan({
+              resource: `update test.${collectionName}`,
+              meta: {
+                'mongodb.query': '[{"_id":"?"},{"_id":"?"}]',
+              },
+            }, { spanResourceMatch: /^update test\./ })
           })
 
           it('should sanitize BigInts when doing a single delete operation', async () => {
@@ -343,14 +330,12 @@ describe('Plugin', () => {
               { updateOne: { filter: { _id: 9999999999999999999999n }, update: { $set: { a: 2 } } } },
             ])
 
-            return agent.assertSomeTraces(traces => {
-              const span = findSpanByResource(traces, `update test.${collectionName}`)
-              assert.ok(span, 'expected an update span')
-              assert.strictEqual(
-                span.meta['mongodb.query'],
-                '[{"_id":"9999999999999999999999"},{"_id":"9999999999999999999999"}]'
-              )
-            })
+            return agent.assertFirstTraceSpan({
+              resource: `update test.${collectionName}`,
+              meta: {
+                'mongodb.query': '[{"_id":"9999999999999999999999"},{"_id":"9999999999999999999999"}]',
+              },
+            }, { spanResourceMatch: /^update test\./ })
           })
 
           it('should sanitize BigInts when doing a multi delete operation', async () => {
@@ -359,14 +344,12 @@ describe('Plugin', () => {
               { deleteOne: { filter: { _id: 9999999999999999999999n } } },
             ])
 
-            return agent.assertSomeTraces(traces => {
-              const span = findSpanByResource(traces, (usesDelete ? 'delete' : 'remove') + ` test.${collectionName}`)
-              assert.ok(span, 'expected a delete span')
-              assert.strictEqual(
-                span.meta['mongodb.query'],
-                '[{"_id":"9999999999999999999999"},{"_id":"9999999999999999999999"}]'
-              )
-            })
+            return agent.assertFirstTraceSpan({
+              resource: (usesDelete ? 'delete' : 'remove') + ` test.${collectionName}`,
+              meta: {
+                'mongodb.query': '[{"_id":"9999999999999999999999"},{"_id":"9999999999999999999999"}]',
+              },
+            }, { spanResourceMatch: usesDelete ? /^delete test\./ : /^remove test\./ })
           })
 
           it('should use the correct resource name for arbitrary commands', done => {
@@ -646,11 +629,12 @@ describe('Plugin', () => {
             { updateOne: { filter: { _id: Buffer.from('1234') }, update: { $set: { a: 2 } } } },
           ])
 
-          return agent.assertSomeTraces(traces => {
-            const span = findSpanByResource(traces, `update test.${collectionName} [{"_id":"?"},{"_id":"?"}]`)
-            assert.ok(span, 'expected an update span with the sanitized query in the resource')
-            assert.strictEqual(span.meta['mongodb.query'], '[{"_id":"?"},{"_id":"?"}]')
-          })
+          return agent.assertFirstTraceSpan({
+            resource: `update test.${collectionName} [{"_id":"?"},{"_id":"?"}]`,
+            meta: {
+              'mongodb.query': '[{"_id":"?"},{"_id":"?"}]',
+            },
+          }, { spanResourceMatch: /^update test\./ })
         })
 
         withNamingSchema(
@@ -694,7 +678,7 @@ describe('Plugin', () => {
             meta: {
               'mongodb.query': '{"user":"string","age":"number"}',
             },
-          })
+          }, { spanResourceMatch: /^find test\./ })
         })
 
         it('should preserve operator keys while reporting value types', async () => {
@@ -704,7 +688,7 @@ describe('Plugin', () => {
             meta: {
               'mongodb.query': '{"age":{"$gte":"number","$lte":"number"}}',
             },
-          })
+          }, { spanResourceMatch: /^find test\./ })
         })
       })
 
