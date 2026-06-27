@@ -22,6 +22,7 @@ const callbackFinishCh = channel('datadog:fastify:callback:execute')
 const parsingContexts = new WeakMap()
 const cookiesPublished = new WeakSet()
 const bodyPublished = new WeakSet()
+const errorsPublished = new WeakSet()
 
 function wrapFastify (fastify, hasParsingEvents) {
   if (typeof fastify !== 'function') return fastify
@@ -309,9 +310,21 @@ function getRouteConfig (request) {
 }
 
 function publishError (ctx) {
-  if (ctx.error) {
-    publishErrorChannel(ctx)
+  const error = ctx.error
+  if (!error) return
+
+  // avvio's boot loop (`_encapsulateThreeParam`) re-invokes the same encapsulated
+  // hook after it throws, re-throwing the same error object on every re-drive
+  // (#9099). Each re-drive is sequential, so the channel's in-flight flag has
+  // already reset; without this object-keyed guard every re-drive republishes,
+  // the subscriber recurses, and boot overflows the stack. Only an object error
+  // can key the WeakSet; a primitive falls through to the channel's re-entry flag.
+  if (typeof error === 'object') {
+    if (errorsPublished.has(error)) return
+    errorsPublished.add(error)
   }
+
+  publishErrorChannel(ctx)
 }
 
 function onRoute (routeOptions) {
