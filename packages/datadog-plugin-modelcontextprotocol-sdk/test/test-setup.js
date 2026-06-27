@@ -2,6 +2,7 @@
 
 class ModelcontextprotocolSdkTestSetup {
   async setup (clientModule, versionMod) {
+    this._versionMod = versionMod
     const path = require('path')
     const { Client } = clientModule
     // Use versionMod.getPath to resolve the SDK root since the package exports map
@@ -29,6 +30,23 @@ class ModelcontextprotocolSdkTestSetup {
       async () => {
         throw new Error('Intentional test error')
       }
+    )
+
+    this._server.registerResource(
+      'test-resource',
+      'file:///test-resource.txt',
+      { description: 'A test resource', mimeType: 'text/plain' },
+      async () => ({
+        contents: [{ uri: 'file:///test-resource.txt', text: 'resource content' }],
+      })
+    )
+
+    this._server.registerPrompt(
+      'test-prompt',
+      { description: 'A test prompt', argsSchema: {} },
+      async () => ({
+        messages: [{ role: 'user', content: { type: 'text', text: 'test prompt message' } }],
+      })
     )
 
     const [clientTransport, serverTransport] = this._InMemoryTransport.createLinkedPair()
@@ -62,6 +80,37 @@ class ModelcontextprotocolSdkTestSetup {
 
   async clientListTools () {
     return this._client.listTools()
+  }
+
+  async clientListResources () {
+    return this._client.listResources()
+  }
+
+  async clientReadResource () {
+    return this._client.readResource({ uri: 'file:///test-resource.txt' })
+  }
+
+  async clientListPrompts () {
+    return this._client.listPrompts()
+  }
+
+  async clientGetPrompt () {
+    return this._client.getPrompt({ name: 'test-prompt', arguments: {} })
+  }
+
+  async clientSendUnknownMethod () {
+    // Send a request for a method the server has no handler for (triggers MethodNotFound).
+    // The client rejects with an McpError; catch it so the test can assert on the server span.
+    const { EmptyResultSchema } = this._versionMod.get('@modelcontextprotocol/sdk/types.js')
+    try {
+      await this._client.request({ method: 'dd/unknownMethod' }, EmptyResultSchema)
+    } catch {
+      // Expected — server returns MethodNotFound
+    }
+  }
+
+  get server () {
+    return this._server
   }
 }
 
