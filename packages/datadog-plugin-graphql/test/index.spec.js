@@ -255,6 +255,10 @@ describe('Plugin', () => {
             const typeDefs = `
               type Query {
                 hello(name: String): String
+                error: String
+              }
+              type Subscription {
+                count: Int
               }
             `
 
@@ -262,6 +266,16 @@ describe('Plugin', () => {
               Query: {
                 hello: (_, { name }) => {
                   return `Hello, ${name || 'world'}!`
+                },
+                error: async () => {
+                  throw new Error('Yoga query failed')
+                },
+              },
+              Subscription: {
+                count: {
+                  subscribe: async function * () {
+                    yield { count: 1 }
+                  },
                 },
               },
             }
@@ -309,11 +323,70 @@ describe('Plugin', () => {
                 },
               })
               assert.ok(!('graphql.source' in spans[0].meta))
+              assert.strictEqual(spans.filter(span => span.name === expectedSchema.server.opName).length, 1)
             }, { spanResourceMatch: /MyQuery/ })
 
             return Promise.all([
               assertion,
               axios.post(`http://localhost:${port}/graphql`, { query }),
+            ])
+          })
+
+          it('should instrument graphql-yoga async execution errors', () => {
+            const query = `
+              query ErrorQuery {
+                error
+              }
+            `
+
+            const assertion = agent.assertSomeTraces(traces => {
+              const spans = sort(traces[0])
+
+              assertObjectContains(spans[0], {
+                name: expectedSchema.server.opName,
+                resource: 'query ErrorQuery{error}',
+                error: 1,
+                meta: {
+                  'graphql.operation.type': 'query',
+                  'graphql.operation.name': 'ErrorQuery',
+                },
+              })
+            }, { spanResourceMatch: /ErrorQuery/ })
+
+            return Promise.all([
+              assertion,
+              axios.post(`http://localhost:${port}/graphql`, { query }),
+            ])
+          })
+
+          it('should instrument graphql-yoga subscriptions', () => {
+            const query = `
+              subscription CountSubscription {
+                count
+              }
+            `
+
+            const assertion = agent.assertSomeTraces(traces => {
+              const spans = sort(traces[0])
+
+              assertObjectContains(spans[0], {
+                name: expectedSchema.server.opName,
+                resource: 'subscription CountSubscription{count}',
+                error: 0,
+                meta: {
+                  'graphql.operation.type': 'subscription',
+                  'graphql.operation.name': 'CountSubscription',
+                },
+              })
+            }, { spanResourceMatch: /CountSubscription/ })
+
+            return Promise.all([
+              assertion,
+              axios.post(`http://localhost:${port}/graphql`, { query }, {
+                headers: {
+                  accept: 'text/event-stream',
+                },
+              }),
             ])
           })
         })
@@ -444,6 +517,56 @@ describe('Plugin', () => {
           assert.ok(await graphql.execute(args), 'execute returned a result')
           assert.strictEqual(args.fieldResolver, callerFieldResolver,
             'instrumentation must not overwrite the caller-supplied fieldResolver')
+        })
+
+        it('should preserve graphql defaultFieldResolver behavior for primitive sources', async () => {
+          const Box = new graphql.GraphQLObjectType({
+            name: 'Box',
+            fields: {
+              length: {
+                type: graphql.GraphQLInt,
+              },
+            },
+          })
+          const query = new graphql.GraphQLObjectType({
+            name: 'Query',
+            fields: {
+              box: {
+                type: Box,
+                resolve: () => 'abc',
+              },
+            },
+          })
+          const localSchema = new graphql.GraphQLSchema({ query })
+          const document = graphql.parse('{ box { length } }')
+
+          const result = await graphql.execute({ schema: localSchema, document })
+
+          assert.strictEqual(result.data.box.length, null)
+        })
+
+        it('publishes caller-owned execute args before installing the wrapped fieldResolver', async () => {
+          const startChannel = dc.channel('apm:graphql:execute:start')
+          const document = graphql.parse('query MyQuery { hello(name: "world") }')
+          const callerFieldResolver = (source, args, contextValue, info) => 'caller-resolved'
+          const args = { schema, document, contextValue: {}, fieldResolver: callerFieldResolver }
+
+          let publishedArgs
+          const handler = ({ args: channelArgs }) => {
+            publishedArgs = channelArgs
+            assert.strictEqual(channelArgs, args)
+            assert.strictEqual(channelArgs.fieldResolver, callerFieldResolver)
+          }
+          startChannel.subscribe(handler)
+
+          try {
+            assert.ok(await graphql.execute(args), 'execute returned a result')
+          } finally {
+            startChannel.unsubscribe(handler)
+          }
+
+          assert.strictEqual(publishedArgs, args)
+          assert.strictEqual(args.fieldResolver, callerFieldResolver)
         })
 
         describe('preserves the caller-supplied contextValue', () => {
@@ -904,11 +1027,15 @@ describe('Plugin', () => {
 
           const [, result] = await Promise.all([
             agent.assertSomeTraces(traces => {
-              const paths = sort(traces[0])
-                .filter(span => span.name === 'graphql.resolve')
-                .map(span => span.meta['graphql.field.path'])
-                .sort()
+              const resolveSpans = sort(traces[0]).filter(span => span.name === 'graphql.resolve')
+              const paths = resolveSpans.map(span => span.meta['graphql.field.path']).sort()
               assert.deepStrictEqual(paths, ['matrix', 'matrix.*.*.value'])
+
+              const matrix = resolveSpans.find(span => span.meta['graphql.field.path'] === 'matrix')
+              const value = resolveSpans.find(span => span.meta['graphql.field.path'] === 'matrix.*.*.value')
+              assert.ok(matrix, 'expected matrix span')
+              assert.ok(value, 'expected matrix.*.*.value span')
+              assert.strictEqual(value.parent_id.toString(), matrix.span_id.toString())
             }),
             graphql.graphql({ schema: matrixSchema, source, rootValue }),
           ])
@@ -1517,6 +1644,27 @@ describe('Plugin', () => {
           }
         })
 
+        it('should publish empty resolver args with subscription to datadog:graphql:resolver:start', async () => {
+          const source = 'query MyQuery { human { name } }'
+          const document = graphql.parse(source)
+          const resolverInfo = []
+
+          const handler = ({ resolverInfo: info }) => {
+            resolverInfo.push(info)
+          }
+          dc.channel('datadog:graphql:resolver:start').subscribe(handler)
+
+          try {
+            await graphql.execute({ schema, document })
+          } finally {
+            dc.channel('datadog:graphql:resolver:start').unsubscribe(handler)
+          }
+
+          const humanResolverInfo = resolverInfo.find(info => info?.human)
+          assert.deepStrictEqual(humanResolverInfo, { human: {} },
+            `Expected empty human resolver args. Got ${inspect(resolverInfo)}`)
+        })
+
         it('should support multiple validations on a pre-parsed document', () => {
           const source = 'query MyQuery { hello(name: "world") }'
           const document = graphql.parse(source)
@@ -1859,6 +2007,26 @@ describe('Plugin', () => {
 
           graphql.graphql({ schema, source, rootValue }).catch(done)
         })
+
+        it('should publish resolver start for depth 0 AppSec subscribers', async () => {
+          const startCh = dc.channel('datadog:graphql:resolver:start')
+          const fields = []
+          const handler = ({ resolverInfo }) => {
+            fields.push(...Object.keys(resolverInfo || {}))
+          }
+
+          startCh.subscribe(handler)
+
+          try {
+            const source = '{ human { name } }'
+            const result = await graphql.graphql({ schema, source })
+
+            assert.ok(!result.errors || result.errors.length === 0, `Expected [${result.errors}] to be empty`)
+            assert.deepStrictEqual(fields.sort(), ['human', 'name'])
+          } finally {
+            startCh.unsubscribe(handler)
+          }
+        })
       })
 
       describe('with a depth >=1', () => {
@@ -1907,6 +2075,61 @@ describe('Plugin', () => {
           })
 
           return Promise.all([assertion, graphql.graphql({ schema, source })])
+        })
+
+        it('should honor resolver abort for fields gated by depth', async () => {
+          let streetResolverRan = false
+          const startCh = dc.channel('datadog:graphql:resolver:start')
+          const handler = ({ abortController, resolverInfo }) => {
+            if (resolverInfo?.street) abortController.abort()
+          }
+
+          const Address = new graphql.GraphQLObjectType({
+            name: 'DepthAbortAddress',
+            fields: {
+              street: {
+                type: graphql.GraphQLString,
+                resolve () {
+                  streetResolverRan = true
+                  return 'foo street'
+                },
+              },
+            },
+          })
+          const Human = new graphql.GraphQLObjectType({
+            name: 'DepthAbortHuman',
+            fields: {
+              address: {
+                type: Address,
+                resolve: () => ({}),
+              },
+            },
+          })
+          const query = new graphql.GraphQLObjectType({
+            name: 'DepthAbortQuery',
+            fields: {
+              human: {
+                type: Human,
+                resolve: () => ({}),
+              },
+            },
+          })
+          const localSchema = new graphql.GraphQLSchema({ query })
+
+          startCh.subscribe(handler)
+
+          try {
+            const result = await graphql.graphql({
+              schema: localSchema,
+              source: '{ human { address { street } } }',
+            })
+
+            assert.strictEqual(streetResolverRan, false)
+            assert.strictEqual(result.errors.length, 1)
+            assert.strictEqual(result.errors[0].originalError?.name, 'AbortError')
+          } finally {
+            startCh.unsubscribe(handler)
+          }
         })
 
         it('publishes apm:graphql:resolve:start for every resolver, including depth-gated ones', async () => {
@@ -2142,6 +2365,7 @@ describe('Plugin', () => {
             execute: sinon.spy((span, context, res) => {}),
             parse: sinon.spy((span, document, operation) => {}),
             validate: sinon.spy((span, document, error) => {}),
+            resolve: sinon.spy((span, field) => {}),
           },
         }
 
@@ -2278,6 +2502,32 @@ describe('Plugin', () => {
             })
 
           return Promise.all([assertion, action])
+        })
+
+        it('should run the resolve hook before graphql.resolve span is finished', () => {
+          const resolveSource = '{ hello(name: "world") }'
+
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
+
+            assert.strictEqual(spans.length, 2)
+            assert.strictEqual(spans[1].name, 'graphql.resolve')
+            sinon.assert.calledOnce(config.hooks.resolve)
+
+            const span = config.hooks.resolve.firstCall.args[0]
+            const field = config.hooks.resolve.firstCall.args[1]
+
+            assert.strictEqual(span.context()._name, 'graphql.resolve')
+            assert.strictEqual(field.fieldName, 'hello')
+            assert.strictEqual(field.path, 'hello')
+            assert.strictEqual(field.error, null)
+            assert.strictEqual(field.result, 'world')
+          }, { spanResourceMatch: /hello:String/ })
+
+          return Promise.all([
+            assertion,
+            graphql.graphql({ schema, source: resolveSource }),
+          ])
         })
       })
 
