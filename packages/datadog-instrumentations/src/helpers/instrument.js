@@ -43,21 +43,44 @@ exports.tracingChannel = function (name) {
 }
 
 /**
- * Build a guarded publisher for a public error channel. A subscriber that
- * re-enters the same wrapped dispatch while handling the error would otherwise
- * republish here and recurse until the stack overflows. Each framework binds
- * its own publisher, so the in-flight flag stays private to one channel: a
- * genuinely nested error on a different framework's channel (a Koa app mounted
- * inside Express) still reaches its subscribers instead of being dropped, and
- * the guard costs a closure read rather than a per-publish channel lookup.
+ * Build a guarded publisher for a public error channel. A channel subscriber
+ * that drives another wrapped hook while handling the error, and fastify's boot
+ * loop re-invoking the same encapsulated hook (avvio's `_encapsulateThreeParam`)
+ * after a throw, both republish here and recurse until the stack overflows
+ * (#8783, #9099). Two guards bound both shapes:
+ *
+ * 1. `publishing` blocks a synchronous re-entry — any error republished while a
+ *    publish is still on the stack — the way the original boolean did.
+ * 2. `lastError` blocks a sequential re-drive of the same error after the publish
+ *    returned. The boolean alone cannot, because its `finally` clears the flag
+ *    before the next re-drive runs, and the error that rides the re-drives (a
+ *    persistent `DatadogRaspAbortError`, the boot deprecation error) is the same
+ *    object on every hop, so a single reference compare against the previous
+ *    publish terminates the loop. This costs one comparison rather than a
+ *    `WeakSet` lookup on every publish, and it does not mutate the error.
+ *
+ * A genuinely distinct error still reaches its subscribers. The only case this
+ * does not collapse is a re-drive that alternates between two distinct persistent
+ * errors on the same channel, which is not a shape fastify's hook re-drive
+ * produces (it re-throws the one caught error).
  *
  * @param {Channel} errorChannel
  */
 exports.createErrorPublisher = function createErrorPublisher (errorChannel) {
   let publishing = false
-  /** @param {object} message */
+  let lastError
+  /** @param {{ error?: unknown }} message */
   return function publishError (message) {
     if (publishing) return
+
+    // The re-drive re-throws the same error object on every hop, so a compare
+    // against the previously published error terminates it. `undefined` is never
+    // a re-drive sentinel: callers gate on `ctx.error` being truthy before
+    // reaching here, so an undefined error simply falls through to the guard.
+    const error = message.error
+    if (error !== undefined && error === lastError) return
+    lastError = error
+
     publishing = true
     try {
       errorChannel.publish(message)
