@@ -2757,6 +2757,21 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_GRAPHQL_COLLAPSE": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
+    "DD_TRACE_GRAPHQL_DEPTH": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "default": "-1",
+        "allowed": "-1|\\d+"
+      }
+    ],
     "DD_TRACE_GRAPHQL_ENABLED": [
       {
         "implementation": "A",
@@ -2790,6 +2805,13 @@
         "implementation": "A",
         "type": "boolean",
         "default": "true"
+      }
+    ],
+    "DD_TRACE_GRAPHQL_VARIABLES": [
+      {
+        "implementation": "A",
+        "type": "array",
+        "default": ""
       }
     ],
     "DD_TRACE_GRAPHQL_YOGA_ENABLED": [
