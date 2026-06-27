@@ -8,38 +8,35 @@ const { NODE_MAJOR, NODE_MINOR, NODE_PATCH } = require('./version')
 
 const parentURL = pathToFileURL(__filename)
 
-// Idempotent: this entry can be loaded both via `--import` and from the CJS init
-// path. Register the loader hooks once per process so they are not installed twice.
-const REGISTERED = Symbol.for('dd-trace:loader-hooks-registered')
-if (!globalThis[REGISTERED]) {
-  globalThis[REGISTERED] = true
-  registerLoaderHooks()
-}
+// Node caches this module, so its body runs once per process even when both the
+// `--import` entry and the CommonJS init path load it. Record that the loader
+// hooks were registered here so initialize.mjs does not also register the async
+// loader (it reaches Module.register on a separate path, which the module cache
+// can't dedupe for us).
+let isSyncLoaderRegistered = false
 
-function registerLoaderHooks () {
-  let isSyncLoaderRegistered = false
-
-  if (shouldRegisterSyncLoaderHooks()) {
-    let registerSyncLoaderHooks
-    let syncRegistrationError
-    try {
-      ({ registerSyncLoaderHooks } = require('./loader-hook.mjs'))
-      if (registerSyncLoaderHooks) {
-        isSyncLoaderRegistered = registerSyncLoaderHooks()
-      }
-    } catch (error) {
-      syncRegistrationError = error
+if (shouldRegisterSyncLoaderHooks()) {
+  let registerSyncLoaderHooks
+  let syncRegistrationError
+  try {
+    ({ registerSyncLoaderHooks } = require('./loader-hook.mjs'))
+    if (registerSyncLoaderHooks) {
+      isSyncLoaderRegistered = registerSyncLoaderHooks()
     }
-
-    if (!isSyncLoaderRegistered) {
-      warnSyncLoaderFallback(syncRegistrationError)
-    }
+  } catch (error) {
+    syncRegistrationError = error
   }
 
   if (!isSyncLoaderRegistered) {
-    register('./loader-hook.mjs', parentURL)
+    warnSyncLoaderFallback(syncRegistrationError)
   }
 }
+
+if (!isSyncLoaderRegistered) {
+  register('./loader-hook.mjs', parentURL)
+}
+
+globalThis[Symbol.for('dd-trace:loader-hooks-registered')] = true
 
 function shouldRegisterSyncLoaderHooks () {
   if (!isSyncLoaderHookVersionSupported()) {
