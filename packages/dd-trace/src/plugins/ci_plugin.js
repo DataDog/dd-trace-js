@@ -628,7 +628,7 @@ module.exports = class CiPlugin extends Plugin {
       return
     }
 
-    if (config.testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED && !this.di) {
+    if (config.isTestDynamicInstrumentationEnabled && !this.di) {
       this.di = getDiClient()
     }
 
