@@ -22,7 +22,7 @@ const callbackFinishCh = channel('datadog:fastify:callback:execute')
 const parsingContexts = new WeakMap()
 const cookiesPublished = new WeakSet()
 const bodyPublished = new WeakSet()
-const errorsPublished = new WeakSet()
+let lastPublishedError
 
 function wrapFastify (fastify, hasParsingEvents) {
   if (typeof fastify !== 'function') return fastify
@@ -111,12 +111,12 @@ function invokeHookWithContext (name, fn, thisArg, args) {
     const promise = fn.apply(thisArg, args)
 
     if (promise && typeof promise.catch === 'function') {
-      return promise.catch(error => {
+      // Observe the rejection to publish, then hand back the original promise so
+      // the rejection keeps propagating untouched. Returning the handler's
+      // promise instead would resolve with `undefined` and swallow the rejection.
+      promise.catch(error => {
         ctx.error = error
         publishError(ctx)
-        // Re-throw so the rejection keeps propagating. Returning the error here
-        // would resolve the promise with it and silently swallow the rejection.
-        throw error
       })
     }
 
@@ -316,13 +316,11 @@ function publishError (ctx) {
   // avvio's boot loop (`_encapsulateThreeParam`) re-invokes the same encapsulated
   // hook after it throws, re-throwing the same error object on every re-drive
   // (#9099). Each re-drive is sequential, so the channel's in-flight flag has
-  // already reset; without this object-keyed guard every re-drive republishes,
-  // the subscriber recurses, and boot overflows the stack. Only an object error
-  // can key the WeakSet; a primitive falls through to the channel's re-entry flag.
-  if (typeof error === 'object') {
-    if (errorsPublished.has(error)) return
-    errorsPublished.add(error)
-  }
+  // already reset; the re-drive carries the one caught error on every hop, so a
+  // reference compare against the previously published error terminates the loop
+  // before the subscriber recurses and boot overflows the stack.
+  if (error === lastPublishedError) return
+  lastPublishedError = error
 
   publishErrorChannel(ctx)
 }

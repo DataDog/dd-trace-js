@@ -257,7 +257,7 @@ describe('fastify instrumentation (unit)', () => {
       sinon.assert.notCalled(errorListener)
     })
 
-    it('publishes a rejected promise and re-rejects it when errorChannel has subscribers', async () => {
+    it('publishes a rejected promise and propagates the rejection when errorChannel has subscribers', async () => {
       const errorListener = sinon.stub()
       subscribe(errorChannel, errorListener)
 
@@ -271,8 +271,8 @@ describe('fastify instrumentation (unit)', () => {
       const wrapper = registered[0].fn
 
       // Invoke without a function trailing arg so we enter the promise branch.
-      // The catch must publish the error and then re-reject; returning the error
-      // would resolve the promise with it and silently swallow the rejection.
+      // The wrapper observes the rejection to publish, then returns the original
+      // promise so the same rejection propagates untouched to the caller.
       await assert.rejects(wrapper({ sentinel: true }), err => err === error)
 
       sinon.assert.calledOnce(errorListener)
