@@ -241,7 +241,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
     if (res?.errors?.length) {
       span.setTag('error', res.errors[0])
       for (const err of res.errors) {
-        extractErrorIntoSpanEvent(this._tracerConfig, span, err)
+        extractErrorIntoSpanEvent(this.config, span, err)
       }
     }
 
