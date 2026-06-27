@@ -7,27 +7,38 @@ const { pathToFileURL } = require('node:url')
 const { NODE_MAJOR, NODE_MINOR, NODE_PATCH } = require('./version')
 
 const parentURL = pathToFileURL(__filename)
-let isSyncLoaderRegistered = false
 
-if (shouldRegisterSyncLoaderHooks()) {
-  let registerSyncLoaderHooks
-  let syncRegistrationError
-  try {
-    ({ registerSyncLoaderHooks } = require('./loader-hook.mjs'))
-    if (registerSyncLoaderHooks) {
-      isSyncLoaderRegistered = registerSyncLoaderHooks()
+// Idempotent: this entry can be loaded both via `--import` and from the CJS init
+// path. Register the loader hooks once per process so they are not installed twice.
+const REGISTERED = Symbol.for('dd-trace:loader-hooks-registered')
+if (!globalThis[REGISTERED]) {
+  globalThis[REGISTERED] = true
+  registerLoaderHooks()
+}
+
+function registerLoaderHooks () {
+  let isSyncLoaderRegistered = false
+
+  if (shouldRegisterSyncLoaderHooks()) {
+    let registerSyncLoaderHooks
+    let syncRegistrationError
+    try {
+      ({ registerSyncLoaderHooks } = require('./loader-hook.mjs'))
+      if (registerSyncLoaderHooks) {
+        isSyncLoaderRegistered = registerSyncLoaderHooks()
+      }
+    } catch (error) {
+      syncRegistrationError = error
     }
-  } catch (error) {
-    syncRegistrationError = error
+
+    if (!isSyncLoaderRegistered) {
+      warnSyncLoaderFallback(syncRegistrationError)
+    }
   }
 
   if (!isSyncLoaderRegistered) {
-    warnSyncLoaderFallback(syncRegistrationError)
+    register('./loader-hook.mjs', parentURL)
   }
-}
-
-if (!isSyncLoaderRegistered) {
-  register('./loader-hook.mjs', parentURL)
 }
 
 function shouldRegisterSyncLoaderHooks () {
