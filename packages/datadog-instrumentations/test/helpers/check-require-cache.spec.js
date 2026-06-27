@@ -139,6 +139,70 @@ describe('check-require-cache', () => {
       }
     })
 
+    it('collects next in output: standalone mode where next-server is copied under .next/standalone', () => {
+      // `output: 'standalone'` copies next-server.js into the bundle and the generated server.js
+      // requires it through normal resolution, so the cache key still ends with
+      // next/dist/server/next-server.js (the last node_modules/next segment is the package).
+      const restore = cacheModule(
+        path.join('/app', '.next', 'standalone', 'node_modules', 'next', 'dist', 'server', 'next-server.js')
+      )
+      try {
+        checkForRequiredModules()
+        assert.ok(drainFrameworkWarnings().some(message => message.includes("'next' was loaded before dd-trace")))
+      } finally {
+        restore()
+      }
+    })
+
+    it('detects standalone next when the cache key uses Windows separators', () => {
+      const restore = cacheModule('C:\\app\\.next\\standalone\\node_modules\\next\\dist\\server\\next-server.js')
+      try {
+        checkForRequiredModules()
+        assert.ok(drainFrameworkWarnings().some(message => message.includes("'next' was loaded before dd-trace")))
+      } finally {
+        restore()
+      }
+    })
+
+    it('collects next for an App Router app where next-server and the app-route runtime are both cached', () => {
+      // The App Router request path runs inside next-server (NextNodeServer), which lazily pulls
+      // in the precompiled app-route runtime bundle, so next-server.js is always cached too. The
+      // existing next-server.js match therefore already covers App Router apps.
+      const restoreServer = cacheModule(
+        path.join('/app', 'node_modules', 'next', 'dist', 'server', 'next-server.js')
+      )
+      const restoreRuntime = cacheModule(
+        path.join('/app', 'node_modules', 'next', 'dist', 'compiled', 'next-server', 'app-route.runtime.prod.js')
+      )
+      try {
+        checkForRequiredModules()
+        assert.ok(drainFrameworkWarnings().some(message => message.includes("'next' was loaded before dd-trace")))
+      } finally {
+        restoreRuntime()
+        restoreServer()
+      }
+    })
+
+    it('ignores the app-route runtime bundle when next-server is not cached', () => {
+      const nextWarnings = messages => messages.filter(message => message.includes("'next'")).length
+
+      checkForRequiredModules()
+      const before = nextWarnings(drainFrameworkWarnings())
+
+      // The runtime bundle can never be the only cached next module under a Node server, so its
+      // presence alone is not a late-load signal. The scan stays on next-server.js rather than
+      // paying a pattern match for a state that cannot occur.
+      const restore = cacheModule(
+        path.join('/app', 'node_modules', 'next', 'dist', 'compiled', 'next-server', 'app-route.runtime.prod.js')
+      )
+      try {
+        checkForRequiredModules()
+        assert.strictEqual(nextWarnings(drainFrameworkWarnings()), before)
+      } finally {
+        restore()
+      }
+    })
+
     it('ignores non-server files of a curated framework', () => {
       const nextWarnings = messages => messages.filter(message => message.includes("'next'")).length
 
