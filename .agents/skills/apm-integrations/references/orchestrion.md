@@ -208,6 +208,95 @@ For integrations wrapping multiple methods, create a separate plugin class per m
 - `ctx.error` — thrown error (on error)
 - `ctx.currentStore` — set by `startSpan` in `bindStart`
 
+## Propagating Synchronous Errors From `bindStart`
+
+Subscribers on the prefix `:start` channel and `bindStore` transforms **cannot
+propagate a synchronous throw** to the caller of an orchestrion-wrapped
+function. Both are wrapped in `try { ... } catch (err) { process.nextTick(() =>
+triggerUncaughtException(err)); ... }` by Node's `diagnostics_channel` (see
+`lib/diagnostics_channel.js`'s `wrapStoreRun` and `publish`). The error
+surfaces async as an uncaught exception, **after** the wrapped fn has already
+run and the call has returned normally.
+
+The wrapper's own catch block, however, **does** rethrow:
+
+```js
+return ch.start.runStores(__apm$ctx, () => {
+  try {
+    const result = __apm$traced();
+    __apm$ctx.result = result;
+    return result;
+  } catch (err) {
+    __apm$ctx.error = err;
+    ch.error.publish(__apm$ctx);
+    throw err;                  // <- propagates the wrapped fn's error to the caller
+  } finally {
+    ch.end.publish(__apm$ctx);
+  }
+});
+```
+
+When a contract requires `assert.throws(() => wrapped(...))`-style synchronous
+propagation from a `:start` observer (the canonical case is AppSec WAF's
+`abortController.abort()` model), use the **Proxy-on-arguments pattern**:
+
+```js
+bindStart (ctx) {
+  // ... normal setup, span creation ...
+  const abortController = new AbortController()
+  if (startCh.hasSubscribers) {
+    startCh.publish({ abortController, args })       // subscribers run sync
+    if (abortController.signal.aborted) {
+      // ctx.arguments is the SAME array reference the wrapper spreads into
+      // the wrapped fn (__apm$wrapped.apply(this, ctx.arguments)). Replace
+      // arguments[0] with a Proxy whose getters throw AbortError. The
+      // wrapped fn's first property access (typically a destructure of args)
+      // triggers the trap → the wrapper's catch+rethrow propagates AbortError
+      // to the caller. Span lifecycle still completes via end.publish.
+      ctx.arguments[0] = new Proxy({}, {
+        get () { throw new AbortError('Aborted') },
+        has () { throw new AbortError('Aborted') },
+      })
+      ctx.ddAborted = true
+      return ctx.currentStore
+    }
+  }
+  // ... rest of bindStart ...
+}
+
+error (ctx) {
+  if (ctx.ddAborted) return                          // abort != error tag
+  // ... regular error handling ...
+}
+```
+
+Reference implementation: `packages/datadog-plugin-graphql/src/execute.js`
+(`apm:graphql:execute:start` contract).
+
+Why this works:
+- `ctx.arguments` and the rewriter's `__apm$arguments` are the same array
+  reference (confirmed by capturing the rewriter output: `const __apm$traced
+  = () => __apm$wrapped.apply(this, __apm$arguments)`).
+- The wrapped fn's body almost always touches `arguments[0]` on the first
+  statement (destructure, property read, validation). Any read triggers the
+  Proxy trap.
+- The orchestrion wrapper's `catch { ...; throw err }` propagates the thrown
+  error synchronously to the caller — confirmed in the rewriter template
+  (vendor's `code-transformer/index.js`, `wrapSync` function).
+- `:end` still fires in `finally`, so the plugin's `end(ctx)` runs as usual
+  and the span lifecycle completes cleanly. Combined with an `error(ctx)`
+  that no-ops when `ctx.ddAborted`, the span finishes with `error === 0`
+  (matches the abort contract).
+
+When NOT to use this:
+- If you control the wrapped fn (e.g., it's a method you can wrap with
+  shimmer on top of orchestrion), do that — clearer and avoids the
+  Proxy indirection.
+- If the wrapped fn might catch its own errors before they escape (some
+  user-resolver patterns do this), the AbortError won't propagate. Verify
+  the wrapped fn does NOT have a top-level `try/catch` around the
+  property access that triggers the trap.
+
 ## Common Issues
 
 ### Wrong filePath
