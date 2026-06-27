@@ -10,9 +10,28 @@ require('../setup/core')
 const tracer = require('../../').init()
 
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
-const spanFormat = require('../../src/span_format')
 
 const NEXT_HANDLE_REQUEST = 'BaseServer.handleRequest'
+
+// Capture the span as the exporter receives it, i.e. after the trace has been
+// formatted and is about to be written. The Next root span is the only span in
+// its trace, so `Span.end()` -> `_ddSpan.finish()` builds and exports the
+// payload synchronously; asserting here proves the correction reached the wire
+// rather than a post-finish re-format that no exported trace ever sees.
+function captureExportedRootSpan (run) {
+  const exporter = tracer._tracer._exporter
+  const originalExport = exporter.export
+  let exported
+  exporter.export = (spans) => {
+    exported ??= spans[0]
+  }
+  try {
+    run()
+  } finally {
+    exporter.export = originalExport
+  }
+  return exported
+}
 
 function startNextRootSpan ({ method = 'GET', initialName } = {}) {
   const provider = new TracerProvider()
@@ -54,58 +73,52 @@ function finishNextRootSpan (span, { method, route, rsc = false } = {}) {
 
 describe('OTel Next.js span processor', () => {
   it('rewrites a routed Next root request span to next.request + "GET /route" resource', () => {
-    const span = startNextRootSpan({ method: 'GET' })
-    finishNextRootSpan(span, { method: 'GET', route: '/products/[slug]' })
-
-    const formatted = spanFormat(span._ddSpan)
-    assert.strictEqual(formatted.name, 'next.request')
-    assert.strictEqual(formatted.resource, 'GET /products/[slug]')
+    const exported = captureExportedRootSpan(() => {
+      finishNextRootSpan(startNextRootSpan({ method: 'GET' }), { method: 'GET', route: '/products/[slug]' })
+    })
+    assert.strictEqual(exported.name, 'next.request')
+    assert.strictEqual(exported.resource, 'GET /products/[slug]')
   })
 
   it('keeps the resource as the bare method when there is no route (404)', () => {
-    const span = startNextRootSpan({ method: 'GET' })
-    finishNextRootSpan(span, { method: 'GET' })
-
-    const formatted = spanFormat(span._ddSpan)
-    assert.strictEqual(formatted.name, 'next.request')
-    assert.strictEqual(formatted.resource, 'GET')
+    const exported = captureExportedRootSpan(() => {
+      finishNextRootSpan(startNextRootSpan({ method: 'GET' }), { method: 'GET' })
+    })
+    assert.strictEqual(exported.name, 'next.request')
+    assert.strictEqual(exported.resource, 'GET')
   })
 
   it('mirrors Next RSC naming in the resource', () => {
-    const span = startNextRootSpan({ method: 'GET' })
-    finishNextRootSpan(span, { method: 'GET', route: '/products/[slug]', rsc: true })
-
-    const formatted = spanFormat(span._ddSpan)
-    assert.strictEqual(formatted.name, 'next.request')
-    assert.strictEqual(formatted.resource, 'RSC GET /products/[slug]')
+    const exported = captureExportedRootSpan(() => {
+      finishNextRootSpan(startNextRootSpan({ method: 'GET' }), { method: 'GET', route: '/products/[slug]', rsc: true })
+    })
+    assert.strictEqual(exported.name, 'next.request')
+    assert.strictEqual(exported.resource, 'RSC GET /products/[slug]')
   })
 
   it('uses the http.method tag with a non-GET verb', () => {
-    const span = startNextRootSpan({ method: 'POST' })
-    finishNextRootSpan(span, { method: 'POST', route: '/api/login' })
-
-    const formatted = spanFormat(span._ddSpan)
-    assert.strictEqual(formatted.name, 'next.request')
-    assert.strictEqual(formatted.resource, 'POST /api/login')
+    const exported = captureExportedRootSpan(() => {
+      finishNextRootSpan(startNextRootSpan({ method: 'POST' }), { method: 'POST', route: '/api/login' })
+    })
+    assert.strictEqual(exported.name, 'next.request')
+    assert.strictEqual(exported.resource, 'POST /api/login')
   })
 
   it('leaves a non-Next OTel span untouched', () => {
-    const provider = new TracerProvider()
-    provider.register()
-    const otelTracer = provider.getTracer()
-
-    const span = otelTracer.startSpan('GET', {
-      kind: api.SpanKind.SERVER,
-      attributes: { 'http.method': 'GET' },
+    const exported = captureExportedRootSpan(() => {
+      const provider = new TracerProvider()
+      provider.register()
+      const span = provider.getTracer().startSpan('GET', {
+        kind: api.SpanKind.SERVER,
+        attributes: { 'http.method': 'GET' },
+      })
+      span.updateName('GET /products/[slug]')
+      span.end()
     })
-    span.updateName('GET /products/[slug]')
-    span.end()
-
-    const formatted = spanFormat(span._ddSpan)
     // The generic bridge behaviour: updateName drives the operation name and the
     // resource keeps the original span name.
-    assert.strictEqual(formatted.name, 'GET /products/[slug]')
-    assert.strictEqual(formatted.resource, 'GET')
+    assert.strictEqual(exported.name, 'GET /products/[slug]')
+    assert.strictEqual(exported.resource, 'GET')
   })
 
   describe('when next.span_name is absent', () => {
@@ -122,35 +135,35 @@ describe('OTel Next.js span processor', () => {
     }
 
     it('constructs the resource from http.method and next.route', () => {
-      const span = startWithoutSpanName('GET')
-      span.setAttributes({ 'next.route': '/products/[slug]', 'http.route': '/products/[slug]' })
-      span.updateName('GET /products/[slug]')
-      span.end()
-
-      const formatted = spanFormat(span._ddSpan)
-      assert.strictEqual(formatted.name, 'next.request')
-      assert.strictEqual(formatted.resource, 'GET /products/[slug]')
+      const exported = captureExportedRootSpan(() => {
+        const span = startWithoutSpanName('GET')
+        span.setAttributes({ 'next.route': '/products/[slug]', 'http.route': '/products/[slug]' })
+        span.updateName('GET /products/[slug]')
+        span.end()
+      })
+      assert.strictEqual(exported.name, 'next.request')
+      assert.strictEqual(exported.resource, 'GET /products/[slug]')
     })
 
     it('falls back to http.route when next.route is absent', () => {
-      const span = startWithoutSpanName('GET')
-      span.setAttributes({ 'http.route': '/api/health' })
-      span.updateName('GET /api/health')
-      span.end()
-
-      const formatted = spanFormat(span._ddSpan)
-      assert.strictEqual(formatted.name, 'next.request')
-      assert.strictEqual(formatted.resource, 'GET /api/health')
+      const exported = captureExportedRootSpan(() => {
+        const span = startWithoutSpanName('GET')
+        span.setAttributes({ 'http.route': '/api/health' })
+        span.updateName('GET /api/health')
+        span.end()
+      })
+      assert.strictEqual(exported.name, 'next.request')
+      assert.strictEqual(exported.resource, 'GET /api/health')
     })
 
     it('constructs the bare method when there is no route', () => {
-      const span = startWithoutSpanName('GET')
-      span.updateName('GET')
-      span.end()
-
-      const formatted = spanFormat(span._ddSpan)
-      assert.strictEqual(formatted.name, 'next.request')
-      assert.strictEqual(formatted.resource, 'GET')
+      const exported = captureExportedRootSpan(() => {
+        const span = startWithoutSpanName('GET')
+        span.updateName('GET')
+        span.end()
+      })
+      assert.strictEqual(exported.name, 'next.request')
+      assert.strictEqual(exported.resource, 'GET')
     })
   })
 
@@ -167,12 +180,11 @@ describe('OTel Next.js span processor', () => {
     })
 
     it('resolves the operation name to http.server.request', () => {
-      const span = startNextRootSpan({ method: 'GET' })
-      finishNextRootSpan(span, { method: 'GET', route: '/products/[slug]' })
-
-      const formatted = spanFormat(span._ddSpan)
-      assert.strictEqual(formatted.name, 'http.server.request')
-      assert.strictEqual(formatted.resource, 'GET /products/[slug]')
+      const exported = captureExportedRootSpan(() => {
+        finishNextRootSpan(startNextRootSpan({ method: 'GET' }), { method: 'GET', route: '/products/[slug]' })
+      })
+      assert.strictEqual(exported.name, 'http.server.request')
+      assert.strictEqual(exported.resource, 'GET /products/[slug]')
     })
   })
 })

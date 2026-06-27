@@ -13,6 +13,7 @@ class NoopSpanProcessor {
   }
 
   onStart (span, context) {}
+  onEnding (span) {}
   onEnd (span) {}
 
   shutdown () {
@@ -35,6 +36,12 @@ class MultiSpanProcessor extends NoopSpanProcessor {
   onStart (span, context) {
     for (const processor of this._processors) {
       processor.onStart(span, context)
+    }
+  }
+
+  onEnding (span) {
+    for (const processor of this._processors) {
+      processor.onEnding?.(span)
     }
   }
 
@@ -61,16 +68,21 @@ class MultiSpanProcessor extends NoopSpanProcessor {
  * processor is installed by the `TracerProvider` unconditionally so the correction needs
  * no user-registered processor and cannot be bypassed.
  *
- * The writes go straight to the DD span context: `Span.end()` finishes the DD span before
- * `onEnd`, so `_duration` is set and the `isWritable`-gated OTel helpers would no-op.
- * `setTag` and `_name` are not gated, and `span_format.js` reads `_name` and the
- * `resource.name` tag at serialization time, which happens later in the writer.
+ * The correction runs in `onEnding`, the spec-defined hook called *before* the span finishes.
+ * That ordering is load-bearing: `Span.end()` calls `_ddSpan.finish()`, and when the Next root
+ * span is the last span in its trace to finish, `finish()` synchronously formats and exports the
+ * trace. `onEnd` fires only after that export, so writing the correction there would leave the
+ * already-built payload with the operation/resource reversed. `onEnding` fires while the DD span
+ * is still unfinished, so `span_format.js` reads the corrected `_name` and `resource.name` tag.
+ *
+ * The writes go straight to the DD span context (`_name` and a `setTag`) rather than the
+ * `isWritable`-gated OTel helpers, so they apply regardless of the OTel-side writable state.
  */
 class NextSpanProcessor extends NoopSpanProcessor {
   /**
    * @param {import('./span')} span
    */
-  onEnd (span) {
+  onEnding (span) {
     const ddSpan = span._ddSpan
     const tags = ddSpan.context().getTags()
     if (tags['next.span_type'] !== NEXT_BASE_SERVER_HANDLE_REQUEST) return
