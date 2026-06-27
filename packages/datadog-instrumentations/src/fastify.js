@@ -112,14 +112,18 @@ function invokeHookWithContext (name, fn, thisArg, args) {
     if (promise && typeof promise.catch === 'function') {
       return promise.catch(error => {
         ctx.error = error
-        return publishError(ctx)
+        publishError(ctx)
+        // Re-throw so the rejection keeps propagating. Returning the error here
+        // would resolve the promise with it and silently swallow the rejection.
+        throw error
       })
     }
 
     return promise
   } catch (error) {
     ctx.error = error
-    throw publishError(ctx)
+    publishError(ctx)
+    throw error
   }
 }
 
@@ -308,8 +312,6 @@ function publishError (ctx) {
   if (ctx.error) {
     publishErrorChannel(ctx)
   }
-
-  return ctx.error
 }
 
 function onRoute (routeOptions) {

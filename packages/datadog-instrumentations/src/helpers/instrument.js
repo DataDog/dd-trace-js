@@ -43,21 +43,41 @@ exports.tracingChannel = function (name) {
 }
 
 /**
- * Build a guarded publisher for a public error channel. A subscriber that
- * re-enters the same wrapped dispatch while handling the error would otherwise
- * republish here and recurse until the stack overflows. Each framework binds
- * its own publisher, so the in-flight flag stays private to one channel: a
- * genuinely nested error on a different framework's channel (a Koa app mounted
- * inside Express) still reaches its subscribers instead of being dropped, and
- * the guard costs a closure read rather than a per-publish channel lookup.
+ * Build a guarded publisher for a public error channel. A channel subscriber
+ * that drives another wrapped hook while handling the error, and fastify's boot
+ * loop re-invoking the same encapsulated hook (avvio's `_encapsulateThreeParam`)
+ * after a throw, both republish here and recurse until the stack overflows
+ * (#8783, #9099). Two guards bound both shapes:
+ *
+ * 1. `publishing` blocks a synchronous re-entry — any error republished while a
+ *    publish is still on the stack — the way the original boolean did.
+ * 2. `published` (keyed on the error object) blocks a sequential re-drive of the
+ *    same error after the publish returned. The boolean alone cannot, because
+ *    its `finally` clears the flag before the next re-drive runs, and the error
+ *    that rides the re-drives (a persistent `DatadogRaspAbortError`, the boot
+ *    deprecation error) is the same object each time.
+ *
+ * A genuinely distinct error still reaches its subscribers, and the `WeakSet`
+ * entry is released once the error object itself is unreachable.
  *
  * @param {Channel} errorChannel
  */
 exports.createErrorPublisher = function createErrorPublisher (errorChannel) {
+  const published = new WeakSet()
   let publishing = false
-  /** @param {object} message */
+  /** @param {{ error?: unknown }} message */
   return function publishError (message) {
     if (publishing) return
+
+    const error = message.error
+    // Only an object error can key the WeakSet. Every in-tree caller passes an
+    // Error object, so the sequential-re-drive guard is the live path; a
+    // primitive error still gets the re-entrancy guard below.
+    if (error !== null && typeof error === 'object') {
+      if (published.has(error)) return
+      published.add(error)
+    }
+
     publishing = true
     try {
       errorChannel.publish(message)
