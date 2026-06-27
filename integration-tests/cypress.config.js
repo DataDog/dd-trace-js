@@ -32,6 +32,9 @@ module.exports = defineConfig({
     },
     specPattern: process.env.SPEC_PATTERN || 'cypress/e2e/**/*.cy.js',
   },
-  video: false,
-  screenshotOnRunFailure: false,
+  // Off by default so most specs don't record video / capture screenshots; the
+  // failure-media upload test sets CYPRESS_ENABLE_FAILURE_MEDIA=true to turn both
+  // on for its run (a CLI --config override does not win over these file values).
+  video: process.env.CYPRESS_ENABLE_FAILURE_MEDIA === 'true',
+  screenshotOnRunFailure: process.env.CYPRESS_ENABLE_FAILURE_MEDIA === 'true',
 })

@@ -8,6 +8,7 @@ const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detectio
 const { getTestManagementTests: getTestManagementTestsRequest } =
   require('../test-management/get-test-management-tests')
 const { uploadCoverageReport: uploadCoverageReportRequest } = require('../requests/upload-coverage-report')
+const { uploadTestScreenshot: uploadTestScreenshotRequest } = require('../requests/upload-test-screenshot')
 const log = require('../../log')
 const BufferingExporter = require('../../exporters/common/buffering-exporter')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')
@@ -45,6 +46,10 @@ class CiVisibilityExporter extends BufferingExporter {
     // The library can use new features like ITR and test suite level visibility
     // AKA CI Vis Protocol
     this._canUseCiVisProtocol = false
+
+    // Screenshot and video uploads on test failure are independent opt-in toggles.
+    this._isTestFailureScreenshotsEnabled = Boolean(config && config.isTestFailureScreenshotsEnabled)
+    this._isTestFailureVideoEnabled = Boolean(config && config.isTestFailureVideoEnabled)
 
     const gitUploadTimeoutId = setTimeout(() => {
       this._resolveGit(new Error('Timeout while uploading git metadata'))
@@ -414,6 +419,48 @@ class CiVisibilityExporter extends BufferingExporter {
       url: this._codeCoverageReportUrl,
       isEvpProxy: !!this._isUsingEvpProxy,
       evpProxyPrefix: this.evpProxyPrefix,
+    }, callback)
+  }
+
+  /**
+   * Returns whether the exporter can upload test failure screenshots.
+   *
+   * @returns {boolean}
+   */
+  canUploadTestScreenshots () {
+    return Boolean(this._testScreenshotUploadUrl) && this._isTestFailureScreenshotsEnabled
+  }
+
+  /**
+   * Returns whether the exporter can upload test failure video.
+   *
+   * @returns {boolean}
+   */
+  canUploadTestVideo () {
+    return Boolean(this._testScreenshotUploadUrl) && this._isTestFailureVideoEnabled
+  }
+
+  /**
+   * Uploads a single test screenshot to the Test Optimization media intake.
+   *
+   * @param {object} options - Upload options
+   * @param {string} options.filePath - Path to the screenshot file
+   * @param {string} options.traceId - Test trace id used as the screenshot key
+   * @param {string} options.idempotencyKey - Stable per-artifact key, reused on retry
+   * @param {number} options.capturedAtMs - Capture time in epoch milliseconds
+   * @param {Function} callback - Callback function (err)
+   */
+  uploadTestScreenshot ({ filePath, traceId, idempotencyKey, capturedAtMs }, callback) {
+    if (!this._testScreenshotUploadUrl) {
+      return callback(new Error('Test screenshot upload URL not configured'))
+    }
+
+    uploadTestScreenshotRequest({
+      filePath,
+      traceId,
+      idempotencyKey,
+      capturedAtMs,
+      url: this._testScreenshotUploadUrl,
     }, callback)
   }
 }

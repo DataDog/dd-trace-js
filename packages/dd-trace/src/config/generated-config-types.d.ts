@@ -463,6 +463,8 @@ export interface GeneratedConfig {
   isImpactedTestsEnabled: boolean;
   isIntelligentTestRunnerEnabled: boolean;
   isTestDynamicInstrumentationEnabled: boolean;
+  isTestFailureScreenshotsEnabled: boolean;
+  isTestFailureVideoEnabled: boolean;
   isTestManagementEnabled: boolean;
   langchain: {
     DD_LANGCHAIN_SPAN_CHAR_LIMIT: number;
@@ -783,6 +785,8 @@ export interface GeneratedEnvVarConfig {
   DD_TELEMETRY_LOG_COLLECTION_ENABLED: boolean;
   DD_TELEMETRY_METRICS_ENABLED: boolean;
   DD_TEST_FAILED_TEST_REPLAY_ENABLED: boolean;
+  DD_TEST_FAILURE_SCREENSHOTS_ENABLED: boolean;
+  DD_TEST_FAILURE_VIDEO_ENABLED: boolean;
   DD_TEST_FLEET_CONFIG_PATH: string | undefined;
   DD_TEST_LOCAL_CONFIG_PATH: string | undefined;
   DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES: number;

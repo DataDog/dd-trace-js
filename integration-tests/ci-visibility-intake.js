@@ -225,6 +225,21 @@ class FakeCiVisIntake extends FakeAgent {
       })
     })
 
+    app.post('/api/unstable/ci/test-runs/:traceId/media', express.raw({ limit: Infinity, type: '*/*' }), (req, res) => {
+      res.status(201).send()
+      this.emit('message', {
+        headers: req.headers,
+        media: {
+          traceId: req.params.traceId,
+          contentType: req.headers['content-type'],
+          idempotencyKey: req.headers['x-dd-idempotency-key'],
+          capturedAt: req.headers['x-dd-media-captured-at'],
+          content: req.body,
+        },
+        url: req.url,
+      })
+    })
+
     app.post([
       '/api/v2/libraries/tests/services/setting',
       '/evp_proxy/:version/api/v2/libraries/tests/services/setting',
