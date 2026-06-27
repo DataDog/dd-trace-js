@@ -51,10 +51,10 @@ function getLibraryConfiguration ({
     options.path = `${evpProxyPrefix}/api/v2/libraries/tests/services/setting`
     options.headers['X-Datadog-EVP-Subdomain'] = 'api'
   } else {
-    if (!config.apiKey) {
+    if (!config.DD_API_KEY) {
       return done(new Error('Request to settings endpoint was not done because Datadog API key is not defined.'))
     }
-    options.headers['dd-api-key'] = config.apiKey
+    options.headers['dd-api-key'] = config.DD_API_KEY
   }
 
   const data = JSON.stringify({

@@ -91,8 +91,8 @@ function getHeaders (config, application, reqType) {
   if (debug) {
     headers['dd-telemetry-debug-enabled'] = 'true'
   }
-  if (config.apiKey) {
-    headers['dd-api-key'] = config.apiKey
+  if (config.DD_API_KEY) {
+    headers['dd-api-key'] = config.DD_API_KEY
   }
   return headers
 }
@@ -176,7 +176,7 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
   })
 
   request(data, options, (error) => {
-    if (error && config.apiKey && config.site) {
+    if (error && config.DD_API_KEY && config.site) {
       if (agentTelemetry) {
         log.warn('Agent telemetry failed, started agentless telemetry')
         agentTelemetry = false
@@ -189,7 +189,7 @@ function sendData (config, application, host, reqType, payload = {}, cb = () => 
         log.error('Invalid Telemetry URL')
         return
       }
-      const backendHeader = { ...options.headers, 'DD-API-KEY': config.apiKey }
+      const backendHeader = { ...options.headers, 'DD-API-KEY': config.DD_API_KEY }
       const backendOptions = {
         ...options,
         url: backendUrl,

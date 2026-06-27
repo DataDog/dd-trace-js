@@ -230,7 +230,7 @@ describe('module', () => {
           llmobs: {
             agentlessEnabled: true,
           },
-          apiKey: 'test',
+          DD_API_KEY: 'test',
           site: 'datadoghq.com',
         })
 
@@ -285,7 +285,7 @@ describe('module', () => {
         it('configures the agentless writers', () => {
           llmobsModule.enable({
             llmobs: {},
-            apiKey: 'test',
+            DD_API_KEY: 'test',
             site: 'datadoghq.com',
           })
 
@@ -327,7 +327,7 @@ describe('module', () => {
 
       describe('when no site is provided', () => {
         it('throws an error', () => {
-          llmobsModule.enable({ llmobs: {}, apiKey: 'test', startupLogs: true })
+          llmobsModule.enable({ llmobs: {}, DD_API_KEY: 'test', startupLogs: true })
 
           sinon.assert.calledWith(startupLogStub, INCOMPATIBLE_INITIALIZATION)
         })
@@ -335,7 +335,7 @@ describe('module', () => {
 
       describe('when an API key is provided', () => {
         it('configures the agentless writers', () => {
-          llmobsModule.enable({ llmobs: {}, apiKey: 'test', site: 'datadoghq.com' })
+          llmobsModule.enable({ llmobs: {}, DD_API_KEY: 'test', site: 'datadoghq.com' })
 
           sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, true)
           sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, true)

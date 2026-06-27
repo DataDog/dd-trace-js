@@ -216,7 +216,7 @@ class Tracer extends NoopProxy {
 
       this._modules.rewriter.enable(config)
 
-      if (config.tracing && config.DD_CIVISIBILITY_MANUAL_API_ENABLED) {
+      if (config.DD_TRACE_ENABLED && config.DD_CIVISIBILITY_MANUAL_API_ENABLED) {
         const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
         this._testApiManualPlugin = new TestApiManualPlugin(this)
         // `shouldGetEnvironmentData` is passed as false so that we only lazily calculate it
@@ -225,7 +225,7 @@ class Tracer extends NoopProxy {
         this._testApiManualPlugin.configure({ ...config, enabled: true }, false)
       }
       if (config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED) {
-        if (config.apiKey) {
+        if (config.DD_API_KEY) {
           const LogSubmissionPlugin = require('./ci-visibility/log-submission/log-submission-plugin')
           const automaticLogPlugin = new LogSubmissionPlugin(this)
           automaticLogPlugin.configure({ ...config, enabled: true })
@@ -237,7 +237,7 @@ class Tracer extends NoopProxy {
         }
       }
 
-      if (config.isTestDynamicInstrumentationEnabled) {
+      if (config.testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED) {
         const getDynamicInstrumentationClient = require('./ci-visibility/dynamic-instrumentation')
         // We instantiate the client but do not start the Worker here. The worker is started lazily
         getDynamicInstrumentationClient(config)
@@ -270,7 +270,7 @@ class Tracer extends NoopProxy {
    * @param {import('./config/config-base')} config - Tracer configuration
    */
   #updateTracing (config) {
-    if (config.tracing !== false) {
+    if (config.DD_TRACE_ENABLED !== false) {
       if (config.appsec.enabled) {
         this._modules.appsec.enable(config)
       }

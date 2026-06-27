@@ -9,7 +9,8 @@ const CoverageWriter = require('./coverage-writer')
 class AgentlessCiVisibilityExporter extends CiVisibilityExporter {
   constructor (config) {
     super(config)
-    const { tags, site, DD_CIVISIBILITY_AGENTLESS_URL: url, isTestDynamicInstrumentationEnabled } = config
+    const { tags, site, DD_CIVISIBILITY_AGENTLESS_URL: url, testOptimization } = config
+    const isTestDynamicInstrumentationEnabled = testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED
     // we don't need to request /info because we are using agentless by configuration
     this._isInitialized = true
     this._resolveCanUseCiVisProtocol(true)

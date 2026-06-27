@@ -34,7 +34,7 @@ function uploadCoverageReport (
   { filePath, format, testEnvironmentMetadata, url, isEvpProxy, evpProxyPrefix },
   callback
 ) {
-  const apiKey = getConfig().apiKey
+  const apiKey = getConfig().DD_API_KEY
 
   if (!apiKey && !isEvpProxy) {
     return callback(new Error('DD_API_KEY is required for coverage report upload'))

@@ -4,7 +4,7 @@ const Plugin = require('../../plugins/plugin')
 const log = require('../../log')
 
 function getWinstonLogSubmissionParameters (config) {
-  const { site, service, apiKey, DD_AGENTLESS_LOG_SUBMISSION_URL } = config
+  const { site, service, DD_API_KEY: apiKey, DD_AGENTLESS_LOG_SUBMISSION_URL } = config
 
   const defaultParameters = {
     host: `http-intake.logs.${site}`,

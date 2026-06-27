@@ -40,7 +40,7 @@ class AgentlessWriter extends BaseWriter {
       }
     }
 
-    if (!getConfig().apiKey) {
+    if (!getConfig().DD_API_KEY) {
       this.#apiKeyMissing = true
       log.error('DD_API_KEY is required for agentless trace intake. Set DD_API_KEY. Traces will not be sent.')
     }
@@ -109,7 +109,7 @@ class AgentlessWriter extends BaseWriter {
       return
     }
 
-    const apiKey = getConfig().apiKey
+    const apiKey = getConfig().DD_API_KEY
     if (!apiKey) {
       if (!this.#apiKeyMissing) {
         this.#apiKeyMissing = true

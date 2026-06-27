@@ -60,7 +60,7 @@ describe('git_metadata', () => {
 
     generatePackFilesForCommitsStub = sinon.stub().returns([temporaryPackFile])
 
-    fakeConfig = { apiKey: 'api-key', DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED: true }
+    fakeConfig = { DD_API_KEY: 'api-key', DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED: true }
 
     // Most tests inject requestStub directly so they never touch nock or the
     // real HTTP stack. This avoids the Windows CI hang caused by nock's

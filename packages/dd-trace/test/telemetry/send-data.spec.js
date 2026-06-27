@@ -205,7 +205,7 @@ describe('sendData', () => {
 
     sendDataModule.sendData(
       {
-        apiKey: 'secret-key',
+        DD_API_KEY: 'secret-key',
         site: 'datadoghq.eu',
         tags: { 'runtime-id': '123' },
       },
@@ -225,7 +225,7 @@ describe('sendData', () => {
 
     sendDataModule.sendData(
       {
-        apiKey: 'secret-key',
+        DD_API_KEY: 'secret-key',
         site: 'x:notaport',
         tags: { 'runtime-id': '123' },
       },

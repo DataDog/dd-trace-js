@@ -40,8 +40,9 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
       lookup,
       protocolVersion,
       headers,
-      isTestDynamicInstrumentationEnabled,
+      testOptimization,
     } = config
+    const isTestDynamicInstrumentationEnabled = testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED
 
     fetchAgentInfo(this._url, (err, agentInfo) => {
       this._isInitialized = true

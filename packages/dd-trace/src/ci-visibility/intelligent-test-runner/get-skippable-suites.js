@@ -124,7 +124,7 @@ function fetchFromApi ({
     options.path = `${evpProxyPrefix}/api/v2/ci/tests/skippable`
     options.headers['X-Datadog-EVP-Subdomain'] = 'api'
   } else {
-    const { apiKey } = getConfig()
+    const { DD_API_KEY: apiKey } = getConfig()
     if (!apiKey) {
       return done(new Error('Skippable suites were not fetched because Datadog API key is not defined.'))
     }

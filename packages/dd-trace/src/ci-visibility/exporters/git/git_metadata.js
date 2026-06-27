@@ -50,7 +50,7 @@ function getCommonRequestOptions (url) {
   return {
     method: 'POST',
     headers: {
-      'dd-api-key': getConfig().apiKey,
+      'dd-api-key': getConfig().DD_API_KEY,
     },
     timeout: 15_000,
     url,
