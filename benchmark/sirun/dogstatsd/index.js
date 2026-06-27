@@ -63,4 +63,4 @@ if (VARIANT === 'aggregated') {
     if ((i & 0x7FF) === 0) client._queue.length = 0
   }
 }
-guard.done()
+guard.done(0.05)
