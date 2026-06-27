@@ -24,6 +24,24 @@ const exclude = new TestExclude({
   extension: ['.js', '.mjs'],
 })
 
+// Integration tests run against dd-trace installed as a packed tarball inside a throwaway sandbox
+// (`<tmp>/<id>/node_modules/dd-trace/…`). V8 records that sandbox path, and the sandbox is deleted
+// before this merge runs, so the entry would both fail the REPO_ROOT check and be unloadable. The
+// tarball ships source verbatim (`packages/*/src/**`, `index.js`, …), so the segment after
+// `node_modules/dd-trace/` maps 1:1 onto the repo tree. Rebase onto REPO_ROOT and load the still-
+// present repo copy, whose bytes are identical to the sandbox copy V8 measured.
+const SANDBOX_MARKER = `${path.sep}node_modules${path.sep}dd-trace${path.sep}`
+
+/**
+ * @param {string} filePath
+ * @returns {string}
+ */
+function rebaseSandboxPath (filePath) {
+  const markerIndex = filePath.lastIndexOf(SANDBOX_MARKER)
+  if (markerIndex === -1) return filePath
+  return path.join(REPO_ROOT, filePath.slice(markerIndex + SANDBOX_MARKER.length))
+}
+
 /**
  * @param {string} filePath
  * @returns {boolean}
@@ -61,6 +79,7 @@ async function mergeV8File (into, v8File) {
     } catch {
       continue
     }
+    filePath = rebaseSandboxPath(filePath)
     if (!shouldInclude(filePath)) continue
 
     const converter = v8toIstanbul(filePath, 0)
