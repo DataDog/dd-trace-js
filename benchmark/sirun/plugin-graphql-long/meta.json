@@ -8,13 +8,27 @@
   "variants": {
     "with-depth-off": {
       "iterations": 7,
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "0", "OPERATIONS": "1150" }
+      "env": {
+        "DEPTH": "0",
+        "OPERATIONS": "1150",
+        "WITH_TRACER": "1"
+      }
     },
     "with-depth-on-max": {
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "4", "OPERATIONS": "800" }
+      "env": {
+        "COLLAPSE": "1",
+        "OPERATIONS": "800",
+        "DEPTH": "10",
+        "WITH_TRACER": "1"
+      }
     },
     "with-depth-and-collapse-off": {
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH_AND_COLLAPSE": "4,0", "OPERATIONS": "210" }
+      "env": {
+        "COLLAPSE": "0",
+        "OPERATIONS": "300",
+        "DEPTH": "10",
+        "WITH_TRACER": "1"
+      }
     }
   }
 }
