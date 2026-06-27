@@ -108,6 +108,23 @@ function load (url, context, nextLoad) {
   return rewriterLoader.load(url, context, (url, context) => origLoad(url, context, nextLoad))
 }
 
+let resolveSyncHook
+
+// Short-circuit builtins before import-in-the-middle resolve sees them. iitm
+// otherwise wraps a builtin and later reads its source via getExports; a builtin
+// resolved synchronously without builtin format (e.g. require("util") compiled
+// into a Debugger.evaluateOnCallFrame expression, or a CJS re-export of a
+// builtin) then reaches readFileSync("util") and throws ENOENT. Builtins are
+// instrumented separately (iitm getBuiltinModule / RITM), so leave them for
+// Node to resolve natively.
+function resolveSync (specifier, context, nextResolve) {
+  if (typeof specifier === 'string' &&
+      (specifier.startsWith('node:') || builtinModules.includes(specifier))) {
+    return nextResolve(specifier, context)
+  }
+  return resolveSyncHook(specifier, context, nextResolve)
+}
+
 function loadSync (url, context, nextLoad) {
   if (isCommonJSLoad(context)) {
     return getSyncImportInTheMiddleHook().loadSync(url, context, nextLoad)
@@ -173,8 +190,9 @@ function registerSyncLoaderHooks (data = {}) {
   // synchronous and asynchronous loaders share the same option preparation so
   // that `import http from 'node:http'` is wrapped on both paths.
   syncHook.applyOptions(prepareImportInTheMiddleOptions(data))
+  resolveSyncHook = syncHook.resolveSync
   Module.registerHooks({
-    resolve: syncHook.resolveSync,
+    resolve: resolveSync,
     load: loadSync,
   })
 
