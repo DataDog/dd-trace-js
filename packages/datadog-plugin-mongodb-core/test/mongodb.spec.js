@@ -261,6 +261,29 @@ describe('Plugin', () => {
                 error: 1,
               }, { spanResourceMatch: /^bulkWrite test\./ })
             })
+
+            it('should restore the parent context for spans started in the legacy callback', done => {
+              const parentSpan = tracer.startSpan('test.parent')
+
+              const assertion = agent.assertSomeTraces(traces => {
+                const bulkWrite = traces[0].find(span => span.resource === `bulkWrite test.${collectionName}`)
+                const child = traces[0].find(span => span.name === 'test.child')
+                assert.ok(bulkWrite, 'expected a bulkWrite span')
+                assert.ok(child, 'expected a span started in the callback')
+                // The bulkWrite span has finished by the time the callback runs, so a span
+                // started there must nest under the original parent, not the bulkWrite span.
+                assert.strictEqual(child.parent_id.toString(), parentSpan.context().toSpanId())
+              }, { spanResourceMatch: /^bulkWrite test\./ })
+
+              tracer.scope().activate(parentSpan, () => {
+                collection.bulkWrite([{ insertOne: { document: { a: 1 } } }], {}, () => {
+                  tracer.trace('test.child', () => {})
+                  parentSpan.finish()
+                })
+              })
+
+              assertion.then(done, done)
+            })
           }
 
           it('should have the statement tag when doing a multi statement update', async () => {

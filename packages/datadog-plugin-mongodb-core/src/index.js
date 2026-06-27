@@ -20,6 +20,9 @@ class MongodbCorePlugin extends DatabasePlugin {
     // bulkWrite is higher-level than the wire commands `query` traces, so it has its own channel.
     this.addBind('apm:mongodb:bulkwrite:start', ctx => this.bindBulkWriteStart(ctx))
     this.addSub('apm:mongodb:bulkwrite:finish', ctx => this.finish(ctx))
+    // Restore the parent store before the legacy callback runs, so a span started there nests
+    // under the original parent instead of the already-finished bulkWrite span.
+    this.addBind('apm:mongodb:bulkwrite:finish', ctx => ctx.parentStore)
     this.addSub('apm:mongodb:bulkwrite:error', ctx => this.error(ctx))
   }
 
