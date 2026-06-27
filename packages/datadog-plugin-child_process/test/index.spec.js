@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const events = require('node:events')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
@@ -528,19 +529,19 @@ describe('Child process plugin', () => {
 
           methods.forEach(({ methodName, async }) => {
             describe(methodName, () => {
-              it('should be instrumented', (done) => {
-                const expected = {
-                  type: 'system',
-                  name: 'command_execution',
-                  error: 0,
-                  meta: {
-                    component: 'subprocess',
-                    'cmd.shell': 'ls',
-                    'cmd.exit_code': '0',
-                  },
-                }
+              const lsExpected = {
+                type: 'system',
+                name: 'command_execution',
+                error: 0,
+                meta: {
+                  component: 'subprocess',
+                  'cmd.shell': 'ls',
+                  'cmd.exit_code': '0',
+                },
+              }
 
-                expectSomeSpan(agent, expected).then(done, done)
+              it('should be instrumented', (done) => {
+                expectSomeSpan(agent, lsExpected).then(done, done)
 
                 const res = childProcess[methodName]('ls')
                 if (async) {
@@ -548,27 +549,29 @@ describe('Child process plugin', () => {
                 }
               })
 
-              it('should maintain previous span after the execution', (done) => {
+              it('should maintain previous span after the execution', async () => {
+                const drained = expectSomeSpan(agent, lsExpected)
+
                 const res = childProcess[methodName]('ls')
-                const span = storage('legacy').getStore()?.span
-                assert.strictEqual(span, parentSpan)
+                assert.strictEqual(storage('legacy').getStore()?.span, parentSpan)
                 if (async) {
-                  res.on('close', () => {
-                    assert.strictEqual(span, parentSpan)
-                    done()
-                  })
+                  await Promise.all([drained, (async () => {
+                    await events.once(res, 'close')
+                    assert.strictEqual(storage('legacy').getStore()?.span, parentSpan)
+                  })()])
                 } else {
-                  done()
+                  await drained
                 }
               })
 
               if (async) {
-                it('should maintain previous span in the callback', (done) => {
-                  childProcess[methodName]('ls', () => {
-                    const span = storage('legacy').getStore()?.span
-                    assert.strictEqual(span, parentSpan)
-                    done()
-                  })
+                it('should maintain previous span in the callback', async () => {
+                  await Promise.all([expectSomeSpan(agent, lsExpected), new Promise(resolve => {
+                    childProcess[methodName]('ls', () => {
+                      assert.strictEqual(storage('legacy').getStore()?.span, parentSpan)
+                      resolve()
+                    })
+                  })])
                 })
               }
 
