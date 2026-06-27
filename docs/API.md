@@ -389,7 +389,11 @@ The following tags are available to override Datadog-specific options:
 
 <h2 id="opentelemetry-api">OpenTelemetry Compatibility</h2>
 
-This library is OpenTelemetry compliant. Use the [OpenTelemetry API](https://opentelemetry.io/docs/instrumentation/js/) and the Datadog Tracer (dd-trace) library to measure execution times for specific pieces of code. In the following example, a Datadog TracerProvider is registered with @opentelemetry/api:
+This library is OpenTelemetry compliant. Use the [OpenTelemetry API](https://opentelemetry.io/docs/instrumentation/js/) and the Datadog Tracer (dd-trace) library to measure execution times for specific pieces of code.
+
+Install `@opentelemetry/api` (and `@opentelemetry/api-logs` for OpenTelemetry logs) in your application. They are optional peer dependencies of dd-trace, so the copy your code imports is the one the bridge shares; when they are absent, the OpenTelemetry bridge, metrics, and logs stay disabled instead of running against a mismatched copy.
+
+In the following example, a Datadog TracerProvider is registered with @opentelemetry/api:
 
 ```javascript
 const tracer = require('dd-trace').init()

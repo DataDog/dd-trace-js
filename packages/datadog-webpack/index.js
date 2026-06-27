@@ -81,6 +81,21 @@ class DatadogWebpackPlugin {
       }
     })
 
+    // The OpenTelemetry API packages are optional peers the application owns. dd-trace's vendored
+    // @opentelemetry/core and the OTel bridge reference them, so bundling them would either fail
+    // when the app has not installed them or, when it has, give dd-trace a second copy and silently
+    // downgrade every span to a no-op (issue #6882). Mark them external so the runtime require
+    // resolves the application's single copy. The `commonjs` type forces a CommonJS require
+    // regardless of the user's externalsType.
+    const externals = Array.isArray(compiler.options.externals)
+      ? compiler.options.externals
+      : [compiler.options.externals].filter(Boolean)
+    externals.push({
+      '@opentelemetry/api': 'commonjs @opentelemetry/api',
+      '@opentelemetry/api-logs': 'commonjs @opentelemetry/api-logs',
+    })
+    compiler.options.externals = externals
+
     const gitMetadata = getGitMetadata()
     if (gitMetadata.repositoryURL || gitMetadata.commitSHA) {
       const banner =
