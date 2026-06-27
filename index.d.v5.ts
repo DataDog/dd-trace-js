@@ -2667,6 +2667,7 @@ declare namespace tracer {
        * instrument the operation or to `-1` to instrument all fields/resolvers.
        *
        * @default -1
+       * @env DD_TRACE_GRAPHQL_DEPTH
        */
       depth?: number;
 
@@ -2683,7 +2684,10 @@ declare namespace tracer {
       /**
        * An array of variable names to record. Can also be a callback that returns
        * the key/value pairs to record. For example, using
-       * `variables => variables` would record all variables.
+       * `variables => variables` would record all variables. The environment
+       * variable only accepts the array form (comma-separated variable names).
+       *
+       * @env DD_TRACE_GRAPHQL_VARIABLES
        */
       variables?: string[] | ((variables: { [key: string]: any }) => { [key: string]: any });
 
@@ -2692,8 +2696,17 @@ declare namespace tracer {
        * `users.*.name` span instead of `users.0.name`, `users.1.name`, etc)
        *
        * @default true
+       * @env DD_TRACE_GRAPHQL_COLLAPSE
        */
       collapse?: boolean;
+
+      /**
+       * An array of error `extensions` keys to attach to the span error event
+       * for each GraphQL error.
+       *
+       * @env DD_TRACE_GRAPHQL_ERROR_EXTENSIONS
+       */
+      errorExtensions?: string[];
 
       /**
        * Whether to enable signature calculation for the resource name. This can
