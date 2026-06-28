@@ -121,6 +121,41 @@ describe('rewriter loader', () => {
     assert.strictEqual(result.stdout.trim(), '1')
   })
 
+  it('publishes dd-trace:moduleLoadStart for a required CommonJS module', function () {
+    if (!supportsSyncHooks()) {
+      this.skip()
+    }
+
+    // Dependency telemetry and IAST security controls rely on this channel for
+    // every loaded module; require-in-the-middle published it per require() and
+    // the synchronous loader took over that role.
+    const root = mkdtempSync(join(tmpdir(), 'dd-loader-moduleloadstart-'))
+    const packageDirectory = join(root, 'node_modules', 'left-pad')
+
+    mkdirSync(packageDirectory, { recursive: true })
+    writeFileSync(join(packageDirectory, 'package.json'), '{"version":"1.0.0","main":"index.js"}')
+    writeFileSync(join(packageDirectory, 'index.js'), 'module.exports = () => {}\n')
+    writeFileSync(join(root, 'main.js'), `
+      const channel = require(${JSON.stringify(join(repositoryRoot, 'node_modules', 'dc-polyfill'))})
+        .channel('dd-trace:moduleLoadStart')
+      let seen = false
+      channel.subscribe((payload) => {
+        if (payload && typeof payload.filename === 'string' && payload.filename.includes('left-pad')) seen = true
+      })
+      require('left-pad')
+      console.log(seen)
+    `)
+
+    const result = spawnSync(process.execPath, [join(root, 'main.js')], {
+      cwd: root,
+      env: { ...process.env, NODE_OPTIONS: `--import ${join(repositoryRoot, 'register.js')}` },
+      encoding: 'utf8',
+    })
+
+    assert.strictEqual(result.status, 0, result.stderr)
+    assert.strictEqual(result.stdout.trim(), 'true', result.stderr)
+  })
+
   it('rewrites ESM modules loaded from CommonJS in the sync loader hook', function () {
     if (!supportsSyncHooks()) {
       this.skip()

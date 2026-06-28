@@ -4,6 +4,10 @@ import { fileURLToPath } from 'url'
 import { rewrite } from './index.js'
 
 const require = createRequire(import.meta.url)
+// Dependency telemetry and IAST security controls subscribe to this channel for
+// every loaded module. require-in-the-middle published it per require(); when the
+// synchronous loader owns CommonJS, this load hook is the equivalent chokepoint.
+const moduleLoadStartChannel = require('dc-polyfill').channel('dd-trace:moduleLoadStart')
 const cjsSyncHookPath = fileURLToPath(new URL('../cjs-sync-hook.js', import.meta.url))
 // Lazily loaded to keep this module importable in environments where the CJS
 // helper's dependencies are unavailable (e.g. some bundler graphs).
@@ -55,6 +59,10 @@ function rewriteResult (result, url, context, ownsCjs) {
   // CommonJS. When the synchronous loader does not own CJS, leave it to
   // Module._compile (rewrite) and RITM (export wrapping).
   if (!ownsCjs) return result
+
+  if (moduleLoadStartChannel.hasSubscribers && url.startsWith('file://')) {
+    moduleLoadStartChannel.publish({ filename: fileURLToPath(url) })
+  }
 
   if (result.source == null) return result
 
