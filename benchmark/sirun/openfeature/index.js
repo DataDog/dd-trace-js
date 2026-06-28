@@ -4,10 +4,10 @@
 //
 // Two variants, both exercising the real FlagEvalEVPHook + FlagEvaluationsWriter:
 //
-//   flag-eval-logging-hook — the synchronous cost a flag evaluation pays for the Finally
+//   flag-eval-logging-hook - the synchronous cost a flag evaluation pays for the Finally
 //     hook. This is the only work charged to the caller's evaluation; it must stay
 //     cheap (scalar capture + bounded enqueue), with all aggregation deferred.
-//   aggregate — the off-hot-path aggregator cost (canonical-key + two-tier map work)
+//   aggregate - the off-hot-path aggregator cost (canonical-key + two-tier map work)
 //     that runs in the deferred drain, NOT on the evaluation path.
 //     Measured for completeness so a regression in the worker path is visible too.
 
@@ -21,7 +21,7 @@ const guard = require('../startup-guard')
 globalThis[Symbol.for('dd-trace')] ??= { beforeExitHandlers: new Set() }
 
 // Stub the egress request module before the writer captures it, exactly as the
-// llmobs bench does — the bench measures only in-process work, never network I/O.
+// llmobs bench does - the bench measures only in-process work, never network I/O.
 const requestPath = require.resolve('../../../packages/dd-trace/src/exporters/common/request')
 require.cache[requestPath] = {
   id: requestPath,
@@ -38,9 +38,16 @@ const FlagEvalEVPHook = require('../../../packages/dd-trace/src/openfeature/writ
 const {
   VARIANT,
   COUNT,
+  NUM_FLAGS = '100',
+  NUM_USERS = '50',
+  NUM_FIELDS = '10',
 } = process.env
 
 const count = Number(COUNT)
+const numFlags = Math.max(1, Number(NUM_FLAGS))
+const numUsers = Math.max(1, Number(NUM_USERS))
+const numFields = Math.max(0, Number(NUM_FIELDS))
+const cycleCount = Math.max(numFlags, numUsers)
 
 // Minimal config: the writer only reads service/version/env (context) and url (base
 // for the stubbed request). A plain object avoids loading the full tracer config and
@@ -52,24 +59,53 @@ const config = {
   url: new URL('http://127.0.0.1:8126'),
 }
 
-// OpenFeature Finally-hook arguments — mirrors what the @openfeature/server-sdk
-// passes a `finally` hook after an evaluation.
-const hookContext = {
-  flagKey: 'test-flag',
-  context: {
-    targetingKey: 'user-123',
-    plan: 'premium',
-    country: 'US',
-    betaTester: true,
-    seatCount: 42,
-  },
+function makeAttrs () {
+  const attrs = {}
+  for (let i = 0; i < numFields; i++) {
+    attrs[`field${i}`] = 'value'
+  }
+  return attrs
 }
-const evaluationDetails = {
-  variant: 'variant-a',
-  reason: 'TARGETING_MATCH',
-  value: true,
-  flagMetadata: { allocationKey: 'allocation-123' },
+
+const attrs = makeAttrs()
+const flagKeys = Array.from({ length: numFlags }, (_, i) => `bench-flag-${i}`)
+const targetingKeys = Array.from({ length: numUsers }, (_, i) => `bench-user-${i}`)
+
+function makeHookContext (i) {
+  return {
+    flagKey: flagKeys[i % numFlags],
+    context: {
+      targetingKey: targetingKeys[i % numUsers],
+      ...attrs,
+    },
+  }
 }
+
+function makeEvaluationDetails (i) {
+  return {
+    variant: `variant-${i % 4}`,
+    reason: 'TARGETING_MATCH',
+    value: true,
+    flagMetadata: { allocationKey: `alloc-${i % numFlags}` },
+  }
+}
+
+function makeRawEvent (i) {
+  return {
+    flagKey: flagKeys[i % numFlags],
+    variant: `variant-${i % 4}`,
+    allocationKey: `alloc-${i % numFlags}`,
+    targetingKey: targetingKeys[i % numUsers],
+    evalTimeMs: 1_760_000_000_000 + i,
+    attrs,
+  }
+}
+
+const hookArgs = Array.from({ length: cycleCount }, (_, i) => ({
+  hookContext: makeHookContext(i),
+  evaluationDetails: makeEvaluationDetails(i),
+}))
+const rawEvents = Array.from({ length: cycleCount }, (_, i) => makeRawEvent(i))
 
 if (VARIANT === 'aggregate') {
   // Off-hot-path aggregator: the canonical-key + two-tier map work that runs
@@ -77,23 +113,9 @@ if (VARIANT === 'aggregate') {
   const writer = new FlagEvaluationsWriter(config)
   clearInterval(writer._periodic)
 
-  const rawEvent = {
-    flagKey: hookContext.flagKey,
-    variant: evaluationDetails.variant,
-    allocationKey: 'allocation-123',
-    targetingKey: hookContext.context.targetingKey,
-    evalTimeMs: 1_760_000_000_000,
-    attrs: {
-      plan: hookContext.context.plan,
-      country: hookContext.context.country,
-      betaTester: hookContext.context.betaTester,
-      seatCount: hookContext.context.seatCount,
-    },
-  }
-
   // Pre-flight: one aggregation must create a full-tier bucket. Catches a silent
   // breakage where the aggregator no longer records into _full.
-  writer._aggregate(rawEvent)
+  writer._aggregate(rawEvents[0])
   assert.equal(writer._full.size, 1, '_aggregate did not create a full-tier bucket')
   writer._full.clear()
   writer._perFlagFullCount.clear()
@@ -101,13 +123,19 @@ if (VARIANT === 'aggregate') {
 
   guard.loopStart()
   for (let i = 0; i < count; i++) {
-    writer._aggregate(rawEvent)
+    writer._aggregate(rawEvents[i % cycleCount])
+    if (i > 0 && i % 10000 === 0) {
+      writer._full.clear()
+      writer._degraded.clear()
+      writer._perFlagFullCount.clear()
+      writer._globalCount = 0
+    }
   }
   guard.done()
 
   assert.ok(writer._full.size > 0, 'aggregate loop produced no buckets')
 } else {
-  // Eval hot path: the cost of the Finally hook itself — scalar capture + bounded
+  // Eval hot path: the cost of the Finally hook itself - scalar capture + bounded
   // enqueue. Aggregation is deferred to the drain (not measured here).
   const writer = new FlagEvaluationsWriter(config)
   clearInterval(writer._periodic)
@@ -116,7 +144,7 @@ if (VARIANT === 'aggregate') {
   // Pre-flight: one finally() must enqueue exactly one bounded event. Catches a silent
   // breakage where the hook stopped enqueuing (which would make the loop measure a
   // near-empty function and falsely "pass").
-  hook.finally(hookContext, evaluationDetails)
+  hook.finally(hookArgs[0].hookContext, hookArgs[0].evaluationDetails)
   assert.equal(writer._rawQueue.length, 1, 'hook.finally did not enqueue a bounded event')
   writer._rawQueue.length = 0
 
@@ -128,7 +156,8 @@ if (VARIANT === 'aggregate') {
     if (writer._rawQueue.length >= writer._rawQueueCap) {
       writer._rawQueue.length = 0
     }
-    hook.finally(hookContext, evaluationDetails)
+    const args = hookArgs[i % cycleCount]
+    hook.finally(args.hookContext, args.evaluationDetails)
   }
   guard.done()
 }
