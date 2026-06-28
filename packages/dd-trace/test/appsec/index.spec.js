@@ -85,10 +85,8 @@ describe('AppSec Index', function () {
         eventTracking: {
           mode: 'anon',
         },
-        apiSecurity: {
-          enabled: false,
-          sampleDelay: 10,
-        },
+        DD_API_SECURITY_ENABLED: false,
+        DD_API_SECURITY_SAMPLE_DELAY: 10,
         rasp: {
           enabled: true,
           bodyCollection: true,
@@ -249,8 +247,8 @@ describe('AppSec Index', function () {
 
     it('should call appsec telemetry enable', () => {
       config.telemetry = {
-        enabled: true,
-        metrics: true,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_METRICS_ENABLED: true,
       }
       AppSec.enable(config)
 
@@ -791,10 +789,8 @@ describe('AppSec Index', function () {
     })
 
     it('should not trigger schema extraction with feature disabled', () => {
-      config.appsec.apiSecurity = {
-        enabled: false,
-        sampleDelay: 1,
-      }
+      config.appsec.DD_API_SECURITY_ENABLED = false
+      config.appsec.DD_API_SECURITY_SAMPLE_DELAY = 1
 
       AppSec.enable(config)
 
@@ -842,10 +838,8 @@ describe('AppSec Index', function () {
     })
 
     it('should trigger schema extraction with sampling enabled', () => {
-      config.appsec.apiSecurity = {
-        enabled: true,
-        sampleDelay: 1,
-      }
+      config.appsec.DD_API_SECURITY_ENABLED = true
+      config.appsec.DD_API_SECURITY_SAMPLE_DELAY = 1
 
       AppSec.enable(config)
 
@@ -897,10 +891,8 @@ describe('AppSec Index', function () {
 
     describe('onResponseBody', () => {
       beforeEach(() => {
-        config.appsec.apiSecurity = {
-          enabled: true,
-          sampleDelay: 1,
-        }
+        config.appsec.DD_API_SECURITY_ENABLED = true
+        config.appsec.DD_API_SECURITY_SAMPLE_DELAY = 1
 
         AppSec.enable(config)
       })
@@ -1536,8 +1528,8 @@ describe('AppSec Index', function () {
     })
 
     it('should increment waf.init metric', () => {
-      config.telemetry.enabled = true
-      config.telemetry.metrics = true
+      config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED = true
+      config.telemetry.DD_TELEMETRY_METRICS_ENABLED = true
 
       appsec.enable(config)
 
@@ -1548,8 +1540,8 @@ describe('AppSec Index', function () {
     })
 
     it('should not increment waf.init metric if metrics are not enabled', () => {
-      config.telemetry.enabled = true
-      config.telemetry.metrics = false
+      config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED = true
+      config.telemetry.DD_TELEMETRY_METRICS_ENABLED = false
 
       appsec.enable(config)
 
@@ -1559,8 +1551,8 @@ describe('AppSec Index', function () {
     })
 
     it('should not increment waf.init metric if telemetry is not enabled', () => {
-      config.telemetry.enabled = false
-      config.telemetry.metrics = true
+      config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED = false
+      config.telemetry.DD_TELEMETRY_METRICS_ENABLED = true
 
       appsec.enable(config)
 

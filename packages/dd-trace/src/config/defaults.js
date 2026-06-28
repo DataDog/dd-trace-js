@@ -227,8 +227,9 @@ for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) 
     if (entry.sensitive) {
       sensitiveConfigurations.add(canonicalName)
     }
-    const configurationNames = entry.internalPropertyName ? [entry.internalPropertyName] : entry.configurationNames
-    const fullPropertyName = configurationNames?.[0] ?? canonicalName
+    const fullPropertyName = entry.namespace
+      ? `${entry.namespace}.${canonicalName}`
+      : (entry.internalPropertyName ?? entry.configurationNames?.[0] ?? canonicalName)
     const type = entry.type.toUpperCase()
 
     let transformer = transformers[entry.transform]

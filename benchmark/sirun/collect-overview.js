@@ -101,6 +101,7 @@ for (const name of benches) {
     try { fs.unlinkSync(SG_FILE) } catch {}
 
     const variantCfg = meta.variants?.[variant] || {}
+    const variantIters = variantCfg.iterations || configIters
     const inner = innerCount(variantCfg.env)
     let perIterMs = '-'
     let stddevPct = '-'
@@ -120,7 +121,7 @@ for (const name of benches) {
           const { mean, stddevPct: sd } = stats(times)
           perIterMs = (mean / 1000).toFixed(1)
           stddevPct = sd.toFixed(1)
-          totalS = ((mean / 1e6) * configIters).toFixed(0)
+          totalS = ((mean / 1e6) * variantIters).toFixed(0)
         }
       } catch { perIterMs = 'parse-err' }
     } else {
@@ -131,7 +132,7 @@ for (const name of benches) {
 
     fs.appendFileSync(OUT,
       `| ${name} | ${variant} | ${categoryOf(name)} | ${meaningOf(name)} | ${inner} | ` +
-      `${configIters} | ${perIterMs} | ${stddevPct} | ${totalS} | ${startupPct} |\n`)
+      `${variantIters} | ${perIterMs} | ${stddevPct} | ${totalS} | ${startupPct} |\n`)
     console.log(`${name}/${variant} ${perIterMs}ms sd=${stddevPct}% ${totalS}s start=${startupPct}%`)
   }
 
