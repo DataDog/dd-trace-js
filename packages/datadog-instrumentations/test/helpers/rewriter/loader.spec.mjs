@@ -154,6 +154,40 @@ describe('rewriter loader', () => {
     assert.strictEqual(result.status, 0, result.stderr)
     assert.strictEqual(result.stdout.trim(), '1')
   })
+
+  it('instruments a built-in imported via a named ESM import exactly once', function () {
+    if (!supportsSyncHooks()) {
+      this.skip()
+    }
+
+    // A built-in is wrapped once on its shared singleton via getBuiltinModule when
+    // the hook registers. `import { createHash } from 'node:crypto'` then reaches
+    // iitm with a namespace re-exporting that already-wrapped function; wrapping it
+    // again fires the instrumentation channel twice per call (the regression that
+    // corrupted http2's per-server emit shim).
+    const root = mkdtempSync(join(tmpdir(), 'dd-loader-builtin-named-import-'))
+    writeFileSync(join(root, 'app.mjs'), `
+      import { createHash } from 'node:crypto'
+      import { createRequire } from 'node:module'
+      const dc = createRequire(${JSON.stringify(join(repositoryRoot, 'index.js'))})('dc-polyfill')
+      let count = 0
+      dc.channel('datadog:crypto:hashing:start').subscribe(() => { count++ })
+      createHash('sha256')
+      console.log(count)
+    `)
+
+    const result = spawnSync(process.execPath, [join(root, 'app.mjs')], {
+      cwd: root,
+      env: {
+        ...process.env,
+        NODE_OPTIONS: `--import ${join(repositoryRoot, 'register.js')} --require ${join(repositoryRoot, 'init.js')}`,
+      },
+      encoding: 'utf8',
+    })
+
+    assert.strictEqual(result.status, 0, result.stderr)
+    assert.strictEqual(result.stdout.trim(), '1', result.stderr)
+  })
 })
 
 function createAiModuleUrl () {

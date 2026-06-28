@@ -5,12 +5,6 @@ const proxyquire = require('proxyquire').noCallThru().noPreserveCache()
 
 require('./setup/core')
 
-const SUPPORTED_SYNC_HOOKS_NODE_VERSION = {
-  NODE_MAJOR: 24,
-  NODE_MINOR: 11,
-  NODE_PATCH: 1,
-}
-
 describe('register.js', () => {
   let emitWarning
 
@@ -31,11 +25,7 @@ describe('register.js', () => {
       register,
       registerSyncLoaderHooks,
       supportsSyncHooks,
-      version: {
-        NODE_MAJOR: 24,
-        NODE_MINOR: 11,
-        NODE_PATCH: 0,
-      },
+      syncLoaderHooksSupported: () => false,
     })
 
     sinon.assert.notCalled(registerSyncLoaderHooks)
@@ -153,11 +143,13 @@ function createThrowingLoaderHook (error) {
   })
 }
 
-function loadRegister ({ register, registerSyncLoaderHooks, loaderHook, supportsSyncHooks, version }) {
+function loadRegister ({ register, registerSyncLoaderHooks, loaderHook, supportsSyncHooks, syncLoaderHooksSupported }) {
   proxyquire('../../../register.js', {
     'node:module': { register },
     'import-in-the-middle/create-hook.mjs': { supportsSyncHooks },
     './loader-hook.mjs': loaderHook || { registerSyncLoaderHooks },
-    './version': version || SUPPORTED_SYNC_HOOKS_NODE_VERSION,
+    './packages/dd-trace/src/supported-loader-hooks': {
+      syncLoaderHooksSupported: syncLoaderHooksSupported || (() => true),
+    },
   })
 }

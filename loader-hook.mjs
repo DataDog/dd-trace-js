@@ -138,7 +138,18 @@ function loadSync (url, context, nextLoad) {
   }
 
   return rewriterLoader.loadSync(url, context, (url, context) => {
-    return getSyncImportInTheMiddleHook().loadSync(url, context, nextLoad)
+    const result = nextLoad(url, context)
+    // A CommonJS package reached by `import pkg` (not require) arrives here with
+    // no format and the import condition, so isCommonJSLoad() can't see it from
+    // context alone; Node resolves it to commonjs in `result`. When the sync
+    // loader owns CJS, keep that entry on the CommonJS path so rewriteResult
+    // appends the export-wrapping shim. Handing it to iitm instead would wrap it
+    // as an ESM namespace and drop the shim, leaving the package's main file
+    // (e.g. express/lib/express.js) uninstrumented — the gap RITM used to cover.
+    if (cjsOwnedBySyncLoader && result.format === 'commonjs') {
+      return result
+    }
+    return getSyncImportInTheMiddleHook().loadSync(url, context, () => result)
   })
 }
 

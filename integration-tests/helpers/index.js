@@ -27,6 +27,16 @@ const { BUN, withBun } = require('./bun')
 
 const sandboxRoot = path.join(os.tmpdir(), id().toString())
 const hookFile = 'dd-trace/loader-hook.mjs'
+// Node >=20.6: `--import dd-trace/initialize.mjs` registers the loader hooks and
+// initializes the tracer before the application's module graph loads, instrumenting
+// CommonJS and ESM alike with a single flag. The legacy `--loader dd-trace/loader-hook.mjs`
+// only reliably instruments ESM entrypoints and, on Node versions that own CommonJS
+// through the synchronous hooks, cannot wrap a CommonJS package reached by `import`.
+const [esmHookNodeMajor, esmHookNodeMinor] = process.versions.node.split('.').map(Number)
+const supportsImportInitialize = esmHookNodeMajor > 20 || (esmHookNodeMajor === 20 && esmHookNodeMinor >= 6)
+const esmHookOptions = supportsImportInitialize
+  ? '--import dd-trace/initialize.mjs'
+  : `--loader=${hookFile}`
 
 const { DEBUG } = process.env
 
@@ -935,7 +945,7 @@ function preparePluginIntegrationTestSpawnOptions (
 ) {
   additionalEnvArgs = { ...additionalEnvArgs }
 
-  let NODE_OPTIONS = `--loader=${hookFile}`
+  let NODE_OPTIONS = esmHookOptions
   if (additionalEnvArgs.NODE_OPTIONS !== undefined) {
     if (/--(loader|import)/.test(additionalEnvArgs.NODE_OPTIONS ?? '')) {
       NODE_OPTIONS = additionalEnvArgs.NODE_OPTIONS

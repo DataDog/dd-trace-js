@@ -4,7 +4,7 @@
 
 const { register } = require('node:module')
 const { pathToFileURL } = require('node:url')
-const { NODE_MAJOR, NODE_MINOR, NODE_PATCH } = require('./version')
+const { syncLoaderHooksSupported } = require('./packages/dd-trace/src/supported-loader-hooks')
 
 const parentURL = pathToFileURL(__filename)
 
@@ -39,7 +39,7 @@ if (!isSyncLoaderRegistered) {
 globalThis[Symbol.for('dd-trace:loader-hooks-registered')] = true
 
 function shouldRegisterSyncLoaderHooks () {
-  if (!isSyncLoaderHookVersionSupported()) {
+  if (!syncLoaderHooksSupported()) {
     return false
   }
 
@@ -51,14 +51,6 @@ function shouldRegisterSyncLoaderHooks () {
     }
   }
 
-  return false
-}
-
-function isSyncLoaderHookVersionSupported () {
-  if (NODE_MAJOR >= 26) return true
-  if (NODE_MAJOR === 25) return NODE_MINOR >= 1
-  if (NODE_MAJOR === 24) return NODE_MINOR > 11 || (NODE_MINOR === 11 && NODE_PATCH >= 1)
-  if (NODE_MAJOR === 22) return NODE_MINOR > 22 || (NODE_MINOR === 22 && NODE_PATCH >= 3)
   return false
 }
 
