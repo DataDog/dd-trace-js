@@ -16,7 +16,7 @@
 // only active where the combined sync hook has taken over (see register.js).
 
 const path = require('path')
-const { builtinModules } = require('module')
+const { builtinModules, createRequire } = require('module')
 
 const parse = require('../../../../vendor/dist/module-details-from-path')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
@@ -36,6 +36,9 @@ const wrapped = new WeakSet()
 
 /** @type {Map<string, string|undefined>} basedir -> resolved version. */
 const versionCache = new Map()
+
+/** @type {Map<string, string|undefined>} basedir -> resolved package main file, or undefined when unresolvable. */
+const mainCache = new Map()
 
 // process.getBuiltinModule lands in Node 22.3 / backported to 20.16; the sync
 // loader only owns CJS on Node ≥22.22.3, so it is always present there, but the
@@ -104,11 +107,36 @@ function matchModule (filename) {
   const hooks = moduleHooks.get(packageName)
   if (!hooks) return
 
-  // RITM keys file-specific hooks as `<name>/<relative path>`; the package main
-  // is matched against the integration's `file` (default 'index.js') inside the
-  // registered callback, so build the same moduleName here.
-  const moduleName = `${packageName}${path.sep}${path.relative(stat.basedir, filename)}`.replaceAll('\\', '/')
+  // Mirror RITM's moduleName: the bare package name for the main entry (which
+  // register.js matches against `filename(name, undefined)` === the bare name),
+  // and `<name>/<relative path>` only for module-internal files. Building
+  // `<name>/index.js` for the main made every package-main hook (no `file:`,
+  // e.g. router/mongoose/undici) miss and silently skip instrumentation.
+  const moduleName = isPackageMain(packageName, stat.basedir, filename)
+    ? packageName
+    : `${packageName}${path.sep}${path.relative(stat.basedir, filename)}`.replaceAll('\\', '/')
   return { packageName, moduleName, basedir: stat.basedir }
+}
+
+/**
+ * Whether `filename` is the resolved main entry of the package rooted at
+ * `basedir`. Resolved once per basedir (the main never changes for a loaded
+ * package) so the per-require path pays a Map read after the first lookup.
+ *
+ * @param {string} packageName
+ * @param {string} basedir
+ * @param {string} filename Absolute resolved file path of the loaded module.
+ * @returns {boolean}
+ */
+function isPackageMain (packageName, basedir, filename) {
+  let main = mainCache.get(basedir)
+  if (main === undefined && !mainCache.has(basedir)) {
+    try {
+      main = createRequire(path.join(basedir, 'package.json')).resolve(packageName)
+    } catch {}
+    mainCache.set(basedir, main)
+  }
+  return main === filename
 }
 
 /**
