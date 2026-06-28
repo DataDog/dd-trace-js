@@ -1,12 +1,16 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const workerThreads = require('node:worker_threads')
 
 const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
 require('../../setup/mocha')
+
+const { installProbeSampler } = require('../../../src/debugger/probe_sampler')
+const { MAX_SAMPLED_PROBES_PER_PAUSE } = require('../../../src/debugger/probe_sampler_constants')
 
 const breakpoint = { file: 'file.js', line: 1 }
 const breakpointId = 'breakpoint-id'
@@ -19,7 +23,11 @@ const event = {
   params: {
     reason: 'other',
     hitBreakpoints: [breakpointId],
-    callFrames: [{ functionName, location: { scriptId, lineNumber: breakpoint.line - 1, columnNumber: 0 } }],
+    callFrames: [{
+      callFrameId: 'call-frame-id',
+      functionName,
+      location: { scriptId, lineNumber: breakpoint.line - 1, columnNumber: 0 },
+    }],
   },
 }
 
@@ -39,12 +47,16 @@ describe('onPause', function () {
   /** @type {Function} */
   let onPaused
   /** @type {sinon.SinonSpy} */
-  let ackReceived
+  let ackEmitting
+  /** @type {import('../../../src/debugger/devtools_client/state')} */
+  let state
+  /** @type {Int32Array} */
+  let sampledProbeIndexes
   /** @type {unknown} */
   let log
 
   beforeEach(async function () {
-    ackReceived = sinon.spy()
+    ackEmitting = sinon.spy()
     log = {
       error: sinon.spy(),
       debug: sinon.spy(),
@@ -57,7 +69,12 @@ describe('onPause', function () {
           listener({ params: { scriptId, url } })
         }
       }),
-      post: sinon.spy(),
+      post: sinon.stub().callsFake((method, params) => {
+        if (method === 'Debugger.evaluateOnCallFrame') {
+          return Promise.resolve({ result: { value: [{}] } })
+        }
+        return Promise.resolve({})
+      }),
       emit: sinon.spy(),
       '@noCallThru': true,
     }
@@ -71,13 +88,15 @@ describe('onPause', function () {
         redactedIdentifiers: [],
         redactionExcludedIdentifiers: [],
       },
+      propagateProcessTags: { enabled: false },
       '@noCallThru': true,
     }
 
     send = sinon.spy()
     send['@noCallThru'] = true
+    sampledProbeIndexes = new Int32Array(installProbeSampler())
 
-    const state = proxyquire('../../../src/debugger/devtools_client/state', { './session': session })
+    state = proxyquire('../../../src/debugger/devtools_client/state', { './session': session })
     proxyquire.noCallThru()('../../../src/debugger/devtools_client/status', { './config': config })
     const collector = proxyquire('../../../src/debugger/devtools_client/snapshot/collector', { '../session': session })
     const redaction = proxyquire('../../../src/debugger/devtools_client/snapshot/redaction', { '../config': config })
@@ -90,13 +109,17 @@ describe('onPause', function () {
       './processor': processor,
     })
     proxyquire('../../../src/debugger/devtools_client', {
+      worker_threads: {
+        ...workerThreads,
+        workerData: { probeSamplerBuffer: sampledProbeIndexes.buffer },
+      },
       './config': config,
       './session': session,
       './state': state,
       './snapshot': snapshot,
       './log': log,
       './send': send,
-      './status': { ackReceived },
+      './status': { ackEmitting },
       './remote_config': { '@noCallThru': true },
     })
 
@@ -108,7 +131,7 @@ describe('onPause', function () {
   it('should not fail if there is no probe for at the breakpoint', async function () {
     await onPaused(event)
     sinon.assert.calledOnceWithExactly(session.post, 'Debugger.resume')
-    sinon.assert.notCalled(ackReceived)
+    sinon.assert.notCalled(ackEmitting)
     sinon.assert.notCalled(send)
   })
 
@@ -131,7 +154,116 @@ describe('onPause', function () {
     assert(thrown instanceof Error)
     assert.strictEqual(thrown.message, 'Unexpected Debugger.paused reason: OOM')
     sinon.assert.notCalled(session.post)
-    sinon.assert.notCalled(ackReceived)
+    sinon.assert.notCalled(ackEmitting)
+    sinon.assert.notCalled(send)
+  })
+
+  it('should process only sampled probes for a breakpoint', async function () {
+    const probe1 = genProcessedProbe('probe-1')
+    const probe2 = genProcessedProbe('probe-2')
+
+    state.breakpointToProbes.set(breakpointId, new Map([
+      [probe1.id, probe1],
+      [probe2.id, probe2],
+    ]))
+    state.samplingIndexToProbe.set(1, probe2)
+    Atomics.store(sampledProbeIndexes, 0, 1)
+    Atomics.store(sampledProbeIndexes, 2, 1)
+
+    await onPaused(event)
+
+    sinon.assert.calledWith(session.post.secondCall, 'Debugger.resume')
+    sinon.assert.calledOnceWithExactly(ackEmitting, probe2)
+    sinon.assert.calledOnce(send)
+    assert.strictEqual(send.firstCall.args[0], 'probe 2')
+    assert.strictEqual(send.firstCall.args[2], undefined)
+  })
+
+  it('should log sampler overflow', async function () {
+    state.breakpointToProbes.set(breakpointId, new Map())
+    Atomics.store(sampledProbeIndexes, 1, 1)
+
+    await onPaused(event)
+
+    sinon.assert.calledWith(log.error,
+      '[debugger:devtools_client] Too many probes sampled at the same breakpoint location; skipping excess probes')
+    sinon.assert.calledOnceWithExactly(session.post, 'Debugger.resume')
+    sinon.assert.notCalled(ackEmitting)
+    sinon.assert.notCalled(send)
+  })
+
+  it('should not read past the sampled probe buffer when more probes are sampled than it can hold', async function () {
+    const probesAtLocation = new Map()
+    const sampler = getSampler()
+    for (let i = 0; i <= MAX_SAMPLED_PROBES_PER_PAUSE; i++) {
+      const probe = genProcessedProbe(`probe-${i}`)
+      probesAtLocation.set(probe.id, probe)
+      state.samplingIndexToProbe.set(i, probe)
+      sampler.makeSampleDecision(i, probe.id, 0n, false)
+    }
+    state.breakpointToProbes.set(breakpointId, probesAtLocation)
+
+    await onPaused(event)
+
+    sinon.assert.calledWith(log.error,
+      '[debugger:devtools_client] Too many probes sampled at the same breakpoint location; skipping excess probes')
+    sinon.assert.calledWith(session.post.secondCall, 'Debugger.resume')
+    sinon.assert.callCount(ackEmitting, MAX_SAMPLED_PROBES_PER_PAUSE)
+    sinon.assert.callCount(send, MAX_SAMPLED_PROBES_PER_PAUSE)
+  })
+
+  it('should log if a sampled probe index is unknown', async function () {
+    state.breakpointToProbes.set(breakpointId, new Map())
+    Atomics.store(sampledProbeIndexes, 0, 1)
+    Atomics.store(sampledProbeIndexes, 2, 42)
+
+    await onPaused(event)
+
+    sinon.assert.calledWith(log.error, '[debugger:devtools_client] No probe found for sampled probe index %d', 42)
+    sinon.assert.calledOnceWithExactly(session.post, 'Debugger.resume')
+    sinon.assert.notCalled(ackEmitting)
+    sinon.assert.notCalled(send)
+  })
+
+  it('should log if a sampled probe is not attached to the hit breakpoint', async function () {
+    const probe = genProcessedProbe('probe-1')
+
+    state.breakpointToProbes.set(breakpointId, new Map())
+    state.samplingIndexToProbe.set(1, probe)
+    Atomics.store(sampledProbeIndexes, 0, 1)
+    Atomics.store(sampledProbeIndexes, 2, 1)
+
+    await onPaused(event)
+
+    sinon.assert.calledWith(log.error,
+      '[debugger:devtools_client] Sampled probe %s was not found at breakpoint %s', 'probe-1', breakpointId)
+    sinon.assert.calledOnceWithExactly(session.post, 'Debugger.resume')
+    sinon.assert.notCalled(ackEmitting)
     sinon.assert.notCalled(send)
   })
 })
+
+/**
+ * Generate a processed probe fixture for pause-handler tests.
+ *
+ * @param {string} id - The probe id.
+ */
+function genProcessedProbe (id) {
+  return {
+    id,
+    version: 1,
+    location: { file: path, lines: ['1'] },
+    templateRequiresEvaluation: false,
+    template: id.replace('-', ' '),
+    captureSnapshot: false,
+  }
+}
+
+/**
+ * Get the installed runtime probe sampler for tests.
+ */
+function getSampler () {
+  return /** @type {{ makeSampleDecision: Function }} */ (
+    globalThis[Symbol.for('dd-trace')][Symbol.for('dd-trace.debugger.probeSampler')]
+  )
+}

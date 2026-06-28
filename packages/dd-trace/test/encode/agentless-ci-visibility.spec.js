@@ -16,6 +16,7 @@ const {
   MAX_SERVICE_LENGTH,
   MAX_RESOURCE_NAME_LENGTH,
   MAX_TYPE_LENGTH,
+  MAX_META_VALUE_LENGTH_TEST_OPTIMIZATION,
   DEFAULT_SPAN_NAME,
   DEFAULT_SERVICE_NAME,
 } = require('../../src/encode/tags-processors')
@@ -376,6 +377,193 @@ describe('agentless-ci-visibility-encode', () => {
       assert.deepStrictEqual(decoded.metadata.test, {
         '_dd.library_capabilities.auto_test_retries': '1',
       })
+    })
+
+    it('stores metadata tags for the test levels target', () => {
+      encoder.addMetadataTags({
+        test_levels: { 'test.command': 'mocha' },
+        'test*': { tag: 'value' },
+        invalid: { tag: 'value' },
+      })
+
+      assert.deepStrictEqual(encoder.metadataTags, {
+        test_levels: { 'test.command': 'mocha' },
+      })
+    })
+
+    it('encodes test levels target tags into the payload', () => {
+      encoder.addMetadataTags({
+        test_levels: { 'test.command': 'mocha', 'test_session.name': 'my-session' },
+      })
+      encoder.encode(trace)
+
+      const buffer = encoder.makePayload()
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
+
+      assert.deepStrictEqual(decoded.metadata.test_levels, {
+        'test.command': 'mocha',
+        'test_session.name': 'my-session',
+      })
+    })
+
+    it('removes matching test levels metadata tags from test level events', () => {
+      encoder.addMetadataTags({
+        test_levels: {
+          'git.repository_url': 'https://github.com/DataDog/dd-trace-js.git',
+          'ci.provider.name': 'github',
+        },
+      })
+      trace[0].type = 'test'
+      trace[0].meta = {
+        'git.repository_url': 'https://github.com/DataDog/dd-trace-js.git',
+        'ci.provider.name': 'github',
+        'test.name': 'does not move',
+      }
+
+      encoder.encode(trace)
+
+      const buffer = encoder.makePayload()
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
+      const testEvent = decoded.events[0]
+
+      assert.deepStrictEqual(decoded.metadata.test_levels, {
+        'git.repository_url': 'https://github.com/DataDog/dd-trace-js.git',
+        'ci.provider.name': 'github',
+      })
+      assert.deepStrictEqual(testEvent.content.meta, {
+        'test.name': 'does not move',
+      })
+    })
+
+    it('keeps git and ci tags event local when test levels metadata is not set', () => {
+      trace[0].type = 'test'
+      trace[0].meta = {
+        'git.repository_url': 'https://github.com/DataDog/dd-trace-js.git',
+        'ci.provider.name': 'github',
+      }
+
+      encoder.encode(trace)
+
+      const buffer = encoder.makePayload()
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
+      const testEvent = decoded.events[0]
+
+      assert.strictEqual(decoded.metadata.test_levels, undefined)
+      assert.deepStrictEqual(testEvent.content.meta, {
+        'git.repository_url': 'https://github.com/DataDog/dd-trace-js.git',
+        'ci.provider.name': 'github',
+      })
+    })
+
+    it('keeps event git and ci tags when they differ from test levels metadata', () => {
+      encoder.addMetadataTags({
+        test_levels: {
+          'git.branch': 'main',
+          'ci.job.name': 'unit-tests',
+        },
+      })
+      trace[0].type = 'test'
+      trace[0].meta = {
+        'git.branch': 'feature',
+        'ci.job.name': 'unit-tests',
+      }
+
+      encoder.encode(trace)
+
+      const buffer = encoder.makePayload()
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
+      const testEvent = decoded.events[0]
+
+      assert.deepStrictEqual(decoded.metadata.test_levels, {
+        'git.branch': 'main',
+        'ci.job.name': 'unit-tests',
+      })
+      assert.deepStrictEqual(testEvent.content.meta, {
+        'git.branch': 'feature',
+      })
+    })
+
+    it('keeps custom git and ci tags event local', () => {
+      encoder.addMetadataTags({
+        test_levels: {
+          'git.repository_url': 'https://github.com/DataDog/dd-trace-js.git',
+          'ci.provider.name': 'github',
+        },
+      })
+      trace[0].type = 'test'
+      trace[0].meta = {
+        'git.repository_url': 'https://github.com/DataDog/dd-trace-js.git',
+        'ci.provider.name': 'github',
+        'git.custom': 'one-off-git-tag',
+        'ci.custom': 'one-off-ci-tag',
+      }
+
+      encoder.encode(trace)
+
+      const buffer = encoder.makePayload()
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
+      const testEvent = decoded.events[0]
+
+      assert.deepStrictEqual(decoded.metadata.test_levels, {
+        'git.repository_url': 'https://github.com/DataDog/dd-trace-js.git',
+        'ci.provider.name': 'github',
+      })
+      assert.deepStrictEqual(testEvent.content.meta, {
+        'git.custom': 'one-off-git-tag',
+        'ci.custom': 'one-off-ci-tag',
+      })
+    })
+
+    it('does not remove test levels metadata tags from non-test-level spans', () => {
+      encoder.addMetadataTags({
+        test_levels: {
+          'git.repository_url': 'https://github.com/DataDog/dd-trace-js.git',
+          'ci.provider.name': 'github',
+        },
+      })
+      trace[0].type = 'worker'
+      trace[0].meta = {
+        'git.repository_url': 'https://github.com/DataDog/dd-trace-js.git',
+        'ci.provider.name': 'github',
+      }
+
+      encoder.encode(trace)
+
+      const buffer = encoder.makePayload()
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
+      const spanEvent = decoded.events[0]
+
+      assert.deepStrictEqual(decoded.metadata.test_levels, {
+        'git.repository_url': 'https://github.com/DataDog/dd-trace-js.git',
+        'ci.provider.name': 'github',
+      })
+      assert.deepStrictEqual(spanEvent.content.meta, {
+        'git.repository_url': 'https://github.com/DataDog/dd-trace-js.git',
+        'ci.provider.name': 'github',
+      })
+    })
+
+    it('truncates test levels metadata values like test optimization span meta', () => {
+      const overlong = 'a'.repeat(MAX_META_VALUE_LENGTH_TEST_OPTIMIZATION + 1)
+      const expected = `${'a'.repeat(MAX_META_VALUE_LENGTH_TEST_OPTIMIZATION)}...`
+      encoder.addMetadataTags({
+        test_levels: {
+          'git.commit.message': overlong,
+        },
+      })
+      trace[0].type = 'test'
+      trace[0].meta = {
+        'git.commit.message': overlong,
+      }
+
+      encoder.encode(trace)
+
+      const buffer = encoder.makePayload()
+      const decoded = msgpack.decode(buffer, { useBigInt64: true })
+      const testEvent = decoded.events[0]
+
+      assert.strictEqual(decoded.metadata.test_levels['git.commit.message'], expected)
+      assert.deepStrictEqual(testEvent.content.meta, {})
     })
   })
 })

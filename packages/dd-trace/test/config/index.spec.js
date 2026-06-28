@@ -257,8 +257,8 @@ describe('Config', () => {
       const firstConfig = getConfig(undefined, { ddMajor: 5 })
       const secondConfig = getConfig(undefined, { ddMajor: 5 })
 
-      assert.strictEqual(firstConfig.iast.securityControlsConfiguration, undefined)
-      assert.strictEqual(secondConfig.iast.securityControlsConfiguration, undefined)
+      assert.strictEqual(firstConfig.iast.DD_IAST_SECURITY_CONTROLS_CONFIGURATION, undefined)
+      assert.strictEqual(secondConfig.iast.DD_IAST_SECURITY_CONTROLS_CONFIGURATION, undefined)
     })
 
     it('should pass through random envs', async () => {
@@ -870,15 +870,13 @@ describe('Config', () => {
       apmTracingEnabled: true,
       DD_APP_KEY: undefined,
       appsec: {
-        apiSecurity: {
-          enabled: true,
-          sampleDelay: 30,
-          endpointCollectionEnabled: true,
-          endpointCollectionMessageLimit: 300,
-          downstreamBodyAnalysisSampleRate: 0.5,
-          maxDownstreamRequestBodyAnalysis: 1,
-          maxDownstreamBodyBytes: 10485760,
-        },
+        DD_API_SECURITY_ENABLED: true,
+        DD_API_SECURITY_SAMPLE_DELAY: 30,
+        DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: true,
+        DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT: 300,
+        DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: 0.5,
+        DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: 1,
+        DD_API_SECURITY_MAX_DOWNSTREAM_BODY_BYTES: 10485760,
         blockedTemplateHtml: undefined,
         blockedTemplateJson: undefined,
         blockedTemplateGraphql: undefined,
@@ -897,9 +895,7 @@ describe('Config', () => {
           enabled: true,
         },
         rateLimit: 100,
-        sca: {
-          enabled: undefined,
-        },
+        DD_APPSEC_SCA_ENABLED: undefined,
         stackTrace: {
           enabled: true,
           maxDepth: 32,
@@ -964,7 +960,7 @@ describe('Config', () => {
       DD_INSTRUMENTATION_CONFIG_ID: undefined,
       llmobs: {
         agentlessEnabled: undefined,
-        enabled: false,
+        DD_LLMOBS_ENABLED: false,
         mlApp: undefined,
       },
       logLevel: 'debug',
@@ -976,7 +972,7 @@ describe('Config', () => {
         service: 'node',
       },
       remoteConfig: {
-        enabled: true,
+        DD_REMOTE_CONFIGURATION_ENABLED: true,
         pollInterval: 5,
       },
       reportHostname: false,
@@ -1348,15 +1344,13 @@ describe('Config', () => {
       apmTracingEnabled: false,
       DD_APP_KEY: 'myAppKey',
       appsec: {
-        apiSecurity: {
-          enabled: true,
-          sampleDelay: 25,
-          endpointCollectionEnabled: false,
-          endpointCollectionMessageLimit: 500,
-          downstreamBodyAnalysisSampleRate: 0.75,
-          maxDownstreamRequestBodyAnalysis: 2,
-          maxDownstreamBodyBytes: 2048,
-        },
+        DD_API_SECURITY_ENABLED: true,
+        DD_API_SECURITY_SAMPLE_DELAY: 25,
+        DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false,
+        DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT: 500,
+        DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: 0.75,
+        DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: 2,
+        DD_API_SECURITY_MAX_DOWNSTREAM_BODY_BYTES: 2048,
         blockedTemplateGraphql: BLOCKED_TEMPLATE_GRAPHQL,
         blockedTemplateHtml: BLOCKED_TEMPLATE_HTML,
         blockedTemplateJson: BLOCKED_TEMPLATE_JSON,
@@ -1377,9 +1371,7 @@ describe('Config', () => {
         },
         rateLimit: 42,
         rules: RULES_JSON_PATH,
-        sca: {
-          enabled: true,
-        },
+        DD_APPSEC_SCA_ENABLED: true,
         stackTrace: {
           enabled: false,
           maxDepth: 42,
@@ -1437,7 +1429,7 @@ describe('Config', () => {
         redactionNamePattern: 'REDACTION_NAME_PATTERN',
         redactionValuePattern: 'REDACTION_VALUE_PATTERN',
         requestSampling: 40,
-        securityControlsConfiguration: 'SANITIZER:CODE_INJECTION:sanitizer.js:method',
+        DD_IAST_SECURITY_CONTROLS_CONFIGURATION: 'SANITIZER:CODE_INJECTION:sanitizer.js:method',
         stackTrace: {
           enabled: false,
         },
@@ -1452,7 +1444,7 @@ describe('Config', () => {
       protocolVersion: '0.5',
       queryStringObfuscation: '.*',
       remoteConfig: {
-        enabled: false,
+        DD_REMOTE_CONFIGURATION_ENABLED: false,
         pollInterval: 42,
       },
       reportHostname: true,
@@ -1986,7 +1978,10 @@ describe('Config', () => {
     assert.deepStrictEqual(config.dynamicInstrumentation.redactedIdentifiers, ['foo', 'bar'])
     assert.deepStrictEqual(config.dynamicInstrumentation.redactionExcludedIdentifiers, ['a', 'b', 'c'])
     if (DD_MAJOR < 6) {
-      assert.strictEqual(config.iast.securityControlsConfiguration, 'SANITIZER:CODE_INJECTION:sanitizer.js:method')
+      assert.strictEqual(
+        config.iast.DD_IAST_SECURITY_CONTROLS_CONFIGURATION,
+        'SANITIZER:CODE_INJECTION:sanitizer.js:method'
+      )
     } else {
       assert.ok(!('iast.securityControlsConfiguration' in config))
     }
@@ -2480,11 +2475,9 @@ describe('Config', () => {
     assertObjectContains(config, {
       apmTracingEnabled: true,
       appsec: {
-        apiSecurity: {
-          enabled: true,
-          endpointCollectionEnabled: true,
-          endpointCollectionMessageLimit: 150,
-        },
+        DD_API_SECURITY_ENABLED: true,
+        DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: true,
+        DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT: 150,
         blockedTemplateGraphql: BLOCKED_TEMPLATE_GRAPHQL,
         blockedTemplateHtml: BLOCKED_TEMPLATE_HTML,
         blockedTemplateJson: BLOCKED_TEMPLATE_JSON,
@@ -2558,7 +2551,8 @@ describe('Config', () => {
         redactionNamePattern: 'REDACTION_NAME_PATTERN',
         redactionValuePattern: 'REDACTION_VALUE_PATTERN',
         requestSampling: 30,
-        securityControlsConfiguration: 'SANITIZER:CODE_INJECTION:sanitizer.js:method' + (DD_MAJOR < 6 ? '2' : '1'),
+        DD_IAST_SECURITY_CONTROLS_CONFIGURATION:
+          'SANITIZER:CODE_INJECTION:sanitizer.js:method' + (DD_MAJOR < 6 ? '2' : '1'),
         stackTrace: {
           enabled: false,
         },
@@ -2694,15 +2688,13 @@ describe('Config', () => {
     })
 
     assert.deepStrictEqual(config.appsec, {
-      apiSecurity: {
-        enabled: true,
-        sampleDelay: 30,
-        endpointCollectionEnabled: true,
-        endpointCollectionMessageLimit: 500,
-        downstreamBodyAnalysisSampleRate: 0.5,
-        maxDownstreamRequestBodyAnalysis: 1,
-        maxDownstreamBodyBytes: 10485760,
-      },
+      DD_API_SECURITY_ENABLED: true,
+      DD_API_SECURITY_SAMPLE_DELAY: 30,
+      DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: true,
+      DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT: 500,
+      DD_API_SECURITY_DOWNSTREAM_BODY_ANALYSIS_SAMPLE_RATE: 0.5,
+      DD_API_SECURITY_MAX_DOWNSTREAM_REQUEST_BODY_ANALYSIS: 1,
+      DD_API_SECURITY_MAX_DOWNSTREAM_BODY_BYTES: 10485760,
       blockedTemplateGraphql: BLOCKED_TEMPLATE_GRAPHQL,
       blockedTemplateHtml: BLOCKED_TEMPLATE_HTML,
       blockedTemplateJson: BLOCKED_TEMPLATE_JSON,
@@ -2723,9 +2715,7 @@ describe('Config', () => {
       },
       rateLimit: 42,
       rules: RULES_JSON_PATH,
-      sca: {
-        enabled: undefined,
-      },
+      DD_APPSEC_SCA_ENABLED: undefined,
       stackTrace: {
         enabled: true,
         maxStackTraces: 2,
@@ -2744,7 +2734,7 @@ describe('Config', () => {
       redactionNamePattern: 'REDACTION_NAME_PATTERN',
       redactionValuePattern: 'REDACTION_VALUE_PATTERN',
       requestSampling: 15,
-      securityControlsConfiguration: undefined,
+      DD_IAST_SECURITY_CONTROLS_CONFIGURATION: undefined,
       stackTrace: {
         enabled: false,
       },
@@ -2898,7 +2888,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.telemetry.enabled, false)
+    assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, false)
   })
 
   it('should not set DD_INSTRUMENTATION_TELEMETRY_ENABLED if FUNCTION_NAME and GCP_PROJECT are present', () => {
@@ -2908,7 +2898,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.telemetry.enabled, false)
+    assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, false)
   })
 
   it('should not set DD_INSTRUMENTATION_TELEMETRY_ENABLED if K_SERVICE and FUNCTION_TARGET are present', () => {
@@ -2918,7 +2908,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.telemetry.enabled, false)
+    assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, false)
   })
 
   it('should not set DD_INSTRUMENTATION_TELEMETRY_ENABLED if Azure Consumption Plan Function', () => {
@@ -2929,7 +2919,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.telemetry.enabled, false)
+    assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, false)
   })
 
   it('should set telemetry default values', () => {
@@ -2937,11 +2927,11 @@ describe('Config', () => {
 
     assertObjectContains(config, {
       telemetry: {
-        enabled: true,
-        heartbeatInterval: 60000,
-        logCollection: true,
-        debug: false,
-        metrics: true,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: 60000,
+        DD_TELEMETRY_LOG_COLLECTION_ENABLED: true,
+        DD_TELEMETRY_DEBUG: false,
+        DD_TELEMETRY_METRICS_ENABLED: true,
       },
     })
   })
@@ -2952,7 +2942,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.telemetry.heartbeatInterval, 42000)
+    assert.strictEqual(config.telemetry.DD_TELEMETRY_HEARTBEAT_INTERVAL, 42000)
 
     process.env.DD_TELEMETRY_HEARTBEAT_INTERVAL = origTelemetryHeartbeatIntervalValue
   })
@@ -2963,7 +2953,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.telemetry.enabled, false)
+    assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, false)
 
     process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = origTraceTelemetryValue
   })
@@ -2974,7 +2964,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.telemetry.metrics, false)
+    assert.strictEqual(config.telemetry.DD_TELEMETRY_METRICS_ENABLED, false)
 
     process.env.DD_TELEMETRY_METRICS_ENABLED = origTelemetryMetricsEnabledValue
   })
@@ -2985,7 +2975,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.telemetry.logCollection, false)
+    assert.strictEqual(config.telemetry.DD_TELEMETRY_LOG_COLLECTION_ENABLED, false)
 
     process.env.DD_TELEMETRY_LOG_COLLECTION_ENABLED = origLogsValue
   })
@@ -2996,7 +2986,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.telemetry.debug, true)
+    assert.strictEqual(config.telemetry.DD_TELEMETRY_DEBUG, true)
 
     process.env.DD_TELEMETRY_DEBUG = origTelemetryDebugValue
   })
@@ -3006,7 +2996,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.remoteConfig.enabled, false)
+    assert.strictEqual(config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED, false)
   })
 
   describe('flushInterval in Lambda', () => {
@@ -3038,7 +3028,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.remoteConfig.enabled, false)
+    assert.strictEqual(config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED, false)
   })
 
   it('should not set DD_REMOTE_CONFIGURATION_ENABLED if K_SERVICE and FUNCTION_TARGET are present', () => {
@@ -3047,7 +3037,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.remoteConfig.enabled, false)
+    assert.strictEqual(config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED, false)
   })
 
   it('should not set DD_REMOTE_CONFIGURATION_ENABLED if Azure Functions env vars are present', () => {
@@ -3057,7 +3047,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.remoteConfig.enabled, false)
+    assert.strictEqual(config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED, false)
   })
 
   it('should send empty array when remote config is called on empty options', () => {
@@ -3274,7 +3264,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.appsec.apiSecurity.enabled, true)
+    assert.strictEqual(config.appsec.DD_API_SECURITY_ENABLED, true)
   })
 
   it('should disable api security with DD_EXPERIMENTAL_API_SECURITY_ENABLED', () => {
@@ -3282,7 +3272,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.appsec.apiSecurity.enabled, false)
+    assert.strictEqual(config.appsec.DD_API_SECURITY_ENABLED, false)
   })
 
   it('should ignore DD_EXPERIMENTAL_API_SECURITY_ENABLED with DD_API_SECURITY_ENABLED=true', () => {
@@ -3291,7 +3281,7 @@ describe('Config', () => {
 
     const config = getConfig()
 
-    assert.strictEqual(config.appsec.apiSecurity.enabled, true)
+    assert.strictEqual(config.appsec.DD_API_SECURITY_ENABLED, true)
   })
 
   it('should prioritize DD_DOGSTATSD_HOST over DD_DOGSTATSD_HOSTNAME', () => {
@@ -3485,7 +3475,7 @@ describe('Config', () => {
       })
       it('should enable telemetry', () => {
         const config = getConfig(options)
-        assert.strictEqual(config.telemetry.enabled, true)
+        assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, true)
       })
       it('should enable early flake detection by default', () => {
         const config = getConfig(options)
@@ -3572,14 +3562,14 @@ describe('Config', () => {
     it('disables telemetry if inside a jest worker', () => {
       process.env.JEST_WORKER_ID = '1'
       const config = getConfig(options)
-      assert.strictEqual(config.telemetry.enabled, false)
+      assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, false)
     })
   })
 
   context('llmobs config', () => {
     it('should disable llmobs by default', () => {
       const config = getConfig()
-      assert.strictEqual(config.llmobs.enabled, false)
+      assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, false)
 
       // check origin computation
       assertConfigUpdateContains(updateConfig.getCall(0).args[0], [{
@@ -3590,7 +3580,7 @@ describe('Config', () => {
     it('should enable llmobs if DD_LLMOBS_ENABLED is set to true', () => {
       process.env.DD_LLMOBS_ENABLED = 'true'
       const config = getConfig()
-      assert.strictEqual(config.llmobs.enabled, true)
+      assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, true)
 
       // check origin computation
       assertConfigUpdateContains(updateConfig.getCall(0).args[0], [{
@@ -3601,7 +3591,7 @@ describe('Config', () => {
     it('should disable llmobs if DD_LLMOBS_ENABLED is set to false', () => {
       process.env.DD_LLMOBS_ENABLED = 'false'
       const config = getConfig()
-      assert.strictEqual(config.llmobs.enabled, false)
+      assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, false)
 
       // check origin computation
       assertConfigUpdateContains(updateConfig.getCall(0).args[0], [{
@@ -3611,7 +3601,7 @@ describe('Config', () => {
 
     it('should enable llmobs with options and DD_LLMOBS_ENABLED is not set', () => {
       const config = getConfig({ llmobs: { agentlessEnabled: true } })
-      assert.strictEqual(config.llmobs.enabled, true)
+      assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, true)
 
       // check origin computation
       assertConfigUpdateContains(updateConfig.getCall(0).args[0], [{
@@ -3622,7 +3612,7 @@ describe('Config', () => {
     it('should have DD_LLMOBS_ENABLED take priority over options', () => {
       process.env.DD_LLMOBS_ENABLED = 'false'
       const config = getConfig({ llmobs: { agentlessEnabled: true } })
-      assert.strictEqual(config.llmobs.enabled, false)
+      assert.strictEqual(config.llmobs.DD_LLMOBS_ENABLED, false)
 
       // check origin computation
       assertConfigUpdateContains(updateConfig.getCall(0).args[0], [{
@@ -3818,7 +3808,7 @@ describe('Config', () => {
       assertObjectContains(config, {
         apmTracingEnabled: true,
         stats: {
-          enabled: true,
+          DD_TRACE_STATS_COMPUTATION_ENABLED: true,
         },
       })
 
@@ -3836,7 +3826,7 @@ describe('Config', () => {
       assertObjectContains(config, {
         apmTracingEnabled: false,
         stats: {
-          enabled: false,
+          DD_TRACE_STATS_COMPUTATION_ENABLED: false,
         },
       })
 
@@ -3854,7 +3844,7 @@ describe('Config', () => {
       assertObjectContains(config, {
         apmTracingEnabled: false,
         stats: {
-          enabled: false,
+          DD_TRACE_STATS_COMPUTATION_ENABLED: false,
         },
       })
     })
@@ -4060,8 +4050,8 @@ apm_configuration_default:
           maxConcurrentRequests: 10,
         },
         telemetry: {
-          heartbeatInterval: 42000,
-          metrics: false,
+          DD_TELEMETRY_HEARTBEAT_INTERVAL: 42000,
+          DD_TELEMETRY_METRICS_ENABLED: false,
         },
         llmobs: {
           mlApp: 'my-llm-app',
@@ -4761,7 +4751,7 @@ rules:
     it('should disable stats computation when agentless is enabled', () => {
       process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
       const config = getConfig()
-      assert.strictEqual(config.stats.enabled, false)
+      assert.strictEqual(config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED, false)
     })
 
     it('should enable hostname reporting when agentless is enabled', () => {
