@@ -7,6 +7,13 @@ const ritm = require('../../../dd-trace/src/ritm')
 const log = require('../../../dd-trace/src/log')
 const requirePackageJson = require('../../../dd-trace/src/require-package-json')
 
+// process.getBuiltinModule lands in Node 22.3 / backported to 20.16. The built-in
+// double-wrap it guards against only happens where the synchronous loader owns
+// CommonJS (Node >=22.22.3), so it is always present when the sync path runs.
+const getBuiltinModule =
+  // eslint-disable-next-line n/no-unsupported-features/node-builtins -- guarded; only reached on Node >=22.22.3
+  typeof process.getBuiltinModule === 'function' ? process.getBuiltinModule : undefined
+
 /**
  * @param {string} moduleBaseDir
  * @returns {string|undefined}
@@ -74,6 +81,30 @@ function Hook (modules, hookOptions, onrequire) {
     } catch (error) {
       log.error('Error getting version for "%s": %s', moduleName, error.message, error)
       return
+    }
+
+    // A built-in (no base directory) is wrapped once on its shared singleton via
+    // process.getBuiltinModule() when the synchronous loader owns CommonJS. An ESM
+    // `import` of it then arrives here a second time with the namespace iitm built;
+    // re-running the hook would wrap the singleton's methods twice (firing the
+    // instrumentation twice per call and corrupting shims like http2's). Instead,
+    // copy the already-wrapped members from the singleton onto the namespace so
+    // named imports (`import { createHash }`) resolve to the wrapped function
+    // without a second wrap. Only reachable on Node that ships getBuiltinModule,
+    // which is exactly where the singleton wrap and this collision occur.
+    if (isIitm && !moduleBaseDir && this._patched[filename] && getBuiltinModule !== undefined) {
+      const singleton = getBuiltinModule(moduleName)
+      if (singleton !== undefined && singleton !== moduleExports) {
+        for (const key of Reflect.ownKeys(singleton)) {
+          if (key === 'default') continue
+          try {
+            if (moduleExports[key] !== singleton[key]) moduleExports[key] = singleton[key]
+          } catch {
+            // Read-only namespace binding; nothing to sync for this member.
+          }
+        }
+        return moduleExports
+      }
     }
 
     if (

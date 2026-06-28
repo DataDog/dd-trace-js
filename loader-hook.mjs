@@ -127,13 +127,33 @@ function resolveSync (specifier, context, nextResolve) {
 
 function loadSync (url, context, nextLoad) {
   if (isCommonJSLoad(context)) {
+    // When the synchronous loader owns CommonJS (RITM disabled on this Node),
+    // run the rewriter loader for CJS too: it rewrites orchestrion targets and
+    // appends the export-wrapping shim. Otherwise leave CJS to RITM +
+    // Module._compile and only let iitm see it (which it skips for require()).
+    if (cjsOwnedBySyncLoader) {
+      return rewriterLoader.loadSync(url, context, nextLoad)
+    }
     return getSyncImportInTheMiddleHook().loadSync(url, context, nextLoad)
   }
 
   return rewriterLoader.loadSync(url, context, (url, context) => {
-    return getSyncImportInTheMiddleHook().loadSync(url, context, nextLoad)
+    const result = nextLoad(url, context)
+    // A CommonJS package reached by `import pkg` (not require) arrives here with
+    // no format and the import condition, so isCommonJSLoad() can't see it from
+    // context alone; Node resolves it to commonjs in `result`. When the sync
+    // loader owns CJS, keep that entry on the CommonJS path so rewriteResult
+    // appends the export-wrapping shim. Handing it to iitm instead would wrap it
+    // as an ESM namespace and drop the shim, leaving the package's main file
+    // (e.g. express/lib/express.js) uninstrumented — the gap RITM used to cover.
+    if (cjsOwnedBySyncLoader && result.format === 'commonjs') {
+      return result
+    }
+    return getSyncImportInTheMiddleHook().loadSync(url, context, () => result)
   })
 }
+
+let cjsOwnedBySyncLoader = false
 
 function isCommonJSLoad (context) {
   if (context.format) return context.format === 'commonjs'
@@ -195,6 +215,13 @@ function registerSyncLoaderHooks (data = {}) {
     resolve: resolveSync,
     load: loadSync,
   })
+
+  // The synchronous loader now owns CommonJS instrumentation too: it rewrites
+  // CJS source and appends the export-wrapping shim, replacing RITM's
+  // per-require interception and the Module._compile rewrite on this Node.
+  cjsOwnedBySyncLoader = true
+  rewriterLoader.setOwnsCjsSync(true)
+  globalThis[Symbol.for('dd-trace:sync-loader-owns-cjs')] = true
 
   return true
 }

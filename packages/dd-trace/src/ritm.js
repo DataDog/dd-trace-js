@@ -78,6 +78,17 @@ function Hook (modules, options, onrequire) {
     }
   }
 
+  // When the synchronous loader owns CommonJS, forward the hook callbacks to the
+  // sync-hook registry and skip patching Module.prototype.require entirely — the
+  // sync `load` hook runs them via an appended shim, with no per-require tax.
+  if (globalThis[Symbol.for('dd-trace:sync-loader-owns-cjs')] === true) {
+    const { registerCjsHook } = require('../../datadog-instrumentations/src/helpers/cjs-sync-hook')
+    if (Array.isArray(modules)) {
+      for (const mod of modules) registerCjsHook(mod, onrequire)
+    }
+    return
+  }
+
   if (patchedRequire) return
 
   const _origRequire = Module.prototype.require

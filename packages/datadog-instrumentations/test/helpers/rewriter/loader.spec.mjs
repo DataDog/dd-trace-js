@@ -121,6 +121,41 @@ describe('rewriter loader', () => {
     assert.strictEqual(result.stdout.trim(), '1')
   })
 
+  it('publishes dd-trace:moduleLoadStart for a required CommonJS module', function () {
+    if (!supportsSyncHooks()) {
+      this.skip()
+    }
+
+    // Dependency telemetry and IAST security controls rely on this channel for
+    // every loaded module; require-in-the-middle published it per require() and
+    // the synchronous loader took over that role.
+    const root = mkdtempSync(join(tmpdir(), 'dd-loader-moduleloadstart-'))
+    const packageDirectory = join(root, 'node_modules', 'left-pad')
+
+    mkdirSync(packageDirectory, { recursive: true })
+    writeFileSync(join(packageDirectory, 'package.json'), '{"version":"1.0.0","main":"index.js"}')
+    writeFileSync(join(packageDirectory, 'index.js'), 'module.exports = () => {}\n')
+    writeFileSync(join(root, 'main.js'), `
+      const channel = require(${JSON.stringify(join(repositoryRoot, 'node_modules', 'dc-polyfill'))})
+        .channel('dd-trace:moduleLoadStart')
+      let seen = false
+      channel.subscribe((payload) => {
+        if (payload && typeof payload.filename === 'string' && payload.filename.includes('left-pad')) seen = true
+      })
+      require('left-pad')
+      console.log(seen)
+    `)
+
+    const result = spawnSync(process.execPath, [join(root, 'main.js')], {
+      cwd: root,
+      env: { ...process.env, NODE_OPTIONS: `--import ${join(repositoryRoot, 'register.js')}` },
+      encoding: 'utf8',
+    })
+
+    assert.strictEqual(result.status, 0, result.stderr)
+    assert.strictEqual(result.stdout.trim(), 'true', result.stderr)
+  })
+
   it('rewrites ESM modules loaded from CommonJS in the sync loader hook', function () {
     if (!supportsSyncHooks()) {
       this.skip()
@@ -153,6 +188,40 @@ describe('rewriter loader', () => {
 
     assert.strictEqual(result.status, 0, result.stderr)
     assert.strictEqual(result.stdout.trim(), '1')
+  })
+
+  it('instruments a built-in imported via a named ESM import exactly once', function () {
+    if (!supportsSyncHooks()) {
+      this.skip()
+    }
+
+    // A built-in is wrapped once on its shared singleton via getBuiltinModule when
+    // the hook registers. `import { createHash } from 'node:crypto'` then reaches
+    // iitm with a namespace re-exporting that already-wrapped function; wrapping it
+    // again fires the instrumentation channel twice per call (the regression that
+    // corrupted http2's per-server emit shim).
+    const root = mkdtempSync(join(tmpdir(), 'dd-loader-builtin-named-import-'))
+    writeFileSync(join(root, 'app.mjs'), `
+      import { createHash } from 'node:crypto'
+      import { createRequire } from 'node:module'
+      const dc = createRequire(${JSON.stringify(join(repositoryRoot, 'index.js'))})('dc-polyfill')
+      let count = 0
+      dc.channel('datadog:crypto:hashing:start').subscribe(() => { count++ })
+      createHash('sha256')
+      console.log(count)
+    `)
+
+    const result = spawnSync(process.execPath, [join(root, 'app.mjs')], {
+      cwd: root,
+      env: {
+        ...process.env,
+        NODE_OPTIONS: `--import ${join(repositoryRoot, 'register.js')} --require ${join(repositoryRoot, 'init.js')}`,
+      },
+      encoding: 'utf8',
+    })
+
+    assert.strictEqual(result.status, 0, result.stderr)
+    assert.strictEqual(result.stdout.trim(), '1', result.stderr)
   })
 })
 
