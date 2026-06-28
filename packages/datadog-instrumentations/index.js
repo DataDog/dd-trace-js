@@ -15,9 +15,12 @@ const { NODE_MAJOR, NODE_MINOR, NODE_PATCH } = require('../../version')
 // relative to the bundle output and fail, and there is nothing to instrument via
 // the ESM loader inside a bundle anyway. So reach it only in real Node (the
 // module wrapper is a Module instance; in a bundle it is a plain object) and via
-// a runtime-built specifier the bundler cannot statically follow.
+// a runtime-built specifier the bundler cannot statically follow. The esbuild and
+// webpack plugins also require this module at build time to read the hook table;
+// they set the bundler-build flag so registerHooks does not run then and perturb
+// the build's conditional require.resolve (which would bundle dual packages as CJS).
 // TODO: share this gate with register.js's isSyncLoaderHookVersionSupported.
-if (module instanceof Module && syncLoaderHooksSupported()) {
+if (module instanceof Module && !globalThis[Symbol.for('dd-trace:bundler-build')] && syncLoaderHooksSupported()) {
   Module.createRequire(__filename)(['..', '..', 'register'].join('/'))
 }
 

@@ -1,5 +1,9 @@
 'use strict'
 
+// Signal a bundler build so datadog-instrumentations skips registering the sync
+// ESM loader hooks (they would break the build's conditional require.resolve).
+globalThis[Symbol.for('dd-trace:bundler-build')] = true
+
 const { execSync } = require('node:child_process')
 const fs = require('node:fs')
 
