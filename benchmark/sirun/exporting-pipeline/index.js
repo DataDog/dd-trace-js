@@ -42,7 +42,6 @@ const prioritySampler = new PrioritySampler()
 const config = {
   flushMinSpans: 100,
   stats: {
-    enabled: WITH_STATS,
     DD_TRACE_STATS_COMPUTATION_ENABLED: WITH_STATS,
   },
   appsec: {},

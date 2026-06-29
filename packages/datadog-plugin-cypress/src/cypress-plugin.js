@@ -639,7 +639,7 @@ class CypressPlugin {
 
     this.isTestIsolationEnabled = getIsTestIsolationEnabled(cypressConfig)
 
-    this.rumFlushWaitMillis = getConfig().DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS
+    this.rumFlushWaitMillis = getConfig().testOptimization.DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS
 
     if (!this.isTestIsolationEnabled) {
       log.warn('Test isolation is disabled, retries will not be enabled')
@@ -1150,7 +1150,7 @@ class CypressPlugin {
       this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
       incrementCountMetric(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,
-        autoInjected: !!getConfig().DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
+        autoInjected: !!getConfig().testOptimization.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
       })
 
       finishAllTraceSpans(this.testSessionSpan)

@@ -34,7 +34,6 @@ const OPERATIONS = Number(process.env.OPERATIONS)
 // per-span LLMObs hot path, uncovered by the existing llmobs writer bench.
 const processor = new LLMObsSpanProcessor({
   llmobs: {
-    enabled: true,
     DD_LLMOBS_ENABLED: true,
   },
   version: '1.0.0',
