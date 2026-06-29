@@ -10,6 +10,12 @@ const { globSync } = require('glob')
 
 const multiMochaRc = require('../.mochamultireporterrc')
 
+// V8's top-level `--maglev`/`--no-maglev` toggle landed in V8 11 (Node 20). On
+// V8 10 (Node 18) the flag does not exist, so passing it aborts the child with
+// `bad option: --no-maglev` (exit 9) before mocha runs. Children reuse this
+// process's binary, so our own V8 major decides whether the flag is safe.
+const SUPPORTS_NO_MAGLEV = Number.parseInt(process.versions.v8, 10) >= 11
+
 /**
  * @param {string} openTag
  * @param {string} name
@@ -553,7 +559,7 @@ async function main () {
         // (0xC0000409) when mocha-run-file's process.exit() races V8's Maglev teardown
         // on Windows. Maglev can only be disabled via a CLI flag, not NODE_OPTIONS.
         // TODO(BridgeAR): drop once https://github.com/nodejs/node/issues/62260 is fixed.
-        if (process.platform === 'win32') nodeArgs.push('--no-maglev')
+        if (process.platform === 'win32' && SUPPORTS_NO_MAGLEV) nodeArgs.push('--no-maglev')
         nodeArgs.push(runFileScript, file)
 
         entry.started = true
