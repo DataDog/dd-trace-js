@@ -47,9 +47,18 @@ runs:
     # The shipped package.json pins engines.node to the supported runtime range, but CI keeps
     # running the full suite on Node 18/20. Widen the field to >=18 for this checkout so the
     # runtime guard and the withVersions test helper don't bail and silently skip those jobs.
+    # Gate on the major so this never runs on the ancient runtimes the guardrails-unsupported
+    # job installs (those must keep seeing the shipped >=22 so the guard aborts), and so the
+    # script is only ever parsed by a Node version new enough to run it.
     - name: Widen engines.node for CI
       shell: bash
-      run: node scripts/ci/widen-engines-for-ci.js
+      run: |
+        MAJOR=$(node -e "process.stdout.write(String(parseInt(process.versions.node)))")
+        if [ "$MAJOR" = "18" ] || [ "$MAJOR" = "20" ]; then
+          node scripts/ci/widen-engines-for-ci.js
+        else
+          echo "Leaving engines.node unchanged on Node $(node -v) (only widened on Node 18/20)."
+        fi
 
     # Persist the resolved version so subsequent runs within this 60-minute window can reuse it.
     - name: Save resolved version
