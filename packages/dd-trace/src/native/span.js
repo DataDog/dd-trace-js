@@ -3,6 +3,7 @@
 const { performance } = require('perf_hooks')
 const now = performance.now.bind(performance)
 const dateNow = Date.now
+const { channel } = require('dc-polyfill')
 
 const DatadogSpan = require('../opentracing/span')
 const id = require('../id')
@@ -11,6 +12,10 @@ const { MAX_META_VALUE_LENGTH } = require('../encode/tags-processors')
 const { MsgpackEncoder } = require('../msgpack')
 const NativeSpanContext = require('./span_context')
 const { OpCode } = require('./index')
+
+// Mirrors the base `_addTags` so subscribers (e.g. the wall profiler's web-tag
+// refresh) still receive tag updates on the native fast path.
+const tagsUpdateCh = channel('dd-trace:span:tags:update')
 
 // Reused across spans to encode meta_struct values to msgpack bytes, matching
 // the legacy encoder's `meta_struct` map<string, bin> wire shape.
@@ -343,6 +348,7 @@ class NativeDatadogSpan extends DatadogSpan {
       if (this._spanContext._sampling.priority === undefined) {
         this._prioritySampler.sample(this, false)
       }
+      if (tagsUpdateCh.hasSubscribers) tagsUpdateCh.publish(this)
       return
     }
 
@@ -355,6 +361,7 @@ class NativeDatadogSpan extends DatadogSpan {
     if (this._spanContext._sampling.priority === undefined) {
       this._prioritySampler.sample(this, false)
     }
+    if (tagsUpdateCh.hasSubscribers) tagsUpdateCh.publish(this)
   }
 
   /**

@@ -1,5 +1,6 @@
 'use strict'
 
+const { AUTO_KEEP } = require('../../../ext/priority')
 const log = require('./log')
 const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
@@ -102,8 +103,12 @@ class SpanProcessor {
       ['f64', spanContext._sampling.priority]
     )
 
-    // Sync mechanism as trace meta if set
-    if (spanContext._sampling.mechanism !== undefined) {
+    // Sync the decision-maker tag as trace meta, but ONLY for keep decisions
+    // (priority >= AUTO_KEEP) — the legacy priority sampler omits `_dd.p.dm`
+    // for auto-reject (0) / manual-drop (-1) traces, so match that to avoid
+    // emitting decision-maker metadata on dropped traces.
+    if (spanContext._sampling.mechanism !== undefined &&
+        spanContext._sampling.priority >= AUTO_KEEP) {
       this._nativeSpans.queueOp(
         native.OpCode.SetTraceMetaAttr,
         spanId,

@@ -2,6 +2,7 @@
 
 const DatadogSpanContext = require('../opentracing/span_context')
 const { BASE_SERVICE, MEASURED } = require('../../../../ext/tags')
+const { IGNORE_OTEL_ERROR } = require('../constants')
 const { OpCode } = require('./index')
 
 /**
@@ -349,9 +350,13 @@ class NativeSpanContext extends DatadogSpanContext {
         return
 
       // Setting error.type implies span.error = 1, except on fs.operation
-      // spans which deliberately don't propagate fs failures up.
+      // spans which deliberately don't propagate fs failures up. OTel
+      // `recordException()` sets error.type alongside IGNORE_OTEL_ERROR=true so
+      // that merely recording an exception does NOT flip the error bit (only
+      // setStatus(ERROR) clears the guard) — mirror span_format.js by skipping
+      // SetError when the guard is present.
       case 'error.type':
-        if (this._name !== 'fs.operation') {
+        if (this._name !== 'fs.operation' && !this.getTag(IGNORE_OTEL_ERROR)) {
           this.#nativeSpans.queueOp(
             OpCode.SetError,
             this._nativeSpanId,

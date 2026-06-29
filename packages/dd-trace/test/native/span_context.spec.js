@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire').noCallThru()
+const { IGNORE_OTEL_ERROR } = require('../../src/constants')
 
 require('../setup/core')
 
@@ -161,6 +162,24 @@ describe('NativeSpanContext', () => {
         assert.ok(nativeSpans.queueOp.called, `case "${name}" did not dispatch queueOp`)
         sinon.assert.calledWith(nativeSpans.queueOp, ...expect)
       }
+    })
+
+    it('does not queue SetError for error.type when IGNORE_OTEL_ERROR is set (otel recordException)', () => {
+      // recordException() sets error.type alongside IGNORE_OTEL_ERROR=true; the
+      // error bit must not flip (only setStatus(ERROR) does that).
+      spanContext.setTag(IGNORE_OTEL_ERROR, true)
+      nativeSpans.queueOp.resetHistory()
+      spanContext.setTag('error.type', 'Error')
+      const setErrorCalls = nativeSpans.queueOp.getCalls().filter(c => c.args[0] === OpCode.SetError)
+      assert.strictEqual(setErrorCalls.length, 0, 'SetError must not be queued when IGNORE_OTEL_ERROR is set')
+      // The meta tag is still written.
+      sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetMetaAttr, leSpanId, 'error.type', 'Error')
+    })
+
+    it('queues SetError for error.type when IGNORE_OTEL_ERROR is absent', () => {
+      nativeSpans.queueOp.resetHistory()
+      spanContext.setTag('error.type', 'Error')
+      sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetError, leSpanId, ['i32', 1])
     })
 
     it('should set _dd.measured when span.kind is non-internal', () => {

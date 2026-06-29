@@ -116,6 +116,35 @@ describe('SpanProcessor', () => {
     sinon.assert.calledWith(prioritySampler.sample, finishedSpan.context())
   })
 
+  it('writes _dd.p.dm to native trace meta for kept traces (priority >= AUTO_KEEP)', () => {
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+    finishedSpan.context()._nativeSpanId = 123
+    prioritySampler.sample = sinon.stub().callsFake((c) => {
+      c._sampling.priority = 1 // AUTO_KEEP
+      c._sampling.mechanism = 3
+    })
+    processor.process(finishedSpan)
+    const dm = nativeSpans.queueOp.getCalls()
+      .filter(c => c.args[0] === fakeOpCode.SetTraceMetaAttr && c.args[2] === '_dd.p.dm')
+    assert.strictEqual(dm.length, 1)
+    assert.strictEqual(dm[0].args[3], '-3')
+  })
+
+  it('omits _dd.p.dm for dropped traces (priority < AUTO_KEEP)', () => {
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+    finishedSpan.context()._nativeSpanId = 123
+    prioritySampler.sample = sinon.stub().callsFake((c) => {
+      c._sampling.priority = 0 // AUTO_REJECT
+      c._sampling.mechanism = 3
+    })
+    processor.process(finishedSpan)
+    const dm = nativeSpans.queueOp.getCalls()
+      .filter(c => c.args[0] === fakeOpCode.SetTraceMetaAttr && c.args[2] === '_dd.p.dm')
+    assert.strictEqual(dm.length, 0)
+  })
+
   it('should erase the trace once finished', () => {
     trace.started = [finishedSpan]
     trace.finished = [finishedSpan]
