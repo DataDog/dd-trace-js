@@ -189,10 +189,19 @@ class CiVisibilityExporter extends BufferingExporter {
       const configuration = this.getRequestConfiguration(testConfiguration)
       const cachedLibraryConfig = this._testOptimizationHttpCache.readSettings()
       if (cachedLibraryConfig !== CACHE_MISS) {
-        log.debug('Test Optimization HTTP cache settings found, git upload already done, skipping git upload')
-        this._resolveGit()
+        log.debug('Test Optimization HTTP cache settings found, skipping settings request')
         writeSettingsToCache(cachedLibraryConfig)
         this._libraryConfig = this.filterConfiguration(cachedLibraryConfig)
+        const canUseCachedSkippableSuites = !this.shouldRequestSkippableSuites() ||
+          this._testOptimizationHttpCache.hasValidSkippableSuites({
+            testLevel: configuration.testLevel,
+            isCoverageReportUploadEnabled: configuration.isCoverageReportUploadEnabled,
+          })
+        if (this._libraryConfig.requireGit && !canUseCachedSkippableSuites) {
+          this.sendGitMetadata(repositoryUrl)
+        } else {
+          this._resolveGit()
+        }
         return callback(null, this._libraryConfig)
       }
 

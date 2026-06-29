@@ -128,6 +128,18 @@ class TestOptimizationHttpCache {
     }
   }
 
+  hasValidSkippableSuites (options = {}) {
+    const payload = this._readFile(SKIPPABLE_TESTS_FILE_NAME)
+    if (payload === CACHE_MISS) return false
+
+    try {
+      parseSkippableSuitesResponse(JSON.parse(payload), { ...options, validateRequiredFields: true })
+      return true
+    } catch {
+      return false
+    }
+  }
+
   readTestManagementTests () {
     const payload = this._readFile(TEST_MANAGEMENT_FILE_NAME)
     if (payload === CACHE_MISS) return CACHE_MISS

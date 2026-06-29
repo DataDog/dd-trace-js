@@ -296,6 +296,7 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
     const ciVisibilityExporter = new CiVisibilityExporter({
       url,
       isGitUploadEnabled: true,
+      isIntelligentTestRunnerEnabled: true,
     })
 
     ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
@@ -447,18 +448,43 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
   it('falls back to live skippable tests when cached skippable tests are missing', (done) => {
     fs.rmSync(path.join(tmpRoot, '.testoptimization', 'cache', 'http', 'skippable_tests.json'))
     getConfig().apiKey = '1'
+    let gitUploadCalls = 0
+    let hasUploadedGit = false
+    let uploadedRepositoryUrl
+    let skippableRequestSawGitUploaded = false
+    const GitUploadingCiVisibilityExporter = loadCiVisibilityExporterWithGitUpload(
+      (_url, _options, repositoryUrl, callback) => {
+        gitUploadCalls++
+        uploadedRepositoryUrl = repositoryUrl
+        setImmediate(() => {
+          hasUploadedGit = true
+          callback()
+        })
+      })
     const skippableScope = nock(url)
-      .post('/api/v2/ci/tests/skippable')
+      .post('/api/v2/ci/tests/skippable', () => {
+        skippableRequestSawGitUploaded = hasUploadedGit
+        return true
+      })
       .reply(200, JSON.stringify(SKIPPABLE_RESPONSE))
 
-    const ciVisibilityExporter = new CiVisibilityExporter({ url, isIntelligentTestRunnerEnabled: true })
-    ciVisibilityExporter.getLibraryConfiguration({}, (settingsErr) => {
+    const ciVisibilityExporter = new GitUploadingCiVisibilityExporter({
+      url,
+      isGitUploadEnabled: true,
+      isIntelligentTestRunnerEnabled: true,
+    })
+    ciVisibilityExporter.getLibraryConfiguration({
+      repositoryUrl: 'https://github.com/example/repo',
+    }, (settingsErr) => {
       assert.strictEqual(settingsErr, null)
       ciVisibilityExporter.getSkippableSuites({}, (err, skippableSuites, correlationId, coverage) => {
         assert.strictEqual(err, null)
         assert.deepStrictEqual(skippableSuites, ['suite1.spec.js'])
         assert.strictEqual(correlationId, 'corr-123')
         assert.deepStrictEqual(coverage, { 'src/file.js': 'gA==' })
+        assert.strictEqual(gitUploadCalls, 1)
+        assert.strictEqual(uploadedRepositoryUrl, 'https://github.com/example/repo')
+        assert.strictEqual(skippableRequestSawGitUploaded, true)
         assert.strictEqual(skippableScope.isDone(), true)
         done()
       })
@@ -472,18 +498,43 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
       JSON.stringify({ data: [{ type: 'suite', attributes: {} }] })
     )
     getConfig().apiKey = '1'
+    let gitUploadCalls = 0
+    let hasUploadedGit = false
+    let uploadedRepositoryUrl
+    let skippableRequestSawGitUploaded = false
+    const GitUploadingCiVisibilityExporter = loadCiVisibilityExporterWithGitUpload(
+      (_url, _options, repositoryUrl, callback) => {
+        gitUploadCalls++
+        uploadedRepositoryUrl = repositoryUrl
+        setImmediate(() => {
+          hasUploadedGit = true
+          callback()
+        })
+      })
     const skippableScope = nock(url)
-      .post('/api/v2/ci/tests/skippable')
+      .post('/api/v2/ci/tests/skippable', () => {
+        skippableRequestSawGitUploaded = hasUploadedGit
+        return true
+      })
       .reply(200, JSON.stringify(SKIPPABLE_RESPONSE))
 
-    const ciVisibilityExporter = new CiVisibilityExporter({ url, isIntelligentTestRunnerEnabled: true })
-    ciVisibilityExporter.getLibraryConfiguration({}, (settingsErr) => {
+    const ciVisibilityExporter = new GitUploadingCiVisibilityExporter({
+      url,
+      isGitUploadEnabled: true,
+      isIntelligentTestRunnerEnabled: true,
+    })
+    ciVisibilityExporter.getLibraryConfiguration({
+      repositoryUrl: 'https://github.com/example/repo',
+    }, (settingsErr) => {
       assert.strictEqual(settingsErr, null)
       ciVisibilityExporter.getSkippableSuites({}, (err, skippableSuites, correlationId, coverage) => {
         assert.strictEqual(err, null)
         assert.deepStrictEqual(skippableSuites, ['suite1.spec.js'])
         assert.strictEqual(correlationId, 'corr-123')
         assert.deepStrictEqual(coverage, { 'src/file.js': 'gA==' })
+        assert.strictEqual(gitUploadCalls, 1)
+        assert.strictEqual(uploadedRepositoryUrl, 'https://github.com/example/repo')
+        assert.strictEqual(skippableRequestSawGitUploaded, true)
         assert.strictEqual(skippableScope.isDone(), true)
         done()
       })
