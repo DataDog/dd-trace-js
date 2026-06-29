@@ -145,7 +145,8 @@ describe('TracerProxy', () => {
     NoopDogStatsDClient = sinon.stub().returns(noopDogStatsDClient)
 
     config = {
-      tracing: true,
+      DD_TRACE_ENABLED: true,
+      testOptimization: {},
       experimental: {
         flaggingProvider: {},
         aiguard: {
@@ -294,7 +295,7 @@ describe('TracerProxy', () => {
       })
 
       it('should not initialize when disabled', () => {
-        config.tracing = false
+        config.DD_TRACE_ENABLED = false
 
         proxy.init()
 
@@ -411,12 +412,12 @@ describe('TracerProxy', () => {
         sinon.assert.notCalled(appsec.enable)
         sinon.assert.notCalled(iast.enable)
 
-        let conf = { tracing: false }
+        let conf = { DD_TRACE_ENABLED: false }
         handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-1', conf))
         sinon.assert.notCalled(appsec.disable)
         sinon.assert.notCalled(iast.disable)
 
-        conf = { tracing: true }
+        conf = { DD_TRACE_ENABLED: true }
         handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-1', conf, 'modify'))
         sinon.assert.calledOnce(DatadogTracer)
         sinon.assert.calledOnce(AppsecSdk)
@@ -438,7 +439,7 @@ describe('TracerProxy', () => {
         config.appsec.enabled = true
         config.iast.enabled = true
         config.setRemoteConfig = conf => {
-          config.tracing = conf.tracing
+          config.DD_TRACE_ENABLED = conf.DD_TRACE_ENABLED
         }
 
         const remoteConfigProxy = new RemoteConfigProxy()
@@ -447,12 +448,12 @@ describe('TracerProxy', () => {
         sinon.assert.calledOnceWithExactly(appsec.enable, config)
         sinon.assert.calledOnceWithExactly(iast.enable, config, tracer)
 
-        let conf = { tracing: false }
+        let conf = { DD_TRACE_ENABLED: false }
         handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-2', conf))
         sinon.assert.called(appsec.disable)
         sinon.assert.called(iast.disable)
 
-        conf = { tracing: true }
+        conf = { DD_TRACE_ENABLED: true }
         handlers.get('APM_TRACING')(createApmTracingTransaction('test-config-2', conf, 'modify'))
         sinon.assert.calledTwice(appsec.enable)
         sinon.assert.calledWithExactly(appsec.enable.secondCall, config)
