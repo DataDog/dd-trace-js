@@ -22,32 +22,35 @@ const PROXY_HEADER_ACCOUNT_ID = 'x-dd-proxy-account-id'
 const PROXY_HEADER_API_ID = 'x-dd-proxy-api-id'
 const PROXY_HEADER_AWS_USER = 'x-dd-proxy-user'
 
-const proxiesWithNoTimestamp = {
-  'azure-gw': {
-    spanName: 'azure.app-gateway',
-    component: 'azure-gw',
-  },
-  'azure-fd': {
-    spanName: 'azure.frontdoor',
-    component: 'azure-fd',
-  },
-}
 const supportedProxies = {
   'aws-apigateway': {
     spanName: 'aws.apigateway',
     component: 'aws-apigateway',
+    providesTimestamp: true,
   },
   'aws-httpapi': {
     spanName: 'aws.httpapi',
     component: 'aws-httpapi',
+    providesTimestamp: true,
   },
   'azure-apim': {
     spanName: 'azure.apim',
     component: 'azure-apim',
+    providesTimestamp: true,
+  },
+  'azure-gw': {
+    spanName: 'azure.app-gateway',
+    component: 'azure-gw',
+    providesTimestamp: false,
+  },
+  'azure-fd': {
+    spanName: 'azure.frontdoor',
+    component: 'azure-fd',
+    providesTimestamp: false,
   },
 }
 
-function createInferredProxySpan (headers, childOf, tracer, reqCtx, traceCtx, config, startSpanHelper) {
+function createInferredProxySpan(headers, childOf, tracer, reqCtx, traceCtx, config, startSpanHelper) {
   if (!headers) {
     return null
   }
@@ -98,7 +101,7 @@ function createInferredProxySpan (headers, childOf, tracer, reqCtx, traceCtx, co
   return childOf
 }
 
-function setInferredProxySpanTags (span, proxyContext) {
+function setInferredProxySpanTags(span, proxyContext) {
   const resourcePath = proxyContext.resourcePath || proxyContext.path
   span.setTag(RESOURCE_NAME, `${proxyContext.method} ${resourcePath}`)
   span.setTag('_dd.inferred_span', 1)
@@ -118,26 +121,23 @@ function setInferredProxySpanTags (span, proxyContext) {
   return span
 }
 
-function extractInferredProxyContext (headers) {
-  if ((headers[PROXY_HEADER_SYSTEM] in proxiesWithNoTimestamp) && !headers[PROXY_HEADER_START_TIME_MS]) {
-    headers[PROXY_HEADER_START_TIME_MS] = (Date.now()).toString()
-  }
-
-  if (!(PROXY_HEADER_START_TIME_MS in headers)) {
+function extractInferredProxyContext(headers) {
+  if (!(PROXY_HEADER_SYSTEM in headers && headers[PROXY_HEADER_SYSTEM] in supportedProxies)) {
+    log.debug('Received headers to create inferred proxy span but headers include an unsupported proxy type', headers)
     return null
   }
 
-  Object.assign(supportedProxies, proxiesWithNoTimestamp)
+  const detectedProxy = supportedProxies[headers[PROXY_HEADER_SYSTEM]]
 
-  if (!(PROXY_HEADER_SYSTEM in headers && headers[PROXY_HEADER_SYSTEM] in supportedProxies)) {
-    log.debug('Received headers to create inferred proxy span but headers include an unsupported proxy type', headers)
+  if (detectedProxy.providesTimestamp && !PROXY_HEADER_START_TIME_MS in headers) {
     return null
   }
 
   return {
     requestTime: headers[PROXY_HEADER_START_TIME_MS]
       ? Number.parseInt(headers[PROXY_HEADER_START_TIME_MS], 10)
-      : null,
+      : proxySystem.providesTimestamp
+        ? null : Date.now(),
     method: headers[PROXY_HEADER_HTTPMETHOD],
     path: headers[PROXY_HEADER_PATH],
     stage: headers[PROXY_HEADER_STAGE],
@@ -151,7 +151,7 @@ function extractInferredProxyContext (headers) {
   }
 }
 
-function finishInferredProxySpan (context) {
+function finishInferredProxySpan(context) {
   const { req } = context
 
   if (!context.inferredProxySpan) return
