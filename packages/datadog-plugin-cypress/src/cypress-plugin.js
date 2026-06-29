@@ -390,6 +390,7 @@ class CypressPlugin {
   earlyFlakeDetectionFaultyThreshold = 0
   testsToSkip = []
   skippedTests = []
+  skippedTestIds = new Set()
   skippableTestsCoverage = {}
   testSessionCoverageMap = createCoverageMap()
   hasForcedToRunSuites = false
@@ -473,6 +474,7 @@ class CypressPlugin {
     this.earlyFlakeDetectionFaultyThreshold = 0
     this.testsToSkip = []
     this.skippedTests = []
+    this.skippedTestIds = new Set()
     this.skippableTestsCoverage = {}
     this.testSessionCoverageMap = createCoverageMap()
     this.hasForcedToRunSuites = false
@@ -1386,7 +1388,7 @@ class CypressPlugin {
         return suitePayload
       },
       'dd:beforeEach': (test) => {
-        const { testName, testSuite, isEfdRetry, efdRetryIndex } = test
+        const { testId, testName, testSuite, isEfdRetry, efdRetryIndex } = test
         if (isEfdRetry && this.shouldSkipEfdRetry(testSuite, testName, efdRetryIndex)) {
           return { shouldSkip: true, shouldDiscard: true }
         }
@@ -1398,7 +1400,11 @@ class CypressPlugin {
         const { isAttemptToFix, isDisabled, isQuarantined } = this.getTestProperties(testSuite, testName)
         // skip test
         if (shouldSkip && !isUnskippable) {
-          this.skippedTests.push(test)
+          const skippedTestId = `${testSuite}:${testId || testName}`
+          if (!this.skippedTestIds.has(skippedTestId)) {
+            this.skippedTestIds.add(skippedTestId)
+            this.skippedTests.push(test)
+          }
           this.isTestsSkipped = true
           return { shouldSkip: true }
         }
