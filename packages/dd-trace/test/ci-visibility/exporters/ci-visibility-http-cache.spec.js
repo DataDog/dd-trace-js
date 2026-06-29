@@ -12,8 +12,35 @@ const proxyquire = require('proxyquire').noPreserveCache()
 require('../../setup/core')
 
 const getConfig = require('../../../src/config')
-const CiVisibilityExporter = require('../../../src/ci-visibility/exporters/ci-visibility-exporter')
+const CiVisibilityExporterBase = require('../../../src/ci-visibility/exporters/ci-visibility-exporter')
 const { defaults: { hostname, port } } = require('../../../src/config/defaults')
+
+const ALL_FEATURE_GATES_ENABLED = {
+  DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: true,
+  DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: true,
+  DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: true,
+  DD_CIVISIBILITY_ITR_ENABLED: true,
+  DD_TEST_FAILED_TEST_REPLAY_ENABLED: true,
+  DD_TEST_MANAGEMENT_ENABLED: true,
+}
+
+const ITR_FEATURE_GATE_ENABLED = {
+  DD_CIVISIBILITY_ITR_ENABLED: true,
+}
+
+const TEST_MANAGEMENT_FEATURE_GATE_ENABLED = {
+  DD_TEST_MANAGEMENT_ENABLED: true,
+}
+
+function withTestOptimizationDefaults (Exporter) {
+  return class CiVisibilityExporter extends Exporter {
+    constructor (config = {}) {
+      super({ testOptimization: {}, ...config })
+    }
+  }
+}
+
+const CiVisibilityExporter = withTestOptimizationDefaults(CiVisibilityExporterBase)
 
 const SETTINGS_RESPONSE = {
   data: {
@@ -109,11 +136,12 @@ function writeCacheLayout (root, options = {}) {
 }
 
 function loadCiVisibilityExporterWithGitUpload (sendGitMetadata) {
-  return proxyquire('../../../src/ci-visibility/exporters/ci-visibility-exporter', {
+  const Exporter = proxyquire('../../../src/ci-visibility/exporters/ci-visibility-exporter', {
     './git/git_metadata': {
       sendGitMetadata,
     },
   })
+  return withTestOptimizationDefaults(Exporter)
 }
 
 describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
@@ -131,7 +159,7 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
     process.chdir(tmpRoot)
     delete process.env.DD_API_KEY
     delete process.env.DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE
-    getConfig().apiKey = undefined
+    getConfig().DD_API_KEY = undefined
     nock.cleanAll()
   })
 
@@ -144,7 +172,7 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
     } else {
       process.env.DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE = previousSettingsCachePath
     }
-    getConfig().apiKey = '1'
+    getConfig().DD_API_KEY = '1'
     nock.cleanAll()
   })
 
@@ -155,12 +183,7 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
 
     const ciVisibilityExporter = new CiVisibilityExporter({
       url,
-      isEarlyFlakeDetectionEnabled: true,
-      isFlakyTestRetriesEnabled: true,
-      isImpactedTestsEnabled: true,
-      isIntelligentTestRunnerEnabled: true,
-      isTestDynamicInstrumentationEnabled: true,
-      isTestManagementEnabled: true,
+      testOptimization: ALL_FEATURE_GATES_ENABLED,
     })
 
     ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
@@ -184,12 +207,7 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
 
     const ciVisibilityExporter = new CiVisibilityExporter({
       url,
-      isEarlyFlakeDetectionEnabled: true,
-      isFlakyTestRetriesEnabled: true,
-      isImpactedTestsEnabled: true,
-      isIntelligentTestRunnerEnabled: true,
-      isTestDynamicInstrumentationEnabled: true,
-      isTestManagementEnabled: true,
+      testOptimization: ALL_FEATURE_GATES_ENABLED,
     })
 
     ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
@@ -213,7 +231,7 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
     fs.rmSync(path.join(tmpRoot, '.testoptimization', 'cache', 'http', 'settings.json'))
     const liveSettingsResponse = JSON.parse(JSON.stringify(SETTINGS_RESPONSE))
     liveSettingsResponse.data.attributes.require_git = false
-    getConfig().apiKey = '1'
+    getConfig().DD_API_KEY = '1'
 
     const settingsScope = nock(url)
       .post('/api/v2/libraries/tests/services/setting')
@@ -221,12 +239,7 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
 
     const ciVisibilityExporter = new CiVisibilityExporter({
       url,
-      isEarlyFlakeDetectionEnabled: true,
-      isFlakyTestRetriesEnabled: true,
-      isImpactedTestsEnabled: true,
-      isIntelligentTestRunnerEnabled: true,
-      isTestDynamicInstrumentationEnabled: true,
-      isTestManagementEnabled: true,
+      testOptimization: ALL_FEATURE_GATES_ENABLED,
     })
 
     ciVisibilityExporter.getLibraryConfiguration({
@@ -254,7 +267,7 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
     )
     const liveSettingsResponse = JSON.parse(JSON.stringify(SETTINGS_RESPONSE))
     liveSettingsResponse.data.attributes.require_git = false
-    getConfig().apiKey = '1'
+    getConfig().DD_API_KEY = '1'
 
     const settingsScope = nock(url)
       .post('/api/v2/libraries/tests/services/setting')
@@ -262,12 +275,7 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
 
     const ciVisibilityExporter = new CiVisibilityExporter({
       url,
-      isEarlyFlakeDetectionEnabled: true,
-      isFlakyTestRetriesEnabled: true,
-      isImpactedTestsEnabled: true,
-      isIntelligentTestRunnerEnabled: true,
-      isTestDynamicInstrumentationEnabled: true,
-      isTestManagementEnabled: true,
+      testOptimization: ALL_FEATURE_GATES_ENABLED,
     })
 
     ciVisibilityExporter.getLibraryConfiguration({
@@ -295,8 +303,10 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
 
     const ciVisibilityExporter = new CiVisibilityExporter({
       url,
-      isGitUploadEnabled: true,
-      isIntelligentTestRunnerEnabled: true,
+      testOptimization: {
+        DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true,
+        DD_CIVISIBILITY_ITR_ENABLED: true,
+      },
     })
 
     ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
@@ -313,7 +323,7 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
 
   it('uploads git metadata before retrying live settings when cached settings are malformed', (done) => {
     fs.writeFileSync(path.join(tmpRoot, '.testoptimization', 'cache', 'http', 'settings.json'), '{invalid json')
-    getConfig().apiKey = '1'
+    getConfig().DD_API_KEY = '1'
 
     const firstLiveSettingsResponse = JSON.parse(JSON.stringify(SETTINGS_RESPONSE))
     firstLiveSettingsResponse.data.attributes.require_git = true
@@ -345,13 +355,10 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
 
     const ciVisibilityExporter = new GitUploadingCiVisibilityExporter({
       url,
-      isEarlyFlakeDetectionEnabled: true,
-      isFlakyTestRetriesEnabled: true,
-      isGitUploadEnabled: true,
-      isImpactedTestsEnabled: true,
-      isIntelligentTestRunnerEnabled: true,
-      isTestDynamicInstrumentationEnabled: true,
-      isTestManagementEnabled: true,
+      testOptimization: {
+        ...ALL_FEATURE_GATES_ENABLED,
+        DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true,
+      },
     })
 
     ciVisibilityExporter.getLibraryConfiguration({
@@ -387,7 +394,7 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
 
   it('falls back to live known tests when cached known tests are missing', (done) => {
     fs.rmSync(path.join(tmpRoot, '.testoptimization', 'cache', 'http', 'known_tests.json'))
-    getConfig().apiKey = '1'
+    getConfig().DD_API_KEY = '1'
     const knownTestsScope = nock(url)
       .post('/api/v2/ci/libraries/tests')
       .reply(200, JSON.stringify(KNOWN_TESTS_RESPONSE))
@@ -409,7 +416,7 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
       path.join(tmpRoot, '.testoptimization', 'cache', 'http', 'known_tests.json'),
       JSON.stringify({ data: { attributes: {} } })
     )
-    getConfig().apiKey = '1'
+    getConfig().DD_API_KEY = '1'
     const knownTestsScope = nock(url)
       .post('/api/v2/ci/libraries/tests')
       .reply(200, JSON.stringify(KNOWN_TESTS_RESPONSE))
@@ -431,7 +438,7 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
       .post('/api/v2/ci/tests/skippable')
       .reply(200, {})
 
-    const ciVisibilityExporter = new CiVisibilityExporter({ url, isIntelligentTestRunnerEnabled: true })
+    const ciVisibilityExporter = new CiVisibilityExporter({ url, testOptimization: ITR_FEATURE_GATE_ENABLED })
     ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
     ciVisibilityExporter._libraryConfig = { isSuitesSkippingEnabled: true }
 
@@ -447,7 +454,7 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
 
   it('falls back to live skippable tests when cached skippable tests are missing', (done) => {
     fs.rmSync(path.join(tmpRoot, '.testoptimization', 'cache', 'http', 'skippable_tests.json'))
-    getConfig().apiKey = '1'
+    getConfig().DD_API_KEY = '1'
     let gitUploadCalls = 0
     let hasUploadedGit = false
     let uploadedRepositoryUrl
@@ -470,8 +477,10 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
 
     const ciVisibilityExporter = new GitUploadingCiVisibilityExporter({
       url,
-      isGitUploadEnabled: true,
-      isIntelligentTestRunnerEnabled: true,
+      testOptimization: {
+        DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true,
+        DD_CIVISIBILITY_ITR_ENABLED: true,
+      },
     })
     ciVisibilityExporter.getLibraryConfiguration({
       repositoryUrl: 'https://github.com/example/repo',
@@ -497,7 +506,7 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
       path.join(tmpRoot, '.testoptimization', 'cache', 'http', 'skippable_tests.json'),
       JSON.stringify({ data: [{ type: 'suite', attributes: {} }] })
     )
-    getConfig().apiKey = '1'
+    getConfig().DD_API_KEY = '1'
     let gitUploadCalls = 0
     let hasUploadedGit = false
     let uploadedRepositoryUrl
@@ -520,8 +529,10 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
 
     const ciVisibilityExporter = new GitUploadingCiVisibilityExporter({
       url,
-      isGitUploadEnabled: true,
-      isIntelligentTestRunnerEnabled: true,
+      testOptimization: {
+        DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true,
+        DD_CIVISIBILITY_ITR_ENABLED: true,
+      },
     })
     ciVisibilityExporter.getLibraryConfiguration({
       repositoryUrl: 'https://github.com/example/repo',
@@ -549,7 +560,7 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
 
     const ciVisibilityExporter = new CiVisibilityExporter({
       url,
-      isTestManagementEnabled: true,
+      testOptimization: TEST_MANAGEMENT_FEATURE_GATE_ENABLED,
     })
     ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
     ciVisibilityExporter._libraryConfig = { isTestManagementEnabled: true }
@@ -567,14 +578,14 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
       path.join(tmpRoot, '.testoptimization', 'cache', 'http', 'test_management.json'),
       JSON.stringify({ data: { attributes: {} } })
     )
-    getConfig().apiKey = '1'
+    getConfig().DD_API_KEY = '1'
     const testManagementScope = nock(url)
       .post('/api/v2/test/libraries/test-management/tests')
       .reply(200, JSON.stringify(TEST_MANAGEMENT_RESPONSE))
 
     const ciVisibilityExporter = new CiVisibilityExporter({
       url,
-      isTestManagementEnabled: true,
+      testOptimization: TEST_MANAGEMENT_FEATURE_GATE_ENABLED,
     })
     ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
     ciVisibilityExporter._libraryConfig = { isTestManagementEnabled: true }
@@ -589,14 +600,14 @@ describe('CI Visibility Exporter Test Optimization HTTP cache', () => {
 
   it('falls back to live test management tests when cached test management tests are missing', (done) => {
     fs.rmSync(path.join(tmpRoot, '.testoptimization', 'cache', 'http', 'test_management.json'))
-    getConfig().apiKey = '1'
+    getConfig().DD_API_KEY = '1'
     const testManagementScope = nock(url)
       .post('/api/v2/test/libraries/test-management/tests')
       .reply(200, JSON.stringify(TEST_MANAGEMENT_RESPONSE))
 
     const ciVisibilityExporter = new CiVisibilityExporter({
       url,
-      isTestManagementEnabled: true,
+      testOptimization: TEST_MANAGEMENT_FEATURE_GATE_ENABLED,
     })
     ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
     ciVisibilityExporter._libraryConfig = { isTestManagementEnabled: true }

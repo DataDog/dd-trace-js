@@ -76,7 +76,7 @@ function cleanup (params) {
 describe('get-known-tests', () => {
   beforeEach(() => {
     process.env.DD_API_KEY = 'test-api-key'
-    getConfig().apiKey = 'test-api-key'
+    getConfig().DD_API_KEY = 'test-api-key'
     process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE = 'true'
     getConfig().DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE = true
     cleanup(DEFAULT_PARAMS)
@@ -84,7 +84,7 @@ describe('get-known-tests', () => {
 
   afterEach(() => {
     delete process.env.DD_API_KEY
-    getConfig().apiKey = undefined
+    getConfig().DD_API_KEY = undefined
     delete process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE
     getConfig().DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE = false
     cleanup(DEFAULT_PARAMS)
