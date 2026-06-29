@@ -90,15 +90,20 @@ function wrapEmit (originalEmit) {
 // Enter the request context and run `emitEvent` (the original `emit`, wrapped to
 // publish per-event for the matching response/stream), publishing any synchronous
 // throw from a user handler before letting it propagate.
+/**
+ * @param {StreamRequestContext | { req: object, res: object }} ctx
+ * @param {() => unknown} emitEvent
+ */
 function traceServerRequest (ctx, emitEvent) {
   return startServerCh.runStores(ctx, () => {
     try {
       return emitEvent()
     } catch (error) {
-      // Reached when a user request/stream handler throws synchronously; publish
-      // the error onto the span, then re-throw to preserve Node's native behavior
-      // of surfacing it to the caller of `emit`. Node turns a throwing handler
-      // into an uncaughtException, so this is not exercised under test.
+      // `EventEmitter.emit` rethrows a listener's synchronous throw to its
+      // caller (this wrapper), so the catch is reachable. It unwinds through
+      // Node's http2 session synchronously and surfaces as an uncaughtException,
+      // which crashes any in-process test harness, so it is covered here rather
+      // than in a spec. Mirrors the `apm:http:server:request:error` path.
       /* istanbul ignore next */
       ctx.error = error
       /* istanbul ignore next */
@@ -109,10 +114,35 @@ function traceServerRequest (ctx, emitEvent) {
   })
 }
 
+/**
+ * The minimal req/res pair the shared web lifecycle (`web.js`) keys on, built
+ * from a core-API `Http2Stream`. The fields below are exactly the surface
+ * `web.js` / `url.js` / `ip_extractor.js` read for a stream-backed request; a
+ * new read added there must be mirrored here or it resolves to `undefined` on
+ * the core path only.
+ *
+ * @typedef {object} StreamRequestContext
+ * @property {object} req
+ * @property {import('node:http2').ServerHttp2Stream} req.stream branch key in `web.js`/`url.js`
+ * @property {import('node:http2').IncomingHttpHeaders} req.headers raw pseudo-header map
+ * @property {string} [req.method]
+ * @property {string} [req.url]
+ * @property {import('node:net').Socket} [req.socket] peer address source (OTel)
+ * @property {object} res
+ * @property {object} res.req back-reference used by `wrapResponseEmit`/finish
+ * @property {string} [res.statusCode] read at finish from `stream.sentHeaders`
+ * @property {(name: string) => string | undefined} res.getHeader response-header tagging
+ */
+
 // Present the core-API stream + pseudo-header map as the minimal req/res pair
-// the shared web lifecycle (`web.js`) consumes. `req.stream` is the field its
-// URL/context branches key on; the response status and headers live on the
-// stream's `sentHeaders`, populated by `stream.respond()`.
+// the shared web lifecycle (`web.js`) consumes. The response status and headers
+// are getters because `stream.sentHeaders` is empty until `stream.respond()`
+// runs in the user handler; a snapshot taken here would always be `undefined`.
+/**
+ * @param {import('node:http2').ServerHttp2Stream} stream
+ * @param {import('node:http2').IncomingHttpHeaders} headers
+ * @returns {StreamRequestContext}
+ */
 function createStreamAdapter (stream, headers) {
   const req = {
     stream,
@@ -124,7 +154,11 @@ function createStreamAdapter (stream, headers) {
   const res = {
     req,
     get statusCode () {
-      return stream.sentHeaders?.[HTTP2_HEADER_STATUS]
+      // A stream aborted before `stream.respond()` has no `:status`. The
+      // compatibility `Http2ServerResponse.statusCode` defaults to 200 in that
+      // case, so match it rather than report `undefined` (which `validateStatus`
+      // would treat as an error and which drops the `http.status_code` tag).
+      return stream.sentHeaders?.[HTTP2_HEADER_STATUS] ?? 200
     },
     getHeader (name) {
       return stream.sentHeaders?.[name]

@@ -573,6 +573,35 @@ describe('Plugin', () => {
 
             request(http2, `http://localhost:${port}/user`).catch(done)
           })
+
+          it('reports status 200 for a stream aborted before it responded', done => {
+            const server = appListener
+            server.removeAllListeners('stream')
+            server.on('stream', (stream) => {
+              stream.on('error', () => {})
+              // Close without responding: `stream.sentHeaders` stays empty, so the
+              // adapter falls back to the compatibility default of 200 instead of
+              // tagging the span as an error with no status.
+              stream.close(http2.constants.NGHTTP2_INTERNAL_ERROR)
+            })
+
+            agent
+              .assertFirstTraceSpan({
+                name: 'web.request',
+                resource: 'GET',
+                error: 0,
+                meta: {
+                  'span.kind': 'server',
+                  'http.method': 'GET',
+                  'http.status_code': '200',
+                  component: 'http2',
+                },
+              })
+              .then(done)
+              .catch(done)
+
+            request(http2, `http://localhost:${port}/user`).catch(() => {})
+          })
         })
 
         describe('with configured headers', () => {
