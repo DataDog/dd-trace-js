@@ -115,6 +115,7 @@ describe('Dynamic Instrumentation Probe Re-Evaluation', function () {
               DD_TRACE_AGENT_PORT: agent.port,
               DD_TRACE_DEBUG: process.env.DD_TRACE_DEBUG, // inherit to make debugging the sandbox easier
               DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS: '0.1',
+              DD_INJECT_FORCE: 'true',
             },
           }).then(_proc => {
             assert(_proc, 'proc must be spawned successfully')

@@ -24,6 +24,7 @@ describe('Code Origin for Spans', function () {
         _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
         NODE_OPTIONS: '--enable-source-maps',
         DD_TRACE_AGENT_URL: `http://localhost:${agent.port}`,
+        DD_INJECT_FORCE: true,
       },
       stdio: 'pipe',
     })
