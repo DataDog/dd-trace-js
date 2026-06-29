@@ -9,6 +9,12 @@ const shimmer = require('../../../datadog-shimmer')
 const startServerCh = channel('apm:http2:server:request:start')
 const errorServerCh = channel('apm:http2:server:request:error')
 const emitCh = channel('apm:http2:server:response:emit')
+// Reuse the `http` response-sink channels so the existing AppSec/IAST analyzers
+// fire for HTTP/2 too. `Http2ServerResponse` and `Http2Stream` do not share the
+// `http.ServerResponse` prototype the `http` instrumentation wraps, so without
+// these republications every response-side sink is dead for both HTTP/2 APIs.
+const finishSetHeaderCh = channel('datadog:http:server:response:set-header:finish')
+const startWriteHeadCh = channel('apm:http:server:response:writeHead:start')
 
 const HTTP2_HEADER_METHOD = ':method'
 const HTTP2_HEADER_PATH = ':path'
@@ -17,6 +23,15 @@ const HTTP2_HEADER_STATUS = ':status'
 addHook({ name: 'http2' }, http2 => {
   shimmer.wrap(http2, 'createSecureServer', wrapCreateServer)
   shimmer.wrap(http2, 'createServer', wrapCreateServer)
+
+  const responseProto = http2.Http2ServerResponse?.prototype
+  if (responseProto) {
+    shimmer.wrap(responseProto, 'setHeader', wrapSetHeader)
+    shimmer.wrap(responseProto, 'appendHeader', wrapSetHeader)
+    shimmer.wrap(responseProto, 'writeHead', wrapWriteHead)
+  }
+
+  return http2
 })
 
 function wrapCreateServer (createServer) {
@@ -79,11 +94,68 @@ function wrapEmit (originalEmit) {
 
       return traceServerRequest(ctx, () => {
         shimmer.wrap(stream, 'emit', emit => wrapStreamEmit(emit, ctx))
+        shimmer.wrap(stream, 'respond', respond => function (...args) {
+          publishStreamResponse(ctx, args[0])
+          return Reflect.apply(respond, this, args)
+        })
         return Reflect.apply(originalEmit, this, args)
       })
     }
 
     return Reflect.apply(originalEmit, this, args)
+  }
+}
+
+// Compatibility response: republish each header set on the response so the
+// redirect / set-cookie analyzers (keyed on the `http` set-header channel) run.
+function wrapSetHeader (setHeader) {
+  return function (...args) {
+    const result = Reflect.apply(setHeader, this, args)
+
+    if (finishSetHeaderCh.hasSubscribers) {
+      finishSetHeaderCh.publish({ name: args[0], value: args[1], res: this })
+    }
+
+    return result
+  }
+}
+
+// Compatibility response: republish the response status + header map so the
+// missing-security-header analyzers and response-header collection run.
+function wrapWriteHead (writeHead) {
+  return function (...args) {
+    if (startWriteHeadCh.hasSubscribers) {
+      startWriteHeadCh.publish({
+        req: this.req,
+        res: this,
+        statusCode: args[0],
+        responseHeaders: this.getHeaders(),
+      })
+    }
+
+    return Reflect.apply(writeHead, this, args)
+  }
+}
+
+// Core stream: `respond(headers)` is the single point that sets every response
+// header, so publish the same response-sink channels the compatibility response
+// does, driving the same analyzers without a `ServerResponse`.
+function publishStreamResponse (ctx, headers) {
+  if (!headers) return
+
+  if (finishSetHeaderCh.hasSubscribers) {
+    for (const name of Object.keys(headers)) {
+      finishSetHeaderCh.publish({ name, value: headers[name], res: ctx.res })
+    }
+  }
+
+  if (startWriteHeadCh.hasSubscribers) {
+    startWriteHeadCh.publish({
+      req: ctx.req,
+      res: ctx.res,
+      statusCode: headers[HTTP2_HEADER_STATUS],
+      responseHeaders: headers,
+    })
   }
 }
 
