@@ -21,6 +21,12 @@ tracer.use('pg', {
 })
 ```
 
+The GraphQL plugin can also configure list item path collapsing with the
+`DD_TRACE_GRAPHQL_COLLAPSE_ENABLED` environment variable. Set it to `false` to
+emit distinct list item paths such as `users.0.name` and `users.1.name` instead
+of collapsed paths such as `users.*.name`. Programmatic `tracer.use('graphql',
+{ collapse })` configuration takes precedence over the environment variable.
+
 <h5 id="amqplib"></h5>
 <h5 id="amqplib-tags"></h5>
 <h5 id="amqplib-config"></h5>
