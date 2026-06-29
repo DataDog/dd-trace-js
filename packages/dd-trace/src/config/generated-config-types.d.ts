@@ -517,6 +517,7 @@ export interface GeneratedConfig {
   service: string;
   serviceMapping: Record<string, string>;
   site: string;
+  sourceMapsEnabled: boolean;
   spanAttributeSchema: "v0" | "v1";
   spanComputePeerService: boolean;
   spanRemoveIntegrationFromService: boolean;
@@ -1047,6 +1048,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_SEQUELIZE_ENABLED: boolean;
   DD_TRACE_SHAREDB_ENABLED: boolean;
   DD_TRACE_SMITHY_SMITHY_CLIENT_ENABLED: boolean;
+  DD_TRACE_SOURCE_MAPS_ENABLED: boolean;
   DD_TRACE_SPAN_ATTRIBUTE_SCHEMA: "v0" | "v1";
   DD_TRACE_SPAN_LEAK_DEBUG: number;
   DD_TRACE_SQLITE3_ENABLED: boolean;

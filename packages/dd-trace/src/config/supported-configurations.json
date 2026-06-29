@@ -3736,6 +3736,16 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_SOURCE_MAPS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true",
+        "configurationNames": [
+          "sourceMapsEnabled"
+        ]
+      }
+    ],
     "DD_TRACE_SPAN_ATTRIBUTE_SCHEMA": [
       {
         "implementation": "B",

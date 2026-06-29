@@ -121,6 +121,16 @@ class Tracer extends NoopProxy {
         require('./heap_snapshots').start(config)
       }
 
+      // Enabled before the application's own modules load: Node only parses source maps for files
+      // required after support is turned on. `isSupported()` is false on runtimes that can neither
+      // enable maps programmatically nor were started with `--enable-source-maps`.
+      if (config.sourceMapsEnabled) {
+        const sourceMaps = require('./source-maps')
+        if (sourceMaps.isSupported()) {
+          sourceMaps.enable()
+        }
+      }
+
       telemetry.start(config, this._pluginManager)
 
       if (config.dogstatsd) {
