@@ -175,7 +175,11 @@ function isFailureScreenshotForUpload (screenshot) {
 }
 
 function isFailureScreenshot (screenshot) {
-  return !!getScreenshotFilePath(screenshot) && screenshot?.testFailure !== false
+  const screenshotFilePath = getScreenshotFilePath(screenshot)
+  // Require an explicit failure signal: prefer the `testFailure` metadata, and fall back to the
+  // '(failed)' filename marker only when the RunResult omits `testFailure`. This keeps manual
+  // cy.screenshot() captures out of the failure-media upload (privacy).
+  return !!screenshotFilePath && (screenshot?.testFailure === true || screenshotFilePath.includes('(failed)'))
 }
 
 function getAttemptScreenshots (cypressTest, attemptIndex) {

@@ -916,14 +916,10 @@ moduleTypes.forEach(({
       }
     })
 
-    it('uploads failure screenshots and the spec video to the v2 media endpoint', async function () {
+    // 6.7.0 uses a flat JSON config that can't read env to enable media, so over10It skips it.
+    over10It('uploads failure screenshots and the spec video to the v2 media endpoint', async function () {
       const envVars = getCiVisAgentlessConfig(receiver.port)
       const specToRun = 'cypress/e2e/basic-fail.js'
-      // 6.7.0 uses a flat JSON config that can't read env to enable media; skip it.
-      if (version === '6.7.0') {
-        this.skip()
-        return
-      }
       // Failure media is off by default in cypress.config.js; CYPRESS_ENABLE_FAILURE_MEDIA
       // (set below) turns the failure screenshot + per-spec video on for this run.
       let testOutput = ''
@@ -972,8 +968,9 @@ moduleTypes.forEach(({
               assert.strictEqual(mediaPayload.media.traceId, expectedTraceId)
               assert.strictEqual(mediaPayload.headers['dd-api-key'], '1')
 
-              // v2 idempotency key is `<traceId>:<filename>`, reused on retry so the
-              // media service overwrites instead of duplicating the stored object.
+              // v2 idempotency key is `<traceId>:<hex(filename)>` (filename hex-encoded so a
+              // non-ASCII title can't break the header), reused on retry so the media service
+              // overwrites instead of duplicating the stored object.
               const idempotencyKey = mediaPayload.headers['x-dd-idempotency-key']
               assert.ok(idempotencyKey, 'media upload should send an X-Dd-Idempotency-Key header')
               assert.strictEqual(mediaPayload.media.idempotencyKey, idempotencyKey)
@@ -1002,6 +999,92 @@ moduleTypes.forEach(({
             assert.deepStrictEqual(
               [...screenshotPayload.media.content.subarray(0, 8)],
               [137, 80, 78, 71, 13, 10, 26, 10]
+            )
+          }, { hardTimeout: 60000 })
+        .catch((error) => {
+          error.message += `\nCypress output:\n${testOutput}`
+          throw error
+        })
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+    })
+
+    // 6.7.0 uses a flat JSON config that can't read env to enable media, so over10It skips it.
+    over10It('uploads only the auto failure frame, not a manual cy.screenshot()', async function () {
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+      const specToRun = 'cypress/e2e/manual-screenshot-before-fail.js'
+      // The spec takes a manual cy.screenshot('before-failure') and then fails. Only the auto
+      // failure frame must reach the media endpoint; the manual capture is excluded for privacy.
+      let testOutput = ''
+
+      childProcess = exec(
+        testCommand,
+        {
+          cwd,
+          env: {
+            ...envVars,
+            CYPRESS_BASE_URL: webAppBaseUrl,
+            SPEC_PATTERN: specToRun,
+            CYPRESS_ENABLE_FAILURE_MEDIA: 'true',
+            DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true',
+            DD_TEST_FAILURE_VIDEO_ENABLED: 'true',
+          },
+        }
+      )
+      childProcess.stdout?.on('data', (d) => { testOutput += d.toString() })
+      childProcess.stderr?.on('data', (d) => { testOutput += d.toString() })
+
+      const receiverPromise = receiver
+        .gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.startsWith('/api/unstable/ci/test-runs/') || url.endsWith('/api/v2/citestcycle'),
+          (payloads) => {
+            const mediaPayloads = payloads.filter(({ url }) => url.startsWith('/api/unstable/ci/test-runs/'))
+            const failedTest = payloads
+              .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+              .flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test')
+              .find(event =>
+                event.content.resource ===
+                  'cypress/e2e/manual-screenshot-before-fail.js.manual screenshot before fail suite ' +
+                  'takes a manual screenshot then fails'
+              )
+
+            assert.ok(failedTest, `failed test event should be reported\n${testOutput}`)
+            const expectedTraceId = failedTest.content.trace_id.toString()
+
+            const screenshotPayloads = mediaPayloads.filter(({ media }) => media.contentType === 'image/png')
+
+            // Exactly the auto failure frame is uploaded; the manual 'before-failure' capture is not.
+            assert.strictEqual(
+              screenshotPayloads.length,
+              1,
+              `only the auto failure screenshot should be uploaded\n${testOutput}`
+            )
+            const [screenshotPayload] = screenshotPayloads
+            assert.strictEqual(screenshotPayload.media.traceId, expectedTraceId)
+            // The key is `<traceId>:<hex(filename)>` — the filename is hex-encoded so a non-ASCII
+            // test title can't break the X-Dd-Idempotency-Key header — so decode it to read the marker.
+            const decodeKeyFilename = (key) => {
+              const [, hexFilename] = (key || '').split(':')
+              return hexFilename ? Buffer.from(hexFilename, 'hex').toString('utf8') : ''
+            }
+            assert.match(
+              decodeKeyFilename(screenshotPayload.media.idempotencyKey),
+              /\(failed\)/,
+              `the uploaded screenshot should be the auto failure frame\n${testOutput}`
+            )
+
+            // The manual cy.screenshot('before-failure') must never reach the media endpoint.
+            const manualUpload = mediaPayloads.find(({ media }) =>
+              decodeKeyFilename(media.idempotencyKey).includes('before-failure')
+            )
+            assert.ok(
+              !manualUpload,
+              `the manual cy.screenshot() must not be uploaded to the media endpoint\n${testOutput}`
             )
           }, { hardTimeout: 60000 })
         .catch((error) => {

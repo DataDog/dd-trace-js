@@ -40,6 +40,27 @@ function isValidTraceId (traceId) {
 }
 
 /**
+ * Renders an idempotency key (`${traceId}:${basename(filePath)}`) into a value safe to put
+ * in an HTTP header. A filename can contain non-ASCII characters (emoji, em-dash); Node throws
+ * ERR_INVALID_CHAR synchronously inside http.request when a header value has such bytes, which
+ * would abort the upload. The trace id part is a decimal uint64 and already header-safe, so it is
+ * kept verbatim; only the filename part is hex-encoded. The transform is deterministic, so a
+ * retried upload produces the same key and the backend's UUIDv5(org, key) overwrite-on-retry holds.
+ *
+ * @param {string} idempotencyKey - The raw idempotency key
+ * @returns {string} A header-safe, deterministic representation of the key
+ */
+function toIdempotencyHeaderValue (idempotencyKey) {
+  const separatorIndex = idempotencyKey.indexOf(':')
+  if (separatorIndex === -1) {
+    return Buffer.from(idempotencyKey, 'utf8').toString('hex')
+  }
+  const traceIdPart = idempotencyKey.slice(0, separatorIndex)
+  const filenamePart = idempotencyKey.slice(separatorIndex + 1)
+  return `${traceIdPart}:${Buffer.from(filenamePart, 'utf8').toString('hex')}`
+}
+
+/**
  * Uploads a single test screenshot to the Test Optimization media intake.
  * The trace id is included in the request path and the body is the raw image bytes.
  *
@@ -93,7 +114,8 @@ function uploadTestScreenshot (
       'Content-Type': contentType,
       'DD-API-KEY': apiKey,
       // Stable per-artifact key (reused on retry) → the service overwrites instead of duplicating.
-      'X-Dd-Idempotency-Key': idempotencyKey,
+      // Rendered header-safe so a non-ASCII filename can't throw ERR_INVALID_CHAR in http.request.
+      'X-Dd-Idempotency-Key': toIdempotencyHeaderValue(idempotencyKey),
       // Capture time in epoch ms; part of the stored object key, so it must be stable across retries.
       'X-Dd-Media-Captured-At': String(capturedAtMs),
     },
