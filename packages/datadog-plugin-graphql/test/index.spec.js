@@ -2269,6 +2269,138 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with collapsing disabled via DD_TRACE_GRAPHQL_COLLAPSE_ENABLED', () => {
+        let collapseEnvBefore
+
+        before(() => {
+          collapseEnvBefore = process.env.DD_TRACE_GRAPHQL_COLLAPSE_ENABLED
+          process.env.DD_TRACE_GRAPHQL_COLLAPSE_ENABLED = 'false'
+          tracer = require('../../dd-trace')
+
+          return agent.load('graphql')
+        })
+
+        after(() => {
+          if (collapseEnvBefore === undefined) {
+            delete process.env.DD_TRACE_GRAPHQL_COLLAPSE_ENABLED
+          } else {
+            process.env.DD_TRACE_GRAPHQL_COLLAPSE_ENABLED = collapseEnvBefore
+          }
+
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          graphql = require(`../../../versions/graphql@${version}`).get()
+          buildSchema()
+        })
+
+        it('should not collapse list field resolvers', () => {
+          const source = '{ friends { name } }'
+
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
+
+            assert.strictEqual(spans.length, 4)
+
+            const [execute, friends, friend0Name, friend1Name] = spans
+
+            assert.strictEqual(execute.name, expectedSchema.server.opName)
+
+            assertObjectContains(friends, {
+              name: 'graphql.resolve',
+              resource: 'friends:[Human]',
+              meta: {
+                'graphql.field.path': 'friends',
+              },
+            })
+            assert.strictEqual(friends.parent_id.toString(), execute.span_id.toString())
+
+            assertObjectContains(friend0Name, {
+              name: 'graphql.resolve',
+              resource: 'name:String',
+              meta: {
+                'graphql.field.path': 'friends.0.name',
+              },
+            })
+            assert.strictEqual(friend0Name.parent_id.toString(), friends.span_id.toString())
+
+            assertObjectContains(friend1Name, {
+              name: 'graphql.resolve',
+              resource: 'name:String',
+              meta: {
+                'graphql.field.path': 'friends.1.name',
+              },
+            })
+            assert.strictEqual(friend1Name.parent_id.toString(), friends.span_id.toString())
+          }, { spanResourceMatch: /friends:\[Human]/ })
+
+          return Promise.all([assertion, graphql.graphql({ schema, source })])
+        })
+      })
+
+      describe('with programmatic collapse overriding DD_TRACE_GRAPHQL_COLLAPSE_ENABLED', () => {
+        let collapseEnvBefore
+
+        before(() => {
+          collapseEnvBefore = process.env.DD_TRACE_GRAPHQL_COLLAPSE_ENABLED
+          process.env.DD_TRACE_GRAPHQL_COLLAPSE_ENABLED = 'false'
+          tracer = require('../../dd-trace')
+
+          // Programmatic `collapse: true` must win over the env var's `false`.
+          return agent.load('graphql', { collapse: true })
+        })
+
+        after(() => {
+          if (collapseEnvBefore === undefined) {
+            delete process.env.DD_TRACE_GRAPHQL_COLLAPSE_ENABLED
+          } else {
+            process.env.DD_TRACE_GRAPHQL_COLLAPSE_ENABLED = collapseEnvBefore
+          }
+
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          graphql = require(`../../../versions/graphql@${version}`).get()
+          buildSchema()
+        })
+
+        it('should collapse list field resolvers when programmatic collapse is true', () => {
+          const source = '{ friends { name } }'
+
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
+
+            assert.strictEqual(spans.length, 3)
+
+            const [execute, friends, friendsName] = spans
+
+            assert.strictEqual(execute.name, expectedSchema.server.opName)
+
+            assertObjectContains(friends, {
+              name: 'graphql.resolve',
+              resource: 'friends:[Human]',
+              meta: {
+                'graphql.field.path': 'friends',
+              },
+            })
+            assert.strictEqual(friends.parent_id.toString(), execute.span_id.toString())
+
+            assertObjectContains(friendsName, {
+              name: 'graphql.resolve',
+              resource: 'name:String',
+              meta: {
+                'graphql.field.path': 'friends.*.name',
+              },
+            })
+            assert.strictEqual(friendsName.parent_id.toString(), friends.span_id.toString())
+          }, { spanResourceMatch: /friends:\[Human]/ })
+
+          return Promise.all([assertion, graphql.graphql({ schema, source })])
+        })
+      })
+
       describe('with collapsing disabled and a depth >=1', () => {
         before(async () => {
           tracer = await agent.load('graphql', { collapse: false, depth: 2 })

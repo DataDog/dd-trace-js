@@ -3392,6 +3392,15 @@ describe('Config', () => {
         const config = getConfig(options)
         assert.strictEqual(config.DD_TRACE_MEMCACHED_COMMAND_ENABLED, true)
       })
+      it('should enable graphql collapse by default', () => {
+        const config = getConfig(options)
+        assert.strictEqual(config.DD_TRACE_GRAPHQL_COLLAPSE_ENABLED, true)
+      })
+      it('should disable graphql collapse if DD_TRACE_GRAPHQL_COLLAPSE_ENABLED is set to false', () => {
+        process.env.DD_TRACE_GRAPHQL_COLLAPSE_ENABLED = 'false'
+        const config = getConfig(options)
+        assert.strictEqual(config.DD_TRACE_GRAPHQL_COLLAPSE_ENABLED, false)
+      })
       it('should enable telemetry', () => {
         const config = getConfig(options)
         assert.strictEqual(config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED, true)
