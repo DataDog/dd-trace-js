@@ -35,9 +35,18 @@ function validateConfig (config) {
     ...config,
     depth: getDepth(config),
     variables: getVariablesFilter(config),
-    collapse: config.collapse === undefined || !!config.collapse,
+    collapse: getCollapse(config),
     hooks: getHooks(config),
   }
+}
+
+function getCollapse (config) {
+  // Programmatic `collapse` (via `tracer.use`) takes precedence over the
+  // `DD_TRACE_GRAPHQL_COLLAPSE_ENABLED` env var; both default to collapsing on.
+  if (config.collapse !== undefined) {
+    return !!config.collapse
+  }
+  return config.DD_TRACE_GRAPHQL_COLLAPSE_ENABLED === undefined || !!config.DD_TRACE_GRAPHQL_COLLAPSE_ENABLED
 }
 
 function getDepth (config) {

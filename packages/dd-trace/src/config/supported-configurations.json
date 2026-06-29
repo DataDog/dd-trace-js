@@ -2735,6 +2735,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_GRAPHQL_COLLAPSE_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_GRAPHQL_ENABLED": [
       {
         "implementation": "A",

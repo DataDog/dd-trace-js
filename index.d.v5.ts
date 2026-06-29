@@ -2691,6 +2691,9 @@ declare namespace tracer {
        * Whether to collapse list items into a single element. (i.e. single
        * `users.*.name` span instead of `users.0.name`, `users.1.name`, etc)
        *
+       * Can also be set via the `DD_TRACE_GRAPHQL_COLLAPSE_ENABLED` environment
+       * variable. The programmatic value takes precedence over the env var.
+       *
        * @default true
        */
       collapse?: boolean;
