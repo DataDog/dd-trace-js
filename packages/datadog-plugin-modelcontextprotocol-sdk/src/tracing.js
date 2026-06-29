@@ -1,7 +1,10 @@
 'use strict'
 
 const { channel } = require('dc-polyfill')
+const Plugin = require('../../dd-trace/src/plugins/plugin')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
+
+const DISTRIBUTED_TRACE_META_KEY = '_dd_trace_context'
 
 const toolNames = new WeakMap()
 channel('apm:mcp:server:tool:registered').subscribe(({ tool, name }) => {
@@ -56,11 +59,15 @@ function tagRequestResult (span, result) {
 
 class McpPlugin extends TracingPlugin {
   bindStart (ctx) {
-    this.startSpan(this.constructor.spanName, {
+    const spanOptions = {
       resource: this.getResource(ctx),
       type: 'mcp',
       kind: this.constructor.kind,
-    }, ctx)
+    }
+    const childOf = this.getChildOf(ctx)
+    if (childOf) spanOptions.childOf = childOf
+
+    this.startSpan(this.constructor.spanName, spanOptions, ctx)
     const span = ctx.currentStore?.span
     if (span) this.onStart(span, ctx)
     return ctx.currentStore
@@ -73,8 +80,27 @@ class McpPlugin extends TracingPlugin {
   }
 
   getResource () {}
+  getChildOf () {}
   onStart () {}
   onEnd () {}
+}
+
+class McpPropagationPlugin extends Plugin {
+  static id = 'modelcontextprotocol_propagation'
+
+  constructor (...args) {
+    super(...args)
+    this.addSub('apm:mcp:client:request:inject', this.injectTraceContext.bind(this))
+  }
+
+  injectTraceContext (ctx) {
+    const span = this.tracer.scope().active()
+    if (!span) return
+
+    const traceContext = {}
+    this.tracer.inject(span, 'text_map', traceContext)
+    ctx.traceContext = traceContext
+  }
 }
 
 class McpToolCallPlugin extends McpPlugin {
@@ -132,6 +158,17 @@ class McpServerRequestPlugin extends McpPlugin {
   static spanName = 'mcp.server.request'
   static kind = 'server'
   getResource (ctx) { return ctx.request?.method }
+  getChildOf (ctx) {
+    const traceContext = ctx.request?.params?._meta?.[DISTRIBUTED_TRACE_META_KEY]
+    if (!traceContext || typeof traceContext !== 'object') return
+
+    const childOf = this.tracer.extract('text_map', traceContext)
+    const activeSpan = this.activeSpan
+    if (!childOf || activeSpan?.context().toTraceId() === childOf.toTraceId()) return
+
+    return childOf
+  }
+
   onStart (span, ctx) { tagRequestParams(span, ctx.request) }
   onEnd (span, ctx) {
     if (ctx.error) span.setTag('error', ctx.error)
@@ -150,6 +187,7 @@ class McpServerToolCallPlugin extends McpPlugin {
 }
 
 module.exports = [
+  McpPropagationPlugin,
   McpToolCallPlugin,
   McpListToolsPlugin,
   McpListResourcesPlugin,

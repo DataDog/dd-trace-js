@@ -9,8 +9,10 @@ for (const hook of getHooks('@modelcontextprotocol/sdk')) {
 }
 
 const serverRequestCh = tracingChannel('apm:mcp:server:request')
+const clientRequestInjectCh = channel('apm:mcp:client:request:inject')
 const serverToolRegisteredCh = channel('apm:mcp:server:tool:registered')
 
+const DISTRIBUTED_TRACE_META_KEY = '_dd_trace_context'
 const TRACED_METHOD_PREFIX = /^(?:tools|resources|prompts)\//
 
 // Maps Protocol instance → Map<requestId, ctx>. Shares the ctx object between
@@ -18,7 +20,39 @@ const TRACED_METHOD_PREFIX = /^(?:tools|resources|prompts)\//
 // wrapper (span finish, after the async handler completes).
 const pendingContexts = new WeakMap()
 
+function addTraceContextToRequest (request, traceContext) {
+  return {
+    ...request,
+    params: {
+      ...request.params,
+      _meta: {
+        ...request.params?._meta,
+        [DISTRIBUTED_TRACE_META_KEY]: traceContext,
+      },
+    },
+  }
+}
+
 function wrapProtocol (Protocol) {
+  // Inject trace context into MCP request metadata so out-of-process MCP servers
+  // can parent server spans to the client operation span.
+  shimmer.wrap(Protocol.prototype, 'request', function (original) {
+    return function requestWithTraceContext (request, resultSchema, options) {
+      if (!clientRequestInjectCh.hasSubscribers || !TRACED_METHOD_PREFIX.test(request?.method)) {
+        return original.apply(this, arguments)
+      }
+
+      const ctx = {}
+      clientRequestInjectCh.publish(ctx)
+
+      if (!ctx.traceContext) {
+        return original.apply(this, arguments)
+      }
+
+      return original.call(this, addTraceContextToRequest(request, ctx.traceContext), resultSchema, options)
+    }
+  })
+
   // Start spans in _onrequest — this runs inside the express POST /mcp handler's
   // async context, so ALS correctly parents server spans under the HTTP span.
   shimmer.wrap(Protocol.prototype, '_onrequest', function (original) {
