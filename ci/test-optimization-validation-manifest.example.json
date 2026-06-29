@@ -78,8 +78,25 @@
             "path": "/absolute/path/to/repo/test/dd-test-optimization-validation.test.js",
             "role": "test",
             "contentLines": [
+              "const fs = require('node:fs')",
+              "const path = require('node:path')",
+              "",
+              "const atrStateFile = path.join(__dirname, '.dd-test-optimization-validation-atr-state')",
+              "",
               "describe('dd-test-optimization-validation', () => {",
               "  it('basic-pass', () => {",
+              "    expect(true).toBe(true)",
+              "  })",
+              "",
+              "  it('atr-fail-once', () => {",
+              "    if (!fs.existsSync(atrStateFile)) {",
+              "      fs.writeFileSync(atrStateFile, 'failed-once')",
+              "      throw new Error('dd-test-optimization-validation atr first failure')",
+              "    }",
+              "    expect(true).toBe(true)",
+              "  })",
+              "",
+              "  it('test-management-target', () => {",
               "    expect(true).toBe(true)",
               "  })",
               "})"
@@ -96,7 +113,10 @@
                 "npm",
                 "test",
                 "--",
-                "test/dd-test-optimization-validation.test.js"
+                "--runTestsByPath",
+                "test/dd-test-optimization-validation.test.js",
+                "--testNamePattern",
+                "basic-pass"
               ],
               "env": {},
               "requiredEnvVars": [],
@@ -117,12 +137,82 @@
                 "parameters": null
               }
             ]
+          },
+          {
+            "id": "atr-fail-once",
+            "purpose": "auto_test_retries_candidate",
+            "runCommand": {
+              "cwd": "/absolute/path/to/repo",
+              "argv": [
+                "npm",
+                "test",
+                "--",
+                "--runTestsByPath",
+                "test/dd-test-optimization-validation.test.js",
+                "--testNamePattern",
+                "atr-fail-once"
+              ],
+              "env": {},
+              "requiredEnvVars": [],
+              "timeoutMs": 300000,
+              "usesShell": false,
+              "shellCommand": null,
+              "shellReason": null
+            },
+            "expectedWithoutDatadog": {
+              "exitCode": 0,
+              "observedTestCount": 1
+            },
+            "testIdentities": [
+              {
+                "suite": "dd-test-optimization-validation",
+                "name": "atr-fail-once",
+                "file": "/absolute/path/to/repo/test/dd-test-optimization-validation.test.js",
+                "parameters": null
+              }
+            ]
+          },
+          {
+            "id": "test-management-target",
+            "purpose": "test_management_candidate",
+            "runCommand": {
+              "cwd": "/absolute/path/to/repo",
+              "argv": [
+                "npm",
+                "test",
+                "--",
+                "--runTestsByPath",
+                "test/dd-test-optimization-validation.test.js",
+                "--testNamePattern",
+                "test-management-target"
+              ],
+              "env": {},
+              "requiredEnvVars": [],
+              "timeoutMs": 300000,
+              "usesShell": false,
+              "shellCommand": null,
+              "shellReason": null
+            },
+            "expectedWithoutDatadog": {
+              "exitCode": 0,
+              "observedTestCount": 1
+            },
+            "testIdentities": [
+              {
+                "suite": "dd-test-optimization-validation",
+                "name": "test-management-target",
+                "file": "/absolute/path/to/repo/test/dd-test-optimization-validation.test.js",
+                "parameters": null
+              }
+            ]
           }
         ],
         "verification": {
           "createdTemporaryFiles": true,
           "ranScenarioIds": [
-            "basic-pass"
+            "basic-pass",
+            "atr-fail-once",
+            "test-management-target"
           ],
           "exitCode": 0,
           "durationMs": 12345,
@@ -132,7 +222,8 @@
           "stderrSummary": ""
         },
         "cleanupPaths": [
-          "/absolute/path/to/repo/test/dd-test-optimization-validation.test.js"
+          "/absolute/path/to/repo/test/dd-test-optimization-validation.test.js",
+          "/absolute/path/to/repo/test/.dd-test-optimization-validation-atr-state"
         ],
         "limitations": []
       },

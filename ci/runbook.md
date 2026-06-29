@@ -443,7 +443,8 @@ validation tests without using intelligence.
 For each runnable framework, include generated file contents as `contentLines`. The validator can
 join those lines with newline characters and write the files exactly.
 
-The generated tests should support these scenarios when possible:
+When `generatedTestStrategy.status` is `verified`, the generated tests must support all of these
+scenarios:
 
 - `basic-pass`: a stable passing test used for basic reporting and EFD new-test validation.
 - `atr-fail-once`: a test that fails on the first attempt and passes on retry, preferably using a
@@ -451,7 +452,8 @@ The generated tests should support these scenarios when possible:
 - `test-management-target`: a stable, named test identity suitable for disabled, quarantined, or
   attempt-to-fix checks.
 
-If a framework cannot support one of these scenarios, include the limitation explicitly.
+If a framework cannot support one of these scenarios, do not mark the generated strategy as
+`verified`; use `proposed` or `not_possible` and include the limitation explicitly.
 
 ## Manifest Contract
 

@@ -89,7 +89,7 @@ function buildFrameworkContext ({ framework, frameworkResults }) {
     id: framework.framework,
     name: getFrameworkName(framework.framework),
     version: framework.frameworkVersion || 'unknown',
-    language: 'javascript',
+    language: framework.language || 'javascript',
     packageName: project.name || readPackageName(project.packageJson) || null,
     workingDirectory: project.root || commandWorkingDirectory,
     commandWorkingDirectory,

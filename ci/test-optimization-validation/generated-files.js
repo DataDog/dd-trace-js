@@ -3,6 +3,8 @@
 const fs = require('fs')
 const path = require('path')
 
+const RUNTIME_FILE_NAMESPACE = 'dd-test-optimization-validation'
+
 function writeGeneratedFiles (framework) {
   const strategy = framework.generatedTestStrategy
   if (!strategy || strategy.status !== 'verified') {
@@ -10,10 +12,23 @@ function writeGeneratedFiles (framework) {
   }
 
   const written = []
-  for (const file of strategy.files || []) {
-    fs.mkdirSync(path.dirname(file.path), { recursive: true })
-    fs.writeFileSync(file.path, `${file.contentLines.join('\n')}\n`)
-    written.push(file.path)
+  try {
+    for (const file of strategy.files || []) {
+      const filename = validateGeneratedFilePath(framework, file.path)
+      validateContentLines(file.contentLines, filename)
+      const content = `${file.contentLines.join('\n')}\n`
+      if (fs.existsSync(filename)) {
+        if (fs.readFileSync(filename, 'utf8') === content) continue
+        throw new Error(`Refusing to overwrite existing generated validation file with different content: ${filename}`)
+      }
+
+      fs.mkdirSync(path.dirname(filename), { recursive: true })
+      fs.writeFileSync(filename, content)
+      written.push(filename)
+    }
+  } catch (err) {
+    cleanupPaths(written)
+    throw err
   }
   return written
 }
@@ -23,13 +38,7 @@ function cleanupGeneratedFiles (manifest, { keep = false } = {}) {
 
   for (const framework of manifest.frameworks || []) {
     const strategy = framework.generatedTestStrategy
-    for (const cleanupPath of strategy?.cleanupPaths || []) {
-      try {
-        fs.rmSync(cleanupPath, { force: true, recursive: true })
-      } catch {
-        // Cleanup should be best-effort. The report will contain the command artifacts.
-      }
-    }
+    cleanupPaths(getSafeCleanupPaths(framework, strategy, { includeGeneratedFiles: true }))
   }
 }
 
@@ -37,22 +46,88 @@ function cleanupGeneratedRuntimeFiles (framework) {
   const strategy = framework.generatedTestStrategy
   if (!strategy) return
 
-  const generatedFiles = (strategy.files || []).map(file => path.resolve(file.path))
+  cleanupPaths(getSafeCleanupPaths(framework, strategy, { includeGeneratedFiles: false }))
+}
+
+function getSafeCleanupPaths (framework, strategy, { includeGeneratedFiles }) {
+  if (!strategy) return []
+
+  const generatedFiles = new Set()
+  for (const file of strategy.files || []) {
+    generatedFiles.add(validateGeneratedFilePath(framework, file.path))
+  }
+
+  const cleanupPaths = []
   for (const cleanupPath of strategy.cleanupPaths || []) {
-    const resolvedCleanupPath = path.resolve(cleanupPath)
-    if (containsGeneratedFile(resolvedCleanupPath, generatedFiles)) continue
+    const filename = validateCleanupPath(framework, cleanupPath)
+    if (generatedFiles.has(filename)) {
+      if (includeGeneratedFiles) cleanupPaths.push(filename)
+      continue
+    }
+
+    if (isNamespacedRuntimeFile(filename)) {
+      cleanupPaths.push(filename)
+    }
+  }
+
+  if (includeGeneratedFiles) cleanupPaths.push(...generatedFiles)
+  return [...new Set(cleanupPaths)]
+}
+
+function cleanupPaths (cleanupPaths) {
+  for (const cleanupPath of cleanupPaths) {
     try {
-      fs.rmSync(resolvedCleanupPath, { force: true, recursive: true })
+      if (isDirectory(cleanupPath)) continue
+      fs.rmSync(cleanupPath, { force: true })
     } catch {
-      // Runtime cleanup should be best-effort. Feature validation will report missing events if reset failed.
+      // Cleanup should be best-effort. The report will contain the command artifacts.
     }
   }
 }
 
-function containsGeneratedFile (cleanupPath, generatedFiles) {
-  return generatedFiles.some(file => {
-    return file === cleanupPath || file.startsWith(`${cleanupPath}${path.sep}`)
-  })
+function validateGeneratedFilePath (framework, filename) {
+  return validatePathUnderProjectRoot(framework, filename, 'generated validation file')
+}
+
+function validateCleanupPath (framework, filename) {
+  return validatePathUnderProjectRoot(framework, filename, 'generated validation cleanup')
+}
+
+function validatePathUnderProjectRoot (framework, filename, label) {
+  const root = getProjectRoot(framework)
+  const resolved = path.resolve(filename || '')
+  if (!root || !isPathInside(root, resolved)) {
+    throw new Error(`Refusing ${label} path outside project root: ${filename}`)
+  }
+  return resolved
+}
+
+function getProjectRoot (framework) {
+  const root = framework.project?.root
+  return typeof root === 'string' && path.isAbsolute(root) ? path.resolve(root) : null
+}
+
+function isPathInside (root, filename) {
+  const relative = path.relative(root, filename)
+  return relative === '' || (relative && !relative.startsWith('..') && !path.isAbsolute(relative))
+}
+
+function validateContentLines (contentLines, filename) {
+  if (!Array.isArray(contentLines) || contentLines.some(line => typeof line !== 'string')) {
+    throw new Error(`Generated validation file contentLines must be an array of strings: ${filename}`)
+  }
+}
+
+function isNamespacedRuntimeFile (filename) {
+  return path.basename(filename).includes(RUNTIME_FILE_NAMESPACE)
+}
+
+function isDirectory (filename) {
+  try {
+    return fs.statSync(filename).isDirectory()
+  } catch {
+    return false
+  }
 }
 
 function findGeneratedScenario (framework, scenarioId) {

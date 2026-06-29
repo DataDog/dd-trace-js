@@ -30,6 +30,7 @@ function runCommand (command, { env = {}, outDir, label, verbose = false } = {})
   fs.mkdirSync(outDir, { recursive: true })
 
   return new Promise((resolve) => {
+    let finalized = false
     const childEnv = {
       ...process.env,
       ...command.env,
@@ -70,8 +71,15 @@ function runCommand (command, { env = {}, outDir, label, verbose = false } = {})
     })
     child.on('error', err => {
       result.stderr += `${err.stack || err}\n`
+      finalize(null, null)
     })
-    child.on('exit', (code, signal) => {
+    child.on('close', (code, signal) => {
+      finalize(code, signal)
+    })
+
+    function finalize (code, signal) {
+      if (finalized) return
+      finalized = true
       clearTimeout(timeout)
       result.exitCode = code
       result.signal = signal
@@ -95,7 +103,7 @@ function runCommand (command, { env = {}, outDir, label, verbose = false } = {})
       }, null, 2)}\n`)
 
       resolve(result)
-    })
+    }
   })
 }
 

@@ -520,7 +520,49 @@
               "files",
               "scenarios",
               "cleanupPaths"
-            ]
+            ],
+            "properties": {
+              "scenarios": {
+                "allOf": [
+                  {
+                    "contains": {
+                      "properties": {
+                        "id": {
+                          "const": "basic-pass"
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ]
+                    }
+                  },
+                  {
+                    "contains": {
+                      "properties": {
+                        "id": {
+                          "const": "atr-fail-once"
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ]
+                    }
+                  },
+                  {
+                    "contains": {
+                      "properties": {
+                        "id": {
+                          "const": "test-management-target"
+                        }
+                      },
+                      "required": [
+                        "id"
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
           }
         }
       ]

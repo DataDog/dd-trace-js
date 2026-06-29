@@ -29,6 +29,12 @@ const STATUSES = new Set([
   'unknown',
 ])
 
+const GENERATED_SCENARIO_IDS = new Set([
+  'basic-pass',
+  'atr-fail-once',
+  'test-management-target',
+])
+
 function validateManifest (manifest) {
   const errors = []
 
@@ -46,6 +52,7 @@ function validateManifest (manifest) {
   }
 
   if (Array.isArray(manifest.frameworks)) {
+    validateUniqueFrameworkIds(manifest.frameworks, errors)
     for (const [index, framework] of manifest.frameworks.entries()) {
       validateFramework(framework, index, errors)
     }
@@ -63,10 +70,15 @@ function validateFramework (framework, index, errors) {
 
   if (framework.project) {
     requiredAbsolutePath(framework.project, 'root', errors, `${prefix}.project`)
+    optionalAbsolutePath(framework.project, 'packageJson', errors, `${prefix}.project`)
+    optionalAbsolutePathArray(framework.project, 'configFiles', errors, `${prefix}.project`)
   }
 
   if (framework.status === 'runnable') {
     requiredCommand(framework, 'existingTestCommand', errors, prefix)
+    requiredObject(framework, 'preflight', errors, prefix)
+  } else {
+    requireNonEmptyNotes(framework, errors, prefix)
   }
 
   if (framework.generatedTestStrategy) {
@@ -83,20 +95,69 @@ function validateGeneratedTestStrategy (strategy, prefix, errors) {
     requiredArray(strategy, 'files', errors, prefix)
     requiredArray(strategy, 'scenarios', errors, prefix)
     requiredArray(strategy, 'cleanupPaths', errors, prefix)
+    validateCompleteGeneratedScenarioSet(strategy, prefix, errors)
   }
 
   if (Array.isArray(strategy.files)) {
     for (const [index, file] of strategy.files.entries()) {
       requiredAbsolutePath(file, 'path', errors, `${prefix}.files[${index}]`)
       requiredArray(file, 'contentLines', errors, `${prefix}.files[${index}]`)
+      validateStringArray(file, 'contentLines', errors, `${prefix}.files[${index}]`)
     }
   }
 
   if (Array.isArray(strategy.scenarios)) {
     for (const [index, scenario] of strategy.scenarios.entries()) {
       requiredString(scenario, 'id', errors, `${prefix}.scenarios[${index}]`)
+      enumString(scenario, 'id', GENERATED_SCENARIO_IDS, errors, `${prefix}.scenarios[${index}]`)
       requiredCommand(scenario, 'runCommand', errors, `${prefix}.scenarios[${index}]`)
+      validateScenarioIdentities(scenario, `${prefix}.scenarios[${index}]`, errors)
     }
+  }
+
+  optionalAbsolutePath(strategy, 'testDirectory', errors, prefix)
+  optionalAbsolutePathArray(strategy, 'cleanupPaths', errors, prefix)
+}
+
+function validateCompleteGeneratedScenarioSet (strategy, prefix, errors) {
+  if (!Array.isArray(strategy.scenarios)) return
+
+  const seen = new Set()
+  for (const scenario of strategy.scenarios) {
+    if (typeof scenario?.id === 'string') seen.add(scenario.id)
+  }
+
+  for (const scenarioId of GENERATED_SCENARIO_IDS) {
+    if (!seen.has(scenarioId)) {
+      errors.push(`${prefix}.scenarios must include generated scenario "${scenarioId}" when status is verified.`)
+    }
+  }
+}
+
+function validateUniqueFrameworkIds (frameworks, errors) {
+  const seen = new Set()
+  for (const [index, framework] of frameworks.entries()) {
+    if (typeof framework?.id !== 'string') continue
+    if (seen.has(framework.id)) {
+      errors.push(`frameworks[${index}].id must be unique; duplicate "${framework.id}".`)
+    }
+    seen.add(framework.id)
+  }
+}
+
+function requireNonEmptyNotes (framework, errors, prefix) {
+  if (!Array.isArray(framework.notes) || framework.notes.length === 0) {
+    errors.push(`${prefix}.notes must include a reason when status is ${framework.status}.`)
+    return
+  }
+  validateStringArray(framework, 'notes', errors, prefix)
+}
+
+function validateScenarioIdentities (scenario, prefix, errors) {
+  if (!Array.isArray(scenario.testIdentities)) return
+
+  for (const [index, identity] of scenario.testIdentities.entries()) {
+    optionalAbsolutePath(identity, 'file', errors, `${prefix}.testIdentities[${index}]`)
   }
 }
 
@@ -112,6 +173,8 @@ function requiredCommand (target, field, errors, prefix = '') {
     requiredString(value, 'shellCommand', errors, key)
   } else if (!Array.isArray(value.argv) || value.argv.length === 0) {
     errors.push(`${key}.argv must be a non-empty array unless usesShell is true.`)
+  } else {
+    validateStringArray(value, 'argv', errors, key)
   }
   if (value.timeoutMs !== undefined && (!Number.isFinite(value.timeoutMs) || value.timeoutMs <= 0)) {
     errors.push(`${key}.timeoutMs must be a positive number when present.`)
@@ -147,6 +210,40 @@ function requiredAbsolutePath (target, field, errors, prefix = '') {
   const value = target && target[field]
   if (typeof value !== 'string' || !path.isAbsolute(value)) {
     errors.push(`${join(prefix, field)} must be an absolute path.`)
+  }
+}
+
+function optionalAbsolutePath (target, field, errors, prefix = '') {
+  const value = target && target[field]
+  if (value === undefined || value === null) return
+  if (typeof value !== 'string' || !path.isAbsolute(value)) {
+    errors.push(`${join(prefix, field)} must be an absolute path when present.`)
+  }
+}
+
+function optionalAbsolutePathArray (target, field, errors, prefix = '') {
+  const value = target && target[field]
+  if (value === undefined) return
+  if (!Array.isArray(value)) {
+    errors.push(`${join(prefix, field)} must be an array when present.`)
+    return
+  }
+
+  for (const [index, item] of value.entries()) {
+    if (typeof item !== 'string' || !path.isAbsolute(item)) {
+      errors.push(`${join(prefix, field)}[${index}] must be an absolute path.`)
+    }
+  }
+}
+
+function validateStringArray (target, field, errors, prefix = '') {
+  const value = target && target[field]
+  if (!Array.isArray(value)) return
+
+  for (const [index, item] of value.entries()) {
+    if (typeof item !== 'string') {
+      errors.push(`${join(prefix, field)}[${index}] must be a string.`)
+    }
   }
 }
 

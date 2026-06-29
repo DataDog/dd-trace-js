@@ -53,7 +53,7 @@ function parseArgs (argv) {
         options.frameworks.add(normalizeFrameworkTarget(requireValue(argv, ++i, arg)))
         break
       case '--scenario':
-        options.scenarios = new Set([requireValue(argv, ++i, arg)])
+        options.scenarios = normalizeScenarioSelection(requireValue(argv, ++i, arg))
         break
       case '--keep-temp-files':
         options.keepTempFiles = true
@@ -227,6 +227,11 @@ function normalizeFrameworkTarget (target) {
 
 function formatFrameworkTargets (targets) {
   return [...targets].map(target => `"${target}"`).join(', ')
+}
+
+function normalizeScenarioSelection (scenario) {
+  if (scenario === BASIC_REPORTING_SCENARIO) return new Set([scenario])
+  return new Set([BASIC_REPORTING_SCENARIO, scenario])
 }
 
 function getAdvancedScenarios (scenarios) {

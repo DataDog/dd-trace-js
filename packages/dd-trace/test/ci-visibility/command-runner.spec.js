@@ -1,10 +1,14 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
 
 const {
   getCommandDetails,
   mergeNodeOptions,
+  runCommand,
   serializeDisplayCommand,
 } = require('../../../../ci/test-optimization-validation/command-runner')
 
@@ -40,5 +44,26 @@ describe('test optimization validation command runner', () => {
       runtimeWrapper: 'node/corepack',
       packageManager: 'pnpm',
     })
+  })
+
+  it('returns a result for missing executable spawn failures', async () => {
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-runner-'))
+
+    try {
+      const result = await runCommand({
+        cwd: outDir,
+        argv: ['definitely-missing-dd-validation-runner'],
+        timeoutMs: 1000,
+      }, {
+        outDir,
+      })
+
+      assert.strictEqual(result.exitCode, null)
+      assert.match(result.stderr, /ENOENT/)
+      assert.ok(fs.existsSync(path.join(outDir, 'command.json')))
+      assert.ok(fs.existsSync(path.join(outDir, 'stderr.txt')))
+    } finally {
+      fs.rmSync(outDir, { recursive: true, force: true })
+    }
   })
 })

@@ -16,6 +16,7 @@ describe('test optimization validation payload', () => {
             id: 'mocha:root',
             framework: 'mocha',
             frameworkVersion: '11.7.6',
+            language: 'typescript',
             project: {
               name: 'example-package',
               root: '/repo/packages/example-package',
@@ -57,7 +58,7 @@ describe('test optimization validation payload', () => {
       id: 'mocha',
       name: 'Mocha',
       version: '11.7.6',
-      language: 'javascript',
+      language: 'typescript',
       packageName: 'example-package',
       workingDirectory: '/repo/packages/example-package',
       commandWorkingDirectory: '/repo/packages/example-package/test-workdir',

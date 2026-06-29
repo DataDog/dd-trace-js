@@ -32,4 +32,10 @@ describe('test optimization validation cli', () => {
       { id: 'vitest:integration', framework: 'vitest' },
     ])
   })
+
+  it('adds basic reporting as a prerequisite for advanced scenario selection', () => {
+    const options = parseArgs(['--scenario', 'efd'])
+
+    assert.deepStrictEqual([...options.scenarios], ['basic-reporting', 'efd'])
+  })
 })
