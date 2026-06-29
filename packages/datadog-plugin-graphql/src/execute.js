@@ -533,14 +533,15 @@ function buildCachedCollapsedPath (path, cache) {
 }
 
 // Depth filtering directly on the linked-list node — no array allocation needed.
-// config.depth < 0 means no limit. In non-collapse mode only string segments
-// count toward depth (array indices are transparent). In collapse mode every
-// node counts (numbers have been conceptually '*'-collapsed).
+// config.depth < 0 means no limit. Only selection-set segments (string keys)
+// count toward depth; list indices are execution artifacts and are transparent.
+// On the v5 line `countListIndices` keeps the legacy behaviour of counting every
+// node when collapsing folds the numeric indices into '*'.
 function shouldInstrumentNode (config, path) {
   if (config.depth < 0) return true
 
   let depth = 0
-  if (config.collapse) {
+  if (config.countListIndices) {
     for (let curr = path; curr; curr = curr.prev) depth++
   } else {
     for (let curr = path; curr; curr = curr.prev) {
