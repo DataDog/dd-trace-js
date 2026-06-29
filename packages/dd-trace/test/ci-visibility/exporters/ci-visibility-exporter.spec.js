@@ -766,7 +766,14 @@ describe('CI Visibility Exporter', () => {
       })
 
       it('should return an error if the request fails', (done) => {
+        // A 5xx triggers one jittered 5–7.5 s retry in the request helper, so the endpoint is
+        // hit twice and the retry delay must collapse to 0 ms to stay under the mocha timeout.
+        const realSetTimeout = setTimeout
+        sinon.stub(global, 'setTimeout').callsFake((fn, delay, ...args) =>
+          realSetTimeout(fn, delay > 100 ? 0 : delay, ...args))
         const scope = nock(url)
+          .post('/api/v2/ci/libraries/tests')
+          .reply(500)
           .post('/api/v2/ci/libraries/tests')
           .reply(500)
         const ciVisibilityExporter = new CiVisibilityExporter({ url })
