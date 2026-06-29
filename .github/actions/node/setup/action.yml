@@ -27,8 +27,10 @@ runs:
         }
         case "$VERSION" in
           eol)         version=16 ;;
-          oldest)      oldest_major=$(awk '/"node"/{match($0,/[0-9]+/);print substr($0,RSTART,RLENGTH);exit}' package.json)
-                      version=$(node_version "$oldest_major") ;;
+          # Pinned to 18 rather than derived from package.json engines.node: CI keeps testing the
+          # oldest version we still exercise (18) even though the shipped engines floor is now >=22.
+          # See the Widen engines.node for CI step below, which restores >=18 on the 18/20 legs.
+          oldest)      version=$(node_version 18) ;;
           maintenance) version=$(node_version 20) ;;
           active)      version=$(node_version 24) ;;
           latest)      version=${LATEST_VERSION:-$(node_version 26)}
