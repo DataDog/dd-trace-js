@@ -33,7 +33,7 @@ describe('AIGuard SDK', () => {
     flushInterval: 0,
     service: 'ai_guard_demo',
     env: 'test',
-    apiKey: 'API_KEY',
+    DD_API_KEY: 'API_KEY',
     DD_APP_KEY: 'APP_KEY',
     protocolVersion: '0.4',
     experimental: {
@@ -124,7 +124,7 @@ describe('AIGuard SDK', () => {
         headers: {
           'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(postData),
-          'DD-API-KEY': config.apiKey,
+          'DD-API-KEY': config.DD_API_KEY,
           'DD-APPLICATION-KEY': config.DD_APP_KEY,
           'DD-AI-GUARD-VERSION': tracerVersion,
           'DD-AI-GUARD-SOURCE': 'SDK',
@@ -523,11 +523,14 @@ describe('AIGuard SDK', () => {
   const sites = [
     { site: 'datad0g.com', endpoint: 'https://app.datad0g.com/api/v2/ai-guard' },
     { site: 'datadoghq.com', endpoint: 'https://app.datadoghq.com/api/v2/ai-guard' },
+    { site: 'ddog-gov.com', endpoint: 'https://app.ddog-gov.com/api/v2/ai-guard' },
+    { site: 'us3.datadoghq.com', endpoint: 'https://us3.datadoghq.com/api/v2/ai-guard' },
+    { site: 'ap1.datadoghq.com', endpoint: 'https://ap1.datadoghq.com/api/v2/ai-guard' },
   ]
   for (const { site, endpoint } of sites) {
     it(`test endpoint discovery: ${site}`, async () => {
-      const newConfig = { site, ...config }
-      delete newConfig.experimental.aiguard.endpoint
+      const { endpoint: _discardedEndpoint, ...aiguard } = config.experimental.aiguard
+      const newConfig = { ...config, site, experimental: { ...config.experimental, aiguard } }
       const client = new AIGuard(tracer, newConfig)
       mockFetch({
         body: { data: { attributes: { action: 'ALLOW', reason: 'OK', is_blocking_enabled: false } } },

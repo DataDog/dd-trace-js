@@ -40,7 +40,7 @@ const waf = require('./waf')
 const addresses = require('./addresses')
 const Reporter = require('./reporter')
 const appsecTelemetry = require('./telemetry')
-const apiSecuritySampler = require('./api_security_sampler')
+const apiSecurity = require('./api_security')
 const { isBlocked, block, callBlockDelegation, setTemplates, getBlockingAction } = require('./blocking')
 const { getActiveRequest } = require('./store')
 const UserTracking = require('./user_tracking')
@@ -74,7 +74,7 @@ function enable (_config) {
 
     Reporter.init(_config.appsec, _config.inferredProxyServicesEnabled)
 
-    apiSecuritySampler.configure(_config)
+    apiSecurity.configure(_config)
 
     UserTracking.setCollectionMode(_config.appsec.eventTracking.mode, false)
 
@@ -240,13 +240,17 @@ function incomingHttpEndTranslator ({ req, res }) {
   // This hook runs before span finish, so ensure route/endpoint tags are available before API Security sampling runs.
   web.setRouteOrEndpointTag(req)
 
-  if (apiSecuritySampler.sampleRequest(req, res, true)) {
+  const apiSecSamplingDecision = apiSecurity.sampleRequest(req, res, true)
+  if (apiSecSamplingDecision === apiSecurity.SamplingDecision.SAMPLE) {
     persistent[addresses.WAF_CONTEXT_PROCESSOR] = { 'extract-schema': true }
   }
 
+  let wafResult
   if (!isEmpty(persistent)) {
-    waf.run({ persistent }, req)
+    wafResult = waf.run({ persistent }, req)
   }
+
+  apiSecurity.reportRequest(req, apiSecSamplingDecision, wafResult)
 
   waf.disposeContext(req)
 
@@ -346,7 +350,7 @@ function onRequestProcessParams ({ req, res, abortController, params }) {
 
 function onResponseBody ({ req, res, body }) {
   if (!body || typeof body !== 'object') return
-  if (!apiSecuritySampler.sampleRequest(req, res)) return
+  if (apiSecurity.sampleRequest(req, res) !== apiSecurity.SamplingDecision.SAMPLE) return
 
   // we don't support blocking at this point, so no results needed
   waf.run({
@@ -520,7 +524,7 @@ function disable () {
 
   appsecRemoteConfig.disableWafUpdate()
 
-  apiSecuritySampler.disable()
+  apiSecurity.disable()
 
   // Channel#unsubscribe() is undefined for non active channels
   if (bodyParser.hasSubscribers) bodyParser.unsubscribe(onRequestBodyParsed)

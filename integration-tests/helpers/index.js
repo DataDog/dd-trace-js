@@ -612,7 +612,9 @@ async function createSandbox (
   }
 
   if (cappedDependencies.length > 0) {
-    execHelper(`${BUN} add ${cappedDependencies.join(' ')} ${addFlags.join(' ')}`, addOptions)
+    // knex 1.x pulls in the @vscode/sqlite3 fork, which compiles from source when no prebuilt matches the runner
+    // and routinely runs past the 60s default.
+    execHelper(`${BUN} add ${cappedDependencies.join(' ')} ${addFlags.join(' ')}`, { ...addOptions, timeout: 300_000 })
   }
 
   execHelper(`${BUN} add file:${out} ${[...addFlags, '--ignore-scripts'].join(' ')}`, addOptions)

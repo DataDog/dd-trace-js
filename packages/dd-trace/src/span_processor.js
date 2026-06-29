@@ -5,6 +5,7 @@ const spanFormat = require('./span_format')
 const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
 const processTags = require('./process-tags')
+const { applyHttpOtelSemantics } = require('./plugins/util/http-otel-semantics')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
@@ -17,7 +18,7 @@ class SpanProcessor {
     this._killAll = false
 
     // TODO: This should already have been calculated in `config.js`.
-    if (config.stats?.enabled && !config.appsec?.standalone?.enabled) {
+    if (config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED && !config.appsec.standalone?.enabled) {
       const { SpanStatsProcessor } = require('./span_stats')
       this._stats = new SpanStatsProcessor(config)
     }
@@ -41,11 +42,11 @@ class SpanProcessor {
     const active = []
     const formatted = []
     const trace = spanContext._trace
-    const { flushMinSpans, tracing } = this._config
+    const { flushMinSpans, DD_TRACE_ENABLED } = this._config
     const { started, finished } = trace
 
     if (trace.record === false) return
-    if (tracing === false) {
+    if (DD_TRACE_ENABLED === false) {
       this._erase(trace, active)
       return
     }
@@ -61,7 +62,12 @@ class SpanProcessor {
         } else {
           const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
           isFirstSpanInChunk = false
+          // Span stats read Datadog HTTP tag names from the formatted span, so
+          // record them before the OTel rename — an export-only transform.
           this._stats?.onSpanFinished(formattedSpan)
+          if (this._config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+            applyHttpOtelSemantics(formattedSpan)
+          }
           formatted.push(formattedSpan)
         }
       }

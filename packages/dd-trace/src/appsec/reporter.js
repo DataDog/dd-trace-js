@@ -654,4 +654,5 @@ module.exports = {
   finishRequest,
   mapHeaderAndTags,
   truncateRequestBody,
+  isSchemaAttribute,
 }

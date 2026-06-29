@@ -12,11 +12,71 @@ const {
   TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE,
 } = require('../telemetry')
 const { writeSettingsToCache } = require('../test-optimization-cache')
+const { validateSettingsResponse } = require('../test-optimization-http-cache-schema')
 const request = require('./request')
 
 const DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES = 2
 const DEFAULT_EARLY_FLAKE_DETECTION_SLOW_TEST_RETRIES = { '5s': 10, '10s': 5, '30s': 3, '5m': 2 }
 const DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD = 30
+
+function parseJsonResponse (rawJson) {
+  return typeof rawJson === 'string' ? JSON.parse(rawJson) : rawJson
+}
+
+function parseLibraryConfigurationResponse (rawJson, config = getConfig(), options = {}) {
+  const parsedResponse = parseJsonResponse(rawJson)
+  if (options.validateRequiredFields) {
+    validateSettingsResponse(parsedResponse)
+  }
+  const {
+    code_coverage: isCodeCoverageEnabled,
+    tests_skipping: isSuitesSkippingEnabled,
+    itr_enabled: isItrEnabled,
+    require_git: requireGit,
+    early_flake_detection: earlyFlakeDetectionConfig,
+    flaky_test_retries_enabled: isFlakyTestRetriesEnabled,
+    di_enabled: isDiEnabled,
+    known_tests_enabled: isKnownTestsEnabled,
+    test_management: testManagementConfig,
+    impacted_tests_enabled: isImpactedTestsEnabled,
+    coverage_report_upload_enabled: isCoverageReportUploadEnabled,
+  } = parsedResponse?.data?.attributes ?? parsedResponse
+
+  const settings = {
+    isCodeCoverageEnabled,
+    isSuitesSkippingEnabled,
+    isItrEnabled,
+    requireGit,
+    isEarlyFlakeDetectionEnabled: isKnownTestsEnabled && (earlyFlakeDetectionConfig?.enabled ?? false),
+    earlyFlakeDetectionNumRetries:
+      earlyFlakeDetectionConfig?.slow_test_retries?.['5s'] || DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES,
+    earlyFlakeDetectionSlowTestRetries:
+      earlyFlakeDetectionConfig?.slow_test_retries ?? DEFAULT_EARLY_FLAKE_DETECTION_SLOW_TEST_RETRIES,
+    earlyFlakeDetectionFaultyThreshold:
+      earlyFlakeDetectionConfig?.faulty_session_threshold ?? DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD,
+    isFlakyTestRetriesEnabled,
+    isDiEnabled: isDiEnabled && isFlakyTestRetriesEnabled,
+    isKnownTestsEnabled,
+    isTestManagementEnabled: (testManagementConfig?.enabled ?? false),
+    testManagementAttemptToFixRetries:
+      testManagementConfig?.attempt_to_fix_retries,
+    isImpactedTestsEnabled,
+    isCoverageReportUploadEnabled: isCoverageReportUploadEnabled ?? false,
+  }
+
+  log.debug('Remote settings: %j', settings)
+
+  if (config.testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE) {
+    settings.isCodeCoverageEnabled = true
+    log.debug('Dangerously set code coverage to true')
+  }
+  if (config.testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING) {
+    settings.isSuitesSkippingEnabled = true
+    log.debug('Dangerously set test skipping to true')
+  }
+
+  return settings
+}
 
 function getLibraryConfiguration ({
   url,
@@ -51,10 +111,10 @@ function getLibraryConfiguration ({
     options.path = `${evpProxyPrefix}/api/v2/libraries/tests/services/setting`
     options.headers['X-Datadog-EVP-Subdomain'] = 'api'
   } else {
-    if (!config.apiKey) {
+    if (!config.DD_API_KEY) {
       return done(new Error('Request to settings endpoint was not done because Datadog API key is not defined.'))
     }
-    options.headers['dd-api-key'] = config.apiKey
+    options.headers['dd-api-key'] = config.DD_API_KEY
   }
 
   const data = JSON.stringify({
@@ -90,56 +150,7 @@ function getLibraryConfiguration ({
       done(err)
     } else {
       try {
-        const {
-          data: {
-            attributes: {
-              code_coverage: isCodeCoverageEnabled,
-              tests_skipping: isSuitesSkippingEnabled,
-              itr_enabled: isItrEnabled,
-              require_git: requireGit,
-              early_flake_detection: earlyFlakeDetectionConfig,
-              flaky_test_retries_enabled: isFlakyTestRetriesEnabled,
-              di_enabled: isDiEnabled,
-              known_tests_enabled: isKnownTestsEnabled,
-              test_management: testManagementConfig,
-              impacted_tests_enabled: isImpactedTestsEnabled,
-              coverage_report_upload_enabled: isCoverageReportUploadEnabled,
-            },
-          },
-        } = JSON.parse(res)
-
-        const settings = {
-          isCodeCoverageEnabled,
-          isSuitesSkippingEnabled,
-          isItrEnabled,
-          requireGit,
-          isEarlyFlakeDetectionEnabled: isKnownTestsEnabled && (earlyFlakeDetectionConfig?.enabled ?? false),
-          earlyFlakeDetectionNumRetries:
-            earlyFlakeDetectionConfig?.slow_test_retries?.['5s'] || DEFAULT_EARLY_FLAKE_DETECTION_NUM_RETRIES,
-          earlyFlakeDetectionSlowTestRetries:
-            earlyFlakeDetectionConfig?.slow_test_retries ?? DEFAULT_EARLY_FLAKE_DETECTION_SLOW_TEST_RETRIES,
-          earlyFlakeDetectionFaultyThreshold:
-            earlyFlakeDetectionConfig?.faulty_session_threshold ?? DEFAULT_EARLY_FLAKE_DETECTION_ERROR_THRESHOLD,
-          isFlakyTestRetriesEnabled,
-          isDiEnabled: isDiEnabled && isFlakyTestRetriesEnabled,
-          isKnownTestsEnabled,
-          isTestManagementEnabled: (testManagementConfig?.enabled ?? false),
-          testManagementAttemptToFixRetries:
-            testManagementConfig?.attempt_to_fix_retries,
-          isImpactedTestsEnabled,
-          isCoverageReportUploadEnabled: isCoverageReportUploadEnabled ?? false,
-        }
-
-        log.debug('Remote settings: %j', settings)
-
-        if (config.DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE) {
-          settings.isCodeCoverageEnabled = true
-          log.debug('Dangerously set code coverage to true')
-        }
-        if (config.DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING) {
-          settings.isSuitesSkippingEnabled = true
-          log.debug('Dangerously set test skipping to true')
-        }
+        const settings = parseLibraryConfigurationResponse(res, config)
 
         incrementCountMetric(TELEMETRY_GIT_REQUESTS_SETTINGS_RESPONSE, settings)
 
@@ -153,4 +164,4 @@ function getLibraryConfiguration ({
   })
 }
 
-module.exports = { getLibraryConfiguration }
+module.exports = { getLibraryConfiguration, parseLibraryConfigurationResponse }
