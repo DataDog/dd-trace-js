@@ -1,10 +1,15 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
 
 const {
+  getDebugAwareDiagnosis,
   getMissingEventDiagnosis,
   shouldRunDebugRerun,
+  summarizeTestOutput,
 } = require('../../../../ci/test-optimization-validation/scenarios/basic-reporting')
 
 describe('test optimization basic reporting diagnosis', () => {
@@ -53,5 +58,81 @@ describe('test optimization basic reporting diagnosis', () => {
     assert.strictEqual(eventLevelFailure.kind, 'missing-test-events')
     assert.match(eventLevelFailure.recommendation, /debug rerun/)
     assert.strictEqual(shouldRunDebugRerun(eventLevelFailure, { exitCode: 0, timedOut: false }), true)
+  })
+
+  it('explains framework source-tree runner commands', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-mocha-source-'))
+
+    try {
+      fs.mkdirSync(path.join(root, 'lib'))
+      fs.writeFileSync(path.join(root, 'lib/mocha.cjs'), '')
+      fs.writeFileSync(path.join(root, 'lib/runner.cjs'), '')
+
+      const eventLevelFailure = getMissingEventDiagnosis({
+        framework: {
+          framework: 'mocha',
+          project: {
+            name: 'mocha',
+            root,
+          },
+        },
+        result: {
+          command: 'npm run test-smoke',
+          stdout: '> node ./bin/mocha.js --no-config test/smoke/smoke.spec.cjs\n  1 passing (1ms)',
+          stderr: '',
+        },
+        evidence: {
+          testSessionEvents: 0,
+          testModuleEvents: 0,
+          testSuiteEvents: 0,
+          testEvents: 0,
+        },
+      })
+
+      assert.strictEqual(eventLevelFailure.kind, 'framework-source-tree-runner')
+      assert.match(eventLevelFailure.summary, /framework source tree/)
+      assert.match(eventLevelFailure.recommendation, /installed supported framework package/)
+    } finally {
+      fs.rmSync(root, { force: true, recursive: true })
+    }
+  })
+
+  it('extracts concise test output summaries', () => {
+    assert.deepStrictEqual(summarizeTestOutput(`
+      sample suite
+        ✔ sample test
+
+      1 passing (2ms)
+    `), ['      1 passing (2ms)'])
+  })
+
+  it('explains when tests ran but debug output shows package-manager initialization only', () => {
+    const diagnosis = getDebugAwareDiagnosis('No Test Optimization test events reached the fake intake.', {
+      commandOutputSummary: ['1 passing (2ms)'],
+      eventLevelFailure: {
+        kind: 'no-test-optimization-events',
+      },
+      preflight: {
+        observedTestCount: 1,
+      },
+      debugRerun: {
+        ran: true,
+        testSessionEvents: 0,
+        testModuleEvents: 0,
+        testSuiteEvents: 0,
+        testEvents: 0,
+        debugLines: [
+          'dd-trace is not initialized in a package manager.',
+        ],
+        stdoutExcerpt: [
+          '1 passing (1ms)',
+        ],
+      },
+    })
+
+    assert.strictEqual(diagnosis.kind, 'tests-ran-tracer-not-initialized')
+    assert.match(diagnosis.summary, /selected command ran tests/)
+    assert.match(diagnosis.summary, /dd-trace is not initialized in a package manager/)
+    assert.deepStrictEqual(diagnosis.signals.testOutputSummary, ['1 passing (2ms)', '1 passing (1ms)'])
   })
 })

@@ -56,7 +56,7 @@ function getStaticBlocker (framework, diagnosis) {
     }
   }
 
-  const staticVersionError = findStaticVersionError(definition, diagnosis)
+  const staticVersionError = findStaticVersionError(definition, diagnosis, framework, version)
   if (staticVersionError) {
     return {
       reason: staticVersionError.title,
@@ -76,14 +76,69 @@ function getUnsupportedFrameworkName (framework) {
   return UNSUPPORTED_FRAMEWORK_NAMES[framework.framework] || framework.framework || framework.id
 }
 
-function findStaticVersionError (definition, diagnosis) {
+function findStaticVersionError (definition, diagnosis, framework, manifestVersion) {
   const results = Array.isArray(diagnosis.results) ? diagnosis.results : []
   return results.find(result => {
     return result.status === 'error' &&
       typeof result.title === 'string' &&
       result.title.startsWith(`${definition.name} `) &&
-      result.title.includes(' is not supported')
+      result.title.includes(' is not supported') &&
+      staticVersionErrorAppliesToFramework(result, diagnosis, framework, definition, manifestVersion)
   })
+}
+
+function staticVersionErrorAppliesToFramework (result, diagnosis, framework, definition, manifestVersion) {
+  const locations = Array.isArray(result.locations) ? result.locations : []
+  if (locations.length === 0) {
+    return !(manifestVersion && satisfies(manifestVersion, definition.supportedRange))
+  }
+
+  return locations.some(location => locationMatchesFramework(location, diagnosis, framework))
+}
+
+function locationMatchesFramework (location, diagnosis, framework) {
+  const relativeLocation = normalizeRelativePath(location)
+  const exactLocations = getExactFrameworkLocations(diagnosis, framework)
+
+  if (exactLocations.has(relativeLocation)) return true
+
+  const projectRoot = getRelativeFrameworkProjectRoot(diagnosis, framework)
+  return projectRoot !== '' &&
+    (relativeLocation === projectRoot || relativeLocation.startsWith(`${projectRoot}/`))
+}
+
+function getExactFrameworkLocations (diagnosis, framework) {
+  const locations = new Set()
+  addRelativeFrameworkLocation(locations, diagnosis, framework.project?.packageJson)
+
+  for (const configFile of framework.project?.configFiles || []) {
+    addRelativeFrameworkLocation(locations, diagnosis, configFile)
+  }
+
+  return locations
+}
+
+function addRelativeFrameworkLocation (locations, diagnosis, location) {
+  if (typeof location !== 'string' || location.length === 0) return
+  locations.add(getRelativeLocation(diagnosis, location))
+}
+
+function getRelativeFrameworkProjectRoot (diagnosis, framework) {
+  return getRelativeLocation(diagnosis, framework.project?.root)
+}
+
+function getRelativeLocation (diagnosis, location) {
+  if (typeof location !== 'string' || location.length === 0) return ''
+  const root = typeof diagnosis.root === 'string' ? diagnosis.root : ''
+  const relativeLocation = path.isAbsolute(location) && root
+    ? path.relative(root, location)
+    : location
+
+  return normalizeRelativePath(relativeLocation)
+}
+
+function normalizeRelativePath (location) {
+  return location.split(path.sep).join('/').replace(/^\.\//, '')
 }
 
 function parseVersion (rawVersion) {

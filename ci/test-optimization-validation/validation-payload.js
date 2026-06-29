@@ -3,6 +3,11 @@
 const fs = require('fs')
 const zlib = require('zlib')
 
+const {
+  getCommandDetails,
+  serializeDisplayCommand,
+} = require('./command-runner')
+
 const VALIDATION_APP_PATH = 'ci/test/validation'
 
 const CHECKS = {
@@ -112,6 +117,7 @@ function buildCheck ({ result }) {
 
   const definition = CHECKS[result.scenario]
   if (!definition) return null
+  const commandInfo = readResultCommandInfo(result)
 
   return {
     id: definition.id,
@@ -123,8 +129,9 @@ function buildCheck ({ result }) {
         id: 'run-tests',
         name: 'Run tests',
         status: getRunTestsStatus(result),
-        command: readResultCommand(result),
+        command: commandInfo.command,
         exitCode: stringify(result.evidence.commandExitCode),
+        evidence: getRunTestsEvidence(commandInfo),
       },
       {
         id: getFeatureCheckStepId(result.scenario),
@@ -156,6 +163,7 @@ function buildBasicReportingCheck (result) {
   }
   const status = toUiStatus(result.status)
   const reason = result.status === 'fail' || result.status === 'error' ? result.diagnosis : undefined
+  const commandInfo = readResultCommandInfo(result)
 
   if (isCheckLevelFailure(result)) {
     return {
@@ -177,9 +185,13 @@ function buildBasicReportingCheck (result) {
         id: 'run-tests',
         name: 'Run tests',
         status: getRunTestsStatus(result),
-        command: readResultCommand(result),
+        command: commandInfo.command,
         exitCode: stringify(evidence.commandExitCode),
         result: getRunTestsResult(result),
+        evidence: {
+          outputSummary: evidence.commandOutputSummary,
+          ...getRunTestsEvidence(commandInfo),
+        },
       },
       {
         id: 'check-events',
@@ -192,6 +204,8 @@ function buildBasicReportingCheck (result) {
           commandFailure: evidence.commandFailure,
           eventLevelFailure: evidence.eventLevelFailure,
           debugRerun: evidence.debugRerun,
+          debugExcerpt: getDebugExcerpt(evidence.debugRerun),
+          localDiagnosis: evidence.localDiagnosis,
           reason,
           samples: evidence.samples,
         },
@@ -218,6 +232,31 @@ function getRunTestsResult (result) {
   if (evidence.commandExitMatchesPreflight === true) {
     return `exited ${evidence.commandExitCode}, matching dd-trace-less preflight`
   }
+  if (Array.isArray(evidence.commandOutputSummary) && evidence.commandOutputSummary.length > 0) {
+    return evidence.commandOutputSummary.join('\n')
+  }
+}
+
+function getDebugExcerpt (debugRerun) {
+  if (!debugRerun || debugRerun.ran !== true) return
+
+  const lines = [
+    ...(debugRerun.debugLines || []),
+    ...(debugRerun.stderrExcerpt || []),
+    ...(debugRerun.stdoutExcerpt || []),
+  ]
+  const unique = []
+  const seen = new Set()
+
+  for (const line of lines) {
+    const normalized = String(line || '').trim()
+    if (!normalized || seen.has(normalized)) continue
+    seen.add(normalized)
+    unique.push(line)
+    if (unique.length === 8) break
+  }
+
+  return unique.length > 0 ? unique : undefined
 }
 
 function getMissingLevels (events) {
@@ -252,12 +291,39 @@ function withReason (evidence, result) {
 }
 
 function readResultCommand (result) {
+  return readResultCommandInfo(result).command
+}
+
+function readResultCommandInfo (result) {
   const commandArtifact = (result.artifacts || []).find(artifact => artifact.endsWith('/command.json'))
-  if (!commandArtifact) return
+  if (!commandArtifact) return {}
 
   try {
-    return JSON.parse(fs.readFileSync(commandArtifact, 'utf8')).command
+    const artifact = JSON.parse(fs.readFileSync(commandArtifact, 'utf8'))
+    return {
+      command: artifact.displayCommand || sanitizeCommand(artifact.command),
+      details: artifact.commandDetails || getFallbackCommandDetails(artifact.command),
+    }
   } catch {}
+
+  return {}
+}
+
+function getRunTestsEvidence (commandInfo) {
+  if (!commandInfo.details) return
+  return {
+    commandDetails: commandInfo.details,
+  }
+}
+
+function sanitizeCommand (command) {
+  if (typeof command !== 'string' || !command) return command
+  return serializeDisplayCommand({ argv: command.split(/\s+/), usesShell: false })
+}
+
+function getFallbackCommandDetails (command) {
+  if (typeof command !== 'string' || !command) return
+  return getCommandDetails({ argv: command.split(/\s+/), usesShell: false })
 }
 
 function toUiStatus (status) {

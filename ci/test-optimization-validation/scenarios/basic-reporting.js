@@ -1,5 +1,8 @@
 'use strict'
 
+const fs = require('fs')
+const path = require('path')
+
 const {
   basicEventEvidence,
   error,
@@ -29,6 +32,7 @@ async function runBasicReporting ({ framework, intake, out, options }) {
       commandExitCode: result.exitCode,
       commandTimedOut: result.timedOut,
       commandDescription: framework.existingTestCommand?.description,
+      commandOutputSummary: summarizeTestOutput(result.stdout, result.stderr),
       manifestNotes: Array.isArray(framework.notes) ? framework.notes : [],
       preflight: summarizePreflight(framework.preflight),
       ...basicEventEvidence(events),
@@ -42,7 +46,7 @@ async function runBasicReporting ({ framework, intake, out, options }) {
         evidence.commandFailure = summarizeCommandFailure(result, evidence)
       }
 
-      return failWithDebugRerun({
+      return failBasicReportingWithDebugRerun({
         command: framework.existingTestCommand,
         configureIntake: () => intake.configure(),
         diagnosis: eventLevelFailure.summary,
@@ -82,7 +86,7 @@ async function runBasicReporting ({ framework, intake, out, options }) {
 
     evidence.commandFailure = summarizeCommandFailure(result, evidence)
     evidence.commandExitMatchesPreflight = false
-    return failWithDebugRerun({
+    return failBasicReportingWithDebugRerun({
       command: framework.existingTestCommand,
       configureIntake: () => intake.configure(),
       diagnosis: `${evidence.commandFailure.summary} The exit code did not match the dd-trace-less preflight run.`,
@@ -96,6 +100,90 @@ async function runBasicReporting ({ framework, intake, out, options }) {
     })
   } catch (err) {
     return error(framework, scenarioName, err)
+  }
+}
+
+async function failBasicReportingWithDebugRerun (options) {
+  const failure = await failWithDebugRerun(options)
+  return refineBasicReportingFailure(failure)
+}
+
+function refineBasicReportingFailure (failure) {
+  const evidence = failure.evidence || {}
+  const diagnosis = getDebugAwareDiagnosis(failure.diagnosis, evidence)
+  if (!diagnosis) return failure
+
+  failure.diagnosis = diagnosis.summary
+  evidence.localDiagnosis = diagnosis
+
+  if (evidence.eventLevelFailure) {
+    evidence.eventLevelFailure = {
+      ...evidence.eventLevelFailure,
+      summary: diagnosis.summary,
+      recommendation: diagnosis.recommendation,
+      signals: diagnosis.signals,
+    }
+  }
+
+  return failure
+}
+
+function getDebugAwareDiagnosis (currentDiagnosis, evidence) {
+  if (evidence.eventLevelFailure?.kind !== 'no-test-optimization-events') return null
+
+  const debugRerun = evidence.debugRerun
+  if (!debugRerun || debugRerun.ran !== true) return null
+
+  const testOutputSummary = summarizeTestOutput(
+    (evidence.commandOutputSummary || []).join('\n'),
+    (debugRerun.stdoutExcerpt || []).join('\n')
+  )
+  const testsRan = commandOutputShowsTestsRan(testOutputSummary) ||
+    Number(evidence.preflight?.observedTestCount) > 0
+  const debugLine = findDebugLine(debugRerun, /dd-trace is not initialized in a package manager/i)
+  const noDebugEvents = !hasAnyTestOptimizationEvent(debugRerun)
+
+  if (testsRan && debugLine && noDebugEvents) {
+    return {
+      kind: 'tests-ran-tracer-not-initialized',
+      summary: 'The selected command ran tests, but no Test Optimization events reached the fake intake. ' +
+        `The debug rerun printed "${debugLine}", which means the preload executed in the package-manager ` +
+        'wrapper without producing Test Optimization events from the test process.',
+      recommendation: 'Try a direct test-runner command, or verify NODE_OPTIONS with dd-trace/ci/init reaches the ' +
+        'final test process rather than only the package-manager wrapper.',
+      signals: getDebugSignals({
+        debugLine,
+        debugRerun,
+        testOutputSummary,
+      }),
+    }
+  }
+
+  if (testsRan && noDebugEvents) {
+    return {
+      kind: 'tests-ran-no-test-optimization-events',
+      summary: 'The selected command ran tests, but no Test Optimization events reached the fake intake. ' +
+        'The debug rerun did not emit Test Optimization events either.',
+      recommendation: 'Inspect the debug rerun excerpt for tracer initialization or intake connection errors, then ' +
+        'verify NODE_OPTIONS with dd-trace/ci/init reaches the final test process.',
+      signals: getDebugSignals({
+        debugRerun,
+        testOutputSummary,
+      }),
+    }
+  }
+
+  if (debugLine && noDebugEvents) {
+    return {
+      kind: 'tracer-not-initialized',
+      summary: `${currentDiagnosis} The debug rerun printed "${debugLine}".`,
+      recommendation: 'Verify NODE_OPTIONS with dd-trace/ci/init reaches the final test process.',
+      signals: getDebugSignals({
+        debugLine,
+        debugRerun,
+        testOutputSummary,
+      }),
+    }
   }
 }
 
@@ -124,6 +212,44 @@ function summarizePreflight (preflight) {
     observedTestCount: preflight.observedTestCount,
     stdoutSummary: preflight.stdoutSummary,
     stderrSummary: preflight.stderrSummary,
+  }
+}
+
+function summarizeTestOutput (stdout = '', stderr = '') {
+  return findInterestingLines(`${stdout}\n${stderr}`, [
+    /\b\d+\s+passing\b/i,
+    /\b\d+\s+pending\b/i,
+    /\b\d+\s+failing\b/i,
+    /\b\d+\s+passed\b/i,
+    /\b\d+\s+failed\b/i,
+    /\btests?\b.*\bpassed\b/i,
+    /\btests?\b.*\bfailed\b/i,
+  ], 8)
+}
+
+function commandOutputShowsTestsRan (lines) {
+  return lines.some(line => {
+    return /\b\d+\s+(?:passing|passed)\b/i.test(line) ||
+      /\btests?\b.*\bpassed\b/i.test(line)
+  })
+}
+
+function findDebugLine (debugRerun, pattern) {
+  const lines = [
+    ...(debugRerun.debugLines || []),
+    ...(debugRerun.stdoutExcerpt || []),
+    ...(debugRerun.stderrExcerpt || []),
+  ]
+  return lines.find(line => pattern.test(line))
+}
+
+function getDebugSignals ({ debugLine, debugRerun, testOutputSummary }) {
+  return {
+    debugLine,
+    debugLines: debugRerun.debugLines || [],
+    stdoutExcerpt: debugRerun.stdoutExcerpt || [],
+    stderrExcerpt: debugRerun.stderrExcerpt || [],
+    testOutputSummary,
   }
 }
 
@@ -165,6 +291,7 @@ function summarizeCommandFailure (result, evidence) {
 function getMissingEventDiagnosis ({ framework, result, evidence }) {
   const missingLevels = getMissingLevels(evidence)
   const vitestBenchmark = detectVitestBenchmark(framework, result)
+  const frameworkSourceTreeRunner = detectFrameworkSourceTreeRunner(framework, result)
 
   if (vitestBenchmark) {
     return {
@@ -176,6 +303,19 @@ function getMissingEventDiagnosis ({ framework, result, evidence }) {
         'per-test events. Choose a normal Vitest test command such as "vitest run <test-file>" for validation.',
       recommendation: 'Replace the selected command with a normal Vitest test command; do not use `vitest bench` ' +
         'or benchmark-only `*.bench.*` files for Test Optimization validation.',
+    }
+  }
+
+  if (frameworkSourceTreeRunner && !hasAnyTestOptimizationEvent(evidence)) {
+    return {
+      kind: 'framework-source-tree-runner',
+      missingLevels,
+      signals: frameworkSourceTreeRunner.signals,
+      summary: 'The selected command ran tests from the test framework source tree, but no Test Optimization ' +
+        'events reached the fake intake. This command is not equivalent to a customer project running an ' +
+        'installed test-runner package.',
+      recommendation: 'Choose a project test command that uses an installed supported framework package. If this ' +
+        'repository is the framework itself, treat this entry as not runnable for Test Optimization validation.',
     }
   }
 
@@ -245,6 +385,41 @@ function detectVitestBenchmark (framework, result) {
   return signals.length > 0 ? { signals } : null
 }
 
+function detectFrameworkSourceTreeRunner (framework, result) {
+  if (framework.framework !== 'mocha') return null
+
+  const projectName = framework.project?.name || ''
+  const commandAndOutput = [
+    result.command || '',
+    result.stdout || '',
+    result.stderr || '',
+  ].join('\n')
+  const signals = []
+
+  if (projectName === 'mocha') {
+    signals.push('repository package name is `mocha`')
+  }
+  if (/\bnode\s+\.\/bin\/mocha\.js\b/.test(commandAndOutput) ||
+    /\bnode\s+bin\/mocha\.js\b/.test(commandAndOutput)) {
+    signals.push('selected command invokes the repository-local `bin/mocha.js` source-tree runner')
+  }
+  if (fileExists(framework.project?.root, 'lib/mocha.cjs') && fileExists(framework.project?.root, 'lib/runner.cjs')) {
+    signals.push('repository contains Mocha source files `lib/mocha.cjs` and `lib/runner.cjs`')
+  }
+
+  return signals.length >= 2 ? { signals } : null
+}
+
+function fileExists (root, filename) {
+  if (!root) return false
+
+  try {
+    return fs.existsSync(path.join(root, filename))
+  } catch {
+    return false
+  }
+}
+
 function getFailureSummary ({ buildErrors, assertionFailures, exitCode, testEventsWereReported, timedOut }) {
   if (timedOut) {
     return 'The selected test command timed out before payload validation could pass.'
@@ -270,7 +445,10 @@ function getFailureSummary ({ buildErrors, assertionFailures, exitCode, testEven
 }
 
 module.exports = {
+  getDebugAwareDiagnosis,
   getMissingEventDiagnosis,
+  refineBasicReportingFailure,
   runBasicReporting,
   shouldRunDebugRerun,
+  summarizeTestOutput,
 }

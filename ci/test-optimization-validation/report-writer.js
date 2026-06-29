@@ -84,8 +84,16 @@ function renderMarkdown (report) {
     '',
   ]
 
-  for (const result of report.results) {
+  for (const result of getLiveValidationResults(report.results)) {
     lines.push(`- ${result.status.toUpperCase()} ${result.frameworkId} ${result.scenario}: ${result.diagnosis}`)
+  }
+
+  const diagnosticResults = getDiagnosticOnlyResults(report.results)
+  if (diagnosticResults.length > 0) {
+    lines.push('', '## Diagnostic-only and Blocked Frameworks', '')
+    for (const result of diagnosticResults) {
+      lines.push(`- ${result.status.toUpperCase()} ${result.frameworkId}: ${result.diagnosis}`)
+    }
   }
 
   lines.push('', '## Framework Context', '')
@@ -110,10 +118,20 @@ function renderMarkdown (report) {
 }
 
 function renderHtml (report) {
-  const summaryItems = report.results.map(result => {
+  const summaryItems = getLiveValidationResults(report.results).map(result => {
     return `<li><strong>${escapeHtml(result.status.toUpperCase())}</strong> ${escapeHtml(result.frameworkId)} ` +
       `${escapeHtml(result.scenario)} - ${escapeHtml(result.diagnosis)}</li>`
   }).join('\n')
+  const diagnosticItems = getDiagnosticOnlyResults(report.results).map(result => {
+    return `<li><strong>${escapeHtml(result.status.toUpperCase())}</strong> ${escapeHtml(result.frameworkId)} - ` +
+      `${escapeHtml(result.diagnosis)}</li>`
+  }).join('\n')
+  const diagnosticSection = diagnosticItems
+    ? `<h2>Diagnostic-only and Blocked Frameworks</h2>
+    <ul>
+      ${diagnosticItems}
+    </ul>`
+    : ''
   const contextItems = report.validation.map(validation => {
     return `<li><code>${escapeHtml(validation.frameworkId)}</code>: ` +
       `${escapeHtml(formatFrameworkContext(validation.framework))}</li>`
@@ -144,6 +162,7 @@ function renderHtml (report) {
     <ul>
       ${summaryItems}
     </ul>
+    ${diagnosticSection}
     <h2>Framework Context</h2>
     <ul>
       ${contextItems}
@@ -185,14 +204,43 @@ function formatFrameworkContext (framework, options = {}) {
 
 function renderConsoleSummary (results, out) {
   const lines = ['', 'Datadog Test Optimization validation summary:']
-  for (const result of results) {
+  const liveResults = getLiveValidationResults(results)
+  const diagnosticResults = getDiagnosticOnlyResults(results)
+
+  if (liveResults.length > 0) {
+    lines.push('Supported live validation:')
+  }
+  for (const result of liveResults) {
     lines.push(`${result.status.toUpperCase()} ${result.frameworkId} ${result.scenario} - ${result.diagnosis}`)
   }
+
+  if (diagnosticResults.length > 0) {
+    lines.push('Diagnostic-only or blocked frameworks:')
+  }
+  for (const result of diagnosticResults) {
+    lines.push(`${result.status.toUpperCase()} ${result.frameworkId} - ${result.diagnosis}`)
+  }
+
   lines.push(
     `Artifacts: ${out}`,
     `Validation URLs: ${path.join(out, 'validation-urls.txt')}`
   )
   return lines.join('\n')
+}
+
+function getLiveValidationResults (results) {
+  return results.filter(result => !isDiagnosticOnlyResult(result))
+}
+
+function getDiagnosticOnlyResults (results) {
+  return results.filter(isDiagnosticOnlyResult)
+}
+
+function isDiagnosticOnlyResult (result) {
+  if (result.scenario !== 'all') return false
+  return result.evidence?.frameworkStatus ||
+    result.evidence?.staticDiagnosis ||
+    result.evidence?.intakeStarted === false
 }
 
 function stripPrivateFields (manifest) {

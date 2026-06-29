@@ -151,6 +151,12 @@ validator injects Test Optimization initialization itself.
 - A generated test strategy is `verified` only if you created the temporary file or files, ran at
   least the stable passing generated scenario without Datadog instrumentation, and deleted the files
   afterward.
+- Before choosing generated test syntax and file extension, inspect the nearest `package.json` that
+  will own the generated file and mirror the module format used by nearby tests. If that package
+  treats `.js` as CommonJS, use CommonJS syntax in `.js` or ESM syntax in `.mjs`. If it treats `.js`
+  as ESM, use ESM syntax in `.js` or CommonJS syntax in `.cjs`. Do not discover this by handing an
+  obviously mismatched generated file to the validator; fix the syntax/extension during the
+  dd-trace-less generated-test preflight.
 - If you cannot verify generated tests, mark the strategy as `proposed` or `not_possible`.
 - Write only valid JSON to `./dd-test-optimization-validation-manifest.json`.
 
@@ -549,7 +555,9 @@ Include:
 - Path to `./dd-test-optimization-validation-manifest.json`
 - Path to `./dd-test-optimization-validation-results`
 - Validator exit code
-- Pass/fail summary by framework
+- Pass/fail summary by framework, separating supported live validation from diagnostic-only or
+  unsupported framework entries. If a supported framework passed all checks but an unsupported
+  framework made the overall validator exit non-zero, state both facts explicitly.
 - Pass/fail summary by scenario
 - Any frameworks that were detected but not runnable
 - Any frameworks that were runnable but unsupported by the validator

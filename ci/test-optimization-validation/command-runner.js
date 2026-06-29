@@ -15,6 +15,8 @@ function runCommand (command, { env = {}, outDir, label, verbose = false } = {})
   const result = {
     label,
     command: serializeCommand(command),
+    displayCommand: serializeDisplayCommand(command),
+    commandDetails: getCommandDetails(command),
     cwd: command.cwd,
     exitCode: null,
     signal: null,
@@ -83,6 +85,8 @@ function runCommand (command, { env = {}, outDir, label, verbose = false } = {})
       fs.writeFileSync(result.artifacts.stderr, result.stderr)
       fs.writeFileSync(result.artifacts.command, `${JSON.stringify({
         command: result.command,
+        displayCommand: result.displayCommand,
+        commandDetails: result.commandDetails,
         cwd: result.cwd,
         exitCode: result.exitCode,
         signal: result.signal,
@@ -148,4 +152,104 @@ function serializeCommand (command) {
   return command.usesShell ? command.shellCommand : command.argv.join(' ')
 }
 
-module.exports = { runCommand, buildDatadogEnv, serializeCommand, withCiPreloads, mergeNodeOptions }
+function serializeDisplayCommand (command) {
+  if (typeof command.displayCommand === 'string' && command.displayCommand.trim()) {
+    return command.displayCommand.trim()
+  }
+
+  if (command.usesShell) return command.shellCommand
+
+  return getDisplayArgv(command.argv).join(' ')
+}
+
+function getCommandDetails (command) {
+  if (command.usesShell) return
+
+  const details = getDisplayDetails(command.argv)
+  if (!details.exactCommandCollapsed) return
+
+  return details
+}
+
+function getDisplayArgv (argv) {
+  const { prefixAssignments, commandIndex, corepackIndex } = parseArgv(argv)
+  if (corepackIndex !== -1) return prefixAssignments.concat(argv.slice(corepackIndex + 1))
+  return prefixAssignments.concat(argv.slice(commandIndex))
+}
+
+function getDisplayDetails (argv) {
+  const { commandIndex, corepackIndex, pathAdjusted } = parseArgv(argv)
+  const displayArgv = getDisplayArgv(argv)
+  const details = {
+    exactCommandCollapsed: displayArgv.join(' ') !== argv.join(' '),
+  }
+
+  if (pathAdjusted) details.pathAdjusted = true
+
+  if (corepackIndex !== -1) {
+    details.runtimeWrapper = 'node/corepack'
+    details.packageManager = argv[corepackIndex + 1]
+  } else if (commandIndex > 0) {
+    details.runtimeWrapper = 'env'
+  }
+
+  return details
+}
+
+function parseArgv (argv) {
+  const result = {
+    prefixAssignments: [],
+    commandIndex: 0,
+    corepackIndex: -1,
+    pathAdjusted: false,
+  }
+
+  if (!Array.isArray(argv) || argv.length === 0) return result
+
+  let index = 0
+  if (isEnvExecutable(argv[index])) {
+    index++
+    while (index < argv.length && isEnvAssignment(argv[index])) {
+      if (argv[index].startsWith('PATH=')) {
+        result.pathAdjusted = true
+      } else {
+        result.prefixAssignments.push(argv[index])
+      }
+      index++
+    }
+  }
+
+  result.commandIndex = index
+
+  if (isNodeExecutable(argv[index]) && isCorepackScript(argv[index + 1]) && argv[index + 2]) {
+    result.corepackIndex = index + 1
+  }
+
+  return result
+}
+
+function isEnvExecutable (value) {
+  return value === 'env' || value.endsWith('/env')
+}
+
+function isEnvAssignment (value) {
+  return /^[A-Za-z_][A-Za-z0-9_]*=/.test(value)
+}
+
+function isNodeExecutable (value = '') {
+  return value === 'node' || value.endsWith('/node')
+}
+
+function isCorepackScript (value = '') {
+  return value === 'corepack' || value.endsWith('/corepack') || value.endsWith('/corepack.js')
+}
+
+module.exports = {
+  runCommand,
+  buildDatadogEnv,
+  getCommandDetails,
+  serializeCommand,
+  serializeDisplayCommand,
+  withCiPreloads,
+  mergeNodeOptions,
+}

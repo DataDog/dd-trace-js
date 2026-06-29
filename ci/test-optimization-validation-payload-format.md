@@ -129,6 +129,27 @@ Each step has this general shape:
 Fields such as `command`, `exitCode`, `result`, `snippet`, and `evidence` are present only when
 they apply to that step.
 
+`command` is a display command, not necessarily the exact spawned argv. The validator keeps the
+exact command, cwd, exit code, and timing in the local `runs/*/*/command.json` artifacts. If the
+selected command required runtime plumbing such as a `/usr/bin/env PATH=...` prefix plus a
+`node .../corepack.js pnpm ...` wrapper, the payload collapses that to the user-facing
+package-manager command and records the collapse in `evidence.commandDetails`:
+
+```json
+{
+  "id": "run-tests",
+  "command": "pnpm vitest run packages/zod/src/index.test.ts",
+  "evidence": {
+    "commandDetails": {
+      "exactCommandCollapsed": true,
+      "pathAdjusted": true,
+      "runtimeWrapper": "node/corepack",
+      "packageManager": "pnpm"
+    }
+  }
+}
+```
+
 ## Basic Reporting Evidence
 
 Basic reporting includes request counts, event counts, missing event levels, decode errors, and up
@@ -158,6 +179,15 @@ to four compact samples: one per event level.
     "ran": true,
     "commandExitCode": 0,
     "debugLines": []
+  },
+  "debugExcerpt": [
+    "dd-trace is not initialized in a package manager.",
+    "1 passing (1ms)"
+  ],
+  "localDiagnosis": {
+    "kind": "tests-ran-tracer-not-initialized",
+    "summary": "The selected command ran tests, but no Test Optimization events reached the fake intake.",
+    "recommendation": "Try a direct test-runner command, or verify NODE_OPTIONS reaches the final test process."
   },
   "samples": [
     { "level": "test session", "test.command": "npm test -- test/sum.spec.js" },
@@ -190,9 +220,17 @@ contains a structured local cause:
   per-test hooks not firing for the selected command.
 - `kind: "no-test-optimization-events"` means no Test Optimization event levels reached the local
   fake intake.
+- `kind: "framework-source-tree-runner"` means the selected command ran the test framework's own
+  source-tree runner, such as `node ./bin/mocha.js` inside the Mocha repository, rather than an
+  installed framework package in a customer project.
+- `localDiagnosis.kind: "tests-ran-tracer-not-initialized"` means the selected command output proves
+  tests ran, but the debug rerun still produced no Test Optimization events and showed tracer
+  initialization evidence such as `dd-trace is not initialized in a package manager.`
 
 For ambiguous successful-command failures, the validator reruns the same command once with
 `DD_TRACE_DEBUG=1` and `DD_TRACE_LOG_LEVEL=debug`. Compact excerpts appear in `debugRerun`.
+The most useful user-facing lines are duplicated into `debugExcerpt`, and the `run-tests` step
+`result` contains a compact test-output summary such as `1 passing (2ms)` when one can be inferred.
 Recognized non-test command shapes such as `vitest-benchmark` do not trigger the debug rerun because
 the local cause is already known and benchmark reruns can be slow.
 
