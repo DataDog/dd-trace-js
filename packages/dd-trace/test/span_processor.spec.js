@@ -166,7 +166,7 @@ describe('SpanProcessor', () => {
 
   it('should erase the trace and stop execution when tracing=false', () => {
     const config = {
-      tracing: false,
+      DD_TRACE_ENABLED: false,
       stats: {
         DD_TRACE_STATS_COMPUTATION_ENABLED: false,
       },
