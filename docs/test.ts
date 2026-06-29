@@ -46,6 +46,7 @@ tracer.init({
   version: '1.0.0',
   url: 'http://localhost',
   runtimeMetrics: true,
+  sourceMapsEnabled: true,
   experimental: {
     exporter: 'log'
   },

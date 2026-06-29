@@ -28,11 +28,14 @@
 /integration-tests/code-origin-remote-config.spec.js @DataDog/debugger-nodejs
 /integration-tests/code-origin.spec.js @DataDog/debugger-nodejs
 /integration-tests/debugger/ @DataDog/debugger-nodejs
+/integration-tests/source-maps/ @DataDog/debugger-nodejs
 
 /packages/datadog-code-origin/ @DataDog/debugger-nodejs
 /packages/datadog-plugin-*/**/code_origin.* @DataDog/debugger-nodejs
 /packages/dd-trace/src/debugger/ @DataDog/debugger-nodejs
+/packages/dd-trace/src/source-maps/ @DataDog/debugger-nodejs
 /packages/dd-trace/test/debugger/ @DataDog/debugger-nodejs
+/packages/dd-trace/test/source-maps/ @DataDog/debugger-nodejs
 /packages/dd-trace/test/plugins/util/stacktrace.spec.js @DataDog/debugger-nodejs
 
 # Serverless

@@ -1292,6 +1292,16 @@ declare namespace tracer {
     peerServiceMapping?: { [key: string]: string }
 
     /**
+     * Whether to remap error stack traces to their original source via source maps. Requires Node.js
+     * to be able to parse source maps: automatic on Node.js >=22.14, otherwise the process must be
+     * started with `--enable-source-maps`. No effect on older runtimes without that flag.
+     * @default true
+     * @env DD_TRACE_SOURCE_MAPS_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    sourceMapsEnabled?: boolean
+
+    /**
      * Controls the naming schema version used for spans.
      * @default 'v0'
      * @env DD_TRACE_SPAN_ATTRIBUTE_SCHEMA
