@@ -2918,6 +2918,53 @@ describe('Config', () => {
     assert.strictEqual(config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED, false)
   })
 
+  describe('graphql plugin config env vars', () => {
+    it('parses the defaults onto the config object', () => {
+      const config = getConfig()
+
+      assert.strictEqual(config.DD_TRACE_GRAPHQL_COLLAPSE, true)
+      assert.strictEqual(config.DD_TRACE_GRAPHQL_DEPTH, -1)
+      assert.deepStrictEqual(config.DD_TRACE_GRAPHQL_VARIABLES, [])
+      assert.deepStrictEqual(config.DD_TRACE_GRAPHQL_ERROR_EXTENSIONS, [])
+    })
+
+    it('parses DD_TRACE_GRAPHQL_COLLAPSE as a boolean', () => {
+      process.env.DD_TRACE_GRAPHQL_COLLAPSE = 'false'
+
+      assert.strictEqual(getConfig().DD_TRACE_GRAPHQL_COLLAPSE, false)
+    })
+
+    it('parses DD_TRACE_GRAPHQL_DEPTH as an integer', () => {
+      process.env.DD_TRACE_GRAPHQL_DEPTH = '2'
+
+      assert.strictEqual(getConfig().DD_TRACE_GRAPHQL_DEPTH, 2)
+    })
+
+    it('accepts the depth=0 boundary', () => {
+      process.env.DD_TRACE_GRAPHQL_DEPTH = '0'
+
+      assert.strictEqual(getConfig().DD_TRACE_GRAPHQL_DEPTH, 0)
+    })
+
+    it('rejects a non-integer depth and falls back to the default', () => {
+      process.env.DD_TRACE_GRAPHQL_DEPTH = 'foo'
+
+      assert.strictEqual(getConfig().DD_TRACE_GRAPHQL_DEPTH, -1)
+    })
+
+    it('rejects an out-of-contract negative depth and falls back to the default', () => {
+      process.env.DD_TRACE_GRAPHQL_DEPTH = '-5'
+
+      assert.strictEqual(getConfig().DD_TRACE_GRAPHQL_DEPTH, -1)
+    })
+
+    it('parses DD_TRACE_GRAPHQL_VARIABLES as an array', () => {
+      process.env.DD_TRACE_GRAPHQL_VARIABLES = 'foo,bar'
+
+      assert.deepStrictEqual(getConfig().DD_TRACE_GRAPHQL_VARIABLES, ['foo', 'bar'])
+    })
+  })
+
   describe('flushInterval in Lambda', () => {
     afterEach(() => {
       existsSyncReturn = undefined
