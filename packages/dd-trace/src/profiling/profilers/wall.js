@@ -3,9 +3,11 @@
 const dc = require('dc-polyfill')
 
 const { storage } = require('../../../../datadog-core')
+const log = require('../../log')
 const runtimeMetrics = require('../../runtime_metrics')
 const telemetryMetrics = require('../../telemetry/metrics')
 const { isWebServerSpan, endpointNameFromTags, getStartedSpans } = require('../webspan-utils')
+const { SAMPLING_INTERVAL } = require('../constants')
 
 const {
   END_TIMESTAMP_LABEL,
@@ -16,6 +18,8 @@ const {
   encodeProfileAsync,
 } = require('./shared')
 const TRACE_ENDPOINT_LABEL = 'trace endpoint'
+
+/** @typedef {import('../../config/config-base')} TracerConfig */
 
 let beforeCh
 const enterCh = dc.channel('dd-trace:storage:enter')
@@ -107,14 +111,17 @@ class NativeWallProfiler {
   #asyncContextFrameEnabled = false
   #captureSpanData = false
   #codeHotspotsEnabled = false
+  #contextCountGaugeUpdater
   #cpuProfilingEnabled = false
+  #currentContext
   #customLabelsActive = false
   #customLabelKeys
   #endpointCollectionEnabled = false
   #flushIntervalMillis = 0
-  #logger
+  #lastSampleCount = 0
   #mapper
   #pprof
+  #profilerState
   #samplingIntervalMicros = 0
   #started = false
   #telemetryHeartbeatIntervalMillis = 0
@@ -130,18 +137,20 @@ class NativeWallProfiler {
 
   get type () { return 'wall' }
 
-  constructor (options = {}) {
-    this.#asyncContextFrameEnabled = !!options.asyncContextFrameEnabled
-    this.#codeHotspotsEnabled = !!options.codeHotspotsEnabled
-    this.#cpuProfilingEnabled = !!options.cpuProfilingEnabled
-    this.#endpointCollectionEnabled = !!options.endpointCollectionEnabled
-    this.#flushIntervalMillis = options.flushInterval || 60 * 1e3 // 60 seconds
-    this.#logger = options.logger
-    // TODO: Remove default value. It is only used in testing.
-    this.#samplingIntervalMicros = (options.samplingInterval || 1e3 / 99) * 1000
-    this.#telemetryHeartbeatIntervalMillis = options.heartbeatInterval || 60 * 1e3 // 60 seconds
-    this.#timelineEnabled = !!options.timelineEnabled
-    this.#v8ProfilerBugWorkaroundEnabled = !!options.v8ProfilerBugWorkaroundEnabled
+  /**
+   * @param {TracerConfig} config
+   * @param {{ asyncContextFrameEnabled: boolean, flushInterval: number }} runtime
+   */
+  constructor (config, { asyncContextFrameEnabled, flushInterval }) {
+    this.#asyncContextFrameEnabled = asyncContextFrameEnabled
+    this.#codeHotspotsEnabled = config.DD_PROFILING_CODEHOTSPOTS_ENABLED
+    this.#cpuProfilingEnabled = config.DD_PROFILING_CPU_ENABLED
+    this.#endpointCollectionEnabled = config.DD_PROFILING_ENDPOINT_COLLECTION_ENABLED
+    this.#flushIntervalMillis = flushInterval
+    this.#samplingIntervalMicros = SAMPLING_INTERVAL * 1000
+    this.#telemetryHeartbeatIntervalMillis = config.telemetry.DD_TELEMETRY_HEARTBEAT_INTERVAL
+    this.#timelineEnabled = config.DD_PROFILING_TIMELINE_ENABLED
+    this.#v8ProfilerBugWorkaroundEnabled = config.DD_PROFILING_V8_PROFILER_BUG_WORKAROUND
 
     // We need to capture span data into the sample context for either code hotspots
     // or endpoint collection.
@@ -193,8 +202,8 @@ class NativeWallProfiler {
       }
 
       if (this.#captureSpanData) {
-        this._profilerState = this.#pprof.time.getState()
-        this._lastSampleCount = 0
+        this.#profilerState = this.#pprof.time.getState()
+        this.#lastSampleCount = 0
 
         ensureChannelsActivated(this.#asyncContextFrameEnabled)
 
@@ -218,12 +227,12 @@ class NativeWallProfiler {
     const asyncContextsLiveGauge = profilerTelemetryMetrics.gauge('wall.async_contexts_live')
     const asyncContextsUsedGauge = profilerTelemetryMetrics.gauge('wall.async_contexts_used')
 
-    this._contextCountGaugeUpdater = setInterval(() => {
+    this.#contextCountGaugeUpdater = setInterval(() => {
       const { totalAsyncContextCount, usedAsyncContextCount } = this.#pprof.time.getMetrics()
       asyncContextsLiveGauge.mark(totalAsyncContextCount)
       asyncContextsUsedGauge.mark(usedAsyncContextCount)
     }, this.#telemetryHeartbeatIntervalMillis)
-    this._contextCountGaugeUpdater.unref?.()
+    this.#contextCountGaugeUpdater.unref?.()
   }
 
   #enter () {
@@ -247,6 +256,7 @@ class NativeWallProfiler {
     // context -- we simply can't tell which one it might've been across all
     // possible async context frames.
     if (this.#asyncContextFrameEnabled) {
+      const current = this.#pprof.time.getContext()
       if (this.#customLabelsActive) {
         // Custom labels may be active in this async context. The current CPED
         // context could be a 2-element array [profilingContext, customLabels].
@@ -254,7 +264,6 @@ class NativeWallProfiler {
         // This flag is monotonic (once set, stays true) because async
         // continuations from runWithLabels can fire at any time after the
         // synchronous runWithLabels call has returned.
-        const current = this.#pprof.time.getContext()
         if (Array.isArray(current)) {
           if (current[0] !== sampleContext) {
             this.#pprof.time.setContext([sampleContext, current[1]])
@@ -262,20 +271,26 @@ class NativeWallProfiler {
         } else if (current !== sampleContext) {
           this.#pprof.time.setContext(sampleContext)
         }
-      } else {
+      // Every setContext() call in ACF mode allocates a fresh contextHolder
+      // (a node::ObjectWrap with its own v8::Global<v8::Value>) in the native
+      // profiler. Skip the call if the CPED already holds this sampleContext,
+      // which is the common case when the same span is repeatedly activated:
+      // #getProfilingContext caches profilingContext on span[ProfilingContext],
+      // so identity comparison short-circuits.
+      } else if (current !== sampleContext) {
         this.#pprof.time.setContext(sampleContext)
       }
     } else {
-      const sampleCount = this._profilerState[kSampleCount]
-      if (sampleCount !== this._lastSampleCount) {
-        this._lastSampleCount = sampleCount
-        const context = this._currentContext.ref
+      const sampleCount = this.#profilerState[kSampleCount]
+      if (sampleCount !== this.#lastSampleCount) {
+        this.#lastSampleCount = sampleCount
+        const context = this.#currentContext.ref
         this.#setNewContext()
 
         updateContext(context)
       }
 
-      this._currentContext.ref = sampleContext
+      this.#currentContext.ref = sampleContext
     }
   }
 
@@ -294,7 +309,7 @@ class NativeWallProfiler {
 
       let webTags
       if (this.#endpointCollectionEnabled) {
-        const tags = context._tags
+        const tags = context.getTags()
         if (isWebServerSpan(tags)) {
           webTags = tags
         } else {
@@ -317,10 +332,10 @@ class NativeWallProfiler {
   }
 
   #setNewContext () {
-    this._currentContext = {
+    this.#currentContext = {
       ref: {},
     }
-    this.#pprof.time.setContext(this._currentContext)
+    this.#pprof.time.setContext(this.#currentContext)
   }
 
   #spanFinished (span) {
@@ -333,7 +348,7 @@ class NativeWallProfiler {
     if (!this.#started) return
     const profilingContext = span[ProfilingContext]
     if (profilingContext === undefined || profilingContext.webTags !== undefined) return
-    const tags = span.context()._tags
+    const tags = span.context().getTags()
     if (isWebServerSpan(tags)) {
       profilingContext.webTags = tags
     }
@@ -342,7 +357,7 @@ class NativeWallProfiler {
   #reportV8bug (maybeBug) {
     const tag = `v8_profiler_bug_workaround_enabled:${this.#v8ProfilerBugWorkaroundEnabled}`
     const metric = `v8_cpu_profiler${maybeBug ? '_maybe' : ''}_stuck_event_loop`
-    this.#logger?.warn(`Wall profiler: ${maybeBug ? 'possible ' : ''}v8 profiler stuck event loop detected.`)
+    log.warn('Wall profiler: %sv8 profiler stuck event loop detected.', maybeBug ? 'possible ' : '')
     // report as runtime metric (can be removed in the future when telemetry is mature)
     runtimeMetrics.increment(`runtime.node.profiler.${metric}`, tag, true)
     // report as telemetry metric
@@ -355,7 +370,7 @@ class NativeWallProfiler {
     if (this.#captureSpanData && !this.#asyncContextFrameEnabled) {
       // update last sample context if needed
       this.#enter()
-      this._lastSampleCount = 0
+      this.#lastSampleCount = 0
     }
 
     // Mark thread labels and trace endpoint label as good deduplication candidates
@@ -377,7 +392,7 @@ class NativeWallProfiler {
         this.#reportV8bug(v8BugDetected === 1)
       }
     } else {
-      clearInterval(this._contextCountGaugeUpdater)
+      clearInterval(this.#contextCountGaugeUpdater)
       if (this.#captureSpanData) {
         if (!this.#asyncContextFrameEnabled) {
           beforeCh.unsubscribe(this.#boundEnter)
@@ -387,7 +402,7 @@ class NativeWallProfiler {
         if (this.#endpointCollectionEnabled) {
           tagsUpdateCh.unsubscribe(this.#boundSpanTagsUpdated)
         }
-        this._profilerState = undefined
+        this.#profilerState = undefined
       }
       this.#started = false
     }

@@ -6,11 +6,9 @@ const v8 = require('v8')
 const os = require('os')
 const process = require('process')
 const { performance, PerformanceObserver, monitorEventLoopDelay } = require('perf_hooks')
-const { DogStatsDClient, MetricsAggregationClient } = require('../dogstatsd')
 const log = require('../log')
-
 const { NODE_MAJOR } = require('../../../../version')
-const processTags = require('../process-tags')
+const { createMetricsClient } = require('./client')
 
 const eventLoopDelayResolution = 4
 
@@ -37,18 +35,11 @@ module.exports = {
     this.stop()
     // The agent expects a flush every ten seconds, so this is for tests only.
     const flushIntervalMs = config.DD_RUNTIME_METRICS_FLUSH_INTERVAL
-    const clientConfig = DogStatsDClient.generateClientConfig(config)
-
-    if (config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED) {
-      for (const tag of processTags.tagsArray) {
-        clientConfig.tags.push(tag)
-      }
-    }
 
     const trackEventLoop = config.runtimeMetrics.eventLoop !== false
     const trackGc = config.runtimeMetrics.gc !== false
 
-    client = new MetricsAggregationClient(new DogStatsDClient(clientConfig))
+    client = createMetricsClient(config)
 
     if (trackGc) {
       startGCObserver()

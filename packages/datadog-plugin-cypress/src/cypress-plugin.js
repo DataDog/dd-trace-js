@@ -4,12 +4,14 @@
 const { performance } = require('perf_hooks')
 const dateNow = Date.now
 
+const { createCoverageMap } = require('../../../vendor/dist/istanbul-lib-coverage')
 const satisfies = require('../../../vendor/dist/semifies')
 const {
   TEST_STATUS,
   TEST_IS_RUM_ACTIVE,
   TEST_CODE_OWNERS,
   getTestEnvironmentMetadata,
+  getTestLevelsMetadataTags,
   CI_APP_ORIGIN,
   getTestParentSpan,
   getCodeOwnersFileEntries,
@@ -22,10 +24,16 @@ const {
   TEST_MODULE_ID,
   TEST_SESSION_ID,
   TEST_COMMAND,
+  TEST_LEVELS_METADATA,
   TEST_MODULE,
   TEST_SOURCE_START,
   finishAllTraceSpans,
-  getCoveredFilenamesFromCoverage,
+  getCoveredFilesFromCoverage,
+  getExecutableFilesFromCoverage,
+  getRelativeCoverageFiles,
+  getTestCoverageLinesPercentage,
+  applySkippedCoverageToCoverage,
+  mergeCoverage,
   getTestSuitePath,
   addIntelligentTestRunnerSpanTags,
   TEST_SKIPPED_BY_ITR,
@@ -40,7 +48,6 @@ const {
   TEST_EARLY_FLAKE_ABORT_REASON,
   getTestSessionName,
   TEST_SESSION_NAME,
-  TEST_LEVEL_EVENT_TYPES,
   TEST_RETRY_REASON,
   DD_TEST_IS_USER_PROVIDED_SERVICE,
   TEST_MANAGEMENT_IS_QUARANTINED,
@@ -74,6 +81,7 @@ const {
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
 const { ORIGIN_KEY, COMPONENT } = require('../../dd-trace/src/constants')
+const { RESOURCE_NAME } = require('../../../ext/tags')
 const getConfig = require('../../dd-trace/src/config')
 const { appClosing: appClosingTelemetry } = require('../../dd-trace/src/telemetry')
 const log = require('../../dd-trace/src/log')
@@ -201,13 +209,17 @@ function getSkippableTests (tracer, testConfiguration) {
     if (!tracer._tracer._exporter?.getSkippableSuites) {
       return resolve({ err: new Error('Test Optimization was not initialized correctly') })
     }
-    tracer._tracer._exporter.getSkippableSuites(testConfiguration, (err, skippableTests, correlationId) => {
-      resolve({
-        err,
-        skippableTests,
-        correlationId,
-      })
-    })
+    tracer._tracer._exporter.getSkippableSuites(
+      testConfiguration,
+      (err, skippableTests, correlationId, skippableTestsCoverage) => {
+        resolve({
+          err,
+          skippableTests,
+          correlationId,
+          skippableTestsCoverage,
+        })
+      }
+    )
   })
 }
 
@@ -361,9 +373,11 @@ class CypressPlugin {
   finishedTestsByFile = {}
   testStatuses = {}
   hasLibraryConfiguration = false
+  isItrEnabled = false
   isTestsSkipped = false
   isSuitesSkippingEnabled = false
   isCodeCoverageEnabled = false
+  isCoverageReportUploadEnabled = false
   isFlakyTestRetriesEnabled = false
   flakyTestRetriesCount = 0
   isEarlyFlakeDetectionEnabled = false
@@ -376,6 +390,9 @@ class CypressPlugin {
   earlyFlakeDetectionFaultyThreshold = 0
   testsToSkip = []
   skippedTests = []
+  skippedTestIds = new Set()
+  skippableTestsCoverage = {}
+  testSessionCoverageMap = createCoverageMap()
   hasForcedToRunSuites = false
   hasUnskippableSuites = false
   unskippableSuites = []
@@ -440,9 +457,11 @@ class CypressPlugin {
     this.finishedTestsByFile = {}
     this.testStatuses = {}
     this.hasLibraryConfiguration = false
+    this.isItrEnabled = false
     this.isTestsSkipped = false
     this.isSuitesSkippingEnabled = false
     this.isCodeCoverageEnabled = false
+    this.isCoverageReportUploadEnabled = false
     this.isFlakyTestRetriesEnabled = false
     this.flakyTestRetriesCount = 0
     this.isEarlyFlakeDetectionEnabled = false
@@ -455,6 +474,9 @@ class CypressPlugin {
     this.earlyFlakeDetectionFaultyThreshold = 0
     this.testsToSkip = []
     this.skippedTests = []
+    this.skippedTestIds = new Set()
+    this.skippableTestsCoverage = {}
+    this.testSessionCoverageMap = createCoverageMap()
     this.hasForcedToRunSuites = false
     this.hasUnskippableSuites = false
     this.unskippableSuites = []
@@ -494,6 +516,117 @@ class CypressPlugin {
     return this._timeOrigin + performance.now() - this._perfOrigin
   }
 
+  /**
+   * Returns the directory used to normalize coverage file names.
+   *
+   * @returns {string}
+   */
+  getCoverageRootDir () {
+    return this.repositoryRoot || this.rootDir || process.cwd()
+  }
+
+  /**
+   * Returns whether the backend supplied skipped-test coverage data.
+   *
+   * @returns {boolean}
+   */
+  hasSkippableTestsCoverage () {
+    return !!(this.skippableTestsCoverage &&
+      typeof this.skippableTestsCoverage === 'object' &&
+      Object.keys(this.skippableTestsCoverage).length > 0)
+  }
+
+  /**
+   * Returns whether skipped test coverage should be backfilled into the session coverage map.
+   *
+   * @returns {boolean}
+   */
+  shouldBackfillSkippedCoverage () {
+    return this.isItrEnabled &&
+      this.isCoverageReportUploadEnabled &&
+      this.isTestsSkipped &&
+      this.hasSkippableTestsCoverage()
+  }
+
+  /**
+   * Adds a test's Istanbul coverage to the aggregated session coverage map.
+   *
+   * @param {object} coverage
+   * @returns {void}
+   */
+  addTestSessionCoverage (coverage) {
+    mergeCoverage(coverage, this.testSessionCoverageMap)
+  }
+
+  /**
+   * Applies backend skipped-test coverage to the aggregated session coverage map.
+   *
+   * @returns {boolean}
+   */
+  applySkippedCoverageToTestSessionCoverage () {
+    if (!this.shouldBackfillSkippedCoverage()) {
+      return false
+    }
+
+    return applySkippedCoverageToCoverage(
+      this.testSessionCoverageMap,
+      this.skippableTestsCoverage,
+      this.getCoverageRootDir()
+    )
+  }
+
+  /**
+   * Calculates the total session code coverage percentage when product rules allow reporting it.
+   *
+   * @param {boolean} hasBackfilledCoverage
+   * @returns {number | undefined}
+   */
+  getTestCodeCoverageLinesTotal (hasBackfilledCoverage) {
+    if (!this.testSessionCoverageMap.files().length || (this.isTestsSkipped && !hasBackfilledCoverage)) {
+      return
+    }
+
+    return getTestCoverageLinesPercentage(this.testSessionCoverageMap, undefined, this.getCoverageRootDir())
+  }
+
+  /**
+   * Returns repository-relative executable-line coverage files for the test session.
+   *
+   * @returns {Array<{ filename: string, bitmap: Buffer }>}
+   */
+  getTestSessionCoverageFiles () {
+    return getRelativeCoverageFiles(
+      getExecutableFilesFromCoverage(this.testSessionCoverageMap),
+      this.getCoverageRootDir()
+    )
+  }
+
+  /**
+   * Uploads executable-line coverage for the test session when backend configuration enables it.
+   *
+   * @returns {void}
+   */
+  reportTestSessionCoverage () {
+    const exporter = this.tracer._tracer._exporter
+    if (
+      !this.testSessionSpan ||
+      !this.isCoverageReportUploadEnabled ||
+      !exporter?.exportCoverage
+    ) {
+      return
+    }
+
+    const files = this.getTestSessionCoverageFiles()
+    if (!files.length) {
+      return
+    }
+
+    exporter.exportCoverage({
+      sessionId: this.testSessionSpan.context()._traceId,
+      files,
+    })
+  }
+
   // Init function returns a promise that resolves with the Cypress configuration
   // Depending on the received configuration, the Cypress configuration can be modified:
   // for example, to enable retries for failed tests.
@@ -506,7 +639,7 @@ class CypressPlugin {
 
     this.isTestIsolationEnabled = getIsTestIsolationEnabled(cypressConfig)
 
-    this.rumFlushWaitMillis = getConfig().DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS
+    this.rumFlushWaitMillis = getConfig().testOptimization.DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS
 
     if (!this.isTestIsolationEnabled) {
       log.warn('Test isolation is disabled, retries will not be enabled')
@@ -529,8 +662,10 @@ class CypressPlugin {
           this.hasLibraryConfiguration = true
           const {
             libraryConfig: {
+              isItrEnabled,
               isSuitesSkippingEnabled,
               isCodeCoverageEnabled,
+              isCoverageReportUploadEnabled,
               isEarlyFlakeDetectionEnabled,
               earlyFlakeDetectionNumRetries,
               earlyFlakeDetectionSlowTestRetries,
@@ -543,8 +678,10 @@ class CypressPlugin {
               isImpactedTestsEnabled,
             },
           } = libraryConfigurationResponse
+          this.isItrEnabled = isItrEnabled
           this.isSuitesSkippingEnabled = isSuitesSkippingEnabled
           this.isCodeCoverageEnabled = isCodeCoverageEnabled
+          this.isCoverageReportUploadEnabled = isCoverageReportUploadEnabled
           this.isEarlyFlakeDetectionEnabled = isEarlyFlakeDetectionEnabled
           this.earlyFlakeDetectionNumRetries = earlyFlakeDetectionNumRetries
           this.earlyFlakeDetectionSlowTestRetries = earlyFlakeDetectionSlowTestRetries ?? {}
@@ -686,7 +823,6 @@ class CypressPlugin {
 
   getTestSpan ({ testName, testSuite, isUnskippable, isForcedToRun, testSourceFile, isDisabled, isQuarantined }) {
     const testSuiteTags = {
-      [TEST_COMMAND]: this.command,
       [TEST_MODULE]: TEST_FRAMEWORK_NAME,
     }
     if (this.testSuiteSpan) {
@@ -798,7 +934,10 @@ class CypressPlugin {
       isSuitesSkippingEnabled: this.isSuitesSkippingEnabled,
       getKnownTests: () => getKnownTests(this.tracer, this.testConfiguration),
       getTestManagementTests: () => getTestManagementTests(this.tracer, this.testConfiguration),
-      getSkippableSuites: () => getSkippableTests(this.tracer, this.testConfiguration),
+      getSkippableSuites: () => getSkippableTests(this.tracer, {
+        ...this.testConfiguration,
+        isCoverageReportUploadEnabled: this.isCoverageReportUploadEnabled,
+      }),
     })
 
     if (this.isKnownTestsEnabled) {
@@ -835,13 +974,17 @@ class CypressPlugin {
 
     if (this.isSuitesSkippingEnabled) {
       const skippableTestsResponse =
-        skippableTestsRequestResponse || await getSkippableTests(this.tracer, this.testConfiguration)
+        skippableTestsRequestResponse || await getSkippableTests(this.tracer, {
+          ...this.testConfiguration,
+          isCoverageReportUploadEnabled: this.isCoverageReportUploadEnabled,
+        })
       if (skippableTestsResponse.err) {
         log.error('Cypress skippable tests response error', skippableTestsResponse.err)
         this._pendingRequestErrorTags.push({ tag: DD_CI_LIBRARY_CONFIGURATION_ERROR_SKIPPABLE_TESTS, value: 'true' })
       } else {
-        const { skippableTests, correlationId } = skippableTestsResponse
+        const { skippableTests, correlationId, skippableTestsCoverage } = skippableTestsResponse
         this.testsToSkip = skippableTests || []
+        this.skippableTestsCoverage = skippableTestsCoverage || {}
         this.itrCorrelationId = correlationId
         incrementCountMetric(TELEMETRY_ITR_SKIPPED, { testLevel: 'test' }, this.testsToSkip.length)
       }
@@ -904,15 +1047,15 @@ class CypressPlugin {
     )
 
     if (this.tracer._tracer._exporter?.addMetadataTags) {
-      const metadataTags = {}
-      for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-        metadataTags[testLevel] = {
+      const metadataTags = {
+        [TEST_LEVELS_METADATA]: {
+          [TEST_COMMAND]: this.command,
           [TEST_SESSION_NAME]: testSessionName,
-        }
+          ...getTestLevelsMetadataTags(this.testEnvironmentMetadata),
+        },
       }
       const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id, this.frameworkVersion)
       metadataTags.test = {
-        ...metadataTags.test,
         ...libraryCapabilitiesTags,
       }
 
@@ -969,6 +1112,9 @@ class CypressPlugin {
     }
     if (this.testSessionSpan && this.testModuleSpan) {
       const testStatus = getSessionStatus(suiteStats)
+      const hasBackfilledCoverage = this.applySkippedCoverageToTestSessionCoverage()
+      const testCodeCoverageLinesTotal = this.getTestCodeCoverageLinesTotal(hasBackfilledCoverage)
+
       this.testModuleSpan.setTag(TEST_STATUS, testStatus)
       this.testSessionSpan.setTag(TEST_STATUS, testStatus)
 
@@ -979,12 +1125,15 @@ class CypressPlugin {
           isSuitesSkipped: this.isTestsSkipped,
           isSuitesSkippingEnabled: this.isSuitesSkippingEnabled,
           isCodeCoverageEnabled: this.isCodeCoverageEnabled,
+          testCodeCoverageLinesTotal,
           skippingType: 'test',
           skippingCount: this.skippedTests.length,
           hasForcedToRunSuites: this.hasForcedToRunSuites,
           hasUnskippableSuites: this.hasUnskippableSuites,
         }
       )
+
+      this.reportTestSessionCoverage()
 
       if (this.isTestManagementTestsEnabled) {
         this.testSessionSpan.setTag(TEST_MANAGEMENT_ENABLED, 'true')
@@ -1001,7 +1150,7 @@ class CypressPlugin {
       this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session')
       incrementCountMetric(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,
-        autoInjected: !!getConfig().DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
+        autoInjected: !!getConfig().testOptimization.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
       })
 
       finishAllTraceSpans(this.testSessionSpan)
@@ -1145,7 +1294,7 @@ class CypressPlugin {
         }
         // Update test status - but NOT for non-ATF quarantined tests where we intentionally
         // report 'fail' to Datadog even though Cypress sees it as 'pass'
-        const isQuarantinedTest = finishedTest.testSpan?.context()?._tags?.[TEST_MANAGEMENT_IS_QUARANTINED] === 'true'
+        const isQuarantinedTest = finishedTest.testSpan?.context()?.getTag(TEST_MANAGEMENT_IS_QUARANTINED) === 'true'
         if (cypressTestStatus !== finishedTest.testStatus && (!isQuarantinedTest || finishedTest.isAttemptToFix)) {
           finishedTest.testSpan.setTag(TEST_STATUS, cypressTestStatus)
           finishedTest.testSpan.setTag('error', latestError)
@@ -1172,7 +1321,7 @@ class CypressPlugin {
         }
 
         if (isLastAttempt) {
-          const testSpanTags = finishedTest.testSpan.context()._tags
+          const testSpanTags = finishedTest.testSpan.context().getTags()
           const retryKind = getFinalStatusRetryKind({
             finishedTest,
             finishedTestAttempts,
@@ -1239,7 +1388,7 @@ class CypressPlugin {
         return suitePayload
       },
       'dd:beforeEach': (test) => {
-        const { testName, testSuite, isEfdRetry, efdRetryIndex } = test
+        const { testId, testName, testSuite, isEfdRetry, efdRetryIndex } = test
         if (isEfdRetry && this.shouldSkipEfdRetry(testSuite, testName, efdRetryIndex)) {
           return { shouldSkip: true, shouldDiscard: true }
         }
@@ -1251,7 +1400,11 @@ class CypressPlugin {
         const { isAttemptToFix, isDisabled, isQuarantined } = this.getTestProperties(testSuite, testName)
         // skip test
         if (shouldSkip && !isUnskippable) {
-          this.skippedTests.push(test)
+          const skippedTestId = `${testSuite}:${testId || testName}`
+          if (!this.skippedTestIds.has(skippedTestId)) {
+            this.skippedTestIds.add(skippedTestId)
+            this.skippedTests.push(test)
+          }
           this.isTestsSkipped = true
           return { shouldSkip: true }
         }
@@ -1280,7 +1433,7 @@ class CypressPlugin {
 
         return this.activeTestSpan ? { traceId: this.activeTestSpan.context().toTraceId() } : {}
       },
-      'dd:afterEach': ({ test, coverage }) => {
+      'dd:afterEach': ({ test, coverage, commands }) => {
         if (!this.activeTestSpan) {
           log.warn('There is no active test span in dd:afterEach handler')
           return null
@@ -1303,11 +1456,18 @@ class CypressPlugin {
           isQuarantined: isQuarantinedFromSupport,
           isDisabled: isDisabledFromSupport,
         } = test
+        if (coverage && (this.isCodeCoverageEnabled || this.isCoverageReportUploadEnabled)) {
+          this.addTestSessionCoverage(coverage)
+        }
+
         if (coverage && this.isCodeCoverageEnabled && this.tracer._tracer._exporter?.exportCoverage) {
-          const coverageFiles = getCoveredFilenamesFromCoverage(coverage)
-          const relativeCoverageFiles = [...coverageFiles, testSuiteAbsolutePath].map(
-            file => getTestSuitePath(file, this.repositoryRoot || this.rootDir)
-          )
+          const coverageFiles = getCoveredFilesFromCoverage(coverage)
+          const relativeCoverageFiles = getRelativeCoverageFiles(coverageFiles, this.getCoverageRootDir())
+          if (testSuiteAbsolutePath) {
+            relativeCoverageFiles.push({
+              filename: getTestSuitePath(testSuiteAbsolutePath, this.getCoverageRootDir()),
+            })
+          }
           if (!relativeCoverageFiles.length) {
             incrementCountMetric(TELEMETRY_CODE_COVERAGE_EMPTY)
           }
@@ -1343,7 +1503,7 @@ class CypressPlugin {
           this.testStatuses[testName] = [testStatus]
         }
         const testStatuses = this.testStatuses[testName]
-        const activeSpanTags = this.activeTestSpan.context()._tags
+        const activeSpanTags = this.activeTestSpan.context().getTags()
 
         if (error) {
           this.activeTestSpan.setTag('error', error)
@@ -1442,6 +1602,31 @@ class CypressPlugin {
         }
         if (isDisabledFromSupport) {
           this.activeTestSpan.setTag(TEST_MANAGEMENT_IS_DISABLED, 'true')
+        }
+
+        if (Array.isArray(commands) && commands.length > 0) {
+          for (const command of commands) {
+            const { startTime, endTime } = command
+            if (typeof startTime !== 'number' || typeof endTime !== 'number' || endTime < startTime) {
+              continue
+            }
+            const stepSpan = this.tracer.startSpan('cypress.step', {
+              childOf: this.activeTestSpan,
+              startTime,
+              tags: {
+                [COMPONENT]: 'cypress',
+                'cypress.command': command.name,
+                [RESOURCE_NAME]: command.name,
+              },
+            })
+            if (command.error) {
+              const errorObj = new Error(command.error.message || String(command.error))
+              if (command.error.name) errorObj.name = command.error.name
+              if (command.error.stack) errorObj.stack = command.error.stack
+              stepSpan.setTag('error', errorObj)
+            }
+            stepSpan.finish(endTime)
+          }
         }
 
         const finishedTest = {

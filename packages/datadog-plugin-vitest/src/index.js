@@ -9,13 +9,15 @@ const {
   finishAllTraceSpans,
   getTestSuitePath,
   getTestSuiteCommonTags,
+  getTestLevelsMetadataTags,
   getTestSessionName,
   getIsFaultyEarlyFlakeDetection,
   TEST_SOURCE_FILE,
   TEST_IS_RETRY,
   TEST_CODE_COVERAGE_LINES_PCT,
   TEST_CODE_OWNERS,
-  TEST_LEVEL_EVENT_TYPES,
+  TEST_COMMAND,
+  TEST_LEVELS_METADATA,
   TEST_SESSION_NAME,
   TEST_SOURCE_START,
   TEST_IS_NEW,
@@ -63,6 +65,8 @@ class VitestPlugin extends CiPlugin {
         testSessionId: testSessionSpanContext?.toTraceId(),
         testModuleId: testModuleSpanContext?.toSpanId(),
         testCommand: this.command,
+        repositoryRoot: this.repositoryRoot,
+        codeOwnersEntries: this.codeOwnersEntries,
       })
     })
 
@@ -307,10 +311,11 @@ class VitestPlugin extends CiPlugin {
     })
 
     this.addBind('ci:vitest:test-suite:start', (ctx) => {
-      const { testSuiteAbsolutePath, frameworkVersion } = ctx
+      const { codeOwnersEntries, repositoryRoot, testSuiteAbsolutePath, frameworkVersion } = ctx
 
       const testCommand = ctx.testCommand || 'vitest run'
       const { testSessionId, testModuleId } = ctx
+      this._setRepositoryRoot(repositoryRoot, codeOwnersEntries)
       this.command = testCommand
       this.frameworkVersion = frameworkVersion
       const testSessionSpanContext = testSessionId && testModuleId
@@ -323,19 +328,15 @@ class VitestPlugin extends CiPlugin {
       const trimmedCommand = DD_MAJOR < 6 ? this.command : 'vitest run'
       // test suites run in a different process, so they also need to init the metadata dictionary
       const testSessionName = getTestSessionName(this.config, trimmedCommand, this.testEnvironmentMetadata)
-      const metadataTags = {}
-      for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-        metadataTags[testLevel] = {
-          [TEST_SESSION_NAME]: testSessionName,
-        }
-      }
       if (this.tracer._exporter.addMetadataTags) {
-        const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id)
-        metadataTags.test = {
-          ...metadataTags.test,
-          ...libraryCapabilitiesTags,
-        }
-        this.tracer._exporter.addMetadataTags(metadataTags)
+        this.tracer._exporter.addMetadataTags({
+          [TEST_LEVELS_METADATA]: {
+            [TEST_COMMAND]: testCommand,
+            [TEST_SESSION_NAME]: testSessionName,
+            ...getTestLevelsMetadataTags(this.testEnvironmentMetadata),
+          },
+          test: getLibraryCapabilitiesTags(this.constructor.id),
+        })
       }
 
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
@@ -442,7 +443,7 @@ class VitestPlugin extends CiPlugin {
       finishAllTraceSpans(this.testSessionSpan)
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,
-        autoInjected: !!this._tracerConfig.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
+        autoInjected: !!this._tracerConfig.testOptimization.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
       })
       this.tracer._exporter.flush(onFinish)
     })

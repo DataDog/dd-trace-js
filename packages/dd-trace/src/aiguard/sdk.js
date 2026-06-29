@@ -1,7 +1,8 @@
 'use strict'
 
 const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
-const { HTTP_CLIENT_IP, NETWORK_CLIENT_IP } = require('../../../../ext/tags')
+const { HTTP_CLIENT_IP, NETWORK_CLIENT_IP, HTTP_USERAGENT } = require('../../../../ext/tags')
+const { USER_ID, USER_SESSION_ID } = require('../appsec/addresses')
 const { getActiveRequest } = require('../appsec/store')
 const log = require('../log')
 const { extractIp } = require('../plugins/util/ip_extractor')
@@ -16,6 +17,16 @@ const TAGS = require('./tags')
 const aiguardMetrics = telemetryMetrics.manager.namespace('ai_guard')
 
 const ALLOW = 'ALLOW'
+
+// Tags from the service entry span that must be mirrored onto every AI Guard span
+// so anomaly detection pipelines can process each span independently.
+const SERVICE_ENTRY_TAG_MAPPINGS = [
+  [HTTP_USERAGENT, TAGS.HTTP_USERAGENT_TAG_KEY],
+  [HTTP_CLIENT_IP, TAGS.HTTP_CLIENT_IP_TAG_KEY],
+  [NETWORK_CLIENT_IP, TAGS.NETWORK_CLIENT_IP_TAG_KEY],
+  [USER_ID, TAGS.USR_ID_TAG_KEY],
+  [USER_SESSION_ID, TAGS.USR_SESSION_ID_TAG_KEY],
+]
 
 /**
  * Reports a telemetry error
@@ -52,6 +63,18 @@ class AIGuardClientError extends Error {
   }
 }
 
+/**
+ * Resolves the AI Guard host for a given Datadog site. Sites with a single subdomain level
+ * (e.g. `datadoghq.com`, `ddog-gov.com`) are served from the `app.` subdomain, while regional
+ * sites (e.g. `us3.datadoghq.com`, `ap1.datadoghq.com`) are used as-is.
+ *
+ * @param {string} site - Datadog site (e.g. `datadoghq.com`, `us3.datadoghq.com`)
+ * @returns {string} The host to use for the AI Guard endpoint
+ */
+function aiGuardHost (site) {
+  return site.split('.').length === 2 ? `app.${site}` : site
+}
+
 class AIGuard extends NoopAIGuard {
   #initialized
   #tracer
@@ -70,20 +93,20 @@ class AIGuard extends NoopAIGuard {
   constructor (tracer, config) {
     super()
 
-    if (!config.apiKey || !config.DD_APP_KEY) {
+    if (!config.DD_API_KEY || !config.DD_APP_KEY) {
       log.error('AIGuard: missing api and/or app keys, use env DD_API_KEY and DD_APP_KEY')
       this.#initialized = false
       return
     }
     this.#tracer = tracer
     this.#headers = {
-      'DD-API-KEY': config.apiKey,
+      'DD-API-KEY': config.DD_API_KEY,
       'DD-APPLICATION-KEY': config.DD_APP_KEY,
       'DD-AI-GUARD-VERSION': tracerVersion,
       'DD-AI-GUARD-SOURCE': 'SDK',
       'DD-AI-GUARD-LANGUAGE': 'nodejs',
     }
-    const endpoint = config.experimental.aiguard.endpoint || `https://app.${config.site}/api/v2/ai-guard`
+    const endpoint = config.experimental.aiguard.endpoint || `https://${aiGuardHost(config.site)}/api/v2/ai-guard`
     this.#evaluateUrl = `${endpoint}/evaluate`
     this.#timeout = config.experimental.aiguard.timeout
     this.#maxMessagesLength = config.experimental.aiguard.maxMessagesLength
@@ -148,7 +171,7 @@ class AIGuard extends NoopAIGuard {
   #setRootSpanClientIpTags (rootSpan) {
     if (!rootSpan) return
 
-    const currentTags = rootSpan.context()._tags
+    const currentTags = rootSpan.context().getTags()
     const needsHttpClientIp = !Object.hasOwn(currentTags, HTTP_CLIENT_IP)
     const needsNetworkClientIp = !Object.hasOwn(currentTags, NETWORK_CLIENT_IP)
 
@@ -181,13 +204,32 @@ class AIGuard extends NoopAIGuard {
     }
   }
 
+  /**
+   * Copies service entry span tags needed by anomaly detection to the AI Guard span.
+   *
+   * @param {import('../opentracing/span')} guardSpan
+   * @param {import('../opentracing/span')} rootSpan
+   */
+  #copyServiceEntryTagsToGuardSpan (guardSpan, rootSpan) {
+    const rootTags = rootSpan.context().getTags()
+    for (const [sourceTag, destTag] of SERVICE_ENTRY_TAG_MAPPINGS) {
+      const value = rootTags[sourceTag]
+      if (value !== undefined && value !== null) {
+        guardSpan.setTag(destTag, value)
+      }
+    }
+  }
+
   evaluate (messages, opts) {
     if (!this.#initialized) {
       return super.evaluate(messages, opts)
     }
-    const { block = true, source = TAGS.SOURCE_SDK, integration = TAGS.INTEGRATION_NONE } = opts ?? {}
+    const { block = true, source = TAGS.SOURCE_SDK, integration = TAGS.INTEGRATION_NONE, childOf } = opts ?? {}
     const telemetryTags = { source, integration }
-    return this.#tracer.trace(TAGS.RESOURCE, {}, async (span) => {
+    // Only pass `childOf` when truthy so `tracer.trace`'s default (`scope().active()`)
+    // still applies for SDK callers that don't supply an explicit parent.
+    const traceOpts = childOf ? { childOf } : {}
+    return this.#tracer.trace(TAGS.RESOURCE, traceOpts, async (span) => {
       const last = messages[messages.length - 1]
       const target = this.#isToolCall(last) ? 'tool' : 'prompt'
       span.setTag(TAGS.TARGET_TAG_KEY, target)
@@ -206,6 +248,7 @@ class AIGuard extends NoopAIGuard {
       const rootSpan = span.context()?._trace?.started?.[0]
       if (rootSpan) {
         this.#setRootSpanClientIpTags(rootSpan)
+        this.#copyServiceEntryTagsToGuardSpan(span, rootSpan)
         // keepTrace must be called before executeRequest so the sampling decision
         // is propagated correctly to outgoing HTTP client calls.
         keepTrace(rootSpan, AI_GUARD)

@@ -3,6 +3,13 @@
 const { DD_MAJOR } = require('../../../../version')
 
 module.exports = {
+  '@aws/durable-execution-sdk-js': [
+    {
+      name: '@aws/durable-execution-sdk-js-testing',
+      dep: true,
+      forced: true,
+    },
+  ],
   aerospike: [
     {
       name: 'aerospike',
@@ -17,6 +24,18 @@ module.exports = {
     {
       name: '@ai-sdk/openai',
       versions: ['^1.3.23', '^2.0.0', '>=3.0.0'],
+    },
+    {
+      name: '@ai-sdk/amazon-bedrock',
+      versions: ['^3.0.0', '>=4.0.0'],
+    },
+    {
+      name: '@ai-sdk/anthropic',
+      versions: ['^1.0.0', '^2.0.0', '>=3.0.0'],
+    },
+    {
+      name: '@ai-sdk/google',
+      versions: ['^1.0.0', '^2.0.0', '>=3.0.0'],
     },
     {
       name: 'zod',
@@ -138,7 +157,7 @@ module.exports = {
   'express-mongo-sanitize': [
     {
       name: 'mongodb',
-      versions: ['>=3.3 <5', '5', '>=6'],
+      versions: ['>=3.3 <5', '5', '6', '>=7'],
     },
     {
       name: 'mongodb-core',
@@ -167,10 +186,6 @@ module.exports = {
     {
       name: 'express',
       versions: ['>=4', '>=4.0.0 <4.3.0', '>=4.0.0 <5.0.0', '>=4.3.0 <5.0.0'],
-    },
-    {
-      name: 'mquery',
-      versions: ['>=5.0.0'],
     },
     {
       name: 'mongodb',
@@ -218,7 +233,7 @@ module.exports = {
   'google-cloud-pubsub': [
     {
       name: 'google-gax',
-      versions: ['3.5.7'],
+      versions: ['5.0.7'],
     },
   ],
   genai: [
@@ -297,6 +312,15 @@ module.exports = {
       versions: ['^16.6.0'],
     },
   ],
+  '@apollo/server': [
+    {
+      // The shared apollo-server-* install also brings in graphql 15.x (for apollo-server v3), which yarn may
+      // hoist over the ^16.11 that @apollo/server v5 needs. Without the pin, v5 resolves 15.x, whose TypeInfo
+      // lacks the `.enter`/`.leave` methods the graphql instrumentation calls, so every traced operation throws.
+      name: 'graphql',
+      dep: true,
+    },
+  ],
   grpc: [
     {
       name: '@grpc/proto-loader',
@@ -319,6 +343,14 @@ module.exports = {
     {
       name: 'sqlite3',
       versions: ['^5.0.8'],
+    },
+    {
+      // knex 1.x is the only major whose sqlite3 dialect requires the @vscode/sqlite3 fork instead of `sqlite3`
+      // (reverted in 2.x). The instrumentation spec loads knex from `versions/knex@<ver>` and opens a sqlite3
+      // client, so the fork must be installed there. Pin an exact prerelease build so prebuilt binaries exist for
+      // the whole Node CI matrix.
+      name: '@vscode/sqlite3',
+      versions: ['5.1.12-vscode'],
     },
     {
       name: 'pg',
@@ -403,12 +435,6 @@ module.exports = {
     {
       name: 'fastify',
       versions: ['>=3'],
-    },
-  ],
-  lodash: [
-    {
-      name: 'lodash',
-      versions: ['>=4'],
     },
   ],
   mariadb: [
@@ -571,6 +597,7 @@ module.exports = {
       name: 'mongodb',
       dep: true,
       forced: true,
+      node: '>=20.19.0',
     },
     {
       name: 'mongodb-core',
@@ -631,12 +658,6 @@ module.exports = {
     {
       name: 'body-parser',
       versions: ['1.20.1'],
-    },
-  ],
-  ws: [
-    {
-      name: 'ws',
-      versions: ['>=8.0.0'],
     },
   ],
 }

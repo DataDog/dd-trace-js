@@ -9,6 +9,8 @@ const { sandboxCwd, useSandbox, getCiVisAgentlessConfig } = require('../helpers'
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const { NODE_MAJOR } = require('../../version')
 
+const isLatestCucumberSupported = NODE_MAJOR === 22 || NODE_MAJOR === 24 || NODE_MAJOR >= 26
+
 // no playwright because it has no programmatic API
 // no cypress because it's not a proper dd-trace plugin
 const testFrameworks = [
@@ -48,13 +50,13 @@ testFrameworks.forEach(({ testFramework, command, expectedOutput, extraTestConte
   describe(`test optimization wrong init for ${testFramework}`, () => {
     let cwd, receiver, childProcess, processOutput
 
-    // cucumber and vitest@4.x do not support Node.js@18
-    if (NODE_MAJOR <= 18 && (testFramework === 'cucumber' || testFramework === 'vitest')) return
+    // cucumber@latest and vitest@4.x do not support every Node.js major in this matrix
+    if (!isLatestCucumberSupported && testFramework === 'cucumber') return
+    if (NODE_MAJOR <= 18 && testFramework === 'vitest') return
 
     const testFrameworks = ['jest', 'mocha', 'vitest']
 
-    // Remove once we drop support for Node.js@18
-    if (NODE_MAJOR > 18) {
+    if (isLatestCucumberSupported) {
       testFrameworks.push('@cucumber/cucumber')
     }
 
@@ -100,8 +102,12 @@ testFrameworks.forEach(({ testFramework, command, expectedOutput, extraTestConte
           env: {
             ...process.env,
             ...restEnvVars,
+            // DD_CIVISIBILITY_AGENTLESS_URL no longer doubles as the APM agent URL, so point the agent
+            // at the fake intake to receive the normal APM spans this test asserts on.
+            DD_TRACE_AGENT_URL: `http://127.0.0.1:${receiver.port}`,
             DD_TRACE_DISABLED_INSTRUMENTATIONS: 'child_process',
             DD_TRACE_DEBUG: '1',
+            DD_CIVISIBILITY_AGENTLESS_URL: 'http://example.org',
             ...extraTestContext,
           },
         }

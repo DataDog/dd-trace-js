@@ -15,6 +15,9 @@ const { validateGitRepositoryUrl, validateGitCommitSha } = require('../../../../
 
 describe('git_metadata', () => {
   let gitMetadata
+  // Used only by the retry test, which must exercise request.js retry logic end-to-end.
+  let gitMetadataWithFastRequest
+  let requestStub
 
   const latestCommits = ['87ce64f636853fbebc05edfcefe9cccc28a7968b', 'cc424c261da5e261b76d982d5d361a023556e2aa']
   // same character range but invalid length
@@ -37,9 +40,8 @@ describe('git_metadata', () => {
   before(() => {
     fs.writeFileSync(temporaryPackFile, '')
     fs.writeFileSync(secondTemporaryPackFile, '')
-    // Any request that escapes a nock interceptor used to hang up to the per
-    // request 15 s timeout and blow the mocha wall on slow Windows CI; flip the
-    // failure into an immediate `NetConnectNotAllowedError` at the call site.
+    // The retry test uses nock; disableNetConnect ensures escaped requests fail
+    // immediately rather than hanging for the 15 s request timeout.
     nock.disableNetConnect()
   })
 
@@ -58,12 +60,31 @@ describe('git_metadata', () => {
 
     generatePackFilesForCommitsStub = sinon.stub().returns([temporaryPackFile])
 
-    fakeConfig = { apiKey: 'api-key', DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED: true }
+    fakeConfig = { DD_API_KEY: 'api-key', testOptimization: { DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED: true } }
 
-    // Build a copy of the shared request module wired against an instant retry
-    // helper so the retry-success test does not pay the real backoff. The
-    // post-startup retry delay is 5 to 7.5 s and would blow the default mocha
-    // timeout once a previous spec marks the endpoint as reached.
+    // Most tests inject requestStub directly so they never touch nock or the
+    // real HTTP stack. This avoids the Windows CI hang caused by nock's
+    // process.nextTick-based connectSocket() being skipped when the request is
+    // considered destroyed before the tick fires, leaving done() uncalled.
+    requestStub = sinon.stub()
+
+    const gitStubs = {
+      getLatestCommits: getLatestCommitsStub,
+      getRepositoryUrl: getRepositoryUrlStub,
+      generatePackFilesForCommits: generatePackFilesForCommitsStub,
+      getCommitsRevList: getCommitsRevListStub,
+      isShallowRepository: isShallowRepositoryStub,
+      unshallowRepository: unshallowRepositoryStub,
+    }
+
+    gitMetadata = proxyquire('../../../../src/ci-visibility/exporters/git/git_metadata', {
+      '../../../plugins/util/git': gitStubs,
+      '../../../config': () => fakeConfig,
+      '../../../exporters/common/request': requestStub,
+    })
+
+    // gitMetadataWithFastRequest keeps the real request.js (including retry
+    // logic) wired through nock for the one test that validates retry behaviour.
     const fastRequest = proxyquire('../../../../src/exporters/common/request', {
       './retry': {
         ...require('../../../../src/exporters/common/retry'),
@@ -71,15 +92,8 @@ describe('git_metadata', () => {
       },
     })
 
-    gitMetadata = proxyquire('../../../../src/ci-visibility/exporters/git/git_metadata', {
-      '../../../plugins/util/git': {
-        getLatestCommits: getLatestCommitsStub,
-        getRepositoryUrl: getRepositoryUrlStub,
-        generatePackFilesForCommits: generatePackFilesForCommitsStub,
-        getCommitsRevList: getCommitsRevListStub,
-        isShallowRepository: isShallowRepositoryStub,
-        unshallowRepository: unshallowRepositoryStub,
-      },
+    gitMetadataWithFastRequest = proxyquire('../../../../src/ci-visibility/exporters/git/git_metadata', {
+      '../../../plugins/util/git': gitStubs,
       '../../../config': () => fakeConfig,
       '../../../exporters/common/request': fastRequest,
     })
@@ -90,146 +104,124 @@ describe('git_metadata', () => {
   })
 
   it('does not unshallow if every commit is already in backend', (done) => {
-    const scope = nock('https://api.test.com')
-      .post('/api/v2/git/repository/search_commits')
-      .reply(200, JSON.stringify({ data: latestCommits.map((sha) => ({ id: sha, type: 'commit' })) }))
+    requestStub.callsArgWith(2, null,
+      JSON.stringify({ data: latestCommits.map((sha) => ({ id: sha, type: 'commit' })) }),
+      200)
 
     isShallowRepositoryStub.returns(true)
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
       sinon.assert.notCalled(unshallowRepositoryStub)
       assert.strictEqual(err, null)
-      assert.strictEqual(scope.isDone(), true)
+      sinon.assert.calledOnce(requestStub)
       done()
     })
   })
 
   it('should unshallow if the repo is shallow and not every commit is in the backend', (done) => {
-    const scope = nock('https://api.test.com')
-      .post('/api/v2/git/repository/search_commits')
-      .reply(200, JSON.stringify({ data: [] }))
-      .post('/api/v2/git/repository/search_commits') // calls a second time after unshallowing
-      .reply(200, JSON.stringify({ data: [] }))
-      .post('/api/v2/git/repository/packfile')
-      .reply(204)
+    requestStub.onCall(0).callsArgWith(2, null, JSON.stringify({ data: [] }), 200)
+    requestStub.onCall(1).callsArgWith(2, null, JSON.stringify({ data: [] }), 200)
+    requestStub.onCall(2).callsArgWith(2, null, '', 204)
 
     isShallowRepositoryStub.returns(true)
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
       sinon.assert.called(unshallowRepositoryStub)
       assert.strictEqual(err, null)
-      assert.strictEqual(scope.isDone(), true)
+      sinon.assert.calledThrice(requestStub)
       done()
     })
   })
 
   it('should not unshallow if the parameter to enable unshallow is false', (done) => {
-    fakeConfig.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED = false
-    const scope = nock('https://api.test.com')
-      .post('/api/v2/git/repository/search_commits')
-      .reply(200, JSON.stringify({ data: [] }))
-      .post('/api/v2/git/repository/search_commits') // calls a second time after unshallowing
-      .reply(200, JSON.stringify({ data: [] }))
-      .post('/api/v2/git/repository/packfile')
-      .reply(204)
+    fakeConfig.testOptimization.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED = false
+    requestStub.onCall(0).callsArgWith(2, null, JSON.stringify({ data: [] }), 200)
+    requestStub.onCall(1).callsArgWith(2, null, JSON.stringify({ data: [] }), 200)
+    requestStub.onCall(2).callsArgWith(2, null, '', 204)
 
     isShallowRepositoryStub.returns(true)
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
       sinon.assert.notCalled(unshallowRepositoryStub)
       assert.strictEqual(err, null)
-      assert.strictEqual(scope.isDone(), true)
+      sinon.assert.calledThrice(requestStub)
       done()
     })
   })
 
   it('should request to /api/v2/git/repository/search_commits and /api/v2/git/repository/packfile', (done) => {
-    const scope = nock('https://api.test.com')
-      .post('/api/v2/git/repository/search_commits')
-      .reply(200, JSON.stringify({ data: [] }))
-      .post('/api/v2/git/repository/packfile')
-      .reply(204)
+    requestStub.onCall(0).callsArgWith(2, null, JSON.stringify({ data: [] }), 200)
+    requestStub.onCall(1).callsArgWith(2, null, '', 204)
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
       assert.strictEqual(err, null)
-      assert.strictEqual(scope.isDone(), true)
+      sinon.assert.calledTwice(requestStub)
+      assert.match(requestStub.getCall(0).args[1].path, /\/api\/v2\/git\/repository\/search_commits/)
+      assert.match(requestStub.getCall(1).args[1].path, /\/api\/v2\/git\/repository\/packfile/)
       done()
     })
   })
 
   it('should not request to /api/v2/git/repository/packfile if the backend has the commit info', (done) => {
-    const scope = nock('https://api.test.com')
-      .post('/api/v2/git/repository/search_commits')
-      .reply(200, JSON.stringify({ data: latestCommits.map((sha) => ({ id: sha, type: 'commit' })) }))
-      .post('/api/v2/git/repository/packfile')
-      .reply(204)
+    requestStub.callsArgWith(2, null,
+      JSON.stringify({ data: latestCommits.map((sha) => ({ id: sha, type: 'commit' })) }),
+      200)
 
     getCommitsRevListStub.returns([])
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
       assert.strictEqual(err, null)
-      // to check that it is not called
-      assert.strictEqual(scope.isDone(), false)
-      assertObjectContains(scope.pendingMocks(), ['POST https://api.test.com:443/api/v2/git/repository/packfile'])
+      sinon.assert.calledOnce(requestStub)
       done()
     })
   })
 
   it('should fail and not continue if first query results in anything other than 200', (done) => {
-    const scope = nock('https://api.test.com')
-      .post('/api/v2/git/repository/search_commits')
-      .reply(404, 'Not found SHA')
-      .post('/api/v2/git/repository/packfile')
-      .reply(204)
+    const requestErr = Object.assign(
+      new Error(
+        'Error from https://api.test.com/api/v2/git/repository/search_commits: ' +
+        '404 Not Found. Response from the endpoint: "Not found SHA"'
+      ),
+      { status: 404 }
+    )
+    requestStub.callsArgWith(2, requestErr, null, 404)
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
-      assertObjectContains(err.message, 'Error fetching commits to exclude: Error from https://api.test.com/api/v2/git/repository/search_commits: 404 Not Found. Response from the endpoint: "Not found SHA"')
-      // to check that it is not called
-      assert.strictEqual(scope.isDone(), false)
-      assertObjectContains(scope.pendingMocks(), ['POST https://api.test.com:443/api/v2/git/repository/packfile'])
+      assertObjectContains(err.message,
+        'Error fetching commits to exclude: Error from https://api.test.com/' +
+        'api/v2/git/repository/search_commits: 404 Not Found. ' +
+        'Response from the endpoint: "Not found SHA"')
+      sinon.assert.calledOnce(requestStub)
       done()
     })
   })
 
   it('should fail and not continue if the response are not correct commits', (done) => {
-    const scope = nock('https://api.test.com')
-      .post('/api/v2/git/repository/search_commits')
-      .reply(200, JSON.stringify({ data: ['; rm -rf ;'] }))
-      .post('/api/v2/git/repository/packfile')
-      .reply(204)
+    requestStub.callsArgWith(2, null, JSON.stringify({ data: ['; rm -rf ;'] }), 200)
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
       assertObjectContains(err.message, "Can't parse commits to exclude response: Invalid commit type response")
-      // to check that it is not called
-      assert.strictEqual(scope.isDone(), false)
-      assertObjectContains(scope.pendingMocks(), ['POST https://api.test.com:443/api/v2/git/repository/packfile'])
+      sinon.assert.calledOnce(requestStub)
       done()
     })
   })
 
   it('should fail and not continue if the response are badly formatted commits', (done) => {
-    const scope = nock('https://api.test.com')
-      .post('/api/v2/git/repository/search_commits')
-      .reply(200, JSON.stringify({ data: badLatestCommits.map((sha) => ({ id: sha, type: 'commit' })) }))
-      .post('/api/v2/git/repository/packfile')
-      .reply(204)
+    requestStub.callsArgWith(2, null,
+      JSON.stringify({ data: badLatestCommits.map((sha) => ({ id: sha, type: 'commit' })) }),
+      200)
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
       assertObjectContains(err.message, "Can't parse commits to exclude response: Invalid commit format")
-      // to check that it is not called
-      assert.strictEqual(scope.isDone(), false)
-      assertObjectContains(scope.pendingMocks(), ['POST https://api.test.com:443/api/v2/git/repository/packfile'])
+      sinon.assert.calledOnce(requestStub)
       done()
     })
   })
 
   it('should fail if the packfile request returns anything other than 204', (done) => {
-    const scope = nock('https://api.test.com')
-      .post('/api/v2/git/repository/search_commits')
-      .reply(200, JSON.stringify({ data: [] }))
-      .post('/api/v2/git/repository/packfile')
-      .reply(502)
+    requestStub.onCall(0).callsArgWith(2, null, JSON.stringify({ data: [] }), 200)
+    requestStub.onCall(1).callsArgWith(2, Object.assign(new Error('502 Bad Gateway'), { status: 502 }), null, 502)
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
       assert.match(err.message, /Could not upload packfiles: status code 502/)
-      assert.strictEqual(scope.isDone(), true)
+      sinon.assert.calledTwice(requestStub)
       done()
     })
   })
@@ -237,29 +229,21 @@ describe('git_metadata', () => {
   it('should fail if the getCommitsRevList fails because the repository is too big', (done) => {
     // returning null means that the git rev-list failed
     getCommitsRevListStub.returns(null)
-    const scope = nock('https://api.test.com')
-      .post('/api/v2/git/repository/search_commits')
-      .reply(200, JSON.stringify({ data: [] }))
+    requestStub.callsArgWith(2, null, JSON.stringify({ data: [] }), 200)
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
       assert.match(err.message, /git rev-list failed/)
-      assert.strictEqual(scope.isDone(), true)
+      sinon.assert.calledOnce(requestStub)
       done()
     })
   })
 
   it('should fire a request per packfile', (done) => {
-    const scope = nock('https://api.test.com')
-      .post('/api/v2/git/repository/search_commits')
-      .reply(200, JSON.stringify({ data: [] }))
-      .post('/api/v2/git/repository/packfile')
-      .reply(204)
-      .post('/api/v2/git/repository/packfile')
-      .reply(204)
-      .post('/api/v2/git/repository/packfile')
-      .reply(204)
-      .post('/api/v2/git/repository/packfile')
-      .reply(204)
+    requestStub.onCall(0).callsArgWith(2, null, JSON.stringify({ data: [] }), 200)
+    requestStub.onCall(1).callsArgWith(2, null, '', 204)
+    requestStub.onCall(2).callsArgWith(2, null, '', 204)
+    requestStub.onCall(3).callsArgWith(2, null, '', 204)
+    requestStub.onCall(4).callsArgWith(2, null, '', 204)
 
     generatePackFilesForCommitsStub.returns([
       temporaryPackFile,
@@ -270,7 +254,7 @@ describe('git_metadata', () => {
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
       assert.strictEqual(err, null)
-      assert.strictEqual(scope.isDone(), true)
+      sinon.assert.callCount(requestStub, 5)
       done()
     })
   })
@@ -332,11 +316,7 @@ describe('git_metadata', () => {
   })
 
   it('should not crash if packfiles can not be accessed', (done) => {
-    const scope = nock('https://api.test.com')
-      .post('/api/v2/git/repository/search_commits')
-      .reply(200, JSON.stringify({ data: [] }))
-      .post('/api/v2/git/repository/packfile')
-      .reply(204)
+    requestStub.callsArgWith(2, null, JSON.stringify({ data: [] }), 200)
 
     generatePackFilesForCommitsStub.returns([
       'not-there',
@@ -345,23 +325,19 @@ describe('git_metadata', () => {
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
       assert.match(err.message, /Could not read "not-there"/)
-      assert.strictEqual(scope.isDone(), false)
+      sinon.assert.calledOnce(requestStub)
       done()
     })
   })
 
   it('should not crash if generatePackFiles returns an empty array', (done) => {
-    const scope = nock('https://api.test.com')
-      .post('/api/v2/git/repository/search_commits')
-      .reply(200, JSON.stringify({ data: [] }))
-      .post('/api/v2/git/repository/packfile')
-      .reply(204)
+    requestStub.callsArgWith(2, null, JSON.stringify({ data: [] }), 200)
 
     generatePackFilesForCommitsStub.returns([])
 
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
       assert.match(err.message, /Failed to generate packfiles/)
-      assert.strictEqual(scope.isDone(), false)
+      sinon.assert.calledOnce(requestStub)
       done()
     })
   })
@@ -371,21 +347,17 @@ describe('git_metadata', () => {
     // git will not be found
     process.env.PATH = ''
 
-    const scope = nock('https://api.test.com')
-      .post('/api/v2/git/repository/search_commits')
-      .reply(200, JSON.stringify({ data: [] }))
-      .post('/api/v2/git/repository/packfile')
-      .reply(204)
-
     gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
       assert.match(err.message, /Git is not available/)
-      assert.strictEqual(scope.isDone(), false)
+      sinon.assert.notCalled(requestStub)
       process.env.PATH = oldPath
       done()
     })
   })
 
   it('should retry if backend temporarily fails', (done) => {
+    // This test exercises request.js retry logic end-to-end, so it uses the
+    // real request module (gitMetadataWithFastRequest) backed by nock.
     // The shared retry helper only treats network errors with a transient `code`
     // (`ECONNRESET`, `ECONNREFUSED`, `ETIMEDOUT`, …) as retriable; uncoded errors
     // are no longer retried, matching real production failure modes.
@@ -401,7 +373,7 @@ describe('git_metadata', () => {
       .post('/api/v2/git/repository/packfile')
       .reply(204)
 
-    gitMetadata.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
+    gitMetadataWithFastRequest.sendGitMetadata(new URL('https://api.test.com'), { isEvpProxy: false }, '', (err) => {
       assert.strictEqual(err, null)
       assert.strictEqual(scope.isDone(), true)
       done()
@@ -409,14 +381,8 @@ describe('git_metadata', () => {
   })
 
   it('should append evp proxy prefix if configured', (done) => {
-    const scope = nock('https://api.test.com')
-      .post('/evp_proxy/v2/api/v2/git/repository/search_commits')
-      .reply(200, JSON.stringify({ data: [] }))
-      .post('/evp_proxy/v2/api/v2/git/repository/packfile')
-      .reply(204, function (uri, body) {
-        assert.strictEqual(this.req.headers['x-datadog-evp-subdomain'], 'api')
-        done()
-      })
+    requestStub.onCall(0).callsArgWith(2, null, JSON.stringify({ data: [] }), 200)
+    requestStub.onCall(1).callsArgWith(2, null, '', 204)
 
     gitMetadata.sendGitMetadata(
       new URL('https://api.test.com'),
@@ -424,24 +390,23 @@ describe('git_metadata', () => {
       '',
       (err) => {
         assert.strictEqual(err, null)
-        assert.strictEqual(scope.isDone(), true)
+        sinon.assert.calledTwice(requestStub)
+        assert.match(
+          requestStub.getCall(0).args[1].path,
+          /\/evp_proxy\/v2\/api\/v2\/git\/repository\/search_commits/
+        )
+        assert.strictEqual(requestStub.getCall(1).args[1].headers['X-Datadog-EVP-Subdomain'], 'api')
+        assert.match(
+          requestStub.getCall(1).args[1].path,
+          /\/evp_proxy\/v2\/api\/v2\/git\/repository\/packfile/
+        )
+        done()
       })
   })
 
   it('should use the input repository url and not call getRepositoryUrl', (done) => {
-    let resolvePromise
-    const requestPromise = new Promise(resolve => {
-      resolvePromise = resolve
-    })
-    const scope = nock('https://api.test.com')
-      .post('/evp_proxy/v2/api/v2/git/repository/search_commits')
-      .reply(200, function () {
-        const { meta: { repository_url: repositoryUrl } } = JSON.parse(this.req.requestBodyBuffers.toString())
-        resolvePromise(repositoryUrl)
-        return JSON.stringify({ data: [] })
-      })
-      .post('/evp_proxy/v2/api/v2/git/repository/packfile')
-      .reply(204)
+    requestStub.onCall(0).callsArgWith(2, null, JSON.stringify({ data: [] }), 200)
+    requestStub.onCall(1).callsArgWith(2, null, '', 204)
 
     gitMetadata.sendGitMetadata(
       new URL('https://api.test.com'),
@@ -449,12 +414,10 @@ describe('git_metadata', () => {
       'https://custom-git@datadog.com',
       (err) => {
         assert.strictEqual(err, null)
-        assert.strictEqual(scope.isDone(), true)
-        requestPromise.then((repositoryUrl) => {
-          sinon.assert.notCalled(getRepositoryUrlStub)
-          assert.strictEqual(repositoryUrl, 'https://custom-git@datadog.com')
-          done()
-        })
+        sinon.assert.notCalled(getRepositoryUrlStub)
+        const { meta: { repository_url: repositoryUrl } } = JSON.parse(requestStub.getCall(0).args[0])
+        assert.strictEqual(repositoryUrl, 'https://custom-git@datadog.com')
+        done()
       })
   })
 })

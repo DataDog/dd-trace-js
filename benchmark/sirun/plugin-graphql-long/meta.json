@@ -3,29 +3,18 @@
   "run": "node index.js",
   "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
   "cachegrind": false,
-  "iterations": 5,
+  "iterations": 10,
   "instructions": true,
   "variants": {
-    "control": {},
-    "with-async-hooks": {
-      "baseline": "control",
-      "env": { "WITH_ASYNC_HOOKS": "1" }
-    },
     "with-depth-off": {
-      "baseline": "control",
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "0" }
+      "iterations": 7,
+      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "0", "OPERATIONS": "1150" }
     },
     "with-depth-on-max": {
-      "baseline": "control",
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "4" }
+      "env": { "WITH_TRACER": "1", "WITH_DEPTH": "4", "OPERATIONS": "800" }
     },
     "with-depth-and-collapse-off": {
-      "baseline": "control",
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH_AND_COLLAPSE": "4,0" }
-    },
-    "with-depth-and-collapse-on": {
-      "baseline": "control",
-      "env": { "WITH_TRACER": "1", "WITH_DEPTH_AND_COLLAPSE": "4,1" }
+      "env": { "WITH_TRACER": "1", "WITH_DEPTH_AND_COLLAPSE": "4,0", "OPERATIONS": "210" }
     }
   }
 }

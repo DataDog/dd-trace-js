@@ -53,7 +53,7 @@ describe('AgentlessWriter', () => {
       '../../encode/agentless-json': { AgentlessJSONEncoder },
       '../../../../../package.json': { version: 'tracerVersion' },
       '../../log': log,
-      '../../config': () => ({ apiKey }),
+      '../../config': () => ({ DD_API_KEY: apiKey }),
     })
   })
 
@@ -80,6 +80,12 @@ describe('AgentlessWriter', () => {
       writer = new Writer({})
 
       assert.strictEqual(writer._url.hostname, 'public-trace-http-intake.logs.datadoghq.com')
+    })
+
+    it('should map a regional site to its data-center intake host', () => {
+      writer = new Writer({ site: 'ap1.datadoghq.com' })
+
+      assert.strictEqual(writer._url.hostname, 'browser-intake-ap1-datadoghq.com')
     })
 
     it('should pass writer reference and metadata to encoder', () => {
@@ -132,7 +138,7 @@ describe('AgentlessWriter', () => {
         assert.deepStrictEqual(request.getCall(0).args[0], expectedData)
         assertObjectContains(request.getCall(0).args[1], {
           url,
-          path: '/v1/input',
+          path: '/api/v2/spans',
           method: 'POST',
           timeout: 15_000,
           headers: {

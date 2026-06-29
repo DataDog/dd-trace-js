@@ -178,7 +178,8 @@ describe('AgentlessJSONEncoder', () => {
     })
 
     it('should convert span_events to meta.events JSON string', () => {
-      data[0].span_events = [{ name: 'exception', attributes: { message: 'error' } }]
+      // Raw events carry startTime; the encoder derives time_unix_nano = round(startTime * 1e6).
+      data[0].span_events = [{ name: 'exception', startTime: 1, attributes: { message: 'error' } }]
 
       encoder.encode(data)
 
@@ -188,7 +189,10 @@ describe('AgentlessJSONEncoder', () => {
 
       assert.strictEqual(span.span_events, undefined)
       assert.strictEqual(typeof span.meta.events, 'string')
-      assert.deepStrictEqual(JSON.parse(span.meta.events), [{ name: 'exception', attributes: { message: 'error' } }])
+      assert.deepStrictEqual(
+        JSON.parse(span.meta.events),
+        [{ name: 'exception', time_unix_nano: 1000000, attributes: { message: 'error' } }]
+      )
     })
 
     it('should include meta_struct when present', () => {
@@ -331,10 +335,11 @@ describe('AgentlessJSONEncoder', () => {
     })
 
     it('should trigger writer flush when estimated size exceeds soft limit', () => {
-      // Set estimated size just under the 8MB soft limit, then encode a span to push over
-      encoder._estimatedSize = 8 * 1024 * 1024
+      // Construct an encoder with a 1-byte soft limit so any non-empty span
+      // pushes over and triggers the flush, no reach-in required.
+      const tinyEncoder = new AgentlessJSONEncoder(writer, metadata, 1)
 
-      encoder.encode(data)
+      tinyEncoder.encode(data)
 
       sinon.assert.calledOnce(writer.flush)
     })

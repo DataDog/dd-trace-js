@@ -4,10 +4,7 @@ const zlib = require('zlib')
 const pkg = require('../../../../package.json')
 const log = require('../log')
 const request = require('../exporters/common/request')
-const { MsgpackEncoder } = require('../msgpack')
-const { getAgentUrl } = require('../agent/url')
-
-const msgpack = new MsgpackEncoder()
+const { encode: encodeMsgpack } = require('../msgpack')
 
 function makeRequest (data, url, cb) {
   const options = {
@@ -31,7 +28,7 @@ function makeRequest (data, url, cb) {
 
 class DataStreamsWriter {
   constructor (config) {
-    this._url = getAgentUrl(config)
+    this._url = config.url
   }
 
   flush (payload) {
@@ -39,7 +36,7 @@ class DataStreamsWriter {
       log.debug('Maximum number of active requests reached. Payload discarded: %j', payload)
       return
     }
-    const encodedPayload = msgpack.encode(payload)
+    const encodedPayload = encodeMsgpack(payload)
 
     zlib.gzip(encodedPayload, { level: 1 }, (err, compressedData) => {
       if (err) {

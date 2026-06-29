@@ -45,7 +45,7 @@ function incrementLLMObsSpanStartCount (tags, value = 1) {
 
 function incrementLLMObsSpanFinishedCount (span, value = 1) {
   const mlObsTags = LLMObsTagger.tagMap.get(span)
-  const spanTags = span.context()._tags
+  const spanTags = span.context().getTags()
 
   const isRootSpan = mlObsTags[PARENT_ID_KEY] === ROOT_PARENT_ID
   const hasSessionId = mlObsTags[SESSION_ID] != null
@@ -87,6 +87,7 @@ function recordLLMObsEnabled (startTime, config, value = 1) {
     site: config.site,
     auto: Number(autoEnabled),
     ml_app: config.llmobs.mlApp,
+    sample_rate: config.llmobs.sampleRate,
   }
   llmobsMetrics.count('product_enabled', tags).inc(value)
   llmobsMetrics.distribution('init_time', tags).track(initTimeMs)

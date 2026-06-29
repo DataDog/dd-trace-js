@@ -60,7 +60,11 @@ function maybeEnable (Plugin) {
 
 function getEnabled (Plugin) {
   const envName = `DD_TRACE_${Plugin.id.toUpperCase()}_ENABLED`
-  return getValueFromEnvSources(normalizePluginEnvName(envName))
+  // skipDefault: only an explicitly configured value should drive enablement here. A registered
+  // default of `false` (e.g. an experimental plugin like `nats`) must not be read as an explicit
+  // "disabled via configuration option" — that path both logs a misleading line and nulls the
+  // plugin class, bypassing the experimental opt-in handled by `loadPlugin`.
+  return getValueFromEnvSources(normalizePluginEnvName(envName), true)
 }
 
 // TODO this must always be a singleton.
@@ -154,7 +158,7 @@ module.exports = class PluginManager {
     const {
       logInjection,
       serviceMapping,
-      queryStringObfuscation,
+      DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,
       site,
       url,
       headerTags,
@@ -164,16 +168,17 @@ module.exports = class PluginManager {
       clientIpEnabled,
       clientIpHeader,
       DD_TRACE_MEMCACHED_COMMAND_ENABLED,
+      DD_TRACE_OTEL_SEMANTICS_ENABLED,
       DD_TEST_SESSION_NAME,
       DD_AGENTLESS_LOG_SUBMISSION_ENABLED,
-      isTestDynamicInstrumentationEnabled,
+      testOptimization,
       isServiceUserProvided,
       middlewareTracingEnabled,
       traceWebsocketMessagesEnabled,
       traceWebsocketMessagesInheritSampling,
       traceWebsocketMessagesSeparateTraces,
       experimental,
-      resourceRenamingEnabled,
+      DD_TRACE_RESOURCE_RENAMING_ENABLED,
     } = /** @type {import('./config/config-base')} */ (this._tracerConfig)
 
     const sharedConfig = {
@@ -181,27 +186,28 @@ module.exports = class PluginManager {
       dbmPropagationMode,
       dsmEnabled,
       DD_TRACE_MEMCACHED_COMMAND_ENABLED,
+      DD_TRACE_OTEL_SEMANTICS_ENABLED,
       site,
       url,
       headers: headerTags || [],
       clientIpHeader,
       DD_TEST_SESSION_NAME,
       DD_AGENTLESS_LOG_SUBMISSION_ENABLED,
-      isTestDynamicInstrumentationEnabled,
+      isTestDynamicInstrumentationEnabled: testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED,
       isServiceUserProvided,
       traceWebsocketMessagesEnabled,
       traceWebsocketMessagesInheritSampling,
       traceWebsocketMessagesSeparateTraces,
       experimental,
-      resourceRenamingEnabled,
+      resourceRenamingEnabled: DD_TRACE_RESOURCE_RENAMING_ENABLED,
     }
 
     if (logInjection !== undefined) {
       sharedConfig.logInjection = logInjection
     }
 
-    if (queryStringObfuscation !== undefined) {
-      sharedConfig.queryStringObfuscation = queryStringObfuscation
+    if (DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP !== undefined) {
+      sharedConfig.queryStringObfuscation = DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP
     }
 
     if (serviceMapping && serviceMapping[name]) {

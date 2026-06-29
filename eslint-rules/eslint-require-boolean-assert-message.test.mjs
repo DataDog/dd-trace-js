@@ -219,6 +219,31 @@ ruleTester.run('eslint-require-boolean-assert-message', /** @type {import('eslin
       errors: [{ messageId: 'missingMessage' }],
     },
 
+    // String literals containing `${...}` — copying them verbatim into the synthesised
+    // backtick template would turn the literal `${...}` into a real interpolation, silently
+    // changing the message (or throwing `ReferenceError` if the identifier isn't in scope).
+    // Bail rather than try to escape.
+    {
+      // eslint-disable-next-line no-template-curly-in-string
+      code: "assert.ok(value == '${expected}')",
+      output: null,
+      errors: [{ messageId: 'missingMessage' }],
+    },
+    {
+      // eslint-disable-next-line no-template-curly-in-string
+      code: "assert.ok(x > '${threshold}')",
+      output: null,
+      errors: [{ messageId: 'missingMessage' }],
+    },
+    {
+      // Escaped `${` inside the literal is just as dangerous — the synthesised template
+      // would still see `${...}` after the source backslash gets normalised by the parser.
+      // eslint-disable-next-line no-template-curly-in-string
+      code: "assert.ok(value == 'foo\\${expected}')",
+      output: null,
+      errors: [{ messageId: 'missingMessage' }],
+    },
+
     // Logical combinations — composite booleans hide which side was falsy, and there's no
     // mechanical message that's reliably better than what the author would write.
     {

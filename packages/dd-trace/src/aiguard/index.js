@@ -1,13 +1,16 @@
 'use strict'
 
 const log = require('../log')
-const { incomingHttpRequestStart, aiguardChannel } = require('./channels')
+const { incomingHttpRequestStart } = require('./channels')
+const openaiIntegration = require('./integrations/openai')
+const vercelAiIntegration = require('./integrations/vercel-ai')
 const AIGuard = require('./sdk')
-const { SOURCE_AUTO, INTEGRATION_NONE } = require('./tags')
 
 let isEnabled = false
 let aiguard
 let block
+let disableOpenAIIntegration
+let disableVercelAiIntegration
 
 function onIncomingHttpRequestStart () {
   // No-op: subscribing ensures the HTTP plugin spreads req onto the store
@@ -21,7 +24,8 @@ function enable (tracer, config) {
     block = config.experimental?.aiguard?.block !== false
 
     incomingHttpRequestStart.subscribe(onIncomingHttpRequestStart)
-    aiguardChannel.subscribe(onEvaluate)
+    disableOpenAIIntegration = openaiIntegration.enable(aiguard, block)
+    disableVercelAiIntegration = vercelAiIntegration.enable(aiguard, block)
 
     isEnabled = true
   } catch (err) {
@@ -34,37 +38,14 @@ function disable () {
   if (!isEnabled) return
 
   incomingHttpRequestStart.unsubscribe(onIncomingHttpRequestStart)
-  aiguardChannel.unsubscribe(onEvaluate)
+  disableOpenAIIntegration?.()
+  disableVercelAiIntegration?.()
 
   aiguard = undefined
   isEnabled = false
   block = false
-}
-
-/**
- * Handles channel messages with pre-converted messages.
- *
- * @param {{messages: Array<object>, resolve: Function, reject: Function}} ctx
- */
-function onEvaluate (ctx) {
-  if (!ctx.messages?.length) {
-    ctx.resolve()
-    return
-  }
-
-  const opts = { block, source: SOURCE_AUTO, integration: ctx.integration || INTEGRATION_NONE }
-  aiguard.evaluate(ctx.messages, opts)
-    .then(() => {
-      ctx.resolve()
-    })
-    .catch(err => {
-      if (err.name === 'AIGuardAbortError') {
-        ctx.reject(err)
-      } else {
-        log.error('AIGuard: unexpected error during evaluation: %s', err.message)
-        ctx.resolve()
-      }
-    })
+  disableOpenAIIntegration = undefined
+  disableVercelAiIntegration = undefined
 }
 
 module.exports = { enable, disable }

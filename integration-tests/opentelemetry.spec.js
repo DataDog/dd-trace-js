@@ -380,6 +380,7 @@ describe('opentelemetry', function () {
         DD_TRACE_OTEL_ENABLED: '1',
         SERVER_PORT,
         DD_TRACE_DISABLED_INSTRUMENTATIONS: 'http,dns,express,net',
+        DD_TRACE_OTEL_SEMANTICS_ENABLED: 'true',
       },
     })
     await getWithRetry(`http://localhost:${SERVER_PORT}/first-endpoint`, 10_000)
@@ -390,7 +391,7 @@ describe('opentelemetry', function () {
       const trace = payload.flat()
       assert.strictEqual(trace.length, 9)
 
-      // Should have expected span names and ordering
+      // Should have expected span resource names and ordering
       assert.ok(eachEqual(trace, [
         'GET /second-endpoint',
         'middleware - query',
@@ -402,7 +403,7 @@ describe('opentelemetry', function () {
         'request handler - /first-endpoint',
         'GET',
       ],
-      (span) => span.name))
+      (span) => span.resource))
 
       assert.ok(allEqual(trace, (span) => {
         span.trace_id.toString()

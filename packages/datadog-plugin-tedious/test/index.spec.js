@@ -358,7 +358,10 @@ describe('Plugin', () => {
             connection.execBulkLoad(bulkLoad, [{ num: 5 }])
           })
 
-          if (semver.intersects(version, '>=4.2.0') && !semver.intersects(version, '>=14')) {
+          // `getRowStream()` is deprecated in tedious 13.1.0 and removed in 14. The shared test setup
+          // (setup/core.js) rethrows DeprecationWarnings, so calling it on >=13 aborts the process; only
+          // exercise the streaming row input on the majors below 13.
+          if (semver.intersects(version, '>=4.2.0') && !semver.intersects(version, '>=13')) {
             it('should handle streaming BulkLoad requests', done => {
               const bulkLoad = buildBulkLoad()
               const rowStream = bulkLoad.getRowStream()
@@ -407,10 +410,11 @@ describe('Plugin', () => {
       let tds
       let connection
 
-      beforeEach(() => {
-        return agent.load('tedious', { dbmPropagationMode: 'service', service: 'custom' }).then(() => {
-          tds = require(`../../../versions/tedious@${version}`).get()
-        })
+      beforeEach(async () => {
+        // Pin the service version so the injected `ddpv` is deterministic; without it the tag falls back
+        // to `pkg.version` (the nearest package.json to mocha), which drifts on every mocha bump.
+        await agent.load('tedious', { dbmPropagationMode: 'service', service: 'custom' }, { version: '1.0.0' })
+        tds = require(`../../../versions/tedious@${version}`).get()
       })
 
       afterEach(() => {
@@ -455,8 +459,14 @@ describe('Plugin', () => {
         const promise = agent
           .assertSomeTraces(traces => {
             assert.strictEqual(traces[0][0].resource, 'SELECT 1 + 1 AS solution')
-            assert.strictEqual(request.sqlTextOrProcedure, "/*dddb='master',dddbs='custom',dde='tester'," +
-              "ddh='localhost',ddps='test',ddpv='10.8.2'*/ SELECT 1 + 1 AS solution")
+            // Some tedious majors route `execSql` through `sp_executesql`, so the injected query lands in
+            // the `statement`/`stmt` parameter instead of `sqlTextOrProcedure`; read it where the
+            // instrumentation wrote it (see `getQueryOrProcedure`).
+            const injectedQuery = request.parametersByName?.statement?.value ??
+              request.parametersByName?.stmt?.value ??
+              request.sqlTextOrProcedure
+            assert.strictEqual(injectedQuery, "/*dddb='master',dddbs='custom',dde='tester'," +
+              "ddh='localhost',ddps='test',ddpv='1.0.0'*/ SELECT 1 + 1 AS solution")
           })
 
         connection.execSql(request)

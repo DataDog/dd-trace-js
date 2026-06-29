@@ -3,18 +3,46 @@ name: "[Release Proposal]"
 on:
   workflow_dispatch:
   schedule:
-    - cron: 0 5 * * *
+    - cron: 0 5 * * 1-5
 
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
 
 jobs:
+  check-branches:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      RELEASE_LINES: 5 6
+    outputs:
+      release-lines: ${{ steps.check.outputs.release-lines }}
+    steps:
+      - uses: DataDog/dd-octo-sts-action@96a25462dbcb10ebf0bfd6e2ccc917d2ab235b9a # v1.0.4
+        id: octo-sts
+        with:
+          scope: DataDog/dd-trace-js
+          policy: release-proposal
+      - id: check
+        run: |
+          lines=()
+          for line in $RELEASE_LINES; do
+            if git ls-remote --heads \
+              "https://x-access-token:${{ steps.octo-sts.outputs.token }}@github.com/DataDog/dd-trace-js.git" \
+              "refs/heads/v${line}.x" | grep -q .; then
+              lines+=("\"${line}\"")
+            fi
+          done
+          echo "release-lines=[$(IFS=,; echo "${lines[*]}")]" >> "$GITHUB_OUTPUT"
+
   create-proposal:
+    needs: check-branches
+    if: needs.check-branches.outputs.release-lines != '[]'
     strategy:
       fail-fast: false
       matrix:
-        release-line: ["5"]
+        release-line: ${{ fromJSON(needs.check-branches.outputs.release-lines) }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -24,7 +52,7 @@ jobs:
         with:
           scope: DataDog/dd-trace-js
           policy: release-proposal
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
           token: ${{ steps.octo-sts.outputs.token }}
@@ -34,6 +62,52 @@ jobs:
       - uses: ./.github/actions/install/branch-diff
         with:
           token: ${{ steps.octo-sts.outputs.token }}
-      - run: node scripts/release/proposal ${{ matrix.release-line }} -y ${{ github.event_name == 'workflow_dispatch' && '-f' || '' }}
+      - id: proposal
+        run: node scripts/release/proposal ${{ matrix.release-line }} -y ${{ github.event_name == 'workflow_dispatch' && '-f' || '' }}
         env:
           GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
+      - uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v2.1.0
+        if: >
+          github.event_name == 'schedule' &&
+          steps.proposal.outputs.commit_count != '' &&
+          fromJSON(steps.proposal.outputs.commit_count) >= 50 &&
+          fromJSON(steps.proposal.outputs.commit_count) < 100
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          errors: true
+          payload: |
+            channel: ${{ secrets.SLACK_CHANNEL_ID }}
+            blocks:
+              - type: "section"
+                text:
+                  type: "mrkdwn"
+                  text: >-
+                    :warning: *Release proposal
+                    <${{ steps.proposal.outputs.pr_url }}|${{ steps.proposal.outputs.version }}>*
+                    has ${{ steps.proposal.outputs.commit_count }} commits queued.
+                    GitHub's rebase limit is 100 — once reached, commits that don't fit
+                    will be deferred to a subsequent release.
+                    Consider cutting this release soon.
+      - uses: slackapi/slack-github-action@45a88b9581bfab2566dc881e2cd66d334e621e2c # v2.1.0
+        if: >
+          github.event_name == 'schedule' &&
+          steps.proposal.outputs.commit_count != '' &&
+          fromJSON(steps.proposal.outputs.commit_count) >= 100
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          errors: true
+          payload: |
+            channel: ${{ secrets.SLACK_CHANNEL_ID }}
+            blocks:
+              - type: "section"
+                text:
+                  type: "mrkdwn"
+                  text: >-
+                    :rotating_light: *Release proposal
+                    <${{ steps.proposal.outputs.pr_url }}|${{ steps.proposal.outputs.version }}>*
+                    has ${{ steps.proposal.outputs.commit_count }} commits queued.
+                    GitHub's rebase limit of 100 has been reached — commits that don't fit
+                    will be deferred to a subsequent release.
+                    Consider cutting this release soon.

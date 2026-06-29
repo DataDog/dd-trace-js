@@ -86,7 +86,7 @@ class CiVisibilityExporter extends BufferingExporter {
   }
 
   shouldRequestSkippableSuites () {
-    return !!(this._config.isIntelligentTestRunnerEnabled &&
+    return !!(this._config.testOptimization.DD_CIVISIBILITY_ITR_ENABLED &&
       this._canUseCiVisProtocol &&
       this._libraryConfig?.isSuitesSkippingEnabled)
   }
@@ -101,7 +101,7 @@ class CiVisibilityExporter extends BufferingExporter {
   shouldRequestTestManagementTests () {
     return !!(
       this._canUseCiVisProtocol &&
-      this._config.isTestManagementEnabled &&
+      this._config.testOptimization.DD_TEST_MANAGEMENT_ENABLED &&
       this._libraryConfig?.isTestManagementEnabled
     )
   }
@@ -218,30 +218,32 @@ class CiVisibilityExporter extends BufferingExporter {
       isImpactedTestsEnabled,
       isCoverageReportUploadEnabled,
     } = remoteConfiguration
+    const { testOptimization } = this._config
     return {
       isCodeCoverageEnabled,
       isSuitesSkippingEnabled,
       isItrEnabled,
       requireGit,
-      isEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionEnabled && this._config.isEarlyFlakeDetectionEnabled,
+      isEarlyFlakeDetectionEnabled:
+        isEarlyFlakeDetectionEnabled && testOptimization.DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED,
       earlyFlakeDetectionNumRetries,
       earlyFlakeDetectionSlowTestRetries,
       earlyFlakeDetectionFaultyThreshold,
-      isFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled && this._config.isFlakyTestRetriesEnabled,
-      flakyTestRetriesCount: this._config.flakyTestRetriesCount,
-      isDiEnabled: isDiEnabled && this._config.isTestDynamicInstrumentationEnabled,
+      isFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled && testOptimization.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED,
+      flakyTestRetriesCount: testOptimization.DD_CIVISIBILITY_FLAKY_RETRY_COUNT,
+      isDiEnabled: isDiEnabled && testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED,
       isKnownTestsEnabled,
-      isTestManagementEnabled: isTestManagementEnabled && this._config.isTestManagementEnabled,
+      isTestManagementEnabled: isTestManagementEnabled && testOptimization.DD_TEST_MANAGEMENT_ENABLED,
       testManagementAttemptToFixRetries:
-        testManagementAttemptToFixRetries ?? this._config.testManagementAttemptToFixRetries,
-      isImpactedTestsEnabled: isImpactedTestsEnabled && this._config.isImpactedTestsEnabled,
+        testManagementAttemptToFixRetries ?? testOptimization.DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES,
+      isImpactedTestsEnabled:
+        isImpactedTestsEnabled && testOptimization.DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED,
       isCoverageReportUploadEnabled,
-      DD_TEST_TIA_KEEP_COV_CONFIG: this._config.DD_TEST_TIA_KEEP_COV_CONFIG,
     }
   }
 
   sendGitMetadata (repositoryUrl) {
-    if (!this._config.isGitUploadEnabled) {
+    if (!this._config.testOptimization.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED) {
       return
     }
     this._canUseCiVisProtocolPromise.then((canUseCiVisProtocol) => {
@@ -319,7 +321,8 @@ class CiVisibilityExporter extends BufferingExporter {
   // DI logs
   exportDiLogs (testEnvironmentMetadata, logMessage) {
     // TODO: could we lose logs if it's not initialized?
-    if (!this._config.isTestDynamicInstrumentationEnabled || !this._isInitialized || !this._canForwardLogs) {
+    if (!this._config.testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED ||
+      !this._isInitialized || !this._canForwardLogs) {
       return
     }
 

@@ -1,0 +1,25 @@
+{
+  "name": "plugin-redis",
+  "run": "node index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "cachegrind": false,
+  "iterations": 15,
+  "instructions": true,
+  "variants": {
+    "get": {
+      "env": { "VARIANT": "get", "OPERATIONS": "13500000" }
+    },
+    "long-value": {
+      "env": { "VARIANT": "long-value", "OPERATIONS": "13000000" }
+    },
+    "mset-wide": {
+      "env": { "VARIANT": "mset-wide", "OPERATIONS": "980000" }
+    },
+    "mixed": {
+      "env": { "VARIANT": "mixed", "OPERATIONS": "11500000" }
+    },
+    "churn": {
+      "env": { "VARIANT": "churn", "OPERATIONS": "5000000" }
+    }
+  }
+}

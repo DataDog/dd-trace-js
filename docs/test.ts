@@ -70,7 +70,9 @@ tracer.init({
   rateLimit: 1000,
   samplingRules: [
     { sampleRate: 0.5, service: 'foo', name: 'foo.request' },
-    { sampleRate: 0.1, service: /foo/, name: /foo\.request/ }
+    { sampleRate: 0.1, service: /foo/, name: /foo\.request/ },
+    { sampleRate: 0, resource: 'GET /health', maxPerSecond: 5 },
+    { sampleRate: 0, tags: { 'http.url': '*/spam*', 'span.kind': /server/ } }
   ],
   spanSamplingRules: [
     { sampleRate: 1.0, service: 'foo', name: 'foo.request', maxPerSecond: 5 },
@@ -228,7 +230,8 @@ const graphqlOptions: plugins.graphql = {
   hooks: {
     execute: (span?: Span, args?, res?) => { },
     validate: (span?: Span, document?, errors?) => { },
-    parse: (span?: Span, source?, document?) => { }
+    parse: (span?: Span, source?, document?) => { },
+    resolve: (span?: Span, field?) => { }
   }
 };
 
@@ -250,6 +253,15 @@ const awsSdkOptions: plugins.aws_sdk = {
     consumer: true,
     producer: false
   }
+};
+
+const awsSdkServiceFunctionOptions: plugins.aws_sdk = {
+  service: (params): string | undefined => params.TableName ? String(params.TableName) : undefined,
+};
+
+const bullmqOptions: plugins.bullmq = {
+  service: 'test',
+  producerFilter: ({ name, queueName }) => name !== 'skip' && queueName !== 'dead-letter',
 };
 
 const redisOptions: plugins.redis = {
@@ -289,9 +301,12 @@ tracer.use('claude-agent-sdk');
 tracer.use('avsc');
 tracer.use('aws-sdk');
 tracer.use('aws-sdk', awsSdkOptions);
+tracer.use('aws-sdk', awsSdkServiceFunctionOptions);
+tracer.use('azure-cosmos');
 tracer.use('azure-event-hubs')
 tracer.use('azure-functions');
 tracer.use('bullmq');
+tracer.use('bullmq', bullmqOptions);
 tracer.use('bunyan');
 tracer.use('couchbase');
 tracer.use('cassandra-driver');
@@ -313,7 +328,6 @@ tracer.use('fastify');
 tracer.use('fastify', httpServerOptions);
 tracer.use('fetch');
 tracer.use('fetch', httpClientOptions);
-tracer.use('generic-pool');
 tracer.use('google-cloud-pubsub');
 tracer.use('google-cloud-vertexai');
 tracer.use('google-genai');
@@ -355,7 +369,6 @@ tracer.use('iovalkey', { splitByInstance: true });
 tracer.use('jest');
 tracer.use('jest', { service: 'jest-service' });
 tracer.use('kafkajs');
-tracer.use('knex');
 tracer.use('koa');
 tracer.use('koa', httpServerOptions);
 tracer.use('langchain');
@@ -374,6 +387,7 @@ tracer.use('mysql');
 tracer.use('mysql', { service: () => `my-custom-mysql` });
 tracer.use('mysql2');
 tracer.use('mysql2', { service: () => `my-custom-mysql2` });
+tracer.use('nats');
 tracer.use('net');
 tracer.use('next');
 tracer.use('next', nextOptions);
@@ -396,6 +410,7 @@ tracer.use('restify');
 tracer.use('restify', httpServerOptions);
 tracer.use('rhea');
 tracer.use('router');
+tracer.use('router', { middleware: false });
 tracer.use('selenium');
 tracer.use('sharedb');
 tracer.use('sharedb', sharedbOptions);

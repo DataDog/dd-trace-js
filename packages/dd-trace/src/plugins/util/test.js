@@ -22,17 +22,40 @@ const { SAMPLING_RULE_DECISION } = require('../../constants')
 const { AUTO_KEEP } = require('../../../../../ext/priority')
 const { version: ddTraceVersion } = require('../../../../../package.json')
 const {
+  CI_JOB_ID,
   GIT_BRANCH,
   GIT_COMMIT_SHA,
   GIT_REPOSITORY_URL,
   GIT_TAG,
+  GIT_COMMIT_AUTHOR_DATE,
   GIT_COMMIT_AUTHOR_EMAIL,
   GIT_COMMIT_AUTHOR_NAME,
+  GIT_COMMIT_COMMITTER_DATE,
+  GIT_COMMIT_COMMITTER_EMAIL,
+  GIT_COMMIT_COMMITTER_NAME,
   GIT_COMMIT_MESSAGE,
+  GIT_COMMIT_HEAD_AUTHOR_DATE,
+  GIT_COMMIT_HEAD_AUTHOR_EMAIL,
+  GIT_COMMIT_HEAD_AUTHOR_NAME,
+  GIT_COMMIT_HEAD_COMMITTER_DATE,
+  GIT_COMMIT_HEAD_COMMITTER_EMAIL,
+  GIT_COMMIT_HEAD_COMMITTER_NAME,
+  GIT_COMMIT_HEAD_MESSAGE,
   CI_WORKSPACE_PATH,
+  CI_PIPELINE_ID,
+  CI_PIPELINE_NAME,
+  CI_PIPELINE_NUMBER,
   CI_PIPELINE_URL,
   CI_JOB_NAME,
+  CI_JOB_URL,
+  CI_NODE_LABELS,
+  CI_NODE_NAME,
+  CI_PROVIDER_NAME,
+  CI_STAGE_NAME,
   GIT_COMMIT_HEAD_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH,
+  GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH_SHA,
 } = require('./tags')
 const { getRuntimeAndOSMetadata } = require('./env')
 const { getCIMetadata } = require('./ci')
@@ -198,6 +221,43 @@ const TEST_LEVEL_EVENT_TYPES = [
   'test_module_end',
   'test_session_end',
 ]
+const TEST_LEVELS_METADATA = 'test_levels'
+const TEST_LEVELS_METADATA_TAGS = [
+  CI_JOB_ID,
+  CI_JOB_NAME,
+  CI_JOB_URL,
+  CI_NODE_LABELS,
+  CI_NODE_NAME,
+  CI_PIPELINE_ID,
+  CI_PIPELINE_NAME,
+  CI_PIPELINE_NUMBER,
+  CI_PIPELINE_URL,
+  CI_PROVIDER_NAME,
+  CI_STAGE_NAME,
+  CI_WORKSPACE_PATH,
+  GIT_BRANCH,
+  GIT_COMMIT_AUTHOR_DATE,
+  GIT_COMMIT_AUTHOR_EMAIL,
+  GIT_COMMIT_AUTHOR_NAME,
+  GIT_COMMIT_COMMITTER_DATE,
+  GIT_COMMIT_COMMITTER_EMAIL,
+  GIT_COMMIT_COMMITTER_NAME,
+  GIT_COMMIT_HEAD_AUTHOR_DATE,
+  GIT_COMMIT_HEAD_AUTHOR_EMAIL,
+  GIT_COMMIT_HEAD_AUTHOR_NAME,
+  GIT_COMMIT_HEAD_COMMITTER_DATE,
+  GIT_COMMIT_HEAD_COMMITTER_EMAIL,
+  GIT_COMMIT_HEAD_COMMITTER_NAME,
+  GIT_COMMIT_HEAD_MESSAGE,
+  GIT_COMMIT_HEAD_SHA,
+  GIT_COMMIT_MESSAGE,
+  GIT_COMMIT_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH,
+  GIT_PULL_REQUEST_BASE_BRANCH_HEAD_SHA,
+  GIT_PULL_REQUEST_BASE_BRANCH_SHA,
+  GIT_REPOSITORY_URL,
+  GIT_TAG,
+]
 const TEST_RETRY_REASON_TYPES = {
   efd: 'early_flake_detection',
   atr: 'auto_test_retry',
@@ -229,11 +289,11 @@ const BASE_LIKE_BRANCH_FILTER = /^(main|master|preprod|prod|dev|development|trun
 
 /**
  * Returns request error tags from a test session span for propagation to child events.
- * @param {{ context: () => { _tags?: Record<string, string> } } | undefined} sessionSpan
+ * @param {{ context: () => { getTag?: (key: string) => string } } | undefined} sessionSpan
  * @returns {Record<string, string>}
  */
 function getSessionRequestErrorTags (sessionSpan) {
-  const tags = sessionSpan?.context()._tags
+  const tags = sessionSpan?.context()?.getTags?.()
   const sessionRequestErrorTags = {}
   if (!tags || typeof tags !== 'object') return {}
   if (tags[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS] === 'true') {
@@ -253,11 +313,11 @@ function getSessionRequestErrorTags (sessionSpan) {
 
 /**
  * Returns ITR skipping-enabled tags from a test session span for propagation to child events.
- * @param {{ context: () => { _tags?: Record<string, string> } } | undefined} sessionSpan
+ * @param {{ context: () => { getTags?: () => Record<string, string> } } | undefined} sessionSpan
  * @returns {Record<string, string>}
  */
 function getSessionItrSkippingEnabledTags (sessionSpan) {
-  const tags = sessionSpan?.context()._tags
+  const tags = sessionSpan?.context()?.getTags?.()
   if (!tags || typeof tags !== 'object') return {}
   if (tags[TEST_ITR_SKIPPING_ENABLED] !== undefined) {
     return {
@@ -398,6 +458,7 @@ module.exports = {
   getCodeOwnersFileEntries,
   getCodeOwnersForFilename,
   getTestCommonTags,
+  getTestLevelsMetadataTags,
   getTestSessionCommonTags,
   getTestModuleCommonTags,
   getTestSuiteCommonTags,
@@ -418,6 +479,12 @@ module.exports = {
   ITR_CORRELATION_ID,
   addIntelligentTestRunnerSpanTags,
   getCoveredFilenamesFromCoverage,
+  getCoveredFilesFromCoverage,
+  getExecutableFilesFromCoverage,
+  getRelativeCoverageFiles,
+  getLineCoverageBitmap,
+  applySkippedCoverageToCoverage,
+  getTestCoverageLinesPercentage,
   resetCoverage,
   mergeCoverage,
   fromCoverageMapToCoverage,
@@ -442,6 +509,7 @@ module.exports = {
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
   DD_CAPABILITIES_FAILED_TEST_REPLAY,
   TEST_LEVEL_EVENT_TYPES,
+  TEST_LEVELS_METADATA,
   TEST_RETRY_REASON_TYPES,
   getNumFromKnownTests,
   getFileAndLineNumberFromError,
@@ -692,6 +760,24 @@ function getTestParametersString (parametersByTestName, testName) {
     // so we ignore the test parameters and move on
     return ''
   }
+}
+
+/**
+ * Extracts CI and Git tags that apply to every test level.
+ *
+ * @param {TestEnvironmentMetadata} testEnvironmentMetadata
+ * @returns {Record<string, string|number>}
+ */
+function getTestLevelsMetadataTags (testEnvironmentMetadata) {
+  const testLevelsMetadataTags = {}
+  for (let i = 0; i < TEST_LEVELS_METADATA_TAGS.length; i++) {
+    const key = TEST_LEVELS_METADATA_TAGS[i]
+    const value = testEnvironmentMetadata[key]
+    if (value !== undefined) {
+      testLevelsMetadataTags[key] = value
+    }
+  }
+  return testLevelsMetadataTags
 }
 
 function getTestTypeFromFramework (testFramework) {
@@ -952,7 +1038,6 @@ function getTestLevelCommonTags (command, testFrameworkVersion, testFramework) {
   return {
     [TEST_FRAMEWORK_VERSION]: testFrameworkVersion,
     [LIBRARY_VERSION]: ddTraceVersion,
-    [TEST_COMMAND]: command,
     [TEST_TYPE]: getTestTypeFromFramework(testFramework),
   }
 }
@@ -1030,15 +1115,233 @@ function addIntelligentTestRunnerSpanTags (
 }
 
 function getCoveredFilenamesFromCoverage (coverage) {
-  const coverageMap = istanbul.createCoverageMap(coverage)
+  return getCoveredFilesFromCoverage(coverage).map(({ filename }) => filename)
+}
 
-  return coverageMap
-    .files()
-    .filter(filename => {
-      const fileCoverage = coverageMap.fileCoverageFor(filename)
-      const lineCoverage = fileCoverage.getLineCoverage()
-      return Object.entries(lineCoverage).some(([, numExecutions]) => !!numExecutions)
-    })
+function getCoverageMap (coverage) {
+  if (coverage?.files && coverage?.fileCoverageFor) {
+    return coverage
+  }
+  return istanbul.createCoverageMap(coverage)
+}
+
+function getCoveredFilesFromCoverage (coverage) {
+  const coverageMap = getCoverageMap(coverage)
+  const coverageFiles = []
+
+  for (const filename of coverageMap.files()) {
+    const fileCoverage = coverageMap.fileCoverageFor(filename)
+    const bitmap = getLineCoverageBitmap(fileCoverage.getLineCoverage(), true)
+    if (bitmap) {
+      coverageFiles.push({ filename, bitmap })
+    }
+  }
+
+  return coverageFiles
+}
+
+function getExecutableFilesFromCoverage (coverage) {
+  const coverageMap = getCoverageMap(coverage)
+  const coverageFiles = []
+
+  for (const filename of coverageMap.files()) {
+    const fileCoverage = coverageMap.fileCoverageFor(filename)
+    const bitmap = getLineCoverageBitmap(fileCoverage.getLineCoverage())
+    if (bitmap) {
+      coverageFiles.push({ filename, bitmap })
+    }
+  }
+
+  return coverageFiles
+}
+
+function getRelativeCoverageFiles (coverageFiles, rootDir) {
+  return coverageFiles.map(({ filename, bitmap }) => ({
+    filename: getTestSuitePath(filename, rootDir),
+    bitmap,
+  }))
+}
+
+function getLineCoverageBitmap (lineCoverage, onlyCoveredLines = false) {
+  let maxLine = 0
+  const lines = []
+
+  for (const [line, hits] of Object.entries(lineCoverage)) {
+    if (onlyCoveredLines && !hits) continue
+
+    const lineNumber = Number(line)
+    if (!Number.isSafeInteger(lineNumber) || lineNumber <= 0) continue
+
+    lines.push(lineNumber)
+    if (lineNumber > maxLine) {
+      maxLine = lineNumber
+    }
+  }
+
+  if (maxLine === 0) return
+
+  const bitmap = Buffer.alloc(Math.ceil((maxLine + 1) / 8))
+  for (const lineNumber of lines) {
+    bitmap[lineNumber >> 3] |= 1 << (lineNumber % 8)
+  }
+
+  return bitmap
+}
+
+function mergeCoverageBitmaps (targetBitmap, bitmap) {
+  if (!targetBitmap) {
+    return Buffer.from(bitmap)
+  }
+
+  if (targetBitmap.length < bitmap.length) {
+    const biggerBitmap = Buffer.alloc(bitmap.length)
+    targetBitmap.copy(biggerBitmap)
+    targetBitmap = biggerBitmap
+  }
+
+  for (let i = 0; i < bitmap.length; i++) {
+    targetBitmap[i] |= bitmap[i]
+  }
+
+  return targetBitmap
+}
+
+function countBitmapBits (bitmap) {
+  let count = 0
+
+  for (const byte of bitmap) {
+    let value = byte
+    while (value) {
+      value &= value - 1
+      count++
+    }
+  }
+
+  return count
+}
+
+function countCoveredExecutableBits (coveredBitmap, executableBitmap) {
+  if (!coveredBitmap) return 0
+
+  let count = 0
+  const length = Math.min(coveredBitmap.length, executableBitmap.length)
+
+  for (let i = 0; i < length; i++) {
+    let value = coveredBitmap[i] & executableBitmap[i]
+    while (value) {
+      value &= value - 1
+      count++
+    }
+  }
+
+  return count
+}
+
+function getCoverageFileBitmap (bitmap) {
+  if (!bitmap) return
+  if (Buffer.isBuffer(bitmap)) return bitmap
+  if (ArrayBuffer.isView(bitmap)) {
+    return Buffer.from(bitmap.buffer, bitmap.byteOffset, bitmap.byteLength)
+  }
+  if (typeof bitmap === 'string') {
+    return Buffer.from(bitmap, 'base64')
+  }
+}
+
+function addCoverageFilesToMap (files, targetMap, rootDir) {
+  for (const file of files) {
+    const bitmap = getCoverageFileBitmap(file.bitmap)
+    if (!bitmap) continue
+
+    const filename = rootDir ? getTestSuitePath(file.filename, rootDir) : file.filename
+    targetMap.set(filename, mergeCoverageBitmaps(targetMap.get(filename), bitmap))
+  }
+}
+
+function addSkippedCoverageToMap (skippedCoverage, targetMap) {
+  if (!skippedCoverage) return
+
+  for (const [filename, bitmap] of Object.entries(skippedCoverage)) {
+    const coverageBitmap = getCoverageFileBitmap(bitmap)
+    if (!coverageBitmap) continue
+    targetMap.set(filename, mergeCoverageBitmaps(targetMap.get(filename), coverageBitmap))
+  }
+}
+
+function hasSkippedCoverage (skippedCoverage) {
+  return skippedCoverage && typeof skippedCoverage === 'object' && Object.keys(skippedCoverage).length > 0
+}
+
+function getTestCoverageLinesPercentage (coverage, skippedCoverage, rootDir) {
+  const executableLinesByFile = new Map()
+  const coveredLinesByFile = new Map()
+
+  addCoverageFilesToMap(getExecutableFilesFromCoverage(coverage), executableLinesByFile, rootDir)
+  addCoverageFilesToMap(getCoveredFilesFromCoverage(coverage), coveredLinesByFile, rootDir)
+  addSkippedCoverageToMap(skippedCoverage, coveredLinesByFile)
+
+  let totalExecutableLines = 0
+  let totalCoveredLines = 0
+
+  for (const [filename, executableLines] of executableLinesByFile) {
+    totalExecutableLines += countBitmapBits(executableLines)
+    totalCoveredLines += countCoveredExecutableBits(coveredLinesByFile.get(filename), executableLines)
+  }
+
+  return totalExecutableLines === 0 ? 0 : Math.floor((totalCoveredLines / totalExecutableLines) * 10_000) / 100
+}
+
+function isLineCoveredByBitmap (bitmap, line) {
+  if (!Number.isSafeInteger(line) || line <= 0) return false
+
+  const byteIndex = line >> 3
+  return byteIndex < bitmap.length && !!(bitmap[byteIndex] & (1 << (line % 8)))
+}
+
+function getSkippedCoverageByFilename (skippedCoverage) {
+  const skippedCoverageByFilename = new Map()
+  addSkippedCoverageToMap(skippedCoverage, skippedCoverageByFilename)
+  return skippedCoverageByFilename
+}
+
+function applySkippedCoverageToFileCoverage (fileCoverage, skippedBitmap) {
+  let updated = false
+  for (const [statementId, statementLocation] of Object.entries(fileCoverage.data.statementMap)) {
+    const startLine = statementLocation?.start?.line
+    if (!isLineCoveredByBitmap(skippedBitmap, startLine)) continue
+    if (fileCoverage.data.s[statementId] > 0) continue
+
+    fileCoverage.data.s[statementId] = 1
+    updated = true
+  }
+  return updated
+}
+
+/**
+ * Applies backend skipped-suite coverage to an Istanbul coverage map.
+ * @param {object} coverage
+ * @param {object} skippedCoverage
+ * @param {string} [rootDir]
+ * @returns {boolean}
+ */
+function applySkippedCoverageToCoverage (coverage, skippedCoverage, rootDir) {
+  if (!hasSkippedCoverage(skippedCoverage)) return false
+
+  const coverageMap = getCoverageMap(coverage)
+  const skippedCoverageByFilename = getSkippedCoverageByFilename(skippedCoverage)
+  let matched = false
+
+  for (const filename of coverageMap.files()) {
+    const relativeFilename = rootDir ? getTestSuitePath(filename, rootDir) : filename
+    const skippedBitmap = skippedCoverageByFilename.get(relativeFilename)
+    if (!skippedBitmap) continue
+
+    const fileCoverage = coverageMap.fileCoverageFor(filename)
+    applySkippedCoverageToFileCoverage(fileCoverage, skippedBitmap)
+    matched = true
+  }
+
+  return matched
 }
 
 function resetCoverage (coverage) {

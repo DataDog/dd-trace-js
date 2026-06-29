@@ -10,7 +10,7 @@
     "dependency": "@anthropic-ai/sdk",
     "integration": "anthropic",
     "minimum_tracer_supported": "0.14.0",
-    "max_tracer_supported": "0.96.0",
+    "max_tracer_supported": "0.105.0",
     "auto-instrumented": "True"
   },
   {
@@ -28,6 +28,20 @@
     "auto-instrumented": "True"
   },
   {
+    "dependency": "@aws/durable-execution-sdk-js",
+    "integration": "aws-durable-execution-sdk-js",
+    "minimum_tracer_supported": "1.1.0",
+    "max_tracer_supported": "2.0.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@azure/cosmos",
+    "integration": "azure-cosmos",
+    "minimum_tracer_supported": "4.4.1",
+    "max_tracer_supported": "4.9.3",
+    "auto-instrumented": "True"
+  },
+  {
     "dependency": "@azure/event-hubs",
     "integration": "azure-event-hubs",
     "minimum_tracer_supported": "6.0.0",
@@ -38,7 +52,7 @@
     "dependency": "@azure/functions",
     "integration": "azure-functions",
     "minimum_tracer_supported": "4.0.0",
-    "max_tracer_supported": "4.14.0",
+    "max_tracer_supported": "4.16.1",
     "auto-instrumented": "True"
   },
   {
@@ -52,14 +66,14 @@
     "dependency": "@confluentinc/kafka-javascript",
     "integration": "confluentinc-kafka-javascript",
     "minimum_tracer_supported": "1.0.0",
-    "max_tracer_supported": "1.9.0",
+    "max_tracer_supported": "1.9.1",
     "auto-instrumented": "True"
   },
   {
     "dependency": "@cucumber/cucumber",
     "integration": "cucumber",
     "minimum_tracer_supported": "7.0.0",
-    "max_tracer_supported": "12.9.0",
+    "max_tracer_supported": "13.0.0",
     "auto-instrumented": "True"
   },
   {
@@ -80,7 +94,7 @@
     "dependency": "@google-cloud/pubsub",
     "integration": "google-cloud-pubsub",
     "minimum_tracer_supported": "1.2.0",
-    "max_tracer_supported": "5.3.0",
+    "max_tracer_supported": "5.3.1",
     "auto-instrumented": "True"
   },
   {
@@ -94,7 +108,7 @@
     "dependency": "@google/genai",
     "integration": "google-genai",
     "minimum_tracer_supported": "1.19.0",
-    "max_tracer_supported": "2.4.0",
+    "max_tracer_supported": "2.9.0",
     "auto-instrumented": "True"
   },
   {
@@ -115,7 +129,7 @@
     "dependency": "@happy-dom/jest-environment",
     "integration": "jest",
     "minimum_tracer_supported": "10.0.0",
-    "max_tracer_supported": "20.9.0",
+    "max_tracer_supported": "20.10.6",
     "auto-instrumented": "True"
   },
   {
@@ -150,14 +164,14 @@
     "dependency": "@langchain/core",
     "integration": "langchain",
     "minimum_tracer_supported": "0.1.0",
-    "max_tracer_supported": "1.1.46",
+    "max_tracer_supported": "1.2.0",
     "auto-instrumented": "True"
   },
   {
     "dependency": "@langchain/langgraph",
     "integration": "langgraph",
     "minimum_tracer_supported": "1.1.2",
-    "max_tracer_supported": "1.3.0",
+    "max_tracer_supported": "1.4.4",
     "auto-instrumented": "True"
   },
   {
@@ -165,6 +179,20 @@
     "integration": "modelcontextprotocol-sdk",
     "minimum_tracer_supported": "1.27.1",
     "max_tracer_supported": "1.29.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@nats-io/nats-core",
+    "integration": "nats",
+    "minimum_tracer_supported": "3.0.0",
+    "max_tracer_supported": "3.4.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "@nats-io/transport-node",
+    "integration": "nats",
+    "minimum_tracer_supported": "3.0.0",
+    "max_tracer_supported": "3.4.0",
     "auto-instrumented": "True"
   },
   {
@@ -196,17 +224,24 @@
     "auto-instrumented": "True"
   },
   {
+    "dependency": "@smithy/core",
+    "integration": "aws-sdk",
+    "minimum_tracer_supported": "3.24.0",
+    "max_tracer_supported": "3.25.1",
+    "auto-instrumented": "True"
+  },
+  {
     "dependency": "@smithy/smithy-client",
     "integration": "aws-sdk",
     "minimum_tracer_supported": "1.0.3",
-    "max_tracer_supported": "4.13.3",
+    "max_tracer_supported": "4.14.1",
     "auto-instrumented": "True"
   },
   {
     "dependency": "@vitest/runner",
     "integration": "vitest",
     "minimum_tracer_supported": "1.6.0",
-    "max_tracer_supported": "4.1.6",
+    "max_tracer_supported": "4.1.9",
     "auto-instrumented": "True"
   },
   {
@@ -220,7 +255,7 @@
     "dependency": "ai",
     "integration": "ai",
     "minimum_tracer_supported": "4.0.0",
-    "max_tracer_supported": "6.0.184",
+    "max_tracer_supported": "6.0.208",
     "auto-instrumented": "True"
   },
   {
@@ -255,7 +290,7 @@
     "dependency": "bullmq",
     "integration": "bullmq",
     "minimum_tracer_supported": "5.66.0",
-    "max_tracer_supported": "5.76.10",
+    "max_tracer_supported": "5.79.1",
     "auto-instrumented": "True"
   },
   {
@@ -276,7 +311,7 @@
     "dependency": "child_process",
     "integration": "child_process",
     "minimum_tracer_supported": "18.0.0",
-    "max_tracer_supported": "25.9.0",
+    "max_tracer_supported": "26.4.0",
     "auto-instrumented": "True"
   },
   {
@@ -297,14 +332,14 @@
     "dependency": "cypress",
     "integration": "cypress",
     "minimum_tracer_supported": "12.0.0",
-    "max_tracer_supported": "15.15.0",
+    "max_tracer_supported": "15.16.0",
     "auto-instrumented": "True"
   },
   {
     "dependency": "dns",
     "integration": "dns",
     "minimum_tracer_supported": "18.0.0",
-    "max_tracer_supported": "25.9.0",
+    "max_tracer_supported": "26.4.0",
     "auto-instrumented": "True"
   },
   {
@@ -350,6 +385,13 @@
     "auto-instrumented": "True"
   },
   {
+    "dependency": "fs",
+    "integration": "fs",
+    "minimum_tracer_supported": "18.0.0",
+    "max_tracer_supported": "26.4.0",
+    "auto-instrumented": "True"
+  },
+  {
     "dependency": "graphql",
     "integration": "graphql",
     "minimum_tracer_supported": "0.10.0",
@@ -374,21 +416,21 @@
     "dependency": "http",
     "integration": "http",
     "minimum_tracer_supported": "18.0.0",
-    "max_tracer_supported": "25.9.0",
+    "max_tracer_supported": "26.4.0",
     "auto-instrumented": "True"
   },
   {
     "dependency": "http2",
     "integration": "http2",
     "minimum_tracer_supported": "18.0.0",
-    "max_tracer_supported": "25.9.0",
+    "max_tracer_supported": "26.4.0",
     "auto-instrumented": "True"
   },
   {
     "dependency": "https",
     "integration": "http",
     "minimum_tracer_supported": "18.0.0",
-    "max_tracer_supported": "25.9.0",
+    "max_tracer_supported": "26.4.0",
     "auto-instrumented": "True"
   },
   {
@@ -493,7 +535,7 @@
     "dependency": "mocha",
     "integration": "mocha",
     "minimum_tracer_supported": "8.0.0",
-    "max_tracer_supported": "11.7.5",
+    "max_tracer_supported": "11.7.6",
     "auto-instrumented": "True"
   },
   {
@@ -514,7 +556,7 @@
     "dependency": "mongodb",
     "integration": "mongodb-core",
     "minimum_tracer_supported": "3.3.0",
-    "max_tracer_supported": "7.0.0",
+    "max_tracer_supported": "7.2.0",
     "auto-instrumented": "True"
   },
   {
@@ -528,7 +570,7 @@
     "dependency": "mongoose",
     "integration": "mongoose",
     "minimum_tracer_supported": "4.6.4",
-    "max_tracer_supported": "9.1.4",
+    "max_tracer_supported": "9.6.2",
     "auto-instrumented": "True"
   },
   {
@@ -549,7 +591,7 @@
     "dependency": "net",
     "integration": "net",
     "minimum_tracer_supported": "18.0.0",
-    "max_tracer_supported": "25.9.0",
+    "max_tracer_supported": "26.4.0",
     "auto-instrumented": "True"
   },
   {
@@ -563,35 +605,42 @@
     "dependency": "node:dns",
     "integration": "dns",
     "minimum_tracer_supported": "18.0.0",
-    "max_tracer_supported": "25.9.0",
+    "max_tracer_supported": "26.4.0",
+    "auto-instrumented": "True"
+  },
+  {
+    "dependency": "node:fs",
+    "integration": "fs",
+    "minimum_tracer_supported": "18.0.0",
+    "max_tracer_supported": "26.4.0",
     "auto-instrumented": "True"
   },
   {
     "dependency": "node:http",
     "integration": "http",
     "minimum_tracer_supported": "18.0.0",
-    "max_tracer_supported": "25.9.0",
+    "max_tracer_supported": "26.4.0",
     "auto-instrumented": "True"
   },
   {
     "dependency": "node:http2",
     "integration": "http2",
     "minimum_tracer_supported": "18.0.0",
-    "max_tracer_supported": "25.9.0",
+    "max_tracer_supported": "26.4.0",
     "auto-instrumented": "True"
   },
   {
     "dependency": "node:https",
     "integration": "http",
     "minimum_tracer_supported": "18.0.0",
-    "max_tracer_supported": "25.9.0",
+    "max_tracer_supported": "26.4.0",
     "auto-instrumented": "True"
   },
   {
     "dependency": "node:net",
     "integration": "net",
     "minimum_tracer_supported": "18.0.0",
-    "max_tracer_supported": "25.9.0",
+    "max_tracer_supported": "26.4.0",
     "auto-instrumented": "True"
   },
   {
@@ -605,7 +654,7 @@
     "dependency": "openai",
     "integration": "openai",
     "minimum_tracer_supported": "3.0.0",
-    "max_tracer_supported": "6.38.0",
+    "max_tracer_supported": "6.44.0",
     "auto-instrumented": "True"
   },
   {
@@ -640,14 +689,14 @@
     "dependency": "playwright",
     "integration": "playwright",
     "minimum_tracer_supported": "1.38.0",
-    "max_tracer_supported": "1.59.1",
+    "max_tracer_supported": "1.61.0",
     "auto-instrumented": "True"
   },
   {
     "dependency": "protobufjs",
     "integration": "protobufjs",
     "minimum_tracer_supported": "6.8.0",
-    "max_tracer_supported": "8.4.0",
+    "max_tracer_supported": "8.6.4",
     "auto-instrumented": "True"
   },
   {
@@ -717,7 +766,7 @@
     "dependency": "vitest",
     "integration": "vitest",
     "minimum_tracer_supported": "1.6.0",
-    "max_tracer_supported": "4.1.6",
+    "max_tracer_supported": "4.1.9",
     "auto-instrumented": "True"
   },
   {

@@ -14,7 +14,6 @@ const {
   EVP_SUBDOMAIN_HEADER_NAME,
   EVP_PROXY_AGENT_BASE_PATH,
 } = require('../constants/writers')
-const { getAgentUrl } = require('../../agent/url')
 const { parseResponseAndLog } = require('./util')
 
 class LLMObsBuffer {
@@ -210,7 +209,7 @@ class BaseLLMObsWriter {
 
     const overrideOriginEnv = getEnvironmentVariable('_DD_LLMOBS_OVERRIDE_ORIGIN')
     const overrideOriginUrl = overrideOriginEnv && new URL(overrideOriginEnv)
-    const base = overrideOriginUrl ?? getAgentUrl(this._config)
+    const base = overrideOriginUrl ?? this._config.url
 
     return {
       url: base,
@@ -230,7 +229,7 @@ class BaseLLMObsWriter {
     }
 
     if (this._agentless) {
-      options.headers['DD-API-KEY'] = this._config.apiKey || ''
+      options.headers['DD-API-KEY'] = this._config.DD_API_KEY || ''
     } else {
       options.headers[EVP_SUBDOMAIN_HEADER_NAME] = this._intake
     }

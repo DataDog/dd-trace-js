@@ -3,12 +3,14 @@
 const assert = require('node:assert/strict')
 const { randomUUID } = require('node:crypto')
 const { inspect } = require('node:util')
+
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
+const semver = require('semver')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
-const { setup, withAwsSdkVersions } = require('./spec_helpers')
+const { callViaPromise, setup, withAwsSdkVersions } = require('./spec_helpers')
 const { rawExpectedSchema } = require('./sqs-naming')
 
 const getQueueParams = (queueName) => {
@@ -25,7 +27,7 @@ describe('Plugin', () => {
     this.timeout(10000)
     setup()
 
-    withAwsSdkVersions((version, moduleName) => {
+    withAwsSdkVersions((version, moduleName, resolvedVersion) => {
       let AWS
       let sqs
       let queueName
@@ -34,6 +36,8 @@ describe('Plugin', () => {
       let tracer
 
       const sqsClientName = moduleName === '@aws-sdk/smithy-client' ? '@aws-sdk/client-sqs' : 'aws-sdk'
+      // AWS SDK v2 added `.promise()` in 2.3.0; older v2 releases have no promise API to exercise.
+      const promisesSupported = moduleName === '@aws-sdk/smithy-client' || semver.gte(resolvedVersion, '2.3.0')
 
       beforeEach(() => {
         const id = randomUUID()
@@ -167,6 +171,39 @@ describe('Plugin', () => {
           })
         })
 
+        if (promisesSupported) {
+          it('should propagate the tracing context from the producer to the consumer with promises', async () => {
+            let parentId
+            let traceId
+
+            const parentPromise = agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+
+              assert.strictEqual(span.resource.startsWith('sendMessage'), true)
+
+              parentId = span.span_id.toString()
+              traceId = span.trace_id.toString()
+            }, { timeoutMs: 10000 })
+
+            const childPromise = agent.assertSomeTraces(traces => {
+              const span = traces[0][0]
+
+              assert.strictEqual(typeof parentId, 'string')
+              assert.strictEqual(span.parent_id.toString(), parentId)
+              assert.strictEqual(span.trace_id.toString(), traceId)
+            }, { timeoutMs: 10000 })
+
+            await Promise.all([
+              parentPromise,
+              childPromise,
+              (async () => {
+                await callViaPromise(sqs, 'sendMessage', { MessageBody: 'test body', QueueUrl })
+                await callViaPromise(sqs, 'receiveMessage', { QueueUrl, MessageAttributeNames: ['.*'] })
+              })(),
+            ])
+          })
+        }
+
         it('should propagate the tracing context from the producer to the consumer in batch operations', async () => {
           let parentId
           let traceId
@@ -243,6 +280,51 @@ describe('Plugin', () => {
           await receiveAndAssertMessage()
         })
 
+        it('links every message of a multi-message receive to its producer', async () => {
+          // Three independent sends produce three distinct producer traces. A single receive
+          // then fans them into one consumer span: the first message is the parent, every other
+          // received message becomes a span link.
+          let receivedCount = 0
+
+          const sendMessage = body => new Promise((resolve, reject) => {
+            sqs.sendMessage({ MessageBody: body, QueueUrl }, error => error ? reject(error) : resolve())
+          })
+
+          const consumerPromise = agent.assertSomeTraces(traces => {
+            let consumerSpan
+            for (const trace of traces) {
+              for (const span of trace) {
+                if (span.name === 'aws.response') {
+                  consumerSpan = span
+                }
+              }
+            }
+            if (consumerSpan === undefined) throw new Error('no consumer span yet')
+
+            const links = consumerSpan.meta['_dd.span_links']
+              ? JSON.parse(consumerSpan.meta['_dd.span_links'])
+              : []
+            assert.ok(receivedCount > 1, `expected a multi-message receive, got ${receivedCount}`)
+            assert.strictEqual(links.length, receivedCount - 1)
+          }, { timeoutMs: 10000 })
+
+          const drive = (async () => {
+            await sendMessage('multi receive 1')
+            await sendMessage('multi receive 2')
+            await sendMessage('multi receive 3')
+
+            const data = await new Promise((resolve, reject) => {
+              sqs.receiveMessage(
+                { QueueUrl, MaxNumberOfMessages: 10, WaitTimeSeconds: 1 },
+                (error, result) => error ? reject(error) : resolve(result)
+              )
+            })
+            receivedCount = data.Messages.length
+          })()
+
+          await Promise.all([consumerPromise, drive])
+        })
+
         it('should run the consumer in the context of its span', (done) => {
           sqs.sendMessage({
             MessageBody: 'test body',
@@ -260,7 +342,7 @@ describe('Plugin', () => {
               const span = tracer.scope().active()
 
               assert.notStrictEqual(span, beforeSpan)
-              assert.strictEqual(span.context()._tags['aws.operation'], 'receiveMessage')
+              assert.strictEqual(span.context().getTag('aws.operation'), 'receiveMessage')
 
               done()
             })
@@ -405,6 +487,39 @@ describe('Plugin', () => {
               done(e)
             }
           }, 250)
+        })
+
+        it('should not create a consumer span when the consumer is disabled', async () => {
+          let consumerSpans = 0
+          const callViaCallback = (method, params) => new Promise((resolve, reject) => {
+            sqs[method](params, error => error ? reject(error) : resolve())
+          })
+
+          await Promise.all([
+            // Resolves the moment a consumer span leaks; otherwise it times out (swallowed) with none seen.
+            agent.assertSomeTraces(traces => {
+              for (const trace of traces) {
+                for (const span of trace) {
+                  if (span.name === 'aws.response') {
+                    consumerSpans++
+                    return
+                  }
+                }
+              }
+              throw new Error('no consumer span yet')
+            }).catch(() => {}),
+            (async () => {
+              await callViaCallback('sendMessage', { MessageBody: 'callback body', QueueUrl })
+              await callViaCallback('receiveMessage', { QueueUrl, MessageAttributeNames: ['.*'] })
+
+              if (promisesSupported) {
+                await callViaPromise(sqs, 'sendMessage', { MessageBody: 'promise body', QueueUrl })
+                await callViaPromise(sqs, 'receiveMessage', { QueueUrl, MessageAttributeNames: ['.*'] })
+              }
+            })(),
+          ])
+
+          assert.strictEqual(consumerSpans, 0)
         })
       })
     })

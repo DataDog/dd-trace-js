@@ -71,7 +71,7 @@ describe('OTel Tracer', () => {
     })
 
     const ddSpanContext = span._ddSpan.context()
-    assert.strictEqual(ddSpanContext._tags.foo, 'bar')
+    assert.strictEqual(ddSpanContext.getTag('foo'), 'bar')
   })
 
   it('returns a non-recording span when the inner tracer is the noop', () => {
@@ -238,6 +238,17 @@ describe('OTel Tracer', () => {
       })
       orphan1.end()
     })
+  })
+
+  it('reflects the sampling decision in traceFlags before the span ends', () => {
+    const otelTracer = new Tracer({}, {}, new TracerProvider())
+
+    const span = otelTracer.startSpan('name')
+    try {
+      assert.strictEqual(span.spanContext().traceFlags, 1)
+    } finally {
+      span.end()
+    }
   })
 
   describe('_convertOtelContextToDatadog (traceparent/tracestate extraction)', () => {

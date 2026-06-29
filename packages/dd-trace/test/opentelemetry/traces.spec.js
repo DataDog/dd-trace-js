@@ -1,7 +1,8 @@
 'use strict'
 
 const assert = require('assert')
-const http = require('http')
+const http = require('node:http')
+const https = require('node:https')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -369,10 +370,11 @@ describe('OpenTelemetry Traces', () => {
 
     it('transforms span events', () => {
       const transformer = new OtlpTraceTransformer({})
+      // Raw events carry startTime; the transformer derives timeUnixNano = round(startTime * 1e6).
       const span = createMockSpan({
         span_events: [{
           name: 'exception',
-          time_unix_nano: 1700000000010000000,
+          startTime: 1700000000010,
           attributes: {
             'exception.message': 'test error',
             'exception.type': 'Error',
@@ -385,6 +387,7 @@ describe('OpenTelemetry Traces', () => {
 
       assert.strictEqual(otlpSpan.events.length, 1)
       assert.strictEqual(otlpSpan.events[0].name, 'exception')
+      assert.strictEqual(Number(otlpSpan.events[0].timeUnixNano), 1700000000010000000)
 
       const eventAttrs = extractAttrs(otlpSpan.events[0].attributes)
       assert.deepStrictEqual(
@@ -461,6 +464,155 @@ describe('OpenTelemetry Traces', () => {
         [otlpSpans[0].name, otlpSpans[1].name],
         ['/api/first', '/api/second']
       )
+    })
+
+    describe('128-bit trace ID handling', () => {
+      // DD splits 128-bit trace IDs: low 64 bits live on the span Identifier,
+      // upper 64 bits live in trace-level tags as `_dd.p.tid` (16 hex chars).
+      // span_format.js#extractChunkTags only copies trace-level tags onto the
+      // first-in-chunk span, so the transformer has to look across the batch
+      // to find `_dd.p.tid` and then apply it to every span.
+
+      it('reconstructs the full 128-bit traceId for every span in a batch from _dd.p.tid', () => {
+        const transformer = new OtlpTraceTransformer({})
+        const lowHex = 'abcdef0123456789'
+        const tidHigh = '1234567890abcdef'
+        const traceIdLow = id(lowHex)
+
+        const firstSpan = createMockSpan({
+          trace_id: traceIdLow,
+          meta: { 'span.kind': 'internal', '_dd.p.tid': tidHigh },
+        })
+        const secondSpan = createMockSpan({
+          trace_id: traceIdLow,
+          span_id: id('bbbbbbbbbbbbbbbb'),
+          meta: { 'span.kind': 'internal' },
+        })
+        const thirdSpan = createMockSpan({
+          trace_id: traceIdLow,
+          span_id: id('cccccccccccccccc'),
+          meta: { 'span.kind': 'internal' },
+        })
+
+        const decoded = decodePayload(transformer.transformSpans([firstSpan, secondSpan, thirdSpan]))
+        const otlpSpans = decoded.resourceSpans[0].scopeSpans[0].spans
+
+        const expectedTraceId = tidHigh + lowHex
+        for (const otlpSpan of otlpSpans) {
+          assert.strictEqual(otlpSpan.traceId, expectedTraceId)
+        }
+      })
+
+      it('drops _dd.p.tid from OTLP attributes once consumed into traceId', () => {
+        const transformer = new OtlpTraceTransformer({})
+        const span = createMockSpan({
+          trace_id: id('abcdef0123456789'),
+          meta: { 'span.kind': 'internal', '_dd.p.tid': '1234567890abcdef' },
+        })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const attrs = extractAttrs(decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes)
+
+        assert.strictEqual(attrs['_dd.p.tid'], undefined)
+      })
+
+      it('zero-pads traceId to 32 hex chars when no _dd.p.tid is present', () => {
+        const transformer = new OtlpTraceTransformer({})
+        const span = createMockSpan({
+          trace_id: id('abcdef0123456789'),
+          meta: { 'span.kind': 'internal' },
+        })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]
+
+        assert.strictEqual(otlpSpan.traceId, '0000000000000000abcdef0123456789')
+      })
+
+      it('lowercases an uppercase _dd.p.tid so the OTLP traceId is canonical lowercase hex', () => {
+        const transformer = new OtlpTraceTransformer({})
+        const lowHex = 'abcdef0123456789'
+        const span = createMockSpan({
+          trace_id: id(lowHex),
+          meta: { 'span.kind': 'internal', '_dd.p.tid': '1234567890ABCDEF' },
+        })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]
+
+        assert.strictEqual(otlpSpan.traceId, '1234567890abcdef' + lowHex)
+      })
+
+      it('uses a full 16-byte trace_id buffer directly without consulting _dd.p.tid', () => {
+        const transformer = new OtlpTraceTransformer({})
+        const unusedTidHigh = '1000000000000000'
+        const span = createMockSpan({
+          trace_id: id('1234567890abcdef1234567890abcdef'),
+          meta: { 'span.kind': 'internal', '_dd.p.tid': unusedTidHigh },
+        })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]
+
+        assert.strictEqual(otlpSpan.traceId, '1234567890abcdef1234567890abcdef')
+      })
+    })
+
+    describe('otelTraceSemanticsEnabled', () => {
+      it('omits service.name, operation.name, resource.name, span.type, and span.kind from attributes', () => {
+        const transformer = new OtlpTraceTransformer({}, true)
+        const span = createMockSpan({ type: 'web', meta: { 'span.kind': 'server' } })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]
+        const attrs = extractAttrs(otlpSpan.attributes)
+
+        assert.strictEqual(attrs['service.name'], undefined)
+        assert.strictEqual(attrs['operation.name'], undefined)
+        assert.strictEqual(attrs['resource.name'], undefined)
+        assert.strictEqual(attrs['span.type'], undefined)
+        assert.strictEqual(attrs['span.kind'], undefined)
+
+        assert.strictEqual(otlpSpan.kind, 2) // SPAN_KIND_SERVER — kind field still set
+      })
+
+      it('still emits non-DD meta tags and metrics as attributes', () => {
+        const transformer = new OtlpTraceTransformer({}, true)
+        const span = createMockSpan({
+          meta: { 'span.kind': 'server', 'http.method': 'GET', 'http.url': 'http://localhost/api' },
+          metrics: { 'http.status_code': 200 },
+        })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const attrs = extractAttrs(decoded.resourceSpans[0].scopeSpans[0].spans[0].attributes)
+
+        assert.strictEqual(attrs['http.method'], 'GET')
+        assert.strictEqual(attrs['http.url'], 'http://localhost/api')
+        assert.strictEqual(attrs['http.status_code'], 200)
+      })
+
+      it('excludes error.message from attributes but still populates OTLP status', () => {
+        const transformer = new OtlpTraceTransformer({}, true)
+        const span = createMockSpan({
+          error: 1,
+          meta: {
+            'error.message': 'cannot read properties',
+            'http.method': 'GET',
+          },
+        })
+
+        const decoded = decodePayload(transformer.transformSpans([span]))
+        const otlpSpan = decoded.resourceSpans[0].scopeSpans[0].spans[0]
+        const attrs = extractAttrs(otlpSpan.attributes)
+
+        assert.strictEqual(attrs['error.message'], undefined, 'error.message must not appear as an attribute')
+        assert.strictEqual(attrs['http.method'], 'GET', 'non-error meta should still be present')
+
+        assert.deepStrictEqual(otlpSpan.status, {
+          code: 2,
+          message: 'cannot read properties',
+        }, 'OTLP status must still be populated from error.message')
+      })
     })
   })
 
@@ -693,6 +845,18 @@ describe('OpenTelemetry Traces', () => {
   })
 
   describe('Telemetry Metrics', () => {
+    it('sets protocol:http tag for http:// endpoint', () => {
+      const exporter = new OtlpHttpTraceExporter('http://collector.example/v1/traces', {}, 1000, {})
+
+      assert.ok(exporter.telemetryTags.includes('protocol:http'))
+    })
+
+    it('sets protocol:https tag for https:// endpoint', () => {
+      const exporter = new OtlpHttpTraceExporter('https://collector.example/v1/traces', {}, 1000, {})
+
+      assert.ok(exporter.telemetryTags.includes('protocol:https'))
+    })
+
     it('tracks telemetry metrics for exported traces', () => {
       const telemetryMetrics = {
         manager: { namespace: sinon.stub().returns({ count: sinon.stub().returns({ inc: sinon.spy() }) }) },
@@ -735,6 +899,40 @@ describe('OpenTelemetry Traces', () => {
       exporter.setUrl('http://otel-collector:9999/v1/traces?token=abc')
 
       assert.strictEqual(exporter.options.path, '/v1/traces?token=abc')
+    })
+
+    it('selects http transport for http:// URLs', () => {
+      const exporter = new OtlpHttpTraceExporter('http://collector.example/v1/traces', {}, 1000, {})
+      const mockReq = { write: () => {}, end: () => {}, on: () => mockReq, once: () => mockReq }
+      const httpStub = sinon.stub(http, 'request').returns(mockReq)
+      sinon.stub(https, 'request').returns(mockReq)
+
+      exporter.sendPayload(Buffer.from('{}'), () => {})
+
+      assert.ok(httpStub.calledOnce, 'http.request should have been called')
+    })
+
+    it('selects https transport for https:// URLs', () => {
+      const exporter = new OtlpHttpTraceExporter('https://collector.example/v1/traces', {}, 1000, {})
+      const mockReq = { write: () => {}, end: () => {}, on: () => mockReq, once: () => mockReq }
+      sinon.stub(http, 'request').returns(mockReq)
+      const httpsStub = sinon.stub(https, 'request').returns(mockReq)
+
+      exporter.sendPayload(Buffer.from('{}'), () => {})
+
+      assert.ok(httpsStub.calledOnce, 'https.request should have been called')
+    })
+
+    it('switches transport when setUrl is called with a different scheme', () => {
+      const exporter = new OtlpHttpTraceExporter('http://collector.example/v1/traces', {}, 1000, {})
+      const mockReq = { write: () => {}, end: () => {}, on: () => mockReq, once: () => mockReq }
+      sinon.stub(http, 'request').returns(mockReq)
+      const httpsStub = sinon.stub(https, 'request').returns(mockReq)
+
+      exporter.setUrl('https://secure-collector.example/v1/traces')
+      exporter.sendPayload(Buffer.from('{}'), () => {})
+
+      assert.ok(httpsStub.calledOnce, 'https.request should have been called after switching to https')
     })
   })
 })

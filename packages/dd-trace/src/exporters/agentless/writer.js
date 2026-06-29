@@ -7,6 +7,7 @@ const tracerVersion = require('../../../../../package.json').version
 
 const BaseWriter = require('../common/writer')
 const { AgentlessJSONEncoder } = require('../../encode/agentless-json')
+const { computeIntakeUrl, INTAKE_PATH } = require('./intake')
 
 /**
  * Writer for agentless APM trace intake.
@@ -28,7 +29,7 @@ class AgentlessWriter extends BaseWriter {
 
     if (!url) {
       try {
-        this._url = new URL(`https://public-trace-http-intake.logs.${site}`)
+        this._url = new URL(computeIntakeUrl(site))
       } catch (err) {
         log.error(
           'Invalid site value for agentless intake: %s. Cannot construct URL. Error: %s',
@@ -39,7 +40,7 @@ class AgentlessWriter extends BaseWriter {
       }
     }
 
-    if (!getConfig().apiKey) {
+    if (!getConfig().DD_API_KEY) {
       this.#apiKeyMissing = true
       log.error('DD_API_KEY is required for agentless trace intake. Set DD_API_KEY. Traces will not be sent.')
     }
@@ -108,8 +109,8 @@ class AgentlessWriter extends BaseWriter {
       return
     }
 
-    const apiKey = getConfig().apiKey
-    if (!apiKey) {
+    const { DD_API_KEY } = getConfig()
+    if (!DD_API_KEY) {
       if (!this.#apiKeyMissing) {
         this.#apiKeyMissing = true
         log.error('DD_API_KEY is required for agentless trace intake. Set DD_API_KEY. Traces will not be sent.')
@@ -121,11 +122,11 @@ class AgentlessWriter extends BaseWriter {
     this.#apiKeyMissing = false
 
     const options = {
-      path: '/v1/input',
+      path: INTAKE_PATH,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'dd-api-key': apiKey,
+        'dd-api-key': DD_API_KEY,
         'X-Datadog-Trace-Count': String(count),
         'Datadog-Meta-Lang': 'nodejs',
         'Datadog-Meta-Lang-Version': process.version,
@@ -140,7 +141,7 @@ class AgentlessWriter extends BaseWriter {
 
     request(data, options, (err, res, statusCode) => {
       if (err) {
-        this._logRequestError(err, statusCode, count)
+        this.#logRequestError(err, statusCode, count)
         done()
         return
       }
@@ -156,7 +157,7 @@ class AgentlessWriter extends BaseWriter {
    * @param {number} statusCode - HTTP status code (if available)
    * @param {number} count - Number of traces that were being sent
    */
-  _logRequestError (err, statusCode, count) {
+  #logRequestError (err, statusCode, count) {
     if (statusCode === 401 || statusCode === 403) {
       log.error(
         'Authentication failed sending %d trace(s) (status %s). Verify DD_API_KEY is valid.',
