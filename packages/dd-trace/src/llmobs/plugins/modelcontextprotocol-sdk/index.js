@@ -22,18 +22,14 @@ class McpBaseToolCallLLMObsPlugin extends LLMObsPlugin {
    * @param {object} ctx
    * @returns {string|undefined}
    */
-  getToolName (ctx) {
-    return undefined
-  }
+  getToolName (ctx) {}
 
   /**
    * Extracts the tool arguments from context.
    * @param {object} ctx
    * @returns {object|undefined}
    */
-  getToolArgs (ctx) {
-    return undefined
-  }
+  getToolArgs (ctx) {}
 
   /**
    * Returns the mcp_tool_kind tag value.
@@ -157,7 +153,7 @@ class McpListToolsLLMObsPlugin extends LLMObsPlugin {
 class McpServerRequestLLMObsPlugin extends LLMObsPlugin {
   static id = 'llmobs_mcp_server_request'
   static integration = 'modelcontextprotocol-sdk'
-  static prefix = 'apm:mcp:server:request'
+  static prefix = 'tracing:apm:mcp:server:request'
 
   getLLMObsSpanRegisterOptions (ctx) {
     const method = ctx.request?.method || 'unknown'
@@ -175,13 +171,6 @@ class McpServerRequestLLMObsPlugin extends LLMObsPlugin {
     const input = params ? JSON.stringify(params) : null
 
     this._tagger.tagTextIO(span, input, null)
-  }
-
-  // Override finish (not asyncEnd) because apm:mcp:server:request publishes :finish
-  finish (ctx) {
-    if (!this._tracerConfig.llmobs?.enabled) return
-    this.setLLMObsTags(ctx)
-    this.end(ctx)
   }
 }
 

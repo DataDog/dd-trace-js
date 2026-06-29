@@ -1,5 +1,12 @@
 'use strict'
 
+const { channel } = require('dc-polyfill')
+
+const serverToolNames = new WeakMap()
+channel('apm:mcp:server:tool:registered').subscribe(({ tool, name }) => {
+  serverToolNames.set(tool, name)
+})
+
 /**
  * Formats tool call input as a JSON string.
  * @param {string} toolName - The name of the tool being called
@@ -55,17 +62,12 @@ function formatOutput (result) {
 }
 
 /**
- * Extracts a tool name from the server's registered tools map by object reference.
- * MCP server stores tools as `_registeredTools[name] = toolObject`, so we look up the
- * key whose value matches the tool object passed to the handler.
+ * Extracts a tool name from the server tool object passed to the handler.
  * @param {object} ctx - The orchestrion context with `ctx.self` and `ctx.arguments`
  * @returns {string|undefined} The tool name, or undefined if not found
  */
 function getServerToolName (ctx) {
-  const [tool] = ctx.arguments || []
-  const registeredTools = ctx.self?._registeredTools
-  if (!registeredTools) return undefined
-  return Object.keys(registeredTools).find(k => registeredTools[k] === tool)
+  return serverToolNames.get(ctx.arguments?.[0])
 }
 
 module.exports = { formatInput, formatOutput, getServerToolName }

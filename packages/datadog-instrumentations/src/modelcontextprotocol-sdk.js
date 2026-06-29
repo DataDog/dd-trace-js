@@ -29,17 +29,21 @@ function wrapProtocol (Protocol) {
 
       const ctx = { request, extra }
       serverRequestCh.start.runStores(ctx, () => {
-        if (!pendingContexts.has(this)) pendingContexts.set(this, new Map())
-        pendingContexts.get(this).set(request.id, ctx)
+        try {
+          if (!pendingContexts.has(this)) pendingContexts.set(this, new Map())
+          pendingContexts.get(this).set(request.id, ctx)
 
-        original.call(this, request, extra)
+          original.call(this, request, extra)
 
-        // The SDK registers an AbortController only when it actually dispatches a handler.
-        // If none was registered (MethodNotFound path), no handler will run and our
-        // setRequestHandler wrapper will never fire — finish the span immediately.
-        if (!this._requestHandlerAbortControllers?.has(request.id)) {
-          pendingContexts.get(this).delete(request.id)
-          serverRequestCh.asyncEnd.publish(ctx)
+          // The SDK registers an AbortController only when it actually dispatches a handler.
+          // If none was registered (MethodNotFound path), no handler will run and our
+          // setRequestHandler wrapper will never fire — finish the span immediately.
+          if (!this._requestHandlerAbortControllers?.has(request.id)) {
+            pendingContexts.get(this).delete(request.id)
+            serverRequestCh.asyncEnd.publish(ctx)
+          }
+        } finally {
+          serverRequestCh.end.publish(ctx)
         }
       })
     }

@@ -2,7 +2,7 @@
 
 const assert = require('node:assert')
 const { inspect } = require('node:util')
-const { describe, it, before, beforeEach, after } = require('mocha')
+const { describe, it, before, after } = require('mocha')
 const { withVersions } = require('../../../setup/mocha')
 
 const agent = require('../../../plugins/agent')
@@ -11,6 +11,18 @@ const {
   MOCK_STRING,
   useLlmObs,
 } = require('../../util')
+
+function findSpanByToolName (spans, spanName, toolName) {
+  return spans.find(span => {
+    if (span.name !== spanName) return false
+
+    try {
+      return JSON.parse(span.meta.input.value).name === toolName
+    } catch {
+      return false
+    }
+  })
+}
 
 describe('integrations', () => {
   let Client
@@ -238,6 +250,59 @@ describe('integrations', () => {
 
       describe('McpServer (server-side)', () => {
         describe('McpServerRequestLLMObsPlugin', () => {
+          it('restores the parent after dispatching concurrent server requests', async () => {
+            const slowToolName = 'slow-parent-restore-tool'
+            let releaseSlowTool
+            let resolveSlowToolStarted
+            const slowToolStarted = new Promise(resolve => {
+              resolveSlowToolStarted = resolve
+            })
+
+            server.registerTool(
+              slowToolName,
+              { description: 'A slow tool', inputSchema: {} },
+              async () => {
+                const waitForRelease = new Promise(resolve => {
+                  releaseSlowTool = resolve
+                })
+                resolveSlowToolStarted()
+                await waitForRelease
+
+                return {
+                  content: [{ type: 'text', text: 'Slow result' }],
+                }
+              }
+            )
+
+            const slowCall = client.callTool({ name: slowToolName, arguments: {} })
+            await slowToolStarted
+
+            await client.callTool({ name: 'test-tool', arguments: {} })
+            releaseSlowTool()
+            await slowCall
+
+            const { llmobsSpans } = await getEvents(6)
+
+            const slowClient = findSpanByToolName(
+              llmobsSpans,
+              'MCP Client Tool Call: slow-parent-restore-tool',
+              slowToolName
+            )
+            const slowRequest = findSpanByToolName(llmobsSpans, 'MCP Server Request: tools/call', slowToolName)
+            const fastClient = findSpanByToolName(llmobsSpans, 'MCP Client Tool Call: test-tool', 'test-tool')
+            const fastRequest = findSpanByToolName(llmobsSpans, 'MCP Server Request: tools/call', 'test-tool')
+
+            assert.ok(slowClient)
+            assert.ok(slowRequest)
+            assert.ok(fastClient)
+            assert.ok(fastRequest)
+
+            assert.strictEqual(slowClient.parent_id, 'undefined')
+            assert.strictEqual(fastClient.parent_id, 'undefined')
+            assert.strictEqual(slowRequest.parent_id, slowClient.span_id)
+            assert.strictEqual(fastRequest.parent_id, fastClient.span_id)
+          })
+
           it('creates a task span for a tools/call server request', async () => {
             await client.callTool({ name: 'test-tool', arguments: {} })
 
