@@ -50,7 +50,7 @@ const supportedProxies = {
   },
 }
 
-function createInferredProxySpan(headers, childOf, tracer, reqCtx, traceCtx, config, startSpanHelper) {
+function createInferredProxySpan (headers, childOf, tracer, reqCtx, traceCtx, config, startSpanHelper) {
   if (!headers) {
     return null
   }
@@ -101,7 +101,7 @@ function createInferredProxySpan(headers, childOf, tracer, reqCtx, traceCtx, con
   return childOf
 }
 
-function setInferredProxySpanTags(span, proxyContext) {
+function setInferredProxySpanTags (span, proxyContext) {
   const resourcePath = proxyContext.resourcePath || proxyContext.path
   span.setTag(RESOURCE_NAME, `${proxyContext.method} ${resourcePath}`)
   span.setTag('_dd.inferred_span', 1)
@@ -121,7 +121,7 @@ function setInferredProxySpanTags(span, proxyContext) {
   return span
 }
 
-function extractInferredProxyContext(headers) {
+function extractInferredProxyContext (headers) {
   if (!(PROXY_HEADER_SYSTEM in headers && headers[PROXY_HEADER_SYSTEM] in supportedProxies)) {
     log.debug('Received headers to create inferred proxy span but headers include an unsupported proxy type', headers)
     return null
@@ -129,7 +129,7 @@ function extractInferredProxyContext(headers) {
 
   const detectedProxy = supportedProxies[headers[PROXY_HEADER_SYSTEM]]
 
-  if (detectedProxy.providesTimestamp && !PROXY_HEADER_START_TIME_MS in headers) {
+  if (detectedProxy.providesTimestamp && !(PROXY_HEADER_START_TIME_MS in headers)) {
     return null
   }
 
@@ -151,7 +151,7 @@ function extractInferredProxyContext(headers) {
   }
 }
 
-function finishInferredProxySpan(context) {
+function finishInferredProxySpan (context) {
   const { req } = context
 
   if (!context.inferredProxySpan) return
@@ -161,7 +161,7 @@ function finishInferredProxySpan(context) {
   // context.config.hooks.request(context.inferredProxySpan, req, res) # TODO: Do we need this??
 
   // Only close the inferred span if one was created
-  if (context.inferredProxySpan) {
+  if (context.inferredProxySpan){
     context.inferredProxySpan.finish()
     context.inferredProxySpanFinished = true
   }
