@@ -2623,6 +2623,122 @@ describe('Plugin', () => {
           })
         })
       })
+
+      // Apollo Federation exposes entity types only through the synthetic
+      // `_Entity` union returned by `Query._entities`, and abstract types through
+      // interfaces. graphql resolves the concrete type at runtime, so the
+      // schema-traversal that wraps resolvers must descend into union members and
+      // interface implementations or those resolvers never get a graphql.resolve
+      // span. The schemas are built by hand with the same versioned graphql the
+      // suite instruments (a separate instance would emit no spans). Regression
+      // for https://github.com/DataDog/dd-trace-js/issues/1057.
+      describe('federation / abstract types', () => {
+        // Apollo Federation (and the abstract-type schema shapes it relies on)
+        // targets modern graphql; the pre-1.0 majors still in the matrix predate
+        // the schema APIs these fixtures use, so scope the suite to 15+.
+        const supported = semver.satisfies(graphqlVersion, '>=15.0.0')
+
+        before(function () {
+          if (!supported) return this.skip()
+
+          tracer = require('../../dd-trace')
+
+          return agent.load('graphql')
+        })
+
+        beforeEach(function () {
+          if (!supported) return this.skip()
+          graphql = require(`../../../versions/graphql@${version}`).get()
+        })
+
+        after(() => agent.close())
+
+        it('should create graphql.resolve spans for fields reached only through a union member', () => {
+          // Product is reachable only as a union member (no field returns it
+          // directly), mirroring federation's `_Entity` union. Without descending
+          // into union members the current traversal never wraps Product.name.
+          const Product = new graphql.GraphQLObjectType({
+            name: 'Product',
+            fields: {
+              name: { type: graphql.GraphQLString, resolve: () => 'Table' },
+            },
+          })
+
+          const Entity = new graphql.GraphQLUnionType({
+            name: '_Entity',
+            types: [Product],
+            resolveType: () => 'Product',
+          })
+
+          const schema = new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'Query',
+              fields: {
+                entity: { type: Entity, resolve: () => ({}) },
+              },
+            }),
+          })
+
+          const source = 'query { entity { ... on Product { name } } }'
+
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
+
+            const productName = spans.find(span =>
+              span.name === 'graphql.resolve' && span.meta['graphql.field.name'] === 'name')
+            assert.ok(productName, 'graphql.resolve span for the field reached via the union should be emitted')
+            assert.strictEqual(productName.meta['graphql.field.type'], 'String')
+          }, { spanResourceMatch: /name:String/ })
+
+          return Promise.all([assertion, graphql.graphql({ schema, source })])
+        })
+
+        it('should create graphql.resolve spans for fields reached only through an interface', () => {
+          const Node = new graphql.GraphQLInterfaceType({
+            name: 'Node',
+            fields: {
+              id: { type: new graphql.GraphQLNonNull(graphql.GraphQLID) },
+            },
+            resolveType: () => 'Widget',
+          })
+
+          // Widget.label is reachable only as an interface implementation.
+          const Widget = new graphql.GraphQLObjectType({
+            name: 'Widget',
+            interfaces: [Node],
+            fields: {
+              id: { type: new graphql.GraphQLNonNull(graphql.GraphQLID), resolve: () => '1' },
+              label: { type: graphql.GraphQLString, resolve: () => 'a widget' },
+            },
+          })
+
+          const schema = new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'Query',
+              fields: {
+                node: { type: Node, resolve: () => ({}) },
+              },
+            }),
+            // Widget implements Node but is referenced by no field, so it reaches
+            // the type map only through this explicit registration — the shape a
+            // federated interface implementation has.
+            types: [Widget],
+          })
+
+          const source = 'query { node { id ... on Widget { label } } }'
+
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
+
+            const label = spans.find(span =>
+              span.name === 'graphql.resolve' && span.meta['graphql.field.name'] === 'label')
+            assert.ok(label, 'graphql.resolve span for the interface implementation field should be emitted')
+            assert.strictEqual(label.meta['graphql.field.type'], 'String')
+          }, { spanResourceMatch: /label:String/ })
+
+          return Promise.all([assertion, graphql.graphql({ schema, source })])
+        })
+      })
     })
   })
 })
