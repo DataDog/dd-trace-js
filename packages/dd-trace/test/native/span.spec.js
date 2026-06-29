@@ -266,6 +266,52 @@ describe('NativeDatadogSpan', () => {
       assert.strictEqual(typeof args[5], 'number') // startMs
     })
 
+    it('gives child spans the same 128-bit native trace id as the root (not zero-padded)', () => {
+      const root = new NativeDatadogSpan(tracer, processor, prioritySampler, {
+        operationName: 'root',
+        traceId128BitGenerationEnabled: true,
+      }, false, nativeSpans)
+      const rootTraceId = nativeSpans.queueCreateSpan.getCall(0).args[1]
+      assert.ok(Array.isArray(rootTraceId) && rootTraceId.length === 16, 'root trace id should be 16 bytes')
+      assert.ok(rootTraceId.slice(0, 8).some(b => b !== 0), 'root high 8 bytes (tid) should be non-zero')
+
+      nativeSpans.queueCreateSpan.resetHistory()
+      // eslint-disable-next-line no-new
+      new NativeDatadogSpan(tracer, processor, prioritySampler, {
+        operationName: 'child',
+        parent: root.context(),
+        traceId128BitGenerationEnabled: true,
+      }, false, nativeSpans)
+      const childTraceId = nativeSpans.queueCreateSpan.getCall(0).args[1]
+      // Child must carry the SAME full 128-bit id, not a high-bits-zeroed one.
+      assert.deepStrictEqual(childTraceId, rootTraceId)
+    })
+
+    it('builds the full 128-bit id for a child of a propagated (16-byte) trace id', () => {
+      // Propagated 128-bit context: _traceId.toBuffer() is 16 bytes [high 8][low 8].
+      const high = [0xaa, 0xbb, 0xcc, 0xdd, 0x11, 0x22, 0x33, 0x44]
+      const low = [1, 2, 3, 4, 5, 6, 7, 8]
+      const sixteen = Buffer.from([...high, ...low])
+      const tidHex = Buffer.from(high).toString('hex')
+      const parent = {
+        _traceId: { toBuffer: () => sixteen, toString: () => 't' },
+        _spanId: { toBuffer: () => Buffer.from(low), toString: () => 'p' },
+        _sampling: {},
+        _baggageItems: {},
+        _trace: { started: [{}], finished: [], tags: { '_dd.p.tid': tidHex } },
+        _tracestate: undefined,
+      }
+      // eslint-disable-next-line no-new
+      new NativeDatadogSpan(tracer, processor, prioritySampler, {
+        operationName: 'child',
+        parent,
+        traceId128BitGenerationEnabled: true,
+      }, false, nativeSpans)
+      const childTraceId = nativeSpans.queueCreateSpan.getCall(0).args[1]
+      // Low 8 bytes come from slice(-8) of the 16-byte id, not [0..7] (the high bytes).
+      assert.deepStrictEqual(childTraceId, [...high, ...low])
+    })
+
     it('should NOT also issue a separate SetName op on init', () => {
       // CreateSpan already carries the name; the subclass shadows
       // `_syncNameToNative` with a no-op so the parent constructor's

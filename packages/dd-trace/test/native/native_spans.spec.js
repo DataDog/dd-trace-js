@@ -65,6 +65,7 @@ describe('NativeSpansInterface', () => {
       getTraceMetricAttr: sinon.stub().returns(100),
       getTraceOrigin: sinon.stub().returns('synthetics'),
       setMetaStruct: sinon.stub(),
+      addSpanEvent: sinon.stub(),
       setUseV05: sinon.stub(),
     }
 
@@ -568,20 +569,23 @@ describe('NativeSpansInterface', () => {
   })
 
   describe('setMetaStruct', () => {
-    it('drains the queue, folds the handle big-endian to a u64, and forwards bytes', () => {
+    it('drains the queue, folds the handle little-endian to a u64, and forwards bytes', () => {
       // Queue an op so there is pending work to drain.
       const spanId = new Uint8Array([1, 0, 0, 0, 0, 0, 0, 0])
       nativeSpans.queueOp(OpCode.SetError, spanId, ['i32', 1])
       assert.strictEqual(nativeSpans._cqbCount, 1)
 
-      const handle = new Uint8Array([0, 0, 0, 0, 0, 0, 0, 2]) // BE => 2n
+      // Non-palindromic handle: LE => 2n (BE would be 0x0200000000000000), so
+      // this asserts the LE fold the change buffer keys spans by.
+      const handle = new Uint8Array([2, 0, 0, 0, 0, 0, 0, 0]) // LE => 2n
       const bytes = new Uint8Array([0x81, 0xa1, 0x61, 0x01])
       nativeSpans.setMetaStruct(handle, 'appsec', bytes)
 
       // Queue was flushed first (kept in sync with the WASM-internal flush).
       sinon.assert.called(mockState.flushChangeQueue)
       assert.strictEqual(nativeSpans._cqbCount, 0)
-      // Handle folds big-endian to the numeric id the WASM state expects.
+      // Handle folds little-endian to the numeric id the WASM state expects
+      // (matching queueOp/queueCreateSpan, which copy the LE handle bytes).
       sinon.assert.calledOnceWithExactly(mockState.setMetaStruct, 2n, 'appsec', bytes)
     })
     it('folds the all-ones handle correctly with no sign/wrap error', () => {
@@ -590,7 +594,8 @@ describe('NativeSpansInterface', () => {
       nativeSpans.queueOp(OpCode.SetError, spanId, ['i32', 1])
       assert.strictEqual(nativeSpans._cqbCount, 1)
 
-      const handle = Uint8Array.from([0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]) // BE => (2n ** 64n) - 1n
+      // palindromic: (2n ** 64n) - 1n in either endianness
+      const handle = Uint8Array.from([0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF])
       const bytes = new Uint8Array([0x81, 0xa1, 0x61, 0x01])
       nativeSpans.setMetaStruct(handle, 'appsec', bytes)
 
@@ -599,6 +604,18 @@ describe('NativeSpansInterface', () => {
       assert.strictEqual(nativeSpans._cqbCount, 0)
       const expectedId = (2n ** 64n) - 1n
       sinon.assert.calledOnceWithExactly(mockState.setMetaStruct, expectedId, 'appsec', bytes)
+    })
+  })
+
+  describe('addSpanEvent', () => {
+    it('drains the queue and folds the handle little-endian before forwarding', () => {
+      // Queue an op so flushChangeQueue has work to drain.
+      nativeSpans.queueOp(OpCode.SetError, new Uint8Array([1, 0, 0, 0, 0, 0, 0, 0]), ['i32', 1])
+      const handle = new Uint8Array([2, 0, 0, 0, 0, 0, 0, 0]) // LE => 2n
+      const attrs = new Uint8Array([0, 0, 0, 0])
+      nativeSpans.addSpanEvent(handle, 'exception', 123n, attrs)
+      sinon.assert.called(mockState.flushChangeQueue)
+      sinon.assert.calledOnceWithExactly(mockState.addSpanEvent, 2n, 'exception', 123n, attrs)
     })
   })
 })

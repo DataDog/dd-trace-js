@@ -17,6 +17,34 @@ const { OpCode } = require('./index')
 // refresh) still receive tag updates on the native fast path.
 const tagsUpdateCh = channel('dd-trace:span:tags:update')
 
+// Build the native trace id passed to queueCreateSpan. When 128-bit ids are in
+// play, all spans in the trace must share the SAME id: a 16-byte
+// [high 8 from the trace's `_dd.p.tid` hex][low 8 from the 64-bit id]. Children
+// and continuations must derive the high bits from the shared `_dd.p.tid`
+// rather than letting queueCreateSpan zero-pad them (which would record the
+// child under a different trace id than the root). Without a tid, the 64-bit
+// id is used as-is.
+function buildNativeTraceId (lowId, tidHex) {
+  if (!tidHex) return lowId
+  // toBuffer() is big-endian. A propagated 128-bit id has a 16-byte buffer
+  // ([high 8][low 8]); a locally generated id is 8 bytes. The low 64 bits are
+  // always the trailing 8 bytes — use slice(-8), not [0..7] (which would grab
+  // the HIGH bytes of a 16-byte id and record the child under a bogus id).
+  const buf = lowId.toBuffer()
+  const low = buf.length > 8 ? buf.slice(-8) : buf
+  return [
+    Number.parseInt(tidHex.slice(0, 2), 16),
+    Number.parseInt(tidHex.slice(2, 4), 16),
+    Number.parseInt(tidHex.slice(4, 6), 16),
+    Number.parseInt(tidHex.slice(6, 8), 16),
+    Number.parseInt(tidHex.slice(8, 10), 16),
+    Number.parseInt(tidHex.slice(10, 12), 16),
+    Number.parseInt(tidHex.slice(12, 14), 16),
+    Number.parseInt(tidHex.slice(14, 16), 16),
+    low[0], low[1], low[2], low[3], low[4], low[5], low[6], low[7],
+  ]
+}
+
 // Reused across spans to encode meta_struct values to msgpack bytes, matching
 // the legacy encoder's `meta_struct` map<string, bin> wire shape.
 const metaStructEncoder = new MsgpackEncoder()
@@ -205,7 +233,7 @@ class NativeDatadogSpan extends DatadogSpan {
       })
 
       if (!spanContext._trace.startTime) startTime = dateNow()
-      traceId = existingContext._traceId
+      traceId = buildNativeTraceId(existingContext._traceId, spanContext._trace.tags['_dd.p.tid'])
       parentId = existingContext._parentId
     } else if (parent) {
       const spanId = id()
@@ -221,7 +249,7 @@ class NativeDatadogSpan extends DatadogSpan {
       })
 
       if (!spanContext._trace.startTime) startTime = dateNow()
-      traceId = parent._traceId
+      traceId = buildNativeTraceId(parent._traceId, spanContext._trace.tags['_dd.p.tid'])
       parentId = parent._spanId
     } else {
       // Root span - generate new trace ID and span ID.
@@ -240,20 +268,7 @@ class NativeDatadogSpan extends DatadogSpan {
           .padStart(8, '0')
           .padEnd(16, '0')
         spanContext._trace.tags['_dd.p.tid'] = tidHex
-        // Build 16-byte trace ID: [high 8 bytes from timestamp][low 8 bytes from spanId]
-        const spanIdBuf = spanId.toBuffer()
-        traceId = [
-          Number.parseInt(tidHex.slice(0, 2), 16),
-          Number.parseInt(tidHex.slice(2, 4), 16),
-          Number.parseInt(tidHex.slice(4, 6), 16),
-          Number.parseInt(tidHex.slice(6, 8), 16),
-          Number.parseInt(tidHex.slice(8, 10), 16),
-          Number.parseInt(tidHex.slice(10, 12), 16),
-          Number.parseInt(tidHex.slice(12, 14), 16),
-          Number.parseInt(tidHex.slice(14, 16), 16),
-          spanIdBuf[0], spanIdBuf[1], spanIdBuf[2], spanIdBuf[3],
-          spanIdBuf[4], spanIdBuf[5], spanIdBuf[6], spanIdBuf[7],
-        ]
+        traceId = buildNativeTraceId(spanId, tidHex)
       } else {
         traceId = spanId
       }

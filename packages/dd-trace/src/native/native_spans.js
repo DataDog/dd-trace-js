@@ -649,9 +649,11 @@ class NativeSpansInterface {
   setMetaStruct (spanId, key, bytes) {
     this.flushChangeQueue()
     // WasmSpanState addresses spans by their numeric u64 id (a BigInt across
-    // the wasm boundary). The 8-byte handle folds big-endian to that id, the
-    // same interpretation the change buffer uses when keying spans by span_id.
-    const id = new DataView(spanId.buffer, spanId.byteOffset, 8).getBigUint64(0, false)
+    // the wasm boundary). `_nativeSpanId` is stored little-endian and the change
+    // buffer keys spans by that same LE interpretation (queueOp/queueCreateSpan
+    // copy the LE bytes into `[span_id u64 LE]`), so decode little-endian here
+    // too — otherwise meta_struct attaches to the wrong/nonexistent span.
+    const id = new DataView(spanId.buffer, spanId.byteOffset, 8).getBigUint64(0, true)
     this._state.setMetaStruct(id, key, bytes)
     // setMetaStruct inserts into a Vec, which can grow WASM memory and detach
     // our cached views — refresh before the next queueOp.
@@ -671,7 +673,8 @@ class NativeSpansInterface {
    */
   addSpanEvent (spanId, name, timeUnixNano, attrsBuf) {
     this.flushChangeQueue()
-    const id = new DataView(spanId.buffer, spanId.byteOffset, 8).getBigUint64(0, false)
+    // Little-endian to match how the change buffer keys spans (see setMetaStruct).
+    const id = new DataView(spanId.buffer, spanId.byteOffset, 8).getBigUint64(0, true)
     this._state.addSpanEvent(id, name, timeUnixNano, attrsBuf)
     // addSpanEvent appends to a Vec, which can grow WASM memory and detach
     // our cached views — refresh before the next queueOp.

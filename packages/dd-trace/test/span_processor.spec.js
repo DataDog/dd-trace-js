@@ -129,6 +129,8 @@ describe('SpanProcessor', () => {
       .filter(c => c.args[0] === fakeOpCode.SetTraceMetaAttr && c.args[2] === '_dd.p.dm')
     assert.strictEqual(dm.length, 1)
     assert.strictEqual(dm[0].args[3], '-3')
+    // _addDecisionMaker also tags the JS trace (exported via #syncTraceTags).
+    assert.strictEqual(trace.tags['_dd.p.dm'], '-3')
   })
 
   it('omits _dd.p.dm for dropped traces (priority < AUTO_KEEP)', () => {
@@ -143,6 +145,8 @@ describe('SpanProcessor', () => {
     const dm = nativeSpans.queueOp.getCalls()
       .filter(c => c.args[0] === fakeOpCode.SetTraceMetaAttr && c.args[2] === '_dd.p.dm')
     assert.strictEqual(dm.length, 0)
+    // and _addDecisionMaker must not tag the dropped trace either (C7).
+    assert.strictEqual(trace.tags['_dd.p.dm'], undefined)
   })
 
   it('should erase the trace once finished', () => {

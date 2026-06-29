@@ -158,8 +158,10 @@ class SpanProcessor {
     const priority = context._sampling.priority
     const mechanism = context._sampling.mechanism
 
-    // AUTO_KEEP = 0, so priority >= 0 means keep
-    if (priority >= 0) {
+    // Only kept traces (priority >= AUTO_KEEP, where AUTO_KEEP === 1) carry the
+    // decision-maker tag; the legacy priority sampler omits it for auto-reject
+    // (0) and manual-drop (-1).
+    if (priority >= AUTO_KEEP) {
       if (!trace.tags[DECISION_MAKER_KEY] && mechanism !== undefined) {
         trace.tags[DECISION_MAKER_KEY] = `-${mechanism}`
       }
