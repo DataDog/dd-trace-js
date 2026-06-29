@@ -50,6 +50,7 @@ const {
 const { TELEMETRY_COVERAGE_UPLOAD } = require('../../packages/dd-trace/src/ci-visibility/telemetry')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR } = require('../../version')
+const { getBabelDependencies } = require('./babel-dependencies')
 
 const runTestsCommand = 'node ./ci-visibility/run-jest.js'
 
@@ -72,8 +73,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     shouldInstallJestEnvironmentJsdom ? `jest-environment-jsdom@${JEST_VERSION}` : '',
     // jest-circus is not included in older versions of jest
     JEST_VERSION !== 'latest' ? `jest-circus@${JEST_VERSION}` : '',
-    '@babel/core',
-    '@babel/preset-typescript',
+    ...getBabelDependencies(JEST_VERSION),
     '@happy-dom/jest-environment',
     'office-addin-mock',
     'winston',

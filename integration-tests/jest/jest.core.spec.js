@@ -55,6 +55,7 @@ const { DD_HOST_CPU_COUNT } = require('../../packages/dd-trace/src/plugins/util/
 const { ERROR_MESSAGE, ERROR_TYPE, ORIGIN_KEY, COMPONENT } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR } = require('../../version')
 const { version: ddTraceVersion } = require('../../package.json')
+const { getBabelDependencies } = require('./babel-dependencies')
 
 const testFile = 'ci-visibility/run-jest.js'
 const expectedStdout = 'Test Suites: 2 passed'
@@ -82,8 +83,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     shouldInstallJestEnvironmentJsdom ? `jest-environment-jsdom@${JEST_VERSION}` : '',
     // jest-circus is not included in older versions of jest
     JEST_VERSION !== 'latest' ? `jest-circus@${JEST_VERSION}` : '',
-    '@babel/core',
-    '@babel/preset-typescript',
+    ...getBabelDependencies(JEST_VERSION),
     '@happy-dom/jest-environment',
     'office-addin-mock',
     'winston',
