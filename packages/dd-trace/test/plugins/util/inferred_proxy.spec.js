@@ -61,6 +61,7 @@ const proxyConfigs = {
     expectedService: 'azure-example.com',
     expectedComponent: 'azure-gw',
     expectedUrl: 'https://azure-example.com/test',
+    expectedStartTime: '1729780025472999936',
   },
 }
 
@@ -239,9 +240,8 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
             },
           })
 
-          if (config.expectedStartTime) {
-            assert.strictEqual(spans[0].start.toString(), config.expectedStartTime)
-          }
+          assert.strictEqual(spans[0].start.toString(), config.expectedStartTime)
+
           assert.strictEqual(spans[0].span_id.toString(), spans[1].parent_id.toString())
 
           assertObjectContains(spans[1], {
@@ -392,9 +392,7 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
 
           assert.strictEqual(spans[0].error, 1)
 
-          if (config.expectedStartTime) {
-            assert.strictEqual(spans[0].start.toString(), config.expectedStartTime)
-          }
+          assert.strictEqual(spans[0].start.toString(), config.expectedStartTime)
           assert.strictEqual(spans[0].span_id.toString(), spans[1].parent_id.toString())
 
           assertObjectContains(spans[1], {
