@@ -87,6 +87,7 @@ function recordLLMObsEnabled (startTime, config, value = 1) {
     site: config.site,
     auto: Number(autoEnabled),
     ml_app: config.llmobs.mlApp,
+    sample_rate: config.llmobs.sampleRate,
   }
   llmobsMetrics.count('product_enabled', tags).inc(value)
   llmobsMetrics.distribution('init_time', tags).track(initTimeMs)

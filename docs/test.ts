@@ -230,7 +230,8 @@ const graphqlOptions: plugins.graphql = {
   hooks: {
     execute: (span?: Span, args?, res?) => { },
     validate: (span?: Span, document?, errors?) => { },
-    parse: (span?: Span, source?, document?) => { }
+    parse: (span?: Span, source?, document?) => { },
+    resolve: (span?: Span, field?) => { }
   }
 };
 
@@ -252,6 +253,10 @@ const awsSdkOptions: plugins.aws_sdk = {
     consumer: true,
     producer: false
   }
+};
+
+const awsSdkServiceFunctionOptions: plugins.aws_sdk = {
+  service: (params): string | undefined => params.TableName ? String(params.TableName) : undefined,
 };
 
 const bullmqOptions: plugins.bullmq = {
@@ -294,9 +299,9 @@ tracer.use('amqplib');
 tracer.use('anthropic');
 tracer.use('claude-agent-sdk');
 tracer.use('avsc');
-tracer.use('aws-durable-execution-sdk-js');
 tracer.use('aws-sdk');
 tracer.use('aws-sdk', awsSdkOptions);
+tracer.use('aws-sdk', awsSdkServiceFunctionOptions);
 tracer.use('azure-cosmos');
 tracer.use('azure-event-hubs')
 tracer.use('azure-functions');

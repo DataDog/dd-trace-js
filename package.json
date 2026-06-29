@@ -46,7 +46,7 @@
     "test:webpack:ci": "nyc --silent node init && nyc -- npm run test:webpack",
     "test:instrumentations": "mocha \"packages/datadog-instrumentations/test/@(${PLUGINS}).spec.js\"",
     "test:instrumentations:ci": "yarn services && nyc --silent node init && nyc -- npm run test:instrumentations",
-    "test:instrumentations:misc": "mocha \"packages/datadog-instrumentations/test/*/**/*.spec.js\"",
+    "test:instrumentations:misc": "mocha \"packages/datadog-instrumentations/test/*/**/*.spec.{js,mjs}\"",
     "test:instrumentations:misc:ci": "nyc --silent node init && nyc -- npm run test:instrumentations:misc",
     "test:core": "node scripts/mocha-parallel-files.js --expose-gc --timeout 30000 -- \"packages/datadog-core/test/**/*.spec.js\"",
     "test:core:ci": "nyc --silent node init && nyc -- npm run test:core",
@@ -104,7 +104,7 @@
     "test:integration:plugins:coverage": "yarn services && node ./integration-tests/coverage/run-suite.js \"packages/datadog-plugin-@(${PLUGINS})/test/integration-test/**/${SPEC:-*}*.spec.js\"",
     "test:unit:plugins": "mocha \"packages/datadog-instrumentations/test/@(${PLUGINS}).spec.js\" \"packages/datadog-plugin-@(${PLUGINS})/test/**/*.spec.js\" --exclude \"packages/datadog-plugin-@(${PLUGINS})/test/integration-test/**/*.spec.js\"",
     "test:release": "mocha \"scripts/release/**/*.spec.js\"",
-    "test:scripts": "mocha \"scripts/helpers/**/*.spec.js\"",
+    "test:scripts": "mocha \"scripts/helpers/**/*.spec.js\" \"scripts/*.spec.mjs\"",
     "test:shimmer": "mocha \"packages/datadog-shimmer/test/**/*.spec.js\"",
     "test:shimmer:ci": "nyc --silent node init && nyc -- npm run test:shimmer",
     "verify:workflow-job-names": "node scripts/verify-workflow-job-names.js",
@@ -131,8 +131,9 @@
   },
   "homepage": "https://github.com/DataDog/dd-trace-js#readme",
   "engines": {
-    "node": ">=18 <27"
+    "node": ">=18"
   },
+  "nodeMaxMajor": 27,
   "files": [
     "/package.json",
     "ci/**/*",
@@ -163,7 +164,7 @@
   ],
   "dependencies": {
     "dc-polyfill": "^0.1.11",
-    "import-in-the-middle": "^3.1.0",
+    "import-in-the-middle": "^3.2.0",
     "opentracing": ">=0.14.7"
   },
   "optionalDependencies": {
@@ -172,7 +173,7 @@
     "@datadog/native-iast-taint-tracking": "4.2.0",
     "@datadog/native-metrics": "3.1.2",
     "@datadog/openfeature-node-server": "2.0.0",
-    "@datadog/pprof": "5.15.0",
+    "@datadog/pprof": "5.15.1",
     "@datadog/wasm-js-rewriter": "5.0.1",
     "@opentelemetry/api": ">=1.0.0 <1.10.0",
     "@opentelemetry/api-logs": "<1.0.0",

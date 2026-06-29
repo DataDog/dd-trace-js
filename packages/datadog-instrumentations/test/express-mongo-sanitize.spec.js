@@ -25,7 +25,7 @@ describe('express-mongo-sanitize', () => {
         // Highest version of express that supports express-mongo-sanitize is <5 (express 5 makes req.query a
         // getter-only property). The unversioned `versions/express` folder tracks the latest express (now 5.x), so
         // pin the <5 range that externals.js installs for this plugin.
-        const express = require('../../../versions/express@>=4 <5').get()
+        const express = require('../../../versions/express@4').get()
         const expressMongoSanitize = require(`../../../versions/express-mongo-sanitize@${version}`).get()
         const app = express()
 

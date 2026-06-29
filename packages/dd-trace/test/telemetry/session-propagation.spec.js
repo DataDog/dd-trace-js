@@ -40,13 +40,13 @@ describe('session-propagation', () => {
   function createConfig (overrides = {}) {
     /**
      * @type {{
-     *   telemetry: { enabled: boolean },
+     *   telemetry: { DD_INSTRUMENTATION_TELEMETRY_ENABLED: boolean },
      *   DD_ROOT_JS_SESSION_ID: string | undefined,
      *   tags: { 'runtime-id': string }
      * }}
      */
     const config = {
-      telemetry: { enabled: true, ...overrides.telemetry },
+      telemetry: { DD_INSTRUMENTATION_TELEMETRY_ENABLED: true, ...overrides.telemetry },
       DD_ROOT_JS_SESSION_ID: undefined,
       tags: { 'runtime-id': 'current-id', ...overrides.tags },
     }
@@ -192,7 +192,7 @@ describe('session-propagation', () => {
     })
 
     it('does not change child process execution when telemetry is disabled', () => {
-      sessionPropagation.start(createConfig({ telemetry: { enabled: false } }))
+      sessionPropagation.start(createConfig({ telemetry: { DD_INSTRUMENTATION_TELEMETRY_ENABLED: false } }))
 
       const context = {
         callArgs: ['node', ['test.js'], { cwd: '/tmp', env: { FOO: 'bar' } }],
