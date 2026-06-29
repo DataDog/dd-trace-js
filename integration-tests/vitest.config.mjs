@@ -54,6 +54,9 @@ if (process.env.PROJECT_POOL_CONFIG) {
       },
     }
   }
+  if (process.env.PROJECT_THREAD_POOL_MATCH_GLOB) {
+    firstProjectConfig.poolMatchGlobs = [[process.env.PROJECT_THREAD_POOL_MATCH_GLOB, 'threads']]
+  }
   if (process.env.PROJECT_UNNAMED) {
     delete firstProjectConfig.name
   }

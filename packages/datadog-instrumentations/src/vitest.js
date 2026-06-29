@@ -1900,8 +1900,10 @@ function getTestSpecificationProject (testSpecification) {
 }
 
 function getTestSpecificationPool (testSpecification) {
+  const testFile = getTestSpecificationFile(testSpecification)
   const project = getTestSpecificationProject(testSpecification)
-  return project?.config?.pool || project?.serializedConfig?.pool || project?.pool || testSpecification?.pool
+  return testFile?.pool || testSpecification?.pool ||
+    project?.config?.pool || project?.serializedConfig?.pool || project?.pool
 }
 
 function getEffectiveTestSpecificationPool (testSpecification, defaultPool) {
@@ -1930,8 +1932,12 @@ function getEffectiveTestSpecificationIsolate (testSpecification, pool, defaultI
 }
 
 function getTestSpecificationFilepath (testSpecification) {
-  const testFile = Array.isArray(testSpecification) ? testSpecification[1] : testSpecification
+  const testFile = getTestSpecificationFile(testSpecification)
   return testFile?.moduleId || testFile?.filepath || testFile
+}
+
+function getTestSpecificationFile (testSpecification) {
+  return Array.isArray(testSpecification) ? testSpecification[1] : testSpecification
 }
 
 function getTestSpecificationProjectName (testSpecification) {
