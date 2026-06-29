@@ -145,6 +145,7 @@ function describeJestVersion (jestVersion, dependencies) {
       expectSessionCoverage = true,
       expectCoveragePayloads = true,
       expectCoverageOutput = true,
+      expectCoverageBitmaps = true,
     }) {
       const receiver = await new FakeCiVisIntake().start()
       receiver.setSettings(settings)
@@ -210,7 +211,15 @@ function describeJestVersion (jestVersion, dependencies) {
             `session executable-line coverage should not be reported:\n${output}`
             )
           }
-          assert.ok(coveredFile?.bitmap, `covered files should report line coverage bitmaps:\n${output}`)
+          if (expectCoverageBitmaps) {
+            assert.ok(coveredFile?.bitmap, `covered files should report line coverage bitmaps:\n${output}`)
+          } else {
+            assert.strictEqual(
+              coveredFile,
+              undefined,
+              `covered files should not report line coverage bitmaps:\n${output}`
+            )
+          }
 
           coverageResult = coverages
         })
@@ -465,9 +474,8 @@ function describeJestVersion (jestVersion, dependencies) {
       assert.ok(result.stdoutCodeCoverageLinesPct > 0)
     })
 
-    // The same suite-only upload behavior applies when TIA has to force Jest coverage because the user did not
-    // configure it. coverage_report_upload_enabled=false still means no backfill, no session executable coverage,
-    // and no Datadog lines_pct.
+    // The same suite-only upload behavior applies without user Jest coverage. Because Datadog Code Coverage is not
+    // enabled, TIA can report filename-only suite coverage without forcing Istanbul.
     it('only uploads suite coverage without report upload or user jest coverage', async () => {
       const framework = {
         ...FRAMEWORKS[0],
@@ -492,6 +500,7 @@ function describeJestVersion (jestVersion, dependencies) {
         },
         expectSessionCoverage: false,
         expectCoverageOutput: false,
+        expectCoverageBitmaps: false,
       })
 
       assert.strictEqual(result.isTiaSkipped, 'true')
