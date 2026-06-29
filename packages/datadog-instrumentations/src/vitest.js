@@ -425,17 +425,18 @@ function shouldUseVitestNoWorkerInit (ctx, testSpecifications) {
     return false
   }
 
-  if (config.isolate === false) {
+  const defaultIsolate = getEffectiveConfigIsolate(config, config.pool)
+  if (defaultIsolate === false) {
     warnVitestNoWorkerInitWithIsolationDisabled()
     return false
   }
 
   if (Array.isArray(testSpecifications)) {
-    if (hasNonIsolatedForkPoolTestSpecification(testSpecifications, config.pool, config.isolate)) {
+    if (hasNonIsolatedForkPoolTestSpecification(testSpecifications, config.pool, defaultIsolate)) {
       warnVitestNoWorkerInitWithIsolationDisabled()
       return false
     }
-    return hasIsolatedForkPoolTestSpecification(testSpecifications, config.pool, config.isolate)
+    return hasIsolatedForkPoolTestSpecification(testSpecifications, config.pool, defaultIsolate)
   }
 
   return !isThreadPool(config.pool)
@@ -1882,14 +1883,24 @@ function getEffectiveTestSpecificationPool (testSpecification, defaultPool) {
   return getTestSpecificationPool(testSpecification) || defaultPool
 }
 
-function getTestSpecificationIsolate (testSpecification) {
+function getPoolOptionsIsolate (config, pool) {
+  return config?.poolOptions?.[pool]?.isolate
+}
+
+function getEffectiveConfigIsolate (config, pool) {
+  return getPoolOptionsIsolate(config, pool) ?? config?.isolate
+}
+
+function getTestSpecificationIsolate (testSpecification, pool) {
   const project = getTestSpecificationProject(testSpecification)
-  return project?.config?.isolate ?? project?.serializedConfig?.isolate ?? project?.isolate ??
+  return getPoolOptionsIsolate(project?.config, pool) ?? getPoolOptionsIsolate(project?.serializedConfig, pool) ??
+    getPoolOptionsIsolate(project, pool) ?? getPoolOptionsIsolate(testSpecification, pool) ??
+    project?.config?.isolate ?? project?.serializedConfig?.isolate ?? project?.isolate ??
     testSpecification?.isolate
 }
 
-function getEffectiveTestSpecificationIsolate (testSpecification, defaultIsolate) {
-  const isolate = getTestSpecificationIsolate(testSpecification)
+function getEffectiveTestSpecificationIsolate (testSpecification, pool, defaultIsolate) {
+  const isolate = getTestSpecificationIsolate(testSpecification, pool)
   return isolate === undefined ? defaultIsolate : isolate
 }
 
@@ -1922,9 +1933,10 @@ function hasIsolatedForkPoolTestSpecification (testSpecifications, defaultPool, 
   }
 
   for (const testSpecification of testSpecifications) {
+    const pool = getEffectiveTestSpecificationPool(testSpecification, defaultPool)
     if (
-      isForkPool(getEffectiveTestSpecificationPool(testSpecification, defaultPool)) &&
-      getEffectiveTestSpecificationIsolate(testSpecification, defaultIsolate) !== false
+      isForkPool(pool) &&
+      getEffectiveTestSpecificationIsolate(testSpecification, pool, defaultIsolate) !== false
     ) {
       return true
     }
@@ -1939,9 +1951,10 @@ function hasNonIsolatedForkPoolTestSpecification (testSpecifications, defaultPoo
   }
 
   for (const testSpecification of testSpecifications) {
+    const pool = getEffectiveTestSpecificationPool(testSpecification, defaultPool)
     if (
-      isForkPool(getEffectiveTestSpecificationPool(testSpecification, defaultPool)) &&
-      getEffectiveTestSpecificationIsolate(testSpecification, defaultIsolate) === false
+      isForkPool(pool) &&
+      getEffectiveTestSpecificationIsolate(testSpecification, pool, defaultIsolate) === false
     ) {
       return true
     }

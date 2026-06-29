@@ -47,6 +47,13 @@ if (process.env.PROJECT_POOL_CONFIG) {
   if (process.env.PROJECT_NO_ISOLATE) {
     firstProjectConfig.isolate = false
   }
+  if (process.env.PROJECT_POOL_NO_ISOLATE) {
+    firstProjectConfig.poolOptions = {
+      [firstProjectConfig.pool]: {
+        isolate: false,
+      },
+    }
+  }
   projectConfigs.push({ test: firstProjectConfig })
 
   if (process.env.SECOND_PROJECT_CONFIG_FILE) {

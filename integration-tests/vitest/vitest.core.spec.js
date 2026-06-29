@@ -693,6 +693,53 @@ versions.forEach((version) => {
       )
     })
 
+    newerVitestIt('ignores no-worker init when a fork project disables pool isolate', async () => {
+      const payloadsPromise = receiver.gatherPayloadsMaxTimeout(
+        ({ url }) => url === '/api/v2/citestcycle',
+        payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testEvent = events.find(event => event.type === 'test')
+
+          assert.ok(testEvent, `should have test event, got events: ${inspect(events.map(event => event.type))}`)
+          assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'pass')
+        }
+      )
+
+      childProcess = exec(
+        './node_modules/.bin/vitest run',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--no-warnings --import dd-trace/register.js -r dd-trace/ci/init',
+            TEST_DIR: 'ci-visibility/vitest-tests/vitest-worker-env.mjs',
+            POOL_CONFIG: 'threads',
+            PROJECT_POOL_CONFIG: 'forks',
+            PROJECT_POOL_NO_ISOLATE: '1',
+            DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+            EXPECT_DD_NODE_OPTIONS_PRESENT: '1',
+            DD_TRACE_DEBUG: 'true',
+            DD_TRACE_LOG_LEVEL: 'warn',
+            DD_SERVICE: undefined,
+          },
+        }
+      )
+
+      childProcess.stdout.on('data', data => { testOutput += data })
+      childProcess.stderr.on('data', data => { testOutput += data })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        payloadsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0, testOutput)
+      assert.match(
+        testOutput,
+        /DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT is ignored because Vitest isolate is disabled/
+      )
+    })
+
     noWorkerUnsupportedIt('propagates test span context to HTTP requests and hooks during test execution', async () => {
       const eventsPromise = receiver
         .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
