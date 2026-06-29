@@ -447,7 +447,7 @@ function shouldUseVitestNoWorkerInit (ctx, testSpecifications) {
     return hasIsolatedForkPoolTestSpecification(testSpecifications, config.pool, defaultIsolate)
   }
 
-  return !isThreadPool(config.pool)
+  return isForkPool(config.pool)
 }
 
 function warnVitestNoWorkerInitWithIsolationDisabled () {
@@ -2062,7 +2062,7 @@ function getProjectFilepathKey (projectName, filepath) {
 
 function shouldMarkVitestWorkerEnv (pool, testSpecifications) {
   return isForkPool(pool) || hasForkPoolTestSpecification(testSpecifications, pool) ||
-    (!testSpecifications && !isThreadPool(pool))
+    (!testSpecifications && isForkPool(pool))
 }
 
 function markVitestWorkerEnv (ctx, testSpecifications) {
