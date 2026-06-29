@@ -27,7 +27,7 @@ runs:
         }
         case "$VERSION" in
           eol)         version=16 ;;
-          oldest)      oldest_major=$(awk '/"node"/{match($0,/[0-9]+/);print substr($0,RSTART,RLENGTH);exit}' package.json)
+          oldest)      version=$(node_version 18) ;;
                       version=$(node_version "$oldest_major") ;;
           maintenance) version=$(node_version 20) ;;
           active)      version=$(node_version 24) ;;
