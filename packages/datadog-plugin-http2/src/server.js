@@ -1,7 +1,5 @@
 'use strict'
 
-// Plugin temporarily disabled. See https://github.com/DataDog/dd-trace-js/issues/312
-
 const ServerPlugin = require('../../dd-trace/src/plugins/server')
 const web = require('../../dd-trace/src/plugins/util/web')
 const { COMPONENT, SVC_SRC_KEY } = require('../../dd-trace/src/constants')
@@ -47,7 +45,9 @@ class Http2ServerPlugin extends ServerPlugin {
 
     const context = web.getContext(req)
 
-    if (!context.instrumented) {
+    // The core stream API has no `res.writeHead`; CORS preflight tagging only
+    // applies to the compatibility response that exposes it.
+    if (!context.instrumented && typeof context.res.writeHead === 'function') {
       context.res.writeHead = web.wrapWriteHead(context)
       context.instrumented = true
     }
