@@ -26,14 +26,16 @@ const {
 } = require('../../../packages/dd-trace/src/llmobs/constants/tags')
 
 const { VARIANT } = process.env
-const ITERATIONS = Number(process.env.ITERATIONS) || 2_000_000
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 // Every finished LLMObs span runs through LLMObsSpanProcessor.format(): it reads
 // the tagger's per-span tag map and the APM span tags, then builds the LLMObs
 // event (meta/input/output by span kind, metrics, tags, error). This is the
 // per-span LLMObs hot path, uncovered by the existing llmobs writer bench.
 const processor = new LLMObsSpanProcessor({
-  llmobs: { enabled: true },
+  llmobs: {
+    DD_LLMOBS_ENABLED: true,
+  },
   version: '1.0.0',
   env: 'bench',
   service: 'llmobs-bench',
@@ -120,7 +122,7 @@ assert.ok(sample.tags.length > 0, 'format did not build the tag array')
 
 guard.loopStart()
 let sink = 0
-for (let i = 0; i < ITERATIONS; i++) {
+for (let i = 0; i < OPERATIONS; i++) {
   const event = processor.format(span)
   sink += event.tags.length
 }

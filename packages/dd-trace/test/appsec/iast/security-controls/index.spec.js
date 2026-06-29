@@ -53,7 +53,7 @@ describe('IAST Security Controls', () => {
       controls.set('sanitizer.js', {})
 
       const securityControlsConfiguration = 'SANITIZER:CODE_INJECTION:sanitizer.js:sanitize'
-      securityControls.configure({ securityControlsConfiguration })
+      securityControls.configure({ DD_IAST_SECURITY_CONTROLS_CONFIGURATION: securityControlsConfiguration })
 
       sinon.assert.calledWithExactly(parse, securityControlsConfiguration)
 
@@ -63,7 +63,7 @@ describe('IAST Security Controls', () => {
 
     it('should call parse and not subscribe to moduleLoad channels', () => {
       const securityControlsConfiguration = 'invalid_config'
-      securityControls.configure({ securityControlsConfiguration })
+      securityControls.configure({ DD_IAST_SECURITY_CONTROLS_CONFIGURATION: securityControlsConfiguration })
 
       sinon.assert.calledWithExactly(parse, securityControlsConfiguration)
 
@@ -114,7 +114,7 @@ describe('IAST Security Controls', () => {
       // eslint-disable-next-line no-multi-str
       const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
 /security-controls/resources/custom_input_validator.js:validate'
-      securityControls.configure({ securityControlsConfiguration: conf })
+      securityControls.configure({ DD_IAST_SECURITY_CONTROLS_CONFIGURATION: conf })
 
       requireAndPublish('./resources/custom_input_validator')
 
@@ -129,7 +129,7 @@ describe('IAST Security Controls', () => {
         // eslint-disable-next-line no-multi-str
         const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
 /security-controls/resources/custom_input_validator.js:validate'
-        securityControls.configure({ securityControlsConfiguration: conf })
+        securityControls.configure({ DD_IAST_SECURITY_CONTROLS_CONFIGURATION: conf })
 
         const { validate } = requireAndPublish('./resources/custom_input_validator')
         validate('input')
@@ -141,7 +141,7 @@ describe('IAST Security Controls', () => {
         // eslint-disable-next-line no-multi-str
         const conf = 'SANITIZER:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
 /security-controls/resources/sanitizer_default.js'
-        securityControls.configure({ securityControlsConfiguration: conf })
+        securityControls.configure({ DD_IAST_SECURITY_CONTROLS_CONFIGURATION: conf })
 
         const sanitize = requireAndPublish('./resources/sanitizer_default')
         const result = sanitize('input')
@@ -156,7 +156,7 @@ describe('IAST Security Controls', () => {
 /security-controls/resources/custom_input_validator.js:validate;INPUT_VALIDATOR:\
 COMMAND_INJECTION:packages/dd-trace/test/appsec/iast/security-controls/resources\
 /custom_input_validator.js:validateObject'
-        securityControls.configure({ securityControlsConfiguration: conf })
+        securityControls.configure({ DD_IAST_SECURITY_CONTROLS_CONFIGURATION: conf })
 
         const { validate, validateObject } = requireAndPublish('./resources/custom_input_validator')
         let result = validate('input')
@@ -174,7 +174,7 @@ COMMAND_INJECTION:packages/dd-trace/test/appsec/iast/security-controls/resources
         // eslint-disable-next-line no-multi-str
         const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
 /security-controls/resources/custom_input_validator.js:validate'
-        securityControls.configure({ securityControlsConfiguration: conf })
+        securityControls.configure({ DD_IAST_SECURITY_CONTROLS_CONFIGURATION: conf })
 
         const { validate } = requireAndPublish('./resources/custom_input_validator')
         validate('input1', 'input2')
@@ -188,7 +188,7 @@ COMMAND_INJECTION:packages/dd-trace/test/appsec/iast/security-controls/resources
         // eslint-disable-next-line no-multi-str
         const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
 /security-controls/resources/custom_input_validator.js:validate:1'
-        securityControls.configure({ securityControlsConfiguration: conf })
+        securityControls.configure({ DD_IAST_SECURITY_CONTROLS_CONFIGURATION: conf })
 
         const { validate } = requireAndPublish('./resources/custom_input_validator')
         validate('input1', 'input2')
@@ -200,7 +200,7 @@ COMMAND_INJECTION:packages/dd-trace/test/appsec/iast/security-controls/resources
         // eslint-disable-next-line no-multi-str
         const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
 /security-controls/resources/custom_input_validator.js:validate:1,3'
-        securityControls.configure({ securityControlsConfiguration: conf })
+        securityControls.configure({ DD_IAST_SECURITY_CONTROLS_CONFIGURATION: conf })
 
         const { validate } = requireAndPublish('./resources/custom_input_validator')
         validate('input1', 'input2', 'input3', 'input4')
@@ -214,7 +214,7 @@ COMMAND_INJECTION:packages/dd-trace/test/appsec/iast/security-controls/resources
         // eslint-disable-next-line no-multi-str
         const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
 /security-controls/resources/custom_input_validator.js:validate:42'
-        securityControls.configure({ securityControlsConfiguration: conf })
+        securityControls.configure({ DD_IAST_SECURITY_CONTROLS_CONFIGURATION: conf })
 
         const { validate } = requireAndPublish('./resources/custom_input_validator')
         validate('input1')
@@ -226,7 +226,7 @@ COMMAND_INJECTION:packages/dd-trace/test/appsec/iast/security-controls/resources
         // eslint-disable-next-line no-multi-str
         const conf = 'SANITIZER:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
 /security-controls/resources/sanitizer.js:sanitize'
-        securityControls.configure({ securityControlsConfiguration: conf })
+        securityControls.configure({ DD_IAST_SECURITY_CONTROLS_CONFIGURATION: conf })
 
         const { sanitize } = requireAndPublish('./resources/sanitizer')
         const result = sanitize('input')
@@ -240,7 +240,7 @@ COMMAND_INJECTION:packages/dd-trace/test/appsec/iast/security-controls/resources
         // eslint-disable-next-line no-multi-str
         const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
 /security-controls/resources/custom_input_validator.js:validateObject'
-        securityControls.configure({ securityControlsConfiguration: conf })
+        securityControls.configure({ DD_IAST_SECURITY_CONTROLS_CONFIGURATION: conf })
 
         const { validateObject } = requireAndPublish('./resources/custom_input_validator')
         const result = validateObject({ input1: 'input1', nested: { input: 'input2' } })
@@ -256,7 +256,7 @@ COMMAND_INJECTION:packages/dd-trace/test/appsec/iast/security-controls/resources
         // eslint-disable-next-line no-multi-str
         const conf = 'INPUT_VALIDATOR:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
 /security-controls/resources/custom_input_validator.js:validateObject'
-        securityControls.configure({ securityControlsConfiguration: conf })
+        securityControls.configure({ DD_IAST_SECURITY_CONTROLS_CONFIGURATION: conf })
 
         const { validateObject } = requireAndPublish('./resources/custom_input_validator')
         const result = validateObject({ input1: 'input1' }, 'input3')
@@ -272,7 +272,7 @@ COMMAND_INJECTION:packages/dd-trace/test/appsec/iast/security-controls/resources
         // eslint-disable-next-line no-multi-str
         const conf = 'SANITIZER:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
 /security-controls/resources/sanitizer.js:sanitizeObject'
-        securityControls.configure({ securityControlsConfiguration: conf })
+        securityControls.configure({ DD_IAST_SECURITY_CONTROLS_CONFIGURATION: conf })
 
         const { sanitizeObject } = requireAndPublish('./resources/sanitizer')
         const result = sanitizeObject({ output: 'output1', nested: { output: 'nested output' } })
@@ -290,7 +290,7 @@ COMMAND_INJECTION:packages/dd-trace/test/appsec/iast/security-controls/resources
         // eslint-disable-next-line no-multi-str
         const conf = 'SANITIZER:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
 /security-controls/resources/sanitizer.js:nested.sanitize'
-        securityControls.configure({ securityControlsConfiguration: conf })
+        securityControls.configure({ DD_IAST_SECURITY_CONTROLS_CONFIGURATION: conf })
 
         const { nested } = requireAndPublish('./resources/sanitizer')
         const result = nested.sanitize('input')
@@ -303,7 +303,7 @@ COMMAND_INJECTION:packages/dd-trace/test/appsec/iast/security-controls/resources
         // eslint-disable-next-line no-multi-str
         const conf = 'SANITIZER:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
 /security-controls/resources/sanitizer.js:incorrect.sanitize'
-        securityControls.configure({ securityControlsConfiguration: conf })
+        securityControls.configure({ DD_IAST_SECURITY_CONTROLS_CONFIGURATION: conf })
 
         const { nested } = requireAndPublish('./resources/sanitizer')
         const result = nested.sanitize('input')
@@ -316,7 +316,7 @@ COMMAND_INJECTION:packages/dd-trace/test/appsec/iast/security-controls/resources
         // eslint-disable-next-line no-multi-str
         const conf = 'SANITIZER:COMMAND_INJECTION:packages/dd-trace/test/appsec/iast\
 /security-controls/resources/sanitizer.js:nested.incorrect.sanitize'
-        securityControls.configure({ securityControlsConfiguration: conf })
+        securityControls.configure({ DD_IAST_SECURITY_CONTROLS_CONFIGURATION: conf })
 
         const { nested } = requireAndPublish('./resources/sanitizer')
         const result = nested.sanitize('input')
@@ -329,7 +329,7 @@ COMMAND_INJECTION:packages/dd-trace/test/appsec/iast/security-controls/resources
     describe('in node_modules', () => {
       it('should hook node_module dependency', () => {
         const conf = 'SANITIZER:COMMAND_INJECTION:node_modules/sanitizer/index.js:sanitize'
-        securityControls.configure({ securityControlsConfiguration: conf })
+        securityControls.configure({ DD_IAST_SECURITY_CONTROLS_CONFIGURATION: conf })
 
         const { sanitize } = requireAndPublish('./resources/node_modules/sanitizer')
         const result = sanitize('input')
@@ -340,7 +340,7 @@ COMMAND_INJECTION:packages/dd-trace/test/appsec/iast/security-controls/resources
 
       it('should hook transitive node_module dependency', () => {
         const conf = 'SANITIZER:COMMAND_INJECTION:node_modules/sanitizer/index.js:sanitize'
-        securityControls.configure({ securityControlsConfiguration: conf })
+        securityControls.configure({ DD_IAST_SECURITY_CONTROLS_CONFIGURATION: conf })
 
         const { sanitize } = requireAndPublish('./resources/node_modules/anotherlib/node_modules/sanitizer')
         const result = sanitize('input')
@@ -351,7 +351,7 @@ COMMAND_INJECTION:packages/dd-trace/test/appsec/iast/security-controls/resources
 
       it('should not fail with not found node_module dep', () => {
         const conf = 'SANITIZER:COMMAND_INJECTION:node_modules/not_loaded_sanitizer/index.js:sanitize'
-        securityControls.configure({ securityControlsConfiguration: conf })
+        securityControls.configure({ DD_IAST_SECURITY_CONTROLS_CONFIGURATION: conf })
 
         const { sanitize } = requireAndPublish('./resources/node_modules/sanitizer')
         const result = sanitize('input')

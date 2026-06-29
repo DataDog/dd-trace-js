@@ -11,7 +11,7 @@ const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
 
 const express4Dir = join(__dirname, '..', '..', '..', 'versions', 'express@4')
-const express5Dir = join(__dirname, '..', '..', '..', 'versions', 'express@>=5.0.0')
+const express5Dir = join(__dirname, '..', '..', '..', 'versions', 'express@5')
 
 const describeOrSkip = existsSync(express4Dir) && existsSync(express5Dir)
   ? describe

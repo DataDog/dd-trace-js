@@ -15,7 +15,7 @@ const ops = require('../../../packages/dd-trace/src/appsec/iast/taint-tracking/o
 //   sink-check - one transaction, taint once, then loop the isTainted/getRanges
 //     check that fires at every sink (the most frequent op)
 const { VARIANT } = process.env
-const ITERATIONS = Number(process.env.ITERATIONS) || 1_000_000
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 const SOURCE = 'echo hello; cat /etc/passwd && rm -rf /tmp/x'
 const UNTAINTED = 'echo a static safe command with no user input'
@@ -31,7 +31,7 @@ if (VARIANT === 'sink-check') {
   assert.ok(ops.getRanges(iastContext, tainted).length > 0, 'tainted source has no ranges')
 
   guard.loopStart()
-  for (let i = 0; i < ITERATIONS; i++) {
+  for (let i = 0; i < OPERATIONS; i++) {
     if (ops.isTainted(iastContext, tainted)) {
       sink += ops.getRanges(iastContext, tainted).length
     }
@@ -50,7 +50,7 @@ if (VARIANT === 'sink-check') {
   ops.removeTransaction(probe)
 
   guard.loopStart()
-  for (let i = 0; i < ITERATIONS; i++) {
+  for (let i = 0; i < OPERATIONS; i++) {
     const iastContext = {}
     ops.createTransaction(String(i), iastContext)
     const tainted = ops.newTaintedString(iastContext, SOURCE, 'param', TYPE)

@@ -22,12 +22,16 @@ describe('Plugin Manager', () => {
   let Six
   let Eight
   let pm
+  let registeredDefaults
 
   function makeTracerConfig (overrides = {}) {
     return {
       plugins: true,
       spanAttributeSchema: 'v0',
       spanRemoveIntegrationFromService: false,
+      // The real tracer Config always carries the testOptimization namespace;
+      // #getSharedConfig reads it, so the stand-in must provide it too.
+      testOptimization: {},
       ...overrides,
     }
   }
@@ -84,6 +88,10 @@ describe('Plugin Manager', () => {
 
     process.env.DD_TRACE_DISABLED_PLUGINS = 'five,six,seven'
 
+    // Mirrors getValueFromEnvSources: an explicit env value wins, otherwise the registered
+    // default is returned unless the caller passes skipDefault. registeredDefaults lets a test
+    // model a plugin whose default-enabled flag is `false` (e.g. an experimental plugin).
+    registeredDefaults = {}
     PluginManager = proxyquire.noPreserveCache()('../src/plugin_manager', {
       './plugins': { ...plugins, '@noCallThru': true },
       '../../datadog-instrumentations': {},
@@ -91,8 +99,11 @@ describe('Plugin Manager', () => {
         getEnvironmentVariable (name) {
           return process.env[name]
         },
-        getValueFromEnvSources (name) {
-          return process.env[name]
+        getValueFromEnvSources (name, skipDefault) {
+          if (process.env[name] !== undefined) {
+            return process.env[name]
+          }
+          return skipDefault ? undefined : registeredDefaults[name]
         },
       },
     })
@@ -312,6 +323,14 @@ describe('Plugin Manager', () => {
         loadChannel.publish({ name: 'eight' })
         sinon.assert.calledWithMatch(Eight.prototype.configure, { enabled: true })
       })
+
+      it('should not hard-disable the plugin when its registered default is false', () => {
+        registeredDefaults.DD_TRACE_EIGHT_ENABLED = false
+        pm.configure(makeTracerConfig())
+        pm.configurePlugin('eight')
+        loadChannel.publish({ name: 'eight' })
+        sinon.assert.calledWithMatch(Eight.prototype.configure, { enabled: true })
+      })
     })
 
     it('instantiates plugin classes', () => {
@@ -352,7 +371,7 @@ describe('Plugin Manager', () => {
       pm.configure(makeTracerConfig({
         serviceMapping: { two: 'deux' },
         logInjection: true,
-        queryStringObfuscation: '.*',
+        DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP: '.*',
         clientIpEnabled: true,
       }))
       loadChannel.publish({ name: 'two' })

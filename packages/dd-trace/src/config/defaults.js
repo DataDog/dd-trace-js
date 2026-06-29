@@ -1,6 +1,5 @@
 'use strict'
 
-const dns = require('dns')
 const util = require('util')
 
 const { DD_MAJOR } = require('../../../../version')
@@ -51,7 +50,6 @@ const defaults = {
   isServiceUserProvided: false,
   plugins: true,
   isCiVisibility: false,
-  lookup: dns.lookup,
   logger: undefined,
 }
 
@@ -218,11 +216,20 @@ for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) 
     )
   }
   for (const entry of entries) {
+    // A deprecated entry that only aliases a canonical option must not surface as
+    // its own Config property/default: the canonical entry already owns the value
+    // and the alias is resolved by helper.js. helper.js drops these from the shared
+    // supported-configurations object (after registering the deprecation), but that
+    // mutation is order-dependent on which module loads first. Skip here too so
+    // `defaults` is identical regardless of load order (it differed in v5, where
+    // major-overrides keeps these entries instead of deleting them outright).
+    if (entry.deprecated && entry.aliases) continue
     if (entry.sensitive) {
       sensitiveConfigurations.add(canonicalName)
     }
-    const configurationNames = entry.internalPropertyName ? [entry.internalPropertyName] : entry.configurationNames
-    const fullPropertyName = configurationNames?.[0] ?? canonicalName
+    const fullPropertyName = entry.namespace
+      ? `${entry.namespace}.${canonicalName}`
+      : (entry.internalPropertyName ?? entry.configurationNames?.[0] ?? canonicalName)
     const type = entry.type.toUpperCase()
 
     let transformer = transformers[entry.transform]
@@ -285,7 +292,7 @@ for (const [canonicalName, entries] of Object.entries(supportedConfigurations)) 
 
 // Replace the alias with the canonical property name.
 for (const [fullPropertyName, alias] of fallbackConfigurations) {
-  if (configurationsTable[alias].property) {
+  if (configurationsTable[alias]?.property) {
     fallbackConfigurations.set(fullPropertyName, configurationsTable[alias].property)
   }
 }
@@ -347,3 +354,16 @@ module.exports = {
 
   generateTelemetry,
 }
+
+// `dns` is instrumented, so requiring it pulls in the dns plugin, which loads
+// `log`, whose bootstrap calls back into `require('./defaults')`. Resolve the
+// `lookup` default last — after the exports above are fully built — so that the
+// re-entrant require during that cascade sees the complete module instead of a
+// half-initialized one.
+defaults.lookup = require('dns').lookup
+configWithOrigin.set('lookupdefault', {
+  name: 'lookup',
+  value: defaults.lookup,
+  origin: 'default',
+  seq_id: seqId++,
+})

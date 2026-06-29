@@ -8,7 +8,10 @@ const nock = require('nock')
 
 require('../../setup/core')
 
-const { getSkippableSuites } = require('../../../src/ci-visibility/intelligent-test-runner/get-skippable-suites')
+const {
+  getSkippableSuites,
+  parseSkippableSuitesResponse,
+} = require('../../../src/ci-visibility/intelligent-test-runner/get-skippable-suites')
 const getConfig = require('../../../src/config')
 const {
   buildCacheKey,
@@ -111,7 +114,7 @@ function cleanup (params) {
 describe('get-skippable-suites', () => {
   beforeEach(() => {
     process.env.DD_API_KEY = 'test-api-key'
-    getConfig().apiKey = 'test-api-key'
+    getConfig().DD_API_KEY = 'test-api-key'
     process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE = 'true'
     getConfig().DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE = true
     cleanup(DEFAULT_PARAMS)
@@ -120,7 +123,7 @@ describe('get-skippable-suites', () => {
 
   afterEach(() => {
     delete process.env.DD_API_KEY
-    getConfig().apiKey = undefined
+    getConfig().DD_API_KEY = undefined
     delete process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE
     getConfig().DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE = false
     cleanup(DEFAULT_PARAMS)
@@ -253,5 +256,66 @@ describe('get-skippable-suites', () => {
       assert.strictEqual(fs.existsSync(getLockPath(key)), false, 'lock should be cleaned up')
       done()
     })
+  })
+})
+
+describe('parseSkippableSuitesResponse', () => {
+  it('returns suite-level skippable data with correlation id and coverage', () => {
+    const result = parseSkippableSuitesResponse(JSON.stringify(SKIPPABLE_RESPONSE_WITH_COVERAGE), {
+      testLevel: 'suite',
+    })
+
+    assert.deepStrictEqual(result, {
+      skippableSuites: ['suite1.spec.js', 'suite2.spec.js'],
+      correlationId: 'corr-123',
+      coverage: {
+        'src/file1.js': 'gA==',
+        'src/file2.js': 'IA==',
+      },
+    })
+  })
+
+  it('returns test-level skippable data', () => {
+    const result = parseSkippableSuitesResponse(JSON.stringify({
+      data: [
+        { type: 'suite', attributes: { suite: 'suite1.spec.js' } },
+        { type: 'test', attributes: { suite: 'suite1.spec.js', name: 'test 1' } },
+      ],
+      meta: { correlation_id: 'corr-123' },
+    }), { testLevel: 'test' })
+
+    assert.deepStrictEqual(result, {
+      skippableSuites: [{ suite: 'suite1.spec.js', name: 'test 1' }],
+      correlationId: 'corr-123',
+      coverage: {},
+    })
+  })
+
+  it('filters missing line coverage when coverage report upload is enabled', () => {
+    const result = parseSkippableSuitesResponse(JSON.stringify(SKIPPABLE_RESPONSE_WITH_MISSING_LINE_COVERAGE), {
+      testLevel: 'suite',
+      isCoverageReportUploadEnabled: true,
+    })
+
+    assert.deepStrictEqual(result.skippableSuites, ['suite2.spec.js'])
+  })
+
+  it('validates skippable tests response shape when requested', () => {
+    const result = parseSkippableSuitesResponse(JSON.stringify(SKIPPABLE_RESPONSE), {
+      validateRequiredFields: true,
+    })
+
+    assert.deepStrictEqual(result.skippableSuites, ['suite1.spec.js', 'suite2.spec.js'])
+    assert.throws(
+      () => parseSkippableSuitesResponse(JSON.stringify({}), { validateRequiredFields: true }),
+      /Invalid skippable tests response: data must be an array/
+    )
+    assert.throws(
+      () => parseSkippableSuitesResponse(
+        JSON.stringify({ data: [{ type: 'suite', attributes: {} }] }),
+        { validateRequiredFields: true }
+      ),
+      /Invalid skippable tests response: data entry suite must be a string/
+    )
   })
 })

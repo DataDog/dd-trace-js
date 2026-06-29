@@ -13,7 +13,7 @@ describe('check-require-cache', () => {
   const opts = {
     cwd: __dirname,
     env: {
-      DD_TRACE_DEBUG: 'true',
+      DD_TRACE_STARTUP_LOGS: 'true',
     },
   }
 
@@ -33,6 +33,15 @@ describe('check-require-cache', () => {
     })
   })
 
+  it('stays silent about late-loaded packages when startupLogs is off', (done) => {
+    const off = { cwd: __dirname, env: { DD_TRACE_STARTUP_LOGS: 'false' } }
+    exec(`${process.execPath} ./check-require-cache/bad-order.js`, off, (error, stdout, stderr) => {
+      assert.strictEqual(error, null)
+      assert.doesNotMatch(stderr, /Package 'express' was loaded/)
+      done()
+    })
+  })
+
   describe('frameworks that must load before the tracer', () => {
     // No DD_TRACE_DEBUG here on purpose: the framework warning has to surface by
     // default, since the users hitting this (issues #5430 / #5432) never turned
@@ -46,6 +55,15 @@ describe('check-require-cache', () => {
         assert.match(stderr, /--require dd-trace\/init/)
         assert.match(stderr, /--import dd-trace\/initialize\.mjs/)
         assert.match(stderr, /serverExternalPackages/)
+        done()
+      })
+    })
+
+    it('warns about next even when startupLogs is off (the v5 default)', (done) => {
+      const off = { cwd: __dirname, env: { DD_TRACE_STARTUP_LOGS: 'false' } }
+      exec(`${process.execPath} ./check-require-cache/next-loaded-first.js`, off, (error, stdout, stderr) => {
+        assert.strictEqual(error, null)
+        assert.match(stderr, /DATADOG TRACER DIAGNOSTIC - 'next' was loaded before dd-trace/)
         done()
       })
     })
@@ -90,8 +108,21 @@ describe('check-require-cache', () => {
         path.join('/app', 'node_modules', 'next', 'dist', 'server', 'next-server.js')
       )
       try {
-        checkForRequiredModules(false)
+        checkForRequiredModules()
         assert.ok(drainFrameworkWarnings().some(message => message.includes("'next' was loaded before dd-trace")))
+      } finally {
+        restore()
+      }
+    })
+
+    it('drains collected warnings so a second flush does not repeat them', () => {
+      const restore = cacheModule(
+        path.join('/app', 'node_modules', 'next', 'dist', 'server', 'next-server.js')
+      )
+      try {
+        checkForRequiredModules()
+        assert.ok(drainFrameworkWarnings().some(message => message.includes("'next' was loaded before dd-trace")))
+        assert.deepStrictEqual(drainFrameworkWarnings(), [])
       } finally {
         restore()
       }
@@ -101,7 +132,7 @@ describe('check-require-cache', () => {
       // Literal backslash key reproduces a Windows require.cache entry on any OS.
       const restore = cacheModule('C:\\app\\node_modules\\next\\dist\\server\\next-server.js')
       try {
-        checkForRequiredModules(false)
+        checkForRequiredModules()
         assert.ok(drainFrameworkWarnings().some(message => message.includes("'next' was loaded before dd-trace")))
       } finally {
         restore()
@@ -111,12 +142,12 @@ describe('check-require-cache', () => {
     it('ignores non-server files of a curated framework', () => {
       const nextWarnings = messages => messages.filter(message => message.includes("'next'")).length
 
-      checkForRequiredModules(false)
+      checkForRequiredModules()
       const before = nextWarnings(drainFrameworkWarnings())
 
       const restore = cacheModule(path.join('/app', 'node_modules', 'next', 'package.json'))
       try {
-        checkForRequiredModules(false)
+        checkForRequiredModules()
         // Caching only a non-server file must not add a warning, regardless of
         // whatever else is already in the real require.cache.
         assert.strictEqual(nextWarnings(drainFrameworkWarnings()), before)
@@ -128,7 +159,7 @@ describe('check-require-cache', () => {
     it('does not collect packages outside the curated set', () => {
       const restore = cacheModule(path.join('/app', 'node_modules', 'express', 'lib', 'express.js'))
       try {
-        checkForRequiredModules(false)
+        checkForRequiredModules()
         assert.ok(drainFrameworkWarnings().every(message => !message.includes("'express'")))
       } finally {
         restore()

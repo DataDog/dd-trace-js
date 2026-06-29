@@ -33,6 +33,8 @@ const {
   ROUTING_API_KEY,
   ROUTING_SITE,
   LLMOBS_SUBMITTED_TAG_KEY,
+  SAMPLE_RATE,
+  SAMPLING_DECISION,
 } = require('./constants/tags')
 const { UNSERIALIZABLE_VALUE_TEXT } = require('./constants/text')
 const telemetry = require('./telemetry')
@@ -81,7 +83,7 @@ class LLMObsSpanProcessor {
 
   // TODO: instead of relying on the tagger's weakmap registry, can we use some namespaced storage correlation?
   process (span) {
-    if (!this.#config.llmobs.enabled) return
+    if (!this.#config.llmobs.DD_LLMOBS_ENABLED) return
     // if the span is not in our private tagger map, it is not an llmobs span
     if (!LLMObsTagger.tagMap.has(span)) return
 
@@ -248,6 +250,8 @@ class LLMObsSpanProcessor {
       _dd: {
         span_id: span.context().toSpanId(),
         trace_id: span.context().toTraceId(true),
+        sample_rate: mlObsTags[SAMPLE_RATE],
+        sampling_decision: mlObsTags[SAMPLING_DECISION],
       },
     }
 
