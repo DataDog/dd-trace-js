@@ -2738,6 +2738,39 @@ describe('Plugin', () => {
 
           return Promise.all([assertion, graphql.graphql({ schema, source })])
         })
+
+        it('should skip the execute span for the federation health-check operation', async () => {
+          const schema = new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'Query',
+              fields: {
+                hello: { type: graphql.GraphQLString, resolve: () => 'world' },
+              },
+            }),
+          })
+
+          // bindStart publishes apm:graphql:execute:start only after it commits to
+          // tracing the operation, so a 0 count proves the health-check was skipped
+          // before span creation. The normal operation below proves the counter fires.
+          const executeCh = dc.channel('apm:graphql:execute:start')
+          let starts = 0
+          const handler = () => { starts++ }
+          executeCh.subscribe(handler)
+
+          try {
+            // The exact operation Apollo Gateway polls subgraphs with.
+            const source = 'query __ApolloServiceHealthCheck__ { hello }'
+            const healthCheck = await graphql.graphql({ schema, source })
+            assert.ok(!healthCheck.errors, inspect(healthCheck.errors))
+            assert.strictEqual(starts, 0, 'execute span must be skipped for the health-check operation')
+
+            const normal = await graphql.graphql({ schema, source: 'query { hello }' })
+            assert.ok(!normal.errors, inspect(normal.errors))
+            assert.strictEqual(starts, 1, 'a normal operation must still be traced')
+          } finally {
+            executeCh.unsubscribe(handler)
+          }
+        })
       })
     })
   })

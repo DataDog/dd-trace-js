@@ -113,6 +113,14 @@ class GraphQLExecutePlugin extends TracingPlugin {
     const name = operation?.name?.value
     const source = this.config.source && docSource
 
+    // Apollo Gateway polls every subgraph with this fixed operation to check
+    // liveness; tracing it floods traces with health-check noise. Skip it here
+    // (no span, no resolver wrapping), the same way mongodb skips heartbeats.
+    if (name === '__ApolloServiceHealthCheck__') {
+      ctx.ddSkipped = true
+      return ctx.currentStore
+    }
+
     ctx.collapse = this.config.collapse
 
     const span = this.startSpan(this.operationName(), {
