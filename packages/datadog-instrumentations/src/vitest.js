@@ -106,6 +106,7 @@ let isSessionStarted = false
 let vitestPool = null
 let isVitestNoWorkerInitActive = false
 let hasWarnedVitestNoWorkerInitWithIsolationDisabled = false
+let hasWarnedVitestNoWorkerInitWithAmbiguousUnnamedProjects = false
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 400
 const DATADOG_TEST_OPTIMIZATION_BOOTSTRAPS = new Set([
@@ -120,6 +121,9 @@ const NODE_OPTIONS_QUOTE_RE = /[\s"\\]/
 const VITEST_NO_WORKER_INIT_ISOLATE_WARNING =
   `${VITEST_NO_WORKER_INIT_REQUEST_ENV} is ignored because Vitest isolate is disabled. ` +
   'The lighter Vitest worker path only helps when each test file runs in an isolated worker.'
+const VITEST_NO_WORKER_INIT_AMBIGUOUS_UNNAMED_PROJECTS_WARNING =
+  `${VITEST_NO_WORKER_INIT_REQUEST_ENV} is ignored because unnamed Vitest projects use the same test file ` +
+  'with different pools.'
 
 function noop () {}
 
@@ -436,6 +440,10 @@ function shouldUseVitestNoWorkerInit (ctx, testSpecifications) {
       warnVitestNoWorkerInitWithIsolationDisabled()
       return false
     }
+    if (getAmbiguousUnnamedForkPoolFilepaths(testSpecifications, config.pool)?.size > 0) {
+      warnVitestNoWorkerInitWithAmbiguousUnnamedProjects()
+      return false
+    }
     return hasIsolatedForkPoolTestSpecification(testSpecifications, config.pool, defaultIsolate)
   }
 
@@ -449,6 +457,15 @@ function warnVitestNoWorkerInitWithIsolationDisabled () {
 
   hasWarnedVitestNoWorkerInitWithIsolationDisabled = true
   log.warn(VITEST_NO_WORKER_INIT_ISOLATE_WARNING)
+}
+
+function warnVitestNoWorkerInitWithAmbiguousUnnamedProjects () {
+  if (hasWarnedVitestNoWorkerInitWithAmbiguousUnnamedProjects) {
+    return
+  }
+
+  hasWarnedVitestNoWorkerInitWithAmbiguousUnnamedProjects = true
+  log.warn(VITEST_NO_WORKER_INIT_AMBIGUOUS_UNNAMED_PROJECTS_WARNING)
 }
 
 function setProvidedContext (ctx, values, warningMessage) {
@@ -928,7 +945,8 @@ function createMainProcessReporter (
     if (projectName) {
       return forkPoolTestModules.projectFilepaths.has(getProjectFilepathKey(projectName, normalizedFilepath))
     }
-    return forkPoolTestModules.filepaths.has(normalizedFilepath)
+    return forkPoolTestModules.filepaths.has(normalizedFilepath) &&
+      !forkPoolTestModules.ambiguousFilepaths?.has(normalizedFilepath)
   }
 
   function shouldReportTestTask (task) {
@@ -1981,11 +1999,39 @@ function hasThreadPoolTestSpecification (defaultPool, testSpecifications) {
   return false
 }
 
+function getAmbiguousUnnamedForkPoolFilepaths (testSpecifications, defaultPool) {
+  if (!Array.isArray(testSpecifications)) {
+    return
+  }
+
+  const forkFilepaths = new Set()
+  const nonForkFilepaths = new Set()
+  const ambiguousFilepaths = new Set()
+  for (const testSpecification of testSpecifications) {
+    if (getTestSpecificationProjectName(testSpecification)) continue
+
+    const filepath = normalizeFilepath(getTestSpecificationFilepath(testSpecification))
+    if (!filepath) continue
+
+    const pool = getEffectiveTestSpecificationPool(testSpecification, defaultPool)
+    if (isForkPool(pool)) {
+      if (nonForkFilepaths.has(filepath)) ambiguousFilepaths.add(filepath)
+      forkFilepaths.add(filepath)
+    } else {
+      if (forkFilepaths.has(filepath)) ambiguousFilepaths.add(filepath)
+      nonForkFilepaths.add(filepath)
+    }
+  }
+
+  return ambiguousFilepaths
+}
+
 function getForkPoolTestModules (defaultPool, testSpecifications) {
   if (!Array.isArray(testSpecifications)) {
     return
   }
 
+  const ambiguousFilepaths = getAmbiguousUnnamedForkPoolFilepaths(testSpecifications, defaultPool)
   const filepaths = new Set()
   const projectFilepaths = new Set()
   for (const testSpecification of testSpecifications) {
@@ -2003,6 +2049,7 @@ function getForkPoolTestModules (defaultPool, testSpecifications) {
   }
 
   return {
+    ambiguousFilepaths,
     filepaths,
     isEmpty: filepaths.size === 0 && projectFilepaths.size === 0,
     projectFilepaths,

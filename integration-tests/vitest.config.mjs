@@ -54,6 +54,9 @@ if (process.env.PROJECT_POOL_CONFIG) {
       },
     }
   }
+  if (process.env.PROJECT_UNNAMED) {
+    delete firstProjectConfig.name
+  }
   projectConfigs.push({ test: firstProjectConfig })
 
   if (process.env.SECOND_PROJECT_CONFIG_FILE) {
