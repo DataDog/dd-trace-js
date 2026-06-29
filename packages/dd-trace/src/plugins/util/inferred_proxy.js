@@ -127,6 +127,7 @@ function extractInferredProxyContext (headers) {
     return null
   }
 
+  const startTime = headers[PROXY_HEADER_SYSTEM]
   const detectedProxy = supportedProxies[headers[PROXY_HEADER_SYSTEM]]
 
   if (detectedProxy.providesTimestamp && !(PROXY_HEADER_START_TIME_MS in headers)) {
@@ -136,8 +137,8 @@ function extractInferredProxyContext (headers) {
   return {
     requestTime: headers[PROXY_HEADER_START_TIME_MS]
       ? Number.parseInt(headers[PROXY_HEADER_START_TIME_MS], 10)
-      : proxySystem.providesTimestamp
-        ? null : Date.now(),
+      : detectedProxy.providesTimestamp
+        ? null : Date.now().toString(),
     method: headers[PROXY_HEADER_HTTPMETHOD],
     path: headers[PROXY_HEADER_PATH],
     stage: headers[PROXY_HEADER_STAGE],
