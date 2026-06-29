@@ -137,7 +137,8 @@ function extractInferredProxyContext (headers) {
     requestTime: headers[PROXY_HEADER_START_TIME_MS]
       ? Number.parseInt(headers[PROXY_HEADER_START_TIME_MS], 10)
       : detectedProxy.providesTimestamp
-        ? null : Date.now().toString(),
+        ? null
+        : Date.now().toString(),
     method: headers[PROXY_HEADER_HTTPMETHOD],
     path: headers[PROXY_HEADER_PATH],
     stage: headers[PROXY_HEADER_STAGE],
@@ -161,7 +162,7 @@ function finishInferredProxySpan (context) {
   // context.config.hooks.request(context.inferredProxySpan, req, res) # TODO: Do we need this??
 
   // Only close the inferred span if one was created
-  if (context.inferredProxySpan){
+  if (context.inferredProxySpan) {
     context.inferredProxySpan.finish()
     context.inferredProxySpanFinished = true
   }
