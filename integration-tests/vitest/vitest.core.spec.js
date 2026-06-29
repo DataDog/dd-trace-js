@@ -456,7 +456,7 @@ versions.forEach((version) => {
       assert.ok(testOutput.includes(CUSTOM_SEQUENCER_MARKER), `Got: ${inspect(testOutput)}`)
     })
 
-    newerVitestIt('sends worker context to thread specs routed from fork projects', async () => {
+    latestVitestIt('sends worker context to thread specs routed from fork projects', async () => {
       const payloadsPromise = receiver.gatherPayloadsMaxTimeout(
         ({ url }) => url === '/api/v2/citestcycle',
         payloads => {
