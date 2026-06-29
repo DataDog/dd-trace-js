@@ -60,8 +60,9 @@ describe('SpanProcessor', () => {
     config = {
       flushMinSpans: 3,
       stats: {
-        enabled: false,
+        DD_TRACE_STATS_COMPUTATION_ENABLED: false,
       },
+      appsec: {},
     }
     spanFormat = sinon.stub().returns({ formatted: true })
 
@@ -142,7 +143,8 @@ describe('SpanProcessor', () => {
 
   it('should configure span sampler correctly', () => {
     const config = {
-      stats: { enabled: false },
+      stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false },
+      appsec: {},
       sampler: {
         sampleRate: 0,
         spanSamplingRules: [
@@ -164,10 +166,11 @@ describe('SpanProcessor', () => {
 
   it('should erase the trace and stop execution when tracing=false', () => {
     const config = {
-      tracing: false,
+      DD_TRACE_ENABLED: false,
       stats: {
-        enabled: false,
+        DD_TRACE_STATS_COMPUTATION_ENABLED: false,
       },
+      appsec: {},
     }
 
     const processor = new SpanProcessor(exporter, prioritySampler, config)
@@ -246,7 +249,12 @@ describe('SpanProcessor', () => {
 
     it('applies the OTel HTTP rename to the exported span', () => {
       spanFormat.returns(formattedHttpSpan())
-      const otelConfig = { flushMinSpans: 3, stats: { enabled: false }, DD_TRACE_OTEL_SEMANTICS_ENABLED: true }
+      const otelConfig = {
+        flushMinSpans: 3,
+        stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false },
+        appsec: {},
+        DD_TRACE_OTEL_SEMANTICS_ENABLED: true,
+      }
       const processor = new SpanProcessor(exporter, prioritySampler, otelConfig)
       trace.started = [finishedSpan]
       trace.finished = [finishedSpan]
@@ -261,7 +269,12 @@ describe('SpanProcessor', () => {
 
     it('records span stats from the Datadog tag names, before the export-only rename', () => {
       spanFormat.returns(formattedHttpSpan())
-      const otelConfig = { flushMinSpans: 3, stats: { enabled: false }, DD_TRACE_OTEL_SEMANTICS_ENABLED: true }
+      const otelConfig = {
+        flushMinSpans: 3,
+        stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false },
+        appsec: {},
+        DD_TRACE_OTEL_SEMANTICS_ENABLED: true,
+      }
       const processor = new SpanProcessor(exporter, prioritySampler, otelConfig)
       const statsView = {}
       processor._stats = {

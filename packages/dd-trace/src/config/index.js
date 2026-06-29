@@ -7,7 +7,7 @@ const { URL, format } = require('node:url')
 const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
 const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
 const set = require('../../../datadog-core/src/utils/src/set')
-const { DD_MAJOR } = require('../../../../version')
+const { DD_MAJOR, NODE_MAJOR } = require('../../../../version')
 const log = require('../log')
 const pkg = require('../pkg')
 const { isTrue } = require('../util')
@@ -246,12 +246,12 @@ class Config extends ConfigBase {
       let entry = optionsTable[fullName]
       if (!entry) {
         // TODO: Fix this by by changing remote config to use env styles.
-        if (name !== 'tracing' || source !== 'remote_config') {
+        if (name !== 'DD_TRACE_ENABLED' || source !== 'remote_config') {
           log.warn('Unknown option %s with value %o', fullName, value)
           continue
         }
         // @ts-expect-error - The entry is defined in the configurationsTable.
-        entry = configurationsTable.tracing
+        entry = configurationsTable.DD_TRACE_ENABLED
       }
 
       if (entry.nestedProperties) {
@@ -287,7 +287,7 @@ class Config extends ConfigBase {
       }
       // TODO: Coerce mismatched types to the expected type, if possible. E.g., strings <> numbers
       const transformed = value !== undefined && entry.transformer ? entry.transformer(value, fullName, source) : value
-      setAndTrack(this, entry.property, transformed, value, source)
+      setAndTrack(this, entry.property ?? name, transformed, value, source)
     }
   }
 
@@ -359,18 +359,22 @@ class Config extends ConfigBase {
       setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'none')
     }
 
-    if (this.telemetry.heartbeatInterval) {
-      setAndTrack(this, 'telemetry.heartbeatInterval', Math.floor(this.telemetry.heartbeatInterval * 1000))
-    }
-    if (this.telemetry.extendedHeartbeatInterval) {
-      setAndTrack(this, 'telemetry.extendedHeartbeatInterval',
-        Math.floor(this.telemetry.extendedHeartbeatInterval * 1000))
+    if (this.telemetry.DD_TELEMETRY_HEARTBEAT_INTERVAL) {
+      setAndTrack(this, 'telemetry.DD_TELEMETRY_HEARTBEAT_INTERVAL',
+        Math.floor(this.telemetry.DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000))
     }
 
-    // Enable resourceRenamingEnabled when appsec is enabled and only
+    // Allocation profiling needs a sampling hook only available on Node.js 26+.
+    setAndTrack(this, 'DD_PROFILING_ALLOCATION_ENABLED', NODE_MAJOR >= 26 && this.DD_PROFILING_ALLOCATION_ENABLED)
+    if (this.telemetry.DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL) {
+      setAndTrack(this, 'telemetry.DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL',
+        Math.floor(this.telemetry.DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL * 1000))
+    }
+
+    // Enable resource renaming when appsec is enabled and only
     // if DD_TRACE_RESOURCE_RENAMING_ENABLED is not explicitly set
-    if (!trackedConfigOrigins.has('resourceRenamingEnabled')) {
-      setAndTrack(this, 'resourceRenamingEnabled', this.appsec.enabled ?? false)
+    if (!trackedConfigOrigins.has('DD_TRACE_RESOURCE_RENAMING_ENABLED')) {
+      setAndTrack(this, 'DD_TRACE_RESOURCE_RENAMING_ENABLED', this.appsec.enabled ?? false)
     }
 
     if (!trackedConfigOrigins.has('spanComputePeerService') && this.spanAttributeSchema !== 'v0') {
@@ -378,9 +382,9 @@ class Config extends ConfigBase {
     }
 
     if (!this.apmTracingEnabled) {
-      setAndTrack(this, 'stats.enabled', false)
-    } else if (!trackedConfigOrigins.has('stats.enabled')) {
-      setAndTrack(this, 'stats.enabled', getIsGCPFunction() || getIsAzureFunction())
+      setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', false)
+    } else if (!trackedConfigOrigins.has('stats.DD_TRACE_STATS_COMPUTATION_ENABLED')) {
+      setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', getIsGCPFunction() || getIsAzureFunction())
     }
 
     // TODO: Remove the experimental env vars as a major or deprecate the option?
@@ -452,11 +456,11 @@ class Config extends ConfigBase {
     }
 
     // For LLMObs, we want to auto enable it when other llmobs options are defined.
-    if (!this.llmobs.enabled &&
-        !trackedConfigOrigins.has('llmobs.enabled') &&
+    if (!this.llmobs.DD_LLMOBS_ENABLED &&
+        !trackedConfigOrigins.has('llmobs.DD_LLMOBS_ENABLED') &&
         (trackedConfigOrigins.has('llmobs.agentlessEnabled') ||
         trackedConfigOrigins.has('llmobs.mlApp'))) {
-      setAndTrack(this, 'llmobs.enabled', true)
+      setAndTrack(this, 'llmobs.DD_LLMOBS_ENABLED', true)
     }
 
     if (this.OTEL_RESOURCE_ATTRIBUTES) {
@@ -549,14 +553,15 @@ class Config extends ConfigBase {
     this.tags['runtime-id'] = RUNTIME_ID
 
     if (IS_SERVERLESS) {
-      setAndTrack(this, 'telemetry.enabled', false)
+      setAndTrack(this, 'telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED', false)
       setAndTrack(this, 'DD_CRASHTRACKING_ENABLED', false)
-      setAndTrack(this, 'remoteConfig.enabled', false)
+      setAndTrack(this, 'remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED', false)
     }
 
     // TODO: Should this unconditionally be disabled?
-    if (getEnvironmentVariable('JEST_WORKER_ID') && !trackedConfigOrigins.has('telemetry.enabled')) {
-      setAndTrack(this, 'telemetry.enabled', false)
+    if (getEnvironmentVariable('JEST_WORKER_ID') &&
+        !trackedConfigOrigins.has('telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED')) {
+      setAndTrack(this, 'telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED', false)
     }
 
     // Experimental agentless APM span intake
@@ -566,7 +571,7 @@ class Config extends ConfigBase {
     if (agentlessEnabled) {
       setAndTrack(this, 'experimental.exporter', 'agentless')
       // Disable client-side stats computation
-      setAndTrack(this, 'stats.enabled', false)
+      setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', false)
       // Enable hostname reporting
       setAndTrack(this, 'reportHostname', true)
       // Disable rate limiting - server-side sampling will be used

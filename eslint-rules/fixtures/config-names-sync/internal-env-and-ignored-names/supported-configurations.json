@@ -2,7 +2,7 @@
   "supportedConfigurations": {
     "DD_LLMOBS_ENABLED": [
       {
-        "internalPropertyName": "llmobs.enabled"
+        "namespace": "llmobs"
       }
     ],
     "DD_LLMOBS_ML_APP": [

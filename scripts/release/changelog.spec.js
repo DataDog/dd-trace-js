@@ -4,6 +4,10 @@ const assert = require('node:assert/strict')
 
 const { createReleaseChangelog } = require('./changelog')
 
+const prLink = (number) => `[#${number}](https://github.com/DataDog/dd-trace-js/pull/${number})`
+const avatar = (login) => `[<img src="https://github.com/${login}.png?size=48" width="24" height="24" ` +
+  `alt="@${login}" title="@${login}" />](https://github.com/${login})`
+
 describe('release changelog', () => {
   it('renders conventional commits in the release changelog format', () => {
     const entries = [
@@ -80,35 +84,35 @@ describe('release changelog', () => {
 
     assert.strictEqual(changelog.isMinor, true)
     assert.strictEqual(changelog.markdown, [
-      '<b>Features</b>',
-      '- <b>AppSec</b> Add AppSec integrations to Laminas Framework ' +
-        '(http.route, endpoint collection, login events) #3716',
-      '- <b>General</b> Add Node.js 26 support #8429',
-      '- <b>LLM Observability</b> Support Bedrock Converse and ConverseStream #8079',
-      '- <b>OpenTelemetry</b> Add support for OTLP Runtime Metrics #8357',
+      '### Features',
+      '- **AppSec:** Add AppSec integrations to Laminas Framework ' +
+        `(http.route, endpoint collection, login events) ${prLink(3716)}`,
+      `- **General:** Add Node.js 26 support ${prLink(8429)}`,
+      `- **LLM Observability:** Support Bedrock Converse and ConverseStream ${prLink(8079)}`,
+      `- **OpenTelemetry:** Add support for OTLP Runtime Metrics ${prLink(8357)}`,
       '',
-      '<b>Fixes</b>',
-      '- <b>AppSec</b> Avoid the possibility of sensitive data going to the telemetry logs backend ' +
-        'via WAF strings #3884',
-      '- <b>AppSec</b> Treat cleared shared memory as no-config rather than an error in AppSec helper #3876',
-      '- <b>General</b> Encoder JSON number type fix #38799',
-      '- <b>LLM Observability</b> Revert "Fan array-valued user tags out into one wire entry per element ' +
-        '(#8689)" #8790',
-      '- <b>Profiling</b> Prevent panics in profiling encoding under out-of-memory and out-of-bounds ' +
-        'conditions #3888',
-      '- <b>unknown-scope</b> Handle strange thing #9999',
+      '### Fixes',
+      '- **AppSec:** Avoid the possibility of sensitive data going to the telemetry logs backend ' +
+        `via WAF strings ${prLink(3884)}`,
+      '- **AppSec:** Treat cleared shared memory as no-config rather than an error in AppSec helper ' +
+        `${prLink(3876)}`,
+      `- **General:** Encoder JSON number type fix ${prLink(38_799)}`,
+      '- **LLM Observability:** Revert "Fan array-valued user tags out into one wire entry per element ' +
+        `(${prLink(8689)})" ${prLink(8790)}`,
+      '- **Profiling:** Prevent panics in profiling encoding under out-of-memory and out-of-bounds ' +
+        `conditions ${prLink(3888)}`,
+      `- **unknown-scope:** Handle strange thing ${prLink(9999)}`,
       '',
-      '<b>Performance</b>',
-      '- <b>General</b> Reduce per-span format and encode overhead #8754',
+      '### Performance',
+      `- **General:** Reduce per-span format and encode overhead ${prLink(8754)}`,
       '',
-      '<b>Documentation</b>',
-      '- <b>General</b> Note that startSpan does not activate the returned span #8771',
+      '### Documentation',
+      `- **General:** Note that startSpan does not activate the returned span ${prLink(8771)}`,
       '',
-      '<b>Internal</b> (CI, Testing, Benchmarking)',
-      '- Add the startup guard to the writer encode loop #8755',
-      '- Bump the serverless group across 1 directory with 8 updates #8782',
-      '- Cap proposal at 100 commits and notify guild at 50 #8711',
-      '- Fixes APMS-19181: sets the service discovery logs to respect the log level #8677',
+      '### Internal (CI, Testing, Benchmarking)',
+      `- **LLM Observability:** Add the startup guard to the writer encode loop ${prLink(8755)}`,
+      `- Fixes APMS-19181: sets the service discovery logs to respect the log level ${prLink(8677)}`,
+      `- **release:** Cap proposal at 100 commits and notify guild at 50 ${prLink(8711)}`,
       '',
     ].join('\n'))
     assert.deepStrictEqual(changelog.warnings, [
@@ -131,11 +135,11 @@ describe('release changelog', () => {
 
     assert.strictEqual(changelog.isMinor, false)
     assert.strictEqual(changelog.markdown, [
-      '<b>Features</b>',
-      '- <b>AppSec</b> Revert "Add experimental detection (#8689)" #8790',
+      '### Features',
+      `- **AppSec:** Revert "Add experimental detection (${prLink(8689)})" ${prLink(8790)}`,
       '',
-      '<b>Fixes</b>',
-      '- <b>Profiling</b> Correct sample counts #8791',
+      '### Fixes',
+      `- **Profiling:** Correct sample counts ${prLink(8791)}`,
       '',
     ].join('\n'))
   })
@@ -153,11 +157,11 @@ describe('release changelog', () => {
     ])
 
     assert.strictEqual(changelog.markdown, [
-      '<b>Features</b>',
-      '- <b>OpenTelemetry</b> Add breaking OpenTelemetry behavior',
+      '### Features',
+      '- **OpenTelemetry:** Add breaking OpenTelemetry behavior',
       '',
-      '<b>Fixes</b>',
-      '- <b>General</b> Keep request tagging stable',
+      '### Fixes',
+      '- **General:** Keep request tagging stable',
       '',
     ].join('\n'))
   })
@@ -171,8 +175,8 @@ describe('release changelog', () => {
     ])
 
     assert.strictEqual(changelog.markdown, [
-      '<b>Fixes</b>',
-      '- <b>AppSec</b> Trim empty scope segments #1234',
+      '### Fixes',
+      `- **AppSec:** Trim empty scope segments ${prLink(1234)}`,
       '',
     ].join('\n'))
   })
@@ -184,11 +188,11 @@ describe('release changelog', () => {
     ])
 
     assert.strictEqual(changelog.markdown, [
-      '<b>Features</b>',
-      '- <b>aws-sdk</b> Create SQS consumer spans #8827',
+      '### Features',
+      `- **aws-sdk:** Create SQS consumer spans ${prLink(8827)}`,
       '',
-      '<b>Fixes</b>',
-      '- <b>redis</b> Drop db.name placeholder #8402',
+      '### Fixes',
+      `- **redis:** Drop db.name placeholder ${prLink(8402)}`,
       '',
     ].join('\n'))
     assert.deepStrictEqual(changelog.warnings, [])
@@ -200,8 +204,8 @@ describe('release changelog', () => {
     ])
 
     assert.strictEqual(changelog.markdown, [
-      '<b>Fixes</b>',
-      '- <b>redis, iovalkey</b> Align reconnect handling #8001',
+      '### Fixes',
+      `- **redis, iovalkey:** Align reconnect handling ${prLink(8001)}`,
       '',
     ].join('\n'))
   })
@@ -219,40 +223,99 @@ describe('release changelog', () => {
     ])
 
     assert.strictEqual(changelog.markdown, [
-      '<b>Fixes</b>',
-      '- <b>AI Guard</b> Tighten prompt evaluation #9002',
-      '- <b>AppSec</b> Block on suspicious request #9001',
-      '- <b>Data Streams Monitoring</b> Track message lineage #9003',
-      '- <b>Database Monitoring</b> Propagate trace context to SQL comments #9004',
-      '- <b>Feature Flags</b> Record exposure events #9006',
-      '- <b>General</b> Route agentless spans to the regional intake #9005',
-      '- <b>Test Optimization</b> Dedupe known tests #9007',
-      '- <b>Test Optimization</b> Stabilize worker handoff #9008',
+      '### Fixes',
+      `- **AI Guard:** Tighten prompt evaluation ${prLink(9002)}`,
+      `- **AppSec:** Block on suspicious request ${prLink(9001)}`,
+      `- **Data Streams Monitoring:** Track message lineage ${prLink(9003)}`,
+      `- **Database Monitoring:** Propagate trace context to SQL comments ${prLink(9004)}`,
+      `- **Feature Flags:** Record exposure events ${prLink(9006)}`,
+      `- **General:** Route agentless spans to the regional intake ${prLink(9005)}`,
+      `- **Test Optimization:** Dedupe known tests ${prLink(9007)}`,
+      `- **Test Optimization:** Stabilize worker handoff ${prLink(9008)}`,
       '',
     ].join('\n'))
     assert.deepStrictEqual(changelog.warnings, [])
   })
 
-  it('lists unique contributors sorted case-insensitively after the change sections', () => {
+  it('keeps production dependency bumps and drops development and instrumented ones', () => {
+    const changelog = createReleaseChangelog([
+      { sha: 'abc001', subject: 'chore(deps): bump form-data from 4.0.5 to 4.0.6 (#8918)' },
+      {
+        sha: 'abc002',
+        subject: 'chore(deps): bump protobufjs from 8.4.2 to 8.6.0 in /vendor in the ' +
+          'vendor-minor-and-patch-dependencies group across 1 directory (#8851)',
+      },
+      {
+        sha: 'abc003',
+        subject: 'chore(deps): bump the runtime-minor-and-patch-dependencies group across 1 directory ' +
+          'with 3 updates (#8920)',
+      },
+      {
+        sha: 'abc004',
+        subject: 'chore(deps-dev): bump the dev-minor-and-patch-dependencies group across 1 directory ' +
+          'with 4 updates (#8854)',
+      },
+      {
+        sha: 'abc005',
+        subject: 'chore(deps): bump @anthropic-ai/sdk from 0.101.0 to 0.102.0 in ' +
+          '/packages/dd-trace/test/plugins/versions in the ai-and-llm group across 1 directory (#8852)',
+      },
+      { sha: 'abc006', subject: 'chore(deps): bump the serverless group across 1 directory with 8 updates (#8929)' },
+      { sha: 'abc007', subject: 'chore(deps): bump markdown-it from 14.1.1 to 14.2.0 in /docs (#8932)' },
+    ])
+
+    assert.strictEqual(changelog.markdown, [
+      '### Internal (CI, Testing, Benchmarking)',
+      `- **Dependencies:** Bump form-data from 4.0.5 to 4.0.6 ${prLink(8918)}`,
+      '- **Dependencies:** Bump protobufjs from 8.4.2 to 8.6.0 in /vendor in the ' +
+        `vendor-minor-and-patch-dependencies group across 1 directory ${prLink(8851)}`,
+      '- **Dependencies:** Bump the runtime-minor-and-patch-dependencies group across 1 directory ' +
+        `with 3 updates ${prLink(8920)}`,
+      '',
+    ].join('\n'))
+  })
+
+  it('renders pull request references as explicit links to keep GitHub from expanding them', () => {
+    const changelog = createReleaseChangelog([
+      { sha: 'abc001', subject: 'fix(redis): drop placeholder (#8402)' },
+    ])
+
+    assert.ok(changelog.markdown.includes('[#8402](https://github.com/DataDog/dd-trace-js/pull/8402)'))
+  })
+
+  it('links inline pull request references inside a subject', () => {
+    const changelog = createReleaseChangelog([
+      { sha: 'abc001', subject: 'revert: fix(core): undo change (#8689) (#8790)' },
+    ])
+
+    assert.ok(changelog.markdown.includes(
+      'Revert "Undo change ([#8689](https://github.com/DataDog/dd-trace-js/pull/8689))" ' +
+      '[#8790](https://github.com/DataDog/dd-trace-js/pull/8790)'
+    ))
+  })
+
+  it('renders contributor avatars on a single line and leaves non-handle names as text', () => {
     const changelog = createReleaseChangelog([
       { sha: 'abc001', subject: 'feat(appsec): add thing (#1)', author: '@Zoe' },
       { sha: 'abc002', subject: 'fix(profiling): fix thing (#2)', author: '@alice' },
       { sha: 'abc003', subject: 'ci(release): tweak the workflow (#3)', author: '@Zoe' },
+      { sha: 'abc004', subject: 'fix(core): another thing (#4)', author: 'Jane Doe' },
     ])
 
     assert.strictEqual(changelog.markdown, [
-      '<b>Features</b>',
-      '- <b>AppSec</b> Add thing #1',
+      '### Features',
+      `- **AppSec:** Add thing ${prLink(1)}`,
       '',
-      '<b>Fixes</b>',
-      '- <b>Profiling</b> Fix thing #2',
+      '### Fixes',
+      `- **General:** Another thing ${prLink(4)}`,
+      `- **Profiling:** Fix thing ${prLink(2)}`,
       '',
-      '<b>Internal</b> (CI, Testing, Benchmarking)',
-      '- Tweak the workflow #3',
+      '### Internal (CI, Testing, Benchmarking)',
+      `- **release:** Tweak the workflow ${prLink(3)}`,
       '',
-      '<b>Contributors</b>',
-      '- @alice',
-      '- @Zoe',
+      '### Contributors',
+      '',
+      `${avatar('alice')} ${avatar('Zoe')} Jane Doe`,
       '',
     ].join('\n'))
   })
@@ -263,8 +326,8 @@ describe('release changelog', () => {
     ])
 
     assert.strictEqual(changelog.markdown, [
-      '<b>Fixes</b>',
-      '- <b>AppSec</b> Handle thing #1',
+      '### Fixes',
+      `- **AppSec:** Handle thing ${prLink(1)}`,
       '',
     ].join('\n'))
   })
@@ -278,8 +341,8 @@ describe('release changelog', () => {
     ])
 
     assert.strictEqual(changelog.markdown, [
-      '<b>Internal</b> (CI, Testing, Benchmarking)',
-      '- deps(express): bump express #1234',
+      '### Internal (CI, Testing, Benchmarking)',
+      `- deps(express): bump express ${prLink(1234)}`,
       '',
     ].join('\n'))
     assert.deepStrictEqual(changelog.warnings, [

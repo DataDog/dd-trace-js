@@ -150,7 +150,7 @@ class TimeBuckets extends Map {
 class SpanStatsProcessor {
   constructor ({
     stats: {
-      enabled = false,
+      DD_TRACE_STATS_COMPUTATION_ENABLED: enabled = false,
       interval = 10,
     } = {},
     hostname,

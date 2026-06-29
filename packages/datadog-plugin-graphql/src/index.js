@@ -6,7 +6,6 @@ const log = require('../../dd-trace/src/log')
 const GraphQLExecutePlugin = require('./execute')
 const GraphQLParsePlugin = require('./parse')
 const GraphQLValidatePlugin = require('./validate')
-const GraphQLResolvePlugin = require('./resolve')
 
 class GraphQLPlugin extends CompositePlugin {
   static id = 'graphql'
@@ -15,7 +14,9 @@ class GraphQLPlugin extends CompositePlugin {
       execute: GraphQLExecutePlugin,
       parse: GraphQLParsePlugin,
       validate: GraphQLValidatePlugin,
-      resolve: GraphQLResolvePlugin,
+      // resolve plugin is absorbed into execute: per-field data is recorded
+      // synchronously in wrapResolve, and all graphql.resolve spans are
+      // materialized at execute end.
     }
   }
 
@@ -60,13 +61,19 @@ function getVariablesFilter (config) {
 }
 
 const noop = () => {}
+const noopHooks = { execute: noop, parse: noop, validate: noop, resolve: undefined }
 
 function getHooks ({ hooks }) {
-  const execute = hooks?.execute ?? noop
-  const parse = hooks?.parse ?? noop
-  const validate = hooks?.validate ?? noop
-
-  return { execute, parse, validate }
+  if (!hooks) return noopHooks
+  return {
+    execute: hooks.execute ?? noop,
+    parse: hooks.parse ?? noop,
+    validate: hooks.validate ?? noop,
+    // No noop fallback: `resolve` runs per-field (hot path); the plugin
+    // gates with `if (this.config.hooks.resolve)` so the absent-hook case
+    // skips both the call and the payload-object allocation.
+    resolve: hooks.resolve,
+  }
 }
 
 module.exports = GraphQLPlugin
