@@ -37,13 +37,13 @@ const COMPLETE_SETTINGS_ATTRIBUTES = {
 
 describe('get-library-configuration', () => {
   beforeEach(() => {
-    getConfig().DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE = false
-    getConfig().DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING = false
+    getConfig().testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE = false
+    getConfig().testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING = false
   })
 
   afterEach(() => {
-    getConfig().DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE = false
-    getConfig().DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING = false
+    getConfig().testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE = false
+    getConfig().testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING = false
   })
 
   describe('parseLibraryConfigurationResponse', () => {
@@ -135,8 +135,8 @@ describe('get-library-configuration', () => {
     })
 
     it('applies dangerous force flags after parsing', () => {
-      getConfig().DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE = true
-      getConfig().DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING = true
+      getConfig().testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE = true
+      getConfig().testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING = true
 
       const settings = parseLibraryConfigurationResponse(JSON.stringify({
         data: {

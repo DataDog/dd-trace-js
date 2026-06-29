@@ -66,11 +66,11 @@ function parseLibraryConfigurationResponse (rawJson, config = getConfig(), optio
 
   log.debug('Remote settings: %j', settings)
 
-  if (config.DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE) {
+  if (config.testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE) {
     settings.isCodeCoverageEnabled = true
     log.debug('Dangerously set code coverage to true')
   }
-  if (config.DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING) {
+  if (config.testOptimization.DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING) {
     settings.isSuitesSkippingEnabled = true
     log.debug('Dangerously set test skipping to true')
   }
@@ -111,10 +111,10 @@ function getLibraryConfiguration ({
     options.path = `${evpProxyPrefix}/api/v2/libraries/tests/services/setting`
     options.headers['X-Datadog-EVP-Subdomain'] = 'api'
   } else {
-    if (!config.apiKey) {
+    if (!config.DD_API_KEY) {
       return done(new Error('Request to settings endpoint was not done because Datadog API key is not defined.'))
     }
-    options.headers['dd-api-key'] = config.apiKey
+    options.headers['dd-api-key'] = config.DD_API_KEY
   }
 
   const data = JSON.stringify({

@@ -15,7 +15,6 @@ const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
-const plugin = require('../src')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 
 describe('Plugin', () => {
@@ -209,7 +208,7 @@ describe('Plugin', () => {
   }
 
   describe('graphql', () => {
-    withVersions('graphql', 'graphql', version => {
+    withVersions('graphql', 'graphql', (version, moduleName, graphqlVersion) => {
       before(() => {
         sort = spans => spans.sort((a, b) => {
           const order = [
@@ -232,92 +231,173 @@ describe('Plugin', () => {
       })
 
       describe('graphql-yoga', () => {
-        withVersions(plugin, 'graphql-yoga', version => {
+        // graphql-yoga 3.x lists graphql as a `^15.2.0 || ^16.0.0` peer and ships no nested copy, so under an
+        // older outer graphql version it resolves an incompatible graphql off NODE_PATH and never executes,
+        // timing out the assertion. Only register the suite for a graphql release graphql-yoga supports.
+        if (!semver.satisfies(graphqlVersion, '^15.2.0 || ^16.0.0')) return
+
+        withVersions('graphql', 'graphql-yoga', version => {
           let graphqlYoga
           let server
           let port
 
-          before(() => {
+          // A generous hook timeout absorbs the one-off cost of loading the
+          // graphql-yoga tree and building the envelop execution pipeline under
+          // coverage on CI, keeping the assertion below on a fast hot path.
+          before(async function () {
+            this.timeout(10000)
+
             tracer = require('../../dd-trace')
-            return agent.load('graphql')
-              .then(() => {
-                graphqlYoga = require(`../../../versions/graphql-yoga@${version}`).get()
+            await agent.load('graphql')
 
-                const typeDefs = `
-                  type Query {
-                    hello(name: String): String
-                  }
-                `
+            graphqlYoga = require(`../../../versions/graphql-yoga@${version}`).get()
 
-                const resolvers = {
-                  Query: {
-                    hello: (_, { name }) => {
-                      return `Hello, ${name || 'world'}!`
-                    },
+            const typeDefs = `
+              type Query {
+                hello(name: String): String
+                error: String
+              }
+              type Subscription {
+                count: Int
+              }
+            `
+
+            const resolvers = {
+              Query: {
+                hello: (_, { name }) => {
+                  return `Hello, ${name || 'world'}!`
+                },
+                error: async () => {
+                  throw new Error('Yoga query failed')
+                },
+              },
+              Subscription: {
+                count: {
+                  subscribe: async function * () {
+                    yield { count: 1 }
                   },
-                }
+                },
+              },
+            }
 
-                const schema = graphqlYoga.createSchema({
-                  typeDefs, resolvers,
-                })
+            const schema = graphqlYoga.createSchema({ typeDefs, resolvers })
+            const yoga = graphqlYoga.createYoga({ schema })
 
-                const yoga = graphqlYoga.createYoga({ schema })
+            server = http.createServer(yoga)
+            await new Promise(resolve => server.listen(0, resolve))
+            port = (/** @type {import('net').AddressInfo} */ (server.address())).port
 
-                server = http.createServer(yoga)
-              })
-          })
-
-          before(done => {
-            server.listen(0, () => {
-              port = (/** @type {import('net').AddressInfo} */ (server.address())).port
-              done()
+            // The first request primes the lazily built execution pipeline so
+            // the timed assertion does not race a cold request on CI.
+            await axios.post(`http://localhost:${port}/graphql`, {
+              query: 'query Warmup { hello(name: "warmup") }',
             })
           })
 
-          after(() => {
+          after(async () => {
             server.close()
-            return agent.close()
+            await agent.close()
           })
 
-          it('should instrument graphql-yoga execution', done => {
-            agent
-              .assertSomeTraces(traces => {
-                const spans = sort(traces[0])
-
-                assert.strictEqual(spans[0].service, expectedSchema.server.serviceName)
-                assert.strictEqual(spans[0].name, expectedSchema.server.opName)
-                assert.strictEqual(spans[0].resource, 'query MyQuery{hello(name:"")}')
-                assert.strictEqual(spans[0].type, 'graphql')
-                assert.strictEqual(spans[0].error, 0)
-                assert.ok(!('graphql.source' in spans[0].meta))
-                assert.strictEqual(spans[0].meta['graphql.operation.type'], 'query')
-                assert.strictEqual(spans[0].meta['graphql.operation.name'], 'MyQuery')
-                assert.strictEqual(spans[0].meta.component, 'graphql')
-                assert.strictEqual(spans[0].meta['_dd.integration'], 'graphql')
-              })
-              .then(done)
-
+          it('should instrument graphql-yoga execution', () => {
             const query = `
               query MyQuery {
                 hello(name: "world")
               }
             `
 
-            axios.post(`http://localhost:${port}/graphql`, {
-              query,
-            }).catch(done)
+            const assertion = agent.assertSomeTraces(traces => {
+              const spans = sort(traces[0])
+
+              assertObjectContains(spans[0], {
+                service: expectedSchema.server.serviceName,
+                name: expectedSchema.server.opName,
+                resource: 'query MyQuery{hello(name:"")}',
+                type: 'graphql',
+                error: 0,
+                meta: {
+                  'graphql.operation.type': 'query',
+                  'graphql.operation.name': 'MyQuery',
+                  component: 'graphql',
+                  '_dd.integration': 'graphql',
+                },
+              })
+              assert.ok(!('graphql.source' in spans[0].meta))
+              assert.strictEqual(spans.filter(span => span.name === expectedSchema.server.opName).length, 1)
+            }, { spanResourceMatch: /MyQuery/ })
+
+            return Promise.all([
+              assertion,
+              axios.post(`http://localhost:${port}/graphql`, { query }),
+            ])
+          })
+
+          it('should instrument graphql-yoga async execution errors', () => {
+            const query = `
+              query ErrorQuery {
+                error
+              }
+            `
+
+            const assertion = agent.assertSomeTraces(traces => {
+              const spans = sort(traces[0])
+
+              assertObjectContains(spans[0], {
+                name: expectedSchema.server.opName,
+                resource: 'query ErrorQuery{error}',
+                error: 1,
+                meta: {
+                  'graphql.operation.type': 'query',
+                  'graphql.operation.name': 'ErrorQuery',
+                },
+              })
+            }, { spanResourceMatch: /ErrorQuery/ })
+
+            return Promise.all([
+              assertion,
+              axios.post(`http://localhost:${port}/graphql`, { query }),
+            ])
+          })
+
+          it('should instrument graphql-yoga subscriptions', () => {
+            const query = `
+              subscription CountSubscription {
+                count
+              }
+            `
+
+            const assertion = agent.assertSomeTraces(traces => {
+              const spans = sort(traces[0])
+
+              assertObjectContains(spans[0], {
+                name: expectedSchema.server.opName,
+                resource: 'subscription CountSubscription{count}',
+                error: 0,
+                meta: {
+                  'graphql.operation.type': 'subscription',
+                  'graphql.operation.name': 'CountSubscription',
+                },
+              })
+            }, { spanResourceMatch: /CountSubscription/ })
+
+            return Promise.all([
+              assertion,
+              axios.post(`http://localhost:${port}/graphql`, { query }, {
+                headers: {
+                  accept: 'text/event-stream',
+                },
+              }),
+            ])
           })
         })
       })
 
       describe('without configuration', () => {
-        before(() => {
-          return agent.load('graphql')
-            .then(() => {
-              tracer = require('../../dd-trace')
-              graphql = require(`../../../versions/graphql@${version}`).get()
-              buildSchema()
-            })
+        before(async () => {
+          await agent.load('graphql')
+          tracer = require('../../dd-trace')
+          graphql = require(`../../../versions/graphql@${version}`).get()
+          buildSchema()
         })
 
         after(() => {
@@ -339,71 +419,67 @@ describe('Plugin', () => {
           }
         )
 
-        it('should instrument parsing', done => {
+        it('should instrument parsing', () => {
           const source = 'query MyQuery { hello(name: "world") }'
           const variableValues = { who: 'world' }
 
-          agent
-            .assertFirstTraceSpan(span => {
-              assertObjectContains(span, {
-                service: 'test',
-                name: 'graphql.parse',
-                resource: 'graphql.parse',
-                type: 'graphql',
-                error: 0,
-                meta: { component: 'graphql' },
-              })
-              assert.ok(!('graphql.source' in span.meta))
-            }, { spanResourceMatch: /^graphql\.parse$/ })
-            .then(done)
-            .catch(done)
-
-          graphql.graphql({ schema, source, variableValues }).catch(done)
-        })
-
-        it('should instrument validation', done => {
-          const source = 'query MyQuery { hello(name: "world") }'
-          const variableValues = { who: 'world' }
-
-          agent
-            .assertFirstTraceSpan(span => {
-              assertObjectContains(span, {
-                service: 'test',
-                name: 'graphql.validate',
-                resource: 'graphql.validate',
-                type: 'graphql',
-                error: 0,
-                meta: { component: 'graphql' },
-              })
-              assert.ok(!('graphql.source' in span.meta))
-            }, { spanResourceMatch: /^graphql\.validate$/ })
-            .then(done)
-            .catch(done)
-
-          graphql.graphql({ schema, source, variableValues }).catch(done)
-        })
-
-        it('should instrument execution', done => {
-          const source = 'query MyQuery { hello(name: "world") }'
-          const variableValues = { who: 'world' }
-
-          agent
-            .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
-
-              assert.strictEqual(spans[0].service, expectedSchema.server.serviceName)
-              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
-              assert.strictEqual(spans[0].resource, 'query MyQuery{hello(name:"")}')
-              assert.strictEqual(spans[0].type, 'graphql')
-              assert.strictEqual(spans[0].error, 0)
-              assert.ok(!('graphql.source' in spans[0].meta))
-              assert.strictEqual(spans[0].meta['graphql.operation.type'], 'query')
-              assert.strictEqual(spans[0].meta['graphql.operation.name'], 'MyQuery')
-              assert.strictEqual(spans[0].meta.component, 'graphql')
+          const assertion = agent.assertFirstTraceSpan(span => {
+            assertObjectContains(span, {
+              service: 'test',
+              name: 'graphql.parse',
+              resource: 'graphql.parse',
+              type: 'graphql',
+              error: 0,
+              meta: { component: 'graphql' },
             })
-            .then(done)
+            assert.ok(!('graphql.source' in span.meta))
+          }, { spanResourceMatch: /^graphql\.parse$/ })
 
-          graphql.graphql({ schema, source, variableValues }).catch(done)
+          return Promise.all([assertion, graphql.graphql({ schema, source, variableValues })])
+        })
+
+        it('should instrument validation', () => {
+          const source = 'query MyQuery { hello(name: "world") }'
+          const variableValues = { who: 'world' }
+
+          const assertion = agent.assertFirstTraceSpan(span => {
+            assertObjectContains(span, {
+              service: 'test',
+              name: 'graphql.validate',
+              resource: 'graphql.validate',
+              type: 'graphql',
+              error: 0,
+              meta: { component: 'graphql' },
+            })
+            assert.ok(!('graphql.source' in span.meta))
+          }, { spanResourceMatch: /^graphql\.validate$/ })
+
+          return Promise.all([assertion, graphql.graphql({ schema, source, variableValues })])
+        })
+
+        it('should instrument execution', () => {
+          const source = 'query MyQuery { hello(name: "world") }'
+          const variableValues = { who: 'world' }
+
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
+
+            assertObjectContains(spans[0], {
+              service: expectedSchema.server.serviceName,
+              name: expectedSchema.server.opName,
+              resource: 'query MyQuery{hello(name:"")}',
+              type: 'graphql',
+              error: 0,
+              meta: {
+                'graphql.operation.type': 'query',
+                'graphql.operation.name': 'MyQuery',
+                component: 'graphql',
+              },
+            })
+            assert.ok(!('graphql.source' in spans[0].meta))
+          }, { spanResourceMatch: /MyQuery/ })
+
+          return Promise.all([assertion, graphql.graphql({ schema, source, variableValues })])
         })
 
         it('should instrument every execute even when the args object is reused', async () => {
@@ -441,6 +517,56 @@ describe('Plugin', () => {
           assert.ok(await graphql.execute(args), 'execute returned a result')
           assert.strictEqual(args.fieldResolver, callerFieldResolver,
             'instrumentation must not overwrite the caller-supplied fieldResolver')
+        })
+
+        it('should preserve graphql defaultFieldResolver behavior for primitive sources', async () => {
+          const Box = new graphql.GraphQLObjectType({
+            name: 'Box',
+            fields: {
+              length: {
+                type: graphql.GraphQLInt,
+              },
+            },
+          })
+          const query = new graphql.GraphQLObjectType({
+            name: 'Query',
+            fields: {
+              box: {
+                type: Box,
+                resolve: () => 'abc',
+              },
+            },
+          })
+          const localSchema = new graphql.GraphQLSchema({ query })
+          const document = graphql.parse('{ box { length } }')
+
+          const result = await graphql.execute({ schema: localSchema, document })
+
+          assert.strictEqual(result.data.box.length, null)
+        })
+
+        it('publishes caller-owned execute args before installing the wrapped fieldResolver', async () => {
+          const startChannel = dc.channel('apm:graphql:execute:start')
+          const document = graphql.parse('query MyQuery { hello(name: "world") }')
+          const callerFieldResolver = (source, args, contextValue, info) => 'caller-resolved'
+          const args = { schema, document, contextValue: {}, fieldResolver: callerFieldResolver }
+
+          let publishedArgs
+          const handler = ({ args: channelArgs }) => {
+            publishedArgs = channelArgs
+            assert.strictEqual(channelArgs, args)
+            assert.strictEqual(channelArgs.fieldResolver, callerFieldResolver)
+          }
+          startChannel.subscribe(handler)
+
+          try {
+            assert.ok(await graphql.execute(args), 'execute returned a result')
+          } finally {
+            startChannel.unsubscribe(handler)
+          }
+
+          assert.strictEqual(publishedArgs, args)
+          assert.strictEqual(args.fieldResolver, callerFieldResolver)
         })
 
         describe('preserves the caller-supplied contextValue', () => {
@@ -494,81 +620,75 @@ describe('Plugin', () => {
             }
           }
 
-          it('emits the execute span for a primitive contextValue', done => {
-            agent
-              .assertSomeTraces(traces => {
-                const spans = sort(traces[0])
-                assert.strictEqual(spans[0].name, expectedSchema.server.opName)
-                assert.strictEqual(spans[0].error, 0)
+          it('emits the execute span for a primitive contextValue', () => {
+            const assertion = agent.assertSomeTraces(traces => {
+              const spans = sort(traces[0])
+              assertObjectContains(spans[0], {
+                name: expectedSchema.server.opName,
+                error: 0,
               })
-              .then(done)
-              .catch(done)
+            }, { spanResourceMatch: /ctx:String/ })
 
-            Promise.resolve(graphql.execute({
+            return Promise.all([assertion, Promise.resolve(graphql.execute({
               schema: recordingSchema,
               document: graphql.parse('{ ctx }'),
               contextValue: 'request-1',
-            })).catch(done)
+            }))])
           })
 
-          it('emits resolver spans for a primitive contextValue', done => {
-            agent
-              .assertSomeTraces(traces => {
-                const spans = sort(traces[0])
-                const resolveSpan = spans.find(span => span.name === 'graphql.resolve')
-                assert.ok(resolveSpan, 'graphql.resolve span should be emitted')
-                assert.strictEqual(resolveSpan.meta['graphql.field.name'], 'ctx')
-              })
-              .then(done)
-              .catch(done)
+          it('emits resolver spans for a primitive contextValue', () => {
+            const assertion = agent.assertSomeTraces(traces => {
+              const spans = sort(traces[0])
+              const resolveSpan = spans.find(span => span.name === 'graphql.resolve')
+              assert.ok(resolveSpan, 'graphql.resolve span should be emitted')
+              assert.strictEqual(resolveSpan.meta['graphql.field.name'], 'ctx')
+            })
 
-            Promise.resolve(graphql.execute({
+            return Promise.all([assertion, Promise.resolve(graphql.execute({
               schema: recordingSchema,
               document: graphql.parse('{ ctx }'),
               contextValue: 42,
-            })).catch(done)
+            }))])
           })
         })
 
-        it('should not include variables by default', done => {
+        it('should not include variables by default', () => {
           const source = 'query MyQuery($who: String!) { hello(name: $who) }'
           const variableValues = { who: 'world' }
 
-          agent
-            .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
-              assert.ok(!('graphql.variables' in spans[0].meta))
-            })
-            .then(done)
-            .catch(done)
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
+            assert.ok(!('graphql.variables' in spans[0].meta))
+          })
 
-          graphql.graphql({ schema, source, variableValues }).catch(done)
+          return Promise.all([assertion, graphql.graphql({ schema, source, variableValues })])
         })
 
-        it('should instrument schema resolvers', done => {
+        it('should instrument schema resolvers', () => {
           const source = '{ hello(name: "world") }'
 
-          agent
-            .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
 
-              assert.strictEqual(spans.length, 2)
-              assert.strictEqual(spans[1].service, 'test')
-              assert.strictEqual(spans[1].name, 'graphql.resolve')
-              assert.strictEqual(spans[1].resource, 'hello:String')
-              assert.strictEqual(spans[1].type, 'graphql')
-              assert.strictEqual(spans[1].error, 0)
-              assert.ok(Number(spans[1].duration) > 0, `Expected ${Number(spans[1].duration)} > 0`)
-              assert.strictEqual(spans[1].meta['graphql.field.name'], 'hello')
-              assert.strictEqual(spans[1].meta['graphql.field.path'], 'hello')
-              assert.strictEqual(spans[1].meta['graphql.field.type'], 'String')
-              assert.ok(!('graphql.source' in spans[1].meta))
-              assert.strictEqual(spans[1].meta.component, 'graphql')
+            assert.strictEqual(spans.length, 2)
+            assertObjectContains(spans[1], {
+              service: 'test',
+              name: 'graphql.resolve',
+              resource: 'hello:String',
+              type: 'graphql',
+              error: 0,
+              meta: {
+                'graphql.field.name': 'hello',
+                'graphql.field.path': 'hello',
+                'graphql.field.type': 'String',
+                component: 'graphql',
+              },
             })
-            .then(done)
-            .catch(done)
+            assert.ok(Number(spans[1].duration) > 0, `Expected ${Number(spans[1].duration)} > 0`)
+            assert.ok(!('graphql.source' in spans[1].meta))
+          }, { spanResourceMatch: /hello:String/ })
 
-          graphql.graphql({ schema, source }).catch(done)
+          return Promise.all([assertion, graphql.graphql({ schema, source })])
         })
 
         it('should trace aliased __proto__ fields with default collapsing', async () => {
@@ -671,7 +791,7 @@ describe('Plugin', () => {
             })
         })
 
-        it('should instrument nested field resolvers', done => {
+        it('should instrument nested field resolvers', () => {
           const source = `
             {
               human {
@@ -684,75 +804,74 @@ describe('Plugin', () => {
             }
           `
 
-          agent
-            .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
-              assert.strictEqual(spans.length, 6)
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
+            assert.strictEqual(spans.length, 6)
 
-              const execute = spans[0]
-              const human = spans[1]
-              const humanName = spans[2]
-              const address = spans[3]
-              const addressCivicNumber = spans[4]
-              const addressStreet = spans[5]
+            const execute = spans[0]
+            const human = spans[1]
+            const humanName = spans[2]
+            const address = spans[3]
+            const addressCivicNumber = spans[4]
+            const addressStreet = spans[5]
 
-              assert.strictEqual(execute.name, expectedSchema.server.opName)
-              assert.strictEqual(execute.error, 0)
-
-              assertObjectContains(human, {
-                name: 'graphql.resolve',
-                resource: 'human:Human',
-                error: 0,
-                meta: {
-                  'graphql.field.path': 'human',
-                },
-              })
-              assert.strictEqual(human.parent_id.toString(), execute.span_id.toString())
-
-              assertObjectContains(humanName, {
-                name: 'graphql.resolve',
-                resource: 'name:String',
-                error: 0,
-                meta: {
-                  'graphql.field.path': 'human.name',
-                },
-              })
-              assert.strictEqual(humanName.parent_id.toString(), human.span_id.toString())
-
-              assertObjectContains(address, {
-                name: 'graphql.resolve',
-                resource: 'address:Address',
-                error: 0,
-                meta: {
-                  'graphql.field.path': 'human.address',
-                },
-              })
-              assert.strictEqual(address.parent_id.toString(), human.span_id.toString())
-
-              assertObjectContains(addressCivicNumber, {
-                name: 'graphql.resolve',
-                resource: 'civicNumber:String',
-                error: 0,
-                meta: {
-                  'graphql.field.path': 'human.address.civicNumber',
-                },
-              })
-              assert.strictEqual(addressCivicNumber.parent_id.toString(), address.span_id.toString())
-
-              assertObjectContains(addressStreet, {
-                name: 'graphql.resolve',
-                resource: 'street:String',
-                error: 0,
-                meta: {
-                  'graphql.field.path': 'human.address.street',
-                },
-              })
-              assert.strictEqual(addressStreet.parent_id.toString(), address.span_id.toString())
+            assertObjectContains(execute, {
+              name: expectedSchema.server.opName,
+              error: 0,
             })
-            .then(done)
-            .catch(done)
 
-          graphql.graphql({ schema, source }).catch(done)
+            assertObjectContains(human, {
+              name: 'graphql.resolve',
+              resource: 'human:Human',
+              error: 0,
+              meta: {
+                'graphql.field.path': 'human',
+              },
+            })
+            assert.strictEqual(human.parent_id.toString(), execute.span_id.toString())
+
+            assertObjectContains(humanName, {
+              name: 'graphql.resolve',
+              resource: 'name:String',
+              error: 0,
+              meta: {
+                'graphql.field.path': 'human.name',
+              },
+            })
+            assert.strictEqual(humanName.parent_id.toString(), human.span_id.toString())
+
+            assertObjectContains(address, {
+              name: 'graphql.resolve',
+              resource: 'address:Address',
+              error: 0,
+              meta: {
+                'graphql.field.path': 'human.address',
+              },
+            })
+            assert.strictEqual(address.parent_id.toString(), human.span_id.toString())
+
+            assertObjectContains(addressCivicNumber, {
+              name: 'graphql.resolve',
+              resource: 'civicNumber:String',
+              error: 0,
+              meta: {
+                'graphql.field.path': 'human.address.civicNumber',
+              },
+            })
+            assert.strictEqual(addressCivicNumber.parent_id.toString(), address.span_id.toString())
+
+            assertObjectContains(addressStreet, {
+              name: 'graphql.resolve',
+              resource: 'street:String',
+              error: 0,
+              meta: {
+                'graphql.field.path': 'human.address.street',
+              },
+            })
+            assert.strictEqual(addressStreet.parent_id.toString(), address.span_id.toString())
+          }, { spanResourceMatch: /human:Human/ })
+
+          return Promise.all([assertion, graphql.graphql({ schema, source })])
         })
 
         it('publishes resolver finish for every sibling of a collapsed list', async () => {
@@ -829,7 +948,7 @@ describe('Plugin', () => {
           }
         })
 
-        it('should instrument list field resolvers', done => {
+        it('should instrument list field resolvers', () => {
           const source = `{
             friends {
               name
@@ -839,64 +958,61 @@ describe('Plugin', () => {
             }
           }`
 
-          agent
-            .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
 
-              assert.strictEqual(spans.length, 5)
+            assert.strictEqual(spans.length, 5)
 
-              const execute = spans[0]
-              const friends = spans[1]
-              const friendsName = spans[2]
-              const pets = spans[3]
-              const petsName = spans[4]
+            const execute = spans[0]
+            const friends = spans[1]
+            const friendsName = spans[2]
+            const pets = spans[3]
+            const petsName = spans[4]
 
-              assert.strictEqual(execute.name, expectedSchema.server.opName)
+            assert.strictEqual(execute.name, expectedSchema.server.opName)
 
-              assertObjectContains(friends, {
-                name: 'graphql.resolve',
-                resource: 'friends:[Human]',
-                meta: {
-                  'graphql.field.path': 'friends',
-                  'graphql.field.type': 'Human',
-                },
-              })
-              assert.strictEqual(friends.parent_id.toString(), execute.span_id.toString())
-
-              assertObjectContains(friendsName, {
-                name: 'graphql.resolve',
-                resource: 'name:String',
-                meta: {
-                  'graphql.field.path': 'friends.*.name',
-                  'graphql.field.type': 'String',
-                },
-              })
-              assert.strictEqual(friendsName.parent_id.toString(), friends.span_id.toString())
-
-              assertObjectContains(pets, {
-                name: 'graphql.resolve',
-                resource: 'pets:[Pet!]',
-                meta: {
-                  'graphql.field.path': 'friends.*.pets',
-                  'graphql.field.type': 'Pet',
-                },
-              })
-              assert.strictEqual(pets.parent_id.toString(), friends.span_id.toString())
-
-              assertObjectContains(petsName, {
-                name: 'graphql.resolve',
-                resource: 'name:String',
-                meta: {
-                  'graphql.field.path': 'friends.*.pets.*.name',
-                  'graphql.field.type': 'String',
-                },
-              })
-              assert.strictEqual(petsName.parent_id.toString(), pets.span_id.toString())
+            assertObjectContains(friends, {
+              name: 'graphql.resolve',
+              resource: 'friends:[Human]',
+              meta: {
+                'graphql.field.path': 'friends',
+                'graphql.field.type': 'Human',
+              },
             })
-            .then(done)
-            .catch(done)
+            assert.strictEqual(friends.parent_id.toString(), execute.span_id.toString())
 
-          graphql.graphql({ schema, source }).catch(done)
+            assertObjectContains(friendsName, {
+              name: 'graphql.resolve',
+              resource: 'name:String',
+              meta: {
+                'graphql.field.path': 'friends.*.name',
+                'graphql.field.type': 'String',
+              },
+            })
+            assert.strictEqual(friendsName.parent_id.toString(), friends.span_id.toString())
+
+            assertObjectContains(pets, {
+              name: 'graphql.resolve',
+              resource: 'pets:[Pet!]',
+              meta: {
+                'graphql.field.path': 'friends.*.pets',
+                'graphql.field.type': 'Pet',
+              },
+            })
+            assert.strictEqual(pets.parent_id.toString(), friends.span_id.toString())
+
+            assertObjectContains(petsName, {
+              name: 'graphql.resolve',
+              resource: 'name:String',
+              meta: {
+                'graphql.field.path': 'friends.*.pets.*.name',
+                'graphql.field.type': 'String',
+              },
+            })
+            assert.strictEqual(petsName.parent_id.toString(), pets.span_id.toString())
+          }, { spanResourceMatch: /friends:\[Human]/ })
+
+          return Promise.all([assertion, graphql.graphql({ schema, source })])
         })
 
         it('caches path strings across nested list-of-lists items', async () => {
@@ -911,11 +1027,15 @@ describe('Plugin', () => {
 
           const [, result] = await Promise.all([
             agent.assertSomeTraces(traces => {
-              const paths = sort(traces[0])
-                .filter(span => span.name === 'graphql.resolve')
-                .map(span => span.meta['graphql.field.path'])
-                .sort()
+              const resolveSpans = sort(traces[0]).filter(span => span.name === 'graphql.resolve')
+              const paths = resolveSpans.map(span => span.meta['graphql.field.path']).sort()
               assert.deepStrictEqual(paths, ['matrix', 'matrix.*.*.value'])
+
+              const matrix = resolveSpans.find(span => span.meta['graphql.field.path'] === 'matrix')
+              const value = resolveSpans.find(span => span.meta['graphql.field.path'] === 'matrix.*.*.value')
+              assert.ok(matrix, 'expected matrix span')
+              assert.ok(value, 'expected matrix.*.*.value span')
+              assert.strictEqual(value.parent_id.toString(), matrix.span_id.toString())
             }),
             graphql.graphql({ schema: matrixSchema, source, rootValue }),
           ])
@@ -924,48 +1044,38 @@ describe('Plugin', () => {
           assert.strictEqual(result.data?.matrix?.[0]?.[0]?.value, 42)
         })
 
-        it('should instrument mutations', done => {
+        it('should instrument mutations', () => {
           const source = 'mutation { human { name } }'
 
-          agent
-            .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
 
-              assert.strictEqual(spans[0].meta['graphql.operation.type'], 'mutation')
-            })
-            .then(done)
-            .catch(done)
+            assert.strictEqual(spans[0].meta['graphql.operation.type'], 'mutation')
+          })
 
-          graphql.graphql({ schema, source }).catch(done)
+          return Promise.all([assertion, graphql.graphql({ schema, source })])
         })
 
-        it('should instrument subscriptions', done => {
+        it('should instrument subscriptions', () => {
           const source = 'subscription { human { name } }'
 
-          agent
-            .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
 
-              assert.strictEqual(spans[0].meta['graphql.operation.type'], 'subscription')
-            })
-            .then(done)
-            .catch(done)
+            assert.strictEqual(spans[0].meta['graphql.operation.type'], 'subscription')
+          })
 
-          graphql.graphql({ schema, source }).catch(done)
+          return Promise.all([assertion, graphql.graphql({ schema, source })])
         })
 
-        it('should handle a circular schema', done => {
+        it('should handle a circular schema', async () => {
           const source = '{ human { pets { owner { name } } } }'
 
-          graphql.graphql({ schema, source })
-            .then((result) => {
-              assert.strictEqual(result.data.human.pets[0].owner.name, 'test')
-            })
-            .then(done)
-            .catch(done)
+          const result = await graphql.graphql({ schema, source })
+          assert.strictEqual(result.data.human.pets[0].owner.name, 'test')
         })
 
-        it('should instrument the default field resolver', done => {
+        it('should instrument the default field resolver', () => {
           const schema = graphql.buildSchema(`
             type Query {
               hello: String
@@ -975,21 +1085,18 @@ describe('Plugin', () => {
           const source = '{ hello }'
           const rootValue = { hello: 'world' }
 
-          agent
-            .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
 
-              assert.strictEqual(spans.length, 2)
-              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
-              assert.strictEqual(spans[1].name, 'graphql.resolve')
-            })
-            .then(done)
-            .catch(done)
+            assert.strictEqual(spans.length, 2)
+            assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+            assert.strictEqual(spans[1].name, 'graphql.resolve')
+          })
 
-          graphql.graphql({ schema, source, rootValue }).catch(done)
+          return Promise.all([assertion, graphql.graphql({ schema, source, rootValue })])
         })
 
-        it('should instrument the execution field resolver without a rootValue resolver', done => {
+        it('should instrument the execution field resolver without a rootValue resolver', () => {
           const schema = graphql.buildSchema(`
             type Query {
               hello: String
@@ -1004,74 +1111,73 @@ describe('Plugin', () => {
             return source[info.fieldName]
           }
 
-          agent
-            .assertSomeTraces(traces => {
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
+
+            assert.strictEqual(spans.length, 2)
+            assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+            assert.strictEqual(spans[1].name, 'graphql.resolve')
+          })
+
+          return Promise.all([assertion, graphql.graphql({ schema, source, rootValue, fieldResolver })])
+        })
+
+        it('should not instrument schema resolvers multiple times', () => {
+          const source = '{ hello(name: "world") }'
+
+          const assertion = agent.assertSomeTraces(() => { // skip first call
+            const secondAssertion = agent.assertSomeTraces(traces => {
               const spans = sort(traces[0])
 
               assert.strictEqual(spans.length, 2)
-              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
-              assert.strictEqual(spans[1].name, 'graphql.resolve')
             })
-            .then(done)
-            .catch(done)
 
-          graphql.graphql({ schema, source, rootValue, fieldResolver }).catch(done)
-        })
-
-        it('should not instrument schema resolvers multiple times', done => {
-          const source = '{ hello(name: "world") }'
-
-          agent.assertSomeTraces(() => { // skip first call
-            agent
-              .assertSomeTraces(traces => {
-                const spans = sort(traces[0])
-
-                assert.strictEqual(spans.length, 2)
-              })
-              .then(done)
-              .catch(done)
-
-            graphql.graphql({ schema, source }).catch(done)
+            return Promise.all([secondAssertion, graphql.graphql({ schema, source })])
           })
 
-          graphql.graphql({ schema, source }).catch(done)
+          return Promise.all([assertion, graphql.graphql({ schema, source })])
         })
 
-        it('should run parsing, validation and execution in the current context', done => {
+        it('should run parsing, validation and execution in the current context', () => {
           const source = 'query MyQuery { hello(name: "world") }'
           const variableValues = { who: 'world' }
           const span = tracer.startSpan('test.request')
 
-          agent
-            .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
 
-              assert.strictEqual(spans.length, 5)
+            assert.strictEqual(spans.length, 5)
 
-              assert.strictEqual(spans[0].name, 'test.request')
+            assert.strictEqual(spans[0].name, 'test.request')
 
-              assert.strictEqual(spans[1].service, 'test')
-              assert.strictEqual(spans[1].name, 'graphql.parse')
-
-              assert.strictEqual(spans[2].service, 'test')
-              assert.strictEqual(spans[2].name, 'graphql.validate')
-
-              assert.strictEqual(spans[3].service, expectedSchema.server.serviceName)
-              assert.strictEqual(spans[3].name, expectedSchema.server.opName)
-              assert.strictEqual(spans[3].resource, 'query MyQuery{hello(name:"")}')
-
-              assert.strictEqual(spans[4].service, 'test')
-              assert.strictEqual(spans[4].name, 'graphql.resolve')
-              assert.strictEqual(spans[4].resource, 'hello:String')
+            assertObjectContains(spans[1], {
+              service: 'test',
+              name: 'graphql.parse',
             })
-            .then(done)
-            .catch(done)
 
-          tracer.scope().activate(span, () => {
-            graphql.graphql({ schema, source, variableValues })
-              .then(() => span.finish())
-              .catch(done)
+            assertObjectContains(spans[2], {
+              service: 'test',
+              name: 'graphql.validate',
+            })
+
+            assertObjectContains(spans[3], {
+              service: expectedSchema.server.serviceName,
+              name: expectedSchema.server.opName,
+              resource: 'query MyQuery{hello(name:"")}',
+            })
+
+            assertObjectContains(spans[4], {
+              service: 'test',
+              name: 'graphql.resolve',
+              resource: 'hello:String',
+            })
+          }, { spanResourceMatch: /test\.request/ })
+
+          const action = tracer.scope().activate(span, () => {
+            return graphql.graphql({ schema, source, variableValues }).then(() => span.finish())
           })
+
+          return Promise.all([assertion, action])
         })
 
         it('should run rootValue resolvers in the current context', done => {
@@ -1134,32 +1240,31 @@ describe('Plugin', () => {
             })
         })
 
-        it('should handle calling low level APIs directly', done => {
+        it('should handle calling low level APIs directly', () => {
           const source = 'query MyQuery { hello(name: "world") }'
 
-          Promise
-            .all([
-              agent.assertSomeTraces(traces => {
-                const spans = sort(traces[0])
-                assert.strictEqual(spans[0].name, 'graphql.parse')
-              }),
-              agent.assertSomeTraces(traces => {
-                const spans = sort(traces[0])
-                assert.strictEqual(spans[0].name, 'graphql.validate')
-              }),
-              agent.assertSomeTraces(traces => {
-                const spans = sort(traces[0])
-                assert.strictEqual(spans[0].name, expectedSchema.server.opName)
-                assert.strictEqual(spans[1].name, 'graphql.resolve')
-              }),
-            ])
-            .then(() => done())
-            .catch(done)
+          const assertion = Promise.all([
+            agent.assertSomeTraces(traces => {
+              const spans = sort(traces[0])
+              assert.strictEqual(spans[0].name, 'graphql.parse')
+            }),
+            agent.assertSomeTraces(traces => {
+              const spans = sort(traces[0])
+              assert.strictEqual(spans[0].name, 'graphql.validate')
+            }),
+            agent.assertSomeTraces(traces => {
+              const spans = sort(traces[0])
+              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+              assert.strictEqual(spans[1].name, 'graphql.resolve')
+            }),
+          ])
 
           // These are the 3 lower-level steps
           const document = graphql.parse(source)
           graphql.validate(schema, document)
           graphql.execute({ schema, document })
+
+          return assertion
         })
 
         it('should not re-execute thenables from resolvers', async () => {
@@ -1170,147 +1275,144 @@ describe('Plugin', () => {
           assert.strictEqual(result.data.human.oneTime, 'one-time result')
         })
 
-        it('should handle Source objects', done => {
+        it('should handle Source objects', () => {
           const source = 'query MyQuery { hello(name: "world") }'
           const document = graphql.parse(new graphql.Source(source))
 
-          agent
-            .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
 
-              assert.strictEqual(spans.length, 2)
-              assert.strictEqual(spans[0].service, expectedSchema.server.serviceName)
-              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
-              assert.strictEqual(spans[0].resource, 'query MyQuery{hello(name:"")}')
-              assert.ok(!('graphql.source' in spans[0].meta))
-              assert.strictEqual(spans[0].meta.component, 'graphql')
+            assert.strictEqual(spans.length, 2)
+            assertObjectContains(spans[0], {
+              service: expectedSchema.server.serviceName,
+              name: expectedSchema.server.opName,
+              resource: 'query MyQuery{hello(name:"")}',
+              meta: { component: 'graphql' },
             })
-            .then(done)
-            .catch(done)
+            assert.ok(!('graphql.source' in spans[0].meta))
+          }, { spanResourceMatch: /MyQuery/ })
 
           graphql.execute({ schema, document })
+
+          return assertion
         })
 
-        it('should handle parsing exceptions', done => {
+        it('should handle parsing exceptions', () => {
           let error
 
-          agent
-            .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
 
-              assert.strictEqual(spans.length, 1)
-              assert.strictEqual(spans[0].service, 'test')
-              assert.strictEqual(spans[0].name, 'graphql.parse')
-              assert.strictEqual(spans[0].error, 1)
-              assert.strictEqual(spans[0].meta[ERROR_TYPE], error.name)
-              assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
-              assert.strictEqual(spans[0].meta[ERROR_STACK], error.stack)
-              assert.strictEqual(spans[0].meta.component, 'graphql')
-            })
-            .then(done)
-            .catch(done)
+            assert.strictEqual(spans.length, 1)
+            assert.strictEqual(spans[0].service, 'test')
+            assert.strictEqual(spans[0].name, 'graphql.parse')
+            assert.strictEqual(spans[0].error, 1)
+            assert.strictEqual(spans[0].meta[ERROR_TYPE], error.name)
+            assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
+            assert.strictEqual(spans[0].meta[ERROR_STACK], error.stack)
+            assert.strictEqual(spans[0].meta.component, 'graphql')
+          })
 
           try {
             graphql.parse('invalid')
           } catch (e) {
             error = e
           }
+
+          return assertion
         })
 
-        it('should handle validation exceptions', done => {
+        it('should handle validation exceptions', () => {
           let error
 
-          agent
-            .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
 
-              assert.strictEqual(spans.length, 1)
-              assert.strictEqual(spans[0].service, 'test')
-              assert.strictEqual(spans[0].name, 'graphql.validate')
-              assert.strictEqual(spans[0].error, 1)
-              assert.strictEqual(spans[0].meta[ERROR_TYPE], error.name)
-              assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
-              assert.strictEqual(spans[0].meta[ERROR_STACK], error.stack)
-              assert.strictEqual(spans[0].meta.component, 'graphql')
-            })
-            .then(done)
-            .catch(done)
+            assert.strictEqual(spans.length, 1)
+            assert.strictEqual(spans[0].service, 'test')
+            assert.strictEqual(spans[0].name, 'graphql.validate')
+            assert.strictEqual(spans[0].error, 1)
+            assert.strictEqual(spans[0].meta[ERROR_TYPE], error.name)
+            assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
+            assert.strictEqual(spans[0].meta[ERROR_STACK], error.stack)
+            assert.strictEqual(spans[0].meta.component, 'graphql')
+          })
 
           try {
             graphql.validate()
           } catch (e) {
             error = e
           }
+
+          return assertion
         })
 
-        it('should handle validation errors', done => {
+        it('should handle validation errors', () => {
           const source = '{ human { address } }'
           const document = graphql.parse(source)
 
-          agent
-            .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
 
-              assert.strictEqual(spans.length, 1)
-              assert.strictEqual(spans[0].service, 'test')
-              assert.strictEqual(spans[0].name, 'graphql.validate')
-              assert.strictEqual(spans[0].error, 1)
-              assert.strictEqual(spans[0].meta[ERROR_TYPE], errors[0].name)
-              assert.strictEqual(spans[0].meta[ERROR_MESSAGE], errors[0].message)
-              assert.strictEqual(spans[0].meta[ERROR_STACK], errors[0].stack)
-              assert.strictEqual(spans[0].meta.component, 'graphql')
+            assert.strictEqual(spans.length, 1)
+            assert.strictEqual(spans[0].service, 'test')
+            assert.strictEqual(spans[0].name, 'graphql.validate')
+            assert.strictEqual(spans[0].error, 1)
+            assert.strictEqual(spans[0].meta[ERROR_TYPE], errors[0].name)
+            assert.strictEqual(spans[0].meta[ERROR_MESSAGE], errors[0].message)
+            assert.strictEqual(spans[0].meta[ERROR_STACK], errors[0].stack)
+            assert.strictEqual(spans[0].meta.component, 'graphql')
 
-              const spanEvents = agent.unformatSpanEvents(spans[0])
+            const spanEvents = agent.unformatSpanEvents(spans[0])
 
-              assert.strictEqual(spanEvents.length, 1)
-              assert.ok(('startTime' in spanEvents[0]))
-              assert.strictEqual(spanEvents[0].name, 'dd.graphql.query.error')
-              assert.strictEqual(spanEvents[0].attributes.type, 'GraphQLError')
-              assert.ok(
-                !Object.hasOwn(spanEvents[0].attributes, 'stacktrace'),
-                `Available keys: ${inspect(Object.keys(spanEvents[0].attributes))}`
-              )
-              assert.strictEqual(spanEvents[0].attributes.message, 'Field "address" of ' +
-                'type "Address" must have a selection of subfields. Did you mean "address { ... }"?')
-              assert.strictEqual(spanEvents[0].attributes.locations.length, 1)
-              assert.strictEqual(spanEvents[0].attributes.locations[0], '1:11')
-            })
-            .then(done)
-            .catch(done)
+            assert.strictEqual(spanEvents.length, 1)
+            assert.ok(('startTime' in spanEvents[0]))
+            assert.strictEqual(spanEvents[0].name, 'dd.graphql.query.error')
+            assert.strictEqual(spanEvents[0].attributes.type, 'GraphQLError')
+            assert.ok(
+              !Object.hasOwn(spanEvents[0].attributes, 'stacktrace'),
+              `Available keys: ${inspect(Object.keys(spanEvents[0].attributes))}`
+            )
+            assert.strictEqual(spanEvents[0].attributes.message, 'Field "address" of ' +
+              'type "Address" must have a selection of subfields. Did you mean "address { ... }"?')
+            assert.strictEqual(spanEvents[0].attributes.locations.length, 1)
+            assert.strictEqual(spanEvents[0].attributes.locations[0], '1:11')
+          })
 
           const errors = graphql.validate(schema, document)
+
+          return assertion
         })
 
-        it('should handle execution exceptions', done => {
+        it('should handle execution exceptions', () => {
           const source = '{ hello }'
           const document = graphql.parse(source)
 
           let error
 
-          agent
-            .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
 
-              assert.strictEqual(spans.length, 1)
-              assert.strictEqual(spans[0].service, expectedSchema.server.serviceName)
-              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
-              assert.strictEqual(spans[0].error, 1)
-              assert.strictEqual(spans[0].meta[ERROR_TYPE], error.name)
-              assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
-              assert.strictEqual(spans[0].meta[ERROR_STACK], error.stack)
-              assert.strictEqual(spans[0].meta.component, 'graphql')
-            })
-            .then(done)
-            .catch(done)
+            assert.strictEqual(spans.length, 1)
+            assert.strictEqual(spans[0].service, expectedSchema.server.serviceName)
+            assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+            assert.strictEqual(spans[0].error, 1)
+            assert.strictEqual(spans[0].meta[ERROR_TYPE], error.name)
+            assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
+            assert.strictEqual(spans[0].meta[ERROR_STACK], error.stack)
+            assert.strictEqual(spans[0].meta.component, 'graphql')
+          })
 
           try {
             graphql.execute(null, document)
           } catch (e) {
             error = e
           }
+
+          return assertion
         })
 
-        it('should handle execution errors', done => {
+        it('should handle execution errors', () => {
           const source = '{ hello }'
           const document = graphql.parse(source)
 
@@ -1328,48 +1430,47 @@ describe('Plugin', () => {
 
           let error
 
-          agent
-            .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
 
-              assert.strictEqual(spans.length, 2)
-              assert.strictEqual(spans[0].service, expectedSchema.server.serviceName)
-              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
-              assert.strictEqual(spans[0].error, 1)
-              assert.strictEqual(spans[0].meta[ERROR_TYPE], error.name)
-              assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
-              assert.strictEqual(spans[0].meta[ERROR_STACK], error.stack)
-              assert.strictEqual(spans[0].meta.component, 'graphql')
+            assert.strictEqual(spans.length, 2)
+            assert.strictEqual(spans[0].service, expectedSchema.server.serviceName)
+            assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+            assert.strictEqual(spans[0].error, 1)
+            assert.strictEqual(spans[0].meta[ERROR_TYPE], error.name)
+            assert.strictEqual(spans[0].meta[ERROR_MESSAGE], error.message)
+            assert.strictEqual(spans[0].meta[ERROR_STACK], error.stack)
+            assert.strictEqual(spans[0].meta.component, 'graphql')
 
-              const spanEvents = agent.unformatSpanEvents(spans[0])
+            const spanEvents = agent.unformatSpanEvents(spans[0])
 
-              assert.strictEqual(spanEvents.length, 1)
-              assert.ok(
-                Object.hasOwn(spanEvents[0], 'startTime'),
-                `Available keys: ${inspect(Object.keys(spanEvents[0]))}`
-              )
-              assert.strictEqual(spanEvents[0].name, 'dd.graphql.query.error')
-              assert.strictEqual(spanEvents[0].attributes.type, 'GraphQLError')
-              assert.ok(
-                Object.hasOwn(spanEvents[0].attributes, 'stacktrace'),
-                `Available keys: ${inspect(Object.keys(spanEvents[0].attributes))}`
-              )
-              assert.strictEqual(spanEvents[0].attributes.message, 'test')
-              assert.strictEqual(spanEvents[0].attributes.locations.length, 1)
-              assert.strictEqual(spanEvents[0].attributes.locations[0], '1:3')
-              assert.strictEqual(spanEvents[0].attributes.path.length, 1)
-              assert.strictEqual(spanEvents[0].attributes.path[0], 'hello')
-            })
-            .then(done)
-            .catch(done)
+            assert.strictEqual(spanEvents.length, 1)
+            assert.ok(
+              Object.hasOwn(spanEvents[0], 'startTime'),
+              `Available keys: ${inspect(Object.keys(spanEvents[0]))}`
+            )
+            assert.strictEqual(spanEvents[0].name, 'dd.graphql.query.error')
+            assert.strictEqual(spanEvents[0].attributes.type, 'GraphQLError')
+            assert.ok(
+              Object.hasOwn(spanEvents[0].attributes, 'stacktrace'),
+              `Available keys: ${inspect(Object.keys(spanEvents[0].attributes))}`
+            )
+            assert.strictEqual(spanEvents[0].attributes.message, 'test')
+            assert.strictEqual(spanEvents[0].attributes.locations.length, 1)
+            assert.strictEqual(spanEvents[0].attributes.locations[0], '1:3')
+            assert.strictEqual(spanEvents[0].attributes.path.length, 1)
+            assert.strictEqual(spanEvents[0].attributes.path[0], 'hello')
+          })
 
-          Promise.resolve(graphql.execute({ schema, document, rootValue }))
+          const action = Promise.resolve(graphql.execute({ schema, document, rootValue }))
             .then(res => {
               error = res.errors[0]
             })
+
+          return Promise.all([assertion, action])
         })
 
-        it('should handle resolver exceptions', done => {
+        it('should handle resolver exceptions', () => {
           const error = new Error('test')
 
           const schema = graphql.buildSchema(`
@@ -1386,24 +1487,21 @@ describe('Plugin', () => {
             },
           }
 
-          agent
-            .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
 
-              assert.strictEqual(spans.length, 2)
-              assert.strictEqual(spans[1].error, 1)
-              assert.strictEqual(spans[1].meta[ERROR_TYPE], error.name)
-              assert.strictEqual(spans[1].meta[ERROR_MESSAGE], error.message)
-              assert.strictEqual(spans[1].meta[ERROR_STACK], error.stack)
-              assert.strictEqual(spans[1].meta.component, 'graphql')
-            })
-            .then(done)
-            .catch(done)
+            assert.strictEqual(spans.length, 2)
+            assert.strictEqual(spans[1].error, 1)
+            assert.strictEqual(spans[1].meta[ERROR_TYPE], error.name)
+            assert.strictEqual(spans[1].meta[ERROR_MESSAGE], error.message)
+            assert.strictEqual(spans[1].meta[ERROR_STACK], error.stack)
+            assert.strictEqual(spans[1].meta.component, 'graphql')
+          })
 
-          graphql.graphql({ schema, source, rootValue }).catch(done)
+          return Promise.all([assertion, graphql.graphql({ schema, source, rootValue })])
         })
 
-        it('should handle rejected promises', done => {
+        it('should handle rejected promises', () => {
           const error = new Error('test')
 
           const schema = graphql.buildSchema(`
@@ -1420,21 +1518,18 @@ describe('Plugin', () => {
             },
           }
 
-          agent
-            .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
 
-              assert.strictEqual(spans.length, 2)
-              assert.strictEqual(spans[1].error, 1)
-              assert.strictEqual(spans[1].meta[ERROR_TYPE], error.name)
-              assert.strictEqual(spans[1].meta[ERROR_MESSAGE], error.message)
-              assert.strictEqual(spans[1].meta[ERROR_STACK], error.stack)
-              assert.strictEqual(spans[1].meta.component, 'graphql')
-            })
-            .then(done)
-            .catch(done)
+            assert.strictEqual(spans.length, 2)
+            assert.strictEqual(spans[1].error, 1)
+            assert.strictEqual(spans[1].meta[ERROR_TYPE], error.name)
+            assert.strictEqual(spans[1].meta[ERROR_MESSAGE], error.message)
+            assert.strictEqual(spans[1].meta[ERROR_STACK], error.stack)
+            assert.strictEqual(spans[1].meta.component, 'graphql')
+          })
 
-          graphql.graphql({ schema, source, rootValue }).catch(done)
+          return Promise.all([assertion, graphql.graphql({ schema, source, rootValue })])
         })
 
         it('throws AbortError when the execute abortController is aborted before execute runs', async () => {
@@ -1506,7 +1601,7 @@ describe('Plugin', () => {
           }
         })
 
-        it('should support multiple executions with the same contextValue', done => {
+        it('should support multiple executions with the same contextValue', async () => {
           const schema = graphql.buildSchema(`
             type Query {
               hello: String
@@ -1521,10 +1616,8 @@ describe('Plugin', () => {
 
           const contextValue = {}
 
-          graphql.graphql({ schema, source, rootValue, contextValue })
-            .then(() => graphql.graphql({ schema, source, rootValue, contextValue }))
-            .then(() => done())
-            .catch(done)
+          await graphql.graphql({ schema, source, rootValue, contextValue })
+          await graphql.graphql({ schema, source, rootValue, contextValue })
         })
 
         it('should support multiple executions on a pre-parsed document', () => {
@@ -1551,6 +1644,27 @@ describe('Plugin', () => {
           }
         })
 
+        it('should publish empty resolver args with subscription to datadog:graphql:resolver:start', async () => {
+          const source = 'query MyQuery { human { name } }'
+          const document = graphql.parse(source)
+          const resolverInfo = []
+
+          const handler = ({ resolverInfo: info }) => {
+            resolverInfo.push(info)
+          }
+          dc.channel('datadog:graphql:resolver:start').subscribe(handler)
+
+          try {
+            await graphql.execute({ schema, document })
+          } finally {
+            dc.channel('datadog:graphql:resolver:start').unsubscribe(handler)
+          }
+
+          const humanResolverInfo = resolverInfo.find(info => info?.human)
+          assert.deepStrictEqual(humanResolverInfo, { human: {} },
+            `Expected empty human resolver args. Got ${inspect(resolverInfo)}`)
+        })
+
         it('should support multiple validations on a pre-parsed document', () => {
           const source = 'query MyQuery { hello(name: "world") }'
           const document = graphql.parse(source)
@@ -1559,7 +1673,7 @@ describe('Plugin', () => {
           graphql.validate(schema, document)
         })
 
-        it('should support multi-operations documents', done => {
+        it('should support multi-operations documents', () => {
           const source = `
             query FirstQuery { hello(name: "world") }
             query SecondQuery { hello(name: "world") }
@@ -1568,25 +1682,26 @@ describe('Plugin', () => {
           const operationName = 'SecondQuery'
           const variableValues = { who: 'world' }
 
-          agent
-            .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
 
-              assert.strictEqual(spans[0].service, expectedSchema.server.serviceName)
-              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
-              assert.strictEqual(spans[0].resource, 'query SecondQuery{hello(name:"")}')
-              assert.ok(!('graphql.source' in spans[0].meta))
-              assert.strictEqual(spans[0].meta['graphql.operation.type'], 'query')
-              assert.strictEqual(spans[0].meta['graphql.operation.name'], 'SecondQuery')
-              assert.strictEqual(spans[0].meta.component, 'graphql')
+            assertObjectContains(spans[0], {
+              service: expectedSchema.server.serviceName,
+              name: expectedSchema.server.opName,
+              resource: 'query SecondQuery{hello(name:"")}',
+              meta: {
+                'graphql.operation.type': 'query',
+                'graphql.operation.name': 'SecondQuery',
+                component: 'graphql',
+              },
             })
-            .then(() => done())
-            .catch(done)
+            assert.ok(!('graphql.source' in spans[0].meta))
+          }, { spanResourceMatch: /SecondQuery/ })
 
-          graphql.graphql({ schema, source, variableValues, operationName }).catch(done)
+          return Promise.all([assertion, graphql.graphql({ schema, source, variableValues, operationName })])
         })
 
-        it('should include used fragments in the source', done => {
+        it('should include used fragments in the source', () => {
           const source = `
             query WithFragments {
               human {
@@ -1598,82 +1713,82 @@ describe('Plugin', () => {
             }
           `
 
-          agent
-            .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
 
-              const resource = 'query WithFragments{human{...firstFields}}fragment firstFields on Human{name}'
+            const resource = 'query WithFragments{human{...firstFields}}fragment firstFields on Human{name}'
 
-              assert.strictEqual(spans[0].service, 'test')
-              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
-              assert.strictEqual(spans[0].resource, resource)
-              assert.ok(!('graphql.source' in spans[0].meta))
-              assert.strictEqual(spans[0].meta['graphql.operation.type'], 'query')
-              assert.strictEqual(spans[0].meta['graphql.operation.name'], 'WithFragments')
-              assert.strictEqual(spans[0].meta.component, 'graphql')
+            assertObjectContains(spans[0], {
+              service: 'test',
+              name: expectedSchema.server.opName,
+              resource,
+              meta: {
+                'graphql.operation.type': 'query',
+                'graphql.operation.name': 'WithFragments',
+                component: 'graphql',
+              },
             })
-            .then(done)
-            .catch(done)
+            assert.ok(!('graphql.source' in spans[0].meta))
+          }, { spanResourceMatch: /WithFragments/ })
 
-          graphql.graphql({ schema, source }).catch(done)
+          return Promise.all([assertion, graphql.graphql({ schema, source })])
         })
 
-        it('should handle single fragment definitions', done => {
+        it('should handle single fragment definitions', () => {
           const source = `
             fragment firstFields on Human {
               name
             }
           `
 
-          agent
-            .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
 
-              assert.strictEqual(spans[0].service, 'test')
-              assert.strictEqual(spans[0].name, 'graphql.parse')
-              assert.strictEqual(spans[0].resource, 'graphql.parse')
-              assert.ok(!('graphql.source' in spans[0].meta))
-              assert.ok(!('graphql.operation.type' in spans[0].meta))
-              assert.ok(!('graphql.operation.name' in spans[0].meta))
-              assert.strictEqual(spans[0].meta.component, 'graphql')
+            assertObjectContains(spans[0], {
+              service: 'test',
+              name: 'graphql.parse',
+              resource: 'graphql.parse',
+              meta: { component: 'graphql' },
             })
-            .then(done)
-            .catch(done)
+            assert.ok(!('graphql.source' in spans[0].meta))
+            assert.ok(!('graphql.operation.type' in spans[0].meta))
+            assert.ok(!('graphql.operation.name' in spans[0].meta))
+          }, { spanResourceMatch: /^graphql\.parse$/ })
 
-          graphql.graphql({ schema, source }).catch(done)
+          return Promise.all([assertion, graphql.graphql({ schema, source })])
         })
 
         // https://github.com/graphql/graphql-js/pull/2904
         if (!semver.intersects(version, '>=16')) {
-          it('should instrument using positional arguments', done => {
+          it('should instrument using positional arguments', () => {
             const source = 'query MyQuery { hello(name: "world") }'
             const variableValues = { who: 'world' }
 
-            agent
-              .assertSomeTraces(traces => {
-                const spans = sort(traces[0])
+            const assertion = agent.assertSomeTraces(traces => {
+              const spans = sort(traces[0])
 
-                assert.strictEqual(spans[0].service, expectedSchema.server.serviceName)
-                assert.strictEqual(spans[0].name, expectedSchema.server.opName)
-                assert.strictEqual(spans[0].resource, 'query MyQuery{hello(name:"")}')
-                assert.strictEqual(spans[0].type, 'graphql')
-                assert.ok(!('graphql.source' in spans[0].meta))
-                assert.strictEqual(spans[0].meta['graphql.operation.type'], 'query')
-                assert.strictEqual(spans[0].meta['graphql.operation.name'], 'MyQuery')
-                assert.strictEqual(spans[0].meta.component, 'graphql')
+              assertObjectContains(spans[0], {
+                service: expectedSchema.server.serviceName,
+                name: expectedSchema.server.opName,
+                resource: 'query MyQuery{hello(name:"")}',
+                type: 'graphql',
+                meta: {
+                  'graphql.operation.type': 'query',
+                  'graphql.operation.name': 'MyQuery',
+                  component: 'graphql',
+                },
               })
-              .then(done)
-              .catch(done)
+              assert.ok(!('graphql.source' in spans[0].meta))
+            }, { spanResourceMatch: /MyQuery/ })
 
-            graphql.graphql(schema, source, null, null, variableValues).catch(done)
+            return Promise.all([assertion, graphql.graphql(schema, source, null, null, variableValues)])
           })
         } else {
-          it('should not support positional arguments', done => {
+          it('should not support positional arguments', () => {
             const source = 'query MyQuery { hello(name: "world") }'
             const variableValues = { who: 'world' }
 
-            graphql.graphql(schema, source, null, null, variableValues)
-              .then(() => done(new Error('Expected error.')), () => done())
+            return assert.rejects(() => graphql.graphql(schema, source, null, null, variableValues))
           })
         }
 
@@ -1735,28 +1850,33 @@ describe('Plugin', () => {
           buildSchema()
         })
 
-        it('should be configured with the correct values', done => {
+        it('should be configured with the correct values', () => {
           const source = '{ hello(name: "world") }'
 
-          agent
-            .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
 
-              assert.strictEqual(spans.length, 2)
-              assert.strictEqual(spans[0].service, 'custom')
-              assert.strictEqual(spans[1].service, 'custom')
-              assert.strictEqual(spans[0].meta['graphql.source'], '{ hello(name: "world") }')
-              assert.strictEqual(spans[0].meta.component, 'graphql')
-              assert.strictEqual(spans[1].meta['graphql.source'], 'hello(name: "world")')
-              assert.strictEqual(spans[1].meta.component, 'graphql')
+            assert.strictEqual(spans.length, 2)
+            assertObjectContains(spans[0], {
+              service: 'custom',
+              meta: {
+                'graphql.source': '{ hello(name: "world") }',
+                component: 'graphql',
+              },
             })
-            .then(done)
-            .catch(done)
+            assertObjectContains(spans[1], {
+              service: 'custom',
+              meta: {
+                'graphql.source': 'hello(name: "world")',
+                component: 'graphql',
+              },
+            })
+          }, { spanResourceMatch: /hello:String/ })
 
-          graphql.graphql({ schema, source }).catch(done)
+          return Promise.all([assertion, graphql.graphql({ schema, source })])
         })
 
-        it('should apply the filter callback to the variables', done => {
+        it('should apply the filter callback to the variables', () => {
           const source = `
             query MyQuery($title: String!, $who: String!) {
               hello(title: $title, name: $who)
@@ -1764,19 +1884,24 @@ describe('Plugin', () => {
           `
           const variableValues = { title: 'planet', who: 'world' }
 
-          agent
-            .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
 
-              assert.strictEqual(spans[0].meta['graphql.variables.title'], 'planet')
-              assert.strictEqual(spans[0].meta['graphql.variables.who'], 'REDACTED')
-              assert.strictEqual(spans[1].meta['graphql.variables.title'], 'planet')
-              assert.strictEqual(spans[1].meta['graphql.variables.who'], 'REDACTED')
+            assertObjectContains(spans[0], {
+              meta: {
+                'graphql.variables.title': 'planet',
+                'graphql.variables.who': 'REDACTED',
+              },
             })
-            .then(done)
-            .catch(done)
+            assertObjectContains(spans[1], {
+              meta: {
+                'graphql.variables.title': 'planet',
+                'graphql.variables.who': 'REDACTED',
+              },
+            })
+          }, { spanResourceMatch: /MyQuery/ })
 
-          graphql.graphql({ schema, source, variableValues }).catch(done)
+          return Promise.all([assertion, graphql.graphql({ schema, source, variableValues })])
         })
       })
 
@@ -1798,7 +1923,7 @@ describe('Plugin', () => {
           buildSchema()
         })
 
-        it('should only include the configured variables', done => {
+        it('should only include the configured variables', () => {
           const source = `
             query MyQuery($title: String!, $who: String!) {
               hello(title: $title, name: $who)
@@ -1806,17 +1931,14 @@ describe('Plugin', () => {
           `
           const variableValues = { title: 'planet', who: 'world' }
 
-          agent
-            .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
 
-              assert.strictEqual(spans[0].meta['graphql.variables.title'], 'planet')
-              assert.ok(!('graphql.variables.who' in spans[0].meta))
-            })
-            .then(done)
-            .catch(done)
+            assert.strictEqual(spans[0].meta['graphql.variables.title'], 'planet')
+            assert.ok(!('graphql.variables.who' in spans[0].meta))
+          })
 
-          graphql.graphql({ schema, source, variableValues }).catch(done)
+          return Promise.all([assertion, graphql.graphql({ schema, source, variableValues })])
         })
       })
 
@@ -1836,7 +1958,7 @@ describe('Plugin', () => {
           buildSchema()
         })
 
-        it('should only instrument the execution', done => {
+        it('should only instrument the execution', () => {
           const source = `
             {
               human {
@@ -1849,17 +1971,14 @@ describe('Plugin', () => {
             }
           `
 
-          agent
-            .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
 
-              assert.strictEqual(spans.length, 1)
-              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
-            })
-            .then(done)
-            .catch(done)
+            assert.strictEqual(spans.length, 1)
+            assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+          })
 
-          graphql.graphql({ schema, source }).catch(done)
+          return Promise.all([assertion, graphql.graphql({ schema, source })])
         })
 
         it('should run the resolvers in the execution scope', done => {
@@ -1888,6 +2007,26 @@ describe('Plugin', () => {
 
           graphql.graphql({ schema, source, rootValue }).catch(done)
         })
+
+        it('should publish resolver start for depth 0 AppSec subscribers', async () => {
+          const startCh = dc.channel('datadog:graphql:resolver:start')
+          const fields = []
+          const handler = ({ resolverInfo }) => {
+            fields.push(...Object.keys(resolverInfo || {}))
+          }
+
+          startCh.subscribe(handler)
+
+          try {
+            const source = '{ human { name } }'
+            const result = await graphql.graphql({ schema, source })
+
+            assert.ok(!result.errors || result.errors.length === 0, `Expected [${result.errors}] to be empty`)
+            assert.deepStrictEqual(fields.sort(), ['human', 'name'])
+          } finally {
+            startCh.unsubscribe(handler)
+          }
+        })
       })
 
       describe('with a depth >=1', () => {
@@ -1906,7 +2045,7 @@ describe('Plugin', () => {
           buildSchema()
         })
 
-        it('should only instrument up to the specified depth', done => {
+        it('should only instrument up to the specified depth', () => {
           const source = `
             {
               human {
@@ -1922,23 +2061,75 @@ describe('Plugin', () => {
             }
           `
 
-          agent
-            .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
-              const ignored = spans.filter(span => {
-                return [
-                  'human.address.civicNumber',
-                  'human.address.street',
-                ].indexOf(span.resource) !== -1
-              })
-
-              assert.strictEqual(spans.length, 5)
-              assert.strictEqual(ignored.length, 0)
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
+            const ignored = spans.filter(span => {
+              return [
+                'human.address.civicNumber',
+                'human.address.street',
+              ].indexOf(span.resource) !== -1
             })
-            .then(done)
-            .catch(done)
 
-          graphql.graphql({ schema, source }).catch(done)
+            assert.strictEqual(spans.length, 5)
+            assert.strictEqual(ignored.length, 0)
+          })
+
+          return Promise.all([assertion, graphql.graphql({ schema, source })])
+        })
+
+        it('should honor resolver abort for fields gated by depth', async () => {
+          let streetResolverRan = false
+          const startCh = dc.channel('datadog:graphql:resolver:start')
+          const handler = ({ abortController, resolverInfo }) => {
+            if (resolverInfo?.street) abortController.abort()
+          }
+
+          const Address = new graphql.GraphQLObjectType({
+            name: 'DepthAbortAddress',
+            fields: {
+              street: {
+                type: graphql.GraphQLString,
+                resolve () {
+                  streetResolverRan = true
+                  return 'foo street'
+                },
+              },
+            },
+          })
+          const Human = new graphql.GraphQLObjectType({
+            name: 'DepthAbortHuman',
+            fields: {
+              address: {
+                type: Address,
+                resolve: () => ({}),
+              },
+            },
+          })
+          const query = new graphql.GraphQLObjectType({
+            name: 'DepthAbortQuery',
+            fields: {
+              human: {
+                type: Human,
+                resolve: () => ({}),
+              },
+            },
+          })
+          const localSchema = new graphql.GraphQLSchema({ query })
+
+          startCh.subscribe(handler)
+
+          try {
+            const result = await graphql.graphql({
+              schema: localSchema,
+              source: '{ human { address { street } } }',
+            })
+
+            assert.strictEqual(streetResolverRan, false)
+            assert.strictEqual(result.errors.length, 1)
+            assert.strictEqual(result.errors[0].originalError?.name, 'AbortError')
+          } finally {
+            startCh.unsubscribe(handler)
+          }
         })
 
         it('publishes apm:graphql:resolve:start for every resolver, including depth-gated ones', async () => {
@@ -2003,53 +2194,50 @@ describe('Plugin', () => {
           buildSchema()
         })
 
-        it('should not collapse list field resolvers', done => {
+        it('should not collapse list field resolvers', () => {
           const source = '{ friends { name } }'
 
-          agent
-            .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
 
-              assert.strictEqual(spans.length, 4)
+            assert.strictEqual(spans.length, 4)
 
-              const execute = spans[0]
-              const friends = spans[1]
-              const friend0Name = spans[2]
-              const friend1Name = spans[3]
+            const execute = spans[0]
+            const friends = spans[1]
+            const friend0Name = spans[2]
+            const friend1Name = spans[3]
 
-              assert.strictEqual(execute.name, expectedSchema.server.opName)
+            assert.strictEqual(execute.name, expectedSchema.server.opName)
 
-              assertObjectContains(friends, {
-                name: 'graphql.resolve',
-                resource: 'friends:[Human]',
-                meta: {
-                  'graphql.field.path': 'friends',
-                },
-              })
-              assert.strictEqual(friends.parent_id.toString(), execute.span_id.toString())
-
-              assertObjectContains(friend0Name, {
-                name: 'graphql.resolve',
-                resource: 'name:String',
-                meta: {
-                  'graphql.field.path': 'friends.0.name',
-                },
-              })
-              assert.strictEqual(friend0Name.parent_id.toString(), friends.span_id.toString())
-
-              assertObjectContains(friend1Name, {
-                name: 'graphql.resolve',
-                resource: 'name:String',
-                meta: {
-                  'graphql.field.path': 'friends.1.name',
-                },
-              })
-              assert.strictEqual(friend1Name.parent_id.toString(), friends.span_id.toString())
+            assertObjectContains(friends, {
+              name: 'graphql.resolve',
+              resource: 'friends:[Human]',
+              meta: {
+                'graphql.field.path': 'friends',
+              },
             })
-            .then(done)
-            .catch(done)
+            assert.strictEqual(friends.parent_id.toString(), execute.span_id.toString())
 
-          graphql.graphql({ schema, source }).catch(done)
+            assertObjectContains(friend0Name, {
+              name: 'graphql.resolve',
+              resource: 'name:String',
+              meta: {
+                'graphql.field.path': 'friends.0.name',
+              },
+            })
+            assert.strictEqual(friend0Name.parent_id.toString(), friends.span_id.toString())
+
+            assertObjectContains(friend1Name, {
+              name: 'graphql.resolve',
+              resource: 'name:String',
+              meta: {
+                'graphql.field.path': 'friends.1.name',
+              },
+            })
+            assert.strictEqual(friend1Name.parent_id.toString(), friends.span_id.toString())
+          }, { spanResourceMatch: /friends:\[Human]/ })
+
+          return Promise.all([assertion, graphql.graphql({ schema, source })])
         })
 
         it('should trace aliased __proto__ fields when collapsing is disabled', async () => {
@@ -2068,7 +2256,7 @@ describe('Plugin', () => {
                   'graphql.field.path': '__proto__',
                 },
               })
-            }),
+            }, { spanResourceMatch: /hello:String/ }),
             graphql.graphql({ schema, source }),
           ])
 
@@ -2095,7 +2283,7 @@ describe('Plugin', () => {
           buildSchema()
         })
 
-        it('should count only string segments when collapsing is disabled', done => {
+        it('should count only string segments when collapsing is disabled', () => {
           const source = `
             {
               friends {
@@ -2107,24 +2295,21 @@ describe('Plugin', () => {
             }
           `
 
-          agent
-            .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
-              const resolveSpans = spans.filter(span => span.name === 'graphql.resolve')
-              const paths = resolveSpans.map(span => span.meta['graphql.field.path']).sort()
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
+            const resolveSpans = spans.filter(span => span.name === 'graphql.resolve')
+            const paths = resolveSpans.map(span => span.meta['graphql.field.path']).sort()
 
-              assert.deepStrictEqual(paths, [
-                'friends',
-                'friends.0.name',
-                'friends.0.pets',
-                'friends.1.name',
-                'friends.1.pets',
-              ])
-            })
-            .then(done)
-            .catch(done)
+            assert.deepStrictEqual(paths, [
+              'friends',
+              'friends.0.name',
+              'friends.0.pets',
+              'friends.1.name',
+              'friends.1.pets',
+            ])
+          })
 
-          graphql.graphql({ schema, source }).catch(done)
+          return Promise.all([assertion, graphql.graphql({ schema, source })])
         })
       })
 
@@ -2144,20 +2329,19 @@ describe('Plugin', () => {
           buildSchema()
         })
 
-        it('should fallback to the operation type and name', done => {
+        it('should fallback to the operation type and name', () => {
           const source = 'query WithoutSignature { friends { name } }'
 
-          agent
-            .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
 
-              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
-              assert.strictEqual(spans[0].resource, 'query WithoutSignature')
+            assertObjectContains(spans[0], {
+              name: expectedSchema.server.opName,
+              resource: 'query WithoutSignature',
             })
-            .then(done)
-            .catch(done)
+          }, { spanResourceMatch: /WithoutSignature/ })
 
-          graphql.graphql({ schema, source }).catch(done)
+          return Promise.all([assertion, graphql.graphql({ schema, source })])
         })
 
         it('should fallback to the operation type', async () => {
@@ -2181,6 +2365,7 @@ describe('Plugin', () => {
             execute: sinon.spy((span, context, res) => {}),
             parse: sinon.spy((span, document, operation) => {}),
             validate: sinon.spy((span, document, error) => {}),
+            resolve: sinon.spy((span, field) => {}),
           },
         }
 
@@ -2208,7 +2393,7 @@ describe('Plugin', () => {
 
         after(() => agent.close())
 
-        it('should run the execute hook before graphql.execute span is finished', done => {
+        it('should run the execute hook before graphql.execute span is finished', () => {
           const document = graphql.parse(source)
 
           graphql.validate(schema, document)
@@ -2228,101 +2413,125 @@ describe('Plugin', () => {
 
           let result
 
-          agent
-            .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
 
-              assert.strictEqual(spans.length, 1)
-              assert.strictEqual(spans[0].name, expectedSchema.server.opName)
-              sinon.assert.calledOnce(config.hooks.execute)
+            assert.strictEqual(spans.length, 1)
+            assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+            sinon.assert.calledOnce(config.hooks.execute)
 
-              const span = config.hooks.execute.firstCall.args[0]
-              const args = config.hooks.execute.firstCall.args[1]
-              const res = config.hooks.execute.firstCall.args[2]
+            const span = config.hooks.execute.firstCall.args[0]
+            const args = config.hooks.execute.firstCall.args[1]
+            const res = config.hooks.execute.firstCall.args[2]
 
-              assert.strictEqual(span.context()._name, expectedSchema.server.opName)
+            assert.strictEqual(span.context()._name, expectedSchema.server.opName)
 
-              // These two properties are circular structures.
-              assert.deepStrictEqual(args.document, params.document)
-              assert.deepStrictEqual(args.schema, params.schema)
+            // These two properties are circular structures.
+            assert.deepStrictEqual(args.document, params.document)
+            assert.deepStrictEqual(args.schema, params.schema)
 
-              // The helper can not handle circular structures properly.
-              assertObjectContains(args, {
-                rootValue: params.rootValue,
-                contextValue: params.contextValue,
-                variableValues: params.variableValues,
-                operationName: params.operationName,
-                typeResolver: params.typeResolver,
-              })
-              assert.strictEqual(typeof args.fieldResolver, 'function')
-              assert.notStrictEqual(args.fieldResolver, params.fieldResolver)
-              assert.strictEqual(res, result)
+            // The helper can not handle circular structures properly.
+            assertObjectContains(args, {
+              rootValue: params.rootValue,
+              contextValue: params.contextValue,
+              variableValues: params.variableValues,
+              operationName: params.operationName,
+              typeResolver: params.typeResolver,
             })
-            .then(done)
-            .catch(done)
+            assert.strictEqual(typeof args.fieldResolver, 'function')
+            assert.notStrictEqual(args.fieldResolver, params.fieldResolver)
+            assert.strictEqual(res, result)
+          }, { spanResourceMatch: /MyQuery/ })
 
-          Promise.resolve(graphql.execute(params))
+          const action = Promise.resolve(graphql.execute(params))
             .then(res => {
               result = res
             })
+
+          return Promise.all([assertion, action])
         })
 
-        it('should run the validate hook before graphql.validate span is finished', done => {
+        it('should run the validate hook before graphql.validate span is finished', () => {
           const document = graphql.parse(source)
 
-          agent
-            .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
 
-              assert.strictEqual(spans.length, 1)
-              assert.strictEqual(spans[0].name, 'graphql.validate')
-              sinon.assert.calledOnce(config.hooks.validate)
+            assert.strictEqual(spans.length, 1)
+            assert.strictEqual(spans[0].name, 'graphql.validate')
+            sinon.assert.calledOnce(config.hooks.validate)
 
-              const span = config.hooks.validate.firstCall.args[0]
-              const hookDocument = config.hooks.validate.firstCall.args[1]
-              const hookErrors = config.hooks.validate.firstCall.args[2]
+            const span = config.hooks.validate.firstCall.args[0]
+            const hookDocument = config.hooks.validate.firstCall.args[1]
+            const hookErrors = config.hooks.validate.firstCall.args[2]
 
-              assert.strictEqual(span.context()._name, 'graphql.validate')
+            assert.strictEqual(span.context()._name, 'graphql.validate')
 
-              assert.strictEqual(hookDocument, document)
-              assert.strictEqual(hookErrors, errors)
-            })
-            .then(done)
-            .catch(done)
+            assert.strictEqual(hookDocument, document)
+            assert.strictEqual(hookErrors, errors)
+          })
+
           const errors = graphql.validate(schema, document)
+
+          return assertion
         })
 
-        it('should run the parse hook before graphql.parse span is finished', done => {
+        it('should run the parse hook before graphql.parse span is finished', () => {
           let document
 
-          agent
-            .assertSomeTraces(traces => {
-              const spans = sort(traces[0])
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
 
-              assert.strictEqual(spans.length, 1)
-              assert.strictEqual(spans[0].name, 'graphql.parse')
-              sinon.assert.calledOnce(config.hooks.parse)
+            assert.strictEqual(spans.length, 1)
+            assert.strictEqual(spans[0].name, 'graphql.parse')
+            sinon.assert.calledOnce(config.hooks.parse)
 
-              const span = config.hooks.parse.firstCall.args[0]
-              const hookSource = config.hooks.parse.firstCall.args[1]
-              const hookDocument = config.hooks.parse.firstCall.args[2]
+            const span = config.hooks.parse.firstCall.args[0]
+            const hookSource = config.hooks.parse.firstCall.args[1]
+            const hookDocument = config.hooks.parse.firstCall.args[2]
 
-              assert.strictEqual(span.context()._name, 'graphql.parse')
+            assert.strictEqual(span.context()._name, 'graphql.parse')
 
-              assert.strictEqual(hookSource, source)
-              assert.strictEqual(hookDocument, document)
-            })
-            .then(done)
-            .catch(done)
+            assert.strictEqual(hookSource, source)
+            assert.strictEqual(hookDocument, document)
+          })
 
-          Promise.resolve(graphql.parse(source))
+          const action = Promise.resolve(graphql.parse(source))
             .then(res => {
               document = res
             })
+
+          return Promise.all([assertion, action])
+        })
+
+        it('should run the resolve hook before graphql.resolve span is finished', () => {
+          const resolveSource = '{ hello(name: "world") }'
+
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
+
+            assert.strictEqual(spans.length, 2)
+            assert.strictEqual(spans[1].name, 'graphql.resolve')
+            sinon.assert.calledOnce(config.hooks.resolve)
+
+            const span = config.hooks.resolve.firstCall.args[0]
+            const field = config.hooks.resolve.firstCall.args[1]
+
+            assert.strictEqual(span.context()._name, 'graphql.resolve')
+            assert.strictEqual(field.fieldName, 'hello')
+            assert.strictEqual(field.path, 'hello')
+            assert.strictEqual(field.error, null)
+            assert.strictEqual(field.result, 'world')
+          }, { spanResourceMatch: /hello:String/ })
+
+          return Promise.all([
+            assertion,
+            graphql.graphql({ schema, source: resolveSource }),
+          ])
         })
       })
 
-      withVersions(plugin, 'apollo-server-core', apolloVersion => {
+      withVersions('graphql', 'apollo-server-core', apolloVersion => {
         // The precense of graphql@^15.2.0 in the /versions folder causes graphql-tools@3.1.1
         // to break in the before() hook. This test tests a library version that had its release occur 5 years ago
         // updating the test would require using newer version of apollo-core which have a completely different syntax

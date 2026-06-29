@@ -1,7 +1,7 @@
 'use strict'
 
 const { createHash } = require('crypto')
-const { lstat, mkdir, readdir, writeFile } = require('fs/promises')
+const { lstat, mkdir, readdir, readFile, writeFile } = require('fs/promises')
 const { createRequire } = require('module')
 const { arch } = require('os')
 const { join } = require('path')
@@ -11,12 +11,17 @@ const semver = require('semver')
 
 const externals = require('../packages/dd-trace/test/plugins/externals')
 const { getInstrumentation } = require('../packages/dd-trace/test/setup/helpers/load-inst')
-const { getCappedRange } = require('../packages/dd-trace/test/plugins/versions')
+const { getCappedRange, resolvePluginVersions } = require('../packages/dd-trace/test/plugins/versions')
 const latests = require('../packages/dd-trace/test/plugins/versions/package.json').dependencies
 const { isRelativeRequire } = require('../packages/datadog-instrumentations/src/helpers/shared-utils')
 const exec = require('./helpers/exec')
+const mapWithConcurrency = require('./helpers/concurrency')
 const requirePackageJsonPath = require.resolve('../packages/dd-trace/src/require-package-json')
 const requirePackageJson = require(requirePackageJsonPath)
+
+// Generating the whole versions/ tree is thousands of mkdir/writeFile calls; bound them so we never exhaust file
+// descriptors (EMFILE). yarn install itself dominates the wall-clock, so a moderate cap costs nothing.
+const FS_CONCURRENCY = 50
 
 // Can remove aerospike after removing support for aerospike < 5.2.0 (for Node.js 22, v5.12.1 is required)
 // Can remove couchbase after removing support for couchbase < 3.2.2
@@ -42,8 +47,10 @@ run()
 async function run () {
   await assertPrerequisites()
   install()
-  await assertPeerDependencies(join(__dirname, '..', 'versions'))
-  install()
+  const changed = await assertPeerDependencies(join(__dirname, '..', 'versions'))
+  // The second install only does something when peer-dependency patching actually changed a manifest. Targeted
+  // installs for plugins without external peer dependencies (the common CI matrix case) skip it entirely.
+  if (changed) install()
 }
 
 async function assertPrerequisites () {
@@ -54,68 +61,73 @@ async function assertPrerequisites () {
     .map(file => file.slice(0, -3))
     .filter(file => !filter || filter.includes(file))
 
-  const internals = moduleNames.reduce((/** @type {object[]} */ internals, moduleName) => {
-    internals.push(...getInstrumentation(moduleName))
-    return internals
-  }, [])
+  const packages = collectPackages(moduleNames)
 
-  for (const inst of internals) {
-    // eslint-disable-next-line no-await-in-loop
-    await assertInstrumentation(inst, false)
-  }
-
-  const externalNames = Object.keys(externals).filter(name => moduleNames.includes(name))
-
-  for (const name of externalNames) {
-    for (const inst of externals[name]) {
-      // eslint-disable-next-line no-await-in-loop
-      await assertInstrumentation(inst, true, name)
-    }
-  }
+  await mapWithConcurrency(packages, FS_CONCURRENCY, ({ name, version, range, external }) =>
+    assertPackage(name, version, range, external))
 
   await assertWorkspaces()
 }
 
 /**
- * @param {object} instrumentation
- * @param {boolean} external
- * @param {string} [pluginName] The plugin key the external entry belongs to. Same-name externals (e.g. the aerospike
- *   externals entry that mirrors the addHook versions) honour `PACKAGE_VERSION_RANGE` so per-major CI matrices do not
- *   force every major to install on every job.
+ * Build the ordered, de-duplicated set of workspace folders to generate. A version that is referenced under several
+ * notations (or by both an internal and an external entry) is generated once; internal entries are processed first so
+ * the nohoisted (isolated) variant wins for any shared folder.
+ *
+ * @param {string[]} moduleNames
+ * @returns {Array<{ name: string, version: string|null, range: string, external: boolean }>}
  */
-async function assertInstrumentation (instrumentation, external, pluginName) {
-  const honourEnvRange = !external || instrumentation.name === pluginName
-  const versions = process.env.PACKAGE_VERSION_RANGE && honourEnvRange
-    ? [process.env.PACKAGE_VERSION_RANGE]
-    : (instrumentation.versions || [])
+function collectPackages (moduleNames) {
+  const seen = new Set()
+  /** @type {Array<{ name: string, version: string|null, range: string, external: boolean }>} */
+  const packages = []
 
-  for (const version of versions) {
-    if (!version) continue
-
-    if (version !== '*') {
-      const result = semver.coerce(version)
-      if (!result) throw new Error(`Invalid version: ${version}`)
-      // eslint-disable-next-line no-await-in-loop
-      await assertModules(instrumentation.name, result.version, external)
-    }
-
-    // eslint-disable-next-line no-await-in-loop
-    await assertModules(instrumentation.name, version, external)
+  const addFolder = (name, version, range, external) => {
+    // File-path requires are resolved from disk; their non-path counterparts already cover them.
+    if (isRelativeRequire(name)) return
+    const key = basename(name, version)
+    if (seen.has(key)) return
+    seen.add(key)
+    packages.push({ name, version, range, external })
   }
-}
 
-/**
- * @param {string} name
- * @param {string} version
- * @param {boolean} external
- */
-async function assertModules (name, version, external) {
-  const range = process.env.RANGE
-  if (range && !semver.subset(version, range)) return
-  await Promise.all([
-    assertPackage(name, null, version, external),
-    assertPackage(name, version, version, external),
-  ])
+  /**
+   * @param {{ name: string, versions?: string[] }} instrumentation
+   * @param {boolean} external
+   * @param {string} [pluginName] The plugin key an external entry belongs to. Same-name externals (e.g. the aerospike
+   *   entry mirroring the addHook versions) honour `PACKAGE_VERSION_RANGE` so per-major CI matrices do not force every
+   *   major to install on every job.
+   */
+  const addInstrumentation = (instrumentation, external, pluginName) => {
+    const { versionList, unversioned } = resolvePluginVersions({
+      name: instrumentation.name,
+      declaredVersions: instrumentation.versions || [],
+      honourEnvRange: !external || instrumentation.name === pluginName,
+    })
+
+    // The unversioned `versions/<name>` folder is the default `require('versions/<name>')` target used by service
+    // setup and several plugin specs.
+    if (unversioned) addFolder(instrumentation.name, null, unversioned, external)
+
+    for (const { versionKey } of versionList) {
+      addFolder(instrumentation.name, versionKey, versionKey, external)
+    }
+  }
+
+  for (const moduleName of moduleNames) {
+    for (const instrumentation of getInstrumentation(moduleName)) {
+      addInstrumentation(instrumentation, false)
+    }
+  }
+
+  for (const name of Object.keys(externals)) {
+    if (!moduleNames.includes(name)) continue
+    for (const instrumentation of externals[name]) {
+      addInstrumentation(instrumentation, true, name)
+    }
+  }
+
+  return packages
 }
 
 /**
@@ -133,8 +145,6 @@ async function assertFolder (name, version) {
  * @param {boolean} external
  */
 async function assertPackage (name, version, dependencyVersionRange, external) {
-  // Early return to prevent filePaths from being installed, their non path counterparts should suffice
-  if (isRelativeRequire(name)) return
   const dependencies = {
     [name]: getCappedRange(name, dependencyVersionRange),
   }
@@ -165,68 +175,101 @@ async function assertPackage (name, version, dependencyVersionRange, external) {
 }
 
 /**
- * @param {object} rootFolder
- * @param {string} parent
+ * Patch generated workspace manifests with the peer/dev dependency versions resolved from the installed packages, so a
+ * second install pulls compatible peers.
+ *
+ * @param {string} rootFolder
+ * @returns {Promise<boolean>} Whether any manifest changed (and therefore a second install is required).
  */
-async function assertPeerDependencies (rootFolder, parent = '') {
+async function assertPeerDependencies (rootFolder) {
+  const folders = await collectPeerDependencyFolders(rootFolder)
+  const changes = await mapWithConcurrency(folders, FS_CONCURRENCY, patchPeerDependencies)
+  return changes.some(Boolean)
+}
+
+/**
+ * Walk the generated tree and return the leaf workspace folders that have external peer dependencies to patch.
+ *
+ * @param {string} rootFolder
+ * @param {string} [parent]
+ * @returns {Promise<Array<{ folder: string, externalName: string }>>}
+ */
+async function collectPeerDependencyFolders (rootFolder, parent = '') {
   const entries = await readdir(rootFolder)
+  const folders = []
 
   for (const entry of entries) {
-    const folder = join(rootFolder, entry)
+    const current = join(rootFolder, entry)
 
     // eslint-disable-next-line no-await-in-loop
-    const folderStat = await lstat(folder)
+    const folderStat = await lstat(current)
     if (!folderStat.isDirectory()) continue
     if (entry === 'node_modules') continue
     if (!isGeneratedWorkspace(entry, parent)) continue
     if (entry.startsWith('@')) {
       // eslint-disable-next-line no-await-in-loop
-      await assertPeerDependencies(folder, parent ? join(parent, entry) : entry)
+      folders.push(...await collectPeerDependencyFolders(current, parent ? join(parent, entry) : entry))
       continue
     }
 
     const externalName = join(parent, entry.split('@')[0])
+    if (externalDeps.has(externalName)) folders.push({ folder: current, externalName })
+  }
 
-    if (!externalDeps.has(externalName)) continue
+  return folders
+}
 
-    const versionPkgJsonPath = join(folder, 'package.json')
-    const versionPkgJson = require(versionPkgJsonPath)
+/**
+ * @param {{ folder: string, externalName: string }} entry
+ * @returns {Promise<boolean>} Whether the manifest changed on disk.
+ */
+async function patchPeerDependencies ({ folder, externalName }) {
+  const versionPkgJsonPath = join(folder, 'package.json')
+  const before = await readFile(versionPkgJsonPath, 'utf8')
+  const versionPkgJson = JSON.parse(before)
 
-    let pkgJson
+  let pkgJson
 
-    for (const { dep, name, node, forced } of externalDeps.get(externalName)) {
-      if (node && !semver.satisfies(process.versions.node, node)) {
-        continue
-      }
-      if (!pkgJson) {
-        const requireFromWorkspace = createRequire(join(folder, 'package.json'))
-        const nodeModulesPaths = requireFromWorkspace.resolve.paths(externalName)
-        pkgJson = requirePackageJson(externalName, { paths: nodeModulesPaths })
-      }
+  for (const { dep, name, node, forced } of externalDeps.get(externalName)) {
+    if (node && !semver.satisfies(process.versions.node, node)) {
+      continue
+    }
+    if (!pkgJson) {
+      const requireFromWorkspace = createRequire(join(folder, 'package.json'))
+      const nodeModulesPaths = requireFromWorkspace.resolve.paths(externalName)
+      pkgJson = requirePackageJson(externalName, { paths: nodeModulesPaths })
+    }
 
-      for (const section of ['devDependencies', 'peerDependencies']) {
-        if (pkgJson[section]?.[name]) {
-          if (dep === externalName) {
-            versionPkgJson.dependencies[name] = pkgJson.version
-          } else {
-            versionPkgJson.dependencies[name] = pkgJson[section][name].includes('||')
+    for (const section of ['devDependencies', 'peerDependencies']) {
+      if (pkgJson[section]?.[name]) {
+        if (dep === externalName) {
+          versionPkgJson.dependencies[name] = pkgJson.version
+        } else {
+          const declared = pkgJson[section][name]
+          versionPkgJson.dependencies[name] = declared.startsWith('workspace:')
+            // A `workspace:` protocol leaked into the published manifest (some monorepo packages publish it raw); it
+            // cannot resolve outside the source repo, so fall back to the pinned compatible version.
+            ? (latests[name] ?? '*')
+            : declared.includes('||')
               // Use the first version in the list (as npm does by default)
-              ? pkgJson[section][name].split('||')[0].trim()
+              ? declared.split('||')[0].trim()
               // Only one version available so use that.
-              : pkgJson[section][name]
-          }
-          break
+              : declared
         }
-      }
-
-      if (!versionPkgJson.dependencies[name] && forced) {
-        versionPkgJson.dependencies[name] = latests[name]
+        break
       }
     }
 
-    // eslint-disable-next-line no-await-in-loop
-    await writeFile(versionPkgJsonPath, JSON.stringify(versionPkgJson, null, 2))
+    if (!versionPkgJson.dependencies[name] && forced) {
+      versionPkgJson.dependencies[name] = latests[name]
+    }
   }
+
+  const after = JSON.stringify(versionPkgJson, null, 2) + '\n'
+  if (after === before) return false
+
+  await writeFile(versionPkgJsonPath, after)
+  return true
 }
 
 /**
@@ -313,9 +356,21 @@ async function assertWorkspaces () {
 function install (retry = true) {
   try {
     exec('yarn --ignore-engines', { cwd: folder() })
-  } catch (err) {
-    if (!retry) throw err
-    install(false) // retry in case of server error from registry
+  } catch (error) {
+    if (retry) {
+      install(false) // retry in case of server error from registry
+      return
+    }
+    // A non-transient failure is most often an unresolvable version: a declared range spans a major version that was
+    // never published. Point at the fix instead of leaving a bare yarn error.
+    throw new Error(
+      'yarn failed to install the generated versions/ workspaces. If a plugin declares a version range that spans a ' +
+      'major version that was never published (non-consecutive majors), add that package to ' +
+      '`nonConsecutiveMajorPackages` in packages/dd-trace/test/plugins/versions/index.js (or split the range) so its ' +
+      'in-between majors are not installed.\n' +
+      `Original error: ${error.message}`,
+      { cause: error }
+    )
   }
 }
 

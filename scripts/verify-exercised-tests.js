@@ -347,10 +347,10 @@ function parseExportAssignments (run) {
 function findTestFiles (repoRoot) {
   const commonGlobOpts = { cwd: repoRoot, nodir: true, windowsPathsNoEscape: true, ignore: DEFAULT_IGNORE_GLOBS }
 
-  const files = [
-    ...globSyncCached('**/*.spec.js', commonGlobOpts),
-    ...globSyncCached('**/*.test.mjs', commonGlobOpts),
-  ]
+  // Collect every test-file naming convention used in the repo so an unrun spec
+  // can never slip through untracked. Kept deliberately wide (js/mjs/cjs) even
+  // where no file currently uses an extension, so a future one is caught.
+  const files = globSyncCached('**/*.@(spec|test).@(js|mjs|cjs)', commonGlobOpts)
 
   files.sort((a, b) => a.localeCompare(b, 'en'))
   return files
@@ -883,7 +883,7 @@ function getTraceCoreCategoriesFromScripts (scripts) {
  * @returns {Set<string>}
  */
 function findDdTraceTestCategories (repoRoot) {
-  const files = globSyncCached('packages/dd-trace/test/*/**/*.spec.js', {
+  const files = globSyncCached('packages/dd-trace/test/*/**/*.@(spec|test).@(js|mjs|cjs)', {
     cwd: repoRoot,
     nodir: true,
     windowsPathsNoEscape: true,
@@ -912,7 +912,7 @@ function findDdTraceTestCategories (repoRoot) {
  * @returns {string[]}
  */
 function listDdTraceCategorySpecFiles (repoRoot, category) {
-  const files = globSyncCached(`packages/dd-trace/test/${category}/**/*.spec.js`, {
+  const files = globSyncCached(`packages/dd-trace/test/${category}/**/*.@(spec|test).@(js|mjs|cjs)`, {
     cwd: repoRoot,
     nodir: true,
     windowsPathsNoEscape: true,
@@ -953,7 +953,7 @@ function isCategoryCoveredByOtherScript (scriptPrefixes, category) {
  * @returns {Set<string>}
  */
 function buildAppsecPluginTestSet (repoRoot) {
-  const files = globSyncCached('packages/dd-trace/test/appsec/**/*.plugin.spec.js', {
+  const files = globSyncCached('packages/dd-trace/test/appsec/**/*.plugin.@(spec|test).@(js|mjs|cjs)', {
     cwd: repoRoot,
     nodir: true,
     windowsPathsNoEscape: true,
@@ -965,7 +965,7 @@ function buildAppsecPluginTestSet (repoRoot) {
   for (const f of files) {
     const base = path.basename(f)
     // e.g. graphql.apollo-server-express.plugin.spec.js -> apollo-server-express
-    const m = base.match(/\.([^.]+)\.plugin\.spec\.js$/)
+    const m = base.match(/\.([^.]+)\.plugin\.(?:spec|test)\.[mc]?js$/)
     if (m && m[1]) out.add(m[1])
   }
   return out
@@ -976,7 +976,7 @@ function buildAppsecPluginTestSet (repoRoot) {
  * @returns {Set<string>}
  */
 function buildLlmobsPluginTestSet (repoRoot) {
-  const files = globSyncCached('packages/dd-trace/test/llmobs/plugins/*/*.spec.js', {
+  const files = globSyncCached('packages/dd-trace/test/llmobs/plugins/*/*.@(spec|test).@(js|mjs|cjs)', {
     cwd: repoRoot,
     nodir: true,
     windowsPathsNoEscape: true,

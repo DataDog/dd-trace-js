@@ -188,10 +188,6 @@ module.exports = {
       versions: ['>=4', '>=4.0.0 <4.3.0', '>=4.0.0 <5.0.0', '>=4.3.0 <5.0.0'],
     },
     {
-      name: 'mquery',
-      versions: ['>=5.0.0'],
-    },
-    {
       name: 'mongodb',
       versions: ['5', '>=6'],
     },
@@ -237,7 +233,7 @@ module.exports = {
   'google-cloud-pubsub': [
     {
       name: 'google-gax',
-      versions: ['3.5.7'],
+      versions: ['5.0.7'],
     },
   ],
   genai: [
@@ -316,6 +312,15 @@ module.exports = {
       versions: ['^16.6.0'],
     },
   ],
+  '@apollo/server': [
+    {
+      // The shared apollo-server-* install also brings in graphql 15.x (for apollo-server v3), which yarn may
+      // hoist over the ^16.11 that @apollo/server v5 needs. Without the pin, v5 resolves 15.x, whose TypeInfo
+      // lacks the `.enter`/`.leave` methods the graphql instrumentation calls, so every traced operation throws.
+      name: 'graphql',
+      dep: true,
+    },
+  ],
   grpc: [
     {
       name: '@grpc/proto-loader',
@@ -338,6 +343,14 @@ module.exports = {
     {
       name: 'sqlite3',
       versions: ['^5.0.8'],
+    },
+    {
+      // knex 1.x is the only major whose sqlite3 dialect requires the @vscode/sqlite3 fork instead of `sqlite3`
+      // (reverted in 2.x). The instrumentation spec loads knex from `versions/knex@<ver>` and opens a sqlite3
+      // client, so the fork must be installed there. Pin an exact prerelease build so prebuilt binaries exist for
+      // the whole Node CI matrix.
+      name: '@vscode/sqlite3',
+      versions: ['5.1.12-vscode'],
     },
     {
       name: 'pg',
@@ -422,12 +435,6 @@ module.exports = {
     {
       name: 'fastify',
       versions: ['>=3'],
-    },
-  ],
-  lodash: [
-    {
-      name: 'lodash',
-      versions: ['>=4'],
     },
   ],
   mariadb: [
@@ -651,12 +658,6 @@ module.exports = {
     {
       name: 'body-parser',
       versions: ['1.20.1'],
-    },
-  ],
-  ws: [
-    {
-      name: 'ws',
-      versions: ['>=8.0.0'],
     },
   ],
 }
