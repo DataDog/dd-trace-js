@@ -227,6 +227,7 @@
 /packages/dd-trace/test/telemetry/ @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/config/ @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/config/ @DataDog/apm-sdk-capabilities-js
+/packages/dd-trace/src/exporters/otlp-span-stats/ @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/opentelemetry/ @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/opentelemetry/ @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/opentracing/ @DataDog/apm-sdk-capabilities-js
