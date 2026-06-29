@@ -9,6 +9,10 @@ describe('vitest worker env', () => {
       expect(nodeOptions.includes('dd-trace/register.js')).toBe(false)
       expect(nodeOptions.includes('dd-trace/ci/init')).toBe(false)
       expect(nodeOptions.includes('--no-warnings')).toBe(true)
+      if (process.env.EXPECT_DD_NODE_OPTIONS_WINDOWS_PATH_PRESERVED === '1') {
+        expect(/C:\\+tools\\+hook\.js/.test(nodeOptions)).toBe(true)
+        expect(nodeOptions.includes('C:toolshook.js')).toBe(false)
+      }
     }
 
     if (process.env.EXPECT_DD_NODE_OPTIONS_PRESENT === '1') {

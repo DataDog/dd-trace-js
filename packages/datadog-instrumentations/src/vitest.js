@@ -2294,23 +2294,17 @@ function splitNodeOptions (nodeOptions) {
   const tokens = []
   let token = ''
   let quote
-  let isEscaped = false
 
   for (let index = 0; index < nodeOptions.length; index++) {
     const char = nodeOptions[index]
 
-    if (isEscaped) {
-      token += char
-      isEscaped = false
-      continue
-    }
-
-    if (char === '\\') {
-      isEscaped = true
-      continue
-    }
-
     if (quote) {
+      if (char === '\\' && nodeOptions[index + 1] === quote) {
+        token += quote
+        index++
+        continue
+      }
+
       if (char === quote) {
         quote = undefined
       } else {

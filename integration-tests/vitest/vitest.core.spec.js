@@ -345,11 +345,13 @@ versions.forEach((version) => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            NODE_OPTIONS: '--no-warnings --import dd-trace/register.js -r dd-trace/ci/init',
+            NODE_OPTIONS:
+              '--conditions=C:\\tools\\hook.js --no-warnings --import dd-trace/register.js -r dd-trace/ci/init',
             TEST_DIR: 'ci-visibility/vitest-tests/vitest-worker-env.mjs',
             POOL_CONFIG: 'forks',
             DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
             EXPECT_DD_NODE_OPTIONS_STRIPPED: '1',
+            EXPECT_DD_NODE_OPTIONS_WINDOWS_PATH_PRESERVED: '1',
             DD_SERVICE: undefined,
           },
         }
