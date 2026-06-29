@@ -350,14 +350,17 @@ describe('Plugin', () => {
 
           it('should emit one kafka.produce span per topicMessages entry', async () => {
             // Per-topic offset isolation: the broker returns one aggregated
-            // response covering every topic in the batch; each span must tag
-            // only its own topic's (partition, offset) entries.
-            const topicAOffsets = JSON.stringify([{ partition: 0, start_offset: '0' }])
-            const topicBOffsets = JSON.stringify([{ partition: 0, start_offset: '0' }])
+            // response covering every topic; each span must tag only its own
+            // topic's entries. The base offset is broker state (a retried
+            // NOT_LEADER_FOR_PARTITION right after topic creation advances it
+            // past 0), so it is compared against the send result rather than
+            // hard-coded. Each entry is its own root span, so it can land in
+            // any trace of any payload.
+            let topicASpan
+            let topicBSpan
 
             const topicASpanPromise = agent.assertSomeTraces(traces => {
-              const span = traces[0].find(s =>
-                s.name === expectedSchema.send.opName && s.resource === topicA)
+              const span = findProduceSpan(traces, topicA)
               assert.ok(span, `no kafka.produce span for ${topicA}`)
               assertObjectContains(span, {
                 service: expectedSchema.send.serviceName,
@@ -367,31 +370,38 @@ describe('Plugin', () => {
                   'messaging.destination.name': topicA,
                   'messaging.kafka.bootstrap.servers': '127.0.0.1:9092',
                   'kafka.cluster_id': testKafkaClusterId,
-                  'kafka.messages.offsets': topicAOffsets,
                 },
                 metrics: { 'kafka.batch_size': 1 },
                 error: 0,
               })
+              topicASpan = span
             })
 
             const topicBSpanPromise = agent.assertSomeTraces(traces => {
-              const span = traces[0].find(s =>
-                s.name === expectedSchema.send.opName && s.resource === topicB)
+              const span = findProduceSpan(traces, topicB)
               assert.ok(span, `no kafka.produce span for ${topicB}`)
               assertObjectContains(span, {
                 resource: topicB,
-                meta: { 'kafka.messages.offsets': topicBOffsets },
                 metrics: { 'kafka.batch_size': 2 },
                 error: 0,
               })
+              topicBSpan = span
             })
 
-            await sendBatch(kafka, [
-              { topic: topicA, messages: [{ key: 'a', value: 'msg-a' }] },
-              { topic: topicB, messages: [{ key: 'b1', value: 'msg-b1' }, { key: 'b2', value: 'msg-b2' }] },
+            let result
+            await Promise.all([
+              topicASpanPromise,
+              topicBSpanPromise,
+              (async () => {
+                result = await sendBatch(kafka, [
+                  { topic: topicA, messages: [{ key: 'a', value: 'msg-a' }] },
+                  { topic: topicB, messages: [{ key: 'b1', value: 'msg-b1' }, { key: 'b2', value: 'msg-b2' }] },
+                ])
+              })(),
             ])
 
-            return Promise.all([topicASpanPromise, topicBSpanPromise])
+            assert.strictEqual(topicASpan.meta['kafka.messages.offsets'], offsetsTag(result, topicA))
+            assert.strictEqual(topicBSpan.meta['kafka.messages.offsets'], offsetsTag(result, topicB))
           })
 
           it('should emit one span for a single-topic sendBatch (mirrors send)', async () => {
@@ -874,4 +884,43 @@ async function sendBatch (kafka, topicMessages) {
   const result = await producer.sendBatch({ topicMessages })
   await producer.disconnect()
   return result
+}
+
+/**
+ * sendBatch emits one independent root span per topicMessages entry, so the two
+ * spans are separate traces the agent may deliver in one payload in any order.
+ * Scan every trace, not just `traces[0]`.
+ *
+ * @param {Array<Array<object>>} traces
+ * @param {string} topic
+ */
+function findProduceSpan (traces, topic) {
+  for (const trace of traces) {
+    for (const span of trace) {
+      if (span.name === expectedSchema.send.opName && span.resource === topic) {
+        return span
+      }
+    }
+  }
+}
+
+/**
+ * The `kafka.messages.offsets` tag the producer span should carry for one topic,
+ * derived from the broker's aggregated sendBatch response. Mirrors the plugin's
+ * per-topic filter so the expectation tracks the broker's real (retry-advanced)
+ * offsets instead of assuming a fresh topic starts at 0.
+ *
+ * @param {Array<{ topicName: string, partition: number, offset?: string, baseOffset?: string }>} result
+ * @param {string} topic
+ */
+function offsetsTag (result, topic) {
+  const offsets = []
+  for (const record of result) {
+    if (record.topicName !== topic) continue
+    const offset = record.offset ?? record.baseOffset
+    if (record.partition === undefined || offset === undefined) continue
+    offsets.push({ partition: record.partition, start_offset: String(offset) })
+  }
+  offsets.sort((a, b) => a.partition - b.partition)
+  return JSON.stringify(offsets)
 }

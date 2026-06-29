@@ -13,7 +13,7 @@ const log = require('../../../../src/log')
 
 const DynamicInstrumentationLogsWriterWithApiKey = proxyquire(
   '../../../../src/ci-visibility/exporters/agentless/di-logs-writer',
-  { '../../../config': () => ({ apiKey: '1' }) }
+  { '../../../config': () => ({ DD_API_KEY: '1' }) }
 )
 const DynamicInstrumentationLogsWriter = require('../../../../src/ci-visibility/exporters/agentless/di-logs-writer')
 

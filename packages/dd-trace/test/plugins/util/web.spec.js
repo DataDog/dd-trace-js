@@ -558,6 +558,61 @@ describe('plugins/util/web', () => {
     })
   })
 
+  describe('route resolved after the AppSec pre-finish endpoint fallback', () => {
+    let context
+
+    beforeEach(() => {
+      config = web.normalizeConfig({ resourceRenamingEnabled: true })
+      req.method = 'GET'
+      req.url = '/users/123'
+
+      span = web.startSpan(tracer, config, req, res, 'test.request')
+      tags = span.context().getTags()
+      context = web.getContext(req)
+    })
+
+    it('keeps http.route when the framework resolves the route after http.endpoint was stamped', () => {
+      // AppSec's incomingHttpRequestEnd hook stamps http.endpoint while the
+      // framework route is still unresolved.
+      web.setRouteOrEndpointTag(req)
+      assert.ok(Object.hasOwn(tags, HTTP_ENDPOINT))
+      assert.ok(!Object.hasOwn(tags, HTTP_ROUTE))
+
+      // The framework resolves the route between the pre-finish hook and finish.
+      web.setRoute(req, '/users/:id')
+
+      web.finishAll(context)
+
+      assert.strictEqual(tags[HTTP_ROUTE], '/users/:id')
+      assert.strictEqual(tags[RESOURCE_NAME], 'GET /users/:id')
+    })
+
+    it('uses http.route alone when the route resolves before the pre-finish hook', () => {
+      web.setRoute(req, '/users/:id')
+
+      web.setRouteOrEndpointTag(req)
+      assert.ok(!Object.hasOwn(tags, HTTP_ENDPOINT))
+
+      web.finishAll(context)
+
+      assert.strictEqual(tags[HTTP_ROUTE], '/users/:id')
+      assert.ok(!Object.hasOwn(tags, HTTP_ENDPOINT))
+      assert.strictEqual(tags[RESOURCE_NAME], 'GET /users/:id')
+    })
+
+    it('keeps the http.endpoint fallback when no route ever resolves', () => {
+      web.setRouteOrEndpointTag(req)
+      const endpoint = tags[HTTP_ENDPOINT]
+      assert.ok(endpoint)
+
+      web.finishAll(context)
+
+      assert.strictEqual(tags[HTTP_ENDPOINT], endpoint)
+      assert.ok(!Object.hasOwn(tags, HTTP_ROUTE))
+      assert.strictEqual(tags[RESOURCE_NAME], 'GET')
+    })
+  })
+
   describe('configured header tagging across the request lifecycle', () => {
     const USER_AGENT_TAG = `${HTTP_REQUEST_HEADERS}.user-agent`
     const SERVER_TAG = `${HTTP_RESPONSE_HEADERS}.server`
