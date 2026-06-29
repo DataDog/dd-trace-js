@@ -1666,6 +1666,66 @@ versions.forEach((version) => {
         assert.strictEqual(exitCode, 1)
       })
 
+      newerVitestIt('reports concurrent EFD statuses when no-worker init is enabled', async () => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD,
+            },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
+        })
+
+        receiver.setKnownTests({
+          vitest: {},
+        })
+
+        const testName = 'early flake detection can retry concurrent tests that eventually pass'
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events
+              .filter(event => event.type === 'test')
+              .map(test => test.content)
+              .filter(test => test.meta[TEST_NAME] === testName)
+              .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+            assert.deepStrictEqual(
+              tests.map(test => ({
+                status: test.meta[TEST_STATUS],
+                isRetry: test.meta[TEST_IS_RETRY],
+                retryReason: test.meta[TEST_RETRY_REASON],
+              })),
+              [
+                { status: 'fail', isRetry: undefined, retryReason: undefined },
+                { status: 'fail', isRetry: 'true', retryReason: TEST_RETRY_REASON_TYPES.efd },
+                { status: 'pass', isRetry: 'true', retryReason: TEST_RETRY_REASON_TYPES.efd },
+                { status: 'pass', isRetry: 'true', retryReason: TEST_RETRY_REASON_TYPES.efd },
+              ]
+            )
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run -t "can retry concurrent tests that eventually pass"',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              SHOULD_ADD_CONCURRENT_EVENTUALLY_PASS: '1',
+              DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+              DD_SERVICE: undefined,
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, 0)
+      })
+
       it('reports the error from each failed EFD attempt', async () => {
         receiver.setSettings({
           early_flake_detection: {

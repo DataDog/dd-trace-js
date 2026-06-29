@@ -5,6 +5,7 @@ let numAttempt = 0
 let numOtherAttempt = 0
 let numLastAttempt = 0
 let numCurrentErrorAttempt = 0
+let numConcurrentAttempt = 0
 let shouldFailCurrentErrorAfterEach = false
 
 describe('early flake detection', () => {
@@ -59,6 +60,11 @@ describe('early flake detection', () => {
         shouldFailCurrentErrorAfterEach = true
         throw new Error(`failure ${currentAttempt}`)
       }
+    })
+  }
+  if (process.env.SHOULD_ADD_CONCURRENT_EVENTUALLY_PASS) {
+    test.concurrent('can retry concurrent tests that eventually pass', () => {
+      expect(sum(1, 2)).to.equal(numConcurrentAttempt++ > 1 ? 3 : 4)
     })
   }
 })

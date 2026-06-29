@@ -2,7 +2,7 @@ import { realpathSync } from 'node:fs'
 import { relative } from 'node:path'
 import { performance } from 'node:perf_hooks'
 
-import { afterEach, beforeAll, beforeEach, onTestFinished } from 'vitest'
+import { afterEach, beforeAll, beforeEach } from 'vitest'
 
 const providedContext = getProvidedContext()
 const attemptToFixTests = providedContext.attemptToFixTests || {}
@@ -40,7 +40,7 @@ beforeAll(function ({}, suite) {
   applyExecutionChanges(suite)
 })
 
-beforeEach(function ({ task, skip }) {
+beforeEach(function ({ onTestFinished, task, skip }) {
   const testSuite = getTestSuite(task)
   const testName = getTestName(task)
   const attemptIndex = getNextAttemptIndex(task)
