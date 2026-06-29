@@ -81,7 +81,7 @@ let isRetryReasonEfd = false
 let isRetryReasonAttemptToFix = false
 const switchedStatuses = new WeakSet()
 const workerProcesses = new WeakSet()
-const mainProcessSetupPromises = new WeakMap()
+const mainProcessSetupStates = new WeakMap()
 const coverageWrappedProviders = new WeakSet()
 const finishWrappedContexts = new WeakSet()
 const mainProcessReporterContexts = new WeakSet()
@@ -536,9 +536,9 @@ function wrapSessionFinish (ctx) {
   shimmer.wrap(ctx, 'close', getFinishWrapper)
 }
 
-async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
+async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, shouldInstallNoWorkerInit) {
   if (!testSessionFinishCh.hasSubscribers) {
-    return
+    return false
   }
 
   let testSessionConfiguration
@@ -573,7 +573,6 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
     isImpactedTestsEnabled = false
   }
 
-  const shouldInstallNoWorkerInit = shouldUseVitestNoWorkerInit(ctx, testSpecifications)
   isVitestNoWorkerInitActive = shouldInstallNoWorkerInit
   const shouldSendWorkerInstrumentationContext = !shouldInstallNoWorkerInit ||
     hasThreadPoolTestSpecification(ctx.config?.pool, testSpecifications)
@@ -706,6 +705,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
   }, shouldInstallNoWorkerInit, testSpecifications)
   wrapCoverageProvider(ctx)
   wrapSessionFinish(ctx)
+  return shouldInstallNoWorkerInit
 }
 
 function addTestOptimizationRequestErrorTag (tag) {
@@ -1555,12 +1555,16 @@ function recomputeTaskState (task) {
 }
 
 function ensureMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
-  let setupPromise = mainProcessSetupPromises.get(ctx)
-  if (!setupPromise) {
-    setupPromise = runMainProcessSetup(ctx, frameworkVersion, testSpecifications)
-    mainProcessSetupPromises.set(ctx, setupPromise)
+  const shouldInstallNoWorkerInit = shouldUseVitestNoWorkerInit(ctx, testSpecifications)
+  let setupState = mainProcessSetupStates.get(ctx)
+  if (!setupState || (shouldInstallNoWorkerInit && !setupState.shouldInstallNoWorkerInit)) {
+    setupState = {
+      promise: runMainProcessSetup(ctx, frameworkVersion, testSpecifications, shouldInstallNoWorkerInit),
+      shouldInstallNoWorkerInit,
+    }
+    mainProcessSetupStates.set(ctx, setupState)
   }
-  return setupPromise
+  return setupState.promise
 }
 
 /**
@@ -2066,13 +2070,13 @@ function shouldMarkVitestWorkerEnv (pool, testSpecifications) {
     (!testSpecifications && isForkPool(pool))
 }
 
-function markVitestWorkerEnv (ctx, testSpecifications) {
+function markVitestWorkerEnv (ctx, testSpecifications, shouldSkipWorkerInit = false) {
   const config = ctx?.config
-  isVitestNoWorkerInitActive = shouldUseVitestNoWorkerInit(ctx, testSpecifications)
+  isVitestNoWorkerInitActive = shouldSkipWorkerInit
   if (!config || !shouldMarkVitestWorkerEnv(config.pool, testSpecifications)) {
     return
   }
-  config.env = getVitestWorkerEnv(config.env, isVitestNoWorkerInitActive)
+  config.env = getVitestWorkerEnv(config.env, shouldSkipWorkerInit)
 }
 
 function wrapVitestRunFiles (Vitest, frameworkVersion) {
@@ -2081,8 +2085,8 @@ function wrapVitestRunFiles (Vitest, frameworkVersion) {
   }
 
   shimmer.wrap(Vitest.prototype, 'runFiles', runFiles => async function (testSpecifications) {
-    markVitestWorkerEnv(this, testSpecifications)
-    await ensureMainProcessSetup(this, frameworkVersion, testSpecifications)
+    const shouldSkipWorkerInit = await ensureMainProcessSetup(this, frameworkVersion, testSpecifications)
+    markVitestWorkerEnv(this, testSpecifications, shouldSkipWorkerInit)
     return runFiles.apply(this, arguments)
   })
 
