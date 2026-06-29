@@ -53,7 +53,7 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
     // mquery analyzes and marks on the same channel: its tracing start both reaches
     // the driver scope and is the first place the filters are available.
     const onStartAndBind = (message) => {
-      onStart(message || {})
+      onStart(message)
       return markExecStore()
     }
 
