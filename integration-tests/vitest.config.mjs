@@ -87,6 +87,14 @@ if (process.env.NO_ISOLATE) {
   config.test.isolate = false
 }
 
+if (process.env.POOL_NO_ISOLATE) {
+  config.test.poolOptions = {
+    [config.test.pool]: {
+      isolate: false,
+    },
+  }
+}
+
 if (process.env.VITEST_SETUP_FILE) {
   config.test.setupFiles = process.env.VITEST_SETUP_FILE
 }

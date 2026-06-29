@@ -429,14 +429,8 @@ function shouldUseVitestNoWorkerInit (ctx, testSpecifications) {
     return false
   }
 
-  const defaultIsolate = getEffectiveConfigIsolate(config, config.pool)
-  if (defaultIsolate === false) {
-    warnVitestNoWorkerInitWithIsolationDisabled()
-    return false
-  }
-
   if (Array.isArray(testSpecifications)) {
-    if (hasNonIsolatedForkPoolTestSpecification(testSpecifications, config.pool, defaultIsolate)) {
+    if (hasNonIsolatedForkPoolTestSpecification(testSpecifications, config.pool, config)) {
       warnVitestNoWorkerInitWithIsolationDisabled()
       return false
     }
@@ -444,7 +438,12 @@ function shouldUseVitestNoWorkerInit (ctx, testSpecifications) {
       warnVitestNoWorkerInitWithAmbiguousUnnamedProjects()
       return false
     }
-    return hasIsolatedForkPoolTestSpecification(testSpecifications, config.pool, defaultIsolate)
+    return hasIsolatedForkPoolTestSpecification(testSpecifications, config.pool, config)
+  }
+
+  if (getEffectiveConfigIsolate(config, config.pool) === false) {
+    warnVitestNoWorkerInitWithIsolationDisabled()
+    return false
   }
 
   return isForkPool(config.pool)
@@ -1949,13 +1948,14 @@ function hasForkPoolTestSpecification (testSpecifications, defaultPool) {
   return false
 }
 
-function hasIsolatedForkPoolTestSpecification (testSpecifications, defaultPool, defaultIsolate) {
+function hasIsolatedForkPoolTestSpecification (testSpecifications, defaultPool, defaultConfig) {
   if (!Array.isArray(testSpecifications)) {
     return false
   }
 
   for (const testSpecification of testSpecifications) {
     const pool = getEffectiveTestSpecificationPool(testSpecification, defaultPool)
+    const defaultIsolate = getEffectiveConfigIsolate(defaultConfig, pool)
     if (
       isForkPool(pool) &&
       getEffectiveTestSpecificationIsolate(testSpecification, pool, defaultIsolate) !== false
@@ -1967,13 +1967,14 @@ function hasIsolatedForkPoolTestSpecification (testSpecifications, defaultPool, 
   return false
 }
 
-function hasNonIsolatedForkPoolTestSpecification (testSpecifications, defaultPool, defaultIsolate) {
+function hasNonIsolatedForkPoolTestSpecification (testSpecifications, defaultPool, defaultConfig) {
   if (!Array.isArray(testSpecifications)) {
     return false
   }
 
   for (const testSpecification of testSpecifications) {
     const pool = getEffectiveTestSpecificationPool(testSpecification, defaultPool)
+    const defaultIsolate = getEffectiveConfigIsolate(defaultConfig, pool)
     if (
       isForkPool(pool) &&
       getEffectiveTestSpecificationIsolate(testSpecification, pool, defaultIsolate) === false
