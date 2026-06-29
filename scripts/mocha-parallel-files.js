@@ -549,6 +549,11 @@ async function main () {
 
         const nodeArgs = []
         if (opts.exposeGc) nodeArgs.push('--expose-gc')
+        // Network-heavy specs intermittently abort with STATUS_STACK_BUFFER_OVERRUN
+        // (0xC0000409) when mocha-run-file's process.exit() races V8's Maglev teardown
+        // on Windows. Maglev can only be disabled via a CLI flag, not NODE_OPTIONS.
+        // TODO(BridgeAR): drop once https://github.com/nodejs/node/issues/62260 is fixed.
+        if (process.platform === 'win32') nodeArgs.push('--no-maglev')
         nodeArgs.push(runFileScript, file)
 
         entry.started = true
