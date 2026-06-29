@@ -43,15 +43,21 @@
 /benchmark/sirun/child_process/ @DataDog/apm-idm-js
 /benchmark/sirun/fs/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-aws-sdk/ @DataDog/apm-idm-js
+/benchmark/sirun/plugin-cassandra-driver/ @DataDog/apm-idm-js
+/benchmark/sirun/plugin-couchbase/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-dns/ @DataDog/apm-idm-js
+/benchmark/sirun/plugin-elasticsearch/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-graphql/ @DataDog/apm-idm-js
+/benchmark/sirun/plugin-grpc/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-http/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-kafkajs/ @DataDog/apm-idm-js
+/benchmark/sirun/plugin-memcached/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-mongodb-core/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-net/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-pg/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-pino/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-redis/ @DataDog/apm-idm-js
+/benchmark/sirun/plugin-redis-traced/ @DataDog/apm-idm-js
 /benchmark/sirun/plugin-ws/ @DataDog/apm-idm-js
 /benchmark/sirun/url/ @DataDog/apm-idm-js
 
@@ -169,6 +175,8 @@
 /.claude/skills/llmobs-integration @DataDog/ml-observability
 /.claude/skills/llmobs-testing @DataDog/ml-observability
 /benchmark/sirun/llmobs/ @DataDog/ml-observability
+/benchmark/sirun/llmobs-evaluations/ @DataDog/ml-observability
+/benchmark/sirun/llmobs-span-processor/ @DataDog/ml-observability
 /packages/datadog-instrumentations/src/ai.js @DataDog/ml-observability
 /packages/datadog-instrumentations/src/anthropic.js @DataDog/ml-observability
 /packages/datadog-instrumentations/src/google-cloud-vertexai.js @DataDog/ml-observability
@@ -196,9 +204,11 @@
 /eslint-rules/ @DataDog/apm-sdk-capabilities-js
 
 /benchmark/sirun/propagation/ @DataDog/apm-sdk-capabilities-js
+/benchmark/sirun/sampling/ @DataDog/apm-sdk-capabilities-js
 /benchmark/sirun/span-format/ @DataDog/apm-sdk-capabilities-js
 /benchmark/sirun/spans/ @DataDog/apm-sdk-capabilities-js
 /benchmark/sirun/test-codeowners/ @DataDog/ci-app-libraries
+/benchmark/sirun/test-optimization/ @DataDog/ci-app-libraries
 
 /integration-tests/log_injection.spec.js @DataDog/apm-sdk-capabilities-js
 /integration-tests/opentelemetry/ @DataDog/apm-sdk-capabilities-js
@@ -305,6 +315,7 @@
 /benchmark/sirun/* @DataDog/lang-platform-js
 /benchmark/stubs/ @DataDog/lang-platform-js
 /benchmark/sirun/async_hooks/ @DataDog/lang-platform-js
+/benchmark/sirun/dogstatsd/ @DataDog/lang-platform-js
 /benchmark/sirun/encoding/ @DataDog/lang-platform-js
 /benchmark/sirun/exporting-pipeline/ @DataDog/lang-platform-js
 /benchmark/sirun/id/ @DataDog/lang-platform-js

@@ -8,8 +8,11 @@ on:
       - synchronize
 
 env:
-  # Add Groups here to enable auto-merge for Dependabot PRs
-  GROUPS: '["dev-minor-and-patch-dependencies", "gh-actions-packages", "test-versions"]'
+  # Add Groups here to enable auto-merge for Dependabot PRs. Production npm *version* updates
+  # (`runtime-minor-and-patch-dependencies`, `vendor-minor-and-patch-dependencies`) are
+  # intentionally absent: they ship to customers and stay on manual review. Production
+  # *security* fixes still auto-merge (see `security-production`), but only below a major.
+  GROUPS: '["dev-minor-and-patch-dependencies", "gh-actions-packages", "docker-images", "ai-and-llm", "cloud-and-messaging", "databases", "web-frameworks", "testing-and-build", "test-versions", "security-production", "security-non-production"]'
 
 jobs:
   dependabot-automation:
@@ -31,14 +34,23 @@ jobs:
         uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # 3.1.0
         with:
           github-token: "${{ steps.octo-sts.outputs.token }}"
+      # A major bump in `security-production` ships a breaking change to customers, so a human
+      # reviews it. Every other allowed group auto-merges regardless of semver level: test-only
+      # matrix bumps, non-production security fixes, and majors already gated by dependabot.yml.
       - name: Approve a PR
-        if: contains(fromJSON(env.GROUPS), steps.metadata.outputs.dependency-group)
+        if: >-
+          contains(fromJSON(env.GROUPS), steps.metadata.outputs.dependency-group) &&
+          (steps.metadata.outputs.dependency-group != 'security-production' ||
+          steps.metadata.outputs.update-type != 'version-update:semver-major')
         run: gh pr review --approve "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
       - name: Enable auto-merge for Dependabot PRs
-        if: contains(fromJSON(env.GROUPS), steps.metadata.outputs.dependency-group)
+        if: >-
+          contains(fromJSON(env.GROUPS), steps.metadata.outputs.dependency-group) &&
+          (steps.metadata.outputs.dependency-group != 'security-production' ||
+          steps.metadata.outputs.update-type != 'version-update:semver-major')
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
