@@ -210,7 +210,7 @@ class VitestPlugin extends CiPlugin {
     })
 
     this.addBind('ci:vitest:test:finish-time', (ctx) => {
-      const { status, task, attemptToFixPassed, attemptToFixFailed } = ctx
+      const { status, task, attemptToFixPassed, attemptToFixFailed, duration } = ctx
       const span = ctx.currentStore?.span
 
       // we store the finish time to finish at a later hook
@@ -224,7 +224,8 @@ class VitestPlugin extends CiPlugin {
           span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
         }
 
-        this.taskToFinishTime.set(task, span._getTime())
+        const finishTime = typeof duration === 'number' ? span._startTime + duration : span._getTime()
+        this.taskToFinishTime.set(task, finishTime)
 
         ctx.parentStore = ctx.currentStore
         ctx.currentStore = { ...ctx.currentStore, span }
@@ -303,6 +304,7 @@ class VitestPlugin extends CiPlugin {
       isNew,
       isDisabled,
       isTestFrameworkWorker,
+      requestErrorTags,
       testSuiteSpan,
     }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
@@ -311,6 +313,7 @@ class VitestPlugin extends CiPlugin {
         testSuite,
         testSuiteSpan || this.testSuiteSpan,
         {
+          ...requestErrorTags,
           [TEST_SOURCE_FILE]: testSuite,
           [TEST_SOURCE_START]: 1, // we can't get the proper start line in vitest
           [TEST_STATUS]: 'skip',

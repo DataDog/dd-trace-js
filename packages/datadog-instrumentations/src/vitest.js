@@ -1385,6 +1385,7 @@ function reportFinalTestAttempt (testReport) {
       isNew: testProperties.isNew,
       isDisabled: testProperties.isDisabled,
       isTestFrameworkWorker: true,
+      requestErrorTags: testOptimizationRequestErrorTags,
       ...testSuiteStore,
     })
     return
@@ -1461,6 +1462,9 @@ function reportTestAttempt (testReport, attempt) {
   testStartCh.runStores(testCtx, () => {})
   testCtx.status = status
   testCtx.task = task
+  if (status === 'pass' && attempt.finalStatus && result?.duration !== undefined) {
+    testCtx.duration = result.duration
+  }
   testFinishTimeCh.runStores(testCtx, () => {})
 
   if (status === 'pass') {
@@ -2992,6 +2996,7 @@ addHook({
             testSuiteAbsolutePath: task.file.filepath,
             isNew: newTasks.has(task),
             isDisabled: disabledTasks.has(task),
+            requestErrorTags: testOptimizationRequestErrorTags,
           })
         } else if (state === 'pass' && !isSwitchedStatus) {
           if (testCtx) {
@@ -3079,6 +3084,7 @@ addHook({
           testSuiteAbsolutePath: task.file.filepath,
           isNew: newTasks.has(task),
           isDisabled: disabledTasks.has(task),
+          requestErrorTags: testOptimizationRequestErrorTags,
         })
       }
     }

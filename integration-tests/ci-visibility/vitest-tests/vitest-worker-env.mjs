@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
 describe('vitest worker env', () => {
-  it('sets DD_VITEST_WORKER', () => {
+  it('sets DD_VITEST_WORKER', async () => {
+    if (process.env.EXPECT_TEST_DURATION === '1') {
+      await new Promise(resolve => setTimeout(resolve, 20))
+    }
+
     expect(process.env.DD_VITEST_WORKER).toBe('1')
 
     if (process.env.EXPECT_DD_NODE_OPTIONS_STRIPPED === '1') {

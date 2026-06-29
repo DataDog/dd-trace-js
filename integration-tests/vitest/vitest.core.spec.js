@@ -336,6 +336,8 @@ versions.forEach((version) => {
           assert.ok(testEvent, `should have test event, got events: ${inspect(events.map(event => event.type))}`)
           assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'pass')
           assert.strictEqual(testEvent.content.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
+          assert.ok(testEvent.content.duration > 0, 'test duration should be positive')
+          assert.ok(testEvent.content.duration < 60_000_000_000, 'test duration should be under 60s')
         }
       )
 
@@ -352,6 +354,7 @@ versions.forEach((version) => {
             DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
             EXPECT_DD_NODE_OPTIONS_STRIPPED: '1',
             EXPECT_DD_NODE_OPTIONS_WINDOWS_PATH_PRESERVED: '1',
+            EXPECT_TEST_DURATION: '1',
             DD_SERVICE: undefined,
           },
         }
@@ -846,6 +849,39 @@ versions.forEach((version) => {
           })
           await Promise.all([eventsPromise, once(childProcess, 'exit')])
         })
+
+      newerVitestIt(
+        'tags skipped no-worker tests with _dd.ci.library_configuration_error.settings when settings fails 4xx',
+        async () => {
+          receiver.setSettingsResponseCode(404)
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const testEvent = events.find(event => event.type === 'test')
+
+              assert.ok(testEvent, 'should have test event')
+              assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'skip')
+              assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS], 'true')
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run -t "does not retry if the test is skipped"',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+                TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
+                POOL_CONFIG: 'forks',
+                DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+                DD_SERVICE: undefined,
+              },
+            }
+          )
+
+          await Promise.all([eventsPromise, once(childProcess, 'exit')])
+        }
+      )
 
       // No skippable_tests test: vitest does not request skippable suites (TIA unsupported).
 
