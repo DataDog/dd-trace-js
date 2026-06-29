@@ -16,19 +16,14 @@ const sinon = require('sinon')
 const { Profile } = require('../../../../../vendor/dist/pprof-format')
 const pkg = require('../../../../../package.json')
 
-const injectForce = process.env.DD_INJECT_FORCE
+// `require('init')` runs the runtime guard at load time and bails on
+// unsupported Node majors, so make sure we get past it for this suite.
 if (!semver.satisfies(process.version, `${pkg.engines.node} <${pkg.nodeMaxMajor}`)) {
   process.env.DD_INJECT_FORCE = 'true'
 }
 
 require('../../setup/core')
 const tracer = require('../../../../../init')
-
-if (injectForce === undefined) {
-  delete process.env.DD_INJECT_FORCE
-} else {
-  process.env.DD_INJECT_FORCE = injectForce
-}
 
 const WallProfiler = require('../../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../../src/profiling/profilers/space')
