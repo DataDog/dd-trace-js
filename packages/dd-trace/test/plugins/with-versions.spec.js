@@ -8,16 +8,25 @@ const expressPlugin = require('../../../datadog-plugin-express/src')
 const { withVersions } = require('../setup/mocha')
 
 describe('withVersions', () => {
+  let injectForce
   let packageNames
 
   beforeEach(() => {
     // PACKAGE_NAMES short-circuits the call before the guard runs; clear it so the assertions are deterministic
     // regardless of the surrounding CI matrix env.
+    injectForce = process.env.DD_INJECT_FORCE
+    process.env.DD_INJECT_FORCE = 'true'
     packageNames = process.env.PACKAGE_NAMES
     delete process.env.PACKAGE_NAMES
   })
 
   afterEach(() => {
+    if (injectForce === undefined) {
+      delete process.env.DD_INJECT_FORCE
+    } else {
+      process.env.DD_INJECT_FORCE = injectForce
+    }
+
     if (packageNames === undefined) {
       delete process.env.PACKAGE_NAMES
     } else {
