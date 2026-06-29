@@ -25,11 +25,11 @@ const PROXY_HEADER_AWS_USER = 'x-dd-proxy-user'
 const proxiesWithNoTimestamp = {
   'azure-gw': {
     spanName: 'azure.app-gateway',
-    component: 'azure-gw'
+    component: 'azure-gw',
   },
   'azure-fd': {
     spanName: 'azure.frontdoor',
-    component: 'azure-fd'
+    component: 'azure-fd',
   },
 }
 const supportedProxies = {
@@ -47,7 +47,7 @@ const supportedProxies = {
   },
 }
 
-function createInferredProxySpan(headers, childOf, tracer, reqCtx, traceCtx, config, startSpanHelper) {
+function createInferredProxySpan (headers, childOf, tracer, reqCtx, traceCtx, config, startSpanHelper) {
   if (!headers) {
     return null
   }
@@ -98,7 +98,7 @@ function createInferredProxySpan(headers, childOf, tracer, reqCtx, traceCtx, con
   return childOf
 }
 
-function setInferredProxySpanTags(span, proxyContext) {
+function setInferredProxySpanTags (span, proxyContext) {
   const resourcePath = proxyContext.resourcePath || proxyContext.path
   span.setTag(RESOURCE_NAME, `${proxyContext.method} ${resourcePath}`)
   span.setTag('_dd.inferred_span', 1)
@@ -118,7 +118,7 @@ function setInferredProxySpanTags(span, proxyContext) {
   return span
 }
 
-function extractInferredProxyContext(headers) {
+function extractInferredProxyContext (headers) {
   if ((headers[PROXY_HEADER_SYSTEM] in proxiesWithNoTimestamp) && !headers[PROXY_HEADER_START_TIME_MS]) {
     headers[PROXY_HEADER_START_TIME_MS] = (Date.now()).toString()
   }
@@ -151,7 +151,7 @@ function extractInferredProxyContext(headers) {
   }
 }
 
-function finishInferredProxySpan(context) {
+function finishInferredProxySpan (context) {
   const { req } = context
 
   if (!context.inferredProxySpan) return
