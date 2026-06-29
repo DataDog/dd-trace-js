@@ -44,6 +44,13 @@ runs:
         node-version: ${{ steps.node-version.outputs.version }}
         registry-url: ${{ inputs.registry-url || 'https://registry.npmjs.org' }}
 
+    # The shipped package.json pins engines.node to the supported runtime range, but CI keeps
+    # running the full suite on Node 18/20. Widen the field to >=18 for this checkout so the
+    # runtime guard and the withVersions test helper don't bail and silently skip those jobs.
+    - name: Widen engines.node for CI
+      shell: bash
+      run: node scripts/ci/widen-engines-for-ci.js
+
     # Persist the resolved version so subsequent runs within this 60-minute window can reuse it.
     - name: Save resolved version
       if: steps.node-version-cache.outputs.cache-hit != 'true'
