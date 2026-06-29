@@ -1,15 +1,9 @@
 'use strict'
 
-const { channel } = require('dc-polyfill')
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
 const DISTRIBUTED_TRACE_META_KEY = '_dd_trace_context'
-
-const toolNames = new WeakMap()
-channel('apm:mcp:server:tool:registered').subscribe(({ tool, name }) => {
-  toolNames.set(tool, name)
-})
 
 function setIsErrorTag (ctx) {
   const result = ctx.result
@@ -182,7 +176,19 @@ class McpServerToolCallPlugin extends McpPlugin {
   static prefix = 'tracing:orchestrion:@modelcontextprotocol/sdk:McpServer_executeToolHandler'
   static spanName = 'mcp.server.tool.call'
   static kind = 'internal'
-  getResource (ctx) { return toolNames.get(ctx.arguments?.[0]) }
+
+  /**
+   * @param {...unknown} args Plugin constructor arguments.
+   */
+  constructor (...args) {
+    super(...args)
+    this.toolNames = new WeakMap()
+    this.addSub('apm:mcp:server:tool:registered', ({ tool, name }) => {
+      this.toolNames.set(tool, name)
+    })
+  }
+
+  getResource (ctx) { return this.toolNames.get(ctx.arguments?.[0]) }
   onEnd (span, ctx) { setIsErrorTag(ctx) }
 }
 

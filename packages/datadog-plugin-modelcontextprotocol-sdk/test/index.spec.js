@@ -1,6 +1,9 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+
+const { channel } = require('dc-polyfill')
+
 const { storage } = require('../../datadog-core')
 const { createIntegrationTestSuite } = require('../../dd-trace/test/setup/helpers/plugin-test-helpers')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
@@ -8,6 +11,18 @@ const TestSetup = require('./test-setup')
 
 const testSetup = new TestSetup()
 const legacyStorage = storage('legacy')
+
+describe('plugin lifecycle', () => {
+  it('does not subscribe to server tool registration when the plugin module is loaded', () => {
+    const registeredCh = channel('apm:mcp:server:tool:registered')
+    assert.strictEqual(registeredCh.hasSubscribers, false)
+
+    delete require.cache[require.resolve('../src/tracing')]
+    require('../src/tracing')
+
+    assert.strictEqual(registeredCh.hasSubscribers, false)
+  })
+})
 
 function assertClientServerParenting (spans, clientResource) {
   const clientSpan = spans.find(s => {
@@ -305,6 +320,27 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
       })
 
       await testSetup.clientCallToolError()
+
+      return traceAssertion
+    })
+
+    it('should finish server request spans with error when tools/call request validation fails', async () => {
+      const traceAssertion = expectSomeSpan(agent, {
+        name: 'mcp.server.request',
+        type: 'mcp',
+        resource: 'tools/call',
+        error: 1,
+        meta: {
+          component: 'modelcontextprotocol_server',
+          '_dd.integration': 'modelcontextprotocol_server',
+          'span.kind': 'server',
+        },
+      })
+
+      await assert.rejects(
+        () => testSetup.clientCallMalformedTool(),
+        { message: /expected string/ }
+      )
 
       return traceAssertion
     })

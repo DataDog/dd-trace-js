@@ -16,9 +16,12 @@ const DISTRIBUTED_TRACE_META_KEY = '_dd_trace_context'
 const TRACED_METHOD_PREFIX = /^(?:tools|resources|prompts)\//
 
 // Maps Protocol instance → Map<requestId, ctx>. Shares the ctx object between
-// _onrequest (span start, in the correct HTTP async context) and setRequestHandler
-// wrapper (span finish, after the async handler completes).
+// _onrequest (span start, in the correct HTTP async context), the SDK request
+// handler wrapper (result/error capture), and the SDK cleanup path (span finish).
 const pendingContexts = new WeakMap()
+const wrappedAbortControllerMaps = new WeakSet()
+const wrappedRequestHandlerMaps = new WeakSet()
+const wrappedRequestHandlers = new WeakSet()
 
 function addTraceContextToRequest (request, traceContext) {
   return {
@@ -31,6 +34,84 @@ function addTraceContextToRequest (request, traceContext) {
       },
     },
   }
+}
+
+function getPendingContext (protocol, requestId) {
+  return pendingContexts.get(protocol)?.get(requestId)
+}
+
+function finishServerRequest (protocol, requestId) {
+  const pending = pendingContexts.get(protocol)
+  const ctx = pending?.get(requestId)
+  if (!ctx) return
+
+  pending.delete(requestId)
+  serverRequestCh.asyncEnd.publish(ctx)
+}
+
+function wrapRequestHandler (protocol, handler) {
+  if (wrappedRequestHandlers.has(handler)) return handler
+
+  const wrappedHandler = function requestHandlerWithTrace (request, extra) {
+    const ctx = getPendingContext(protocol, extra?.requestId)
+    if (!ctx) return handler.apply(this, arguments)
+
+    let result
+    try {
+      result = handler.apply(this, arguments)
+    } catch (err) {
+      ctx.error = err
+      throw err
+    }
+
+    return Promise.resolve(result).then(result => {
+      ctx.result = result
+      return result
+    }, err => {
+      ctx.error = err
+      throw err
+    })
+  }
+
+  wrappedRequestHandlers.add(wrappedHandler)
+  return wrappedHandler
+}
+
+function wrapRequestHandlers (protocol) {
+  const handlers = protocol._requestHandlers
+  if (!handlers || wrappedRequestHandlerMaps.has(handlers)) return
+
+  wrappedRequestHandlerMaps.add(handlers)
+  shimmer.wrap(handlers, 'set', function (original) {
+    return function setRequestHandlerWithTrace (method, handler) {
+      if (typeof handler === 'function') {
+        return original.call(this, method, wrapRequestHandler(protocol, handler))
+      }
+
+      return original.apply(this, arguments)
+    }
+  })
+}
+
+function wrapAbortControllers (protocol) {
+  const controllers = protocol._requestHandlerAbortControllers
+  if (!controllers || wrappedAbortControllerMaps.has(controllers)) return
+
+  wrappedAbortControllerMaps.add(controllers)
+  shimmer.wrap(controllers, 'delete', function (original) {
+    return function deleteAbortControllerWithTrace (requestId) {
+      finishServerRequest(protocol, requestId)
+      return original.apply(this, arguments)
+    }
+  })
+  shimmer.wrap(controllers, 'clear', function (original) {
+    return function clearAbortControllersWithTrace () {
+      for (const requestId of this.keys()) {
+        finishServerRequest(protocol, requestId)
+      }
+      return original.apply(this, arguments)
+    }
+  })
 }
 
 function wrapProtocol (Protocol) {
@@ -61,19 +142,29 @@ function wrapProtocol (Protocol) {
         return original.call(this, request, extra)
       }
 
+      wrapAbortControllers(this)
       const ctx = { request, extra }
       serverRequestCh.start.runStores(ctx, () => {
-        if (!pendingContexts.has(this)) pendingContexts.set(this, new Map())
-        pendingContexts.get(this).set(request.id, ctx)
+        let pending = pendingContexts.get(this)
+        if (!pending) {
+          pending = new Map()
+          pendingContexts.set(this, pending)
+        }
+        pending.set(request.id, ctx)
 
-        original.call(this, request, extra)
+        try {
+          original.call(this, request, extra)
+        } catch (err) {
+          ctx.error = err
+          finishServerRequest(this, request.id)
+          throw err
+        }
 
         // The SDK registers an AbortController only when it actually dispatches a handler.
         // If none was registered (MethodNotFound path), no handler will run and our
-        // setRequestHandler wrapper will never fire — finish the span immediately.
+        // SDK cleanup hook will never fire — finish the span immediately.
         if (!this._requestHandlerAbortControllers?.has(request.id)) {
-          pendingContexts.get(this).delete(request.id)
-          serverRequestCh.asyncEnd.publish(ctx)
+          finishServerRequest(this, request.id)
         }
       })
     }
@@ -82,28 +173,9 @@ function wrapProtocol (Protocol) {
   // The SDK's handler closure Zod-parses the request, stripping the JSON-RPC `id`.
   // Use `extra.requestId` (the SDK's fullExtra field) to correlate with the pending ctx.
   shimmer.wrap(Protocol.prototype, 'setRequestHandler', function (original) {
-    return function (schema, handler) {
-      const protocol = this
-      const wrappedHandler = async (request, extra) => {
-        const pending = pendingContexts.get(protocol)
-        const ctx = pending?.get(extra?.requestId)
-
-        if (!ctx) return handler(request, extra)
-
-        try {
-          const result = await handler(request, extra)
-          ctx.result = result
-          return result
-        } catch (err) {
-          ctx.error = err
-          throw err
-        } finally {
-          pending.delete(extra?.requestId)
-          serverRequestCh.asyncEnd.publish(ctx)
-        }
-      }
-
-      return original.call(this, schema, wrappedHandler)
+    return function setRequestHandlerWithTrace () {
+      wrapRequestHandlers(this)
+      return original.apply(this, arguments)
     }
   })
 
