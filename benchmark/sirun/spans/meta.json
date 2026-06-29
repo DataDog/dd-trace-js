@@ -10,7 +10,7 @@
       "env": {
         "DD_TRACE_SCOPE": "noop",
         "FINISH": "now",
-        "OPERATIONS": "2000000"
+        "OPERATIONS": "2400000"
       }
     },
     "finish-later": {

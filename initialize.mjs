@@ -76,7 +76,12 @@ export const resolve = brokenLoaders ? undefined : hookResolve
 if (isMainThread) {
   const require = Module.createRequire(import.meta.url)
   require('./init.js')
-  if (Module.register) {
+  // init may already have registered the loader hooks from the CJS init path
+  // (synchronous hooks on supported Node); only fall back to the async loader
+  // when nothing registered them yet. The shared flag keeps it to once.
+  const REGISTERED = Symbol.for('dd-trace:loader-hooks-registered')
+  if (Module.register && !globalThis[REGISTERED]) {
+    globalThis[REGISTERED] = true
     // The loader builds its own include/exclude matcher in `initialize`, so no
     // options need to cross the registration boundary.
     Module.register('./loader-hook.mjs', import.meta.url)

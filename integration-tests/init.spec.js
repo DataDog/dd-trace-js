@@ -8,7 +8,16 @@ const semver = require('semver')
 const DD_INJECTION_ENABLED = 'tracing'
 const DD_INJECT_FORCE = 'true'
 const DD_TRACE_DEBUG = 'true'
-const { NODE_MAJOR, NODE_VERSION } = require('../version')
+const { NODE_MAJOR, NODE_MINOR, NODE_PATCH, NODE_VERSION } = require('../version')
+
+// On Node versions with working synchronous loader hooks, `-r dd-trace/init`
+// registers them from the CommonJS init path, so it now instruments ESM
+// (including require(esm)) without `--import`. Mirrors register.js's gate.
+const syncLoaderHooksSupported =
+  NODE_MAJOR >= 26 ||
+  (NODE_MAJOR === 25 && NODE_MINOR >= 1) ||
+  (NODE_MAJOR === 24 && (NODE_MINOR > 11 || (NODE_MINOR === 11 && NODE_PATCH >= 1))) ||
+  (NODE_MAJOR === 22 && (NODE_MINOR > 22 || (NODE_MINOR === 22 && NODE_PATCH >= 3)))
 
 const telemetryAbort = ['abort', 'reason:incompatible_runtime', 'abort.runtime', '']
 const telemetryForced = ['complete', 'injection_forced:true']
@@ -266,7 +275,8 @@ describe('init.js', () => {
   useSandbox()
   stubTracerIfNeeded()
 
-  testInjectionScenarios('require', 'init.js', false)
+  // With the synchronous loader hooks active, `-r` instruments ESM too.
+  testInjectionScenarios('require', 'init.js', syncLoaderHooksSupported)
   testRuntimeVersionChecks('require', 'init.js')
 })
 
