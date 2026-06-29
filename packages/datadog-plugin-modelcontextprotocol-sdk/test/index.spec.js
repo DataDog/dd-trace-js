@@ -138,13 +138,17 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
   })
 
   describe('Protocol.setRequestHandler - mcp.server.request', () => {
-    it('should tag mcp.tool.name and mcp.request.arguments on tools/call', async () => {
+    it('should tag mcp.tool.name and argument shape on tools/call', async () => {
       const traceAssertion = expectSomeSpan(agent, {
         name: 'mcp.server.request',
         resource: 'tools/call',
         meta: {
           component: 'modelcontextprotocol_server',
           'mcp.tool.name': 'test-tool',
+          'mcp.request.argument_keys': 'query',
+        },
+        metrics: {
+          'mcp.request.argument_count': 1,
         },
       })
 
@@ -153,13 +157,33 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
       return traceAssertion
     })
 
-    it('should tag mcp.tool.response on tools/call', async () => {
+    it('should tag mcp.tool.response shape on tools/call', async () => {
       const traceAssertion = expectSomeSpan(agent, {
         name: 'mcp.server.request',
         resource: 'tools/call',
         meta: {
-          'mcp.tool.response': 'Result from test-tool',
+          'mcp.tool.response.content_types': 'text',
         },
+        metrics: {
+          'mcp.tool.response.content_count': 1,
+        },
+      })
+
+      await testSetup.clientCallTool()
+
+      return traceAssertion
+    })
+
+    it('should not tag raw tool arguments or response content on tools/call', async () => {
+      const traceAssertion = agent.assertSomeTraces(traces => {
+        const spans = traces.flatMap(trace => trace)
+        const span = spans.find(span => {
+          return span.name === 'mcp.server.request' && span.resource === 'tools/call'
+        })
+
+        assert.ok(span, 'mcp.server.request span should exist')
+        assert.strictEqual(Object.hasOwn(span.meta, 'mcp.request.arguments'), false)
+        assert.strictEqual(Object.hasOwn(span.meta, 'mcp.tool.response'), false)
       })
 
       await testSetup.clientCallTool()
@@ -239,6 +263,41 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
       })
 
       await testSetup.clientListPrompts()
+
+      return traceAssertion
+    })
+
+    it('should generate server request span with error when tools/call returns isError', async () => {
+      const traceAssertion = expectSomeSpan(agent, {
+        name: 'mcp.server.request',
+        type: 'mcp',
+        resource: 'tools/call',
+        error: 1,
+        meta: {
+          component: 'modelcontextprotocol_server',
+          '_dd.integration': 'modelcontextprotocol_server',
+          'span.kind': 'server',
+        },
+      })
+
+      await testSetup.clientCallToolError()
+
+      return traceAssertion
+    })
+
+    it('should finish server request spans for allowlisted unknown methods', async () => {
+      const traceAssertion = expectSomeSpan(agent, {
+        name: 'mcp.server.request',
+        type: 'mcp',
+        resource: 'tools/unknown',
+        meta: {
+          component: 'modelcontextprotocol_server',
+          '_dd.integration': 'modelcontextprotocol_server',
+          'span.kind': 'server',
+        },
+      })
+
+      await testSetup.clientSendUnknownMethod()
 
       return traceAssertion
     })
@@ -353,6 +412,28 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
       })
 
       await testSetup.clientCallToolError()
+
+      return traceAssertion
+    })
+
+    it('should update server tool call span resource when tool is renamed', async () => {
+      const traceAssertion = expectSomeSpan(agent, {
+        name: 'mcp.server.tool.call',
+        type: 'mcp',
+        resource: 'renamed-tool',
+        meta: {
+          component: 'modelcontextprotocol_server_tool',
+          '_dd.integration': 'modelcontextprotocol_server_tool',
+          'span.kind': 'internal',
+        },
+      })
+
+      testSetup.renameTestTool('renamed-tool')
+      try {
+        await testSetup.clientCallTool('renamed-tool')
+      } finally {
+        testSetup.renameTestTool('test-tool')
+      }
 
       return traceAssertion
     })

@@ -16,7 +16,7 @@ class ModelcontextprotocolSdkTestSetup {
 
     this._server = new McpServer({ name: 'test-server', version: '1.0.0' })
 
-    this._server.registerTool(
+    this._testTool = this._server.registerTool(
       'test-tool',
       { description: 'A test tool', inputSchema: {} },
       async () => ({
@@ -70,8 +70,8 @@ class ModelcontextprotocolSdkTestSetup {
     this._server = null
   }
 
-  async clientCallTool () {
-    return this._client.callTool({ name: 'test-tool', arguments: {} })
+  async clientCallTool (name = 'test-tool') {
+    return this._client.callTool({ name, arguments: { query: 'secret value' } })
   }
 
   async clientCallToolError () {
@@ -103,10 +103,14 @@ class ModelcontextprotocolSdkTestSetup {
     // The client rejects with an McpError; catch it so the test can assert on the server span.
     const { EmptyResultSchema } = this._versionMod.get('@modelcontextprotocol/sdk/types.js')
     try {
-      await this._client.request({ method: 'dd/unknownMethod' }, EmptyResultSchema)
+      await this._client.request({ method: 'tools/unknown' }, EmptyResultSchema)
     } catch {
       // Expected — server returns MethodNotFound
     }
+  }
+
+  renameTestTool (name) {
+    this._testTool.update({ name })
   }
 
   get server () {

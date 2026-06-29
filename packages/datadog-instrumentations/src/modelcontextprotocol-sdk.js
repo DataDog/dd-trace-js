@@ -86,7 +86,18 @@ function wrapMcpServer (McpServer) {
       const result = original.apply(this, arguments)
       if (serverToolRegisteredCh.hasSubscribers) {
         const tool = this._registeredTools?.[name]
-        if (tool) serverToolRegisteredCh.publish({ tool, name })
+        if (tool) {
+          serverToolRegisteredCh.publish({ tool, name })
+          shimmer.wrap(tool, 'update', function (update) {
+            return function updateWithTrace (updates) {
+              const result = update.apply(this, arguments)
+              if (Object.hasOwn(updates ?? {}, 'name')) {
+                serverToolRegisteredCh.publish({ tool, name: updates.name || undefined })
+              }
+              return result
+            }
+          })
+        }
       }
       return result
     }

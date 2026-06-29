@@ -24,8 +24,12 @@ function tagRequestParams (span, request) {
     span.setTag(request.method === 'prompts/get' ? 'mcp.prompt.name' : 'mcp.tool.name', params.name)
   }
   if (params.uri) span.setTag('mcp.resource.uri', params.uri)
-  if (params.arguments && Object.keys(params.arguments).length) {
-    span.setTag('mcp.request.arguments', JSON.stringify(params.arguments))
+  if (params.arguments) {
+    const argumentKeys = Object.keys(params.arguments)
+    if (argumentKeys.length) {
+      span.setTag('mcp.request.argument_count', argumentKeys.length)
+      span.setTag('mcp.request.argument_keys', argumentKeys.join(','))
+    }
   }
 }
 
@@ -38,9 +42,15 @@ function tagRequestResult (span, result) {
     const descriptions = result.prompts.map(p => p.description).filter(Boolean)
     if (descriptions.length) span.setTag('mcp.prompt.descriptions', descriptions.join(','))
   }
-  if (result.content) {
-    const text = result.content.filter(c => c.type === 'text').map(c => c.text).join('\n')
-    if (text) span.setTag('mcp.tool.response', text)
+  if (Array.isArray(result.content)) {
+    span.setTag('mcp.tool.response.content_count', result.content.length)
+
+    const contentTypes = []
+    for (const item of result.content) {
+      if (item.type) contentTypes.push(item.type)
+    }
+
+    if (contentTypes.length) span.setTag('mcp.tool.response.content_types', contentTypes.join(','))
   }
 }
 
@@ -125,6 +135,7 @@ class McpServerRequestPlugin extends McpPlugin {
   onStart (span, ctx) { tagRequestParams(span, ctx.request) }
   onEnd (span, ctx) {
     if (ctx.error) span.setTag('error', ctx.error)
+    setIsErrorTag(ctx)
     tagRequestResult(span, ctx.result)
   }
 }
