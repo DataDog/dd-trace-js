@@ -137,7 +137,7 @@ class TimeBuckets extends Map {
 class SpanStatsProcessor {
   constructor ({
     stats: {
-      enabled = false,
+      DD_TRACE_STATS_COMPUTATION_ENABLED: enabled = false,
       interval = 10,
     },
     hostname,
@@ -190,7 +190,7 @@ class SpanStatsProcessor {
     if (!this.enabled) return
     if (!span.metrics[TOP_LEVEL_KEY] && !span.metrics[MEASURED]) return
 
-    const spanEndNs = span.startTime + span.duration
+    const spanEndNs = span.start + span.duration
     const bucketTime = spanEndNs - (spanEndNs % this.bucketSizeNs)
 
     this.buckets.forTime(bucketTime)

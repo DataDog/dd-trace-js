@@ -58,6 +58,7 @@ jobs:
             aerospike-version: ce-6.4.0.3
             image: aerospike@sha256:f268d48f5075010ff268b29fbae28518418070dfb31935daa31f0b45c59f4da9 # ce-6.4.0.3
             test-image: ubuntu-latest
+
     runs-on: ${{ matrix.test-image }}
     permissions:
       id-token: write
@@ -71,9 +72,7 @@ jobs:
       SERVICES: aerospike
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.node-version }}
@@ -85,11 +84,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-aerospike-${{ matrix.node-version }}-${{ matrix.range_clean }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}-${{ strategy.job-index }}
 
   amqp10:
     runs-on: ubuntu-latest
@@ -108,7 +106,7 @@ jobs:
       SERVICES: qpid
       DD_DATA_STREAMS_ENABLED: true
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
 
   amqplib:
@@ -124,7 +122,7 @@ jobs:
       PLUGINS: amqplib
       SERVICES: rabbitmq
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
 
   apollo:
@@ -134,7 +132,7 @@ jobs:
     env:
       PLUGINS: apollo
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
 
   avsc:
@@ -145,7 +143,7 @@ jobs:
       PLUGINS: avsc
       DD_DATA_STREAMS_ENABLED: true
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
 
   axios:
@@ -155,7 +153,7 @@ jobs:
     env:
       PLUGINS: axios
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/upstream
       # `plugins/upstream` only runs `test:plugins:upstream`, which is a non-glob suite runner;
       # the in-tree `test/integration-test/*.spec.js` files would otherwise have no CI invocation
@@ -169,7 +167,7 @@ jobs:
     env:
       PLUGINS: body-parser
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/upstream
       - uses: ./.github/actions/plugins/integration-test
 
@@ -186,7 +184,7 @@ jobs:
       PLUGINS: bullmq
       SERVICES: redis
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   bunyan:
@@ -196,7 +194,7 @@ jobs:
     env:
       PLUGINS: bunyan
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
 
   cassandra:
@@ -212,7 +210,7 @@ jobs:
       PLUGINS: cassandra-driver
       SERVICES: cassandra
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   child_process:
@@ -222,9 +220,7 @@ jobs:
     env:
       PLUGINS: child_process
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
@@ -237,11 +233,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-child-process
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   crypto:
     runs-on: ubuntu-latest
@@ -250,7 +245,7 @@ jobs:
     env:
       PLUGINS: crypto
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       - uses: ./.github/actions/plugins/test
 
   confluentinc-kafka-javascript:
@@ -295,9 +290,7 @@ jobs:
       SERVICES: kafka
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.node-version }}
@@ -306,11 +299,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-confluentinc-kafka-javascript-${{ matrix.node-version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}-${{ strategy.job-index }}
 
   cookie-parser:
     runs-on: ubuntu-latest
@@ -319,7 +311,7 @@ jobs:
     env:
       PLUGINS: cookie-parser
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       - uses: ./.github/actions/plugins/test
 
   cookie:
@@ -329,7 +321,7 @@ jobs:
     env:
       PLUGINS: cookie
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       - uses: ./.github/actions/plugins/test
 
   couchbase:
@@ -341,7 +333,7 @@ jobs:
           - "^3.0.7"
           - ">=4.0.0 <4.2.0"
         include:
-          - node-version: 18
+          - node-version: oldest
             range: ">=4.2.0"
     runs-on: ubuntu-latest
     permissions:
@@ -358,9 +350,7 @@ jobs:
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
       DD_INJECT_FORCE: "true"
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.node-version }}
@@ -370,11 +360,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-couchbase-${{ matrix.node-version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}-${{ strategy.job-index }}
 
   connect:
     runs-on: ubuntu-latest
@@ -383,7 +372,7 @@ jobs:
     env:
       PLUGINS: connect
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
 
   dns:
@@ -393,9 +382,7 @@ jobs:
     env:
       PLUGINS: dns
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
@@ -408,11 +395,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-dns
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   elasticsearch:
     runs-on: ubuntu-latest
@@ -429,20 +415,17 @@ jobs:
       PLUGINS: elasticsearch
       SERVICES: elasticsearch
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-elasticsearch
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   electron:
     runs-on: ubuntu-latest
@@ -451,9 +434,7 @@ jobs:
     env:
       PLUGINS: electron
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -478,17 +459,17 @@ jobs:
           timeout 30 bash -c 'until xdpyinfo -display :99 >/dev/null 2>&1; do sleep 0.1; done'
       # Point Electron at the virtual display started above.
       - run: DISPLAY=:99 yarn test:plugins:ci
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   express:
     runs-on: ubuntu-latest
     env:
       PLUGINS: express
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
@@ -500,7 +481,7 @@ jobs:
     env:
       PLUGINS: express-mongo-sanitize
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       - uses: ./.github/actions/plugins/test
 
   express-session:
@@ -510,7 +491,7 @@ jobs:
     env:
       PLUGINS: express-session
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       - uses: ./.github/actions/plugins/test
 
   fastify:
@@ -520,7 +501,7 @@ jobs:
     env:
       PLUGINS: fastify
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   fetch:
@@ -530,7 +511,7 @@ jobs:
     env:
       PLUGINS: fetch
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   fs:
@@ -540,7 +521,7 @@ jobs:
     env:
       PLUGINS: fs
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   generic-pool:
@@ -550,7 +531,7 @@ jobs:
     env:
       PLUGINS: generic-pool
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   graphql:
@@ -560,7 +541,7 @@ jobs:
     env:
       PLUGINS: graphql
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
 
   grpc:
@@ -570,7 +551,7 @@ jobs:
     env:
       PLUGINS: grpc
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   handlebars:
@@ -580,7 +561,7 @@ jobs:
     env:
       PLUGINS: handlebars
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       - uses: ./.github/actions/plugins/test
 
   hapi:
@@ -590,7 +571,7 @@ jobs:
     env:
       PLUGINS: hapi
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   hono:
@@ -600,7 +581,7 @@ jobs:
     env:
       PLUGINS: hono
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   nitro:
@@ -624,9 +605,7 @@ jobs:
     env:
       PLUGINS: http
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.node-version }}
@@ -635,11 +614,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-http-${{ matrix.node-version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}-${{ strategy.job-index }}
 
   http2:
     runs-on: ubuntu-latest
@@ -648,9 +626,7 @@ jobs:
     env:
       PLUGINS: http2
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
@@ -663,11 +639,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-http2
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}-${{ strategy.job-index }}
 
   kafkajs:
     strategy:
@@ -704,9 +679,7 @@ jobs:
       PLUGINS: kafkajs
       SERVICES: kafka
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.node-version }}
@@ -715,11 +688,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-kafkajs-${{ matrix.node-version }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}-${{ strategy.job-index }}
 
   knex:
     runs-on: ubuntu-latest
@@ -728,7 +700,7 @@ jobs:
     env:
       PLUGINS: knex
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   koa:
@@ -738,7 +710,7 @@ jobs:
     env:
       PLUGINS: koa
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
 
   ldapjs:
@@ -748,7 +720,7 @@ jobs:
     env:
       PLUGINS: ldapjs
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   light-my-request:
@@ -758,7 +730,7 @@ jobs:
     env:
       PLUGINS: "light-my-request"
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   limitd-client:
@@ -778,7 +750,7 @@ jobs:
       PLUGINS: limitd-client
       SERVICES: limitd
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   lodash:
@@ -788,7 +760,7 @@ jobs:
     env:
       PLUGINS: lodash
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   mariadb:
@@ -807,7 +779,7 @@ jobs:
       PLUGINS: mariadb
       SERVICES: mariadb
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   memcached:
@@ -823,7 +795,7 @@ jobs:
       PLUGINS: memcached
       SERVICES: memcached
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   microgateway-core:
@@ -833,7 +805,7 @@ jobs:
     env:
       PLUGINS: microgateway-core
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   moleculer:
@@ -843,7 +815,7 @@ jobs:
     env:
       PLUGINS: moleculer
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   mongodb:
@@ -860,7 +832,7 @@ jobs:
       PACKAGE_NAMES: mongodb
       SERVICES: mongo
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
         with:
           node-floor: newest-maintenance-lts
@@ -879,7 +851,7 @@ jobs:
       PACKAGE_NAMES: mongodb-core,express-mongo-sanitize
       SERVICES: mongo
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
         with:
           node-floor: newest-maintenance-lts
@@ -897,7 +869,7 @@ jobs:
       PLUGINS: mongoose
       SERVICES: mongo
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
         with:
           node-floor: newest-maintenance-lts
@@ -909,7 +881,7 @@ jobs:
     env:
       PLUGINS: multer
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       - uses: ./.github/actions/plugins/test
 
   mysql:
@@ -928,7 +900,7 @@ jobs:
       PLUGINS: mysql
       SERVICES: mysql
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   mysql2:
@@ -947,7 +919,7 @@ jobs:
       PLUGINS: mysql2
       SERVICES: mysql2
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   nats:
@@ -963,7 +935,7 @@ jobs:
       PLUGINS: nats
       SERVICES: nats
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   net:
@@ -973,9 +945,7 @@ jobs:
     env:
       PLUGINS: net
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
@@ -988,11 +958,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-net
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   # TODO: fix performance issues and test more Node versions
 
@@ -1015,6 +984,10 @@ jobs:
           - "14.2.35"
           - "15.0.0"
           - "15.4.0"
+          - "*"
+        include:
+          - range: "*"
+            range_clean: latest
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -1022,20 +995,17 @@ jobs:
       PLUGINS: next
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/coverage
         with:
-          flags: apm-integrations-next-${{ matrix.range }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+          flags: apm-integrations-next-${{ matrix.range_clean || matrix.range }}
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}-${{ strategy.job-index }}
 
   node-serialize:
     runs-on: ubuntu-latest
@@ -1044,7 +1014,7 @@ jobs:
     env:
       PLUGINS: node-serialize
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   opensearch:
@@ -1063,7 +1033,7 @@ jobs:
       PLUGINS: opensearch
       SERVICES: opensearch
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   oracledb:
@@ -1083,9 +1053,7 @@ jobs:
       SERVICES: oracledb
       DD_INJECT_FORCE: "true"
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node
         with:
@@ -1110,11 +1078,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-oracledb
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   # TODO: re-enable upstream tests if it ever stops being flaky
   pino:
@@ -1124,7 +1091,7 @@ jobs:
     env:
       PLUGINS: pino
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
         with:
           node-floor: newest-maintenance-lts
@@ -1136,7 +1103,7 @@ jobs:
     env:
       PLUGINS: passport-http
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   postgres:
@@ -1155,7 +1122,7 @@ jobs:
       PLUGINS: pg
       SERVICES: postgres
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   prisma:
@@ -1166,7 +1133,7 @@ jobs:
           - node-version: 18
             range: ">=6.1.0 <7.0.0"
             range_clean: gte.6.16.0.and.lt.7.0.0
-          - node-version: "latest"
+          - node-version: latest
             range: ""
             range_clean: all
     runs-on: ubuntu-latest
@@ -1204,9 +1171,7 @@ jobs:
       SERVICES: prisma
       PACKAGE_VERSION_RANGE: ${{ matrix.range }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.node-version }}
@@ -1216,11 +1181,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-prisma-${{ matrix.node-version }}-${{ matrix.range_clean }}
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}-${{ strategy.job-index }}
 
   process:
     runs-on: ubuntu-latest
@@ -1229,7 +1193,7 @@ jobs:
     env:
       PLUGINS: process
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       - uses: ./.github/actions/plugins/test
 
   protobufjs:
@@ -1240,7 +1204,7 @@ jobs:
       PLUGINS: protobufjs
       DD_DATA_STREAMS_ENABLED: true
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
 
   pug:
@@ -1250,7 +1214,7 @@ jobs:
     env:
       PLUGINS: pug
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       - uses: ./.github/actions/plugins/test
 
   redis:
@@ -1266,7 +1230,7 @@ jobs:
       PLUGINS: redis
       SERVICES: redis
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   ioredis:
@@ -1278,11 +1242,23 @@ jobs:
         image: redis@sha256:a0bb2f95a4672c5bbf3a01fcc2eb6dfb8fd898d83fc71cbf012c6b9479ab1607 # 6.2-alpine
         ports:
           - 6379:6379
+      redis-cluster:
+        image: grokzen/redis-cluster@sha256:f130dd8a322fc4dc595380ec94907539c341d5841de7d31e679223aec04d30f6 # 7.0.10
+        env:
+          IP: 0.0.0.0
+          INITIAL_PORT: 7000
+        ports:
+          - 7000:7000
+          - 7001:7001
+          - 7002:7002
+          - 7003:7003
+          - 7004:7004
+          - 7005:7005
     env:
       PLUGINS: ioredis
-      SERVICES: ioredis
+      SERVICES: redis-cluster
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   valkey:
@@ -1298,7 +1274,7 @@ jobs:
       PLUGINS: iovalkey
       SERVICES: valkey
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   # Restify isn't compatible with Node.js v24 so we don't run against latest Node.js
@@ -1310,9 +1286,7 @@ jobs:
     env:
       PLUGINS: restify
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/testagent/start
       - uses: ./.github/actions/node/oldest-maintenance-lts
       - uses: ./.github/actions/install
@@ -1320,11 +1294,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-restify
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   rhea:
     runs-on: ubuntu-latest
@@ -1343,7 +1316,7 @@ jobs:
       SERVICES: qpid
       DD_DATA_STREAMS_ENABLED: true
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test-and-upstream
 
   router:
@@ -1353,7 +1326,7 @@ jobs:
     env:
       PLUGINS: router
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   sequelize:
@@ -1363,7 +1336,7 @@ jobs:
     env:
       PLUGINS: sequelize
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       - uses: ./.github/actions/plugins/test
 
   sharedb:
@@ -1373,20 +1346,17 @@ jobs:
     env:
       PLUGINS: sharedb
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-sharedb
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   tedious:
     runs-on: ubuntu-latest
@@ -1405,9 +1375,7 @@ jobs:
       PLUGINS: tedious
       SERVICES: mssql
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node/latest
       - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
@@ -1415,11 +1383,10 @@ jobs:
       - uses: ./.github/actions/coverage
         with:
           flags: apm-integrations-tedious
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
-      - uses: ./.github/actions/push_to_test_optimization
+      - uses: ./.github/actions/upload-junit-artifacts
         if: "!cancelled()"
         with:
-          dd_api_key: ${{ steps.dd-sts.outputs.api_key }}
+          id: ${{ github.job }}
 
   undici:
     runs-on: ubuntu-latest
@@ -1428,7 +1395,7 @@ jobs:
     env:
       PLUGINS: undici
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   url:
@@ -1438,7 +1405,7 @@ jobs:
     env:
       PLUGINS: url
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       - uses: ./.github/actions/plugins/test
 
   vm:
@@ -1448,7 +1415,7 @@ jobs:
     env:
       PLUGINS: vm
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
       - uses: ./.github/actions/plugins/test
 
   winston:
@@ -1458,7 +1425,7 @@ jobs:
     env:
       PLUGINS: winston
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   ws:
@@ -1468,5 +1435,5 @@ jobs:
     env:
       PLUGINS: ws
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test

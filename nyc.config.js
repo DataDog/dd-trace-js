@@ -16,6 +16,10 @@ module.exports = {
   reporter: [
     'text',
     'lcov',
+    // Codecov reads branch and function coverage from istanbul's native JSON via its NodeProcessor;
+    // its lcov parser only ingests line hits. Datadog accepts the lcov, so All Green uploads each
+    // format to the backend that reads it best.
+    'json',
   ],
   include: [
     '**/ext/**/*.{js,mjs}',

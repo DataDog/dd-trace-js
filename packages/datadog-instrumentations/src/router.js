@@ -2,7 +2,7 @@
 
 const METHODS = [...require('http').METHODS.map(v => v.toLowerCase()), 'all']
 const shimmer = require('../../datadog-shimmer')
-const { addHook, channel } = require('./helpers/instrument')
+const { addHook, channel, createErrorPublisher } = require('./helpers/instrument')
 const { getCompileToRegexp } = require('./path-to-regexp')
 
 const {
@@ -40,6 +40,8 @@ function createWrapRouterMethod (name, compile) {
   const errorChannel = channel(`apm:${name}:middleware:error`)
   const nextChannel = channel(`apm:${name}:middleware:next`)
   const routeAddedChannel = channel(`apm:${name}:route:added`)
+  // Bound per name so express and a bare router keep independent guards.
+  const publishError = createErrorPublisher(errorChannel)
 
   function wrapLayerHandle (layer, original, matchers) {
     // Resolve `name` once at wrap time: cached on the original for any code
@@ -65,9 +67,20 @@ function createWrapRouterMethod (name, compile) {
     // `Layer.handleError`. Specialising lets the per-call body use named
     // parameters and `.call`, avoiding the rest-spread Array allocation that
     // the unified shape forced on every middleware invocation.
-    return original.length === 4
+    const wrapped = original.length === 4
       ? shimmer.wrapFunction(original, errorHandlerLayerWrap(layer, name, captureRoute, needMultiMatch, matchers))
       : shimmer.wrapFunction(original, requestHandlerLayerWrap(layer, name, captureRoute, needMultiMatch, matchers))
+
+    // Workaround for loopback's phase-based middleware sorting. Its
+    // `_findLayerByHandler` maps a layer back to the user handler by scanning
+    // the layer handle's enumerable properties for the original function.
+    // Replacing `layer.handle` with this wrapper hides that handler, so without
+    // the back-reference loopback cannot tag the layer with its phase and
+    // `app.middleware(phase, ...)` handlers run in insertion order instead of
+    // phase order. The property name is part of that contract; keep it stable.
+    wrapped._datadog_orig = original
+
+    return wrapped
   }
 
   function requestHandlerLayerWrap (layer, name, captureRoute, needMultiMatch, matchers) {
@@ -91,7 +104,7 @@ function createWrapRouterMethod (name, compile) {
       try {
         return original.call(this, req, res, wrappedNext)
       } catch (error) {
-        errorChannel.publish({ req, error })
+        publishError({ req, error })
         nextChannel.publish({ req })
         finishChannel.publish({ req })
 
@@ -123,7 +136,7 @@ function createWrapRouterMethod (name, compile) {
       try {
         return original.call(this, error, req, res, wrappedNext)
       } catch (caught) {
-        errorChannel.publish({ req, error: caught })
+        publishError({ req, error: caught })
         nextChannel.publish({ req })
         finishChannel.publish({ req })
 
@@ -157,17 +170,17 @@ function createWrapRouterMethod (name, compile) {
   }
 
   function wrapNext (req, originalNext) {
-    // Per layer dispatch, N per request. `shimmer.wrapCallback` preserves
-    // only `name` + `length`; see its JSDoc for the full contract.
-    return shimmer.wrapCallback(originalNext, next => function (error) {
+    // Per layer dispatch, N per request. Named `next`/arity-1 mirrors the
+    // router continuation so wrapCallback skips its name/length rewrite.
+    return shimmer.wrapCallback(originalNext, original => function next (error) {
       if (error && error !== 'route' && error !== 'router') {
-        errorChannel.publish({ req, error })
+        publishError({ req, error })
       }
 
       nextChannel.publish({ req })
       finishChannel.publish({ req })
 
-      next.apply(this, arguments)
+      original.apply(this, arguments)
     })
   }
 
@@ -328,7 +341,8 @@ const routerParamStartCh = channel('datadog:router:param:start')
 const visitedParams = new WeakSet()
 
 function wrapHandleRequest (original) {
-  return function wrappedHandleRequest (req, res, next) {
+  return function wrappedHandleRequest (...args) {
+    const req = args[0]
     if (routerParamStartCh.hasSubscribers && !visitedParams.has(req.params) && Object.keys(req.params).length) {
       visitedParams.add(req.params)
 
@@ -336,7 +350,7 @@ function wrapHandleRequest (original) {
 
       routerParamStartCh.publish({
         req,
-        res,
+        res: args[1],
         params: req?.params,
         abortController,
       })
@@ -344,7 +358,7 @@ function wrapHandleRequest (original) {
       if (abortController.signal.aborted) return
     }
 
-    return original.apply(this, arguments)
+    return Reflect.apply(original, this, args)
   }
 }
 
@@ -358,7 +372,8 @@ addHook({
 function wrapParam (original) {
   return function wrappedProcessParams (...args) {
     args[1] = shimmer.wrapFunction(args[1], (originalFn) => {
-      return function wrappedFn (req, res) {
+      return function wrappedFn (...fnArgs) {
+        const req = fnArgs[0]
         if (routerParamStartCh.hasSubscribers && Object.keys(req.params).length && !visitedParams.has(req.params)) {
           visitedParams.add(req.params)
 
@@ -366,7 +381,7 @@ function wrapParam (original) {
 
           routerParamStartCh.publish({
             req,
-            res,
+            res: fnArgs[1],
             params: req?.params,
             abortController,
           })
@@ -374,7 +389,7 @@ function wrapParam (original) {
           if (abortController.signal.aborted) return
         }
 
-        return originalFn.apply(this, arguments)
+        return Reflect.apply(originalFn, this, fnArgs)
       }
     })
 

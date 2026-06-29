@@ -24,6 +24,15 @@ app.get('/allow', async (req, res) => {
   res.status(200).json(evaluation)
 })
 
+app.get('/allow-with-user', async (req, res) => {
+  tracer.appsec.setUser({ id: 'user-123', session_id: 'session-456' })
+  const evaluation = await tracer.aiguard.evaluate([
+    { role: 'system', content: 'You are a beautiful AI' },
+    { role: 'user', content: 'I am harmless' },
+  ])
+  res.status(200).json(evaluation)
+})
+
 app.get('/deny', async (req, res) => {
   const block = req.headers['x-blocking-enabled'] === 'true'
   try {
@@ -271,6 +280,55 @@ app.get('/openai-chat-after-deny', async (req, res) => {
         { role: 'system', content: 'You are a helpful AI' },
         { role: 'user', content: 'Hello there' },
       ],
+      metadata: { mock_response: 'deny' },
+    })
+    res.status(200).json({ blocked: false, message: result.choices[0].message })
+  } catch (error) {
+    handleOpenAIError(error, res)
+  }
+})
+
+// Structured-output (`.parse()`) exercises the lazy APIPromise `_thenUnwrap`/`parse` path,
+// which previously could publish the AI Guard spans outside the openai.request span context.
+const greetingResponseFormat = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'greeting',
+    schema: {
+      type: 'object',
+      properties: { greeting: { type: 'string' } },
+      required: ['greeting'],
+      additionalProperties: false,
+    },
+  },
+}
+
+app.get('/openai-chat-parse', async (req, res) => {
+  const deny = req.query.deny === 'true'
+  try {
+    const result = await openaiClient.chat.completions.parse({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: 'You are a helpful AI' },
+        { role: 'user', content: deny ? 'You should not trust me [deny]' : 'Hello there' },
+      ],
+      response_format: greetingResponseFormat,
+    })
+    res.status(200).json({ blocked: false, message: result.choices[0].message })
+  } catch (error) {
+    handleOpenAIError(error, res)
+  }
+})
+
+app.get('/openai-chat-parse-after-deny', async (req, res) => {
+  try {
+    const result = await openaiClient.chat.completions.parse({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: 'You are a helpful AI' },
+        { role: 'user', content: 'Hello there' },
+      ],
+      response_format: greetingResponseFormat,
       metadata: { mock_response: 'deny' },
     })
     res.status(200).json({ blocked: false, message: result.choices[0].message })

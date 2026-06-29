@@ -2,7 +2,7 @@
 
 const { channel } = require('dc-polyfill')
 
-const { isError, isTrue } = require('../util')
+const { isError } = require('../util')
 const tracerVersion = require('../../../../package.json').version
 const logger = require('../log')
 const { getValueFromEnvSources } = require('../config/helper')
@@ -49,7 +49,7 @@ class LLMObs extends NoopLLMObs {
   }
 
   get enabled () {
-    return this._config.llmobs.enabled ?? false
+    return this._config.llmobs.DD_LLMOBS_ENABLED ?? false
   }
 
   enable (options = {}) {
@@ -65,15 +65,17 @@ class LLMObs extends NoopLLMObs {
 
     logger.debug('Enabling LLMObs')
 
-    const DD_LLMOBS_ENABLED = getValueFromEnvSources('DD_LLMOBS_ENABLED')
+    // skipDefault: only an explicit DD_LLMOBS_ENABLED=false blocks enable(); an unset value
+    // (its default is false) must still allow this programmatic opt-in.
+    const DD_LLMOBS_ENABLED = getValueFromEnvSources('DD_LLMOBS_ENABLED', true)
 
-    if (DD_LLMOBS_ENABLED != null && !isTrue(DD_LLMOBS_ENABLED)) {
+    if (DD_LLMOBS_ENABLED === false) {
       logger.debug('LLMObs.enable() called when DD_LLMOBS_ENABLED is false. No action taken.')
       return
     }
 
     // TODO: These configs should be passed through directly at construction time instead.
-    this._config.llmobs.enabled = true
+    this._config.llmobs.DD_LLMOBS_ENABLED = true
     this._config.llmobs.mlApp = options.mlApp
     this._config.llmobs.agentlessEnabled = options.agentlessEnabled
 
@@ -94,7 +96,7 @@ class LLMObs extends NoopLLMObs {
 
     logger.debug('Disabling LLMObs')
 
-    this._config.llmobs.enabled = false
+    this._config.llmobs.DD_LLMOBS_ENABLED = false
 
     // disable writers and channel subscribers
     this._llmobsModule.disable()
@@ -259,7 +261,7 @@ class LLMObs extends NoopLLMObs {
         throw new Error('LLMObs span must have a span kind specified')
       }
 
-      const { inputData, outputData, metadata, metrics, tags, prompt, costTags } = options
+      const { inputData, outputData, metadata, metrics, tags, prompt, costTags, toolDefinitions } = options
 
       if (inputData || outputData) {
         if (spanKind === 'llm') {
@@ -288,6 +290,9 @@ class LLMObs extends NoopLLMObs {
       }
       if (prompt) {
         this._tagger.tagPrompt(span, prompt)
+      }
+      if (toolDefinitions != null) {
+        this._tagger.tagToolDefinitions(span, toolDefinitions)
       }
     } catch (e) {
       if (e.ddErrorTag) {

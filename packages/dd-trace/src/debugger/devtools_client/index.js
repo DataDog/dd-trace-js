@@ -1,17 +1,22 @@
 'use strict'
 
 const { randomUUID } = require('crypto')
+const { workerData: { probeSamplerBuffer } } = require('worker_threads')
 const { version } = require('../../../../../package.json')
-const { NODE_MAJOR } = require('../../../../../version')
 const processTags = require('../../process-tags')
-const { breakpointToProbes } = require('./state')
+const {
+  MAX_SAMPLED_PROBES_PER_PAUSE,
+  SAMPLED_PROBE_COUNT_INDEX,
+  SAMPLED_PROBE_INDEXES_START,
+  SAMPLED_PROBE_OVERFLOW_INDEX,
+} = require('../probe_sampler_constants')
+const { breakpointToProbes, samplingIndexToProbe } = require('./state')
 const session = require('./session')
 const { getLocalStateForCallFrame, evaluateCaptureExpressions } = require('./snapshot')
 const send = require('./send')
 const { getStackFromCallFrames } = require('./state')
 const { ackEmitting } = require('./status')
 const config = require('./config')
-const { MAX_SNAPSHOTS_PER_SECOND_GLOBALLY } = require('./defaults')
 const log = require('./log')
 
 require('./remote_config')
@@ -38,25 +43,7 @@ const getDDTagsExpression = `(() => {
 // something that should be useful to a Node.js developer.
 const threadId = config.parentThreadId === 0 ? `pid:${process.pid}` : `pid:${process.pid};tid:${config.parentThreadId}`
 const threadName = config.parentThreadId === 0 ? 'MainThread' : `WorkerThread:${config.parentThreadId}`
-
-const SUPPORT_ARRAY_BUFFER_RESIZE = NODE_MAJOR >= 20
-const oneSecondNs = 1_000_000_000n
-let globalSnapshotSamplingRateWindowStart = 0n
-let snapshotsSampledWithinTheLastSecond = 0
-
-// TODO: Change to const once we drop support for Node.js 18
-let snapshotProbeIndexBuffer, snapshotProbeIndex
-
-if (SUPPORT_ARRAY_BUFFER_RESIZE) {
-  // TODO: Is a limit of 256 snapshots ever going to be a problem?
-  // @ts-ignore - ArrayBuffer constructor with maxByteLength is available in Node.js 20+ but not in @types/node@18
-  // eslint-disable-next-line n/no-unsupported-features/es-syntax
-  snapshotProbeIndexBuffer = new ArrayBuffer(1, { maxByteLength: 256 })
-  // TODO: Is a limit of 256 probes ever going to be a problem?
-  snapshotProbeIndex = new Uint8Array(snapshotProbeIndexBuffer)
-} else {
-  snapshotProbeIndex = new Uint8Array(1)
-}
+const sampledProbeIndexes = new Int32Array(probeSamplerBuffer)
 
 // WARNING: The code above the line `await session.post('Debugger.resume')` is highly optimized. Please edit with care!
 session.on('Debugger.paused', async ({ params }) => {
@@ -71,7 +58,6 @@ session.on('Debugger.paused', async ({ params }) => {
   let maxCollectionSize = 0
   let maxFieldCount = 0
   let maxLength = 0
-  let sampled = false
   let numberOfProbesWithSnapshots = 0
   let probesWithCaptureExpressions = false
   const probes = []
@@ -80,7 +66,15 @@ session.on('Debugger.paused', async ({ params }) => {
   // V8 doesn't allow setting more than one breakpoint at a specific location, however, it's possible to set two
   // breakpoints just next to each other that will "snap" to the same logical location, which in turn will be hit at the
   // same time. E.g. index.js:1:1 and index.js:1:2.
-  let numberOfProbesOnBreakpoint = params.hitBreakpoints.length
+  const numberOfSampledProbeIndexes = Math.min(
+    Atomics.exchange(sampledProbeIndexes, SAMPLED_PROBE_COUNT_INDEX, 0),
+    MAX_SAMPLED_PROBES_PER_PAUSE
+  )
+  if (Atomics.exchange(sampledProbeIndexes, SAMPLED_PROBE_OVERFLOW_INDEX, 0) === 1) {
+    log.error(
+      '[debugger:devtools_client] Too many probes sampled at the same breakpoint location; skipping excess probes'
+    )
+  }
 
   // TODO: Investigate if it will improve performance to create a fast-path for when there's only a single breakpoint
   for (let i = 0; i < params.hitBreakpoints.length; i++) {
@@ -92,36 +86,23 @@ session.on('Debugger.paused', async ({ params }) => {
       continue
     }
 
-    if (probesAtLocation.size !== 1) {
-      numberOfProbesOnBreakpoint = numberOfProbesOnBreakpoint + probesAtLocation.size - 1
-      if (numberOfProbesOnBreakpoint > snapshotProbeIndex.length) {
-        if (SUPPORT_ARRAY_BUFFER_RESIZE) {
-          snapshotProbeIndexBuffer.resize(numberOfProbesOnBreakpoint)
-        } else {
-          snapshotProbeIndex = new Uint8Array(numberOfProbesOnBreakpoint)
-        }
-      }
-    }
+    for (let j = 0; j < numberOfSampledProbeIndexes; j++) {
+      const samplingIndex = Atomics.load(sampledProbeIndexes, SAMPLED_PROBE_INDEXES_START + j)
+      const probe = samplingIndexToProbe.get(samplingIndex)
 
-    for (const probe of probesAtLocation.values()) {
-      if (start - probe.lastCaptureNs < probe.nsBetweenSampling) {
+      if (probe === undefined) {
+        log.error('[debugger:devtools_client] No probe found for sampled probe index %d', samplingIndex)
+        continue
+      }
+      if (!probesAtLocation.has(probe.id)) {
+        log.error('[debugger:devtools_client] Sampled probe %s was not found at breakpoint %s',
+          probe.id, params.hitBreakpoints[i])
         continue
       }
 
       if (probe.captureSnapshot === true || probe.compiledCaptureExpressions !== undefined) {
-        // This algorithm to calculate number of sampled snapshots within the last second is not perfect, as it's not a
-        // sliding window. But it's quick and easy :)
-        if (i === 0 && start - globalSnapshotSamplingRateWindowStart > oneSecondNs) {
-          snapshotsSampledWithinTheLastSecond = 1
-          globalSnapshotSamplingRateWindowStart = start
-        } else if (snapshotsSampledWithinTheLastSecond >= MAX_SNAPSHOTS_PER_SECOND_GLOBALLY) {
-          continue
-        } else {
-          snapshotsSampledWithinTheLastSecond++
-        }
-
         if (probe.captureSnapshot === true) {
-          snapshotProbeIndex[numberOfProbesWithSnapshots++] = probes.length
+          numberOfProbesWithSnapshots++
           maxReferenceDepth = Math.max(probe.capture.maxReferenceDepth, maxReferenceDepth)
           maxCollectionSize = Math.max(probe.capture.maxCollectionSize, maxCollectionSize)
           maxFieldCount = Math.max(probe.capture.maxFieldCount, maxFieldCount)
@@ -131,23 +112,6 @@ session.on('Debugger.paused', async ({ params }) => {
         }
       }
 
-      if (probe.condition !== undefined) {
-        // TODO: Bundle all conditions and evaluate them in a single call
-        // TODO: Handle errors
-        const { result } = /** @type {EvaluateOnCallFrameResult} */ (
-          // eslint-disable-next-line no-await-in-loop
-          await session.post('Debugger.evaluateOnCallFrame', {
-            callFrameId: params.callFrames[0].callFrameId,
-            expression: probe.condition,
-            returnByValue: true,
-          })
-        )
-        if (result.value !== true) continue
-      }
-
-      sampled = true
-      probe.lastCaptureNs = start
-
       if (probe.templateRequiresEvaluation) {
         templateExpressions += `,${probe.template}`
       }
@@ -156,7 +120,8 @@ session.on('Debugger.paused', async ({ params }) => {
     }
   }
 
-  if (sampled === false) {
+  // This can happen if sampled probe indexes are inconsistent with the worker state. Those cases are logged above.
+  if (probes.length === 0) {
     return session.post('Debugger.resume')
   }
 

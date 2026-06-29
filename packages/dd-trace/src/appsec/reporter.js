@@ -461,7 +461,7 @@ function truncateRequestBody (target, depth = 0) {
 }
 
 function reportRequestBody (rootSpan, requestBody, comesFromRaspAction = false) {
-  if (!requestBody || Object.keys(requestBody).length === 0) return
+  if (!requestBody || isEmpty(requestBody)) return
 
   if (!rootSpan.meta_struct) {
     rootSpan.meta_struct = {}
@@ -615,4 +615,5 @@ module.exports = {
   finishRequest,
   mapHeaderAndTags,
   truncateRequestBody,
+  isSchemaAttribute,
 }

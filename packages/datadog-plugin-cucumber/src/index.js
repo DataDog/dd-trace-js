@@ -80,6 +80,7 @@ class CucumberPlugin extends CiPlugin {
       isTestManagementTestsEnabled,
       isParallel,
     }) => {
+      this._exportPendingWorkerTraces()
       const {
         isSuitesSkippingEnabled,
         isCodeCoverageEnabled,
@@ -129,7 +130,7 @@ class CucumberPlugin extends CiPlugin {
       finishAllTraceSpans(this.testSessionSpan)
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,
-        autoInjected: !!this._tracerConfig.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
+        autoInjected: !!this._tracerConfig.testOptimization.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
       })
 
       this.libraryConfig = null
@@ -186,6 +187,7 @@ class CucumberPlugin extends CiPlugin {
         integrationName: this.constructor.id,
       })
       this._testSuiteSpansByTestSuite.set(testSuitePath, testSuiteSpan)
+      this._exportPendingWorkerTracesForTestSuite(testSuitePath)
 
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       if (this.libraryConfig?.isCodeCoverageEnabled) {

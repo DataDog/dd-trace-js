@@ -27,7 +27,7 @@ const ADVANCED_USER_SCHEMA_DEF = JSON.parse(
   fs.readFileSync(path.join(__dirname, 'schemas/expected_advanced_user_schema.json'), 'utf8')
 )
 
-const BASIC_USER_SCHEMA_ID = '1605040621379664412'
+const BASIC_USER_SCHEMA_ID = '15683462889181473629'
 const ADVANCED_USER_SCHEMA_ID = '919692610494986520'
 function compareJson (expected, span) {
   const actual = JSON.parse(span.context().getTag(SCHEMA_DEFINITION))
@@ -53,7 +53,7 @@ describe('Plugin', () => {
       })
 
       describe('without configuration', () => {
-        before(() => {
+        before(async () => {
           dateNowStub = sinon.stub(Date, 'now').callsFake(() => {
             const returnValue = mockTime
             mockTime += 50000 // Increment by 50000 ms to ensure each DSM schema is sampled
@@ -61,10 +61,9 @@ describe('Plugin', () => {
           })
           const cache = SchemaBuilder.getCache()
           cache.clear()
-          return agent.load('avsc').then(() => {
-            temporaryWarningExceptions.add('SlowBuffer() is deprecated. Please use Buffer.allocUnsafeSlow()')
-            avro = require(`../../../versions/avsc@${version}`).get()
-          })
+          await agent.load('avsc')
+          temporaryWarningExceptions.add('SlowBuffer() is deprecated. Please use Buffer.allocUnsafeSlow()')
+          avro = require(`../../../versions/avsc@${version}`).get()
         })
 
         after(() => {

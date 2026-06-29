@@ -3,35 +3,46 @@
   "run": "node spans.js",
   "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node spans.js\"",
   "cachegrind": false,
-  "iterations": 80,
+  "iterations": 12,
   "instructions": true,
   "variants": {
     "finish-immediately": {
       "env": {
         "DD_TRACE_SCOPE": "noop",
-        "FINISH": "now"
+        "FINISH": "now",
+        "OPERATIONS": "2000000"
       }
     },
     "finish-later": {
+      "iterations": 16,
       "env": {
         "DD_TRACE_SCOPE": "noop",
-        "FINISH": "later"
+        "FINISH": "later",
+        "OPERATIONS": "3000000"
       }
     },
     "finish-immediately-with-tags": {
-      "baseline": "finish-immediately",
       "env": {
         "DD_TRACE_SCOPE": "noop",
         "FINISH": "now",
-        "SHAPE": "tags"
+        "SHAPE": "tags",
+        "OPERATIONS": "2000000"
+      }
+    },
+    "finish-immediately-with-many-tags": {
+      "env": {
+        "DD_TRACE_SCOPE": "noop",
+        "FINISH": "now",
+        "SHAPE": "many-tags",
+        "OPERATIONS": "2000000"
       }
     },
     "finish-immediately-with-tags-and-otel": {
-      "baseline": "finish-immediately",
       "env": {
         "DD_TRACE_SCOPE": "noop",
         "FINISH": "now",
-        "SHAPE": "tags-and-otel"
+        "SHAPE": "tags-and-otel",
+        "OPERATIONS": "2000000"
       }
     }
   }

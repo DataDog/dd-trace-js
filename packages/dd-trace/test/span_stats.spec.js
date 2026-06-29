@@ -26,9 +26,12 @@ const {
 } = require('../src/encode/tags-processors')
 const processTags = require('../src/process-tags')
 
-// Mock spans
+// Mock spans use the post-format field name `start` (nanoseconds), matching
+// what `SpanProcessor.process` hands to `onSpanFinished` via the formatted
+// span. The formatter never emits `startTime`, so reading that field bucketed
+// every span under a single NaN time key.
 const basicSpan = {
-  startTime: 12345 * 1e9,
+  start: 12345 * 1e9,
   duration: 1234,
   error: 0,
   name: 'basic-span',
@@ -301,7 +304,7 @@ describe('SpanStatsProcessor', () => {
 
   const config = {
     stats: {
-      enabled: true,
+      DD_TRACE_STATS_COMPUTATION_ENABLED: true,
       interval: 10,
     },
     hostname: '127.0.0.1',
@@ -325,14 +328,14 @@ describe('SpanStatsProcessor', () => {
     assert.strictEqual(processor.interval, config.stats.interval)
     assert.ok(processor.buckets instanceof TimeBuckets)
     assert.strictEqual(processor.hostname, hostname())
-    assert.strictEqual(processor.enabled, config.stats.enabled)
+    assert.strictEqual(processor.enabled, config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED)
     assert.strictEqual(processor.env, config.env)
     assert.deepStrictEqual(processor.tags, config.tags)
     assert.strictEqual(processor.version, config.version)
   })
 
   it('should construct a disabled instance', () => {
-    const disabledConfig = { ...config, stats: { enabled: false, interval: 10 } }
+    const disabledConfig = { ...config, stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false, interval: 10 } }
     const processor = new SpanStatsProcessor(disabledConfig)
 
     assert.strictEqual(processor.enabled, false)
@@ -377,6 +380,33 @@ describe('SpanStatsProcessor', () => {
       OkSummary: okDistribution.toProto(),
       ErrorSummary: errorDistribution.toProto(),
     })
+  })
+
+  it('should bucket by the formatted span start, not the missing startTime field', () => {
+    const localProcessor = new SpanStatsProcessor(config)
+    clearTimeout(localProcessor.timer)
+
+    localProcessor.onSpanFinished(topLevelSpan)
+
+    const bucketTime = localProcessor.buckets.keys().next().value
+    assert.ok(Number.isFinite(bucketTime), `bucket time should be finite, got ${bucketTime}`)
+    assert.strictEqual(bucketTime, 12340000000000)
+  })
+
+  it('should bucket spans by their containing interval boundary', () => {
+    const localProcessor = new SpanStatsProcessor(config)
+    clearTimeout(localProcessor.timer)
+
+    const bucketSizeNs = config.stats.interval * 1e9
+    // Last nanosecond of the first bucket and first nanosecond of the second.
+    const lastInFirstBucket = { ...topLevelSpan, start: bucketSizeNs - topLevelSpan.duration - 1 }
+    const firstInSecondBucket = { ...topLevelSpan, start: bucketSizeNs }
+
+    localProcessor.onSpanFinished(lastInFirstBucket)
+    localProcessor.onSpanFinished(firstInSecondBucket)
+
+    const bucketTimes = [...localProcessor.buckets.keys()]
+    assert.deepStrictEqual(bucketTimes, [0, bucketSizeNs])
   })
 
   it('should export on interval', () => {

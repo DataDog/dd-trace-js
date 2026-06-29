@@ -2,7 +2,6 @@
 
 const { URL } = require('url')
 const log = require('../../log')
-const { getAgentUrl } = require('../../agent/url')
 const Writer = require('./writer')
 
 class AgentExporter {
@@ -11,10 +10,10 @@ class AgentExporter {
   constructor (config, prioritySampler) {
     this._config = config
     const { lookup, protocolVersion, stats = {}, apmTracingEnabled } = config
-    this._url = getAgentUrl(config)
+    this._url = config.url
 
     const headers = {}
-    if (stats.enabled || apmTracingEnabled === false) {
+    if (stats.DD_TRACE_STATS_COMPUTATION_ENABLED || apmTracingEnabled === false) {
       headers['Datadog-Client-Computed-Stats'] = 'yes'
     }
 

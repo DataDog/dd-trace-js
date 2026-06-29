@@ -3,34 +3,46 @@
 const { channel, tracingChannel } = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const { addHook, getHooks } = require('./helpers/instrument')
-const { convertVercelPromptToMessages, buildOutputMessages } = require('./helpers/ai-messages')
 
 const vercelAiTracingChannel = tracingChannel('dd-trace:vercel-ai')
 const vercelAiSpanSetAttributesChannel = channel('dd-trace:vercel-ai:span:setAttributes')
-const aiguardChannel = channel('dd-trace:ai:aiguard')
+const doGenerateBeforeChannel = channel('dd-trace:vercel-ai:doGenerate:before')
+const doGenerateAfterChannel = channel('dd-trace:vercel-ai:doGenerate:after')
+const doStreamBeforeChannel = channel('dd-trace:vercel-ai:doStream:before')
+const doStreamAfterChannel = channel('dd-trace:vercel-ai:doStream:after')
 
 const tracers = new WeakSet()
 const wrappedModels = new WeakSet()
 
 /**
- * Publishes already-converted AI-style messages to the AI Guard evaluation channel.
+ * Publishes a provider-native lifecycle payload to a cancelable lifecycle channel.
  *
- * @param {Array<object>} messages - AI-style messages to evaluate.
+ * Subscribers push async work into `pending` synchronously during publication and
+ * abort `abortController` with an error before the pushed promise resolves to block.
+ *
+ * @param {object} lifecycleChannel
+ * @param {object} payload
  * @returns {Promise<void>}
  */
-function publishEvaluation (messages) {
-  return new Promise((resolve, reject) => {
-    aiguardChannel.publish({ messages, integration: 'ai', resolve, reject })
+function publishLifecycle (lifecycleChannel, payload) {
+  const abortController = new AbortController()
+  const ctx = { ...payload, abortController, pending: [] }
+
+  lifecycleChannel.publish(ctx)
+
+  return Promise.all(ctx.pending).then(() => {
+    if (abortController.signal.aborted) {
+      throw abortController.signal.reason
+    }
   })
 }
 
 /**
- * Wraps a Vercel AI language model's doGenerate and doStream methods to evaluate
- * messages with AIGuard.
+ * Wraps a Vercel AI language model's doGenerate and doStream lifecycle methods.
  *
  * @param {object} model - A Vercel AI language model instance
  */
-function wrapModelWithAIGuard (model) {
+function wrapModelWithLifecycle (model) {
   if (!model || wrappedModels.has(model)) return
   wrappedModels.add(model)
 
@@ -39,20 +51,18 @@ function wrapModelWithAIGuard (model) {
       return function (options) {
         const originalResult = original.call(this, options)
 
-        if (!aiguardChannel.hasSubscribers) return originalResult
+        if (!doGenerateBeforeChannel.hasSubscribers && !doGenerateAfterChannel.hasSubscribers) return originalResult
         if (!options.prompt?.length) return originalResult
 
-        const inputMessages = convertVercelPromptToMessages(options.prompt)
-        if (!inputMessages.length) return originalResult
+        const beforeEvaluation = doGenerateBeforeChannel.hasSubscribers
+          ? publishLifecycle(doGenerateBeforeChannel, { prompt: options.prompt, options })
+          : Promise.resolve()
 
-        // Run AI Guard input evaluation and LLM call in parallel.
-        // The LLM has no side effects so it is safe to discard its result if AI Guard blocks.
-        return Promise.all([publishEvaluation(inputMessages), originalResult])
+        return Promise.all([beforeEvaluation, originalResult])
           .then(([, result]) => {
-            if (!result.content?.length) return result
-            const outputMessages = buildOutputMessages(inputMessages, result.content)
-            return publishEvaluation(outputMessages)
-              .then(() => result)
+            if (!doGenerateAfterChannel.hasSubscribers || !result.content?.length) return result
+            const payload = { prompt: options.prompt, options, result }
+            return publishLifecycle(doGenerateAfterChannel, payload).then(() => result)
           })
       }
     })
@@ -63,16 +73,17 @@ function wrapModelWithAIGuard (model) {
       return function (options) {
         const originalResult = original.call(this, options)
 
-        if (!aiguardChannel.hasSubscribers) return originalResult
+        if (!doStreamBeforeChannel.hasSubscribers && !doStreamAfterChannel.hasSubscribers) return originalResult
         if (!options.prompt?.length) return originalResult
 
-        const inputMessages = convertVercelPromptToMessages(options.prompt)
-        if (!inputMessages.length) return originalResult
+        const beforeEvaluation = doStreamBeforeChannel.hasSubscribers
+          ? publishLifecycle(doStreamBeforeChannel, { prompt: options.prompt, options })
+          : Promise.resolve()
 
-        // Run AI Guard input evaluation and LLM call in parallel.
-        // The LLM has no side effects so it is safe to discard its result if AI Guard blocks.
-        return Promise.all([publishEvaluation(inputMessages), originalResult])
+        return Promise.all([beforeEvaluation, originalResult])
           .then(([, result]) => {
+            if (!doStreamAfterChannel.hasSubscribers) return result
+
             const chunks = []
             const reader = result.stream.getReader()
 
@@ -85,26 +96,19 @@ function wrapModelWithAIGuard (model) {
             }
 
             return readAll().then(() => {
-              const toolCalls = chunks.filter(c => c?.type === 'tool-call')
-              const text = chunks.filter(c => c?.type === 'text-delta').map(c => c.textDelta).join('')
-              const content = toolCalls.length ? toolCalls : text ? [{ type: 'text', text }] : []
-
-              const evaluate = content.length
-                ? publishEvaluation(buildOutputMessages(inputMessages, content))
-                : Promise.resolve()
-
-              return evaluate.then(() => {
-                // eslint-disable-next-line n/no-unsupported-features/node-builtins
-                const stream = new ReadableStream({
-                  start (controller) {
-                    for (const chunk of chunks) {
-                      controller.enqueue(chunk)
-                    }
-                    controller.close()
-                  },
+              return publishLifecycle(doStreamAfterChannel, { prompt: options.prompt, options, chunks })
+                .then(() => {
+                  // eslint-disable-next-line n/no-unsupported-features/node-builtins
+                  const stream = new ReadableStream({
+                    start (controller) {
+                      for (const chunk of chunks) {
+                        controller.enqueue(chunk)
+                      }
+                      controller.close()
+                    },
+                  })
+                  return { ...result, stream }
                 })
-                return { ...result, stream }
-              })
             })
           })
       }
@@ -221,7 +225,7 @@ for (const hook of getHooks('ai')) {
     // generateObject, streamObject)
     tracingChannel('orchestrion:ai:resolveLanguageModel').subscribe({
       end (ctx) {
-        wrapModelWithAIGuard(ctx.result)
+        wrapModelWithLifecycle(ctx.result)
       },
     })
 
@@ -229,4 +233,4 @@ for (const hook of getHooks('ai')) {
   })
 }
 
-module.exports = { wrapModelWithAIGuard }
+module.exports = { wrapModelWithLifecycle }

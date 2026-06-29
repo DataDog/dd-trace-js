@@ -90,6 +90,7 @@ export default [
       '!**/integration-tests/coverage/**',
       '**/dist', // Generated
       '**/docs', // Any JS here is for presentation only.
+      '**/.next', // Generated Next.js build output
       '**/out', // Generated
       '**/node_modules', // We don't own these.
       '**/versions', // This is effectively a node_modules tree.
@@ -655,6 +656,7 @@ export default [
       'packages/datadog-plugin-net/test/epipe-crash/**/*.js',
       'packages/datadog-plugin-openai/test/no-init.js',
       'packages/dd-trace/test/custom-metrics-app.js',
+      'packages/datadog-plugin-aws-durable-execution-sdk-js/test/integration-test/server.mjs',
       'packages/datadog-plugin-fastify/test/integration-test/helper.mjs',
       'packages/datadog-plugin-light-my-request/test/integration-test/server.mjs',
     ],
@@ -871,6 +873,11 @@ export default [
     },
   },
   {
+    // These fixture apps import dd-trace the way a customer does
+    // (`require('dd-trace')`), so dd-trace never appears in their own manifest.
+    // Both extraneous-require rules must be off; otherwise the rule fires
+    // whenever dd-trace happens to be resolvable locally (e.g. `yarn link`),
+    // even though CI's clean install keeps it unresolvable.
     name: 'dd-trace/tests/integration-and-resources',
     plugins: {
       import: eslintPluginImport,
@@ -888,6 +895,25 @@ export default [
     ],
     rules: {
       'import/no-extraneous-dependencies': 'off',
+      'n/no-extraneous-require': 'off',
+    },
+  },
+  {
+    // The Next.js fixture apps import dd-trace the way a customer does
+    // (`require('dd-trace')`). The package is supplied to the app at runtime via a
+    // stub written into node_modules (see test/index.spec.js), so it never appears
+    // in a manifest the extraneous-dependency rules can read.
+    name: 'dd-trace/datadog-plugin-next/fixtures',
+    plugins: {
+      import: eslintPluginImport,
+    },
+    files: [
+      'packages/datadog-plugin-next/test/app/**/*.js',
+      'packages/datadog-plugin-next/test/**/pages/**/*.js',
+    ],
+    rules: {
+      'import/no-extraneous-dependencies': 'off',
+      'n/no-extraneous-require': 'off',
     },
   },
 ]

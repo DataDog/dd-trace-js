@@ -11,8 +11,16 @@ const sinon = require('sinon')
 const nock = require('nock')
 
 require('../../../../../dd-trace/test/setup/core')
-const AgentlessCiVisibilityExporter = require('../../../../src/ci-visibility/exporters/agentless')
+const AgentlessCiVisibilityExporterBase = require('../../../../src/ci-visibility/exporters/agentless')
 const DynamicInstrumentationLogsWriter = require('../../../../src/ci-visibility/exporters/agentless/di-logs-writer')
+
+// The real tracer Config always carries a `testOptimization` namespace object.
+// Default it here so the partial config stand-ins below mirror that guarantee.
+class AgentlessCiVisibilityExporter extends AgentlessCiVisibilityExporterBase {
+  constructor (config) {
+    super({ testOptimization: {}, ...config })
+  }
+}
 
 // Used by the negative "no API key" test to inject a stubbed getConfig singleton into
 // the request chain. The stubbed singleton still pulls every other field from the real
@@ -52,7 +60,9 @@ describe('CI Visibility Agentless Exporter', () => {
   })
 
   it('can use CI Vis protocol right away', () => {
-    const agentlessExporter = new AgentlessCiVisibilityExporter({ url, isGitUploadEnabled: true, tags: {} })
+    const agentlessExporter = new AgentlessCiVisibilityExporter({
+      testOptimization: { DD_CIVISIBILITY_AGENTLESS_URL: url, DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true }, tags: {},
+    })
     assert.strictEqual(agentlessExporter.canReportSessionTraces(), true)
   })
 
@@ -71,8 +81,10 @@ describe('CI Visibility Agentless Exporter', () => {
         }))
       const agentlessExporter = new AgentlessCiVisibilityExporter({
         site: 'datadoge.c0m',
-        isGitUploadEnabled: true,
-        isIntelligentTestRunnerEnabled: true,
+        testOptimization: {
+          DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true,
+          DD_CIVISIBILITY_ITR_ENABLED: true,
+        },
         tags: {},
       })
       agentlessExporter.getLibraryConfiguration({}, () => {
@@ -102,8 +114,10 @@ describe('CI Visibility Agentless Exporter', () => {
 
       const agentlessExporter = new AgentlessCiVisibilityExporter({
         site: 'datadoge.c0m',
-        isGitUploadEnabled: true,
-        isIntelligentTestRunnerEnabled: true,
+        testOptimization: {
+          DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true,
+          DD_CIVISIBILITY_ITR_ENABLED: true,
+        },
         tags: {},
       })
       agentlessExporter._resolveGit()
@@ -128,7 +142,12 @@ describe('CI Visibility Agentless Exporter', () => {
           },
         }))
       const agentlessExporter = new AgentlessCiVisibilityExporter({
-        url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
+        testOptimization: {
+          DD_CIVISIBILITY_AGENTLESS_URL: url,
+          DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true,
+          DD_CIVISIBILITY_ITR_ENABLED: true,
+        },
+        tags: {},
       })
       agentlessExporter.getLibraryConfiguration({}, () => {
         assert.strictEqual(scope.isDone(), true)
@@ -151,7 +170,12 @@ describe('CI Visibility Agentless Exporter', () => {
           },
         }))
       const agentlessExporter = new AgentlessCiVisibilityExporter({
-        url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
+        testOptimization: {
+          DD_CIVISIBILITY_AGENTLESS_URL: url,
+          DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true,
+          DD_CIVISIBILITY_ITR_ENABLED: true,
+        },
+        tags: {},
       })
       agentlessExporter.getLibraryConfiguration({}, () => {
         assert.strictEqual(scope.isDone(), true)
@@ -161,8 +185,8 @@ describe('CI Visibility Agentless Exporter', () => {
     })
 
     it('will not allow skippable request if ITR configuration fails', (done) => {
-      // Stub apiKey to be missing so the request is never sent.
-      const AgentlessCiVisibilityExporter = loadAgentlessExporterWithFakeConfig({ apiKey: undefined })
+      // Stub the API key to be missing so the request is never sent.
+      const AgentlessCiVisibilityExporter = loadAgentlessExporterWithFakeConfig({ DD_API_KEY: undefined })
 
       const scope = nock('http://www.example.com')
         .post('/api/v2/libraries/tests/services/setting')
@@ -177,7 +201,12 @@ describe('CI Visibility Agentless Exporter', () => {
         }))
 
       const agentlessExporter = new AgentlessCiVisibilityExporter({
-        url, isGitUploadEnabled: true, isIntelligentTestRunnerEnabled: true, tags: {},
+        testOptimization: {
+          DD_CIVISIBILITY_AGENTLESS_URL: url,
+          DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true,
+          DD_CIVISIBILITY_ITR_ENABLED: true,
+        },
+        tags: {},
       })
       agentlessExporter.sendGitMetadata = () => {
         return /** @type {Promise<void>} */ (new Promise(resolve => {
@@ -202,7 +231,7 @@ describe('CI Visibility Agentless Exporter', () => {
     it('should initialise DynamicInstrumentationLogsWriter', async () => {
       const agentProxyCiVisibilityExporter = new AgentlessCiVisibilityExporter({
         tags: {},
-        isTestDynamicInstrumentationEnabled: true,
+        testOptimization: { DD_TEST_FAILED_TEST_REPLAY_ENABLED: true },
       })
       await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
       assert.ok(agentProxyCiVisibilityExporter._logsWriter instanceof DynamicInstrumentationLogsWriter)
@@ -215,7 +244,7 @@ describe('CI Visibility Agentless Exporter', () => {
       }
       const agentProxyCiVisibilityExporter = new AgentlessCiVisibilityExporter({
         tags: {},
-        isTestDynamicInstrumentationEnabled: true,
+        testOptimization: { DD_TEST_FAILED_TEST_REPLAY_ENABLED: true },
       })
       await agentProxyCiVisibilityExporter._canUseCiVisProtocolPromise
       agentProxyCiVisibilityExporter._logsWriter = mockWriter
@@ -231,6 +260,15 @@ describe('CI Visibility Agentless Exporter', () => {
       const agentlessExporter = new AgentlessCiVisibilityExporter({ site, tags: {} })
       assert.strictEqual(agentlessExporter._url.href, `https://citestcycle-intake.${site}/`)
       assert.strictEqual(agentlessExporter._coverageUrl.href, `https://citestcov-intake.${site}/`)
+    })
+
+    it('uses DD_CIVISIBILITY_AGENTLESS_URL as the intake override for every endpoint', () => {
+      const agentlessExporter = new AgentlessCiVisibilityExporter({
+        testOptimization: { DD_CIVISIBILITY_AGENTLESS_URL: url }, site: 'd4tad0g.com', tags: {},
+      })
+      assert.strictEqual(agentlessExporter._url.href, 'http://www.example.com/')
+      assert.strictEqual(agentlessExporter._coverageUrl.href, 'http://www.example.com/')
+      assert.strictEqual(agentlessExporter._apiUrl.href, 'http://www.example.com/')
     })
   })
 })

@@ -8,6 +8,11 @@ const { pathToFileURL, fileURLToPath } = require('node:url')
 const instrumentations = require('../datadog-instrumentations/src/helpers/instrumentations')
 const extractPackageAndModulePath = require('../datadog-instrumentations/src/helpers/extract-package-and-module-path')
 const hooks = require('../datadog-instrumentations/src/helpers/hooks')
+const {
+  OPTIONAL_PEER_FILTER,
+  matchesOptionalPeerFile,
+  rewriteOptionalPeerLoads,
+} = require('../datadog-instrumentations/src/helpers/optional-peer-bundler')
 const { processModule, isESMFile } = require('./src/utils')
 const log = require('./src/log')
 
@@ -128,6 +133,11 @@ module.exports.setup = function (build) {
 ${build.initialOptions.banner.js}`
   }
 
+  // Keep the build from failing on the optional `@openfeature/core` peer of
+  // `@openfeature/server-sdk` when it is not installed (#8635). esbuild follows the chain
+  // whenever `@openfeature/server-sdk` is reachable -- the app importing it directly, or the
+  // bundled provider when the optional peer is present -- so mark `@openfeature/core` external
+  // when it is absent rather than erroring at bundle time.
   try {
     // eslint-disable-next-line n/no-unpublished-require
     require.resolve('@openfeature/core')
@@ -171,6 +181,22 @@ ${build.initialOptions.banner.js}`
   } else {
     log.warn('No git metadata available - skipping injection')
   }
+
+  // Rewrite optional-peer loads so installed peers get bundled and survive the bundle being
+  // relocated without them on disk (#8980). Registered before the generic onLoad so it wins for
+  // these files. Absent peers stay opaque, so a build that does not opt into the feature does not
+  // follow their dependency chain (#8635).
+  build.onLoad({ filter: OPTIONAL_PEER_FILTER }, args => {
+    const normalizedPath = args.path.replaceAll('\\', '/')
+    if (!matchesOptionalPeerFile(normalizedPath)) return
+
+    log.debug('INLINE: optional-peer loader applied to %s', normalizedPath)
+    return {
+      contents: rewriteOptionalPeerLoads(fs.readFileSync(args.path, 'utf8'), path.dirname(args.path)),
+      loader: 'js',
+      resolveDir: path.dirname(args.path),
+    }
+  })
 
   // first time is intercepted, proxy should be created, next time the original should be loaded
   const interceptedESMModules = new Set()
@@ -347,10 +373,15 @@ register(${JSON.stringify(toRegister)}, _, set, get, ${JSON.stringify(data.raw)}
         }
       } else {
         const fileCode = fs.readFileSync(args.path, 'utf8')
+        // Don't spread `...arguments`: esbuild's minifier can rewrite the surrounding
+        // `__commonJS` factory into an arrow function whose `arguments` resolves to the
+        // ESM top-level scope (see issue #8681). Pass `(module.exports, module)`
+        // explicitly; the IIFE declares no parameters so esbuild's static `require()`
+        // resolution inside `fileCode` is preserved through the factory's closure.
         contents = `
         (function() {
           ${fileCode}
-        })(...arguments);
+        })(module.exports, module);
         {
           const dc = require('dc-polyfill');
           const ch = dc.channel('${CHANNEL}');

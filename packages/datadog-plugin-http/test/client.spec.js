@@ -60,6 +60,98 @@ describe('Plugin', () => {
         await agent.close()
       })
 
+      describe('with OTel semantics enabled', () => {
+        beforeEach(async () => {
+          process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
+          tracer = await agent.load('http', { server: false })
+          http = require(pluginToBeLoaded)
+          express = require('express')
+        })
+
+        afterEach(() => {
+          delete process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED
+        })
+
+        it('emits OpenTelemetry client attributes and omits the Datadog ones', done => {
+          const app = express()
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          appListener = server(app, port => {
+            agent.assertFirstTraceSpan(span => {
+              // OpenTelemetry attribute names are present...
+              assertObjectContains(span, {
+                type: 'http',
+                resource: 'GET',
+                meta: {
+                  'span.kind': 'client',
+                  'http.request.method': 'GET',
+                  'url.full': `${protocol}://localhost:${port}/user`,
+                  'server.address': 'localhost',
+                },
+                metrics: {
+                  'http.response.status_code': 200,
+                  'server.port': port,
+                },
+              })
+              // ...and the Datadog ones are absent.
+              assert.ok(!Object.hasOwn(span.meta, 'http.method'))
+              assert.ok(!Object.hasOwn(span.meta, 'http.url'))
+              assert.ok(!Object.hasOwn(span.meta, 'http.status_code'))
+              assert.ok(!Object.hasOwn(span.meta, 'out.host'))
+              assert.ok(!Object.hasOwn(span.meta, 'error.type'))
+            }).then(done).catch(done)
+
+            const req = http.request(`${protocol}://localhost:${port}/user`, res => {
+              res.on('data', () => {})
+            })
+            req.end()
+          })
+        })
+
+        it('sets error.type to the status code on a 4xx client response', done => {
+          const app = express()
+          app.get('/bad', (req, res) => {
+            res.status(400).send()
+          })
+
+          appListener = server(app, port => {
+            agent.assertFirstTraceSpan(span => {
+              assertObjectContains(span, {
+                meta: { 'error.type': '400' },
+                metrics: { 'http.response.status_code': 400 },
+              })
+            }).then(done).catch(done)
+
+            const req = http.request(`${protocol}://localhost:${port}/bad`, res => {
+              res.on('data', () => {})
+            })
+            req.end()
+          })
+        })
+
+        it('includes the query string in url.full (obfuscation preserved)', done => {
+          const app = express()
+          app.get('/user', (req, res) => {
+            res.status(200).send()
+          })
+
+          appListener = server(app, port => {
+            agent.assertFirstTraceSpan(span => {
+              assertObjectContains(span, {
+                meta: { 'url.full': `${protocol}://localhost:${port}/user?foo=bar` },
+              })
+            }).then(done).catch(done)
+
+            const req = http.request(`${protocol}://localhost:${port}/user?foo=bar`, res => {
+              res.on('data', () => {})
+            })
+            req.end()
+          })
+        })
+      })
+
       describe('without configuration', () => {
         beforeEach(async () => {
           tracer = await agent.load('http', { server: false })
@@ -220,9 +312,9 @@ describe('Plugin', () => {
 
             appListener.on('upgrade', (req, socket, head) => {
               socket.write('HTTP/1.1 101 Web Socket Protocol Handshake\r\n' +
-                             'Upgrade: WebSocket\r\n' +
-                             'Connection: Upgrade\r\n' +
-                             '\r\n')
+                            'Upgrade: WebSocket\r\n' +
+                            'Connection: Upgrade\r\n' +
+                            '\r\n')
               socket.pipe(socket)
             })
 
