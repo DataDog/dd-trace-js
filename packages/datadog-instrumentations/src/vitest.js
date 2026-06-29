@@ -976,7 +976,7 @@ function createMainProcessReporter (
 
     const attemptCount = getRepeatedAttemptCount(task, statuses)
     if (statuses.length < attemptCount) {
-      statuses.push(getDatadogStatus(task.result))
+      statuses.push(getFinalRepeatedTaskStatus(task))
     }
   }
 
@@ -1522,6 +1522,10 @@ function getDatadogStatus (result) {
   if (state === 'pass' || state === 'passed') return 'pass'
   if (state === 'fail' || state === 'failed') return 'fail'
   return 'skip'
+}
+
+function getFinalRepeatedTaskStatus (task) {
+  return task.meta?.__ddTestOptQuarantinedFailed ? 'fail' : getDatadogStatus(task.result)
 }
 
 function getSuiteTaskError (task) {
