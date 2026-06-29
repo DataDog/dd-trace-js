@@ -958,7 +958,7 @@ function createMainProcessReporter (
 
     const attemptCount = getRepeatedAttemptCount(task, statuses)
     if (statuses.length < attemptCount) {
-      statuses.push('pass')
+      statuses.push(getDatadogStatus(task.result))
     }
   }
 
@@ -1344,7 +1344,8 @@ function getRepeatedTestReport (task, testName, testSuiteAbsolutePath, testPrope
 }
 
 function getRepeatedAttemptCount (task, statuses) {
-  const retries = task.meta?.__ddTestOptAtfRetries ?? task.meta?.__ddTestOptEfdRetries ?? task.repeats ?? 0
+  const retries = task.meta?.__ddTestOptAtfRetries ?? task.meta?.__ddTestOptEfdRetries ??
+    Math.max(task.result?.retryCount || 0, task.repeats || 0)
   return Math.max(statuses.length, retries + 1)
 }
 

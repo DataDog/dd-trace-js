@@ -1174,6 +1174,60 @@ versions.forEach((version) => {
         const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
         assert.strictEqual(exitCode, 1)
       })
+
+      newerVitestIt('reports final passing attempt after multiple retries when no-worker init is enabled', async () => {
+        receiver.setSettings({
+          flaky_test_retries_enabled: false,
+          known_tests_enabled: false,
+          early_flake_detection: {
+            enabled: false,
+          },
+        })
+
+        const testName = 'early flake detection can retry tests that eventually pass'
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events
+              .filter(event => event.type === 'test')
+              .map(test => test.content)
+              .filter(test => test.meta[TEST_NAME] === testName)
+              .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+            assert.deepStrictEqual(
+              tests.map(test => ({
+                status: test.meta[TEST_STATUS],
+                isRetry: test.meta[TEST_IS_RETRY],
+                retryReason: test.meta[TEST_RETRY_REASON],
+              })),
+              [
+                { status: 'fail', isRetry: undefined, retryReason: undefined },
+                { status: 'fail', isRetry: 'true', retryReason: TEST_RETRY_REASON_TYPES.ext },
+                { status: 'pass', isRetry: 'true', retryReason: TEST_RETRY_REASON_TYPES.ext },
+              ]
+            )
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run -t "can retry tests that eventually pass"',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              POOL_CONFIG: 'forks',
+              PROJECT_POOL_CONFIG: 'forks',
+              PROJECT_RETRY_CONFIG: '2',
+              DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+              DD_SERVICE: undefined,
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, 0)
+      })
     })
 
     it('correctly calculates test code owners when working directory is not repository root', (done) => {
