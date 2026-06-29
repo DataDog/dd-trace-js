@@ -236,9 +236,17 @@ for (const hook of getHooks('ai')) {
 const aiSdkTelemetryChannel = tracingChannel('ai:telemetry')
 const aiSdkTelemetryStreamedChunkChannel = channel('dd-trace:vercel-ai:chunk')
 
+// for testing, and possibly actual instrumentation use, we want to
+// guard against double-subscribing to the asyncEnd channel of the
+// vercel ai-provided tracingChannel
+let subscribed = false
+
 // as of the v7 release, the ai sdk does not automatically aggregate streamed responses
 // we will handle emitting the chunks directly for products to handle
 addHook({ name: 'ai', versions: ['>=7.0.0'] }, exports => {
+  if (subscribed) return exports
+  subscribed = true
+
   // ai sdk v7 only supported on node.js 22+
   // inlining this import here so we only import in those cases
   // eslint-disable-next-line n/no-unsupported-features/node-builtins
