@@ -34,9 +34,9 @@ function uploadCoverageReport (
   { filePath, format, testEnvironmentMetadata, url, isEvpProxy, evpProxyPrefix },
   callback
 ) {
-  const apiKey = getConfig().apiKey
+  const { DD_API_KEY } = getConfig()
 
-  if (!apiKey && !isEvpProxy) {
+  if (!DD_API_KEY && !isEvpProxy) {
     return callback(new Error('DD_API_KEY is required for coverage report upload'))
   }
 
@@ -82,7 +82,7 @@ function uploadCoverageReport (
     options.headers['X-Datadog-EVP-Subdomain'] = 'ci-intake'
   } else {
     options.path = '/api/v2/cicovreprt'
-    options.headers['dd-api-key'] = apiKey
+    options.headers['dd-api-key'] = DD_API_KEY
   }
 
   log.debug('Uploading coverage report %s to %s%s', filePath, url, options.path)

@@ -31,14 +31,14 @@ describe('endpoints telemetry', () => {
     })
 
     it('should subscribe', () => {
-      const config = { appsec: { apiSecurity: { endpointCollectionEnabled: true } } }
+      const config = { appsec: { DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: true } }
       endpoints.start(config)
 
       sinon.assert.calledThrice(subscribe)
     })
 
     it('should not subscribe', () => {
-      const config = { appsec: { apiSecurity: { endpointCollectionEnabled: false } } }
+      const config = { appsec: { DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false } }
       endpoints.start(config)
 
       sinon.assert.notCalled(subscribe)
@@ -68,10 +68,8 @@ describe('endpoints telemetry', () => {
 
       const config = {
         appsec: {
-          apiSecurity: {
-            endpointCollectionEnabled: true,
-            endpointCollectionMessageLimit: 100,
-          },
+          DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: true,
+          DD_API_SECURITY_ENDPOINT_COLLECTION_MESSAGE_LIMIT: 100,
         },
       }
 

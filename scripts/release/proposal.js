@@ -101,10 +101,14 @@ try {
     process.exit(0)
   }
 
+  // Expand to full SHA to avoid minimist scientific notation coercion in branch-diff.
+  // Abbreviated SHAs like "980e663509" match JS float syntax and become Infinity.
+  const upperBoundRef = capture(`git rev-parse ${upperBoundSha}`)
+
   // notesShas is scoped to upperBoundSha so isMinor and release notes only reflect
   // the capped commits actually included in the proposal, not deferred ones.
   // Excludes semver-major (gated behind a flag, not user-visible).
-  const notesShas = capture(`${notesDiffCmd} --format=sha --reverse v${releaseLine}.x ${upperBoundSha}`)
+  const notesShas = capture(`${notesDiffCmd} --format=sha --reverse v${releaseLine}.x ${upperBoundRef}`)
     .split('\n').filter(Boolean)
   const contributorBySha = getContributorsBySha(`v${releaseLine}.x`, upperBoundSha)
   const notesEntries = []
@@ -155,7 +159,7 @@ try {
 
   if (shasToApply.length > 0) {
     // Show only commits being applied; upperBoundSha is the last main SHA that fits.
-    const newChanges = capture(`${cherryPickDiffCmd} v${newVersion}-proposal ${upperBoundSha}`)
+    const newChanges = capture(`${cherryPickDiffCmd} v${newVersion}-proposal ${upperBoundRef}`)
     const truncationNote = truncated
       ? `\n\n⚠️  Applying ${shasToApply.length} of ${proposalShas.length} available commits` +
         ` (GitHub limit: ${MAX_CHERRY_PICKS}). Remaining commits require a separate release.`

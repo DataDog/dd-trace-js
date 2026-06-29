@@ -31,11 +31,11 @@ class NoopTTLCache {
 }
 
 function configure ({ appsec, apmTracingEnabled }) {
-  enabled = appsec.apiSecurity.enabled
+  enabled = appsec.DD_API_SECURITY_ENABLED
   asmStandaloneEnabled = apmTracingEnabled === false
-  sampledRequests = appsec.apiSecurity.sampleDelay === 0
+  sampledRequests = appsec.DD_API_SECURITY_SAMPLE_DELAY === 0
     ? new NoopTTLCache()
-    : new TTLCache({ max: MAX_SIZE, ttl: appsec.apiSecurity.sampleDelay * 1000 })
+    : new TTLCache({ max: MAX_SIZE, ttl: appsec.DD_API_SECURITY_SAMPLE_DELAY * 1000 })
 }
 
 function disable () {
