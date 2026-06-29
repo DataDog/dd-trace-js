@@ -22,6 +22,16 @@ const PROXY_HEADER_ACCOUNT_ID = 'x-dd-proxy-account-id'
 const PROXY_HEADER_API_ID = 'x-dd-proxy-api-id'
 const PROXY_HEADER_AWS_USER = 'x-dd-proxy-user'
 
+const proxiesWithNoTimestamp = {
+  'azure-gw': {
+    spanName: 'azure.app-gateway',
+    component: 'azure-gw'
+  },
+  'azure-fd': {
+    spanName: 'azure.frontdoor',
+    component: 'azure-fd'
+  },
+}
 const supportedProxies = {
   'aws-apigateway': {
     spanName: 'aws.apigateway',
@@ -34,10 +44,6 @@ const supportedProxies = {
   'azure-apim': {
     spanName: 'azure.apim',
     component: 'azure-apim',
-  },
-  'azure-gw': {
-    spanName: 'azure.app-gateway',
-    component: 'azure-gw'
   },
 }
 
@@ -113,13 +119,15 @@ function setInferredProxySpanTags(span, proxyContext) {
 }
 
 function extractInferredProxyContext(headers) {
-  if (headers[PROXY_HEADER_SYSTEM] == 'azure-gw' && !headers[PROXY_HEADER_START_TIME_MS]) {
+  if ((headers[PROXY_HEADER_SYSTEM] in proxiesWithNoTimestamp) && !headers[PROXY_HEADER_START_TIME_MS]) {
     headers[PROXY_HEADER_START_TIME_MS] = (Date.now()).toString()
   }
 
   if (!(PROXY_HEADER_START_TIME_MS in headers)) {
     return null
   }
+
+  Object.assign(supportedProxies, proxiesWithNoTimestamp)
 
   if (!(PROXY_HEADER_SYSTEM in headers && headers[PROXY_HEADER_SYSTEM] in supportedProxies)) {
     log.debug('Received headers to create inferred proxy span but headers include an unsupported proxy type', headers)
