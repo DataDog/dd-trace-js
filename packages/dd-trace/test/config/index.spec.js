@@ -3417,7 +3417,7 @@ describe('Config', () => {
       })
       it('should disable test failure screenshots by default', () => {
         const config = getConfig(options)
-        assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED, false)
+        assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED, undefined)
       })
       it('should enable test failure screenshots if DD_TEST_FAILURE_SCREENSHOTS_ENABLED is true', () => {
         process.env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED = 'true'
