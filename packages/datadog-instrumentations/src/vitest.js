@@ -84,7 +84,7 @@ const workerProcesses = new WeakSet()
 const mainProcessSetupStates = new WeakMap()
 const coverageWrappedProviders = new WeakSet()
 const finishWrappedContexts = new WeakSet()
-const mainProcessReporterContexts = new WeakSet()
+const mainProcessReporterStates = new WeakMap()
 let isFlakyTestRetriesEnabled = false
 let flakyTestRetriesCount = 0
 let isEarlyFlakeDetectionEnabled = false
@@ -883,26 +883,28 @@ function installMainProcessReporter (
 
   if (
     !shouldInstallNoWorkerInit ||
-    noWorkerInitTestModules?.isEmpty ||
-    mainProcessReporterContexts.has(ctx)
+    noWorkerInitTestModules?.isEmpty
   ) {
     return
   }
-  mainProcessReporterContexts.add(ctx)
-  ctx.reporters.push(createMainProcessReporter(
+
+  const reporterState = {
     frameworkVersion,
     testSessionConfiguration,
     testOptimizationData,
-    noWorkerInitTestModules
-  ))
+    noWorkerInitTestModules,
+  }
+  const installedReporterState = mainProcessReporterStates.get(ctx)
+  if (installedReporterState) {
+    Object.assign(installedReporterState, reporterState)
+    return
+  }
+
+  mainProcessReporterStates.set(ctx, reporterState)
+  ctx.reporters.push(createMainProcessReporter(reporterState))
 }
 
-function createMainProcessReporter (
-  frameworkVersion,
-  testSessionConfiguration = {},
-  testOptimizationData = {},
-  noWorkerInitTestModules
-) {
+function createMainProcessReporter (reporterState) {
   const testSuiteContexts = new Map()
   const finishedTestModules = new Set()
   const taskAttemptStatuses = new Map()
@@ -951,6 +953,7 @@ function createMainProcessReporter (
   }
 
   function shouldReportTestModule (testModule) {
+    const noWorkerInitTestModules = reporterState.noWorkerInitTestModules
     if (!noWorkerInitTestModules) return true
 
     const filepath = getTestModuleFilepath(testModule)
@@ -966,6 +969,7 @@ function createMainProcessReporter (
   }
 
   function shouldReportTestTask (task) {
+    const noWorkerInitTestModules = reporterState.noWorkerInitTestModules
     if (!noWorkerInitTestModules) return true
 
     const file = task.file
@@ -1044,6 +1048,7 @@ function createMainProcessReporter (
   }
 
   function startTestSuite (testModule) {
+    const { frameworkVersion, testSessionConfiguration } = reporterState
     const testModuleId = getTestModuleId(testModule)
     const testSuiteCtx = {
       testSuiteAbsolutePath: getTestModuleFilepath(testModule),
@@ -1160,6 +1165,7 @@ function createMainProcessReporter (
   }
 
   function getMainProcessTestProperties (task, testSuiteAbsolutePath, testName) {
+    const { testOptimizationData, testSessionConfiguration } = reporterState
     const testSuite = getTestSuitePath(
       testSuiteAbsolutePath,
       testSessionConfiguration.repositoryRoot || process.cwd()
@@ -1584,7 +1590,7 @@ function recomputeTaskState (task) {
 function ensureMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
   const shouldInstallNoWorkerInit = shouldUseVitestNoWorkerInit(ctx, testSpecifications, frameworkVersion)
   let setupState = mainProcessSetupStates.get(ctx)
-  if (!setupState || (shouldInstallNoWorkerInit && !setupState.shouldInstallNoWorkerInit)) {
+  if (!setupState || shouldInstallNoWorkerInit || setupState.shouldInstallNoWorkerInit !== shouldInstallNoWorkerInit) {
     setupState = {
       promise: runMainProcessSetup(ctx, frameworkVersion, testSpecifications, shouldInstallNoWorkerInit),
       shouldInstallNoWorkerInit,
