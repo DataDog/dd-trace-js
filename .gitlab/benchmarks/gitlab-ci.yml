@@ -4,6 +4,7 @@
 include:
   - project: 'DataDog/benchmarking-platform-tools'
     file: 'images/templates/gitlab/build-ci-images.template.yml'
+  - local: '.gitlab/benchmarks/benchmark-health.yml'
 
 variables:
   # Consumed by the benchmark jobs below. Repin after a `build-benchmark-ci-images`
