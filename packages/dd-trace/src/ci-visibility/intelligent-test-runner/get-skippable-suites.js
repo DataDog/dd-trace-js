@@ -14,6 +14,42 @@ const {
   TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_BYTES,
 } = require('../../ci-visibility/telemetry')
 const { buildCacheKey, writeToCache, withCache } = require('../requests/fs-cache')
+const { validateSkippableTestsResponse } = require('../test-optimization-http-cache-schema')
+
+function parseJsonResponse (rawJson) {
+  return typeof rawJson === 'string' ? JSON.parse(rawJson) : rawJson
+}
+
+function parseSkippableSuitesResponse (
+  rawJson,
+  { testLevel = 'suite', isCoverageReportUploadEnabled = false, validateRequiredFields = false } = {}
+) {
+  const parsedResponse = parseJsonResponse(rawJson)
+  if (validateRequiredFields) {
+    validateSkippableTestsResponse(parsedResponse)
+  }
+  const coverage = parsedResponse.meta?.coverage || {}
+
+  const skippableItems = parsedResponse
+    .data
+    .filter(({ type }) => type === testLevel)
+  const skippableSuites = []
+  for (const {
+    attributes: {
+      suite,
+      name,
+      _is_missing_line_code_coverage: isMissingLineCodeCoverage,
+    },
+  } of skippableItems) {
+    // Only reject candidates without backend line coverage when we need that coverage to backfill reports.
+    if (isCoverageReportUploadEnabled && isMissingLineCodeCoverage) continue
+
+    skippableSuites.push(testLevel === 'suite' ? suite : { suite, name })
+  }
+  const correlationId = parsedResponse.meta?.correlation_id
+
+  return { skippableSuites, correlationId, coverage }
+}
 
 function getSkippableSuites ({
   url,
@@ -124,12 +160,12 @@ function fetchFromApi ({
     options.path = `${evpProxyPrefix}/api/v2/ci/tests/skippable`
     options.headers['X-Datadog-EVP-Subdomain'] = 'api'
   } else {
-    const { apiKey } = getConfig()
-    if (!apiKey) {
+    const { DD_API_KEY } = getConfig()
+    if (!DD_API_KEY) {
       return done(new Error('Skippable suites were not fetched because Datadog API key is not defined.'))
     }
 
-    options.headers['dd-api-key'] = apiKey
+    options.headers['dd-api-key'] = DD_API_KEY
   }
 
   const data = JSON.stringify({
@@ -163,26 +199,12 @@ function fetchFromApi ({
       done(err)
     } else {
       try {
-        const parsedResponse = JSON.parse(res)
-        const coverage = parsedResponse.meta?.coverage || {}
-
-        const skippableItems = parsedResponse
-          .data
-          .filter(({ type }) => type === testLevel)
-        const skippableSuites = []
-        for (const {
-          attributes: {
-            suite,
-            name,
-            _is_missing_line_code_coverage: isMissingLineCodeCoverage,
-          },
-        } of skippableItems) {
-          // Only reject candidates without backend line coverage when we need that coverage to backfill reports.
-          if (isCoverageReportUploadEnabled && isMissingLineCodeCoverage) continue
-
-          skippableSuites.push(testLevel === 'suite' ? suite : { suite, name })
-        }
-        const correlationId = parsedResponse.meta?.correlation_id
+        const parsedResponse = parseJsonResponse(res)
+        const result = parseSkippableSuitesResponse(parsedResponse, {
+          testLevel,
+          isCoverageReportUploadEnabled,
+        })
+        const skippableItems = parsedResponse.data.filter(({ type }) => type === testLevel)
         incrementCountMetric(
           testLevel === 'test'
             ? TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_TESTS
@@ -191,9 +213,8 @@ function fetchFromApi ({
           skippableItems.length
         )
         distributionMetric(TELEMETRY_ITR_SKIPPABLE_TESTS_RESPONSE_BYTES, {}, res.length)
-        log.debug('Number of received skippable %ss:', testLevel, skippableSuites.length)
+        log.debug('Number of received skippable %ss:', testLevel, result.skippableSuites.length)
 
-        const result = { skippableSuites, correlationId, coverage }
         writeToCache(cacheKey, result)
 
         done(null, result)
@@ -204,4 +225,4 @@ function fetchFromApi ({
   })
 }
 
-module.exports = { getSkippableSuites }
+module.exports = { getSkippableSuites, parseSkippableSuitesResponse }

@@ -10,7 +10,9 @@ require('../../setup/core')
 
 const {
   getTestManagementTests,
+  parseTestManagementTestsResponse,
 } = require('../../../src/ci-visibility/test-management/get-test-management-tests')
+const getConfig = require('../../../src/config')
 const {
   buildCacheKey,
   getCachePath,
@@ -64,13 +66,17 @@ function cleanup (params) {
 describe('get-test-management-tests', () => {
   beforeEach(() => {
     process.env.DD_API_KEY = 'test-api-key'
+    getConfig().DD_API_KEY = 'test-api-key'
     process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE = 'true'
+    getConfig().DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE = true
     cleanup(DEFAULT_PARAMS)
   })
 
   afterEach(() => {
     delete process.env.DD_API_KEY
+    getConfig().DD_API_KEY = undefined
     delete process.env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE
+    getConfig().DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE = false
     cleanup(DEFAULT_PARAMS)
     nock.cleanAll()
   })
@@ -122,5 +128,35 @@ describe('get-test-management-tests', () => {
       assert.strictEqual(fs.existsSync(getLockPath(key)), false, 'lock should be cleaned up')
       done()
     })
+  })
+})
+
+describe('parseTestManagementTestsResponse', () => {
+  it('returns modules from a raw backend response', () => {
+    assert.deepStrictEqual(
+      parseTestManagementTestsResponse(JSON.stringify(TEST_MGMT_RESPONSE)),
+      TEST_MGMT_RESPONSE.data.attributes.modules
+    )
+  })
+
+  it('validates test management tests response shape when requested', () => {
+    assert.deepStrictEqual(
+      parseTestManagementTestsResponse(JSON.stringify(TEST_MGMT_RESPONSE), { validateRequiredFields: true }),
+      TEST_MGMT_RESPONSE.data.attributes.modules
+    )
+    assert.throws(
+      () => parseTestManagementTestsResponse(
+        JSON.stringify({ data: { attributes: {} } }),
+        { validateRequiredFields: true }
+      ),
+      /Invalid test management tests response: missing modules/
+    )
+    assert.throws(
+      () => parseTestManagementTestsResponse(
+        JSON.stringify({ data: { attributes: { modules: { jest: {} } } } }),
+        { validateRequiredFields: true }
+      ),
+      /Invalid test management tests response: module suites must be objects/
+    )
   })
 })
