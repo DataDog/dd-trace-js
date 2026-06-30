@@ -58,7 +58,10 @@ class CypressPlugin extends Plugin {
         on('after:screenshot', (details) => {
           const chain = userAfterScreenshotHandlers.reduce(
             (p, h) => p.then((latestDetails) => Promise.resolve(h(latestDetails)).then(
-              (returned) => returned ?? latestDetails
+              // Merge the user handler's (possibly partial) return into the running details
+              // rather than replacing them, so Cypress metadata such as `testFailure` and
+              // `takenAt` survives a handler that only returns { path, size, dimensions }.
+              (returned) => (returned == null ? latestDetails : { ...latestDetails, ...returned })
             )),
             Promise.resolve(details)
           )
