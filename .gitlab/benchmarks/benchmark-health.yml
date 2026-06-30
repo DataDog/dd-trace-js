@@ -1,0 +1,88 @@
+# Fast-track CI shim for benchmark-health stability monitoring.
+#
+# bp-tools triggers this job via `trigger:project`, passing:
+#   EXTERNAL_BENCHMARK_RUN_ID  - unique run identifier (8-hex-char UUID prefix)
+#   STABILITY_N                - number of repetitions (N parallel indices)
+#   BENCHMARK_HEALTH           - set to "true" to activate this job
+#
+# The job applies `.gitlab/benchmarks/patches/stability-monitoring.patch` to
+# the working tree, which expands the `benchmark` parallel matrix with
+# STABILITY_MONITORING_INDEX 0..N-1, then self-pushes the patched tree to
+# `external/benchmark-health/${EXTERNAL_BENCHMARK_RUN_ID}`. The push fires
+# the normal benchmark pipeline on the patched branch via GitHub->GitLab mirror.
+
+benchmark-health:
+  stage: benchmarks
+  needs: []
+  tags: ["arch:amd64"]
+  image: registry.ddbuild.io/images/benchmarking-platform-tools-ubuntu:latest
+  rules:
+    - if: '$BENCHMARK_HEALTH != "true"'
+      when: never
+    - when: on_success
+  timeout: 15m
+  id_tokens:
+    DDOCTOSTS_ID_TOKEN:
+      aud: dd-octo-sts
+  variables:
+    DDOCTOSTS_POLICY: "gitlab-benchmark-health-push"
+    TARGET_BRANCH: "external/benchmark-health/${EXTERNAL_BENCHMARK_RUN_ID}"
+    GIT_STRATEGY: clone
+  script:
+    - |
+      set -euo pipefail
+
+      # Validate required variables before doing any work.
+      for var in EXTERNAL_BENCHMARK_RUN_ID STABILITY_N; do
+        if [ -z "${!var:-}" ]; then
+          echo "ERROR: '$var' is required but not set."
+          exit 1
+        fi
+      done
+
+    - |
+      set -euo pipefail
+
+      # Mint a short-lived GitHub token via dd-octo-sts.
+      echo "Minting GitHub token with policy: $DDOCTOSTS_POLICY"
+      GITHUB_TOKEN=$(dd-octo-sts token --scope DataDog/dd-trace-js --policy "$DDOCTOSTS_POLICY")
+      if [ -z "$GITHUB_TOKEN" ]; then
+        echo "ERROR: dd-octo-sts returned an empty token. Check policy '$DDOCTOSTS_POLICY' in .github/chainguard/."
+        exit 1
+      fi
+
+    - |
+      set -euo pipefail
+
+      # Apply the stability-monitoring patch, which adds STABILITY_MONITORING_INDEX
+      # 0..2 to the benchmark parallel matrix. The patch is committed in-tree so
+      # its content is auditable alongside the CI config it targets.
+      PATCH=".gitlab/benchmarks/patches/stability-monitoring.patch"
+      echo "Applying patch: $PATCH"
+      git apply "$PATCH"
+      echo "Patch applied successfully."
+
+    - |
+      set -euo pipefail
+
+      # Configure git identity for the self-push commit.
+      git config user.email "benchmark-health-ci@datadoghq.com"
+      git config user.name "benchmark-health CI"
+
+      # Commit the patched tree on a new branch scoped to this run.
+      git checkout -b "$TARGET_BRANCH"
+      git add .gitlab/benchmarks/gitlab-ci.yml
+      git commit -m "ci(benchmarks): apply stability-monitoring patch for run ${EXTERNAL_BENCHMARK_RUN_ID}
+
+Stability run triggered by bp-tools with STABILITY_N=${STABILITY_N}.
+EXTERNAL_BENCHMARK_RUN_ID=${EXTERNAL_BENCHMARK_RUN_ID}"
+
+    - |
+      set -euo pipefail
+
+      # Push to GitHub over HTTPS using the minted token. The GitHub->GitLab
+      # mirror fires the benchmark pipeline on the pushed branch automatically.
+      REMOTE_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/DataDog/dd-trace-js.git"
+      echo "Pushing to branch: $TARGET_BRANCH"
+      git push "$REMOTE_URL" "HEAD:refs/heads/${TARGET_BRANCH}"
+      echo "Push complete. Benchmark pipeline will fire on branch: $TARGET_BRANCH"

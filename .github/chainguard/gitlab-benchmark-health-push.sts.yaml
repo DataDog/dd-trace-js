@@ -1,0 +1,16 @@
+# Grants the benchmark-health fast-track job in GitLab a short-lived GitHub
+# token with `contents: write` so it can self-push the stability-monitoring
+# patch to `external/benchmark-health/<run-id>` and trigger the benchmark
+# pipeline from bp-tools.
+#
+# Scoped tightly: GitLab issuer, dd-trace-js project path only, and the
+# `benchmark-health` job name. Contact: APM DCS Performance team.
+issuer: https://gitlab.ddbuild.io
+
+subject_pattern: "project_path:DataDog/apm-reliability/dd-trace-js:ref_type:branch:ref:.*"
+
+claim_pattern:
+  job_name: benchmark-health
+
+permissions:
+  contents: write

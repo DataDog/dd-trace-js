@@ -1,0 +1,197 @@
+From 6137f886efefa485ea65014722a6d190e4c6142c Mon Sep 17 00:00:00 2001
+From: Augusto de Oliveira <augusto.deoliveira@datadoghq.com>
+Date: Tue, 30 Jun 2026 19:15:32 +0200
+Subject: [PATCH] feat(benchmarks): add STABILITY_MONITORING_INDEX dimension
+ for flaky detection
+
+---
+ .gitlab/benchmarks/gitlab-ci.yml | 133 ++++++++++++++++++++++++++++++-
+ 1 file changed, 131 insertions(+), 2 deletions(-)
+
+diff --git a/.gitlab/benchmarks/gitlab-ci.yml b/.gitlab/benchmarks/gitlab-ci.yml
+index c9e30a6..10dcbc3 100644
+--- a/.gitlab/benchmarks/gitlab-ci.yml
++++ b/.gitlab/benchmarks/gitlab-ci.yml
+@@ -86,48 +86,177 @@ check-big-regressions:
+ 
+ benchmark:
+   extends: .benchmarks
+-  # The number of GROUP rows per MAJOR_VERSION must equal SPLITS. If you change
+-  # one, change the other — otherwise variants get silently skipped.
++  # The number of GROUP rows per (MAJOR_VERSION, STABILITY_MONITORING_INDEX) pair
++  # must equal SPLITS. If you change one, change the other — otherwise variants get
++  # silently skipped. STABILITY_MONITORING_INDEX repeats the full suite N times to
++  # measure run-to-run variance for flaky benchmark detection.
+   parallel:
+     matrix:
+       - MAJOR_VERSION: 20
+         GROUP: 1
++        STABILITY_MONITORING_INDEX: 0
+       - MAJOR_VERSION: 20
+         GROUP: 2
++        STABILITY_MONITORING_INDEX: 0
+       - MAJOR_VERSION: 20
+         GROUP: 3
++        STABILITY_MONITORING_INDEX: 0
+       - MAJOR_VERSION: 20
+         GROUP: 4
++        STABILITY_MONITORING_INDEX: 0
+       - MAJOR_VERSION: 20
+         GROUP: 5
++        STABILITY_MONITORING_INDEX: 0
+       - MAJOR_VERSION: 20
+         GROUP: 6
++        STABILITY_MONITORING_INDEX: 0
+       - MAJOR_VERSION: 24
+         GROUP: 1
++        STABILITY_MONITORING_INDEX: 0
+       - MAJOR_VERSION: 24
+         GROUP: 2
++        STABILITY_MONITORING_INDEX: 0
+       - MAJOR_VERSION: 24
+         GROUP: 3
++        STABILITY_MONITORING_INDEX: 0
+       - MAJOR_VERSION: 24
+         GROUP: 4
++        STABILITY_MONITORING_INDEX: 0
+       - MAJOR_VERSION: 24
+         GROUP: 5
++        STABILITY_MONITORING_INDEX: 0
+       - MAJOR_VERSION: 24
+         GROUP: 6
++        STABILITY_MONITORING_INDEX: 0
+       - MAJOR_VERSION: 26
+         GROUP: 1
++        STABILITY_MONITORING_INDEX: 0
+       - MAJOR_VERSION: 26
+         GROUP: 2
++        STABILITY_MONITORING_INDEX: 0
+       - MAJOR_VERSION: 26
+         GROUP: 3
++        STABILITY_MONITORING_INDEX: 0
+       - MAJOR_VERSION: 26
+         GROUP: 4
++        STABILITY_MONITORING_INDEX: 0
+       - MAJOR_VERSION: 26
+         GROUP: 5
++        STABILITY_MONITORING_INDEX: 0
+       - MAJOR_VERSION: 26
+         GROUP: 6
++        STABILITY_MONITORING_INDEX: 0
++      - MAJOR_VERSION: 20
++        GROUP: 1
++        STABILITY_MONITORING_INDEX: 1
++      - MAJOR_VERSION: 20
++        GROUP: 2
++        STABILITY_MONITORING_INDEX: 1
++      - MAJOR_VERSION: 20
++        GROUP: 3
++        STABILITY_MONITORING_INDEX: 1
++      - MAJOR_VERSION: 20
++        GROUP: 4
++        STABILITY_MONITORING_INDEX: 1
++      - MAJOR_VERSION: 20
++        GROUP: 5
++        STABILITY_MONITORING_INDEX: 1
++      - MAJOR_VERSION: 20
++        GROUP: 6
++        STABILITY_MONITORING_INDEX: 1
++      - MAJOR_VERSION: 24
++        GROUP: 1
++        STABILITY_MONITORING_INDEX: 1
++      - MAJOR_VERSION: 24
++        GROUP: 2
++        STABILITY_MONITORING_INDEX: 1
++      - MAJOR_VERSION: 24
++        GROUP: 3
++        STABILITY_MONITORING_INDEX: 1
++      - MAJOR_VERSION: 24
++        GROUP: 4
++        STABILITY_MONITORING_INDEX: 1
++      - MAJOR_VERSION: 24
++        GROUP: 5
++        STABILITY_MONITORING_INDEX: 1
++      - MAJOR_VERSION: 24
++        GROUP: 6
++        STABILITY_MONITORING_INDEX: 1
++      - MAJOR_VERSION: 26
++        GROUP: 1
++        STABILITY_MONITORING_INDEX: 1
++      - MAJOR_VERSION: 26
++        GROUP: 2
++        STABILITY_MONITORING_INDEX: 1
++      - MAJOR_VERSION: 26
++        GROUP: 3
++        STABILITY_MONITORING_INDEX: 1
++      - MAJOR_VERSION: 26
++        GROUP: 4
++        STABILITY_MONITORING_INDEX: 1
++      - MAJOR_VERSION: 26
++        GROUP: 5
++        STABILITY_MONITORING_INDEX: 1
++      - MAJOR_VERSION: 26
++        GROUP: 6
++        STABILITY_MONITORING_INDEX: 1
++      - MAJOR_VERSION: 20
++        GROUP: 1
++        STABILITY_MONITORING_INDEX: 2
++      - MAJOR_VERSION: 20
++        GROUP: 2
++        STABILITY_MONITORING_INDEX: 2
++      - MAJOR_VERSION: 20
++        GROUP: 3
++        STABILITY_MONITORING_INDEX: 2
++      - MAJOR_VERSION: 20
++        GROUP: 4
++        STABILITY_MONITORING_INDEX: 2
++      - MAJOR_VERSION: 20
++        GROUP: 5
++        STABILITY_MONITORING_INDEX: 2
++      - MAJOR_VERSION: 20
++        GROUP: 6
++        STABILITY_MONITORING_INDEX: 2
++      - MAJOR_VERSION: 24
++        GROUP: 1
++        STABILITY_MONITORING_INDEX: 2
++      - MAJOR_VERSION: 24
++        GROUP: 2
++        STABILITY_MONITORING_INDEX: 2
++      - MAJOR_VERSION: 24
++        GROUP: 3
++        STABILITY_MONITORING_INDEX: 2
++      - MAJOR_VERSION: 24
++        GROUP: 4
++        STABILITY_MONITORING_INDEX: 2
++      - MAJOR_VERSION: 24
++        GROUP: 5
++        STABILITY_MONITORING_INDEX: 2
++      - MAJOR_VERSION: 24
++        GROUP: 6
++        STABILITY_MONITORING_INDEX: 2
++      - MAJOR_VERSION: 26
++        GROUP: 1
++        STABILITY_MONITORING_INDEX: 2
++      - MAJOR_VERSION: 26
++        GROUP: 2
++        STABILITY_MONITORING_INDEX: 2
++      - MAJOR_VERSION: 26
++        GROUP: 3
++        STABILITY_MONITORING_INDEX: 2
++      - MAJOR_VERSION: 26
++        GROUP: 4
++        STABILITY_MONITORING_INDEX: 2
++      - MAJOR_VERSION: 26
++        GROUP: 5
++        STABILITY_MONITORING_INDEX: 2
++      - MAJOR_VERSION: 26
++        GROUP: 6
++        STABILITY_MONITORING_INDEX: 2
+   variables:
+     SPLITS: 6
++    STABILITY_MONITORING_INDEX: 0
+ 
+ benchmark-serverless:
+   stage: benchmarks
+-- 
+2.50.1
+
