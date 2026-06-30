@@ -1166,14 +1166,16 @@ function createMainProcessReporter (
     )
     const knownTests = testOptimizationData.knownTests?.vitest
     const testsForThisTestSuite = knownTests?.[testSuite] || []
+    const testManagementProperties =
+      testOptimizationData.testManagementTests?.vitest?.suites?.[testSuite]?.tests?.[testName]?.properties || {}
+    const isAttemptToFix = testManagementProperties.attempt_to_fix
     const isNew = !!(
+      !isAttemptToFix &&
       isKnownTestsEnabled &&
       knownTests &&
       !isEarlyFlakeDetectionFaulty &&
       !testsForThisTestSuite.includes(testName)
     )
-    const testManagementProperties =
-      testOptimizationData.testManagementTests?.vitest?.suites?.[testSuite]?.tests?.[testName]?.properties || {}
     const isModified = !!(isImpactedTestsEnabled && testOptimizationData.modifiedFiles &&
       isModifiedTest(testSuite, 0, 0, testOptimizationData.modifiedFiles, 'vitest'))
     const { flakyTestRetriesConfiguration } = testOptimizationData
@@ -1184,7 +1186,7 @@ function createMainProcessReporter (
     }, task)
 
     return {
-      isAttemptToFix: testManagementProperties.attempt_to_fix,
+      isAttemptToFix,
       isDisabled: testManagementProperties.disabled,
       isEarlyFlakeDetection: (isNew || isModified) && isEarlyFlakeDetectionEnabled,
       isFlakyTestRetries,

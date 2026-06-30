@@ -535,13 +535,9 @@ versions.forEach((version) => {
             runAttemptToFixTest(done, { extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
           })
 
-          it('does not tag known attempt to fix tests as new', async () => {
+          it('does not tag no-worker attempt to fix tests as new', async () => {
             receiver.setKnownTests({
-              vitest: {
-                'ci-visibility/vitest-tests/test-attempt-to-fix.mjs': [
-                  'attempt to fix tests can attempt to fix a test',
-                ],
-              },
+              vitest: {},
             })
             receiver.setSettings({
               test_management: { enabled: true, attempt_to_fix_retries: 2 },
@@ -577,6 +573,7 @@ versions.forEach((version) => {
                   ...getCiVisAgentlessConfig(receiver.port),
                   TEST_DIR: 'ci-visibility/vitest-tests/test-attempt-to-fix*',
                   NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+                  DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
                 },
               }
             )
