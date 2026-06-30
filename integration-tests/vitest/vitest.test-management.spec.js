@@ -370,7 +370,6 @@ versions.forEach((version) => {
 
           const noWorkerAttemptToFixCases = [
             { poolConfig: 'forks', workerName: 'fork' },
-            { poolConfig: 'threads', workerName: 'thread' },
           ]
 
           for (const { poolConfig, workerName } of noWorkerAttemptToFixCases) {
@@ -388,6 +387,22 @@ versions.forEach((version) => {
               })
             })
           }
+
+          newerVitestIt(
+            'can attempt to fix thread workers with worker instrumentation when no-worker init is enabled',
+            (done) => {
+              receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+              runAttemptToFixTest(done, {
+                isAttemptingToFix: true,
+                expectedExecutionCount: 4,
+                extraEnvVars: {
+                  DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+                  POOL_CONFIG: 'threads',
+                },
+              })
+            }
+          )
 
           it('can attempt to fix and mark last attempt as passed if every attempt passes', (done) => {
             receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })

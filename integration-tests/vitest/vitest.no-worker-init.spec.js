@@ -33,7 +33,6 @@ versions.forEach((version) => {
   describe(`vitest@${version} no-worker init`, () => {
     let cwd, receiver, childProcess, testOutput
     const newerVitestIt = version === '1.6.0' ? it.skip : it
-    const vitest3It = version === '3.2.6' ? it : it.skip
     const latestVitestIt = version === 'latest' ? it : it.skip
 
     useSandbox([
@@ -67,12 +66,6 @@ versions.forEach((version) => {
           EXPECT_TEST_DURATION: '1',
         },
         testFn: newerVitestIt,
-      },
-      {
-        nodeOptions: '--no-warnings --import dd-trace/register.js -r dd-trace/ci/init',
-        poolConfig: 'threads',
-        testFn: latestVitestIt,
-        workerName: 'thread',
       },
     ]
 
@@ -174,6 +167,47 @@ versions.forEach((version) => {
       })
     }
 
+    latestVitestIt('keeps Datadog NODE_OPTIONS in thread workers when no-worker init is enabled', async () => {
+      const payloadsPromise = receiver.gatherPayloadsMaxTimeout(
+        ({ url }) => url === '/api/v2/citestcycle',
+        payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testEvents = events.filter(event => event.type === 'test')
+
+          assert.strictEqual(testEvents.length, 1, inspect(events.map(event => event.type)))
+          assert.strictEqual(testEvents[0].content.meta[TEST_NAME], 'vitest worker env sets DD_VITEST_WORKER')
+          assert.strictEqual(testEvents[0].content.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(testEvents[0].content.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
+        }
+      )
+
+      childProcess = exec(
+        './node_modules/.bin/vitest run',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--no-warnings --import dd-trace/register.js -r dd-trace/ci/init',
+            TEST_DIR: 'ci-visibility/vitest-tests/vitest-worker-env.mjs',
+            POOL_CONFIG: 'threads',
+            DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+            EXPECT_DD_NODE_OPTIONS_PRESENT: '1',
+            DD_SERVICE: undefined,
+          },
+        }
+      )
+
+      childProcess.stdout.on('data', data => { testOutput += data })
+      childProcess.stderr.on('data', data => { testOutput += data })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        payloadsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+
     newerVitestIt('strips Datadog NODE_OPTIONS from fork project workers when root pool is threads', async () => {
       const payloadsPromise = receiver.gatherPayloadsMaxTimeout(
         ({ url }) => url === '/api/v2/citestcycle',
@@ -259,79 +293,45 @@ versions.forEach((version) => {
       assert.ok(testOutput.includes(CUSTOM_SEQUENCER_MARKER), `Got: ${inspect(testOutput)}`)
     })
 
-    latestVitestIt('reports thread specs routed from fork projects without worker init', async () => {
-      const payloadsPromise = receiver.gatherPayloadsMaxTimeout(
-        ({ url }) => url === '/api/v2/citestcycle',
-        payloads => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-          assertNoWorkerSuiteContextEvents(events, true)
-        }
-      )
+    newerVitestIt(
+      'reports thread-routed specs with worker instrumentation when no-worker init is enabled',
+      async () => {
+        const payloadsPromise = receiver.gatherPayloadsMaxTimeout(
+          ({ url }) => url === '/api/v2/citestcycle',
+          payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            assertNoWorkerSuiteContextEvents(events)
+          }
+        )
 
-      childProcess = exec(
-        './node_modules/.bin/vitest run',
-        {
-          cwd,
-          env: {
-            ...getCiVisAgentlessConfig(receiver.port),
-            NODE_OPTIONS: '--no-warnings --import dd-trace/register.js -r dd-trace/ci/init',
-            TEST_DIR: 'ci-visibility/vitest-tests/no-worker-suite-context-*.mjs',
-            POOL_CONFIG: 'forks',
-            PROJECT_POOL_CONFIG: 'forks',
-            PROJECT_THREAD_POOL_MATCH_GLOB: '**/no-worker-suite-context-b-fast.mjs',
-            DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
-            DD_SERVICE: undefined,
-          },
-        }
-      )
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NODE_OPTIONS: '--no-warnings --import dd-trace/register.js -r dd-trace/ci/init',
+              TEST_DIR: 'ci-visibility/vitest-tests/no-worker-suite-context-*.mjs',
+              POOL_CONFIG: 'forks',
+              PROJECT_POOL_CONFIG: 'forks',
+              PROJECT_THREAD_POOL_MATCH_GLOB: '**/no-worker-suite-context-b-fast.mjs',
+              DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+              DD_SERVICE: undefined,
+            },
+          }
+        )
 
-      childProcess.stdout.on('data', data => { testOutput += data })
-      childProcess.stderr.on('data', data => { testOutput += data })
+        childProcess.stdout.on('data', data => { testOutput += data })
+        childProcess.stderr.on('data', data => { testOutput += data })
 
-      const [[exitCode]] = await Promise.all([
-        once(childProcess, 'exit'),
-        payloadsPromise,
-      ])
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          payloadsPromise,
+        ])
 
-      assert.strictEqual(exitCode, 0, testOutput)
-    })
-
-    vitest3It('reports thread-routed specs with worker instrumentation when no-worker init is enabled', async () => {
-      const payloadsPromise = receiver.gatherPayloadsMaxTimeout(
-        ({ url }) => url === '/api/v2/citestcycle',
-        payloads => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-          assertNoWorkerSuiteContextEvents(events)
-        }
-      )
-
-      childProcess = exec(
-        './node_modules/.bin/vitest run',
-        {
-          cwd,
-          env: {
-            ...getCiVisAgentlessConfig(receiver.port),
-            NODE_OPTIONS: '--no-warnings --import dd-trace/register.js -r dd-trace/ci/init',
-            TEST_DIR: 'ci-visibility/vitest-tests/no-worker-suite-context-*.mjs',
-            POOL_CONFIG: 'forks',
-            PROJECT_POOL_CONFIG: 'forks',
-            PROJECT_THREAD_POOL_MATCH_GLOB: '**/no-worker-suite-context-b-fast.mjs',
-            DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
-            DD_SERVICE: undefined,
-          },
-        }
-      )
-
-      childProcess.stdout.on('data', data => { testOutput += data })
-      childProcess.stderr.on('data', data => { testOutput += data })
-
-      const [[exitCode]] = await Promise.all([
-        once(childProcess, 'exit'),
-        payloadsPromise,
-      ])
-
-      assert.strictEqual(exitCode, 0, testOutput)
-    })
+        assert.strictEqual(exitCode, 0, testOutput)
+      }
+    )
 
     newerVitestIt('strips Datadog NODE_OPTIONS from fork projects when root thread pool disables isolate', async () => {
       const payloadsPromise = receiver.gatherPayloadsMaxTimeout(

@@ -105,7 +105,6 @@ let coverageRootDir
 let isSessionStarted = false
 let vitestPool = null
 let isVitestNoWorkerInitActive = false
-let isVitestNoWorkerInitThreadSupported = false
 let hasWarnedVitestNoWorkerInitWithIsolationDisabled = false
 let hasWarnedVitestNoWorkerInitWithAmbiguousUnnamedProjects = false
 
@@ -420,17 +419,8 @@ function isVitestNoWorkerInitRequested () {
   return value === 'true' || value === '1'
 }
 
-function isVitestNoWorkerInitPool (pool, frameworkVersion) {
-  return isForkPool(pool) || (isThreadPool(pool) && isVitestNoWorkerInitSupportedForThreads(frameworkVersion))
-}
-
-function isVitestNoWorkerInitSupportedForThreads (frameworkVersion) {
-  return getMajorVersion(frameworkVersion) >= 4
-}
-
-function getMajorVersion (version) {
-  const major = Number.parseInt(version, 10)
-  return Number.isNaN(major) ? 0 : major
+function isVitestNoWorkerInitPool (pool, _frameworkVersion) {
+  return isForkPool(pool)
 }
 
 function shouldUseVitestNoWorkerInit (ctx, testSpecifications, frameworkVersion) {
@@ -588,7 +578,6 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, s
   }
 
   isVitestNoWorkerInitActive = shouldInstallNoWorkerInit
-  isVitestNoWorkerInitThreadSupported = isVitestNoWorkerInitSupportedForThreads(frameworkVersion)
   const shouldSendWorkerInstrumentationContext = !shouldInstallNoWorkerInit ||
     hasWorkerInstrumentationPoolTestSpecification(ctx.config?.pool, testSpecifications, frameworkVersion)
 
@@ -1911,10 +1900,6 @@ function isForkPool (pool) {
   return pool === 'forks' || pool === 'vmForks'
 }
 
-function isThreadPool (pool) {
-  return pool === 'threads' || pool === 'vmThreads'
-}
-
 function normalizeFilepath (filepath) {
   return typeof filepath === 'string' ? filepath.replaceAll('\\', '/') : undefined
 }
@@ -2155,7 +2140,6 @@ function shouldMarkVitestWorkerEnv (pool, testSpecifications, shouldSkipWorkerIn
 function markVitestWorkerEnv (ctx, testSpecifications, shouldSkipWorkerInit = false, frameworkVersion) {
   const config = ctx?.config
   isVitestNoWorkerInitActive = shouldSkipWorkerInit
-  isVitestNoWorkerInitThreadSupported = isVitestNoWorkerInitSupportedForThreads(frameworkVersion)
   if (!config || !shouldMarkVitestWorkerEnv(config.pool, testSpecifications, shouldSkipWorkerInit, frameworkVersion)) {
     return
   }
@@ -2275,12 +2259,7 @@ function getTinypoolOptions (options = {}) {
 
 function shouldMarkVitestWorkerPool (options) {
   if (options?.runtime !== 'child_process' && options?.runtime !== 'worker_threads') return false
-  if (
-    options.runtime === 'worker_threads' &&
-    (!isVitestNoWorkerInitActive || !isVitestNoWorkerInitThreadSupported)
-  ) {
-    return false
-  }
+  if (options.runtime === 'worker_threads') return false
   if (options.env?.VITEST !== 'true') return false
 
   const filename = typeof options.filename === 'string' ? options.filename.replaceAll('\\', '/') : ''
@@ -2368,10 +2347,7 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
     // function is async
     shimmer.wrap(threadsPoolWorker.value.prototype, 'start', start => function (...args) {
       vitestPool = 'worker_threads'
-      const shouldSkipWorkerInit = isVitestNoWorkerInitActive && isVitestNoWorkerInitThreadSupported
-      if (shouldSkipWorkerInit) {
-        this.env = getVitestWorkerEnv(this.env, true)
-      } else if (this.env) {
+      if (this.env) {
         this.env.DD_VITEST_WORKER = '1'
         delete this.env[VITEST_NO_WORKER_INIT_ACTIVE_ENV]
       } else {
