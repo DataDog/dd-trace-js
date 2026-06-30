@@ -21,7 +21,7 @@ describe('Multi-Tenant Routing', () => {
     site: 'default-site.com',
     hostname: 'localhost',
     port: 8126,
-    apiKey: 'default-key',
+    DD_API_KEY: 'default-key',
   }
 
   beforeEach(() => {

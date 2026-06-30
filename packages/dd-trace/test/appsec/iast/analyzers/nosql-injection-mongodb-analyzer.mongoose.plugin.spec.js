@@ -8,14 +8,9 @@ const semver = require('semver')
 const { prepareTestServerForIastInExpress } = require('../utils')
 const agent = require('../../../plugins/agent')
 const { withVersions } = require('../../../setup/mocha')
-const { NODE_MAJOR } = require('../../../../../../version')
 
 describe('nosql injection detection in mongodb - whole feature', () => {
-  withVersions('mongoose', 'express', (expressVersion, _moduleName, resolvedExpressVersion) => {
-    // Node 20 + Express 5 loses IAST taint on the per-request `req.query` getter;
-    // passes on Node 18 and Node 24. See APPSEC-66705.
-    if (NODE_MAJOR === 20 && semver.major(resolvedExpressVersion) >= 5) return
-
+  withVersions('mongoose', 'express', expressVersion => {
     withVersions('mongoose', 'mongoose', '>4.0.0', mongooseVersion => {
       const specificMongooseVersion = require(`../../../../../../versions/mongoose@${mongooseVersion}`).version()
 
