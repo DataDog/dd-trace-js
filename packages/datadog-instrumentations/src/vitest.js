@@ -1342,7 +1342,9 @@ function getRepeatedTestReport (task, testName, testSuiteAbsolutePath, testPrope
     const isFinalAttempt = index === attemptCount - 1
     const attemptStatus = statuses[index] || 'pass'
     const nextErrorCount = errorCounts?.[index]
-    const error = attemptStatus === 'fail' ? errors[previousErrorCount] || errors[errorIndex] || errors[0] : undefined
+    const error = attemptStatus === 'fail'
+      ? errors[nextErrorCount === undefined ? errorIndex : previousErrorCount] || errors[errorIndex] || errors[0]
+      : undefined
     if (nextErrorCount !== undefined) {
       previousErrorCount = nextErrorCount
     } else if (attemptStatus === 'fail') {

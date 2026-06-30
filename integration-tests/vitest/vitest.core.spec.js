@@ -849,7 +849,7 @@ versions.forEach((version) => {
           },
         })
 
-        const testName = 'early flake detection can retry tests that eventually pass'
+        const testName = 'efd with manual vitest retries fails first then passes'
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
             const events = payloads.flatMap(({ payload }) => payload.events)
@@ -871,15 +871,17 @@ versions.forEach((version) => {
                 { status: 'pass', isRetry: 'true', retryReason: TEST_RETRY_REASON_TYPES.ext },
               ]
             )
+            const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
+            assert.notStrictEqual(failedTests[0].meta[ERROR_MESSAGE], failedTests[1].meta[ERROR_MESSAGE])
           })
 
         childProcess = exec(
-          './node_modules/.bin/vitest run -t "can retry tests that eventually pass"',
+          './node_modules/.bin/vitest run',
           {
             cwd,
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
-              TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection*',
+              TEST_DIR: 'ci-visibility/vitest-tests/fails-first-then-passes.mjs',
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
               POOL_CONFIG: 'forks',
               PROJECT_POOL_CONFIG: 'forks',
