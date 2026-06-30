@@ -77,7 +77,7 @@ class VercelAiTelemetryPlugin extends TracingPlugin {
     if (ctx.isStream && ctx.result?.stream && !ctx.streamConsumed) return
 
     if (ctx.type?.includes('stream')) {
-      this.#streamedCalls.add(ctx.event?.callId)
+      this.#streamedCalls.delete(ctx.event?.callId)
     }
 
     const span = ctx.currentStore?.span
