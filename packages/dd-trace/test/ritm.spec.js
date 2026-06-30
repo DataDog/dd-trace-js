@@ -5,6 +5,7 @@ const Module = require('node:module')
 
 const sinon = require('sinon')
 const dc = require('dc-polyfill')
+const semver = require('semver')
 const { describe, it, before, beforeEach } = require('mocha')
 
 require('./setup/core')
@@ -123,6 +124,22 @@ describe('Ritm', () => {
     assert.equal(require('./ritm-tests/relative/module-c').foo, 1)
     assert.equal(startListener.callCount, 1)
     assert.equal(endListener.callCount, 1)
+  })
+
+  it('redirects a hooked dual-package from its ESM entry to the CJS sibling', function () {
+    // graphql 17 and other dual packages resolve require() to their ESM build via
+    // the module-sync export condition once require(esm) is enabled. RITM can't
+    // rewrite ESM without the sync loader hooks, so it redirects the hooked
+    // package's .mjs to its .js sibling. Only reproducible where require(esm) is on.
+    if (!semver.satisfies(process.version, '^20.19.0 || ^22.12.0 || >=23.0.0')) {
+      this.skip()
+      return
+    }
+
+    Hook(['dd-dual-package'], exports => exports)
+
+    const mod = require('./ritm-tests/load-dual')
+    assert.equal(mod.format, 'cjs', 'the CommonJS sibling is loaded, not the module-sync .mjs')
   })
 
   it('should use moduleId as cache key for node:-prefixed built-ins', () => {
