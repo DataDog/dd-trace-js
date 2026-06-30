@@ -8,7 +8,8 @@ const { getCompileToRegexp } = require('./path-to-regexp')
 const {
   getRouterMountPaths,
   joinPath,
-  setLayerMatchers,
+  setLayerMeta,
+  getLayerMeta,
   isAppMounted,
   setRouterMountPath,
   extractMountPaths,
@@ -25,149 +26,68 @@ function isFastSlash (layer, matchers) {
   return layer.regexp?.fast_slash ?? matchers.hasSlashPath
 }
 
-// TODO: Move this function to a shared file between Express and Router
 /**
- * @param {string} name Channel namespace (`apm:<name>:middleware:*`).
- * @param {((pattern: string | RegExp) => RegExp | undefined) | undefined} compile
- *   Host-resolved path-to-regexp compile adapter, or undefined when the host
- *   instance ships no path-to-regexp. Captured here so each express/router
- *   instance keeps the dialect it actually loaded.
+ * Cache the per-layer dispatch metadata in a side table instead of replacing
+ * `layer.handle`. Phase-sorting hosts (loopback's `_findLayerByHandler`) map a
+ * layer back to the user handler by scanning the handle, so the handle has to
+ * stay the user's function.
+ *
+ * @param {{ handle: Function, name?: string, path?: string,
+ *   regexp?: { fast_star?: boolean, fast_slash?: boolean } }} layer
+ * @param {Array<{ path?: string, regex?: RegExp }> & { hasStarPath?: boolean, hasSlashPath?: boolean }} matchers
  */
-function createWrapRouterMethod (name, compile) {
+function annotateLayer (layer, matchers) {
+  const handle = layer.handle
+  const name = handle._name || layer.name || handle.name
+
+  let captureRoute
+  let needMultiMatch = false
+  if (matchers.length !== 0 && !isFastStar(layer, matchers) && !isFastSlash(layer, matchers)) {
+    if (matchers.length === 1) {
+      captureRoute = matchers[0].path
+    } else {
+      needMultiMatch = true
+    }
+  }
+
+  setLayerMeta(layer, { name, captureRoute, needMultiMatch, matchers })
+}
+
+/**
+ * Resolve the route for a dispatched layer. Single-pattern layers carry a
+ * constant route; only multi-pattern stacks need the per-request `layer.path`
+ * match the host already computed.
+ *
+ * @param {{ captureRoute?: string, needMultiMatch: boolean,
+ *   matchers: Array<{ path?: string, regex?: RegExp }> }} meta
+ * @param {{ path?: string }} layer
+ * @returns {string | undefined}
+ */
+function resolveLayerRoute (meta, layer) {
+  if (!meta.needMultiMatch) return meta.captureRoute
+
+  for (const matcher of meta.matchers) {
+    if (matcher.regex?.test(layer.path)) return matcher.path
+  }
+}
+
+/**
+ * Build the request/error dispatch wrappers for one host (`express` / `router`).
+ * They wrap the layer's prototype dispatch and read the side-table metadata, so
+ * `layer.handle` is never replaced. The arity guard mirrors the host's own
+ * (`handle_request` skips 4-arg handlers, `handle_error` skips the rest), so a
+ * span is published only for the layer the host actually runs.
+ *
+ * @param {string} name Channel namespace (`apm:<name>:middleware:*`).
+ */
+function createLayerDispatchWrappers (name) {
   const enterChannel = channel(`apm:${name}:middleware:enter`)
   const exitChannel = channel(`apm:${name}:middleware:exit`)
   const finishChannel = channel(`apm:${name}:middleware:finish`)
   const errorChannel = channel(`apm:${name}:middleware:error`)
   const nextChannel = channel(`apm:${name}:middleware:next`)
-  const routeAddedChannel = channel(`apm:${name}:route:added`)
   // Bound per name so express and a bare router keep independent guards.
   const publishError = createErrorPublisher(errorChannel)
-
-  function wrapLayerHandle (layer, original, matchers) {
-    // Resolve `name` once at wrap time: cached on the original for any code
-    // that reads `_name`, captured in the closure so the per-call body avoids
-    // the property-lookup / `||` fallback.
-    const name = original._name || layer.name || original.name
-    original._name = name
-
-    // Wrap-time matcher analysis. The single-pattern case yields a constant
-    // route; only multi-pattern stacks need a per-request layer.path match.
-    let captureRoute
-    let needMultiMatch = false
-    if (matchers.length !== 0 && !isFastStar(layer, matchers) && !isFastSlash(layer, matchers)) {
-      if (matchers.length === 1) {
-        captureRoute = matchers[0].path
-      } else {
-        needMultiMatch = true
-      }
-    }
-
-    // Split by arity: router only ever dispatches 3-arg request handlers
-    // through `Layer.handleRequest` and 4-arg error handlers through
-    // `Layer.handleError`. Specialising lets the per-call body use named
-    // parameters and `.call`, avoiding the rest-spread Array allocation that
-    // the unified shape forced on every middleware invocation.
-    const wrapped = original.length === 4
-      ? shimmer.wrapFunction(original, errorHandlerLayerWrap(layer, name, captureRoute, needMultiMatch, matchers))
-      : shimmer.wrapFunction(original, requestHandlerLayerWrap(layer, name, captureRoute, needMultiMatch, matchers))
-
-    // Workaround for loopback's phase-based middleware sorting. Its
-    // `_findLayerByHandler` maps a layer back to the user handler by scanning
-    // the layer handle's enumerable properties for the original function.
-    // Replacing `layer.handle` with this wrapper hides that handler, so without
-    // the back-reference loopback cannot tag the layer with its phase and
-    // `app.middleware(phase, ...)` handlers run in insertion order instead of
-    // phase order. The property name is part of that contract; keep it stable.
-    wrapped._datadog_orig = original
-
-    return wrapped
-  }
-
-  function requestHandlerLayerWrap (layer, name, captureRoute, needMultiMatch, matchers) {
-    return original => function (req, res, next) {
-      if (!enterChannel.hasSubscribers) return original.call(this, req, res, next)
-
-      const wrappedNext = typeof next === 'function' ? wrapNext(req, next) : next
-
-      let route = captureRoute
-      if (needMultiMatch) {
-        for (const matcher of matchers) {
-          if (matcher.regex?.test(layer.path)) {
-            route = matcher.path
-            break
-          }
-        }
-      }
-
-      enterChannel.publish({ name, req, route, layer })
-
-      try {
-        return original.call(this, req, res, wrappedNext)
-      } catch (error) {
-        publishError({ req, error })
-        nextChannel.publish({ req })
-        finishChannel.publish({ req })
-
-        throw error
-      } finally {
-        exitChannel.publish({ req })
-      }
-    }
-  }
-
-  function errorHandlerLayerWrap (layer, name, captureRoute, needMultiMatch, matchers) {
-    return original => function (error, req, res, next) {
-      if (!enterChannel.hasSubscribers) return original.call(this, error, req, res, next)
-
-      const wrappedNext = typeof next === 'function' ? wrapNext(req, next) : next
-
-      let route = captureRoute
-      if (needMultiMatch) {
-        for (const matcher of matchers) {
-          if (matcher.regex?.test(layer.path)) {
-            route = matcher.path
-            break
-          }
-        }
-      }
-
-      enterChannel.publish({ name, req, route, layer })
-
-      try {
-        return original.call(this, error, req, res, wrappedNext)
-      } catch (caught) {
-        publishError({ req, error: caught })
-        nextChannel.publish({ req })
-        finishChannel.publish({ req })
-
-        throw caught
-      } finally {
-        exitChannel.publish({ req })
-      }
-    }
-  }
-
-  function wrapStack (layers, matchers) {
-    for (const layer of layers) {
-      if (layer.__handle) { // express-async-errors
-        layer.__handle = wrapLayerHandle(layer, layer.__handle, matchers)
-      } else {
-        layer.handle = wrapLayerHandle(layer, layer.handle, matchers)
-      }
-
-      setLayerMatchers(layer, matchers)
-
-      if (layer.route) {
-        for (const method of METHODS) {
-          if (typeof layer.route.stack === 'function') {
-            layer.route.stack = [{ handle: layer.route.stack }]
-          }
-
-          layer.route[method] = wrapMethod(layer.route[method])
-        }
-      }
-    }
-  }
 
   function wrapNext (req, originalNext) {
     // Per layer dispatch, N per request. Named `next`/arity-1 mirrors the
@@ -182,6 +102,133 @@ function createWrapRouterMethod (name, compile) {
 
       original.apply(this, arguments)
     })
+  }
+
+  // Every host dispatch turns a synchronous throw into `next(error)`, and the
+  // hosts that await the handler (router >=2, express 5, express 4 +
+  // express-async-errors) do the same for a rejected promise. Passing
+  // `wrappedNext` through captures both without a tracer-side try/catch; only
+  // `exit` needs the `finally`. express 4's native dispatch converts only the
+  // synchronous throw — exactly what the pre-refactor handle wrap caught.
+  function wrapLayerRequest (originalRequest) {
+    return function (req, res, next) {
+      if (!enterChannel.hasSubscribers) return originalRequest.call(this, req, res, next)
+
+      const meta = getLayerMeta(this)
+      if (meta === undefined || this.handle.length > 3) return originalRequest.call(this, req, res, next)
+
+      const wrappedNext = typeof next === 'function' ? wrapNext(req, next) : next
+      enterChannel.publish({ name: meta.name, req, route: resolveLayerRoute(meta, this), layer: this })
+
+      try {
+        return originalRequest.call(this, req, res, wrappedNext)
+      } finally {
+        exitChannel.publish({ req })
+      }
+    }
+  }
+
+  function wrapLayerError (originalError) {
+    return function (error, req, res, next) {
+      if (!enterChannel.hasSubscribers) return originalError.call(this, error, req, res, next)
+
+      const meta = getLayerMeta(this)
+      if (meta === undefined || this.handle.length !== 4) return originalError.call(this, error, req, res, next)
+
+      const wrappedNext = typeof next === 'function' ? wrapNext(req, next) : next
+      enterChannel.publish({ name: meta.name, req, route: resolveLayerRoute(meta, this), layer: this })
+
+      try {
+        return originalError.call(this, error, req, res, wrappedNext)
+      } finally {
+        exitChannel.publish({ req })
+      }
+    }
+  }
+
+  // express <4.6.0 has no `Layer` prototype dispatch: the router invokes
+  // `layer.handle` directly and routes errors by its arity. There the handle is
+  // replaced in place, with the arity preserved so the host still routes
+  // correctly. Newer express, express 5, and the router package keep `handle`
+  // pristine and are traced through the prototype wraps above.
+  function wrapLegacyHandle (layer, original) {
+    // `annotateLayer` always runs first in `wrapStack`, so the captured meta is
+    // never undefined here (unlike the prototype wraps, where `this` can be any
+    // layer the host dispatches).
+    const meta = getLayerMeta(layer)
+    const wrapped = shimmer.wrapFunction(original, inner => function (...args) {
+      if (!enterChannel.hasSubscribers) return inner.apply(this, args)
+
+      const isErrorHandler = original.length === 4
+      const req = args[isErrorHandler ? 1 : 0]
+      const nextIndex = isErrorHandler ? 3 : 2
+      if (typeof args[nextIndex] === 'function') args[nextIndex] = wrapNext(req, args[nextIndex])
+
+      enterChannel.publish({ name: meta.name, req, route: resolveLayerRoute(meta, layer), layer })
+
+      try {
+        return inner.apply(this, args)
+      } catch (error) {
+        // Unlike the prototype hosts, this router catches a synchronous throw
+        // outside the layer and calls its own `next(error)`, never `wrappedNext`.
+        // Mirror `wrapNext` here so the throwing layer still tags its error and
+        // finishes, rather than lingering on the stack until request finish.
+        publishError({ req, error })
+        nextChannel.publish({ req })
+        finishChannel.publish({ req })
+
+        throw error
+      } finally {
+        exitChannel.publish({ req })
+      }
+    })
+    Object.defineProperty(wrapped, 'length', { value: original.length, configurable: true })
+    return wrapped
+  }
+
+  return { wrapLayerRequest, wrapLayerError, wrapLegacyHandle }
+}
+
+function hasLayerDispatch (layer) {
+  return typeof layer.handle_request === 'function' || typeof layer.handleRequest === 'function'
+}
+
+// TODO: Move this function to a shared file between Express and Router
+/**
+ * @param {string} name Channel namespace (`apm:<name>:middleware:*`).
+ * @param {((pattern: string | RegExp) => RegExp | undefined) | undefined} compile
+ *   Host-resolved path-to-regexp compile adapter, or undefined when the host
+ *   instance ships no path-to-regexp. Captured here so each express/router
+ *   instance keeps the dialect it actually loaded.
+ * @param {((layer: object, original: Function) => Function) | undefined} [wrapLegacyHandle]
+ *   Fallback that replaces `layer.handle` for hosts without a `Layer` prototype
+ *   dispatch (express <4.6.0). Omitted for hosts that always ship one.
+ */
+function createWrapRouterMethod (name, compile, wrapLegacyHandle) {
+  const routeAddedChannel = channel(`apm:${name}:route:added`)
+
+  function wrapStack (layers, matchers) {
+    for (const layer of layers) {
+      annotateLayer(layer, matchers)
+
+      if (wrapLegacyHandle !== undefined && !hasLayerDispatch(layer)) {
+        if (layer.__handle) { // express-async-errors
+          layer.__handle = wrapLegacyHandle(layer, layer.__handle)
+        } else {
+          layer.handle = wrapLegacyHandle(layer, layer.handle)
+        }
+      }
+
+      if (layer.route) {
+        for (const method of METHODS) {
+          if (typeof layer.route.stack === 'function') {
+            layer.route.stack = [{ handle: layer.route.stack }]
+          }
+
+          layer.route[method] = wrapMethod(layer.route[method])
+        }
+      }
+    }
   }
 
   function extractMatchers (fn) {
@@ -304,6 +351,15 @@ addHook({ name: 'router', versions: ['>=1 <2'] }, Router => {
   return Router
 })
 
+addHook({ name: 'router', file: 'lib/layer.js', versions: ['>=1 <2'] }, Layer => {
+  const { wrapLayerRequest, wrapLayerError } = createLayerDispatchWrappers('router')
+
+  shimmer.wrap(Layer.prototype, 'handle_request', wrapLayerRequest)
+  shimmer.wrap(Layer.prototype, 'handle_error', wrapLayerError)
+
+  return Layer
+})
+
 const queryParserReadCh = channel('datadog:query:read:finish')
 
 addHook({ name: 'router', versions: ['>=2'] }, Router => {
@@ -365,6 +421,14 @@ function wrapHandleRequest (original) {
 addHook({
   name: 'router', file: 'lib/layer.js', versions: ['>=2'],
 }, Layer => {
+  const { wrapLayerRequest, wrapLayerError } = createLayerDispatchWrappers('router')
+
+  // `handleRequest` carries two concerns: the middleware dispatch span and the
+  // param-start publish (`wrapHandleRequest`). Wrap the dispatch first so it
+  // sits inner and param-start still fires before `middleware:enter`, matching
+  // the order from when the handle itself was wrapped.
+  shimmer.wrap(Layer.prototype, 'handleRequest', wrapLayerRequest)
+  shimmer.wrap(Layer.prototype, 'handleError', wrapLayerError)
   shimmer.wrap(Layer.prototype, 'handleRequest', wrapHandleRequest)
   return Layer
 })
@@ -404,4 +468,4 @@ addHook({
   return router
 })
 
-module.exports = { createWrapRouterMethod }
+module.exports = { createWrapRouterMethod, createLayerDispatchWrappers }
