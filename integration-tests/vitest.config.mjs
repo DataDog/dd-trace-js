@@ -30,6 +30,11 @@ if (process.env.CUSTOM_SEQUENCER) {
   }
 }
 
+if (process.env.SEQUENCE_HOOKS) {
+  config.test.sequence ||= {}
+  config.test.sequence.hooks = process.env.SEQUENCE_HOOKS
+}
+
 if (process.env.PROJECT_POOL_CONFIG) {
   const projectConfigs = []
   const firstProjectConfig = {

@@ -48,6 +48,9 @@ if (isNoWorkerInitActive) {
   beforeEach(function ({ onTestFinished, task, skip }) {
     const testSuite = getTestSuite(task)
     const testName = getTestName(task)
+    const isAttemptToFixTest = attemptToFixTests[testSuite]?.[testName]
+    const isEarlyFlakeDetectionTestAttempt = isEarlyFlakeDetectionTest(testSuite, testName)
+    const isQuarantinedTest = quarantinedTests[testSuite]?.[testName] && !isAttemptToFixTest
     const attemptIndex = getNextAttemptIndex(task)
     if (attemptIndex > 0) {
       recordTestOptimizationStatus(task, attemptIndex - 1)
@@ -55,19 +58,22 @@ if (isNoWorkerInitActive) {
 
     if (disabledTests[testSuite]?.[testName]) {
       skip('Skipped by Datadog Test Optimization')
-    } else if (attemptToFixTests[testSuite]?.[testName] && attemptIndex > 0) {
+    } else if (isAttemptToFixTest && attemptIndex > 0) {
       task.result.state = 'run'
-    } else if (isEarlyFlakeDetectionTest(testSuite, testName)) {
+    } else if (isEarlyFlakeDetectionTestAttempt) {
       const isSkippedRepeat = prepareEarlyFlakeDetectionAttempt(task, attemptIndex)
       if (!isSkippedRepeat && attemptIndex > 0) {
         task.result.state = 'run'
       }
     }
 
-    if (attemptToFixTests[testSuite]?.[testName] || isEarlyFlakeDetectionTest(testSuite, testName)) {
+    if (isAttemptToFixTest || isEarlyFlakeDetectionTestAttempt || isQuarantinedTest) {
       onTestFinished(() => {
         if (attemptIndex === getFinalAttemptIndex(task)) {
-          recordTestOptimizationStatus(task, attemptIndex, true)
+          if (isAttemptToFixTest || isEarlyFlakeDetectionTestAttempt) {
+            recordTestOptimizationStatus(task, attemptIndex, true)
+          }
+          switchQuarantinedFinalFailure(task, attemptIndex)
         }
       })
     }

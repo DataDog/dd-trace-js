@@ -16,8 +16,11 @@ const {
   TEST_STATUS,
   TEST_SOURCE_FILE,
   TEST_SUITE_ID,
+  TEST_FINAL_STATUS,
   TEST_NAME,
   TEST_IS_TEST_FRAMEWORK_WORKER,
+  TEST_MANAGEMENT_ENABLED,
+  TEST_MANAGEMENT_IS_QUARANTINED,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { NODE_MAJOR } = require('../../version')
 
@@ -471,6 +474,73 @@ versions.forEach((version) => {
       ])
 
       assert.strictEqual(exitCode, 1, testOutput)
+    })
+
+    newerVitestIt('quarantines afterEach failures after user hooks when no-worker init is enabled', async () => {
+      receiver.setSettings({ test_management: { enabled: true } })
+      receiver.setTestManagementTests({
+        vitest: {
+          suites: {
+            'ci-visibility/vitest-tests/hooks-test-quarantine-failing-after-each.mjs': {
+              tests: {
+                'quarantine tests with failing afterEach can quarantine a test whose afterEach hook fails': {
+                  properties: { quarantined: true },
+                },
+              },
+            },
+          },
+        },
+      })
+
+      const payloadsPromise = receiver.gatherPayloadsMaxTimeout(
+        ({ url }) => url === '/api/v2/citestcycle',
+        payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const eventTypes = inspect(events.map(event => event.type))
+          const testSessionEvent = events.find(event => event.type === 'test_session_end')
+          const testEvent = events.find(event => event.type === 'test')
+
+          assert.ok(testSessionEvent, `should have test session event, got events: ${eventTypes}`)
+          assert.strictEqual(testSessionEvent.content.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(testSessionEvent.content.meta[TEST_MANAGEMENT_ENABLED], 'true')
+
+          assert.ok(testEvent, `should have test event, got events: ${eventTypes}`)
+          assert.strictEqual(
+            testEvent.content.meta[TEST_NAME],
+            'quarantine tests with failing afterEach can quarantine a test whose afterEach hook fails'
+          )
+          assert.strictEqual(testEvent.content.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(testEvent.content.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+          assert.strictEqual(testEvent.content.meta[TEST_FINAL_STATUS], 'skip')
+          assert.strictEqual(testEvent.content.meta[ERROR_MESSAGE], 'afterEach hook failed')
+        }
+      )
+
+      childProcess = exec(
+        './node_modules/.bin/vitest run',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--no-warnings --import dd-trace/register.js -r dd-trace/ci/init',
+            TEST_DIR: 'ci-visibility/vitest-tests/hooks-test-quarantine-failing-after-each.mjs',
+            POOL_CONFIG: 'forks',
+            SEQUENCE_HOOKS: 'list',
+            DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+            DD_SERVICE: undefined,
+          },
+        }
+      )
+
+      childProcess.stdout.on('data', data => { testOutput += data })
+      childProcess.stderr.on('data', data => { testOutput += data })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        payloadsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0, testOutput)
     })
 
     newerVitestIt('preserves string setupFiles when no-worker init is enabled', async () => {
