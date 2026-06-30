@@ -123,6 +123,19 @@ class OtlpHttpExporterBase {
     })
   }
 
+  /**
+   * Re-targets the exporter to a different URL, updating transport, hostname, port, and path.
+   * @param {string} url
+   */
+  setUrl (url) {
+    const parsedUrl = new URL(url)
+    this.#transport = parsedUrl.protocol === 'http:' ? http : https
+    this.options.hostname = parsedUrl.hostname
+    this.options.port = parsedUrl.port
+    this.options.path = parsedUrl.pathname + parsedUrl.search
+    this.telemetryTags[0] = `protocol:${this.#transport === https ? 'https' : 'http'}`
+  }
+
   shutdown () {}
 }
 
