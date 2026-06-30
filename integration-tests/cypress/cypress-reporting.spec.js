@@ -1097,5 +1097,157 @@ moduleTypes.forEach(({
         receiverPromise,
       ])
     })
+
+    // Failure media upload only goes through the agentless transport for now; the evp proxy path
+    // is not wired up to the v2 media endpoint yet. These tests therefore always use the agentless
+    // config (getCiVisAgentlessConfig). The named helper documents that constraint so a future
+    // report-method param-loop can swap to a real gate.
+    // TODO: gate on the report method (agentless vs evp proxy) once evp proxy media upload is supported.
+    const onlyAgentlessIt = over10It
+
+    onlyAgentlessIt('uploads only screenshots when only screenshots are enabled', async function () {
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+      const specToRun = 'cypress/e2e/basic-fail.js'
+      let testOutput = ''
+
+      childProcess = exec(
+        testCommand,
+        {
+          cwd,
+          env: {
+            ...envVars,
+            CYPRESS_BASE_URL: webAppBaseUrl,
+            SPEC_PATTERN: specToRun,
+            CYPRESS_ENABLE_FAILURE_MEDIA: 'true',
+            DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true',
+            DD_TEST_FAILURE_VIDEO_ENABLED: 'false',
+          },
+        }
+      )
+      childProcess.stdout?.on('data', (d) => { testOutput += d.toString() })
+      childProcess.stderr?.on('data', (d) => { testOutput += d.toString() })
+
+      const receiverPromise = receiver
+        .gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.startsWith('/api/unstable/ci/test-runs/') || url.endsWith('/api/v2/citestcycle'),
+          (payloads) => {
+            const mediaPayloads = payloads.filter(({ url }) => url.startsWith('/api/unstable/ci/test-runs/'))
+
+            const screenshotPayload = mediaPayloads.find(({ media }) => media.contentType === 'image/png')
+            assert.ok(screenshotPayload, `a screenshot should be uploaded when screenshots are enabled\n${testOutput}`)
+
+            const videoPayload = mediaPayloads.find(({ media }) => media.contentType.startsWith('video/'))
+            assert.ok(!videoPayload, `no video should be uploaded when video is disabled\n${testOutput}`)
+          }, { hardTimeout: 60000 })
+        .catch((error) => {
+          error.message += `\nCypress output:\n${testOutput}`
+          throw error
+        })
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+    })
+
+    onlyAgentlessIt('uploads only the video when only video is enabled', async function () {
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+      const specToRun = 'cypress/e2e/basic-fail.js'
+      let testOutput = ''
+
+      childProcess = exec(
+        testCommand,
+        {
+          cwd,
+          env: {
+            ...envVars,
+            CYPRESS_BASE_URL: webAppBaseUrl,
+            SPEC_PATTERN: specToRun,
+            CYPRESS_ENABLE_FAILURE_MEDIA: 'true',
+            DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'false',
+            DD_TEST_FAILURE_VIDEO_ENABLED: 'true',
+          },
+        }
+      )
+      childProcess.stdout?.on('data', (d) => { testOutput += d.toString() })
+      childProcess.stderr?.on('data', (d) => { testOutput += d.toString() })
+
+      const receiverPromise = receiver
+        .gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.startsWith('/api/unstable/ci/test-runs/') || url.endsWith('/api/v2/citestcycle'),
+          (payloads) => {
+            const mediaPayloads = payloads.filter(({ url }) => url.startsWith('/api/unstable/ci/test-runs/'))
+
+            const videoPayload = mediaPayloads.find(({ media }) => media.contentType === 'video/mp4')
+            assert.ok(videoPayload, `the spec video should be uploaded when video is enabled\n${testOutput}`)
+
+            const screenshotPayload = mediaPayloads.find(({ media }) => media.contentType === 'image/png')
+            assert.ok(
+              !screenshotPayload,
+              `no screenshot should be uploaded when screenshots are disabled\n${testOutput}`
+            )
+          }, { hardTimeout: 60000 })
+        .catch((error) => {
+          error.message += `\nCypress output:\n${testOutput}`
+          throw error
+        })
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+    })
+
+    onlyAgentlessIt('continues normally when the media upload endpoint fails', async function () {
+      // 500 is the backend's real "failed to store media" code; a failed upload must be swallowed
+      // so the cypress run still completes and the failed test is reported as usual.
+      receiver.setMediaResponseStatusCode(500)
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+      const specToRun = 'cypress/e2e/basic-fail.js'
+      let testOutput = ''
+
+      childProcess = exec(
+        testCommand,
+        {
+          cwd,
+          env: {
+            ...envVars,
+            CYPRESS_BASE_URL: webAppBaseUrl,
+            SPEC_PATTERN: specToRun,
+            CYPRESS_ENABLE_FAILURE_MEDIA: 'true',
+            DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true',
+            DD_TEST_FAILURE_VIDEO_ENABLED: 'true',
+          },
+        }
+      )
+      childProcess.stdout?.on('data', (d) => { testOutput += d.toString() })
+      childProcess.stderr?.on('data', (d) => { testOutput += d.toString() })
+
+      const receiverPromise = receiver
+        .gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.startsWith('/api/unstable/ci/test-runs/') || url.endsWith('/api/v2/citestcycle'),
+          (payloads) => {
+            const failedTest = payloads
+              .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+              .flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test')
+              .find(event => event.content.resource === 'cypress/e2e/basic-fail.js.basic fail suite can fail')
+
+            assert.ok(failedTest, `the failed test should still be reported when media upload fails\n${testOutput}`)
+            assert.strictEqual(failedTest.content.meta[TEST_STATUS], 'fail')
+          }, { hardTimeout: 60000 })
+        .catch((error) => {
+          error.message += `\nCypress output:\n${testOutput}`
+          throw error
+        })
+
+      await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+    })
   })
 })
