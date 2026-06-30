@@ -1,115 +1,251 @@
 'use strict'
 
 const LLMObsPlugin = require('../base')
-const { SOURCE_TO_TRIGGER, safeStringify, splitModel } = require('./utils')
+const { storage: llmobsStorage } = require('../../storage')
+const { NAME, SESSION_ID } = require('../../constants/tags')
+const { splitModel } = require('./utils')
 
-class TurnLLMObsPlugin extends LLMObsPlugin {
+const subagentToolIds = new Set()
+
+function buildOutputMessages (chunks, llmStartIdx, llmEndIdx) {
+  let thinking = ''
+  let text = ''
+  const toolCalls = []
+
+  for (let i = llmStartIdx; i < llmEndIdx; i++) {
+    const c = chunks[i]
+    if (c.type !== 'assistant') continue
+    const block = c.message?.content?.[0]
+    if (block?.type === 'thinking') thinking += block.thinking ?? ''
+    else if (block?.type === 'text') text += block.text ?? ''
+    else if (block?.type === 'tool_use') {
+      toolCalls.push({ name: block.name, arguments: block.input ?? {}, toolId: block.id, type: block.type })
+    }
+  }
+
+  const messages = []
+  if (thinking) messages.push({ role: 'thinking', content: thinking })
+  const msg = { role: 'assistant', content: text }
+  if (toolCalls.length) msg.toolCalls = toolCalls
+  messages.push(msg)
+  return messages
+}
+
+class QueryLLMObsPlugin extends LLMObsPlugin {
   static integration = 'claude-agent-sdk'
-  static id = 'llmobs_claude_agent_sdk_turn'
-  static prefix = 'tracing:apm:claude-agent-sdk:turn'
+  static id = 'llmobs_claude_agent_sdk_query'
+  static prefix = 'tracing:orchestrion:@anthropic-ai/claude-agent-sdk:query'
+
+  getLLMObsSpanRegisterOptions (ctx) {
+    return { kind: 'agent' }
+  }
+
+  start (ctx) {
+    super.start(ctx)
+    if (!this._tracerConfig.llmobs.DD_LLMOBS_ENABLED) return
+    const store = llmobsStorage.getStore()
+    const prev = ctx.runInContext ?? (fn => fn())
+    ctx.runInContext = fn => prev(() => llmobsStorage.run(store, fn))
+  }
+
+  asyncEnd (ctx) {
+    if (!ctx.streamResolved) return
+    super.asyncEnd(ctx)
+  }
+
+  setLLMObsTags (ctx) {
+    const span = ctx.currentStore?.span
+    if (!span) return
+
+    // post-populate session_id
+    if (ctx.session_id) this._tagger._setTag(span, SESSION_ID, ctx.session_id)
+    this._tagger.tagTextIO(span, ctx.arguments?.[0]?.prompt, ctx.output)
+
+    // metadata
+    const { cwd, permissionMode } = ctx
+    const metadata = {}
+
+    if (cwd) metadata.cwd = cwd
+    if (permissionMode) metadata.permissionMode = permissionMode
+
+    this._tagger.tagMetadata(span, metadata)
+  }
+}
+
+class StepLlmObsPlugin extends LLMObsPlugin {
+  static id = 'claude_agent_sdk_step_llmobs'
+  static system = 'claude-agent-sdk'
+  static prefix = 'tracing:apm:claude-agent-sdk:step'
+
+  getLLMObsSpanRegisterOptions (ctx) {
+    if (ctx.parentToolUseId) subagentToolIds.add(ctx.parentToolUseId)
+    return { kind: 'step', name: `step-${ctx.stepIndex}`, sessionId: ctx.sessionId }
+  }
+
+  end (ctx) {
+    super.end(ctx)
+    super.asyncEnd(ctx)
+  }
+
+  setLLMObsTags (ctx) {
+    const span = ctx.currentStore?.span
+    if (!span) return
+
+    const { chunks, llmStartIdx, llmEndIdx, toolOutputs } = ctx
+    if (!chunks) return
+
+    const outputMessages = buildOutputMessages(chunks, llmStartIdx, llmEndIdx)
+    const thinking = outputMessages.find(m => m.role === 'thinking')?.content ?? ''
+
+    const output = toolOutputs?.length
+      ? toolOutputs.map(raw => {
+        const content = raw?.[0]?.content
+        if (!Array.isArray(content)) return ''
+        return content.find(b => b.type === 'text')?.text ??
+          content.find(b => b.type === 'tool_reference')?.tool_name ??
+          ''
+      }).filter(Boolean).join('\n')
+      : outputMessages.find(m => m.role === 'assistant')?.content ?? ''
+
+    this._tagger.tagTextIO(span, thinking, output)
+  }
+}
+
+class LlmLlmObsPlugin extends LLMObsPlugin {
+  static id = 'claude_agent_sdk_llm_llmobs'
+  static system = 'claude-agent-sdk'
+  static prefix = 'tracing:apm:claude-agent-sdk:llm'
 
   getLLMObsSpanRegisterOptions (ctx) {
     const { modelName, modelProvider } = splitModel(ctx.model)
-    return {
-      kind: 'agent',
-      modelName,
-      modelProvider,
-      name: 'claude_agent_sdk.query',
-      sessionId: ctx.sessionId,
-    }
+    return { kind: 'llm', name: ctx.model, modelName, modelProvider, sessionId: ctx.sessionId }
+  }
+
+  end (ctx) {
+    super.end(ctx)
+    super.asyncEnd(ctx)
   }
 
   setLLMObsTags (ctx) {
     const span = ctx.currentStore?.span
     if (!span) return
 
-    const input = ctx.prompt || ''
-    const output = ctx.lastAssistantMessage || ctx.stopReason || ''
-    this._tagger.tagTextIO(span, input, output)
+    const { chunks, llmStartIdx, llmEndIdx, parentToolUseId, initialPrompt, usage } = ctx
 
-    const metadata = {}
-    if (ctx.model) {
-      const { modelName, modelProvider } = splitModel(ctx.model)
-      if (modelName) metadata.model_name = modelName
-      if (modelProvider) metadata.model_provider = modelProvider
+    if (chunks) {
+      const inputMessages = this.#buildInputMessages(chunks, llmStartIdx, parentToolUseId, initialPrompt)
+      const outputMessages = buildOutputMessages(chunks, llmStartIdx, llmEndIdx)
+      this._tagger.tagLLMIO(span, inputMessages, outputMessages)
     }
-    if (ctx.source) metadata.start_trigger = SOURCE_TO_TRIGGER[ctx.source] || ctx.source
-    if (ctx.permissionMode) metadata.permission_mode = ctx.permissionMode
-    if (ctx.cwd) metadata.project_dir = ctx.cwd
-    if (ctx.agentType) metadata.agent_type = ctx.agentType
-    if (ctx.transcriptPath) metadata.transcript_path = ctx.transcriptPath
 
-    this._tagger.tagMetadata(span, metadata)
+    if (usage) {
+      const inputTokens = (usage.input_tokens ?? 0) +
+        (usage.cache_creation_input_tokens ?? 0) +
+        (usage.cache_read_input_tokens ?? 0)
+      this._tagger.tagMetrics(span, {
+        input_tokens: inputTokens,
+        output_tokens: usage.output_tokens ?? 0,
+      })
+    }
+  }
+
+  #buildInputMessages (chunks, llmStartIdx, parentToolUseId, initialPrompt) {
+    const messages = []
+    if (initialPrompt) messages.push({ role: 'user', content: initialPrompt })
+    const seenIds = new Set()
+
+    for (let i = 0; i < llmStartIdx; i++) {
+      const c = chunks[i]
+      if (c.parent_tool_use_id !== parentToolUseId) continue
+
+      if (c.type === 'assistant') {
+        const msgId = c.message?.id
+        if (!msgId || seenIds.has(msgId)) continue
+        seenIds.add(msgId)
+
+        let thinking = ''
+        let text = ''
+        const toolCalls = []
+        for (let j = i; j < llmStartIdx; j++) {
+          const cc = chunks[j]
+          if (cc.type !== 'assistant' || cc.message?.id !== msgId) break
+          const block = cc.message?.content?.[0]
+          if (block?.type === 'thinking') thinking += block.thinking ?? ''
+          else if (block?.type === 'text') text += block.text ?? ''
+          else if (block?.type === 'tool_use') {
+            toolCalls.push({ name: block.name, arguments: block.input ?? {}, toolId: block.id, type: block.type })
+          }
+        }
+        if (thinking) messages.push({ role: 'thinking', content: thinking })
+        const msg = { role: 'assistant', content: text }
+        if (toolCalls.length) msg.toolCalls = toolCalls
+        messages.push(msg)
+      } else if (c.type === 'user') {
+        const content = c.message?.content
+        if (!content) continue
+        for (const block of content) {
+          if (block.type === 'text') {
+            messages.push({ role: 'user', content: block.text ?? '' })
+          } else if (block.type === 'tool_result') {
+            const raw = block.content
+            const text = Array.isArray(raw)
+              ? raw.find(b => b.type === 'text')?.text ??
+                raw.find(b => b.type === 'tool_reference')?.tool_name ??
+                ''
+              : String(raw ?? '')
+            messages.push({ role: 'tool', content: text })
+          }
+        }
+      }
+    }
+
+    return messages
   }
 }
 
-class ToolLLMObsPlugin extends LLMObsPlugin {
-  static integration = 'claude-agent-sdk'
-  static id = 'llmobs_claude_agent_sdk_tool'
+class ToolLlmObsPlugin extends LLMObsPlugin {
+  static id = 'claude_agent_sdk_tool_llmobs'
+  static system = 'claude-agent-sdk'
   static prefix = 'tracing:apm:claude-agent-sdk:tool'
 
   getLLMObsSpanRegisterOptions (ctx) {
-    return {
-      kind: 'tool',
-      modelProvider: 'anthropic',
-      name: ctx.toolName || 'tool',
-      sessionId: ctx.sessionId,
-    }
+    return { kind: 'tool', name: ctx.name, sessionId: ctx.sessionId }
+  }
+
+  end (ctx) {
+    super.end(ctx)
+    super.asyncEnd(ctx)
   }
 
   setLLMObsTags (ctx) {
     const span = ctx.currentStore?.span
     if (!span) return
 
-    const input = safeStringify(ctx.toolInput)
-    const output = ctx.error
-      ? safeStringify(ctx.error)
-      : safeStringify(ctx.toolResponse)
-
-    this._tagger.tagTextIO(span, input, output)
-
-    const metadata = {}
-    if (ctx.toolName) metadata.tool_name = ctx.toolName
-    if (ctx.toolUseId) metadata.tool_use_id = ctx.toolUseId
-    if (ctx.isInterrupt) metadata.is_interrupt = true
-
-    this._tagger.tagMetadata(span, metadata)
-  }
-}
-
-class SubagentLLMObsPlugin extends LLMObsPlugin {
-  static integration = 'claude-agent-sdk'
-  static id = 'llmobs_claude_agent_sdk_subagent'
-  static prefix = 'tracing:apm:claude-agent-sdk:subagent'
-
-  getLLMObsSpanRegisterOptions (ctx) {
-    return {
-      kind: 'agent',
-      modelProvider: 'anthropic',
-      name: ctx.agentType || 'subagent',
-      sessionId: ctx.sessionId,
+    if (subagentToolIds.has(ctx.id)) {
+      subagentToolIds.delete(ctx.id)
+      const description = ctx.input?.description
+      this._tagger.changeKind(span, 'agent')
+      if (description) this._tagger._setTag(span, NAME, `${ctx.name} (${description})`)
+      const output = ctx.output?.[0]?.content?.find?.(b => b.type === 'text')?.text
+      this._tagger.tagTextIO(span, ctx.input?.prompt, output)
+      return
     }
-  }
 
-  setLLMObsTags (ctx) {
-    const span = ctx.currentStore?.span
-    if (!span) return
-
-    const input = ctx.agentType || ctx.agentId || ''
-    const output = ctx.lastAssistantMessage || ''
+    const input = ctx.input ? JSON.stringify(ctx.input) : undefined
+    const raw = ctx.output
+    let output
+    if (Array.isArray(raw)) {
+      output = raw.map(b => b.text ?? JSON.stringify(b)).join('\n')
+    } else if (raw != null) {
+      output = String(raw)
+    }
     this._tagger.tagTextIO(span, input, output)
-
-    const metadata = {}
-    if (ctx.agentId) metadata.agent_id = ctx.agentId
-    if (ctx.agentType) metadata.agent_type = ctx.agentType
-    if (ctx.transcriptPath) metadata.agent_transcript_path = ctx.transcriptPath
-
-    this._tagger.tagMetadata(span, metadata)
   }
 }
 
 module.exports = [
-  TurnLLMObsPlugin,
-  ToolLLMObsPlugin,
-  SubagentLLMObsPlugin,
+  QueryLLMObsPlugin,
+  StepLlmObsPlugin,
+  ToolLlmObsPlugin,
+  LlmLlmObsPlugin,
 ]
