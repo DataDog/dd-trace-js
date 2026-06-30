@@ -102,7 +102,7 @@ describe('OtlpStatsTransformer', () => {
           [HTTP_METHOD]: 'POST',
           [HTTP_ROUTE]: '/users/:id',
           [SPAN_KIND]: 'server',
-          [GRPC_STATUS_CODE]: '0',
+          [GRPC_STATUS_CODE]: 'OK',
           [ORIGIN_KEY]: 'synthetics',
         },
       })
@@ -114,7 +114,7 @@ describe('OtlpStatsTransformer', () => {
         'http.response.status_code': 404,
         'http.request.method': 'POST',
         'http.route': '/users/:id',
-        'rpc.response.status_code': '0',
+        'rpc.response.status_code': 'OK',
         'datadog.operation.name': 'test.op',
         'datadog.span.type': 'web',
         'datadog.origin': 'synthetics',
@@ -122,13 +122,20 @@ describe('OtlpStatsTransformer', () => {
       })
     })
 
-    it('translates grpc.status.code to rpc.response.status_code as a string', () => {
-      // The gRPC plugin records the status code as a numeric metric; emitted as a string to align
-      // with libdatadog (kv_str). 0 (OK) is a common value and must not be filtered out.
-      const span = makeSpan({ meta: {}, metrics: { [GRPC_STATUS_CODE]: 0 } })
+    it('emits the raw grpc.status.code name upper-cased as rpc.response.status_code', () => {
+      // OTel rpc.response.status_code is the canonical gRPC status NAME; the raw meta value is
+      // emitted upper-cased without any code<->name mapping.
+      const span = makeSpan({ meta: { [GRPC_STATUS_CODE]: 'not_found' }, metrics: {} })
       const payload = JSON.parse(transformer.transform(makeDrained(12340000000000, [span]), BUCKET_SIZE_NS))
 
-      assert.strictEqual(attrMapOf(dataPointsOf(payload)[0])['rpc.response.status_code'], '0')
+      assert.strictEqual(attrMapOf(dataPointsOf(payload)[0])['rpc.response.status_code'], 'NOT_FOUND')
+    })
+
+    it('prefers the meta status name over the numeric metrics value', () => {
+      const span = makeSpan({ meta: { [GRPC_STATUS_CODE]: 'UNAVAILABLE' }, metrics: { [GRPC_STATUS_CODE]: 14 } })
+      const payload = JSON.parse(transformer.transform(makeDrained(12340000000000, [span]), BUCKET_SIZE_NS))
+
+      assert.strictEqual(attrMapOf(dataPointsOf(payload)[0])['rpc.response.status_code'], 'UNAVAILABLE')
     })
 
     it('omits optional attributes when not present on the span', () => {

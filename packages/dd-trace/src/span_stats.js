@@ -98,9 +98,9 @@ class SpanAggKey {
     this.srvSrc = span.meta[SVC_SRC_KEY] || ''
     this.origin = span.meta[ORIGIN_KEY] || ''
     this.spanKind = span.meta[SPAN_KIND] || ''
-    // The gRPC plugin records the status code as a numeric tag, which span formatting routes into
-    // metrics rather than meta; fall back to meta for string-valued tags (e.g. manual instrumentation).
-    this.rpcStatusCode = span.metrics?.[GRPC_STATUS_CODE] ?? span.meta[GRPC_STATUS_CODE] ?? ''
+    // gRPC status is the canonical status NAME string and lives in meta; prefer it so the name is
+    // preserved. Fall back to metrics for the numeric tag the gRPC plugin records.
+    this.rpcStatusCode = span.meta[GRPC_STATUS_CODE] ?? span.metrics?.[GRPC_STATUS_CODE] ?? ''
   }
 
   toString () {

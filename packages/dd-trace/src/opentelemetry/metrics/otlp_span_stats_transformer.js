@@ -159,7 +159,8 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
     if (aggKey.method) raw['http.request.method'] = aggKey.method
     if (aggKey.endpoint) raw['http.route'] = aggKey.endpoint
     if (aggKey.rpcStatusCode !== '') {
-      raw['rpc.response.status_code'] = String(aggKey.rpcStatusCode)
+      // OTel rpc.response.status_code is the canonical gRPC status NAME; emit the raw value upper-cased.
+      raw['rpc.response.status_code'] = String(aggKey.rpcStatusCode).toUpperCase()
     }
 
     if (!this.#otelSemanticsEnabled) {
