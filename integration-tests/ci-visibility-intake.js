@@ -232,7 +232,7 @@ class FakeCiVisIntake extends FakeAgent {
       })
     })
 
-    app.post('/api/unstable/ci/test-runs/:traceId/media', express.raw({ limit: Infinity, type: '*/*' }), (req, res) => {
+    app.post('/api/v2/ci/test-runs/:traceId/media', express.raw({ limit: Infinity, type: '*/*' }), (req, res) => {
       res.status(this.#mediaResponseStatusCode).send()
       this.emit('message', {
         headers: req.headers,

@@ -953,10 +953,10 @@ moduleTypes.forEach(({
           const receiverPromise = receiver
             .gatherPayloadsUntilChildExit(
               childProcess,
-              ({ url }) => url.startsWith('/api/unstable/ci/test-runs/') || url.endsWith('/api/v2/citestcycle'),
+              ({ url }) => url.startsWith('/api/v2/ci/test-runs/') || url.endsWith('/api/v2/citestcycle'),
               (payloads) => {
                 const testOutput = getTestOutput()
-                const mediaPayloads = payloads.filter(({ url }) => url.startsWith('/api/unstable/ci/test-runs/'))
+                const mediaPayloads = payloads.filter(({ url }) => url.startsWith('/api/v2/ci/test-runs/'))
                 const failedTest = payloads
                   .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
                   .flatMap(({ payload }) => payload.events)
@@ -968,7 +968,7 @@ moduleTypes.forEach(({
 
                 const screenshotPayload = mediaPayloads.find(({ media }) => media.contentType === 'image/png')
                 assert.ok(screenshotPayload, `a screenshot should be uploaded to the v2 media endpoint\n${testOutput}`)
-                assert.strictEqual(screenshotPayload.url, `/api/unstable/ci/test-runs/${expectedTraceId}/media`)
+                assert.strictEqual(screenshotPayload.url, `/api/v2/ci/test-runs/${expectedTraceId}/media`)
                 assert.strictEqual(screenshotPayload.media.traceId, expectedTraceId)
                 assert.strictEqual(screenshotPayload.headers['dd-api-key'], '1')
 
@@ -1016,10 +1016,10 @@ moduleTypes.forEach(({
           const receiverPromise = receiver
             .gatherPayloadsUntilChildExit(
               childProcess,
-              ({ url }) => url.startsWith('/api/unstable/ci/test-runs/') || url.endsWith('/api/v2/citestcycle'),
+              ({ url }) => url.startsWith('/api/v2/ci/test-runs/') || url.endsWith('/api/v2/citestcycle'),
               (payloads) => {
                 const testOutput = getTestOutput()
-                const mediaPayloads = payloads.filter(({ url }) => url.startsWith('/api/unstable/ci/test-runs/'))
+                const mediaPayloads = payloads.filter(({ url }) => url.startsWith('/api/v2/ci/test-runs/'))
                 const failedTest = payloads
                   .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
                   .flatMap(({ payload }) => payload.events)

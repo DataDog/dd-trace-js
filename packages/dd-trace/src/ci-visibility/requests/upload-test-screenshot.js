@@ -8,7 +8,7 @@ const request = require('../../exporters/common/request')
 const log = require('../../log')
 
 const UPLOAD_TIMEOUT_MS = 30_000
-const TEST_SCREENSHOT_ENDPOINT_PREFIX = '/api/unstable/ci/test-runs/'
+const TEST_SCREENSHOT_ENDPOINT_PREFIX = '/api/v2/ci/test-runs/'
 const TEST_SCREENSHOT_ENDPOINT_SUFFIX = '/media'
 const UINT64_MAX = 18_446_744_073_709_551_615n
 
