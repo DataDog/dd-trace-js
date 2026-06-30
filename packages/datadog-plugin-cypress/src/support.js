@@ -107,7 +107,9 @@ Cypress.on('fail', (err, runnable) => {
   // If command:end fired for all commands (none in-flight) but the last command
   // has no error, it means command:end fired before the error was attached to it.
   if (!hadInFlightCommands && currentTestCommands.length > 0) {
-    const lastCommand = currentTestCommands.at(-1)
+    // We have to support very old cypress versions in v5
+    // eslint-disable-next-line unicorn/prefer-at
+    const lastCommand = currentTestCommands[currentTestCommands.length - 1]
     if (!lastCommand.error) {
       lastCommand.error = { message: err.message, stack: err.stack, name: err.name }
     }
