@@ -5,7 +5,7 @@ const dc = require('dc-polyfill')
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const GraphQLParsePlugin = require('./parse')
-const { extractErrorIntoSpanEvent, getSignature } = require('./utils')
+const { cacheRequestOperation, extractErrorIntoSpanEvent, getSignature } = require('./utils')
 
 const legacyStorage = storage('legacy')
 
@@ -132,8 +132,10 @@ class GraphQLExecutePlugin extends TracingPlugin {
     // Backfill the top-level graphql.request span (mercurius) with the operation
     // signature/type now that the document is parsed. The request boundary only
     // had the raw source + operationName, so this is where the precise resource
-    // becomes known. No-op for drivers that never open a request span.
-    backfillRequestSpan(ctx.currentStore?.graphqlRequestSpan, signature, type, name)
+    // becomes known. No-op for drivers that never open a request span. Also cache
+    // it by source so the JIT warm path — where execute never fires — can recover
+    // the same tags at the request boundary.
+    backfillRequestSpan(ctx.currentStore?.graphqlRequestSpan, docSource, signature, type, name)
 
     addVariableTags(this.config, span, args.variableValues)
 
@@ -332,7 +334,11 @@ class GraphQLExecutePlugin extends TracingPlugin {
 // the precise signature exists. Guarded so it is a no-op for graphql-js/apollo/
 // yoga, which never open a request span, and idempotent across re-entrant
 // execute() calls (yoga's normalizedExecutor) via the ddRequestRefined flag.
-function backfillRequestSpan (requestSpan, signature, type, name) {
+// Caches the metadata by source regardless of whether a request span is open so
+// the JIT warm path (no execute span) can apply the same tags at its boundary.
+function backfillRequestSpan (requestSpan, docSource, signature, type, name) {
+  if (docSource) cacheRequestOperation(docSource, { signature, type, name })
+
   if (!requestSpan || requestSpan.ddRequestRefined) return
   requestSpan.ddRequestRefined = true
 
