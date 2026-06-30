@@ -198,18 +198,25 @@ function wrapQueryAsyncIterator (asyncIterator, ctx) {
   }
 }
 
-queryChannel.subscribe({
-  end (ctx) {
-    const { result } = ctx
-
-    ctx.streamResolved = false
-
-    shimmer.wrap(result, Symbol.asyncIterator, asyncIterator => wrapQueryAsyncIterator(asyncIterator, ctx))
-  },
-})
+let querySubscribed = false
 
 for (const hook of getHooks('@anthropic-ai/claude-agent-sdk')) {
   hook.file = null
 
-  addHook(hook, exports => exports)
+  addHook(hook, exports => {
+    if (!querySubscribed) {
+      querySubscribed = true
+      queryChannel.subscribe({
+        end (ctx) {
+          const { result } = ctx
+
+          ctx.streamResolved = false
+
+          shimmer.wrap(result, Symbol.asyncIterator, asyncIterator => wrapQueryAsyncIterator(asyncIterator, ctx))
+        },
+      })
+    }
+
+    return exports
+  })
 }
