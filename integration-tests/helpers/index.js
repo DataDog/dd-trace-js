@@ -956,6 +956,7 @@ function preparePluginIntegrationTestSpawnOptions (
         NODE_OPTIONS,
         DD_TRACE_AGENT_PORT: String(agentPort),
         DD_TRACE_FLUSH_INTERVAL: '0',
+        DD_INJECT_FORCE: true,
         ...additionalEnvArgs,
       },
       execArgv,

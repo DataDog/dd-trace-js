@@ -178,3 +178,4 @@ benchmark-serverless-trigger:
     # only available on Merge Requests
     UPSTREAM_MERGE_TARGET_BRANCH: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME
     DD_TAGS: "SLS_CI_BRANCH:$SLS_CI_BRANCH"
+    DD_INJECT_FORCE: true
