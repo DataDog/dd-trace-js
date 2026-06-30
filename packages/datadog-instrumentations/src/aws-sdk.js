@@ -25,6 +25,10 @@ const KNOWN_CHANNEL_SUFFIXES = new Set([
   'bedrockruntime',
 ])
 
+const CHANNEL_SUFFIX_ALIASES = {
+  cloudwatchevents: 'eventbridge',
+}
+
 /**
  * @typedef {object} ChannelBag
  * @property {ReturnType<typeof channel>} start
@@ -314,7 +318,7 @@ function addResponse (ctx, error, result) {
 function getChannelSuffix (name) {
   // some resource identifiers have spaces between ex: bedrock runtime
   name = String(name).replaceAll(' ', '')
-  return KNOWN_CHANNEL_SUFFIXES.has(name) ? name : 'default'
+  return CHANNEL_SUFFIX_ALIASES[name] || (KNOWN_CHANNEL_SUFFIXES.has(name) ? name : 'default')
 }
 
 addHook({ name: '@smithy/smithy-client', versions: ['>=1.0.3'] }, smithy => {
