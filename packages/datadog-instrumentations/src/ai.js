@@ -143,27 +143,29 @@ function wrapTracer (tracer) {
           // through to the real span instance so private fields always resolve correctly.
           const freshSpan = {
             spanContext () { return span.spanContext() },
-            setAttribute (key, value) { return span.setAttribute(key, value) },
+            setAttribute (key, value) { span.setAttribute(key, value); return freshSpan },
             setAttributes (attributes) {
               vercelAiSpanSetAttributesChannel.publish({ ctx, attributes })
-              return span.setAttributes(attributes)
+              span.setAttributes(attributes)
+              return freshSpan
             },
             addEvent (name, attributesOrStartTime, startTime) {
-              return span.addEvent(name, attributesOrStartTime, startTime)
+              span.addEvent(name, attributesOrStartTime, startTime)
+              return freshSpan
             },
-            addLink (link, attrs) { return span.addLink(link, attrs) },
-            addLinks (links) { return span.addLinks(links) },
-            setStatus (status) { return span.setStatus(status) },
-            updateName (spanName) { return span.updateName(spanName) },
+            addLink (link, attrs) { span.addLink(link, attrs); return freshSpan },
+            addLinks (links) { span.addLinks(links); return freshSpan },
+            setStatus (status) { span.setStatus(status); return freshSpan },
+            updateName (spanName) { span.updateName(spanName); return freshSpan },
             isRecording () { return span.isRecording() },
             recordException (exception, timeInput) {
               ctx.error = exception
               vercelAiTracingChannel.error.publish(ctx)
-              return span.recordException(exception, timeInput)
+              span.recordException(exception, timeInput)
             },
             end (...endArgs) {
               vercelAiTracingChannel.asyncEnd.publish(ctx)
-              return span.end(...endArgs)
+              span.end(...endArgs)
             },
           }
 
