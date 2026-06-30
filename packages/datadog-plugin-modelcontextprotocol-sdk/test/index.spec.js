@@ -1,11 +1,50 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+
+const { channel } = require('dc-polyfill')
+
+const { storage } = require('../../datadog-core')
 const { createIntegrationTestSuite } = require('../../dd-trace/test/setup/helpers/plugin-test-helpers')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
 const TestSetup = require('./test-setup')
 
 const testSetup = new TestSetup()
+const legacyStorage = storage('legacy')
+
+describe('plugin lifecycle', () => {
+  it('does not subscribe to server tool registration when the plugin module is loaded', () => {
+    const registeredCh = channel('apm:mcp:server:tool:registered')
+    assert.strictEqual(registeredCh.hasSubscribers, false)
+
+    delete require.cache[require.resolve('../src/tracing')]
+    require('../src/tracing')
+
+    assert.strictEqual(registeredCh.hasSubscribers, false)
+  })
+})
+
+function assertClientServerParenting (spans, clientResource) {
+  const clientSpan = spans.find(s => {
+    return s.name === 'mcp.client.tool.call' && s.resource === clientResource
+  })
+  const serverSpan = spans.find(s => {
+    return s.name === 'mcp.server.request' && s.resource === 'tools/call'
+  })
+
+  assert.ok(clientSpan, 'mcp.client.tool.call span should exist')
+  assert.ok(serverSpan, 'mcp.server.request span should exist')
+  assert.strictEqual(
+    serverSpan.trace_id.toString(),
+    clientSpan.trace_id.toString(),
+    'server request span trace_id should equal client tool call trace_id'
+  )
+  assert.strictEqual(
+    serverSpan.parent_id.toString(),
+    clientSpan.span_id.toString(),
+    'server request span parent_id should equal client tool call span_id'
+  )
+}
 
 createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sdk', {
   subModule: '@modelcontextprotocol/sdk/client',
@@ -285,6 +324,27 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
       return traceAssertion
     })
 
+    it('should finish server request spans with error when tools/call request validation fails', async () => {
+      const traceAssertion = expectSomeSpan(agent, {
+        name: 'mcp.server.request',
+        type: 'mcp',
+        resource: 'tools/call',
+        error: 1,
+        meta: {
+          component: 'modelcontextprotocol_server',
+          '_dd.integration': 'modelcontextprotocol_server',
+          'span.kind': 'server',
+        },
+      })
+
+      await assert.rejects(
+        () => testSetup.clientCallMalformedTool(),
+        { message: /expected string/ }
+      )
+
+      return traceAssertion
+    })
+
     it('should finish server request spans for allowlisted unknown methods', async () => {
       const traceAssertion = expectSomeSpan(agent, {
         name: 'mcp.server.request',
@@ -307,23 +367,66 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
     it('mcp.server.request span should be a child of mcp.client.tool.call span', async () => {
       // Client and server run in the same process via InMemoryTransport, so async
       // context propagation carries the client span into the server _onrequest handler.
-      // Both spans land in the same trace payload.
+      // Distributed extraction can split linked spans across trace payloads, so aggregate
+      // the mock agent payloads before asserting the relationship.
+      const spans = []
       const traceAssertion = agent.assertSomeTraces(traces => {
-        const allSpans = traces.flatMap(trace => trace)
-        const clientSpan = allSpans.find(s => s.name === 'mcp.client.tool.call')
-        const serverSpan = allSpans.find(s => s.name === 'mcp.server.request')
-        assert.ok(clientSpan, 'mcp.client.tool.call span should exist')
-        assert.ok(serverSpan, 'mcp.server.request span should exist')
-        assert.strictEqual(
-          serverSpan.parent_id.toString(),
-          clientSpan.span_id.toString(),
-          'server request span parent_id should equal client tool call span_id'
-        )
+        spans.push(...traces.flatMap(trace => trace))
+        assertClientServerParenting(spans, 'test-tool')
       })
 
       await testSetup.clientCallTool()
 
       return traceAssertion
+    })
+
+    it('mcp.server.request span should use _meta trace context when async context is absent', async () => {
+      const { McpServer } = meta.versionMod.get('@modelcontextprotocol/sdk/server/mcp.js')
+      const { InMemoryTransport } = meta.versionMod.get('@modelcontextprotocol/sdk/inMemory.js')
+      const { Client } = meta.mod
+
+      const distributedServer = new McpServer({ name: 'distributed-server', version: '1.0.0' })
+      distributedServer.registerTool(
+        'distributed-tool',
+        { description: 'Distributed tool', inputSchema: {} },
+        async () => ({
+          content: [{ type: 'text', text: 'distributed result' }],
+        })
+      )
+
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+      await distributedServer.connect(serverTransport)
+
+      const serverOnMessage = serverTransport.onmessage
+      let traceContext
+      serverTransport.onmessage = (...args) => {
+        traceContext = args[0]?.params?._meta?._dd_trace_context
+        return legacyStorage.run({}, () => serverOnMessage.apply(serverTransport, args))
+      }
+
+      const distributedClient = new Client({ name: 'distributed-client', version: '1.0.0' })
+      await distributedClient.connect(clientTransport)
+
+      const spans = []
+      const traceAssertion = agent.assertSomeTraces(traces => {
+        spans.push(...traces.flatMap(trace => trace))
+        assertClientServerParenting(spans, 'distributed-tool')
+      })
+
+      try {
+        await distributedClient.callTool({ name: 'distributed-tool', arguments: {} })
+
+        assert.ok(traceContext, 'request should include _meta._dd_trace_context')
+        assert.ok(
+          traceContext['x-datadog-trace-id'] || traceContext.traceparent,
+          'trace context should include a supported propagation header'
+        )
+
+        return traceAssertion
+      } finally {
+        await distributedClient.close()
+        await distributedServer.close()
+      }
     })
   })
 

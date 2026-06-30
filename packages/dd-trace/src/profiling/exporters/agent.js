@@ -3,12 +3,12 @@
 const { request: httpRequest } = require('http')
 const { request: httpsRequest } = require('https')
 const perf = require('perf_hooks').performance
-const { urlToHttpOptions } = require('url')
 
 const retry = require('../../../../../vendor/dist/retry')
 // TODO: avoid using dd-trace internals. Make this a separate module?
 const docker = require('../../exporters/common/docker')
 const FormData = require('../../exporters/common/form-data')
+const { parseUrl } = require('../../exporters/common/url')
 const log = require('../../log')
 const { storage } = require('../../../../datadog-core')
 const version = require('../../../../../package.json').version
@@ -88,15 +88,22 @@ function computeRetries (uploadTimeout) {
 }
 
 class AgentExporter extends EventSerializer {
-  constructor (config = {}) {
+  #backoffTime
+  #backoffTries
+
+  /** @param {import('./event_serializer').TracerConfig} config */
+  constructor (config) {
     super(config)
-    const { url, uploadTimeout } = config
-    this._url = url
+    this._url = config.url
 
-    const [backoffTries, backoffTime] = computeRetries(uploadTimeout)
+    const [backoffTries, backoffTime] = computeRetries(config.DD_PROFILING_UPLOAD_TIMEOUT)
 
-    this._backoffTime = backoffTime
-    this._backoffTries = backoffTries
+    this.#backoffTime = backoffTime
+    this.#backoffTries = backoffTries
+  }
+
+  getExportUrl () {
+    return this._url
   }
 
   export (exportSpec) {
@@ -128,8 +135,8 @@ class AgentExporter extends EventSerializer {
     return new Promise((resolve, reject) => {
       const operation = retry.operation({
         randomize: true,
-        minTimeout: this._backoffTime,
-        retries: this._backoffTries,
+        minTimeout: this.#backoffTime,
+        retries: this.#backoffTries,
         unref: true,
       })
 
@@ -148,18 +155,18 @@ class AgentExporter extends EventSerializer {
             'DD-EVP-ORIGIN-VERSION': version,
             ...form.getHeaders(),
           },
-          timeout: this._backoffTime * 2 ** attempt,
+          timeout: this.#backoffTime * 2 ** attempt,
         }
 
         docker.inject(options.headers)
 
-        if (this._url.protocol === 'unix:') {
-          options.socketPath = this._url.pathname
+        const url = parseUrl(this._url)
+        if (url.protocol === 'unix:') {
+          options.socketPath = url.pathname
         } else {
-          const httpOptions = urlToHttpOptions(this._url)
-          options.protocol = httpOptions.protocol
-          options.hostname = httpOptions.hostname
-          options.port = httpOptions.port
+          options.protocol = url.protocol
+          options.hostname = url.hostname
+          options.port = url.port
         }
 
         // eslint-disable-next-line eslint-rules/eslint-log-printf-style

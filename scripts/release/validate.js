@@ -58,7 +58,12 @@ try {
 
   pass()
 
-  const diffCmd = 'branch-diff --user DataDog --repo dd-trace-js --exclude-label=only-land-on-next'
+  const { DD_MAJOR, DD_MINOR, DD_PATCH, VERSION } = require('../../version')
+  const stableVersion = `${DD_MAJOR}.${DD_MINOR}.${DD_PATCH}`
+  const isPreRelease = VERSION !== stableVersion
+
+  const diffCmd = 'branch-diff --user DataDog --repo dd-trace-js' +
+    (isPreRelease ? '' : ' --exclude-label=only-land-on-next')
 
   start('Validate differences between proposal and main branch.')
 

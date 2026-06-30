@@ -319,12 +319,34 @@ Validate basic plugin structure with:
 ./node_modules/.bin/mocha packages/dd-trace/test/plugins/plugin-structure.spec.js
 ```
 
+## Debugging failures
+
+A failing test on your change is your change's fault until you can name the mechanism that proves otherwise.
+"Flaky", "pre-existing", and "unrelated" are verdicts you earn with evidence: a rerun that passes, the same
+failure on `master`, a known-flaky entry. They are never the default you reach for when a log is missing.
+"I can't see the cause" means dig harder (fresh logs, local repro, re-read the diff), not "there is no cause".
+Before labeling a failure, write its one-line mechanism ("X breaks because this change did Y"). If you can't,
+the label is "unknown, investigating".
+
+Every fix resolves the cause, not the symptom. A loosened assertion, a filtered-out input, or a bumped timeout
+that hides the root problem is rejected: if a spy fires twice because a stray request reaches the server, stop the
+stray request rather than filtering the spy. When the cause is a repeating shape (a stale version-folder path, a
+renamed key, a string compare that should be a semver check), grep for every sibling and fix them in the same
+change. CI shows you one instance, not all, and the missed sibling is the next red.
+
+A hung job is a masked failure, not "just slow". It is usually an early error plus a leaked handle (a tracer/RC
+timer, an open socket) that kept the process from reporting it, so read the last meaningful line before the stall
+as the real error rather than raising the timeout.
+
 ## Pull Requests and CI
 
 ### Commit Messages
 
 Conventional format: `type(scope): description`
-Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`
+Types: `feat`, `fix`, `perf`, `refactor`, `test`, `bench`, `docs`, `chore`, `ci`
+Reserve `feat`/`fix`/`perf` for production code shipped in the npm package. A fix or new capability in
+tests, benchmarks, CI, or tooling uses the area type even so — a test-suite fix is `test(...)`, a benchmark
+fix `bench(...)`, a CI fix `ci(...)`; never `fix(...)`/`feat(...)`.
 Example: `feat(appsec): add new WAF rule`
 
 ### PR Requirements
@@ -332,6 +354,16 @@ Example: `feat(appsec): add new WAF rule`
 - Use template from `.github/pull_request_template.md`
 - Label: `semver-patch` (fixes only), `semver-minor` (new features), `semver-major` (breaking)
 - **All tests must pass - all-green policy, no exceptions**
+
+### Flaky tests
+
+A genuine non-deterministic failure (timeout, test-ordering, port race, a stub asserted once but called twice) that
+surfaces while you work on an unrelated change is fixed in its own PR, not folded into the current one. Dispatch a
+background sub-agent to repro and fix it, branched off `master` and opened as its own draft PR automatically, so the
+main thread keeps moving (see "Debugging failures"). Stabilize the test or skip it with a tracked reason, and never
+weaken or delete an assertion to make it pass. A deterministic failure (assertion mismatch, missing fixture/cassette,
+stale path, version incompatibility) is not flaky; fix it inline. Either way the bar for "flake" is high: a
+wrongly-dismissed failure ships a real bug, while a wrongly-investigated flake costs only your time.
 
 ## Vendoring Dependencies
 

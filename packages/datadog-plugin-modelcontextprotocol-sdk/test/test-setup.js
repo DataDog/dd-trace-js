@@ -109,6 +109,11 @@ class ModelcontextprotocolSdkTestSetup {
     }
   }
 
+  clientCallMalformedTool () {
+    const { EmptyResultSchema } = this._versionMod.get('@modelcontextprotocol/sdk/types.js')
+    return this._client.request({ method: 'tools/call', params: { arguments: {} } }, EmptyResultSchema)
+  }
+
   renameTestTool (name) {
     this._testTool.update({ name })
   }

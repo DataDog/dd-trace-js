@@ -2,7 +2,6 @@
 
 const assert = require('node:assert/strict')
 const os = require('node:os')
-const path = require('node:path')
 const { inspect } = require('node:util')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
@@ -14,6 +13,7 @@ require('../setup/core')
 const { getConfigFresh } = require('../helpers/config')
 const { AgentExporter } = require('../../src/profiling/exporters/agent')
 const { FileExporter } = require('../../src/profiling/exporters/file')
+const { getActivation } = require('../../src/profiling/exporters/event_serializer')
 const WallProfiler = require('../../src/profiling/profilers/wall')
 const SpaceProfiler = require('../../src/profiling/profilers/space')
 const EventsProfiler = require('../../src/profiling/profilers/events')
@@ -24,8 +24,6 @@ const oomMonitoringSupported = process.platform !== 'win32'
 const isAtLeast24 = satisfies(process.versions.node, '>=24.0.0')
 const isAtLeast26 = satisfies(process.versions.node, '>=26.0.0')
 const zstdOrGzip = isAtLeast24 ? 'zstd' : 'gzip'
-
-/** @typedef {InstanceType<(typeof import('../../src/profiling/config'))['Config']>} ProfilerConfig */
 
 describe('config', () => {
   let env
@@ -40,21 +38,48 @@ describe('config', () => {
   })
 
   /**
+   * Assembles the profiling runtime from the tracer config the same way
+   * {@link import('../../src/profiling/profiler').Profiler#start} does, so the
+   * assertions exercise the real derivation functions through their composition.
+   *
    * @param {Record<string, unknown>} [tracerOptions]
-   * @param {Record<string, unknown>} [moduleStubs]
-   * @returns {{config: ProfilerConfig, warnings: string[], errors: string[]}}
+   * @param {Record<string, unknown>} [configStubs] - Module stubs for the tracer config graph
+   *   (e.g. the runtime version that drives Node.js-gated calculated values).
+   * @returns {{config: Record<string, unknown>, warnings: string[], errors: string[]}}
    */
-  function getProfilerConfig (tracerOptions, moduleStubs = {}) {
+  function getProfilerConfig (tracerOptions, configStubs = {}) {
     process.env.DD_PROFILING_ENABLED = '1'
 
-    const tracerConfig = getConfigFresh(tracerOptions)
+    const tracerConfig = getConfigFresh(tracerOptions, configStubs)
 
     const gitMetadata = proxyquire.noPreserveCache()('../../src/git_metadata', {})
-    const ProfilingConfig = proxyquire.noPreserveCache()('../../src/profiling/config', {
+    // Stubs are forwarded to both graphs; proxyquire only applies the keys each module requires
+    // (e.g. the runtime version drives the config layer, serverless/azure drive the tag derivation).
+    const { buildProfilingRuntime } = proxyquire.noPreserveCache()('../../src/profiling/config', {
       '../git_metadata': gitMetadata,
-      ...moduleStubs,
-    }).Config
-    const config = /** @type {ProfilerConfig} */ (new ProfilingConfig(tracerConfig))
+      ...configStubs,
+    })
+
+    const { tags, exporters, flushInterval, profilers, uploadCompression, systemInfoReport } =
+      buildProfilingRuntime(tracerConfig)
+
+    // The assertions read a flat view that mixes the reported settings (systemInfoReport, which
+    // carries oomMonitoring) with the Profiler-level fields and the raw passthrough values the
+    // exporters consume.
+    const config = {
+      ...systemInfoReport,
+      tags,
+      exporters,
+      profilers,
+      flushInterval,
+      uploadCompression,
+      service: tracerConfig.service,
+      version: tracerConfig.version,
+      env: tracerConfig.env,
+      activation: getActivation(tracerConfig.profiling.DD_PROFILING_ENABLED),
+      uploadTimeout: tracerConfig.DD_PROFILING_UPLOAD_TIMEOUT,
+      pprofPrefix: tracerConfig.DD_PROFILING_PPROF_PREFIX,
+    }
 
     return {
       config,
@@ -159,6 +184,15 @@ describe('config', () => {
     assert.strictEqual(config.tags.host, os.hostname())
   })
 
+  it('should use azure function metadata for tags when running as an azure function', () => {
+    const { config } = getProfilerConfig(undefined, {
+      '../serverless': { getIsAzureFunction: () => true },
+      '../azure_metadata': { getAzureFunctionMetadata: () => ({ siteName: 'my-func' }) },
+    })
+
+    assert.strictEqual(config.tags['aas.site.name'], 'my-func')
+  })
+
   it('should filter out invalid profilers', () => {
     process.env = {
       DD_PROFILING_PROFILERS: 'nope,also_nope',
@@ -204,7 +238,7 @@ describe('config', () => {
     try {
       getProfilerConfig()
       assert.ok(
-        warnings.some(m => m.includes('Invalid compression level 99')),
+        warnings.some(m => typeof m === 'string' && m.includes('DD_PROFILING_DEBUG_UPLOAD_COMPRESSION')),
         `Expected compression warning in: ${inspect(warnings)}`
       )
     } finally {
@@ -233,6 +267,21 @@ describe('config', () => {
     assert.strictEqual(
       /** @type {InstanceType<typeof WallProfiler>} */ (config.profilers[0]).codeHotspotsEnabled(),
       samplingContextsAvailable
+    )
+  })
+
+  it('should treat the cpu profiler alias as a wall profiler', () => {
+    process.env = {
+      DD_PROFILING_PROFILERS: 'cpu',
+    }
+
+    const { config } = getProfilerConfig()
+
+    assert.deepStrictEqual(
+      config.profilers.map(profiler => profiler.constructor),
+      samplingContextsAvailable
+        ? [WallProfiler, EventsProfiler]
+        : [WallProfiler]
     )
   })
 
@@ -300,6 +349,16 @@ describe('config', () => {
       uploadTimeout: 10000,
       timelineEnabled: false,
     })
+  })
+
+  it('should reject a non-positive heap sampling interval and keep the default', () => {
+    process.env = {
+      DD_PROFILING_HEAP_SAMPLING_INTERVAL: '0',
+    }
+
+    const { config } = getProfilerConfig()
+
+    assert.strictEqual(config.heapSamplingInterval, 524_288)
   })
 
   it('should disable allocation profiling on unsupported Node.js versions', () => {
@@ -480,43 +539,26 @@ describe('config', () => {
 
     const { config } = getProfilerConfig()
 
+    // The reported settings no longer carry the export command; that is the space profiler's
+    // runtime concern and is covered in profilers/space.spec.js.
     assert.deepStrictEqual(config.oomMonitoring, {
       enabled: false,
       heapLimitExtensionSize: 0,
       maxHeapExtensionCount: 0,
       exportStrategies: [],
-      exportCommand: undefined,
     })
   })
-
-  function assertOomExportCommand (config) {
-    assert.ok(
-      config.oomMonitoring.exportCommand[3].includes(`service:${config.service}`),
-      `Got: ${inspect(config.oomMonitoring.exportCommand[3])}`
-    )
-    assert.ok(
-      config.oomMonitoring.exportCommand[3].includes('snapshot:on_oom'),
-      `Got: ${inspect(config.oomMonitoring.exportCommand[3])}`
-    )
-  }
 
   it('should enable OOM heap profiler by default and use process as default strategy', () => {
     const { config } = getProfilerConfig({ reportHostname: true })
 
     if (oomMonitoringSupported) {
-      assertObjectContains(config.oomMonitoring, {
+      assert.deepStrictEqual(config.oomMonitoring, {
         enabled: true,
         heapLimitExtensionSize: 0,
         maxHeapExtensionCount: 0,
         exportStrategies: ['process'],
-        exportCommand: [
-          process.execPath,
-          path.normalize(path.join(__dirname, '../../src/profiling', 'exporter_cli.js')),
-          'http://127.0.0.1:8126/',
-          'space',
-        ],
       })
-      assertOomExportCommand(config)
     } else {
       assert.strictEqual(config.oomMonitoring.enabled, false)
     }
@@ -575,19 +617,25 @@ describe('config', () => {
 
       const { config } = getProfilerConfig({ reportHostname: true, tags: {} })
 
-      assertObjectContains(config.oomMonitoring, {
+      // Duplicate strategies collapse to a validated, de-duplicated list.
+      assert.deepStrictEqual(config.oomMonitoring, {
         enabled: true,
         heapLimitExtensionSize: 1000000,
         maxHeapExtensionCount: 2,
         exportStrategies: ['process', 'async'],
-        exportCommand: [
-          process.execPath,
-          path.normalize(path.join(__dirname, '../../src/profiling', 'exporter_cli.js')),
-          'http://127.0.0.1:8126/',
-          'space',
-        ],
       })
-      assertOomExportCommand(config)
+    })
+
+    it('should drop an unknown OOM export strategy', () => {
+      process.env = {
+        DD_PROFILING_EXPERIMENTAL_OOM_MONITORING_ENABLED: '1',
+        DD_PROFILING_EXPERIMENTAL_OOM_EXPORT_STRATEGIES: 'bogus,process',
+      }
+
+      const { config } = getProfilerConfig()
+
+      // An unrecognized strategy is logged as an error and dropped from the validated list.
+      assert.deepStrictEqual(config.oomMonitoring.exportStrategies, ['process'])
     })
   }
 
@@ -639,7 +687,60 @@ describe('config', () => {
           assert.strictEqual(config.asyncContextFrameEnabled, false)
         }
       })
+
+      it('stays off when explicitly disabled by env var', function () {
+        if (isSupported) {
+          this.skip()
+        } else {
+          process.env = {
+            DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED: '0',
+          }
+
+          const { config } = getProfilerConfig()
+          assert.strictEqual(config.asyncContextFrameEnabled, false)
+        }
+      })
+
+      it('does not warn when left at its default', function () {
+        if (isSupported) {
+          this.skip()
+        } else {
+          assert.deepStrictEqual(getAsyncContextFrameWarnings(), [])
+        }
+      })
+
+      it('warns only when explicitly opted in', function () {
+        if (isSupported) {
+          this.skip()
+        } else {
+          const warnings = getAsyncContextFrameWarnings({ DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED: '1' })
+          assert.strictEqual(warnings.length, 1)
+          // On Windows the tracer config deactivates the option before the profiler reads it, so the
+          // warning comes from the config layer; elsewhere the profiler derivation owns it.
+          assert.match(warnings[0], process.platform === 'win32'
+            ? /DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED is not supported on Windows/
+            : /DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED was set .*it will have no effect/)
+        }
+      })
     })
+
+    // Logging is only wired up when it is enabled, so capture the warning through
+    // a real logger with DD_TRACE_DEBUG on, the same way the upload compression
+    // tests do, rather than reaching into the unexported derivation function.
+    function getAsyncContextFrameWarnings (extraEnv = {}) {
+      process.env = { ...extraEnv, DD_TRACE_DEBUG: '1' }
+      const warnings = []
+      const logger = {
+        debug () {},
+        info () {},
+        error () {},
+        warn (message) { warnings.push(message) },
+      }
+      getProfilerConfig({ logger })
+      return warnings.filter(
+        message => typeof message === 'string' && message.includes('DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED')
+      )
+    }
   })
 
   describe('upload compression settings', () => {
@@ -663,8 +764,7 @@ describe('config', () => {
 
       const { config } = getProfilerConfig({ logger })
       const compressionWarnings = warnings.filter(message => {
-        return message.includes('DD_PROFILING_DEBUG_UPLOAD_COMPRESSION') ||
-          message.includes('Invalid compression level ')
+        return typeof message === 'string' && message.includes('DD_PROFILING_DEBUG_UPLOAD_COMPRESSION')
       })
 
       if (warning) {
@@ -715,13 +815,24 @@ describe('config', () => {
       })
     })
 
-    it('should normalize compression levels', () => {
+    it('should reject out-of-range compression levels', () => {
+      // The `allowed` pattern caps gzip at 9 and zstd at 22, so the first out-of-range level on each
+      // side is rejected and falls back to the default rather than being clamped.
       expectConfig('gzip-0', zstdOrGzip, undefined, "Invalid value: 'gzip-0'")
-      expectConfig('gzip-10', 'gzip', 9, 'Invalid compression level 10. Will use 9.')
+      expectConfig('gzip-10', zstdOrGzip, undefined, "Invalid value: 'gzip-10'")
       expectConfig('gzip-3.14', zstdOrGzip, undefined, "Invalid value: 'gzip-3.14'")
       expectConfig('zstd-0', zstdOrGzip, undefined, "Invalid value: 'zstd-0'")
-      expectConfig('zstd-23', 'zstd', 22, 'Invalid compression level 23. Will use 22.')
+      expectConfig('zstd-23', zstdOrGzip, undefined, "Invalid value: 'zstd-23'")
       expectConfig('zstd-3.14', zstdOrGzip, undefined, "Invalid value: 'zstd-3.14'")
+    })
+  })
+
+  describe('getActivation', () => {
+    it('should map the canonical profiling.DD_PROFILING_ENABLED value to an activation', () => {
+      assert.strictEqual(getActivation('auto'), 'auto')
+      assert.strictEqual(getActivation('true'), 'manual')
+      assert.strictEqual(getActivation('false'), 'unknown')
+      assert.strictEqual(getActivation(undefined), 'unknown')
     })
   })
 })

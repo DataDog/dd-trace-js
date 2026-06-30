@@ -1,7 +1,7 @@
 'use strict'
 
 const LLMObsPlugin = require('../base')
-const { formatInput, formatOutput, getServerToolName } = require('./utils')
+const { formatInput, formatOutput, formatServerRequestInput, getServerToolName } = require('./utils')
 
 /**
  * Abstract base for MCP tool-call LLMObs plugins.
@@ -167,8 +167,7 @@ class McpServerRequestLLMObsPlugin extends LLMObsPlugin {
     const span = ctx.currentStore?.span
     if (!span) return
 
-    const params = ctx.request?.params
-    const input = params ? JSON.stringify(params) : null
+    const input = formatServerRequestInput(ctx.request?.params)
 
     this._tagger.tagTextIO(span, input, null)
   }

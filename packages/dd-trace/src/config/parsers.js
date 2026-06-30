@@ -2,7 +2,7 @@
 
 const fs = require('fs')
 
-const { DD_MAJOR } = require('../../../../version')
+const { DD_MAJOR, NODE_MAJOR } = require('../../../../version')
 const tagger = require('../tagger')
 
 let warnInvalidValue
@@ -99,6 +99,24 @@ const transformers = {
       return transformers.normalizeProfilingEnabled(lowercased)
     }
     return configValue
+  },
+  /**
+   * Parses DD_PROFILING_DEBUG_UPLOAD_COMPRESSION ('on' | 'off' | 'gzip[-1..9]' | 'zstd[-1..22]')
+   * into the codec and level the profiler uploads with. The value's shape is already range-checked
+   * by the `allowed` pattern, so no validation is needed here.
+   *
+   * @param {string} value
+   * @returns {{ method: string, level: number | undefined }}
+   */
+  normalizeProfilingUploadCompression (value) {
+    let [method, level] = value.toLowerCase().split('-')
+    // Default "on" to zstd on Node.js 24+ and gzip earlier. zstd ships everywhere via a Rust
+    // compressor, but 24+ has a built-in that runs on libuv worker threads just as gzip does, so it
+    // is the least disruptive default.
+    if (method === 'on') {
+      method = NODE_MAJOR >= 24 ? 'zstd' : 'gzip'
+    }
+    return { method, level: level ? Number.parseInt(level, 10) : undefined }
   },
   sampleRate (value, optionName, source) {
     const number = Number(value)

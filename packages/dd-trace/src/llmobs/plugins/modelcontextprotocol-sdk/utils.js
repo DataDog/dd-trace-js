@@ -2,6 +2,8 @@
 
 const { channel } = require('dc-polyfill')
 
+const DISTRIBUTED_TRACE_META_KEY = '_dd_trace_context'
+
 const serverToolNames = new WeakMap()
 channel('apm:mcp:server:tool:registered').subscribe(({ tool, name }) => {
   serverToolNames.set(tool, name)
@@ -70,4 +72,45 @@ function getServerToolName (ctx) {
   return serverToolNames.get(ctx.arguments?.[0])
 }
 
-module.exports = { formatInput, formatOutput, getServerToolName }
+/**
+ * Formats MCP server request params without internal trace propagation metadata.
+ * @param {object} params - The MCP request params
+ * @returns {string|null} JSON string of sanitized params, or null if nothing remains
+ */
+function formatServerRequestInput (params) {
+  if (!params) return null
+
+  const meta = params._meta
+  if (!meta || meta[DISTRIBUTED_TRACE_META_KEY] === undefined) {
+    return JSON.stringify(params)
+  }
+
+  const input = {}
+  let hasInput = false
+
+  for (const key of Object.keys(params)) {
+    if (key === '_meta') continue
+
+    input[key] = params[key]
+    hasInput = true
+  }
+
+  const sanitizedMeta = {}
+  let hasMeta = false
+
+  for (const key of Object.keys(meta)) {
+    if (key === DISTRIBUTED_TRACE_META_KEY) continue
+
+    sanitizedMeta[key] = meta[key]
+    hasMeta = true
+  }
+
+  if (hasMeta) {
+    input._meta = sanitizedMeta
+    hasInput = true
+  }
+
+  return hasInput ? JSON.stringify(input) : null
+}
+
+module.exports = { formatInput, formatOutput, formatServerRequestInput, getServerToolName }

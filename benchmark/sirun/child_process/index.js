@@ -18,7 +18,7 @@ require('../../../packages/datadog-instrumentations/src/child_process')
 const channel = dc.tracingChannel('datadog:child_process:execution')
 
 const { VARIANT } = process.env
-const ITERATIONS = Number(process.env.ITERATIONS) || 5_000_000
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 // execFile-shaped (file + array args) vs exec-shaped (single shell string).
 const useFileArgs = VARIANT === 'file-args'
@@ -91,7 +91,7 @@ assert.ok(probeContext.abortController, 'context is missing the AbortController'
 
 let sink = 0
 guard.loopStart()
-for (let i = 0; i < ITERATIONS; i++) {
+for (let i = 0; i < OPERATIONS; i++) {
   sink += instrumentedCall()
 }
 guard.done()
