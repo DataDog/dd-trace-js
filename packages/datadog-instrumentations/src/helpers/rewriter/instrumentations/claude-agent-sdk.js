@@ -4,7 +4,7 @@ module.exports = [
   {
     module: {
       name: '@anthropic-ai/claude-agent-sdk',
-      versionRange: '>=0.2.1',
+      versionRange: '>=0.2.113',
       filePath: 'sdk.mjs',
     },
     functionQuery: {

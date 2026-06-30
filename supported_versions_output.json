@@ -2,7 +2,7 @@
   {
     "dependency": "@anthropic-ai/claude-agent-sdk",
     "integration": "claude-agent-sdk",
-    "minimum_tracer_supported": "0.2.1",
+    "minimum_tracer_supported": "0.2.113",
     "max_tracer_supported": "0.2.98",
     "auto-instrumented": "True"
   },
