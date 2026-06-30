@@ -145,26 +145,28 @@ function wrapProtocol (Protocol) {
       wrapAbortControllers(this)
       const ctx = { request, extra }
       serverRequestCh.start.runStores(ctx, () => {
-        let pending = pendingContexts.get(this)
-        if (!pending) {
-          pending = new Map()
-          pendingContexts.set(this, pending)
-        }
-        pending.set(request.id, ctx)
-
         try {
+          let pending = pendingContexts.get(this)
+          if (!pending) {
+            pending = new Map()
+            pendingContexts.set(this, pending)
+          }
+          pending.set(request.id, ctx)
+
           original.call(this, request, extra)
+
+          // The SDK registers an AbortController only when it actually dispatches a handler.
+          // If none was registered (MethodNotFound path), no handler will run and our
+          // SDK cleanup hook will never fire — finish the span immediately.
+          if (!this._requestHandlerAbortControllers?.has(request.id)) {
+            finishServerRequest(this, request.id)
+          }
         } catch (err) {
           ctx.error = err
           finishServerRequest(this, request.id)
           throw err
-        }
-
-        // The SDK registers an AbortController only when it actually dispatches a handler.
-        // If none was registered (MethodNotFound path), no handler will run and our
-        // SDK cleanup hook will never fire — finish the span immediately.
-        if (!this._requestHandlerAbortControllers?.has(request.id)) {
-          finishServerRequest(this, request.id)
+        } finally {
+          serverRequestCh.end.publish(ctx)
         }
       })
     }
