@@ -14,6 +14,11 @@ const HTTP2_HEADER_METHOD = ':method'
 const HTTP2_HEADER_PATH = ':path'
 const HTTP2_HEADER_STATUS = ':status'
 
+// Streams whose server span was already created from the 'stream' event. The
+// compatibility layer synthesizes 'request' from that same stream, so the
+// 'request' branch consults this set to avoid creating a second span.
+const tracedStreams = new WeakSet()
+
 addHook({ name: 'http2' }, http2 => {
   shimmer.wrap(http2, 'createSecureServer', wrapCreateServer)
   shimmer.wrap(http2, 'createServer', wrapCreateServer)
@@ -56,31 +61,41 @@ function wrapEmit (originalEmit) {
     }
 
     const eventName = args[0]
-    if (eventName === 'request') {
+    if (eventName === 'stream') {
+      // The compatibility layer synthesizes 'request' from an internal 'stream'
+      // listener it registers exactly once when a 'request' listener is added,
+      // so `listenerCount('stream')` exceeds one only when the application also
+      // registered a raw-stream listener. Owning the span here for that case
+      // keeps it active while the application's stream listener runs; the
+      // synthesized 'request' that fires nested below then reuses it. A
+      // request-only server (no raw-stream listener) is left to the 'request'
+      // branch so the compatibility response keeps its richer req/res.
+      if (this.listenerCount('request') === 0 || this.listenerCount('stream') > 1) {
+        const stream = args[1]
+        const headers = args[2]
+        const ctx = createStreamAdapter(stream, headers)
+        tracedStreams.add(stream)
+
+        return traceServerRequest(ctx, () => {
+          shimmer.wrap(stream, 'emit', emit => wrapStreamEmit(emit, ctx))
+          return Reflect.apply(originalEmit, this, args)
+        })
+      }
+    } else if (eventName === 'request') {
       const req = args[1]
-      const res = args[2]
-      res.req = req
+      // A mixed server (raw-stream + 'request' listeners) already created the
+      // span from the 'stream' event above; the stream's single 'close' is the
+      // sole finish source, so skip to avoid a second span and a second finish.
+      if (!tracedStreams.has(req.stream)) {
+        const res = args[2]
+        res.req = req
 
-      const ctx = { req, res }
-      return traceServerRequest(ctx, () => {
-        shimmer.wrap(res, 'emit', emit => wrapResponseEmit(emit, ctx))
-        return Reflect.apply(originalEmit, this, args)
-      })
-    }
-
-    // Core API: a compatibility server emits both 'request' and 'stream' for
-    // every request, so the span belongs to the 'request' branch above when a
-    // 'request' listener exists. Only a server without one is using the raw
-    // stream API, where this branch is the sole place a server span is created.
-    if (eventName === 'stream' && this.listenerCount('request') === 0) {
-      const stream = args[1]
-      const headers = args[2]
-      const ctx = createStreamAdapter(stream, headers)
-
-      return traceServerRequest(ctx, () => {
-        shimmer.wrap(stream, 'emit', emit => wrapStreamEmit(emit, ctx))
-        return Reflect.apply(originalEmit, this, args)
-      })
+        const ctx = { req, res }
+        return traceServerRequest(ctx, () => {
+          shimmer.wrap(res, 'emit', emit => wrapResponseEmit(emit, ctx))
+          return Reflect.apply(originalEmit, this, args)
+        })
+      }
     }
 
     return Reflect.apply(originalEmit, this, args)
@@ -130,8 +145,8 @@ function traceServerRequest (ctx, emitEvent) {
  * @property {import('node:net').Socket} [req.socket] peer address source (OTel)
  * @property {object} res
  * @property {object} res.req back-reference used by `wrapResponseEmit`/finish
- * @property {string} [res.statusCode] read at finish from `stream.sentHeaders`
- * @property {(name: string) => string | undefined} res.getHeader response-header tagging
+ * @property {number} res.statusCode read at finish from `stream.sentHeaders`
+ * @property {(name: string) => string | number | string[] | undefined} res.getHeader response-header tagging
  */
 
 // Present the core-API stream + pseudo-header map as the minimal req/res pair

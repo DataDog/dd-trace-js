@@ -605,11 +605,11 @@ describe('Plugin', () => {
         })
 
         describe('with configured headers', () => {
+          // The parent `core API` `beforeEach` already started the mock agent;
+          // reconfigure the plugin in place instead of `agent.load`, which would
+          // start a second agent and leak the first server's handle.
           beforeEach(() => {
-            return agent.load('http2', { client: false, headers: ['x-foo', 'x-resp:resp_tag'] })
-              .then(() => {
-                http2 = require(pluginToBeLoaded)
-              })
+            agent.reload('http2', { client: false, headers: ['x-foo', 'x-resp:resp_tag'] })
           })
 
           beforeEach(done => {
@@ -677,6 +677,25 @@ describe('Plugin', () => {
             server.on('stream', () => {})
             await listenAsync(server)
             await assertSingleServerSpan(http2, `http://localhost:${port}/user`)
+          })
+
+          it('keeps the server span active inside a mixed setup\'s stream listener', async () => {
+            let streamActive
+            const server = http2.createServer((req, res) => {
+              res.writeHead(200)
+              res.end()
+            })
+            server.on('stream', () => {
+              streamActive = tracer.scope().active()
+            })
+            await listenAsync(server)
+
+            const traceAsserted = agent.assertFirstTraceSpan(span => {
+              assert.ok(streamActive, 'stream listener ran without an active span')
+              assert.strictEqual(streamActive.context().toSpanId(), span.span_id.toString())
+            })
+
+            await Promise.all([traceAsserted, request(http2, `http://localhost:${port}/user`)])
           })
         })
       })
