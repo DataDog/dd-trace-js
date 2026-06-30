@@ -1817,7 +1817,7 @@
         "implementation": "A",
         "type": "boolean",
         "default": "false",
-        "internalPropertyName": "isTestFailureScreenshotsEnabled"
+        "configurationNames": ["isTestFailureScreenshotsEnabled"]
       }
     ],
     "DD_TEST_FAILURE_VIDEO_ENABLED": [
@@ -1825,7 +1825,7 @@
         "implementation": "A",
         "type": "boolean",
         "default": "false",
-        "internalPropertyName": "isTestFailureVideoEnabled"
+        "configurationNames": ["isTestFailureVideoEnabled"]
       }
     ],
     "DD_TEST_FLEET_CONFIG_PATH": [
