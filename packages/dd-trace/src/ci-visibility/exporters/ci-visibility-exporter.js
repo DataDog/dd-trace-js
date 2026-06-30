@@ -50,9 +50,8 @@ class CiVisibilityExporter extends BufferingExporter {
     // AKA CI Vis Protocol
     this._canUseCiVisProtocol = false
 
-    // Screenshot and video uploads on test failure are independent opt-in toggles.
-    this._isTestFailureScreenshotsEnabled = Boolean(config && config.isTestFailureScreenshotsEnabled)
-    this._isTestFailureVideoEnabled = Boolean(config && config.isTestFailureVideoEnabled)
+    this._isTestFailureScreenshotsEnabled =
+      Boolean(config?.testOptimization?.DD_TEST_FAILURE_SCREENSHOTS_ENABLED)
 
     const gitUploadTimeoutId = setTimeout(() => {
       this._resolveGit(new Error('Timeout while uploading git metadata'))
@@ -471,15 +470,6 @@ class CiVisibilityExporter extends BufferingExporter {
    */
   canUploadTestScreenshots () {
     return Boolean(this._testScreenshotUploadUrl) && this._isTestFailureScreenshotsEnabled
-  }
-
-  /**
-   * Returns whether the exporter can upload test failure video.
-   *
-   * @returns {boolean}
-   */
-  canUploadTestVideo () {
-    return Boolean(this._testScreenshotUploadUrl) && this._isTestFailureVideoEnabled
   }
 
   /**

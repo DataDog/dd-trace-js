@@ -3347,7 +3347,6 @@ describe('Config', () => {
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_ENABLED
       delete process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT
       delete process.env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED
-      delete process.env.DD_TEST_FAILURE_VIDEO_ENABLED
       delete process.env.DD_TEST_SESSION_NAME
       delete process.env.JEST_WORKER_ID
       delete process.env.DD_TEST_FAILED_TEST_REPLAY_ENABLED
@@ -3418,31 +3417,17 @@ describe('Config', () => {
       })
       it('should disable test failure screenshots by default', () => {
         const config = getConfig(options)
-        assert.strictEqual(config.isTestFailureScreenshotsEnabled, false)
+        assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED, false)
       })
       it('should enable test failure screenshots if DD_TEST_FAILURE_SCREENSHOTS_ENABLED is true', () => {
         process.env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED = 'true'
         const config = getConfig(options)
-        assert.strictEqual(config.isTestFailureScreenshotsEnabled, true)
+        assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED, true)
       })
       it('should disable test failure screenshots if DD_TEST_FAILURE_SCREENSHOTS_ENABLED is false', () => {
         process.env.DD_TEST_FAILURE_SCREENSHOTS_ENABLED = 'false'
         const config = getConfig(options)
-        assert.strictEqual(config.isTestFailureScreenshotsEnabled, false)
-      })
-      it('should disable test failure video by default', () => {
-        const config = getConfig(options)
-        assert.strictEqual(config.isTestFailureVideoEnabled, false)
-      })
-      it('should enable test failure video if DD_TEST_FAILURE_VIDEO_ENABLED is true', () => {
-        process.env.DD_TEST_FAILURE_VIDEO_ENABLED = 'true'
-        const config = getConfig(options)
-        assert.strictEqual(config.isTestFailureVideoEnabled, true)
-      })
-      it('should disable test failure video if DD_TEST_FAILURE_VIDEO_ENABLED is false', () => {
-        process.env.DD_TEST_FAILURE_VIDEO_ENABLED = 'false'
-        const config = getConfig(options)
-        assert.strictEqual(config.isTestFailureVideoEnabled, false)
+        assert.strictEqual(config.testOptimization.DD_TEST_FAILURE_SCREENSHOTS_ENABLED, false)
       })
       it('should read DD_CIVISIBILITY_FLAKY_RETRY_COUNT if present', () => {
         process.env.DD_CIVISIBILITY_FLAKY_RETRY_COUNT = '4'

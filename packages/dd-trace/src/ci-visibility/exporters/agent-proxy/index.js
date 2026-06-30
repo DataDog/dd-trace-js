@@ -33,10 +33,9 @@ function getCanForwardDebuggerLogs (err, agentInfo) {
 class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
   constructor (config) {
     super(config)
-    // Agent-mode media upload is not wired yet: the Datadog Agent's evp_proxy must
-    // allow-list POST /api/unstable/ci/test-runs/<trace_id>/media before screenshots
-    // can be forwarded through it. Until then, upload is enabled only in agentless
-    // mode (canUploadTestScreenshots() returns false while this stays undefined).
+    // Screenshot media upload is agentless-only for now. The Datadog Agent's
+    // evp_proxy does not forward POST /api/unstable/ci/test-runs/<trace_id>/media
+    // yet, so canUploadTestScreenshots() returns false while this stays undefined.
     this._testScreenshotUploadUrl = undefined
 
     const {

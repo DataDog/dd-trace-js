@@ -178,7 +178,7 @@ function isFailureScreenshot (screenshot) {
   const screenshotFilePath = getScreenshotFilePath(screenshot)
   // Require an explicit failure signal: prefer the `testFailure` metadata, and fall back to the
   // '(failed)' filename marker only when the RunResult omits `testFailure`. This keeps manual
-  // cy.screenshot() captures out of the failure-media upload (privacy).
+  // cy.screenshot() captures out of the failure-screenshot upload (privacy).
   return !!screenshotFilePath && (screenshot?.testFailure === true || screenshotFilePath.includes('(failed)'))
 }
 
@@ -718,6 +718,37 @@ class CypressPlugin {
     })
   }
 
+  /**
+   * Warns when screenshot upload is enabled but Cypress cannot produce or send the screenshots.
+   *
+   * @param {object} cypressConfig - Cypress resolved config
+   * @param {object} tracer - dd-trace proxy tracer
+   * @param {object} testOptimizationConfig - Test Optimization config
+   * @returns {void}
+   */
+  warnIfMisconfiguredTestFailureScreenshots (cypressConfig, tracer, testOptimizationConfig) {
+    if (!testOptimizationConfig.DD_TEST_FAILURE_SCREENSHOTS_ENABLED) {
+      return
+    }
+
+    if (cypressConfig.screenshotOnRunFailure === false) {
+      log.warn(
+        '%s %s',
+        'DD_TEST_FAILURE_SCREENSHOTS_ENABLED is true, but Cypress screenshotOnRunFailure is false.',
+        'Datadog cannot upload failure screenshots unless Cypress is configured to capture them.'
+      )
+      return
+    }
+
+    if (!tracer?._tracer?._exporter?.canUploadTestScreenshots?.()) {
+      log.warn(
+        '%s %s',
+        'DD_TEST_FAILURE_SCREENSHOTS_ENABLED is true, but Cypress failure screenshot upload is only supported',
+        'in agentless mode. The Datadog Agent EVP proxy does not support this media endpoint yet.'
+      )
+    }
+  }
+
   // Init function returns a promise that resolves with the Cypress configuration
   // Depending on the received configuration, the Cypress configuration can be modified:
   // for example, to enable retries for failed tests.
@@ -730,7 +761,9 @@ class CypressPlugin {
 
     this.isTestIsolationEnabled = getIsTestIsolationEnabled(cypressConfig)
 
-    this.rumFlushWaitMillis = getConfig().testOptimization.DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS
+    const testOptimizationConfig = getConfig().testOptimization
+    this.rumFlushWaitMillis = testOptimizationConfig.DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS
+    this.warnIfMisconfiguredTestFailureScreenshots(cypressConfig, tracer, testOptimizationConfig)
 
     if (!this.isTestIsolationEnabled) {
       log.warn('Test isolation is disabled, retries will not be enabled')
@@ -1303,14 +1336,11 @@ class CypressPlugin {
   }
 
   afterSpec (spec, results) {
-    const { tests, stats, screenshots, video } = results || {}
+    const { tests, stats, screenshots } = results || {}
     const cypressTests = tests || []
     const specScreenshots = screenshots || []
     const finishedTests = this.finishedTestsByFile[spec.relative] || []
     const screenshotUploadPromises = []
-    // Cypress records one video per spec; collect the failed tests' trace ids so the
-    // spec video can be attached to each failed test run's media after the loop.
-    const failedTestTraceIds = []
 
     if (!this.testSuiteSpan) {
       // dd:testSuiteStart hasn't been triggered for whatever reason
@@ -1420,7 +1450,6 @@ class CypressPlugin {
 
         if (cypressTestStatus === 'fail' || finishedTest.testStatus === 'fail' || cypressTest.displayError) {
           const failedTestTraceId = finishedTest.testSpan.context().toTraceId()
-          failedTestTraceIds.push(failedTestTraceId)
           const testScreenshots = getTestScreenshots(cypressTest, attemptIndex, specScreenshots)
           const screenshotUploadPromise = this.uploadTestScreenshots({
             screenshots: testScreenshots,
@@ -1491,14 +1520,6 @@ class CypressPlugin {
       }
     }
 
-    // Attach the per-spec Cypress video to each failed test run's media.
-    if (video && failedTestTraceIds.length > 0) {
-      const videoUploadPromise = this.uploadTestVideo({ videoPath: video, traceIds: failedTestTraceIds })
-      if (videoUploadPromise) {
-        screenshotUploadPromises.push(videoUploadPromise)
-      }
-    }
-
     if (this.testSuiteSpan) {
       const status = getSuiteStatus(stats)
       this.testSuiteSpan.setTag(TEST_STATUS, status)
@@ -1552,47 +1573,6 @@ class CypressPlugin {
           filePath,
           traceId,
           idempotencyKey,
-          capturedAtMs,
-        }, () => {
-          resolve()
-        })
-      }))
-    }
-
-    if (uploadPromises.length > 0) {
-      return Promise.all(uploadPromises).then(() => {})
-    }
-  }
-
-  /**
-   * Uploads the per-spec Cypress video to each given failed test run's media.
-   * Cypress records one video per spec, so the same recording is attached to every
-   * failed test in that spec. The capture time falls back to the file mtime since
-   * the spec video has no per-test timestamp.
-   *
-   * @param {object} options - Upload options
-   * @param {string} options.videoPath - Path to the spec video file
-   * @param {Array<string>} options.traceIds - Failed test trace ids to attach the video to
-   * @returns {Promise<void>|undefined}
-   */
-  uploadTestVideo ({ videoPath, traceIds }) {
-    const exporter = this.tracer?._tracer?._exporter
-    if (!videoPath || !traceIds.length ||
-      !exporter?.canUploadTestVideo?.() ||
-      !exporter.uploadTestScreenshot) {
-      return
-    }
-
-    const capturedAtMs = getScreenshotCapturedAtMs(videoPath, videoPath)
-    const videoFileName = basename(videoPath)
-    const uploadPromises = []
-
-    for (const traceId of new Set(traceIds)) {
-      uploadPromises.push(new Promise(resolve => {
-        exporter.uploadTestScreenshot({
-          filePath: videoPath,
-          traceId,
-          idempotencyKey: `${traceId}:${videoFileName}`,
           capturedAtMs,
         }, () => {
           resolve()

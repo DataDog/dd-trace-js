@@ -1817,15 +1817,7 @@
         "implementation": "A",
         "type": "boolean",
         "default": "false",
-        "configurationNames": ["isTestFailureScreenshotsEnabled"]
-      }
-    ],
-    "DD_TEST_FAILURE_VIDEO_ENABLED": [
-      {
-        "implementation": "A",
-        "type": "boolean",
-        "default": "false",
-        "configurationNames": ["isTestFailureVideoEnabled"]
+        "namespace": "testOptimization"
       }
     ],
     "DD_TEST_FLEET_CONFIG_PATH": [
