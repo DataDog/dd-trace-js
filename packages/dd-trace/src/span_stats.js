@@ -12,7 +12,6 @@ const {
   HTTP_METHOD,
   SPAN_KIND,
 } = require('../../../ext/tags')
-const { VERSION } = require('../../../version')
 const { ORIGIN_KEY, TOP_LEVEL_KEY, SVC_SRC_KEY } = require('./constants')
 const { version } = require('./pkg')
 const processTags = require('./process-tags')
@@ -88,7 +87,7 @@ class SpanAggStats {
 }
 
 class SpanAggKey {
-  constructor (span, otlpEnabled) {
+  constructor (span) {
     this.name = span.name || DEFAULT_SPAN_NAME
     this.service = span.service || DEFAULT_SERVICE_NAME
     this.resource = span.resource || ''
@@ -98,12 +97,11 @@ class SpanAggKey {
     this.endpoint = span.meta[HTTP_ROUTE] || span.meta[HTTP_ENDPOINT] || ''
     this.method = span.meta[HTTP_METHOD] || ''
     this.srvSrc = span.meta[SVC_SRC_KEY] || ''
-    // TODO: origin and spanKind should also be included in dd native client stats aggregation.
-    this.origin = otlpEnabled ? (span.meta[ORIGIN_KEY] || '') : ''
-    this.spanKind = otlpEnabled ? (span.meta[SPAN_KIND] || '') : ''
+    this.origin = span.meta[ORIGIN_KEY] || ''
+    this.spanKind = span.meta[SPAN_KIND] || ''
     // The gRPC plugin records the status code as a numeric tag, which span formatting routes into
     // metrics rather than meta; fall back to meta for string-valued tags (e.g. manual instrumentation).
-    this.rpcStatusCode = otlpEnabled ? (span.metrics?.[GRPC_STATUS_CODE] ?? span.meta[GRPC_STATUS_CODE] ?? '') : ''
+    this.rpcStatusCode = span.metrics?.[GRPC_STATUS_CODE] ?? span.meta[GRPC_STATUS_CODE] ?? ''
   }
 
   toString () {
@@ -125,8 +123,8 @@ class SpanAggKey {
 }
 
 class SpanBuckets extends Map {
-  forSpan (span, otlpEnabled) {
-    const aggKey = new SpanAggKey(span, otlpEnabled)
+  forSpan (span) {
+    const aggKey = new SpanAggKey(span)
     const key = aggKey.toString()
 
     if (!this.has(key)) {
@@ -156,54 +154,25 @@ class SpanStatsProcessor {
     hostname,
     port,
     url,
-    service,
     env,
     tags,
     version: appVersion,
-    OTEL_TRACES_SPAN_METRICS_ENABLED: otlpTraceMetricsEnabled,
     _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: flushIntervalMs,
-    OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: otelMetricsUrl,
-    OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: otelMetricsProtocol,
-    OTEL_EXPORTER_OTLP_METRICS_HEADERS: otelMetricsHeaders,
-    OTEL_EXPORTER_OTLP_METRICS_TIMEOUT: otelMetricsTimeout,
-    DD_TRACE_OTEL_SEMANTICS_ENABLED: otelSemanticsEnabled,
-    reportHostname,
-  } = {}) {
-    if (!otlpTraceMetricsEnabled) {
-      this.exporter = new SpanStatsExporter({
-        hostname,
-        port,
-        tags,
-        url,
-      })
+  } = {}, otlpExporter) {
+    if (!otlpExporter) {
+      this.exporter = new SpanStatsExporter({ hostname, port, tags, url })
     }
-    const intervalMs = otlpTraceMetricsEnabled ? (flushIntervalMs ?? 10_000) : interval * 1e3
+    const intervalMs = otlpExporter ? (flushIntervalMs ?? 10_000) : interval * 1e3
     this.interval = intervalMs / 1e3
     this.bucketSizeNs = intervalMs * 1e6
     this.buckets = new TimeBuckets()
     this.hostname = os.hostname()
     this.enabled = enabled
-    this.otlpTraceMetricsEnabled = !!otlpTraceMetricsEnabled
+    this.otlpExporter = otlpExporter || null
     this.env = env
     this.tags = tags || {}
     this.sequence = 0
     this.version = appVersion
-
-    if (otlpTraceMetricsEnabled) {
-      const { OtlpStatsExporter } = require('./exporters/otlp-span-stats')
-      const protocol = otelMetricsProtocol || 'http/json'
-      const resourceAttributes = buildResourceAttributes(this.tags, {
-        reportHostname,
-        otelSemanticsEnabled,
-        service,
-        env,
-        serviceVersion: appVersion,
-      })
-      this.otlpExporter = new OtlpStatsExporter(
-        otelMetricsUrl, protocol, resourceAttributes, otelSemanticsEnabled, service,
-        otelMetricsHeaders, otelMetricsTimeout
-      )
-    }
 
     if (this.enabled || this.otlpExporter) {
       this.timer = setInterval(this.onInterval.bind(this), intervalMs)
@@ -241,7 +210,7 @@ class SpanStatsProcessor {
     const bucketTime = spanEndNs - (spanEndNs % this.bucketSizeNs)
 
     this.buckets.forTime(bucketTime)
-      .forSpan(span, this.otlpTraceMetricsEnabled)
+      .forSpan(span)
       .record(span)
   }
 
@@ -269,45 +238,6 @@ class SpanStatsProcessor {
       Stats: [...bucket.values()].map(stats => stats.toJSON()),
     }))
   }
-}
-
-/**
- * Builds the OTLP resource attributes. Service identity (service.name / service.version /
- * deployment.environment.name) is reported here, as the configured default service of the producing
- * process; spans with a custom service additionally carry service.name on their data point.
- *
- * @param {object} tags
- * @param {{ reportHostname?: boolean, otelSemanticsEnabled?: boolean, service?: string, env?: string,
- *   serviceVersion?: string }} [options]
- *   reportHostname: whether DD_TRACE_REPORT_HOSTNAME is enabled.
- *   otelSemanticsEnabled: when true, only OTel attributes are emitted (no dd.*).
- *   service/env/serviceVersion: the configured default service identity.
- * @returns {import('@opentelemetry/api').Attributes}
- */
-function buildResourceAttributes (tags, { reportHostname, otelSemanticsEnabled, service, env, serviceVersion } = {}) {
-  // Identify the emitter as the Datadog SDK so the backend can attribute these metrics separately.
-  const attrs = {
-    'telemetry.sdk.name': 'datadog',
-    'telemetry.sdk.language': 'nodejs',
-    'telemetry.sdk.version': VERSION,
-  }
-  if (service) attrs['service.name'] = service
-  if (serviceVersion) attrs['service.version'] = serviceVersion
-  if (env) attrs['deployment.environment.name'] = env
-  // Only report host.name when DD_TRACE_REPORT_HOSTNAME is enabled, matching the other OTLP
-  // signals (metrics/logs). DD_HOSTNAME is not supported in dd-trace-js, so use os.hostname().
-  if (reportHostname) attrs['host.name'] = os.hostname()
-
-  if (!otelSemanticsEnabled) {
-    if (tags?.['runtime-id']) attrs['datadog.runtime_id'] = tags['runtime-id']
-    const processTagsObject = processTags.tagsObject
-    if (processTagsObject) {
-      for (const key of Object.keys(processTagsObject)) {
-        attrs[`datadog.${key}`] = processTagsObject[key]
-      }
-    }
-  }
-  return attrs
 }
 
 module.exports = {

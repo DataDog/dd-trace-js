@@ -610,6 +610,11 @@ class Config extends ConfigBase {
     // are enabled.
     const autoTraceMetrics = this.OTEL_TRACES_EXPORTER === 'otlp' && this.DD_METRICS_OTEL_ENABLED === true
     setAndTrack(this, 'OTEL_TRACES_SPAN_METRICS_ENABLED', this.OTEL_TRACES_SPAN_METRICS_ENABLED ?? autoTraceMetrics)
+
+    if (this.OTEL_TRACES_SPAN_METRICS_ENABLED) {
+      this.stats = { ...this.stats, DD_TRACE_STATS_COMPUTATION_ENABLED: true }
+    }
+
     const flushInterval = getValueFromEnvSources('_DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL')
     setAndTrack(this, '_DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL', flushInterval)
 

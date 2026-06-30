@@ -86,7 +86,6 @@ const SpanStatsExporter = sinon.stub().returns(exporter)
 const otlpExporter = {
   export: sinon.stub(),
 }
-const OtlpStatsExporter = sinon.stub().returns(otlpExporter)
 
 const {
   SpanAggStats,
@@ -98,9 +97,6 @@ const {
   './exporters/span-stats': {
     SpanStatsExporter,
   },
-  './exporters/otlp-span-stats': {
-    OtlpStatsExporter,
-  },
 })
 
 describe('SpanAggKey', () => {
@@ -111,11 +107,6 @@ describe('SpanAggKey', () => {
 
   it('should make aggregation key for a synthetic span', () => {
     const key = new SpanAggKey(syntheticSpan)
-    assert.strictEqual(key.toString(), 'synthetic-span,service-name,resource-name,span-type,200,true,,,integration,,,')
-  })
-
-  it('should include origin in aggregation key when otlp is enabled', () => {
-    const key = new SpanAggKey(syntheticSpan, true)
     assert.strictEqual(
       key.toString(), 'synthetic-span,service-name,resource-name,span-type,200,true,,,integration,synthetics,,')
   })
@@ -489,28 +480,15 @@ describe('SpanStatsProcessor', () => {
     assert.strictEqual(p.buckets.size, 0)
   })
 
-  it('should create OtlpStatsExporter when traceMetrics.enabled', () => {
-    OtlpStatsExporter.resetHistory()
-    const p = new SpanStatsProcessor({
-      ...config,
-      OTEL_TRACES_SPAN_METRICS_ENABLED: true,
-      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
-      OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/json',
-    })
+  it('creates and stores the injected otlp exporter', () => {
+    const p = new SpanStatsProcessor(config, otlpExporter)
     clearTimeout(p.timer)
-
-    assert.ok(OtlpStatsExporter.calledOnce)
-    assert.ok(p.otlpExporter)
+    assert.strictEqual(p.otlpExporter, otlpExporter)
   })
 
   it('should call OTLP exporter on interval when traceMetrics enabled', () => {
     otlpExporter.export.resetHistory()
-    const p = new SpanStatsProcessor({
-      ...config,
-      OTEL_TRACES_SPAN_METRICS_ENABLED: true,
-      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
-      OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/json',
-    })
+    const p = new SpanStatsProcessor(config, otlpExporter)
     clearTimeout(p.timer)
     p.onSpanFinished(topLevelSpan)
     p.onInterval()
@@ -523,12 +501,7 @@ describe('SpanStatsProcessor', () => {
 
   it('should not call OTLP exporter on interval when drained is empty', () => {
     otlpExporter.export.resetHistory()
-    const p = new SpanStatsProcessor({
-      ...config,
-      OTEL_TRACES_SPAN_METRICS_ENABLED: true,
-      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
-      OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/json',
-    })
+    const p = new SpanStatsProcessor(config, otlpExporter)
     clearTimeout(p.timer)
     p.onInterval()
 
@@ -538,12 +511,7 @@ describe('SpanStatsProcessor', () => {
   it('should not call the legacy /v0.6/stats exporter when OTLP is enabled (mutual exclusion)', () => {
     exporter.export.resetHistory()
     otlpExporter.export.resetHistory()
-    const p = new SpanStatsProcessor({
-      ...config,
-      OTEL_TRACES_SPAN_METRICS_ENABLED: true,
-      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
-      OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/json',
-    })
+    const p = new SpanStatsProcessor(config, otlpExporter)
     clearTimeout(p.timer)
     p.onSpanFinished(topLevelSpan)
     p.onInterval()
@@ -555,16 +523,13 @@ describe('SpanStatsProcessor', () => {
   it('should record spans when only OTLP is enabled', () => {
     otlpExporter.export.resetHistory()
     const p = new SpanStatsProcessor({
-      stats: { enabled: false, interval: 10 },
+      stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false, interval: 10 },
       hostname: '127.0.0.1',
       port: 8126,
       url: new URL('http://127.0.0.1:8126'),
       env: 'test',
       tags: {},
-      OTEL_TRACES_SPAN_METRICS_ENABLED: true,
-      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
-      OTEL_EXPORTER_OTLP_METRICS_PROTOCOL: 'http/json',
-    })
+    }, otlpExporter)
     clearTimeout(p.timer)
 
     p.onSpanFinished(topLevelSpan)

@@ -1,7 +1,7 @@
 'use strict'
 
-const OtlpTransformerBase = require('../../opentelemetry/otlp/otlp_transformer_base')
-const { getProtobufTypes } = require('../../opentelemetry/otlp/protobuf_loader')
+const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
+const { getProtobufTypes } = require('../otlp/protobuf_loader')
 
 const NS_PER_S = 1e9
 

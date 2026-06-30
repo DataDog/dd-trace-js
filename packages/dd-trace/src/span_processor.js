@@ -11,18 +11,15 @@ const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
 
 class SpanProcessor {
-  constructor (exporter, prioritySampler, config) {
+  constructor (exporter, prioritySampler, config, otlpStatsExporter) {
     this._exporter = exporter
     this._prioritySampler = prioritySampler
     this._config = config
     this._killAll = false
 
-    // TODO: This should already have been calculated in `config.js`.
-    const spanMetricsEnabled =
-      config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED || config.OTEL_TRACES_SPAN_METRICS_ENABLED
-    if (spanMetricsEnabled && !config.appsec?.standalone?.enabled) {
+    if (config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED && !config.appsec?.standalone?.enabled) {
       const { SpanStatsProcessor } = require('./span_stats')
-      this._stats = new SpanStatsProcessor(config)
+      this._stats = new SpanStatsProcessor(config, otlpStatsExporter)
     }
 
     this._spanSampler = new SpanSampler(config.sampler)

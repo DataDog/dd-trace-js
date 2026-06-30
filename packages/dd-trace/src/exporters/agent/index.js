@@ -10,11 +10,10 @@ class AgentExporter {
   constructor (config, prioritySampler) {
     this._config = config
     const { lookup, protocolVersion, stats = {}, apmTracingEnabled } = config
-    const otlpTraceMetricsEnabled = config.OTEL_TRACES_SPAN_METRICS_ENABLED
     this._url = config.url
 
     const headers = {}
-    if (stats.DD_TRACE_STATS_COMPUTATION_ENABLED || otlpTraceMetricsEnabled || apmTracingEnabled === false) {
+    if (stats.DD_TRACE_STATS_COMPUTATION_ENABLED || apmTracingEnabled === false) {
       headers['Datadog-Client-Computed-Stats'] = 'yes'
     }
 

@@ -1,8 +1,8 @@
 'use strict'
 
 const log = require('../../log')
-const OtlpHttpExporterBase = require('../../opentelemetry/otlp/otlp_http_exporter_base')
-const OtlpStatsTransformer = require('./transformer')
+const OtlpHttpExporterBase = require('../otlp/otlp_http_exporter_base')
+const OtlpStatsTransformer = require('./otlp_span_stats_transformer')
 
 /**
  * Exports span stats as OTLP metrics to a /v1/metrics endpoint.

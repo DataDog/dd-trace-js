@@ -7,7 +7,7 @@ const sinon = require('sinon')
 
 require('../../setup/core')
 
-const { OtlpStatsExporter } = require('../../../src/exporters/otlp-span-stats')
+const { OtlpStatsExporter } = require('../../../src/opentelemetry/metrics/otlp_span_stats_exporter')
 const { SpanBuckets } = require('../../../src/span_stats')
 const { HTTP_STATUS_CODE } = require('../../../../../ext/tags')
 

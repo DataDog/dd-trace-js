@@ -5,7 +5,7 @@ const { describe, it, before } = require('mocha')
 
 require('../../setup/core')
 
-const OtlpStatsTransformer = require('../../../src/exporters/otlp-span-stats/transformer')
+const OtlpStatsTransformer = require('../../../src/opentelemetry/metrics/otlp_span_stats_transformer')
 const { EXPLICIT_BOUNDS_SECONDS } = OtlpStatsTransformer
 const { SpanBuckets } = require('../../../src/span_stats')
 const { getProtobufTypes } = require('../../../src/opentelemetry/otlp/protobuf_loader')
@@ -45,7 +45,7 @@ function makeTopLevelSpan (overrides = {}) {
 function makeBucket (spans) {
   const bucket = new SpanBuckets()
   for (const span of spans) {
-    bucket.forSpan(span, true).record(span)
+    bucket.forSpan(span).record(span)
   }
   return bucket
 }
