@@ -452,4 +452,33 @@ describe('wrapTracer', () => {
       })
     })
   })
+
+  it('returns freshSpan from chainable methods so chained end() is not bypassed', () => {
+    const endSpy = sinon.spy()
+    const span = {
+      spanContext () { return { traceId: '', spanId: '', traceFlags: 0 } },
+      setAttribute () { return this },
+      setAttributes () { return this },
+      addEvent () { return this },
+      addLink () { return this },
+      addLinks () { return this },
+      setStatus () { return this },
+      updateName () { return this },
+      end: endSpy,
+      isRecording () { return false },
+      recordException () {},
+    }
+    const tracer = {
+      startActiveSpan (name, fn) { return fn(span) },
+    }
+
+    wrapTracer(tracer)
+
+    tracer.startActiveSpan('test', (freshSpan) => {
+      const returned = freshSpan.setStatus({ code: 0 })
+      assert.strictEqual(returned, freshSpan, 'setStatus must return freshSpan to preserve chaining')
+      returned.end()
+      sinon.assert.calledOnce(endSpy)
+    })
+  })
 })
