@@ -24,6 +24,8 @@ const packageJsonPath = path.join(__dirname, '..', '..', 'package.json')
 const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'))
 
 const before = pkg.engines.node
+if (before === CI_MIN_NODE) return
+
 pkg.engines.node = CI_MIN_NODE
 const after = pkg.engines.node
 

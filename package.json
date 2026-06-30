@@ -131,7 +131,7 @@
   },
   "homepage": "https://github.com/DataDog/dd-trace-js#readme",
   "engines": {
-    "node": ">=22"
+    "node": ">=18"
   },
   "nodeMaxMajor": 27,
   "files": [
