@@ -37,7 +37,6 @@ versions.forEach((version) => {
   describe(`vitest@${version}`, () => {
     let cwd, receiver, childProcess
     const newerVitestIt = version === '1.6.0' ? it.skip : it
-    const latestVitestIt = version === 'latest' ? it : it.skip
 
     useSandbox([
       `vitest@${version}`,
@@ -369,32 +368,26 @@ versions.forEach((version) => {
             runAttemptToFixTest(done, { isAttemptingToFix: true })
           })
 
-          it('can attempt to fix when no-worker init is enabled', (done) => {
-            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+          const noWorkerAttemptToFixCases = [
+            { poolConfig: 'forks', workerName: 'fork' },
+            { poolConfig: 'threads', workerName: 'thread' },
+          ]
 
-            runAttemptToFixTest(done, {
-              isAttemptingToFix: true,
-              expectedExecutionCount: 4,
-              extraEnvVars: {
-                DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
-                EXPECT_DD_TEST_OPT_VITEST_SETUP_ENV_ABSENT: '1',
-              },
+          for (const { poolConfig, workerName } of noWorkerAttemptToFixCases) {
+            it(`can attempt to fix ${workerName} workers when no-worker init is enabled`, (done) => {
+              receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+              runAttemptToFixTest(done, {
+                isAttemptingToFix: true,
+                expectedExecutionCount: 4,
+                extraEnvVars: {
+                  DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+                  EXPECT_DD_TEST_OPT_VITEST_SETUP_ENV_ABSENT: '1',
+                  POOL_CONFIG: poolConfig,
+                },
+              })
             })
-          })
-
-          latestVitestIt('can attempt to fix thread workers when no-worker init is enabled', (done) => {
-            receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
-
-            runAttemptToFixTest(done, {
-              isAttemptingToFix: true,
-              expectedExecutionCount: 4,
-              extraEnvVars: {
-                DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
-                EXPECT_DD_TEST_OPT_VITEST_SETUP_ENV_ABSENT: '1',
-                POOL_CONFIG: 'threads',
-              },
-            })
-          })
+          }
 
           it('can attempt to fix and mark last attempt as passed if every attempt passes', (done) => {
             receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
