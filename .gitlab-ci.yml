@@ -1,6 +1,8 @@
 stages:
   - ci-image
-  - shared-pipeline
+  - shared-pipeline-build
+  - shared-pipeline-test
+  - shared-pipeline-publish
   - benchmarks
   - benchmarks-pr-comment
   - single-step-instrumentation-tests
