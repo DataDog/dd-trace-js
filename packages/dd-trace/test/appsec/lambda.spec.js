@@ -77,6 +77,7 @@ describe('AppSec Lambda handler', () => {
       })
 
       assert.equal(span.context().getTag('_dd.appsec.enabled'), 1)
+      assert.equal(span.context().getTag('_dd.runtime_family'), 'nodejs')
     })
 
     it('should set HTTP_CLIENT_IP tag when clientIp is provided', () => {
