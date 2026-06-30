@@ -1,9 +1,10 @@
 # Orchestrion (AST Rewriter)
 
-**Required default for new instrumentations.** Orchestrion rewrites a library's
-source at load time (CJS + ESM) and *inlines* `diagnostics_channel` publishes
-into the target function. No runtime monkey-patching, so it handles ESM
-reliably where shimmer cannot.
+**Required default for new instrumentations when a source function can be
+matched.** Orchestrion rewrites a library at load time (CJS + ESM) and injects
+`diagnostics_channel` publishes into the matched function. Prefer it for static
+source hooks, ESM support, and avoiding runtime monkey-patching; use shimmer
+only when the work exists only as a runtime value.
 
 Engine: `@apm-js-collab/code-transformer` (mirror of
 [nodejs/orchestrion-js](https://github.com/nodejs/orchestrion-js)), vendored at
@@ -17,20 +18,27 @@ Engine: `@apm-js-collab/code-transformer` (mirror of
 > `#visit`) and `lib/transforms.js`. The vendored bundle is single-file with a
 > source map; extract `sourcesContent` to read the originals.
 
-## Why transform, not wrap
+## Decision Rule
 
-Every generated wrapper opens with `if (!hasSubscribers(channel)) return
-original()` and the publish is compiled *into* the method body — so an inactive
-integration costs nothing and an active one has the exact shape of hand-written
-instrumentation (no wrapper closure, no property copy, no per-call indirection).
+Use orchestrion when the function to instrument exists in source: top-level
+declaration, class/object method, named expression, or assignment to a named
+receiver. Do **not** use shimmer just because users reach it through a decorated
+runtime handle; match the source function behind the handle instead.
 
-Prefer orchestrion over shimmer for performance. Reach for shimmer only when no
-source function can be matched (e.g. a value built at runtime that never exists
-in source), and say why in a comment.
+Inactive-path cost is **not zero** in the vendored 0.15.0 templates. The wrapper
+builds `__apm$arguments`, `__apm$ctx`, and `__apm$traced` before the selected
+operator checks `hasSubscribers`. The check skips channel work and the wrapped
+call's tracing body, not the wrapper's array/object/closure setup. For very hot
+idle methods, inspect the generated transform or microbench the path before
+claiming a perf win.
+
+Reach for shimmer only when no source node can be matched (for example, a method
+constructed entirely at runtime) or the instrumentation must mutate arguments
+before the original function is invoked. Leave a code comment naming that reason.
 
 ## Required Files
 
-```
+```text
 packages/datadog-instrumentations/src/
 ├── <name>.js                                 # Hooks file — triggers the rewriter
 └── helpers/
@@ -89,28 +97,19 @@ runs on the matched files. Without this file the rewriter is never triggered.
 }
 ```
 
-**`methodName` matches literal keys only.** It compiles to
-`Property[key.name="X"][key.type=Identifier]` / `ClassBody > [key.name="X"]`, so
-a *computed* method (`{ [name](){} }`) or a string-literal key is **not**
-matched — use `astQuery` for those.
+**Pick the narrowest source match that names the real owner.**
 
-**Prefer a named source function over a runtime handle.** When a library exposes
-its work through a method it *decorates onto a runtime instance* (`app.decorate('x',
-fn)`, `obj.x = fn` at call time), the runtime handle is not a static source node —
-but the function it points at usually *is*. A top-level `async function foo (…)`
-that every code path funnels through is matchable with `functionName: 'foo', kind:
-'Async'` directly, with no shimmer. Example: mercurius routes every GraphQL request
-(HTTP, batched, persisted, programmatic, JIT) through the named declaration
-`async function fastifyGraphQl (source, context, variables, operationName)` in
-`index.js`, even though users only ever call the decorated `app.graphql`. Match the
-declaration, not the handle.
-
-**`objectName` + `propertyName` pin a function assigned to a property.** For
-`obj.method = fn` / `this.method = fn` shapes — common in factory and constructor
-code where there is no class or named declaration — pair the two fields to match
-`AssignmentExpression[left.object.name="obj"][left.property.name="method"] >
-[async]`. `objectName: 'this'` targets a `ThisExpression` receiver. Both are
-required together; one without the other throws.
+- `methodName` matches literal class/object keys only. Computed keys
+  (`{ [name] () {} }`) and string-literal keys need `astQuery`.
+- `functionName` beats shimmer for decorated handles. If `app.decorate('x', fn)`
+  exposes work through `app.x` but all paths call `async function foo (…)`, match
+  `foo`. Mercurius' `app.graphql` funnels through `fastifyGraphQl`; instrument
+  that declaration, not the runtime handle.
+- `objectName` + `propertyName` pin assignment receivers:
+  `conn.query = async () => {}` or `this._query = async () => {}`. Both fields
+  are required together; `objectName: 'this'` targets a `ThisExpression`.
+- `expressionName` alone constrains the property/expression name, **not** the
+  receiver. If several objects assign `.query`, it can match the wrong one.
 
 ```javascript
 // matches: conn.query = async (...) => { … }
@@ -119,11 +118,6 @@ functionQuery: { objectName: 'conn', propertyName: 'query', kind: 'Async' }
 functionQuery: { objectName: 'this', propertyName: '_query', kind: 'Async' }
 ```
 
-`expressionName` alone matches `AssignmentExpression[left.property.name="…"]`
-*without* constraining the receiver — when the same property name is assigned on
-several objects it instruments the wrong one. Reach for `objectName` + `propertyName`
-when the receiver matters.
-
 **Patch both CJS and ESM.** Most libraries ship separate builds (`dist/cjs/…`
 and `dist/esm/…`, or `.js` + `.mjs`). Each needs its own entry with the same
 `functionQuery`/`channelName`; patching one silently misses the other format.
@@ -131,7 +125,7 @@ and `dist/esm/…`, or `.js` + `.mjs`). Each needs its own entry with the same
 ## kind → operator
 
 | kind | operator | behaviour |
-|------|----------|-----------|
+| --- | --- | --- |
 | `Sync` (default) | `traceSync` | sync return/throw; `ctx.result` on success |
 | `Async` | `tracePromise` | sync **or** promise return; chains `asyncStart`/`asyncEnd`; side-chains Promise subclasses/thenables so subclass methods survive |
 | `Callback` | `traceCallback` | wraps the arg at `callbackIndex`; publishes `asyncStart`/`asyncEnd`/`error` from the callback |
@@ -149,7 +143,7 @@ names against the installed version).
 
 ## Channel Name Formation
 
-```
+```text
 tracing:orchestrion:{module.name}:{channelName}:{event}
 ```
 
@@ -160,10 +154,9 @@ Events: `start`, `asyncStart`, `asyncEnd`, `end`, `error` (plus the
 
 ## Plugin Subscription
 
-Set `static prefix` to the channel base; `TracingPlugin` subscribes all events
-and routes them to `bindStart`/`bindFinish`/`end`/`error`. Use `extraPrefixes`
-when more than one module emits to the same logical span (e.g. a fork that
-re-exports under a different package name).
+Set `static prefix` to the channel base; `TracingPlugin` subscribes
+`start`/`end`/`asyncStart`/`asyncEnd`/`error`/`finish` and routes them to
+`bindStart`/`bindFinish`/`end`/`error`.
 
 ```javascript
 class MyPlugin extends TracingPlugin {
@@ -180,11 +173,42 @@ class MyPlugin extends TracingPlugin {
 }
 ```
 
-`ctx` fields: `ctx.arguments` (the original args array — **same reference**
-passed to the wrapped fn), `ctx.self` (`this`), `ctx.result` (on
-`asyncEnd`/`end`), `ctx.error` (on `error`), `ctx.currentStore` (set by
-`startSpan`). For multi-method integrations, one plugin per method combined in a
-`CompositePlugin` (see langchain).
+`ctx` fields: `ctx.arguments` (same array reference later applied to the wrapped
+function), `ctx.self`, `ctx.result`, `ctx.error`, and `ctx.currentStore` (set by
+`startSpan`). For multi-method integrations, use one plugin per method combined
+in a `CompositePlugin` (see langchain).
+
+Multiple module prefixes are manual today. `TracingPlugin.addTraceSub()` and
+`addTraceBind()` read only `this.constructor.prefix`; a `static extraPrefixes`
+field does nothing unless the plugin overrides `addTraceSubs()`, calls `super`,
+then registers the same events for each extra prefix. Use this for forks or
+re-exporting packages that should create the same logical span; see
+`datadog-plugin-graphql/src/execute.js`.
+
+```javascript
+class MyPlugin extends TracingPlugin {
+  static prefix = 'tracing:orchestrion:<npm-package>:Client_query'
+  static extraPrefixes = [
+    'tracing:orchestrion:<fork-package>:Client_query',
+  ]
+
+  addTraceSubs () {
+    super.addTraceSubs()
+
+    for (const prefix of this.constructor.extraPrefixes) {
+      for (const event of ['start', 'end', 'asyncStart', 'asyncEnd', 'error', 'finish']) {
+        const bindName = `bind${event.charAt(0).toUpperCase()}${event.slice(1)}`
+        if (this[event]) {
+          this.addSub(`${prefix}:${event}`, this[event].bind(this))
+        }
+        if (this[bindName]) {
+          this.addBind(`${prefix}:${event}`, this[bindName].bind(this))
+        }
+      }
+    }
+  }
+}
+```
 
 ## Custom Transforms
 
@@ -194,14 +218,12 @@ Register a transform the built-ins don't cover via
 select it from a config with `transform: '<name>'` (it overrides `kind`).
 Signature: `(state, node, parent, ancestry) => void`, mutating the AST in place.
 
-Configs run in array order and share the AST, so the established pattern
-(precedent: `waitForAsyncEnd`) is **built-in generates, custom post-processes**:
-one config wraps with a built-in `kind`; a later config matches a node *inside
-the generated wrapper* (e.g. the `__apm$ctx` object literal) via `astQuery` and
-augments it — for instance to capture a binding from the enclosing closure that
-the built-in `ctx` (only `arguments`/`self`) does not include. Keep custom
-transforms as a stopgap: when the capability lands upstream, replace the custom
-config with the built-in option and delete the registration.
+Configs run in order and share the AST. Established pattern (see
+`waitForAsyncEnd`): built-in wraps first; a later custom transform matches inside
+the generated wrapper (for example the `__apm$ctx` literal) and augments it with
+data the built-in ctx does not include. Treat custom transforms as stopgaps:
+when upstream adds the capability, switch to the built-in option and delete the
+registration.
 
 ## Propagating Synchronous Errors From `bindStart`
 
