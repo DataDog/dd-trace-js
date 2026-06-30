@@ -419,7 +419,20 @@ function isVitestNoWorkerInitRequested () {
   return value === 'true' || value === '1'
 }
 
-function shouldUseVitestNoWorkerInit (ctx, testSpecifications) {
+function isVitestNoWorkerInitPool (pool, frameworkVersion) {
+  return isForkPool(pool) || (isThreadPool(pool) && isVitestNoWorkerInitSupportedForThreads(frameworkVersion))
+}
+
+function isVitestNoWorkerInitSupportedForThreads (frameworkVersion) {
+  return getMajorVersion(frameworkVersion) >= 4
+}
+
+function getMajorVersion (version) {
+  const major = Number.parseInt(version, 10)
+  return Number.isNaN(major) ? 0 : major
+}
+
+function shouldUseVitestNoWorkerInit (ctx, testSpecifications, frameworkVersion) {
   if (!isVitestNoWorkerInitRequested()) {
     return false
   }
@@ -430,15 +443,15 @@ function shouldUseVitestNoWorkerInit (ctx, testSpecifications) {
   }
 
   if (Array.isArray(testSpecifications)) {
-    if (hasNonIsolatedNoWorkerInitPoolTestSpecification(testSpecifications, config.pool, config)) {
+    if (hasNonIsolatedNoWorkerInitPoolTestSpecification(testSpecifications, config.pool, config, frameworkVersion)) {
       warnVitestNoWorkerInitWithIsolationDisabled()
       return false
     }
-    if (getAmbiguousUnnamedNoWorkerInitPoolFilepaths(testSpecifications, config.pool)?.size > 0) {
+    if (getAmbiguousUnnamedNoWorkerInitPoolFilepaths(testSpecifications, config.pool, frameworkVersion)?.size > 0) {
       warnVitestNoWorkerInitWithAmbiguousUnnamedProjects()
       return false
     }
-    return hasIsolatedNoWorkerInitPoolTestSpecification(testSpecifications, config.pool, config)
+    return hasIsolatedNoWorkerInitPoolTestSpecification(testSpecifications, config.pool, config, frameworkVersion)
   }
 
   if (getEffectiveConfigIsolate(config, config.pool) === false) {
@@ -446,7 +459,7 @@ function shouldUseVitestNoWorkerInit (ctx, testSpecifications) {
     return false
   }
 
-  return isNoWorkerInitPool(config.pool)
+  return isVitestNoWorkerInitPool(config.pool, frameworkVersion)
 }
 
 function warnVitestNoWorkerInitWithIsolationDisabled () {
@@ -702,7 +715,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, s
     knownTests,
     modifiedFiles,
     testManagementTests,
-  }, shouldInstallNoWorkerInit, testSpecifications)
+  }, shouldInstallNoWorkerInit, testSpecifications, frameworkVersion)
   wrapCoverageProvider(ctx)
   wrapSessionFinish(ctx)
   return shouldInstallNoWorkerInit
@@ -717,10 +730,11 @@ function configureMainProcessExecutionHooks (
   testSessionConfiguration = {},
   testOptimizationData = {},
   shouldInstallNoWorkerInit,
-  testSpecifications
+  testSpecifications,
+  frameworkVersion
 ) {
   if (shouldInstallNoWorkerInit === undefined) {
-    shouldInstallNoWorkerInit = shouldUseVitestNoWorkerInit(ctx, testSpecifications)
+    shouldInstallNoWorkerInit = shouldUseVitestNoWorkerInit(ctx, testSpecifications, frameworkVersion)
   }
 
   if (!shouldInstallNoWorkerInit) {
@@ -859,10 +873,10 @@ function installMainProcessReporter (
   frameworkVersion,
   testSessionConfiguration,
   testOptimizationData,
-  shouldInstallNoWorkerInit = shouldUseVitestNoWorkerInit(ctx),
+  shouldInstallNoWorkerInit = shouldUseVitestNoWorkerInit(ctx, undefined, frameworkVersion),
   testSpecifications
 ) {
-  const noWorkerInitTestModules = getNoWorkerInitTestModules(ctx.config?.pool, testSpecifications)
+  const noWorkerInitTestModules = getNoWorkerInitTestModules(ctx.config?.pool, testSpecifications, frameworkVersion)
 
   if (
     !shouldInstallNoWorkerInit ||
@@ -1559,7 +1573,7 @@ function recomputeTaskState (task) {
 }
 
 function ensureMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
-  const shouldInstallNoWorkerInit = shouldUseVitestNoWorkerInit(ctx, testSpecifications)
+  const shouldInstallNoWorkerInit = shouldUseVitestNoWorkerInit(ctx, testSpecifications, frameworkVersion)
   let setupState = mainProcessSetupStates.get(ctx)
   if (!setupState || (shouldInstallNoWorkerInit && !setupState.shouldInstallNoWorkerInit)) {
     setupState = {
@@ -1966,7 +1980,26 @@ function hasNoWorkerInitPoolTestSpecification (testSpecifications, defaultPool) 
   return false
 }
 
-function hasIsolatedNoWorkerInitPoolTestSpecification (testSpecifications, defaultPool, defaultConfig) {
+function hasForkPoolTestSpecification (testSpecifications, defaultPool) {
+  if (!Array.isArray(testSpecifications)) {
+    return false
+  }
+
+  for (const testSpecification of testSpecifications) {
+    if (isForkPool(getEffectiveTestSpecificationPool(testSpecification, defaultPool))) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function hasIsolatedNoWorkerInitPoolTestSpecification (
+  testSpecifications,
+  defaultPool,
+  defaultConfig,
+  frameworkVersion
+) {
   if (!Array.isArray(testSpecifications)) {
     return false
   }
@@ -1975,7 +2008,7 @@ function hasIsolatedNoWorkerInitPoolTestSpecification (testSpecifications, defau
     const pool = getEffectiveTestSpecificationPool(testSpecification, defaultPool)
     const defaultIsolate = getEffectiveConfigIsolate(defaultConfig, pool)
     if (
-      isNoWorkerInitPool(pool) &&
+      isVitestNoWorkerInitPool(pool, frameworkVersion) &&
       getEffectiveTestSpecificationIsolate(testSpecification, pool, defaultIsolate) !== false
     ) {
       return true
@@ -1985,7 +2018,12 @@ function hasIsolatedNoWorkerInitPoolTestSpecification (testSpecifications, defau
   return false
 }
 
-function hasNonIsolatedNoWorkerInitPoolTestSpecification (testSpecifications, defaultPool, defaultConfig) {
+function hasNonIsolatedNoWorkerInitPoolTestSpecification (
+  testSpecifications,
+  defaultPool,
+  defaultConfig,
+  frameworkVersion
+) {
   if (!Array.isArray(testSpecifications)) {
     return false
   }
@@ -1994,7 +2032,7 @@ function hasNonIsolatedNoWorkerInitPoolTestSpecification (testSpecifications, de
     const pool = getEffectiveTestSpecificationPool(testSpecification, defaultPool)
     const defaultIsolate = getEffectiveConfigIsolate(defaultConfig, pool)
     if (
-      isNoWorkerInitPool(pool) &&
+      isVitestNoWorkerInitPool(pool, frameworkVersion) &&
       getEffectiveTestSpecificationIsolate(testSpecification, pool, defaultIsolate) === false
     ) {
       return true
@@ -2018,7 +2056,7 @@ function hasWorkerInstrumentationPoolTestSpecification (defaultPool, testSpecifi
   return false
 }
 
-function getAmbiguousUnnamedNoWorkerInitPoolFilepaths (testSpecifications, defaultPool) {
+function getAmbiguousUnnamedNoWorkerInitPoolFilepaths (testSpecifications, defaultPool, frameworkVersion) {
   if (!Array.isArray(testSpecifications)) {
     return
   }
@@ -2033,7 +2071,7 @@ function getAmbiguousUnnamedNoWorkerInitPoolFilepaths (testSpecifications, defau
     if (!filepath) continue
 
     const pool = getEffectiveTestSpecificationPool(testSpecification, defaultPool)
-    if (isNoWorkerInitPool(pool)) {
+    if (isVitestNoWorkerInitPool(pool, frameworkVersion)) {
       if (workerInstrumentationFilepaths.has(filepath)) ambiguousFilepaths.add(filepath)
       noWorkerInitFilepaths.add(filepath)
     } else {
@@ -2045,16 +2083,23 @@ function getAmbiguousUnnamedNoWorkerInitPoolFilepaths (testSpecifications, defau
   return ambiguousFilepaths
 }
 
-function getNoWorkerInitTestModules (defaultPool, testSpecifications) {
+function getNoWorkerInitTestModules (defaultPool, testSpecifications, frameworkVersion) {
   if (!Array.isArray(testSpecifications)) {
     return
   }
 
-  const ambiguousFilepaths = getAmbiguousUnnamedNoWorkerInitPoolFilepaths(testSpecifications, defaultPool)
+  const ambiguousFilepaths = getAmbiguousUnnamedNoWorkerInitPoolFilepaths(
+    testSpecifications,
+    defaultPool,
+    frameworkVersion
+  )
   const filepaths = new Set()
   const projectFilepaths = new Set()
   for (const testSpecification of testSpecifications) {
-    if (!isNoWorkerInitPool(getEffectiveTestSpecificationPool(testSpecification, defaultPool))) continue
+    const pool = getEffectiveTestSpecificationPool(testSpecification, defaultPool)
+    if (!isVitestNoWorkerInitPool(pool, frameworkVersion)) {
+      continue
+    }
 
     const filepath = normalizeFilepath(getTestSpecificationFilepath(testSpecification))
     if (!filepath) return
@@ -2079,7 +2124,12 @@ function getProjectFilepathKey (projectName, filepath) {
   return `${projectName}\u0000${filepath}`
 }
 
-function shouldMarkVitestWorkerEnv (pool, testSpecifications) {
+function shouldMarkVitestWorkerEnv (pool, testSpecifications, shouldSkipWorkerInit) {
+  if (!shouldSkipWorkerInit) {
+    return isForkPool(pool) || hasForkPoolTestSpecification(testSpecifications, pool) ||
+      (!testSpecifications && isForkPool(pool))
+  }
+
   return isNoWorkerInitPool(pool) || hasNoWorkerInitPoolTestSpecification(testSpecifications, pool) ||
     (!testSpecifications && isNoWorkerInitPool(pool))
 }
@@ -2087,10 +2137,10 @@ function shouldMarkVitestWorkerEnv (pool, testSpecifications) {
 function markVitestWorkerEnv (ctx, testSpecifications, shouldSkipWorkerInit = false) {
   const config = ctx?.config
   isVitestNoWorkerInitActive = shouldSkipWorkerInit
-  if (!config || !shouldMarkVitestWorkerEnv(config.pool, testSpecifications)) {
+  if (!config || !shouldMarkVitestWorkerEnv(config.pool, testSpecifications, shouldSkipWorkerInit)) {
     return
   }
-  config.env = getVitestWorkerEnv(config.env)
+  config.env = getVitestWorkerEnv(config.env, shouldSkipWorkerInit)
 }
 
 function wrapVitestRunFiles (Vitest, frameworkVersion) {
@@ -2206,6 +2256,7 @@ function getTinypoolOptions (options = {}) {
 
 function shouldMarkVitestWorkerPool (options) {
   if (options?.runtime !== 'child_process' && options?.runtime !== 'worker_threads') return false
+  if (options.runtime === 'worker_threads' && !isVitestNoWorkerInitActive) return false
   if (options.env?.VITEST !== 'true') return false
 
   const filename = typeof options.filename === 'string' ? options.filename.replaceAll('\\', '/') : ''
@@ -2293,7 +2344,14 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
     // function is async
     shimmer.wrap(threadsPoolWorker.value.prototype, 'start', start => function (...args) {
       vitestPool = 'worker_threads'
-      this.env = getVitestWorkerEnv(this.env, isVitestNoWorkerInitActive)
+      if (isVitestNoWorkerInitActive) {
+        this.env = getVitestWorkerEnv(this.env, true)
+      } else if (this.env) {
+        this.env.DD_VITEST_WORKER = '1'
+        delete this.env[VITEST_NO_WORKER_INIT_ACTIVE_ENV]
+      } else {
+        this.env = getVitestWorkerEnv()
+      }
       return start.apply(this, args)
     })
     shimmer.wrap(threadsPoolWorker.value.prototype, 'on', getWrappedOn)
