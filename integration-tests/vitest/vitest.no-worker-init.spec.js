@@ -30,6 +30,7 @@ versions.forEach((version) => {
   describe(`vitest@${version} no-worker init`, () => {
     let cwd, receiver, childProcess, testOutput
     const newerVitestIt = version === '1.6.0' ? it.skip : it
+    const vitest3It = version === '3.2.6' ? it : it.skip
     const latestVitestIt = version === 'latest' ? it : it.skip
 
     useSandbox([
@@ -71,6 +72,58 @@ versions.forEach((version) => {
         workerName: 'thread',
       },
     ]
+
+    function assertNoWorkerSuiteContextEvents (events, shouldAssertWorkerMarker = false) {
+      const testSessionEvents = events.filter(event => event.type === 'test_session_end')
+      const testModuleEvents = events.filter(event => event.type === 'test_module_end')
+      const testSuiteEvents = events
+        .filter(event => event.type === 'test_suite_end')
+        .map(event => event.content)
+        .filter(testSuite => testSuite.meta[TEST_SOURCE_FILE].startsWith(
+          'ci-visibility/vitest-tests/no-worker-suite-context-'
+        ))
+      const testEvents = events
+        .filter(event => event.type === 'test')
+        .map(event => event.content)
+        .filter(test => test.meta[TEST_SOURCE_FILE].startsWith(
+          'ci-visibility/vitest-tests/no-worker-suite-context-'
+        ))
+      const sourceFiles = testEvents.map(test => test.meta[TEST_SOURCE_FILE]).sort()
+      const testNames = testEvents.map(test => test.meta[TEST_NAME]).sort()
+      const testSuiteSourceFiles = testSuiteEvents.map(testSuite => testSuite.meta[TEST_SOURCE_FILE]).sort()
+      const testSuiteIds = new Set(testSuiteEvents.map(testSuite => testSuite[TEST_SUITE_ID].toString()))
+
+      assert.strictEqual(testSessionEvents.length, 1, inspect(events.map(event => event.type)))
+      assert.strictEqual(testModuleEvents.length, 1, inspect(events.map(event => event.type)))
+      assert.strictEqual(testSuiteEvents.length, 2, inspect(testSuiteSourceFiles))
+      assert.strictEqual(testEvents.length, 2, inspect(testNames))
+      assert.deepStrictEqual(sourceFiles, [
+        'ci-visibility/vitest-tests/no-worker-suite-context-a-slow.mjs',
+        'ci-visibility/vitest-tests/no-worker-suite-context-b-fast.mjs',
+      ])
+      assert.deepStrictEqual(testSuiteSourceFiles, sourceFiles)
+      assert.deepStrictEqual(testNames, [
+        'no-worker suite context fast uses fast suite',
+        'no-worker suite context slow uses slow suite',
+      ])
+      assert.strictEqual(new Set(testEvents.map(test => test.test_session_id.toString())).size, 1)
+      assert.strictEqual(new Set(testEvents.map(test => test.test_module_id.toString())).size, 1)
+      for (const testEvent of testEvents) {
+        assert.strictEqual(testEvent.meta[TEST_STATUS], 'pass')
+        assert.ok(testSuiteIds.has(testEvent[TEST_SUITE_ID].toString()))
+        if (shouldAssertWorkerMarker) {
+          assert.strictEqual(testEvent.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
+        }
+        assert.strictEqual(
+          testEvent.test_session_id.toString(),
+          testSessionEvents[0].content.test_session_id.toString()
+        )
+        assert.strictEqual(
+          testEvent.test_module_id.toString(),
+          testModuleEvents[0].content.test_module_id.toString()
+        )
+      }
+    }
 
     for (const { testFn, nodeOptions, poolConfig, workerName, extraEnv } of workerPoolCases) {
       testFn(`strips Datadog NODE_OPTIONS from ${workerName} workers`, async () => {
@@ -208,30 +261,44 @@ versions.forEach((version) => {
         ({ url }) => url === '/api/v2/citestcycle',
         payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
-          const testSessionEvents = events.filter(event => event.type === 'test_session_end')
-          const testEvents = events
-            .filter(event => event.type === 'test')
-            .map(event => event.content)
-            .filter(test => test.meta[TEST_SOURCE_FILE].startsWith(
-              'ci-visibility/vitest-tests/no-worker-suite-context-'
-            ))
-          const sourceFiles = testEvents.map(test => test.meta[TEST_SOURCE_FILE]).sort()
+          assertNoWorkerSuiteContextEvents(events, true)
+        }
+      )
 
-          assert.strictEqual(testSessionEvents.length, 1, inspect(events.map(event => event.type)))
-          assert.deepStrictEqual(sourceFiles, [
-            'ci-visibility/vitest-tests/no-worker-suite-context-a-slow.mjs',
-            'ci-visibility/vitest-tests/no-worker-suite-context-b-fast.mjs',
-          ])
-          assert.strictEqual(new Set(testEvents.map(test => test.test_session_id.toString())).size, 1)
-          assert.strictEqual(new Set(testEvents.map(test => test.test_module_id.toString())).size, 1)
-          for (const testEvent of testEvents) {
-            assert.strictEqual(testEvent.meta[TEST_STATUS], 'pass')
-            assert.strictEqual(testEvent.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
-            assert.strictEqual(
-              testEvent.test_session_id.toString(),
-              testSessionEvents[0].content.test_session_id.toString()
-            )
-          }
+      childProcess = exec(
+        './node_modules/.bin/vitest run',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--no-warnings --import dd-trace/register.js -r dd-trace/ci/init',
+            TEST_DIR: 'ci-visibility/vitest-tests/no-worker-suite-context-*.mjs',
+            POOL_CONFIG: 'forks',
+            PROJECT_POOL_CONFIG: 'forks',
+            PROJECT_THREAD_POOL_MATCH_GLOB: '**/no-worker-suite-context-b-fast.mjs',
+            DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+            DD_SERVICE: undefined,
+          },
+        }
+      )
+
+      childProcess.stdout.on('data', data => { testOutput += data })
+      childProcess.stderr.on('data', data => { testOutput += data })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        payloadsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+
+    vitest3It('reports thread-routed specs with worker instrumentation when no-worker init is enabled', async () => {
+      const payloadsPromise = receiver.gatherPayloadsMaxTimeout(
+        ({ url }) => url === '/api/v2/citestcycle',
+        payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          assertNoWorkerSuiteContextEvents(events)
         }
       )
 
