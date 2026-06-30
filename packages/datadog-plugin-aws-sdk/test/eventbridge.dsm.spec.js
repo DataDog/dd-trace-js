@@ -17,6 +17,10 @@ describe('EventBridge', function () {
     let eventbridge
     let expectedProducerHash
 
+    const eventbridgeClientName = moduleName === '@aws-sdk/smithy-client'
+      ? '@aws-sdk/client-eventbridge'
+      : 'aws-sdk'
+
     before(async function () {
       eventbridge = getEventBridgeClient()
       if (!eventbridge) {
@@ -77,13 +81,12 @@ describe('EventBridge', function () {
 
     function getEventBridgeClient () {
       const params = { endpoint: 'http://127.0.0.1:4566', region: 'us-east-1' }
+      const lib = require(`../../../versions/${eventbridgeClientName}@${version}`).get()
 
       if (moduleName === '@aws-sdk/smithy-client') {
-        const lib = require(`../../../versions/@aws-sdk/smithy-client@${version}`).get('@aws-sdk/client-eventbridge')
         return new lib.EventBridge(params)
       }
 
-      const lib = require(`../../../versions/aws-sdk@${version}`).get()
       const EventBridge = lib.EventBridge || lib.CloudWatchEvents
       // Older aws-sdk fixtures predate this service entirely, so there is no
       // client we can instantiate for an integration test.
