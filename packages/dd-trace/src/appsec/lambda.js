@@ -33,7 +33,10 @@ function onLambdaStartInvocation (data) {
 
     activeInvocations.add(span)
 
-    span.setTag('_dd.appsec.enabled', 1)
+    span.addTags({
+      '_dd.appsec.enabled': 1,
+      '_dd.runtime_family': 'nodejs',
+    })
 
     const persistent = {}
 
