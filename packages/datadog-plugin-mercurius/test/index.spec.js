@@ -182,13 +182,12 @@ describe('Plugin', () => {
         return Promise.all([assertion, app.graphql(query)])
       })
 
-      it('still produces a graphql.request span on the JIT warm path', async () => {
+      it('carries the operation signature on the JIT warm path', async () => {
         // jit:1 compiles the query after its first run; subsequent runs take the
         // JIT path, which bypasses graphql.execute. The request span is the only
-        // top-level span that survives that path. It carries the source (set at
-        // the boundary, before any execute), even though the operation
-        // signature backfill — which lives in the execute sub-plugin — does not
-        // run on the warm path.
+        // top-level span that survives that path. The cold run caches the
+        // operation signature/type by source, so the warm run recovers the same
+        // resource and tags at the request boundary without re-parsing.
         const query = 'query WarmQuery { hello(name: "jit") }'
 
         // Run twice up front so the assertion below observes the compiled run.
@@ -196,9 +195,19 @@ describe('Plugin', () => {
 
         const assertion = agent.assertSomeTraces(traces => {
           const request = traces[0].find(span => span.name === expectedSchema.server.opName)
+          const execute = traces[0].find(span => span.name === 'graphql.execute')
           assert.ok(request, 'expected a graphql.request span even when JIT-compiled')
-          assert.strictEqual(request.meta['graphql.source'], query)
-        })
+          assert.strictEqual(execute, undefined, 'JIT warm path must not produce a graphql.execute span')
+          assertObjectContains(request, {
+            error: 0,
+            meta: {
+              'graphql.operation.type': 'query',
+              'graphql.operation.name': 'WarmQuery',
+              'graphql.source': query,
+            },
+          })
+          assert.match(request.resource, /WarmQuery/)
+        }, { spanResourceMatch: /WarmQuery/ })
 
         return Promise.all([assertion, axios.post(`http://localhost:${port}/graphql`, { query })])
       })

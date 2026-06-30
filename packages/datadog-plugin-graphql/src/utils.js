@@ -1,5 +1,32 @@
 'use strict'
 
+const { LRUCache } = require('../../../vendor/dist/lru-cache')
+
+// Mercurius funnels every operation through `fastifyGraphQl`, but the parsed
+// document — and therefore the operation signature/type/name — is only known
+// once execute runs. On the JIT warm path execute never fires, so the top-level
+// request span would otherwise be left with only the provisional resource. The
+// cold path caches the computed metadata keyed by the raw query text (the same
+// key mercurius uses for its own LRU); the request boundary reads it back on the
+// warm path. Bounded so a flood of distinct queries can't grow it without limit.
+const requestOperationCache = new LRUCache({ max: 500 })
+
+/**
+ * @param {string} source - The raw query text; the same key mercurius uses.
+ * @param {{ signature?: string, type?: string, name?: string }} operation
+ */
+function cacheRequestOperation (source, operation) {
+  requestOperationCache.set(source, operation)
+}
+
+/**
+ * @param {string | undefined} source - undefined for a pre-parsed AST source.
+ * @returns {{ signature?: string, type?: string, name?: string } | undefined}
+ */
+function getCachedRequestOperation (source) {
+  return requestOperationCache.get(source)
+}
+
 /**
  * @param {{ errorExtensions?: string[] }} config Resolved plugin config; `errorExtensions` lists the
  *   GraphQL error `extensions` keys to copy onto the span event.
@@ -83,6 +110,8 @@ function getSignature (document, operationName, operationType, calculate) {
 }
 
 module.exports = {
+  cacheRequestOperation,
   extractErrorIntoSpanEvent,
+  getCachedRequestOperation,
   getSignature,
 }

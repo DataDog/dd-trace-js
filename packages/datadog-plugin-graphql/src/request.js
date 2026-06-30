@@ -1,7 +1,7 @@
 'use strict'
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
-const { extractErrorIntoSpanEvent } = require('./utils')
+const { extractErrorIntoSpanEvent, getCachedRequestOperation } = require('./utils')
 
 // Top-level GraphQL request span for drivers that funnel every operation
 // through a single entry point but parse/validate/execute internally (mercurius
@@ -12,10 +12,12 @@ const { extractErrorIntoSpanEvent } = require('./utils')
 //
 // The entry boundary only hands us the raw `source` (string or pre-parsed AST)
 // and `operationName`; the parsed document — and therefore the precise
-// operation signature — is only known once mercurius parses internally. The
-// `execute` sub-plugin backfills the resource/operation tags onto this span via
-// `ctx.currentStore.graphqlRequestSpan` once the document is available, so we
-// never re-parse on the hot path.
+// operation signature — is only known once mercurius parses internally. On the
+// cold path the `execute` sub-plugin backfills the resource/operation tags onto
+// this span via `ctx.currentStore.graphqlRequestSpan` once the document is
+// available, so we never re-parse on the hot path. On the JIT warm path execute
+// never fires, so we recover the same tags from the source-keyed cache the cold
+// path populated.
 class GraphQLRequestPlugin extends TracingPlugin {
   static id = 'graphql'
   static operation = 'request'
@@ -32,16 +34,23 @@ class GraphQLRequestPlugin extends TracingPlugin {
     // accepts a pre-parsed document AST; only a string is the query text.
     const docSource = typeof source === 'string' ? source : undefined
 
+    // Warm (JIT-compiled) path: execute never fires, so recover the operation
+    // signature/type the cold path cached by source. Empty on the cold path —
+    // execute hasn't run yet — where the execute sub-plugin backfills instead.
+    const cached = getCachedRequestOperation(docSource)
+
     const span = this.startSpan(this.operationName({ id: 'request' }), {
       service: this.config.service || this.serviceName(),
-      // Provisional: refined to the operation signature by the execute
-      // sub-plugin once the document is parsed. `operationName` is the best we
-      // can name it at the boundary; falls back to the operation kind there.
-      resource: operationName || undefined,
+      // The cached signature is the precise resource; otherwise provisional and
+      // refined by the execute sub-plugin once the document is parsed.
+      // `operationName` is the best name at the boundary; falls back to the
+      // operation kind in execute.
+      resource: cached?.signature || operationName || undefined,
       kind: this.constructor.kind,
       type: this.constructor.type,
       meta: {
-        'graphql.operation.name': operationName,
+        'graphql.operation.type': cached?.type,
+        'graphql.operation.name': cached?.name || operationName,
         'graphql.source': this.config.source ? docSource : undefined,
       },
     }, ctx)
