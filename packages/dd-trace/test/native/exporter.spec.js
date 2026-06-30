@@ -452,6 +452,29 @@ describe('NativeExporter', () => {
       assert.strictEqual(exporter._pendingSpans.length, 0)
     })
 
+    it('disables the exporter on a fatal NativeExporterBuildError (no retry loop)', async () => {
+      // A build failure (bad config) is fatal and one-shot; the exporter must
+      // stop instead of looping on the same error every flush.
+      const buildErr = new Error('native exporter build failed: invalid config')
+      buildErr.name = 'NativeExporterBuildError'
+      nativeSpans.flushSpans.rejects(buildErr)
+
+      exporter.export([createMockSpan(1n)])
+      exporter.flush()
+      await clock.tickAsync(0)
+      await clock.tickAsync(0)
+
+      // Buffered spans dropped, and the exporter is now disabled.
+      assert.strictEqual(exporter._pendingSpans.length, 0)
+      sinon.assert.calledOnce(nativeSpans.flushSpans)
+
+      // Subsequent export()/flush() are no-ops — no further send attempts.
+      exporter.export([createMockSpan(2n)])
+      exporter.flush()
+      assert.strictEqual(exporter._pendingSpans.length, 0)
+      sinon.assert.calledOnce(nativeSpans.flushSpans)
+    })
+
     it('should not start a new flush while one is in flight', () => {
       // While the first flush()'s send is unresolved, a second flush()
       // call must not call into native again — the spans should accumulate

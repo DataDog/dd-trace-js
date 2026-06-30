@@ -29,6 +29,10 @@ class NativeExporter {
   #timer
   #flushInFlight = false
   #firstFlushSent = false
+  // Set when libdatadog reports a fatal exporter-build failure (bad config):
+  // building is one-shot and won't recover, so we stop exporting rather than
+  // loop on the same error every flush.
+  #disabled = false
 
   /**
    * @param {object} config - Tracer configuration
@@ -183,6 +187,7 @@ class NativeExporter {
    * @param {Array<object>} spans - Array of span objects to export
    */
   export (spans) {
+    if (this.#disabled) return
     // Collect spans for batch export
     for (const span of spans) {
       this._pendingSpans.push(span)
@@ -207,6 +212,10 @@ class NativeExporter {
    * @param {Function} [done] - Callback when flush completes
    */
   flush (done = () => {}) {
+    if (this.#disabled) {
+      done()
+      return
+    }
     clearTimeout(this.#timer)
     this.#timer = undefined
 
@@ -268,6 +277,18 @@ class NativeExporter {
           runtimeMetrics.increment(`${METRIC_PREFIX}.errors.by.code`, `code:${err.code}`, true)
         }
         log.error('Error sending spans to agent via native exporter:', err)
+        // A fatal exporter-build error (bad config) is one-shot and won't
+        // recover; libdatadog tags it as NativeExporterBuildError. Stop
+        // exporting instead of looping on the same error every flush, and drop
+        // buffered spans so they don't accumulate indefinitely.
+        if (err?.name === 'NativeExporterBuildError') {
+          this.#disabled = true
+          this._pendingSpans = []
+          clearTimeout(this.#timer)
+          this.#timer = undefined
+          log.error('Native exporter disabled after a fatal build error; no further spans will be sent')
+          return
+        }
         // Drain on rejection too — otherwise a single transient failure
         // would leave spans buffered indefinitely (no signal beyond the
         // log line, and bursts of low-traffic services may never flush).
