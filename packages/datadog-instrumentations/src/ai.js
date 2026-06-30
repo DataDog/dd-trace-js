@@ -136,33 +136,36 @@ function wrapTracer (tracer) {
 
       args[args.length - 1] = shimmer.wrapFunction(cb, function (originalCb) {
         return function (span) {
-          // the below is necessary in the case that the span is vercel ai's noopSpan.
-          // while we don't want to patch the noopSpan more than once, we do want to treat each as a
-          // fresh instance. However, this is really not necessary for non-noop spans, but not sure
-          // how to differentiate.
-          const freshSpan = Object.create(span) // TODO: does this cause memory leaks?
-
-          shimmer.wrap(freshSpan, 'end', function (spanEnd) {
-            return function (...args) {
-              vercelAiTracingChannel.asyncEnd.publish(ctx)
-              return spanEnd.apply(this, args)
-            }
-          })
-
-          shimmer.wrap(freshSpan, 'setAttributes', function (setAttributes) {
-            return function (attributes) {
+          // A plain delegating wrapper is used instead of Object.create(span) because
+          // Object.create (and Proxy) cannot cross private-field brand checks — any span
+          // method that reads a private field (e.g. BridgeSpanBase#statusCode) would throw
+          // "Cannot read private member" on a prototype clone. Every method here calls
+          // through to the real span instance so private fields always resolve correctly.
+          const freshSpan = {
+            spanContext () { return span.spanContext() },
+            setAttribute (key, value) { return span.setAttribute(key, value) },
+            setAttributes (attributes) {
               vercelAiSpanSetAttributesChannel.publish({ ctx, attributes })
-              return setAttributes.apply(this, arguments)
-            }
-          })
-
-          shimmer.wrap(freshSpan, 'recordException', function (recordException) {
-            return function (exception) {
+              return span.setAttributes(attributes)
+            },
+            addEvent (name, attributesOrStartTime, startTime) {
+              return span.addEvent(name, attributesOrStartTime, startTime)
+            },
+            addLink (link, attrs) { return span.addLink(link, attrs) },
+            addLinks (links) { return span.addLinks(links) },
+            setStatus (status) { return span.setStatus(status) },
+            updateName (spanName) { return span.updateName(spanName) },
+            isRecording () { return span.isRecording() },
+            recordException (exception, timeInput) {
               ctx.error = exception
               vercelAiTracingChannel.error.publish(ctx)
-              return recordException.apply(this, arguments)
-            }
-          })
+              return span.recordException(exception, timeInput)
+            },
+            end (...endArgs) {
+              vercelAiTracingChannel.asyncEnd.publish(ctx)
+              return span.end(...endArgs)
+            },
+          }
 
           return originalCb.call(this, freshSpan)
         }
@@ -233,4 +236,4 @@ for (const hook of getHooks('ai')) {
   })
 }
 
-module.exports = { wrapModelWithLifecycle }
+module.exports = { wrapModelWithLifecycle, wrapTracer }
