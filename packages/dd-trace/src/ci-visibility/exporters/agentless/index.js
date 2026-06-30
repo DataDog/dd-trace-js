@@ -9,7 +9,8 @@ const CoverageWriter = require('./coverage-writer')
 class AgentlessCiVisibilityExporter extends CiVisibilityExporter {
   constructor (config) {
     super(config)
-    const { tags, site, DD_CIVISIBILITY_AGENTLESS_URL: url, isTestDynamicInstrumentationEnabled } = config
+    const { tags, site, testOptimization } = config
+    const { DD_CIVISIBILITY_AGENTLESS_URL: url } = testOptimization
     // we don't need to request /info because we are using agentless by configuration
     this._isInitialized = true
     this._resolveCanUseCiVisProtocol(true)
@@ -23,7 +24,7 @@ class AgentlessCiVisibilityExporter extends CiVisibilityExporter {
 
     this._codeCoverageReportUrl = url || new URL(`https://ci-intake.${site}`)
 
-    if (isTestDynamicInstrumentationEnabled) {
+    if (testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED) {
       const DynamicInstrumentationLogsWriter = require('./di-logs-writer')
       this._logsUrl = url || new URL(`https://http-intake.logs.${site}`)
       this._logsWriter = new DynamicInstrumentationLogsWriter({ url: this._logsUrl, tags })

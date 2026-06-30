@@ -26,6 +26,34 @@ module.exports = defineConfig({
           return ddAfterSpec(...args)
         })
       }
+      if (process.env.CYPRESS_DD_BEFORE_EACH_NO_RESULT_ONCE) {
+        const ddTracePlugin = require('dd-trace/ci/cypress/plugin')
+        let ddBeforeEachCalls = 0
+
+        const wrappedOn = (event, handler) => {
+          if (event !== 'task' || !handler['dd:beforeEach']) {
+            on(event, handler)
+            return
+          }
+
+          const ddBeforeEach = handler['dd:beforeEach']
+          on('task', {
+            ...handler,
+            'dd:beforeEach': (test) => {
+              ddBeforeEachCalls++
+              // eslint-disable-next-line no-console
+              console.log(`[datadog:test] dd:beforeEach call ${ddBeforeEachCalls}`)
+              const result = ddBeforeEach(test)
+              if (ddBeforeEachCalls === 1) {
+                return null
+              }
+              return result
+            },
+          })
+        }
+
+        return ddTracePlugin(wrappedOn, config)
+      }
       if (process.env.CYPRESS_ENABLE_MANUAL_PLUGIN) {
         return require('dd-trace/ci/cypress/plugin')(on, config)
       }

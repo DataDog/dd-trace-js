@@ -2,34 +2,54 @@
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
+const documentSources = new WeakMap()
+
 class GraphQLParsePlugin extends TracingPlugin {
   static id = 'graphql'
   static operation = 'parser'
+  static prefix = 'tracing:orchestrion:graphql:apm:graphql:parser'
 
   bindStart (ctx) {
+    const source = ctx.arguments?.[0]
+
     this.startSpan('graphql.parse', {
       service: this.config.service,
       type: 'graphql',
       meta: {},
     }, ctx)
 
+    ctx.ddSource = source
+
     return ctx.currentStore
   }
 
-  finish (ctx) {
-    const { source, document, docSource } = ctx
+  end (ctx) {
+    const source = ctx.ddSource
+    const document = ctx.result
     const span = ctx?.currentStore?.span || this.activeSpan
 
-    if (this.config.source && document) {
+    let docSource
+    if (document) {
+      if (source) {
+        docSource = source.body || source
+        documentSources.set(document, docSource)
+      } else {
+        docSource = documentSources.get(document)
+      }
+    }
+
+    if (this.config.source && docSource) {
       span.setTag('graphql.source', docSource)
     }
 
     this.config.hooks.parse(span, source, document)
 
-    super.finish(ctx)
+    span.finish()
 
     return ctx.parentStore
   }
 }
+
+GraphQLParsePlugin.documentSources = documentSources
 
 module.exports = GraphQLParsePlugin

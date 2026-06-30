@@ -304,7 +304,7 @@ describe('SpanStatsProcessor', () => {
 
   const config = {
     stats: {
-      enabled: true,
+      DD_TRACE_STATS_COMPUTATION_ENABLED: true,
       interval: 10,
     },
     hostname: '127.0.0.1',
@@ -328,14 +328,14 @@ describe('SpanStatsProcessor', () => {
     assert.strictEqual(processor.interval, config.stats.interval)
     assert.ok(processor.buckets instanceof TimeBuckets)
     assert.strictEqual(processor.hostname, hostname())
-    assert.strictEqual(processor.enabled, config.stats.enabled)
+    assert.strictEqual(processor.enabled, config.stats.DD_TRACE_STATS_COMPUTATION_ENABLED)
     assert.strictEqual(processor.env, config.env)
     assert.deepStrictEqual(processor.tags, config.tags)
     assert.strictEqual(processor.version, config.version)
   })
 
   it('should construct a disabled instance', () => {
-    const disabledConfig = { ...config, stats: { enabled: false, interval: 10 } }
+    const disabledConfig = { ...config, stats: { DD_TRACE_STATS_COMPUTATION_ENABLED: false, interval: 10 } }
     const processor = new SpanStatsProcessor(disabledConfig)
 
     assert.strictEqual(processor.enabled, false)

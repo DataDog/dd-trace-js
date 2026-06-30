@@ -93,14 +93,14 @@ class AIGuard extends NoopAIGuard {
   constructor (tracer, config) {
     super()
 
-    if (!config.apiKey || !config.DD_APP_KEY) {
+    if (!config.DD_API_KEY || !config.DD_APP_KEY) {
       log.error('AIGuard: missing api and/or app keys, use env DD_API_KEY and DD_APP_KEY')
       this.#initialized = false
       return
     }
     this.#tracer = tracer
     this.#headers = {
-      'DD-API-KEY': config.apiKey,
+      'DD-API-KEY': config.DD_API_KEY,
       'DD-APPLICATION-KEY': config.DD_APP_KEY,
       'DD-AI-GUARD-VERSION': tracerVersion,
       'DD-AI-GUARD-SOURCE': 'SDK',
