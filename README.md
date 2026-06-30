@@ -29,7 +29,7 @@ Most of the documentation for `dd-trace` is available on these webpages:
 | [`v3`](https://github.com/DataDog/dd-trace-js/tree/v3.x) | ![npm v3](https://img.shields.io/npm/v/dd-trace/latest-node14?color=white&label=%20&style=flat-square) | `>= v14` | NO | YES | **EOL** | 2022-08-15     | 2024-05-15  |
 | [`v4`](https://github.com/DataDog/dd-trace-js/tree/v4.x) | ![npm v4](https://img.shields.io/npm/v/dd-trace/latest-node16?color=white&label=%20&style=flat-square) | `>= v16` | YES | YES | **EOL**     | 2023-05-12     | 2025-01-11     |
 | [`v5`](https://github.com/DataDog/dd-trace-js/tree/v5.x) | ![npm v5](https://img.shields.io/npm/v/dd-trace/latest-node18?color=white&label=%20&style=flat-square)  | `>= v18` | YES | YES | **Maintenance** | 2024-01-11     | Unknown     |
-| [`v6`](https://github.com/DataDog/dd-trace-js/tree/v6.x) | ![npm v6](https://img.shields.io/npm/v/dd-trace/latest?color=white&label=%20&style=flat-square)         | `>= v22` | YES | YES | **Current**     | 2026-06-30     | Unknown     |
+| [`v6`](https://github.com/DataDog/dd-trace-js/tree/v6.x) | ![npm v6](https://img.shields.io/npm/v/dd-trace/latest?color=white&label=%20&style=flat-square)         | `>= v22` | YES | YES | **Current**     | 2026-07-02     | Unknown     |
 
 * EOL = End-of-life
 * SSI = Single-Step Install
