@@ -293,7 +293,9 @@ class JestPlugin extends CiPlugin {
       })
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_CREATED, 'suite')
       if (_ddTestCodeCoverageEnabled) {
-        this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_STARTED, 'suite', { library: 'istanbul' })
+        this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_STARTED, 'suite', {
+          library: testEnvironmentOptions._ddTestCodeCoverageEngine || 'istanbul',
+        })
       }
       this.testSuiteSpanPerTestSuiteAbsolutePath.set(testSuiteAbsolutePath, this.testSuiteSpan)
     })
@@ -401,7 +403,12 @@ class JestPlugin extends CiPlugin {
      * because this subscription happens in a different process from the one
      * fetching the ITR config.
      */
-    this.addSub('ci:jest:test-suite:code-coverage', ({ coverageFiles, testSuite, mockedFiles }) => {
+    this.addSub('ci:jest:test-suite:code-coverage', ({
+      coverageFiles,
+      testSuite,
+      mockedFiles,
+      coverageLibrary = 'istanbul',
+    }) => {
       if (!coverageFiles.length) {
         this.telemetry.count(TELEMETRY_CODE_COVERAGE_EMPTY)
       }
@@ -415,7 +422,7 @@ class JestPlugin extends CiPlugin {
       }
 
       this.tracer._exporter.exportCoverage(formattedCoverage)
-      this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_FINISHED, 'suite', { library: 'istanbul' })
+      this.telemetry.ciVisEvent(TELEMETRY_CODE_COVERAGE_FINISHED, 'suite', { library: coverageLibrary })
       this.telemetry.distribution(TELEMETRY_CODE_COVERAGE_NUM_FILES, {}, files.length)
     })
 

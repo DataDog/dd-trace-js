@@ -142,6 +142,7 @@ const newTestsWithDynamicNames = new Set()
 const loggedAttemptToFixTests = new Set()
 const testSuiteMockedFiles = new Map()
 const testsToBeRetried = new Set()
+const testSuiteTouchedFiles = new Map()
 // Per-test: how many EFD retries were determined after the first execution.
 const efdDeterminedRetries = new Map()
 // Tests whose first run exceeded the 5-min threshold — tagged "slow".
@@ -152,6 +153,7 @@ const efdNewTestCandidates = new Set()
 const newTests = new Set()
 const testSuiteJestObjects = new Map()
 const wrappedJestGlobals = new WeakSet()
+const wrappedJestEsmLoaders = new WeakSet()
 const wrappedJestObjects = new WeakSet()
 const wrappedWorkerInitializers = new WeakSet()
 const publishedRuntimeReferenceErrors = new WeakMap()
@@ -166,9 +168,13 @@ const MINIMUM_JEST_WORKER_VERSION_BEFORE_30 = DD_MAJOR >= 6 ? '>=28.0.0 <30.0.0'
 const MINIMUM_JEST_CONFIG_ASYNC_VERSION = DD_MAJOR >= 6 ? '>=28.0.0' : '>=25.1.0'
 const MINIMUM_JEST_TEST_SCHEDULER_VERSION = DD_MAJOR >= 6 ? '>=28.0.0' : '>=27.0.0'
 const MINIMUM_JEST_COVERAGE_BACKFILL_VERSION = '>=28.0.0'
+const JEST_RUNTIME_COVERAGE_VERSION_RANGE = '>=28.0.0'
+const JEST_TIA_COVERAGE_ENGINE_RUNTIME = 'runtime'
+const JEST_TIA_COVERAGE_ENGINE_ISTANBUL = 'istanbul'
 const atrSuppressedErrors = new Map()
 let hasWarnedDeprecatedJestVersion = false
 let isJestCoverageBackfillSupported = false
+let isJestRuntimeCoverageEngineSupported = false
 let hasFinishedTestSession = false
 
 // Track quarantined tests whose errors were suppressed, keyed by "suite › testName"
@@ -1175,12 +1181,33 @@ function hasSkippableSuitesCoverage () {
 }
 
 function shouldCollectJestCoverageForTia () {
-  return shouldReportJestSuiteCoverageForTia() ||
+  return shouldReportJestSuiteCoverageWithIstanbulForTia() ||
     (isJestCoverageBackfillSupported && isItrEnabled && isCoverageReportUploadEnabled)
 }
 
 function shouldReportJestSuiteCoverageForTia () {
   return isItrEnabled && isCodeCoverageEnabled
+}
+
+/**
+ * Checks whether Jest's Istanbul coverage should be enabled for TIA suite coverage.
+ *
+ * @returns {boolean}
+ */
+function shouldReportJestSuiteCoverageWithIstanbulForTia () {
+  return shouldReportJestSuiteCoverageForTia() && !shouldUseJestRuntimeCoverageForTia()
+}
+
+/**
+ * Checks whether the Jest runtime coverage engine should collect TIA suite coverage.
+ *
+ * @returns {boolean}
+ */
+function shouldUseJestRuntimeCoverageForTia () {
+  return isJestRuntimeCoverageEngineSupported &&
+    shouldReportJestSuiteCoverageForTia() &&
+    !isCoverageReportUploadEnabled &&
+    !isUserCodeCoverageEnabled
 }
 
 function hasJestCoverageMap () {
@@ -1588,6 +1615,8 @@ function getCliWrapper (isNewJestVersion) {
     warnDeprecatedJestVersion(jestVersion)
     isJestCoverageBackfillSupported = !!jestVersion &&
       satisfies(jestVersion, MINIMUM_JEST_COVERAGE_BACKFILL_VERSION)
+    isJestRuntimeCoverageEngineSupported = !!jestVersion &&
+      satisfies(jestVersion, JEST_RUNTIME_COVERAGE_VERSION_RANGE)
 
     if (isNewJestVersion) {
       cli = shimmer.wrap(
@@ -1925,6 +1954,135 @@ function publishTestSuiteFinish (payload, waitForFinish) {
 function cleanupTestSuiteState (testSuiteAbsolutePath) {
   testSuiteMockedFiles.delete(testSuiteAbsolutePath)
   testSuiteJestObjects.delete(testSuiteAbsolutePath)
+  testSuiteTouchedFiles.delete(testSuiteAbsolutePath)
+}
+
+/**
+ * @typedef {object} JestRuntimeCoverageResolver
+ * @property {(moduleName: string) => boolean} [isCoreModule]
+ * @property {(from: string|undefined, moduleName: string) => string} [resolveCjs]
+ */
+
+/**
+ * @typedef {object} JestRuntimeCoverageRuntime
+ * @property {string} [_testPath]
+ * @property {{ testEnvironmentOptions?: { _ddTestCodeCoverageEngine?: string } }} [_config]
+ * @property {JestRuntimeCoverageResolver} [_resolver]
+ * @property {(from: string|undefined, moduleName: string, options: { conditions?: string[] }) => string}
+ *   [_resolveCjsModule]
+ * @property {string[]} [cjsConditions]
+ * @property {{ resolution?: JestRuntimeCoverageResolver }} [cjsLoader]
+ * @property {{ loadEsmModule?: (modulePath: string, query?: string) => unknown }} [esmLoader]
+ */
+
+/**
+ * Records a file executed by Jest's runtime for its active test suite.
+ *
+ * @param {JestRuntimeCoverageRuntime} runtime
+ * @param {string|undefined} filename
+ * @returns {void}
+ */
+function recordJestRuntimeTouchedFile (runtime, filename) {
+  const testSuiteAbsolutePath = runtime?._testPath
+  if (!testSuiteAbsolutePath || typeof filename !== 'string' || !path.isAbsolute(filename)) return
+
+  let touchedFiles = testSuiteTouchedFiles.get(testSuiteAbsolutePath)
+  if (!touchedFiles) {
+    touchedFiles = new Set()
+    testSuiteTouchedFiles.set(testSuiteAbsolutePath, touchedFiles)
+  }
+  touchedFiles.add(filename)
+}
+
+/**
+ * Checks whether the parent Jest process selected runtime TIA coverage for this suite.
+ *
+ * @param {JestRuntimeCoverageRuntime} runtime
+ * @returns {boolean}
+ */
+function shouldRecordJestRuntimeCoverage (runtime) {
+  return runtime?._config?.testEnvironmentOptions?._ddTestCodeCoverageEngine === JEST_TIA_COVERAGE_ENGINE_RUNTIME
+}
+
+/**
+ * Resolves a Jest runtime require call to the file path that will be executed.
+ *
+ * @param {JestRuntimeCoverageRuntime} runtime
+ * @param {string|undefined} from
+ * @param {string|undefined} moduleName
+ * @returns {string|undefined}
+ */
+function resolveJestRuntimeRequiredFile (runtime, from, moduleName) {
+  if (typeof moduleName !== 'string') return
+  if (path.isAbsolute(moduleName)) return moduleName
+
+  try {
+    if (
+      runtime?._resolver?.isCoreModule?.(moduleName) ||
+      runtime?.cjsLoader?.resolution?.isCoreModule?.(moduleName)
+    ) {
+      return
+    }
+
+    if (typeof runtime?._resolveCjsModule === 'function') {
+      return runtime._resolveCjsModule(from, moduleName, { conditions: runtime.cjsConditions })
+    }
+
+    const resolveCjs = runtime?.cjsLoader?.resolution?.resolveCjs
+    if (typeof resolveCjs === 'function') {
+      return resolveCjs.call(runtime.cjsLoader.resolution, from, moduleName)
+    }
+  } catch {
+    // If Jest cannot resolve this module, preserve Jest's original error path.
+  }
+}
+
+/**
+ * Checks whether a file is inside a directory without treating sibling prefixes as matches.
+ *
+ * @param {string} filename
+ * @param {string|undefined} directory
+ * @returns {boolean}
+ */
+function isPathInsideDirectory (filename, directory) {
+  if (!directory) return false
+
+  const relativePath = path.relative(directory, filename)
+  return relativePath === '' || (
+    !!relativePath &&
+    !relativePath.startsWith('..') &&
+    !path.isAbsolute(relativePath)
+  )
+}
+
+/**
+ * Converts runtime-touched files into the coverage-file shape used by the CITESTCOV encoder.
+ *
+ * @param {string} testSuiteAbsolutePath
+ * @param {string} rootDir
+ * @param {string[]} mockedFiles
+ * @returns {{ filename: string }[]}
+ */
+function getJestRuntimeTouchedCoverageFiles (testSuiteAbsolutePath, rootDir, mockedFiles) {
+  const touchedFiles = testSuiteTouchedFiles.get(testSuiteAbsolutePath)
+  if (!touchedFiles?.size) return []
+
+  const mockedFileSet = mockedFiles.length ? new Set(mockedFiles) : undefined
+  const coverageFiles = []
+  for (const filename of touchedFiles) {
+    if (
+      filename === testSuiteAbsolutePath ||
+      mockedFileSet?.has(filename) ||
+      filename.includes(`${path.sep}node_modules${path.sep}`) ||
+      !isPathInsideDirectory(filename, rootDir)
+    ) {
+      continue
+    }
+
+    coverageFiles.push({ filename: getTestSuitePath(filename, rootDir) })
+  }
+
+  return coverageFiles
 }
 
 addHook({
@@ -2045,19 +2203,21 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
        */
       if (environment.testEnvironmentOptions?._ddTestCodeCoverageEnabled) {
         const root = environment.repositoryRoot || environment.rootDir
-
-        const coverageFiles = getCoveredFilesFromCoverage(environment.global.__coverage__)
-          .map(file => ({
-            ...file,
-            filename: getTestSuitePath(file.filename, root),
-          }))
+        const coverageEngine = environment.testEnvironmentOptions._ddTestCodeCoverageEngine
         const mockedFiles = getMockedFiles(environment.testSuiteAbsolutePath)
-          .map(file => getTestSuitePath(file, root))
+        const coverageFiles = coverageEngine === JEST_TIA_COVERAGE_ENGINE_RUNTIME
+          ? getJestRuntimeTouchedCoverageFiles(environment.testSuiteAbsolutePath, root, mockedFiles)
+          : getCoveredFilesFromCoverage(environment.global.__coverage__)
+            .map(file => ({
+              ...file,
+              filename: getTestSuitePath(file.filename, root),
+            }))
 
         testSuiteCodeCoverageCh.publish({
           coverageFiles,
           testSuite: environment.testSourceFile,
-          mockedFiles,
+          mockedFiles: mockedFiles.map(file => getTestSuitePath(file, root)),
+          coverageLibrary: coverageEngine || JEST_TIA_COVERAGE_ENGINE_ISTANBUL,
           testSuiteAbsolutePath: environment.testSuiteAbsolutePath,
         })
       }
@@ -2154,6 +2314,9 @@ function configureTestEnvironment (readConfigsResult) {
     const testEnvironmentOptions = config.testEnvironmentOptions || {}
     testEnvironmentOptions._ddRepositoryRoot = repositoryRoot
     testEnvironmentOptions._ddTestCodeCoverageEnabled = shouldReportJestSuiteCoverageForTia()
+    testEnvironmentOptions._ddTestCodeCoverageEngine = shouldUseJestRuntimeCoverageForTia()
+      ? JEST_TIA_COVERAGE_ENGINE_RUNTIME
+      : JEST_TIA_COVERAGE_ENGINE_ISTANBUL
 
     return {
       ...config,
@@ -2211,6 +2374,7 @@ const DD_TEST_ENVIRONMENT_OPTION_KEYS = [
   '_ddEarlyFlakeDetectionSlowTestRetries',
   '_ddRepositoryRoot',
   '_ddTestCodeCoverageEnabled',
+  '_ddTestCodeCoverageEngine',
   '_ddIsFlakyTestRetriesEnabled',
   '_ddFlakyTestRetriesCount',
   '_ddItrSkippingEnabledTags',
@@ -2394,6 +2558,28 @@ function wrapJestGlobalsForRuntime (runtime) {
   })
 }
 
+/**
+ * Wraps Jest's modern per-runtime ESM loader so native ESM static and dynamic imports
+ * are visible to the runtime TIA coverage collector.
+ *
+ * @param {JestRuntimeCoverageRuntime} runtime
+ * @returns {void}
+ */
+function wrapJestRuntimeEsmLoader (runtime) {
+  const esmLoader = runtime?.esmLoader
+  if (!esmLoader || wrappedJestEsmLoaders.has(esmLoader) || typeof esmLoader.loadEsmModule !== 'function') {
+    return
+  }
+
+  wrappedJestEsmLoaders.add(esmLoader)
+  shimmer.wrap(esmLoader, 'loadEsmModule', loadEsmModule => function (modulePath) {
+    if (shouldRecordJestRuntimeCoverage(runtime)) {
+      recordJestRuntimeTouchedFile(runtime, modulePath)
+    }
+    return loadEsmModule.apply(this, arguments)
+  })
+}
+
 function getLastLoggedReferenceError (runtime) {
   const loggedReferenceErrors = runtime?.loggedReferenceErrors
   if (!loggedReferenceErrors?.size) return
@@ -2469,8 +2655,40 @@ addHook({
     })
   }
 
+  // Jest runtime loaders are version-dependent internals created at runtime, so keep this in the existing
+  // shimmer hook rather than trying to express it with Orchestrion's static rewrites.
+  if (typeof Runtime.prototype._execModule === 'function') {
+    shimmer.wrap(Runtime.prototype, '_execModule', _execModule => function (localModule) {
+      if (shouldRecordJestRuntimeCoverage(this)) {
+        recordJestRuntimeTouchedFile(this, localModule?.filename)
+      }
+      return _execModule.apply(this, arguments)
+    })
+  }
+
+  if (typeof Runtime.prototype.loadEsmModule === 'function') {
+    shimmer.wrap(Runtime.prototype, 'loadEsmModule', loadEsmModule => function (modulePath) {
+      if (shouldRecordJestRuntimeCoverage(this)) {
+        recordJestRuntimeTouchedFile(this, modulePath)
+      }
+      return loadEsmModule.apply(this, arguments)
+    })
+  }
+
+  if (typeof Runtime.prototype.unstable_importModule === 'function') {
+    shimmer.wrap(Runtime.prototype, 'unstable_importModule', unstableImportModule => function () {
+      wrapJestGlobalsForRuntime(this)
+      wrapJestRuntimeEsmLoader(this)
+      return unstableImportModule.apply(this, arguments)
+    })
+  }
+
   shimmer.wrap(Runtime.prototype, 'requireModule', requireModule => function (from, moduleName) {
     wrapJestGlobalsForRuntime(this)
+    wrapJestRuntimeEsmLoader(this)
+    if (shouldRecordJestRuntimeCoverage(this)) {
+      recordJestRuntimeTouchedFile(this, resolveJestRuntimeRequiredFile(this, from, moduleName))
+    }
     try {
       return requireModule.apply(this, arguments)
     } catch (error) {
@@ -2483,6 +2701,7 @@ addHook({
 
   shimmer.wrap(Runtime.prototype, 'requireModuleOrMock', requireModuleOrMock => function (from, moduleName) {
     wrapJestGlobalsForRuntime(this)
+    wrapJestRuntimeEsmLoader(this)
     // `requireModuleOrMock` may log errors to the console. If we don't remove ourselves
     // from the stack trace, the user might see a useless stack trace rather than the error
     // that `jest` tries to show.
