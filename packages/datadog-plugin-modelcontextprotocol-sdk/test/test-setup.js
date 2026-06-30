@@ -86,6 +86,10 @@ class ModelcontextprotocolSdkTestSetup {
     return this._client.listResources()
   }
 
+  async clientListResourceTemplates () {
+    return this._client.listResourceTemplates()
+  }
+
   async clientReadResource () {
     return this._client.readResource({ uri: 'file:///test-resource.txt' })
   }

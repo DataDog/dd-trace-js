@@ -36,16 +36,28 @@ describe('esm', () => {
     })
 
     it('is instrumented', async () => {
+      const nodeOptions = [
+        process.env.NODE_OPTIONS,
+        '--import dd-trace/initialize.mjs',
+      ].filter(Boolean).join(' ')
+
+      const traces = []
       const res = agent.assertMessageReceived(({ headers, payload }) => {
         assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
         assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
-        assert.strictEqual(checkSpansForServiceName(payload, 'mcp.client.tool.call'), true)
-        assert.strictEqual(checkSpansForServiceName(payload, 'mcp.server.request'), true)
-        assert.strictEqual(checkSpansForServiceName(payload, 'mcp.server.tool.call'), true)
+        traces.push(...payload)
+        assert.strictEqual(checkSpansForServiceName(traces, 'mcp.tools.list'), true)
+        assert.strictEqual(checkSpansForServiceName(traces, 'mcp.client.tool.call'), true)
+        assert.strictEqual(checkSpansForServiceName(traces, 'mcp.resources.list'), true)
+        assert.strictEqual(checkSpansForServiceName(traces, 'mcp.resource.read'), true)
+        assert.strictEqual(checkSpansForServiceName(traces, 'mcp.prompts.list'), true)
+        assert.strictEqual(checkSpansForServiceName(traces, 'mcp.prompt.get'), true)
+        assert.strictEqual(checkSpansForServiceName(traces, 'mcp.server.request'), true)
+        assert.strictEqual(checkSpansForServiceName(traces, 'mcp.server.tool.call'), true)
       })
 
       proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), 'server.mjs', agent.port, {
-        NODE_OPTIONS: '--import dd-trace/initialize.mjs',
+        NODE_OPTIONS: nodeOptions,
       })
 
       await res

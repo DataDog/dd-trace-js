@@ -11,6 +11,19 @@ server.registerTool(
   async ({ message }) => ({ content: [{ type: 'text', text: message }] })
 )
 
+server.registerResource(
+  'test-resource',
+  'file:///test-resource.txt',
+  { description: 'A test resource', mimeType: 'text/plain' },
+  async () => ({ contents: [{ uri: 'file:///test-resource.txt', text: 'resource content' }] })
+)
+
+server.registerPrompt(
+  'test-prompt',
+  { description: 'A test prompt', argsSchema: {} },
+  async () => ({ messages: [{ role: 'user', content: { type: 'text', text: 'test prompt message' } }] })
+)
+
 const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
 await server.connect(serverTransport)
 
@@ -19,6 +32,10 @@ await client.connect(clientTransport)
 
 await client.listTools()
 await client.callTool({ name: 'echo', arguments: { message: 'hello' } })
+await client.listResources()
+await client.readResource({ uri: 'file:///test-resource.txt' })
+await client.listPrompts()
+await client.getPrompt({ name: 'test-prompt', arguments: {} })
 
 await client.close()
 await server.close()

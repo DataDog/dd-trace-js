@@ -101,6 +101,35 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
 
       return traceAssertion
     })
+
+    it('should use a fallback error message when an isError result has no text content', async () => {
+      const emptyErrorTool = testSetup.server.registerTool(
+        'empty-error-tool',
+        { description: 'A tool with an empty error result', inputSchema: {} },
+        async () => ({ content: [], isError: true })
+      )
+
+      const traceAssertion = expectSomeSpan(agent, {
+        name: 'mcp.server.tool.call',
+        type: 'mcp',
+        resource: 'empty-error-tool',
+        error: 1,
+        meta: {
+          component: 'modelcontextprotocol_server_tool',
+          '_dd.integration': 'modelcontextprotocol_server_tool',
+          'span.kind': 'internal',
+          'error.message': 'Tool call returned isError: true',
+        },
+      })
+
+      try {
+        await testSetup.clientCallTool('empty-error-tool')
+
+        return await traceAssertion
+      } finally {
+        emptyErrorTool.disable()
+      }
+    })
   })
 
   describe('Client.listTools() - mcp.tools.list', () => {
@@ -340,6 +369,34 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
       await assert.rejects(
         () => testSetup.clientCallMalformedTool(),
         { message: /expected string/ }
+      )
+
+      return traceAssertion
+    })
+
+    it('should finish server request spans with error when a custom handler rejects', async () => {
+      const { ListResourceTemplatesRequestSchema } = meta.versionMod.get('@modelcontextprotocol/sdk/types.js')
+
+      testSetup.server.server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
+        throw new Error('template handler failed')
+      })
+
+      const traceAssertion = expectSomeSpan(agent, {
+        name: 'mcp.server.request',
+        type: 'mcp',
+        resource: 'resources/templates/list',
+        error: 1,
+        meta: {
+          component: 'modelcontextprotocol_server',
+          '_dd.integration': 'modelcontextprotocol_server',
+          'span.kind': 'server',
+          'error.message': 'template handler failed',
+        },
+      })
+
+      await assert.rejects(
+        () => testSetup.clientListResourceTemplates(),
+        { message: /template handler failed/ }
       )
 
       return traceAssertion
