@@ -50,19 +50,11 @@ function getDeltaTemporality () {
 const ERROR_STATUS_ATTR = { key: 'status.code', value: { intValue: 2 } }
 
 /**
- * Transforms span stats bucket data into an OTLP ExportMetricsServiceRequest.
- *
- * Emits a single histogram metric (delta temporality):
- *   - traces.span.sdk.metrics.duration (Histogram)
- *
- * Each aggregation key emits up to 2 data points (ok and error), each a fixed explicit-bounds
- * histogram derived from the group's DDSketch. Errors carry status.code=ERROR; top-level is conveyed
- * via the per-group dd.span.top_level attribute (true only when every hit was top-level), which (like
- * all dd.* attributes) is omitted in OTel-semantics mode. Data points with count=0 are omitted.
- *
- * Service identity (service.name/service.version/deployment.environment.name) is carried on the
- * resource. A span whose service differs from the configured default service additionally carries
- * service.name on its data point.
+ * Transforms span stats buckets into an OTLP ExportMetricsServiceRequest containing a single
+ * delta `traces.span.sdk.metrics.duration` histogram. Each aggregation key produces up to two
+ * data points (ok and error). Errors carry `status.code=ERROR`; `dd.*` attributes are omitted in
+ * OTel-semantics mode. Service identity lives on the resource; a data point carries `service.name`
+ * only when it differs from the configured default.
  *
  * @class OtlpStatsTransformer
  * @augments OtlpTransformerBase
@@ -72,11 +64,10 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
   #defaultService
 
   /**
-   * @param {import('@opentelemetry/api').Attributes} resourceAttributes - Resource attributes
-   * @param {string} protocol - OTLP protocol (http/protobuf or http/json)
-   * @param {boolean} [otelSemanticsEnabled] - When true, only OTel attributes are emitted (no dd.*)
-   * @param {string} [defaultService] - The configured default service (DD_SERVICE), reported on the
-   *   resource. A data point carries service.name only when its span's service differs from this.
+   * @param {import('@opentelemetry/api').Attributes} resourceAttributes
+   * @param {string} protocol - 'http/protobuf' or 'http/json'
+   * @param {boolean} [otelSemanticsEnabled]
+   * @param {string} [defaultService]
    */
   constructor (resourceAttributes, protocol, otelSemanticsEnabled = false, defaultService = '') {
     super(resourceAttributes, protocol, 'span-stats')
@@ -85,11 +76,9 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
   }
 
   /**
-   * Transforms drained span stat buckets to an OTLP metrics payload.
-   *
    * @param {Array<{timeNs: number, bucket: import('../../span_stats').SpanBuckets}>} drained
-   * @param {number} bucketSizeNs - Bucket duration in nanoseconds
-   * @returns {Buffer} Serialized OTLP ExportMetricsServiceRequest
+   * @param {number} bucketSizeNs
+   * @returns {Buffer}
    */
   transform (drained, bucketSizeNs) {
     const isJson = this.protocol === 'http/json'
@@ -132,7 +121,6 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
       metrics: [
         {
           name: 'traces.span.sdk.metrics.duration',
-          description: '',
           unit: 's',
           histogram: { dataPoints, aggregationTemporality: temporality },
         },
@@ -156,10 +144,6 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
   }
 
   /**
-   * Builds the shared OTLP data point attributes for an aggregation key. OTel semantic-convention
-   * attributes are emitted in both modes; Datadog datadog.* attributes are added only in default mode.
-   * Values are emitted with their native OTLP types (http.response.status_code: int, rpc.response.status_code: string).
-   *
    * @param {import('../../span_stats').SpanAggKey} aggKey
    * @returns {object[]}
    */

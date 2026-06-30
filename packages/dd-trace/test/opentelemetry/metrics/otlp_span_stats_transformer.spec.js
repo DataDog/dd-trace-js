@@ -9,7 +9,7 @@ const OtlpStatsTransformer = require('../../../src/opentelemetry/metrics/otlp_sp
 const { EXPLICIT_BOUNDS_SECONDS } = OtlpStatsTransformer
 const { SpanBuckets } = require('../../../src/span_stats')
 const { getProtobufTypes } = require('../../../src/opentelemetry/otlp/protobuf_loader')
-const { HTTP_STATUS_CODE, HTTP_METHOD, HTTP_ROUTE, SPAN_KIND } = require('../../../../../ext/tags')
+const { HTTP_STATUS_CODE, HTTP_METHOD, HTTP_ROUTE, SPAN_KIND, GRPC_STATUS_CODE } = require('../../../../../ext/tags')
 const { ORIGIN_KEY, TOP_LEVEL_KEY } = require('../../../src/constants')
 
 const METRIC_NAME = 'traces.span.sdk.metrics.duration'
@@ -102,7 +102,7 @@ describe('OtlpStatsTransformer', () => {
           [HTTP_METHOD]: 'POST',
           [HTTP_ROUTE]: '/users/:id',
           [SPAN_KIND]: 'server',
-          'grpc.status.code': '0',
+          [GRPC_STATUS_CODE]: '0',
           [ORIGIN_KEY]: 'synthetics',
         },
       })
@@ -125,7 +125,7 @@ describe('OtlpStatsTransformer', () => {
     it('translates grpc.status.code to rpc.response.status_code as a string', () => {
       // The gRPC plugin records the status code as a numeric metric; emitted as a string to align
       // with libdatadog (kv_str). 0 (OK) is a common value and must not be filtered out.
-      const span = makeSpan({ meta: {}, metrics: { 'grpc.status.code': 0 } })
+      const span = makeSpan({ meta: {}, metrics: { [GRPC_STATUS_CODE]: 0 } })
       const payload = JSON.parse(transformer.transform(makeDrained(12340000000000, [span]), BUCKET_SIZE_NS))
 
       assert.strictEqual(attrMapOf(dataPointsOf(payload)[0])['rpc.response.status_code'], '0')
