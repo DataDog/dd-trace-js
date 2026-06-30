@@ -1,0 +1,65 @@
+{
+  "name": "openfeature",
+  "run": "node index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "allow_baseline_skip_with_source_changes": true,
+  "cachegrind": false,
+  "iterations": 10,
+  "instructions": true,
+  "variants": {
+    "flag-eval-logging-hook-typical": {
+      "env": {
+        "VARIANT": "flag-eval-logging-hook",
+        "COUNT": "40000000",
+        "NUM_FLAGS": "100",
+        "NUM_USERS": "50",
+        "NUM_FIELDS": "10"
+      }
+    },
+    "flag-eval-logging-hook-stress": {
+      "env": {
+        "VARIANT": "flag-eval-logging-hook",
+        "COUNT": "10000000",
+        "NUM_FLAGS": "10",
+        "NUM_USERS": "1000",
+        "NUM_FIELDS": "250"
+      }
+    },
+    "flag-eval-logging-hook-scale": {
+      "env": {
+        "VARIANT": "flag-eval-logging-hook",
+        "COUNT": "10000000",
+        "NUM_FLAGS": "2500",
+        "NUM_USERS": "500",
+        "NUM_FIELDS": "20"
+      }
+    },
+    "aggregate-typical": {
+      "env": {
+        "VARIANT": "aggregate",
+        "COUNT": "1000000",
+        "NUM_FLAGS": "100",
+        "NUM_USERS": "50",
+        "NUM_FIELDS": "10"
+      }
+    },
+    "aggregate-stress": {
+      "env": {
+        "VARIANT": "aggregate",
+        "COUNT": "500000",
+        "NUM_FLAGS": "10",
+        "NUM_USERS": "1000",
+        "NUM_FIELDS": "250"
+      }
+    },
+    "aggregate-scale": {
+      "env": {
+        "VARIANT": "aggregate",
+        "COUNT": "500000",
+        "NUM_FLAGS": "2500",
+        "NUM_USERS": "500",
+        "NUM_FIELDS": "20"
+      }
+    }
+  }
+}
