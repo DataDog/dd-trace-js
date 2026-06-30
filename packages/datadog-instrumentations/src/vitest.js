@@ -1203,6 +1203,8 @@ function createTestModuleFromFile (file) {
   return {
     id: file.id,
     moduleId: file.filepath,
+    project: file.project,
+    projectName: file.projectName,
     task: file,
   }
 }
