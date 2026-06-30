@@ -7,17 +7,27 @@ const path = require('node:path')
 
 const axios = require('axios')
 const { after, before, describe } = require('mocha')
+const satisfies = require('semifies')
 
 const agent = require('../../../plugins/agent')
 const { withVersions } = require('../../../setup/mocha')
 const { prepareTestServerForIastInExpress } = require('../utils')
+const { NODE_MAJOR } = require('../../../../../../version')
 
-// TODO(APPSEC-62431): re-enable once duplicate NOSQL_MONGODB_INJECTION
-// detection (N+1 !== N) is fixed
-describe.skip('nosql injection detection with mquery', () => {
+describe('nosql injection detection with mquery', () => {
   // https://github.com/fiznool/express-mongo-sanitize/issues/200
   withVersions('mquery', 'express', '>4.18.0 <5.0.0', expressVersion => {
     withVersions('mquery', 'mongodb', mongodbVersion => {
+      const mongodb = require(`../../../../../../versions/mongodb@${mongodbVersion}`)
+
+      // TODO: remove once Node.js 18 is no longer supported
+      if (satisfies(mongodb.version(), '>=7') && NODE_MAJOR < 20) {
+        describe.skip(
+          `Skipping the tests as mongodb@${mongodb.version()} requires Node.js >= 20 (current: ${NODE_MAJOR})`
+        )
+        return
+      }
+
       const vulnerableMethodFilename = 'mquery-vulnerable-method.js'
       let client, testCollection, tmpFilePath, dbName
 
@@ -28,7 +38,7 @@ describe.skip('nosql injection detection with mquery', () => {
       before(async () => {
         const id = require('../../../../src/id')
         dbName = id().toString()
-        const mongo = require(`../../../../../../versions/mongodb@${mongodbVersion}`).get()
+        const mongo = mongodb.get()
 
         client = new mongo.MongoClient(`mongodb://localhost:27017/${dbName}`)
         await client.connect()

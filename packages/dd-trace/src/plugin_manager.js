@@ -158,7 +158,7 @@ module.exports = class PluginManager {
     const {
       logInjection,
       serviceMapping,
-      queryStringObfuscation,
+      DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP,
       site,
       url,
       headerTags,
@@ -171,14 +171,14 @@ module.exports = class PluginManager {
       DD_TRACE_OTEL_SEMANTICS_ENABLED,
       DD_TEST_SESSION_NAME,
       DD_AGENTLESS_LOG_SUBMISSION_ENABLED,
-      isTestDynamicInstrumentationEnabled,
+      testOptimization,
       isServiceUserProvided,
       middlewareTracingEnabled,
       traceWebsocketMessagesEnabled,
       traceWebsocketMessagesInheritSampling,
       traceWebsocketMessagesSeparateTraces,
       experimental,
-      resourceRenamingEnabled,
+      DD_TRACE_RESOURCE_RENAMING_ENABLED,
     } = /** @type {import('./config/config-base')} */ (this._tracerConfig)
 
     const sharedConfig = {
@@ -193,21 +193,21 @@ module.exports = class PluginManager {
       clientIpHeader,
       DD_TEST_SESSION_NAME,
       DD_AGENTLESS_LOG_SUBMISSION_ENABLED,
-      isTestDynamicInstrumentationEnabled,
+      isTestDynamicInstrumentationEnabled: testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED,
       isServiceUserProvided,
       traceWebsocketMessagesEnabled,
       traceWebsocketMessagesInheritSampling,
       traceWebsocketMessagesSeparateTraces,
       experimental,
-      resourceRenamingEnabled,
+      resourceRenamingEnabled: DD_TRACE_RESOURCE_RENAMING_ENABLED,
     }
 
     if (logInjection !== undefined) {
       sharedConfig.logInjection = logInjection
     }
 
-    if (queryStringObfuscation !== undefined) {
-      sharedConfig.queryStringObfuscation = queryStringObfuscation
+    if (DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP !== undefined) {
+      sharedConfig.queryStringObfuscation = DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP
     }
 
     if (serviceMapping && serviceMapping[name]) {

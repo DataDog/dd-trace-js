@@ -50,7 +50,7 @@ function getCommonRequestOptions (url) {
   return {
     method: 'POST',
     headers: {
-      'dd-api-key': getConfig().apiKey,
+      'dd-api-key': getConfig().DD_API_KEY,
     },
     timeout: 15_000,
     url,
@@ -287,7 +287,7 @@ function sendGitMetadata (url, { isEvpProxy, evpProxyPrefix }, configRepositoryU
     }
     // Otherwise we unshallow and get commits to upload again
     log.debug('It is shallow clone, unshallowing...')
-    if (getConfig().DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED) {
+    if (getConfig().testOptimization.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED) {
       unshallowRepository(false)
     }
 
