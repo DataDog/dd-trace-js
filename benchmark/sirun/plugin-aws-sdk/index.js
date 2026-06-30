@@ -9,7 +9,7 @@ const Lambda = require('../../../packages/datadog-plugin-aws-sdk/src/services/la
 
 const { VARIANT } = process.env
 
-const ITERATIONS = Number(process.env.ITERATIONS) || 2_000_000
+const OPERATIONS = Number(process.env.OPERATIONS)
 
 // Plugin reads `this.tracer` via a getter that forwards to `this._tracer`; wire the
 // stub through the underscore field so the public access path stays intact.
@@ -54,7 +54,7 @@ if (VARIANT === 'extract-response-body') {
   const sanityBody = plugin.extractResponseBody(RESPONSE)
   assert.equal(sanityBody.$metadata, undefined)
   assert.equal(sanityBody.MessageId, 'msg-cccccccccc')
-  for (let iteration = 0; iteration < ITERATIONS; iteration++) {
+  for (let iteration = 0; iteration < OPERATIONS; iteration++) {
     sink += plugin.extractResponseBody(RESPONSE).MessageId.length
   }
 } else if (VARIANT === 'eventbridge-inject-detail') {
@@ -71,7 +71,7 @@ if (VARIANT === 'extract-response-body') {
   plugin.requestInject(fakeSpan, sanityRequest)
   assert.ok(sanityRequest.params.Entries[0].Detail.includes('_datadog'),
     'EventBridge requestInject did not embed _datadog')
-  for (let iteration = 0; iteration < ITERATIONS; iteration++) {
+  for (let iteration = 0; iteration < OPERATIONS; iteration++) {
     const request = {
       operation: 'putEvents',
       params: { Entries: [{ Detail: EVENTBRIDGE_DETAIL_JSON }] },
@@ -85,7 +85,7 @@ if (VARIANT === 'extract-response-body') {
   const sanityRequest = { operation: 'invoke', params: { FunctionName: 'my-fn' } }
   plugin.requestInject(fakeSpan, sanityRequest)
   assert.ok(sanityRequest.params.ClientContext, 'Lambda requestInject did not set ClientContext')
-  for (let iteration = 0; iteration < ITERATIONS; iteration++) {
+  for (let iteration = 0; iteration < OPERATIONS; iteration++) {
     const request = { operation: 'invoke', params: { FunctionName: 'my-fn' } }
     plugin.requestInject(fakeSpan, request)
     sink += request.params.ClientContext.length
@@ -108,7 +108,7 @@ if (VARIANT === 'extract-response-body') {
   const merged = JSON.parse(Buffer.from(sanityRequest.params.ClientContext, 'base64').toString('utf8'))
   assert.ok(merged.custom['app.request.id'] === 'req-1234567890' && merged.custom['x-datadog-trace-id'],
     'Lambda requestInject did not merge datadog keys into the existing ClientContext')
-  for (let iteration = 0; iteration < ITERATIONS; iteration++) {
+  for (let iteration = 0; iteration < OPERATIONS; iteration++) {
     const request = {
       operation: 'invoke',
       params: { FunctionName: 'my-fn', ClientContext: EXISTING_CONTEXT },

@@ -225,17 +225,14 @@ const snsWrap = (message) => ({
   Message: typeof message === 'string' ? message : JSON.stringify(message),
 })
 
+// `responseExtract` returns the raw `_datadog` text-map carrier per message (in message
+// order, `undefined` where absent). `#startResponseSpan` is what turns the carriers into
+// the parent context plus span links; that wiring is covered by the integration suite.
 describe('Sqs plugin responseExtract', () => {
-  it('extracts trace context from MessageAttributes._datadog (direct SQS to SQS)', () => {
-    let receivedAttributes
-    const plugin = buildPlugin({
-      extract: (format, attrs) => {
-        receivedAttributes = attrs
-        return 'sqs-native-context'
-      },
-    })
+  it('parses the carrier from MessageAttributes._datadog (direct SQS to SQS)', () => {
+    const plugin = buildPlugin()
 
-    const result = plugin.responseExtract(
+    const carriers = plugin.responseExtract(
       { QueueUrl },
       'receiveMessage',
       {
@@ -255,22 +252,15 @@ describe('Sqs plugin responseExtract', () => {
       }
     )
 
-    assert.deepStrictEqual(receivedAttributes, {
+    assert.deepStrictEqual(carriers, [{
       'x-datadog-trace-id': '111',
       'x-datadog-parent-id': '222',
       'x-datadog-sampling-priority': '1',
-    })
-    assert.strictEqual(result.datadogContext, 'sqs-native-context')
+    }])
   })
 
-  it('extracts trace context from the SNS Notification body wrapper (SNS to SQS)', () => {
-    let receivedAttributes
-    const plugin = buildPlugin({
-      extract: (format, attrs) => {
-        receivedAttributes = attrs
-        return 'sns-context'
-      },
-    })
+  it('parses the carrier from the SNS Notification body wrapper (SNS to SQS)', () => {
+    const plugin = buildPlugin()
 
     const snsBody = {
       Type: 'Notification',
@@ -288,125 +278,85 @@ describe('Sqs plugin responseExtract', () => {
       },
     }
 
-    const result = plugin.responseExtract(
+    const carriers = plugin.responseExtract(
       { QueueUrl },
       'receiveMessage',
       { Messages: [{ Body: JSON.stringify(snsBody) }] }
     )
 
-    assert.deepStrictEqual(receivedAttributes, {
+    assert.deepStrictEqual(carriers, [{
       'x-datadog-trace-id': '333',
       'x-datadog-parent-id': '444',
-    })
-    assert.strictEqual(result.datadogContext, 'sns-context')
+    }])
   })
 
-  it('returns no datadogContext when neither MessageAttributes nor SNS body carry _datadog', () => {
-    let extractCalled = false
-    const plugin = buildPlugin({ extract: () => { extractCalled = true } })
+  it('yields an undefined carrier when neither MessageAttributes nor SNS body carry _datadog', () => {
+    const plugin = buildPlugin()
 
-    const result = plugin.responseExtract(
+    const carriers = plugin.responseExtract(
       { QueueUrl },
       'receiveMessage',
       { Messages: [{ Body: 'plain text', MessageAttributes: {} }] }
     )
 
-    assert.strictEqual(extractCalled, false)
-    assert.strictEqual(result.datadogContext, undefined)
-    assert.strictEqual(result.bodyChecked, true)
+    assert.deepStrictEqual(carriers, [undefined])
   })
 
-  it('extracts trace context from EventBridge body.detail._datadog (EventBridge to SQS)', () => {
-    let receivedAttributes
-    const plugin = buildPlugin({
-      extract: (format, attrs) => {
-        receivedAttributes = attrs
-        return 'eventbridge-context'
-      },
-    })
+  it('parses the carrier from EventBridge body.detail._datadog (EventBridge to SQS)', () => {
+    const plugin = buildPlugin()
 
     const datadog = { 'x-datadog-trace-id': '999', 'x-datadog-parent-id': '888', 'x-datadog-sampling-priority': '1' }
-    const result = plugin.responseExtract(
+    const carriers = plugin.responseExtract(
       { QueueUrl },
       'receiveMessage',
       { Messages: [{ Body: JSON.stringify(ebEnvelope(datadog)) }] }
     )
 
-    assert.deepStrictEqual(receivedAttributes, datadog)
-    assert.strictEqual(result.datadogContext, 'eventbridge-context')
+    assert.deepStrictEqual(carriers, [datadog])
   })
 
   it('falls through cleanly when an EventBridge envelope has no `_datadog` in detail', () => {
-    let extractCalled = false
-    const plugin = buildPlugin({
-      extract: () => {
-        extractCalled = true
-        return 'should-not-happen'
-      },
-    })
+    const plugin = buildPlugin()
 
-    const result = plugin.responseExtract(
+    const carriers = plugin.responseExtract(
       { QueueUrl },
       'receiveMessage',
       { Messages: [{ Body: JSON.stringify(ebEnvelope()) }] }
     )
 
-    assert.strictEqual(extractCalled, false)
-    assert.strictEqual(result.datadogContext, undefined)
-    assert.strictEqual(result.bodyChecked, true)
+    assert.deepStrictEqual(carriers, [undefined])
   })
 
-  it('extracts trace context from an EventBridge envelope wrapped in an SNS Notification', () => {
-    let receivedAttributes
-    const plugin = buildPlugin({
-      extract: (format, attrs) => {
-        receivedAttributes = attrs
-        return 'eventbridge-sns-context'
-      },
-    })
+  it('parses the carrier from an EventBridge envelope wrapped in an SNS Notification', () => {
+    const plugin = buildPlugin()
 
     const datadog = { 'x-datadog-trace-id': '555', 'x-datadog-parent-id': '444' }
-    const result = plugin.responseExtract(
+    const carriers = plugin.responseExtract(
       { QueueUrl },
       'receiveMessage',
       { Messages: [{ Body: JSON.stringify(snsWrap(ebEnvelope(datadog))) }] }
     )
 
-    assert.deepStrictEqual(receivedAttributes, datadog)
-    assert.strictEqual(result.datadogContext, 'eventbridge-sns-context')
+    assert.deepStrictEqual(carriers, [datadog])
   })
 
   it('falls through when an SNS Notification Message is not an EventBridge envelope', () => {
-    let extractCalled = false
-    const plugin = buildPlugin({
-      extract: () => {
-        extractCalled = true
-        return 'should-not-happen'
-      },
-    })
+    const plugin = buildPlugin()
 
-    const result = plugin.responseExtract(
+    const carriers = plugin.responseExtract(
       { QueueUrl },
       'receiveMessage',
       { Messages: [{ Body: JSON.stringify(snsWrap('a plain string payload, not JSON')) }] }
     )
 
-    assert.strictEqual(extractCalled, false)
-    assert.strictEqual(result.datadogContext, undefined)
-    assert.strictEqual(result.bodyChecked, true)
+    assert.deepStrictEqual(carriers, [undefined])
   })
 
   // Both carriers present: MessageAttributes must win and the body is never consulted.
   it('prefers MessageAttributes over the EventBridge body when both are present', () => {
-    const extractCalls = []
-    const plugin = buildPlugin({
-      extract: (format, attrs) => {
-        extractCalls.push(attrs)
-        return 'message-attribute-context'
-      },
-    })
+    const plugin = buildPlugin()
 
-    const result = plugin.responseExtract(
+    const carriers = plugin.responseExtract(
       { QueueUrl },
       'receiveMessage',
       {
@@ -422,9 +372,43 @@ describe('Sqs plugin responseExtract', () => {
       }
     )
 
-    assert.strictEqual(result.datadogContext, 'message-attribute-context')
-    // extract is called exactly once, with the MessageAttributes context only.
-    assert.deepStrictEqual(extractCalls, [{ 'x-datadog-trace-id': 'from-attrs' }])
+    assert.deepStrictEqual(carriers, [{ 'x-datadog-trace-id': 'from-attrs' }])
+  })
+
+  it('returns a carrier per message for a multi-message receive, undefined where absent', () => {
+    const plugin = buildPlugin()
+
+    const first = { 'x-datadog-trace-id': '1', 'x-datadog-parent-id': '11' }
+    const third = { 'x-datadog-trace-id': '3', 'x-datadog-parent-id': '33' }
+    const carriers = plugin.responseExtract(
+      { QueueUrl, MaxNumberOfMessages: 10 },
+      'receiveMessage',
+      {
+        Messages: [
+          {
+            Body: 'opaque',
+            MessageAttributes: { _datadog: { DataType: 'String', StringValue: JSON.stringify(first) } },
+          },
+          { Body: 'no context here', MessageAttributes: {} },
+          { Body: JSON.stringify(ebEnvelope(third)) },
+        ],
+      }
+    )
+
+    assert.deepStrictEqual(carriers, [first, undefined, third])
+  })
+
+  it('returns undefined for a non-receiveMessage operation', () => {
+    const plugin = buildPlugin()
+
+    assert.strictEqual(plugin.responseExtract({ QueueUrl }, 'sendMessage', { Messages: [{ Body: 'x' }] }), undefined)
+  })
+
+  it('returns undefined when the receive yields no messages', () => {
+    const plugin = buildPlugin()
+
+    assert.strictEqual(plugin.responseExtract({ QueueUrl }, 'receiveMessage', { Messages: [] }), undefined)
+    assert.strictEqual(plugin.responseExtract({ QueueUrl }, 'receiveMessage', {}), undefined)
   })
 })
 
@@ -491,5 +475,65 @@ describe('Sqs plugin responseExtractDSMContext', () => {
     )
 
     assert.strictEqual(decodeCalled, false)
+  })
+
+  it('attributes the checkpoint to the span for a single-message receive', () => {
+    const spans = []
+    const plugin = buildPlugin({
+      dsmEnabled: true,
+      setCheckpoint: (tags, span) => { spans.push(span); return null },
+    })
+    const consumerSpan = { id: 'consumer' }
+
+    plugin.responseExtractDSMContext('receiveMessage', { QueueUrl }, { Messages: [{ Body: 'a' }] }, consumerSpan)
+
+    assert.deepStrictEqual(spans, [consumerSpan])
+  })
+
+  it('detaches the span and checkpoints once per message for a multi-message receive', () => {
+    const spans = []
+    const plugin = buildPlugin({
+      dsmEnabled: true,
+      setCheckpoint: (tags, span) => { spans.push(span); return null },
+    })
+
+    plugin.responseExtractDSMContext(
+      'receiveMessage',
+      { QueueUrl },
+      { Messages: [{ Body: 'a' }, { Body: 'b' }] },
+      { id: 'consumer' }
+    )
+
+    // More than one message: payloadSize must not be attributed to the consumer span.
+    assert.deepStrictEqual(spans, [null, null])
+  })
+
+  it('decodes the pre-parsed carriers instead of re-parsing each body', () => {
+    const decoded = []
+    const plugin = buildPlugin({
+      dsmEnabled: true,
+      decodeDataStreamsContext: (carrier) => { decoded.push(carrier) },
+    })
+
+    const carrier = { 'x-datadog-trace-id': '42' }
+    plugin.responseExtractDSMContext(
+      'receiveMessage',
+      { QueueUrl },
+      // Bodies are unparseable JSON: reached only if the carriers were ignored.
+      { Messages: [{ Body: 'not json {' }, { Body: 'also not json {' }] },
+      null,
+      [carrier, undefined]
+    )
+
+    assert.deepStrictEqual(decoded, [carrier])
+  })
+
+  it('returns without checkpoints when the receive yields no messages', () => {
+    let checkpoints = 0
+    const plugin = buildPlugin({ dsmEnabled: true, setCheckpoint: () => { checkpoints++; return null } })
+
+    plugin.responseExtractDSMContext('receiveMessage', { QueueUrl }, { Messages: [] }, null)
+
+    assert.strictEqual(checkpoints, 0)
   })
 })
