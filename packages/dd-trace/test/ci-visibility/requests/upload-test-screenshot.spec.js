@@ -36,7 +36,9 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
     )
 
     assert.ok(requestStub.calledOnce)
-    return requestStub.getCall(0).args[1].headers['X-Dd-Idempotency-Key']
+    const headers = requestStub.getCall(0).args[1].headers
+    assert.strictEqual(headers['DD-API-KEY'], 'test-api-key')
+    return headers['X-Dd-Idempotency-Key']
   }
 
   before(() => {
@@ -48,7 +50,7 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
     const { uploadTestScreenshot: upload } = proxyquire(
       '../../../src/ci-visibility/requests/upload-test-screenshot',
       {
-        '../../config': () => ({ apiKey: 'test-api-key' }),
+        '../../config': () => ({ DD_API_KEY: 'test-api-key' }),
         '../../exporters/common/request': requestStub,
       }
     )

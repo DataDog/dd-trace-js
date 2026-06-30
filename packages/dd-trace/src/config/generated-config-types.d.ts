@@ -446,8 +446,6 @@ export interface GeneratedConfig {
     telemetryVerbosity: string;
   };
   inferredProxyServicesEnabled: boolean;
-  isTestFailureScreenshotsEnabled: boolean;
-  isTestFailureVideoEnabled: boolean;
   langchain: {
     DD_LANGCHAIN_SPAN_CHAR_LIMIT: number;
     DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE: number;
@@ -557,6 +555,7 @@ export interface GeneratedConfig {
     DD_CIVISIBILITY_TEST_MODULE_ID: string | undefined;
     DD_CIVISIBILITY_TEST_SESSION_ID: string | undefined;
     DD_TEST_FAILED_TEST_REPLAY_ENABLED: boolean;
+    DD_TEST_FAILURE_SCREENSHOTS_ENABLED: boolean;
     DD_TEST_FLEET_CONFIG_PATH: string | undefined;
     DD_TEST_LOCAL_CONFIG_PATH: string | undefined;
     DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES: number;
@@ -788,7 +787,6 @@ export interface GeneratedEnvVarConfig {
   DD_TELEMETRY_METRICS_ENABLED: boolean;
   DD_TEST_FAILED_TEST_REPLAY_ENABLED: boolean;
   DD_TEST_FAILURE_SCREENSHOTS_ENABLED: boolean;
-  DD_TEST_FAILURE_VIDEO_ENABLED: boolean;
   DD_TEST_FLEET_CONFIG_PATH: string | undefined;
   DD_TEST_LOCAL_CONFIG_PATH: string | undefined;
   DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES: number;

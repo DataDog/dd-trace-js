@@ -23,12 +23,6 @@ function getContentType (filePath) {
   if (extension === '.webp') {
     return 'image/webp'
   }
-  if (extension === '.mp4') {
-    return 'video/mp4'
-  }
-  if (extension === '.webm') {
-    return 'video/webm'
-  }
   return 'image/png'
 }
 
@@ -82,12 +76,12 @@ function uploadTestScreenshot (
   { filePath, traceId, idempotencyKey, capturedAtMs, url },
   callback
 ) {
-  const apiKey = getConfig().apiKey
+  const { DD_API_KEY } = getConfig()
 
   if (!isValidTraceId(traceId)) {
     return callback(new Error('A non-zero decimal uint64 trace_id is required for test screenshot upload'))
   }
-  if (!apiKey) {
+  if (!DD_API_KEY) {
     return callback(new Error('DD_API_KEY is required for test screenshot upload'))
   }
   if (!idempotencyKey) {
@@ -112,7 +106,7 @@ function uploadTestScreenshot (
     method: 'POST',
     headers: {
       'Content-Type': contentType,
-      'DD-API-KEY': apiKey,
+      'DD-API-KEY': DD_API_KEY,
       // Stable per-artifact key (reused on retry) → the service overwrites instead of duplicating.
       // Rendered header-safe so a non-ASCII filename can't throw ERR_INVALID_CHAR in http.request.
       'X-Dd-Idempotency-Key': toIdempotencyHeaderValue(idempotencyKey),
