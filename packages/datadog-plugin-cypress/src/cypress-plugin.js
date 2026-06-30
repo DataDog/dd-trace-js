@@ -744,7 +744,7 @@ class CypressPlugin {
       log.warn(
         '%s %s',
         'DD_TEST_FAILURE_SCREENSHOTS_ENABLED is true, but Cypress failure screenshot upload is only supported',
-        'in agentless mode. The Datadog Agent EVP proxy does not support this media endpoint yet.'
+        'in agentless mode.'
       )
     }
   }
