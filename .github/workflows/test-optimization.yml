@@ -440,6 +440,7 @@ jobs:
         version: [oldest, latest]
         spec:
           - vitest.core
+          - vitest.no-worker-init
           - vitest.test-management
           - vitest.advanced
     name: integration-vitest (node-${{ matrix.version }}, ${{ matrix.spec }})

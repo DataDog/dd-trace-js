@@ -30,6 +30,11 @@ if (process.env.CUSTOM_SEQUENCER) {
   }
 }
 
+if (process.env.SEQUENCE_HOOKS) {
+  config.test.sequence ||= {}
+  config.test.sequence.hooks = process.env.SEQUENCE_HOOKS
+}
+
 if (process.env.PROJECT_POOL_CONFIG) {
   const projectConfigs = []
   const firstProjectConfig = {
@@ -43,6 +48,22 @@ if (process.env.PROJECT_POOL_CONFIG) {
   }
   if (process.env.PROJECT_RETRY_CONFIG) {
     firstProjectConfig.retry = Number(process.env.PROJECT_RETRY_CONFIG)
+  }
+  if (process.env.PROJECT_NO_ISOLATE) {
+    firstProjectConfig.isolate = false
+  }
+  if (process.env.PROJECT_POOL_NO_ISOLATE) {
+    firstProjectConfig.poolOptions = {
+      [firstProjectConfig.pool]: {
+        isolate: false,
+      },
+    }
+  }
+  if (process.env.PROJECT_THREAD_POOL_MATCH_GLOB) {
+    firstProjectConfig.poolMatchGlobs = [[process.env.PROJECT_THREAD_POOL_MATCH_GLOB, 'threads']]
+  }
+  if (process.env.PROJECT_UNNAMED) {
+    delete firstProjectConfig.name
   }
   projectConfigs.push({ test: firstProjectConfig })
 
@@ -68,6 +89,22 @@ if (process.env.PROJECT_POOL_CONFIG) {
   }
 
   config.test.projects = projectConfigs
+}
+
+if (process.env.NO_ISOLATE) {
+  config.test.isolate = false
+}
+
+if (process.env.POOL_NO_ISOLATE) {
+  config.test.poolOptions = {
+    [config.test.pool]: {
+      isolate: false,
+    },
+  }
+}
+
+if (process.env.VITEST_SETUP_FILE) {
+  config.test.setupFiles = process.env.VITEST_SETUP_FILE
 }
 
 if (process.env.COVERAGE_PROVIDER) {

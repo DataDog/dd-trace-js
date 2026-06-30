@@ -1,13 +1,14 @@
 'use strict'
 
 /* eslint-disable no-console */
-const tracer = require('../packages/dd-trace')
-const log = require('../packages/dd-trace/src/log')
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../packages/dd-trace/src/config/helper')
+const log = require('../packages/dd-trace/src/log')
+const { isTrue } = require('../packages/dd-trace/src/util')
 
 const PACKAGE_MANAGERS = ['npm', 'yarn', 'pnpm']
 const DEFAULT_FLUSH_INTERVAL = 5000
 const JEST_FLUSH_INTERVAL = 0
+const VITEST_NO_WORKER_INIT_ACTIVE_ENV = 'DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE'
 const EXPORTER_MAP = {
   jest: 'jest_worker',
   cucumber: 'cucumber_worker',
@@ -78,10 +79,30 @@ if (isTestWorker) {
   }
 }
 
-if (shouldInit) {
+const skipVitestWorkerInit = shouldSkipVitestWorkerInit()
+
+const tracer = skipVitestWorkerInit
+  ? {
+      init () {},
+      use () {},
+    }
+  : require('../packages/dd-trace')
+
+if (shouldInit && !skipVitestWorkerInit) {
   tracer.init(baseOptions)
   tracer.use('fs', false)
   tracer.use('child_process', false)
 }
 
 module.exports = tracer
+
+function shouldSkipVitestWorkerInit () {
+  return shouldInit &&
+    getValueFromEnvSources('DD_VITEST_WORKER') &&
+    isVitestNoWorkerInitActive()
+}
+
+function isVitestNoWorkerInitActive () {
+  // eslint-disable-next-line eslint-rules/eslint-process-env
+  return isTrue(process.env[VITEST_NO_WORKER_INIT_ACTIVE_ENV])
+}

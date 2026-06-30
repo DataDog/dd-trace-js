@@ -36,6 +36,7 @@ const versions = NODE_MAJOR <= 18 ? ['1.6.0', '3.2.6'] : ['1.6.0', 'latest']
 versions.forEach((version) => {
   describe(`vitest@${version}`, () => {
     let cwd, receiver, childProcess
+    const newerVitestIt = version === '1.6.0' ? it.skip : it
 
     useSandbox([
       `vitest@${version}`,
@@ -367,6 +368,42 @@ versions.forEach((version) => {
             runAttemptToFixTest(done, { isAttemptingToFix: true })
           })
 
+          const noWorkerAttemptToFixCases = [
+            { poolConfig: 'forks', workerName: 'fork' },
+          ]
+
+          for (const { poolConfig, workerName } of noWorkerAttemptToFixCases) {
+            it(`can attempt to fix ${workerName} workers when no-worker init is enabled`, (done) => {
+              receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+              runAttemptToFixTest(done, {
+                isAttemptingToFix: true,
+                expectedExecutionCount: 4,
+                extraEnvVars: {
+                  DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+                  EXPECT_DD_TEST_OPT_VITEST_SETUP_ENV_ABSENT: '1',
+                  POOL_CONFIG: poolConfig,
+                },
+              })
+            })
+          }
+
+          newerVitestIt(
+            'can attempt to fix thread workers with worker instrumentation when no-worker init is enabled',
+            (done) => {
+              receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+              runAttemptToFixTest(done, {
+                isAttemptingToFix: true,
+                expectedExecutionCount: 4,
+                extraEnvVars: {
+                  DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+                  POOL_CONFIG: 'threads',
+                },
+              })
+            }
+          )
+
           it('can attempt to fix and mark last attempt as passed if every attempt passes', (done) => {
             receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 
@@ -513,13 +550,9 @@ versions.forEach((version) => {
             runAttemptToFixTest(done, { extraEnvVars: { DD_TEST_MANAGEMENT_ENABLED: '0' } })
           })
 
-          it('does not tag known attempt to fix tests as new', async () => {
+          it('does not tag no-worker attempt to fix tests as new', async () => {
             receiver.setKnownTests({
-              vitest: {
-                'ci-visibility/vitest-tests/test-attempt-to-fix.mjs': [
-                  'attempt to fix tests can attempt to fix a test',
-                ],
-              },
+              vitest: {},
             })
             receiver.setSettings({
               test_management: { enabled: true, attempt_to_fix_retries: 2 },
@@ -555,6 +588,7 @@ versions.forEach((version) => {
                   ...getCiVisAgentlessConfig(receiver.port),
                   TEST_DIR: 'ci-visibility/vitest-tests/test-attempt-to-fix*',
                   NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+                  DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
                 },
               }
             )
@@ -691,20 +725,29 @@ versions.forEach((version) => {
                 }
               })
 
-          const runDisableTest = (done, isDisabling, extraEnvVars = {}) => {
+          const runDisableTest = (
+            done,
+            isDisabling,
+            extraEnvVars = {},
+            command = './node_modules/.bin/vitest run',
+            testDir = 'ci-visibility/vitest-tests/test-disabled*'
+          ) => {
             let stdout = ''
             const testAssertionsPromise = getTestAssertions(isDisabling)
+            const env = {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+              ...extraEnvVars,
+            }
+            if (testDir) {
+              env.TEST_DIR = testDir
+            }
 
             childProcess = exec(
-              './node_modules/.bin/vitest run',
+              command,
               {
                 cwd,
-                env: {
-                  ...getCiVisAgentlessConfig(receiver.port),
-                  TEST_DIR: 'ci-visibility/vitest-tests/test-disabled*',
-                  NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
-                  ...extraEnvVars,
-                },
+                env,
               }
             )
 
@@ -730,6 +773,30 @@ versions.forEach((version) => {
             receiver.setSettings({ test_management: { enabled: true } })
 
             runDisableTest(done, true)
+          })
+
+          newerVitestIt('can disable tests when no-worker init is enabled', (done) => {
+            receiver.setSettings({ test_management: { enabled: true } })
+
+            runDisableTest(done, true, {
+              DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+              POOL_CONFIG: 'forks',
+            })
+          })
+
+          newerVitestIt('can disable explicit file tests when no-worker init is enabled', (done) => {
+            receiver.setSettings({ test_management: { enabled: true } })
+
+            runDisableTest(
+              done,
+              true,
+              {
+                DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+                POOL_CONFIG: 'forks',
+              },
+              './node_modules/.bin/vitest run ci-visibility/vitest-tests/test-disabled.mjs',
+              undefined
+            )
           })
 
           it('fails if disable is not enabled', (done) => {
@@ -844,6 +911,14 @@ versions.forEach((version) => {
             runQuarantineTest(done, true)
           })
 
+          newerVitestIt('can quarantine tests when no-worker init is enabled', (done) => {
+            receiver.setSettings({ test_management: { enabled: true } })
+
+            runQuarantineTest(done, true, {
+              DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+            })
+          })
+
           it('can quarantine tests retried by Vitest', async () => {
             receiver.setSettings({
               test_management: { enabled: true },
@@ -894,6 +969,76 @@ versions.forEach((version) => {
                   ...getCiVisAgentlessConfig(receiver.port),
                   TEST_DIR: 'ci-visibility/vitest-tests/test-quarantine.mjs',
                   NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+                },
+              }
+            )
+            childProcess.stdout?.on('data', data => {
+              stdout += data
+            })
+
+            const [[exitCode]] = await Promise.all([
+              once(childProcess, 'exit'),
+              testAssertionsPromise,
+            ])
+
+            assert.strictEqual(
+              (stdout.match(/I am running when quarantined/g) || []).length,
+              2
+            )
+            assert.strictEqual(exitCode, 0)
+          })
+
+          newerVitestIt('can quarantine tests retried by Vitest when no-worker init is enabled', async () => {
+            receiver.setSettings({
+              test_management: { enabled: true },
+              flaky_test_retries_enabled: false,
+            })
+
+            const testAssertionsPromise = receiver
+              .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+                const events = payloads.flatMap(({ payload }) => payload.events)
+                const tests = events.filter(event => event.type === 'test').map(event => event.content)
+                const testSession = events.find(event => event.type === 'test_session_end').content
+
+                assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+                assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+
+                const quarantinedTests = tests
+                  .filter(test => test.meta[TEST_NAME] === 'quarantine tests can quarantine a test')
+                  .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+                assert.strictEqual(quarantinedTests.length, 2)
+
+                quarantinedTests.forEach((test, index) => {
+                  assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+                  assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+
+                  if (index === 0) {
+                    assert.ok(!(TEST_IS_RETRY in test.meta))
+                    assert.ok(!(TEST_RETRY_REASON in test.meta))
+                  } else {
+                    assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
+                    assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+                  }
+
+                  if (index === quarantinedTests.length - 1) {
+                    assert.strictEqual(test.meta[TEST_FINAL_STATUS], 'skip')
+                  } else {
+                    assert.ok(!(TEST_FINAL_STATUS in test.meta))
+                  }
+                })
+              })
+
+            let stdout = ''
+            childProcess = exec(
+              './node_modules/.bin/vitest run --retry=1',
+              {
+                cwd,
+                env: {
+                  ...getCiVisAgentlessConfig(receiver.port),
+                  TEST_DIR: 'ci-visibility/vitest-tests/test-quarantine.mjs',
+                  NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+                  DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
                 },
               }
             )
