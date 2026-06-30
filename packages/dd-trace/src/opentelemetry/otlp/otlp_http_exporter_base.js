@@ -3,10 +3,12 @@
 const http = require('node:http')
 const https = require('node:https')
 const { URL } = require('node:url')
+const { storage } = require('../../../../datadog-core')
 const log = require('../../log')
 const telemetryMetrics = require('../../telemetry/metrics')
 
 const tracerMetrics = telemetryMetrics.manager.namespace('tracers')
+const legacyStorage = storage('legacy')
 
 /**
  * Base class for OTLP HTTP exporters.
@@ -84,37 +86,39 @@ class OtlpHttpExporterBase {
       },
     }
 
-    const req = this.#transport.request(options, (res) => {
-      let data = ''
+    legacyStorage.run({ noop: true }, () => {
+      const req = this.#transport.request(options, (res) => {
+        let data = ''
 
-      res.on('data', (chunk) => {
-        data += chunk
+        res.on('data', (chunk) => {
+          data += chunk
+        })
+
+        res.once('end', () => {
+          // @ts-expect-error - res.statusCode can be undefined
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            resultCallback({ code: 0 })
+          } else {
+            const error = new Error(`HTTP ${res.statusCode}: ${data}`)
+            resultCallback({ code: 1, error })
+          }
+        })
       })
 
-      res.once('end', () => {
-        // @ts-expect-error - res.statusCode can be undefined
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          resultCallback({ code: 0 })
-        } else {
-          const error = new Error(`HTTP ${res.statusCode}: ${data}`)
-          resultCallback({ code: 1, error })
-        }
+      req.on('error', (error) => {
+        log.error('Error sending OTLP %s:', this.signalType, error)
+        resultCallback({ code: 1, error })
       })
-    })
 
-    req.on('error', (error) => {
-      log.error('Error sending OTLP %s:', this.signalType, error)
-      resultCallback({ code: 1, error })
-    })
+      req.once('timeout', () => {
+        req.destroy()
+        const error = new Error('Request timeout')
+        resultCallback({ code: 1, error })
+      })
 
-    req.once('timeout', () => {
-      req.destroy()
-      const error = new Error('Request timeout')
-      resultCallback({ code: 1, error })
+      req.write(payload)
+      req.end()
     })
-
-    req.write(payload)
-    req.end()
   }
 
   /**
