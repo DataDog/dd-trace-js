@@ -53,7 +53,12 @@ class NativeExporter {
     // meta_struct (or top-level span_events/span_links), so libdatadog silently
     // drops them in v0.5 mode — matching the legacy v0.5 encoder. It must never
     // be enabled implicitly, hence the explicit-opt-in + capability check.
-    if (config.protocolVersion === '0.5') {
+    // OTLP export (OTEL_TRACES_EXPORTER=otlp) routes traces to an OTLP endpoint
+    // via libdatadog instead of the Datadog agent. It is mutually exclusive with
+    // the agent v0.4/v0.5 path, so it takes precedence and v0.5 is not negotiated.
+    if (config.OTEL_TRACES_EXPORTER === 'otlp') {
+      this.#configureOtlp()
+    } else if (config.protocolVersion === '0.5') {
       this.#negotiateV05()
     }
 
@@ -66,6 +71,41 @@ class NativeExporter {
       handlers.add(() => this.flush())
     } else {
       process.once('beforeExit', () => this.flush())
+    }
+  }
+
+  /**
+   * Configure libdatadog to export traces over OTLP HTTP (instead of the agent)
+   * from the resolved OTEL_EXPORTER_OTLP_TRACES_* config. Synchronous, so it
+   * takes effect before the first flush (the native output format is fixed at
+   * first send).
+   */
+  #configureOtlp () {
+    const config = this._config
+    this._nativeSpans.setOtlpEndpoint(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT)
+
+    const protocol = config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
+    if (protocol) {
+      try {
+        this._nativeSpans.setOtlpProtocol(protocol)
+      } catch (e) {
+        // grpc / unknown: libdatadog only supports http/json and http/protobuf.
+        // Fall back to the native default rather than failing tracer startup.
+        log.warn('Native exporter: unsupported OTLP protocol %s, using default: %s', protocol, e.message)
+      }
+    }
+
+    // OTEL_EXPORTER_OTLP_TRACES_HEADERS is a parsed { key: value } map; flatten
+    // to the [key, value, ...] array the native binding expects.
+    const headers = config.OTEL_EXPORTER_OTLP_TRACES_HEADERS
+    if (headers && typeof headers === 'object') {
+      const flat = []
+      for (const [key, value] of Object.entries(headers)) {
+        flat.push(key, String(value))
+      }
+      if (flat.length > 0) {
+        this._nativeSpans.setOtlpHeaders(flat)
+      }
     }
   }
 

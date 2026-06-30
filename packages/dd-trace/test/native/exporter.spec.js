@@ -36,6 +36,9 @@ describe('NativeExporter', () => {
       flushSpans: sinon.stub().resolves('unchanged'),
       setAgentUrl: sinon.stub(),
       setUseV05: sinon.stub(),
+      setOtlpEndpoint: sinon.stub(),
+      setOtlpProtocol: sinon.stub(),
+      setOtlpHeaders: sinon.stub(),
     }
 
     logError = sinon.stub()
@@ -100,6 +103,54 @@ describe('NativeExporter', () => {
       new NativeExporter(config, prioritySampler, nativeSpans)
       sinon.assert.notCalled(fetchAgentInfo)
       sinon.assert.notCalled(nativeSpans.setUseV05)
+    })
+  })
+
+  describe('OTLP export', () => {
+    beforeEach(() => {
+      config.OTEL_TRACES_EXPORTER = 'otlp'
+      config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = 'http://collector:4318/v1/traces'
+    })
+
+    it('routes traces to the OTLP endpoint when OTEL_TRACES_EXPORTER=otlp', () => {
+      // eslint-disable-next-line no-new
+      new NativeExporter(config, prioritySampler, nativeSpans)
+      sinon.assert.calledOnceWithExactly(nativeSpans.setOtlpEndpoint, 'http://collector:4318/v1/traces')
+    })
+
+    it('forwards the OTLP protocol and flattened headers', () => {
+      config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'http/protobuf'
+      config.OTEL_EXPORTER_OTLP_TRACES_HEADERS = { authorization: 'Bearer t', 'x-tenant': 'a' }
+      // eslint-disable-next-line no-new
+      new NativeExporter(config, prioritySampler, nativeSpans)
+      sinon.assert.calledOnceWithExactly(nativeSpans.setOtlpProtocol, 'http/protobuf')
+      sinon.assert.calledOnceWithExactly(nativeSpans.setOtlpHeaders, ['authorization', 'Bearer t', 'x-tenant', 'a'])
+    })
+
+    it('takes precedence over v0.5 (no /info negotiation)', () => {
+      config.protocolVersion = '0.5'
+      // eslint-disable-next-line no-new
+      new NativeExporter(config, prioritySampler, nativeSpans)
+      sinon.assert.calledOnce(nativeSpans.setOtlpEndpoint)
+      sinon.assert.notCalled(fetchAgentInfo)
+      sinon.assert.notCalled(nativeSpans.setUseV05)
+    })
+
+    it('tolerates an unsupported protocol (caught, falls back to default)', () => {
+      config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = 'grpc'
+      nativeSpans.setOtlpProtocol.throws(new Error('OTLP gRPC export is not supported'))
+
+      // Construction must not throw — the unsupported protocol is caught and logged.
+      // eslint-disable-next-line no-new
+      new NativeExporter(config, prioritySampler, nativeSpans)
+      sinon.assert.calledOnce(nativeSpans.setOtlpEndpoint)
+    })
+
+    it('does not configure OTLP when exporter is not otlp', () => {
+      config.OTEL_TRACES_EXPORTER = 'none'
+      // eslint-disable-next-line no-new
+      new NativeExporter(config, prioritySampler, nativeSpans)
+      sinon.assert.notCalled(nativeSpans.setOtlpEndpoint)
     })
   })
 

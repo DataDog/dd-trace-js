@@ -67,6 +67,9 @@ describe('NativeSpansInterface', () => {
       setMetaStruct: sinon.stub(),
       addSpanEvent: sinon.stub(),
       setUseV05: sinon.stub(),
+      setOtlpEndpoint: sinon.stub(),
+      setOtlpProtocol: sinon.stub(),
+      setOtlpHeaders: sinon.stub(),
     }
 
     WasmSpanState = sinon.stub().returns(mockState)
@@ -440,6 +443,42 @@ describe('NativeSpansInterface', () => {
       WasmSpanState.returns(newState)
       nativeSpans.setAgentUrl('http://localhost:9999')
       sinon.assert.notCalled(newState.setUseV05)
+    })
+  })
+
+  describe('OTLP config', () => {
+    it('forwards setOtlpEndpoint/Protocol/Headers to the native state', () => {
+      nativeSpans.setOtlpEndpoint('http://c:4318/v1/traces')
+      nativeSpans.setOtlpProtocol('http/protobuf')
+      nativeSpans.setOtlpHeaders(['authorization', 'Bearer t'])
+      sinon.assert.calledOnceWithExactly(mockState.setOtlpEndpoint, 'http://c:4318/v1/traces')
+      sinon.assert.calledOnceWithExactly(mockState.setOtlpProtocol, 'http/protobuf')
+      sinon.assert.calledOnceWithExactly(mockState.setOtlpHeaders, ['authorization', 'Bearer t'])
+    })
+
+    it('re-applies OTLP config to the rebuilt state across setAgentUrl', () => {
+      nativeSpans.setOtlpEndpoint('http://c:4318/v1/traces')
+      nativeSpans.setOtlpProtocol('http/protobuf')
+      nativeSpans.setOtlpHeaders(['authorization', 'Bearer t'])
+      const newState = {
+        ...mockState,
+        setOtlpEndpoint: sinon.stub(),
+        setOtlpProtocol: sinon.stub(),
+        setOtlpHeaders: sinon.stub(),
+        change_queue_ptr: sinon.stub().returns(0),
+      }
+      WasmSpanState.returns(newState)
+      nativeSpans.setAgentUrl('http://localhost:9999')
+      sinon.assert.calledOnceWithExactly(newState.setOtlpEndpoint, 'http://c:4318/v1/traces')
+      sinon.assert.calledOnceWithExactly(newState.setOtlpProtocol, 'http/protobuf')
+      sinon.assert.calledOnceWithExactly(newState.setOtlpHeaders, ['authorization', 'Bearer t'])
+    })
+
+    it('does not configure OTLP on the rebuilt state when none was set', () => {
+      const newState = { ...mockState, setOtlpEndpoint: sinon.stub(), change_queue_ptr: sinon.stub().returns(0) }
+      WasmSpanState.returns(newState)
+      nativeSpans.setAgentUrl('http://localhost:9999')
+      sinon.assert.notCalled(newState.setOtlpEndpoint)
     })
   })
 

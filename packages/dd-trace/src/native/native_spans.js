@@ -149,6 +149,12 @@ class NativeSpansInterface {
     // setAgentUrl() that rebuilds the WASM state (which would otherwise reset
     // to the v0.4 default).
     this._useV05 = false
+    // OTLP export config (set when OTEL_TRACES_EXPORTER=otlp). Persisted so it
+    // survives a setAgentUrl() rebuild, like _useV05. When _otlpEndpoint is
+    // set, libdatadog exports traces via OTLP instead of to the agent.
+    this._otlpEndpoint = null
+    this._otlpProtocol = null
+    this._otlpHeaders = null
     this._state = this.#createWasmState(options.agentUrl)
 
     // Get the WASM memory views for writing to the change queue buffer
@@ -198,6 +204,37 @@ class NativeSpansInterface {
   }
 
   /**
+   * Route trace export through libdatadog's OTLP HTTP exporter instead of the
+   * Datadog agent. Must be set before the first flush.
+   * @param {string} url OTLP HTTP traces endpoint (e.g. http://host:4318/v1/traces)
+   */
+  setOtlpEndpoint (url) {
+    this._otlpEndpoint = url
+    this._state.setOtlpEndpoint(url)
+  }
+
+  /**
+   * Select the OTLP wire protocol ('http/json' or 'http/protobuf'). Throws on
+   * unsupported values (e.g. 'grpc'); callers should guard.
+   * @param {string} protocol
+   */
+  setOtlpProtocol (protocol) {
+    // Forward first: only persist a protocol the native layer accepts, so a
+    // later setAgentUrl() rebuild never re-applies an invalid value.
+    this._state.setOtlpProtocol(protocol)
+    this._otlpProtocol = protocol
+  }
+
+  /**
+   * Set extra OTLP export headers (e.g. collector auth).
+   * @param {string[]} headers Flat [key, value, ...] pairs
+   */
+  setOtlpHeaders (headers) {
+    this._otlpHeaders = headers
+    this._state.setOtlpHeaders(headers)
+  }
+
+  /**
    * Update the agent URL by reinitializing the native state.
    * Warning: This will discard any buffered but unflushed span data.
    * @param {string} url New agent URL
@@ -220,6 +257,13 @@ class NativeSpansInterface {
     // new agent lacks v0.5 the sends will fail loudly (404) rather than lose
     // data silently.
     if (this._useV05) newState.setUseV05(true)
+    // Re-apply OTLP routing across the rebuild (these were validated when first
+    // set, so re-applying won't throw).
+    if (this._otlpEndpoint !== null) {
+      newState.setOtlpEndpoint(this._otlpEndpoint)
+      if (this._otlpProtocol !== null) newState.setOtlpProtocol(this._otlpProtocol)
+      if (this._otlpHeaders !== null) newState.setOtlpHeaders(this._otlpHeaders)
+    }
 
     // Atomic swap: only after the new state is fully constructed do we
     // commit to it and reset JS-side counters.
