@@ -867,12 +867,16 @@ versions.forEach((version) => {
               })),
               [
                 { status: 'fail', isRetry: undefined, retryReason: undefined },
-                { status: 'fail', isRetry: 'true', retryReason: TEST_RETRY_REASON_TYPES.ext },
+                { status: 'pass', isRetry: 'true', retryReason: TEST_RETRY_REASON_TYPES.ext },
                 { status: 'pass', isRetry: 'true', retryReason: TEST_RETRY_REASON_TYPES.ext },
               ]
             )
-            const failedTests = tests.filter(test => test.meta[TEST_STATUS] === 'fail')
-            assert.notStrictEqual(failedTests[0].meta[ERROR_MESSAGE], failedTests[1].meta[ERROR_MESSAGE])
+            const retriedPasses = tests.filter(test =>
+              test.meta[TEST_STATUS] === 'pass' && test.meta[TEST_IS_RETRY] === 'true'
+            )
+            for (const retriedPass of retriedPasses) {
+              assert.ok(retriedPass.duration < 1_200_000_000, `Retried pass duration was ${retriedPass.duration}`)
+            }
           })
 
         childProcess = exec(
@@ -887,6 +891,8 @@ versions.forEach((version) => {
               PROJECT_POOL_CONFIG: 'forks',
               PROJECT_RETRY_CONFIG: '2',
               DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+              PERSIST_RETRY_ATTEMPTS: '1',
+              SLOW_FAILED_ATTEMPTS: '1',
               DD_SERVICE: undefined,
             },
           }
@@ -894,6 +900,53 @@ versions.forEach((version) => {
 
         const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
         assert.strictEqual(exitCode, 0)
+      })
+
+      newerVitestIt('reports the error from each failed retry when no-worker init is enabled', async () => {
+        receiver.setSettings({
+          flaky_test_retries_enabled: false,
+          known_tests_enabled: false,
+          early_flake_detection: {
+            enabled: false,
+          },
+        })
+
+        const testName = 'efd with manual vitest retries fails first then passes'
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events
+              .filter(event => event.type === 'test')
+              .map(test => test.content)
+              .filter(test => test.meta[TEST_NAME] === testName)
+              .sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0))
+
+            assert.strictEqual(tests.length, 3)
+            assert.strictEqual(tests.filter(test => test.meta[TEST_STATUS] === 'fail').length, 3)
+            assert.strictEqual(new Set(tests.map(test => test.meta[ERROR_MESSAGE])).size, 3)
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/fails-first-then-passes.mjs',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              POOL_CONFIG: 'forks',
+              PROJECT_POOL_CONFIG: 'forks',
+              PROJECT_RETRY_CONFIG: '2',
+              ALWAYS_FAIL_WITH_ATTEMPT_ERROR: '1',
+              DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+              PERSIST_RETRY_ATTEMPTS: '1',
+              DD_SERVICE: undefined,
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([once(childProcess, 'exit'), eventsPromise])
+        assert.strictEqual(exitCode, 1)
       })
     })
 

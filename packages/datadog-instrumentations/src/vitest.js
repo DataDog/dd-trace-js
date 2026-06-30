@@ -1502,7 +1502,7 @@ function reportTestAttempt (testReport, attempt) {
   testStartCh.runStores(testCtx, () => {})
   testCtx.status = status
   testCtx.task = task
-  if (status === 'pass' && attempt.finalStatus && result?.duration !== undefined) {
+  if (status === 'pass' && !attempt.isRetry && attempt.finalStatus && result?.duration !== undefined) {
     testCtx.duration = result.duration
   }
   testFinishTimeCh.runStores(testCtx, () => {})
