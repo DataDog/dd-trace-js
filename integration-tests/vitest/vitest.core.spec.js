@@ -43,6 +43,7 @@ const {
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_RETRY_REASON_TYPES,
   TEST_HAS_DYNAMIC_NAME,
+  TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   VITEST_POOL,
   TEST_IS_TEST_FRAMEWORK_WORKER,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
@@ -1226,6 +1227,7 @@ versions.forEach((version) => {
             assert.strictEqual(slowTests[0].meta[TEST_STATUS], 'fail')
             assert.strictEqual(slowTests[0].meta[TEST_IS_NEW], 'true')
             assert.strictEqual(slowTests[0].meta[TEST_EARLY_FLAKE_ABORT_REASON], 'slow')
+            assert.ok(!(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED in slowTests[0].meta))
           }, 55_000)
 
         childProcess = exec(

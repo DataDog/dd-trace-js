@@ -1347,7 +1347,7 @@ function getRepeatedTestReport (task, testName, testSuiteAbsolutePath, testPrope
       errorIndex++
     }
     const attempt = {
-      attemptToFixFailed: isFinalAttempt && hasFailure,
+      attemptToFixFailed: type === 'attempt_to_fix' && isFinalAttempt && hasFailure,
       earlyFlakeAbortReason: type === 'early_flake_detection' && isFinalAttempt
         ? task.meta?.__ddTestOptEfdAbortReason
         : undefined,
