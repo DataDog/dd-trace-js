@@ -1,8 +1,6 @@
 'use strict'
 
 /* eslint-disable no-console */
-const { isMainThread } = require('node:worker_threads')
-
 const { getEnvironmentVariable, getValueFromEnvSources } = require('../packages/dd-trace/src/config/helper')
 const log = require('../packages/dd-trace/src/log')
 const { isTrue } = require('../packages/dd-trace/src/util')
@@ -100,7 +98,6 @@ module.exports = tracer
 
 function shouldSkipVitestWorkerInit () {
   return shouldInit &&
-    isMainThread &&
     getValueFromEnvSources('DD_VITEST_WORKER') &&
     isVitestNoWorkerInitActive()
 }

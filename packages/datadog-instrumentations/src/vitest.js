@@ -430,15 +430,15 @@ function shouldUseVitestNoWorkerInit (ctx, testSpecifications) {
   }
 
   if (Array.isArray(testSpecifications)) {
-    if (hasNonIsolatedForkPoolTestSpecification(testSpecifications, config.pool, config)) {
+    if (hasNonIsolatedNoWorkerInitPoolTestSpecification(testSpecifications, config.pool, config)) {
       warnVitestNoWorkerInitWithIsolationDisabled()
       return false
     }
-    if (getAmbiguousUnnamedForkPoolFilepaths(testSpecifications, config.pool)?.size > 0) {
+    if (getAmbiguousUnnamedNoWorkerInitPoolFilepaths(testSpecifications, config.pool)?.size > 0) {
       warnVitestNoWorkerInitWithAmbiguousUnnamedProjects()
       return false
     }
-    return hasIsolatedForkPoolTestSpecification(testSpecifications, config.pool, config)
+    return hasIsolatedNoWorkerInitPoolTestSpecification(testSpecifications, config.pool, config)
   }
 
   if (getEffectiveConfigIsolate(config, config.pool) === false) {
@@ -446,7 +446,7 @@ function shouldUseVitestNoWorkerInit (ctx, testSpecifications) {
     return false
   }
 
-  return isForkPool(config.pool)
+  return isNoWorkerInitPool(config.pool)
 }
 
 function warnVitestNoWorkerInitWithIsolationDisabled () {
@@ -575,7 +575,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, s
 
   isVitestNoWorkerInitActive = shouldInstallNoWorkerInit
   const shouldSendWorkerInstrumentationContext = !shouldInstallNoWorkerInit ||
-    hasThreadPoolTestSpecification(ctx.config?.pool, testSpecifications)
+    hasWorkerInstrumentationPoolTestSpecification(ctx.config?.pool, testSpecifications)
 
   if (testSessionConfigurationCh.hasSubscribers) {
     testSessionConfiguration = await getChannelPromise(
@@ -760,19 +760,19 @@ function getVitestConfigs (ctx, testSpecifications) {
 
   if (Array.isArray(testSpecifications)) {
     const defaultPool = ctx.config?.pool
-    let hasRootConfigForkSpecification = false
+    let hasRootConfigNoWorkerInitSpecification = false
     for (const testSpecification of testSpecifications) {
-      if (!isForkPool(getEffectiveTestSpecificationPool(testSpecification, defaultPool))) continue
+      if (!isNoWorkerInitPool(getEffectiveTestSpecificationPool(testSpecification, defaultPool))) continue
 
       const config = safeConfig(getTestSpecificationProject(testSpecification))
       if (config) {
         configs.add(config)
       } else {
-        hasRootConfigForkSpecification = true
+        hasRootConfigNoWorkerInitSpecification = true
       }
     }
 
-    if (hasRootConfigForkSpecification) {
+    if (hasRootConfigNoWorkerInitSpecification) {
       addRootVitestConfigs(configs, ctx)
     }
 
@@ -862,11 +862,11 @@ function installMainProcessReporter (
   shouldInstallNoWorkerInit = shouldUseVitestNoWorkerInit(ctx),
   testSpecifications
 ) {
-  const forkPoolTestModules = getForkPoolTestModules(ctx.config?.pool, testSpecifications)
+  const noWorkerInitTestModules = getNoWorkerInitTestModules(ctx.config?.pool, testSpecifications)
 
   if (
     !shouldInstallNoWorkerInit ||
-    forkPoolTestModules?.isEmpty ||
+    noWorkerInitTestModules?.isEmpty ||
     mainProcessReporterContexts.has(ctx)
   ) {
     return
@@ -876,7 +876,7 @@ function installMainProcessReporter (
     frameworkVersion,
     testSessionConfiguration,
     testOptimizationData,
-    forkPoolTestModules
+    noWorkerInitTestModules
   ))
 }
 
@@ -884,7 +884,7 @@ function createMainProcessReporter (
   frameworkVersion,
   testSessionConfiguration = {},
   testOptimizationData = {},
-  forkPoolTestModules
+  noWorkerInitTestModules
 ) {
   const testSuiteContexts = new Map()
   const finishedTestModules = new Set()
@@ -934,7 +934,7 @@ function createMainProcessReporter (
   }
 
   function shouldReportTestModule (testModule) {
-    if (!forkPoolTestModules) return true
+    if (!noWorkerInitTestModules) return true
 
     const filepath = getTestModuleFilepath(testModule)
     const normalizedFilepath = normalizeFilepath(filepath)
@@ -942,14 +942,14 @@ function createMainProcessReporter (
 
     const projectName = getTestModuleProjectName(testModule)
     if (projectName) {
-      return forkPoolTestModules.projectFilepaths.has(getProjectFilepathKey(projectName, normalizedFilepath))
+      return noWorkerInitTestModules.projectFilepaths.has(getProjectFilepathKey(projectName, normalizedFilepath))
     }
-    return forkPoolTestModules.filepaths.has(normalizedFilepath) &&
-      !forkPoolTestModules.ambiguousFilepaths?.has(normalizedFilepath)
+    return noWorkerInitTestModules.filepaths.has(normalizedFilepath) &&
+      !noWorkerInitTestModules.ambiguousFilepaths?.has(normalizedFilepath)
   }
 
   function shouldReportTestTask (task) {
-    if (!forkPoolTestModules) return true
+    if (!noWorkerInitTestModules) return true
 
     const file = task.file
     if (!file) return false
@@ -1886,6 +1886,10 @@ function isThreadPool (pool) {
   return pool === 'threads' || pool === 'vmThreads'
 }
 
+function isNoWorkerInitPool (pool) {
+  return isForkPool(pool) || isThreadPool(pool)
+}
+
 function normalizeFilepath (filepath) {
   return typeof filepath === 'string' ? filepath.replaceAll('\\', '/') : undefined
 }
@@ -1948,13 +1952,13 @@ function getTestSpecificationProjectName (testSpecification) {
   return getProjectName(getTestSpecificationProject(testSpecification))
 }
 
-function hasForkPoolTestSpecification (testSpecifications, defaultPool) {
+function hasNoWorkerInitPoolTestSpecification (testSpecifications, defaultPool) {
   if (!Array.isArray(testSpecifications)) {
     return false
   }
 
   for (const testSpecification of testSpecifications) {
-    if (isForkPool(getEffectiveTestSpecificationPool(testSpecification, defaultPool))) {
+    if (isNoWorkerInitPool(getEffectiveTestSpecificationPool(testSpecification, defaultPool))) {
       return true
     }
   }
@@ -1962,7 +1966,7 @@ function hasForkPoolTestSpecification (testSpecifications, defaultPool) {
   return false
 }
 
-function hasIsolatedForkPoolTestSpecification (testSpecifications, defaultPool, defaultConfig) {
+function hasIsolatedNoWorkerInitPoolTestSpecification (testSpecifications, defaultPool, defaultConfig) {
   if (!Array.isArray(testSpecifications)) {
     return false
   }
@@ -1971,7 +1975,7 @@ function hasIsolatedForkPoolTestSpecification (testSpecifications, defaultPool, 
     const pool = getEffectiveTestSpecificationPool(testSpecification, defaultPool)
     const defaultIsolate = getEffectiveConfigIsolate(defaultConfig, pool)
     if (
-      isForkPool(pool) &&
+      isNoWorkerInitPool(pool) &&
       getEffectiveTestSpecificationIsolate(testSpecification, pool, defaultIsolate) !== false
     ) {
       return true
@@ -1981,7 +1985,7 @@ function hasIsolatedForkPoolTestSpecification (testSpecifications, defaultPool, 
   return false
 }
 
-function hasNonIsolatedForkPoolTestSpecification (testSpecifications, defaultPool, defaultConfig) {
+function hasNonIsolatedNoWorkerInitPoolTestSpecification (testSpecifications, defaultPool, defaultConfig) {
   if (!Array.isArray(testSpecifications)) {
     return false
   }
@@ -1990,7 +1994,7 @@ function hasNonIsolatedForkPoolTestSpecification (testSpecifications, defaultPoo
     const pool = getEffectiveTestSpecificationPool(testSpecification, defaultPool)
     const defaultIsolate = getEffectiveConfigIsolate(defaultConfig, pool)
     if (
-      isForkPool(pool) &&
+      isNoWorkerInitPool(pool) &&
       getEffectiveTestSpecificationIsolate(testSpecification, pool, defaultIsolate) === false
     ) {
       return true
@@ -2000,13 +2004,13 @@ function hasNonIsolatedForkPoolTestSpecification (testSpecifications, defaultPoo
   return false
 }
 
-function hasThreadPoolTestSpecification (defaultPool, testSpecifications) {
+function hasWorkerInstrumentationPoolTestSpecification (defaultPool, testSpecifications) {
   if (!Array.isArray(testSpecifications)) {
     return false
   }
 
   for (const testSpecification of testSpecifications) {
-    if (isThreadPool(getEffectiveTestSpecificationPool(testSpecification, defaultPool))) {
+    if (!isNoWorkerInitPool(getEffectiveTestSpecificationPool(testSpecification, defaultPool))) {
       return true
     }
   }
@@ -2014,13 +2018,13 @@ function hasThreadPoolTestSpecification (defaultPool, testSpecifications) {
   return false
 }
 
-function getAmbiguousUnnamedForkPoolFilepaths (testSpecifications, defaultPool) {
+function getAmbiguousUnnamedNoWorkerInitPoolFilepaths (testSpecifications, defaultPool) {
   if (!Array.isArray(testSpecifications)) {
     return
   }
 
-  const forkFilepaths = new Set()
-  const nonForkFilepaths = new Set()
+  const noWorkerInitFilepaths = new Set()
+  const workerInstrumentationFilepaths = new Set()
   const ambiguousFilepaths = new Set()
   for (const testSpecification of testSpecifications) {
     if (getTestSpecificationProjectName(testSpecification)) continue
@@ -2029,28 +2033,28 @@ function getAmbiguousUnnamedForkPoolFilepaths (testSpecifications, defaultPool) 
     if (!filepath) continue
 
     const pool = getEffectiveTestSpecificationPool(testSpecification, defaultPool)
-    if (isForkPool(pool)) {
-      if (nonForkFilepaths.has(filepath)) ambiguousFilepaths.add(filepath)
-      forkFilepaths.add(filepath)
+    if (isNoWorkerInitPool(pool)) {
+      if (workerInstrumentationFilepaths.has(filepath)) ambiguousFilepaths.add(filepath)
+      noWorkerInitFilepaths.add(filepath)
     } else {
-      if (forkFilepaths.has(filepath)) ambiguousFilepaths.add(filepath)
-      nonForkFilepaths.add(filepath)
+      if (noWorkerInitFilepaths.has(filepath)) ambiguousFilepaths.add(filepath)
+      workerInstrumentationFilepaths.add(filepath)
     }
   }
 
   return ambiguousFilepaths
 }
 
-function getForkPoolTestModules (defaultPool, testSpecifications) {
+function getNoWorkerInitTestModules (defaultPool, testSpecifications) {
   if (!Array.isArray(testSpecifications)) {
     return
   }
 
-  const ambiguousFilepaths = getAmbiguousUnnamedForkPoolFilepaths(testSpecifications, defaultPool)
+  const ambiguousFilepaths = getAmbiguousUnnamedNoWorkerInitPoolFilepaths(testSpecifications, defaultPool)
   const filepaths = new Set()
   const projectFilepaths = new Set()
   for (const testSpecification of testSpecifications) {
-    if (!isForkPool(getEffectiveTestSpecificationPool(testSpecification, defaultPool))) continue
+    if (!isNoWorkerInitPool(getEffectiveTestSpecificationPool(testSpecification, defaultPool))) continue
 
     const filepath = normalizeFilepath(getTestSpecificationFilepath(testSpecification))
     if (!filepath) return
@@ -2076,8 +2080,8 @@ function getProjectFilepathKey (projectName, filepath) {
 }
 
 function shouldMarkVitestWorkerEnv (pool, testSpecifications) {
-  return isForkPool(pool) || hasForkPoolTestSpecification(testSpecifications, pool) ||
-    (!testSpecifications && isForkPool(pool))
+  return isNoWorkerInitPool(pool) || hasNoWorkerInitPoolTestSpecification(testSpecifications, pool) ||
+    (!testSpecifications && isNoWorkerInitPool(pool))
 }
 
 function markVitestWorkerEnv (ctx, testSpecifications, shouldSkipWorkerInit = false) {
@@ -2086,7 +2090,7 @@ function markVitestWorkerEnv (ctx, testSpecifications, shouldSkipWorkerInit = fa
   if (!config || !shouldMarkVitestWorkerEnv(config.pool, testSpecifications)) {
     return
   }
-  config.env = getVitestWorkerEnv(config.env, shouldSkipWorkerInit)
+  config.env = getVitestWorkerEnv(config.env)
 }
 
 function wrapVitestRunFiles (Vitest, frameworkVersion) {
@@ -2190,7 +2194,7 @@ function wrapTinypoolConstructor (Tinypool) {
 }
 
 function getTinypoolOptions (options = {}) {
-  if (!shouldMarkVitestForkWorkerPool(options)) {
+  if (!shouldMarkVitestWorkerPool(options)) {
     return options
   }
 
@@ -2200,8 +2204,8 @@ function getTinypoolOptions (options = {}) {
   }
 }
 
-function shouldMarkVitestForkWorkerPool (options) {
-  if (options?.runtime !== 'child_process') return false
+function shouldMarkVitestWorkerPool (options) {
+  if (options?.runtime !== 'child_process' && options?.runtime !== 'worker_threads') return false
   if (options.env?.VITEST !== 'true') return false
 
   const filename = typeof options.filename === 'string' ? options.filename.replaceAll('\\', '/') : ''
@@ -2289,7 +2293,7 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
     // function is async
     shimmer.wrap(threadsPoolWorker.value.prototype, 'start', start => function (...args) {
       vitestPool = 'worker_threads'
-      this.env.DD_VITEST_WORKER = '1'
+      this.env = getVitestWorkerEnv(this.env, isVitestNoWorkerInitActive)
       return start.apply(this, args)
     })
     shimmer.wrap(threadsPoolWorker.value.prototype, 'on', getWrappedOn)

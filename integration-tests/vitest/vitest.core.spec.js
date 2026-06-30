@@ -371,6 +371,47 @@ versions.forEach((version) => {
       assert.strictEqual(exitCode, 0, testOutput)
     })
 
+    latestVitestIt('strips Datadog NODE_OPTIONS from thread workers when no-worker init is enabled', async () => {
+      const payloadsPromise = receiver.gatherPayloadsMaxTimeout(
+        ({ url }) => url === '/api/v2/citestcycle',
+        payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testEvents = events.filter(event => event.type === 'test')
+
+          assert.strictEqual(testEvents.length, 1, inspect(events.map(event => event.type)))
+          assert.strictEqual(testEvents[0].content.meta[TEST_NAME], 'vitest worker env sets DD_VITEST_WORKER')
+          assert.strictEqual(testEvents[0].content.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(testEvents[0].content.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
+        }
+      )
+
+      childProcess = exec(
+        './node_modules/.bin/vitest run',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--no-warnings --import dd-trace/register.js -r dd-trace/ci/init',
+            TEST_DIR: 'ci-visibility/vitest-tests/vitest-worker-env.mjs',
+            POOL_CONFIG: 'threads',
+            DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+            EXPECT_DD_NODE_OPTIONS_STRIPPED: '1',
+            DD_SERVICE: undefined,
+          },
+        }
+      )
+
+      childProcess.stdout.on('data', data => { testOutput += data })
+      childProcess.stderr.on('data', data => { testOutput += data })
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        payloadsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+
     newerVitestIt('strips Datadog NODE_OPTIONS from fork project workers when root pool is threads', async () => {
       const payloadsPromise = receiver.gatherPayloadsMaxTimeout(
         ({ url }) => url === '/api/v2/citestcycle',
@@ -456,7 +497,7 @@ versions.forEach((version) => {
       assert.ok(testOutput.includes(CUSTOM_SEQUENCER_MARKER), `Got: ${inspect(testOutput)}`)
     })
 
-    latestVitestIt('sends worker context to thread specs routed from fork projects', async () => {
+    latestVitestIt('reports thread specs routed from fork projects without worker init', async () => {
       const payloadsPromise = receiver.gatherPayloadsMaxTimeout(
         ({ url }) => url === '/api/v2/citestcycle',
         payloads => {

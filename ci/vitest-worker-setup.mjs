@@ -4,7 +4,9 @@ import { performance } from 'node:perf_hooks'
 
 import { afterEach, beforeAll, beforeEach } from 'vitest'
 
-const providedContext = getProvidedContext()
+const VITEST_NO_WORKER_INIT_ACTIVE_ENV = 'DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE'
+const isNoWorkerInitActive = getIsNoWorkerInitActive()
+const providedContext = isNoWorkerInitActive ? getProvidedContext() : {}
 const attemptToFixTests = providedContext.attemptToFixTests || {}
 const attemptToFixRetries = providedContext.attemptToFixRetries || 0
 const disabledTests = providedContext.disabledTests || {}
@@ -23,58 +25,62 @@ const modifiedFiles = providedContext.modifiedFiles || {}
 const quarantinedTests = providedContext.quarantinedTests || {}
 const repositoryRoot = realpath(providedContext.repositoryRoot || process.cwd())
 let setVitestTaskFn
-try {
-  // Vitest does not expose setFn from the public setup API; keep this optional for strict installers.
-  const vitestRunner = await import('@vitest/runner')
-  setVitestTaskFn = vitestRunner.setFn
-} catch {}
+if (isNoWorkerInitActive) {
+  try {
+    // Vitest does not expose setFn from the public setup API; keep this optional for strict installers.
+    const vitestRunner = await import('@vitest/runner')
+    setVitestTaskFn = vitestRunner.setFn
+  } catch {}
+}
 const earlyFlakeDetectionRetriesByTask = new WeakMap()
 const earlyFlakeDetectionSkippedResults = new WeakMap()
 const earlyFlakeDetectionStartByTask = new WeakMap()
 const nextAttemptIndexByTask = new WeakMap()
 const realpaths = new Map()
 
-// eslint-disable-next-line no-empty-pattern
-beforeAll(function ({}, suite) {
-  suite ||= arguments[0]
-  applyExecutionChanges(suite)
-})
+if (isNoWorkerInitActive) {
+  // eslint-disable-next-line no-empty-pattern
+  beforeAll(function ({}, suite) {
+    suite ||= arguments[0]
+    applyExecutionChanges(suite)
+  })
 
-beforeEach(function ({ onTestFinished, task, skip }) {
-  const testSuite = getTestSuite(task)
-  const testName = getTestName(task)
-  const attemptIndex = getNextAttemptIndex(task)
-  if (attemptIndex > 0) {
-    recordTestOptimizationStatus(task, attemptIndex - 1)
-  }
-
-  if (disabledTests[testSuite]?.[testName]) {
-    skip('Skipped by Datadog Test Optimization')
-  } else if (attemptToFixTests[testSuite]?.[testName] && attemptIndex > 0) {
-    task.result.state = 'run'
-  } else if (isEarlyFlakeDetectionTest(testSuite, testName)) {
-    const isSkippedRepeat = prepareEarlyFlakeDetectionAttempt(task, attemptIndex)
-    if (!isSkippedRepeat && attemptIndex > 0) {
-      task.result.state = 'run'
+  beforeEach(function ({ onTestFinished, task, skip }) {
+    const testSuite = getTestSuite(task)
+    const testName = getTestName(task)
+    const attemptIndex = getNextAttemptIndex(task)
+    if (attemptIndex > 0) {
+      recordTestOptimizationStatus(task, attemptIndex - 1)
     }
-  }
 
-  if (attemptToFixTests[testSuite]?.[testName] || isEarlyFlakeDetectionTest(testSuite, testName)) {
-    onTestFinished(() => {
-      if (attemptIndex === getFinalAttemptIndex(task)) {
-        recordTestOptimizationStatus(task, attemptIndex, true)
+    if (disabledTests[testSuite]?.[testName]) {
+      skip('Skipped by Datadog Test Optimization')
+    } else if (attemptToFixTests[testSuite]?.[testName] && attemptIndex > 0) {
+      task.result.state = 'run'
+    } else if (isEarlyFlakeDetectionTest(testSuite, testName)) {
+      const isSkippedRepeat = prepareEarlyFlakeDetectionAttempt(task, attemptIndex)
+      if (!isSkippedRepeat && attemptIndex > 0) {
+        task.result.state = 'run'
       }
-    })
-  }
-})
+    }
 
-afterEach(function ({ task }) {
-  const attemptIndex = task.meta.__ddTestOptCurrentAttemptIndex
-  if (attemptIndex === getFinalAttemptIndex(task)) {
-    recordTestOptimizationStatus(task, attemptIndex)
-  }
-  switchQuarantinedFinalFailure(task, attemptIndex)
-})
+    if (attemptToFixTests[testSuite]?.[testName] || isEarlyFlakeDetectionTest(testSuite, testName)) {
+      onTestFinished(() => {
+        if (attemptIndex === getFinalAttemptIndex(task)) {
+          recordTestOptimizationStatus(task, attemptIndex, true)
+        }
+      })
+    }
+  })
+
+  afterEach(function ({ task }) {
+    const attemptIndex = task.meta.__ddTestOptCurrentAttemptIndex
+    if (attemptIndex === getFinalAttemptIndex(task)) {
+      recordTestOptimizationStatus(task, attemptIndex)
+    }
+    switchQuarantinedFinalFailure(task, attemptIndex)
+  })
+}
 
 function applyExecutionChanges (suite) {
   for (const task of suite?.tasks || []) {
@@ -363,6 +369,16 @@ function getTestName (task) {
 
 function normalizePath (filepath) {
   return filepath.replaceAll('\\', '/')
+}
+
+function getIsNoWorkerInitActive () {
+  try {
+    // eslint-disable-next-line eslint-rules/eslint-process-env
+    const value = process.env[VITEST_NO_WORKER_INIT_ACTIVE_ENV]
+    return value === '1' || value === 'true'
+  } catch {
+    return false
+  }
 }
 
 function getProvidedContext () {
