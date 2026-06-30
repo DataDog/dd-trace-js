@@ -158,7 +158,7 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
   /**
    * Builds the shared OTLP data point attributes for an aggregation key. OTel semantic-convention
    * attributes are emitted in both modes; Datadog datadog.* attributes are added only in default mode.
-   * Values are emitted with their native OTLP types (e.g. the HTTP status code as an int).
+   * Values are emitted with their native OTLP types (http.response.status_code: int, rpc.response.status_code: string).
    *
    * @param {import('../../span_stats').SpanAggKey} aggKey
    * @returns {object[]}
@@ -174,9 +174,8 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
     if (aggKey.statusCode) raw['http.response.status_code'] = Number(aggKey.statusCode)
     if (aggKey.method) raw['http.request.method'] = aggKey.method
     if (aggKey.endpoint) raw['http.route'] = aggKey.endpoint
-    if (aggKey.rpcStatusCode !== undefined && aggKey.rpcStatusCode !== '') {
-      const code = Number(aggKey.rpcStatusCode)
-      raw['rpc.response.status_code'] = Number.isNaN(code) ? aggKey.rpcStatusCode : code
+    if (aggKey.rpcStatusCode !== '') {
+      raw['rpc.response.status_code'] = String(aggKey.rpcStatusCode)
     }
 
     if (!this.#otelSemanticsEnabled) {

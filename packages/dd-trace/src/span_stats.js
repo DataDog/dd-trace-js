@@ -11,14 +11,13 @@ const {
   HTTP_ROUTE,
   HTTP_METHOD,
   SPAN_KIND,
+  GRPC_STATUS_CODE,
 } = require('../../../ext/tags')
 const { ORIGIN_KEY, TOP_LEVEL_KEY, SVC_SRC_KEY } = require('./constants')
 const { version } = require('./pkg')
 const processTags = require('./process-tags')
 
 const { SpanStatsExporter } = require('./exporters/span-stats')
-
-const GRPC_STATUS_CODE = 'grpc.status.code'
 
 const {
   DEFAULT_SPAN_NAME,
@@ -195,9 +194,7 @@ class SpanStatsProcessor {
         Sequence: ++this.sequence,
         ProcessTags: processTags.serialized,
       })
-    }
-
-    if (this.otlpExporter && drained.length > 0) {
+    } else if (this.otlpExporter && drained.length > 0) {
       this.otlpExporter.export(drained, this.bucketSizeNs)
     }
   }

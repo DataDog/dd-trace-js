@@ -114,7 +114,7 @@ describe('OtlpStatsTransformer', () => {
         'http.response.status_code': 404,
         'http.request.method': 'POST',
         'http.route': '/users/:id',
-        'rpc.response.status_code': 0,
+        'rpc.response.status_code': '0',
         'datadog.operation.name': 'test.op',
         'datadog.span.type': 'web',
         'datadog.origin': 'synthetics',
@@ -122,13 +122,13 @@ describe('OtlpStatsTransformer', () => {
       })
     })
 
-    it('translates a numeric grpc.status.code stored in span metrics to rpc.response.status_code', () => {
-      // The gRPC plugin records the status code as a numeric tag, which span formatting routes into
-      // metrics rather than meta; 0 (OK) is a common value and must still be emitted.
+    it('translates grpc.status.code to rpc.response.status_code as a string', () => {
+      // The gRPC plugin records the status code as a numeric metric; emitted as a string to align
+      // with libdatadog (kv_str). 0 (OK) is a common value and must not be filtered out.
       const span = makeSpan({ meta: {}, metrics: { 'grpc.status.code': 0 } })
       const payload = JSON.parse(transformer.transform(makeDrained(12340000000000, [span]), BUCKET_SIZE_NS))
 
-      assert.strictEqual(attrMapOf(dataPointsOf(payload)[0])['rpc.response.status_code'], 0)
+      assert.strictEqual(attrMapOf(dataPointsOf(payload)[0])['rpc.response.status_code'], '0')
     })
 
     it('omits optional attributes when not present on the span', () => {

@@ -27,6 +27,9 @@ const tags = {
   HTTP_CLIENT_IP: 'http.client_ip',
   NETWORK_CLIENT_IP: 'network.client.ip',
 
+  // gRPC
+  GRPC_STATUS_CODE: 'grpc.status.code',
+
   // Messaging
 
   // DSM Specific
