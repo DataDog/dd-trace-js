@@ -419,6 +419,39 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     return replayedStep
   })
 
+  it('checkpoint plugin: replayed step that failed permanently reports normalized operation_attempt', async () => {
+    const replayedFailedStep = agent.assertSomeTraces(traces => {
+      const span = traces.flat().find(s =>
+        s.name === 'aws.durable.step' &&
+        s.resource === 'always-fails' &&
+        s.meta?.['aws.durable.replayed'] === 'true'
+      )
+      assert.ok(span, 'expected a replayed FAILED step span')
+      // The step exhausts its retries and fails on its 2nd attempt. On replay the SDK reloads the
+      // FAILED checkpoint (re-raising without running the body), whose StepDetails.Attempt is the
+      // 1-indexed attempt that failed (2). A FAILED checkpoint is a replay just like a SUCCEEDED
+      // one, so it is tagged replayed=true and normalized back to the live 0-indexed final attempt.
+      assert.equal(span.metrics?.['aws.durable.operation_attempt'], 1,
+        'replayed FAILED step should carry the normalized operation_attempt=1')
+    }, { timeoutMs: 8000 })
+
+    await invokeHandler(async (event, ctx) => {
+      try {
+        await ctx.step(
+          'always-fails',
+          async () => { throw new Error('permanent failure') },
+          { retryStrategy: (error, attempt) => ({ shouldRetry: attempt < 2, delay: { seconds: 1 } }) }
+        )
+      } catch {
+        // The durable step surfaces the permanent failure; swallow it so the execution continues
+        // to the wait below, whose replay re-reads the now-FAILED checkpoint.
+      }
+      await ctx.wait('suspend-trigger', { seconds: 1 })
+    })
+
+    return replayedFailedStep
+  })
+
   // waitForCondition is the other retryable op. Its StepDetails.Attempt follows the
   // same convention as step (live: prior-attempt count; SUCCEEDED replay: 1-indexed
   // attempt that succeeded), so it must get the same replay normalization. This guards
