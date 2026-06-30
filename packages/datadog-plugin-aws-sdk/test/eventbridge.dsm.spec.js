@@ -7,7 +7,7 @@ const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor'
 const propagationHash = require('../../dd-trace/src/propagation-hash')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
-const { callViaPromise, setup, withAwsSdkVersions } = require('./spec_helpers')
+const { setup, withAwsSdkVersions } = require('./spec_helpers')
 
 describe('EventBridge', function () {
   this.timeout(10000)
@@ -55,7 +55,7 @@ describe('EventBridge', function () {
     it('injects the expected DSM pathway hash during EventBridge putEvents', done => {
       let putEventsSpanMeta = {}
 
-      const tracePromise = agent.assertSomeTraces(traces => {
+      agent.assertSomeTraces(traces => {
         const span = traces[0][0]
 
         if (span.resource.startsWith('putEvents')) {
@@ -65,18 +65,17 @@ describe('EventBridge', function () {
         assertObjectContains(putEventsSpanMeta, {
           'pathway.hash': expectedProducerHash,
         })
-      })
+      }).then(done, done)
 
-      Promise.all([
-        tracePromise,
-        callViaPromise(eventbridge, 'putEvents', {
-          Entries: [{
-            Detail: '{"id":1}',
-            DetailType: 'invoice.created',
-            Source: 'checkout',
-          }],
-        }),
-      ]).then(() => done(), done)
+      eventbridge.putEvents({
+        Entries: [{
+          Detail: '{"id":1}',
+          DetailType: 'invoice.created',
+          Source: 'checkout',
+        }],
+      }, err => {
+        if (err) return done(err)
+      })
     })
 
     function getEventBridgeClient () {
@@ -84,6 +83,9 @@ describe('EventBridge', function () {
       const lib = require(`../../../versions/${eventbridgeClientName}@${version}`).get()
 
       if (moduleName === '@aws-sdk/smithy-client') {
+        const { NodeHttpHandler } = require(`../../../versions/@aws-sdk/node-http-handler@${version}`).get()
+
+        params.requestHandler = new NodeHttpHandler()
         return new lib.EventBridge(params)
       }
 
