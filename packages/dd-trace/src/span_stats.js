@@ -98,8 +98,7 @@ class SpanAggKey {
     this.srvSrc = span.meta[SVC_SRC_KEY] || ''
     this.origin = span.meta[ORIGIN_KEY] || ''
     this.spanKind = span.meta[SPAN_KIND] || ''
-    // gRPC status is the canonical status NAME string and lives in meta; prefer it so the name is
-    // preserved. Fall back to metrics for the numeric tag the gRPC plugin records.
+    // Prefer the meta status NAME string; fall back to the numeric metrics tag from the gRPC plugin.
     this.rpcStatusCode = span.meta[GRPC_STATUS_CODE] ?? span.metrics?.[GRPC_STATUS_CODE] ?? ''
   }
 

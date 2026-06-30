@@ -123,8 +123,6 @@ describe('OtlpStatsTransformer', () => {
     })
 
     it('emits the raw grpc.status.code name upper-cased as rpc.response.status_code', () => {
-      // OTel rpc.response.status_code is the canonical gRPC status NAME; the raw meta value is
-      // emitted upper-cased without any code<->name mapping.
       const span = makeSpan({ meta: { [GRPC_STATUS_CODE]: 'not_found' }, metrics: {} })
       const payload = JSON.parse(transformer.transform(makeDrained(12340000000000, [span]), BUCKET_SIZE_NS))
 
