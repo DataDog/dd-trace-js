@@ -209,8 +209,10 @@ class NativeSpansInterface {
    * @param {string} url OTLP HTTP traces endpoint (e.g. http://host:4318/v1/traces)
    */
   setOtlpEndpoint (url) {
-    this._otlpEndpoint = url
+    // Forward first, persist only on success (matching setOtlpProtocol), so a
+    // value the native layer rejects is never re-applied on a setAgentUrl rebuild.
     this._state.setOtlpEndpoint(url)
+    this._otlpEndpoint = url
   }
 
   /**
@@ -230,8 +232,9 @@ class NativeSpansInterface {
    * @param {string[]} headers Flat [key, value, ...] pairs
    */
   setOtlpHeaders (headers) {
-    this._otlpHeaders = headers
+    // Forward first, persist only on success (see setOtlpEndpoint).
     this._state.setOtlpHeaders(headers)
+    this._otlpHeaders = headers
   }
 
   /**

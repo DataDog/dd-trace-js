@@ -14,6 +14,7 @@ describe('NativeExporter', () => {
   let prioritySampler
   let nativeSpans
   let logError
+  let logWarn
   let metricsIncrement
   let fetchAgentInfo
   let clock
@@ -42,11 +43,12 @@ describe('NativeExporter', () => {
     }
 
     logError = sinon.stub()
+    logWarn = sinon.stub()
     metricsIncrement = sinon.stub()
     fetchAgentInfo = sinon.stub()
     NativeExporter = proxyquire('../../src/exporters/native', {
       '../../log': {
-        warn: sinon.stub(),
+        warn: logWarn,
         error: logError,
         debug: sinon.stub(),
       },
@@ -116,6 +118,9 @@ describe('NativeExporter', () => {
       // eslint-disable-next-line no-new
       new NativeExporter(config, prioritySampler, nativeSpans)
       sinon.assert.calledOnceWithExactly(nativeSpans.setOtlpEndpoint, 'http://collector:4318/v1/traces')
+      // No protocol/headers configured — the native defaults are used.
+      sinon.assert.notCalled(nativeSpans.setOtlpProtocol)
+      sinon.assert.notCalled(nativeSpans.setOtlpHeaders)
     })
 
     it('forwards the OTLP protocol and flattened headers', () => {
@@ -144,6 +149,8 @@ describe('NativeExporter', () => {
       // eslint-disable-next-line no-new
       new NativeExporter(config, prioritySampler, nativeSpans)
       sinon.assert.calledOnce(nativeSpans.setOtlpEndpoint)
+      // The fallback is observable as a warning.
+      sinon.assert.calledOnce(logWarn)
     })
 
     it('does not configure OTLP when exporter is not otlp', () => {
@@ -151,6 +158,22 @@ describe('NativeExporter', () => {
       // eslint-disable-next-line no-new
       new NativeExporter(config, prioritySampler, nativeSpans)
       sinon.assert.notCalled(nativeSpans.setOtlpEndpoint)
+    })
+
+    it('does not call setOtlpHeaders for an empty headers map', () => {
+      config.OTEL_EXPORTER_OTLP_TRACES_HEADERS = {}
+      // eslint-disable-next-line no-new
+      new NativeExporter(config, prioritySampler, nativeSpans)
+      sinon.assert.calledOnce(nativeSpans.setOtlpEndpoint)
+      sinon.assert.notCalled(nativeSpans.setOtlpHeaders)
+    })
+
+    it('skips OTLP setup (and warns) when no endpoint is resolved', () => {
+      config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT = undefined
+      // eslint-disable-next-line no-new
+      new NativeExporter(config, prioritySampler, nativeSpans)
+      sinon.assert.notCalled(nativeSpans.setOtlpEndpoint)
+      sinon.assert.calledOnce(logWarn)
     })
   })
 

@@ -480,6 +480,26 @@ describe('NativeSpansInterface', () => {
       nativeSpans.setAgentUrl('http://localhost:9999')
       sinon.assert.notCalled(newState.setOtlpEndpoint)
     })
+
+    it('does not persist or re-apply a protocol the native layer rejects', () => {
+      // setOtlpProtocol forwards first; a rejected value must NOT be persisted,
+      // so a later setAgentUrl rebuild never re-applies (and re-throws) it.
+      mockState.setOtlpProtocol.throws(new Error('OTLP gRPC export is not supported'))
+      nativeSpans.setOtlpEndpoint('http://c:4318/v1/traces')
+      assert.throws(() => nativeSpans.setOtlpProtocol('grpc'))
+      const newState = {
+        ...mockState,
+        setOtlpEndpoint: sinon.stub(),
+        setOtlpProtocol: sinon.stub(),
+        setOtlpHeaders: sinon.stub(),
+        change_queue_ptr: sinon.stub().returns(0),
+      }
+      WasmSpanState.returns(newState)
+      nativeSpans.setAgentUrl('http://localhost:9999')
+      // Endpoint re-applied; the rejected protocol was never persisted.
+      sinon.assert.calledOnceWithExactly(newState.setOtlpEndpoint, 'http://c:4318/v1/traces')
+      sinon.assert.notCalled(newState.setOtlpProtocol)
+    })
   })
 
   describe('agent URL normalization', () => {

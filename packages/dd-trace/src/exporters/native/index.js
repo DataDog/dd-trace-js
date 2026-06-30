@@ -82,7 +82,18 @@ class NativeExporter {
    */
   #configureOtlp () {
     const config = this._config
-    this._nativeSpans.setOtlpEndpoint(config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT)
+    const endpoint = config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+    if (!endpoint) {
+      // OTEL_TRACES_EXPORTER=otlp but no endpoint resolved (normally config
+      // defaults this). Without an endpoint there's nothing to route to, so
+      // leave the exporter on the agent path rather than passing undefined.
+      log.warn('Native exporter: OTEL_TRACES_EXPORTER=otlp but no OTLP traces endpoint resolved; skipping OTLP setup')
+      return
+    }
+    // A malformed endpoint is intentionally NOT caught here (unlike protocol
+    // below): it fails loud at build/first-send rather than silently degrading,
+    // since there is no sensible default endpoint to fall back to.
+    this._nativeSpans.setOtlpEndpoint(endpoint)
 
     const protocol = config.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
     if (protocol) {
