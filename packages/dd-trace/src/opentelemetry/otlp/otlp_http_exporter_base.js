@@ -37,17 +37,19 @@ class OtlpHttpExporterBase {
 
     const isJson = protocol === 'http/json'
 
-    // Initialize fields setUrl doesn't touch; it fills in hostname/port/path below.
+    const parsedUrl = new URL(url)
+    this.#transport = parsedUrl.protocol === 'http:' ? http : https
     this.options = {
       method: 'POST',
       timeout,
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port,
+      path: parsedUrl.pathname + parsedUrl.search,
       headers: {
         'Content-Type': isJson ? 'application/json' : 'application/x-protobuf',
         ...headers,
       },
     }
-
-    this.setUrl(url)
 
     this.telemetryTags = [
       `protocol:${this.#transport === https ? 'https' : 'http'}`,
@@ -121,26 +123,6 @@ class OtlpHttpExporterBase {
     })
   }
 
-  /**
-   * Updates the target URL used by this exporter. The URL is used as-is per the OTel spec: the
-   * caller is responsible for including the signal-specific path (`/v1/traces` etc.).
-   * @param {string} url - New OTLP endpoint URL
-   */
-  setUrl (url) {
-    const parsedUrl = new URL(url)
-    this.options.hostname = parsedUrl.hostname
-    this.options.port = parsedUrl.port
-    this.options.path = parsedUrl.pathname + parsedUrl.search
-    this.#transport = parsedUrl.protocol === 'http:' ? http : https
-    if (this.telemetryTags !== undefined) {
-      this.telemetryTags[0] = `protocol:${this.#transport === https ? 'https' : 'http'}`
-    }
-  }
-
-  /**
-   * Shuts down the exporter.
-   * Subclasses can override to add cleanup logic.
-   */
   shutdown () {}
 }
 

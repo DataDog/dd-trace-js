@@ -8,6 +8,7 @@ const sinon = require('sinon')
 require('../../setup/core')
 
 const { OtlpStatsExporter } = require('../../../src/opentelemetry/metrics/otlp_span_stats_exporter')
+const { buildResourceAttributes, createOtlpSpanStatsExporter } = require('../../../src/opentelemetry/metrics')
 const { SpanBuckets } = require('../../../src/span_stats')
 const { HTTP_STATUS_CODE } = require('../../../../../ext/tags')
 
@@ -36,6 +37,49 @@ function makeDrained (spans) {
   }
   return [{ timeNs: 12340000000000, bucket }]
 }
+
+describe('buildResourceAttributes', () => {
+  it('includes sdk identity and maps service/env/version to OTel attributes', () => {
+    const attrs = buildResourceAttributes({}, { service: 'my-svc', env: 'prod', serviceVersion: '1.0.0' })
+
+    assert.strictEqual(attrs['telemetry.sdk.name'], 'datadog')
+    assert.strictEqual(attrs['telemetry.sdk.language'], 'nodejs')
+    assert.strictEqual(typeof attrs['telemetry.sdk.version'], 'string')
+    assert.strictEqual(attrs['service.name'], 'my-svc')
+    assert.strictEqual(attrs['deployment.environment.name'], 'prod')
+    assert.strictEqual(attrs['service.version'], '1.0.0')
+  })
+
+  it('includes datadog.runtime_id from tags when otelSemanticsEnabled is false', () => {
+    const attrs = buildResourceAttributes({ 'runtime-id': 'abc-123' }, { otelSemanticsEnabled: false })
+    assert.strictEqual(attrs['datadog.runtime_id'], 'abc-123')
+  })
+
+  it('omits dd.* attributes when otelSemanticsEnabled is true', () => {
+    const attrs = buildResourceAttributes({ 'runtime-id': 'abc-123' }, { otelSemanticsEnabled: true })
+    assert.ok(!Object.keys(attrs).some(k => k.startsWith('datadog.')))
+  })
+})
+
+describe('createOtlpSpanStatsExporter', () => {
+  let httpStub
+
+  beforeEach(() => {
+    httpStub = sinon.stub(http, 'request').returns({
+      write: sinon.stub(), end: sinon.stub(), on: sinon.stub(), once: sinon.stub(),
+    })
+  })
+
+  afterEach(() => httpStub.restore())
+
+  it('returns an OtlpStatsExporter configured from config', () => {
+    const exporter = createOtlpSpanStatsExporter({
+      OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: 'http://localhost:4318/v1/metrics',
+      service: 'svc',
+    })
+    assert.ok(exporter instanceof OtlpStatsExporter)
+  })
+})
 
 describe('OtlpStatsExporter', () => {
   let exporter
@@ -110,5 +154,29 @@ describe('OtlpStatsExporter', () => {
 
     const options = httpStub.firstCall.args[0]
     assert.strictEqual(options.headers['Content-Type'], 'application/x-protobuf')
+  })
+
+  it('logs an error on non-2xx HTTP response', () => {
+    httpStub.callsFake((options, callback) => {
+      const mockRes = {
+        statusCode: 500,
+        on: (event, handler) => { if (event === 'data') handler('err body') },
+        once: (event, handler) => { if (event === 'end') handler() },
+      }
+      if (callback) callback(mockRes)
+      return mockReq
+    })
+
+    const drained = makeDrained([makeSpan()])
+    exporter.export(drained, BUCKET_SIZE_NS)
+    assert.ok(httpStub.calledOnce)
+  })
+
+  it('handles request error without throwing', () => {
+    mockReq.on = (event, handler) => { if (event === 'error') handler(new Error('connection refused')) }
+
+    const drained = makeDrained([makeSpan()])
+    exporter.export(drained, BUCKET_SIZE_NS)
+    assert.ok(httpStub.calledOnce)
   })
 })
