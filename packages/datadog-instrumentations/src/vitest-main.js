@@ -17,6 +17,7 @@ const {
   isModifiedTest,
 } = require('../../dd-trace/src/plugins/util/test')
 const { addHook } = require('./helpers/instrument')
+const noWorkerInit = require('./vitest-main-no-worker-init')
 const {
   testSessionStartCh,
   testSessionFinishCh,
@@ -55,6 +56,7 @@ let isDiEnabled = false
 let testCodeCoverageLinesTotal
 let coverageRootDir
 let isSessionStarted = false
+let isVitestNoWorkerInitActive = false
 let vitestPool = null
 let isMessagePortWrapped = false
 const tinyPoolClassWrappers = new WeakMap()
@@ -375,16 +377,21 @@ function resetMainProcessProvidedContext (ctx) {
   }, 'Could not reset Test Optimization context for workers.')
 }
 
-async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
+async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, shouldInstallNoWorkerInit) {
   if (!testSessionFinishCh.hasSubscribers) {
     return
   }
 
   let repositoryRoot = process.cwd()
+  let testSessionConfiguration
   let testFilepaths
   let shouldSendTestProperties = false
+  let testPropertiesByFilepath
+  let knownTests
   let knownTestsBySuite
+  let testManagementTests
   let testManagementTestsBySuite
+  let modifiedFiles
   let impactedTestSuites
   const getCurrentTestFilepaths = async () => {
     if (testFilepaths === undefined) {
@@ -407,21 +414,24 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
   resetMainProcessProvidedContext(ctx)
 
   if (testSessionConfigurationCh.hasSubscribers) {
+    testSessionConfiguration = await getChannelPromise(testSessionConfigurationCh, frameworkVersion)
     const {
       testSessionId,
       testModuleId,
       testCommand,
       repositoryRoot: receivedRepositoryRoot,
       codeOwnersEntries,
-    } = await getChannelPromise(testSessionConfigurationCh, frameworkVersion)
+    } = testSessionConfiguration
     repositoryRoot = receivedRepositoryRoot || repositoryRoot
-    setProvidedContext(ctx, {
-      _ddTestSessionId: testSessionId,
-      _ddTestModuleId: testModuleId,
-      _ddTestCommand: testCommand,
-      _ddRepositoryRoot: repositoryRoot,
-      _ddCodeOwnersEntries: codeOwnersEntries,
-    }, 'Could not send test session configuration to workers.')
+    if (!shouldInstallNoWorkerInit) {
+      setProvidedContext(ctx, {
+        _ddTestSessionId: testSessionId,
+        _ddTestModuleId: testModuleId,
+        _ddTestCommand: testCommand,
+        _ddRepositoryRoot: repositoryRoot,
+        _ddCodeOwnersEntries: codeOwnersEntries,
+      }, 'Could not send test session configuration to workers.')
+    }
   }
 
   const {
@@ -449,7 +459,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
     if (currentKnownTestsResponse.err) {
       isEarlyFlakeDetectionEnabled = false
     } else {
-      const knownTests = currentKnownTestsResponse.knownTests
+      knownTests = currentKnownTestsResponse.knownTests
       const currentTestFilepaths = await getCurrentTestFilepaths()
 
       if (isValidKnownTests(knownTests)) {
@@ -466,13 +476,15 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
         } else {
           knownTestsBySuite = knownTests.vitest
           shouldSendTestProperties = true
-          setProvidedContext(ctx, {
-            _ddIsKnownTestsEnabled: isKnownTestsEnabled,
-            _ddIsEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionEnabled,
-            _ddEarlyFlakeDetectionNumRetries:
-              getConfiguredEfdRetryCount(earlyFlakeDetectionSlowTestRetries, earlyFlakeDetectionNumRetries),
-            _ddEarlyFlakeDetectionSlowTestRetries: earlyFlakeDetectionSlowTestRetries,
-          }, 'Could not send known tests to workers so Early Flake Detection will not work.')
+          if (!shouldInstallNoWorkerInit) {
+            setProvidedContext(ctx, {
+              _ddIsKnownTestsEnabled: isKnownTestsEnabled,
+              _ddIsEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionEnabled,
+              _ddEarlyFlakeDetectionNumRetries:
+                getConfiguredEfdRetryCount(earlyFlakeDetectionSlowTestRetries, earlyFlakeDetectionNumRetries),
+              _ddEarlyFlakeDetectionSlowTestRetries: earlyFlakeDetectionSlowTestRetries,
+            }, 'Could not send known tests to workers so Early Flake Detection will not work.')
+          }
         }
       } else {
         isEarlyFlakeDetectionFaulty = true
@@ -481,7 +493,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
     }
   }
 
-  if (isDiEnabled) {
+  if (!shouldInstallNoWorkerInit && isDiEnabled) {
     setProvidedContext(ctx, {
       _ddIsDiEnabled: isDiEnabled,
     }, 'Could not send Dynamic Instrumentation configuration to workers.')
@@ -494,50 +506,101 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
       isTestManagementTestsEnabled = false
       log.error('Could not get test management tests.')
     } else {
+      testManagementTests = receivedTestManagementTests
       testManagementTestsBySuite = getTestManagementTestsBySuite(receivedTestManagementTests)
       shouldSendTestProperties = true
-      setProvidedContext(ctx, {
-        _ddIsTestManagementTestsEnabled: isTestManagementTestsEnabled,
-        _ddTestManagementAttemptToFixRetries: testManagementAttemptToFixRetries,
-      }, 'Could not send test management tests to workers so Test Management will not work.')
+      if (!shouldInstallNoWorkerInit) {
+        setProvidedContext(ctx, {
+          _ddIsTestManagementTestsEnabled: isTestManagementTestsEnabled,
+          _ddTestManagementAttemptToFixRetries: testManagementAttemptToFixRetries,
+        }, 'Could not send test management tests to workers so Test Management will not work.')
+      }
     }
   }
 
   if (isImpactedTestsEnabled) {
-    const { err, modifiedFiles } = await getChannelPromise(modifiedFilesCh)
+    const modifiedFilesResponse = await getChannelPromise(modifiedFilesCh)
+    const { err } = modifiedFilesResponse
     if (err) {
       log.error('Could not get modified tests.')
     } else {
+      modifiedFiles = modifiedFilesResponse.modifiedFiles
       impactedTestSuites = getImpactedTestSuites(modifiedFiles)
       shouldSendTestProperties = true
-      setProvidedContext(ctx, {
-        _ddIsImpactedTestsEnabled: isImpactedTestsEnabled,
-      }, 'Could not send modified tests to workers so Impacted Tests will not work.')
+      if (!shouldInstallNoWorkerInit) {
+        setProvidedContext(ctx, {
+          _ddIsImpactedTestsEnabled: isImpactedTestsEnabled,
+        }, 'Could not send modified tests to workers so Impacted Tests will not work.')
+      }
     }
   }
 
   if (shouldSendTestProperties) {
-    setProvidedContext(ctx, {
-      _ddTestPropertiesByFilepath: getTestPropertiesByFilepath(
-        await getCurrentTestFilepaths(),
-        repositoryRoot,
-        knownTestsBySuite,
-        testManagementTestsBySuite,
-        impactedTestSuites
-      ),
-    }, 'Could not send test properties to workers so some Test Optimization features will not work.')
+    testPropertiesByFilepath = getTestPropertiesByFilepath(
+      await getCurrentTestFilepaths(),
+      repositoryRoot,
+      knownTestsBySuite,
+      testManagementTestsBySuite,
+      impactedTestSuites
+    )
+    if (!shouldInstallNoWorkerInit) {
+      setProvidedContext(ctx, {
+        _ddTestPropertiesByFilepath: testPropertiesByFilepath,
+      }, 'Could not send test properties to workers so some Test Optimization features will not work.')
+    }
+  }
+
+  if (shouldInstallNoWorkerInit) {
+    noWorkerInit.configure(ctx, frameworkVersion, testSpecifications, {
+      knownTests,
+      knownTestsBySuite,
+      modifiedFiles,
+      repositoryRoot,
+      flakyTestRetriesConfiguration,
+      testManagementTests,
+      testManagementTestsBySuite,
+      testPropertiesByFilepath: testPropertiesByFilepath || {},
+      testSessionConfiguration,
+    }, {
+      getConfiguredEfdRetryCount,
+      state: getNoWorkerInitState(),
+    })
   }
 
   wrapCoverageProvider(ctx)
   wrapSessionFinish(ctx)
+  return shouldInstallNoWorkerInit
+}
+
+function getNoWorkerInitState () {
+  return {
+    attemptToFixExecutions,
+    earlyFlakeDetectionNumRetries,
+    earlyFlakeDetectionSlowTestRetries,
+    isEarlyFlakeDetectionEnabled,
+    isEarlyFlakeDetectionFaulty,
+    isFlakyTestRetriesEnabled,
+    isKnownTestsEnabled,
+    newTestsWithDynamicNames,
+    testManagementAttemptToFixRetries,
+  }
 }
 
 function ensureMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
+  const shouldInstallNoWorkerInit = noWorkerInit.shouldUse(ctx, testSpecifications, {
+    hasVitestWorkerPoolTestSpecification,
+    isVitestWorkerPool,
+  })
   const specificationsKey = getTestSpecificationsKey(testSpecifications)
   let setupState = mainProcessSetupStates.get(ctx)
-  if (!setupState || setupState.specificationsKey !== specificationsKey) {
+  if (
+    !setupState ||
+    setupState.specificationsKey !== specificationsKey ||
+    setupState.shouldInstallNoWorkerInit !== shouldInstallNoWorkerInit
+  ) {
     setupState = {
-      setupPromise: runMainProcessSetup(ctx, frameworkVersion, testSpecifications),
+      setupPromise: runMainProcessSetup(ctx, frameworkVersion, testSpecifications, shouldInstallNoWorkerInit),
+      shouldInstallNoWorkerInit,
       specificationsKey,
     }
     mainProcessSetupStates.set(ctx, setupState)
@@ -791,17 +854,22 @@ function hasVitestWorkerPoolTestSpecification (testSpecifications) {
   return false
 }
 
-function shouldMarkVitestWorkerEnv (pool, testSpecifications) {
-  return isVitestWorkerPool(pool) || hasVitestWorkerPoolTestSpecification(testSpecifications) ||
-    (!testSpecifications && pool === undefined)
+function shouldMarkVitestWorkerEnv (pool, testSpecifications, shouldSkipWorkerInit) {
+  if (!shouldSkipWorkerInit) {
+    return isVitestWorkerPool(pool) || hasVitestWorkerPoolTestSpecification(testSpecifications) ||
+      (!testSpecifications && pool === undefined)
+  }
+
+  return isVitestWorkerPool(pool) || pool === undefined || hasVitestWorkerPoolTestSpecification(testSpecifications)
 }
 
-function markVitestWorkerEnv (ctx, testSpecifications) {
+function markVitestWorkerEnv (ctx, testSpecifications, shouldSkipWorkerInit = false) {
   const config = ctx?.config
-  if (!config || !shouldMarkVitestWorkerEnv(config.pool, testSpecifications)) {
+  isVitestNoWorkerInitActive = shouldSkipWorkerInit
+  if (!config || !shouldMarkVitestWorkerEnv(config.pool, testSpecifications, shouldSkipWorkerInit)) {
     return
   }
-  config.env = getVitestWorkerEnv(config.env)
+  config.env = getVitestWorkerEnv(config.env, shouldSkipWorkerInit)
 }
 
 function wrapVitestRunFiles (Vitest, frameworkVersion) {
@@ -810,14 +878,14 @@ function wrapVitestRunFiles (Vitest, frameworkVersion) {
   }
 
   shimmer.wrap(Vitest.prototype, 'runFiles', runFiles => async function (testSpecifications) {
-    markVitestWorkerEnv(this, testSpecifications)
-    await ensureMainProcessSetup(this, frameworkVersion, testSpecifications)
+    const shouldSkipWorkerInit = await ensureMainProcessSetup(this, frameworkVersion, testSpecifications)
+    markVitestWorkerEnv(this, testSpecifications, shouldSkipWorkerInit)
     return runFiles.apply(this, arguments)
   })
 
   if (Vitest.prototype.collectTests) {
     shimmer.wrap(Vitest.prototype, 'collectTests', collectTests => function () {
-      markVitestWorkerEnv(this)
+      markVitestWorkerEnv(this, undefined, false)
       return collectTests.apply(this, arguments)
     })
   }
@@ -885,14 +953,14 @@ function isVitestTinypoolOptions (options) {
 function markVitestTinypoolOptions (options) {
   if (!isVitestTinypoolOptions(options)) return
 
-  options.env = getVitestWorkerEnv(options.env)
+  options.env = getVitestWorkerEnv(options.env, isVitestNoWorkerInitActive)
 }
 
-function getVitestWorkerEnv (env = {}) {
-  return {
+function getVitestWorkerEnv (env = {}, shouldSkipWorkerInit = false) {
+  return noWorkerInit.configureWorkerEnv({
     ...env,
     DD_VITEST_WORKER: '1',
-  }
+  }, shouldSkipWorkerInit)
 }
 
 function wrapTinyPoolRun (TinyPool) {
@@ -1014,7 +1082,7 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
     // function is async
     shimmer.wrap(forksPoolWorker.value.prototype, 'start', start => function (...args) {
       vitestPool = 'child_process'
-      this.env = getVitestWorkerEnv(this.env)
+      this.env = getVitestWorkerEnv(this.env, isVitestNoWorkerInitActive)
 
       return start.apply(this, args)
     })
@@ -1026,7 +1094,7 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
     // function is async
     shimmer.wrap(threadsPoolWorker.value.prototype, 'start', start => function (...args) {
       vitestPool = 'worker_threads'
-      this.env = getVitestWorkerEnv(this.env)
+      this.env = getVitestWorkerEnv(this.env, isVitestNoWorkerInitActive)
       return start.apply(this, args)
     })
     shimmer.wrap(threadsPoolWorker.value.prototype, 'on', getWrappedOn)
