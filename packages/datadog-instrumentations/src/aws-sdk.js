@@ -27,6 +27,7 @@ const KNOWN_CHANNEL_SUFFIXES = new Set([
 
 const CHANNEL_SUFFIX_ALIASES = {
   cloudwatchevents: 'eventbridge',
+  events: 'eventbridge',
 }
 
 /**
