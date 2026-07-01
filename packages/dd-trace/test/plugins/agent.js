@@ -426,6 +426,13 @@ module.exports = {
       config = [config]
     }
 
+    // Plugin tests assert on spans delivered to this mock agent via the APM
+    // agent exporter (`/v0.4/traces`). An instrumented shell may leak
+    // `_DD_APM_TRACING_AGENTLESS_ENABLED`, which switches the tracer to the
+    // agentless intake exporter, so spans never reach this agent and every
+    // span assertion times out. Force the agent exporter for plugin tests.
+    delete process.env._DD_APM_TRACING_AGENTLESS_ENABLED
+
     currentIntegrationName = getCurrentIntegrationName()
 
     const tracerConfigJson = JSON.stringify(tracerConfig)
