@@ -315,6 +315,25 @@ versions.forEach((version) => {
       })
     })
 
+    it('does not mark application tinypool workers as Vitest workers', (done) => {
+      childProcess = exec('node ./ci-visibility/run-tinypool-with-vitest-env.mjs', {
+        cwd,
+        env: getCiVisAgentlessConfig(receiver.port),
+      })
+      childProcess.stdout?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.on('exit', (code) => {
+        assert.match(testOutput, /result 10/)
+        assert.match(testOutput, /dd vitest worker undefined/)
+        assert.strictEqual(code, 0)
+        done()
+      })
+    })
+
     context('programmatic api', () => {
       it('can report data using the vitest programmatic api', async () => {
         const eventsPromise = receiver
