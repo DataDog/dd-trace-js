@@ -27,6 +27,7 @@ const {
   DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
   DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
   EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
+  TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_FINAL_STATUS,
   TEST_HAS_FAILED_ALL_RETRIES,
@@ -858,6 +859,47 @@ describe('impacted test', () => {
         ]).then(([exitCode]) => exitCode)
 
         assert.strictEqual(exitCode, 0, testOutput)
+      })
+
+      it('keeps a failed slow EFD test failed when remaining repeats are no-ops', async () => {
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': 0,
+              '10s': 2,
+            },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
+        })
+        receiver.setKnownTests({ vitest: {} })
+
+        const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
+          const tests = getEventContents(events, 'test')
+          const [testSession] = getEventContents(events, 'test_session_end')
+          const retriedTests = getTestsByName(tests, 'early flake detection can retry tests that always pass')
+          assert.ok(retriedTests.length > 0, inspect(tests.map(test => test.meta[TEST_NAME])))
+          retriedTests.forEach(test => {
+            assert.strictEqual(test.meta[TEST_STATUS], 'fail', inspect(test.meta))
+          })
+          const finalTest = retriedTests[retriedTests.length - 1]
+          assert.strictEqual(finalTest.meta[TEST_FINAL_STATUS], 'fail')
+          assert.strictEqual(finalTest.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'slow')
+          assert.ok(!(TEST_IS_RETRY in finalTest.meta), inspect(finalTest.meta))
+          assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
+        })
+
+        const exitCode = await Promise.all([
+          runVitest({
+            ALWAYS_FAIL: '1',
+            TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection.mjs',
+            POOL_CONFIG: 'forks',
+          }, './node_modules/.bin/vitest run -t "can retry tests that always pass"'),
+          payloadsPromise,
+        ]).then(([exitCode]) => exitCode)
+
+        assert.strictEqual(exitCode, 1, testOutput)
       })
     }
   })

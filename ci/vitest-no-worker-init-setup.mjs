@@ -80,6 +80,9 @@ if (isNoWorkerInitActive) {
 
   afterEach(function ({ task }) {
     const attemptIndex = task.meta.__ddTestOptCurrentAttemptIndex
+    if (restoreEarlyFlakeDetectionSkippedResult(task)) {
+      return
+    }
     if (attemptIndex === getFinalAttemptIndex(task)) {
       recordTestOptimizationStatus(task, attemptIndex)
     }
@@ -154,13 +157,7 @@ function recordAttemptToFixStatus (task, attemptIndex, onlyIfNewErrors) {
 }
 
 function recordEarlyFlakeDetectionStatus (task, attemptIndex, onlyIfNewErrors) {
-  if (task.meta.__ddTestOptEfdSkipCurrentAttempt) {
-    delete task.meta.__ddTestOptEfdSkipCurrentAttempt
-    const skippedResult = earlyFlakeDetectionSkippedResults.get(task)
-    if (skippedResult) {
-      task.result = skippedResult
-      earlyFlakeDetectionSkippedResults.delete(task)
-    }
+  if (restoreEarlyFlakeDetectionSkippedResult(task)) {
     return
   }
 
@@ -207,6 +204,20 @@ function recordManualRepeatStatus (task, attemptIndex) {
     attemptIndex
   )
   task.meta.__ddTestOptRepeatErrorCounts[attemptIndex] = task.result?.errors?.length || 0
+}
+
+function restoreEarlyFlakeDetectionSkippedResult (task) {
+  if (!task.meta.__ddTestOptEfdSkipCurrentAttempt) {
+    return false
+  }
+
+  delete task.meta.__ddTestOptEfdSkipCurrentAttempt
+  const skippedResult = earlyFlakeDetectionSkippedResults.get(task)
+  if (skippedResult) {
+    task.result = skippedResult
+    earlyFlakeDetectionSkippedResults.delete(task)
+  }
+  return true
 }
 
 function hasNewErrors (errorCounts, attemptIndex, task) {
