@@ -328,25 +328,34 @@ versions.forEach((version) => {
           const testSessionEvent = events.find(event => event.type === 'test_session_end')
           const testModuleEvent = events.find(event => event.type === 'test_module_end')
           const testSuiteEvent = events.find(event => event.type === 'test_suite_end')
-          const testEvent = events.find(event => event.type === 'test')
+          const testEvents = events.filter(event => event.type === 'test')
+          const passedTestEvent = testEvents.find(event =>
+            event.content.meta[TEST_NAME] === 'typecheck can report type assertion'
+          )
+          const skippedTestEvent = testEvents.find(event =>
+            event.content.meta[TEST_NAME] === 'typecheck can report skipped assertion'
+          )
 
           assert.ok(testSessionEvent, testOutput)
           assert.ok(testModuleEvent, testOutput)
           assert.ok(testSuiteEvent, testOutput)
-          assert.ok(testEvent, testOutput)
+          assert.ok(passedTestEvent, testOutput)
+          assert.ok(skippedTestEvent, testOutput)
 
           const testSession = testSessionEvent.content
           const testModule = testModuleEvent.content
           const testSuite = testSuiteEvent.content
-          const test = testEvent.content
+          const passedTest = passedTestEvent.content
+          const skippedTest = skippedTestEvent.content
 
           assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
           assert.strictEqual(testModule.meta[TEST_STATUS], 'pass')
           assert.strictEqual(testSuite.meta[TEST_STATUS], 'pass')
           assert.strictEqual(testSuite.meta[TEST_SOURCE_FILE], 'ci-visibility/vitest-tests/typecheck.test-d.ts')
-          assert.strictEqual(test.meta[TEST_STATUS], 'pass')
-          assert.strictEqual(test.meta[TEST_NAME], 'typecheck can report type assertion')
-          assert.strictEqual(test.meta[TEST_SOURCE_FILE], 'ci-visibility/vitest-tests/typecheck.test-d.ts')
+          assert.strictEqual(passedTest.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(passedTest.meta[TEST_SOURCE_FILE], 'ci-visibility/vitest-tests/typecheck.test-d.ts')
+          assert.strictEqual(skippedTest.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(skippedTest.meta[TEST_SOURCE_FILE], 'ci-visibility/vitest-tests/typecheck.test-d.ts')
         }, 25000)
 
       childProcess = exec(
@@ -370,6 +379,60 @@ versions.forEach((version) => {
       ])
 
       assert.strictEqual(code, 0, testOutput)
+    })
+
+    typecheckIt('can report failed typecheck tests', async () => {
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSessionEvent = events.find(event => event.type === 'test_session_end')
+          const testModuleEvent = events.find(event => event.type === 'test_module_end')
+          const testSuiteEvent = events.find(event => event.type === 'test_suite_end')
+          const testEvent = events.find(event => event.type === 'test')
+
+          assert.ok(testSessionEvent, testOutput)
+          assert.ok(testModuleEvent, testOutput)
+          assert.ok(testSuiteEvent, testOutput)
+          assert.ok(testEvent, testOutput)
+
+          const testSession = testSessionEvent.content
+          const testModule = testModuleEvent.content
+          const testSuite = testSuiteEvent.content
+          const test = testEvent.content
+
+          assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(testModule.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(testSuite.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(testSuite.meta[TEST_SOURCE_FILE], 'ci-visibility/vitest-tests/typecheck-fail.test-d.ts')
+          assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(test.meta[TEST_NAME], 'typecheck can report failing assertion')
+          assert.strictEqual(test.meta[TEST_SOURCE_FILE], 'ci-visibility/vitest-tests/typecheck-fail.test-d.ts')
+          assert.strictEqual(test.meta[ERROR_TYPE], 'TypeCheckError')
+          assert.ok(test.meta[ERROR_MESSAGE])
+        }, 25000)
+
+      childProcess = exec(
+        './node_modules/.bin/vitest run --config=./vitest.typecheck.config.mjs ' +
+          'ci-visibility/vitest-tests/typecheck-fail.test-d.ts --reporter=verbose',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            DD_SERVICE: undefined,
+            TYPECHECK_FAIL: 'true',
+          },
+        }
+      )
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+      const [[code]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      assert.strictEqual(code, 1, testOutput)
     })
 
     it('propagates test span context to HTTP requests and hooks during test execution', async () => {

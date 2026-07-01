@@ -921,9 +921,7 @@ async function reportTypecheckResults (result, frameworkVersion) {
     ? await getChannelPromise(testSessionConfigurationCh, frameworkVersion)
     : {}
 
-  for (const file of result.files) {
-    await reportTypecheckFile(file, sessionConfiguration, frameworkVersion)
-  }
+  await Promise.all(result.files.map(file => reportTypecheckFile(file, sessionConfiguration, frameworkVersion)))
 }
 
 function wrapTypechecker (Typechecker, frameworkVersion) {

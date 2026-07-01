@@ -9,6 +9,6 @@
     ]
   },
   "include": [
-    "ci-visibility/vitest-tests/*.test-d.ts"
+    "ci-visibility/vitest-tests/typecheck.test-d.ts"
   ]
 }
