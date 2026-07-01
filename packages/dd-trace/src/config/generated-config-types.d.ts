@@ -457,6 +457,14 @@ export interface GeneratedConfig {
     mlApp: string | undefined;
     sampleRate: number;
   };
+  logCaptureEnabled: boolean;
+  logCaptureFlushIntervalMs: number;
+  logCaptureHost: string;
+  logCaptureMaxBufferSize: number;
+  logCapturePath: string;
+  logCapturePort: number;
+  logCaptureProtocol: string;
+  logCaptureTimeoutMs: number;
   logInjection: boolean;
   logLevel: "debug" | "info" | "warn" | "error";
   middlewareTracingEnabled: boolean;
