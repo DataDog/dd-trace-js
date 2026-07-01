@@ -189,7 +189,7 @@ module.exports = class PluginManager {
       DD_TRACE_OTEL_SEMANTICS_ENABLED,
       site,
       url,
-      headers: headerTags || [],
+      headers: headerTags,
       clientIpHeader,
       DD_TEST_SESSION_NAME,
       DD_AGENTLESS_LOG_SUBMISSION_ENABLED,

@@ -916,7 +916,7 @@ describe('Plugin', () => {
           config = {
             server: false,
             client: {
-              headers: [':path', 'x-foo'],
+              headers: { ':path': '', 'x-foo': 'http2.foo', 'x-bar': '' },
             },
           }
 
@@ -930,6 +930,7 @@ describe('Plugin', () => {
           const app = (stream, headers) => {
             stream.respond({
               'x-foo': 'bar',
+              'x-bar': 'baz',
               ':status': 200,
             })
             stream.end()
@@ -941,7 +942,10 @@ describe('Plugin', () => {
                 const meta = traces[0][0].meta
 
                 assert.strictEqual(meta[`${HTTP_REQUEST_HEADERS}.:path`], '/user')
-                assert.strictEqual(meta[`${HTTP_RESPONSE_HEADERS}.x-foo`], 'bar')
+                // Custom tag name is honored (previously http2 ignored it).
+                assert.strictEqual(meta['http2.foo'], 'bar')
+                // An empty tag still falls back to the default prefixed tag name.
+                assert.strictEqual(meta[`${HTTP_RESPONSE_HEADERS}.x-bar`], 'baz')
               })
               .then(done)
               .catch(done)

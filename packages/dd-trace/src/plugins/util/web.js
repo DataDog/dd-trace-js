@@ -15,6 +15,7 @@ const urlFilter = require('./urlfilter')
 const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
 const { extractURL, obfuscateQs, getQsObfuscator, calculateHttpEndpoint } = require('./url')
 const { NETWORK_PEER_ADDRESS } = require('./http-otel-semantics')
+const { toHeaderTagEntries } = require('./header-tags')
 
 const WEB = types.WEB
 const SERVER = kinds.SERVER
@@ -58,7 +59,7 @@ const web = {
 
   // Ensure the configuration has the correct structure and defaults.
   normalizeConfig (config) {
-    const headers = getHeadersToRecord(config)
+    const headers = toHeaderTagEntries(config.headers)
     const validateStatus = getStatusValidator(config)
     const hooks = getHooks(config)
     const filter = urlFilter.getFilter(config)
@@ -504,21 +505,6 @@ function addResponseHeaders (context) {
       inferredProxySpan?.setTag(tagName, resHeader)
     }
   }
-}
-
-function getHeadersToRecord (config) {
-  if (Array.isArray(config.headers)) {
-    try {
-      return config.headers
-        .map(h => h.split(':'))
-        .map(([key, tag]) => [key.toLowerCase(), tag])
-    } catch (err) {
-      log.error('Web plugin error getting headers', err)
-    }
-  } else if (config.hasOwnProperty('headers')) {
-    log.error('Expected `headers` to be an array of strings.')
-  }
-  return []
 }
 
 function isNot500ErrorCode (code) {

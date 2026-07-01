@@ -1274,7 +1274,7 @@ describe('Plugin', () => {
           config = {
             server: false,
             client: {
-              headers: ['host', 'x-foo', 'x-bar:http.bar', 'x-baz:http.baz', 'X-Request-Id'],
+              headers: { host: '', 'x-foo': '', 'x-bar': 'http.bar', 'x-baz': 'http.baz', 'X-Request-Id': '' },
             },
           }
 

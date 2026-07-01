@@ -11,6 +11,7 @@ const formats = require('../../../ext/formats')
 const { COMPONENT, CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
+const { toHeaderTagEntries } = require('../../dd-trace/src/plugins/util/header-tags')
 
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const HTTP_STATUS_CODE = tags.HTTP_STATUS_CODE
@@ -181,7 +182,7 @@ function getStatusValidator (config) {
 function normalizeConfig (config) {
   const validateStatus = getStatusValidator(config)
   const filter = getFilter(config)
-  const headers = getHeaders(config)
+  const headers = toHeaderTagEntries(config.headers)
 
   return {
     ...config,
@@ -200,21 +201,13 @@ function getFilter (config) {
 function addHeaderTags (span, headers, prefix, config) {
   if (!headers) return
 
-  for (const key of config.headers) {
+  for (const [key, tag] of config.headers) {
     const value = headers[key]
 
     if (value) {
-      span.setTag(`${prefix}.${key}`, value)
+      span.setTag(tag || `${prefix}.${key}`, value)
     }
   }
-}
-
-function getHeaders (config) {
-  if (!Array.isArray(config.headers)) return []
-
-  return config.headers
-    .filter(key => typeof key === 'string')
-    .map(key => key.toLowerCase())
 }
 
 module.exports = Http2ClientPlugin

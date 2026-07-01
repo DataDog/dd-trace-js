@@ -9,6 +9,7 @@ const formats = require('../../../ext/formats')
 const HTTP_HEADERS = formats.HTTP_HEADERS
 const urlFilter = require('../../dd-trace/src/plugins/util/urlfilter')
 const { buildClientHttpUrl } = require('../../dd-trace/src/plugins/util/url')
+const { toHeaderTagEntries } = require('../../dd-trace/src/plugins/util/header-tags')
 const log = require('../../dd-trace/src/log')
 const { CLIENT_PORT_KEY, COMPONENT, ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 
@@ -169,7 +170,7 @@ function normalizeClientConfig (config) {
   const validateStatus = getStatusValidator(config)
   const filter = getFilter(config)
   const propagationFilter = getFilter({ blocklist: config.propagationBlocklist })
-  const headers = getHeaders(config)
+  const headers = toHeaderTagEntries(config.headers)
   const hooks = getHooks(config)
 
   return {
@@ -199,25 +200,6 @@ function getFilter (config) {
   config = { ...config, blocklist: config.blocklist || [] }
 
   return urlFilter.getFilter(config)
-}
-
-function getHeaders (config) {
-  if (!Array.isArray(config.headers)) return []
-
-  const result = []
-  for (const header of config.headers) {
-    if (typeof header === 'string') {
-      const separatorIndex = header.indexOf(':')
-      result.push(separatorIndex === -1
-        ? [header.toLowerCase(), undefined]
-        : [
-            header.slice(0, separatorIndex).toLowerCase(),
-            header.slice(separatorIndex + 1),
-          ]
-      )
-    }
-  }
-  return result
 }
 
 const noop = () => {}
