@@ -14,6 +14,14 @@ const {
   GRPC_STATUS_CODE,
 } = require('../../../ext/tags')
 const { ORIGIN_KEY, TOP_LEVEL_KEY, SVC_SRC_KEY } = require('./constants')
+
+// https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
+const GRPC_STATUS_NAMES = [
+  'OK', 'CANCELLED', 'UNKNOWN', 'INVALID_ARGUMENT', 'DEADLINE_EXCEEDED',
+  'NOT_FOUND', 'ALREADY_EXISTS', 'PERMISSION_DENIED', 'RESOURCE_EXHAUSTED',
+  'FAILED_PRECONDITION', 'ABORTED', 'OUT_OF_RANGE', 'UNIMPLEMENTED',
+  'INTERNAL', 'UNAVAILABLE', 'DATA_LOSS', 'UNAUTHENTICATED',
+]
 const { version } = require('./pkg')
 const processTags = require('./process-tags')
 
@@ -98,8 +106,12 @@ class SpanAggKey {
     this.srvSrc = span.meta[SVC_SRC_KEY] || ''
     this.origin = span.meta[ORIGIN_KEY] || ''
     this.spanKind = span.meta[SPAN_KIND] || ''
-    // gRPC status code is the canonical status NAME string, read from meta.
-    this.rpcStatusCode = span.meta[GRPC_STATUS_CODE] ?? ''
+    // meta holds a string name (OTel/manual); metrics holds a numeric code (dd gRPC plugin via setTag).
+    // Prefer meta; translate a numeric metrics code to the canonical status NAME string.
+    const grpcCode = span.meta[GRPC_STATUS_CODE] ?? span.metrics?.[GRPC_STATUS_CODE]
+    this.rpcStatusCode = typeof grpcCode === 'number'
+      ? (GRPC_STATUS_NAMES[grpcCode] ?? String(grpcCode))
+      : (grpcCode ?? '')
   }
 
   toString () {

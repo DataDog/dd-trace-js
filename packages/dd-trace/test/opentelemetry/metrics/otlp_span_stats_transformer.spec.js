@@ -129,11 +129,12 @@ describe('OtlpStatsTransformer', () => {
       assert.strictEqual(attrMapOf(dataPointsOf(payload)[0])['rpc.response.status_code'], 'NOT_FOUND')
     })
 
-    it('reads grpc.status.code from meta only, ignoring the metrics tag', () => {
+    it('translates numeric grpc.status.code from metrics to the canonical status name', () => {
+      // dd gRPC plugin sets grpc.status.code as a number via setTag → span_format routes into metrics
       const span = makeSpan({ meta: {}, metrics: { [GRPC_STATUS_CODE]: 14 } })
       const payload = JSON.parse(transformer.transform(makeDrained(12340000000000, [span]), BUCKET_SIZE_NS))
 
-      assert.ok(!('rpc.response.status_code' in attrMapOf(dataPointsOf(payload)[0])))
+      assert.strictEqual(attrMapOf(dataPointsOf(payload)[0])['rpc.response.status_code'], 'UNAVAILABLE')
     })
 
     it('omits optional attributes when not present on the span', () => {
