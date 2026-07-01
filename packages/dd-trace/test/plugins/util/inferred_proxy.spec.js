@@ -421,7 +421,7 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
               '_dd.inferred_span': 1,
             },
           })
-          assert.notStrictEqual(spans[0].start.toString(), null)
+          assert.ok(spans[0].start)
 
           assert.strictEqual(spans[0].span_id.toString(), spans[1].parent_id.toString())
 
