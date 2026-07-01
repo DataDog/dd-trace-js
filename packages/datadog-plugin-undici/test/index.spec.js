@@ -571,7 +571,7 @@ describe('Plugin', () => {
 
         beforeEach(() => {
           config = {
-            headers: ['x-baz', 'x-foo'],
+            headers: { 'x-baz': '', 'x-foo': '' },
           }
 
           return agent.load('undici', config)

@@ -2873,12 +2873,12 @@
     "DD_TRACE_HEADER_TAGS": [
       {
         "implementation": "A",
-        "type": "array",
+        "type": "map",
         "default": "",
         "configurationNames": [
           "headerTags"
         ],
-        "transform": "stripColonWhitespace"
+        "transform": "headerTags"
       }
     ],
     "DD_TRACE_HONO_ENABLED": [

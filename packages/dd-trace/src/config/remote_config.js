@@ -248,9 +248,13 @@ const transformers = {
     return samplingRules
   },
   tracing_header_tags (headerTags) {
-    return headerTags?.map(tag => {
-      return tag.tag_name ? `${tag.header}:${tag.tag_name}` : tag.header
-    })
+    if (!headerTags) return headerTags
+
+    const normalizedHeaderTags = {}
+    for (const tag of headerTags) {
+      normalizedHeaderTags[tag.header] = tag.tag_name ?? ''
+    }
+    return normalizedHeaderTags
   },
   tracing_tags (tags) {
     const normalizedTags = {}

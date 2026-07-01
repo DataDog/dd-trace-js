@@ -301,6 +301,23 @@ describe('Config', () => {
     })
   })
 
+  describe('headerTags', () => {
+    it('normalizes an object programmatic value', () => {
+      assert.deepStrictEqual(getConfig({ headerTags: { 'x-a': 'tag', 'x-b': '' } }).headerTags,
+        { 'x-a': 'tag', 'x-b': '' })
+    })
+
+    it('normalizes the legacy array programmatic value to an object', () => {
+      assert.deepStrictEqual(getConfig({ headerTags: ['x-a : tag', 'x-b'] }).headerTags,
+        { 'x-a': 'tag', 'x-b': '' })
+    })
+
+    it('normalizes the DD_TRACE_HEADER_TAGS env var to an object', () => {
+      process.env.DD_TRACE_HEADER_TAGS = 'x-a : tag, x-b : '
+      assert.deepStrictEqual(getConfig().headerTags, { 'x-a': 'tag', 'x-b': '' })
+    })
+  })
+
   it('should initialize its own logging config based off the loggers config', () => {
     process.env.DD_TRACE_DEBUG = 'true'
     process.env.DD_TRACE_LOG_LEVEL = 'error'
@@ -4541,14 +4558,14 @@ rules:
     })
 
     it('should map tracing_header_tags to headerTags', () => {
-      const config = getConfig({ headerTags: ['foo :bar'] })
-      assert.deepStrictEqual(config.headerTags, ['foo:bar'])
-      config.setRemoteConfig({ headerTags: ['x-custom-header:custom.tag'] })
-      assert.deepStrictEqual(config.headerTags, [
+      const config = getConfig({ headerTags: { foo: 'bar' } })
+      assert.deepStrictEqual(config.headerTags, { foo: 'bar' })
+      config.setRemoteConfig({ headerTags: { 'x-custom-header': 'custom.tag' } })
+      assert.deepStrictEqual(config.headerTags, {
         // TODO: There's an unrelated bug in the tracer resulting in headerTags not being merged.
-        // 'foo:bar',
-        'x-custom-header:custom.tag',
-      ])
+        // foo: 'bar',
+        'x-custom-header': 'custom.tag',
+      })
     })
 
     it('should map tracing_tags to tags', () => {

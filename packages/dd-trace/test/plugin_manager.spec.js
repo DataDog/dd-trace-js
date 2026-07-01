@@ -185,6 +185,23 @@ describe('Plugin Manager', () => {
       })
     })
 
+    describe('headerTags', () => {
+      it('passes the tracer-level headerTags object through as the plugin headers option', () => {
+        const headerTags = { 'x-user-id': 'user.id', 'x-team': '' }
+        pm.configure(makeTracerConfig({ headerTags }))
+        pm.configurePlugin('two')
+        loadChannel.publish({ name: 'two' })
+        sinon.assert.calledWithMatch(Two.prototype.configure, { headers: headerTags })
+      })
+
+      it('leaves headers undefined when headerTags is unset', () => {
+        pm.configure(makeTracerConfig())
+        pm.configurePlugin('two')
+        loadChannel.publish({ name: 'two' })
+        sinon.assert.calledWithMatch(Two.prototype.configure, { headers: undefined })
+      })
+    })
+
     describe('with disabled plugins', () => {
       beforeEach(() => pm.configure(makeTracerConfig()))
 

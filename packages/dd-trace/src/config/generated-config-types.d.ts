@@ -433,7 +433,7 @@ export interface GeneratedConfig {
   };
   flushInterval: number;
   flushMinSpans: number;
-  headerTags: string[];
+  headerTags: Record<string, string>;
   hostname: string;
   iast: {
     dbRowsToTaint: number;
@@ -940,7 +940,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_HAPI_BOOM_ENABLED: boolean;
   DD_TRACE_HAPI_ENABLED: boolean;
   DD_TRACE_HAPI_HAPI_ENABLED: boolean;
-  DD_TRACE_HEADER_TAGS: string[];
+  DD_TRACE_HEADER_TAGS: Record<string, string>;
   DD_TRACE_HONO_ENABLED: boolean;
   DD_TRACE_HTTP_ENABLED: boolean;
   DD_TRACE_HTTP2_ENABLED: boolean;
