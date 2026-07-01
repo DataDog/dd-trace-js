@@ -440,7 +440,7 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
           })
         })
       })
-      it('should should not create a span if timestamp is missing from headers', async () => {
+      it('should not create a span if timestamp is missing from headers', async () => {
         const testCase = additionalTestCases['aws-missingtimestamp']
         await loadTest({})
 
