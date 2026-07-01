@@ -5,6 +5,7 @@ const realSetTimeout = setTimeout
 
 const path = require('node:path')
 const { performance } = require('node:perf_hooks')
+const { MessagePort } = require('node:worker_threads')
 
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
@@ -98,6 +99,8 @@ let testCodeCoverageLinesTotal
 let coverageRootDir
 let isSessionStarted = false
 let vitestPool = null
+let isMessagePortWrapped = false
+const tinyPoolClassWrappers = new WeakMap()
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 400
 
@@ -913,6 +916,10 @@ function isThreadPool (pool) {
   return pool === 'threads' || pool === 'vmThreads'
 }
 
+function isVitestWorkerPool (pool) {
+  return isForkPool(pool) || isThreadPool(pool)
+}
+
 /**
  * Return the project object attached to a Vitest test specification.
  *
@@ -931,13 +938,13 @@ function getTestSpecificationPool (testSpecification) {
   return project?.config?.pool || project?.serializedConfig?.pool || project?.pool || testSpecification?.pool
 }
 
-function hasForkPoolTestSpecification (testSpecifications) {
+function hasVitestWorkerPoolTestSpecification (testSpecifications) {
   if (!Array.isArray(testSpecifications)) {
     return false
   }
 
   for (const testSpecification of testSpecifications) {
-    if (isForkPool(getTestSpecificationPool(testSpecification))) {
+    if (isVitestWorkerPool(getTestSpecificationPool(testSpecification))) {
       return true
     }
   }
@@ -946,8 +953,8 @@ function hasForkPoolTestSpecification (testSpecifications) {
 }
 
 function shouldMarkVitestWorkerEnv (pool, testSpecifications) {
-  return isForkPool(pool) || hasForkPoolTestSpecification(testSpecifications) ||
-    (!testSpecifications && !isThreadPool(pool))
+  return isVitestWorkerPool(pool) || hasVitestWorkerPoolTestSpecification(testSpecifications) ||
+    (!testSpecifications && pool === undefined)
 }
 
 function markVitestWorkerEnv (ctx, testSpecifications) {
@@ -1011,20 +1018,25 @@ function threadHandler (thread) {
   workerProcesses.add(workerProcess)
   workerProcess.on('message', (message) => {
     if (message.__tinypool_worker_message__ && message.data) {
-      if (message.interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE) {
-        collectTestOptimizationSummariesFromTraces(message.data, {
-          newTestsWithDynamicNames,
-          attemptToFixExecutions,
-        })
-        workerReportTraceCh.publish(message.data)
-      } else if (message.interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE) {
-        workerReportLogsCh.publish(message.data)
-      }
+      handleWorkerReport(message.interprocessCode, message.data)
     }
   })
 }
 
+function isVitestTinypoolOptions (options) {
+  return options?.env?.VITEST === 'true' &&
+    (options.filename?.endsWith(`${path.sep}worker.js`) || options.filename?.endsWith('/worker.js'))
+}
+
+function markVitestTinypoolOptions (options) {
+  if (!isVitestTinypoolOptions(options)) return
+
+  options.env.DD_VITEST_WORKER = '1'
+}
+
 function wrapTinyPoolRun (TinyPool) {
+  if (!TinyPool?.prototype?.run) return
+
   shimmer.wrap(TinyPool.prototype, 'run', run => async function () {
     // We have to do this before and after because the threads list gets recycled, that is, the processes are re-created
     // eslint-disable-next-line unicorn/no-array-for-each
@@ -1036,13 +1048,51 @@ function wrapTinyPoolRun (TinyPool) {
   })
 }
 
+function wrapTinyPoolClass (TinyPool) {
+  if (typeof TinyPool !== 'function') return TinyPool
+
+  const wrappedTinyPool = tinyPoolClassWrappers.get(TinyPool)
+  if (wrappedTinyPool) return wrappedTinyPool
+
+  class DatadogTinyPool extends TinyPool {
+    constructor (options) {
+      markVitestTinypoolOptions(options)
+      super(options)
+    }
+  }
+
+  tinyPoolClassWrappers.set(TinyPool, DatadogTinyPool)
+  wrapTinyPoolRun(DatadogTinyPool)
+
+  return DatadogTinyPool
+}
+
+function wrapTinyPool (TinyPool) {
+  if (typeof TinyPool === 'function') {
+    return wrapTinyPoolClass(TinyPool)
+  }
+
+  const defaultTinyPool = wrapTinyPoolClass(TinyPool?.default)
+  if (defaultTinyPool) {
+    TinyPool.default = defaultTinyPool
+  }
+
+  const namedTinyPool = TinyPool?.Tinypool === TinyPool?.default
+    ? defaultTinyPool
+    : wrapTinyPoolClass(TinyPool?.Tinypool)
+  if (namedTinyPool) {
+    TinyPool.Tinypool = namedTinyPool
+  }
+
+  return TinyPool
+}
+
 addHook({
   name: 'tinypool',
   // version from tinypool@0.8 was used in vitest@1.6.0
   versions: ['>=0.8.0'],
 }, (TinyPool) => {
-  wrapTinyPoolRun(TinyPool)
-  return TinyPool
+  return wrapTinyPool(TinyPool)
 })
 
 function getWrappedOn (on) {
@@ -1056,22 +1106,41 @@ function getWrappedOn (on) {
     arguments[1] = shimmer.wrapFunction(callback, callback => function (message) {
       if (message.type !== 'Buffer' && Array.isArray(message)) {
         const [interprocessCode, data] = message
-        if (interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE) {
-          collectTestOptimizationSummariesFromTraces(data, {
-            newTestsWithDynamicNames,
-            attemptToFixExecutions,
-          })
-          workerReportTraceCh.publish(data)
-        } else if (interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE) {
-          workerReportLogsCh.publish(data)
+        if (handleWorkerReport(interprocessCode, data)) {
+          // If we execute the callback vitest crashes, as the message is not supported
+          return
         }
-        // If we execute the callback vitest crashes, as the message is not supported
-        return
       }
       return callback.apply(this, arguments)
     })
     return on.apply(this, arguments)
   }
+}
+
+function handleWorkerReport (interprocessCode, data) {
+  if (interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE) {
+    collectTestOptimizationSummariesFromTraces(data, {
+      newTestsWithDynamicNames,
+      attemptToFixExecutions,
+    })
+    workerReportTraceCh.publish(data)
+    return true
+  }
+
+  if (interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE) {
+    workerReportLogsCh.publish(data)
+    return true
+  }
+
+  return false
+}
+
+function wrapMessagePortOn () {
+  if (isMessagePortWrapped) return
+
+  isMessagePortWrapped = true
+  shimmer.wrap(MessagePort.prototype, 'on', getWrappedOn)
+  shimmer.wrap(MessagePort.prototype, 'addListener', getWrappedOn)
 }
 
 function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
@@ -1080,6 +1149,7 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
   }
   const startVitestExport = findExportByName(cliApiPackage, 'startVitest')
   shimmer.wrap(cliApiPackage, startVitestExport.key, getCliOrStartVitestWrapper(frameworkVersion))
+  wrapMessagePortOn()
 
   const vitest = getVitestExport(cliApiPackage)
   if (vitest) {
