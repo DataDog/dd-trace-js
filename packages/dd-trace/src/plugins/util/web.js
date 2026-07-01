@@ -13,7 +13,8 @@ const { storage } = require('../../../../datadog-core')
 const legacyStorage = storage('legacy')
 const urlFilter = require('./urlfilter')
 const { createInferredProxySpan, finishInferredProxySpan } = require('./inferred_proxy')
-const { extractURL, obfuscateQs, calculateHttpEndpoint } = require('./url')
+const { extractURL, obfuscateQs, getQsObfuscator, calculateHttpEndpoint } = require('./url')
+const { NETWORK_PEER_ADDRESS } = require('./http-otel-semantics')
 
 const WEB = types.WEB
 const SERVER = kinds.SERVER
@@ -389,6 +390,15 @@ function addRequestTags (context, spanType) {
     [HTTP_USERAGENT]: req.headers['user-agent'],
   })
 
+  // OTel `network.peer.address` is the immediate socket peer. It has no Datadog
+  // equivalent and the socket isn't available at serialization, so (unlike the
+  // other HTTP attributes, which are renamed centrally in span_format) it is set
+  // here directly when OTel semantics are enabled.
+  if (config.DD_TRACE_OTEL_SEMANTICS_ENABLED) {
+    const peerAddress = req.socket?.remoteAddress
+    if (peerAddress) span.setTag(NETWORK_PEER_ADDRESS, peerAddress)
+  }
+
   // if client ip has already been set by appsec, no need to run it again
   if (config.extractIp && !spanContext.hasTag(HTTP_CLIENT_IP)) {
     const clientIp = config.extractIp(config, req)
@@ -433,26 +443,25 @@ function applyRouteOrEndpointTag (context) {
   if (!span) return
   const spanContext = span.context()
 
-  // AppSec calls `web.setRouteOrEndpointTag` from a pre-finish hook so the
-  // route/endpoint tags are available for API Security sampling, and the
-  // normal finish-time path runs this again. Either tag being present
-  // means the work has already been done; paths are stable between the
-  // two calls, so the second pass has nothing to add.
-  if (spanContext.hasTag(HTTP_ROUTE) || spanContext.hasTag(HTTP_ENDPOINT)) return
+  // AppSec runs this from a pre-finish hook and the finish path runs it
+  // again. http.route is terminal once set; nothing supersedes it.
+  if (spanContext.hasTag(HTTP_ROUTE)) return
 
   // Skip the `Array.prototype.join` builtin in the empty / single-segment
   // cases; `paths[0]` covers both (`undefined` is falsy for the empty case).
   const route = paths.length > 1 ? paths.join('') : paths[0]
 
   if (route) {
-    // Use http.route from trusted framework instrumentation.
+    // A framework route supersedes any http.endpoint fallback a pre-finish
+    // call stamped before the route resolved; it must not be gated on
+    // HTTP_ENDPOINT.
     span.setTag(HTTP_ROUTE, route)
     return
   }
 
-  if (!config.resourceRenamingEnabled) return
+  // Route unavailable. Compute the http.endpoint fallback once across both calls.
+  if (!config.resourceRenamingEnabled || spanContext.hasTag(HTTP_ENDPOINT)) return
 
-  // Route is unavailable, compute http.endpoint once.
   const url = spanContext.getTag(HTTP_URL)
   const endpoint = url ? calculateHttpEndpoint(url) : '/'
   span.setTag(HTTP_ENDPOINT, endpoint)
@@ -538,32 +547,6 @@ function getMiddlewareSetting (config) {
     return config.middleware
   } else if (config && config.hasOwnProperty('middleware')) {
     log.error('Expected `middleware` to be a boolean.')
-  }
-
-  return true
-}
-
-function getQsObfuscator (config) {
-  const obfuscator = config.queryStringObfuscation
-
-  if (typeof obfuscator === 'boolean') {
-    return obfuscator
-  }
-
-  if (typeof obfuscator === 'string') {
-    if (obfuscator === '') return false // disable obfuscator
-
-    if (obfuscator === '.*') return true // optimize full redact
-
-    try {
-      return new RegExp(obfuscator, 'gi')
-    } catch (err) {
-      log.error('Web plugin error getting qs obfuscator', err)
-    }
-  }
-
-  if (config.hasOwnProperty('queryStringObfuscation')) {
-    log.error('Expected `queryStringObfuscation` to be a regex string or boolean.')
   }
 
   return true

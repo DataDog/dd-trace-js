@@ -115,8 +115,8 @@ versions.forEach((version) => {
             const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
             metadataDicts.forEach(metadata => {
-              assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session')
-              assert.ok(metadata['*'][TEST_COMMAND])
+              assert.strictEqual(metadata.test_levels[TEST_SESSION_NAME], 'my-test-session')
+              assert.ok(metadata.test_levels[TEST_COMMAND])
             })
 
             const events = payloads.flatMap(({ payload }) => payload.events)
@@ -231,19 +231,13 @@ versions.forEach((version) => {
             )
 
             testEvents.forEach(test => {
-              // `threads` config will report directly. TODO: update this once we're testing vitest@>=4
-              if (poolConfig === 'forks') {
-                assert.strictEqual(test.content.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
-              }
+              assert.strictEqual(test.content.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
               assert.ok(test.content.metrics[DD_HOST_CPU_COUNT])
               assert.strictEqual(test.content.meta[DD_TEST_IS_USER_PROVIDED_SERVICE], 'false')
             })
 
             testSuiteEvents.forEach(testSuite => {
-              // `threads` config will report directly. TODO: update this once we're testing vitest@>=4
-              if (poolConfig === 'forks') {
-                assert.strictEqual(testSuite.content.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
-              }
+              assert.strictEqual(testSuite.content.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
               assert.strictEqual(
                 testSuite.content.meta[TEST_SOURCE_FILE].startsWith('ci-visibility/vitest-tests/test-visibility'),
                 true
@@ -256,38 +250,40 @@ versions.forEach((version) => {
       })
     })
 
-    newerVitestIt('sets DD_VITEST_WORKER in workers with pool=forks', async () => {
-      const eventsPromise = receiver
-        .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
-          const events = payloads.flatMap(({ payload }) => payload.events)
-          const test = events.find(event => event.type === 'test').content
+    for (const workerPoolConfig of poolConfig) {
+      it(`sets DD_VITEST_WORKER in workers with pool=${workerPoolConfig}`, async () => {
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const test = events.find(event => event.type === 'test').content
 
-          assert.ok(test)
-          assert.strictEqual(test.meta[TEST_NAME], 'vitest worker env sets DD_VITEST_WORKER')
-          assert.strictEqual(test.meta[TEST_STATUS], 'pass')
-        }, 25000)
+            assert.ok(test)
+            assert.strictEqual(test.meta[TEST_NAME], 'vitest worker env sets DD_VITEST_WORKER')
+            assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+          }, 25000)
 
-      childProcess = exec(
-        './node_modules/.bin/vitest run',
-        {
-          cwd,
-          env: {
-            ...getCiVisAgentlessConfig(receiver.port),
-            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-            TEST_DIR: 'ci-visibility/vitest-tests/vitest-worker-env.mjs',
-            POOL_CONFIG: 'forks',
-            DD_SERVICE: undefined,
-          },
-        }
-      )
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              TEST_DIR: 'ci-visibility/vitest-tests/vitest-worker-env.mjs',
+              POOL_CONFIG: workerPoolConfig,
+              DD_SERVICE: undefined,
+            },
+          }
+        )
 
-      const [[code]] = await Promise.all([
-        once(childProcess, 'exit'),
-        eventsPromise,
-      ])
+        const [[code]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
 
-      assert.strictEqual(code, 0)
-    })
+        assert.strictEqual(code, 0)
+      })
+    }
 
     newerVitestIt('sets DD_VITEST_WORKER in workers when a fork project has a threads root pool', async () => {
       const eventsPromise = receiver

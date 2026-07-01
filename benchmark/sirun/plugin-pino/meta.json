@@ -8,7 +8,7 @@
   "variants": {
     "json-log-injection": {
       "env": {
-        "COUNT": "5000000"
+        "OPERATIONS": "5000000"
       }
     }
   }

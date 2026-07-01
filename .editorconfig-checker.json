@@ -1,0 +1,18 @@
+{
+  "Verbose": false,
+  "Debug": false,
+  "IgnoreDefaults": false,
+  "SpacesAfterTabs": false,
+  "NoColor": false,
+  "Exclude": [
+    "^\\.nyc_output/",
+    "^LICENSE",
+    "^\\.github/vendored-dependencies\\.csv$",
+    "^coverage/",
+    "^packages/dd-trace/test/appsec/bad-formatted-rules\\.json$",
+    "^packages/dd-trace/test/llmobs/cassettes/",
+    "^vendor/"
+  ],
+  "AllowedContentTypes": [],
+  "PassedFiles": []
+}

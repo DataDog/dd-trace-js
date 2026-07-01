@@ -141,19 +141,19 @@ function instrument (req, res, handler, error) {
   requests.add(req)
 
   const ctx = { req, res }
-  // Parse query parameters from request URL
   if (queryParsedChannel.hasSubscribers && req.url) {
-    // req.url is only the relative path (/foo?bar=baz) and new URL() needs a full URL
-    // so we give it a dummy base
-    const { searchParams } = new URL(req.url, 'http://dummy')
-    const query = {}
-    for (const key of searchParams.keys()) {
-      if (!query[key]) {
-        query[key] = searchParams.getAll(key)
+    const queryIndex = req.url.indexOf('?')
+    if (queryIndex !== -1) {
+      const searchParams = new URLSearchParams(req.url.slice(queryIndex + 1))
+      const query = {}
+      for (const key of searchParams.keys()) {
+        if (!query[key]) {
+          query[key] = searchParams.getAll(key)
+        }
       }
-    }
 
-    queryParsedChannel.publish({ query })
+      queryParsedChannel.publish({ query })
+    }
   }
 
   return startChannel.runStores(ctx, () => {

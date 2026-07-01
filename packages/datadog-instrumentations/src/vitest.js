@@ -5,6 +5,8 @@ const realSetTimeout = setTimeout
 
 const path = require('node:path')
 const { performance } = require('node:perf_hooks')
+const { fileURLToPath } = require('node:url')
+const { MessagePort } = require('node:worker_threads')
 
 const shimmer = require('../../datadog-shimmer')
 const log = require('../../dd-trace/src/log')
@@ -98,6 +100,8 @@ let testCodeCoverageLinesTotal
 let coverageRootDir
 let isSessionStarted = false
 let vitestPool = null
+let isMessagePortWrapped = false
+const tinyPoolClassWrappers = new WeakMap()
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 400
 
@@ -138,6 +142,8 @@ function getProvidedContext () {
       _ddTestManagementTests: testManagementTests,
       _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled,
       _ddFlakyTestRetriesCount: flakyTestRetriesCount,
+      _ddFlakyTestRetriesIncludesUnnamedProject: flakyTestRetriesIncludesUnnamedProject,
+      _ddFlakyTestRetriesProjectNames: flakyTestRetriesProjectNames,
       _ddIsImpactedTestsEnabled: isImpactedTestsEnabled,
       _ddModifiedFiles: modifiedFiles,
       _ddTestSessionId: testSessionId,
@@ -159,6 +165,8 @@ function getProvidedContext () {
       testManagementTests,
       isFlakyTestRetriesEnabled,
       flakyTestRetriesCount: flakyTestRetriesCount ?? 0,
+      flakyTestRetriesIncludesUnnamedProject,
+      flakyTestRetriesProjectNames,
       isImpactedTestsEnabled,
       modifiedFiles,
       testSessionId,
@@ -181,6 +189,8 @@ function getProvidedContext () {
       testManagementTests: {},
       isFlakyTestRetriesEnabled: false,
       flakyTestRetriesCount: 0,
+      flakyTestRetriesIncludesUnnamedProject: false,
+      flakyTestRetriesProjectNames: undefined,
       isImpactedTestsEnabled: false,
       modifiedFiles: {},
       testSessionId: undefined,
@@ -501,11 +511,13 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
     getTestManagementTests: () => getChannelPromise(testManagementTestsCh),
   })
 
-  if (isFlakyTestRetriesEnabled && !ctx.config.retry && flakyTestRetriesCount > 0) {
-    ctx.config.retry = flakyTestRetriesCount
+  const flakyTestRetriesConfiguration = configureFlakyTestRetries(ctx, testSpecifications)
+  if (flakyTestRetriesConfiguration) {
     setProvidedContext(ctx, {
       _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled,
       _ddFlakyTestRetriesCount: flakyTestRetriesCount,
+      _ddFlakyTestRetriesIncludesUnnamedProject: flakyTestRetriesConfiguration.includesUnnamedProject,
+      _ddFlakyTestRetriesProjectNames: flakyTestRetriesConfiguration.projectNames,
     }, 'Could not send library configuration to workers.')
   }
 
@@ -591,6 +603,242 @@ function ensureMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
   return setupPromise
 }
 
+/**
+ * Configure Vitest retries for the root project and resolved workspace projects.
+ *
+ * @param {object} ctx
+ * @param {unknown[]|undefined} testSpecifications
+ * @returns {{ projectNames: string[], includesUnnamedProject: boolean }|undefined}
+ */
+function configureFlakyTestRetries (ctx, testSpecifications) {
+  if (!isFlakyTestRetriesEnabled || flakyTestRetriesCount <= 0) return
+
+  let configured = false
+  let includesUnnamedProject = false
+  const projectNames = []
+  for (const { config, projectName } of getVitestProjectConfigs(ctx, testSpecifications)) {
+    if (!config.retry) {
+      config.retry = flakyTestRetriesCount
+      configured = true
+      if (projectName) {
+        projectNames.push(projectName)
+      } else {
+        includesUnnamedProject = true
+      }
+    }
+  }
+
+  if (!configured) return
+
+  return {
+    includesUnnamedProject,
+    projectNames,
+  }
+}
+
+/**
+ * Return unique Vitest configs that can be used to run tests.
+ *
+ * @param {object} ctx
+ * @param {unknown[]|undefined} testSpecifications
+ * @returns {{ config: object, projectName?: string }[]}
+ */
+function getVitestProjectConfigs (ctx, testSpecifications) {
+  const entries = []
+
+  addTestSpecificationConfigs(entries, testSpecifications)
+  if (entries.length > 0) {
+    return entries
+  }
+
+  const selectedProjectNames = getSelectedProjectNames()
+  addSelectedInlineProjectConfigs(entries, safeConfig(ctx), selectedProjectNames)
+  addSelectedRuntimeProjectConfigs(entries, ctx?.projects, selectedProjectNames)
+  if (entries.length > 0) {
+    return entries
+  }
+
+  if (Array.isArray(ctx?.projects)) {
+    for (const project of ctx.projects) {
+      addConfig(entries, safeConfig(project), getProjectName(project))
+    }
+    if (entries.length > 0) {
+      return entries
+    }
+  }
+
+  addConfig(entries, safeConfig(ctx))
+  addConfig(entries, safeConfig(safeWorkspaceProject(ctx)))
+
+  return entries
+}
+
+/**
+ * Add configs from runnable test specifications once.
+ *
+ * @param {{ config: object, projectName?: string }[]} entries
+ * @param {unknown[]|undefined} testSpecifications
+ */
+function addTestSpecificationConfigs (entries, testSpecifications) {
+  if (!Array.isArray(testSpecifications)) return
+
+  for (const testSpecification of testSpecifications) {
+    const project = getTestSpecificationProject(testSpecification)
+    addConfig(entries, safeConfig(project), getProjectName(project))
+  }
+}
+
+/**
+ * Add selected inline project configs from the root Vitest config once.
+ *
+ * @param {{ config: object, projectName?: string }[]} entries
+ * @param {object|undefined} rootConfig
+ * @param {string[]} selectedProjectNames
+ */
+function addSelectedInlineProjectConfigs (entries, rootConfig, selectedProjectNames) {
+  if (selectedProjectNames.length === 0 || !Array.isArray(rootConfig?.projects)) return
+
+  for (const project of rootConfig.projects) {
+    const config = getInlineProjectConfig(project)
+    const projectName = getProjectName(project)
+    if (selectedProjectNames.includes(projectName)) {
+      addConfig(entries, config, projectName)
+    }
+  }
+}
+
+/**
+ * Add selected resolved project configs once.
+ *
+ * @param {{ config: object, projectName?: string }[]} entries
+ * @param {unknown[]|undefined} projects
+ * @param {string[]} selectedProjectNames
+ */
+function addSelectedRuntimeProjectConfigs (entries, projects, selectedProjectNames) {
+  if (selectedProjectNames.length === 0 || !Array.isArray(projects)) return
+
+  for (const project of projects) {
+    const projectName = getProjectName(project)
+    if (selectedProjectNames.includes(projectName)) {
+      addConfig(entries, safeConfig(project), projectName)
+    }
+  }
+}
+
+/**
+ * Return selected project names from the Vitest CLI arguments.
+ *
+ * @returns {string[]}
+ */
+function getSelectedProjectNames () {
+  const names = []
+  for (let index = 0; index < process.argv.length; index++) {
+    const argument = process.argv[index]
+    if (argument === '--project' && process.argv[index + 1]) {
+      names.push(process.argv[index + 1])
+      index++
+    } else if (argument.startsWith('--project=')) {
+      names.push(argument.slice('--project='.length))
+    }
+  }
+  return names
+}
+
+/**
+ * Return the test config from an inline Vitest project entry.
+ *
+ * @param {unknown} project
+ * @returns {object|undefined}
+ */
+function getInlineProjectConfig (project) {
+  return project?.test || project
+}
+
+/**
+ * Return a Vitest project name from runtime or inline project objects.
+ *
+ * @param {unknown} project
+ * @returns {string|undefined}
+ */
+function getProjectName (project) {
+  return normalizeProjectName(project?.name || project?.config?.name || project?.test?.name)
+}
+
+/**
+ * Return a normalized Vitest project name.
+ *
+ * @param {unknown} name
+ * @returns {string|undefined}
+ */
+function normalizeProjectName (name) {
+  if (typeof name === 'string') return name
+
+  const label = name?.label
+  return typeof label === 'string' ? label : undefined
+}
+
+/**
+ * Add a config object once.
+ *
+ * @param {{ config: object, projectName?: string }[]} entries
+ * @param {object|undefined} config
+ * @param {string|undefined} projectName
+ */
+function addConfig (entries, config, projectName) {
+  if (config && !entries.some(entry => entry.config === config || (projectName && entry.projectName === projectName))) {
+    entries.push({ config, projectName })
+  }
+}
+
+/**
+ * Read a Vitest config object without assuming the project is initialized.
+ *
+ * @param {object|undefined} project
+ * @returns {object|undefined}
+ */
+function safeConfig (project) {
+  let config
+  try {
+    config = project?.config
+  } catch {}
+  return config
+}
+
+/**
+ * Read the workspace project without assuming the root server is initialized.
+ *
+ * @param {object} ctx
+ * @returns {object|undefined}
+ */
+function safeWorkspaceProject (ctx) {
+  let project
+  try {
+    project = getWorkspaceProject(ctx)
+  } catch {}
+  return project
+}
+
+/**
+ * Return whether Datadog configured ATR retries for a task.
+ *
+ * @param {object} providedContext
+ * @param {object} task
+ * @returns {boolean}
+ */
+function isFlakyTestRetriesEnabledForTask (providedContext, task) {
+  if (!providedContext.isFlakyTestRetriesEnabled) return false
+
+  const { flakyTestRetriesProjectNames } = providedContext
+  if (!Array.isArray(flakyTestRetriesProjectNames)) return true
+
+  const projectName = task.file?.projectName
+  if (!projectName) {
+    return providedContext.flakyTestRetriesIncludesUnnamedProject === true
+  }
+
+  return flakyTestRetriesProjectNames.includes(projectName)
+}
+
 function getSortWrapper (sort, frameworkVersion) {
   return async function () {
     await ensureMainProcessSetup(this.ctx, frameworkVersion, arguments[0])
@@ -669,18 +917,35 @@ function isThreadPool (pool) {
   return pool === 'threads' || pool === 'vmThreads'
 }
 
+function isVitestWorkerPool (pool) {
+  return isForkPool(pool) || isThreadPool(pool)
+}
+
+/**
+ * Return the project object attached to a Vitest test specification.
+ *
+ * @param {unknown} testSpecification
+ * @returns {object|undefined}
+ */
+function getTestSpecificationProject (testSpecification) {
+  if (Array.isArray(testSpecification)) {
+    return testSpecification[0]
+  }
+  return testSpecification?.project
+}
+
 function getTestSpecificationPool (testSpecification) {
-  const project = Array.isArray(testSpecification) ? testSpecification[0] : testSpecification?.project
+  const project = getTestSpecificationProject(testSpecification)
   return project?.config?.pool || project?.serializedConfig?.pool || project?.pool || testSpecification?.pool
 }
 
-function hasForkPoolTestSpecification (testSpecifications) {
+function hasVitestWorkerPoolTestSpecification (testSpecifications) {
   if (!Array.isArray(testSpecifications)) {
     return false
   }
 
   for (const testSpecification of testSpecifications) {
-    if (isForkPool(getTestSpecificationPool(testSpecification))) {
+    if (isVitestWorkerPool(getTestSpecificationPool(testSpecification))) {
       return true
     }
   }
@@ -689,8 +954,8 @@ function hasForkPoolTestSpecification (testSpecifications) {
 }
 
 function shouldMarkVitestWorkerEnv (pool, testSpecifications) {
-  return isForkPool(pool) || hasForkPoolTestSpecification(testSpecifications) ||
-    (!testSpecifications && !isThreadPool(pool))
+  return isVitestWorkerPool(pool) || hasVitestWorkerPoolTestSpecification(testSpecifications) ||
+    (!testSpecifications && pool === undefined)
 }
 
 function markVitestWorkerEnv (ctx, testSpecifications) {
@@ -754,20 +1019,41 @@ function threadHandler (thread) {
   workerProcesses.add(workerProcess)
   workerProcess.on('message', (message) => {
     if (message.__tinypool_worker_message__ && message.data) {
-      if (message.interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE) {
-        collectTestOptimizationSummariesFromTraces(message.data, {
-          newTestsWithDynamicNames,
-          attemptToFixExecutions,
-        })
-        workerReportTraceCh.publish(message.data)
-      } else if (message.interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE) {
-        workerReportLogsCh.publish(message.data)
-      }
+      handleWorkerReport(message.interprocessCode, message.data)
     }
   })
 }
 
+function isVitestTinypoolOptions (options) {
+  if (options?.env?.VITEST !== 'true' || typeof options.filename !== 'string') return false
+
+  let filename = options.filename
+  if (filename.startsWith('file:')) {
+    try {
+      filename = fileURLToPath(filename)
+    } catch {
+      return false
+    }
+  }
+
+  const workerPath = path.normalize(filename)
+  const workerDir = path.dirname(workerPath)
+  const packageDir = path.dirname(workerDir)
+
+  return path.basename(workerPath) === 'worker.js' &&
+    path.basename(workerDir) === 'dist' &&
+    path.basename(packageDir) === 'vitest'
+}
+
+function markVitestTinypoolOptions (options) {
+  if (!isVitestTinypoolOptions(options)) return
+
+  options.env.DD_VITEST_WORKER = '1'
+}
+
 function wrapTinyPoolRun (TinyPool) {
+  if (!TinyPool?.prototype?.run) return
+
   shimmer.wrap(TinyPool.prototype, 'run', run => async function () {
     // We have to do this before and after because the threads list gets recycled, that is, the processes are re-created
     // eslint-disable-next-line unicorn/no-array-for-each
@@ -779,13 +1065,51 @@ function wrapTinyPoolRun (TinyPool) {
   })
 }
 
+function wrapTinyPoolClass (TinyPool) {
+  if (typeof TinyPool !== 'function') return TinyPool
+
+  const wrappedTinyPool = tinyPoolClassWrappers.get(TinyPool)
+  if (wrappedTinyPool) return wrappedTinyPool
+
+  class DatadogTinyPool extends TinyPool {
+    constructor (options) {
+      markVitestTinypoolOptions(options)
+      super(options)
+    }
+  }
+
+  tinyPoolClassWrappers.set(TinyPool, DatadogTinyPool)
+  wrapTinyPoolRun(DatadogTinyPool)
+
+  return DatadogTinyPool
+}
+
+function wrapTinyPool (TinyPool) {
+  if (typeof TinyPool === 'function') {
+    return wrapTinyPoolClass(TinyPool)
+  }
+
+  const defaultTinyPool = wrapTinyPoolClass(TinyPool?.default)
+  if (defaultTinyPool) {
+    TinyPool.default = defaultTinyPool
+  }
+
+  const namedTinyPool = TinyPool?.Tinypool === TinyPool?.default
+    ? defaultTinyPool
+    : wrapTinyPoolClass(TinyPool?.Tinypool)
+  if (namedTinyPool) {
+    TinyPool.Tinypool = namedTinyPool
+  }
+
+  return TinyPool
+}
+
 addHook({
   name: 'tinypool',
   // version from tinypool@0.8 was used in vitest@1.6.0
   versions: ['>=0.8.0'],
 }, (TinyPool) => {
-  wrapTinyPoolRun(TinyPool)
-  return TinyPool
+  return wrapTinyPool(TinyPool)
 })
 
 function getWrappedOn (on) {
@@ -799,22 +1123,41 @@ function getWrappedOn (on) {
     arguments[1] = shimmer.wrapFunction(callback, callback => function (message) {
       if (message.type !== 'Buffer' && Array.isArray(message)) {
         const [interprocessCode, data] = message
-        if (interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE) {
-          collectTestOptimizationSummariesFromTraces(data, {
-            newTestsWithDynamicNames,
-            attemptToFixExecutions,
-          })
-          workerReportTraceCh.publish(data)
-        } else if (interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE) {
-          workerReportLogsCh.publish(data)
+        if (handleWorkerReport(interprocessCode, data)) {
+          // If we execute the callback vitest crashes, as the message is not supported
+          return
         }
-        // If we execute the callback vitest crashes, as the message is not supported
-        return
       }
       return callback.apply(this, arguments)
     })
     return on.apply(this, arguments)
   }
+}
+
+function handleWorkerReport (interprocessCode, data) {
+  if (interprocessCode === VITEST_WORKER_TRACE_PAYLOAD_CODE) {
+    collectTestOptimizationSummariesFromTraces(data, {
+      newTestsWithDynamicNames,
+      attemptToFixExecutions,
+    })
+    workerReportTraceCh.publish(data)
+    return true
+  }
+
+  if (interprocessCode === VITEST_WORKER_LOGS_PAYLOAD_CODE) {
+    workerReportLogsCh.publish(data)
+    return true
+  }
+
+  return false
+}
+
+function wrapMessagePortOn () {
+  if (isMessagePortWrapped) return
+
+  isMessagePortWrapped = true
+  shimmer.wrap(MessagePort.prototype, 'on', getWrappedOn)
+  shimmer.wrap(MessagePort.prototype, 'addListener', getWrappedOn)
 }
 
 function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
@@ -823,6 +1166,7 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
   }
   const startVitestExport = findExportByName(cliApiPackage, 'startVitest')
   shimmer.wrap(cliApiPackage, startVitestExport.key, getCliOrStartVitestWrapper(frameworkVersion))
+  wrapMessagePortOn()
 
   const vitest = getVitestExport(cliApiPackage)
   if (vitest) {
@@ -995,15 +1339,15 @@ function wrapVitestTestRunner (VitestTestRunner) {
     let isNew = false
     let isQuarantined = false
 
+    const providedContext = getProvidedContext()
     const {
       isKnownTestsEnabled,
       isEarlyFlakeDetectionEnabled,
       isDiEnabled,
       isTestManagementTestsEnabled,
       testManagementTests,
-      isFlakyTestRetriesEnabled,
       slowTestRetries,
-    } = getProvidedContext()
+    } = providedContext
 
     if (isKnownTestsEnabled) {
       isNew = newTasks.has(task)
@@ -1133,7 +1477,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
     }
 
     const isRetryReasonAtr = numAttempt > 0 &&
-      isFlakyTestRetriesEnabled &&
+      isFlakyTestRetriesEnabledForTask(providedContext, task) &&
       !isRetryReasonAttemptToFix &&
       !isRetryReasonEfd
 
@@ -1524,7 +1868,7 @@ addHook({
           }
 
           // ATR: set hasFailedAllRetries when all auto test retries were exhausted and every attempt failed
-          const isAtrRetry = providedContext.isFlakyTestRetriesEnabled && !attemptToFixTasks.has(task) &&
+          const isAtrRetry = isFlakyTestRetriesEnabledForTask(providedContext, task) && !attemptToFixTasks.has(task) &&
             !newTasks.has(task) && !modifiedTasks.has(task)
           if (isAtrRetry) {
             const maxRetries = providedContext.flakyTestRetriesCount ?? 0

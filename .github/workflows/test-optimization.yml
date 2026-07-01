@@ -27,7 +27,7 @@ jobs:
         with:
           scope: DataDog/test-environment
           policy: dd-trace-js
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           token: ${{ steps.octo-sts.outputs.token }}
       - uses: ./.github/actions/node/oldest-maintenance-lts
@@ -48,7 +48,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/node
         with:
           version: ${{ matrix.version }}
@@ -60,7 +60,7 @@ jobs:
           echo "version=$PLAYWRIGHT_VERSION" >> $GITHUB_OUTPUT
           echo "Playwright version: $PLAYWRIGHT_VERSION"
       - name: Cache Playwright browsers
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-browsers-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
@@ -84,7 +84,7 @@ jobs:
       # behaviour of matrix outputs is safe here.
       images: ${{ steps.versions.outputs.images }}
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Determine versions
         id: versions
         run: |
@@ -150,7 +150,7 @@ jobs:
       OPTIONS_OVERRIDE: 1
       PLAYWRIGHT_VERSION: ${{ matrix.playwright-version }}
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node
@@ -184,7 +184,7 @@ jobs:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node
@@ -219,7 +219,7 @@ jobs:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node
@@ -246,7 +246,7 @@ jobs:
     env:
       PLUGINS: jest
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
   integration-cucumber:
@@ -262,7 +262,7 @@ jobs:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node
@@ -287,7 +287,7 @@ jobs:
     outputs:
       image: ${{ steps.image.outputs.image }}
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - name: Determine image tag
         id: image
         run: |
@@ -330,7 +330,7 @@ jobs:
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
       OPTIONS_OVERRIDE: 1
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node
@@ -396,7 +396,7 @@ jobs:
       DD_SERVICE: dd-trace-js-integration-tests
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node
@@ -413,7 +413,7 @@ jobs:
           fi
           echo "resolved=$RESOLVED" >> $GITHUB_OUTPUT
       - name: Cache Cypress binary
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/Cypress
           key: cypress-binary-${{ steps.cypress-version.outputs.resolved }}
@@ -448,7 +448,7 @@ jobs:
       DD_CIVISIBILITY_AGENTLESS_ENABLED: 1
       OPTIONS_OVERRIDE: 1
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/dd-sts-api-key
         id: dd-sts
       - uses: ./.github/actions/node
