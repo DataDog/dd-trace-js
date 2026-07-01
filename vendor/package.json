@@ -23,11 +23,11 @@
     "module-details-from-path": "^1.0.4",
     "mutexify": "^1.4.0",
     "pprof-format": "^2.2.2",
-    "protobufjs": "^8.6.4",
+    "protobufjs": "^8.6.5",
     "retry": "^0.13.1",
     "rfdc": "^1.4.1",
     "semifies": "^1.0.0",
-    "shell-quote": "^1.8.4",
+    "shell-quote": "^1.9.0",
     "source-map": "^0.7.4",
     "tlhunter-sorted-set": "^0.1.0",
     "ttl-set": "^1.0.0"
