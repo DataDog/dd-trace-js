@@ -345,21 +345,24 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
     reject = _reject
   })
 
+  const timeoutMs = options.timeoutMs || 1000
   const rejectionTimeout = setTimeout(() => {
-    if (errors.length) {
-      let error = errors[0]
-      if (errors.length > 1) {
-        error = new AggregateError(errors, 'Asserting traces failed. No result matched the expected one.')
-        // Mark errors enumerable for older Node.js versions to be visible.
-        Object.defineProperty(error, 'errors', {
-          enumerable: true,
-        })
-      }
-      // Hack for the information to be fully visible.
-      error.message = util.inspect(error, { depth: null })
-      reject(error)
+    if (errors.length === 0) {
+      reject(new Error(`No matching trace received within ${timeoutMs}ms.`))
+      return
     }
-  }, options.timeoutMs || 1000)
+    let error = errors[0]
+    if (errors.length > 1) {
+      error = new AggregateError(errors, 'Asserting traces failed. No result matched the expected one.')
+      // Mark errors enumerable for older Node.js versions to be visible.
+      Object.defineProperty(error, 'errors', {
+        enumerable: true,
+      })
+    }
+    // Hack for the information to be fully visible.
+    error.message = util.inspect(error, { depth: null })
+    reject(error)
+  }, timeoutMs)
 
   const handlerPayload = {
     handler,
