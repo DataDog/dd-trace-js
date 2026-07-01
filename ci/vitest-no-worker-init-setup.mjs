@@ -55,7 +55,7 @@ if (isNoWorkerInitActive) {
       recordTestOptimizationStatus(task, attemptIndex - 1)
     }
 
-    if (disabledTests[testSuite]?.[testName]) {
+    if (disabledTests[testSuite]?.[testName] && !isAttemptToFixTest) {
       skip('Skipped by Datadog Test Optimization')
     } else if (isAttemptToFixTest && attemptIndex > 0) {
       task.result.state = 'run'

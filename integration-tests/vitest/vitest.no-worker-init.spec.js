@@ -655,6 +655,73 @@ SUPPORTED_VERSIONS.forEach((version) => {
         assert.strictEqual(exitCode, 1, testOutput)
       })
 
+      it('does not skip disabled attempt-to-fix tests in no-worker mode', async () => {
+        receiver.setSettings({
+          test_management: {
+            enabled: true,
+            attempt_to_fix_retries: 2,
+          },
+        })
+        receiver.setTestManagementTests({
+          vitest: {
+            suites: {
+              'ci-visibility/vitest-tests/test-attempt-to-fix.mjs': {
+                tests: {
+                  'attempt to fix tests can attempt to fix a test': {
+                    properties: {
+                      attempt_to_fix: true,
+                      disabled: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
+          assertEventCounts(events, {
+            test_session_end: 1,
+            test_module_end: 1,
+            test_suite_end: 1,
+            test: 3,
+          })
+
+          const attemptedToFixTests = getTestsByName(
+            getEventContents(events, 'test'),
+            'attempt to fix tests can attempt to fix a test'
+          )
+          assert.strictEqual(attemptedToFixTests.length, 3)
+
+          attemptedToFixTests.forEach((test, index) => {
+            assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+            assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+            assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+            if (index === 0) {
+              assert.ok(!(TEST_IS_RETRY in test.meta))
+              return
+            }
+            assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
+            assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atf)
+          })
+
+          const finalAttempt = attemptedToFixTests[attemptedToFixTests.length - 1]
+          assert.strictEqual(finalAttempt.meta[TEST_FINAL_STATUS], 'fail')
+          assert.strictEqual(finalAttempt.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+          assert.strictEqual(finalAttempt.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
+        })
+
+        const exitCode = await Promise.all([
+          runVitest({
+            POOL_CONFIG: 'forks',
+            TEST_DIR: 'ci-visibility/vitest-tests/test-attempt-to-fix.mjs',
+          }),
+          payloadsPromise,
+        ]).then(([exitCode]) => exitCode)
+
+        assert.strictEqual(exitCode, 1, testOutput)
+      })
+
       it('applies no-worker setup data for auto test retries', async () => {
         receiver.setSettings({
           itr_enabled: false,
