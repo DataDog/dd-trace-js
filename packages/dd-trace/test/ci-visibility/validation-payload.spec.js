@@ -126,8 +126,9 @@ describe('test optimization validation payload', () => {
     }
   })
 
-  it('collapses validator plumbing failures to the check level', () => {
-    const diagnosis = 'The local fake intake could not start, so live validation was not run: listen EPERM'
+  it('reports localhost socket blockers as execution-environment checks', () => {
+    const reason = 'The current agent sandbox blocks localhost sockets, so the validator could not start the fake ' +
+      'Datadog intake.'
     const [{ payload }] = buildValidationPayloads({
       manifest: {
         frameworks: [
@@ -141,11 +142,25 @@ describe('test optimization validation payload', () => {
       results: [
         {
           frameworkId: 'mocha:root',
-          scenario: 'basic-reporting',
-          status: 'error',
-          diagnosis,
+          scenario: 'all',
+          status: 'blocked',
+          diagnosis: 'No Test Optimization conclusion was reached.',
           evidence: {
             intakeStarted: false,
+            blockedByExecutionEnvironment: true,
+            localNetworkingBlocked: true,
+            manifestMayBeReused: true,
+            reason,
+            error: 'listen EPERM: operation not permitted 127.0.0.1',
+            errorCode: 'EPERM',
+            errorSyscall: 'listen',
+            errorAddress: '127.0.0.1',
+            remediation: [
+              'Rerun the validator command shown below from the host shell',
+              'In Codex, approve running that single validator command outside the sandbox',
+              'Rerun in CI',
+            ],
+            rerunCommand: 'node /repo/node_modules/dd-trace/ci/validate-test-optimization.js --manifest manifest.json',
           },
           artifacts: [],
         },
@@ -156,8 +171,27 @@ describe('test optimization validation payload', () => {
       },
     })
 
-    assert.strictEqual(payload.checks[0].status, 'failed')
-    assert.strictEqual(payload.checks[0].reason, diagnosis)
+    assert.strictEqual(payload.status, 'unknown')
+    assert.strictEqual(payload.checks[0].id, 'execution-environment')
+    assert.strictEqual(payload.checks[0].name, 'Local fake intake')
+    assert.strictEqual(payload.checks[0].status, 'unknown')
+    assert.strictEqual(payload.checks[0].reason, reason)
+    assert.deepStrictEqual(payload.checks[0].remediation, [
+      'Rerun the validator command shown below from the host shell',
+      'In Codex, approve running that single validator command outside the sandbox',
+      'Rerun in CI',
+    ])
+    assert.deepStrictEqual(payload.checks[0].evidence, {
+      blockedByExecutionEnvironment: true,
+      localNetworkingBlocked: true,
+      manifestMayBeReused: true,
+      intakeStarted: false,
+      error: 'listen EPERM: operation not permitted 127.0.0.1',
+      errorCode: 'EPERM',
+      errorSyscall: 'listen',
+      errorAddress: '127.0.0.1',
+      rerunCommand: 'node /repo/node_modules/dd-trace/ci/validate-test-optimization.js --manifest manifest.json',
+    })
     assert.deepStrictEqual(payload.checks[0].steps, [])
   })
 

@@ -28,6 +28,7 @@ const STATUSES = new Set([
   'unsupported_by_validator',
   'unknown',
 ])
+const UNRESOLVED_PLACEHOLDER_PATTERN = /\$\{[^}]+\}/
 
 const GENERATED_SCENARIO_IDS = new Set([
   'basic-pass',
@@ -79,6 +80,24 @@ function validateFramework (framework, index, errors) {
     requiredObject(framework, 'preflight', errors, prefix)
   } else {
     requireNonEmptyNotes(framework, errors, prefix)
+  }
+
+  if (framework.ciWiringCommand) {
+    requiredCommand(framework, 'ciWiringCommand', errors, prefix)
+  }
+
+  if (framework.forcedLocalCommand) {
+    requiredCommand(framework, 'forcedLocalCommand', errors, prefix)
+  }
+
+  if (framework.setup?.commands) {
+    if (!Array.isArray(framework.setup.commands)) {
+      errors.push(`${prefix}.setup.commands must be an array.`)
+    } else {
+      for (const [commandIndex, command] of framework.setup.commands.entries()) {
+        requiredCommand({ command }, 'command', errors, `${prefix}.setup.commands[${commandIndex}]`)
+      }
+    }
   }
 
   if (framework.generatedTestStrategy) {
@@ -169,16 +188,44 @@ function requiredCommand (target, field, errors, prefix = '') {
     return
   }
   requiredAbsolutePath(value, 'cwd', errors, key)
+  rejectUnresolvedPlaceholder(value.cwd, `${key}.cwd`, errors)
   if (value.usesShell) {
     requiredString(value, 'shellCommand', errors, key)
+    rejectUnresolvedPlaceholder(value.shellCommand, `${key}.shellCommand`, errors)
   } else if (!Array.isArray(value.argv) || value.argv.length === 0) {
     errors.push(`${key}.argv must be a non-empty array unless usesShell is true.`)
   } else {
     validateStringArray(value, 'argv', errors, key)
+    for (const [index, arg] of value.argv.entries()) {
+      rejectUnresolvedPlaceholder(arg, `${key}.argv[${index}]`, errors)
+    }
+  }
+  if (value.env !== undefined) {
+    if (!value.env || typeof value.env !== 'object' || Array.isArray(value.env)) {
+      errors.push(`${key}.env must be an object when present.`)
+    } else {
+      for (const [name, envValue] of Object.entries(value.env)) {
+        rejectUnresolvedPlaceholder(envValue, `${key}.env.${name}`, errors)
+      }
+    }
+  }
+  if (value.requiredEnvVars !== undefined) {
+    if (!Array.isArray(value.requiredEnvVars)) {
+      errors.push(`${key}.requiredEnvVars must be an array when present.`)
+    } else {
+      for (const [index, name] of value.requiredEnvVars.entries()) {
+        requiredString(value.requiredEnvVars, index, errors, `${key}.requiredEnvVars`)
+      }
+    }
   }
   if (value.timeoutMs !== undefined && (!Number.isFinite(value.timeoutMs) || value.timeoutMs <= 0)) {
     errors.push(`${key}.timeoutMs must be a positive number when present.`)
   }
+}
+
+function rejectUnresolvedPlaceholder (value, key, errors) {
+  if (typeof value !== 'string' || !UNRESOLVED_PLACEHOLDER_PATTERN.test(value)) return
+  errors.push(`${key} contains an unresolved placeholder. Resolve it before live validation.`)
 }
 
 function requiredObject (target, field, errors, prefix = '') {

@@ -9,7 +9,13 @@ const { runBasicReporting } = require('./scenarios/basic-reporting')
 const { runEarlyFlakeDetection } = require('./scenarios/early-flake-detection')
 const { runAutoTestRetries } = require('./scenarios/auto-test-retries')
 const { runTestManagement } = require('./scenarios/test-management')
+const { runCiWiring } = require('./scenarios/ci-wiring')
 const { cleanupGeneratedFiles } = require('./generated-files')
+const { serializeDisplayCommand } = require('./command-runner')
+const {
+  buildExecutionEnvironmentBlockerResult,
+  isLocalSocketPermissionError,
+} = require('./execution-environment')
 const { loadManifest } = require('./manifest-loader')
 const { MockIntake } = require('./mock-intake')
 const { writeReport } = require('./report-writer')
@@ -121,7 +127,7 @@ async function main (argv) {
 
     try {
       const frameworks = filterFrameworks(manifest.frameworks, options.frameworks)
-      const setupReadyFrameworks = []
+      const liveReadyFrameworks = []
       const runnableFrameworks = []
 
       for (const framework of frameworks) {
@@ -136,12 +142,23 @@ async function main (argv) {
           continue
         }
 
-        setupReadyFrameworks.push(framework)
+        liveReadyFrameworks.push(framework)
       }
 
-      for (const framework of setupReadyFrameworks) {
-        // Setup commands run before the shared fake intake is started. They are project preparation,
-        // not Test Optimization signal collection.
+      if (liveReadyFrameworks.length > 0) {
+        try {
+          await intake.start()
+          intakeStarted = true
+        } catch (err) {
+          for (const framework of liveReadyFrameworks) {
+            results.push(getIntakeStartupFailure(framework, err))
+          }
+          liveReadyFrameworks.length = 0
+        }
+      }
+
+      for (const framework of liveReadyFrameworks) {
+        // Setup commands are project preparation, not Test Optimization signal collection.
         // eslint-disable-next-line no-await-in-loop
         const setup = await runSetupCommands({ framework, out, options })
         if (!setup.ok) {
@@ -151,19 +168,6 @@ async function main (argv) {
 
         runnableFrameworks.push(framework)
       }
-
-      if (runnableFrameworks.length > 0) {
-        try {
-          await intake.start()
-          intakeStarted = true
-        } catch (err) {
-          for (const framework of runnableFrameworks) {
-            results.push(getIntakeStartupFailure(framework, err))
-          }
-          runnableFrameworks.length = 0
-        }
-      }
-
       for (const framework of runnableFrameworks) {
         let basicResult
         if (options.scenarios.has(BASIC_REPORTING_SCENARIO)) {
@@ -171,6 +175,16 @@ async function main (argv) {
           // eslint-disable-next-line no-await-in-loop
           basicResult = await SCENARIOS[BASIC_REPORTING_SCENARIO]({ manifest, framework, intake, out, options })
           results.push(basicResult)
+        }
+
+        if (hasCiWiringValidation(framework)) {
+          if (basicResult && basicResult.status !== 'pass') {
+            results.push(getSkippedCiWiringAfterBasicFailure(framework, basicResult))
+          } else {
+            // CI wiring runs after forced local Basic Reporting proves this framework can report when configured.
+            // eslint-disable-next-line no-await-in-loop
+            results.push(await runCiWiring({ framework, intake, out, options, basicResult }))
+          }
         }
 
         const advancedScenarios = getAdvancedScenarios(options.scenarios)
@@ -194,11 +208,15 @@ async function main (argv) {
     }
 
     await writeReport({ manifest, results, out, intake, staticDiagnosis })
-    process.exitCode = results.some(result => result.status === 'fail' || result.status === 'error') ? 1 : 0
+    process.exitCode = results.some(isUnsuccessfulResult) ? 1 : 0
   } catch (err) {
     process.exitCode = 1
     console.error(err && err.stack ? err.stack : err)
   }
+}
+
+function hasCiWiringValidation (framework) {
+  return framework.ciWiringCommand || framework.ciWiring
 }
 
 function filterFrameworks (frameworks, targets) {
@@ -218,7 +236,7 @@ function filterFrameworks (frameworks, targets) {
 }
 
 function normalizeFrameworkTarget (target) {
-  const normalized = String(target).trim().replace(/:+$/g, '')
+  const normalized = String(target).trim().replaceAll(/:+$/g, '')
   if (!normalized) {
     throw new Error('Framework target cannot be empty')
   }
@@ -240,6 +258,23 @@ function getAdvancedScenarios (scenarios) {
   })
 }
 
+function getSkippedCiWiringAfterBasicFailure (framework, basicResult) {
+  return {
+    frameworkId: framework.id,
+    scenario: 'ci-wiring',
+    status: 'skip',
+    diagnosis: 'Skipped CI wiring validation because forced local Basic Reporting did not pass. ' +
+      'Fix the selected test command or local Test Optimization capability before diagnosing CI wiring.',
+    evidence: {
+      blockedBy: BASIC_REPORTING_SCENARIO,
+      basicReportingStatus: basicResult.status,
+      basicReportingDiagnosis: basicResult.diagnosis,
+      ciWiring: framework.ciWiring,
+    },
+    artifacts: [],
+  }
+}
+
 function getSkippedAfterBasicFailure (framework, scenario, basicResult) {
   return {
     frameworkId: framework.id,
@@ -257,18 +292,43 @@ function getSkippedAfterBasicFailure (framework, scenario, basicResult) {
 
 function getIntakeStartupFailure (framework, err) {
   const message = err && err.message ? err.message : String(err)
+  const permissionError = isLocalSocketPermissionError(err)
+  if (permissionError) {
+    return buildExecutionEnvironmentBlockerResult({
+      framework,
+      error: err,
+      rerunCommand: getCurrentRerunCommand(),
+    })
+  }
+
+  const diagnosis = `The local fake intake could not start, so live validation was not run: ${message}`
+  const recommendation = 'Allow the validator to bind to 127.0.0.1, then rerun validation.'
+
   return {
     frameworkId: framework.id,
     scenario: 'all',
     status: 'error',
-    diagnosis: `The local fake intake could not start, so live validation was not run: ${message}`,
+    diagnosis,
     evidence: {
       intakeStarted: false,
       error: message,
-      recommendation: 'Allow the validator to bind to 127.0.0.1, then rerun validation.',
+      errorCode: err?.code,
+      errorSyscall: err?.syscall,
+      recommendation,
     },
     artifacts: [],
   }
+}
+
+function getCurrentRerunCommand () {
+  return serializeDisplayCommand({
+    argv: [process.execPath, ...process.argv.slice(1)],
+    usesShell: false,
+  })
+}
+
+function isUnsuccessfulResult (result) {
+  return result.status === 'fail' || result.status === 'error' || result.status === 'blocked'
 }
 
 function getStaticFailure (framework, blocker, staticDiagnosisPath) {
@@ -479,7 +539,7 @@ function includesWord (value, word) {
 }
 
 function escapeRegExp (value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)
 }
 
 module.exports = { filterFrameworks, main, normalizeFrameworkTarget, parseArgs }

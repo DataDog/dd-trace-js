@@ -7,12 +7,23 @@ const path = require('node:path')
 
 const {
   getDebugAwareDiagnosis,
+  getBasicReportingCommand,
   getMissingEventDiagnosis,
   shouldRunDebugRerun,
   summarizeTestOutput,
 } = require('../../../../ci/test-optimization-validation/scenarios/basic-reporting')
 
 describe('test optimization basic reporting diagnosis', () => {
+  it('uses forcedLocalCommand for forced local Basic Reporting when present', () => {
+    const existingTestCommand = { argv: ['npm', 'test'] }
+    const forcedLocalCommand = { argv: ['npx', 'jest', '--runTestsByPath', 'test/example.test.js'] }
+
+    assert.strictEqual(getBasicReportingCommand({
+      existingTestCommand,
+      forcedLocalCommand,
+    }), forcedLocalCommand)
+  })
+
   it('explains Vitest benchmark mode without scheduling a debug rerun', () => {
     const eventLevelFailure = getMissingEventDiagnosis({
       framework: {

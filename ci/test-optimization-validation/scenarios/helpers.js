@@ -15,6 +15,8 @@ const {
   normalizeRequests,
 } = require('../payload-normalizer')
 
+const ANSI_PATTERN = new RegExp(`${String.fromCharCode(27)}${String.raw`\[[0-?]*[ -/]*[@-~]`}`, 'g')
+
 function frameworkOutDir (out, framework, scenario) {
   return path.join(out, 'runs', sanitize(framework.id), scenario)
 }
@@ -55,7 +57,7 @@ async function failWithDebugRerun ({
   out,
   outDir,
   scenarioName,
-  skipDebug
+  skipDebug,
 }) {
   if (!skipDebug && command) {
     const debugRerun = await runDebugInstrumentedCommand({
@@ -86,7 +88,7 @@ async function runDebugInstrumentedCommand ({
   intake,
   options,
   out,
-  scenarioName
+  scenarioName,
 }) {
   try {
     cleanupGeneratedRuntimeFiles(framework)
@@ -289,7 +291,7 @@ function getDebugArtifacts (outDir) {
 }
 
 function findInterestingLines (output, patterns, limit = 8) {
-  return uniqueLines(output.split(/\r?\n/).filter(line => {
+  return uniqueLines(output.split(/\r?\n/).map(stripAnsi).filter(line => {
     if (/^\s*Encoding payload:/.test(line)) return false
     return patterns.some(pattern => pattern.test(line))
   }).map(truncateLine)).slice(0, limit)
@@ -303,9 +305,14 @@ function truncateLine (line) {
 function tailInterestingLines (output) {
   return output
     .split(/\r?\n/)
+    .map(stripAnsi)
     .map(line => line.trimEnd())
     .filter(line => line.trim() !== '')
     .slice(-12)
+}
+
+function stripAnsi (line) {
+  return line.replaceAll(ANSI_PATTERN, '')
 }
 
 function uniqueLines (lines) {

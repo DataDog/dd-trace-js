@@ -11,6 +11,10 @@ const {
 const VALIDATION_APP_PATH = 'ci/test/validation'
 
 const CHECKS = {
+  'ci-wiring': {
+    id: 'ci-wiring',
+    name: 'CI wiring',
+  },
   'basic-reporting': {
     id: 'basic-reporting',
     name: 'Basic reporting',
@@ -56,7 +60,7 @@ function buildFrameworkPayload ({ framework, frameworkResults, artifacts }) {
     version: 2,
     source: 'dd-trace-js',
     type: 'test-optimization-validation',
-    status: checks.some(check => check.status === 'failed') ? 'failed' : 'ok',
+    status: getPayloadStatus(checks),
     checks,
     artifacts: {
       htmlFileUrl: artifacts.htmlFileUrl,
@@ -123,7 +127,7 @@ function buildCheck ({ result }) {
     id: definition.id,
     name: definition.name,
     status: toUiStatus(result.status),
-    reason: result.status === 'fail' || result.status === 'error' ? result.diagnosis : undefined,
+    reason: isProblemStatus(result.status) ? result.diagnosis : undefined,
     steps: [
       {
         id: 'run-tests',
@@ -144,6 +148,18 @@ function buildCheck ({ result }) {
 }
 
 function buildStaticOnlyCheck (result) {
+  if (result.evidence?.blockedByExecutionEnvironment) {
+    return {
+      id: 'execution-environment',
+      name: 'Local fake intake',
+      status: 'unknown',
+      reason: result.evidence.reason || result.diagnosis,
+      remediation: result.evidence.remediation,
+      evidence: getExecutionEnvironmentEvidence(result),
+      steps: [],
+    }
+  }
+
   return {
     id: 'basic-reporting',
     name: 'Basic reporting',
@@ -162,7 +178,7 @@ function buildBasicReportingCheck (result) {
     tests: evidence.testEvents || 0,
   }
   const status = toUiStatus(result.status)
-  const reason = result.status === 'fail' || result.status === 'error' ? result.diagnosis : undefined
+  const reason = isProblemStatus(result.status) ? result.diagnosis : undefined
   const commandInfo = readResultCommandInfo(result)
 
   if (isCheckLevelFailure(result)) {
@@ -269,6 +285,7 @@ function getMissingLevels (events) {
 }
 
 function getFeatureCheckStepId (scenario) {
+  if (scenario === 'ci-wiring') return 'check-ci-wiring-events'
   if (scenario === 'efd') return 'check-new-test-retried'
   if (scenario === 'atr') return 'check-passing-execution-marked-retry'
   if (scenario === 'test-management') return 'check-managed-test-tags'
@@ -276,6 +293,7 @@ function getFeatureCheckStepId (scenario) {
 }
 
 function getFeatureCheckStepName (scenario) {
+  if (scenario === 'ci-wiring') return 'Check CI wiring events'
   if (scenario === 'efd') return 'Check that new test is retried'
   if (scenario === 'atr') return 'Check passing execution marked retry'
   if (scenario === 'test-management') return 'Check managed test tags'
@@ -283,7 +301,7 @@ function getFeatureCheckStepName (scenario) {
 }
 
 function withReason (evidence, result) {
-  if (result.status !== 'fail' && result.status !== 'error') return evidence
+  if (!isProblemStatus(result.status)) return evidence
   return {
     ...evidence,
     reason: result.diagnosis,
@@ -328,9 +346,36 @@ function getFallbackCommandDetails (command) {
 
 function toUiStatus (status) {
   if (status === 'pass') return 'ok'
+  if (status === 'blocked') return 'unknown'
   if (status === 'fail' || status === 'error') return 'failed'
   if (status === 'skip' || status === 'skipped') return 'skipped'
   return 'unknown'
+}
+
+function getPayloadStatus (checks) {
+  if (checks.some(check => check.status === 'failed')) return 'failed'
+  if (checks.some(check => check.status === 'unknown')) return 'unknown'
+  return 'ok'
+}
+
+function getExecutionEnvironmentEvidence (result) {
+  const evidence = result.evidence || {}
+
+  return {
+    blockedByExecutionEnvironment: true,
+    localNetworkingBlocked: evidence.localNetworkingBlocked,
+    manifestMayBeReused: evidence.manifestMayBeReused,
+    intakeStarted: evidence.intakeStarted,
+    error: evidence.error,
+    errorCode: evidence.errorCode,
+    errorSyscall: evidence.errorSyscall,
+    errorAddress: evidence.errorAddress,
+    rerunCommand: evidence.rerunCommand,
+  }
+}
+
+function isProblemStatus (status) {
+  return status === 'fail' || status === 'error' || status === 'blocked'
 }
 
 function getValidationAppUrl (payload) {

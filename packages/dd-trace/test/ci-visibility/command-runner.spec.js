@@ -6,6 +6,7 @@ const os = require('node:os')
 const path = require('node:path')
 
 const {
+  getBaseEnv,
   getCommandDetails,
   mergeNodeOptions,
   runCommand,
@@ -64,6 +65,33 @@ describe('test optimization validation command runner', () => {
       assert.ok(fs.existsSync(path.join(outDir, 'stderr.txt')))
     } finally {
       fs.rmSync(outDir, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps toolchain env but drops Datadog preloads from clean env', () => {
+    const originalVoltaHome = process.env.VOLTA_HOME
+    const originalNodeOptions = process.env.NODE_OPTIONS
+
+    process.env.VOLTA_HOME = '/Users/example/.volta'
+    process.env.NODE_OPTIONS = '-r dd-trace/ci/init'
+
+    try {
+      const cleanEnv = getBaseEnv('clean')
+
+      assert.strictEqual(cleanEnv.VOLTA_HOME, '/Users/example/.volta')
+      assert.strictEqual(cleanEnv.NODE_OPTIONS, undefined)
+    } finally {
+      if (originalVoltaHome === undefined) {
+        delete process.env.VOLTA_HOME
+      } else {
+        process.env.VOLTA_HOME = originalVoltaHome
+      }
+
+      if (originalNodeOptions === undefined) {
+        delete process.env.NODE_OPTIONS
+      } else {
+        process.env.NODE_OPTIONS = originalNodeOptions
+      }
     }
   })
 })

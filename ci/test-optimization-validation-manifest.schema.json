@@ -197,6 +197,15 @@
         "existingTestCommand": {
           "$ref": "#/$defs/command"
         },
+        "ciWiring": {
+          "$ref": "#/$defs/ciWiring"
+        },
+        "ciWiringCommand": {
+          "$ref": "#/$defs/command"
+        },
+        "forcedLocalCommand": {
+          "$ref": "#/$defs/command"
+        },
         "preflight": {
           "$ref": "#/$defs/preflight"
         },
@@ -328,16 +337,19 @@
           "type": "string"
         },
         "cwd": {
-          "type": "string"
+          "$ref": "#/$defs/executableString"
         },
         "argv": {
           "type": "array",
           "items": {
-            "type": "string"
+            "$ref": "#/$defs/executableString"
           }
         },
         "env": {
-          "type": "object"
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/executableString"
+          }
         },
         "requiredEnvVars": {
           "type": "array",
@@ -353,9 +365,13 @@
           "type": "boolean"
         },
         "shellCommand": {
-          "type": [
-            "string",
-            "null"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/executableString"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "shellReason": {
@@ -384,6 +400,12 @@
           ]
         }
       ]
+    },
+    "executableString": {
+      "type": "string",
+      "not": {
+        "pattern": "\\$\\{[^}]+\\}"
+      }
     },
     "preflight": {
       "type": "object",
@@ -416,6 +438,89 @@
           "type": "string"
         },
         "stderrSummary": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "ciWiring": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "enum": [
+            "pass",
+            "fail",
+            "skip",
+            "unknown"
+          ]
+        },
+        "provider": {
+          "type": "string"
+        },
+        "configFile": {
+          "type": "string"
+        },
+        "workflow": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "job": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "step": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "matrix": {
+          "type": "object"
+        },
+        "runner": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "shell": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "workingDirectory": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "inheritedEnv": {
+          "type": "object"
+        },
+        "requiredSecretEnvVars": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "setupCommandIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unresolved": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "diagnosis": {
           "type": "string"
         }
       },

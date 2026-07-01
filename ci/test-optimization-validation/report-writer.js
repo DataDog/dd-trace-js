@@ -9,6 +9,8 @@ const { pathToFileURL } = require('url')
 const { normalizeRequests } = require('./payload-normalizer')
 const { buildValidationPayloads } = require('./validation-payload')
 
+const CI_WIRING_SCENARIO = 'ci-wiring'
+
 function writeReport ({ manifest, results, out, intake, staticDiagnosis }) {
   const intakeArtifacts = intake.writeArtifacts()
   const normalizedEvents = normalizeRequests(intake.requests)
@@ -84,9 +86,9 @@ function renderMarkdown (report) {
     '',
   ]
 
-  for (const result of getLiveValidationResults(report.results)) {
-    lines.push(`- ${result.status.toUpperCase()} ${result.frameworkId} ${result.scenario}: ${result.diagnosis}`)
-  }
+  appendMarkdownResultSection(lines, 'Basic Reporting', getBasicReportingResults(report.results))
+  appendMarkdownResultSection(lines, 'CI Wiring', getCiWiringResults(report.results))
+  appendMarkdownResultSection(lines, 'Advanced Features', getAdvancedFeatureResults(report.results))
 
   const diagnosticResults = getDiagnosticOnlyResults(report.results)
   if (diagnosticResults.length > 0) {
@@ -118,10 +120,9 @@ function renderMarkdown (report) {
 }
 
 function renderHtml (report) {
-  const summaryItems = getLiveValidationResults(report.results).map(result => {
-    return `<li><strong>${escapeHtml(result.status.toUpperCase())}</strong> ${escapeHtml(result.frameworkId)} ` +
-      `${escapeHtml(result.scenario)} - ${escapeHtml(result.diagnosis)}</li>`
-  }).join('\n')
+  const basicReportingSection = renderHtmlResultSection('Basic Reporting', getBasicReportingResults(report.results))
+  const ciWiringSection = renderHtmlResultSection('CI Wiring', getCiWiringResults(report.results))
+  const advancedFeaturesSection = renderHtmlResultSection('Advanced Features', getAdvancedFeatureResults(report.results))
   const diagnosticItems = getDiagnosticOnlyResults(report.results).map(result => {
     return `<li><strong>${escapeHtml(result.status.toUpperCase())}</strong> ${escapeHtml(result.frameworkId)} - ` +
       `${escapeHtml(result.diagnosis)}</li>`
@@ -159,9 +160,9 @@ function renderHtml (report) {
     <h1>Datadog Test Optimization Validation Report</h1>
     <p>Generated at: ${escapeHtml(report.generatedAt)}</p>
     <h2>Summary</h2>
-    <ul>
-      ${summaryItems}
-    </ul>
+    ${basicReportingSection}
+    ${ciWiringSection}
+    ${advancedFeaturesSection}
     ${diagnosticSection}
     <h2>Framework Context</h2>
     <ul>
@@ -204,13 +205,29 @@ function formatFrameworkContext (framework, options = {}) {
 
 function renderConsoleSummary (results, out) {
   const lines = ['', 'Datadog Test Optimization validation summary:']
-  const liveResults = getLiveValidationResults(results)
+  const basicReportingResults = getBasicReportingResults(results)
+  const ciWiringResults = getCiWiringResults(results)
+  const advancedFeatureResults = getAdvancedFeatureResults(results)
   const diagnosticResults = getDiagnosticOnlyResults(results)
 
-  if (liveResults.length > 0) {
-    lines.push('Supported live validation:')
+  if (basicReportingResults.length > 0) {
+    lines.push('Basic Reporting:')
   }
-  for (const result of liveResults) {
+  for (const result of basicReportingResults) {
+    lines.push(`${result.status.toUpperCase()} ${result.frameworkId} ${result.scenario} - ${result.diagnosis}`)
+  }
+
+  if (ciWiringResults.length > 0) {
+    lines.push('CI wiring validation:')
+  }
+  for (const result of ciWiringResults) {
+    lines.push(`${result.status.toUpperCase()} ${result.frameworkId} ${result.scenario} - ${result.diagnosis}`)
+  }
+
+  if (advancedFeatureResults.length > 0) {
+    lines.push('Advanced feature validation:')
+  }
+  for (const result of advancedFeatureResults) {
     lines.push(`${result.status.toUpperCase()} ${result.frameworkId} ${result.scenario} - ${result.diagnosis}`)
   }
 
@@ -219,6 +236,7 @@ function renderConsoleSummary (results, out) {
   }
   for (const result of diagnosticResults) {
     lines.push(`${result.status.toUpperCase()} ${result.frameworkId} - ${result.diagnosis}`)
+    appendExecutionEnvironmentRemediation(lines, result)
   }
 
   lines.push(
@@ -228,12 +246,73 @@ function renderConsoleSummary (results, out) {
   return lines.join('\n')
 }
 
+function appendExecutionEnvironmentRemediation (lines, result) {
+  const evidence = result.evidence || {}
+  if (evidence.blockedByExecutionEnvironment !== true) return
+
+  lines.push(
+    'No Test Optimization conclusion was reached for this framework.',
+    'This is not evidence that Test Optimization is misconfigured.',
+    'The manifest and generated artifacts may still be useful for rerunning live validation.',
+    'Rerun the validator outside the restricted sandbox.'
+  )
+
+  if (Array.isArray(evidence.remediation) && evidence.remediation.length > 0) {
+    lines.push('Rerun live validation from one of:')
+    for (const remediation of evidence.remediation) {
+      lines.push(`- ${remediation}`)
+    }
+  }
+
+  if (evidence.rerunCommand) {
+    lines.push(`Command: ${evidence.rerunCommand}`)
+  }
+}
+
 function getLiveValidationResults (results) {
   return results.filter(result => !isDiagnosticOnlyResult(result))
 }
 
+function getCiWiringResults (results) {
+  return getLiveValidationResults(results).filter(result => result.scenario === CI_WIRING_SCENARIO)
+}
+
+function getBasicReportingResults (results) {
+  return getLiveValidationResults(results).filter(result => result.scenario === 'basic-reporting')
+}
+
+function getAdvancedFeatureResults (results) {
+  return getLiveValidationResults(results).filter(result => {
+    return result.scenario !== CI_WIRING_SCENARIO && result.scenario !== 'basic-reporting'
+  })
+}
+
 function getDiagnosticOnlyResults (results) {
   return results.filter(isDiagnosticOnlyResult)
+}
+
+function appendMarkdownResultSection (lines, title, results) {
+  if (results.length === 0) return
+
+  lines.push(`### ${title}`, '')
+  for (const result of results) {
+    lines.push(`- ${result.status.toUpperCase()} ${result.frameworkId} ${result.scenario}: ${result.diagnosis}`)
+  }
+  lines.push('')
+}
+
+function renderHtmlResultSection (title, results) {
+  if (results.length === 0) return ''
+
+  const items = results.map(result => {
+    return `<li><strong>${escapeHtml(result.status.toUpperCase())}</strong> ${escapeHtml(result.frameworkId)} ` +
+      `${escapeHtml(result.scenario)} - ${escapeHtml(result.diagnosis)}</li>`
+  }).join('\n')
+
+  return `<h3>${escapeHtml(title)}</h3>
+    <ul>
+      ${items}
+    </ul>`
 }
 
 function isDiagnosticOnlyResult (result) {
@@ -251,11 +330,11 @@ function stripPrivateFields (manifest) {
 
 function escapeHtml (value) {
   return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll('\'', '&#39;')
 }
 
 module.exports = { writeReport }

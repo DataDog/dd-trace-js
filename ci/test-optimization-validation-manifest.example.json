@@ -55,6 +55,49 @@
         "shellCommand": null,
         "shellReason": null
       },
+      "ciWiring": {
+        "status": "unknown",
+        "provider": "github-actions",
+        "configFile": "/absolute/path/to/repo/.github/workflows/test.yml",
+        "workflow": "test",
+        "job": "unit",
+        "step": "Run unit tests",
+        "matrix": {
+          "node": "20"
+        },
+        "runner": "ubuntu-latest",
+        "shell": "bash",
+        "workingDirectory": "/absolute/path/to/repo",
+        "inheritedEnv": {
+          "NODE_OPTIONS": "-r dd-trace/ci/init"
+        },
+        "requiredSecretEnvVars": [
+          "DD_API_KEY"
+        ],
+        "setupCommandIds": [],
+        "unresolved": [],
+        "diagnosis": "CI wiring command is replayable locally."
+      },
+      "ciWiringCommand": {
+        "description": "CI test step replayed without validator-injected preloads",
+        "cwd": "/absolute/path/to/repo",
+        "argv": [
+          "npm",
+          "test",
+          "--",
+          "test/sum.test.js"
+        ],
+        "env": {
+          "CI": "true",
+          "NODE_OPTIONS": "-r dd-trace/ci/init",
+          "DD_API_KEY": "dd-validation-placeholder"
+        },
+        "requiredEnvVars": [],
+        "timeoutMs": 300000,
+        "usesShell": false,
+        "shellCommand": null,
+        "shellReason": null
+      },
       "preflight": {
         "ran": true,
         "command": "existingTestCommand",
@@ -251,7 +294,7 @@
       },
       "generatedTestStrategy": {
         "status": "not_possible",
-        "reason": "node:test is detected for diagnosis only and is not supported as a Test Optimization test framework.",
+        "reason": "node:test is detected for diagnosis only and is not supported by this validator.",
         "adapter": "node:test",
         "testDirectory": null,
         "moduleSystem": "unknown",

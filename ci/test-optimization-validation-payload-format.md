@@ -47,7 +47,9 @@ const payload = JSON.parse(pako.inflate(compressed, { to: 'string' }))
 }
 ```
 
-`status` is `ok` or `failed`.
+`status` is `ok`, `failed`, or `unknown`. The validator's local JSON report may use `blocked` for
+execution-environment blockers, but the pako/UI payload maps that to `unknown` for compatibility
+with the current validation UI.
 
 `framework.language` is currently hardcoded to `javascript`. `workingDirectory`, `projectRoot`,
 and `packageJson` come from the manifest framework entry so the UI can show which workspace package
@@ -95,6 +97,8 @@ Each check has this shape:
 
 Known check IDs:
 
+- `ci-wiring`
+- `execution-environment`
 - `basic-reporting`
 - `efd-new-test-detection-and-retry`
 - `auto-test-retries`
@@ -199,8 +203,37 @@ to four compact samples: one per event level.
 ```
 
 The payload only includes user-facing validation steps. It does not include fake-intake setup as a
-step; that setup is validator plumbing. If the fake intake cannot start, the affected check is
-reported as failed with `steps: []` and the local diagnosis is carried by the check-level `reason`.
+step; that setup is validator plumbing. If the fake intake cannot bind or connect to localhost
+because the execution environment blocks local sockets, the affected framework is reported as an
+execution-environment blocker instead of an ordinary Basic Reporting failure:
+
+```json
+{
+  "id": "execution-environment",
+  "name": "Local fake intake",
+  "status": "unknown",
+  "reason": "The current agent sandbox blocks localhost sockets, so the validator could not start the fake Datadog intake.",
+  "remediation": [
+    "Rerun the validator command shown below from the host shell",
+    "In Codex, approve running that single validator command outside the sandbox",
+    "Rerun in CI"
+  ],
+  "evidence": {
+    "blockedByExecutionEnvironment": true,
+    "localNetworkingBlocked": true,
+    "manifestMayBeReused": true,
+    "intakeStarted": false,
+    "errorCode": "EPERM",
+    "errorSyscall": "listen",
+    "errorAddress": "127.0.0.1",
+    "rerunCommand": "node /absolute/path/to/validate-test-optimization.js --manifest ./dd-test-optimization-validation-manifest.json --out ./dd-test-optimization-validation-results"
+  },
+  "steps": []
+}
+```
+
+This means no Test Optimization conclusion was reached. The UI should tell the user to preserve the
+manifest/artifacts and rerun live validation from a host shell, by approving the single validator command to run outside the agent sandbox, or from CI.
 
 When live basic reporting runs and fails, the `basic-reporting` check and its `check-events` step
 evidence include a concise local diagnosis in `reason`. Examples:

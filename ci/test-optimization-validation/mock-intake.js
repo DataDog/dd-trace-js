@@ -4,6 +4,7 @@
 
 const fs = require('fs')
 const http = require('http')
+const net = require('net')
 const path = require('path')
 const zlib = require('zlib')
 
@@ -69,20 +70,23 @@ class MockIntake {
       })
     })
 
-    await new Promise((resolve, reject) => {
-      this.server.once('error', reject)
-      this.server.listen(0, '127.0.0.1', () => {
-        this.port = this.server.address().port
-        this.server.off('error', reject)
-        resolve()
-      })
-    })
+    try {
+      await listenOnLocalhost(this.server)
+      this.port = this.server.address().port
+      await verifyLocalConnection(this.port)
+    } catch (err) {
+      await closeServer(this.server)
+      this.server = null
+      this.port = null
+      throw err
+    }
   }
 
   async close () {
     if (!this.server) return
-    await new Promise(resolve => this.server.close(resolve))
+    await closeServer(this.server)
     this.server = null
+    this.port = null
   }
 
   async handle (req, res) {
@@ -171,6 +175,43 @@ class MockIntake {
     fs.writeFileSync(requestsPath, this.requests.map(request => JSON.stringify(request)).join('\n') + '\n')
     return { requestsPath }
   }
+}
+
+function listenOnLocalhost (server) {
+  return new Promise((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject)
+      resolve()
+    })
+  })
+}
+
+function verifyLocalConnection (port) {
+  return new Promise((resolve, reject) => {
+    const socket = net.createConnection({ host: '127.0.0.1', port })
+    const cleanup = () => {
+      socket.off('connect', onConnect)
+      socket.off('error', onError)
+    }
+    const onConnect = () => {
+      cleanup()
+      socket.end()
+      resolve()
+    }
+    const onError = err => {
+      cleanup()
+      reject(err)
+    }
+
+    socket.once('connect', onConnect)
+    socket.once('error', onError)
+  })
+}
+
+function closeServer (server) {
+  if (!server || !server.listening) return Promise.resolve()
+  return new Promise(resolve => server.close(resolve))
 }
 
 function decodeSafely (body, headers) {

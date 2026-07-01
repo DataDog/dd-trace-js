@@ -8,8 +8,27 @@ const { spawn } = require('child_process')
 
 const INIT_PATH = path.resolve(__dirname, '..', 'init.js')
 const REGISTER_PATH = path.resolve(__dirname, '..', '..', 'register.js')
+const CLEAN_ENV_ALLOWLIST = new Set([
+  'COMSPEC',
+  'ComSpec',
+  'HOME',
+  'LOGNAME',
+  'PATH',
+  'Path',
+  'PATHEXT',
+  'SHELL',
+  'SystemRoot',
+  'TEMP',
+  'TMP',
+  'TMPDIR',
+  'USER',
+  'USERNAME',
+  'VOLTA_HOME',
+  'WINDIR',
+  'windir',
+])
 
-function runCommand (command, { env = {}, outDir, label, verbose = false } = {}) {
+function runCommand (command, { env = {}, envMode = 'inherit', outDir, label, verbose = false } = {}) {
   const startedAt = Date.now()
   const timeoutMs = command.timeoutMs || 300_000
   const result = {
@@ -32,7 +51,7 @@ function runCommand (command, { env = {}, outDir, label, verbose = false } = {})
   return new Promise((resolve) => {
     let finalized = false
     const childEnv = {
-      ...process.env,
+      ...getBaseEnv(envMode),
       ...command.env,
       ...env,
     }
@@ -107,6 +126,16 @@ function runCommand (command, { env = {}, outDir, label, verbose = false } = {})
   })
 }
 
+function getBaseEnv (envMode) {
+  if (envMode !== 'clean') return process.env
+
+  const cleanEnv = {}
+  for (const name of CLEAN_ENV_ALLOWLIST) {
+    if (process.env[name] !== undefined) cleanEnv[name] = process.env[name]
+  }
+  return cleanEnv
+}
+
 function buildDatadogEnv ({ intake, scenario, framework }) {
   return {
     DD_TRACE_AGENT_PORT: String(intake.port),
@@ -119,6 +148,15 @@ function buildDatadogEnv ({ intake, scenario, framework }) {
     DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
     DD_TAGS: `test_optimization.validation.scenario:${scenario}`,
     NODE_OPTIONS: withCiPreloads(process.env.NODE_OPTIONS, framework),
+  }
+}
+
+function buildCiWiringEnv ({ intake }) {
+  return {
+    DD_TRACE_AGENT_PORT: String(intake.port),
+    DD_TRACE_AGENT_URL: `http://127.0.0.1:${intake.port}`,
+    DD_CIVISIBILITY_AGENTLESS_URL: `http://127.0.0.1:${intake.port}`,
+    DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
   }
 }
 
@@ -181,8 +219,8 @@ function getCommandDetails (command) {
 
 function getDisplayArgv (argv) {
   const { prefixAssignments, commandIndex, corepackIndex } = parseArgv(argv)
-  if (corepackIndex !== -1) return prefixAssignments.concat(argv.slice(corepackIndex + 1))
-  return prefixAssignments.concat(argv.slice(commandIndex))
+  if (corepackIndex !== -1) return [...prefixAssignments, ...argv.slice(corepackIndex + 1)]
+  return [...prefixAssignments, ...argv.slice(commandIndex)]
 }
 
 function getDisplayDetails (argv) {
@@ -254,7 +292,9 @@ function isCorepackScript (value = '') {
 
 module.exports = {
   runCommand,
+  buildCiWiringEnv,
   buildDatadogEnv,
+  getBaseEnv,
   getCommandDetails,
   serializeCommand,
   serializeDisplayCommand,

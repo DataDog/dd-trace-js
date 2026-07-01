@@ -18,20 +18,22 @@ const {
 async function runBasicReporting ({ framework, intake, out, options }) {
   const scenarioName = 'basic-reporting'
   try {
+    const command = getBasicReportingCommand(framework)
     intake.configure()
     const { result, events, outDir } = await runInstrumentedCommand({
       framework,
       intake,
       out,
       scenarioName,
-      command: framework.existingTestCommand,
+      command,
       options,
     })
 
     const evidence = {
       commandExitCode: result.exitCode,
       commandTimedOut: result.timedOut,
-      commandDescription: framework.existingTestCommand?.description,
+      commandDescription: command?.description,
+      forcedLocalCommandUsed: command === framework.forcedLocalCommand,
       commandOutputSummary: summarizeTestOutput(result.stdout, result.stderr),
       manifestNotes: Array.isArray(framework.notes) ? framework.notes : [],
       preflight: summarizePreflight(framework.preflight),
@@ -47,7 +49,7 @@ async function runBasicReporting ({ framework, intake, out, options }) {
       }
 
       return failBasicReportingWithDebugRerun({
-        command: framework.existingTestCommand,
+        command,
         configureIntake: () => intake.configure(),
         diagnosis: eventLevelFailure.summary,
         evidence,
@@ -87,7 +89,7 @@ async function runBasicReporting ({ framework, intake, out, options }) {
     evidence.commandFailure = summarizeCommandFailure(result, evidence)
     evidence.commandExitMatchesPreflight = false
     return failBasicReportingWithDebugRerun({
-      command: framework.existingTestCommand,
+      command,
       configureIntake: () => intake.configure(),
       diagnosis: `${evidence.commandFailure.summary} The exit code did not match the dd-trace-less preflight run.`,
       evidence,
@@ -101,6 +103,10 @@ async function runBasicReporting ({ framework, intake, out, options }) {
   } catch (err) {
     return error(framework, scenarioName, err)
   }
+}
+
+function getBasicReportingCommand (framework) {
+  return framework.forcedLocalCommand || framework.existingTestCommand
 }
 
 async function failBasicReportingWithDebugRerun (options) {
@@ -224,13 +230,19 @@ function summarizeTestOutput (stdout = '', stderr = '') {
     /\b\d+\s+failed\b/i,
     /\btests?\b.*\bpassed\b/i,
     /\btests?\b.*\bfailed\b/i,
+    /\bSuccessfully ran target\b.*\btest\b/i,
+    /\bsuccess:\s*\d+\b/i,
+    /\bTasks:\s*\d+\s+successful\b/i,
   ], 8)
 }
 
 function commandOutputShowsTestsRan (lines) {
   return lines.some(line => {
     return /\b\d+\s+(?:passing|passed)\b/i.test(line) ||
-      /\btests?\b.*\bpassed\b/i.test(line)
+      /\btests?\b.*\bpassed\b/i.test(line) ||
+      /\bSuccessfully ran target\b.*\btest\b/i.test(line) ||
+      /\bsuccess:\s*[1-9]\d*\b/i.test(line) ||
+      /\bTasks:\s*[1-9]\d*\s+successful\b/i.test(line)
   })
 }
 
@@ -446,6 +458,7 @@ function getFailureSummary ({ buildErrors, assertionFailures, exitCode, testEven
 
 module.exports = {
   getDebugAwareDiagnosis,
+  getBasicReportingCommand,
   getMissingEventDiagnosis,
   refineBasicReportingFailure,
   runBasicReporting,
