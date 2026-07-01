@@ -158,6 +158,21 @@ describe('vitest no-worker init instrumentation selection', () => {
       )
     })
 
+    it('rejects default pool-specific isolate disabled configuration', () => {
+      assert.strictEqual(
+        noWorkerInit.shouldUse({
+          config: {
+            poolOptions: {
+              forks: {
+                isolate: false,
+              },
+            },
+          },
+        }, '3.2.6', undefined, options),
+        false
+      )
+    })
+
     it('rejects selected test specifications with isolate disabled', () => {
       const project = {
         config: {
@@ -168,6 +183,25 @@ describe('vitest no-worker init instrumentation selection', () => {
 
       assert.strictEqual(
         noWorkerInit.shouldUse({ config: { pool: 'forks' } }, '3.2.6', [[project, { pool: 'forks' }]], options),
+        false
+      )
+    })
+
+    it('rejects selected test specifications with default pool-specific isolate disabled', () => {
+      const project = {
+        config: {},
+      }
+
+      assert.strictEqual(
+        noWorkerInit.shouldUse({
+          config: {
+            poolOptions: {
+              forks: {
+                isolate: false,
+              },
+            },
+          },
+        }, '3.2.6', [[project, {}]], options),
         false
       )
     })
@@ -413,6 +447,13 @@ SUPPORTED_VERSIONS.forEach((version) => {
           name: 'root pool isolate disabled',
           env: {
             POOL_CONFIG: 'forks',
+            POOL_NO_ISOLATE: '1',
+          },
+        },
+        {
+          name: 'default pool isolate disabled',
+          env: {
+            USE_VITEST_DEFAULT_POOL: '1',
             POOL_NO_ISOLATE: '1',
           },
         },

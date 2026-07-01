@@ -19,9 +19,13 @@ const config = {
     include: [
       process.env.TEST_DIR || 'ci-visibility/vitest-tests/test-visibility*',
     ],
-    pool: process.env.POOL_CONFIG || 'forks',
     reporters: ['default'],
   },
+}
+
+const poolConfig = process.env.POOL_CONFIG || 'forks'
+if (!process.env.USE_VITEST_DEFAULT_POOL) {
+  config.test.pool = poolConfig
 }
 
 if (process.env.NO_ISOLATE) {
@@ -30,7 +34,7 @@ if (process.env.NO_ISOLATE) {
 
 if (process.env.POOL_NO_ISOLATE) {
   config.test.poolOptions = {
-    [config.test.pool]: {
+    [poolConfig]: {
       isolate: false,
     },
   }

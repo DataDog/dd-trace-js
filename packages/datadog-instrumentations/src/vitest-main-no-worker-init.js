@@ -41,6 +41,7 @@ const DATADOG_TEST_OPTIMIZATION_NODE_OPTION_FLAGS = new Set(['--import', '--requ
 const VITEST_NO_WORKER_INIT_ACTIVE_ENV = 'DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE'
 const VITEST_NO_WORKER_INIT_REQUEST_ENV = 'DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT'
 const VITEST_NO_WORKER_INIT_MINIMUM_VERSION = '3.2.6'
+const VITEST_DEFAULT_POOL = 'forks'
 const VITEST_NO_WORKER_INIT_SETUP_FILE = path.join(
   __dirname,
   '..',
@@ -78,8 +79,9 @@ function shouldUse (ctx, frameworkVersion, testSpecifications, options) {
     return shouldUseForTestSpecifications(config, testSpecifications, isVitestWorkerPool)
   }
 
-  if (!isNoWorkerInitPool(config.pool, isVitestWorkerPool)) return false
-  if (getEffectiveConfigIsolate(config, config.pool) === false) {
+  const pool = getEffectiveConfigPool(config)
+  if (!isNoWorkerInitPool(pool, isVitestWorkerPool)) return false
+  if (getEffectiveConfigIsolate(config, pool) === false) {
     warnDisabledIsolate()
     return false
   }
@@ -111,7 +113,7 @@ function warnDisabledIsolate () {
 }
 
 function shouldUseForTestSpecifications (config, testSpecifications, isVitestWorkerPool) {
-  const defaultPool = config.pool
+  const defaultPool = getEffectiveConfigPool(config)
   let hasNoWorkerInitSpecification = false
   let hasNonWorkerSpecification = false
 
@@ -1052,6 +1054,16 @@ function getTestSpecificationPool (testSpecification) {
 
 function getEffectiveTestSpecificationPool (testSpecification, defaultPool) {
   return getTestSpecificationPool(testSpecification) || defaultPool
+}
+
+/**
+ * Resolves Vitest's default worker pool when the user did not configure one.
+ *
+ * @param {{ pool?: string }|undefined} config
+ * @returns {string}
+ */
+function getEffectiveConfigPool (config) {
+  return config?.pool || VITEST_DEFAULT_POOL
 }
 
 function getPoolOptionsIsolate (config, pool) {
