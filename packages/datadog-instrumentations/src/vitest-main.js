@@ -13,6 +13,8 @@ const {
   collectTestOptimizationSummariesFromTraces,
   logTestOptimizationSummary,
   getTestOptimizationRequestResults,
+  getTestSuitePath,
+  isModifiedTest,
 } = require('../../dd-trace/src/plugins/util/test')
 const { addHook } = require('./helpers/instrument')
 const {
@@ -135,6 +137,138 @@ function getTestFilepaths (ctx, testSpecifications) {
   return getFilePaths.call(ctx)
 }
 
+/**
+ * @typedef {{
+ *   isAttemptToFix?: boolean,
+ *   isDisabled?: boolean,
+ *   isQuarantined?: boolean
+ * }} VitestTestManagementProperties
+ *
+ * @typedef {{
+ *   testSuite?: string,
+ *   knownTests?: string[],
+ *   testManagementTests?: Record<string, VitestTestManagementProperties>,
+ *   isModified?: boolean
+ * }} VitestTestProperties
+ */
+
+/**
+ * Normalize a Vitest test file path to the test suite path used by Test Optimization APIs.
+ *
+ * @param {string} testFilepath
+ * @param {string} repositoryRoot
+ * @returns {string}
+ */
+function getNormalizedTestSuitePath (testFilepath, repositoryRoot) {
+  const testSuiteAbsolutePath = path.isAbsolute(testFilepath) ? testFilepath : path.join(repositoryRoot, testFilepath)
+  return getTestSuitePath(testSuiteAbsolutePath, repositoryRoot)
+}
+
+/**
+ * Build simplified Test Management metadata grouped by normalized test suite path.
+ *
+ * @param {{ vitest?: { suites?: Record<string, { tests?: Record<string, { properties?: {
+ *   attempt_to_fix?: boolean,
+ *   disabled?: boolean,
+ *   quarantined?: boolean
+ * } }> }> } }} testManagementTests
+ * @returns {Record<string, Record<string, VitestTestManagementProperties>>}
+ */
+function getTestManagementTestsBySuite (testManagementTests) {
+  const testManagementTestsBySuite = {}
+  const suites = testManagementTests?.vitest?.suites
+  if (!suites) return testManagementTestsBySuite
+
+  for (const [testSuite, suite] of Object.entries(suites)) {
+    const tests = suite?.tests
+    if (!tests) continue
+
+    const testsByName = {}
+    let hasTests = false
+    for (const [testName, test] of Object.entries(tests)) {
+      const properties = test?.properties
+      const testProperties = {
+        isAttemptToFix: properties?.attempt_to_fix,
+        isDisabled: properties?.disabled,
+        isQuarantined: properties?.quarantined,
+      }
+      testsByName[testName] = testProperties
+      hasTests = true
+    }
+    if (hasTests) {
+      testManagementTestsBySuite[testSuite] = testsByName
+    }
+  }
+
+  return testManagementTestsBySuite
+}
+
+/**
+ * Build a set-like object for test suites modified in the current pull request diff.
+ *
+ * @param {Record<string, number[]>|undefined} modifiedFiles
+ * @returns {Record<string, boolean>}
+ */
+function getImpactedTestSuites (modifiedFiles) {
+  const impactedTestSuites = {}
+  if (!modifiedFiles) return impactedTestSuites
+
+  for (const testSuite of Object.keys(modifiedFiles)) {
+    if (isModifiedTest(testSuite, 0, 0, modifiedFiles, 'vitest')) {
+      impactedTestSuites[testSuite] = true
+    }
+  }
+
+  return impactedTestSuites
+}
+
+/**
+ * Build the worker-ready test metadata map keyed by Vitest's absolute filepath.
+ *
+ * @param {string[]} testFilepaths
+ * @param {string} repositoryRoot
+ * @param {Record<string, string[]>|undefined} knownTestsBySuite
+ * @param {Record<string, Record<string, VitestTestManagementProperties>>|undefined} testManagementTestsBySuite
+ * @param {Record<string, boolean>|undefined} impactedTestSuites
+ * @returns {Record<string, VitestTestProperties>}
+ */
+function getTestPropertiesByFilepath (
+  testFilepaths,
+  repositoryRoot,
+  knownTestsBySuite,
+  testManagementTestsBySuite,
+  impactedTestSuites
+) {
+  const testPropertiesByFilepath = {}
+  if (!Array.isArray(testFilepaths)) return testPropertiesByFilepath
+
+  for (const testFilepath of testFilepaths) {
+    if (typeof testFilepath !== 'string') continue
+
+    const testSuite = getNormalizedTestSuitePath(testFilepath, repositoryRoot)
+    const testProperties = { testSuite }
+    const hasProperties = knownTestsBySuite !== undefined ||
+      testManagementTestsBySuite !== undefined ||
+      impactedTestSuites !== undefined
+
+    if (knownTestsBySuite) {
+      testProperties.knownTests = knownTestsBySuite[testSuite] || []
+    }
+    if (testManagementTestsBySuite) {
+      testProperties.testManagementTests = testManagementTestsBySuite[testSuite] || {}
+    }
+    if (impactedTestSuites?.[testSuite]) {
+      testProperties.isModified = true
+    }
+
+    if (hasProperties) {
+      testPropertiesByFilepath[testFilepath] = testProperties
+    }
+  }
+
+  return testPropertiesByFilepath
+}
+
 function wrapCoverageProvider (ctx) {
   const { coverageProvider } = ctx
   if (!coverageProvider?.generateCoverage || coverageWrappedProviders.has(coverageProvider)) {
@@ -180,6 +314,19 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
     return
   }
 
+  let repositoryRoot = process.cwd()
+  let testFilepaths
+  let shouldSendTestProperties = false
+  let knownTestsBySuite
+  let testManagementTestsBySuite
+  let impactedTestSuites
+  const getCurrentTestFilepaths = async () => {
+    if (testFilepaths === undefined) {
+      testFilepaths = await getTestFilepaths(ctx, testSpecifications)
+    }
+    return testFilepaths
+  }
+
   try {
     const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh, frameworkVersion)
     if (!err) {
@@ -203,10 +350,14 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
   }
 
   if (testSessionConfigurationCh.hasSubscribers) {
-    const { testSessionId, testModuleId, testCommand, repositoryRoot, codeOwnersEntries } = await getChannelPromise(
-      testSessionConfigurationCh,
-      frameworkVersion
-    )
+    const {
+      testSessionId,
+      testModuleId,
+      testCommand,
+      repositoryRoot: receivedRepositoryRoot,
+      codeOwnersEntries,
+    } = await getChannelPromise(testSessionConfigurationCh, frameworkVersion)
+    repositoryRoot = receivedRepositoryRoot || repositoryRoot
     setProvidedContext(ctx, {
       _ddTestSessionId: testSessionId,
       _ddTestModuleId: testModuleId,
@@ -242,12 +393,12 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
       isEarlyFlakeDetectionEnabled = false
     } else {
       const knownTests = currentKnownTestsResponse.knownTests
-      const testFilepaths = await getTestFilepaths(ctx, testSpecifications)
+      const currentTestFilepaths = await getCurrentTestFilepaths()
 
       if (isValidKnownTests(knownTests)) {
         isEarlyFlakeDetectionFaultyCh.publish({
           knownTests: knownTests.vitest,
-          testFilepaths,
+          testFilepaths: currentTestFilepaths,
           onDone: (isFaulty) => {
             isEarlyFlakeDetectionFaulty = isFaulty
           },
@@ -256,9 +407,10 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
           isEarlyFlakeDetectionEnabled = false
           log.warn('New test detection is disabled because the number of new tests is too high.')
         } else {
+          knownTestsBySuite = knownTests.vitest
+          shouldSendTestProperties = true
           setProvidedContext(ctx, {
             _ddIsKnownTestsEnabled: isKnownTestsEnabled,
-            _ddKnownTests: knownTests,
             _ddIsEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionEnabled,
             _ddEarlyFlakeDetectionNumRetries:
               getConfiguredEfdRetryCount(earlyFlakeDetectionSlowTestRetries, earlyFlakeDetectionNumRetries),
@@ -285,10 +437,11 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
       isTestManagementTestsEnabled = false
       log.error('Could not get test management tests.')
     } else {
+      testManagementTestsBySuite = getTestManagementTestsBySuite(receivedTestManagementTests)
+      shouldSendTestProperties = true
       setProvidedContext(ctx, {
         _ddIsTestManagementTestsEnabled: isTestManagementTestsEnabled,
         _ddTestManagementAttemptToFixRetries: testManagementAttemptToFixRetries,
-        _ddTestManagementTests: receivedTestManagementTests,
       }, 'Could not send test management tests to workers so Test Management will not work.')
     }
   }
@@ -298,11 +451,24 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
     if (err) {
       log.error('Could not get modified tests.')
     } else {
+      impactedTestSuites = getImpactedTestSuites(modifiedFiles)
+      shouldSendTestProperties = true
       setProvidedContext(ctx, {
         _ddIsImpactedTestsEnabled: isImpactedTestsEnabled,
-        _ddModifiedFiles: modifiedFiles,
       }, 'Could not send modified tests to workers so Impacted Tests will not work.')
     }
+  }
+
+  if (shouldSendTestProperties) {
+    setProvidedContext(ctx, {
+      _ddTestPropertiesByFilepath: getTestPropertiesByFilepath(
+        await getCurrentTestFilepaths(),
+        repositoryRoot,
+        knownTestsBySuite,
+        testManagementTestsBySuite,
+        impactedTestSuites
+      ),
+    }, 'Could not send test properties to workers so some Test Optimization features will not work.')
   }
 
   wrapCoverageProvider(ctx)

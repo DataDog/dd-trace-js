@@ -32,7 +32,6 @@ const {
   TEST_HAS_FAILED_ALL_RETRIES,
   getLibraryCapabilitiesTags,
   TEST_RETRY_REASON_TYPES,
-  isModifiedTest,
   TEST_IS_MODIFIED,
   TEST_HAS_DYNAMIC_NAME,
   TEST_FINAL_STATUS,
@@ -68,49 +67,6 @@ class VitestPlugin extends CiPlugin {
         repositoryRoot: this.repositoryRoot,
         codeOwnersEntries: this.codeOwnersEntries,
       })
-    })
-
-    this.addSub('ci:vitest:test:is-new', ({ knownTests, testSuiteAbsolutePath, testName, onDone }) => {
-      // if for whatever reason the worker does not receive valid known tests, we don't consider it as new
-      if (!knownTests.vitest) {
-        return onDone(false)
-      }
-      const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
-      const testsForThisTestSuite = knownTests.vitest[testSuite] || []
-      onDone(!testsForThisTestSuite.includes(testName))
-    })
-
-    this.addSub('ci:vitest:test:is-attempt-to-fix', ({
-      testManagementTests,
-      testSuiteAbsolutePath,
-      testName,
-      onDone,
-    }) => {
-      const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
-      const { isAttemptToFix } = this.getTestProperties(testManagementTests, testSuite, testName)
-
-      onDone(isAttemptToFix ?? false)
-    })
-
-    this.addSub('ci:vitest:test:is-disabled', ({ testManagementTests, testSuiteAbsolutePath, testName, onDone }) => {
-      const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
-      const { isDisabled } = this.getTestProperties(testManagementTests, testSuite, testName)
-
-      onDone(isDisabled)
-    })
-
-    this.addSub('ci:vitest:test:is-quarantined', ({ testManagementTests, testSuiteAbsolutePath, testName, onDone }) => {
-      const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
-      const { isQuarantined } = this.getTestProperties(testManagementTests, testSuite, testName)
-
-      onDone(isQuarantined)
-    })
-
-    this.addSub('ci:vitest:test:is-modified', ({ modifiedFiles, testSuiteAbsolutePath, onDone }) => {
-      const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
-      const isModified = isModifiedTest(testSuite, 0, 0, modifiedFiles, this.constructor.id)
-
-      onDone(isModified)
     })
 
     this.addSub('ci:vitest:is-early-flake-detection-faulty', ({
@@ -468,13 +424,6 @@ class VitestPlugin extends CiPlugin {
       testEnvironmentMetadata: this.testEnvironmentMetadata,
       onDone,
     })
-  }
-
-  getTestProperties (testManagementTests, testSuite, testName) {
-    const { attempt_to_fix: isAttemptToFix, disabled: isDisabled, quarantined: isQuarantined } =
-      testManagementTests?.vitest?.suites?.[testSuite]?.tests?.[testName]?.properties || {}
-
-    return { isAttemptToFix, isDisabled, isQuarantined }
   }
 }
 
