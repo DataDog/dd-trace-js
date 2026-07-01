@@ -1,10 +1,11 @@
 'use strict'
 
 const log = require('../log')
-const { channel } = require('../../../datadog-instrumentations/src/helpers/instrument')
 const { ERROR_MESSAGE, ERROR_TYPE } = require('../constants')
-const { ImpendingTimeout } = require('./runtime/errors')
+const { channel } = require('../../../datadog-instrumentations/src/helpers/instrument')
+const { HTTP_REQUEST_HEADERS } = require('../../../../ext/tags')
 const { extractContext } = require('./context')
+const { ImpendingTimeout } = require('./runtime/errors')
 
 const timeoutChannel = channel('apm:aws:lambda:timeout')
 // Always crash the flushes when a message is received
@@ -56,6 +57,26 @@ function crashFlush () {
     activeSpan.finish()
   }
 }
+
+const startInvocationChannel = channel('datadog:lambda:start-invocation')
+
+function onStartInvocation ({ span, headers }) {
+  if (!span || !headers) return
+
+  const raw = global._ddtrace?._tracer?._config?.headerTags
+  if (!Array.isArray(raw) || raw.length === 0) return
+
+  try {
+    for (const [key, tag] of raw.map(h => h.split(':')).map(([key, tag]) => [key.toLowerCase(), tag])) {
+      const value = headers[key]
+      if (value) span.setTag(tag || `${HTTP_REQUEST_HEADERS}.${key}`, value)
+    }
+  } catch (err) {
+    log.error('Error applying Lambda header tags', err)
+  }
+}
+
+startInvocationChannel.subscribe(onStartInvocation)
 
 /**
  * Patches your AWS Lambda handler function to add some tracing support.
