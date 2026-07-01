@@ -17,16 +17,17 @@ const Reference = opentracing.Reference
 describe('Tracer', () => {
   let Tracer
   let tracer
-  let Span
+  let NativeDatadogSpan
   let span
   let spanCtx
   let PrioritySampler
   let prioritySampler
-  let AgentExporter
+  let NativeExporter
   let SpanProcessor
   let processor
   let exporter
-  let agentExporter
+  let nativeSpansInstance
+  let NativeSpansInterface
   let spanContext
   let fields
   let carrier
@@ -49,22 +50,25 @@ describe('Tracer', () => {
       addTags: sinon.stub().returns(span),
       context: sinon.stub().returns(spanCtx),
     }
-    Span = sinon.stub().returns(span)
+    NativeDatadogSpan = sinon.stub().returns(span)
 
     prioritySampler = {
       sample: sinon.stub(),
     }
     PrioritySampler = sinon.stub().returns(prioritySampler)
 
-    agentExporter = {
+    exporter = {
       export: sinon.spy(),
     }
-    AgentExporter = sinon.stub().returns(agentExporter)
+    NativeExporter = sinon.stub().returns(exporter)
 
     processor = {
       process: sinon.spy(),
     }
     SpanProcessor = sinon.stub().returns(processor)
+
+    nativeSpansInstance = {}
+    NativeSpansInterface = sinon.stub().returns(nativeSpansInstance)
 
     spanContext = {}
     carrier = {}
@@ -93,12 +97,11 @@ describe('Tracer', () => {
       use: sinon.spy(),
       toggle: sinon.spy(),
       error: sinon.spy(),
+      warn: sinon.spy(),
+      debug: sinon.spy(),
     }
 
-    exporter = sinon.stub().returns(AgentExporter)
-
     Tracer = proxyquire('../../src/opentracing/tracer', {
-      './span': Span,
       './span_context': SpanContext,
       '../priority_sampler': PrioritySampler,
       '../span_processor': SpanProcessor,
@@ -107,24 +110,28 @@ describe('Tracer', () => {
       './propagation/binary': BinaryPropagator,
       './propagation/log': LogPropagator,
       '../log': log,
-      '../exporter': exporter,
+      '../exporters/native': NativeExporter,
+      '../native': {
+        get NativeSpansInterface () { return NativeSpansInterface },
+        get NativeDatadogSpan () { return NativeDatadogSpan },
+      },
     })
   })
 
   it('should support recording', () => {
     tracer = new Tracer(config)
 
-    sinon.assert.called(AgentExporter)
-    sinon.assert.calledWith(AgentExporter, config, prioritySampler)
-    sinon.assert.calledWith(SpanProcessor, agentExporter, prioritySampler, config)
+    sinon.assert.called(NativeExporter)
+    sinon.assert.calledWith(NativeExporter, config, prioritySampler, nativeSpansInstance)
+    sinon.assert.calledWith(SpanProcessor, exporter, prioritySampler, config, nativeSpansInstance)
   })
 
   it('should allow to configure an alternative prioritySampler', () => {
     const sampler = {}
     tracer = new Tracer(config, sampler)
 
-    sinon.assert.calledWith(AgentExporter, config, sampler)
-    sinon.assert.calledWith(SpanProcessor, agentExporter, sampler, config)
+    sinon.assert.calledWith(NativeExporter, config, sampler, nativeSpansInstance)
+    sinon.assert.calledWith(SpanProcessor, exporter, sampler, config, nativeSpansInstance)
   })
 
   describe('startSpan', () => {
@@ -135,7 +142,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       const testSpan = tracer.startSpan('name', fields)
 
-      sinon.assert.calledWith(Span, tracer, processor, prioritySampler, {
+      sinon.assert.calledWith(NativeDatadogSpan, tracer, processor, prioritySampler, {
         operationName: 'name',
         parent: null,
         startTime: fields.startTime,
@@ -143,7 +150,7 @@ describe('Tracer', () => {
         traceId128BitGenerationEnabled: undefined,
         integrationName: undefined,
         links: undefined,
-      }, true)
+      }, true, nativeSpansInstance)
 
       sinon.assert.calledWith(span.addTags, {
         foo: 'bar',
@@ -163,7 +170,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      sinon.assert.calledWithMatch(Span, tracer, processor, prioritySampler, {
+      sinon.assert.calledWithMatch(NativeDatadogSpan, tracer, processor, prioritySampler, {
         operationName: 'name',
         parent,
       })
@@ -179,7 +186,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      sinon.assert.calledWithMatch(Span, tracer, processor, prioritySampler, {
+      sinon.assert.calledWithMatch(NativeDatadogSpan, tracer, processor, prioritySampler, {
         operationName: 'name',
         parent,
       })
@@ -192,7 +199,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       const testSpan = tracer.startSpan('name', fields)
 
-      sinon.assert.calledWith(Span, tracer, processor, prioritySampler, {
+      sinon.assert.calledWith(NativeDatadogSpan, tracer, processor, prioritySampler, {
         operationName: 'name',
         parent: null,
         startTime: fields.startTime,
@@ -216,7 +223,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      sinon.assert.calledWithMatch(Span, tracer, processor, prioritySampler, {
+      sinon.assert.calledWithMatch(NativeDatadogSpan, tracer, processor, prioritySampler, {
         operationName: 'name',
         parent,
       })
@@ -232,7 +239,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       tracer.startSpan('name', fields)
 
-      sinon.assert.calledWithMatch(Span, tracer, processor, prioritySampler, {
+      sinon.assert.calledWithMatch(NativeDatadogSpan, tracer, processor, prioritySampler, {
         operationName: 'name',
         parent: null,
       })
@@ -290,7 +297,7 @@ describe('Tracer', () => {
 
       sinon.assert.calledWith(span.addTags, config.tags)
       sinon.assert.calledWith(span.addTags, { ...fields.tags, version: undefined })
-      sinon.assert.calledWith(Span, tracer, processor, prioritySampler, {
+      sinon.assert.calledWith(NativeDatadogSpan, tracer, processor, prioritySampler, {
         operationName: 'name',
         parent: null,
         startTime: fields.startTime,
@@ -308,7 +315,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       const testSpan = tracer.startSpan('name', fields)
 
-      sinon.assert.calledWith(Span, tracer, processor, prioritySampler, {
+      sinon.assert.calledWith(NativeDatadogSpan, tracer, processor, prioritySampler, {
         operationName: 'name',
         parent: null,
         startTime: fields.startTime,
@@ -327,7 +334,7 @@ describe('Tracer', () => {
       tracer = new Tracer(config)
       const testSpan = tracer.startSpan('name', fields)
 
-      sinon.assert.calledWith(Span, tracer, processor, prioritySampler, {
+      sinon.assert.calledWith(NativeDatadogSpan, tracer, processor, prioritySampler, {
         operationName: 'name',
         parent: null,
         startTime: fields.startTime,

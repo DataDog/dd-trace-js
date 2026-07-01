@@ -1,12 +1,15 @@
 'use strict'
 
 const os = require('os')
+const { URL, format } = require('url')
 const SpanProcessor = require('../span_processor')
 const PrioritySampler = require('../priority_sampler')
 const formats = require('../../../../ext/formats')
 const log = require('../log')
 const runtimeMetrics = require('../runtime_metrics')
-const getExporter = require('../exporter')
+const NativeExporter = require('../exporters/native')
+const defaults = require('../config/defaults')
+const pkg = require('../../../../package.json')
 const Span = require('./span')
 const TextMapPropagator = require('./propagation/text_map')
 const DSMTextMapPropagator = require('./propagation/text_map_dsm')
@@ -15,6 +18,17 @@ const BinaryPropagator = require('./propagation/binary')
 const LogPropagator = require('./propagation/log')
 
 const SpanContext = require('./span_context')
+
+// Lazy-loaded so the libdatadog initialization cost is only paid the first
+// time the tracer is constructed. libdatadog is a required dependency, so
+// any load-time failure surfaces via `require('../native')` at module-load.
+let nativeModule
+function getNativeModule () {
+  if (nativeModule === undefined) {
+    nativeModule = require('../native')
+  }
+  return nativeModule
+}
 
 const REFERENCE_CHILD_OF = 'child_of'
 const REFERENCE_FOLLOWS_FROM = 'follows_from'
@@ -30,25 +44,42 @@ class DatadogTracer {
     this._logInjection = config.logInjection
     this._debug = config.debug
     this._prioritySampler = prioritySampler ?? new PrioritySampler(config.env, config.sampler)
-
-    // OTEL_TRACES_EXPORTER=otlp should not replace the Test Optimization
-    // exporter when the tracer is running in Test Optimization mode. Test spans
-    // (test_session/test_module/ test_suite/test) belong on the citestcycle
-    // endpoint, not on an OTLP traces endpoint — otherwise users with OTEL_*
-    // vars set in their environment (e.g. for a separate telemetry integration)
-    // silently lose all test spans.
-    if (config.OTEL_TRACES_EXPORTER === 'otlp' && !config.isCiVisibility) {
-      const { createOtlpTraceExporter } = require('../opentelemetry/trace')
-      this._exporter = createOtlpTraceExporter(config)
-    } else {
-      const Exporter = getExporter(config.experimental.exporter)
-      this._exporter = new Exporter(config, this._prioritySampler)
-    }
-
-    this._processor = new SpanProcessor(this._exporter, this._prioritySampler, config)
-    this._url = this._exporter._url
     this._enableGetRumData = config.experimental.enableGetRumData
     this._traceId128BitGenerationEnabled = config.traceId128BitGenerationEnabled
+
+    // Native spans are the only supported pipeline. libdatadog is a required
+    // dependency; if NativeSpansInterface construction fails, that's a hard
+    // error and we let it propagate to the caller.
+    const NativeSpansInterface = getNativeModule().NativeSpansInterface
+
+    const { url, hostname = defaults.hostname, port } = config
+    const agentUrl = url || new URL(format({
+      protocol: 'http:',
+      hostname,
+      port,
+    }))
+
+    this._nativeSpans = new NativeSpansInterface({
+      agentUrl: agentUrl.toString(),
+      tracerVersion: pkg.version,
+      lang: 'nodejs',
+      langVersion: process.version,
+      langInterpreter: process.jsEngine || 'v8',
+      pid: process.pid,
+      tracerService: config.service,
+      statsEnabled: config.stats?.enabled || false,
+      hostname: config.hostname || os.hostname(),
+      env: config.env || '',
+      appVersion: config.version || '',
+      runtimeId: config.tags?.['runtime-id'] || '',
+    })
+
+    this._exporter = new NativeExporter(config, this._prioritySampler, this._nativeSpans)
+    this._processor = new SpanProcessor(this._exporter, this._prioritySampler, config, this._nativeSpans)
+    this._url = agentUrl
+
+    log.debug('Native spans mode enabled')
+
     this._propagators = {
       [formats.TEXT_MAP]: new TextMapPropagator(config),
       [formats.HTTP_HEADERS]: new HttpPropagator(config),
@@ -66,7 +97,7 @@ class DatadogTracer {
       ? getContext(options.childOf)
       : getParent(options.references)
 
-    const span = new Span(this, this._processor, this._prioritySampler, {
+    const fields = {
       operationName: options.operationName || name,
       parent,
       startTime: options.startTime,
@@ -74,7 +105,17 @@ class DatadogTracer {
       traceId128BitGenerationEnabled: this._traceId128BitGenerationEnabled,
       integrationName: options.integrationName,
       links: options.links,
-    }, this._debug)
+    }
+
+    const NativeDatadogSpan = getNativeModule().NativeDatadogSpan
+    const span = new NativeDatadogSpan(
+      this,
+      this._processor,
+      this._prioritySampler,
+      fields,
+      this._debug,
+      this._nativeSpans
+    )
 
     // As per unified service tagging spec if a span is created with a service name different from the global
     // service name it will not inherit the global version value

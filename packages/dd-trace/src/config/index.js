@@ -10,7 +10,6 @@ const set = require('../../../datadog-core/src/utils/src/set')
 const { DD_MAJOR, NODE_MAJOR } = require('../../../../version')
 const log = require('../log')
 const pkg = require('../pkg')
-const { isTrue } = require('../util')
 const telemetry = require('../telemetry')
 const telemetryMetrics = require('../telemetry/metrics')
 const {
@@ -353,11 +352,6 @@ class Config extends ConfigBase {
       setAndTrack(this, 'DD_METRICS_OTEL_ENABLED', false)
     }
 
-    if (this.OTEL_TRACES_EXPORTER === 'otlp' && trackedConfigOrigins.has('protocolVersion')) {
-      log.warn('DD_TRACE_AGENT_PROTOCOL_VERSION is set, disabling OTLP traces export')
-      setAndTrack(this, 'OTEL_TRACES_EXPORTER', 'none')
-    }
-
     if (this.telemetry.DD_TELEMETRY_HEARTBEAT_INTERVAL) {
       setAndTrack(this, 'telemetry.DD_TELEMETRY_HEARTBEAT_INTERVAL',
         Math.floor(this.telemetry.DD_TELEMETRY_HEARTBEAT_INTERVAL * 1000))
@@ -561,26 +555,6 @@ class Config extends ConfigBase {
     if (getEnvironmentVariable('JEST_WORKER_ID') &&
         !trackedConfigOrigins.has('telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED')) {
       setAndTrack(this, 'telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED', false)
-    }
-
-    // Experimental agentless APM span intake
-    // When enabled, sends spans directly to Datadog intake without an agent
-    // TODO: Replace this with a proper configuration
-    const agentlessEnabled = isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
-    if (agentlessEnabled) {
-      setAndTrack(this, 'experimental.exporter', 'agentless')
-      // Disable client-side stats computation
-      setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', false)
-      // Enable hostname reporting
-      setAndTrack(this, 'reportHostname', true)
-      // Disable rate limiting - server-side sampling will be used
-      setAndTrack(this, 'sampler.rateLimit', -1)
-      // Clear sampling rules - server-side sampling handles this
-      setAndTrack(this, 'sampler.rules', [])
-      // Agentless intake only accepts 64-bit trace IDs; disable 128-bit generation
-      if (!trackedConfigOrigins.has('traceId128BitGenerationEnabled')) {
-        setAndTrack(this, 'traceId128BitGenerationEnabled', false)
-      }
     }
 
     // Apply all fallbacks to the calculated config.
