@@ -6,7 +6,7 @@
       "Accept": "application/json",
       "Content-Type": "application/json",
       "User-Agent": "claude-cli/2.1.113 (external, sdk-ts)",
-      "X-Claude-Code-Session-Id": "f2a990aa-d2f8-448c-b804-fce54538f361",
+      "X-Claude-Code-Session-Id": "7e08923f-5705-49d1-a3cd-d9d906d2418e",
       "X-Stainless-Arch": "arm64",
       "X-Stainless-Lang": "js",
       "X-Stainless-OS": "MacOS",
@@ -27,7 +27,7 @@
       "Accept-Encoding": "gzip, deflate, br, zstd",
       "Content-Length": "1647"
     },
-    "body": "{\"model\":\"claude-haiku-4-5-20251001\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Spawn a subagent to get the weather in New York. After that subagent, do it again but for California, not in a subagent. Both should be in fahrenheit.\"}]}],\"system\":[{\"type\":\"text\",\"text\":\"x-anthropic-billing-header: cc_version=2.1.113.92d; cc_entrypoint=sdk-ts; cch=22bac;\"},{\"type\":\"text\",\"text\":\"You are a Claude agent, built on Anthropic's Claude Agent SDK.\"},{\"type\":\"text\",\"text\":\"Generate a concise, sentence-case title (3-7 words) that captures the main topic or goal of this coding session. The title should be clear enough that the user recognizes the session in a list. Use sentence case: capitalize only the first word and proper nouns.\\n\\nReturn JSON with a single \\\"title\\\" field.\\n\\nGood examples:\\n{\\\"title\\\": \\\"Fix login button on mobile\\\"}\\n{\\\"title\\\": \\\"Add OAuth authentication\\\"}\\n{\\\"title\\\": \\\"Debug failing CI tests\\\"}\\n{\\\"title\\\": \\\"Refactor API client error handling\\\"}\\n\\nBad (too vague): {\\\"title\\\": \\\"Code changes\\\"}\\nBad (too long): {\\\"title\\\": \\\"Investigate and fix the issue where the login button does not respond on mobile devices\\\"}\\nBad (wrong case): {\\\"title\\\": \\\"Fix Login Button On Mobile\\\"}\"}],\"tools\":[],\"metadata\":{\"user_id\":\"{\\\"device_id\\\":\\\"e2d1d93d007cacafcf2aa5d4f3865621fab26c324ac6d664fab9d26f045d63f6\\\",\\\"account_uuid\\\":\\\"\\\",\\\"session_id\\\":\\\"f2a990aa-d2f8-448c-b804-fce54538f361\\\"}\"},\"max_tokens\":32000,\"temperature\":1,\"output_config\":{\"format\":{\"type\":\"json_schema\",\"schema\":{\"type\":\"object\",\"properties\":{\"title\":{\"type\":\"string\"}},\"required\":[\"title\"],\"additionalProperties\":false}}},\"stream\":true}"
+    "body": "{\"model\":\"claude-haiku-4-5-20251001\",\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Spawn a subagent to get the weather in New York. After that subagent, do it again but for California, not in a subagent. Both should be in fahrenheit.\"}]}],\"system\":[{\"type\":\"text\",\"text\":\"x-anthropic-billing-header: cc_version=2.1.113.92d; cc_entrypoint=sdk-ts; cch=15cbc;\"},{\"type\":\"text\",\"text\":\"You are a Claude agent, built on Anthropic's Claude Agent SDK.\"},{\"type\":\"text\",\"text\":\"Generate a concise, sentence-case title (3-7 words) that captures the main topic or goal of this coding session. The title should be clear enough that the user recognizes the session in a list. Use sentence case: capitalize only the first word and proper nouns.\\n\\nReturn JSON with a single \\\"title\\\" field.\\n\\nGood examples:\\n{\\\"title\\\": \\\"Fix login button on mobile\\\"}\\n{\\\"title\\\": \\\"Add OAuth authentication\\\"}\\n{\\\"title\\\": \\\"Debug failing CI tests\\\"}\\n{\\\"title\\\": \\\"Refactor API client error handling\\\"}\\n\\nBad (too vague): {\\\"title\\\": \\\"Code changes\\\"}\\nBad (too long): {\\\"title\\\": \\\"Investigate and fix the issue where the login button does not respond on mobile devices\\\"}\\nBad (wrong case): {\\\"title\\\": \\\"Fix Login Button On Mobile\\\"}\"}],\"tools\":[],\"metadata\":{\"user_id\":\"{\\\"device_id\\\":\\\"e2d1d93d007cacafcf2aa5d4f3865621fab26c324ac6d664fab9d26f045d63f6\\\",\\\"account_uuid\\\":\\\"\\\",\\\"session_id\\\":\\\"7e08923f-5705-49d1-a3cd-d9d906d2418e\\\"}\"},\"max_tokens\":32000,\"temperature\":1,\"output_config\":{\"format\":{\"type\":\"json_schema\",\"schema\":{\"type\":\"object\",\"properties\":{\"title\":{\"type\":\"string\"}},\"required\":[\"title\"],\"additionalProperties\":false}}},\"stream\":true}"
   },
   "response": {
     "status": {
@@ -35,35 +35,35 @@
       "message": "OK"
     },
     "headers": {
-      "Date": "Wed, 01 Jul 2026 14:29:55 GMT",
+      "Date": "Wed, 01 Jul 2026 18:22:29 GMT",
       "Content-Type": "text/event-stream; charset=utf-8",
       "Transfer-Encoding": "chunked",
       "Connection": "keep-alive",
       "Cache-Control": "no-cache",
       "anthropic-ratelimit-requests-limit": "20000",
       "anthropic-ratelimit-requests-remaining": "19998",
-      "anthropic-ratelimit-requests-reset": "2026-07-01T14:29:54Z",
+      "anthropic-ratelimit-requests-reset": "2026-07-01T18:22:28Z",
       "anthropic-ratelimit-input-tokens-limit": "33800000",
       "anthropic-ratelimit-input-tokens-remaining": "33800000",
-      "anthropic-ratelimit-input-tokens-reset": "2026-07-01T14:29:54Z",
+      "anthropic-ratelimit-input-tokens-reset": "2026-07-01T18:22:28Z",
       "anthropic-ratelimit-output-tokens-limit": "5100000",
       "anthropic-ratelimit-output-tokens-remaining": "5100000",
-      "anthropic-ratelimit-output-tokens-reset": "2026-07-01T14:29:54Z",
+      "anthropic-ratelimit-output-tokens-reset": "2026-07-01T18:22:28Z",
       "anthropic-ratelimit-tokens-limit": "38900000",
       "anthropic-ratelimit-tokens-remaining": "38900000",
-      "anthropic-ratelimit-tokens-reset": "2026-07-01T14:29:54Z",
-      "request-id": "req_011CcbVoPQXFiexDB8Hc7f2c",
+      "anthropic-ratelimit-tokens-reset": "2026-07-01T18:22:28Z",
+      "request-id": "req_011CcboXyEtsgXbFRb8jbBHu",
       "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
       "anthropic-organization-id": "4257e925-ee99-4ee8-9c62-8e53716d5203",
-      "traceresponse": "00-cfec0380f5289d3550fc403c8e4a74c0-0c600abe1477c384-01",
+      "traceresponse": "00-a43b936eae5c30054fee81c7536ce93f-26476c38c39b3847-01",
       "Server": "cloudflare",
       "Content-Encoding": "gzip",
       "vary": "Accept-Encoding",
       "cf-cache-status": "DYNAMIC",
       "X-Robots-Tag": "none",
       "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
-      "CF-RAY": "a1461b094f66b109-BOS"
+      "CF-RAY": "a1476fb38c988f99-BOS"
     },
-    "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-haiku-4-5-20251001\",\"id\":\"msg_01YRtdxF2kvcvyQ3hAbv3wid\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":379,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":7,\"service_tier\":\"standard\",\"inference_geo\":\"not_available\"}} }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}               }\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"{\\\"title\\\": \\\"Get weather for\"}            }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" New York and California\\\"}\"}         }\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0  }\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null},\"usage\":{\"input_tokens\":379,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":15,\"iterations\":[{\"input_tokens\":379,\"output_tokens\":15,\"cache_read_input_tokens\":0,\"cache_creation_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"type\":\"message\"}]},\"context_management\":{\"applied_edits\":[]}         }\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"            }\n\n"
+    "body": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-haiku-4-5-20251001\",\"id\":\"msg_01678vtnRAtmHrN4ECZE5p65\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":379,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":5,\"service_tier\":\"standard\",\"inference_geo\":\"not_available\"}}   }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}       }\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"{\\\"title\\\": \\\"Get\"}   }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" weather for New York and California\\\"}\"}   }\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0              }\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null},\"usage\":{\"input_tokens\":379,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":15,\"iterations\":[{\"input_tokens\":379,\"output_tokens\":15,\"cache_read_input_tokens\":0,\"cache_creation_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"type\":\"message\"}]},\"context_management\":{\"applied_edits\":[]}              }\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"         }\n\n"
   }
 }

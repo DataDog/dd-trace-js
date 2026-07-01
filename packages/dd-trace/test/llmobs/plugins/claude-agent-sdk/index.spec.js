@@ -77,44 +77,48 @@ describe('Plugin', () => {
 
       // Subagent prompt is determined by the LLM at the previous step - differs between SDK versions
       const subagentPrompt = is03
-        ? 'Fetch the current weather for New York (state code: NY) in fahrenheit ' +
-          'using the available weather tool, and return the result.'
+        ? 'Use the fetch_weather tool to get the current weather in New York ' +
+          '(state code: NY) in fahrenheit. Return the full result.'
         : 'Use the fetch_weather tool to get the current weather in New York ' +
-          '(state code: NY) in fahrenheit. Report back the result.'
+          '(state code: NY) in fahrenheit. Report back the results.'
 
       const subagentNYResult = is03
         ? 'The current weather in New York (NY) is **72°F**.'
-        : 'The current weather in New York (NY) is 72°F.'
+        : 'The current weather in New York (NY) is 72 degrees Fahrenheit.'
 
       const outerThinkingText = is03
         ? 'The user wants me to:\n' +
           '1. Spawn a subagent to get the weather in New York (in fahrenheit)\n' +
-          // eslint-disable-next-line @stylistic/max-len
-          '2. After that subagent completes, get the weather in California (in fahrenheit) directly, not in a subagent\n' +
+          '2. After that subagent completes, get the weather in California myself (in fahrenheit)\n' +
           '\n' +
           'Let me spawn the subagent for New York first.'
         : 'The user wants me to:\n' +
           '1. Spawn a subagent to get the weather in New York (in fahrenheit)\n' +
-          '2. After that, get the weather in California myself (not in a subagent) in fahrenheit\n' +
+          '2. After that, get the weather in California myself (not in a subagent, in fahrenheit)\n' +
           '\n' +
-          "Let me start by spawning a subagent for New York, then after it completes, get California's weather myself."
+          'Let me spawn the subagent for New York first, wait for it to complete, ' +
+          "then get California's weather myself."
 
       // The assistant's text preamble before issuing the Agent tool call
       const outerAgentPreamble = is03
-        ? 'Sure! Let me start by spawning a subagent to get the New York weather.'
-        : "Sure! Let me spawn a subagent for New York's weather first, then I'll fetch California's myself."
+        ? 'Sure! Let me first spawn a subagent to fetch the New York weather.'
+        : "Sure! Let me first spawn a subagent to get New York's weather, " +
+          "and then I'll fetch California's weather myself."
 
       // The assistant's text preamble before fetching CA weather directly
       const outerCaPreamble = is03
-        ? "The subagent returned **72°F** for New York. Now let me fetch California's weather directly:"
-        : "The subagent reported **72°F in New York**. Now let me fetch California's weather myself:"
+        ? "The subagent is done! New York is reporting **72°F**. Now let me fetch California's weather directly:"
+        : "The subagent returned **72°F** for New York! Now let me fetch California's weather myself:"
+
+      // The Agent tool's `description` argument (chosen by the LLM at outer step-0); differs by SDK version
+      const agentDescription = is03 ? 'Get weather in New York' : 'Get NY weather'
 
       const agentToolId = is03
-        ? 'toolu_01XdH1H4GAxGzcyG5fhQvHN9'
-        : 'toolu_01AQjXNcY7oU3cyk6shcoAf2'
+        ? 'toolu_01PNXj5uPeuqpqTFNoLu3hNn'
+        : 'toolu_015xHwpHCj1UL2knRkKiRrc8'
       const caToolId = is03
-        ? 'toolu_01N1R9bRGxL6BEzhBD4xphw9'
-        : 'toolu_01QRx3oQ49dWKPP2Tp8X7FBa'
+        ? 'toolu_01RsSnxr1tzkWf9u1cN3acXT'
+        : 'toolu_012MX38F8b83p5aupfRhs2Jv'
 
       // [0] root query span
       assertLlmObsSpanEvent(llmobsSpans[0], {
@@ -123,7 +127,7 @@ describe('Plugin', () => {
         name: 'claude_agent_sdk.query',
         inputValue: PROMPT,
         outputValue: MOCK_STRING,
-        metadata: { cwd: '/private/tmp', permissionMode: 'default' },
+        metadata: { cwd: require('node:fs').realpathSync('/tmp'), permissionMode: 'default' },
         sessionId,
         tags: { ml_app: 'test', integration: 'claude-agent-sdk' },
       })
@@ -144,7 +148,7 @@ describe('Plugin', () => {
             content: MOCK_STRING,
             tool_calls: [{
               name: 'Agent',
-              arguments: { description: 'Get NY weather', prompt: subagentPrompt },
+              arguments: { description: agentDescription, prompt: subagentPrompt },
               tool_id: MOCK_STRING,
               type: 'tool_use',
             }],
@@ -170,12 +174,12 @@ describe('Plugin', () => {
       if (is03) {
         // 0.3.x: [3]=agent wrapper, [4]=subagent LLM, [5]=subagent step-0
 
-        // [3] Agent (Get NY weather) — the subagent wrapper span
+        // [3] Agent (<description>) — the subagent wrapper span
         assertLlmObsSpanEvent(llmobsSpans[3], {
           span: apmSpans[3],
           parentId: llmobsSpans[2].span_id,
           spanKind: 'agent',
-          name: 'Agent (Get NY weather)',
+          name: `Agent (${agentDescription})`,
           inputValue: subagentPrompt,
           outputValue: subagentNYResult,
           sessionId,
@@ -260,12 +264,12 @@ describe('Plugin', () => {
           tags: { ml_app: 'test' },
         })
 
-        // [5] Agent (Get NY weather) — the subagent wrapper span
+        // [5] Agent (<description>) — the subagent wrapper span
         assertLlmObsSpanEvent(llmobsSpans[5], {
           span: apmSpans[3],
           parentId: llmobsSpans[2].span_id,
           spanKind: 'agent',
-          name: 'Agent (Get NY weather)',
+          name: `Agent (${agentDescription})`,
           inputValue: subagentPrompt,
           outputValue: subagentNYResult,
           sessionId,
@@ -301,7 +305,7 @@ describe('Plugin', () => {
             content: outerAgentPreamble,
             tool_calls: [{
               name: 'Agent',
-              arguments: { description: 'Get NY weather', prompt: subagentPrompt },
+              arguments: { description: agentDescription, prompt: subagentPrompt },
               tool_id: agentToolId,
               type: 'tool_use',
             }],
@@ -365,7 +369,7 @@ describe('Plugin', () => {
             content: outerAgentPreamble,
             tool_calls: [{
               name: 'Agent',
-              arguments: { description: 'Get NY weather', prompt: subagentPrompt },
+              arguments: { description: agentDescription, prompt: subagentPrompt },
               tool_id: agentToolId,
               type: 'tool_use',
             }],
