@@ -4,39 +4,15 @@ const { tracingChannel } = require('dc-polyfill')
 
 const { addHook, getHooks } = require('./helpers/instrument')
 
-// h3 v2 exposes a native `tracingChannel('h3.request')` that NitroPlugin
-// subscribes to (see packages/datadog-plugin-nitro/src/index.js), but the
-// handlers only publish to it once h3's tracing plugin has wrapped them.
-//
-// We register our own equivalent plugin rather than h3's ESM-only
-// `dist/tracing.mjs` export for two reasons:
-//   1. It is ESM-only, so it cannot be `require()`d synchronously on every
-//      supported Node version, and registration must happen synchronously at
-//      construction time (see below).
-//   2. h3's plugin re-wraps already-registered routes by replacing the
-//      `~routes` array with new objects, which leaves the `rou3` routing trie
-//      (where requests are actually dispatched) pointing at the original,
-//      unwrapped handlers. Mutating the handler in place keeps the trie and the
-//      `~routes` array in sync.
+// h3 has its own h3.request tracing plugin, but it is ESM-only and replaces
+// route objects after rou3 has stored them. Register here and mutate handlers in
+// place so h3's route table and dispatch trie stay aligned.
 const requestChannel = tracingChannel('h3.request')
 
-/**
- * Wraps an h3 route handler so its execution is traced via `h3.request`.
- *
- * Guards against double wrapping: skips handlers already wrapped by us
- * (`__dd_traced__`) or by h3's own `tracingPlugin` (`__traced__`), and marks the
- * wrapped handler with both so neither side wraps it a second time (which would
- * publish to `h3.request` twice and produce duplicate spans per request).
- *
- * @param {Function} handler - The original h3 route handler.
- * @returns {Function} The traced handler (or the original if already traced).
- */
 function wrapHandler (handler) {
   if (typeof handler !== 'function' || handler.__dd_traced__ || handler.__traced__) return handler
 
-  // `async` so a handler that throws synchronously becomes a rejection that
-  // tracePromise reports through the error/asyncEnd events (matching h3's own
-  // tracingPlugin), rather than throwing straight out of the channel.
+  // Match h3's plugin: sync throws become promise rejections reported by tracePromise.
   const wrapped = (...args) => requestChannel.tracePromise(
     async () => await handler(...args),
     { event: args[0], type: 'route' }
@@ -47,22 +23,11 @@ function wrapHandler (handler) {
   return wrapped
 }
 
-/**
- * h3 plugin that traces route handlers. Registered at construction time so that
- * every route added afterwards is wrapped in place (keeping the `rou3` trie and
- * the `~routes` array in sync).
- *
- * @param {object} app - The H3 application instance.
- */
 function ddTracingPlugin (app) {
-  // Wrap any routes that already exist (none at construction, but safe if the
-  // plugin is ever registered after routes have been added).
   for (const route of app['~routes'] ?? []) {
     route.handler = wrapHandler(route.handler)
   }
 
-  // Wrap handlers for routes registered after the plugin. `all`/`get`/`post`/...
-  // all funnel through `on`, so wrapping `on` covers every route registration.
   if (typeof app.on === 'function') {
     const originalOn = app.on
     app.on = function (...args) {
@@ -75,9 +40,7 @@ function ddTracingPlugin (app) {
   }
 }
 
-// The orchestrion rewriter (see helpers/rewriter/instrumentations/h3.js) injects
-// this tracing channel into the `H3` constructor. `ctx.self` is the freshly
-// constructed instance, available before any route is registered.
+// Orchestrion publishes the freshly constructed H3 instance here.
 tracingChannel('orchestrion:h3:H3_constructor').subscribe({
   end (ctx) {
     ctx.self?.register(ddTracingPlugin)
