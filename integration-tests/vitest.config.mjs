@@ -24,6 +24,22 @@ const config = {
   },
 }
 
+if (process.env.NO_ISOLATE) {
+  config.test.isolate = false
+}
+
+if (process.env.POOL_NO_ISOLATE) {
+  config.test.poolOptions = {
+    [config.test.pool]: {
+      isolate: false,
+    },
+  }
+}
+
+if (process.env.VITEST_SETUP_FILE) {
+  config.test.setupFiles = process.env.VITEST_SETUP_FILE
+}
+
 if (process.env.CUSTOM_SEQUENCER) {
   config.test.sequence = {
     sequencer: CustomSequencer,
@@ -43,6 +59,16 @@ if (process.env.PROJECT_POOL_CONFIG) {
   }
   if (process.env.PROJECT_RETRY_CONFIG) {
     firstProjectConfig.retry = Number(process.env.PROJECT_RETRY_CONFIG)
+  }
+  if (process.env.PROJECT_NO_ISOLATE) {
+    firstProjectConfig.isolate = false
+  }
+  if (process.env.PROJECT_POOL_NO_ISOLATE) {
+    firstProjectConfig.poolOptions = {
+      [firstProjectConfig.pool]: {
+        isolate: false,
+      },
+    }
   }
   projectConfigs.push({ test: firstProjectConfig })
 

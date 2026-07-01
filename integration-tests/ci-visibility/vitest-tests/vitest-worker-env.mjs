@@ -15,5 +15,13 @@ describe('vitest worker env', () => {
     if (process.env.EXPECT_NO_DD_TRACE_INIT) {
       expect(globalThis._ddtrace).toBeUndefined()
     }
+
+    if (process.env.EXPECT_DD_NODE_OPTIONS_STRIPPED) {
+      expect(process.env.NODE_OPTIONS || '').not.toMatch(/dd-trace\/(?:register\.js|ci\/init(?:\.js)?)/)
+    }
+
+    if (process.env.EXPECT_DD_NODE_OPTIONS_PRESERVED) {
+      expect(process.env.NODE_OPTIONS || '').toContain(process.env.EXPECT_DD_NODE_OPTIONS_PRESERVED)
+    }
   })
 })

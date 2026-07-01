@@ -48,7 +48,11 @@ const VITEST_NO_WORKER_INIT_SETUP_FILE = path.join(
   'ci',
   'vitest-no-worker-init-setup.mjs'
 )
+const VITEST_NO_WORKER_INIT_ISOLATE_WARNING =
+  `${VITEST_NO_WORKER_INIT_REQUEST_ENV} is ignored because Vitest isolate is disabled. ` +
+  'The lighter Vitest worker path only works when each test file runs in an isolated worker.'
 const NODE_OPTIONS_QUOTE_RE = /[\s"\\]/
+let hasWarnedDisabledIsolate = false
 let hasWarnedUnsupportedVersion = false
 
 function noop () {}
@@ -66,12 +70,20 @@ function shouldUse (ctx, frameworkVersion, testSpecifications, options) {
   }
 
   const config = ctx?.config
-  if (!config || config.isolate === false) return false
+  if (!config) return false
 
-  const { hasVitestWorkerPoolTestSpecification, isVitestWorkerPool } = options
-  return isVitestWorkerPool(config.pool) ||
-    config.pool === undefined ||
-    hasVitestWorkerPoolTestSpecification(testSpecifications)
+  const { isVitestWorkerPool } = options
+  if (Array.isArray(testSpecifications)) {
+    return shouldUseForTestSpecifications(config, testSpecifications, isVitestWorkerPool)
+  }
+
+  if (!isNoWorkerInitPool(config.pool, isVitestWorkerPool)) return false
+  if (getEffectiveConfigIsolate(config, config.pool) === false) {
+    warnDisabledIsolate()
+    return false
+  }
+
+  return true
 }
 
 function isSupportedVersion (frameworkVersion) {
@@ -88,6 +100,41 @@ function warnUnsupportedVersion (frameworkVersion) {
     VITEST_NO_WORKER_INIT_MINIMUM_VERSION,
     frameworkVersion || 'unknown'
   )
+}
+
+function warnDisabledIsolate () {
+  if (hasWarnedDisabledIsolate) return
+
+  hasWarnedDisabledIsolate = true
+  log.warn(VITEST_NO_WORKER_INIT_ISOLATE_WARNING)
+}
+
+function shouldUseForTestSpecifications (config, testSpecifications, isVitestWorkerPool) {
+  const defaultPool = config.pool
+  let hasNoWorkerInitSpecification = false
+  let hasNonWorkerSpecification = false
+
+  for (const testSpecification of testSpecifications) {
+    const pool = getEffectiveTestSpecificationPool(testSpecification, defaultPool)
+    if (!isNoWorkerInitPool(pool, isVitestWorkerPool)) {
+      hasNonWorkerSpecification = true
+      continue
+    }
+
+    const defaultIsolate = getEffectiveConfigIsolate(config, pool)
+    if (getEffectiveTestSpecificationIsolate(testSpecification, pool, defaultIsolate) === false) {
+      warnDisabledIsolate()
+      return false
+    }
+
+    hasNoWorkerInitSpecification = true
+  }
+
+  return hasNoWorkerInitSpecification && !hasNonWorkerSpecification
+}
+
+function isNoWorkerInitPool (pool, isVitestWorkerPool) {
+  return pool === undefined || isVitestWorkerPool(pool)
 }
 
 function configure (ctx, frameworkVersion, testSpecifications, setupData, options) {
@@ -161,9 +208,19 @@ function addSetupFileToVitestConfigs (ctx, setupFile, testSpecifications) {
 function getNoWorkerInitVitestConfigs (ctx, testSpecifications) {
   const configs = new Set()
   if (Array.isArray(testSpecifications)) {
+    let shouldAddRootConfig = false
     for (const testSpecification of testSpecifications) {
       const project = getTestSpecificationProject(testSpecification)
-      addNoWorkerInitConfig(configs, safeConfig(project))
+      const config = safeConfig(project)
+      if (config) {
+        addNoWorkerInitConfig(configs, config)
+      } else {
+        shouldAddRootConfig = true
+      }
+    }
+
+    if (!shouldAddRootConfig && configs.size > 0) {
+      return configs
     }
   }
 
@@ -972,6 +1029,54 @@ function getTestSpecificationProject (testSpecification) {
     return testSpecification[0]
   }
   return testSpecification?.project
+}
+
+function getTestSpecificationFile (testSpecification) {
+  if (Array.isArray(testSpecification)) {
+    return testSpecification[1]
+  }
+  return testSpecification
+}
+
+function getTestSpecificationPool (testSpecification) {
+  const file = getTestSpecificationFile(testSpecification)
+  const project = getTestSpecificationProject(testSpecification)
+  return file?.pool ||
+    testSpecification?.pool ||
+    project?.config?.pool ||
+    project?.serializedConfig?.pool ||
+    project?.pool
+}
+
+function getEffectiveTestSpecificationPool (testSpecification, defaultPool) {
+  return getTestSpecificationPool(testSpecification) || defaultPool
+}
+
+function getPoolOptionsIsolate (config, pool) {
+  if (!pool) return
+
+  return config?.poolOptions?.[pool]?.isolate
+}
+
+function getEffectiveConfigIsolate (config, pool) {
+  return getPoolOptionsIsolate(config, pool) ?? config?.isolate
+}
+
+function getTestSpecificationIsolate (testSpecification, pool) {
+  const project = getTestSpecificationProject(testSpecification)
+  return getPoolOptionsIsolate(project?.config, pool) ??
+    getPoolOptionsIsolate(project?.serializedConfig, pool) ??
+    getPoolOptionsIsolate(project, pool) ??
+    getPoolOptionsIsolate(testSpecification, pool) ??
+    project?.config?.isolate ??
+    project?.serializedConfig?.isolate ??
+    project?.isolate ??
+    testSpecification?.isolate
+}
+
+function getEffectiveTestSpecificationIsolate (testSpecification, pool, defaultIsolate) {
+  const isolate = getTestSpecificationIsolate(testSpecification, pool)
+  return isolate === undefined ? defaultIsolate : isolate
 }
 
 function getProjectName (project) {
