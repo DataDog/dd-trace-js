@@ -136,9 +136,7 @@ function extractInferredProxyContext (headers) {
   return {
     requestTime: headers[PROXY_HEADER_START_TIME_MS]
       ? Number.parseInt(headers[PROXY_HEADER_START_TIME_MS], 10)
-      : detectedProxy.providesTimestamp
-        ? null
-        : Date.now().toString(),
+      : Date.now().toString(),
     method: headers[PROXY_HEADER_HTTPMETHOD],
     path: headers[PROXY_HEADER_PATH],
     stage: headers[PROXY_HEADER_STAGE],
