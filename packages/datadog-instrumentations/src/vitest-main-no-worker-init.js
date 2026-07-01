@@ -830,7 +830,7 @@ function reportFinalTestAttempt (testReport) {
       isRetry: errors.length > 1 || (result?.retryCount || 0) > 0 || (result?.repeatCount || 0) > 0,
       status: 'fail',
     })
-    return error
+    return finalStatus === 'skip' ? undefined : error
   }
 
   reportTestAttempt(testReport, finalAttempt || {

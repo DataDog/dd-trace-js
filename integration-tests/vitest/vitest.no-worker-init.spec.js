@@ -604,6 +604,7 @@ SUPPORTED_VERSIONS.forEach((version) => {
           })
 
           const tests = getEventContents(events, 'test')
+          const suites = getEventContents(events, 'test_suite_end')
           const [testSession] = getEventContents(events, 'test_session_end')
           assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
 
@@ -615,6 +616,13 @@ SUPPORTED_VERSIONS.forEach((version) => {
           assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
           assert.strictEqual(quarantinedTest.meta[TEST_FINAL_STATUS], 'skip')
           assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+
+          const quarantinedSuite = suites.find(suite =>
+            suite.meta[TEST_SOURCE_FILE] === 'ci-visibility/vitest-tests/test-quarantine.mjs'
+          )
+          assert.ok(quarantinedSuite, inspect(suites.map(suite => suite.meta[TEST_SOURCE_FILE])))
+          assert.strictEqual(quarantinedSuite.meta[TEST_STATUS], 'pass')
+          assert.ok(!(ERROR_MESSAGE in quarantinedSuite.meta), inspect(quarantinedSuite.meta))
 
           const attemptedToFixTests = getTestsByName(tests, 'attempt to fix tests can attempt to fix a test')
           assert.strictEqual(attemptedToFixTests.length, 3)
