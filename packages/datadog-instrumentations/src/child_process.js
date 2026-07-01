@@ -138,10 +138,10 @@ function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod, shell) {
     } else {
       try {
         result = customPromisifyMethod.apply(this, context.callArgs)
-      } catch (error) {
-        context.error = error
+      } catch (err) {
+        context.error = err
         error.publish(context)
-        throw error
+        throw err
       } finally {
         end.publish(context)
       }
