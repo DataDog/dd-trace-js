@@ -32,9 +32,7 @@ describe('Plugin', () => {
       zod = sdkModule.get('zod')
     })
 
-    it('instruments a full agentic call with subagents', async function () {
-      this.timeout(300000000)
-
+    it('instruments a full agentic call with subagents', async () => {
       const { z } = zod
 
       const fetchWeather = client.tool(

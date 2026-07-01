@@ -3,7 +3,7 @@
 const LLMObsPlugin = require('../base')
 const { storage: llmobsStorage } = require('../../storage')
 const { NAME, SESSION_ID } = require('../../constants/tags')
-const { splitModel } = require('./utils')
+const { splitModel } = require('../../../../../datadog-plugin-claude-agent-sdk/src/util')
 
 const subagentToolIds = new Set()
 

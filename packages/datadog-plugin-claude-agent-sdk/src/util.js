@@ -1,5 +1,10 @@
 'use strict'
 
+/**
+ * Parse a model ID string into the model name and provider for claude agent sdk provided model IDs
+ * @param {string} model model id
+ * @returns {{ modelName: string, modelProvider: string }}
+ */
 function splitModel (model) {
   if (!model) return { modelName: undefined, modelProvider: 'anthropic' }
   const idx = model.indexOf('/')
