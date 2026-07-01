@@ -154,7 +154,10 @@ function handleLLMObsInjection ({ carrier }) {
   // encoder drop the whole header. The backend resolves the name from the id in that case.
   if (parentAgentSpanId) tags += `${tags ? ',' : ''}${PROPAGATED_PARENT_AGENT_ID_KEY}=${parentAgentSpanId}`
   if (parentAgentName && agentNameWireSafe(parentAgentName)) {
-    tags += `${tags ? ',' : ''}${PROPAGATED_PARENT_AGENT_NAME_KEY}=${parentAgentName}`
+    const nameEntry = `${tags ? ',' : ''}${PROPAGATED_PARENT_AGENT_NAME_KEY}=${parentAgentName}`
+    if (tags.length + nameEntry.length <= globalTracerConfig.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH) {
+      tags += nameEntry
+    }
   }
   if (tags !== existing) carrier['x-datadog-tags'] = tags
 }
