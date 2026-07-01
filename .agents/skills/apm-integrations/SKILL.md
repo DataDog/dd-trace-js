@@ -16,7 +16,7 @@ dd-trace-js provides automatic tracing for 100+ third-party libraries. Each inte
 
 ## Architecture
 
-```
+```text
 ┌──────────────────────────┐     diagnostic channels      ┌─────────────────────────┐
 │     Instrumentation      │ ──────────────────────────▶  │        Plugin           │
 │ datadog-instrumentations │    apm:<name>:<op>:start     │  datadog-plugin-<name>  │
@@ -36,7 +36,7 @@ Both layers are always needed for a new integration.
 
 ## Instrumentation: Orchestrion First
 
-**Orchestrion is the required default for all new instrumentations.** It is an AST rewriter that automatically wraps methods via JSON configuration, with correct CJS and ESM handling built in. Orchestrion handles ESM code far more reliably than traditional shimmer-based wrapping, which struggles with ESM's static module structure.
+**Orchestrion is the required default when the work exists as a source function.** It rewrites matched CJS/ESM source from JSON config, avoiding runtime monkey-patching and ESM's static-binding traps. Start there for top-level declarations, class/object methods, named expressions, and assignments to named receivers; use shimmer only when the work is created entirely at runtime or arguments must be mutated before the original call.
 
 Config lives in `packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/<name>.js`. See [Orchestrion Reference](references/orchestrion.md) for the full config format and examples.
 
@@ -54,7 +54,7 @@ If none of these apply, use orchestrion. For shimmer patterns, refer to existing
 
 Plugins extend a base class matching the library type. The base class provides automatic channel subscriptions, span lifecycle, and type-specific tags.
 
-```
+```text
 Plugin
 ├── CompositePlugin              — Multiple sub-plugins (produce + consume)
 ├── LogPlugin                    — Log correlation injection (no spans)
@@ -86,7 +86,7 @@ Two ways to fetch the source locally:
   git clone --depth 1 --branch v<x.y.z> https://github.com/<org>/<repo>.git /tmp/<lib>-versions/v<x.y.z>
   ```
 
-2. **`npm pack`** when the published runtime artifact is what matters:
+1. **`npm pack`** when the published runtime artifact is what matters:
 
   ```bash
   cd /tmp/<lib>-versions && npm pack <lib>@<x.y.z>
@@ -98,6 +98,7 @@ Read the file the wrap hooks, the base classes the hooked methods inherit from, 
 ## Key Concepts
 
 ### The `ctx` Object
+
 Context flows from instrumentation to plugin:
 
 - **Orchestrion**: automatically provides `ctx.arguments` (method args) and `ctx.self` (instance)
@@ -106,17 +107,20 @@ Context flows from instrumentation to plugin:
 - **On completion**: `ctx.result` or `ctx.error`
 
 ### Channel Event Lifecycle
+
 - `runStores()` for **start** events — establishes async context (always)
 - `publish()` for **finish/error** events — notification only
-- `hasSubscribers` guard — skip instrumentation when no plugin listens (performance fast path)
+- `hasSubscribers` guard — skip publish/subscriber work when no plugin listens; orchestrion still pays wrapper setup in current templates
 - When shimmer is necessary, prefer `tracingChannel` (from `dc-polyfill`) over manual channels — it provides `start/end/asyncStart/asyncEnd/error` events automatically
 
 ### Channel Prefix Patterns
+
 - **Orchestrion**: `tracing:orchestrion:<npm-package>:<channelName>` (set via `static prefix`)
 - **Shimmer + `tracingChannel`** (preferred): `tracing:apm:<name>:<operation>` (set via `static prefix`)
 - **Shimmer + manual channels** (legacy): `apm:{id}:{operation}` (default, no `static prefix` needed)
 
 ### `bindStart` / `bindFinish`
+
 Primary plugin methods. Base classes handle most lifecycle; often only `bindStart` is needed to create the span and set tags.
 
 ### Subscriber Cardinality (`channel.publish` position)
@@ -133,7 +137,7 @@ Before adding or moving a gate in front of a publish, grep the repo for the chan
 **Always read 1-2 references of the same type before writing or modifying code.**
 
 | Library Type | Plugin | Instrumentation | Base Class |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Database | `datadog-plugin-pg` | `src/pg.js` | `DatabasePlugin` |
 | Cache | `datadog-plugin-redis` | `src/redis.js` | `CachePlugin` |
 | HTTP client | `datadog-plugin-fetch` | `src/fetch.js` | `HttpClientPlugin` (extends `ClientPlugin`) |
@@ -161,15 +165,17 @@ Follow these steps when creating or modifying an integration:
 4. **Register** — Add entries in `packages/dd-trace/src/plugins/index.js`, `index.d.ts`, `docs/test.ts`, `docs/API.md`, and `.github/workflows/apm-integrations.yml`.
 5. **Write tests** — Add unit tests and ESM integration tests. See [Testing](references/testing.md) for templates.
 6. **Run tests** — Validate with:
-  ```bash
-  # Run plugin tests (preferred CI command — handles yarn services automatically)
-  PLUGINS="<name>" npm run test:plugins:ci
 
-  # If the plugin needs external services (databases, message brokers, etc.),
-  # check docker-compose.yml for available service names, then:
-  docker compose up -d <service>
-  PLUGINS="<name>" npm run test:plugins:ci
-  ```
+   ```bash
+   # Run plugin tests (preferred CI command — handles yarn services automatically)
+   PLUGINS="<name>" npm run test:plugins:ci
+
+   # If the plugin needs external services (databases, message brokers, etc.),
+   # check docker-compose.yml for available service names, then:
+   docker compose up -d <service>
+   PLUGINS="<name>" npm run test:plugins:ci
+   ```
+
 7. **Verify** — Confirm all tests pass before marking work as complete.
 
 ## Reference Files

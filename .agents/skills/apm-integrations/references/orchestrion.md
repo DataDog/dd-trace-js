@@ -1,24 +1,56 @@
 # Orchestrion (AST Rewriter)
 
-Orchestrion is the **required default** for new instrumentations. It automatically wraps methods via JSON configuration with correct CJS/ESM handling built in. Orchestrion handles ESM code far more reliably than shimmer-based wrapping because it operates at the AST level rather than trying to monkey-patch module exports.
+**Required default for new instrumentations when a source function can be
+matched.** Orchestrion rewrites a library at load time (CJS + ESM) and injects
+`diagnostics_channel` publishes into the matched function. Prefer it for static
+source hooks, ESM support, and avoiding runtime monkey-patching; use shimmer
+only when the work exists only as a runtime value.
+
+Engine: `@apm-js-collab/code-transformer` (mirror of
+[nodejs/orchestrion-js](https://github.com/nodejs/orchestrion-js)), vendored at
+`vendor/dist/@apm-js-collab/code-transformer/`. Installed version is in
+`vendor/package-lock.json`.
+
+> **Verify before relying on a field/transform.** The engine is actively
+> developed and the config surface changes between releases. This doc tracks
+> the vendored version (currently 0.15.0); confirm anything below against the
+> installed source — `lib/transformer.js` (`#fromFunctionQuery`, `#getOperator`,
+> `#visit`) and `lib/transforms.js`. The vendored bundle is single-file with a
+> source map; extract `sourcesContent` to read the originals.
+
+## Decision Rule
+
+Use orchestrion when the function to instrument exists in source: top-level
+declaration, class/object method, named expression, or assignment to a named
+receiver. Do **not** use shimmer just because users reach it through a decorated
+runtime handle; match the source function behind the handle instead.
+
+Inactive-path cost is **not zero** in the vendored 0.15.0 templates. The wrapper
+builds `__apm$arguments`, `__apm$ctx`, and `__apm$traced` before the selected
+operator checks `hasSubscribers`. The check skips channel work and the wrapped
+call's tracing body, not the wrapper's array/object/closure setup. For very hot
+idle methods, inspect the generated transform or microbench the path before
+claiming a perf win.
+
+Reach for shimmer only when no source node can be matched (for example, a method
+constructed entirely at runtime) or the instrumentation must mutate arguments
+before the original function is invoked. Leave a code comment naming that reason.
 
 ## Required Files
 
-Orchestrion integrations need three files:
-
-```
+```text
 packages/datadog-instrumentations/src/
-├── <name>.js                           # Hooks file (registers module hooks)
+├── <name>.js                                 # Hooks file — triggers the rewriter
 └── helpers/
-    ├── hooks.js                        # Entry pointing to <name>.js
+    ├── hooks.js                              # Add: '<name>': () => require('../<name>')
     └── rewriter/
-        ├── index.js                    # Main rewriter logic
+        ├── transforms.js                     # Custom transforms (addTransform)
         └── instrumentations/
-            ├── langchain.js            # Reference: LangChain config
-            └── <name>.js              # JSON config
+            ├── index.js                      # Add: ...require('./<name>')
+            └── <name>.js                     # The config array
 ```
 
-**Hooks file** (`packages/datadog-instrumentations/src/<name>.js`):
+Hooks file (`src/<name>.js`):
 
 ```javascript
 'use strict'
@@ -30,154 +62,101 @@ for (const hook of getHooks('<npm-package>')) {
 }
 ```
 
-`getHooks` reads the orchestrion JSON config and generates `addHook` entries so the module hooks are registered for the rewriter to process. Without this file, the rewriter will not be triggered.
-
-**hooks.js entry** (`packages/datadog-instrumentations/src/helpers/hooks.js`):
-
-```javascript
-'<name>': () => require('../<name>'),
-```
+`getHooks` reads the config and registers `addHook` entries so the rewriter
+runs on the matched files. Without this file the rewriter is never triggered.
 
 ## Config Schema
-
-Each entry in the instrumentations array:
 
 ```javascript
 {
   module: {
-    name: string,            // npm package name (e.g. "bullmq", "@langchain/core")
-    versionRange: string,    // semver range (e.g. ">=1.0.0")
-    filePath: string,        // path within package (e.g. "dist/cjs/classes/queue.js")
+    name: string,            // npm package name, e.g. 'bullmq', '@langchain/core'
+    versionRange: string,    // semver range, e.g. '>=1.0.0' — fail-fast version guard
+    filePath: string,        // path within the package, e.g. 'dist/cjs/queue.js'
   },
 
-  // Option A: functionQuery (recommended)
+  // One of: functionQuery (preferred) or astQuery (escape hatch).
   functionQuery: {
-    kind: 'Async' | 'AsyncIterator' | 'Callback' | 'Sync',  // transform type (see below)
-    methodName: string,      // class method or property method name
-    className?: string,      // scope to a specific class
-    functionName?: string,   // target a FunctionDeclaration (alternative to methodName)
-    expressionName?: string, // target a FunctionExpression/ArrowFunctionExpression
-    index?: number,          // Callback only: argument index of the callback (-1 = last)
+    kind: 'Async' | 'Auto' | 'Callback' | 'Sync',  // operator; default 'Sync'
+    className?: string,            // scope to a class (with methodName, or alone for ctor)
+    methodName?: string,           // class/object method — LITERAL key only (see note)
+    privateMethodName?: string,    // #private method
+    functionName?: string,         // FunctionDeclaration by name
+    expressionName?: string,       // named FunctionExpression / arrow / assignment
+    objectName?: string,           // `obj.prop = fn` — MUST pair with propertyName
+    propertyName?: string,         //   ('this' is allowed as objectName)
+    callbackIndex?: number,        // Callback only: which arg is the callback (-1 = last)
+    index?: number,                // which match to wrap when several match (0 = first, null = all)
+    returnKind?: 'Iterator' | 'AsyncIterator',  // also patch the returned iterator
+    isExportAlias?: boolean,       // resolve ESM `export { local as exported }` to local
   },
 
-  // Option B: astQuery (advanced, for edge cases)
-  astQuery?: string,         // raw ESQuery selector string — bypasses functionQuery entirely
-
-  channelName: string,       // used in the diagnostic channel name
+  astQuery?: string,         // raw ESQuery selector; bypasses functionQuery entirely
+  transform?: string,        // name of a custom transform (overrides kind)
+  channelName: string,       // segment of the channel name (see below)
 }
 ```
 
-### functionQuery Targeting
+**Pick the narrowest source match that names the real owner.**
 
-| Field | Targets |
-|---|---|
-| `methodName` + `className` | A method on a specific class |
-| `methodName` alone | Any class method or object property method with that name |
-| `functionName` | A `FunctionDeclaration` by name |
-| `expressionName` | A `FunctionExpression` or `ArrowFunctionExpression` by name |
-
-### astQuery (ESQuery Selectors)
-
-For advanced cases where `functionQuery` fields are insufficient, use `astQuery` with a raw [ESQuery](https://github.com/estools/esquery) selector string. This is parsed via `esquery.parse()` and matched against the AST directly. Internally, `functionQuery` is converted to ESQuery selectors — `astQuery` lets you write them directly.
-
-### Basic Example
+- `methodName` matches literal class/object keys only. Computed keys
+  (`{ [name] () {} }`) and string-literal keys need `astQuery`.
+- `functionName` beats shimmer for decorated handles. If `app.decorate('x', fn)`
+  exposes work through `app.x` but all paths call `async function foo (…)`, match
+  `foo`. Mercurius' `app.graphql` funnels through `fastifyGraphQl`; instrument
+  that declaration, not the runtime handle.
+- `objectName` + `propertyName` pin assignment receivers:
+  `conn.query = async () => {}` or `this._query = async () => {}`. Both fields
+  are required together; `objectName: 'this'` targets a `ThisExpression`.
+- `expressionName` alone constrains the property/expression name, **not** the
+  receiver. If several objects assign `.query`, it can match the wrong one.
 
 ```javascript
-// instrumentations/<name>.js
-module.exports = [
-  {
-    module: {
-      name: '<npm-package>',
-      versionRange: '>=1.0.0',
-      filePath: 'dist/client.js'
-    },
-    functionQuery: {
-      methodName: 'query',
-      className: 'Client',
-      kind: 'Async'
-    },
-    channelName: 'Client_query'
-  }
-]
+// matches: conn.query = async (...) => { … }
+functionQuery: { objectName: 'conn', propertyName: 'query', kind: 'Async' }
+// matches: this._query = async (...) => { … }   (inside a constructor)
+functionQuery: { objectName: 'this', propertyName: '_query', kind: 'Async' }
 ```
 
-Multiple methods can be wrapped by adding more entries to the array.
+**Patch both CJS and ESM.** Most libraries ship separate builds (`dist/cjs/…`
+and `dist/esm/…`, or `.js` + `.mjs`). Each needs its own entry with the same
+`functionQuery`/`channelName`; patching one silently misses the other format.
+
+## kind → operator
+
+| kind | operator | behaviour |
+| --- | --- | --- |
+| `Sync` (default) | `traceSync` | sync return/throw; `ctx.result` on success |
+| `Async` | `tracePromise` | sync **or** promise return; chains `asyncStart`/`asyncEnd`; side-chains Promise subclasses/thenables so subclass methods survive |
+| `Callback` | `traceCallback` | wraps the arg at `callbackIndex`; publishes `asyncStart`/`asyncEnd`/`error` from the callback |
+| `Auto` | `traceAuto` | runtime branch: if the `callbackIndex` arg is a function → callback path, else promise path |
+
+`returnKind` is orthogonal to `kind`: it injects iterator-patching into the
+chosen wrapper, patching `next`/`throw`/`return` on the returned iterator and
+publishing to a second `…:next` channel (`Iterator` → sync, `AsyncIterator` →
+promise). Use it with a base `kind` for the call itself — e.g. a method that
+returns `Promise<AsyncIterable>` uses `kind: 'Async', returnKind: 'AsyncIterator'`
+(see `langgraph.js`). This is a two-plugin pattern; read
+[async-iterator-pattern.md](./async-iterator-pattern.md) (note: that doc
+predates the `returnKind` field name — the *mechanism* matches, verify field
+names against the installed version).
 
 ## Channel Name Formation
 
-Orchestrion channels follow this pattern:
-```
+```text
 tracing:orchestrion:{module.name}:{channelName}:{event}
 ```
 
-Example with `module.name: "@langchain/core"` and `channelName: "RunnableSequence_invoke"`:
-- `tracing:orchestrion:@langchain/core:RunnableSequence_invoke:start`
-- `tracing:orchestrion:@langchain/core:RunnableSequence_invoke:asyncStart`
-- `tracing:orchestrion:@langchain/core:RunnableSequence_invoke:asyncEnd`
-- `tracing:orchestrion:@langchain/core:RunnableSequence_invoke:end`
-- `tracing:orchestrion:@langchain/core:RunnableSequence_invoke:error`
+Events: `start`, `asyncStart`, `asyncEnd`, `end`, `error` (plus the
+`{channelName}:next` channel when `returnKind` is set). Example for
+`module.name: '@langchain/core'`, `channelName: 'RunnableSequence_invoke'`:
+`tracing:orchestrion:@langchain/core:RunnableSequence_invoke:start`, …
 
-## Function Kinds and Transforms
+## Plugin Subscription
 
-Orchestrion supports four transform types, selected by the `kind` field:
-
-| Kind | Transform | Behavior |
-|------|-----------|----------|
-| `Async` | `tracePromise` | Wraps in async arrow, calls `channel.tracePromise()` — handles promise resolution/rejection |
-| `AsyncIterator` | `traceAsyncIterator` | Wraps async generators/iterators — creates TWO channels: base and `_next` (**see [async-iterator-pattern.md](./async-iterator-pattern.md)**) |
-| `Callback` | `traceCallback` | Intercepts callback at `arguments[index]` (default: last arg, i.e. `-1`), wraps it to publish `asyncStart`/`asyncEnd`/`error` events |
-| `Sync` | `traceSync` | Wraps in non-async arrow, calls `channel.traceSync()` — handles synchronous return/throw. **Note:** `Sync` is the default when `kind` is omitted or unrecognized. |
-
-All transforms dispatch to `traceFunction` (for standalone functions) or `traceInstanceMethod` (for class methods, including inherited ones via constructor patching).
-
-For `Callback` kind, use the `index` field to specify which argument is the callback (defaults to `-1`, meaning the last argument).
-
-### AsyncIterator Pattern (Two Plugins Required)
-
-**⚠️ CRITICAL:** `AsyncIterator` is a special transform that requires **TWO plugins** and has specific implementation requirements.
-
-**When to use:**
-- Method returns `Promise<AsyncIterable>`, `Promise<AsyncIterableIterator>`, or `Promise<IterableReadableStream>`
-- Async generator functions: `async *methodName()`
-
-**How it works:**
-- Orchestrion creates **TWO channels**: base channel and `{channelName}_next` channel
-- **Main plugin**: Creates span when method is called
-- **Next plugin**: Finishes span when `result.done === true` (after all iterations complete)
-
-**📖 REQUIRED READING:** If you are implementing an AsyncIterator integration, you **MUST** read the complete guide:
-
-👉 **[AsyncIterator Pattern Reference](./async-iterator-pattern.md)** 👈
-
-This pattern is complex and easy to get wrong. The reference document covers:
-- Two-channel pattern details
-- Complete plugin implementation examples
-- Common mistakes and how to avoid them
-- Testing strategies
-- Full working example (LangGraph)
-
-**DO NOT** attempt to implement AsyncIterator without reading the full reference.
-
-## Finding the Right filePath
-
-1. Install the package: `npm install <package>`
-2. Search for the method definition:
-  ```bash
-  grep -r "methodName" node_modules/<package>/
-  ```
-3. Use the path relative to the package root
-
-**IMPORTANT: Patch both CJS and ESM code paths.** Many libraries duplicate their classes across separate CJS and ESM builds (e.g., `dist/cjs/client.js` and `dist/esm/client.js`). Each file path needs its own entry in the instrumentations array with the same `functionQuery` and `channelName`. If only one is patched, the instrumentation will silently fail for the other module format.
-
-Common locations:
-- `dist/cjs/index.js` / `dist/esm/index.js` — separate CJS/ESM builds
-- `dist/index.js` — single compiled output
-- `lib/client.js` — source files
-- `src/index.mjs` — ESM source
-
-## Plugin Subscription for Orchestrion
-
-Set `static prefix` to match the orchestrion channel base. The `TracingPlugin` base class automatically subscribes to all events and routes them to `bindStart`, `bindFinish`, etc.
+Set `static prefix` to the channel base; `TracingPlugin` subscribes
+`start`/`end`/`asyncStart`/`asyncEnd`/`error`/`finish` and routes them to
+`bindStart`/`bindFinish`/`end`/`error`.
 
 ```javascript
 class MyPlugin extends TracingPlugin {
@@ -185,74 +164,86 @@ class MyPlugin extends TracingPlugin {
   static prefix = 'tracing:orchestrion:<npm-package>:Client_query'
 
   bindStart (ctx) {
-    const query = ctx.arguments?.[0]
-    const instance = ctx.self
-
     this.startSpan(this.operationName(), {
-      resource: query,
-      meta: { component: '<name>' }
+      resource: ctx.arguments?.[0],
+      meta: { component: '<name>' },
     }, ctx)
-
     return ctx.currentStore
   }
 }
 ```
 
-For integrations wrapping multiple methods, create a separate plugin class per method (each with its own `static prefix`), then combine them in a `CompositePlugin`. See langchain for this pattern.
+`ctx` fields: `ctx.arguments` (same array reference later applied to the wrapped
+function), `ctx.self`, `ctx.result`, `ctx.error`, and `ctx.currentStore` (set by
+`startSpan`). For multi-method integrations, use one plugin per method combined
+in a `CompositePlugin` (see langchain).
 
-### The `ctx` Object in Orchestrion
+Multiple module prefixes are manual today. `TracingPlugin.addTraceSub()` and
+`addTraceBind()` read only `this.constructor.prefix`; a `static extraPrefixes`
+field does nothing unless the plugin overrides `addTraceSubs()`, calls `super`,
+then registers the same events for each extra prefix. Use this for forks or
+re-exporting packages that should create the same logical span; see
+`datadog-plugin-graphql/src/execute.js`.
 
-- `ctx.arguments` — the original method arguments (array)
-- `ctx.self` — the `this` context of the wrapped method (instance)
-- `ctx.result` — return value (on asyncEnd/end)
-- `ctx.error` — thrown error (on error)
-- `ctx.currentStore` — set by `startSpan` in `bindStart`
+```javascript
+class MyPlugin extends TracingPlugin {
+  static prefix = 'tracing:orchestrion:<npm-package>:Client_query'
+  static extraPrefixes = [
+    'tracing:orchestrion:<fork-package>:Client_query',
+  ]
+
+  addTraceSubs () {
+    super.addTraceSubs()
+
+    for (const prefix of this.constructor.extraPrefixes) {
+      for (const event of ['start', 'end', 'asyncStart', 'asyncEnd', 'error', 'finish']) {
+        const bindName = `bind${event.charAt(0).toUpperCase()}${event.slice(1)}`
+        if (this[event]) {
+          this.addSub(`${prefix}:${event}`, this[event].bind(this))
+        }
+        if (this[bindName]) {
+          this.addBind(`${prefix}:${event}`, this[bindName].bind(this))
+        }
+      }
+    }
+  }
+}
+```
+
+## Custom Transforms
+
+Register a transform the built-ins don't cover via
+`InstrumentationMatcher.addTransform(name, fn)` in
+`packages/datadog-instrumentations/src/helpers/rewriter/transforms.js`, then
+select it from a config with `transform: '<name>'` (it overrides `kind`).
+Signature: `(state, node, parent, ancestry) => void`, mutating the AST in place.
+
+Configs run in order and share the AST. Established pattern (see
+`waitForAsyncEnd`): built-in wraps first; a later custom transform matches inside
+the generated wrapper (for example the `__apm$ctx` literal) and augments it with
+data the built-in ctx does not include. Treat custom transforms as stopgaps:
+when upstream adds the capability, switch to the built-in option and delete the
+registration.
 
 ## Propagating Synchronous Errors From `bindStart`
 
-Subscribers on the prefix `:start` channel and `bindStore` transforms **cannot
-propagate a synchronous throw** to the caller of an orchestrion-wrapped
-function. Both are wrapped in `try { ... } catch (err) { process.nextTick(() =>
-triggerUncaughtException(err)); ... }` by Node's `diagnostics_channel` (see
-`lib/diagnostics_channel.js`'s `wrapStoreRun` and `publish`). The error
-surfaces async as an uncaught exception, **after** the wrapped fn has already
-run and the call has returned normally.
-
-The wrapper's own catch block, however, **does** rethrow:
-
-```js
-return ch.start.runStores(__apm$ctx, () => {
-  try {
-    const result = __apm$traced();
-    __apm$ctx.result = result;
-    return result;
-  } catch (err) {
-    __apm$ctx.error = err;
-    ch.error.publish(__apm$ctx);
-    throw err;                  // <- propagates the wrapped fn's error to the caller
-  } finally {
-    ch.end.publish(__apm$ctx);
-  }
-});
-```
-
-When a contract requires `assert.throws(() => wrapped(...))`-style synchronous
-propagation from a `:start` observer (the canonical case is AppSec WAF's
-`abortController.abort()` model), use the **Proxy-on-arguments pattern**:
+A `:start` subscriber / `bindStore` transform **cannot** propagate a synchronous
+throw to the caller — Node's `diagnostics_channel` wraps `runStores`/`publish`
+in `try/catch` and re-surfaces the throw async as an uncaught exception, after
+the wrapped fn already ran. The wrapper's *own* `catch { …; throw err }` does
+propagate, so to make a `:start` observer abort synchronously (canonical case:
+AppSec WAF `abort()`), use the **Proxy-on-arguments** pattern:
 
 ```js
 bindStart (ctx) {
-  // ... normal setup, span creation ...
   const abortController = new AbortController()
   if (startCh.hasSubscribers) {
     startCh.publish({ abortController, args })       // subscribers run sync
     if (abortController.signal.aborted) {
-      // ctx.arguments is the SAME array reference the wrapper spreads into
-      // the wrapped fn (__apm$wrapped.apply(this, ctx.arguments)). Replace
-      // arguments[0] with a Proxy whose getters throw AbortError. The
-      // wrapped fn's first property access (typically a destructure of args)
-      // triggers the trap → the wrapper's catch+rethrow propagates AbortError
-      // to the caller. Span lifecycle still completes via end.publish.
+      // ctx.arguments is the SAME array the wrapper spreads into the wrapped fn.
+      // Replace the arg the wrapped fn reads FIRST with a throwing Proxy; its
+      // first property access trips the trap and the wrapper's catch+rethrow
+      // propagates to the caller. :end still fires in finally.
       ctx.arguments[0] = new Proxy({}, {
         get () { throw new AbortError('Aborted') },
         has () { throw new AbortError('Aborted') },
@@ -261,63 +252,27 @@ bindStart (ctx) {
       return ctx.currentStore
     }
   }
-  // ... rest of bindStart ...
+  // … normal setup …
 }
 
-error (ctx) {
-  if (ctx.ddAborted) return                          // abort != error tag
-  // ... regular error handling ...
-}
+error (ctx) { if (ctx.ddAborted) return /* abort is not an error */ }
 ```
 
-Reference implementation: `packages/datadog-plugin-graphql/src/execute.js`
-(`apm:graphql:execute:start` contract).
-
-Why this works:
-- `ctx.arguments` and the rewriter's `__apm$arguments` are the same array
-  reference (confirmed by capturing the rewriter output: `const __apm$traced
-  = () => __apm$wrapped.apply(this, __apm$arguments)`).
-- The wrapped fn's body almost always touches `arguments[0]` on the first
-  statement (destructure, property read, validation). Any read triggers the
-  Proxy trap.
-- The orchestrion wrapper's `catch { ...; throw err }` propagates the thrown
-  error synchronously to the caller — confirmed in the rewriter template
-  (vendor's `code-transformer/index.js`, `wrapSync` function).
-- `:end` still fires in `finally`, so the plugin's `end(ctx)` runs as usual
-  and the span lifecycle completes cleanly. Combined with an `error(ctx)`
-  that no-ops when `ctx.ddAborted`, the span finishes with `error === 0`
-  (matches the abort contract).
-
-When NOT to use this:
-- If you control the wrapped fn (e.g., it's a method you can wrap with
-  shimmer on top of orchestrion), do that — clearer and avoids the
-  Proxy indirection.
-- If the wrapped fn might catch its own errors before they escape (some
-  user-resolver patterns do this), the AbortError won't propagate. Verify
-  the wrapped fn does NOT have a top-level `try/catch` around the
-  property access that triggers the trap.
-
-## Common Issues
-
-### Wrong filePath
-**Symptom**: No channel events published
-**Fix**: Verify the method is actually defined in that file (not re-exported from elsewhere)
-
-### Case Mismatch
-**Symptom**: Method not found
-**Fix**: Match exact class/method name casing
-
-### Multiple Build Outputs
-**Symptom**: Works in one context, not another
-**Fix**: Check if the package has separate CJS/ESM builds with different file paths; each needs its own entry in the instrumentations array
+Reference: `packages/datadog-plugin-graphql/src/execute.js`
+(`apm:graphql:execute:start`). Caveats: target the arg the wrapped fn actually
+dereferences first (not always `[0]`); and it fails if the wrapped fn wraps that
+access in its own `try/catch`. If you control the wrapped fn, prefer wrapping it
+directly.
 
 ## Reference Implementations
 
-**Langchain** (canonical, multi-method):
-- Config: `packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/langchain.js`
-- Hooks file: `packages/datadog-instrumentations/src/langchain.js`
-- Plugin: `packages/datadog-plugin-langchain/src/tracing.js`
-
-**BullMQ** (simpler, single-package):
-- Config: `packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/bullmq.json`
-- Hooks file: `packages/datadog-instrumentations/src/bullmq.js`
+- **Langchain** (multi-method, CompositePlugin): config
+  `helpers/rewriter/instrumentations/langchain.js`, hooks `src/langchain.js`,
+  plugin `packages/datadog-plugin-langchain/src/tracing.js`.
+- **LangGraph** (`returnKind: 'AsyncIterator'`):
+  `helpers/rewriter/instrumentations/langgraph.js`.
+- **graphql** (`functionName` + `Sync`, and why per-field resolve hooks are
+  *not* done via orchestrion): `helpers/rewriter/instrumentations/graphql.js`.
+- **BullMQ** (single package): config
+  `helpers/rewriter/instrumentations/bullmq.js`, hooks `src/bullmq.js`.
+- **Custom transform**: `helpers/rewriter/transforms.js` (`waitForAsyncEnd`).
