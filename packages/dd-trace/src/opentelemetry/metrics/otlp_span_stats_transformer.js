@@ -158,7 +158,7 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
     if (!this.#otelSemanticsEnabled) {
       raw['datadog.operation.name'] = aggKey.name
       if (aggKey.type) raw['datadog.span.type'] = aggKey.type
-      if (aggKey.origin) raw['datadog.origin'] = aggKey.origin
+      if (aggKey.synthetics) raw['datadog.origin'] = 'synthetics'
     }
 
     return this.transformAttributes(raw)

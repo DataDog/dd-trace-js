@@ -268,7 +268,7 @@ describe('OtlpStatsTransformer', () => {
     it('emits only OTel attributes (no dd.*) while keeping status.code on errors', () => {
       const span = makeTopLevelSpan({
         error: 1,
-        meta: { [HTTP_STATUS_CODE]: 500, [HTTP_METHOD]: 'GET', [ORIGIN_KEY]: 'synthetics' },
+        meta: { [HTTP_STATUS_CODE]: 500, [HTTP_METHOD]: 'GET' },
       })
       const payload = JSON.parse(transformer.transform(makeDrained(12340000000000, [span]), BUCKET_SIZE_NS))
       const attrs = attrMapOf(dataPointsOf(payload)[0])

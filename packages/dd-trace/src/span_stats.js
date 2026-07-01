@@ -52,7 +52,7 @@ class SpanAggStats {
   toJSON () {
     const {
       name, service, resource, type, statusCode, synthetics, method, endpoint, srvSrc,
-      origin, spanKind, rpcStatusCode,
+      spanKind, rpcStatusCode,
     } = this.aggKey
     const base = {
       Name: name,
@@ -65,7 +65,6 @@ class SpanAggStats {
       HTTPEndpoint: endpoint,
       srv_src: srvSrc,
       SpanKind: spanKind,
-      Origin: origin,
       GRPCStatusCode: rpcStatusCode,
     }
     const rows = []
@@ -107,7 +106,6 @@ class SpanAggKey {
     this.endpoint = span.meta[HTTP_ROUTE] || span.meta[HTTP_ENDPOINT] || ''
     this.method = span.meta[HTTP_METHOD] || ''
     this.srvSrc = span.meta[SVC_SRC_KEY] || ''
-    this.origin = span.meta[ORIGIN_KEY] || ''
     this.spanKind = span.meta[SPAN_KIND] || ''
     // dd gRPC plugin sets a numeric code via setTag; OTel/manual sets a string name via meta.
     const grpcCode = span.meta[GRPC_STATUS_CODE] ?? span.metrics?.[GRPC_STATUS_CODE]
@@ -127,7 +125,6 @@ class SpanAggKey {
       this.method,
       this.endpoint,
       this.srvSrc,
-      this.origin,
       this.spanKind,
       this.rpcStatusCode,
     ].join(',')
@@ -200,7 +197,7 @@ class SpanStatsProcessor {
         Hostname: this.hostname,
         Env: this.env,
         Version: this.version || version,
-        Stats: this.#v06Payload(drained),
+        Stats: this.#toV06Payload(drained),
         Lang: 'javascript',
         TracerVersion: pkg.version,
         RuntimeID: this.tags['runtime-id'],
@@ -233,7 +230,7 @@ class SpanStatsProcessor {
     return drained
   }
 
-  #v06Payload (drained) {
+  #toV06Payload (drained) {
     const { bucketSizeNs } = this
     return drained.map(({ timeNs, bucket }) => ({
       Start: timeNs,
