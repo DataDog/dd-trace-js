@@ -157,14 +157,14 @@
     "dependency": "@langchain/core",
     "integration": "langchain",
     "minimum_tracer_supported": "0.1.0",
-    "max_tracer_supported": "1.2.0",
+    "max_tracer_supported": "1.2.1",
     "auto-instrumented": "True"
   },
   {
     "dependency": "@langchain/langgraph",
     "integration": "langgraph",
     "minimum_tracer_supported": "1.1.2",
-    "max_tracer_supported": "1.4.4",
+    "max_tracer_supported": "1.4.7",
     "auto-instrumented": "True"
   },
   {
@@ -196,6 +196,13 @@
     "auto-instrumented": "True"
   },
   {
+    "dependency": "@openai/agents",
+    "integration": "openai-agents",
+    "minimum_tracer_supported": "0.7.0",
+    "max_tracer_supported": "0.11.8",
+    "auto-instrumented": "True"
+  },
+  {
     "dependency": "@opensearch-project/opensearch",
     "integration": "opensearch",
     "minimum_tracer_supported": "1.0.0",
@@ -220,21 +227,14 @@
     "dependency": "@smithy/core",
     "integration": "aws-sdk",
     "minimum_tracer_supported": "3.24.0",
-    "max_tracer_supported": "3.25.1",
+    "max_tracer_supported": "3.26.0",
     "auto-instrumented": "True"
   },
   {
     "dependency": "@smithy/smithy-client",
     "integration": "aws-sdk",
     "minimum_tracer_supported": "1.0.3",
-    "max_tracer_supported": "4.14.1",
-    "auto-instrumented": "True"
-  },
-  {
-    "dependency": "@vitest/runner",
-    "integration": "vitest",
-    "minimum_tracer_supported": "1.6.0",
-    "max_tracer_supported": "4.1.9",
+    "max_tracer_supported": "4.14.2",
     "auto-instrumented": "True"
   },
   {
@@ -283,7 +283,7 @@
     "dependency": "bullmq",
     "integration": "bullmq",
     "minimum_tracer_supported": "5.66.0",
-    "max_tracer_supported": "5.79.1",
+    "max_tracer_supported": "5.79.2",
     "auto-instrumented": "True"
   },
   {
@@ -339,7 +339,7 @@
     "dependency": "durable-functions",
     "integration": "azure-durable-functions",
     "minimum_tracer_supported": "3.0.0",
-    "max_tracer_supported": "3.3.1",
+    "max_tracer_supported": "3.4.0",
     "auto-instrumented": "True"
   },
   {
@@ -689,7 +689,7 @@
     "dependency": "protobufjs",
     "integration": "protobufjs",
     "minimum_tracer_supported": "6.8.0",
-    "max_tracer_supported": "8.6.4",
+    "max_tracer_supported": "8.6.5",
     "auto-instrumented": "True"
   },
   {
