@@ -507,6 +507,272 @@ describe('Plugin', () => {
           })
         })
       })
+
+      describe('core API', () => {
+        beforeEach(() => {
+          return agent.load('http2', { client: false })
+            .then(() => {
+              http2 = require(pluginToBeLoaded)
+            })
+        })
+
+        function listen (server, done) {
+          appListener = server.listen(0, 'localhost', () => {
+            port = appListener.address().port
+            done()
+          })
+        }
+
+        describe('server.on(\'stream\')', () => {
+          beforeEach(done => {
+            const server = http2.createServer()
+            server.on('stream', (stream) => {
+              stream.respond({ ':status': 200 })
+              stream.end()
+            })
+            listen(server, done)
+          })
+
+          it('should instrument the core stream API', done => {
+            agent
+              .assertFirstTraceSpan({
+                name: 'web.request',
+                service: 'test',
+                type: 'web',
+                resource: 'GET',
+                meta: {
+                  'span.kind': 'server',
+                  'http.url': `http://localhost:${port}/user`,
+                  'http.method': 'GET',
+                  'http.status_code': '200',
+                  component: 'http2',
+                },
+              })
+              .then(done)
+              .catch(done)
+
+            request(http2, `http://localhost:${port}/user`).catch(done)
+          })
+
+          it('should produce exactly one server span per request', async () => {
+            await assertSingleServerSpan(http2, `http://localhost:${port}/user`)
+          })
+
+          it('should run the stream\'s close event in the correct context', done => {
+            const server = appListener
+            server.removeAllListeners('stream')
+            server.on('stream', (stream) => {
+              const span = tracer.scope().active()
+              stream.once('close', () => {
+                assert.strictEqual(tracer.scope().active(), span)
+                done()
+              })
+              stream.respond({ ':status': 200 })
+              stream.end()
+            })
+
+            request(http2, `http://localhost:${port}/user`).catch(done)
+          })
+
+          it('reports status 200 for a stream aborted before it responded', done => {
+            const server = appListener
+            server.removeAllListeners('stream')
+            server.on('stream', (stream) => {
+              stream.on('error', () => {})
+              // Close without responding: `stream.sentHeaders` stays empty, so the
+              // adapter falls back to the compatibility default of 200 instead of
+              // tagging the span as an error with no status.
+              stream.close(http2.constants.NGHTTP2_INTERNAL_ERROR)
+            })
+
+            agent
+              .assertFirstTraceSpan({
+                name: 'web.request',
+                resource: 'GET',
+                error: 0,
+                meta: {
+                  'span.kind': 'server',
+                  'http.method': 'GET',
+                  'http.status_code': '200',
+                  component: 'http2',
+                },
+              })
+              .then(done)
+              .catch(done)
+
+            request(http2, `http://localhost:${port}/user`).catch(() => {})
+          })
+        })
+
+        describe('with configured headers', () => {
+          // The parent `core API` `beforeEach` already started the mock agent;
+          // reconfigure the plugin in place instead of `agent.load`, which would
+          // start a second agent and leak the first server's handle.
+          beforeEach(() => {
+            agent.reload('http2', { client: false, headers: ['x-foo', 'x-resp:resp_tag'] })
+          })
+
+          beforeEach(done => {
+            const server = http2.createServer()
+            server.on('stream', (stream) => {
+              stream.respond({ ':status': 200, 'x-resp': 'sent' })
+              stream.end()
+            })
+            listen(server, done)
+          })
+
+          it('tags configured request and response headers from the stream', done => {
+            agent
+              .assertFirstTraceSpan({
+                name: 'web.request',
+                meta: {
+                  component: 'http2',
+                  'http.request.headers.x-foo': 'bar',
+                  resp_tag: 'sent',
+                },
+              })
+              .then(done)
+              .catch(done)
+
+            const url = new URL(`http://localhost:${port}/user`)
+            const client = http2.connect(url.origin).on('error', done)
+            const req = client.request({ ':path': url.pathname, ':method': 'GET', 'x-foo': 'bar' })
+            req.on('error', done)
+            req.on('end', () => client.close())
+            req.resume()
+            req.end()
+          })
+        })
+
+        describe('compatibility servers do not double-span', () => {
+          /** @param {import('node:http2').Http2Server} server */
+          function listenAsync (server) {
+            return new Promise(resolve => listen(server, resolve))
+          }
+
+          it('createServer(handler) produces exactly one server span', async () => {
+            const server = http2.createServer((req, res) => {
+              res.writeHead(200)
+              res.end()
+            })
+            await listenAsync(server)
+            await assertSingleServerSpan(http2, `http://localhost:${port}/user`)
+          })
+
+          it('createServer().on(\'request\') produces exactly one server span', async () => {
+            const server = http2.createServer()
+            server.on('request', (req, res) => {
+              res.writeHead(200)
+              res.end()
+            })
+            await listenAsync(server)
+            await assertSingleServerSpan(http2, `http://localhost:${port}/user`)
+          })
+
+          it('a server with both request and stream listeners produces exactly one server span', async () => {
+            const server = http2.createServer((req, res) => {
+              res.writeHead(200)
+              res.end()
+            })
+            server.on('stream', () => {})
+            await listenAsync(server)
+            await assertSingleServerSpan(http2, `http://localhost:${port}/user`)
+          })
+
+          it('keeps the server span active inside a mixed setup\'s stream listener', async () => {
+            let streamActive
+            const server = http2.createServer((req, res) => {
+              res.writeHead(200)
+              res.end()
+            })
+            server.on('stream', () => {
+              streamActive = tracer.scope().active()
+            })
+            await listenAsync(server)
+
+            const traceAsserted = agent.assertFirstTraceSpan(span => {
+              assert.ok(streamActive, 'stream listener ran without an active span')
+              assert.strictEqual(streamActive.context().toSpanId(), span.span_id.toString())
+            })
+
+            await Promise.all([traceAsserted, request(http2, `http://localhost:${port}/user`)])
+          })
+        })
+      })
+
+      describe('core API distributed tracing', () => {
+        beforeEach(() => {
+          return agent.load('http2')
+            .then(() => {
+              http2 = require(pluginToBeLoaded)
+            })
+        })
+
+        beforeEach(done => {
+          const server = http2.createServer()
+          server.on('stream', (stream) => {
+            stream.respond({ ':status': 200 })
+            stream.end()
+          })
+          appListener = server.listen(0, 'localhost', () => {
+            port = appListener.address().port
+            done()
+          })
+        })
+
+        it('makes the core server span a child of the client span', async () => {
+          const spans = []
+          const collect = traces => spans.push(...traces.flat())
+          agent.subscribe(collect)
+
+          try {
+            await request(http2, `http://localhost:${port}/user`)
+
+            for (let drain = 0; drain < 5; drain++) await setImmediate()
+
+            const clientSpan = spans.find(span => span.meta?.['span.kind'] === 'client')
+            const serverSpan = spans.find(span => span.name === 'web.request')
+
+            assert.ok(clientSpan, 'expected an http2 client span')
+            assert.ok(serverSpan, 'expected a core-API server span')
+            assert.strictEqual(serverSpan.trace_id.toString(), clientSpan.trace_id.toString())
+            assert.strictEqual(serverSpan.parent_id.toString(), clientSpan.span_id.toString())
+          } finally {
+            agent.unsubscribe(collect)
+          }
+        })
+      })
     })
   })
 })
+
+/**
+ * Drive one request and assert the agent receives exactly one `web.request`
+ * span for it. A compatibility server emits both 'request' and 'stream'; a
+ * regression that drops the core-API request-listener gate produces a second
+ * `web.request` span that flushes in a later payload, so the count accumulates
+ * across every payload and is read only after the request has fully closed and
+ * the flush turns have drained (`flushInterval` is 0 under the test agent).
+ *
+ * @param {typeof import('http2')} http2
+ * @param {string} url
+ */
+async function assertSingleServerSpan (http2, url) {
+  let serverSpanCount = 0
+  const countHandler = traces => {
+    serverSpanCount += traces.flat().filter(span => span.name === 'web.request').length
+  }
+  agent.subscribe(countHandler)
+
+  try {
+    await request(http2, url)
+
+    // Let every flush for the request drain (flushInterval is 0, so each
+    // finished trace chunk is sent on the next turns) before reading the count.
+    for (let drain = 0; drain < 5; drain++) await setImmediate()
+
+    assert.strictEqual(serverSpanCount, 1)
+  } finally {
+    agent.unsubscribe(countHandler)
+  }
+}
