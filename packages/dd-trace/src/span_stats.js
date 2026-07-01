@@ -37,10 +37,6 @@ class SpanAggStats {
     this.aggKey = aggKey
     this.hits = 0
     this.topLevelHits = 0
-    this.errors = 0
-    this.duration = 0
-    // Split by top-level status so the OTLP path can emit separate histogram data points.
-    // Native stats merges them at export time via toJSON().
     this.topLevelOkDistribution = new LogCollapsingLowestDenseDDSketch()
     this.topLevelErrorDistribution = new LogCollapsingLowestDenseDDSketch()
     this.nonTopLevelOkDistribution = new LogCollapsingLowestDenseDDSketch()
@@ -50,11 +46,9 @@ class SpanAggStats {
   record (span) {
     const durationNs = span.duration
     this.hits++
-    this.duration += durationNs
     const isTopLevel = Boolean(span.metrics[TOP_LEVEL_KEY])
     if (isTopLevel) this.topLevelHits++
     if (span.error) {
-      this.errors++
       if (isTopLevel) this.topLevelErrorDistribution.accept(durationNs)
       else this.nonTopLevelErrorDistribution.accept(durationNs)
     } else {
@@ -65,27 +59,10 @@ class SpanAggStats {
 
   toJSON () {
     const {
-      name,
-      service,
-      resource,
-      type,
-      statusCode,
-      synthetics,
-      method,
-      endpoint,
-      srvSrc,
+      name, service, resource, type, statusCode, synthetics, method, endpoint, srvSrc,
+      origin, spanKind, rpcStatusCode,
     } = this.aggKey
-
-    const okSummary = new LogCollapsingLowestDenseDDSketch()
-    okSummary.merge(this.topLevelOkDistribution)
-    okSummary.merge(this.nonTopLevelOkDistribution)
-    const errorSummary = new LogCollapsingLowestDenseDDSketch()
-    errorSummary.merge(this.topLevelErrorDistribution)
-    errorSummary.merge(this.nonTopLevelErrorDistribution)
-
-    const { origin, spanKind, rpcStatusCode } = this.aggKey
-
-    return {
+    const base = {
       Name: name,
       Service: service,
       Resource: resource,
@@ -97,14 +74,33 @@ class SpanAggStats {
       srv_src: srvSrc,
       SpanKind: spanKind,
       Origin: origin,
-      RpcStatusCode: rpcStatusCode,
-      Hits: this.hits,
-      TopLevelHits: this.topLevelHits,
-      Errors: this.errors,
-      Duration: this.duration,
-      OkSummary: okSummary.toProto(), // TODO: custom proto encoding
-      ErrorSummary: errorSummary.toProto(), // TODO: custom proto encoding
+      GRPCStatusCode: rpcStatusCode,
     }
+    const rows = []
+    if (this.topLevelHits > 0) {
+      rows.push({
+        ...base,
+        Hits: this.topLevelHits,
+        TopLevelHits: this.topLevelHits,
+        Errors: this.topLevelErrorDistribution.count,
+        Duration: this.topLevelOkDistribution.sum + this.topLevelErrorDistribution.sum,
+        OkSummary: this.topLevelOkDistribution.toProto(), // TODO: custom proto encoding
+        ErrorSummary: this.topLevelErrorDistribution.toProto(), // TODO: custom proto encoding
+      })
+    }
+    const nonTopLevelHits = this.hits - this.topLevelHits
+    if (nonTopLevelHits > 0) {
+      rows.push({
+        ...base,
+        Hits: nonTopLevelHits,
+        TopLevelHits: 0,
+        Errors: this.nonTopLevelErrorDistribution.count,
+        Duration: this.nonTopLevelOkDistribution.sum + this.nonTopLevelErrorDistribution.sum,
+        OkSummary: this.nonTopLevelOkDistribution.toProto(), // TODO: custom proto encoding
+        ErrorSummary: this.nonTopLevelErrorDistribution.toProto(), // TODO: custom proto encoding
+      })
+    }
+    return rows
   }
 }
 
@@ -258,7 +254,7 @@ class SpanStatsProcessor {
     return drained.map(({ timeNs, bucket }) => ({
       Start: timeNs,
       Duration: bucketSizeNs,
-      Stats: [...bucket.values()].map(stats => stats.toJSON()),
+      Stats: [...bucket.values()].flatMap(stats => stats.toJSON()),
     }))
   }
 }

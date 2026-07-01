@@ -191,7 +191,7 @@ describe('SpanAggStats', () => {
     const errorDistribution = new LogCollapsingLowestDenseDDSketch(0.00775)
     okDistribution.accept(basicSpan.duration)
 
-    assert.deepStrictEqual(aggStats.toJSON(), {
+    assert.deepStrictEqual(aggStats.toJSON(), [{
       Name: aggKey.name,
       Type: aggKey.type,
       Resource: aggKey.resource,
@@ -203,14 +203,14 @@ describe('SpanAggStats', () => {
       srv_src: aggKey.srvSrc,
       SpanKind: aggKey.spanKind,
       Origin: aggKey.origin,
-      RpcStatusCode: aggKey.rpcStatusCode,
+      GRPCStatusCode: aggKey.rpcStatusCode,
       Hits: 1,
       TopLevelHits: 0,
       Errors: 0,
       Duration: basicSpan.duration,
       OkSummary: okDistribution.toProto(),
       ErrorSummary: errorDistribution.toProto(),
-    })
+    }])
   })
 
   it('should record a top-level span', () => {
@@ -222,7 +222,7 @@ describe('SpanAggStats', () => {
     const errorDistribution = new LogCollapsingLowestDenseDDSketch(0.00775)
     okDistribution.accept(topLevelSpan.duration)
 
-    assert.deepStrictEqual(aggStats.toJSON(), {
+    assert.deepStrictEqual(aggStats.toJSON(), [{
       Name: aggKey.name,
       Type: aggKey.type,
       Resource: aggKey.resource,
@@ -234,14 +234,14 @@ describe('SpanAggStats', () => {
       srv_src: aggKey.srvSrc,
       SpanKind: aggKey.spanKind,
       Origin: aggKey.origin,
-      RpcStatusCode: aggKey.rpcStatusCode,
+      GRPCStatusCode: aggKey.rpcStatusCode,
       Hits: 1,
       TopLevelHits: 1,
       Errors: 0,
       Duration: topLevelSpan.duration,
       OkSummary: okDistribution.toProto(),
       ErrorSummary: errorDistribution.toProto(),
-    })
+    }])
   })
 
   it('should record an error span', () => {
@@ -253,7 +253,7 @@ describe('SpanAggStats', () => {
     const errorDistribution = new LogCollapsingLowestDenseDDSketch(0.00775)
     errorDistribution.accept(errorSpan.duration)
 
-    assert.deepStrictEqual(aggStats.toJSON(), {
+    assert.deepStrictEqual(aggStats.toJSON(), [{
       Name: aggKey.name,
       Type: aggKey.type,
       Resource: aggKey.resource,
@@ -265,14 +265,14 @@ describe('SpanAggStats', () => {
       srv_src: aggKey.srvSrc,
       SpanKind: aggKey.spanKind,
       Origin: aggKey.origin,
-      RpcStatusCode: aggKey.rpcStatusCode,
+      GRPCStatusCode: aggKey.rpcStatusCode,
       Hits: 1,
       TopLevelHits: 0,
       Errors: 1,
       Duration: errorSpan.duration,
       OkSummary: okDistribution.toProto(),
       ErrorSummary: errorDistribution.toProto(),
-    })
+    }])
   })
 })
 
@@ -380,7 +380,7 @@ describe('SpanStatsProcessor', () => {
       okDistribution.accept(topLevelSpan.duration)
     }
 
-    assert.deepStrictEqual(spanBucket.toJSON(), {
+    assert.deepStrictEqual(spanBucket.toJSON(), [{
       Name: 'top-level-span',
       Service: 'service-name',
       Resource: 'resource-name',
@@ -392,14 +392,14 @@ describe('SpanStatsProcessor', () => {
       srv_src: 'integration',
       SpanKind: '',
       Origin: '',
-      RpcStatusCode: '',
+      GRPCStatusCode: '',
       Hits: n,
       TopLevelHits: n,
       Errors: 0,
       Duration: (topLevelSpan.duration) * n,
       OkSummary: okDistribution.toProto(),
       ErrorSummary: errorDistribution.toProto(),
-    })
+    }])
   })
 
   it('should bucket by the formatted span start, not the missing startTime field', () => {
@@ -451,7 +451,7 @@ describe('SpanStatsProcessor', () => {
           srv_src: 'integration',
           SpanKind: '',
           Origin: '',
-          RpcStatusCode: '',
+          GRPCStatusCode: '',
           Hits: n,
           TopLevelHits: n,
           Errors: 0,
