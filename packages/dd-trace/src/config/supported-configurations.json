@@ -3275,6 +3275,13 @@
         "default": "true"
       }
     ],
+    "DD_TRACE_NITRO_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
     "DD_TRACE_NODE_CHILD_PROCESS_ENABLED": [
       {
         "implementation": "A",

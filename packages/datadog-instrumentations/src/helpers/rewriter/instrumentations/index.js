@@ -5,6 +5,7 @@ module.exports = [
   ...require('./azure-cosmos'),
   ...require('./bullmq'),
   ...require('./graphql'),
+  ...require('./h3'),
   ...require('./langchain'),
   ...require('./langgraph'),
   ...require('./modelcontextprotocol-sdk'),
