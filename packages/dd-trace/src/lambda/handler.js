@@ -1,11 +1,11 @@
 'use strict'
 
-const { HTTP_REQUEST_HEADERS } = require('../../../../ext/tags')
 const log = require('../log')
-const { channel } = require('../../../datadog-instrumentations/src/helpers/instrument')
 const { ERROR_MESSAGE, ERROR_TYPE } = require('../constants')
-const { ImpendingTimeout } = require('./runtime/errors')
 const { extractContext } = require('./context')
+const { ImpendingTimeout } = require('./runtime/errors')
+const { channel } = require('../../../datadog-instrumentations/src/helpers/instrument')
+const { HTTP_REQUEST_HEADERS } = require('../../../../ext/tags')
 
 const timeoutChannel = channel('apm:aws:lambda:timeout')
 // Always crash the flushes when a message is received
@@ -60,24 +60,19 @@ function crashFlush () {
 
 const startInvocationChannel = channel('datadog:lambda:start-invocation')
 
-let parsedHeaderTags = null
-
-function getHeaderTags () {
-  if (parsedHeaderTags === null) {
-    const raw = global._ddtrace?._tracer?._config?.headerTags
-    parsedHeaderTags = Array.isArray(raw) && raw.length > 0
-      ? raw.map(h => h.split(':')).map(([key, tag]) => [key.toLowerCase(), tag])
-      : []
-  }
-  return parsedHeaderTags
-}
-
 function onStartInvocation ({ span, headers }) {
   if (!span || !headers) return
 
-  for (const [key, tag] of getHeaderTags()) {
-    const value = headers[key]
-    if (value) span.setTag(tag || `${HTTP_REQUEST_HEADERS}.${key}`, value)
+  const raw = global._ddtrace?._tracer?._config?.headerTags
+  if (!Array.isArray(raw) || raw.length === 0) return
+
+  try {
+    for (const [key, tag] of raw.map(h => h.split(':')).map(([key, tag]) => [key.toLowerCase(), tag])) {
+      const value = headers[key]
+      if (value) span.setTag(tag || `${HTTP_REQUEST_HEADERS}.${key}`, value)
+    }
+  } catch (err) {
+    log.error('Error applying Lambda header tags', err)
   }
 }
 
