@@ -2,15 +2,16 @@
 # benchmarking-platform template (manual `build-benchmark-ci-images` job).
 # @see https://github.com/DataDog/benchmarking-platform-tools/blob/main/images/templates/gitlab/build-ci-images.template.yml
 include:
-  - project: 'DataDog/benchmarking-platform-tools'
-    file: 'images/templates/gitlab/build-ci-images.template.yml'
+- project: 'DataDog/benchmarking-platform-tools'
+  file: 'images/templates/gitlab/build-ci-images.template.yml'
 
 variables:
   # Consumed by the benchmark jobs below. Repin after a `build-benchmark-ci-images`
   # run to the tag it pushes; the @sha256 digest is what image-integrity verifies, so
   # the pull can't be shifted by a tag rewrite.
   # Built here: https://gitlab.ddbuild.io/DataDog/apm-reliability/dd-trace-js/-/jobs/1755904623
-  MICROBENCHMARKS_CI_IMAGE: registry.ddbuild.io/ci/benchmarking-platform:dd-trace-js-117825597@sha256:23a63e17211bb712a07494ccbbed86edb8f4a3c1c301310c217938dbe1b7284d
+  MICROBENCHMARKS_CI_IMAGE: 
+    registry.ddbuild.io/ci/benchmarking-platform:dd-trace-js-117825597@sha256:23a63e17211bb712a07494ccbbed86edb8f4a3c1c301310c217938dbe1b7284d
 
   # Image build, consumed by the included build-ci-images template. The per-pipeline
   # suffix pins each build to a unique tag so a rebuild can't shift what older
@@ -30,59 +31,32 @@ variables:
 
 .benchmarks:
   stage: benchmarks
-  needs: [ ]
+  needs: []
   tags: ["runner:apm-k8s-m7i-metal"]
   image: $MICROBENCHMARKS_CI_IMAGE
   rules:
-    - if: '$CI_COMMIT_REF_NAME =~ /^graphite-base\/.*$/'
-      when: never
-    - if: $CI_COMMIT_BRANCH == 'master'
-      interruptible: false
-    - interruptible: true
+  - if: '$CI_COMMIT_REF_NAME =~ /^graphite-base\/.*$/'
+    when: never
+  - if: $CI_COMMIT_BRANCH == 'master'
+    interruptible: false
+  - interruptible: true
   timeout: 30m  # TODO: Reduce this once GitLab CI runner availability improves
   script:
-    - cd .gitlab/benchmarks && bp-runner bp-runner.yml --debug
+  - cd .gitlab/benchmarks && bp-runner bp-runner.yml --debug
   artifacts:
     name: "artifacts"
     when: always
     paths:
-      - .gitlab/benchmarks/artifacts/
+    - .gitlab/benchmarks/artifacts/
     expire_in: 3 months
   retry:
     max: 2
     when:
-      - unknown_failure
-      - data_integrity_failure
-      - runner_system_failure
-      - scheduler_failure
-      - api_failure
-
-benchmarks-pr-comment:
-  stage: benchmarks-pr-comment
-  needs: [ benchmark, benchmark-serverless ]
-  rules:
-    - if: '$CI_COMMIT_REF_NAME =~ /^graphite-base\/.*$/'
-      when: never
-    - when: on_success
-  tags: ["arch:amd64"]
-  image: $MICROBENCHMARKS_CI_IMAGE
-  script:
-    - cd .gitlab/benchmarks && bp-runner bp-runner.pr-comment.yml --debug
-  allow_failure: true
-
-check-big-regressions:
-  stage: benchmarks-pr-comment
-  needs: [ benchmark, benchmark-serverless ]
-  rules:
-    - if: '$CI_COMMIT_REF_NAME =~ /^graphite-base\/.*$/'
-      when: never
-    - if: $CI_COMMIT_BRANCH == 'master'
-      interruptible: false
-    - interruptible: true
-  tags: ["arch:amd64"]
-  image: $MICROBENCHMARKS_CI_IMAGE
-  script:
-    - cd .gitlab/benchmarks && bp-runner bp-runner.fail-on-regression.yml --debug
+    - unknown_failure
+    - data_integrity_failure
+    - runner_system_failure
+    - scheduler_failure
+    - api_failure
 
 benchmark:
   extends: .benchmarks
@@ -92,168 +66,168 @@ benchmark:
   # measure run-to-run variance for flaky benchmark detection.
   parallel:
     matrix:
-      - MAJOR_VERSION: 20
-        GROUP: 1
-        STABILITY_MONITORING_INDEX: 0
-      - MAJOR_VERSION: 20
-        GROUP: 2
-        STABILITY_MONITORING_INDEX: 0
-      - MAJOR_VERSION: 20
-        GROUP: 3
-        STABILITY_MONITORING_INDEX: 0
-      - MAJOR_VERSION: 20
-        GROUP: 4
-        STABILITY_MONITORING_INDEX: 0
-      - MAJOR_VERSION: 20
-        GROUP: 5
-        STABILITY_MONITORING_INDEX: 0
-      - MAJOR_VERSION: 20
-        GROUP: 6
-        STABILITY_MONITORING_INDEX: 0
-      - MAJOR_VERSION: 24
-        GROUP: 1
-        STABILITY_MONITORING_INDEX: 0
-      - MAJOR_VERSION: 24
-        GROUP: 2
-        STABILITY_MONITORING_INDEX: 0
-      - MAJOR_VERSION: 24
-        GROUP: 3
-        STABILITY_MONITORING_INDEX: 0
-      - MAJOR_VERSION: 24
-        GROUP: 4
-        STABILITY_MONITORING_INDEX: 0
-      - MAJOR_VERSION: 24
-        GROUP: 5
-        STABILITY_MONITORING_INDEX: 0
-      - MAJOR_VERSION: 24
-        GROUP: 6
-        STABILITY_MONITORING_INDEX: 0
-      - MAJOR_VERSION: 26
-        GROUP: 1
-        STABILITY_MONITORING_INDEX: 0
-      - MAJOR_VERSION: 26
-        GROUP: 2
-        STABILITY_MONITORING_INDEX: 0
-      - MAJOR_VERSION: 26
-        GROUP: 3
-        STABILITY_MONITORING_INDEX: 0
-      - MAJOR_VERSION: 26
-        GROUP: 4
-        STABILITY_MONITORING_INDEX: 0
-      - MAJOR_VERSION: 26
-        GROUP: 5
-        STABILITY_MONITORING_INDEX: 0
-      - MAJOR_VERSION: 26
-        GROUP: 6
-        STABILITY_MONITORING_INDEX: 0
-      - MAJOR_VERSION: 20
-        GROUP: 1
-        STABILITY_MONITORING_INDEX: 1
-      - MAJOR_VERSION: 20
-        GROUP: 2
-        STABILITY_MONITORING_INDEX: 1
-      - MAJOR_VERSION: 20
-        GROUP: 3
-        STABILITY_MONITORING_INDEX: 1
-      - MAJOR_VERSION: 20
-        GROUP: 4
-        STABILITY_MONITORING_INDEX: 1
-      - MAJOR_VERSION: 20
-        GROUP: 5
-        STABILITY_MONITORING_INDEX: 1
-      - MAJOR_VERSION: 20
-        GROUP: 6
-        STABILITY_MONITORING_INDEX: 1
-      - MAJOR_VERSION: 24
-        GROUP: 1
-        STABILITY_MONITORING_INDEX: 1
-      - MAJOR_VERSION: 24
-        GROUP: 2
-        STABILITY_MONITORING_INDEX: 1
-      - MAJOR_VERSION: 24
-        GROUP: 3
-        STABILITY_MONITORING_INDEX: 1
-      - MAJOR_VERSION: 24
-        GROUP: 4
-        STABILITY_MONITORING_INDEX: 1
-      - MAJOR_VERSION: 24
-        GROUP: 5
-        STABILITY_MONITORING_INDEX: 1
-      - MAJOR_VERSION: 24
-        GROUP: 6
-        STABILITY_MONITORING_INDEX: 1
-      - MAJOR_VERSION: 26
-        GROUP: 1
-        STABILITY_MONITORING_INDEX: 1
-      - MAJOR_VERSION: 26
-        GROUP: 2
-        STABILITY_MONITORING_INDEX: 1
-      - MAJOR_VERSION: 26
-        GROUP: 3
-        STABILITY_MONITORING_INDEX: 1
-      - MAJOR_VERSION: 26
-        GROUP: 4
-        STABILITY_MONITORING_INDEX: 1
-      - MAJOR_VERSION: 26
-        GROUP: 5
-        STABILITY_MONITORING_INDEX: 1
-      - MAJOR_VERSION: 26
-        GROUP: 6
-        STABILITY_MONITORING_INDEX: 1
-      - MAJOR_VERSION: 20
-        GROUP: 1
-        STABILITY_MONITORING_INDEX: 2
-      - MAJOR_VERSION: 20
-        GROUP: 2
-        STABILITY_MONITORING_INDEX: 2
-      - MAJOR_VERSION: 20
-        GROUP: 3
-        STABILITY_MONITORING_INDEX: 2
-      - MAJOR_VERSION: 20
-        GROUP: 4
-        STABILITY_MONITORING_INDEX: 2
-      - MAJOR_VERSION: 20
-        GROUP: 5
-        STABILITY_MONITORING_INDEX: 2
-      - MAJOR_VERSION: 20
-        GROUP: 6
-        STABILITY_MONITORING_INDEX: 2
-      - MAJOR_VERSION: 24
-        GROUP: 1
-        STABILITY_MONITORING_INDEX: 2
-      - MAJOR_VERSION: 24
-        GROUP: 2
-        STABILITY_MONITORING_INDEX: 2
-      - MAJOR_VERSION: 24
-        GROUP: 3
-        STABILITY_MONITORING_INDEX: 2
-      - MAJOR_VERSION: 24
-        GROUP: 4
-        STABILITY_MONITORING_INDEX: 2
-      - MAJOR_VERSION: 24
-        GROUP: 5
-        STABILITY_MONITORING_INDEX: 2
-      - MAJOR_VERSION: 24
-        GROUP: 6
-        STABILITY_MONITORING_INDEX: 2
-      - MAJOR_VERSION: 26
-        GROUP: 1
-        STABILITY_MONITORING_INDEX: 2
-      - MAJOR_VERSION: 26
-        GROUP: 2
-        STABILITY_MONITORING_INDEX: 2
-      - MAJOR_VERSION: 26
-        GROUP: 3
-        STABILITY_MONITORING_INDEX: 2
-      - MAJOR_VERSION: 26
-        GROUP: 4
-        STABILITY_MONITORING_INDEX: 2
-      - MAJOR_VERSION: 26
-        GROUP: 5
-        STABILITY_MONITORING_INDEX: 2
-      - MAJOR_VERSION: 26
-        GROUP: 6
-        STABILITY_MONITORING_INDEX: 2
+    - MAJOR_VERSION: 20
+      GROUP: 1
+      STABILITY_MONITORING_INDEX: 0
+    - MAJOR_VERSION: 20
+      GROUP: 2
+      STABILITY_MONITORING_INDEX: 0
+    - MAJOR_VERSION: 20
+      GROUP: 3
+      STABILITY_MONITORING_INDEX: 0
+    - MAJOR_VERSION: 20
+      GROUP: 4
+      STABILITY_MONITORING_INDEX: 0
+    - MAJOR_VERSION: 20
+      GROUP: 5
+      STABILITY_MONITORING_INDEX: 0
+    - MAJOR_VERSION: 20
+      GROUP: 6
+      STABILITY_MONITORING_INDEX: 0
+    - MAJOR_VERSION: 24
+      GROUP: 1
+      STABILITY_MONITORING_INDEX: 0
+    - MAJOR_VERSION: 24
+      GROUP: 2
+      STABILITY_MONITORING_INDEX: 0
+    - MAJOR_VERSION: 24
+      GROUP: 3
+      STABILITY_MONITORING_INDEX: 0
+    - MAJOR_VERSION: 24
+      GROUP: 4
+      STABILITY_MONITORING_INDEX: 0
+    - MAJOR_VERSION: 24
+      GROUP: 5
+      STABILITY_MONITORING_INDEX: 0
+    - MAJOR_VERSION: 24
+      GROUP: 6
+      STABILITY_MONITORING_INDEX: 0
+    - MAJOR_VERSION: 26
+      GROUP: 1
+      STABILITY_MONITORING_INDEX: 0
+    - MAJOR_VERSION: 26
+      GROUP: 2
+      STABILITY_MONITORING_INDEX: 0
+    - MAJOR_VERSION: 26
+      GROUP: 3
+      STABILITY_MONITORING_INDEX: 0
+    - MAJOR_VERSION: 26
+      GROUP: 4
+      STABILITY_MONITORING_INDEX: 0
+    - MAJOR_VERSION: 26
+      GROUP: 5
+      STABILITY_MONITORING_INDEX: 0
+    - MAJOR_VERSION: 26
+      GROUP: 6
+      STABILITY_MONITORING_INDEX: 0
+    - MAJOR_VERSION: 20
+      GROUP: 1
+      STABILITY_MONITORING_INDEX: 1
+    - MAJOR_VERSION: 20
+      GROUP: 2
+      STABILITY_MONITORING_INDEX: 1
+    - MAJOR_VERSION: 20
+      GROUP: 3
+      STABILITY_MONITORING_INDEX: 1
+    - MAJOR_VERSION: 20
+      GROUP: 4
+      STABILITY_MONITORING_INDEX: 1
+    - MAJOR_VERSION: 20
+      GROUP: 5
+      STABILITY_MONITORING_INDEX: 1
+    - MAJOR_VERSION: 20
+      GROUP: 6
+      STABILITY_MONITORING_INDEX: 1
+    - MAJOR_VERSION: 24
+      GROUP: 1
+      STABILITY_MONITORING_INDEX: 1
+    - MAJOR_VERSION: 24
+      GROUP: 2
+      STABILITY_MONITORING_INDEX: 1
+    - MAJOR_VERSION: 24
+      GROUP: 3
+      STABILITY_MONITORING_INDEX: 1
+    - MAJOR_VERSION: 24
+      GROUP: 4
+      STABILITY_MONITORING_INDEX: 1
+    - MAJOR_VERSION: 24
+      GROUP: 5
+      STABILITY_MONITORING_INDEX: 1
+    - MAJOR_VERSION: 24
+      GROUP: 6
+      STABILITY_MONITORING_INDEX: 1
+    - MAJOR_VERSION: 26
+      GROUP: 1
+      STABILITY_MONITORING_INDEX: 1
+    - MAJOR_VERSION: 26
+      GROUP: 2
+      STABILITY_MONITORING_INDEX: 1
+    - MAJOR_VERSION: 26
+      GROUP: 3
+      STABILITY_MONITORING_INDEX: 1
+    - MAJOR_VERSION: 26
+      GROUP: 4
+      STABILITY_MONITORING_INDEX: 1
+    - MAJOR_VERSION: 26
+      GROUP: 5
+      STABILITY_MONITORING_INDEX: 1
+    - MAJOR_VERSION: 26
+      GROUP: 6
+      STABILITY_MONITORING_INDEX: 1
+    - MAJOR_VERSION: 20
+      GROUP: 1
+      STABILITY_MONITORING_INDEX: 2
+    - MAJOR_VERSION: 20
+      GROUP: 2
+      STABILITY_MONITORING_INDEX: 2
+    - MAJOR_VERSION: 20
+      GROUP: 3
+      STABILITY_MONITORING_INDEX: 2
+    - MAJOR_VERSION: 20
+      GROUP: 4
+      STABILITY_MONITORING_INDEX: 2
+    - MAJOR_VERSION: 20
+      GROUP: 5
+      STABILITY_MONITORING_INDEX: 2
+    - MAJOR_VERSION: 20
+      GROUP: 6
+      STABILITY_MONITORING_INDEX: 2
+    - MAJOR_VERSION: 24
+      GROUP: 1
+      STABILITY_MONITORING_INDEX: 2
+    - MAJOR_VERSION: 24
+      GROUP: 2
+      STABILITY_MONITORING_INDEX: 2
+    - MAJOR_VERSION: 24
+      GROUP: 3
+      STABILITY_MONITORING_INDEX: 2
+    - MAJOR_VERSION: 24
+      GROUP: 4
+      STABILITY_MONITORING_INDEX: 2
+    - MAJOR_VERSION: 24
+      GROUP: 5
+      STABILITY_MONITORING_INDEX: 2
+    - MAJOR_VERSION: 24
+      GROUP: 6
+      STABILITY_MONITORING_INDEX: 2
+    - MAJOR_VERSION: 26
+      GROUP: 1
+      STABILITY_MONITORING_INDEX: 2
+    - MAJOR_VERSION: 26
+      GROUP: 2
+      STABILITY_MONITORING_INDEX: 2
+    - MAJOR_VERSION: 26
+      GROUP: 3
+      STABILITY_MONITORING_INDEX: 2
+    - MAJOR_VERSION: 26
+      GROUP: 4
+      STABILITY_MONITORING_INDEX: 2
+    - MAJOR_VERSION: 26
+      GROUP: 5
+      STABILITY_MONITORING_INDEX: 2
+    - MAJOR_VERSION: 26
+      GROUP: 6
+      STABILITY_MONITORING_INDEX: 2
   variables:
     SPLITS: 6
     STABILITY_MONITORING_INDEX: 0
@@ -262,52 +236,3 @@ benchmark:
     # In production the run-id is supplied by the orchestrator, not hardcoded.
     EXTERNAL_S3_URL: "s3://relenv-benchmarking-data/dd-trace-js/external/5p1ke001/sample-${STABILITY_MONITORING_INDEX}/node-${MAJOR_VERSION}/"
 
-benchmark-serverless:
-  stage: benchmarks
-  image: $SLS_CI_IMAGE
-  tags: ["arch:amd64"]
-  when: on_success
-  rules:
-    - if: $CI_COMMIT_BRANCH == 'master'
-      interruptible: false
-    - interruptible: true
-  needs:
-    - benchmark-serverless-trigger
-  script:
-    - curl -OL "https://binaries.ddbuild.io/dd-source/authanywhere/LATEST/authanywhere-linux-amd64"
-    - mv "authanywhere-linux-amd64" /bin/authanywhere
-    - chmod +x /bin/authanywhere
-    - BTI_CI_API_TOKEN=$(authanywhere --audience rapid-devex-ci)
-    - >-
-      BTI_RESPONSE=$(curl --silent --request GET \
-        --header "$BTI_CI_API_TOKEN" \  --header "Content-Type: application/vnd.api+json" \
-        "https://bti-ci-api.us1.ddbuild.io/internal/ci/gitlab/token?owner=DataDog&repository=serverless-tools")
-    - GITLAB_TOKEN=$(echo "$BTI_RESPONSE" | jq -r '.token // empty')
-    - git clone https://serverless-tools:${GITLAB_TOKEN}@gitlab.ddbuild.io/DataDog/serverless-tools.git ./serverless-tools && cd ./serverless-tools
-    - ./ci/check_trigger_status.sh
-
-benchmark-serverless-trigger:
-  stage: benchmarks
-  needs: []
-  rules:
-    - if: $CI_COMMIT_BRANCH == 'master'
-      interruptible: false
-    - interruptible: true
-  trigger:
-    project: DataDog/serverless-tools
-    branch: $SLS_CI_BRANCH
-    strategy: depend
-  allow_failure: true
-  variables:
-    UPSTREAM_PIPELINE_ID: $CI_PIPELINE_ID
-    UPSTREAM_PROJECT_URL: $CI_PROJECT_URL
-    UPSTREAM_COMMIT_BRANCH: $CI_COMMIT_BRANCH
-    UPSTREAM_COMMIT_AUTHOR: $CI_COMMIT_AUTHOR
-    UPSTREAM_COMMIT_TITLE: $CI_COMMIT_TITLE
-    UPSTREAM_COMMIT_TAG: $CI_COMMIT_TAG
-    UPSTREAM_PROJECT_NAME: $CI_PROJECT_NAME
-    UPSTREAM_GITLAB_USER_LOGIN: $GITLAB_USER_LOGIN
-    UPSTREAM_GITLAB_USER_EMAIL: $GITLAB_USER_EMAIL
-    # only available on Merge Requests
-    UPSTREAM_MERGE_TARGET_BRANCH: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME
-    DD_TAGS: "SLS_CI_BRANCH:$SLS_CI_BRANCH"
