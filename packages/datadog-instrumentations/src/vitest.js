@@ -5,6 +5,7 @@ const realSetTimeout = setTimeout
 
 const path = require('node:path')
 const { performance } = require('node:perf_hooks')
+const { fileURLToPath } = require('node:url')
 const { MessagePort } = require('node:worker_threads')
 
 const shimmer = require('../../datadog-shimmer')
@@ -1024,8 +1025,24 @@ function threadHandler (thread) {
 }
 
 function isVitestTinypoolOptions (options) {
-  return options?.env?.VITEST === 'true' &&
-    (options.filename?.endsWith(`${path.sep}worker.js`) || options.filename?.endsWith('/worker.js'))
+  if (options?.env?.VITEST !== 'true' || typeof options.filename !== 'string') return false
+
+  let filename = options.filename
+  if (filename.startsWith('file:')) {
+    try {
+      filename = fileURLToPath(filename)
+    } catch {
+      return false
+    }
+  }
+
+  const workerPath = path.normalize(filename)
+  const workerDir = path.dirname(workerPath)
+  const packageDir = path.dirname(workerDir)
+
+  return path.basename(workerPath) === 'worker.js' &&
+    path.basename(workerDir) === 'dist' &&
+    path.basename(packageDir) === 'vitest'
 }
 
 function markVitestTinypoolOptions (options) {
