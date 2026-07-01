@@ -589,10 +589,7 @@ function getNoWorkerInitState () {
 }
 
 function ensureMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
-  const shouldInstallNoWorkerInit = noWorkerInit.shouldUse(ctx, frameworkVersion, testSpecifications, {
-    hasVitestWorkerPoolTestSpecification,
-    isVitestWorkerPool,
-  })
+  const shouldInstallNoWorkerInit = shouldUseNoWorkerInit(ctx, frameworkVersion, testSpecifications)
   const specificationsKey = getTestSpecificationsKey(testSpecifications)
   let setupState = mainProcessSetupStates.get(ctx)
   if (
@@ -608,6 +605,13 @@ function ensureMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
     mainProcessSetupStates.set(ctx, setupState)
   }
   return setupState.setupPromise
+}
+
+function shouldUseNoWorkerInit (ctx, frameworkVersion, testSpecifications) {
+  return noWorkerInit.shouldUse(ctx, frameworkVersion, testSpecifications, {
+    hasVitestWorkerPoolTestSpecification,
+    isVitestWorkerPool,
+  })
 }
 
 function configureFlakyTestRetries (ctx, testSpecifications) {
@@ -887,8 +891,9 @@ function wrapVitestRunFiles (Vitest, frameworkVersion) {
   })
 
   if (Vitest.prototype.collectTests) {
-    shimmer.wrap(Vitest.prototype, 'collectTests', collectTests => function () {
-      markVitestWorkerEnv(this, undefined, false)
+    shimmer.wrap(Vitest.prototype, 'collectTests', collectTests => function (testSpecifications) {
+      const shouldSkipWorkerInit = shouldUseNoWorkerInit(this, frameworkVersion, testSpecifications)
+      markVitestWorkerEnv(this, testSpecifications, shouldSkipWorkerInit)
       return collectTests.apply(this, arguments)
     })
   }

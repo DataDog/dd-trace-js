@@ -392,6 +392,19 @@ SUPPORTED_VERSIONS.forEach((version) => {
     })
 
     if (version === '3.2.6') {
+      it('preserves no-worker env when the programmatic API collects tests', async () => {
+        const exitCode = await runVitest({
+          TEST_DIR: 'ci-visibility/vitest-tests/vitest-worker-env.mjs',
+          POOL_CONFIG: 'forks',
+          EXPECT_DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE: '1',
+          EXPECT_DD_NODE_OPTIONS_STRIPPED: '1',
+          EXPECT_NO_DD_TRACE_INIT: '1',
+        }, 'node ci-visibility/vitest-tests-programmatic-api/run-no-worker-programmatic-api-collect-before-run.mjs')
+
+        assert.strictEqual(exitCode, 0, testOutput)
+        assert.match(testOutput, /1 passed/, testOutput)
+      })
+
       it('reports multiple suites with the same parentage as worker instrumentation', async () => {
         const expectedSuites = [
           'ci-visibility/vitest-tests/no-worker-suite-context-a-slow.mjs',
