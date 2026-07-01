@@ -146,6 +146,9 @@
 /integration-tests/vitest/ @DataDog/ci-app-libraries
 /integration-tests/vitest.config.mjs @DataDog/ci-app-libraries
 /integration-tests/vitest.second-project.config.mjs @DataDog/ci-app-libraries
+/integration-tests/vitest.typecheck.config.mjs @DataDog/ci-app-libraries
+/integration-tests/tsconfig.typecheck.json @DataDog/ci-app-libraries
+/integration-tests/tsconfig.typecheck-fail.json @DataDog/ci-app-libraries
 /integration-tests/ci-visibility-intake.js @DataDog/ci-app-libraries
 /integration-tests/ci-visibility-intake.spec.js @DataDog/ci-app-libraries
 /integration-tests/CODEOWNERS @DataDog/ci-app-libraries

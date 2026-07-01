@@ -18,6 +18,12 @@ const {
 } = require('../../dd-trace/src/plugins/util/test')
 const { addHook } = require('./helpers/instrument')
 const {
+  testStartCh,
+  testPassCh,
+  testErrorCh,
+  testSkipCh,
+  testSuiteStartCh,
+  testSuiteFinishCh,
   testSessionStartCh,
   testSessionFinishCh,
   testSessionConfigurationCh,
@@ -31,8 +37,10 @@ const {
   codeCoverageReportCh,
   findExportByName,
   getChannelPromise,
+  getTypeTasks,
   getWorkspaceProject,
   setProvidedContext,
+  getVitestTestProperties,
 } = require('./vitest-util')
 
 const newTestsWithDynamicNames = new Set()
@@ -96,6 +104,10 @@ function isCliApiPackage (vitestPackage) {
 
 function getVitestExport (vitestPackage) {
   return findExportByName(vitestPackage, 'Vitest')
+}
+
+function getTypecheckerExport (vitestPackage) {
+  return findExportByName(vitestPackage, 'Typechecker')
 }
 
 function getForksPoolWorkerExport (vitestPackage) {
@@ -823,6 +835,190 @@ function wrapVitestRunFiles (Vitest, frameworkVersion) {
   }
 }
 
+function getTypecheckTaskStatus (task) {
+  const state = task.result?.state
+  if (state === 'fail') return 'fail'
+  if (state === 'skip' || task.mode === 'skip' || task.mode === 'todo') return 'skip'
+  return 'pass'
+}
+
+/**
+ * Return whether a typecheck suite name represents the synthetic file-level suite.
+ *
+ * @param {string|undefined} suiteName
+ * @param {string} testSuiteAbsolutePath
+ * @returns {boolean}
+ */
+function isTypecheckFileSuiteName (suiteName, testSuiteAbsolutePath) {
+  if (!suiteName || !testSuiteAbsolutePath) return false
+
+  const normalizedSuiteName = path.normalize(suiteName).replaceAll('\\', '/')
+  const normalizedSuitePath = path.normalize(testSuiteAbsolutePath).replaceAll('\\', '/')
+
+  return normalizedSuitePath === normalizedSuiteName || normalizedSuitePath.endsWith(`/${normalizedSuiteName}`)
+}
+
+/**
+ * Return a typecheck test name with describe/suite prefixes and without the file-level suite prefix.
+ *
+ * @param {object} task
+ * @param {string} testSuiteAbsolutePath
+ * @returns {string}
+ */
+function getTypecheckTestName (task, testSuiteAbsolutePath) {
+  let testName = task.name || task.fullTestName
+  let currentTask = task.suite
+
+  while (currentTask) {
+    if (currentTask.name && !isTypecheckFileSuiteName(currentTask.name, testSuiteAbsolutePath)) {
+      testName = `${currentTask.name} ${testName}`
+    }
+    currentTask = currentTask.suite
+  }
+
+  return testName
+}
+
+/**
+ * Return Test Optimization metadata prepared in Vitest's main process setup.
+ *
+ * @param {object|undefined} ctx
+ * @returns {{ testPropertiesByFilepath: object }}
+ */
+function getMainProcessProvidedContext (ctx) {
+  try {
+    const workspaceProject = getWorkspaceProject(ctx)
+    const providedContext = workspaceProject.getProvidedContext?.() || workspaceProject._provided || {}
+
+    return {
+      testPropertiesByFilepath: providedContext._ddTestPropertiesByFilepath || {},
+    }
+  } catch {
+    return {
+      testPropertiesByFilepath: {},
+    }
+  }
+}
+
+/**
+ * Return the Vitest context that owns a Typechecker instance.
+ *
+ * @param {object} typechecker
+ * @returns {object|undefined}
+ */
+function getTypecheckerVitestContext (typechecker) {
+  return typechecker.ctx || typechecker.project?.vitest
+}
+
+function reportTypecheckTest (task, testSuiteAbsolutePath, providedContext) {
+  const testName = getTypecheckTestName(task, testSuiteAbsolutePath)
+  const testProperties = getVitestTestProperties(providedContext, testSuiteAbsolutePath, testName)
+  const isAttemptToFix = testProperties.isAttemptToFix === true
+  const isDisabled = testProperties.isDisabled === true
+  const isQuarantined = testProperties.isQuarantined === true
+  const isModified = testProperties.isModified === true
+  const isSkippedByTestManagement = !isAttemptToFix && isDisabled
+  const status = getTypecheckTaskStatus(task)
+
+  if (status === 'skip' || isSkippedByTestManagement) {
+    testSkipCh.publish({
+      testName,
+      testSuiteAbsolutePath,
+      isNew: testProperties.isNew,
+      isDisabled,
+    })
+    return
+  }
+
+  const ctx = {
+    testName,
+    testSuiteAbsolutePath,
+    isRetry: false,
+    isNew: testProperties.isNew,
+    hasDynamicName: false,
+    mightHitProbe: false,
+    isAttemptToFix,
+    isDisabled,
+    isQuarantined,
+    isModified,
+  }
+  testStartCh.runStores(ctx, () => {})
+
+  const finalStatus = !isAttemptToFix && isQuarantined ? 'skip' : undefined
+  if (status === 'fail') {
+    testErrorCh.publish({
+      error: task.result?.errors?.[0],
+      finalStatus,
+      ...ctx.currentStore,
+    })
+  } else {
+    testPassCh.publish({
+      task,
+      finalStatus,
+      ...ctx.currentStore,
+    })
+  }
+}
+
+async function reportTypecheckFile (file, sessionConfiguration, frameworkVersion, providedContext) {
+  const testSuiteAbsolutePath = file.filepath
+  const testSuiteCtx = {
+    testSuiteAbsolutePath,
+    frameworkVersion,
+    testSessionId: sessionConfiguration.testSessionId,
+    testModuleId: sessionConfiguration.testModuleId,
+    testCommand: sessionConfiguration.testCommand,
+    repositoryRoot: sessionConfiguration.repositoryRoot,
+    codeOwnersEntries: sessionConfiguration.codeOwnersEntries,
+  }
+  testSuiteStartCh.runStores(testSuiteCtx, () => {})
+
+  for (const task of getTypeTasks(file.tasks)) {
+    reportTypecheckTest(task, testSuiteAbsolutePath, providedContext)
+  }
+
+  let onFinish
+  const onFinishPromise = new Promise(resolve => {
+    onFinish = resolve
+  })
+  testSuiteFinishCh.publish({
+    status: getTypecheckTaskStatus(file),
+    onFinish,
+    ...testSuiteCtx.currentStore,
+  })
+  await onFinishPromise
+}
+
+async function reportTypecheckResults (result, frameworkVersion, ctx) {
+  if (!testSuiteFinishCh.hasSubscribers) return
+  if (!Array.isArray(result?.files)) return
+
+  if (ctx) {
+    await ensureMainProcessSetup(ctx, frameworkVersion, result.files)
+  }
+  const providedContext = getMainProcessProvidedContext(ctx)
+  const sessionConfiguration = testSessionConfigurationCh.hasSubscribers
+    ? await getChannelPromise(testSessionConfigurationCh, frameworkVersion)
+    : {}
+
+  await Promise.all(result.files.map(file => reportTypecheckFile(
+    file,
+    sessionConfiguration,
+    frameworkVersion,
+    providedContext
+  )))
+}
+
+function wrapTypechecker (Typechecker, frameworkVersion) {
+  if (!Typechecker?.prototype?.prepareResults) return
+
+  shimmer.wrap(Typechecker.prototype, 'prepareResults', prepareResults => async function () {
+    const result = await prepareResults.apply(this, arguments)
+    await reportTypecheckResults(result, frameworkVersion, getTypecheckerVitestContext(this))
+    return result
+  })
+}
+
 function getCreateCliWrapper (vitestPackage, frameworkVersion) {
   const createCliExport = findExportByName(vitestPackage, 'createCLI')
   if (!createCliExport) {
@@ -1077,6 +1273,18 @@ addHook({
     shimmer.wrap(vitestPackage.h.prototype, 'sort', getSortWrapper)
   }
 
+  return vitestPackage
+})
+
+addHook({
+  name: 'vitest',
+  versions: ['>=4.0.0'],
+  filePattern: 'dist/chunks/index.*',
+}, (vitestPackage, frameworkVersion) => {
+  const typechecker = getTypecheckerExport(vitestPackage)
+  if (typechecker) {
+    wrapTypechecker(typechecker.value, frameworkVersion)
+  }
   return vitestPackage
 })
 

@@ -1,8 +1,10 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { exec, execSync } = require('node:child_process')
 const { once } = require('node:events')
-const { exec } = require('child_process')
+const fs = require('node:fs')
+const path = require('node:path')
 const { inspect } = require('node:util')
 const { assertObjectContains } = require('../helpers')
 
@@ -28,6 +30,7 @@ const {
   TEST_COMMAND,
   TEST_SOURCE_FILE,
   TEST_SOURCE_START,
+  TEST_IS_MODIFIED,
   TEST_IS_NEW,
   TEST_NAME,
   TEST_EARLY_FLAKE_ENABLED,
@@ -43,6 +46,10 @@ const {
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_RETRY_REASON_TYPES,
   TEST_HAS_DYNAMIC_NAME,
+  TEST_FINAL_STATUS,
+  TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_MANAGEMENT_IS_DISABLED,
+  TEST_MANAGEMENT_IS_QUARANTINED,
   VITEST_POOL,
   TEST_IS_TEST_FRAMEWORK_WORKER,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
@@ -69,12 +76,14 @@ versions.forEach((version) => {
   describe(`vitest@${version}`, () => {
     let cwd, receiver, childProcess, testOutput
     const newerVitestIt = version === '1.6.0' ? it.skip : it
+    const typecheckIt = version === 'latest' && NODE_MAJOR >= 20 ? it : it.skip
 
     useSandbox([
       `vitest@${version}`,
       `@vitest/coverage-istanbul@${version}`,
       `@vitest/coverage-v8@${version}`,
       'tinypool',
+      'typescript',
     ], true)
 
     before(function () {
@@ -317,6 +326,331 @@ versions.forEach((version) => {
       ])
 
       assert.strictEqual(code, 0)
+    })
+
+    typecheckIt('can report typecheck tests', async () => {
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSessionEvent = events.find(event => event.type === 'test_session_end')
+          const testModuleEvent = events.find(event => event.type === 'test_module_end')
+          const testSuiteEvent = events.find(event => event.type === 'test_suite_end')
+          const testEvents = events.filter(event => event.type === 'test')
+          const passedTestEvent = testEvents.find(event =>
+            event.content.meta[TEST_NAME] === 'typecheck can report type assertion'
+          )
+          const skippedTestEvent = testEvents.find(event =>
+            event.content.meta[TEST_NAME] === 'typecheck can report skipped assertion'
+          )
+          const nestedTestEvent = testEvents.find(event =>
+            event.content.meta[TEST_NAME] === 'typecheck nested suite can report nested assertion'
+          )
+
+          assert.ok(testSessionEvent, testOutput)
+          assert.ok(testModuleEvent, testOutput)
+          assert.ok(testSuiteEvent, testOutput)
+          assert.ok(passedTestEvent, testOutput)
+          assert.ok(skippedTestEvent, testOutput)
+          assert.ok(nestedTestEvent, testOutput)
+
+          const testSession = testSessionEvent.content
+          const testModule = testModuleEvent.content
+          const testSuite = testSuiteEvent.content
+          const passedTest = passedTestEvent.content
+          const skippedTest = skippedTestEvent.content
+          const nestedTest = nestedTestEvent.content
+
+          assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(testModule.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(testSuite.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(testSuite.meta[TEST_SOURCE_FILE], 'ci-visibility/vitest-tests/typecheck.test-d.ts')
+          assert.strictEqual(passedTest.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(passedTest.meta[TEST_SOURCE_FILE], 'ci-visibility/vitest-tests/typecheck.test-d.ts')
+          assert.strictEqual(skippedTest.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(skippedTest.meta[TEST_SOURCE_FILE], 'ci-visibility/vitest-tests/typecheck.test-d.ts')
+          assert.strictEqual(nestedTest.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(nestedTest.meta[TEST_SOURCE_FILE], 'ci-visibility/vitest-tests/typecheck.test-d.ts')
+        }, 25000)
+
+      childProcess = exec(
+        './node_modules/.bin/vitest run --config=./vitest.typecheck.config.mjs ' +
+          'ci-visibility/vitest-tests/typecheck.test-d.ts --reporter=verbose',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            DD_SERVICE: undefined,
+          },
+        }
+      )
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+      const [[code]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      assert.strictEqual(code, 0, testOutput)
+    })
+
+    typecheckIt('honors Known Tests metadata for typecheck tests', async () => {
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': NUM_RETRIES_EFD,
+          },
+        },
+        known_tests_enabled: true,
+      })
+      receiver.setKnownTests({
+        vitest: {
+          'ci-visibility/vitest-tests/typecheck.test-d.ts': [
+            'typecheck can report type assertion',
+          ],
+        },
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const knownTest = tests.find(test =>
+            test.meta[TEST_NAME] === 'typecheck can report type assertion'
+          )
+          const newTest = tests.find(test =>
+            test.meta[TEST_NAME] === 'typecheck can report disabled assertion'
+          )
+
+          assert.ok(knownTest, testOutput)
+          assert.ok(newTest, testOutput)
+          assert.ok(!(TEST_IS_NEW in knownTest.meta))
+          assert.strictEqual(newTest.meta[TEST_IS_NEW], 'true')
+        }, 25000)
+
+      childProcess = exec(
+        './node_modules/.bin/vitest run --config=./vitest.typecheck.config.mjs ' +
+          'ci-visibility/vitest-tests/typecheck.test-d.ts --reporter=verbose',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            DD_SERVICE: undefined,
+          },
+        }
+      )
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+      const [[code]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      assert.strictEqual(code, 0, testOutput)
+    })
+
+    typecheckIt('honors Impacted Tests metadata for typecheck tests', async () => {
+      receiver.setSettings({ impacted_tests_enabled: true })
+
+      const branchName = `typecheck-impacted-${process.pid}`
+      execSync(`git checkout -b ${branchName}`, { cwd, stdio: 'ignore' })
+
+      try {
+        const typecheckFile = 'ci-visibility/vitest-tests/typecheck.test-d.ts'
+        fs.appendFileSync(path.join(cwd, typecheckFile), '\n// impacted typecheck test\n')
+        execSync(`git add ${typecheckFile}`, { cwd, stdio: 'ignore' })
+        execSync('git commit -m "modify typecheck test"', { cwd, stdio: 'ignore' })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const impactedTest = tests.find(test =>
+              test.meta[TEST_NAME] === 'typecheck can report type assertion'
+            )
+
+            assert.ok(impactedTest, testOutput)
+            assert.strictEqual(impactedTest.meta[TEST_IS_MODIFIED], 'true')
+          }, 25000)
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run --config=./vitest.typecheck.config.mjs ' +
+            'ci-visibility/vitest-tests/typecheck.test-d.ts --reporter=verbose',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              DD_SERVICE: undefined,
+              GITHUB_BASE_REF: '',
+            },
+          }
+        )
+        childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+        childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+        const [[code]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+
+        assert.strictEqual(code, 0, testOutput)
+      } finally {
+        execSync('git checkout -', { cwd, stdio: 'ignore' })
+        execSync(`git branch -D ${branchName}`, { cwd, stdio: 'ignore' })
+      }
+    })
+
+    typecheckIt('honors Test Management metadata for typecheck tests', async () => {
+      receiver.setSettings({ test_management: { enabled: true } })
+      receiver.setTestManagementTests({
+        vitest: {
+          suites: {
+            'ci-visibility/vitest-tests/typecheck.test-d.ts': {
+              tests: {
+                'typecheck can report disabled assertion': {
+                  properties: {
+                    disabled: true,
+                  },
+                },
+                'typecheck can report quarantined assertion': {
+                  properties: {
+                    quarantined: true,
+                  },
+                },
+                'typecheck can report attempt-to-fix assertion': {
+                  properties: {
+                    attempt_to_fix: true,
+                  },
+                },
+                'typecheck nested suite can report nested disabled assertion': {
+                  properties: {
+                    disabled: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const disabledTest = tests.find(test =>
+            test.meta[TEST_NAME] === 'typecheck can report disabled assertion'
+          )
+          const quarantinedTest = tests.find(test =>
+            test.meta[TEST_NAME] === 'typecheck can report quarantined assertion'
+          )
+          const attemptToFixTest = tests.find(test =>
+            test.meta[TEST_NAME] === 'typecheck can report attempt-to-fix assertion'
+          )
+          const nestedDisabledTest = tests.find(test =>
+            test.meta[TEST_NAME] === 'typecheck nested suite can report nested disabled assertion'
+          )
+
+          assert.ok(disabledTest, testOutput)
+          assert.ok(quarantinedTest, testOutput)
+          assert.ok(attemptToFixTest, testOutput)
+          assert.ok(nestedDisabledTest, testOutput)
+
+          assert.strictEqual(disabledTest.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(disabledTest.meta[TEST_FINAL_STATUS], 'skip')
+          assert.strictEqual(disabledTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+
+          assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(quarantinedTest.meta[TEST_FINAL_STATUS], 'skip')
+          assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+
+          assert.strictEqual(attemptToFixTest.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(attemptToFixTest.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+
+          assert.strictEqual(nestedDisabledTest.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(nestedDisabledTest.meta[TEST_FINAL_STATUS], 'skip')
+          assert.strictEqual(nestedDisabledTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+        }, 25000)
+
+      childProcess = exec(
+        './node_modules/.bin/vitest run --config=./vitest.typecheck.config.mjs ' +
+          'ci-visibility/vitest-tests/typecheck.test-d.ts --reporter=verbose',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            DD_SERVICE: undefined,
+          },
+        }
+      )
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+      const [[code]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      assert.strictEqual(code, 0, testOutput)
+    })
+
+    typecheckIt('can report failed typecheck tests', async () => {
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const testSessionEvent = events.find(event => event.type === 'test_session_end')
+          const testModuleEvent = events.find(event => event.type === 'test_module_end')
+          const testSuiteEvent = events.find(event => event.type === 'test_suite_end')
+          const testEvent = events.find(event => event.type === 'test')
+
+          assert.ok(testSessionEvent, testOutput)
+          assert.ok(testModuleEvent, testOutput)
+          assert.ok(testSuiteEvent, testOutput)
+          assert.ok(testEvent, testOutput)
+
+          const testSession = testSessionEvent.content
+          const testModule = testModuleEvent.content
+          const testSuite = testSuiteEvent.content
+          const test = testEvent.content
+
+          assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(testModule.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(testSuite.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(testSuite.meta[TEST_SOURCE_FILE], 'ci-visibility/vitest-tests/typecheck-fail.test-d.ts')
+          assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(test.meta[TEST_NAME], 'typecheck can report failing assertion')
+          assert.strictEqual(test.meta[TEST_SOURCE_FILE], 'ci-visibility/vitest-tests/typecheck-fail.test-d.ts')
+          assert.strictEqual(test.meta[ERROR_TYPE], 'TypeCheckError')
+          assert.ok(test.meta[ERROR_MESSAGE])
+        }, 25000)
+
+      childProcess = exec(
+        './node_modules/.bin/vitest run --config=./vitest.typecheck.config.mjs ' +
+          'ci-visibility/vitest-tests/typecheck-fail.test-d.ts --reporter=verbose',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            DD_SERVICE: undefined,
+            TYPECHECK_FAIL: 'true',
+          },
+        }
+      )
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+      const [[code]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      assert.strictEqual(code, 1, testOutput)
     })
 
     it('propagates test span context to HTTP requests and hooks during test execution', async () => {
