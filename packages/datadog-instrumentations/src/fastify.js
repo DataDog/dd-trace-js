@@ -22,6 +22,7 @@ const callbackFinishCh = channel('datadog:fastify:callback:execute')
 const parsingContexts = new WeakMap()
 const cookiesPublished = new WeakSet()
 const bodyPublished = new WeakSet()
+let lastPublishedError
 
 function wrapFastify (fastify, hasParsingEvents) {
   if (typeof fastify !== 'function') return fastify
@@ -110,16 +111,20 @@ function invokeHookWithContext (name, fn, thisArg, args) {
     const promise = fn.apply(thisArg, args)
 
     if (promise && typeof promise.catch === 'function') {
-      return promise.catch(error => {
+      // Observe the rejection to publish, then hand back the original promise so
+      // the rejection keeps propagating untouched. Returning the handler's
+      // promise instead would resolve with `undefined` and swallow the rejection.
+      promise.catch(error => {
         ctx.error = error
-        return publishError(ctx)
+        publishError(ctx)
       })
     }
 
     return promise
   } catch (error) {
     ctx.error = error
-    throw publishError(ctx)
+    publishError(ctx)
+    throw error
   }
 }
 
@@ -305,11 +310,19 @@ function getRouteConfig (request) {
 }
 
 function publishError (ctx) {
-  if (ctx.error) {
-    publishErrorChannel(ctx)
-  }
+  const error = ctx.error
+  if (!error) return
 
-  return ctx.error
+  // avvio's boot loop (`_encapsulateThreeParam`) re-invokes the same encapsulated
+  // hook after it throws, re-throwing the same error object on every re-drive
+  // (#9099). Each re-drive is sequential, so the channel's in-flight flag has
+  // already reset; the re-drive carries the one caught error on every hop, so a
+  // reference compare against the previously published error terminates the loop
+  // before the subscriber recurses and boot overflows the stack.
+  if (error === lastPublishedError) return
+  lastPublishedError = error
+
+  publishErrorChannel(ctx)
 }
 
 function onRoute (routeOptions) {

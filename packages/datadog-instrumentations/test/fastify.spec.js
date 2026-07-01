@@ -192,6 +192,55 @@ describe('fastify instrumentation (unit)', () => {
       assert.strictEqual(depth, 1)
     })
 
+    it('publishes a persistent error once across sequential hook re-drives', () => {
+      // #9099: fastify's boot loop (avvio _encapsulateThreeParam) re-invokes the
+      // same encapsulated hook after a throw, and the same error object rides
+      // every re-drive. Each re-drive is a fresh, sequential hook invocation -
+      // not a nested re-entry - so the publish has already returned and a
+      // module-level boolean has reset before the next one runs. Without an
+      // error-keyed guard every re-drive republishes, the channel subscriber
+      // recurses, and the boot overflows the stack. The wrapped hook must
+      // publish the persistent error exactly once no matter how often it is
+      // re-driven.
+      const { app, registered } = buildWrappedAddHook()
+      const persistentError = new Error('persistent boom')
+      const userHook = sinon.stub().throws(persistentError)
+      app.addHook('preHandler', userHook)
+      const wrapper = registered[0].fn
+
+      let publishCount = 0
+      const errorListener = () => { publishCount++ }
+      subscribe(errorChannel, errorListener)
+
+      const redrives = 5000
+      for (let i = 0; i < redrives; i++) {
+        // Mirror avvio: the throw is caught by fastify's hook wrap and routed to
+        // done(error); here we swallow it and drive the next iteration.
+        assert.throws(() => wrapper({}, {}, () => {}), err => err === persistentError)
+      }
+
+      assert.strictEqual(publishCount, 1)
+    })
+
+    it('republishes a genuinely distinct error on each invocation', () => {
+      // The guard keys on error identity, so distinct errors must each reach the
+      // subscriber - the dedupe only collapses re-drives of the same object.
+      const { app, registered } = buildWrappedAddHook()
+      const userHook = sinon.stub().callsFake(() => { throw new Error('distinct ' + userHook.callCount) })
+      app.addHook('preHandler', userHook)
+      const wrapper = registered[0].fn
+
+      let publishCount = 0
+      const errorListener = () => { publishCount++ }
+      subscribe(errorChannel, errorListener)
+
+      for (let i = 0; i < 5; i++) {
+        assert.throws(() => wrapper({}, {}, () => {}))
+      }
+
+      assert.strictEqual(publishCount, 5)
+    })
+
     it('returns the user value unchanged when the hook is callbackless and returns non-thenable', () => {
       const errorListener = sinon.stub()
       subscribe(errorChannel, errorListener)
@@ -208,7 +257,7 @@ describe('fastify instrumentation (unit)', () => {
       sinon.assert.notCalled(errorListener)
     })
 
-    it('captures rejected promises when errorChannel has subscribers', async () => {
+    it('publishes a rejected promise and propagates the rejection when errorChannel has subscribers', async () => {
       const errorListener = sinon.stub()
       subscribe(errorChannel, errorListener)
 
@@ -222,7 +271,9 @@ describe('fastify instrumentation (unit)', () => {
       const wrapper = registered[0].fn
 
       // Invoke without a function trailing arg so we enter the promise branch.
-      await wrapper({ sentinel: true })
+      // The wrapper observes the rejection to publish, then returns the original
+      // promise so the same rejection propagates untouched to the caller.
+      await assert.rejects(wrapper({ sentinel: true }), err => err === error)
 
       sinon.assert.calledOnce(errorListener)
       assert.strictEqual(errorListener.firstCall.args[0].error, error)
