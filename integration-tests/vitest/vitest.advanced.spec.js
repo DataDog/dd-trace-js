@@ -367,7 +367,7 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-              TEST_DIR: './test-programmatic-api*',
+              TEST_DIR: './test-programmatic-api.mjs',
             },
           }
         )

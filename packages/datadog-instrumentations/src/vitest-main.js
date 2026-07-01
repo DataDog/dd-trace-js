@@ -329,6 +329,48 @@ function wrapSessionFinish (ctx) {
   shimmer.wrap(ctx, 'close', getFinishWrapper)
 }
 
+function resetLibraryConfig () {
+  isFlakyTestRetriesEnabled = false
+  flakyTestRetriesCount = 0
+  isEarlyFlakeDetectionEnabled = false
+  earlyFlakeDetectionNumRetries = 0
+  earlyFlakeDetectionSlowTestRetries = {}
+  isEarlyFlakeDetectionFaulty = false
+  isDiEnabled = false
+  isKnownTestsEnabled = false
+  isTestManagementTestsEnabled = false
+  isImpactedTestsEnabled = false
+  testManagementAttemptToFixRetries = 0
+}
+
+function applyLibraryConfig (libraryConfig) {
+  isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
+  flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
+  isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
+  earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
+  earlyFlakeDetectionSlowTestRetries = libraryConfig.earlyFlakeDetectionSlowTestRetries ?? {}
+  isEarlyFlakeDetectionFaulty = false
+  isDiEnabled = libraryConfig.isDiEnabled
+  isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
+  isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
+  testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
+  isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
+}
+
+function resetMainProcessProvidedContext (ctx) {
+  setProvidedContext(ctx, {
+    _ddIsDiEnabled: false,
+    _ddIsEarlyFlakeDetectionEnabled: false,
+    _ddEarlyFlakeDetectionNumRetries: 0,
+    _ddEarlyFlakeDetectionSlowTestRetries: {},
+    _ddIsImpactedTestsEnabled: false,
+    _ddIsKnownTestsEnabled: false,
+    _ddIsTestManagementTestsEnabled: false,
+    _ddTestManagementAttemptToFixRetries: 0,
+    _ddTestPropertiesByFilepath: {},
+  }, 'Could not reset Test Optimization context for workers.')
+}
+
 async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
   if (!testSessionFinishCh.hasSubscribers) {
     return
@@ -349,25 +391,16 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
 
   try {
     const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh, frameworkVersion)
-    if (!err) {
-      isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
-      flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
-      isEarlyFlakeDetectionEnabled = libraryConfig.isEarlyFlakeDetectionEnabled
-      earlyFlakeDetectionNumRetries = libraryConfig.earlyFlakeDetectionNumRetries
-      earlyFlakeDetectionSlowTestRetries = libraryConfig.earlyFlakeDetectionSlowTestRetries ?? {}
-      isDiEnabled = libraryConfig.isDiEnabled
-      isKnownTestsEnabled = libraryConfig.isKnownTestsEnabled
-      isTestManagementTestsEnabled = libraryConfig.isTestManagementEnabled
-      testManagementAttemptToFixRetries = libraryConfig.testManagementAttemptToFixRetries
-      isImpactedTestsEnabled = libraryConfig.isImpactedTestsEnabled
+    if (err) {
+      resetLibraryConfig()
+    } else {
+      applyLibraryConfig(libraryConfig)
     }
   } catch {
-    isFlakyTestRetriesEnabled = false
-    isEarlyFlakeDetectionEnabled = false
-    isDiEnabled = false
-    isKnownTestsEnabled = false
-    isImpactedTestsEnabled = false
+    resetLibraryConfig()
   }
+
+  resetMainProcessProvidedContext(ctx)
 
   if (testSessionConfigurationCh.hasSubscribers) {
     const {
