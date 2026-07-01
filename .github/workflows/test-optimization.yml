@@ -249,6 +249,18 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/plugins/test
 
+  # Unit tests for the Vitest no-worker-init instrumentation helpers. The `integration-vitest`
+  # matrix only runs `integration-tests/vitest/*.spec.js`.
+  vitest-main-no-worker-init:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      PLUGINS: vitest-main-no-worker-init
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: ./.github/actions/instrumentations/test
+
   integration-cucumber:
     strategy:
       fail-fast: false
