@@ -80,7 +80,8 @@ describe('Plugin', () => {
 
       it('sets model_provider to unknown for unrecognized base URLs', async () => {
         const { Anthropic } = require(`../../../../../../versions/@anthropic-ai/sdk@${version}`).get()
-        const customClient = new Anthropic({ baseURL: 'http://localhost:8000' })
+        // the endpoint is dead on purpose; skip the multi-second retry backoff
+        const customClient = new Anthropic({ baseURL: 'http://localhost:8000', maxRetries: 0 })
 
         try {
           await customClient.messages.create({

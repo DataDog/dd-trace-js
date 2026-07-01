@@ -381,13 +381,11 @@ describe('Plugin', function () {
         })
 
         appListener = server(app, port => {
-          const timer = setTimeout(done, 100)
-
           agent
-            .assertSomeTraces(() => {
-              clearTimeout(timer)
-              done(new Error('Noop request was traced.'))
-            })
+            .assertNoTraces(() => {
+              throw new Error('Noop request was traced.')
+            }, { timeoutMs: 100 })
+            .then(done, done)
 
           const store = storage('legacy').getStore()
 
@@ -668,14 +666,11 @@ describe('Plugin', function () {
         })
 
         appListener = server(app, port => {
-          const timer = setTimeout(done, 100)
-
           agent
-            .assertSomeTraces(() => {
-              clearTimeout(timer)
-              done(new Error('Blocklisted requests should not be recorded.'))
-            })
-            .catch(done)
+            .assertNoTraces(() => {
+              throw new Error('Blocklisted requests should not be recorded.')
+            }, { timeoutMs: 100 })
+            .then(done, done)
 
           fetch(`http://localhost:${port}/users`).catch(() => {})
         })

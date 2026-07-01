@@ -398,6 +398,67 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
   return promise
 }
 
+/**
+ * The options for the runCallbackAgainstNoTraces function.
+ *
+ * @typedef {object} RunCallbackAgainstNoTracesOptions
+ * @property {number} [timeoutMs=1000] - How long to wait for a forbidden payload before resolving.
+ * @property {RegExp} [spanResourceMatch] - A regex to match against the span resource.
+ */
+/**
+ * Register a callback that runs against every payload but expects none to match. The callback
+ * inspects each payload and throws when a forbidden trace arrives; the returned promise then
+ * rejects with that error. If no payload makes the callback throw within the timeout
+ * (default 1000 ms), the promise resolves — the absence of a matching trace is the success case.
+ *
+ * The mirror of {@link runCallbackAgainstTraces}: there a throw defers and a clean payload
+ * resolves; here a clean payload keeps waiting and a throw rejects.
+ *
+ * @param {RunCallbackAgainstTracesCallback} callback - Inspects a payload; throws on a forbidden trace.
+ * @param {RunCallbackAgainstNoTracesOptions} [options] - An options object.
+ * @param {Set} handlers - Set of handlers to add the callback to.
+ * @returns {Promise<void>} A promise resolving when no forbidden trace arrives before the timeout.
+ */
+function runCallbackAgainstNoTraces (callback, options = {}, handlers) {
+  let resolve
+  let reject
+  const promise = new Promise((_resolve, _reject) => {
+    resolve = _resolve
+    reject = _reject
+  })
+
+  const handlerPayload = {
+    handler,
+    spanResourceMatch: options.spanResourceMatch,
+  }
+
+  const resolveTimeout = setTimeout(() => {
+    handlers.delete(handlerPayload)
+    resolve()
+  }, options.timeoutMs || 1000)
+
+  /**
+   * @type {TracesCallback | AgentlessCallback}
+   */
+  function handler (...args) {
+    // we assert integration name being tagged on all spans (when running integration tests)
+    assertIntegrationName(args[0])
+
+    try {
+      // @ts-expect-error The number of arguments can either be one or two. TS expects it to be stricter typed.
+      callback(...args)
+    } catch (error) {
+      handlers.delete(handlerPayload)
+      clearTimeout(resolveTimeout)
+      reject(error)
+    }
+  }
+
+  handlers.add(handlerPayload)
+
+  return promise
+}
+
 module.exports = {
   /**
    * Load the plugin on the tracer with an optional config and start a
@@ -621,6 +682,20 @@ module.exports = {
    */
   assertSomeTraces (callback, options) {
     return runCallbackAgainstTraces(callback, options, traceHandlers)
+  },
+
+  /**
+   * Assert that no payload makes the callback throw before the timeout. Use for "should not be
+   * traced" cases: the callback throws on a forbidden trace (rejecting the promise), and the
+   * promise resolves once the timeout passes without one. Await or return the promise directly
+   * instead of pairing a bare `assertSomeTraces` with a separate `setTimeout(done, …)`.
+   *
+   * @param {RunCallbackAgainstTracesCallback} callback - Inspects a payload; throws on a forbidden trace.
+   * @param {RunCallbackAgainstNoTracesOptions} [options] - An options object.
+   * @returns {Promise<void>} A promise resolving when no forbidden trace arrives before the timeout.
+   */
+  assertNoTraces (callback, options) {
+    return runCallbackAgainstNoTraces(callback, options, traceHandlers)
   },
 
   /**

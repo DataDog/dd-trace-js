@@ -73,7 +73,8 @@ describe('Plugin', () => {
               aws_service: 'S3',
               'aws.operation': 'listBuckets',
             })
-          }).then(done, done)
+          // first S3 call against localstack on the oldest SDK is slow to connect
+          }, { timeoutMs: 5000 }).then(done, done)
 
           s3.listBuckets({}, e => e && done(e))
         })

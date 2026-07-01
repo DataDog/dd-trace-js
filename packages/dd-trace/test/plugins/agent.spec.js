@@ -175,4 +175,41 @@ describe('test agent helper', () => {
       assert.ok(Date.now() - start < 1000, 'rejected well before Mocha\'s 5s timeout')
     })
   })
+
+  describe('assertNoTraces', () => {
+    afterEach(() => agent.close())
+
+    it('resolves at the timeout when no forbidden trace arrives', async () => {
+      const tracer = await agent.load('dns')
+
+      const start = Date.now()
+      await agent.assertNoTraces(() => {
+        assert.fail('no trace should have been produced')
+      }, { timeoutMs: 200 })
+      const elapsed = Date.now() - start
+      assert.ok(elapsed >= 200, `resolved before the timeout window (${elapsed}ms)`)
+      assert.ok(elapsed < 1000, `resolved well after the timeout window (${elapsed}ms)`)
+
+      assert.strictEqual(tracer, global._ddtrace)
+    })
+
+    it('rejects when a forbidden trace arrives', async () => {
+      const tracer = await agent.load('dns')
+      const dns = require('node:dns')
+
+      const rejection = assert.rejects(
+        agent.assertNoTraces(traces => {
+          if (traces[0][0].name === 'dns.lookup') {
+            assert.fail('dns.lookup should not have been traced')
+          }
+        }, { timeoutMs: 5000 }),
+        { message: /dns\.lookup should not have been traced/ }
+      )
+
+      dns.lookup('localhost', () => {})
+      await rejection
+
+      assert.strictEqual(tracer, global._ddtrace)
+    })
+  })
 })
