@@ -162,6 +162,22 @@ The deterministic validator's forced local scenarios may inject `NODE_OPTIONS=-r
 and for Vitest may also inject `dd-trace/register.js`, while redirecting traffic to the local fake
 intake.
 
+Forced local scenarios also suppress Datadog side channels that are not part of this validation.
+This keeps the fake intake focused on Test Optimization test-cycle events and the scenario-specific
+endpoints the validator intentionally enables:
+
+- `DD_INSTRUMENTATION_TELEMETRY_ENABLED=false`
+- `DD_CIVISIBILITY_GIT_UPLOAD_ENABLED=false`
+- `DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED=false`
+- `DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED=false`
+- `DD_TEST_FAILED_TEST_REPLAY_ENABLED=false`
+
+Do not treat those forced-local suppressions as customer CI recommendations. In real CI, git upload
+and impacted-test detection may be required for normal Test Optimization features. In this
+validator, they are disabled because they can create unrelated intake traffic, large git packfile
+uploads, extra debugger/log endpoints, or impacted-test behavior that distracts from the question
+being validated.
+
 Forced local validation proves that the framework and `dd-trace` can report when configured
 correctly. It does not prove that the customer's CI workflow is wired correctly.
 
@@ -252,6 +268,12 @@ Recognize these CI systems and extract test-command evidence when practical:
 ## Rules
 
 - Include every detected test framework, even if it cannot be run.
+- Treat a framework as detected only when there is evidence of the test runner itself: a dependency,
+  config file, CLI binary, or command that invokes that runner. Reporter names, output formats, and
+  script names are not enough. For example, `mocha --reporter tap ...` or a `test-tap` script that
+  invokes Mocha is still a Mocha run, not a TAP framework entry. Record the reporter detail in the
+  Mocha entry's `project.evidence` or `notes`; do not add a separate `tap:*` framework unless a TAP
+  runner/package/config/command is actually present.
 - For every framework that is not `runnable`, include a concrete `notes` entry explaining why:
   no package script, no config file, no safe passing test, missing setup step, missing external
   service, unsupported framework, or unsupported version.
@@ -304,7 +326,8 @@ Recognize these CI systems and extract test-command evidence when practical:
   replay, use an explicit safe dummy value, not a shell placeholder like `${SECRET_NAME}`, and
   record the original secret variable name in CI metadata. For forced local or locally invented
   commands, do not add `dd-trace/ci/init`, `dd-trace/register.js`, `NODE_OPTIONS`, or
-  Datadog-specific env vars manually; the validator owns forced injection.
+  Datadog-specific env vars manually; the validator owns forced injection and the forced-local
+  side-channel suppressions listed above.
 - All paths must be absolute.
 - A generated test strategy is `verified` only if you created the temporary file or files, ran at
   least the stable passing generated scenario without Datadog instrumentation, and deleted the files
@@ -742,7 +765,9 @@ The validator separates forced local capability from CI wiring when the manifest
 
 - Forced local Basic Reporting: injects Test Optimization initialization into the selected command
   and proves the repository/framework can emit the required event hierarchy when configured
-  correctly.
+  correctly. It also sets `DD_CIVISIBILITY_GIT_UPLOAD_ENABLED=false` and other forced-local
+  suppressions so git metadata upload, impacted-test detection, telemetry, and failed-test replay
+  do not distract the fake-intake diagnosis.
 - CI wiring: runs `ciWiringCommand` with fake-intake transport overrides only. It does not add
   `dd-trace/ci/init`, `dd-trace/register.js`, `DD_CIVISIBILITY_ENABLED`, or `NODE_OPTIONS`. This is
   only meaningful after forced local Basic Reporting passes.

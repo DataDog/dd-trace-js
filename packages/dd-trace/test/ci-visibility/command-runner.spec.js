@@ -6,6 +6,7 @@ const os = require('node:os')
 const path = require('node:path')
 
 const {
+  buildDatadogEnv,
   getBaseEnv,
   getCommandDetails,
   mergeNodeOptions,
@@ -16,9 +17,27 @@ const {
 describe('test optimization validation command runner', () => {
   it('keeps project and validator NODE_OPTIONS together', () => {
     assert.strictEqual(
-      mergeNodeOptions('--import ./src/dev-loader.js', '--import dd-trace/register.js -r dd-trace/ci/init'),
+      mergeNodeOptions(
+        '--import ./src/dev-loader.js',
+        '--import dd-trace/register.js -r dd-trace/ci/init'
+      ),
       '--import ./src/dev-loader.js --import dd-trace/register.js -r dd-trace/ci/init'
     )
+  })
+
+  it('disables unrelated Datadog side channels during forced local validation', () => {
+    const env = buildDatadogEnv({
+      intake: { port: 1234 },
+      scenario: 'basic-reporting',
+      framework: { framework: 'mocha' },
+    })
+
+    assert.strictEqual(env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED, 'false')
+    assert.strictEqual(env.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED, 'false')
+    assert.strictEqual(env.DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED, 'false')
+    assert.strictEqual(env.DD_INSTRUMENTATION_TELEMETRY_ENABLED, 'false')
+    assert.strictEqual(env.DD_TEST_FAILED_TEST_REPLAY_ENABLED, 'false')
+    assert.match(env.NODE_OPTIONS, /\/ci\/init\.js/)
   })
 
   it('collapses node and corepack runtime plumbing for display commands', () => {

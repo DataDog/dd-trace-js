@@ -143,6 +143,12 @@ function buildDatadogEnv ({ intake, scenario, framework }) {
     DD_CIVISIBILITY_AGENTLESS_ENABLED: '0',
     DD_CIVISIBILITY_ENABLED: '1',
     DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+    // Live validation only needs test-cycle events and explicitly configured scenario endpoints.
+    // Extra side channels can produce noisy fake-intake traffic or race the final test event flush.
+    DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
+    DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED: 'false',
+    DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: 'false',
+    DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false',
     DD_SERVICE: 'dd-test-optimization-validation',
     DD_ENV: 'local-validation',
     DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
