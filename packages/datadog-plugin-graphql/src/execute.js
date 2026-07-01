@@ -113,6 +113,14 @@ class GraphQLExecutePlugin extends TracingPlugin {
     const name = operation?.name?.value
     const source = this.config.source && docSource
 
+    // Apollo Gateway polls every subgraph with this fixed operation to check
+    // liveness; tracing it floods traces with health-check noise. Skip it here
+    // (no span, no resolver wrapping), the same way mongodb skips heartbeats.
+    if (name === '__ApolloServiceHealthCheck__') {
+      ctx.ddSkipped = true
+      return ctx.currentStore
+    }
+
     ctx.collapse = this.config.collapse
 
     const span = this.startSpan(this.operationName(), {
@@ -165,9 +173,9 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
     const schema = args.schema
     if (schema) {
-      wrapFields(schema._queryType)
-      wrapFields(schema._mutationType)
-      wrapFields(schema._subscriptionType)
+      wrapFields(schema._queryType, schema)
+      wrapFields(schema._mutationType, schema)
+      wrapFields(schema._subscriptionType, schema)
     }
 
     const rootCtx = {
@@ -421,14 +429,33 @@ function wrapResolve (resolve) {
   return resolveAsync
 }
 
-function wrapFields (type) {
-  if (!type?._fields || patchedTypes.has(type)) return
+function wrapFields (type, schema) {
+  if (!type || patchedTypes.has(type)) return
+
+  // Union types (e.g. Apollo Federation's `_Entity`) hold their members on
+  // `_types`, not `_fields`. Their member object types are reachable only here,
+  // so descend into each to wrap the entity resolvers a `_entities` query runs.
+  if (type[Symbol.toStringTag] === 'GraphQLUnionType') {
+    patchedTypes.add(type)
+    for (const member of type.getTypes()) wrapFields(member, schema)
+    return
+  }
+
+  if (!type._fields) return
 
   patchedTypes.add(type)
 
   for (const field of Object.values(type._fields)) {
     wrapFieldResolve(field)
-    wrapFieldType(field)
+    wrapFieldType(field, schema)
+  }
+
+  // Interface implementations carry their own resolvers and are reachable only
+  // through `getPossibleTypes`; an interface return type alone never wraps them.
+  // `Symbol.toStringTag` is graphql's realm-agnostic type discriminator — an
+  // interface without an explicit `resolveType` still resolves via `__typename`.
+  if (schema && type[Symbol.toStringTag] === 'GraphQLInterfaceType') {
+    for (const impl of schema.getPossibleTypes(type)) wrapFields(impl, schema)
   }
 }
 
@@ -437,13 +464,13 @@ function wrapFieldResolve (field) {
   field.resolve = wrapResolve(field.resolve)
 }
 
-function wrapFieldType (field) {
+function wrapFieldType (field, schema) {
   if (!field?.type) return
 
   let unwrapped = field.type
   while (unwrapped.ofType) unwrapped = unwrapped.ofType
 
-  wrapFields(unwrapped)
+  wrapFields(unwrapped, schema)
 }
 
 function callInAsyncScope (fn, thisArg, args, abortController, cb) {
