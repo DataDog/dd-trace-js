@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
-const { ExperimentsClient, apiHost } = require('../../../src/llmobs/experiments/client')
+const { ExperimentsClient, apiHost, appHost } = require('../../../src/llmobs/experiments/client')
 
 describe('LLMObs Experiments control-plane client', () => {
   let originalFetch
@@ -31,6 +31,23 @@ describe('LLMObs Experiments control-plane client', () => {
     assert.equal(apiHost('datadoghq.com'), 'api.datadoghq.com')
     assert.equal(apiHost('us3.datadoghq.com'), 'api.us3.datadoghq.com')
     assert.equal(apiHost('datad0g.com'), 'api.datad0g.com')
+  })
+
+  it('resolves the web-app host (app.<site> for single-level, regional as-is)', () => {
+    assert.equal(appHost('datadoghq.com'), 'app.datadoghq.com')
+    assert.equal(appHost('us3.datadoghq.com'), 'us3.datadoghq.com')
+    const client = new ExperimentsClient({ apiKey: 'k', appKey: 'a', site: 'datadoghq.com' })
+    assert.equal(client.appBase, 'https://app.datadoghq.com')
+  })
+
+  it('ensureProjectId resolves the configured project name', async () => {
+    resolveWith(200, { data: { id: 'proj-9' } })
+    const client = new ExperimentsClient({ apiKey: 'k', appKey: 'a', site: 'datadoghq.com', projectName: 'cfg-app' })
+    const id = await client.ensureProjectId()
+    assert.equal(id, 'proj-9')
+    assert.deepEqual(JSON.parse(global.fetch.firstCall.args[1].body), {
+      data: { type: 'projects', attributes: { name: 'cfg-app' } },
+    })
   })
 
   it('reports configured only when api key, app key and site are present', () => {

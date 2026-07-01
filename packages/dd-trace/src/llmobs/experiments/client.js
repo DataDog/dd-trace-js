@@ -17,17 +17,26 @@ function apiHost (site) {
   return `api.${site}`
 }
 
+// Web-app host for dashboard URLs. Single-level sites (datadoghq.com,
+// ddog-gov.com) are served from the `app.` subdomain; regional sites
+// (us3.datadoghq.com, ap1.datadoghq.com) are used as-is.
+function appHost (site) {
+  return site.split('.').length === 2 ? `app.${site}` : site
+}
+
 class ExperimentsClient {
   #apiKey
   #appKey
   #site
+  #projectName
   #timeout
   #cachedProjectId
 
-  constructor ({ apiKey, appKey, site, timeout = 30000 } = {}) {
+  constructor ({ apiKey, appKey, site, projectName, timeout = 30_000 } = {}) {
     this.#apiKey = apiKey
     this.#appKey = appKey
     this.#site = site
+    this.#projectName = projectName
     this.#timeout = timeout
     this.#cachedProjectId = null
   }
@@ -35,6 +44,20 @@ class ExperimentsClient {
   // Whether the client has everything it needs to talk to the control plane.
   get configured () {
     return Boolean(this.#apiKey && this.#appKey && this.#site)
+  }
+
+  get site () {
+    return this.#site
+  }
+
+  // Dashboard URL base for the configured site, e.g. https://app.datadoghq.com
+  get appBase () {
+    return `https://${appHost(this.#site)}`
+  }
+
+  // Resolve the configured project's id (get-or-create), cached.
+  ensureProjectId () {
+    return this.getOrCreateProject(this.#projectName)
   }
 
   // Low-level request. Builds https://api.<site><path>, attaches both keys, and
@@ -91,4 +114,4 @@ class ExperimentsClient {
   }
 }
 
-module.exports = { ExperimentsClient, apiHost, API_BASE_PATH }
+module.exports = { ExperimentsClient, apiHost, appHost, API_BASE_PATH }

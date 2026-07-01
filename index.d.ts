@@ -3542,6 +3542,12 @@ declare namespace tracer {
       enabled: boolean,
 
       /**
+       * Datasets & Experiments API. Requires LLM Observability to be enabled and
+       * `DD_API_KEY` / `DD_APP_KEY` to be set.
+       */
+      experiments: Experiments,
+
+      /**
        * Enable LLM Observability tracing.
        *
        * @deprecated Enabling LLM Observability via `llmobs.enable()` is deprecated and will be removed in dd-trace@7.0.0. Please instantiate LLM Observability via DD_LLMOBS_ENABLED or `tracer.init({ llmobs: ...options })`.
@@ -3692,6 +3698,85 @@ declare namespace tracer {
        * Flushes any remaining spans and evaluation metrics to LLM Observability.
        */
       flush (): void
+    }
+
+    /**
+     * A task run over each dataset record during an experiment.
+     */
+    type ExperimentTask = (input: any, config: Record<string, any>) => any | Promise<any>
+
+    /**
+     * Scores a single task output. The return type selects the metric:
+     * `boolean` -> boolean, `number` -> score, anything else -> categorical.
+     */
+    type ExperimentEvaluator = (input: any, output: any, expectedOutput: any) => any | Promise<any>
+
+    interface ExperimentOptions {
+      name: string
+      dataset: Dataset
+      task: ExperimentTask
+      /** Evaluators keyed by metric label. */
+      evaluators?: Record<string, ExperimentEvaluator>
+      description?: string
+      config?: Record<string, any>
+      tags?: Record<string, string>
+    }
+
+    interface PullDatasetOptions {
+      /** Wait until at least this many records are readable (absorbs write lag). */
+      expectedRecordCount?: number
+      /** Maximum total time to wait, in ms. Default 30000. */
+      maxWaitMs?: number
+    }
+
+    interface ExperimentResultRow {
+      index: number
+      spanId: string
+      traceId: string
+      startNs: number
+      durationNs: number
+      input: any
+      output: any
+      expectedOutput: any
+      readonly isError: boolean
+      errorType: string | null
+      errorMessage: string | null
+      evaluations: Record<string, any>
+      evaluationErrors: Record<string, string>
+    }
+
+    interface ExperimentResult {
+      experimentId: string
+      rows: ExperimentResultRow[]
+      /** Dashboard URL for the experiment. */
+      url: string
+    }
+
+    interface Dataset {
+      addRecord (input: any, expectedOutput?: any, metadata?: Record<string, any>): Dataset
+      push (): Promise<void>
+      name (): string
+      id (): string | null
+      projectId (): string | null
+      records (): Array<{ input: any, expectedOutput: any, metadata: Record<string, any> }>
+      /** Dashboard URL for the dataset, or null until pushed. */
+      url (): string | null
+    }
+
+    interface Experiment {
+      name (): string
+      experimentId (): string | null
+      url (): string | null
+      run (): Promise<ExperimentResult>
+    }
+
+    interface Experiments {
+      /** Create a local dataset buffer; pushed on the first experiment run. */
+      createDataset (name: string, description?: string): Dataset
+      /** Pull an existing dataset (with records) by name. */
+      pullDataset (name: string, options?: PullDatasetOptions): Promise<Dataset>
+      /** Build an experiment to run over a dataset. */
+      experiment (options: ExperimentOptions): Experiment
     }
 
     interface LLMObservabilitySpan {
