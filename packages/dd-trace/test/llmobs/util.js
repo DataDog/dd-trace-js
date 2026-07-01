@@ -403,11 +403,13 @@ function useLlmObs ({
   let apmTracesPromise
 
   const resetTracesPromises = () => {
+    // LLMObs plugin tests drive real SDK calls through the VCR proxy; the first call in a suite
+    // pays module-load and cassette-read cost that can exceed the 1s assertSomeTraces default.
     apmTracesPromise = agent.assertSomeTraces(apmTraces => {
       return apmTraces
         .flatMap(trace => trace)
         .sort((a, b) => a.start < b.start ? -1 : (a.start > b.start ? 1 : 0))
-    })
+    }, { timeoutMs: 5000 })
   }
 
   useEnv({

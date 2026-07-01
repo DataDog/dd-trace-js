@@ -706,14 +706,11 @@ describe('Plugin', () => {
           })
 
           appListener = server(app, port => {
-            const timer = setTimeout(done, 100)
-
             agent
-              .assertSomeTraces(() => {
-                clearTimeout(timer)
-                done(new Error('Blocklisted requests should not be recorded.'))
-              })
-              .catch(done)
+              .assertNoTraces(() => {
+                throw new Error('Blocklisted requests should not be recorded.')
+              }, { timeoutMs: 100 })
+              .then(done, done)
 
             fetch.fetch(`http://localhost:${port}/users`).catch(() => {})
           })
