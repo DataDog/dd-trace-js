@@ -177,11 +177,11 @@ class SpanProcessor {
     const spanContext = span.context()
     const active = []
     const trace = spanContext._trace
-    const { flushMinSpans, tracing } = this._config
+    const { flushMinSpans, DD_TRACE_ENABLED } = this._config
     const { started, finished } = trace
 
     if (trace.record === false) return
-    if (tracing === false) {
+    if (DD_TRACE_ENABLED === false) {
       this._erase(trace, active)
       return
     }

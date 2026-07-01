@@ -30,6 +30,7 @@ tracer.use('pg', {
 <h5 id="anthropic"></h5>
 <h5 id="apollo"></h5>
 <h5 id="avsc"></h5>
+<h5 id="aws-durable-execution-sdk-js"></h5>
 <h5 id="aws-sdk"></h5>
 <h5 id="azure-cosmos"></h5>
 <h5 id="azure-event-hubs"></h5>
@@ -53,7 +54,6 @@ tracer.use('pg', {
 <h5 id="fetch"></h5>
 <h5 id="find-my-way"></h5>
 <h5 id="fs"></h5>
-<h5 id="generic-pool"></h5>
 <h5 id="google-cloud-pubsub"></h5>
 <h5 id="google-cloud-vertexai"></h5>
 <h5 id="google-genai"></h5>
@@ -67,7 +67,6 @@ tracer.use('pg', {
 <h5 id="iovalkey"></h5>
 <h5 id="jest"></h5>
 <h5 id="kafkajs"></h5>
-<h5 id="knex"></h5>
 <h5 id="koa"></h5>
 <h5 id="langchain"></h5>
 <h5 id="langgraph"></h5>
@@ -81,6 +80,7 @@ tracer.use('pg', {
 <h5 id="mongoose"></h5>
 <h5 id="mysql"></h5>
 <h5 id="mysql2"></h5>
+<h5 id="nats"></h5>
 <h5 id="net"></h5>
 <h5 id="next"></h5>
 <h5 id="nyc"></h5>
@@ -113,6 +113,7 @@ tracer.use('pg', {
 * [anthropic](./interfaces/export_.plugins.anthropic.html)
 * [apollo](./interfaces/export_.plugins.apollo.html)
 * [avsc](./interfaces/export_.plugins.avsc.html)
+* [aws-durable-execution-sdk-js](./interfaces/export_.plugins.aws_durable_execution_sdk_js.html)
 * [aws-sdk](./interfaces/export_.plugins.aws_sdk.html)
 * [azure-cosmos](./interfaces/export_.plugins.azure_cosmos.html)
 * [azure-event-hubs](./interfaces/export_.plugins.azure_event_hubs.html)
@@ -136,7 +137,6 @@ tracer.use('pg', {
 * [fetch](./interfaces/export_.plugins.fetch.html)
 * [find-my-way](./interfaces/export_.plugins.find_my_way.html)
 * [fs](./interfaces/export_.plugins.fs.html)
-* [generic-pool](./interfaces/export_.plugins.generic_pool.html)
 * [google-cloud-pubsub](./interfaces/export_.plugins.google_cloud_pubsub.html)
 * [google-cloud-vertexai](./interfaces/export_.plugins.google_cloud_vertexai.html)
 * [google-genai](./interfaces/export_.plugins.google_genai.html)
@@ -150,7 +150,6 @@ tracer.use('pg', {
 * [iovalkey](./interfaces/export_.plugins.iovalkey.html)
 * [jest](./interfaces/export_.plugins.jest.html)
 * [kafkajs](./interfaces/export_.plugins.kafkajs.html)
-* [knex](./interfaces/export_.plugins.knex.html)
 * [koa](./interfaces/export_.plugins.koa.html)
 * [langchain](./interfaces/export_.plugins.langchain.html)
 * [langgraph](./interfaces/export_.plugins.langgraph.html)
@@ -164,6 +163,7 @@ tracer.use('pg', {
 * [mongoose](./interfaces/export_.plugins.mongoose.html)
 * [mysql](./interfaces/export_.plugins.mysql.html)
 * [mysql2](./interfaces/export_.plugins.mysql2.html)
+* [nats](./interfaces/export_.plugins.nats.html)
 * [net](./interfaces/export_.plugins.net.html)
 * [next](./interfaces/export_.plugins.next.html)
 * [nyc](./interfaces/export_.plugins.nyc.html)

@@ -43,7 +43,7 @@ describe('telemetry (proxy)', () => {
   })
 
   it('should proxy when enabled', () => {
-    const config = { telemetry: { enabled: true } }
+    const config = { telemetry: { DD_INSTRUMENTATION_TELEMETRY_ENABLED: true } }
 
     proxy.start(config)
     proxy.updateIntegrations()
@@ -57,7 +57,7 @@ describe('telemetry (proxy)', () => {
   })
 
   it('should proxy when enabled from updateConfig', () => {
-    const config = { telemetry: { enabled: true } }
+    const config = { telemetry: { DD_INSTRUMENTATION_TELEMETRY_ENABLED: true } }
 
     proxy.updateConfig([], config)
     proxy.updateIntegrations()
@@ -122,9 +122,9 @@ describe('telemetry', () => {
 
     telemetry.start({
       telemetry: {
-        enabled: true,
-        heartbeatInterval: DEFAULT_HEARTBEAT_INTERVAL,
-        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: DEFAULT_HEARTBEAT_INTERVAL,
+        DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
       },
       hostname: 'localhost',
       port: traceAgent.address().port,
@@ -135,8 +135,8 @@ describe('telemetry', () => {
         'runtime-id': '1a2b3c',
       },
       circularObject,
-      appsec: { enabled: true },
-      profiling: { enabled: 'true' },
+      appsec: { enabled: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
+      profiling: { DD_PROFILING_ENABLED: 'true' },
       peerServiceMapping: {
         service_1: 'remapped_service_1',
         service_2: 'remapped_service_2',
@@ -254,13 +254,13 @@ describe('telemetry', () => {
     }).listen(0, () => {
       telemetry.start({
         telemetry: {
-          enabled: false,
-          heartbeatInterval: 60000,
-          extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+          DD_INSTRUMENTATION_TELEMETRY_ENABLED: false,
+          DD_TELEMETRY_HEARTBEAT_INTERVAL: 60000,
+          DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
         },
         hostname: 'localhost',
         port: (/** @type {import('net').AddressInfo} */ (server.address())).port,
-        appsec: { sca: { enabled: false } },
+        appsec: { DD_APPSEC_SCA_ENABLED: false },
       })
 
       setTimeout(() => {
@@ -279,12 +279,12 @@ describe('telemetry', () => {
     })
     notEnabledTelemetry.start({
       telemetry: {
-        enabled: false,
-        heartbeatInterval: DEFAULT_HEARTBEAT_INTERVAL,
-        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: false,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: DEFAULT_HEARTBEAT_INTERVAL,
+        DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
       },
-      appsec: { enabled: false, sca: { enabled: undefined } },
-      profiling: { enabled: false },
+      appsec: { enabled: false, DD_APPSEC_SCA_ENABLED: undefined },
+      profiling: { DD_PROFILING_ENABLED: false },
     }, {
       _pluginsByName: pluginsByName,
     })
@@ -311,7 +311,7 @@ describe('telemetry app-heartbeat', () => {
   })
 
   it('should send heartbeat in uniform intervals', (done) => {
-    let beats = 0 // to keep track of the amont of times extendedHeartbeat is called
+    let beats = 0 // to keep track of the amount of times extendedHeartbeat is called
     const sendDataRequest = {
       sendData: (config, application, host, reqType, payload, cb = () => {}) => {
         if (reqType === 'app-heartbeat') {
@@ -327,26 +327,25 @@ describe('telemetry app-heartbeat', () => {
       },
       './send-data': sendDataRequest,
     })
+    pluginsByName = {}
 
     telemetry.start({
       telemetry: {
-        enabled: true,
-        heartbeatInterval: HEARTBEAT_INTERVAL,
-        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: HEARTBEAT_INTERVAL,
+        DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
       },
       hostname: 'localhost',
       port: 0,
       service: 'test service',
       version: '1.2.3-beta4',
-      appsec: { enabled: true },
-      profiling: { enabled: true },
+      appsec: { enabled: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
+      profiling: { DD_PROFILING_ENABLED: true },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
       },
-    }, {
-      _pluginsByName: pluginsByName,
-    })
+    }, { _pluginsByName: pluginsByName })
     clock.tick(HEARTBEAT_INTERVAL)
     assert.strictEqual(beats, 1)
     clock.tick(HEARTBEAT_INTERVAL)
@@ -357,8 +356,8 @@ describe('telemetry app-heartbeat', () => {
 
 describe('Telemetry extended heartbeat', () => {
   const HEARTBEAT_INTERVAL = 43200000
+  const pluginManager = { _pluginsByName: {} }
   let telemetry
-  let pluginsByName
   let clock
 
   beforeEach(() => {
@@ -374,7 +373,7 @@ describe('Telemetry extended heartbeat', () => {
 
   it('should be sent every 24 hours', (done) => {
     let extendedHeartbeatRequest
-    let beats = 0 // to keep track of the amont of times extendedHeartbeat is called
+    let beats = 0 // to keep track of the amount of times extendedHeartbeat is called
     const sendDataRequest = {
       sendData: (config, application, host, reqType, payload, cb = () => {}) => {
         if (reqType === 'app-started') {
@@ -400,23 +399,21 @@ describe('Telemetry extended heartbeat', () => {
 
     telemetry.start({
       telemetry: {
-        enabled: true,
-        heartbeatInterval: HEARTBEAT_INTERVAL,
-        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: HEARTBEAT_INTERVAL,
+        DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
       },
       hostname: 'localhost',
       port: 0,
       service: 'test service',
       version: '1.2.3-beta4',
-      appsec: { enabled: true },
-      profiling: { enabled: true },
+      appsec: { enabled: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
+      profiling: { DD_PROFILING_ENABLED: true },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
       },
-    }, {
-      _pluginsByName: pluginsByName,
-    })
+    }, pluginManager)
     clock.tick(DEFAULT_EXTENDED_HEARTBEAT_INTERVAL)
     assert.strictEqual(extendedHeartbeatRequest, 'app-extended-heartbeat')
     assert.strictEqual(beats, 1)
@@ -447,23 +444,23 @@ describe('Telemetry extended heartbeat', () => {
 
     const config = {
       telemetry: {
-        enabled: true,
-        heartbeatInterval: HEARTBEAT_INTERVAL,
-        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: HEARTBEAT_INTERVAL,
+        DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
       },
       hostname: 'localhost',
       port: 0,
       service: 'test service',
       version: '1.2.3-beta4',
-      appsec: { enabled: true },
-      profiling: { enabled: true },
+      appsec: { enabled: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
+      profiling: { DD_PROFILING_ENABLED: true },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
       },
     }
 
-    telemetry.start(config, { _pluginsByName: pluginsByName })
+    telemetry.start(config, pluginManager)
 
     clock.tick(DEFAULT_EXTENDED_HEARTBEAT_INTERVAL)
     assert.deepStrictEqual(configuration, [])
@@ -554,23 +551,23 @@ describe('Telemetry extended heartbeat', () => {
 
     const config = {
       telemetry: {
-        enabled: true,
-        heartbeatInterval: HEARTBEAT_INTERVAL,
-        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: HEARTBEAT_INTERVAL,
+        DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
       },
       hostname: 'localhost',
       port: 0,
       service: 'test service',
       version: '1.2.3-beta4',
-      appsec: { enabled: true },
-      profiling: { enabled: true },
+      appsec: { enabled: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
+      profiling: { DD_PROFILING_ENABLED: true },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
       },
     }
 
-    telemetry.start(config, { _pluginsByName: pluginsByName })
+    telemetry.start(config, pluginManager)
 
     clock.tick(DEFAULT_EXTENDED_HEARTBEAT_INTERVAL)
     assert.deepStrictEqual(configuration, [])
@@ -650,16 +647,16 @@ describe('Telemetry retry', () => {
 
     telemetry.start({
       telemetry: {
-        enabled: true,
-        heartbeatInterval: HEARTBEAT_INTERVAL,
-        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: HEARTBEAT_INTERVAL,
+        DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
       },
       hostname: 'localhost',
       port: 0,
       service: 'test service',
       version: '1.2.3-beta4',
-      appsec: { enabled: true },
-      profiling: { enabled: true },
+      appsec: { enabled: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
+      profiling: { DD_PROFILING_ENABLED: true },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -743,16 +740,16 @@ describe('Telemetry retry', () => {
 
     telemetry.start({
       telemetry: {
-        enabled: true,
-        heartbeatInterval: HEARTBEAT_INTERVAL,
-        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: HEARTBEAT_INTERVAL,
+        DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
       },
       hostname: 'localhost',
       port: 0,
       service: 'test service',
       version: '1.2.3-beta4',
-      appsec: { enabled: true },
-      profiling: { enabled: true },
+      appsec: { enabled: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
+      profiling: { DD_PROFILING_ENABLED: true },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -818,16 +815,16 @@ describe('Telemetry retry', () => {
 
     telemetry.start({
       telemetry: {
-        enabled: true,
-        heartbeatInterval: HEARTBEAT_INTERVAL,
-        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: HEARTBEAT_INTERVAL,
+        DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
       },
       hostname: 'localhost',
       port: 0,
       service: 'test service',
       version: '1.2.3-beta4',
-      appsec: { enabled: true },
-      profiling: { enabled: true },
+      appsec: { enabled: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
+      profiling: { DD_PROFILING_ENABLED: true },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -884,16 +881,16 @@ describe('Telemetry retry', () => {
     // Start function sends 2 messages app-started & app-integrations-change
     telemetry.start({
       telemetry: {
-        enabled: true,
-        heartbeatInterval: HEARTBEAT_INTERVAL,
-        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: HEARTBEAT_INTERVAL,
+        DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
       },
       hostname: 'localhost',
       port: 0,
       service: 'test service',
       version: '1.2.3-beta4',
-      appsec: { enabled: true },
-      profiling: { enabled: true },
+      appsec: { enabled: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
+      profiling: { DD_PROFILING_ENABLED: true },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -972,16 +969,16 @@ describe('Telemetry retry', () => {
     // Start function sends 2 messages app-started & app-integrations-change
     telemetry.start({
       telemetry: {
-        enabled: true,
-        heartbeatInterval: HEARTBEAT_INTERVAL,
-        extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+        DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+        DD_TELEMETRY_HEARTBEAT_INTERVAL: HEARTBEAT_INTERVAL,
+        DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
       },
       hostname: 'localhost',
       port: 0,
       service: 'test service',
       version: '1.2.3-beta4',
-      appsec: { enabled: true },
-      profiling: { enabled: true },
+      appsec: { enabled: true, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
+      profiling: { DD_PROFILING_ENABLED: true },
       env: 'preprod',
       tags: {
         'runtime-id': '1a2b3c',
@@ -1071,9 +1068,9 @@ describe('AVM OSS', () => {
 
           telemetryConfig = {
             telemetry: {
-              enabled: true,
-              heartbeatInterval: HEARTBEAT_INTERVAL,
-              extendedHeartbeatInterval: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
+              DD_INSTRUMENTATION_TELEMETRY_ENABLED: true,
+              DD_TELEMETRY_HEARTBEAT_INTERVAL: HEARTBEAT_INTERVAL,
+              DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL: DEFAULT_EXTENDED_HEARTBEAT_INTERVAL,
             },
             hostname: 'localhost',
             port: traceAgent.address().port,
@@ -1083,8 +1080,8 @@ describe('AVM OSS', () => {
             tags: {
               'runtime-id': '1a2b3c',
             },
-            appsec: { enabled: false },
-            profiling: { enabled: false },
+            appsec: { enabled: false, DD_API_SECURITY_ENDPOINT_COLLECTION_ENABLED: false },
+            profiling: { DD_PROFILING_ENABLED: false },
           }
         })
 
@@ -1142,8 +1139,8 @@ describe('AVM OSS', () => {
     it('should log a warning when sca is enabled and telemetry no', () => {
       telemetry.start(
         {
-          telemetry: { enabled: false },
-          appsec: { sca: { enabled: true } },
+          telemetry: { DD_INSTRUMENTATION_TELEMETRY_ENABLED: false },
+          appsec: { DD_APPSEC_SCA_ENABLED: true },
         }
       )
 

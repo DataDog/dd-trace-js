@@ -5,6 +5,43 @@ const BaseAwsSdkPlugin = require('../base')
 const { DsmPathwayCodec, getHeadersSize } = require('../../../dd-trace/src/datastreams')
 const { extractQueueMetadata, isEmpty } = require('../util')
 
+/**
+ * @typedef {{
+ *   'detail-type'?: string,
+ *   detail?: { _datadog?: Record<string, string> },
+ *   Type?: string,
+ *   Message?: string
+ * }} ParsedSqsBody
+ */
+
+/**
+ * Resolve the EventBridge `_datadog` text map from a parsed SQS body — for both
+ * EventBridge -> SQS (`body.detail._datadog`) and EventBridge -> SNS -> SQS (the
+ * envelope is the SNS `Notification`'s stringified `Message`). Keyed off
+ * `detail-type`, the marker AWS sets on every PutEvents delivery. Relies on the
+ * default SQS-target shape; a target InputTransformer can drop `detail`.
+ *
+ * @param {ParsedSqsBody} [parsedBody]
+ * @returns {Record<string, string> | undefined}
+ */
+function getEventBridgeContext (parsedBody) {
+  let envelope
+  if (parsedBody?.['detail-type'] !== undefined) {
+    envelope = parsedBody // EventBridge -> SQS
+  } else if (parsedBody?.Type === 'Notification' && typeof parsedBody.Message === 'string') {
+    // EventBridge -> SNS -> SQS
+    try {
+      const innerEnvelope = JSON.parse(parsedBody.Message)
+      if (innerEnvelope?.['detail-type'] !== undefined) {
+        envelope = innerEnvelope
+      }
+    } catch {
+      // SNS `Message` not JSON
+    }
+  }
+  return envelope?.detail?._datadog
+}
+
 class Sqs extends BaseAwsSdkPlugin {
   static id = 'sqs'
   static peerServicePrecursors = ['queuename']
@@ -17,47 +54,73 @@ class Sqs extends BaseAwsSdkPlugin {
     // in the base class
     this.requestTags = new WeakMap()
 
-    this.addBind('apm:aws:response:start:sqs', ctx => {
-      const { request, response } = ctx
-      const contextExtraction = this.responseExtract(request.params, request.operation, response)
+    this.addBind('apm:aws:response:start:sqs', ctx => this.#startResponseSpan(ctx))
 
-      let store = this._parentMap.get(request)
-      let span
-      let parsedMessageAttributes
-      let parsedFirstBody
-      let firstBodyChecked = false
-      if (contextExtraction !== undefined) {
-        parsedFirstBody = contextExtraction.parsedBody
-        firstBodyChecked = contextExtraction.bodyChecked === true
-        if (contextExtraction.datadogContext !== undefined) {
-          ctx.needsFinish = true
-          const options = {
-            childOf: contextExtraction.datadogContext,
-            meta: {
-              ...this.requestTags.get(request),
-              'span.kind': 'server',
-            },
-            integrationName: 'aws-sdk',
-          }
-          parsedMessageAttributes = contextExtraction.parsedAttributes
-          span = this.startSpan('aws.response', options, ctx)
-          store = ctx.currentStore
-        }
-      }
-
-      // Extract DSM context after, as we might not have a parent-child but may have a DSM context.
-      this.responseExtractDSMContext(
-        request.operation, request.params, response, span ?? null,
-        { parsedAttributes: parsedMessageAttributes, parsedFirstBody, firstBodyChecked }
-      )
-
-      return store
+    // No-callback receives (promises, event emitters) never publish response:start, so link and
+    // finish the consumer span here instead. Callback paths reach the same logic via the bind above.
+    this.addSub('apm:aws:request:complete:sqs', ctx => {
+      if (ctx.cbExists) return
+      // v2 nests the SDK payload under response.data; v3 spreads the output onto response.
+      const responseCtx = { request: ctx.request, response: ctx.response?.data ?? ctx.response }
+      this.#startResponseSpan(responseCtx)
+      if (responseCtx.needsFinish) this.finish(responseCtx)
     })
 
     this.addSub('apm:aws:response:finish:sqs', ctx => {
       if (!ctx.needsFinish) return
       this.finish(ctx)
     })
+  }
+
+  /**
+   * Start the consumer (`aws.response`) span for a receive. The first message carrying trace
+   * context becomes the parent; every additional one fans in as a span link.
+   *
+   * @param {{ request: object, response: object, needsFinish?: boolean, currentStore?: object }} ctx
+   * @returns {object | undefined} The store to activate for the consumer span, else the parent store.
+   */
+  #startResponseSpan (ctx) {
+    const { request, response } = ctx
+    const carriers = this.responseExtract(request.params, request.operation, response)
+
+    let store = this._parentMap.get(request)
+    let span
+
+    if (carriers !== undefined) {
+      // request:start records requestTags only after the isEnabled gate, so an absent entry
+      // means this consumer is disabled — gate on it instead of paying isEnabled again here.
+      const requestTags = this.requestTags.get(request)
+      if (requestTags !== undefined) {
+        // A receive can return messages from many producers; fanning the extra ones in as span
+        // links is the shape dd-trace-java and dd-trace-py use for batch SQS receives.
+        for (const carrier of carriers) {
+          if (carrier === undefined) continue
+          const datadogContext = this.tracer.extract('text_map', carrier)
+          // A DSM-only carrier (a non-first sendMessageBatch entry when batchPropagationEnabled
+          // is off) extracts to null; span.addLink dereferences the context and would throw on it.
+          if (datadogContext === null) continue
+          if (span === undefined) {
+            ctx.needsFinish = true
+            span = this.startSpan('aws.response', {
+              childOf: datadogContext,
+              meta: {
+                ...requestTags,
+                'span.kind': 'server',
+              },
+              integrationName: 'aws-sdk',
+            }, ctx)
+            store = ctx.currentStore
+          } else {
+            span.addLink({ context: datadogContext })
+          }
+        }
+      }
+    }
+
+    // Extract DSM context after, as we might not have a parent-child but may have a DSM context.
+    this.responseExtractDSMContext(request.operation, request.params, response, span ?? null, carriers)
+
+    return store
   }
 
   operationFromRequest (request) {
@@ -129,19 +192,39 @@ class Sqs extends BaseAwsSdkPlugin {
     return tags
   }
 
+  /**
+   * Parse the trace-context carrier of every received message, in message order.
+   * Entries are `undefined` for messages that carry no `_datadog` context.
+   *
+   * @param {{ MaxNumberOfMessages?: number }} params
+   * @param {string} operation
+   * @param {{ Messages?: object[] }} response
+   * @returns {Array<Record<string, string> | undefined> | undefined}
+   */
   responseExtract (params, operation, response) {
     if (operation !== 'receiveMessage') return
-    if (params.MaxNumberOfMessages && params.MaxNumberOfMessages !== 1) return
-    if (!response || !response.Messages || !response.Messages[0]) return
+    if (!response?.Messages?.length) return
 
-    let message = response.Messages[0]
+    return response.Messages.map(message => this.parseMessageCarrier(message))
+  }
+
+  /**
+   * Resolve the trace-context carrier for a single received message. The
+   * `MessageAttributes._datadog` text map (direct SQS or SNS to SQS) wins;
+   * otherwise the EventBridge envelope, optionally wrapped in an SNS
+   * `Notification` (see getEventBridgeContext). Checking MessageAttributes first
+   * avoids parsing a large SNS `Message` just to rule out an EventBridge envelope.
+   *
+   * @param {object} message A single `response.Messages` entry.
+   * @returns {Record<string, string> | undefined}
+   */
+  parseMessageCarrier (message) {
     let parsedBody
-
     if (message.Body) {
       try {
         parsedBody = JSON.parse(message.Body)
       } catch {
-        // SQS to SQS
+        // Opaque, non-JSON body (SQS to SQS).
       }
       // SNS to SQS
       if (parsedBody?.Type === 'Notification') {
@@ -149,23 +232,9 @@ class Sqs extends BaseAwsSdkPlugin {
       }
     }
 
-    if (!message.MessageAttributes || !message.MessageAttributes._datadog) {
-      return { parsedBody, bodyChecked: true }
-    }
-
-    const datadogAttribute = message.MessageAttributes._datadog
-
-    const parsedAttributes = this.parseDatadogAttributes(datadogAttribute)
-    if (parsedAttributes) {
-      return {
-        datadogContext: this.tracer.extract('text_map', parsedAttributes),
-        parsedAttributes,
-        parsedBody,
-        bodyChecked: true,
-      }
-    }
-
-    return { parsedBody, bodyChecked: true }
+    const datadogAttribute = message.MessageAttributes?._datadog
+    const carrier = datadogAttribute ? this.parseDatadogAttributes(datadogAttribute) : undefined
+    return carrier ?? getEventBridgeContext(parsedBody)
   }
 
   parseDatadogAttributes (attributes) {
@@ -182,48 +251,39 @@ class Sqs extends BaseAwsSdkPlugin {
     }
   }
 
-  responseExtractDSMContext (operation, params, response, span, kwargs = {}) {
-    let { parsedAttributes } = kwargs
-    const { parsedFirstBody, firstBodyChecked } = kwargs
+  /**
+   * @param {string} operation
+   * @param {{ QueueUrl: string }} params
+   * @param {{ Messages?: object[] }} response
+   * @param {import('../../../dd-trace/src/opentracing/span') | null} span
+   * @param {Array<Record<string, string> | undefined>} [carriers] Per-message carriers already
+   *   parsed by `responseExtract`; reused so each message body is parsed once. When omitted, the
+   *   carriers are parsed here.
+   */
+  responseExtractDSMContext (operation, params, response, span, carriers) {
     if (!this.config.dsmEnabled) return
     if (operation !== 'receiveMessage') return
-    if (!response || !response.Messages || !response.Messages[0]) return
+    if (!response?.Messages?.length) return
 
+    const messages = response.Messages
     // Only attribute payloadSize to the span when there is a single message.
-    span = response.Messages.length > 1 ? null : span
+    span = messages.length > 1 ? null : span
 
     // QueueUrl is the same for the whole receive batch.
     const queue = params.QueueUrl.slice(params.QueueUrl.lastIndexOf('/') + 1)
 
-    for (let i = 0; i < response.Messages.length; i++) {
-      let message = response.Messages[i]
-      if (!parsedAttributes) {
-        let body
-        // responseExtract already parsed message[0]; reuse that result instead of re-parsing.
-        if (i === 0 && firstBodyChecked) {
-          body = parsedFirstBody
-        } else if (message.Body) {
-          try {
-            body = JSON.parse(message.Body)
-          } catch {
-            // SQS to SQS
-          }
-        }
-        // SNS to SQS
-        if (body?.Type === 'Notification') {
-          message = body
-        }
-        if (message.MessageAttributes && message.MessageAttributes._datadog) {
-          parsedAttributes = this.parseDatadogAttributes(message.MessageAttributes._datadog)
-        }
+    for (let i = 0; i < messages.length; i++) {
+      const message = messages[i]
+      const carrier = carriers === undefined ? this.parseMessageCarrier(message) : carriers[i]
+      if (carrier) {
+        // Inert for EventBridge until its producer emits a pathway (separate
+        // change) — no `dd-pathway-ctx-base64` to decode yet; SQS/SNS decode now.
+        this.tracer.decodeDataStreamsContext(carrier)
       }
       const payloadSize = getHeadersSize({
         Body: message.Body,
         MessageAttributes: message.MessageAttributes,
       })
-      if (parsedAttributes) {
-        this.tracer.decodeDataStreamsContext(parsedAttributes)
-      }
       this.tracer
         .setCheckpoint(['direction:in', `topic:${queue}`, 'type:sqs'], span, payloadSize)
     }

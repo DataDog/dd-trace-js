@@ -25,6 +25,7 @@ const { NODE_MAJOR } = require('../../version')
 const webAppServer = require('../ci-visibility/web-app-server')
 
 const versionRange = ['4.11.0', 'latest']
+const isLatestCucumberSupported = NODE_MAJOR === 22 || NODE_MAJOR === 24 || NODE_MAJOR >= 26
 
 versionRange.forEach(version => {
   describe(`selenium ${version}`, () => {
@@ -36,7 +37,7 @@ versionRange.forEach(version => {
     useSandbox([
       'mocha',
       'jest',
-      '@cucumber/cucumber',
+      ...(isLatestCucumberSupported ? ['@cucumber/cucumber'] : []),
       `selenium-webdriver@${version}`,
     ])
 
@@ -81,7 +82,7 @@ versionRange.forEach(version => {
       },
     ]
     testFrameworks.forEach(({ name, command }) => {
-      if ((NODE_MAJOR === 18 || NODE_MAJOR === 23) && name === 'cucumber') return
+      if (!isLatestCucumberSupported && name === 'cucumber') return
 
       context(`with ${name}`, () => {
         it('identifies tests using selenium as browser tests', async () => {
@@ -164,7 +165,7 @@ versionRange.forEach(version => {
       )
 
       childProcess.on('exit', (code) => {
-        assert.strictEqual(code, 0)
+        assert.strictEqual(code, 0, `Process exited with code ${code}.\n${testOutput}`)
         assert.doesNotMatch(testOutput, /InvalidArgumentError/)
         done()
       })

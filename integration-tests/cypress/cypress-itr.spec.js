@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 const { exec } = require('node:child_process')
 const { once } = require('node:events')
 
+const semver = require('semver')
 const {
   sandboxCwd,
   useSandbox,
@@ -33,6 +34,7 @@ const oldestVersion = DD_MAJOR >= 6 ? '12.0.0' : '6.7.0'
 const version = requestedVersion === 'oldest' ? oldestVersion : requestedVersion
 const hookFile = 'dd-trace/loader-hook.mjs'
 const CYPRESS_RUN_HARD_TIMEOUT = 70_000
+const over12It = (version === 'latest' || semver.gte(version, '12.0.0')) ? it : it.skip
 
 function assertItrSkippingEnabledTags (events, expected) {
   const testSuite = events.find(event => event.type === 'test_suite_end').content
@@ -115,6 +117,7 @@ moduleTypes.forEach(({
     useSandbox([`cypress@${version}`, 'cypress-fail-fast@7.1.0', 'typescript'], true)
 
     before(async function () {
+      this.timeout(180_000)
       cwd = sandboxCwd()
       await warmCypressBinary(cwd)
 
@@ -158,10 +161,6 @@ moduleTypes.forEach(({
             },
           }
         )
-
-        // TODO: remove this once we have figured out flakiness
-        childProcess.stdout?.pipe(process.stdout)
-        childProcess.stderr?.pipe(process.stderr)
 
         const [, searchCommitRequest, packfileRequest] = await Promise.all([
           once(childProcess, 'exit'),
@@ -241,10 +240,6 @@ moduleTypes.forEach(({
           }
         )
 
-        // TODO: remove this once we have figured out flakiness
-        childProcess.stdout?.pipe(process.stdout)
-        childProcess.stderr?.pipe(process.stderr)
-
         const eventsPromise = gatherCypressPayloads(receiver, childProcess, '/api/v2/citestcycle', payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
           const eventTypes = events.map(event => event.type)
@@ -279,6 +274,73 @@ moduleTypes.forEach(({
         ])
       })
 
+      over12It('does not count ITR-skipped tests twice when retrying a missing dd:beforeEach result', async () => {
+        receiver.setSuitesToSkip([
+          {
+            type: 'test',
+            attributes: {
+              name: 'context passes',
+              suite: 'cypress/e2e/other.cy.js',
+            },
+          },
+          {
+            type: 'test',
+            attributes: {
+              name: 'basic pass suite can pass',
+              suite: 'cypress/e2e/basic-pass.js',
+            },
+          },
+        ])
+
+        const envVars = getCiVisAgentlessConfig(receiver.port)
+        let testOutput = ''
+
+        childProcess = exec(
+          testCommand,
+          {
+            cwd,
+            env: {
+              ...envVars,
+              CYPRESS_BASE_URL: webAppBaseUrl,
+              CYPRESS_DD_BEFORE_EACH_NO_RESULT_ONCE: '1',
+              SPEC_PATTERN: 'cypress/e2e/{basic-pass,other.cy}.js',
+            },
+          }
+        )
+        childProcess.stdout?.on('data', (data) => { testOutput += data })
+        childProcess.stderr?.on('data', (data) => { testOutput += data })
+
+        const eventsPromise = gatherCypressPayloads(receiver, childProcess, '/api/v2/citestcycle', payloads => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const skippedTest = events.find(event =>
+            event.content.resource === 'cypress/e2e/other.cy.js.context passes'
+          ).content
+          assert.strictEqual(skippedTest.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(skippedTest.meta[TEST_SKIPPED_BY_ITR], 'true')
+
+          const skippedTestInOtherSpec = events.find(event =>
+            event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+          ).content
+          assert.strictEqual(skippedTestInOtherSpec.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(skippedTestInOtherSpec.meta[TEST_SKIPPED_BY_ITR], 'true')
+
+          const testSession = events.find(event => event.type === 'test_session_end').content
+          assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 2)
+
+          const testModule = events.find(event => event.type === 'test_module_end').content
+          assert.strictEqual(testModule.metrics[TEST_ITR_SKIPPING_COUNT], 2)
+        })
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+
+        assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
+        assert.match(testOutput, /\[datadog:test\] dd:beforeEach call 1/)
+        assert.match(testOutput, /\[datadog:test\] dd:beforeEach call 2/)
+      })
+
       it('does not skip tests if test skipping is disabled by the API', async () => {
         let hasRequestedSkippable = false
         receiver.setSettings({
@@ -311,10 +373,6 @@ moduleTypes.forEach(({
             },
           }
         )
-
-        // TODO: remove this once we have figured out flakiness
-        childProcess.stdout?.pipe(process.stdout)
-        childProcess.stderr?.pipe(process.stderr)
 
         const receiverPromise = gatherCypressPayloads(receiver, childProcess, '/api/v2/citestcycle', payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -364,10 +422,6 @@ moduleTypes.forEach(({
             },
           }
         )
-
-        // TODO: remove this once we have figured out flakiness
-        childProcess.stdout?.pipe(process.stdout)
-        childProcess.stderr?.pipe(process.stderr)
 
         const receiverPromise = gatherCypressPayloads(receiver, childProcess, '/api/v2/citestcycle', payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -429,10 +483,6 @@ moduleTypes.forEach(({
           }
         )
 
-        // TODO: remove this once we have figured out flakiness
-        childProcess.stdout?.pipe(process.stdout)
-        childProcess.stderr?.pipe(process.stderr)
-
         const receiverPromise = gatherCypressPayloads(receiver, childProcess, '/api/v2/citestcycle', payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
 
@@ -491,10 +541,6 @@ moduleTypes.forEach(({
             },
           }
         )
-
-        // TODO: remove this once we have figured out flakiness
-        childProcess.stdout?.pipe(process.stdout)
-        childProcess.stderr?.pipe(process.stderr)
 
         const eventsPromise = gatherCypressPayloads(receiver, childProcess, '/api/v2/citestcycle', payloads => {
           const events = payloads.flatMap(({ payload }) => payload.events)
@@ -576,10 +622,6 @@ moduleTypes.forEach(({
             },
           }
         )
-
-        // TODO: remove this once we have figured out flakiness
-        childProcess.stdout?.pipe(process.stdout)
-        childProcess.stderr?.pipe(process.stderr)
 
         const eventsPromise = gatherCypressPayloads(receiver, childProcess, '/api/v2/citestcov', payloads => {
           const coveredFiles = payloads

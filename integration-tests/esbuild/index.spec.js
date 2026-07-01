@@ -95,6 +95,12 @@ esbuildVersions.forEach((version) => {
       })
     })
 
+    it('bundles the optional OpenFeature peer so it survives bundle relocation', () => {
+      execSync('node ./build-and-test-openfeature.js', {
+        timeout,
+      })
+    })
+
     it('injects Git metadata into bundled applications', () => {
       execSync('node ./build-and-test-git-tags.js', {
         timeout,
@@ -117,6 +123,18 @@ esbuildVersions.forEach((version) => {
       it('works', () => {
         execSync('npm run build:esm')
         execSync('npm run built:esm', {
+          timeout,
+        })
+      })
+
+      it('runs minified ESM bundles without ReferenceError on arguments', () => {
+        execSync('node ./build-and-test-esm-minify.mjs', {
+          timeout,
+        })
+      })
+
+      it('keeps __filename, __dirname, and relative requires working in a minified instrumented module', () => {
+        execSync('node ./build-and-test-esm-minify-globals.mjs', {
           timeout,
         })
       })

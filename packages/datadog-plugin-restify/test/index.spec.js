@@ -21,8 +21,10 @@ describe('Plugin', () => {
     withVersions('restify', 'restify', version => {
       const pkgVersion = require(`../../../versions/restify@${version}`).version()
 
-      // Some internal code of older versions is not compatible with Node >6
-      if (semver.intersects(pkgVersion, '<5')) return
+      // restify <4 fails to load (its `dtrace-provider` native dep has no prebuilt binding), and 7.x-9.x crash
+      // on load on Node >=18 (they assign the now getter-only `IncomingMessage#closed`). Skip those; the
+      // remaining majors (4-6, 10+) load and run against this suite.
+      if (semver.intersects(pkgVersion, '<4.0.0') || semver.intersects(pkgVersion, '>=7.0.0 <10.0.0')) return
 
       beforeEach(() => {
         tracer = require('../../dd-trace')
@@ -92,7 +94,11 @@ describe('Plugin', () => {
           })
         })
 
-        it('should support routing with async functions and middleware', done => {
+        // restify added async route handler/middleware support in 7.x; older majors never await the
+        // returned promise, so the request hangs. Only assert async routing where the feature exists.
+        it('should support routing with async functions and middleware', function (done) {
+          if (!semver.intersects(pkgVersion, '>=7')) return this.skip()
+
           const server = restify.createServer()
 
           server.get(
@@ -121,7 +127,9 @@ describe('Plugin', () => {
           })
         })
 
-        it('should route without producing any warnings', done => {
+        it('should route without producing any warnings', function (done) {
+          if (!semver.intersects(pkgVersion, '>=7')) return this.skip()
+
           const warningSpy = sinon.spy((_, msg) => {
             // eslint-disable-next-line no-console
             console.error(`route called with warning: ${msg}`)

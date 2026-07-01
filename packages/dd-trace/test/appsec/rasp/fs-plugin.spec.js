@@ -178,9 +178,10 @@ describe('AppsecFsPlugin', () => {
 
       afterEach(() => agent.close())
 
-      beforeEach(() => agent.load('fs', undefined, { flushInterval: 1 }).then(() => {
+      beforeEach(async () => {
+        await agent.load([], undefined, { flushInterval: 1 })
         fs = require('fs')
-      }))
+      })
 
       it('should mark root operations', () => {
         let count = 0

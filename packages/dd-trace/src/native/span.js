@@ -9,7 +9,7 @@ const DatadogSpan = require('../opentracing/span')
 const id = require('../id')
 const tagger = require('../tagger')
 const { MAX_META_VALUE_LENGTH } = require('../encode/tags-processors')
-const { MsgpackEncoder } = require('../msgpack')
+const { encode: encodeMsgpack } = require('../msgpack')
 const NativeSpanContext = require('./span_context')
 const { OpCode } = require('./index')
 
@@ -44,10 +44,6 @@ function buildNativeTraceId (lowId, tidHex) {
     low[0], low[1], low[2], low[3], low[4], low[5], low[6], low[7],
   ]
 }
-
-// Reused across spans to encode meta_struct values to msgpack bytes, matching
-// the legacy encoder's `meta_struct` map<string, bin> wire shape.
-const metaStructEncoder = new MsgpackEncoder()
 
 // Empty span-event attribute buffer (shared; the decoder treats an empty
 // buffer as "no attributes").
@@ -509,7 +505,7 @@ class NativeDatadogSpan extends DatadogSpan {
         this._nativeSpans.setMetaStruct(
           this._spanContext._nativeSpanId,
           key,
-          metaStructEncoder.encode(value)
+          encodeMsgpack(value)
         )
       }
     }

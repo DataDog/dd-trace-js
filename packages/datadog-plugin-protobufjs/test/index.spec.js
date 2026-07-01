@@ -23,7 +23,7 @@ const MESSAGE_SCHEMA_DEF = schemas.MESSAGE_SCHEMA_DEF
 const OTHER_MESSAGE_SCHEMA_DEF = schemas.OTHER_MESSAGE_SCHEMA_DEF
 const ALL_TYPES_MESSAGE_SCHEMA_DEF = schemas.ALL_TYPES_MESSAGE_SCHEMA_DEF
 
-const MESSAGE_SCHEMA_ID = '666607144722735562'
+const MESSAGE_SCHEMA_ID = '2700361977390526367'
 const OTHER_MESSAGE_SCHEMA_ID = '2691489402935632768'
 const ALL_TYPES_MESSAGE_SCHEMA_ID = '15890948796193489151'
 
@@ -49,7 +49,7 @@ describe('Plugin', () => {
       })
 
       describe('without configuration', () => {
-        before(() => {
+        before(async () => {
           dateNowStub = sinon.stub(Date, 'now').callsFake(() => {
             const returnValue = mockTime
             mockTime += 50000 // Increment by 50000 ms to ensure each DSM schema is sampled
@@ -57,9 +57,8 @@ describe('Plugin', () => {
           })
           const cache = SchemaBuilder.getCache()
           cache.clear()
-          return agent.load('protobufjs').then(() => {
-            protobuf = require(`../../../versions/protobufjs@${version}`).get()
-          })
+          await agent.load('protobufjs')
+          protobuf = require(`../../../versions/protobufjs@${version}`).get()
         })
 
         after(() => {

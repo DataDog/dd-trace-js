@@ -5,7 +5,7 @@ const { describe, it, before, after } = require('mocha')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const { setup, withAwsSdkVersions } = require('./spec_helpers')
-const { models } = require('./fixtures/bedrockruntime')
+const { models, converseRequest } = require('./fixtures/bedrockruntime')
 const serviceName = 'bedrock-service-name-test'
 
 describe('Plugin', () => {
@@ -25,7 +25,7 @@ describe('Plugin', () => {
 
         before(function () {
           this.timeout(10_000)
-          const requireVersion = version === '3.0.0' ? '3.422.0' : '>=3.422.0'
+          const requireVersion = version === '3.0.0' ? '3.422.0' : '3'
           AWS = require(`../../../versions/${bedrockRuntimeClientName}@${requireVersion}`).get()
           const NodeHttpHandler =
             require(`../../../versions/${bedrockRuntimeClientName}@${requireVersion}`)
@@ -96,6 +96,46 @@ describe('Plugin', () => {
 
             await tracesPromise
           })
+        })
+
+        it('should converse', async function () {
+          if (typeof AWS.ConverseCommand !== 'function') return this.skip()
+          const command = new AWS.ConverseCommand({ modelId: converseRequest.modelId, ...converseRequest.request })
+
+          const tracesPromise = agent.assertFirstTraceSpan({
+            meta: {
+              'aws.operation': 'converse',
+              'aws.bedrock.request.model': converseRequest.modelId.split('.')[1],
+              'aws.bedrock.request.model_provider': converseRequest.provider.toLowerCase(),
+            },
+          })
+          tracesPromise.catch(() => {}) // silence unhandled rejection if `send` throws first
+
+          await bedrockRuntimeClient.send(command)
+          await tracesPromise
+        })
+
+        it('should converse-stream', async function () {
+          if (typeof AWS.ConverseStreamCommand !== 'function') return this.skip()
+          const command = new AWS.ConverseStreamCommand({
+            modelId: converseRequest.modelId,
+            ...converseRequest.request,
+          })
+
+          const tracesPromise = agent.assertFirstTraceSpan({
+            meta: {
+              'aws.operation': 'converseStream',
+              'aws.bedrock.request.model': converseRequest.modelId.split('.')[1],
+              'aws.bedrock.request.model_provider': converseRequest.provider.toLowerCase(),
+            },
+          })
+          tracesPromise.catch(() => {}) // silence unhandled rejection if stream iteration throws first
+
+          const result = await bedrockRuntimeClient.send(command)
+          for await (const _event of result.stream) { // eslint-disable-line no-unused-vars
+            // drain
+          }
+          await tracesPromise
         })
       })
     })

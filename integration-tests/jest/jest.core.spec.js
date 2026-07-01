@@ -31,7 +31,6 @@ const {
   TEST_SOURCE_START,
   TEST_CODE_OWNERS,
   TEST_SESSION_NAME,
-  TEST_LEVEL_EVENT_TYPES,
   DI_ERROR_DEBUG_INFO_CAPTURED,
   DI_DEBUG_ERROR_PREFIX,
   DI_DEBUG_ERROR_FILE_SUFFIX,
@@ -430,9 +429,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
             metadataDicts.forEach(metadata => {
-              for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-                assert.strictEqual(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
-              }
+              assert.strictEqual(metadata.test_levels[TEST_SESSION_NAME], 'my-test-session')
             })
 
             const events = payloads.flatMap(({ payload }) => payload.events)
@@ -545,6 +542,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+            metadataDicts.forEach(metadata => {
+              assert.ok(metadata.test_levels[TEST_COMMAND])
+            })
+
             const events = payloads.flatMap(({ payload }) => payload.events)
             const testSessionEvent = events.find(event => event.type === 'test_session_end').content
             const testModuleEvent = events.find(event => event.type === 'test_module_end').content
@@ -554,7 +556,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             assert.ok(testSessionEvent)
             assert.strictEqual(testSessionEvent.meta[TEST_STATUS], 'pass')
             assert.ok(testSessionEvent[TEST_SESSION_ID])
-            assert.ok(testSessionEvent.meta[TEST_COMMAND])
             assert.ok(testSessionEvent[TEST_SUITE_ID] == null, `Expected ${testSessionEvent[TEST_SUITE_ID]} == null`)
             assert.ok(testSessionEvent[TEST_MODULE_ID] == null, `Expected ${testSessionEvent[TEST_MODULE_ID]} == null`)
 
@@ -562,13 +563,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             assert.strictEqual(testModuleEvent.meta[TEST_STATUS], 'pass')
             assert.ok(testModuleEvent[TEST_SESSION_ID])
             assert.ok(testModuleEvent[TEST_MODULE_ID])
-            assert.ok(testModuleEvent.meta[TEST_COMMAND])
             assert.ok(testModuleEvent[TEST_SUITE_ID] == null, `Expected ${testModuleEvent[TEST_SUITE_ID]} == null`)
 
             assert.ok(testSuiteEvent)
             assert.strictEqual(testSuiteEvent.meta[TEST_STATUS], 'pass')
             assert.strictEqual(testSuiteEvent.meta[TEST_SUITE], 'ci-visibility/jest-plugin-tests/jest-test-suite.js')
-            assert.ok(testSuiteEvent.meta[TEST_COMMAND])
             assert.ok(testSuiteEvent.meta[TEST_MODULE])
             assert.ok(testSuiteEvent[TEST_SUITE_ID])
             assert.ok(testSuiteEvent[TEST_SESSION_ID])
@@ -578,7 +577,6 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             assert.strictEqual(testEvent.meta[TEST_STATUS], 'pass')
             assert.strictEqual(testEvent.meta[TEST_NAME], 'jest-test-suite-visibility works')
             assert.strictEqual(testEvent.meta[TEST_SUITE], 'ci-visibility/jest-plugin-tests/jest-test-suite.js')
-            assert.ok(testEvent.meta[TEST_COMMAND])
             assert.ok(testEvent.meta[TEST_MODULE])
             assert.ok(testEvent[TEST_SUITE_ID])
             assert.ok(testEvent[TEST_SESSION_ID])
@@ -697,6 +695,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
   // --shard was added in jest@28
   onlyLatestIt('works when sharding', (done) => {
+    receiver.setSettings({
+      itr_enabled: true,
+      code_coverage: false,
+      tests_skipping: true,
+    })
     receiver.payloadReceived(({ url }) => url === '/api/v2/citestcycle').then(events => {
       const testSuiteEvents = events.payload.events.filter(event => event.type === 'test_suite_end')
       assert.strictEqual(testSuiteEvents.length, 3)
@@ -761,8 +764,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.strictEqual(testSession.metrics[TEST_ITR_SKIPPING_COUNT], 2)
 
         done()
-      })
-    })
+      }).catch(done)
+    }).catch(done)
     childProcess = exec(
       runTestsCommand,
       {
@@ -863,9 +866,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
         // it propagates test session name to the test and test suite events in parallel mode
         metadataDicts.forEach(metadata => {
-          for (const testLevel of TEST_LEVEL_EVENT_TYPES) {
-            assert.strictEqual(metadata[testLevel][TEST_SESSION_NAME], 'my-test-session')
-          }
+          assert.strictEqual(metadata.test_levels[TEST_SESSION_NAME], 'my-test-session')
         })
 
         const events = eventsRequests.map(({ payload }) => payload)
@@ -1275,16 +1276,17 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
   })
 
-  it('does not report total code coverage % if user has not configured coverage manually', (done) => {
+  it('reports total code coverage % when TIA forces coverage collection', (done) => {
     receiver.setSettings({
       itr_enabled: true,
       code_coverage: true,
+      coverage_report_upload_enabled: true,
       tests_skipping: false,
     })
 
     receiver.assertPayloadReceived(({ payload }) => {
       const testSession = payload.events.find(event => event.type === 'test_session_end').content
-      assert.ok(!(TEST_CODE_COVERAGE_LINES_PCT in testSession.metrics))
+      assert.ok(testSession.metrics[TEST_CODE_COVERAGE_LINES_PCT])
     }, ({ url }) => url === '/api/v2/citestcycle').then(() => done()).catch(done)
 
     childProcess = exec(
@@ -1356,6 +1358,105 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     childProcess.stderr?.on('data', (chunk) => {
       testOutput += chunk.toString()
     })
+  })
+
+  it('flushes test data before Jest bails', async () => {
+    receiver.setSettings({
+      itr_enabled: false,
+      code_coverage: false,
+      tests_skipping: false,
+    })
+
+    childProcess = exec(
+      runTestsCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          JEST_BAIL: '1',
+          TESTS_TO_RUN: 'test/fail-test.js',
+          ENABLE_CODE_COVERAGE: '1',
+        },
+      }
+    )
+
+    childProcess.stdout?.on('data', (chunk) => {
+      testOutput += chunk.toString()
+    })
+    childProcess.stderr?.on('data', (chunk) => {
+      testOutput += chunk.toString()
+    })
+
+    await receiver.gatherPayloadsUntilChildExit(
+      childProcess,
+      ({ url }) => url.endsWith('/api/v2/citestcycle'),
+      (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const testSession = events.find(event => event.type === 'test_session_end')
+        const testModule = events.find(event => event.type === 'test_module_end')
+        const testSuite = events.find(event => event.type === 'test_suite_end')
+        const test = events.find(event => event.type === 'test')
+
+        assert.ok(testSession)
+        assert.ok(testModule)
+        assert.ok(testSuite)
+        assert.ok(test)
+        assert.notStrictEqual(testSession.content.metrics[TEST_CODE_COVERAGE_LINES_PCT], undefined)
+        assert.strictEqual(test.content.meta[TEST_SUITE], 'ci-visibility/test/fail-test.js')
+        assert.strictEqual(test.content.meta[TEST_NAME], 'fail can report failed tests')
+        assert.strictEqual(test.content.meta[TEST_STATUS], 'fail')
+      }
+    )
+    assert.strictEqual(childProcess.exitCode, 1)
+  })
+
+  it('flushes suite-level failures when bail is enabled', async () => {
+    receiver.setSettings({
+      itr_enabled: false,
+      code_coverage: false,
+      tests_skipping: false,
+    })
+
+    childProcess = exec(
+      runTestsCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          JEST_BAIL: '1',
+          SHOULD_CHECK_RESULTS: '1',
+          TESTS_TO_RUN: 'test-parsing-error/parsing-error.js',
+        },
+      }
+    )
+
+    childProcess.stdout?.on('data', (chunk) => {
+      testOutput += chunk.toString()
+    })
+    childProcess.stderr?.on('data', (chunk) => {
+      testOutput += chunk.toString()
+    })
+
+    await receiver.gatherPayloadsUntilChildExit(
+      childProcess,
+      ({ url }) => url.endsWith('/api/v2/citestcycle'),
+      (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const testSession = events.find(event => event.type === 'test_session_end')
+        const testModule = events.find(event => event.type === 'test_module_end')
+        const testSuite = events.find(event => event.type === 'test_suite_end')
+        const tests = events.filter(event => event.type === 'test')
+
+        assert.ok(testSession)
+        assert.ok(testModule)
+        assert.ok(testSuite)
+        assert.strictEqual(tests.length, 0)
+        assert.strictEqual(testSuite.content.meta[TEST_SUITE], 'ci-visibility/test-parsing-error/parsing-error.js')
+        assert.strictEqual(testSuite.content.meta[TEST_STATUS], 'fail')
+        assert.match(testSuite.content.meta[ERROR_MESSAGE], /chao/)
+      }
+    )
+    assert.strictEqual(childProcess.exitCode, 1)
   })
 
   it('does not hang if server is not available and logs an error', (done) => {

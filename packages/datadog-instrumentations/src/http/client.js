@@ -14,6 +14,7 @@ const finishChannel = channel('apm:http:client:request:finish')
 const endChannel = channel('apm:http:client:request:end')
 const asyncStartChannel = channel('apm:http:client:request:asyncStart')
 const errorChannel = channel('apm:http:client:request:error')
+const responseStartChannel = channel('apm:http:client:response:start')
 const responseFinishChannel = channel('apm:http:client:response:finish')
 
 addHook({ name: 'http' }, hookFn)
@@ -78,10 +79,15 @@ function setupResponseInstrumentation (ctx, res) {
   let dataReadStarted = false
 
   const { shouldCollectBody } = ctx
-  const bodyChunks = shouldCollectBody ? [] : null
+
+  let bodyChunks = null
+
+  if (shouldCollectBody) {
+    bodyChunks = []
+  }
 
   const collectChunk = chunk => {
-    if (!shouldCollectBody || !chunk) return
+    if (!bodyChunks || !chunk) return
 
     if (typeof chunk === 'string') {
       bodyChunks.push(chunk)
@@ -219,7 +225,9 @@ function patch (http, methodName) {
             return setTimeout.apply(this, args)
           }
 
-          req.emit = function (eventName, arg) {
+          req.emit = function (...args) {
+            const eventName = args[0]
+            const arg = args[1]
             switch (eventName) {
               case 'response': {
                 const res = arg
@@ -227,13 +235,17 @@ function patch (http, methodName) {
                 res.once('end', finish)
                 res.once(errorMonitor, finish)
 
+                if (responseStartChannel.hasSubscribers) {
+                  responseStartChannel.publish({ ctx, res })
+                }
+
                 const instrumentation = setupResponseInstrumentation(ctx, res)
 
                 if (!instrumentation) {
                   break
                 }
 
-                const result = emit.apply(this, arguments)
+                const result = Reflect.apply(emit, this, args)
 
                 instrumentation.finalizeIfNeeded()
 
@@ -254,7 +266,7 @@ function patch (http, methodName) {
                 finish()
             }
 
-            return emit.apply(this, arguments)
+            return Reflect.apply(emit, this, args)
           }
 
           if (abortController.signal.aborted) {
@@ -292,17 +304,12 @@ function patch (http, methodName) {
 
   function normalizeOptions (inputURL) {
     if (typeof inputURL === 'string') {
-      try {
-        return urlToOptions(new url.URL(inputURL))
-      } catch {
-        // eslint-disable-next-line n/no-deprecated-api
-        return url.parse(inputURL)
-      }
-    } else if (inputURL instanceof url.URL) {
-      return urlToOptions(inputURL)
-    } else {
-      return inputURL
+      return urlToOptions(new url.URL(inputURL))
     }
+    if (inputURL instanceof url.URL) {
+      return urlToOptions(inputURL)
+    }
+    return inputURL
   }
 
   function urlToOptions (url) {

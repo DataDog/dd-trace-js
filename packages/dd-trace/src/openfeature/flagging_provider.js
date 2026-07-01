@@ -1,16 +1,22 @@
 'use strict'
 
-const { DatadogNodeServerProvider } = require('@datadog/openfeature-node-server')
 const { channel } = require('dc-polyfill')
+const requireOptionalPeer = require('../../../datadog-instrumentations/src/helpers/require-optional-peer')
 const log = require('../log')
 const { EXPOSURE_CHANNEL } = require('./constants/constants')
 const EvalMetricsHook = require('./eval-metrics-hook')
+const SpanEnrichmentHook = require('./span-enrichment-hook')
+
+const { DatadogNodeServerProvider } = requireOptionalPeer('@datadog/openfeature-node-server')
 
 /**
  * OpenFeature provider that integrates with Datadog's feature flagging system.
  * Extends DatadogNodeServerProvider to add tracer integration and configuration management.
  */
 class FlaggingProvider extends DatadogNodeServerProvider {
+  /** @type {SpanEnrichmentHook?} */
+  #spanEnrichmentHook
+
   /**
    * @param {import('../tracer')} tracer - Datadog tracer instance
    * @param {import('../config')} config - Tracer configuration object
@@ -27,8 +33,24 @@ class FlaggingProvider extends DatadogNodeServerProvider {
 
     this.hooks.push(new EvalMetricsHook(config))
 
+    if (config.experimental.flaggingProvider.spanEnrichment?.enabled) {
+      this.#spanEnrichmentHook = new SpanEnrichmentHook(tracer)
+      this.hooks.push(this.#spanEnrichmentHook)
+      log.info('%s span enrichment enabled', this.constructor.name)
+    } else {
+      log.info('%s span enrichment disabled', this.constructor.name)
+    }
+
     log.debug('%s created with timeout: %dms', this.constructor.name,
       config.experimental.flaggingProvider.initializationTimeoutMs)
+  }
+
+  /**
+   * Called when the provider is shut down.
+   * Cleans up resources including channel subscriptions.
+   */
+  onClose () {
+    this.#spanEnrichmentHook?.destroy()
   }
 
   /**

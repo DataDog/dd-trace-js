@@ -19,6 +19,7 @@ const {
   assertObjectContains,
   stopProc,
 } = require('../helpers')
+const { processExitPromise } = require('./helpers')
 
 const DEFAULT_PROFILE_TYPES = ['wall', 'space']
 if (process.platform !== 'win32') {
@@ -75,28 +76,6 @@ function expectProfileMessagePromise (agent, timeout,
       throw e
     }
   }, timeout, 1, true)
-}
-
-function processExitPromise (proc, timeout, expectBadExit = false) {
-  return new Promise((resolve, reject) => {
-    const timeoutObj = setTimeout(() => {
-      reject(new Error('Process timed out'))
-    }, timeout)
-
-    function checkExitCode (code) {
-      clearTimeout(timeoutObj)
-
-      if ((code !== 0) !== expectBadExit) {
-        reject(new Error(`Process exited with unexpected status code ${code}.`))
-      } else {
-        resolve()
-      }
-    }
-
-    proc
-      .on('error', reject)
-      .on('exit', checkExitCode)
-  })
 }
 
 async function getLatestProfile (cwd, pattern) {
@@ -286,6 +265,48 @@ class CryptoEventProcessor extends TimelineEventProcessor {
 
 async function gatherCryptoTimelineEvents (cwd, scriptFilePath, agentPort) {
   return gatherTimelineEvents(cwd, scriptFilePath, agentPort, 'crypto', [], CryptoEventProcessor)
+}
+
+// Gathers the distinct 'gc type' label values seen across the events profile.
+// GC events are sourced through the Node API and don't carry span IDs, so this
+// has a simpler shape than gatherTimelineEvents.
+async function gatherGcTypes (cwd, scriptFilePath, agentPort, execArgv) {
+  const proc = fork(path.join(cwd, scriptFilePath), [], {
+    cwd,
+    execArgv,
+    env: {
+      DD_PROFILING_EXPORTERS: 'file',
+      DD_PROFILING_ENABLED: '1',
+      DD_INTERNAL_PROFILING_TIMELINE_SAMPLING_ENABLED: '0', // capture all events
+      DD_TRACE_AGENT_PORT: agentPort,
+    },
+  })
+
+  // A crash (e.g. issue #8839) would surface here as a non-zero exit.
+  await processExitPromise(proc, TIMEOUT)
+
+  const { profile } = await getLatestProfile(cwd, /^events_.+\.pprof$/)
+  const strings = profile.stringTable
+  const eventKey = strings.dedup('event')
+  const gcTypeKey = strings.dedup('gc type')
+  const gcEventValue = strings.dedup('gc')
+
+  const gcTypes = new Set()
+  for (const sample of profile.sample) {
+    let isGc = false
+    let gcType
+    for (const label of sample.label) {
+      if (label.key === eventKey) {
+        isGc = label.str === gcEventValue
+      } else if (label.key === gcTypeKey) {
+        gcType = strings.strings[label.str]
+      }
+    }
+    if (isGc && gcType !== undefined) {
+      gcTypes.add(gcType)
+    }
+  }
+  return gcTypes
 }
 
 async function gatherTimelineEvents (cwd, scriptFilePath, agentPort, eventType, args, Processor) {
@@ -636,6 +657,21 @@ describe('profiler', () => {
         server1.close()
       }
     })
+
+    it('gc timeline events work with the minor mark-sweep collector', async function () {
+      // V8's --minor-ms collector emits GC events with kind 2, which has no
+      // NODE_PERFORMANCE_GC_* constant and used to crash the profiler.
+      // It is stable since Node 22. See issue #8839.
+      if (!satisfies(process.versions.node, '>=22.0.0')) {
+        this.skip()
+      }
+      const gcTypes = await gatherGcTypes(cwd, 'profiler/gctest.js', agent.port, ['--minor-ms'])
+      // The collector was renamed from minor_mark_compact to minor_mark_sweep in Node 22.
+      assert.ok(gcTypes.has('minor_mark_sweep'), `Expected a minor_mark_sweep GC event, got ${inspect(gcTypes)}`)
+      for (const gcType of gcTypes) {
+        assert.doesNotMatch(gcType, /^unknown/, `Unexpected unknown GC type: ${gcType}`)
+      }
+    })
   })
 
   context('shutdown', () => {
@@ -678,6 +714,10 @@ describe('profiler', () => {
         }
       })
 
+      // All OOM tests below are retried 3 times because OOM export behavior is timing-sensitive
+      // and Node.js version-dependent: newer V8 versions (e.g. Node 26) crash faster or handle
+      // worker OOM differently, making these tests inherently unreliable without retries.
+
       it('sends a heap profile on OOM with external process', () => {
         proc = fork(oomTestFile, {
           cwd,
@@ -685,7 +725,7 @@ describe('profiler', () => {
           env: oomEnv,
         })
         return checkProfiles(agent, proc, timeout, ['space'], true, false)
-      })
+      }).retries(3)
 
       it('sends a heap profile on OOM in worker thread and exits successfully', () => {
         proc = fork(oomTestFile, [1, OOM_HEAP_MB], {
@@ -693,11 +733,10 @@ describe('profiler', () => {
           env: { ...oomEnv, DD_PROFILING_WALLTIME_ENABLED: '0' },
         })
         return checkProfiles(agent, proc, timeout, ['space'], false)
-      })
+      }).retries(3)
 
-      // Following tests are flaky because they use unreliable strategies to export profiles
+      // Following tests also use unreliable strategies to export profiles
       // (or check that the process can recover from OOM, which is also unreliable).
-      // We retry them 3 times to decrease flakiness.
       it('sends a heap profile on OOM with external process and exits successfully', () => {
         proc = fork(oomTestFile, {
           cwd,

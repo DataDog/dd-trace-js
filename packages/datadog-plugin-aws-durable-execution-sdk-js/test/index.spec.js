@@ -1,0 +1,619 @@
+'use strict'
+
+const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
+
+const { NODE_MAJOR } = require('../../../version')
+
+// @aws/durable-execution-sdk-js >=1.1.0 (our minimum supported version) requires Node.js >=22.
+if (NODE_MAJOR < 22) return
+
+const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { createIntegrationTestSuite } = require('../../dd-trace/test/setup/helpers/plugin-test-helpers')
+const { TEST_FUNC_ARN, invokeHandler, setup, teardown } = require('./helpers')
+
+const COMPONENT = 'aws-durable-execution-sdk-js'
+const OPERATION_ID_RE = /^[a-f0-9]{16}$/
+const defaultMeta = {
+  component: COMPONENT,
+  'span.kind': 'internal',
+  'aws.durable.replayed': 'false',
+}
+
+function assertSpanByName (traces, expected) {
+  const byName = traces.flat().filter(s => s.name === expected.name)
+  const span = byName.find(s =>
+    Object.entries(expected.meta ?? {}).every(([k, v]) => s.meta?.[k] === v)
+  )
+  assert.ok(span, `expected span matching ${inspect(expected)}, got: ${inspect(byName)}`)
+  assertObjectContains(span, expected)
+  return span
+}
+
+// Asserts step children of `parentName` keep the default resource (cardinality protection)
+// while still carrying the user-supplied operation_name.
+function assertStepChildren (traces, parentName, expectedNames) {
+  const allSpans = traces.flat()
+  const parent = allSpans.find(s => s.name === parentName)
+  assert.ok(parent, `${parentName} span not found`)
+  const stepChildren = allSpans.filter(s =>
+    s.name === 'aws.durable.step' && s.parent_id?.toString() === parent.span_id?.toString()
+  )
+  for (const step of stepChildren) {
+    assert.equal(step.resource, 'aws.durable.step')
+  }
+  assert.deepStrictEqual(
+    stepChildren.map(s => s.meta?.['aws.durable.operation_name']).sort(),
+    [...expectedNames].sort()
+  )
+}
+
+createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-execution-sdk-js', {
+  category: 'orchestration',
+}, (meta) => {
+  const { agent } = meta
+
+  // Run with the cross-invocation trace-context checkpoint feature (default-on) disabled.
+  // The feature is gated at plugin-construction time: the handler plugin subscribes to the
+  // terminate channel only when enabled, and the instrumentation wraps terminate() only while
+  // that channel has subscribers. So we disable for a single invocation by unsubscribing that
+  // one subscription, then restore it.
+  // TODO: Remove this once the bug is fixed upstream in aws/aws-durable-execution-sdk-js#544.
+  const TERMINATE_CHANNEL = 'apm:aws-durable-execution-sdk-js:terminate'
+
+  function terminateSubscription () {
+    const composite = meta.tracer._pluginManager?._pluginsByName?.['aws-durable-execution-sdk-js']
+    return composite?.handler?._subscriptions?.find(sub => sub._channel?.name === TERMINATE_CHANNEL)
+  }
+
+  async function withCrossInvocationTracingDisabled (fn) {
+    const subscription = terminateSubscription()
+    subscription?.disable()
+    try {
+      return await fn()
+    } finally {
+      subscription?.enable()
+    }
+  }
+
+  beforeEach(async () => setup(meta.mod, meta.versionMod))
+  afterEach(async () => teardown())
+
+  describe('withDurableExecution() - aws.durable.execute', () => {
+    it('happy: emits invocation_status=succeeded, replayed=false', async () => {
+      const tracePromise = agent.assertSomeTraces(traces => assertSpanByName(traces, {
+        name: 'aws.durable.execute',
+        meta: {
+          ...defaultMeta,
+          'aws.durable.invocation_status': 'succeeded',
+        },
+      }))
+
+      const result = await invokeHandler(async () => {})
+      assert.notStrictEqual(result, undefined, 'withDurableExecution should return a result')
+
+      return tracePromise
+    })
+
+    it('error: invocation_status=failed when handler throws', async () => {
+      const tracePromise = agent.assertSomeTraces(traces => assertSpanByName(traces, {
+        name: 'aws.durable.execute',
+        meta: { component: COMPONENT, 'aws.durable.invocation_status': 'failed' },
+      }))
+
+      // The SDK catches handler errors and returns FAILED without rethrowing.
+      await invokeHandler(async () => { throw new Error('Intentional durable execution error') })
+
+      return tracePromise
+    })
+
+    // ctx.wait suspends invocation, reinvoked after waiting with replayed=true
+    it('replay: replayed=true on resume after suspend', async () => {
+      const tracePromise = agent.assertSomeTraces(traces => assertSpanByName(traces, {
+        name: 'aws.durable.execute',
+        meta: { 'aws.durable.replayed': 'true' },
+      }), { timeoutMs: 5000 })
+
+      let invocations = 0
+      await invokeHandler(async (event, ctx) => {
+        invocations++
+        await ctx.wait('replay-trigger', { seconds: 1 })
+      })
+      assert.equal(invocations, 2, 'expected the handler to be invoked twice (initial + replay)')
+
+      return tracePromise
+    })
+  })
+
+  // Derived from the plugin's static retryable property — stays in sync automatically.
+  const contextPlugins = require('../src/context')
+  const RETRYABLE_SPAN_NAMES = new Set(
+    Object.values(contextPlugins).filter(cls => cls.retryable).map(cls => cls.spanName)
+  )
+
+  for (const { span, operationName, run, opts, disableCrossInvocationTracing } of [
+    {
+      span: 'aws.durable.step',
+      operationName: 'test-step',
+      run: ctx => ctx.step('test-step', async () => {}),
+    },
+    {
+      span: 'aws.durable.child_context',
+      operationName: 'test-child',
+      run: ctx => ctx.runInChildContext('test-child', async () => {}),
+    },
+    {
+      span: 'aws.durable.wait',
+      operationName: 'test-wait',
+      run: ctx => ctx.wait('test-wait', { seconds: 1 }),
+    },
+    {
+      span: 'aws.durable.wait_for_condition',
+      operationName: 'test-condition',
+      run: ctx => ctx.waitForCondition('test-condition', async () => 'done', {
+        initialState: 'pending',
+        waitStrategy: () => ({ shouldContinue: false }),
+      }),
+    },
+    {
+      span: 'aws.durable.wait_for_callback',
+      operationName: 'test-callback',
+      run: ctx => ctx.waitForCallback('test-callback', async () => {}),
+      opts: { resolveCallback: 'test-callback' },
+      // Resume is driven externally by sendCallbackSuccess(); run with the checkpoint feature
+      // disabled to avoid the #544 race (see withCrossInvocationTracingDisabled).
+      disableCrossInvocationTracing: true,
+    },
+    {
+      span: 'aws.durable.create_callback',
+      operationName: 'test-create-cb',
+      run: ctx => ctx.createCallback('test-create-cb'),
+    },
+    {
+      span: 'aws.durable.map',
+      operationName: 'test-map',
+      run: ctx => ctx.map('test-map', [1, 2, 3], async () => {}),
+    },
+    {
+      span: 'aws.durable.parallel',
+      operationName: 'test-parallel',
+      run: ctx => ctx.parallel('test-parallel', [async () => {}, async () => {}]),
+    },
+  ]) {
+    it(`${span} (happy path): emits span with expected tags`, async () => {
+      const tracePromise = agent.assertSomeTraces(traces => {
+        const matched = assertSpanByName(traces, {
+          name: span,
+          resource: operationName,
+          meta: { ...defaultMeta, 'aws.durable.operation_name': operationName },
+        })
+        assert.match(matched.meta?.['aws.durable.operation_id'] ?? '', OPERATION_ID_RE)
+        assert.notEqual(matched.error, 1, `${span} happy path should not be errored`)
+        if (RETRYABLE_SPAN_NAMES.has(span)) {
+          // 0-indexed: original attempt has 0 prior failures.
+          assert.equal(matched.metrics?.['aws.durable.operation_attempt'], 0,
+            `${span} should carry aws.durable.operation_attempt`)
+        } else {
+          assert.equal(matched.metrics?.['aws.durable.operation_attempt'], undefined,
+            `${span} must not carry aws.durable.operation_attempt`)
+        }
+      })
+      const invoke = () => invokeHandler(async (event, ctx) => run(ctx), opts)
+      await (disableCrossInvocationTracing ? withCrossInvocationTracingDisabled(invoke) : invoke())
+      return tracePromise
+    })
+  }
+
+  it('aws.durable.step (un-named overload): omits operation_name when no name is passed', async () => {
+    const tracePromise = agent.assertSomeTraces(traces => {
+      const matched = assertSpanByName(traces, {
+        name: 'aws.durable.step',
+        resource: 'aws.durable.step',
+        meta: defaultMeta,
+      })
+      assert.equal(matched.meta?.['aws.durable.operation_name'], undefined,
+        'aws.durable.operation_name must be absent when no name is passed')
+      assert.match(matched.meta?.['aws.durable.operation_id'] ?? '', OPERATION_ID_RE)
+    })
+    await invokeHandler(async (event, ctx) => ctx.step(async () => {}))
+    return tracePromise
+  })
+
+  for (const { span, errorMessage, run } of [
+    {
+      span: 'aws.durable.step',
+      errorMessage: 'Intentional step error',
+      run: ctx => ctx.step('error-step',
+        async () => { throw new Error('Intentional step error') },
+        { retryStrategy: () => ({ shouldRetry: false }) }),
+    },
+    {
+      span: 'aws.durable.child_context',
+      errorMessage: 'Intentional child context error',
+      run: ctx => ctx.runInChildContext('error-child',
+        async () => { throw new Error('Intentional child context error') },
+        { retryStrategy: () => ({ shouldRetry: false }) }),
+    },
+  ]) {
+    it(`${span} (error path): stamps error tags on span`, async () => {
+      const tracePromise = agent.assertSomeTraces(traces => assertSpanByName(traces, {
+        name: span,
+        meta: {
+          component: COMPONENT,
+          'span.kind': 'internal',
+          'error.type': 'Error',
+          'error.message': errorMessage,
+        },
+        error: 1,
+      }))
+      try {
+        await invokeHandler(async (event, ctx) => run(ctx))
+      } catch { /* expected */ }
+      return tracePromise
+    })
+  }
+
+  // map/parallel suppress internal child_context spans and force the default resource on
+  // direct step children to avoid unbounded resource-tag cardinality.
+  describe('aws.durable.map', () => {
+    const runMap = () => invokeHandler(async (event, ctx) =>
+      ctx.map('items', [1, 2], async (mapCtx, item) =>
+        mapCtx.step(`work-${item}`, async () => {})))
+
+    it('suppresses internal child_context spans', async () => {
+      const tracePromise = agent.assertSomeTraces(traces => {
+        assert.equal(traces.flat().filter(s => s.name === 'aws.durable.child_context').length, 0)
+      })
+      await runMap()
+      return tracePromise
+    })
+
+    it('step children keep default resource and carry operation_name', async () => {
+      const tracePromise = agent.assertSomeTraces(
+        traces => assertStepChildren(traces, 'aws.durable.map', ['work-1', 'work-2'])
+      )
+      await runMap()
+      return tracePromise
+    })
+  })
+
+  describe('aws.durable.parallel', () => {
+    const runParallel = () => invokeHandler(async (event, ctx) =>
+      ctx.parallel('fan-out', [
+        async pCtx => pCtx.step('a', async () => {}),
+        async pCtx => pCtx.step('b', async () => {}),
+      ]))
+
+    it('suppresses internal child_context spans', async () => {
+      const tracePromise = agent.assertSomeTraces(traces => {
+        assert.equal(traces.flat().filter(s => s.name === 'aws.durable.child_context').length, 0)
+      })
+      await runParallel()
+      return tracePromise
+    })
+
+    it('step children keep default resource and carry operation_name', async () => {
+      const tracePromise = agent.assertSomeTraces(
+        traces => assertStepChildren(traces, 'aws.durable.parallel', ['a', 'b'])
+      )
+      await runParallel()
+      return tracePromise
+    })
+  })
+
+  // The chained-invoke resume (target completing) is driven externally, so the checkpoint hook
+  // races the #544 TimerScheduler bug. These assert invoke span shape only — independent of the
+  // checkpoint feature — so we run them with the feature disabled (see
+  // withCrossInvocationTracingDisabled) rather than skipping them.
+  describe('DurableContextImpl.invoke() - aws.durable.invoke', () => {
+    it('happy: emits function_name, operation_name and operation_id with span.kind=client', async () => {
+      const tracePromise = agent.assertSomeTraces(traces => {
+        const matched = assertSpanByName(traces, {
+          name: 'aws.durable.invoke',
+          resource: 'test-func',
+          meta: {
+            component: COMPONENT,
+            'span.kind': 'client',
+            'aws.durable.invoke.function_name': TEST_FUNC_ARN,
+            'aws.durable.replayed': 'false',
+            'aws.durable.operation_name': 'test-func',
+          },
+        })
+        assert.match(matched.meta?.['aws.durable.operation_id'] ?? '', OPERATION_ID_RE)
+      })
+
+      const result = await withCrossInvocationTracingDisabled(() => invokeHandler(
+        async (event, ctx) => ctx.invoke('test-func', TEST_FUNC_ARN, {}),
+        { invokeTarget: async () => { } }
+      ))
+      assert.notStrictEqual(result, undefined, 'invoke should return a result')
+
+      return tracePromise
+    })
+
+    it('error: stamps error tags when invoke target fails', async () => {
+      const tracePromise = agent.assertSomeTraces(traces => assertSpanByName(traces, {
+        name: 'aws.durable.invoke',
+        meta: {
+          component: COMPONENT,
+          'span.kind': 'client',
+          'error.type': 'Error',
+          'error.message': 'Intentional invoke error',
+        },
+        error: 1,
+      }))
+
+      try {
+        await withCrossInvocationTracingDisabled(() => invokeHandler(
+          async (event, ctx) => ctx.invoke('error-func', TEST_FUNC_ARN, {}),
+          { invokeTarget: async () => { throw new Error('Intentional invoke error') } }
+        ))
+      } catch { /* expected */ }
+
+      return tracePromise
+    })
+  })
+
+  it('checkpoint plugin: fail-then-succeed retry produces a span per attempt', async () => {
+    const failedAttemptSpan = agent.assertSomeTraces(traces => {
+      const span = assertSpanByName(traces, {
+        name: 'aws.durable.step',
+        resource: 'retry-step',
+        meta: { 'error.type': 'Error', 'error.message': 'transient failure' },
+        error: 1,
+      })
+      // Original attempt: 0 prior failed attempts.
+      assert.equal(span.metrics?.['aws.durable.operation_attempt'], 0,
+        'failed original attempt should carry aws.durable.operation_attempt=0')
+    })
+    const succeededAttemptSpan = agent.assertSomeTraces(traces => {
+      const span = traces.flat().find(s =>
+        s.name === 'aws.durable.step' && s.resource === 'retry-step' && s.error !== 1
+      )
+      assert.ok(span, 'expected successful step span')
+      // First retry: 1 prior failed attempt.
+      assert.equal(span.metrics?.['aws.durable.operation_attempt'], 1,
+        'successful retry attempt should carry aws.durable.operation_attempt=1')
+    }, { timeoutMs: 5000 })
+    const successfulExecuteSpan = agent.assertSomeTraces(traces => assertSpanByName(traces, {
+      name: 'aws.durable.execute',
+      meta: { 'aws.durable.invocation_status': 'succeeded' },
+    }), { timeoutMs: 5000 })
+
+    let attempts = 0
+    await invokeHandler(async (event, ctx) => ctx.step(
+      'retry-step',
+      async () => {
+        attempts++
+        if (attempts === 1) throw new Error('transient failure')
+      },
+      { retryStrategy: () => ({ shouldRetry: true, delay: { seconds: 1 } }) }
+    ))
+    assert.equal(attempts, 2, 'expected the step body to be called twice (initial + retry)')
+
+    return Promise.all([failedAttemptSpan, succeededAttemptSpan, successfulExecuteSpan])
+  })
+
+  it('checkpoint plugin: replayed step that succeeded first try reports operation_attempt=0', async () => {
+    const replayedStep = agent.assertSomeTraces(traces => {
+      const span = traces.flat().find(s =>
+        s.name === 'aws.durable.step' &&
+        s.resource === 'first-try-step' &&
+        s.meta?.['aws.durable.replayed'] === 'true'
+      )
+      assert.ok(span, 'expected a replayed first-try-step span')
+      // The step succeeded on its first attempt. On replay the SDK reloads the
+      // SUCCEEDED checkpoint, whose StepDetails.Attempt is the 1-indexed number of
+      // the attempt that succeeded (1), not the "prior failed attempts" count used
+      // on the live run (0). We must normalize back to 0 so the replay agrees with
+      // the original attempt span.
+      assert.equal(span.metrics?.['aws.durable.operation_attempt'], 0,
+        'replayed first-try step should carry aws.durable.operation_attempt=0')
+    }, { timeoutMs: 5000 })
+
+    await invokeHandler(async (event, ctx) => {
+      await ctx.step('first-try-step', async () => 'ok')
+      await ctx.wait('suspend-trigger', { seconds: 1 })
+    })
+
+    return replayedStep
+  })
+
+  it('checkpoint plugin: replayed step that failed permanently reports normalized operation_attempt', async () => {
+    const replayedFailedStep = agent.assertSomeTraces(traces => {
+      const span = traces.flat().find(s =>
+        s.name === 'aws.durable.step' &&
+        s.resource === 'always-fails' &&
+        s.meta?.['aws.durable.replayed'] === 'true'
+      )
+      assert.ok(span, 'expected a replayed FAILED step span')
+      // The step exhausts its retries and fails on its 2nd attempt. On replay the SDK reloads the
+      // FAILED checkpoint (re-raising without running the body), whose StepDetails.Attempt is the
+      // 1-indexed attempt that failed (2). A FAILED checkpoint is a replay just like a SUCCEEDED
+      // one, so it is tagged replayed=true and normalized back to the live 0-indexed final attempt.
+      assert.equal(span.metrics?.['aws.durable.operation_attempt'], 1,
+        'replayed FAILED step should carry the normalized operation_attempt=1')
+    }, { timeoutMs: 8000 })
+
+    await invokeHandler(async (event, ctx) => {
+      try {
+        await ctx.step(
+          'always-fails',
+          async () => { throw new Error('permanent failure') },
+          { retryStrategy: (error, attempt) => ({ shouldRetry: attempt < 2, delay: { seconds: 1 } }) }
+        )
+      } catch {
+        // The durable step surfaces the permanent failure; swallow it so the execution continues
+        // to the wait below, whose replay re-reads the now-FAILED checkpoint.
+      }
+      await ctx.wait('suspend-trigger', { seconds: 1 })
+    })
+
+    return replayedFailedStep
+  })
+
+  // waitForCondition is the other retryable op. Its StepDetails.Attempt follows the
+  // same convention as step (live: prior-attempt count; SUCCEEDED replay: 1-indexed
+  // attempt that succeeded), so it must get the same replay normalization. This guards
+  // against the SDK diverging the two operations' attempt semantics in the future.
+  it('checkpoint plugin: replayed waitForCondition that passed first check reports operation_attempt=0', async () => {
+    const replayedCondition = agent.assertSomeTraces(traces => {
+      const span = traces.flat().find(s =>
+        s.name === 'aws.durable.wait_for_condition' &&
+        s.resource === 'first-check-condition' &&
+        s.meta?.['aws.durable.replayed'] === 'true'
+      )
+      assert.ok(span, 'expected a replayed first-check-condition span')
+      assert.equal(span.metrics?.['aws.durable.operation_attempt'], 0,
+        'replayed first-check waitForCondition should carry aws.durable.operation_attempt=0')
+    }, { timeoutMs: 5000 })
+
+    await invokeHandler(async (event, ctx) => {
+      await ctx.waitForCondition('first-check-condition', async () => 'done', {
+        initialState: 'pending',
+        waitStrategy: () => ({ shouldContinue: false }),
+      })
+      await ctx.wait('suspend-trigger', { seconds: 1 })
+    })
+
+    return replayedCondition
+  })
+
+  // Live multi-poll: the first check returns shouldContinue:true, forcing a second poll. Each poll
+  // is a separate retryable waitForCondition span, and the second carries operation_attempt=1. This
+  // is the only path that exercises getOperationAttempt's live (non-replay) branch at attempt>0 for
+  // waitForCondition — without it the op is only ever covered at attempt=0, so a future SDK that
+  // indexed waitForCondition's StepDetails.Attempt differently from step's would slip through.
+  it('checkpoint plugin: waitForCondition reports operation_attempt=1 on its second poll', async () => {
+    const secondPollSpan = agent.assertSomeTraces(traces => {
+      const span = traces.flat().find(s =>
+        s.name === 'aws.durable.wait_for_condition' &&
+        s.resource === 'multi-poll-condition' &&
+        s.metrics?.['aws.durable.operation_attempt'] === 1
+      )
+      assert.ok(span, 'expected a second-poll waitForCondition span with operation_attempt=1')
+    }, { timeoutMs: 5000 })
+
+    let polls = 0
+    await invokeHandler(async (event, ctx) => {
+      await ctx.waitForCondition('multi-poll-condition', async () => 'done', {
+        initialState: 'pending',
+        waitStrategy: () => ({ shouldContinue: polls++ < 1, delay: { seconds: 1 } }),
+      })
+    })
+    assert.equal(polls, 2, 'expected the condition to be polled twice (initial + one retry)')
+
+    return secondPollSpan
+  })
+
+  // Regression coverage for the SDK "safe paths" the trace-checkpoint hook relies on
+  // (see packages/datadog-plugin-aws-durable-execution-sdk-js/src/trace-checkpoint.js).
+  // These exercise the real @aws/durable-execution-sdk-js + @aws/durable-execution-sdk-js-testing
+  // version pinned in packages/dd-trace/test/plugins/versions/package.json. If an SDK upgrade
+  // starts iterating all stepData entries, drops the chronological Operations[0] guarantee,
+  // or routes our blake2b-hashed stepIds through the user-step lifecycle map, one of these
+  // will fail and tell us exactly which assumption broke.
+  describe('trace-checkpoint propagation (SDK safe-path coverage)', () => {
+    const CHECKPOINT_NAME_RE = /^_datadog_\d+$/
+
+    const checkpointOps = (result) =>
+      result.getOperations().filter(op => CHECKPOINT_NAME_RE.test(op.getName() ?? ''))
+
+    const parseCheckpointHeaders = (op) => {
+      const data = op.getOperationData()
+      const payload = data?.Payload ?? data?.StepDetails?.Result
+      return typeof payload === 'string' ? JSON.parse(payload) : null
+    }
+
+    // Safe paths covered: stepData namespace isolation (getStepData lookups by user-code
+    // sequential stepIds never hit our blake2b-hashed entries) and Operations[0] ordering
+    // (the customer's original payload remains reachable on resume even though our
+    // _datadog_* op is appended to InitialExecutionState.Operations).
+    //
+    // NB: This test does NOT assert trace_id continuity across initial and replay
+    // spans. The dd-trace integration only persists the checkpoint; the extraction
+    // layer that seeds the resumed invocation with the saved context lives in
+    // datadog-lambda-js (the upstream wrapper), which isn't loaded in this harness.
+    // See dd-trace-py tests/contrib/aws_durable_execution_sdk_python/
+    // test_aws_durable_execution_sdk_python.py docstring for the parallel reasoning.
+    it('single cycle: writes _datadog_0, preserves customer payload across resume', async () => {
+      const replayExecute = agent.assertSomeTraces(traces => assertSpanByName(traces, {
+        name: 'aws.durable.execute',
+        meta: { 'aws.durable.replayed': 'true' },
+      }), { timeoutMs: 5000 })
+
+      const handlerInputs = []
+      const result = await invokeHandler(async (event, ctx) => {
+        handlerInputs.push(event)
+        await ctx.wait('checkpoint-trigger', { seconds: 1 })
+      })
+
+      assert.equal(handlerInputs.length, 2, 'handler should run on initial invocation and resume')
+      for (const ev of handlerInputs) {
+        assertObjectContains(ev, { testInput: true })
+      }
+
+      const saved = checkpointOps(result)
+      assert.ok(saved.length >= 1, `expected a _datadog_ checkpoint op, got names: ${
+        result.getOperations().map(o => o.getName()).join(', ')}`)
+      const headers = parseCheckpointHeaders(saved[0])
+      assert.ok(headers?.['x-datadog-trace-id'], 'checkpoint payload should carry x-datadog-trace-id')
+      assert.ok(headers?.['x-datadog-parent-id'], 'checkpoint payload should carry x-datadog-parent-id')
+      // Checkpoints are written and read entirely by Datadog code, so we force
+      // datadog-only injection regardless of the user's propagation-style config.
+      assert.equal(headers?.traceparent, undefined,
+        'tracecontext headers must not be persisted — checkpoints are datadog-style only')
+      assert.equal(headers?.tracestate, undefined,
+        'tracestate must not be persisted — checkpoints are datadog-style only')
+
+      return replayExecute
+    })
+
+    // Safe path covered: hasFinishedAncestor() in CheckpointManager parses stepIds by
+    // splitting on `-`. Our 64-char hex blake2b stepIds contain no `-`, so even when the
+    // suspend happens inside runInChildContext (whose own child stepIds DO use `-`),
+    // ancestor-finished pruning never targets our checkpoint write.
+    it('child-context: checkpoint still saves when suspend happens inside runInChildContext', async () => {
+      const replayExecute = agent.assertSomeTraces(traces => assertSpanByName(traces, {
+        name: 'aws.durable.execute',
+        meta: { 'aws.durable.replayed': 'true' },
+      }), { timeoutMs: 5000 })
+
+      const result = await invokeHandler(async (event, ctx) =>
+        ctx.runInChildContext('child', async cctx => cctx.wait('child-wait', { seconds: 1 })))
+
+      assert.ok(checkpointOps(result).length >= 1,
+        'a _datadog_ checkpoint must save even when the suspend originates inside runInChildContext')
+
+      return replayExecute
+    })
+
+    // Safe paths covered: this.operations lifecycle map (checkAndTerminate / cleanupAllOperations
+    // never see us) and validateReplayConsistency (per-stepId, called only with user stepIds).
+    // A real step before AND after a suspend forces the SDK to (1) validateReplayConsistency
+    // against the prior step's stored entry, (2) walk through REPLAY → ExecutionMode while our
+    // _datadog_0 sits in stepData, and (3) start a fresh user step after the transition. Any
+    // leakage of our blake2b-hashed entries into those checks would surface as
+    // NonDeterministicExecutionError or a hung termination.
+    it('step-suspend-step: replay-validation runs around our _datadog_0 without errors', async () => {
+      const succeededExecute = agent.assertSomeTraces(traces => assertSpanByName(traces, {
+        name: 'aws.durable.execute',
+        meta: { 'aws.durable.invocation_status': 'succeeded' },
+      }), { timeoutMs: 5000 })
+
+      const stepInvocations = { before: 0, after: 0 }
+      const result = await invokeHandler(async (event, ctx) => {
+        await ctx.step('before', async () => { stepInvocations.before++ })
+        await ctx.wait('mid-wait', { seconds: 1 })
+        await ctx.step('after', async () => { stepInvocations.after++ })
+      })
+
+      assert.equal(stepInvocations.before, 1, "'before' step body must run exactly once across replay")
+      assert.equal(stepInvocations.after, 1, "'after' step body must run exactly once after the suspend resume")
+      assert.ok(checkpointOps(result).length >= 1,
+        'expected at least one _datadog_ checkpoint op across the suspend cycle')
+
+      return succeededExecute
+    })
+  })
+})

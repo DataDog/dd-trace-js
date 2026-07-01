@@ -13,6 +13,8 @@ let testManagementTests = {}
 let isImpactedTestsEnabled = false
 let isModifiedTest = false
 let isTestIsolationEnabled = false
+let hasWarnedMissingBeforeEachTaskResult = false
+let hasWarnedMissingBeforeEachRetryResult = false
 // Array of test names that have been retried and the reason
 const retryReasonsByTestName = new Map()
 // Track test errors suppressed by test management so we can still report them to Datadog.
@@ -86,6 +88,47 @@ function getTestProperties (testName) {
   return { isAttemptToFix, isDisabled, isQuarantined }
 }
 
+/**
+ * @param {string} message
+ * @returns {void}
+ */
+function warnMissingBeforeEachTaskResult (message) {
+  // eslint-disable-next-line no-console
+  console.warn(message)
+}
+
+/**
+ * @param {object} test
+ * @returns {Cypress.Chainable<{ traceId?: string, shouldSkip?: boolean, shouldDiscard?: boolean }>}
+ */
+function runBeforeEachTask (test) {
+  return cy.task('dd:beforeEach', test).then((taskResult) => {
+    if (taskResult !== undefined && taskResult !== null) {
+      return taskResult
+    }
+
+    if (!hasWarnedMissingBeforeEachTaskResult) {
+      hasWarnedMissingBeforeEachTaskResult = true
+      warnMissingBeforeEachTaskResult('Datadog Cypress dd:beforeEach task returned no result. Retrying once.')
+    }
+
+    return cy.task('dd:beforeEach', test).then((retryTaskResult) => {
+      if (retryTaskResult !== undefined && retryTaskResult !== null) {
+        return retryTaskResult
+      }
+
+      if (!hasWarnedMissingBeforeEachRetryResult) {
+        hasWarnedMissingBeforeEachRetryResult = true
+        warnMissingBeforeEachTaskResult(
+          'Datadog Cypress dd:beforeEach task returned no result after retry. Continuing with an empty task result.'
+        )
+      }
+
+      return {}
+    })
+  })
+}
+
 // Catch test failures for quarantined tests and suppress them
 // By not re-throwing the error, Cypress marks the test as passed
 // This allows quarantined tests to run but not affect the exit code
@@ -136,6 +179,7 @@ function getRetriedTests (test, numRetries, tags) {
     // TODO: signal in framework logs that this is a retry.
     // TODO: Change it so these tests are allowed to fail.
     const clonedTest = test.clone()
+    disableFrameworkRetries(clonedTest)
     if (tags.includes('_ddIsEfdRetry')) {
       clonedTest._ddEfdRetryIndex = retryIndex + 1
     }
@@ -147,6 +191,19 @@ function getRetriedTests (test, numRetries, tags) {
     retriedTests.push(clonedTest)
   }
   return retriedTests
+}
+
+function disableFrameworkRetries (test) {
+  test._retries = 0
+}
+
+function shouldDisableFrameworkRetries (test) {
+  return test && (
+    test._ddIsAttemptToFix ||
+    (isTestIsolationEnabled &&
+      isEarlyFlakeDetectionEnabled &&
+      (test._ddIsNew || test._ddIsModified))
+  )
 }
 
 const oldRunTests = Cypress.mocha.getRunner().runTests
@@ -188,9 +245,11 @@ Cypress.mocha.getRunner().runTests = function (suite, fn) {
     let retryMessage = ''
     if (isAtemptToFix) {
       test._ddIsAttemptToFix = true
+      disableFrameworkRetries(test)
       retryMessage = 'because it is an attempt to fix'
       retriedTests = getRetriedTests(test, testManagementAttemptToFixRetries, ['_ddIsAttemptToFix'])
     } else if (isModified && isEarlyFlakeDetectionEnabled) {
+      disableFrameworkRetries(test)
       retryMessage = 'to detect flakes because it is modified'
       retriedTests = getRetriedTests(test, earlyFlakeDetectionNumRetries, [
         '_ddIsModified',
@@ -198,6 +257,7 @@ Cypress.mocha.getRunner().runTests = function (suite, fn) {
         isKnownTestsEnabled && isNewTest(test) && '_ddIsNew',
       ])
     } else if (isNew && isEarlyFlakeDetectionEnabled) {
+      disableFrameworkRetries(test)
       retryMessage = 'to detect flakes because it is new'
       retriedTests = getRetriedTests(test, earlyFlakeDetectionNumRetries, ['_ddIsNew', '_ddIsEfdRetry'])
     }
@@ -214,8 +274,21 @@ Cypress.mocha.getRunner().runTests = function (suite, fn) {
   return oldRunTests.apply(this, [suite, fn])
 }
 
+Cypress.on('test:before:run', (attributes, test) => {
+  if (shouldDisableFrameworkRetries(test)) {
+    disableFrameworkRetries(test)
+  }
+})
+
+Cypress.on('test:before:run:async', (attributes, test) => {
+  if (shouldDisableFrameworkRetries(test)) {
+    disableFrameworkRetries(test)
+  }
+})
+
 beforeEach(function () {
-  const testName = Cypress.mocha.getRunner().suite.ctx.currentTest.fullTitle()
+  const currentTest = Cypress.mocha.getRunner().suite.ctx.currentTest
+  const testName = currentTest.fullTitle()
 
   const retryMessage = retryReasonsByTestName.get(testName)
   if (retryMessage) {
@@ -233,7 +306,8 @@ beforeEach(function () {
     originalWindow = win
   })
 
-  cy.task('dd:beforeEach', {
+  runBeforeEachTask({
+    testId: currentTest.id,
     testName,
     testSuite: Cypress.mocha.getRootSuite().file,
     isEfdRetry: Cypress.mocha.getRunner().suite.ctx.currentTest._ddIsEfdRetry,

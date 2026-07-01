@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire').noCallThru()
-const { MsgpackEncoder } = require('../../src/msgpack')
+const { encode: encodeMsgpack } = require('../../src/msgpack')
 
 require('../setup/core')
 
@@ -455,7 +455,7 @@ describe('NativeDatadogSpan', () => {
       const keys = nativeSpans.setMetaStruct.getCalls().map(c => c.args[1])
       assert.deepEqual(keys.sort(), ['num', 'obj', 'str'])
 
-      const expected = new MsgpackEncoder().encode({ a: 1 })
+      const expected = encodeMsgpack({ a: 1 })
       const objCall = nativeSpans.setMetaStruct.getCalls().find(c => c.args[1] === 'obj')
       assert.deepEqual(Uint8Array.from(objCall.args[2]), Uint8Array.from(expected))
     })

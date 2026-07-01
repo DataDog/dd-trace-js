@@ -1,28 +1,43 @@
 'use strict'
 
-// WARNING: CHANGES TO THIS FUNCTION WILL AFFECT THE LINE NUMBERS OF THE BREAKPOINTS
+// WARNING: the breakpoint targets below are referenced by line number from
+// meta.json (BREAKPOINT_LINE). Update the BREAKPOINT_LINE values there if you
+// move the `data.n = n` line or the unreachable `return n` line.
+
+const guard = require('../startup-guard')
+
+const OPERATIONS = Number(process.env.OPERATIONS)
+const STARTUP_GUARD_MAX_SHARE = Number(process.env.STARTUP_GUARD_MAX_SHARE)
 
 if (process.env.DD_DYNAMIC_INSTRUMENTATION_ENABLED === 'true') {
-  require('./start-devtools-client')
+  // The devtools worker and its ports are unref'd, so nothing holds the event
+  // loop open while the breakpoint installs. Keep it alive until the install
+  // ack, then run the loop so the probe fires on every iteration instead of
+  // racing its installation.
+  const keepAlive = setInterval(() => {}, 2 ** 31 - 1)
+  require('./start-devtools-client')(() => {
+    clearInterval(keepAlive)
+    runWork()
+  })
+} else {
+  runWork()
 }
 
-let n = 0
-
-// Give the devtools client time to connect before doing work
-setTimeout(doSomeWork, 250)
-
-function doSomeWork (arg1 = 1, arg2 = 2) {
-  const data = getSomeData()
-  data.n = n
-  if (++n <= 250) {
-    setTimeout(doSomeWork, 1)
+function runWork () {
+  guard.loopStart()
+  for (let i = 0; i < OPERATIONS; i++) {
+    doSomeWork(i)
   }
+  guard.done(STARTUP_GUARD_MAX_SHARE)
 }
 
-// Location to put dummy breakpoint that is never hit:
-// eslint-disable-next-line no-unused-vars
-function dummy () {
-  throw new Error('This line should never execute')
+function doSomeWork (n) {
+  const data = getSomeData()
+  data.n = n // BREAKPOINT HERE!
+  if (n < 0) {
+    return n // BREAKPOINT HERE!
+  }
+  return data.n
 }
 
 function getSomeData () {
