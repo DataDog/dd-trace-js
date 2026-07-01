@@ -311,7 +311,7 @@ describe('telemetry app-heartbeat', () => {
   })
 
   it('should send heartbeat in uniform intervals', (done) => {
-    let beats = 0 // to keep track of the amont of times extendedHeartbeat is called
+    let beats = 0 // to keep track of the amount of times extendedHeartbeat is called
     const sendDataRequest = {
       sendData: (config, application, host, reqType, payload, cb = () => {}) => {
         if (reqType === 'app-heartbeat') {
@@ -373,7 +373,7 @@ describe('Telemetry extended heartbeat', () => {
 
   it('should be sent every 24 hours', (done) => {
     let extendedHeartbeatRequest
-    let beats = 0 // to keep track of the amont of times extendedHeartbeat is called
+    let beats = 0 // to keep track of the amount of times extendedHeartbeat is called
     const sendDataRequest = {
       sendData: (config, application, host, reqType, payload, cb = () => {}) => {
         if (reqType === 'app-started') {
