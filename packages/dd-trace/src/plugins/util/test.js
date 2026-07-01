@@ -1617,7 +1617,7 @@ function isFailedTestReplaySupported (testFramework, frameworkVersion) {
     : true
 }
 
-function getLibraryCapabilitiesTags (testFramework, frameworkVersion) {
+function getLibraryCapabilitiesTags (testFramework, frameworkVersion, options = {}) {
   return {
     [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: isTiaSupported(testFramework)
       ? '1'
@@ -1639,7 +1639,8 @@ function getLibraryCapabilitiesTags (testFramework, frameworkVersion) {
       isAttemptToFixSupported(testFramework, frameworkVersion)
         ? '5'
         : undefined,
-    [DD_CAPABILITIES_FAILED_TEST_REPLAY]: isFailedTestReplaySupported(testFramework, frameworkVersion)
+    [DD_CAPABILITIES_FAILED_TEST_REPLAY]: !options.omitFailedTestReplay &&
+      isFailedTestReplaySupported(testFramework, frameworkVersion)
       ? '1'
       : undefined,
   }

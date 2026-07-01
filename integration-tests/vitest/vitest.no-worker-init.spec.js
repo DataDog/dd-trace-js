@@ -11,6 +11,7 @@ const {
   sandboxCwd,
   useSandbox,
   getCiVisAgentlessConfig,
+  assertObjectContains,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const noWorkerInit = require('../../packages/datadog-instrumentations/src/vitest-main-no-worker-init')
@@ -18,6 +19,13 @@ const {
   ERROR_MESSAGE,
 } = require('../../packages/dd-trace/src/constants')
 const {
+  DD_CAPABILITIES_AUTO_TEST_RETRIES,
+  DD_CAPABILITIES_EARLY_FLAKE_DETECTION,
+  DD_CAPABILITIES_FAILED_TEST_REPLAY,
+  DD_CAPABILITIES_IMPACTED_TESTS,
+  DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
+  DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
+  DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
   EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_FINAL_STATUS,
@@ -342,6 +350,45 @@ SUPPORTED_VERSIONS.forEach((version) => {
         assert.strictEqual(exitCode, 0, testOutput)
       })
     }
+
+    it('does not advertise Failed Test Replay capability in no-worker mode', async () => {
+      receiver.setSettings({
+        di_enabled: true,
+      })
+
+      const metadataPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+          const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
+
+          assert.ok(metadataDicts.length > 0, `Expected ${metadataDicts.length} > 0`)
+          metadataDicts.forEach(metadata => {
+            assertObjectContains(metadata.test, {
+              [DD_CAPABILITIES_EARLY_FLAKE_DETECTION]: '1',
+              [DD_CAPABILITIES_AUTO_TEST_RETRIES]: '1',
+              [DD_CAPABILITIES_IMPACTED_TESTS]: '1',
+              [DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE]: '1',
+              [DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE]: '1',
+              [DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX]: '5',
+            })
+            assert.ok(
+              !Object.hasOwn(metadata.test, DD_CAPABILITIES_FAILED_TEST_REPLAY),
+              `Available keys: ${inspect(Object.keys(metadata.test))}`
+            )
+          })
+        })
+
+      const exitCode = await Promise.all([
+        runVitest({
+          TEST_DIR: 'ci-visibility/vitest-tests/vitest-worker-env.mjs',
+          POOL_CONFIG: 'forks',
+          EXPECT_DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE: '1',
+          EXPECT_NO_DD_TRACE_INIT: '1',
+        }),
+        metadataPromise,
+      ]).then(([exitCode]) => exitCode)
+
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
 
     if (version === '3.2.6') {
       it('reports multiple suites with the same parentage as worker instrumentation', async () => {

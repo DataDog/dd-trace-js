@@ -401,7 +401,9 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, s
   }
 
   try {
-    const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh, frameworkVersion)
+    const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh, frameworkVersion, {
+      isVitestNoWorkerInitActive: shouldInstallNoWorkerInit,
+    })
     if (err) {
       resetLibraryConfig()
     } else {
@@ -785,6 +787,7 @@ function getFinishWrapper (exitOrClose) {
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
       vitestPool,
+      isVitestNoWorkerInitActive,
       onFinish,
     })
 

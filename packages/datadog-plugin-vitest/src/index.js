@@ -30,7 +30,7 @@ const {
   TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
   TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED,
   TEST_HAS_FAILED_ALL_RETRIES,
-  getLibraryCapabilitiesTags,
+  getLibraryCapabilitiesTags: getDefaultLibraryCapabilitiesTags,
   TEST_RETRY_REASON_TYPES,
   TEST_IS_MODIFIED,
   TEST_HAS_DYNAMIC_NAME,
@@ -293,6 +293,7 @@ class VitestPlugin extends CiPlugin {
         testSuiteAbsolutePath,
         frameworkVersion,
         isTestFrameworkWorker,
+        isVitestNoWorkerInitActive,
       } = ctx
 
       const testCommand = ctx.testCommand || 'vitest run'
@@ -311,13 +312,16 @@ class VitestPlugin extends CiPlugin {
       // test suites run in a different process, so they also need to init the metadata dictionary
       const testSessionName = getTestSessionName(this.config, trimmedCommand, this.testEnvironmentMetadata)
       if (this.tracer._exporter.addMetadataTags) {
+        const libraryCapabilitiesTags = this.getLibraryCapabilitiesTags(frameworkVersion, {
+          isVitestNoWorkerInitActive,
+        })
         this.tracer._exporter.addMetadataTags({
           [TEST_LEVELS_METADATA]: {
             [TEST_COMMAND]: testCommand,
             [TEST_SESSION_NAME]: testSessionName,
             ...getTestLevelsMetadataTags(this.testEnvironmentMetadata),
           },
-          test: getLibraryCapabilitiesTags(this.constructor.id),
+          test: libraryCapabilitiesTags,
         })
       }
 
@@ -401,6 +405,7 @@ class VitestPlugin extends CiPlugin {
       isTestManagementTestsEnabled,
       requestErrorTags,
       vitestPool,
+      isVitestNoWorkerInitActive,
       onFinish,
     }) => {
       for (const [tag, value] of Object.entries(requestErrorTags || {})) {
@@ -433,7 +438,7 @@ class VitestPlugin extends CiPlugin {
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'module')
       this.testSessionSpan.finish()
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'session', {
-        hasFailedTestReplay: this.libraryConfig?.isDiEnabled || undefined,
+        hasFailedTestReplay: this.libraryConfig?.isDiEnabled && !isVitestNoWorkerInitActive ? true : undefined,
       })
       finishAllTraceSpans(this.testSessionSpan)
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
@@ -445,6 +450,19 @@ class VitestPlugin extends CiPlugin {
 
     this.addSub('ci:vitest:coverage-report', ({ rootDir, onDone }) => {
       this.handleCoverageReport(rootDir, onDone)
+    })
+  }
+
+  /**
+   * Returns Vitest library capability metadata tags.
+   * @param {string} frameworkVersion - The Vitest version.
+   * @param {object} [ctx] - Diagnostic channel context.
+   * @param {boolean} [ctx.isVitestNoWorkerInitActive] - Whether no-worker init is active for this run.
+   * @returns {Record<string, string|undefined>}
+   */
+  getLibraryCapabilitiesTags (frameworkVersion, ctx = {}) {
+    return getDefaultLibraryCapabilitiesTags(this.constructor.id, frameworkVersion, {
+      omitFailedTestReplay: ctx.isVitestNoWorkerInitActive,
     })
   }
 

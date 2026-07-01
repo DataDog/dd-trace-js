@@ -389,6 +389,7 @@ function createMainProcessReporter (reporterState) {
       repositoryRoot: testSessionConfiguration.repositoryRoot,
       codeOwnersEntries: testSessionConfiguration.codeOwnersEntries,
       isTestFrameworkWorker: true,
+      isVitestNoWorkerInitActive: true,
     }
     testSuiteStartCh.runStores(testSuiteCtx, () => {})
     testSuiteContexts.set(testModuleId, testSuiteCtx)
