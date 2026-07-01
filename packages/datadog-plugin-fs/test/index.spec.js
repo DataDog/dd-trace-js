@@ -50,25 +50,17 @@ describe('Plugin', () => {
 
       describe('open', () => {
         it('should not be instrumented', (done) => {
-          function waitForNextTrace () {
-            agent.assertSomeTraces((data) => {
-              if (data) {
-                data.forEach((arr) => {
-                  arr.forEach((trace) => {
-                    if (trace.name === 'fs.operation') {
-                      assert.fail('should not have been any fs traces')
-                    }
-                  })
-                })
+          agent
+            .assertNoTraces((data) => {
+              for (const traces of data) {
+                for (const trace of traces) {
+                  if (trace.name === 'fs.operation') {
+                    assert.fail('should not have been any fs traces')
+                  }
+                }
               }
-              process.nextTick(() => {
-                waitForNextTrace()
-              })
-            }).catch(done)
-          }
-
-          waitForNextTrace()
-          setTimeout(done, 1500) // allow enough time to ensure no traces happened
+            }, { timeoutMs: 1500 }) // allow enough time to ensure no traces happened
+            .then(done, done)
 
           fs.open(__filename, 'r+', (err, fd) => {
             if (err) {
@@ -107,11 +99,11 @@ describe('Plugin', () => {
     describe('without parent span', () => {
       describe('open', () => {
         it('should not be instrumented', (done) => {
-          agent.assertSomeTraces(() => {
-            assert.fail('should not have been any traces')
-          }).catch(done)
-
-          setTimeout(done, 1500) // allow enough time to ensure no traces happened
+          agent
+            .assertNoTraces(() => {
+              assert.fail('should not have been any traces')
+            }, { timeoutMs: 1500 }) // allow enough time to ensure no traces happened
+            .then(done, done)
 
           fs.open(__filename, 'r+', (err, fd) => {
             if (err) {

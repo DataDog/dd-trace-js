@@ -289,7 +289,7 @@ describe('Plugin', () => {
                 assert.strictEqual(traces[0][0].meta['http.url'], `http://localhost:${port}/error`)
                 assert.strictEqual(traces[0][0].meta['http.status_code'], '599')
                 assert.strictEqual(traces[0][0].meta.component, 'restify')
-              })
+              }, { timeoutMs: 12000 }) // restify <5 flushes the uncaught-exception span several seconds later
               .then(done)
               .catch(done)
 
@@ -299,7 +299,7 @@ describe('Plugin', () => {
               })
               .catch(done)
           })
-        })
+        }).timeout(15000)
       })
     })
   })

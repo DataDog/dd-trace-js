@@ -160,7 +160,7 @@ describe('Plugin', () => {
           .then(done)
           .catch(done)
 
-        dns.resolveAny('localhost', () => done())
+        dns.resolveAny('localhost', err => err && done(err))
       })
 
       it('should instrument reverse', done => {
@@ -230,13 +230,12 @@ describe('Plugin', () => {
 
       it('should skip instrumentation for noop context', done => {
         const resolver = new dns.Resolver()
-        const timer = setTimeout(done, 200)
 
         agent
-          .assertSomeTraces(() => {
-            clearTimeout(timer)
-            done(new Error('Resolve was traced.'))
-          })
+          .assertNoTraces(() => {
+            throw new Error('Resolve was traced.')
+          }, { timeoutMs: 200 })
+          .then(done, done)
 
         storage('legacy').run({ noop: true }, () => {
           resolver.resolve('lvh.me', () => {})
