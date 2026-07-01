@@ -35,6 +35,7 @@ const {
   TEST_IS_MODIFIED,
   TEST_HAS_DYNAMIC_NAME,
   TEST_FINAL_STATUS,
+  TEST_IS_TEST_FRAMEWORK_WORKER,
 } = require('../../dd-trace/src/plugins/util/test')
 const { COMPONENT } = require('../../dd-trace/src/constants')
 const {
@@ -97,12 +98,16 @@ class VitestPlugin extends CiPlugin {
         isRetryReasonAttemptToFix,
         isRetryReasonAtr,
         isModified,
+        isTestFrameworkWorker,
+        requestErrorTags,
       } = ctx
 
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
-      const store = storage('legacy').getStore()
+      const store = ctx.currentStore || storage('legacy').getStore()
+      const testSuiteSpan = store?.testSuiteSpan || this.testSuiteSpan
 
       const extraTags = {
+        ...requestErrorTags,
         [TEST_SOURCE_FILE]: testSuite,
       }
       if (isRetry) {
@@ -135,11 +140,14 @@ class VitestPlugin extends CiPlugin {
       if (isModified) {
         extraTags[TEST_IS_MODIFIED] = 'true'
       }
+      if (isTestFrameworkWorker) {
+        extraTags[TEST_IS_TEST_FRAMEWORK_WORKER] = 'true'
+      }
 
       const span = this.startTestSpan(
         testName,
         testSuite,
-        this.testSuiteSpan,
+        testSuiteSpan,
         extraTags
       )
 
@@ -160,7 +168,7 @@ class VitestPlugin extends CiPlugin {
     })
 
     this.addBind('ci:vitest:test:finish-time', (ctx) => {
-      const { status, task, attemptToFixPassed, attemptToFixFailed } = ctx
+      const { status, task, attemptToFixPassed, attemptToFixFailed, duration } = ctx
       const span = ctx.currentStore?.span
 
       // we store the finish time to finish at a later hook
@@ -174,7 +182,8 @@ class VitestPlugin extends CiPlugin {
           span.setTag(TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED, 'false')
         }
 
-        this.taskToFinishTime.set(task, span._getTime())
+        const finishTime = typeof duration === 'number' ? span._startTime + duration : span._getTime()
+        this.taskToFinishTime.set(task, finishTime)
 
         ctx.parentStore = ctx.currentStore
         ctx.currentStore = { ...ctx.currentStore, span }
@@ -247,19 +256,29 @@ class VitestPlugin extends CiPlugin {
       finishAllTraceSpans(span)
     })
 
-    this.addSub('ci:vitest:test:skip', ({ testName, testSuiteAbsolutePath, isNew, isDisabled }) => {
+    this.addSub('ci:vitest:test:skip', ({
+      testName,
+      testSuiteAbsolutePath,
+      isNew,
+      isDisabled,
+      isTestFrameworkWorker,
+      requestErrorTags,
+      testSuiteSpan,
+    }) => {
       const testSuite = getTestSuitePath(testSuiteAbsolutePath, this.repositoryRoot)
       const testSpan = this.startTestSpan(
         testName,
         testSuite,
-        this.testSuiteSpan,
+        testSuiteSpan || this.testSuiteSpan,
         {
+          ...requestErrorTags,
           [TEST_SOURCE_FILE]: testSuite,
           [TEST_SOURCE_START]: 1, // we can't get the proper start line in vitest
           [TEST_STATUS]: 'skip',
           [TEST_FINAL_STATUS]: 'skip',
           ...(isDisabled ? { [TEST_MANAGEMENT_IS_DISABLED]: 'true' } : {}),
           ...(isNew ? { [TEST_IS_NEW]: 'true' } : {}),
+          ...(isTestFrameworkWorker ? { [TEST_IS_TEST_FRAMEWORK_WORKER]: 'true' } : {}),
         }
       )
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', this.getTestTelemetryTags(testSpan))
@@ -267,7 +286,14 @@ class VitestPlugin extends CiPlugin {
     })
 
     this.addBind('ci:vitest:test-suite:start', (ctx) => {
-      const { codeOwnersEntries, repositoryRoot, testSuiteAbsolutePath, frameworkVersion } = ctx
+      const {
+        codeOwnersEntries,
+        repositoryRoot,
+        requestErrorTags,
+        testSuiteAbsolutePath,
+        frameworkVersion,
+        isTestFrameworkWorker,
+      } = ctx
 
       const testCommand = ctx.testCommand || 'vitest run'
       const { testSessionId, testModuleId } = ctx
@@ -304,8 +330,12 @@ class VitestPlugin extends CiPlugin {
           testSuite,
           'vitest'
         ),
+        ...requestErrorTags,
         [TEST_SOURCE_FILE]: testSuite,
         [TEST_SOURCE_START]: 1,
+      }
+      if (isTestFrameworkWorker) {
+        testSuiteMetadata[TEST_IS_TEST_FRAMEWORK_WORKER] = 'true'
       }
 
       const codeOwners = this.getCodeOwners(testSuiteMetadata)
@@ -330,13 +360,17 @@ class VitestPlugin extends CiPlugin {
       return ctx.currentStore
     })
 
-    this.addSub('ci:vitest:test-suite:finish', ({ testSuiteSpan, status, onFinish }) => {
+    this.addSub('ci:vitest:test-suite:finish', ({ testSuiteSpan, status, deferFlush, onFinish }) => {
       if (testSuiteSpan) {
         testSuiteSpan.setTag(TEST_STATUS, status)
         testSuiteSpan.finish()
         finishAllTraceSpans(testSuiteSpan)
       }
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
+      if (deferFlush) {
+        onFinish()
+        return
+      }
       this.tracer._exporter.flush(onFinish)
       if (this.runningTestProbe) {
         this.removeDiProbe(this.runningTestProbe)
@@ -365,9 +399,14 @@ class VitestPlugin extends CiPlugin {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
+      requestErrorTags,
       vitestPool,
       onFinish,
     }) => {
+      for (const [tag, value] of Object.entries(requestErrorTags || {})) {
+        this.testSessionSpan.setTag(tag, value)
+        this.testModuleSpan.setTag(tag, value)
+      }
       this.testSessionSpan.setTag(TEST_STATUS, status)
       this.testModuleSpan.setTag(TEST_STATUS, status)
       if (error) {

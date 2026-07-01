@@ -38,7 +38,7 @@ const {
 const newTestsWithDynamicNames = new Set()
 const attemptToFixExecutions = new Map()
 const workerProcesses = new WeakSet()
-const mainProcessSetupPromises = new WeakMap()
+const mainProcessSetupStates = new WeakMap()
 const coverageWrappedProviders = new WeakSet()
 const finishWrappedContexts = new WeakSet()
 let isFlakyTestRetriesEnabled = false
@@ -125,6 +125,26 @@ function getTestFilepathsFromSpecifications (testSpecifications) {
     const testFile = Array.isArray(testSpecification) ? testSpecification[1] : testSpecification
     return testFile?.moduleId || testFile?.filepath || testFile
   })
+}
+
+function getTestSpecificationsKey (testSpecifications) {
+  if (!Array.isArray(testSpecifications) || !testSpecifications.length) return
+
+  const keyParts = []
+  for (const testSpecification of testSpecifications) {
+    const testFile = Array.isArray(testSpecification) ? testSpecification[1] : testSpecification
+    const testFilepath = testFile?.moduleId || testFile?.filepath || testFile
+    if (!testFilepath) continue
+
+    const projectName = getProjectName(getTestSpecificationProject(testSpecification)) || ''
+    const pool = getTestSpecificationPool(testSpecification) || ''
+    keyParts.push(`${projectName}\0${pool}\0${testFilepath}`)
+  }
+
+  if (!keyParts.length) return
+
+  keyParts.sort()
+  return keyParts.join('\0')
 }
 
 function getTestFilepaths (ctx, testSpecifications) {
@@ -476,12 +496,16 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
 }
 
 function ensureMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
-  let setupPromise = mainProcessSetupPromises.get(ctx)
-  if (!setupPromise) {
-    setupPromise = runMainProcessSetup(ctx, frameworkVersion, testSpecifications)
-    mainProcessSetupPromises.set(ctx, setupPromise)
+  const specificationsKey = getTestSpecificationsKey(testSpecifications)
+  let setupState = mainProcessSetupStates.get(ctx)
+  if (!setupState || setupState.specificationsKey !== specificationsKey) {
+    setupState = {
+      setupPromise: runMainProcessSetup(ctx, frameworkVersion, testSpecifications),
+      specificationsKey,
+    }
+    mainProcessSetupStates.set(ctx, setupState)
   }
-  return setupPromise
+  return setupState.setupPromise
 }
 
 function configureFlakyTestRetries (ctx, testSpecifications) {
@@ -740,8 +764,7 @@ function markVitestWorkerEnv (ctx, testSpecifications) {
   if (!config || !shouldMarkVitestWorkerEnv(config.pool, testSpecifications)) {
     return
   }
-  config.env = config.env || {}
-  config.env.DD_VITEST_WORKER = '1'
+  config.env = getVitestWorkerEnv(config.env)
 }
 
 function wrapVitestRunFiles (Vitest, frameworkVersion) {
@@ -825,7 +848,14 @@ function isVitestTinypoolOptions (options) {
 function markVitestTinypoolOptions (options) {
   if (!isVitestTinypoolOptions(options)) return
 
-  options.env.DD_VITEST_WORKER = '1'
+  options.env = getVitestWorkerEnv(options.env)
+}
+
+function getVitestWorkerEnv (env = {}) {
+  return {
+    ...env,
+    DD_VITEST_WORKER: '1',
+  }
 }
 
 function wrapTinyPoolRun (TinyPool) {
@@ -947,7 +977,7 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
     // function is async
     shimmer.wrap(forksPoolWorker.value.prototype, 'start', start => function (...args) {
       vitestPool = 'child_process'
-      this.env.DD_VITEST_WORKER = '1'
+      this.env = getVitestWorkerEnv(this.env)
 
       return start.apply(this, args)
     })
@@ -959,7 +989,7 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
     // function is async
     shimmer.wrap(threadsPoolWorker.value.prototype, 'start', start => function (...args) {
       vitestPool = 'worker_threads'
-      this.env.DD_VITEST_WORKER = '1'
+      this.env = getVitestWorkerEnv(this.env)
       return start.apply(this, args)
     })
     shimmer.wrap(threadsPoolWorker.value.prototype, 'on', getWrappedOn)
