@@ -70,17 +70,23 @@ describe('plugins/util/web', () => {
 
     it('should use the shared config if set', () => {
       const config = web.normalizeConfig({
-        headers: ['test'],
+        headers: { test: '', 'x-tagged': 'my.tag' },
         validateStatus: code => false,
         hooks: {
           request: () => 'test',
         },
       })
 
-      assert.deepStrictEqual(config.headers, [['test', undefined]])
+      assert.deepStrictEqual(config.headers, [['test', undefined], ['x-tagged', 'my.tag']])
       assert.strictEqual(config.validateStatus(200), false)
       assert.ok(Object.hasOwn(config, 'hooks'))
       assert.strictEqual(config.hooks.request(), 'test')
+    })
+
+    it('should still accept the legacy array form for headers', () => {
+      const config = web.normalizeConfig({ headers: ['test', 'x-tagged:my.tag'] })
+
+      assert.deepStrictEqual(config.headers, [['test', undefined], ['x-tagged', 'my.tag']])
     })
 
     describe('queryStringObfuscation', () => {
@@ -467,7 +473,7 @@ describe('plugins/util/web', () => {
     })
 
     it('should tag the headers even when DD_TRACE_HEADER_TAGS is set to unrelated headers', () => {
-      config = web.normalizeConfig({ headers: ['x-other-header'] })
+      config = web.normalizeConfig({ headers: { 'x-other-header': '' } })
       const context = web.getContext(req)
       context.config = config
 
@@ -624,7 +630,7 @@ describe('plugins/util/web', () => {
 
     it('honours headers added to the plugin config after startSpan', () => {
       const httpConfig = web.normalizeConfig({})
-      const frameworkConfig = web.normalizeConfig({ headers: ['user-agent', 'server'] })
+      const frameworkConfig = web.normalizeConfig({ headers: { 'user-agent': '', server: '' } })
 
       web.startSpan(tracer, httpConfig, req, res, 'test.request')
       span = web.root(req)
@@ -642,7 +648,7 @@ describe('plugins/util/web', () => {
     })
 
     it('still tags headers when the http-side config already lists them', () => {
-      const httpConfig = web.normalizeConfig({ headers: ['user-agent'] })
+      const httpConfig = web.normalizeConfig({ headers: { 'user-agent': '' } })
 
       web.startSpan(tracer, httpConfig, req, res, 'test.request')
       span = web.root(req)

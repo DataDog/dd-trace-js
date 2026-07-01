@@ -620,18 +620,21 @@ config.runtimeMetrics.enabled === true
 
 The `sampleRate` transform validates and clamps the value to the supported `0..1` range.
 
-### Array with transform
+### Map with a legacy-form transform
 
 ```json
 "DD_TRACE_HEADER_TAGS": [{
-  "type": "array",
+  "type": "map",
   "configurationNames": ["headerTags"],
   "default": "",
-  "transform": "stripColonWhitespace"
+  "transform": "headerTags"
 }]
 ```
 
-This matters because the transform is reused for both input styles:
+The env var is parsed to an object by the `map` parser. The programmatic option skips
+the parser, so the `headerTags` transform accepts the legacy `['header:tag']` array (or
+comma-separated string), converts it to the same object shape via `tagger.add`, and logs
+a one-time deprecation warning. Both input styles converge on one shape:
 
 ```bash
 DD_TRACE_HEADER_TAGS="x-user-id : user.id, x-team : team"
@@ -639,7 +642,7 @@ DD_TRACE_HEADER_TAGS="x-user-id : user.id, x-team : team"
 
 ```js
 tracer.init({
-  headerTags: ['x-user-id : user.id', 'x-team : team']
+  headerTags: { 'x-user-id': 'user.id', 'x-team': 'team' }
 })
 ```
 
@@ -647,7 +650,7 @@ Both become:
 
 ```js
 config.headerTags
-// ['x-user-id:user.id', 'x-team:team']
+// { 'x-user-id': 'user.id', 'x-team': 'team' }
 ```
 
 ### JSON with nested output
