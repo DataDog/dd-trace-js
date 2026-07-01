@@ -842,8 +842,41 @@ function getTypecheckTaskStatus (task) {
   return 'pass'
 }
 
-function getTypecheckTestName (task) {
-  return task.fullTestName || task.name
+/**
+ * Return whether a typecheck suite name represents the synthetic file-level suite.
+ *
+ * @param {string|undefined} suiteName
+ * @param {string} testSuiteAbsolutePath
+ * @returns {boolean}
+ */
+function isTypecheckFileSuiteName (suiteName, testSuiteAbsolutePath) {
+  if (!suiteName || !testSuiteAbsolutePath) return false
+
+  const normalizedSuiteName = path.normalize(suiteName).replaceAll('\\', '/')
+  const normalizedSuitePath = path.normalize(testSuiteAbsolutePath).replaceAll('\\', '/')
+
+  return normalizedSuitePath === normalizedSuiteName || normalizedSuitePath.endsWith(`/${normalizedSuiteName}`)
+}
+
+/**
+ * Return a typecheck test name with describe/suite prefixes and without the file-level suite prefix.
+ *
+ * @param {object} task
+ * @param {string} testSuiteAbsolutePath
+ * @returns {string}
+ */
+function getTypecheckTestName (task, testSuiteAbsolutePath) {
+  let testName = task.name || task.fullTestName
+  let currentTask = task.suite
+
+  while (currentTask) {
+    if (currentTask.name && !isTypecheckFileSuiteName(currentTask.name, testSuiteAbsolutePath)) {
+      testName = `${currentTask.name} ${testName}`
+    }
+    currentTask = currentTask.suite
+  }
+
+  return testName
 }
 
 /**
@@ -878,7 +911,7 @@ function getTypecheckerVitestContext (typechecker) {
 }
 
 function reportTypecheckTest (task, testSuiteAbsolutePath, providedContext) {
-  const testName = getTypecheckTestName(task)
+  const testName = getTypecheckTestName(task, testSuiteAbsolutePath)
   const testProperties = getVitestTestProperties(providedContext, testSuiteAbsolutePath, testName)
   const isAttemptToFix = testProperties.isAttemptToFix === true
   const isDisabled = testProperties.isDisabled === true
@@ -961,7 +994,7 @@ async function reportTypecheckResults (result, frameworkVersion, ctx) {
   if (!Array.isArray(result?.files)) return
 
   if (ctx) {
-    await ensureMainProcessSetup(ctx, frameworkVersion)
+    await ensureMainProcessSetup(ctx, frameworkVersion, result.files)
   }
   const providedContext = getMainProcessProvidedContext(ctx)
   const sessionConfiguration = testSessionConfigurationCh.hasSubscribers

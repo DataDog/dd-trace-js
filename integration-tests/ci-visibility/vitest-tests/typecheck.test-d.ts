@@ -1,4 +1,4 @@
-import { expectTypeOf, test } from 'vitest'
+import { describe, expectTypeOf, test } from 'vitest'
 
 test('typecheck can report type assertion', () => {
   expectTypeOf({ value: 'ok' }).toEqualTypeOf<{ value: string }>()
@@ -18,4 +18,14 @@ test('typecheck can report attempt-to-fix assertion', () => {
 
 test.skip('typecheck can report skipped assertion', () => {
   expectTypeOf({ value: 'skipped' }).toEqualTypeOf<{ value: string }>()
+})
+
+describe('typecheck nested suite', () => {
+  test('can report nested assertion', () => {
+    expectTypeOf({ value: 'nested' }).toEqualTypeOf<{ value: string }>()
+  })
+
+  test('can report nested disabled assertion', () => {
+    expectTypeOf({ value: 'nested disabled' }).toEqualTypeOf<{ value: string }>()
+  })
 })
