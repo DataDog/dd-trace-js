@@ -9,12 +9,15 @@ const {
   ML_APP,
   PROPAGATED_ML_APP_KEY,
   PROPAGATED_PARENT_ID_KEY,
+  PROPAGATED_PARENT_AGENT_ID_KEY,
+  PROPAGATED_PARENT_AGENT_NAME_KEY,
   SAMPLE_RATE,
   SAMPLING_DECISION,
   PROPAGATED_SAMPLE_RATE_KEY,
   PROPAGATED_SAMPLING_DECISION_KEY,
 } = require('./constants/tags')
 const { storage } = require('./storage')
+const { agentNameWireSafe } = require('./util')
 const telemetry = require('./telemetry')
 const LLMObsSpanProcessor = require('./span_processor')
 const LLMObsEvalMetricsWriter = require('./writers/evaluations')
@@ -133,6 +136,12 @@ function handleLLMObsInjection ({ carrier }) {
 
   if (!parentId && !mlApp && samplingDecision == null) return
 
+  // Propagate the nearest agent so spans in the downstream process attribute correctly. When the
+  // active span sits under a distributed agent, `resolveAgentAttribution` inherits the propagated
+  // id/name already on the parent's registry entry, so the chain survives multiple hops. Resolved
+  // after the bail-out above so we don't allocate when there is nothing to inject.
+  const { name: parentAgentName, spanId: parentAgentSpanId } = LLMObsTagger.resolveAgentAttribution(parent)
+
   // `_injectTags` only writes `x-datadog-tags` when the trace has `_dd.p.*`
   // tags, so it may be undefined here — coalesce before appending.
   const existing = carrier['x-datadog-tags']
@@ -141,6 +150,15 @@ function handleLLMObsInjection ({ carrier }) {
   if (mlApp) tags += `${tags ? ',' : ''}${PROPAGATED_ML_APP_KEY}=${mlApp}`
   if (sampleRate != null) tags += `${tags ? ',' : ''}${PROPAGATED_SAMPLE_RATE_KEY}=${sampleRate}`
   if (samplingDecision != null) tags += `${tags ? ',' : ''}${PROPAGATED_SAMPLING_DECISION_KEY}=${samplingDecision}`
+  // The id is always digit-safe; skip an unsafe name (id-only) rather than letting the tagset
+  // encoder drop the whole header. The backend resolves the name from the id in that case.
+  if (parentAgentSpanId) tags += `${tags ? ',' : ''}${PROPAGATED_PARENT_AGENT_ID_KEY}=${parentAgentSpanId}`
+  if (parentAgentName && agentNameWireSafe(parentAgentName)) {
+    const nameEntry = `${tags ? ',' : ''}${PROPAGATED_PARENT_AGENT_NAME_KEY}=${parentAgentName}`
+    if (tags.length + nameEntry.length <= globalTracerConfig.DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH) {
+      tags += nameEntry
+    }
+  }
   if (tags !== existing) carrier['x-datadog-tags'] = tags
 }
 

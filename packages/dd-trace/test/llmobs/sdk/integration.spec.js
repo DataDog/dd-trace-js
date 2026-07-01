@@ -62,6 +62,8 @@ describe('end to end sdk integration tests', () => {
       name: 'myWorkflow',
       inputValue: 'world',
       outputValue: 'hello',
+      // The workflow sits under the agent, so it is attributed to it.
+      agentAttribution: { parent_agent_name: 'agent', parent_agent_span_id: llmobsSpans[0].span_id },
     })
   })
 
@@ -225,6 +227,50 @@ describe('end to end sdk integration tests', () => {
 
       assert.equal(getTag(llmobsSpans[0], 'ml_app'), 'test')
       assert.equal(getTag(llmobsSpans[1], 'ml_app'), 'test')
+    })
+
+    it('propagates agent attribution across a distributed boundary', async () => {
+      const carrier = {}
+      let agentId
+      llmobs.trace({ kind: 'agent', name: 'upstream_agent' }, agentSpan => {
+        agentId = agentSpan.context().toSpanId()
+        tracer.inject(agentSpan, 'text_map', carrier)
+      })
+
+      const spanContext = tracer.extract('text_map', carrier)
+      tracer.trace('new-service-root', { childOf: spanContext }, () => {
+        llmobs.trace({ kind: 'tool', name: 'downstream_tool' }, () => {})
+      })
+
+      const { llmobsSpans } = await getEvents(2)
+      const toolEvent = llmobsSpans.find(event => event.name === 'downstream_tool')
+      assert.deepStrictEqual(toolEvent.meta.agent_attribution, {
+        parent_agent_name: 'upstream_agent',
+        parent_agent_span_id: agentId,
+      })
+    })
+
+    it('propagates only the id across a boundary when the upstream agent name is unsafe', async () => {
+      const carrier = {}
+      let agentId
+      llmobs.trace({ kind: 'agent', name: 'Researcher, v2' }, agentSpan => {
+        agentId = agentSpan.context().toSpanId()
+        tracer.inject(agentSpan, 'text_map', carrier)
+      })
+
+      const spanContext = tracer.extract('text_map', carrier)
+      tracer.trace('new-service-root', { childOf: spanContext }, () => {
+        llmobs.trace({ kind: 'tool', name: 'downstream_tool' }, () => {})
+      })
+
+      const { llmobsSpans } = await getEvents(2)
+      const toolEvent = llmobsSpans.find(event => event.name === 'downstream_tool')
+      // The comma-bearing name was skipped on the wire, so only the id survives; the name is
+      // emitted as explicit null (matching dd-trace-py) and the backend resolves it from the id.
+      assert.deepStrictEqual(toolEvent.meta.agent_attribution, {
+        parent_agent_name: null,
+        parent_agent_span_id: agentId,
+      })
     })
 
     it('injects the local mlApp', async () => {
