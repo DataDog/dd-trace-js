@@ -18,6 +18,12 @@ const {
 } = require('../../dd-trace/src/plugins/util/test')
 const { addHook } = require('./helpers/instrument')
 const {
+  testStartCh,
+  testPassCh,
+  testErrorCh,
+  testSkipCh,
+  testSuiteStartCh,
+  testSuiteFinishCh,
   testSessionStartCh,
   testSessionFinishCh,
   testSessionConfigurationCh,
@@ -31,6 +37,7 @@ const {
   codeCoverageReportCh,
   findExportByName,
   getChannelPromise,
+  getTypeTasks,
   getWorkspaceProject,
   setProvidedContext,
 } = require('./vitest-util')
@@ -96,6 +103,10 @@ function isCliApiPackage (vitestPackage) {
 
 function getVitestExport (vitestPackage) {
   return findExportByName(vitestPackage, 'Vitest')
+}
+
+function getTypecheckerExport (vitestPackage) {
+  return findExportByName(vitestPackage, 'Typechecker')
 }
 
 function getForksPoolWorkerExport (vitestPackage) {
@@ -823,6 +834,108 @@ function wrapVitestRunFiles (Vitest, frameworkVersion) {
   }
 }
 
+function getTypecheckTaskStatus (task) {
+  const state = task.result?.state
+  if (state === 'fail') return 'fail'
+  if (state === 'skip' || task.mode === 'skip' || task.mode === 'todo') return 'skip'
+  return 'pass'
+}
+
+function getTypecheckTestName (task) {
+  return task.fullTestName || task.name
+}
+
+function reportTypecheckTest (task, testSuiteAbsolutePath) {
+  const testName = getTypecheckTestName(task)
+  if (getTypecheckTaskStatus(task) === 'skip') {
+    testSkipCh.publish({
+      testName,
+      testSuiteAbsolutePath,
+      isNew: false,
+      isDisabled: false,
+    })
+    return
+  }
+
+  const ctx = {
+    testName,
+    testSuiteAbsolutePath,
+    isRetry: false,
+    isNew: false,
+    hasDynamicName: false,
+    mightHitProbe: false,
+    isAttemptToFix: false,
+    isDisabled: false,
+    isQuarantined: false,
+    isModified: false,
+  }
+  testStartCh.runStores(ctx, () => {})
+
+  if (getTypecheckTaskStatus(task) === 'fail') {
+    testErrorCh.publish({
+      error: task.result?.errors?.[0],
+      ...ctx.currentStore,
+    })
+  } else {
+    testPassCh.publish({
+      task,
+      ...ctx.currentStore,
+    })
+  }
+}
+
+async function reportTypecheckFile (file, sessionConfiguration, frameworkVersion) {
+  const testSuiteAbsolutePath = file.filepath
+  const testSuiteCtx = {
+    testSuiteAbsolutePath,
+    frameworkVersion,
+    testSessionId: sessionConfiguration.testSessionId,
+    testModuleId: sessionConfiguration.testModuleId,
+    testCommand: sessionConfiguration.testCommand,
+    repositoryRoot: sessionConfiguration.repositoryRoot,
+    codeOwnersEntries: sessionConfiguration.codeOwnersEntries,
+  }
+  testSuiteStartCh.runStores(testSuiteCtx, () => {})
+
+  for (const task of getTypeTasks(file.tasks)) {
+    reportTypecheckTest(task, testSuiteAbsolutePath)
+  }
+
+  let onFinish
+  const onFinishPromise = new Promise(resolve => {
+    onFinish = resolve
+  })
+  testSuiteFinishCh.publish({
+    status: getTypecheckTaskStatus(file),
+    onFinish,
+    ...testSuiteCtx.currentStore,
+  })
+  await onFinishPromise
+}
+
+async function reportTypecheckResults (result, frameworkVersion) {
+  if (!testSuiteFinishCh.hasSubscribers) return
+  if (!Array.isArray(result?.files)) return
+
+  const sessionConfiguration = testSessionConfigurationCh.hasSubscribers
+    ? await getChannelPromise(testSessionConfigurationCh, frameworkVersion)
+    : {}
+
+  for (const file of result.files) {
+    await reportTypecheckFile(file, sessionConfiguration, frameworkVersion)
+  }
+}
+
+function wrapTypechecker (Typechecker, frameworkVersion) {
+  if (!Typechecker?.prototype?.prepareResults) return
+
+  shimmer.wrap(Typechecker.prototype, 'prepareResults', prepareResults => async function () {
+    const result = await prepareResults.apply(this, arguments)
+    await reportTypecheckResults(result, frameworkVersion)
+    return result
+  })
+}
+
 function getCreateCliWrapper (vitestPackage, frameworkVersion) {
   const createCliExport = findExportByName(vitestPackage, 'createCLI')
   if (!createCliExport) {
@@ -1077,6 +1190,18 @@ addHook({
     shimmer.wrap(vitestPackage.h.prototype, 'sort', getSortWrapper)
   }
 
+  return vitestPackage
+})
+
+addHook({
+  name: 'vitest',
+  versions: ['>=4.0.0'],
+  filePattern: 'dist/chunks/index.*',
+}, (vitestPackage, frameworkVersion) => {
+  const typechecker = getTypecheckerExport(vitestPackage)
+  if (typechecker) {
+    wrapTypechecker(typechecker.value, frameworkVersion)
+  }
   return vitestPackage
 })
 
