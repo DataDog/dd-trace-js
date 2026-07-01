@@ -26,10 +26,18 @@ describe('Plugin', () => {
     let client
     let zod
 
+    let pathToClaudeCodeExecutable
+
     before(() => {
+      const path = require('node:path')
       const sdkModule = require(`../../../../../../versions/@anthropic-ai/claude-agent-sdk@${version}`)
       client = sdkModule.get()
       zod = sdkModule.get('zod')
+      // Force the glibc linux binary path — the SDK's musl/glibc auto-detection fails on some CI runners.
+      const anthropicDir = path.dirname(path.dirname(sdkModule.getPath()))
+      pathToClaudeCodeExecutable = path.join(
+        anthropicDir, `claude-agent-sdk-${process.platform}-${process.arch}`, 'claude'
+      )
     })
 
     it('instruments a full agentic call with subagents', async () => {
@@ -58,6 +66,7 @@ describe('Plugin', () => {
           disallowedTools: ['ToolSearch'],
           settingSources: [],
           cwd: '/tmp',
+          pathToClaudeCodeExecutable,
           env: {
             ANTHROPIC_BASE_URL: 'http://127.0.0.1:9126/vcr/claude-agent-sdk',
             CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST: true,

@@ -1,5 +1,14 @@
+import { createRequire } from 'node:module'
+import path from 'node:path'
 import { query, tool, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk'
 import { z } from 'zod'
+
+const require = createRequire(import.meta.url)
+const sdkPath = require.resolve('@anthropic-ai/claude-agent-sdk')
+const anthropicDir = path.dirname(path.dirname(sdkPath))
+const pathToClaudeCodeExecutable = path.join(
+  anthropicDir, `claude-agent-sdk-${process.platform}-${process.arch}`, 'claude'
+)
 
 const fetchWeather = tool(
   'fetch_weather',
@@ -25,6 +34,7 @@ const stream = query({
     disallowedTools: ['ToolSearch'],
     settingSources: [],
     cwd: '/tmp',
+    pathToClaudeCodeExecutable,
     env: {
       ANTHROPIC_BASE_URL: 'http://127.0.0.1:9126/vcr/claude-agent-sdk',
       CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST: true,

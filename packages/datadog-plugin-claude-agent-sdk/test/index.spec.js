@@ -19,12 +19,18 @@ describe('Plugin', () => {
     withVersions('claude-agent-sdk', '@anthropic-ai/claude-agent-sdk', (version) => {
       let client
       let zod
+      let pathToClaudeCodeExecutable
 
       before(async () => {
+        const path = require('node:path')
         await agent.load('claude-agent-sdk')
         const sdkModule = require(`../../../versions/@anthropic-ai/claude-agent-sdk@${version}`)
         client = sdkModule.get()
         zod = sdkModule.get('zod')
+        const anthropicDir = path.dirname(path.dirname(sdkModule.getPath()))
+        pathToClaudeCodeExecutable = path.join(
+          anthropicDir, `claude-agent-sdk-${process.platform}-${process.arch}`, 'claude'
+        )
       })
 
       after(() => agent.close())
@@ -117,6 +123,7 @@ describe('Plugin', () => {
             disallowedTools: ['ToolSearch'],
             settingSources: [],
             cwd: '/tmp',
+            pathToClaudeCodeExecutable,
             env: {
               ANTHROPIC_BASE_URL: 'http://127.0.0.1:9126/vcr/claude-agent-sdk',
               CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST: true,
