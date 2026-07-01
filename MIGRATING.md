@@ -113,6 +113,19 @@ The `ingestion: { sampleRate, rateLimit }` wrapper has been removed. Set
 `sampleRate` and `rateLimit` directly on the top-level `TracerOptions` object,
 or use `DD_TRACE_SAMPLE_RATE` / `DD_TRACE_RATE_LIMIT`.
 
+### GraphQL resolver `depth` no longer counts list indices
+
+The `graphql` plugin's `depth` option counted a resolver's full execution path,
+including the numeric list indices that `collapse` folds away. The same query
+therefore reached a different depth depending on whether `collapse` was enabled:
+a field one list-hop below the limit was instrumented with `collapse: false` and
+dropped with the default `collapse: true`.
+
+v6 counts only selection-set nesting (named fields) toward `depth`, so the limit
+tracks query structure rather than execution artifacts and is independent of
+`collapse`. At a given `depth`, a resolver nested under a list is now reached one
+level sooner than on v5's default. Lower `depth` to restore the previous cutoff.
+
 ## 4.0 to 5.0
 
 ### Node 16 is no longer supported

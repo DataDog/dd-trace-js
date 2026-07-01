@@ -54,6 +54,7 @@ versions.forEach((version) => {
   describe(`vitest@${version}`, () => {
     let cwd, receiver, childProcess, testOutput
     const vitestProjectsIt = version === 'latest' && NODE_MAJOR >= 20 ? it : it.skip
+    const latestVitestIt = version === 'latest' ? it : it.skip
 
     useSandbox([
       `vitest@${version}`,
@@ -315,6 +316,25 @@ versions.forEach((version) => {
       })
     })
 
+    it('does not mark application tinypool workers as Vitest workers', (done) => {
+      childProcess = exec('node ./ci-visibility/run-tinypool-with-vitest-env.mjs', {
+        cwd,
+        env: getCiVisAgentlessConfig(receiver.port),
+      })
+      childProcess.stdout?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.on('exit', (code) => {
+        assert.match(testOutput, /result 10/)
+        assert.match(testOutput, /dd vitest worker undefined/)
+        assert.strictEqual(code, 0)
+        done()
+      })
+    })
+
     context('programmatic api', () => {
       it('can report data using the vitest programmatic api', async () => {
         const eventsPromise = receiver
@@ -347,7 +367,7 @@ versions.forEach((version) => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
-              TEST_DIR: './test-programmatic-api*',
+              TEST_DIR: './test-programmatic-api.mjs',
             },
           }
         )
@@ -356,6 +376,75 @@ versions.forEach((version) => {
           eventsPromise,
           once(childProcess, 'exit'),
         ])
+      })
+
+      latestVitestIt('refreshes metadata when the vitest programmatic api reruns different files', async () => {
+        const disabledTestName = 'programmatic api second run is disabled by Test Management'
+        receiver.setSettings({
+          test_management: {
+            enabled: true,
+          },
+        })
+        receiver.setTestManagementTests({
+          vitest: {
+            suites: {
+              'ci-visibility/vitest-tests-programmatic-api/test-programmatic-api-second.mjs': {
+                tests: {
+                  [disabledTestName]: {
+                    properties: {
+                      disabled: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', payloads => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events
+              .filter(event => event.type === 'test')
+              .map(test => test.content)
+              .filter(test => test.meta[TEST_SOURCE_FILE].startsWith(
+                'ci-visibility/vitest-tests-programmatic-api/test-programmatic-api-'
+              ))
+
+            const testDetails = events
+              .filter(event => event.type === 'test')
+              .map(test => ({
+                name: test.content.meta[TEST_NAME],
+                sourceFile: test.content.meta[TEST_SOURCE_FILE],
+              }))
+            assert.strictEqual(tests.length, 2, inspect(testDetails))
+
+            const disabledTest = tests.find(test => test.meta[TEST_NAME] === disabledTestName)
+            assert.ok(disabledTest, inspect(tests.map(test => test.meta[TEST_NAME])))
+            assert.strictEqual(disabledTest.meta[TEST_STATUS], 'skip')
+            assert.strictEqual(disabledTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+          })
+
+        childProcess = exec(
+          'node run-programmatic-api-rerun.mjs',
+          {
+            cwd: `${cwd}/ci-visibility/vitest-tests-programmatic-api`,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              TEST_DIR: './test-programmatic-api-*',
+            },
+          }
+        )
+        childProcess.stdout.on('data', data => { testOutput += data })
+        childProcess.stderr.on('data', data => { testOutput += data })
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+
+        assert.strictEqual(exitCode, 0, testOutput)
       })
     })
 
