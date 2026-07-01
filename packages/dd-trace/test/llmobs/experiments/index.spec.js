@@ -42,9 +42,19 @@ describe('LLMObs Experiments facade', () => {
 
     it('returns a working facade when enabled and credentialed', () => {
       const exp = createExperiments(enabledConfig())
-      assert.equal(typeof exp.createDataset, 'function')
-      assert.equal(typeof exp.pullDataset, 'function')
-      assert.equal(typeof exp.experiment, 'function')
+      const dataset = exp.createDataset('d', 'desc')
+      assert.equal(typeof dataset.addRecord, 'function')
+      const experiment = exp.experiment({ name: 'n', dataset, task: (i) => i })
+      assert.equal(typeof experiment.run, 'function')
+    })
+  })
+
+  describe('no-op (disabled / missing keys)', () => {
+    it('throws on every operation with a clear message', async () => {
+      const exp = createExperiments({ llmobs: { DD_LLMOBS_ENABLED: false } })
+      assert.throws(() => exp.createDataset('d'), /unavailable/)
+      assert.throws(() => exp.experiment({}), /unavailable/)
+      await assert.rejects(() => exp.pullDataset('d'), /unavailable/)
     })
   })
 
@@ -105,6 +115,28 @@ describe('LLMObs Experiments facade', () => {
       await assert.rejects(
         () => createExperiments(enabledConfig()).pullDataset('ghost', { maxWaitMs: 0 }),
         /not found/
+      )
+    })
+
+    it('throws with the underlying error when listing datasets fails', async () => {
+      global.fetch.callsFake(async (url) => {
+        const u = new URL(url)
+        if (u.pathname === '/api/v2/llm-obs/v1/projects') {
+          return { ok: true, status: 200, text: sinon.stub().resolves(JSON.stringify({ data: { id: 'proj' } })) }
+        }
+        return { ok: false, status: 500, text: sinon.stub().resolves('server error') }
+      })
+      await assert.rejects(
+        () => createExperiments(enabledConfig()).pullDataset('wanted', { maxWaitMs: 0 }),
+        /Failed to list datasets/
+      )
+    })
+
+    it('throws when the expected record count never arrives within the budget', async () => {
+      resolveRoutes([{ data: [{ id: 'r1', attributes: { input: 'i1' } }] }]) // only ever 1 record
+      await assert.rejects(
+        () => createExperiments(enabledConfig()).pullDataset('wanted', { expectedRecordCount: 3, maxWaitMs: 0 }),
+        /expected 3.*backend may not have finished ingesting/
       )
     })
   })

@@ -31,6 +31,20 @@ function installFetch (calls, overrides = {}) {
   })
 }
 
+// Like installFetch, but returns a non-2xx for the given `METHOD /pathname`.
+function installFetchFailing (calls, failKey) {
+  installFetch(calls)
+  const stub = global.fetch
+  global.fetch = sinon.stub().callsFake(async (url, opts) => {
+    const u = new URL(url)
+    if (`${opts.method} ${u.pathname}` === failKey) {
+      calls.push({ method: opts.method, path: u.pathname, failed: true })
+      return { ok: false, status: 500, text: sinon.stub().resolves('boom') }
+    }
+    return stub(url, opts)
+  })
+}
+
 describe('LLMObs Experiments — dataset + experiment run', () => {
   let originalFetch
   let calls
@@ -187,5 +201,85 @@ describe('LLMObs Experiments — dataset + experiment run', () => {
     assert.throws(() => new Experiment(client, { dataset, task: (i) => i }), /name/)
     assert.throws(() => new Experiment(client, { name: 'n', task: (i) => i }), /dataset/)
     assert.throws(() => new Experiment(client, { name: 'n', dataset }), /task/)
+  })
+
+  it('exposes dataset getters and accepts a DatasetRecord instance', () => {
+    const { DatasetRecord } = require('../../../src/llmobs/experiments/dataset')
+    const dataset = new Dataset(client, 'my-name', 'desc').addRecord(new DatasetRecord('in', 'out', { m: 1 }))
+    assert.equal(dataset.name(), 'my-name')
+    assert.equal(dataset.id(), null)
+    assert.equal(dataset.url(), null)
+    const record = dataset.records()[0]
+    assert.equal(record.input, 'in')
+    assert.equal(record.expectedOutput, 'out')
+    assert.deepEqual(record.metadata, { m: 1 })
+  })
+
+  it('pads record ids when the push response is not an array', async () => {
+    installFetch(calls, { 'POST /api/v2/llm-obs/v1/proj/datasets/ds/records': { data: { ok: true } } })
+    const dataset = new Dataset(client, 'demo').addRecord('a').addRecord('b')
+    await dataset.push()
+    assert.deepEqual(dataset.recordIds(), ['', ''])
+  })
+
+  it('throws a clear error when dataset creation fails', async () => {
+    installFetchFailing(calls, 'POST /api/v2/llm-obs/v1/proj/datasets')
+    const dataset = new Dataset(client, 'demo').addRecord('a')
+    await assert.rejects(() => dataset.push(), /Failed to create dataset 'demo'/)
+  })
+
+  it('throws a clear error when pushing records fails', async () => {
+    installFetchFailing(calls, 'POST /api/v2/llm-obs/v1/proj/datasets/ds/records')
+    const dataset = new Dataset(client, 'demo').addRecord('a')
+    await assert.rejects(() => dataset.push(), /Failed to push records to dataset 'demo'/)
+  })
+
+  it('exposes experiment getters before and after run', async () => {
+    const dataset = new Dataset(client, 'demo').addRecord('x')
+    const experiment = new Experiment(client, { name: 'exp-demo', dataset, task: (i) => i })
+    assert.equal(experiment.name(), 'exp-demo')
+    assert.equal(experiment.experimentId(), null)
+    assert.equal(experiment.url(), null)
+    await experiment.run()
+    assert.equal(experiment.experimentId(), 'exp')
+    assert.equal(experiment.url(), 'https://app.datadoghq.com/llm/experiments/exp')
+  })
+
+  it('throws when the dataset has no id after push', async () => {
+    installFetch(calls, { 'POST /api/v2/llm-obs/v1/proj/datasets': { data: {} } })
+    const dataset = new Dataset(client, 'demo').addRecord('x')
+    await assert.rejects(
+      () => new Experiment(client, { name: 'exp-demo', dataset, task: (i) => i }).run(),
+      /has no id after push/
+    )
+  })
+
+  it('throws a clear error when experiment creation fails', async () => {
+    installFetchFailing(calls, 'POST /api/v2/llm-obs/v1/experiments')
+    const dataset = new Dataset(client, 'demo').addRecord('x')
+    await assert.rejects(
+      () => new Experiment(client, { name: 'exp-demo', dataset, task: (i) => i }).run(),
+      /Failed to create experiment 'exp-demo'/
+    )
+  })
+
+  it('marks the experiment failed and rethrows if posting events fails', async () => {
+    installFetchFailing(calls, 'POST /api/v2/llm-obs/v1/experiments/exp/events')
+    const dataset = new Dataset(client, 'demo').addRecord('x')
+    await assert.rejects(() => new Experiment(client, { name: 'exp-demo', dataset, task: (i) => i }).run())
+    assert.ok(calls.some(c => c.method === 'PATCH' && c.body?.data?.attributes?.status === 'failed'))
+  })
+
+  it('stringifies non-primitive categorical values (and empties null)', async () => {
+    const dataset = new Dataset(client, 'demo').addRecord('x')
+    await new Experiment(client, {
+      name: 'exp-demo',
+      dataset,
+      task: () => 'out',
+      evaluators: { obj: () => ({ x: 1 }), nul: () => null },
+    }).run()
+    const metrics = eventsBody().data.attributes.metrics
+    assert.equal(metrics.find(m => m.label === 'obj').categorical_value, '{"x":1}')
+    assert.equal(metrics.find(m => m.label === 'nul').categorical_value, '')
   })
 })

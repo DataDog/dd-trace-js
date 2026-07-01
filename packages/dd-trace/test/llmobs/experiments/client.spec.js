@@ -38,6 +38,7 @@ describe('LLMObs Experiments control-plane client', () => {
     assert.equal(appHost('us3.datadoghq.com'), 'us3.datadoghq.com')
     const client = new ExperimentsClient({ apiKey: 'k', appKey: 'a', site: 'datadoghq.com' })
     assert.equal(client.appBase, 'https://app.datadoghq.com')
+    assert.equal(client.site, 'datadoghq.com')
   })
 
   it('ensureProjectId resolves the configured project name', async () => {
