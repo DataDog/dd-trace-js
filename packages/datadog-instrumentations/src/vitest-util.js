@@ -9,11 +9,6 @@ const testFinishTimeCh = channel('ci:vitest:test:finish-time')
 const testPassCh = channel('ci:vitest:test:pass')
 const testErrorCh = channel('ci:vitest:test:error')
 const testSkipCh = channel('ci:vitest:test:skip')
-const isNewTestCh = channel('ci:vitest:test:is-new')
-const isAttemptToFixCh = channel('ci:vitest:test:is-attempt-to-fix')
-const isDisabledCh = channel('ci:vitest:test:is-disabled')
-const isQuarantinedCh = channel('ci:vitest:test:is-quarantined')
-const isModifiedCh = channel('ci:vitest:test:is-modified')
 const testFnCh = channel('ci:vitest:test:fn')
 
 // test suite hooks
@@ -104,19 +99,17 @@ function getProvidedContext () {
     const {
       _ddIsEarlyFlakeDetectionEnabled,
       _ddIsDiEnabled,
-      _ddKnownTests: knownTests,
+      _ddTestPropertiesByFilepath: testPropertiesByFilepath,
       _ddEarlyFlakeDetectionNumRetries: numRepeats,
       _ddEarlyFlakeDetectionSlowTestRetries: slowTestRetries,
       _ddIsKnownTestsEnabled: isKnownTestsEnabled,
       _ddIsTestManagementTestsEnabled: isTestManagementTestsEnabled,
       _ddTestManagementAttemptToFixRetries: testManagementAttemptToFixRetries,
-      _ddTestManagementTests: testManagementTests,
       _ddIsFlakyTestRetriesEnabled: isFlakyTestRetriesEnabled,
       _ddFlakyTestRetriesCount: flakyTestRetriesCount,
       _ddFlakyTestRetriesIncludesUnnamedProject: flakyTestRetriesIncludesUnnamedProject,
       _ddFlakyTestRetriesProjectNames: flakyTestRetriesProjectNames,
       _ddIsImpactedTestsEnabled: isImpactedTestsEnabled,
-      _ddModifiedFiles: modifiedFiles,
       _ddTestSessionId: testSessionId,
       _ddTestModuleId: testModuleId,
       _ddTestCommand: testCommand,
@@ -127,19 +120,17 @@ function getProvidedContext () {
     return {
       isDiEnabled: _ddIsDiEnabled,
       isEarlyFlakeDetectionEnabled: _ddIsEarlyFlakeDetectionEnabled,
-      knownTests,
+      testPropertiesByFilepath,
       numRepeats,
       slowTestRetries: slowTestRetries ?? {},
       isKnownTestsEnabled,
       isTestManagementTestsEnabled,
       testManagementAttemptToFixRetries,
-      testManagementTests,
       isFlakyTestRetriesEnabled,
       flakyTestRetriesCount: flakyTestRetriesCount ?? 0,
       flakyTestRetriesIncludesUnnamedProject,
       flakyTestRetriesProjectNames,
       isImpactedTestsEnabled,
-      modifiedFiles,
       testSessionId,
       testModuleId,
       testCommand,
@@ -151,19 +142,17 @@ function getProvidedContext () {
     return {
       isDiEnabled: false,
       isEarlyFlakeDetectionEnabled: false,
-      knownTests: {},
+      testPropertiesByFilepath: {},
       numRepeats: 0,
       slowTestRetries: {},
       isKnownTestsEnabled: false,
       isTestManagementTestsEnabled: false,
       testManagementAttemptToFixRetries: 0,
-      testManagementTests: {},
       isFlakyTestRetriesEnabled: false,
       flakyTestRetriesCount: 0,
       flakyTestRetriesIncludesUnnamedProject: false,
       flakyTestRetriesProjectNames: undefined,
       isImpactedTestsEnabled: false,
-      modifiedFiles: {},
       testSessionId: undefined,
       testModuleId: undefined,
       testCommand: undefined,
@@ -187,17 +176,51 @@ function isFlakyTestRetriesEnabledForTask (providedContext, task) {
   return flakyTestRetriesProjectNames.includes(projectName)
 }
 
+/**
+ * Return the main-prepared Test Optimization metadata for a Vitest test.
+ *
+ * @param {{ testPropertiesByFilepath?: Record<string, {
+ *   testSuite?: string,
+ *   knownTests?: string[],
+ *   testManagementTests?: Record<string, {
+ *     isAttemptToFix?: boolean,
+ *     isDisabled?: boolean,
+ *     isQuarantined?: boolean
+ *   }>,
+ *   isModified?: boolean
+ * }> }} providedContext
+ * @param {string} testSuiteAbsolutePath
+ * @param {string} testName
+ * @returns {{
+ *   testSuite?: string,
+ *   isNew: boolean,
+ *   isModified: boolean,
+ *   isAttemptToFix?: boolean,
+ *   isDisabled?: boolean,
+ *   isQuarantined?: boolean
+ * }}
+ */
+function getVitestTestProperties (providedContext, testSuiteAbsolutePath, testName) {
+  const testProperties = providedContext.testPropertiesByFilepath?.[testSuiteAbsolutePath]
+  const knownTests = testProperties?.knownTests
+  const testManagementProperties = testProperties?.testManagementTests?.[testName] || {}
+
+  return {
+    testSuite: testProperties?.testSuite,
+    isNew: Array.isArray(knownTests) ? !knownTests.includes(testName) : false,
+    isModified: testProperties?.isModified === true,
+    isAttemptToFix: testManagementProperties.isAttemptToFix,
+    isDisabled: testManagementProperties.isDisabled,
+    isQuarantined: testManagementProperties.isQuarantined,
+  }
+}
+
 module.exports = {
   testStartCh,
   testFinishTimeCh,
   testPassCh,
   testErrorCh,
   testSkipCh,
-  isNewTestCh,
-  isAttemptToFixCh,
-  isDisabledCh,
-  isQuarantinedCh,
-  isModifiedCh,
   testFnCh,
   testSuiteStartCh,
   testSuiteFinishCh,
@@ -222,4 +245,5 @@ module.exports = {
   setProvidedContext,
   getProvidedContext,
   isFlakyTestRetriesEnabledForTask,
+  getVitestTestProperties,
 }
