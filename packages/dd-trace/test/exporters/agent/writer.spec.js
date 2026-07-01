@@ -48,7 +48,6 @@ function describeWriter (protocolVersion) {
 
     log = {
       error: sinon.spy(),
-      errorWithoutTelemetry: sinon.spy(),
     }
 
     const AgentEncoder = function () {
@@ -165,7 +164,7 @@ function describeWriter (protocolVersion) {
 
       setTimeout(() => {
         sinon.assert.calledWith(
-          log.errorWithoutTelemetry,
+          log.error,
           'Error sending payload to the agent (status code: %s)',
           error.status,
           error

@@ -7,6 +7,11 @@ const logCollector = require('./log-collector')
 const telemetryLog = dc.channel('datadog:telemetry:log')
 const errorLog = dc.channel('datadog:log:error')
 
+const REPORTED_ERROR_CODES = new Set([
+  'DD_TRACER_INIT_ERROR',
+  'DD_PROFILER_INIT_ERROR',
+])
+
 let enabled = false
 
 /**
@@ -34,22 +39,19 @@ function onLog (log) {
   }
 }
 
-function onErrorLog (msg) {
-  const { message, cause, sendViaTelemetry } = msg
-  if (!sendViaTelemetry || (!message && !cause)) return
+function onErrorLog (err) {
+  const code = err?.cause?.code ?? err?.code
+  if (!REPORTED_ERROR_CODES.has(code)) return
 
   const telLog = {
     level: 'ERROR',
     count: 1,
-
-    // existing log.error(err) without message will be reported as 'Generic Error'
-    message: message ?? 'Generic Error',
+    message: err.message || 'Generic Error',
   }
 
-  if (cause) {
-    telLog.stack_trace = cause.stack
-    telLog.errorType = cause.constructor.name
-  }
+  const cause = err.cause ?? err
+  telLog.stack_trace = cause.stack
+  telLog.errorType = cause.constructor.name
 
   onLog(telLog)
 }
