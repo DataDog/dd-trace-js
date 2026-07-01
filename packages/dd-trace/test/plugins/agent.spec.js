@@ -160,4 +160,19 @@ describe('test agent helper', () => {
       }
     })
   })
+
+  describe('assertSomeTraces timeout', () => {
+    afterEach(() => agent.close())
+
+    it('rejects at the timeout when no payload arrives', async () => {
+      await agent.load([])
+
+      const start = Date.now()
+      await assert.rejects(
+        agent.assertSomeTraces(() => {}, { timeoutMs: 200 }),
+        { message: /No matching trace received within 200ms/ }
+      )
+      assert.ok(Date.now() - start < 1000, 'rejected well before Mocha\'s 5s timeout')
+    })
+  })
 })
