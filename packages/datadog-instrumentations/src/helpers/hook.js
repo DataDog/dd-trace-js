@@ -46,6 +46,13 @@ function Hook (modules, hookOptions, onrequire) {
     hookOptions = {}
   }
 
+  const ritmOptions = {}
+  if (hookOptions.patchLoadedBuiltins) {
+    ritmOptions.patchLoadedBuiltins = true
+    hookOptions = { ...hookOptions }
+    delete hookOptions.patchLoadedBuiltins
+  }
+
   this._patched = Object.create(null)
   const patched = new WeakMap()
 
@@ -94,7 +101,7 @@ function Hook (modules, hookOptions, onrequire) {
     return newExports
   }
 
-  this._ritmHook = ritm(modules, {}, safeHook)
+  this._ritmHook = ritm(modules, ritmOptions, safeHook)
   this._iitmHook = iitm(modules, hookOptions, (moduleExports, moduleName, moduleBaseDir) => {
     return safeHook(moduleExports, moduleName, moduleBaseDir, null, true)
   })

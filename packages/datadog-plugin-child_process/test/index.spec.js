@@ -2,15 +2,19 @@
 
 const assert = require('node:assert/strict')
 const events = require('node:events')
+const { inspect } = require('node:util')
 
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const { storage } = require('../../datadog-core')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
-const ChildProcessPlugin = require('../src')
+const { compare } = require('../../dd-trace/test/plugins/helpers')
 const { temporaryWarningExceptions } = require('../../dd-trace/test/setup/core')
+const { assertObjectContains } = require('../../../integration-tests/helpers')
+const ChildProcessPlugin = require('../src')
+
+const COMMAND_SPAN_TIMEOUT = 4000
 
 function noop () {}
 
@@ -25,6 +29,76 @@ function normalizeArgs (methodName, command, options) {
   args.push(options)
 
   return args
+}
+
+function getTestMarker (...parts) {
+  return ['dd-child-process', ...parts].join('-')
+}
+
+function isCommandExecutionSpan (span) {
+  return span.name === 'command_execution' && span.meta?.component === 'subprocess'
+}
+
+function matchesExpectedCommand (span, expected) {
+  const expectedMeta = expected.meta
+  if (expectedMeta === undefined || expectedMeta === null || typeof expectedMeta !== 'object') {
+    return true
+  }
+
+  if (Object.hasOwn(expectedMeta, 'cmd.exec') && span.meta?.['cmd.exec'] !== expectedMeta['cmd.exec']) {
+    return false
+  }
+
+  if (Object.hasOwn(expectedMeta, 'cmd.shell') && span.meta?.['cmd.shell'] !== expectedMeta['cmd.shell']) {
+    return false
+  }
+
+  return true
+}
+
+/**
+ * Waits for the child_process span under test instead of letting parent/manual
+ * spans from shared agent payloads become assertion candidates.
+ *
+ * @param {Record<string, unknown>} expected expected span fields
+ * @param {number} [timeout] timeout in milliseconds
+ * @returns {Promise<void>}
+ */
+function expectCommandSpan (expected, timeout = COMMAND_SPAN_TIMEOUT) {
+  return agent.assertSomeTraces(traces => {
+    const commandSpans = []
+    const matchingCommandSpans = []
+    const scoredErrors = []
+
+    for (const trace of traces) {
+      for (const span of trace) {
+        if (!isCommandExecutionSpan(span)) continue
+
+        commandSpans.push(span)
+        if (!matchesExpectedCommand(span, expected)) continue
+
+        matchingCommandSpans.push(span)
+
+        try {
+          assertObjectContains(span, expected)
+          return
+        } catch (err) {
+          scoredErrors.push({ err, score: compare(expected, span) })
+        }
+      }
+    }
+
+    if (scoredErrors.length > 0) {
+      const error = scoredErrors.sort((a, b) => a.score - b.score)[0].err
+      error.message += '\n\nCandidate Child Process Spans:\n' + inspect(matchingCommandSpans)
+      throw error
+    }
+
+    throw new assert.AssertionError({
+      message: 'No matching child_process command_execution span found\n\nCandidate Child Process Spans:\n' +
+        inspect(commandSpans),
+    })
+  }, { timeoutMs: timeout })
 }
 
 describe('Child process plugin', () => {
@@ -415,7 +489,7 @@ describe('Child process plugin', () => {
       assert.strictEqual(global.Promise, Bluebird)
       assert.ok(global.Promise.version)
 
-      const expectedPromise = expectSomeSpan(agent, {
+      const expectedPromise = expectCommandSpan({
         type: 'system',
         name: 'command_execution',
         error: 0,
@@ -455,7 +529,7 @@ describe('Child process plugin', () => {
 
       const execFileAsync = util.promisify(childProcess.execFile)
 
-      const expectedPromise = expectSomeSpan(agent, {
+      const expectedPromise = expectCommandSpan({
         type: 'system',
         name: 'command_execution',
         error: 1,
@@ -529,30 +603,36 @@ describe('Child process plugin', () => {
 
           methods.forEach(({ methodName, async }) => {
             describe(methodName, () => {
-              const lsExpected = {
-                type: 'system',
-                name: 'command_execution',
-                error: 0,
-                meta: {
-                  component: 'subprocess',
-                  'cmd.shell': 'ls',
-                  'cmd.exit_code': '0',
-                },
+              const markerPrefix = getTestMarker('shell', hasParentSpan ? 'parent' : 'root', methodName)
+
+              function getExpectedShellSpan (command) {
+                return {
+                  type: 'system',
+                  name: 'command_execution',
+                  error: 0,
+                  meta: {
+                    component: 'subprocess',
+                    'cmd.shell': command,
+                    'cmd.exit_code': '0',
+                  },
+                }
               }
 
               it('should be instrumented', (done) => {
-                expectSomeSpan(agent, lsExpected).then(done, done)
+                const command = `echo ${markerPrefix}-instrumented`
+                expectCommandSpan(getExpectedShellSpan(command)).then(done, done)
 
-                const res = childProcess[methodName]('ls')
+                const res = childProcess[methodName](command)
                 if (async) {
                   res.on('close', noop)
                 }
               })
 
               it('should maintain previous span after the execution', async () => {
-                const drained = expectSomeSpan(agent, lsExpected)
+                const command = `echo ${markerPrefix}-maintain`
+                const drained = expectCommandSpan(getExpectedShellSpan(command))
 
-                const res = childProcess[methodName]('ls')
+                const res = childProcess[methodName](command)
                 assert.strictEqual(storage('legacy').getStore()?.span, parentSpan)
                 if (async) {
                   await Promise.all([drained, (async () => {
@@ -566,8 +646,9 @@ describe('Child process plugin', () => {
 
               if (async) {
                 it('should maintain previous span in the callback', async () => {
-                  await Promise.all([expectSomeSpan(agent, lsExpected), new Promise(resolve => {
-                    childProcess[methodName]('ls', () => {
+                  const command = `echo ${markerPrefix}-callback`
+                  await Promise.all([expectCommandSpan(getExpectedShellSpan(command)), new Promise(resolve => {
+                    childProcess[methodName](command, () => {
                       assert.strictEqual(storage('legacy').getStore()?.span, parentSpan)
                       resolve()
                     })
@@ -576,24 +657,25 @@ describe('Child process plugin', () => {
               }
 
               it('command should be scrubbed', (done) => {
+                const marker = `${markerPrefix}-scrubbed`
                 const expected = {
                   type: 'system',
                   name: 'command_execution',
                   error: 0,
                   meta: {
                     component: 'subprocess',
-                    'cmd.shell': 'echo password ?',
+                    'cmd.shell': `echo password ? ${marker}`,
                     'cmd.exit_code': '0',
                   },
                 }
-                expectSomeSpan(agent, expected).then(done, done)
+                expectCommandSpan(expected).then(done, done)
 
                 const args = []
                 if (methodName === 'exec' || methodName === 'execSync') {
-                  args.push('echo password 123')
+                  args.push(`echo password 123 ${marker}`)
                 } else {
                   args.push('echo')
-                  args.push(['password', '123'])
+                  args.push(['password', '123', marker])
                 }
 
                 const res = childProcess[methodName](...args)
@@ -603,7 +685,7 @@ describe('Child process plugin', () => {
               })
 
               it('should be instrumented with error code', (done) => {
-                const command = ['node', '-badOption']
+                const command = ['node', `-badOption-${markerPrefix}-error`]
                 const options = {
                   stdio: 'pipe',
                 }
@@ -613,12 +695,12 @@ describe('Child process plugin', () => {
                   error: 1,
                   meta: {
                     component: 'subprocess',
-                    'cmd.shell': 'node -badOption',
+                    'cmd.shell': command.join(' '),
                     'cmd.exit_code': '9',
                   },
                 }
 
-                expectSomeSpan(agent, expected).then(done, done)
+                expectCommandSpan(expected).then(done, done)
 
                 const args = normalizeArgs(methodName, command, options)
 
@@ -669,44 +751,48 @@ describe('Child process plugin', () => {
 
           methods.forEach(({ methodName, async }) => {
             describe(methodName, () => {
+              const markerPrefix = getTestMarker('exec', parentSpan ? 'parent' : 'root', methodName)
+
               it('should be instrumented', (done) => {
+                const marker = `${markerPrefix}-instrumented`
                 const expected = {
                   type: 'system',
                   name: 'command_execution',
                   error: 0,
                   meta: {
                     component: 'subprocess',
-                    'cmd.exec': '["ls"]',
+                    'cmd.exec': JSON.stringify(['echo', marker]),
                     'cmd.exit_code': '0',
                   },
                 }
-                expectSomeSpan(agent, expected).then(done, done)
+                expectCommandSpan(expected).then(done, done)
 
-                const res = childProcess[methodName]('ls')
+                const res = childProcess[methodName]('echo', [marker])
                 if (async) {
                   res.on('close', noop)
                 }
               })
 
               it('command should be scrubbed', (done) => {
+                const marker = `${markerPrefix}-scrubbed`
                 const expected = {
                   type: 'system',
                   name: 'command_execution',
                   error: 0,
                   meta: {
                     component: 'subprocess',
-                    'cmd.exec': '["echo","password","?"]',
+                    'cmd.exec': JSON.stringify(['echo', 'password', '?', marker]),
                     'cmd.exit_code': '0',
                   },
                 }
-                expectSomeSpan(agent, expected).then(done, done)
+                expectCommandSpan(expected).then(done, done)
 
                 const args = []
                 if (methodName === 'exec' || methodName === 'execSync') {
-                  args.push('echo password 123')
+                  args.push(`echo password 123 ${marker}`)
                 } else {
                   args.push('echo')
-                  args.push(['password', '123'])
+                  args.push(['password', '123', marker])
                 }
 
                 const res = childProcess[methodName](...args)
@@ -716,7 +802,7 @@ describe('Child process plugin', () => {
               })
 
               it('should be instrumented with error code', (done) => {
-                const command = ['node', '-badOption']
+                const command = ['node', `-badOption-${markerPrefix}-error`]
                 const options = {
                   stdio: 'pipe',
                 }
@@ -727,7 +813,7 @@ describe('Child process plugin', () => {
                   error: 1,
                   meta: {
                     component: 'subprocess',
-                    'cmd.exec': '["node","-badOption"]',
+                    'cmd.exec': JSON.stringify(command),
                     'cmd.exit_code': '9',
                   },
                 }
@@ -738,7 +824,7 @@ describe('Child process plugin', () => {
                   error: 0,
                   meta: {
                     component: 'subprocess',
-                    'cmd.exec': '["node","-badOption"]',
+                    'cmd.exec': JSON.stringify(command),
                     'cmd.exit_code': '9',
                   },
                 }
@@ -746,15 +832,15 @@ describe('Child process plugin', () => {
                 const args = normalizeArgs(methodName, command, options)
 
                 if (async) {
-                  expectSomeSpan(agent, errorExpected).then(done, done)
+                  expectCommandSpan(errorExpected).then(done, done)
                   const res = childProcess[methodName].apply(null, args)
                   res.on('close', noop)
                 } else {
                   try {
                     if (methodName === 'spawnSync') {
-                      expectSomeSpan(agent, noErrorExpected).then(done, done)
+                      expectCommandSpan(noErrorExpected).then(done, done)
                     } else {
-                      expectSomeSpan(agent, errorExpected).then(done, done)
+                      expectCommandSpan(errorExpected).then(done, done)
                     }
                     childProcess[methodName].apply(null, args)
                   } catch {
@@ -764,7 +850,7 @@ describe('Child process plugin', () => {
               })
 
               it('should be instrumented with error code (override shell default behavior)', (done) => {
-                const command = ['node', '-badOption']
+                const command = ['node', `-badOption-${markerPrefix}-shell-error`]
                 const options = {
                   stdio: 'pipe',
                   shell: true,
@@ -776,7 +862,7 @@ describe('Child process plugin', () => {
                   error: 1,
                   meta: {
                     component: 'subprocess',
-                    'cmd.shell': 'node -badOption',
+                    'cmd.shell': command.join(' '),
                     'cmd.exit_code': '9',
                   },
                 }
@@ -787,7 +873,7 @@ describe('Child process plugin', () => {
                   error: 0,
                   meta: {
                     component: 'subprocess',
-                    'cmd.shell': 'node -badOption',
+                    'cmd.shell': command.join(' '),
                     'cmd.exit_code': '9',
                   },
                 }
@@ -800,15 +886,15 @@ describe('Child process plugin', () => {
                 )
 
                 if (async) {
-                  expectSomeSpan(agent, errorExpected).then(done, done)
+                  expectCommandSpan(errorExpected).then(done, done)
                   const res = childProcess[methodName].apply(null, args)
                   res.on('close', noop)
                 } else {
                   try {
                     if (methodName === 'spawnSync') {
-                      expectSomeSpan(agent, noErrorExpected).then(done, done)
+                      expectCommandSpan(noErrorExpected).then(done, done)
                     } else {
-                      expectSomeSpan(agent, errorExpected).then(done, done)
+                      expectCommandSpan(errorExpected).then(done, done)
                     }
                     childProcess[methodName].apply(null, args)
                   } catch {

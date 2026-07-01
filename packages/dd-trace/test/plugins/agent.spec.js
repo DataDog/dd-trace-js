@@ -13,6 +13,32 @@ describe('test agent helper', () => {
   describe('agent.load contract', () => {
     afterEach(() => agent.close())
 
+    it('patches a builtin that was loaded before the tracer', async () => {
+      const childProcess = require('child_process')
+      const marker = 'agent-preloaded-child-process'
+
+      await agent.load(['child_process'])
+
+      const expected = agent.assertSomeTraces(traces => {
+        for (const trace of traces) {
+          for (const span of trace) {
+            if (span.name !== 'command_execution' || span.meta?.component !== 'subprocess') continue
+            if (span.meta['cmd.exec'] !== JSON.stringify(['echo', marker])) continue
+
+            assert.strictEqual(span.error, 0)
+            assert.strictEqual(span.type, 'system')
+            return
+          }
+        }
+
+        throw new assert.AssertionError({ message: 'No child_process command span found' })
+      }, { timeoutMs: 4000 })
+
+      childProcess.execFile('echo', [marker])
+
+      await expected
+    })
+
     it('resolves with the live TracerProxy', async () => {
       const tracer = await agent.load([])
       assert.strictEqual(tracer, global._ddtrace)

@@ -2,7 +2,7 @@
 
 module.exports = {
   // Only list unprefixed node modules. They will automatically be instrumented as prefixed and unprefixed.
-  child_process: () => require('../child_process'),
+  child_process: { patchLoadedBuiltins: true, fn: () => require('../child_process') },
   crypto: () => require('../crypto'),
   dns: () => require('../dns'),
   'dns/promises': () => require('../dns'),

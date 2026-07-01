@@ -84,6 +84,9 @@ for (const name of names) {
     if (hook.serverless === false && IS_SERVERLESS) continue
 
     hookOptions.internals = hook.esmFirst
+    if (hook.patchLoadedBuiltins) {
+      hookOptions.patchLoadedBuiltins = true
+    }
     hook = hook.fn
   }
 

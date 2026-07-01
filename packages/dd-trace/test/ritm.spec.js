@@ -149,4 +149,21 @@ describe('Ritm', () => {
       }
     }
   })
+
+  it('should patch an already loaded builtin when requested', () => {
+    const childProcess = require('child_process')
+    const marker = Symbol('dd-ritm-loaded-builtin')
+    const hook = Hook(['child_process'], { patchLoadedBuiltins: true }, exports => {
+      exports[marker] = true
+      return exports
+    })
+
+    try {
+      assert.equal(childProcess[marker], true)
+      assert.equal(require('child_process')[marker], true)
+    } finally {
+      delete childProcess[marker]
+      hook.unhook()
+    }
+  })
 })

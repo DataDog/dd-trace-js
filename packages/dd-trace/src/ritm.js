@@ -11,6 +11,7 @@ const { isRelativeRequire } = require('../../datadog-instrumentations/src/helper
 const { getConfiguredEnvName, getEnvironmentVariable } = require('./config/helper')
 
 const origRequire = Module.prototype.require
+const runtimeRequire = Module.createRequire(__filename)
 // derived from require-in-the-middle@3 with tweaks
 
 module.exports = Hook
@@ -78,7 +79,12 @@ function Hook (modules, options, onrequire) {
     }
   }
 
-  if (patchedRequire) return
+  if (patchedRequire) {
+    if (options.patchLoadedBuiltins) {
+      patchLoadedBuiltins(modules)
+    }
+    return
+  }
 
   const _origRequire = Module.prototype.require
   patchedRequire = Module.prototype.require = function (request) {
@@ -203,6 +209,45 @@ function Hook (modules, options, onrequire) {
 
     return cache[moduleId].exports
   }
+
+  if (options.patchLoadedBuiltins) {
+    patchLoadedBuiltins(modules)
+  }
+}
+
+/**
+ * @param {string[]|undefined} modules
+ */
+function patchLoadedBuiltins (modules) {
+  if (!Array.isArray(modules)) return
+
+  for (const moduleName of modules) {
+    if (!isLoadedBuiltinModule(moduleName)) continue
+
+    const moduleId = normalizeModuleName(moduleName)
+    if (cache[moduleId]) continue
+
+    const hooks = moduleHooks[moduleId]
+    if (!hooks) continue
+
+    const exports = runtimeRequire(moduleId)
+    cache[moduleId] = { exports, original: exports }
+
+    for (const hook of hooks) {
+      cache[moduleId].exports = hook(cache[moduleId].exports, moduleId)
+    }
+  }
+}
+
+/**
+ * @param {string} moduleName
+ * @returns {boolean}
+ */
+function isLoadedBuiltinModule (moduleName) {
+  const moduleId = normalizeModuleName(moduleName)
+
+  return isBuiltinModuleName(moduleId) &&
+    process.moduleLoadList.includes(`NativeModule ${moduleId}`)
 }
 
 /**

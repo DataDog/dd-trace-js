@@ -238,6 +238,34 @@ jobs:
         with:
           id: ${{ github.job }}
 
+  child_process_stress:
+    name: child_process stress (${{ matrix.runner }})
+    runs-on: ubuntu-latest
+    needs: child_process
+    permissions:
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [1, 2, 3, 4]
+    env:
+      PLUGINS: child_process
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/install
+      - name: Run child_process suite repeatedly
+        run: |
+          for iteration in 1 2 3 4 5; do
+            echo "::group::child_process stress runner ${{ matrix.runner }} iteration ${iteration}"
+            npm run test:plugins:ci
+            echo "::endgroup::"
+          done
+      - uses: ./.github/actions/upload-junit-artifacts
+        if: "!cancelled()"
+        with:
+          id: ${{ github.job }}-${{ strategy.job-index }}
+
   crypto:
     runs-on: ubuntu-latest
     permissions:
