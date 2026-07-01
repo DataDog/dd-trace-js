@@ -46,8 +46,6 @@ class NosqlInjectionMongodbAnalyzer extends InjectionAnalyzer {
           this.analyze({ filter }, store)
         }
       }
-
-      return store
     }
 
     this.addSub('datadog:mongodb:collection:filter:start', onStart)
