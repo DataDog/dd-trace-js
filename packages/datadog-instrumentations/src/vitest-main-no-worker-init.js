@@ -7,6 +7,7 @@ const satisfies = require('../../../vendor/dist/semifies')
 const log = require('../../dd-trace/src/log')
 const {
   DYNAMIC_NAME_RE,
+  EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
   getTestSuitePath,
   logAttemptToFixTestExecution,
   recordAttemptToFixExecution,
@@ -158,6 +159,7 @@ function configure (ctx, frameworkVersion, testSpecifications, setupData, option
         state.earlyFlakeDetectionSlowTestRetries,
         state.earlyFlakeDetectionNumRetries
       ),
+      earlyFlakeDetectionRetryThresholds: EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
       earlyFlakeDetectionSlowRetries: state.earlyFlakeDetectionSlowTestRetries,
       isEarlyFlakeDetectionEnabled: state.isEarlyFlakeDetectionEnabled && !state.isEarlyFlakeDetectionFaulty,
       knownTests: knownTestsBySuite || {},

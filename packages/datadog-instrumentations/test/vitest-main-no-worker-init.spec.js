@@ -3,6 +3,9 @@
 const assert = require('node:assert/strict')
 
 const noWorkerInit = require('../src/vitest-main-no-worker-init')
+const {
+  EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
+} = require('../../dd-trace/src/plugins/util/test')
 
 const VITEST_NO_WORKER_INIT_REQUEST_ENV = 'DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT'
 const workerPools = new Set(['forks', 'threads', 'vmForks', 'vmThreads'])
@@ -102,6 +105,41 @@ describe('vitest-main-no-worker-init', () => {
           [nonWorkerProject, { pool: 'browser' }],
         ], options),
         false
+      )
+    })
+  })
+
+  describe('configure', () => {
+    it('sends EFD retry thresholds to the no-worker setup context', () => {
+      const rootProject = { _provided: {} }
+      const ctx = {
+        config: {},
+        reporters: [],
+        getRootProject () {
+          return rootProject
+        },
+      }
+
+      noWorkerInit.configure(ctx, '3.2.6', undefined, {
+        knownTestsBySuite: {},
+        modifiedFiles: {},
+        repositoryRoot: '/repo',
+        testManagementTestsBySuite: {},
+        testSessionConfiguration: {},
+      }, {
+        getConfiguredEfdRetryCount: () => 2,
+        state: {
+          earlyFlakeDetectionNumRetries: 1,
+          earlyFlakeDetectionSlowTestRetries: { '5s': 2 },
+          isEarlyFlakeDetectionEnabled: true,
+          isEarlyFlakeDetectionFaulty: false,
+          testManagementAttemptToFixRetries: 0,
+        },
+      })
+
+      assert.deepStrictEqual(
+        rootProject._provided._ddVitestWorkerSetup.earlyFlakeDetectionRetryThresholds,
+        EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS
       )
     })
   })

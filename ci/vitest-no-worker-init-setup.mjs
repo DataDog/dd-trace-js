@@ -13,13 +13,10 @@ const attemptToFixTests = providedContext.attemptToFixTests || {}
 const attemptToFixRetries = providedContext.attemptToFixRetries || 0
 const disabledTests = providedContext.disabledTests || {}
 const earlyFlakeDetectionRetries = providedContext.earlyFlakeDetectionRetries || 0
+const earlyFlakeDetectionRetryThresholds = Array.isArray(providedContext.earlyFlakeDetectionRetryThresholds)
+  ? providedContext.earlyFlakeDetectionRetryThresholds
+  : []
 const earlyFlakeDetectionSlowRetries = providedContext.earlyFlakeDetectionSlowRetries || {}
-const earlyFlakeDetectionRetryThresholds = [
-  { limitMs: 5 * 1000, key: '5s' },
-  { limitMs: 10 * 1000, key: '10s' },
-  { limitMs: 30 * 1000, key: '30s' },
-  { limitMs: 5 * 60 * 1000, key: '5m' },
-]
 const hasEarlyFlakeDetectionSlowRetries = Object.keys(earlyFlakeDetectionSlowRetries).length > 0
 const isEarlyFlakeDetectionEnabled = providedContext.isEarlyFlakeDetectionEnabled === true
 const knownTests = providedContext.knownTests || {}
@@ -299,7 +296,12 @@ function prepareEarlyFlakeDetectionAttempt (task, attemptIndex) {
     }
   }
 
-  if (attemptIndex <= retryCount || typeof setVitestTaskFn !== 'function') {
+  if (attemptIndex <= retryCount) {
+    earlyFlakeDetectionStartByTask.set(task, performance.now())
+    return false
+  }
+
+  if (!canReplaceVitestTaskFn()) {
     earlyFlakeDetectionStartByTask.set(task, performance.now())
     return false
   }
@@ -311,7 +313,7 @@ function prepareEarlyFlakeDetectionAttempt (task, attemptIndex) {
     })
   }
   task.meta.__ddTestOptEfdSkipCurrentAttempt = true
-  setVitestTaskFn(task, noopTest)
+  replaceVitestTaskFn(task, noopTest)
   return true
 }
 
@@ -331,6 +333,25 @@ function getEarlyFlakeDetectionRetryCount (task) {
 }
 
 function noopTest () {}
+
+/**
+ * Returns whether Vitest's private task function setter is available.
+ *
+ * @returns {boolean}
+ */
+function canReplaceVitestTaskFn () {
+  return typeof setVitestTaskFn === 'function'
+}
+
+/**
+ * Replaces the function Vitest runs for a task.
+ *
+ * @param {object} task
+ * @param {(...args: unknown[]) => unknown} testFn
+ */
+function replaceVitestTaskFn (task, testFn) {
+  setVitestTaskFn(task, testFn)
+}
 
 function isEarlyFlakeDetectionTest (testSuite, testName) {
   if (!isEarlyFlakeDetectionEnabled || earlyFlakeDetectionRetries <= 0) return false
