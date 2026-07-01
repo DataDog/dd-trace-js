@@ -2,10 +2,10 @@
 
 const log = require('../log')
 const { ERROR_MESSAGE, ERROR_TYPE } = require('../constants')
-const { extractContext } = require('./context')
-const { ImpendingTimeout } = require('./runtime/errors')
 const { channel } = require('../../../datadog-instrumentations/src/helpers/instrument')
 const { HTTP_REQUEST_HEADERS } = require('../../../../ext/tags')
+const { extractContext } = require('./context')
+const { ImpendingTimeout } = require('./runtime/errors')
 
 const timeoutChannel = channel('apm:aws:lambda:timeout')
 // Always crash the flushes when a message is received
