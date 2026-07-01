@@ -3,7 +3,13 @@
 const childProcess = require('node:child_process')
 const workerThreads = require('node:worker_threads')
 
-const { BOOTSTRAP_REQUIRE_ARG, applyCoverageEnv, isCoverageActive, resolveCoverageRoot } = require('./runtime')
+const {
+  V8_COVERAGE_ENV,
+  applyCoverageEnv,
+  getV8CoverageDir,
+  isCoverageActive,
+  resolveCoverageRoot,
+} = require('./runtime')
 
 const PATCHED = Symbol.for('dd-trace.integration-coverage.child-process-patched')
 
@@ -19,10 +25,10 @@ function patchOptions (options, scriptPath) {
   return { ...options, env: applyCoverageEnv(options.env, ctx) }
 }
 
-// Apply unconditionally: NODE_OPTIONS only affects Node descendants, so overlaying it on
-// `bash`/`func`/etc. is harmless and lets a Node grandchild pick up the bootstrap. Picking
-// the first non-flag arg as scriptPath gives the right cwd for plain `node script.js`
-// invocations and degrades gracefully for shell commands.
+// Apply unconditionally: NODE_V8_COVERAGE only affects Node descendants, so overlaying it on
+// `bash`/`func`/etc. is harmless and lets a Node grandchild collect coverage. Picking the first
+// non-flag arg as scriptPath gives the right cwd for plain `node script.js` invocations and
+// degrades gracefully for shell commands.
 function patchSpawnOptions (options, command, args) {
   let scriptPath
   for (const arg of args) {
@@ -42,10 +48,10 @@ function patchExecOptions (options) {
 }
 
 /**
- * Worker threads inherit the parent's `process.env` only when the caller did not pass
- * `options.env`; once they do, the child env is exactly what the caller specified.
- * Inject our bootstrap require into the worker's NODE_OPTIONS only in that
- * caller-provided-env case so we don't clobber a customer-provided `--require` chain.
+ * Worker threads inherit the parent's `process.env` (including `NODE_V8_COVERAGE`) only when the
+ * caller did not pass `options.env`; once they do, the child env is exactly what the caller
+ * specified. Inject the coverage directory only in that caller-provided-env case, and only when
+ * coverage is active, so a worker spawned with a custom env is still recorded.
  *
  * @returns {void}
  */
@@ -54,8 +60,8 @@ function installWorkerPatch () {
   workerThreads.Worker = class extends OriginalWorker {
     constructor (filename, options) {
       const env = options?.env
-      if (env && typeof env === 'object' && !env.NODE_OPTIONS) {
-        options = { ...options, env: { ...env, NODE_OPTIONS: BOOTSTRAP_REQUIRE_ARG } }
+      if (isCoverageActive() && env && typeof env === 'object' && !env[V8_COVERAGE_ENV]) {
+        options = { ...options, env: { ...env, [V8_COVERAGE_ENV]: getV8CoverageDir() } }
       }
       super(filename, options)
     }

@@ -4,20 +4,23 @@ const { existsSync, mkdirSync, readFileSync, realpathSync, rmSync } = require('n
 const path = require('node:path')
 const { fileURLToPath } = require('node:url')
 
-const FLUSH_SIGNAL_KEY = '__ddCovFlush'
 // `_DD_*` marks these as internal to the harness. Test files that opt children out
 // reference the name as a literal (`_DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1'`) so a
 // rename here requires updating those tests and `.mocharc.js` / `register.js`.
 const COLLECTOR_ENV = '_DD_TRACE_INTEGRATION_COVERAGE_COLLECTOR'
 const DISABLE_ENV = '_DD_TRACE_INTEGRATION_COVERAGE_DISABLE'
 const ROOT_ENV = '_DD_TRACE_INTEGRATION_COVERAGE_ROOT'
+// Node writes one raw V8 coverage JSON per process into the directory named by this variable.
+// We point every process in the tree at a shared directory so a single pass converts them all.
+const V8_COVERAGE_ENV = 'NODE_V8_COVERAGE'
 const REPO_ROOT = path.resolve(__dirname, '..', '..')
+
+// Preloaded into every Node descendant via NODE_OPTIONS. Under V8 coverage it does no
+// instrumentation — V8 collects automatically from NODE_V8_COVERAGE — it only re-installs the
+// child_process / worker_threads patch so a grandchild spawned with a *custom* env (which would
+// otherwise drop the inherited NODE_V8_COVERAGE) still has the directory injected.
 const CHILD_BOOTSTRAP_PATH = path.join(__dirname, 'child-bootstrap.js')
 const BOOTSTRAP_REQUIRE_ARG = `--require=${CHILD_BOOTSTRAP_PATH}`
-
-const PRE_INSTRUMENTED_SENTINEL = '.nyc-pre-instrumented'
-// POSIX-style so `path.isAbsolute` matches on both POSIX and Windows.
-const PRE_INSTRUMENTED_ROOT = '/__DD_TRACE_PRE_INSTRUMENTED__'
 
 const packageNameCache = new Map()
 const rootCache = new Map()
@@ -69,16 +72,20 @@ function getCollectorRoot (env = process.env) {
 function resetCollectorRoot () {
   const root = getCollectorRoot()
   rmSync(root, { force: true, recursive: true })
-  mkdirSync(path.join(root, 'sandboxes'), { recursive: true })
+  mkdirSync(getV8CoverageDir(root), { recursive: true })
   return root
 }
 
 /**
- * @param {string} folder
+ * Directory every process in the tree writes its raw V8 coverage JSON into. A single shared
+ * directory (rather than per-sandbox dirs) lets the finalize step convert and merge in one pass,
+ * and survives sandbox teardown because it lives under the repo-root collector, not the sandbox.
+ *
+ * @param {string} [collectorRoot]
  * @returns {string}
  */
-function getSandboxCollectorDir (folder) {
-  return path.join(getCollectorRoot(), 'sandboxes', path.basename(folder))
+function getV8CoverageDir (collectorRoot = getCollectorRoot()) {
+  return path.join(collectorRoot, 'v8')
 }
 
 /**
@@ -86,26 +93,6 @@ function getSandboxCollectorDir (folder) {
  */
 function getMergedReportDir () {
   return path.join(REPO_ROOT, 'coverage', `node-${process.version}${labelSuffix()}`)
-}
-
-/**
- * @param {string} coverageRoot
- * @returns {{ reportDir: string, tempDir: string }}
- */
-function getSandboxNycPaths (coverageRoot) {
-  return {
-    reportDir: path.join(coverageRoot, 'coverage', 'integration-tests'),
-    tempDir: path.join(coverageRoot, '.nyc_output', 'integration-tests'),
-  }
-}
-
-/**
- * @param {string | undefined} coverageRoot
- * @returns {boolean}
- */
-function isPreInstrumentedSandbox (coverageRoot) {
-  if (!coverageRoot) return false
-  return existsSync(path.join(coverageRoot, PRE_INSTRUMENTED_SENTINEL))
 }
 
 /**
@@ -189,8 +176,8 @@ function resolveCoverageRoot (options = {}) {
 }
 
 /**
- * Must be Node's first `--require` so a caller-supplied preloader (e.g. `-r dd-trace/ci/init`)
- * can't run first and leave its module graph uninstrumented.
+ * Prepend the bootstrap require to an existing NODE_OPTIONS. Must be first so a caller-supplied
+ * preloader (e.g. `-r dd-trace/ci/init`) can't run before the child_process patch is reinstalled.
  *
  * @param {string | undefined} nodeOptions
  * @returns {string}
@@ -201,6 +188,14 @@ function prependBootstrapRequire (nodeOptions) {
 }
 
 /**
+ * Overlay the coverage env onto a child's environment so it (and its descendants) collect native
+ * V8 coverage into the shared collector directory. Sets `NODE_V8_COVERAGE` (V8 does the actual
+ * collection) and prepends the bootstrap require to `NODE_OPTIONS` (so the child re-patches
+ * child_process and the directory keeps flowing into grandchildren spawned with a custom env).
+ *
+ * `ROOT_ENV` is carried so descendants keep recognising coverage as active; a child that sets
+ * `DISABLE_ENV` has all three variables stripped so its subtree runs clean.
+ *
  * @param {NodeJS.ProcessEnv | undefined} env
  * @param {object} [options]
  * @param {string} [options.cwd]
@@ -211,7 +206,10 @@ function applyCoverageEnv (env, options = {}) {
   if (!isCoverageActive()) return env
   const baseEnv = env || process.env
   if (baseEnv[DISABLE_ENV]) {
-    const { [ROOT_ENV]: _omit, ...rest } = baseEnv
+    // Node copies `NODE_V8_COVERAGE` from the parent process to a child even when a custom env
+    // omits it, so omitting is not enough to opt a subtree out — we must blank it explicitly.
+    const { [ROOT_ENV]: _root, ...rest } = baseEnv
+    rest[V8_COVERAGE_ENV] = ''
     return rest
   }
   const root = resolveCoverageRoot(options)
@@ -219,6 +217,7 @@ function applyCoverageEnv (env, options = {}) {
   return {
     ...baseEnv,
     [ROOT_ENV]: canonicalizePath(root),
+    [V8_COVERAGE_ENV]: getV8CoverageDir(),
     NODE_OPTIONS: prependBootstrapRequire(baseEnv.NODE_OPTIONS),
   }
 }
@@ -228,19 +227,15 @@ module.exports = {
   CHILD_BOOTSTRAP_PATH,
   COLLECTOR_ENV,
   DISABLE_ENV,
-  FLUSH_SIGNAL_KEY,
-  PRE_INSTRUMENTED_ROOT,
-  PRE_INSTRUMENTED_SENTINEL,
   REPO_ROOT,
   ROOT_ENV,
+  V8_COVERAGE_ENV,
   applyCoverageEnv,
   canonicalizePath,
   getCollectorRoot,
   getMergedReportDir,
-  getSandboxCollectorDir,
-  getSandboxNycPaths,
+  getV8CoverageDir,
   isCoverageActive,
-  isPreInstrumentedSandbox,
   prependBootstrapRequire,
   resetCollectorRoot,
   resolveCoverageRoot,

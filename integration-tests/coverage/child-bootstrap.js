@@ -1,127 +1,69 @@
 'use strict'
 
-const { mkdirSync } = require('node:fs')
-const path = require('node:path')
+// Preloaded (via NODE_OPTIONS=--require) into every Node descendant of the mocha process.
+//
+// Under native V8 coverage this does NO instrumentation — V8 records coverage on its own from the
+// inherited NODE_V8_COVERAGE directory. It has two jobs:
+//   1. Re-install the child_process / worker_threads patch so a *grandchild* spawned with a custom
+//      `env` (which would otherwise drop the inherited NODE_V8_COVERAGE) still gets it injected.
+//   2. Flush V8 coverage on the termination signals the harness uses to stop long-running fixtures.
+//      V8 only writes the profile on a clean exit; a server killed with SIGTERM/SIGINT would lose
+//      its coverage, so we call `v8.takeCoverage()` then exit cleanly on those signals.
+
+const v8 = require('node:v8')
 
 const preloadList = require('node-preload')
 
 const { installPatch } = require('./patch-child-process')
 const {
   DISABLE_ENV,
-  FLUSH_SIGNAL_KEY,
   ROOT_ENV,
   canonicalizePath,
   isCoverageActive,
-  isPreInstrumentedSandbox,
   prependBootstrapRequire,
   resolveCoverageRoot,
 } = require('./runtime')
 
 const BOOTSTRAPPED = Symbol.for('dd-trace.integration-coverage.bootstrapped')
-const OWN_TEMPDIR_MARKER = `${path.sep}.nyc_output${path.sep}integration-tests`
-
-/** @typedef {{ unrefCounted?: () => void } | null | undefined} RefCountedChannel */
 
 if (isCoverageActive() && !process.env[DISABLE_ENV] && !globalThis[BOOTSTRAPPED]) {
   globalThis[BOOTSTRAPPED] = true
   bootstrapCoverage()
 }
 
-function hasForeignNyc () {
-  const config = process.env.NYC_CONFIG
-  if (!config) return false
-  try {
-    const parsed = JSON.parse(config)
-    return typeof parsed.tempDir !== 'string' || !parsed.tempDir.includes(OWN_TEMPDIR_MARKER)
-  } catch {
-    return true
-  }
-}
-
 function bootstrapCoverage () {
   const coverageRoot = resolveCoverageRoot({ cwd: process.env[ROOT_ENV] || process.cwd() })
   if (!coverageRoot) return
 
-  const preInstrumented = isPreInstrumentedSandbox(coverageRoot)
-  const foreignNyc = hasForeignNyc()
-
-  // A foreign nyc (spawned by a test like cucumber.spec's `nyc --all ...`) drives its own
-  // coverage collection. Pre-instrumented dd-trace counters still pollute `global.__coverage__`
-  // though, which skews `nyc --all` style reporters. Install the enumeration shield so those
-  // entries stay invisible to any enumeration-based consumer, and leave the rest of the harness
-  // (writer, nyc.wrap) alone.
-  // TODO(BridgeAR): also install the pre-instrumented writer here, filtered to the
-  // `PRE_INSTRUMENTED_ROOT`-keyed entries so the foreign nyc keeps owning the rest. As of
-  // today the dd-trace counters accumulated under cucumber's `nyc --all` are dropped on the
-  // floor, so the cucumber suite under-reports coverage for dd-trace itself.
-  if (foreignNyc) {
-    if (preInstrumented) {
-      const { installCoverageShield } = require('./pre-instrumented-writer')
-      installCoverageShield()
-    }
-    return
-  }
-
+  // Keep the resolved root and the bootstrap require on this process' own env so anything it
+  // spawns with the default env inherits both (the child_process patch handles custom-env spawns).
   process.env[ROOT_ENV] = canonicalizePath(coverageRoot)
   process.env.NODE_OPTIONS = prependBootstrapRequire(process.env.NODE_OPTIONS)
   if (!preloadList.includes(__filename)) preloadList.push(__filename)
 
-  if (preInstrumented) {
-    const { installPreInstrumentedWriter } = require('./pre-instrumented-writer')
-    installPreInstrumentedWriter(coverageRoot)
-  } else {
-    installRuntimeInstrumentation(coverageRoot)
-  }
-
-  // Patch this descendant's `child_process` and `worker_threads` so its grandchildren
-  // also pick up the bootstrap, even when the caller passes an explicit `env`.
   installPatch()
-  maybePatchWindowsFlush()
+  installCoverageFlush()
 }
 
 /**
- * @param {string} coverageRoot
- * @returns {void}
- */
-function installRuntimeInstrumentation (coverageRoot) {
-  const NYC = require('nyc')
-  const { createConfig } = require('./nyc.sandbox.config')
-  const config = { ...createConfig(coverageRoot), cwd: coverageRoot }
-
-  const nyc = new NYC({
-    ...config,
-    isChildProcess: Boolean(process.env.NYC_PROCESS_ID),
-    _processInfo: {
-      pid: process.pid,
-      ppid: process.ppid,
-      parent: process.env.NYC_PROCESS_ID || null,
-    },
-  })
-
-  mkdirSync(nyc.tempDirectory(), { recursive: true })
-  mkdirSync(nyc.processInfo.directory, { recursive: true })
-
-  process.env.NYC_CONFIG = JSON.stringify(config)
-
-  const registerEnvPath = require.resolve('nyc/lib/register-env.js')
-  if (!preloadList.includes(registerEnvPath)) preloadList.push(registerEnvPath)
-  require(registerEnvPath)('NYC_PROCESS_ID')
-  nyc.wrap()
-}
-
-/**
- * Windows `SIGTERM` is forceful and skips our exit hook; flush on the IPC sentinel from
- * `helpers#stopProc` instead. `unrefCounted` lets the listener not keep idle fixtures alive.
+ * Flush V8 coverage when the harness terminates a long-running fixture. `helpers#stopProc` sends
+ * SIGTERM (then escalates to SIGKILL, which we can't intercept). On SIGTERM/SIGINT we write the
+ * profile via `v8.takeCoverage()` and exit cleanly so the data lands in NODE_V8_COVERAGE; without
+ * this a killed server contributes no coverage. We add listeners with `process.once` and only act
+ * when we're the sole listener for the signal, so a fixture with its own handler keeps control.
  *
  * @returns {void}
  */
-function maybePatchWindowsFlush () {
-  if (process.platform !== 'win32') return
-  process.on('message', message => {
-    if (message?.[FLUSH_SIGNAL_KEY] === true) {
-      process.exit(0)
-    }
-  })
-  const channel = /** @type {RefCountedChannel} */ (/** @type {unknown} */ (process.channel))
-  channel?.unrefCounted?.()
+function installCoverageFlush () {
+  for (const signal of ['SIGTERM', 'SIGINT']) {
+    process.once(signal, () => {
+      try {
+        v8.takeCoverage()
+      } catch {}
+      // Only force exit if no other handler did; mirrors the default signal disposition.
+      if (process.listenerCount(signal) === 0) {
+        process.exit(0)
+      }
+    })
+  }
 }

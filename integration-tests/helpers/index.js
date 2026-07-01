@@ -15,12 +15,7 @@ const execAsync = promisify(exec)
 
 const id = require('../../packages/dd-trace/src/id')
 const { getCappedRange } = require('../../packages/dd-trace/test/plugins/versions')
-const finalizeSandboxCoverage = require('../coverage/finalize-sandbox')
-const {
-  FLUSH_SIGNAL_KEY,
-  isCoverageActive,
-  resolveCoverageRoot,
-} = require('../coverage/runtime')
+const { resolveCoverageRoot } = require('../coverage/runtime')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const FakeAgent = require('./fake-agent')
 const { BUN, withBun } = require('./bun')
@@ -289,12 +284,6 @@ async function stopProc (proc, options = {}) {
   const signal = options.signal ?? 'SIGTERM'
   const timeoutMs = options.timeoutMs ?? defaultStopProcTimeoutMs
 
-  // Windows SIGTERM is forceful; ask the bootstrap to flush via the IPC sentinel instead.
-  if (process.platform === 'win32' && isCoverageActive() && proc.connected) {
-    proc.send({ [FLUSH_SIGNAL_KEY]: true }, () => {})
-    if (await waitForProcExit(proc, timeoutMs)) return
-  }
-
   proc.kill(signal)
 
   const exitedAfterInitialSignal = await waitForProcExit(proc, timeoutMs)
@@ -459,12 +448,8 @@ async function execHelperAsync (command, options) {
  * @returns {Promise<void>}
  */
 async function packTarball (tarballPath, env) {
-  if (isCoverageActive()) {
-    const { packInstrumentedTarball } = require('../coverage/pack-instrumented-tarball')
-    await packInstrumentedTarball(tarballPath, env)
-    log('Pre-instrumented tarball packed successfully:', tarballPath)
-    return
-  }
+  // Native V8 coverage reads execution straight from the installed (uninstrumented) sources, so
+  // there is no pre-instrumentation step: the tarball is always a plain pack.
   await execHelperAsync(`${BUN} pm pack --ignore-scripts --quiet --gzip-level 0 --filename ${tarballPath}`, { env })
   log('Tarball packed successfully:', tarballPath)
 }
@@ -659,8 +644,8 @@ async function createSandbox (
     coverageRoot: resolveCoverageRoot({ cwd: folder }),
     folder,
     remove: async () => {
-      await finalizeSandboxCoverage(folder, resolveCoverageRoot({ cwd: folder }))
-
+      // No coverage finalize step: every process already wrote its V8 profile to the shared
+      // collector dir (outside the sandbox), so deleting the sandbox folder loses nothing.
       // Use `exec` below, instead of `fs.rm` to keep support for older Node.js versions, since this code is called in
       // our `integration-guardrails` GitHub Actions workflow
       if (process.platform === 'win32') {
