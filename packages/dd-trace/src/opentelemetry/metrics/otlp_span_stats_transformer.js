@@ -1,5 +1,6 @@
 'use strict'
 
+const { LogCollapsingLowestDenseDDSketch } = require('../../../../../vendor/dist/@datadog/sketches-js')
 const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
 const { getProtobufTypes } = require('../otlp/protobuf_loader')
 
@@ -105,14 +106,26 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
 
       for (const aggStats of bucket.values()) {
         const baseAttrs = this.#buildAttributes(aggStats.aggKey)
-        // Per-group top-level heuristic: a group is top-level only when every hit was top-level.
-        const topLevel = aggStats.hits > 0 && aggStats.topLevelHits === aggStats.hits
-        const attrs = this.#otelSemanticsEnabled
-          ? baseAttrs
-          : [...baseAttrs, { key: 'datadog.span.top_level', value: { boolValue: topLevel } }]
 
-        this.#pushPoint(dataPoints, aggStats.okDistribution, startNano, endNano, attrs)
-        this.#pushPoint(dataPoints, aggStats.errorDistribution, startNano, endNano, [...attrs, ERROR_STATUS_ATTR])
+        if (this.#otelSemanticsEnabled) {
+          const okDist = new LogCollapsingLowestDenseDDSketch()
+          okDist.merge(aggStats.topLevelOkDistribution)
+          okDist.merge(aggStats.nonTopLevelOkDistribution)
+          const errDist = new LogCollapsingLowestDenseDDSketch()
+          errDist.merge(aggStats.topLevelErrorDistribution)
+          errDist.merge(aggStats.nonTopLevelErrorDistribution)
+          this.#pushPoint(dataPoints, okDist, startNano, endNano, baseAttrs)
+          this.#pushPoint(dataPoints, errDist, startNano, endNano, [...baseAttrs, ERROR_STATUS_ATTR])
+        } else {
+          const tlAttrs = [...baseAttrs, { key: 'datadog.span.top_level', value: { boolValue: true } }]
+          const ntlAttrs = [...baseAttrs, { key: 'datadog.span.top_level', value: { boolValue: false } }]
+          this.#pushPoint(dataPoints, aggStats.topLevelOkDistribution, startNano, endNano, tlAttrs)
+          this.#pushPoint(dataPoints, aggStats.topLevelErrorDistribution, startNano, endNano,
+            [...tlAttrs, ERROR_STATUS_ATTR])
+          this.#pushPoint(dataPoints, aggStats.nonTopLevelOkDistribution, startNano, endNano, ntlAttrs)
+          this.#pushPoint(dataPoints, aggStats.nonTopLevelErrorDistribution, startNano, endNano,
+            [...ntlAttrs, ERROR_STATUS_ATTR])
+        }
       }
     }
 

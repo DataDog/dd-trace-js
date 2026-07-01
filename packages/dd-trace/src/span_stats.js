@@ -39,24 +39,27 @@ class SpanAggStats {
     this.topLevelHits = 0
     this.errors = 0
     this.duration = 0
-    this.okDistribution = new LogCollapsingLowestDenseDDSketch()
-    this.errorDistribution = new LogCollapsingLowestDenseDDSketch()
+    // Split by top-level status so the OTLP path can emit separate histogram data points.
+    // Native stats merges them at export time via toJSON().
+    this.topLevelOkDistribution = new LogCollapsingLowestDenseDDSketch()
+    this.topLevelErrorDistribution = new LogCollapsingLowestDenseDDSketch()
+    this.nonTopLevelOkDistribution = new LogCollapsingLowestDenseDDSketch()
+    this.nonTopLevelErrorDistribution = new LogCollapsingLowestDenseDDSketch()
   }
 
   record (span) {
     const durationNs = span.duration
     this.hits++
     this.duration += durationNs
-
-    if (span.metrics[TOP_LEVEL_KEY]) {
-      this.topLevelHits++
-    }
-
+    const isTopLevel = Boolean(span.metrics[TOP_LEVEL_KEY])
+    if (isTopLevel) this.topLevelHits++
     if (span.error) {
       this.errors++
-      this.errorDistribution.accept(durationNs)
+      if (isTopLevel) this.topLevelErrorDistribution.accept(durationNs)
+      else this.nonTopLevelErrorDistribution.accept(durationNs)
     } else {
-      this.okDistribution.accept(durationNs)
+      if (isTopLevel) this.topLevelOkDistribution.accept(durationNs)
+      else this.nonTopLevelOkDistribution.accept(durationNs)
     }
   }
 
@@ -73,6 +76,15 @@ class SpanAggStats {
       srvSrc,
     } = this.aggKey
 
+    const okSummary = new LogCollapsingLowestDenseDDSketch()
+    okSummary.merge(this.topLevelOkDistribution)
+    okSummary.merge(this.nonTopLevelOkDistribution)
+    const errorSummary = new LogCollapsingLowestDenseDDSketch()
+    errorSummary.merge(this.topLevelErrorDistribution)
+    errorSummary.merge(this.nonTopLevelErrorDistribution)
+
+    const { origin, spanKind, rpcStatusCode } = this.aggKey
+
     return {
       Name: name,
       Service: service,
@@ -83,12 +95,15 @@ class SpanAggStats {
       HTTPMethod: method,
       HTTPEndpoint: endpoint,
       srv_src: srvSrc,
+      SpanKind: spanKind,
+      Origin: origin,
+      RpcStatusCode: rpcStatusCode,
       Hits: this.hits,
       TopLevelHits: this.topLevelHits,
       Errors: this.errors,
       Duration: this.duration,
-      OkSummary: this.okDistribution.toProto(), // TODO: custom proto encoding
-      ErrorSummary: this.errorDistribution.toProto(), // TODO: custom proto encoding
+      OkSummary: okSummary.toProto(), // TODO: custom proto encoding
+      ErrorSummary: errorSummary.toProto(), // TODO: custom proto encoding
     }
   }
 }
@@ -106,7 +121,6 @@ class SpanAggKey {
     this.srvSrc = span.meta[SVC_SRC_KEY] || ''
     this.origin = span.meta[ORIGIN_KEY] || ''
     this.spanKind = span.meta[SPAN_KIND] || ''
-    this.topLevel = Boolean(span.metrics?.[TOP_LEVEL_KEY])
     // meta holds a string name (OTel/manual); metrics holds a numeric code (dd gRPC plugin via setTag).
     // Prefer meta; translate a numeric metrics code to the canonical status NAME string.
     const grpcCode = span.meta[GRPC_STATUS_CODE] ?? span.metrics?.[GRPC_STATUS_CODE]
@@ -129,7 +143,6 @@ class SpanAggKey {
       this.origin,
       this.spanKind,
       this.rpcStatusCode,
-      this.topLevel,
     ].join(',')
   }
 }
