@@ -21,6 +21,29 @@ tracer.use('pg', {
 })
 ```
 
+<h3 id="next-setup">Next.js</h3>
+
+dd-trace must be loaded before Next.js. The `register()` hook in `instrumentation.ts` runs after Next has already loaded its server modules, so the `next` integration finds nothing left to instrument and silently no-ops. Load the tracer with a preloader instead of from `instrumentation.ts`:
+
+```bash
+# CommonJS
+NODE_OPTIONS='--require dd-trace/init' next start
+# or: node --require dd-trace/init node_modules/.bin/next start
+
+# ESM
+NODE_OPTIONS='--import dd-trace/initialize.mjs' next start
+```
+
+Standalone output (`output: 'standalone'`) needs two more things. First, the bundler tree-shakes dd-trace out of the standalone bundle, so the server fails at runtime with `Cannot find module 'dd-trace'`. To stop that, add `'dd-trace'` to `serverExternalPackages` (Next.js >=15) or `experimental.serverComponentsExternalPackages` (13-14) so it is not bundled. Second, the generated server still needs the preloader:
+
+```bash
+node --require dd-trace/init server.js
+```
+
+When instrumentation is in place, an inbound request appears as a `next.request` span whose resource is the matched route (for example `GET /products/[slug]`), so endpoints aggregate by route rather than by raw URL.
+
+For the full setup guide see the [Node.js compatibility documentation](https://docs.datadoghq.com/tracing/trace_collection/compatibility/nodejs/).
+
 <h5 id="amqplib"></h5>
 <h5 id="amqplib-tags"></h5>
 <h5 id="amqplib-config"></h5>
