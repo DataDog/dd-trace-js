@@ -1,8 +1,8 @@
 'use strict'
 
-const { trace, ROOT_CONTEXT, propagation } = require('@opentelemetry/api')
 const { storage } = require('../../../datadog-core')
 const { getAllBaggageItems, setAllBaggageItems, removeAllBaggageItems } = require('../baggage')
+const { trace, ROOT_CONTEXT, propagation } = require('./api').load()
 
 const ActiveSpanProxy = require('./active-span-proxy')
 const SpanContext = require('./span_context')

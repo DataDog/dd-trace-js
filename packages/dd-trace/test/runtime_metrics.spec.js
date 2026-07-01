@@ -984,8 +984,8 @@ function loadOtlpRuntimeMetricsTestModule (overrides = {}) {
   const monitorEventLoopDelay = overrides.monitorEventLoopDelay ?? realPerfHooks.monitorEventLoopDelay
 
   const otlpMetrics = proxyquire.noCallThru()('../src/runtime_metrics/otlp_runtime_metrics', {
-    '@opentelemetry/api': {
-      metrics: { getMeterProvider: () => ({ getMeter: () => mockMeter }) },
+    '../opentelemetry/api': {
+      load: () => ({ metrics: { getMeterProvider: () => ({ getMeter: () => mockMeter }) } }),
     },
     '../log': { debug () {}, error () {} },
     'node:perf_hooks': {
@@ -1292,8 +1292,8 @@ describe('otlp_runtime_metrics', () => {
     }
     const errorLog = sinon.spy()
     const otlpMetricsFailing = proxyquire.noCallThru()('../src/runtime_metrics/otlp_runtime_metrics', {
-      '@opentelemetry/api': {
-        metrics: { getMeterProvider: () => ({ getMeter: () => throwingMeter }) },
+      '../opentelemetry/api': {
+        load: () => ({ metrics: { getMeterProvider: () => ({ getMeter: () => throwingMeter }) } }),
       },
       '../log': { debug () {}, error: errorLog },
       './client': {

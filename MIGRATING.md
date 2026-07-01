@@ -6,6 +6,38 @@ open an issue or contact our [support](https://www.datadoghq.com/support/) team.
 
 ## 5.0 to 6.0 (unreleased)
 
+### `@opentelemetry/api` and `@opentelemetry/api-logs` are optional peer dependencies
+
+dd-trace no longer bundles the OpenTelemetry API packages. v5 shipped them as
+optional dependencies, so dd-trace could resolve its own (often older) copy. When
+the application also had a newer copy, the OTel global API rejected the provider
+registered by the older one and silently downgraded every span to a no-op
+(issue #6882). v6 declares both packages as optional peer dependencies so a single
+copy, the application's, is shared.
+
+If you use any OpenTelemetry feature, add the packages to your application's
+dependencies:
+
+- The OpenTelemetry trace bridge (`tracer.TracerProvider`) needs
+  `@opentelemetry/api`. Without it the bridge throws on first use instead of
+  registering.
+- OTel metrics (`DD_METRICS_OTEL_ENABLED`) needs `@opentelemetry/api`.
+- OTel logs (`DD_LOGS_OTEL_ENABLED`) needs both `@opentelemetry/api` and
+  `@opentelemetry/api-logs`.
+
+```sh
+npm install @opentelemetry/api @opentelemetry/api-logs
+```
+
+When `DD_LOGS_OTEL_ENABLED` or `DD_METRICS_OTEL_ENABLED` is set but the matching
+package is missing, dd-trace disables that flag (Datadog log injection stays on)
+and warns once. Apps that do not touch OpenTelemetry need to do nothing.
+
+The supported ranges are `@opentelemetry/api` `>=1.0.0 <1.10.0` and
+`@opentelemetry/api-logs` `<1.0.0`. A copy outside the range warns once. The
+`dd-trace/esbuild` and `dd-trace/webpack` plugins mark both packages external
+automatically, so bundled apps only need them installed.
+
 ### IAST security controls is env-only
 
 `iast.securityControlsConfiguration` (and the legacy alias

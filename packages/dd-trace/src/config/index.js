@@ -342,6 +342,30 @@ class Config extends ConfigBase {
     if (!trackedConfigOrigins.has('dogstatsd.hostname')) {
       setAndTrack(this, 'dogstatsd.hostname', agentHostname)
     }
+    // Each OTel pipeline requires its optional peer deps. The metrics pipeline needs
+    // @opentelemetry/api; the logs pipeline also registers a global provider through
+    // @opentelemetry/api-logs. Disable a flag whose peer is missing before the
+    // log-injection mutual exclusion below, so a missing module leaves DD log injection
+    // on instead of crashing the host. Warn only when the customer turned the flag on; a
+    // default-on flag is disabled silently so changing a default later does not warn
+    // every app that never opted in.
+    if (this.DD_LOGS_OTEL_ENABLED || this.DD_METRICS_OTEL_ENABLED) {
+      const otelApi = require('../opentelemetry/api')
+      const requiredPeers = {
+        DD_METRICS_OTEL_ENABLED: ['@opentelemetry/api'],
+        DD_LOGS_OTEL_ENABLED: ['@opentelemetry/api', '@opentelemetry/api-logs'],
+      }
+      for (const [name, peers] of Object.entries(requiredPeers)) {
+        if (!this[name]) continue
+        const missing = peers.find(peer => !otelApi.forPackage(peer).isAvailable())
+        if (missing) {
+          if (trackedConfigOrigins.has(name)) {
+            log.warn('%s is not installed; disabling %s', missing, name)
+          }
+          setAndTrack(this, name, false)
+        }
+      }
+    }
     // Disable log injection when OTEL logs are enabled
     // OTEL logs and DD log injection are mutually exclusive
     if (this.DD_LOGS_OTEL_ENABLED) {

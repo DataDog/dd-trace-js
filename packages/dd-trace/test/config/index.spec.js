@@ -57,6 +57,11 @@ describe('Config', () => {
   const getConfig = (options, overrides = {}) => {
     const {
       ddMajor = DD_MAJOR,
+      otelApi = require('../../src/opentelemetry/api'),
+      // Merged into the resolved defaults to exercise a default-on flag (the "if we
+      // change a default later" path) through the real #applyDefaults, which sets
+      // defaults untracked.
+      defaultsOverride,
     } = overrides
 
     log = proxyquire('../../src/log', {})
@@ -71,6 +76,7 @@ describe('Config', () => {
       './parsers': parsers,
       '../../../../version': { DD_MAJOR: ddMajor },
     })
+    if (defaultsOverride) Object.assign(configDefaults.defaults, defaultsOverride)
     const configHelper = proxyquire.noPreserveCache()('../../src/config/helper', {
       './supported-configurations.json': supportedConfigurations,
     })
@@ -83,6 +89,7 @@ describe('Config', () => {
       'node:fs': fs,
       './helper': configHelper,
       '../pkg': pkg,
+      '../opentelemetry/api': otelApi,
       '../../../../version': { DD_MAJOR: ddMajor },
     })(options)
   }
@@ -384,6 +391,93 @@ describe('Config', () => {
     const indexFile = require('../../src/index')
     const proxy = require('../../src/proxy')
     assert.strictEqual(indexFile, proxy)
+  })
+
+  // Stubs the OTel API loader so `forPackage(name).isAvailable()` returns true only for
+  // the listed packages. The metrics pipeline needs @opentelemetry/api; the logs pipeline
+  // also needs @opentelemetry/api-logs.
+  const otelApiAvailable = (...installed) => ({
+    forPackage: (packageName) => ({ isAvailable: () => installed.includes(packageName) }),
+  })
+  const peerWarnings = (packageName) => log.warn.getCalls().filter(
+    (call) => /is not installed; disabling/.test(call.args[0]) && call.args.includes(packageName)
+  )
+
+  it('disables DD_METRICS_OTEL_ENABLED when @opentelemetry/api is not installed', () => {
+    process.env.DD_METRICS_OTEL_ENABLED = 'true'
+
+    const config = getConfig({}, { otelApi: otelApiAvailable() })
+
+    assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, false)
+    assert.strictEqual(peerWarnings('@opentelemetry/api').length, 1)
+  })
+
+  it('keeps DD_METRICS_OTEL_ENABLED when @opentelemetry/api is installed', () => {
+    process.env.DD_METRICS_OTEL_ENABLED = 'true'
+
+    const config = getConfig({}, { otelApi: otelApiAvailable('@opentelemetry/api') })
+
+    assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, true)
+  })
+
+  it('disables DD_LOGS_OTEL_ENABLED but keeps log injection when @opentelemetry/api is not installed', () => {
+    process.env.DD_LOGS_OTEL_ENABLED = 'true'
+
+    const config = getConfig({ logInjection: true }, { otelApi: otelApiAvailable() })
+
+    assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, false)
+    // Disabling OTel logs must re-enable DD log injection (the two are mutually exclusive).
+    assert.strictEqual(config.logInjection, true)
+    assert.strictEqual(peerWarnings('@opentelemetry/api').length, 1)
+  })
+
+  it('disables DD_LOGS_OTEL_ENABLED when @opentelemetry/api-logs is absent but @opentelemetry/api is present', () => {
+    process.env.DD_LOGS_OTEL_ENABLED = 'true'
+    process.env.DD_METRICS_OTEL_ENABLED = 'true'
+
+    const config = getConfig({ logInjection: true }, { otelApi: otelApiAvailable('@opentelemetry/api') })
+
+    // Metrics need only @opentelemetry/api, so they stay on; the logs pipeline also
+    // registers a global provider through @opentelemetry/api-logs, so it is disabled.
+    assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, true)
+    assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, false)
+    assert.strictEqual(config.logInjection, true)
+    assert.strictEqual(peerWarnings('@opentelemetry/api-logs').length, 1)
+    assert.strictEqual(peerWarnings('@opentelemetry/api').length, 0)
+  })
+
+  it('keeps DD_LOGS_OTEL_ENABLED when both @opentelemetry/api and @opentelemetry/api-logs are installed', () => {
+    process.env.DD_LOGS_OTEL_ENABLED = 'true'
+
+    const config = getConfig({}, { otelApi: otelApiAvailable('@opentelemetry/api', '@opentelemetry/api-logs') })
+
+    assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, true)
+  })
+
+  it('silently disables a default-on OTel flag when @opentelemetry/api is not installed', () => {
+    const config = getConfig({}, {
+      otelApi: otelApiAvailable(),
+      defaultsOverride: { DD_METRICS_OTEL_ENABLED: true, DD_LOGS_OTEL_ENABLED: true },
+    })
+
+    assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, false)
+    assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, false)
+    assert.ok(log.warn.getCalls().every((call) => !/is not installed; disabling/.test(call.args[0])))
+  })
+
+  it('warns only for the customer-set flag when a sibling is default-on', () => {
+    process.env.DD_LOGS_OTEL_ENABLED = 'true'
+
+    const config = getConfig({}, {
+      otelApi: otelApiAvailable(),
+      defaultsOverride: { DD_METRICS_OTEL_ENABLED: true },
+    })
+
+    assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, false)
+    assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, false)
+    const warnings = log.warn.getCalls().filter((call) => /is not installed; disabling/.test(call.args[0]))
+    assert.strictEqual(warnings.length, 1)
+    assert.ok(warnings[0].args.includes('DD_LOGS_OTEL_ENABLED'))
   })
 
   it('should initialize with OTEL environment variables when DD env vars are not set', () => {
