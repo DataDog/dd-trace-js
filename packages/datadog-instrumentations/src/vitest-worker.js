@@ -8,7 +8,6 @@ const { performance } = require('node:perf_hooks')
 const shimmer = require('../../datadog-shimmer')
 const {
   DYNAMIC_NAME_RE,
-  getTestSuitePath,
   getEfdRetryCount,
   recordAttemptToFixExecution,
   logAttemptToFixTestExecution,
@@ -20,11 +19,6 @@ const {
   testPassCh,
   testErrorCh,
   testSkipCh,
-  isNewTestCh,
-  isAttemptToFixCh,
-  isDisabledCh,
-  isQuarantinedCh,
-  isModifiedCh,
   testFnCh,
   testSuiteStartCh,
   testSuiteFinishCh,
@@ -35,11 +29,13 @@ const {
   getTestName,
   getProvidedContext,
   isFlakyTestRetriesEnabledForTask,
+  getVitestTestProperties,
 } = require('./vitest-util')
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 400
 
 const taskToCtx = new WeakMap()
+const taskToTestProperties = new WeakMap()
 const taskToStatuses = new WeakMap()
 const taskToReportedErrorCount = new WeakMap()
 const attemptToFixTaskToStatuses = new WeakMap()
@@ -86,6 +82,16 @@ function getFinalAttemptToFixStatus (task, state, isSwitchedStatus, testCtx) {
   return state === 'fail' ? 'fail' : 'pass'
 }
 
+/**
+ * Return the normalized test suite path prepared by the main process for a Vitest task.
+ *
+ * @param {{ file: { filepath: string } }} task
+ * @returns {string}
+ */
+function getTaskTestSuite (task) {
+  return taskToTestProperties.get(task)?.testSuite || task.file.filepath
+}
+
 function recordFinalAttemptToFixExecution (task, status, providedContext) {
   const statuses = attemptToFixTaskToStatuses.get(task)
   if (statuses && statuses.length <= providedContext.testManagementAttemptToFixRetries) {
@@ -93,7 +99,7 @@ function recordFinalAttemptToFixExecution (task, status, providedContext) {
   }
 
   recordAttemptToFixExecution(attemptToFixExecutions, {
-    testSuite: getTestSuitePath(task.file.filepath, process.cwd()),
+    testSuite: getTaskTestSuite(task),
     testName: getTestName(task),
     status,
     isDisabled: disabledTasks.has(task),
@@ -138,87 +144,64 @@ function wrapVitestTestRunner (VitestTestRunner) {
   shimmer.wrap(VitestTestRunner.prototype, 'onBeforeRunTask', onBeforeRunTask => function (task) {
     const testName = getTestName(task)
 
+    const providedContext = getProvidedContext()
     const {
-      knownTests,
       isEarlyFlakeDetectionEnabled,
       isKnownTestsEnabled,
       numRepeats,
       isTestManagementTestsEnabled,
       testManagementAttemptToFixRetries,
-      testManagementTests,
       isImpactedTestsEnabled,
-      modifiedFiles,
-    } = getProvidedContext()
+    } = providedContext
+    const testProperties = getVitestTestProperties(providedContext, task.file.filepath, testName)
+    taskToTestProperties.set(task, testProperties)
 
     if (isTestManagementTestsEnabled) {
-      isAttemptToFixCh.publish({
-        testManagementTests,
-        testSuiteAbsolutePath: task.file.filepath,
-        testName,
-        onDone: (isAttemptToFix) => {
-          if (isAttemptToFix) {
-            isRetryReasonAttemptToFix = task.repeats !== testManagementAttemptToFixRetries
-            disableFrameworkRetries(task)
-            task.repeats = testManagementAttemptToFixRetries
-            attemptToFixTasks.add(task)
-            attemptToFixTaskToStatuses.set(task, [])
-          }
-        },
-      })
-      isDisabledCh.publish({
-        testManagementTests,
-        testSuiteAbsolutePath: task.file.filepath,
-        testName,
-        onDone: (isTestDisabled) => {
-          if (isTestDisabled) {
-            disabledTasks.add(task)
-            if (!attemptToFixTasks.has(task)) {
-              // we only actually skip if the test is not being attempted to be fixed
-              task.mode = 'skip'
-            }
-          }
-        },
-      })
+      const {
+        isAttemptToFix,
+        isDisabled,
+        isQuarantined,
+      } = testProperties
+      if (isAttemptToFix) {
+        isRetryReasonAttemptToFix = task.repeats !== testManagementAttemptToFixRetries
+        disableFrameworkRetries(task)
+        task.repeats = testManagementAttemptToFixRetries
+        attemptToFixTasks.add(task)
+        attemptToFixTaskToStatuses.set(task, [])
+      }
+      if (isQuarantined) {
+        quarantinedTasks.add(task)
+      }
+      if (isDisabled) {
+        disabledTasks.add(task)
+        if (!attemptToFixTasks.has(task)) {
+          // we only actually skip if the test is not being attempted to be fixed
+          task.mode = 'skip'
+        }
+      }
     }
 
-    if (isImpactedTestsEnabled) {
-      isModifiedCh.publish({
-        modifiedFiles,
-        testSuiteAbsolutePath: task.file.filepath,
-        onDone: (isImpacted) => {
-          if (isImpacted) {
-            if (isEarlyFlakeDetectionEnabled) {
-              isRetryReasonEfd = true
-              disableFrameworkRetries(task)
-              task.repeats = numRepeats
-            }
-            modifiedTasks.add(task)
-            taskToStatuses.set(task, [])
-          }
-        },
-      })
+    if (isImpactedTestsEnabled && testProperties.isModified) {
+      if (isEarlyFlakeDetectionEnabled) {
+        isRetryReasonEfd = true
+        disableFrameworkRetries(task)
+        task.repeats = numRepeats
+      }
+      modifiedTasks.add(task)
+      taskToStatuses.set(task, [])
     }
 
-    if (isKnownTestsEnabled) {
-      isNewTestCh.publish({
-        knownTests,
-        testSuiteAbsolutePath: task.file.filepath,
-        testName,
-        onDone: (isNew) => {
-          if (isNew && !attemptToFixTasks.has(task)) {
-            if (isEarlyFlakeDetectionEnabled && !modifiedTasks.has(task)) {
-              isRetryReasonEfd = true
-              disableFrameworkRetries(task)
-              task.repeats = numRepeats
-            }
-            newTasks.add(task)
-            taskToStatuses.set(task, [])
-            if (DYNAMIC_NAME_RE.test(testName)) {
-              dynamicNameTasks.add(task)
-            }
-          }
-        },
-      })
+    if (isKnownTestsEnabled && testProperties.isNew && !attemptToFixTasks.has(task)) {
+      if (isEarlyFlakeDetectionEnabled && !modifiedTasks.has(task)) {
+        isRetryReasonEfd = true
+        disableFrameworkRetries(task)
+        task.repeats = numRepeats
+      }
+      newTasks.add(task)
+      taskToStatuses.set(task, [])
+      if (DYNAMIC_NAME_RE.test(testName)) {
+        dynamicNameTasks.add(task)
+      }
     }
 
     return onBeforeRunTask.apply(this, arguments)
@@ -271,34 +254,16 @@ function wrapVitestTestRunner (VitestTestRunner) {
     }
     const testName = getTestName(task)
     let isNew = false
-    let isQuarantined = false
-
     const providedContext = getProvidedContext()
     const {
       isKnownTestsEnabled,
       isEarlyFlakeDetectionEnabled,
       isDiEnabled,
-      isTestManagementTestsEnabled,
-      testManagementTests,
       slowTestRetries,
     } = providedContext
 
     if (isKnownTestsEnabled) {
       isNew = newTasks.has(task)
-    }
-
-    if (isTestManagementTestsEnabled) {
-      isQuarantinedCh.publish({
-        testManagementTests,
-        testSuiteAbsolutePath: task.file.filepath,
-        testName,
-        onDone: (isTestQuarantined) => {
-          isQuarantined = isTestQuarantined
-          if (isTestQuarantined) {
-            quarantinedTasks.add(task)
-          }
-        },
-      })
     }
 
     const { retry: numAttempt, repeats: numRepetition } = retryInfo
@@ -426,7 +391,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
       mightHitProbe: isDiEnabled && numAttempt > 0,
       isAttemptToFix: attemptToFixTasks.has(task),
       isDisabled: disabledTasks.has(task),
-      isQuarantined,
+      isQuarantined: quarantinedTasks.has(task),
       isRetryReasonAtr,
       isModified: modifiedTasks.has(task),
     }
@@ -434,7 +399,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
 
     if (attemptToFixTasks.has(task)) {
       logAttemptToFixTestExecution(
-        getTestSuitePath(task.file.filepath, process.cwd()),
+        getTaskTestSuite(task),
         testName,
         loggedAttemptToFixTests
       )
