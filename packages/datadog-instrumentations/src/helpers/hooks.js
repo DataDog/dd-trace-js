@@ -104,6 +104,7 @@ module.exports = {
   lodash: () => require('../lodash'),
   mariadb: () => require('../mariadb'),
   memcached: () => require('../memcached'),
+  mercurius: () => require('../mercurius'),
   'microgateway-core': () => require('../microgateway-core'),
   mocha: () => require('../mocha'),
   'mocha-each': () => require('../mocha'),

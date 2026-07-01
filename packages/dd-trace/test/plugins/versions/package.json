@@ -162,6 +162,7 @@
     "loopback": "3.28.0",
     "mariadb": "3.4.5",
     "memcached": "2.2.2",
+    "mercurius": "16.9.0",
     "microgateway-core": "3.3.7",
     "middie": "7.1.0",
     "mocha": "11.7.6",
