@@ -178,12 +178,8 @@ jobs:
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: ./.github/actions/testagent/start
-      - uses: ./.github/actions/node/oldest-maintenance-lts
-      - uses: ./.github/actions/install
-      - run: yarn test:plugins:ci
-      - run: yarn test:llmobs:plugins:ci
-        shell: bash
       - uses: ./.github/actions/node/latest
+      - uses: ./.github/actions/install
       - run: yarn test:plugins:ci
       - run: yarn test:llmobs:plugins:ci
         shell: bash

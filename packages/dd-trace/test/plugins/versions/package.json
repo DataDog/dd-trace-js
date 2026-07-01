@@ -91,7 +91,7 @@
     "@vitest/runner": "4.1.9",
     "@vscode/sqlite3": "5.1.12-vscode",
     "aerospike": "6.7.0",
-    "ai": "6.0.208",
+    "ai": "7.0.2",
     "amqp10": "3.6.0",
     "amqplib": "2.0.1",
     "apollo-server-core": "3.13.0",
