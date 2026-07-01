@@ -43,6 +43,10 @@ const {
   TEST_HAS_FAILED_ALL_RETRIES,
   TEST_RETRY_REASON_TYPES,
   TEST_HAS_DYNAMIC_NAME,
+  TEST_FINAL_STATUS,
+  TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX,
+  TEST_MANAGEMENT_IS_DISABLED,
+  TEST_MANAGEMENT_IS_QUARANTINED,
   VITEST_POOL,
   TEST_IS_TEST_FRAMEWORK_WORKER,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
@@ -356,6 +360,87 @@ versions.forEach((version) => {
           assert.strictEqual(passedTest.meta[TEST_SOURCE_FILE], 'ci-visibility/vitest-tests/typecheck.test-d.ts')
           assert.strictEqual(skippedTest.meta[TEST_STATUS], 'skip')
           assert.strictEqual(skippedTest.meta[TEST_SOURCE_FILE], 'ci-visibility/vitest-tests/typecheck.test-d.ts')
+        }, 25000)
+
+      childProcess = exec(
+        './node_modules/.bin/vitest run --config=./vitest.typecheck.config.mjs ' +
+          'ci-visibility/vitest-tests/typecheck.test-d.ts --reporter=verbose',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            DD_SERVICE: undefined,
+          },
+        }
+      )
+      childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+      childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+      const [[code]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      assert.strictEqual(code, 0, testOutput)
+    })
+
+    typecheckIt('honors Test Management metadata for typecheck tests', async () => {
+      receiver.setSettings({ test_management: { enabled: true } })
+      receiver.setTestManagementTests({
+        vitest: {
+          suites: {
+            'ci-visibility/vitest-tests/typecheck.test-d.ts': {
+              tests: {
+                'typecheck can report disabled assertion': {
+                  properties: {
+                    disabled: true,
+                  },
+                },
+                'typecheck can report quarantined assertion': {
+                  properties: {
+                    quarantined: true,
+                  },
+                },
+                'typecheck can report attempt-to-fix assertion': {
+                  properties: {
+                    attempt_to_fix: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const disabledTest = tests.find(test =>
+            test.meta[TEST_NAME] === 'typecheck can report disabled assertion'
+          )
+          const quarantinedTest = tests.find(test =>
+            test.meta[TEST_NAME] === 'typecheck can report quarantined assertion'
+          )
+          const attemptToFixTest = tests.find(test =>
+            test.meta[TEST_NAME] === 'typecheck can report attempt-to-fix assertion'
+          )
+
+          assert.ok(disabledTest, testOutput)
+          assert.ok(quarantinedTest, testOutput)
+          assert.ok(attemptToFixTest, testOutput)
+
+          assert.strictEqual(disabledTest.meta[TEST_STATUS], 'skip')
+          assert.strictEqual(disabledTest.meta[TEST_FINAL_STATUS], 'skip')
+          assert.strictEqual(disabledTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+
+          assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(quarantinedTest.meta[TEST_FINAL_STATUS], 'skip')
+          assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+
+          assert.strictEqual(attemptToFixTest.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(attemptToFixTest.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
         }, 25000)
 
       childProcess = exec(

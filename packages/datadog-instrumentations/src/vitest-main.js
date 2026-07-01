@@ -40,6 +40,7 @@ const {
   getTypeTasks,
   getWorkspaceProject,
   setProvidedContext,
+  getVitestTestProperties,
 } = require('./vitest-util')
 
 const newTestsWithDynamicNames = new Set()
@@ -845,14 +846,53 @@ function getTypecheckTestName (task) {
   return task.fullTestName || task.name
 }
 
-function reportTypecheckTest (task, testSuiteAbsolutePath) {
+/**
+ * Return Test Optimization metadata prepared in Vitest's main process setup.
+ *
+ * @param {object|undefined} ctx
+ * @returns {{ testPropertiesByFilepath: object }}
+ */
+function getMainProcessProvidedContext (ctx) {
+  try {
+    const workspaceProject = getWorkspaceProject(ctx)
+    const providedContext = workspaceProject.getProvidedContext?.() || workspaceProject._provided || {}
+
+    return {
+      testPropertiesByFilepath: providedContext._ddTestPropertiesByFilepath || {},
+    }
+  } catch {
+    return {
+      testPropertiesByFilepath: {},
+    }
+  }
+}
+
+/**
+ * Return the Vitest context that owns a Typechecker instance.
+ *
+ * @param {object} typechecker
+ * @returns {object|undefined}
+ */
+function getTypecheckerVitestContext (typechecker) {
+  return typechecker.ctx || typechecker.project?.vitest
+}
+
+function reportTypecheckTest (task, testSuiteAbsolutePath, providedContext) {
   const testName = getTypecheckTestName(task)
-  if (getTypecheckTaskStatus(task) === 'skip') {
+  const testProperties = getVitestTestProperties(providedContext, testSuiteAbsolutePath, testName)
+  const isAttemptToFix = testProperties.isAttemptToFix === true
+  const isDisabled = testProperties.isDisabled === true
+  const isQuarantined = testProperties.isQuarantined === true
+  const isModified = testProperties.isModified === true
+  const isSkippedByTestManagement = !isAttemptToFix && isDisabled
+  const status = getTypecheckTaskStatus(task)
+
+  if (status === 'skip' || isSkippedByTestManagement) {
     testSkipCh.publish({
       testName,
       testSuiteAbsolutePath,
-      isNew: false,
-      isDisabled: false,
+      isNew: testProperties.isNew,
+      isDisabled,
     })
     return
   }
@@ -861,30 +901,33 @@ function reportTypecheckTest (task, testSuiteAbsolutePath) {
     testName,
     testSuiteAbsolutePath,
     isRetry: false,
-    isNew: false,
+    isNew: testProperties.isNew,
     hasDynamicName: false,
     mightHitProbe: false,
-    isAttemptToFix: false,
-    isDisabled: false,
-    isQuarantined: false,
-    isModified: false,
+    isAttemptToFix,
+    isDisabled,
+    isQuarantined,
+    isModified,
   }
   testStartCh.runStores(ctx, () => {})
 
-  if (getTypecheckTaskStatus(task) === 'fail') {
+  const finalStatus = !isAttemptToFix && isQuarantined ? 'skip' : undefined
+  if (status === 'fail') {
     testErrorCh.publish({
       error: task.result?.errors?.[0],
+      finalStatus,
       ...ctx.currentStore,
     })
   } else {
     testPassCh.publish({
       task,
+      finalStatus,
       ...ctx.currentStore,
     })
   }
 }
 
-async function reportTypecheckFile (file, sessionConfiguration, frameworkVersion) {
+async function reportTypecheckFile (file, sessionConfiguration, frameworkVersion, providedContext) {
   const testSuiteAbsolutePath = file.filepath
   const testSuiteCtx = {
     testSuiteAbsolutePath,
@@ -898,7 +941,7 @@ async function reportTypecheckFile (file, sessionConfiguration, frameworkVersion
   testSuiteStartCh.runStores(testSuiteCtx, () => {})
 
   for (const task of getTypeTasks(file.tasks)) {
-    reportTypecheckTest(task, testSuiteAbsolutePath)
+    reportTypecheckTest(task, testSuiteAbsolutePath, providedContext)
   }
 
   let onFinish
@@ -913,15 +956,24 @@ async function reportTypecheckFile (file, sessionConfiguration, frameworkVersion
   await onFinishPromise
 }
 
-async function reportTypecheckResults (result, frameworkVersion) {
+async function reportTypecheckResults (result, frameworkVersion, ctx) {
   if (!testSuiteFinishCh.hasSubscribers) return
   if (!Array.isArray(result?.files)) return
 
+  if (ctx) {
+    await ensureMainProcessSetup(ctx, frameworkVersion)
+  }
+  const providedContext = getMainProcessProvidedContext(ctx)
   const sessionConfiguration = testSessionConfigurationCh.hasSubscribers
     ? await getChannelPromise(testSessionConfigurationCh, frameworkVersion)
     : {}
 
-  await Promise.all(result.files.map(file => reportTypecheckFile(file, sessionConfiguration, frameworkVersion)))
+  await Promise.all(result.files.map(file => reportTypecheckFile(
+    file,
+    sessionConfiguration,
+    frameworkVersion,
+    providedContext
+  )))
 }
 
 function wrapTypechecker (Typechecker, frameworkVersion) {
@@ -929,7 +981,7 @@ function wrapTypechecker (Typechecker, frameworkVersion) {
 
   shimmer.wrap(Typechecker.prototype, 'prepareResults', prepareResults => async function () {
     const result = await prepareResults.apply(this, arguments)
-    await reportTypecheckResults(result, frameworkVersion)
+    await reportTypecheckResults(result, frameworkVersion, getTypecheckerVitestContext(this))
     return result
   })
 }
