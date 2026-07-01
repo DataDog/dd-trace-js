@@ -2,6 +2,9 @@
 
 const path = require('node:path')
 
+const satisfies = require('../../../vendor/dist/semifies')
+
+const log = require('../../dd-trace/src/log')
 const {
   DYNAMIC_NAME_RE,
   getTestSuitePath,
@@ -36,6 +39,7 @@ const DATADOG_TEST_OPTIMIZATION_BOOTSTRAPS = new Set([
 const DATADOG_TEST_OPTIMIZATION_NODE_OPTION_FLAGS = new Set(['--import', '--require', '-r'])
 const VITEST_NO_WORKER_INIT_ACTIVE_ENV = 'DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE'
 const VITEST_NO_WORKER_INIT_REQUEST_ENV = 'DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT'
+const VITEST_NO_WORKER_INIT_MINIMUM_VERSION = '3.2.6'
 const VITEST_NO_WORKER_INIT_SETUP_FILE = path.join(
   __dirname,
   '..',
@@ -45,6 +49,7 @@ const VITEST_NO_WORKER_INIT_SETUP_FILE = path.join(
   'vitest-no-worker-init-setup.mjs'
 )
 const NODE_OPTIONS_QUOTE_RE = /[\s"\\]/
+let hasWarnedUnsupportedVersion = false
 
 function noop () {}
 
@@ -53,8 +58,12 @@ function isRequested () {
   return isTrue(process.env[VITEST_NO_WORKER_INIT_REQUEST_ENV])
 }
 
-function shouldUse (ctx, testSpecifications, options) {
+function shouldUse (ctx, frameworkVersion, testSpecifications, options) {
   if (!isRequested()) return false
+  if (!isSupportedVersion(frameworkVersion)) {
+    warnUnsupportedVersion(frameworkVersion)
+    return false
+  }
 
   const config = ctx?.config
   if (!config || config.isolate === false) return false
@@ -63,6 +72,22 @@ function shouldUse (ctx, testSpecifications, options) {
   return isVitestWorkerPool(config.pool) ||
     config.pool === undefined ||
     hasVitestWorkerPoolTestSpecification(testSpecifications)
+}
+
+function isSupportedVersion (frameworkVersion) {
+  return !!frameworkVersion && satisfies(frameworkVersion, `>=${VITEST_NO_WORKER_INIT_MINIMUM_VERSION}`)
+}
+
+function warnUnsupportedVersion (frameworkVersion) {
+  if (hasWarnedUnsupportedVersion) return
+
+  hasWarnedUnsupportedVersion = true
+  log.warn(
+    '%s is only supported for vitest >=%s. Falling back to normal Vitest worker instrumentation for vitest %s.',
+    VITEST_NO_WORKER_INIT_REQUEST_ENV,
+    VITEST_NO_WORKER_INIT_MINIMUM_VERSION,
+    frameworkVersion || 'unknown'
+  )
 }
 
 function configure (ctx, frameworkVersion, testSpecifications, setupData, options) {

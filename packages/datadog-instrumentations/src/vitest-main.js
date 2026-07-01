@@ -587,7 +587,7 @@ function getNoWorkerInitState () {
 }
 
 function ensureMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
-  const shouldInstallNoWorkerInit = noWorkerInit.shouldUse(ctx, testSpecifications, {
+  const shouldInstallNoWorkerInit = noWorkerInit.shouldUse(ctx, frameworkVersion, testSpecifications, {
     hasVitestWorkerPoolTestSpecification,
     isVitestWorkerPool,
   })
