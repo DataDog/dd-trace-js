@@ -190,14 +190,18 @@ describe('OtlpStatsTransformer', () => {
       assert.strictEqual(attrMapOf(err)['datadog.span.top_level'], true)
     })
 
-    it('tags datadog.span.top_level=false for a group mixing top-level and non-top-level hits', () => {
-      const spans = [makeSpan(), makeTopLevelSpan()] // same aggregation key, mixed top-level
+    it('emits separate data points for top-level and non-top-level spans sharing the same dimensions', () => {
+      const spans = [makeSpan(), makeTopLevelSpan()]
       const payload = JSON.parse(transformer.transform(makeDrained(12340000000000, spans), BUCKET_SIZE_NS))
       const points = dataPointsOf(payload)
 
-      assert.strictEqual(points.length, 1)
-      assert.strictEqual(points[0].count, 2)
-      assert.strictEqual(attrMapOf(points[0])['datadog.span.top_level'], false)
+      assert.strictEqual(points.length, 2)
+      const topLevelPoint = points.find(dp => attrMapOf(dp)['datadog.span.top_level'] === true)
+      const nonTopLevelPoint = points.find(dp => attrMapOf(dp)['datadog.span.top_level'] === false)
+      assert.ok(topLevelPoint, 'top-level data point should exist')
+      assert.ok(nonTopLevelPoint, 'non-top-level data point should exist')
+      assert.strictEqual(topLevelPoint.count, 1)
+      assert.strictEqual(nonTopLevelPoint.count, 1)
     })
 
     it('omits data points with zero count', () => {

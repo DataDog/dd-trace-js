@@ -106,6 +106,7 @@ class SpanAggKey {
     this.srvSrc = span.meta[SVC_SRC_KEY] || ''
     this.origin = span.meta[ORIGIN_KEY] || ''
     this.spanKind = span.meta[SPAN_KIND] || ''
+    this.topLevel = Boolean(span.metrics?.[TOP_LEVEL_KEY])
     // meta holds a string name (OTel/manual); metrics holds a numeric code (dd gRPC plugin via setTag).
     // Prefer meta; translate a numeric metrics code to the canonical status NAME string.
     const grpcCode = span.meta[GRPC_STATUS_CODE] ?? span.metrics?.[GRPC_STATUS_CODE]
@@ -128,6 +129,7 @@ class SpanAggKey {
       this.origin,
       this.spanKind,
       this.rpcStatusCode,
+      this.topLevel,
     ].join(',')
   }
 }
