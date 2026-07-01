@@ -11,10 +11,12 @@ const {
   getCiVisAgentlessConfig,
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
+const noWorkerInit = require('../../packages/datadog-instrumentations/src/vitest-main-no-worker-init')
 const {
   ERROR_MESSAGE,
 } = require('../../packages/dd-trace/src/constants')
 const {
+  EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
   TEST_EARLY_FLAKE_ENABLED,
   TEST_FINAL_STATUS,
   TEST_HAS_FAILED_ALL_RETRIES,
@@ -36,6 +38,7 @@ const {
 const { NODE_MAJOR } = require('../../version')
 
 const DEFAULT_NODE_OPTIONS = '--no-warnings --import dd-trace/register.js -r dd-trace/ci/init'
+const VITEST_NO_WORKER_INIT_REQUEST_ENV = 'DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT'
 const SUPPORTED_VERSIONS = NODE_MAJOR <= 18 ? ['3.2.6'] : ['3.2.6', 'latest']
 const UNSUPPORTED_VERSION = '1.6.0'
 const UNSUPPORTED_VERSION_WARNING =
@@ -82,7 +85,7 @@ function getNoWorkerInitEnv (receiver, extraEnv = {}) {
   return {
     ...getCiVisAgentlessConfig(receiver.port),
     NODE_OPTIONS: DEFAULT_NODE_OPTIONS,
-    DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: 'true',
+    [VITEST_NO_WORKER_INIT_REQUEST_ENV]: 'true',
     DD_SERVICE: undefined,
     ...extraEnv,
   }
@@ -94,6 +97,142 @@ function gatherCitestcyclePayloads (receiver, assertions) {
     payloads => assertions(getEvents(payloads))
   )
 }
+
+describe('vitest no-worker init instrumentation selection', () => {
+  const workerPools = new Set(['forks', 'threads', 'vmForks', 'vmThreads'])
+  const options = {
+    isVitestWorkerPool: pool => workerPools.has(pool),
+  }
+  let originalRequested
+
+  beforeEach(() => {
+    originalRequested = process.env[VITEST_NO_WORKER_INIT_REQUEST_ENV]
+    process.env[VITEST_NO_WORKER_INIT_REQUEST_ENV] = 'true'
+  })
+
+  afterEach(() => {
+    if (originalRequested === undefined) {
+      delete process.env[VITEST_NO_WORKER_INIT_REQUEST_ENV]
+    } else {
+      process.env[VITEST_NO_WORKER_INIT_REQUEST_ENV] = originalRequested
+    }
+  })
+
+  describe('shouldUse', () => {
+    it('rejects runs when the feature was not requested', () => {
+      delete process.env[VITEST_NO_WORKER_INIT_REQUEST_ENV]
+
+      assert.strictEqual(noWorkerInit.shouldUse({ config: { pool: 'forks' } }, '3.2.6', undefined, options), false)
+    })
+
+    it('rejects vitest versions older than 3.2.6', () => {
+      assert.strictEqual(noWorkerInit.shouldUse({ config: { pool: 'forks' } }, '3.2.5', undefined, options), false)
+    })
+
+    for (const pool of ['forks', 'threads']) {
+      it(`accepts isolated ${pool} runs`, () => {
+        assert.strictEqual(noWorkerInit.shouldUse({ config: { pool } }, '3.2.6', undefined, options), true)
+      })
+    }
+
+    it('rejects root projects with isolate disabled', () => {
+      assert.strictEqual(
+        noWorkerInit.shouldUse({ config: { isolate: false, pool: 'forks' } }, '3.2.6', undefined, options),
+        false
+      )
+    })
+
+    it('rejects pool-specific isolate disabled configuration', () => {
+      assert.strictEqual(
+        noWorkerInit.shouldUse({
+          config: {
+            pool: 'threads',
+            poolOptions: {
+              threads: {
+                isolate: false,
+              },
+            },
+          },
+        }, '3.2.6', undefined, options),
+        false
+      )
+    })
+
+    it('rejects selected test specifications with isolate disabled', () => {
+      const project = {
+        config: {
+          isolate: false,
+          pool: 'forks',
+        },
+      }
+
+      assert.strictEqual(
+        noWorkerInit.shouldUse({ config: { pool: 'forks' } }, '3.2.6', [[project, { pool: 'forks' }]], options),
+        false
+      )
+    })
+
+    it('rejects mixed worker and non-worker selected test specifications', () => {
+      const workerProject = {
+        config: {
+          pool: 'forks',
+        },
+      }
+      const nonWorkerProject = {
+        config: {
+          pool: 'browser',
+        },
+      }
+
+      assert.strictEqual(
+        noWorkerInit.shouldUse({
+          config: {
+            pool: 'forks',
+          },
+        }, '3.2.6', [
+          [workerProject, { pool: 'forks' }],
+          [nonWorkerProject, { pool: 'browser' }],
+        ], options),
+        false
+      )
+    })
+  })
+
+  describe('configure', () => {
+    it('sends EFD retry thresholds to the no-worker setup context', () => {
+      const rootProject = { _provided: {} }
+      const ctx = {
+        config: {},
+        reporters: [],
+        getRootProject () {
+          return rootProject
+        },
+      }
+
+      noWorkerInit.configure(ctx, '3.2.6', undefined, {
+        knownTestsBySuite: {},
+        modifiedFiles: {},
+        repositoryRoot: '/repo',
+        testManagementTestsBySuite: {},
+        testSessionConfiguration: {},
+      }, {
+        getConfiguredEfdRetryCount: () => 2,
+        state: {
+          earlyFlakeDetectionNumRetries: 1,
+          earlyFlakeDetectionSlowTestRetries: { '5s': 2 },
+          isEarlyFlakeDetectionEnabled: true,
+          isEarlyFlakeDetectionFaulty: false,
+          testManagementAttemptToFixRetries: 0,
+        },
+      })
+
+      assert.deepStrictEqual(
+        rootProject._provided._ddVitestWorkerSetup.earlyFlakeDetectionRetryThresholds,
+        EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS
+      )
+    })
+  })
+})
 
 SUPPORTED_VERSIONS.forEach((version) => {
   describe(`vitest@${version} no-worker init`, () => {
