@@ -289,6 +289,26 @@ function getFunctionArguments (fn, args = []) {
   }
 }
 
+// The `x-datadog-tags` tagset encoder rejects commas (the entry delimiter) and any byte
+// outside 0x20-0x7E, and a raise there drops the ENTIRE header (taking ml_app,
+// llmobs_trace_id, parent_id, sampling with it). An agent name is arbitrary user text, so it
+// must be skipped rather than sanitized when unsafe: only the digit-safe id then propagates and
+// the backend resolves the real name by span id. `=` is legal in tagset values (illegal only in
+// keys), so a name containing `=` is safe and must not be dropped.
+/**
+ * @param {string} name
+ * @returns {boolean}
+ */
+function agentNameWireSafe (name) {
+  // Conservative slice of the 512B shared tagset budget, mirroring dd-trace-py.
+  if (Buffer.byteLength(name, 'utf8') > 256) return false
+  for (let index = 0; index < name.length; index++) {
+    const code = name.charCodeAt(index)
+    if (code < 0x20 || code > 0x7E || code === 0x2C /* comma */) return false
+  }
+  return true
+}
+
 function spanHasError (span) {
   const spanContext = span.context()
   return !!(spanContext.getTag('error') || spanContext.getTag('error.type'))
@@ -363,6 +383,7 @@ function findGenAIAncestorSpanId (span) {
 }
 
 module.exports = {
+  agentNameWireSafe,
   encodeUnicode,
   findGenAIAncestorSpanId,
   validateCostTags,

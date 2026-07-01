@@ -1783,5 +1783,67 @@ describe('sdk', () => {
         `_dd.p.llmobs_parent_id=${parentId},_dd.p.llmobs_ml_app=mlApp,_dd.p.llmobs_sr=1,_dd.p.llmobs_sd=1`
       )
     })
+
+    it('propagates the agent attribution when injecting from within an agent', () => {
+      const carrier = { 'x-datadog-tags': '' }
+      let agentId
+      llmobs.trace({ kind: 'agent', name: 'my_agent' }, span => {
+        agentId = span.context().toSpanId()
+        injectCh.publish({ carrier })
+      })
+
+      const tags = carrier['x-datadog-tags']
+      assert.ok(tags.includes(`_dd.p.llmobs_parent_agent_id=${agentId}`), tags)
+      assert.ok(tags.includes('_dd.p.llmobs_parent_agent_name=my_agent'), tags)
+    })
+
+    it('inherits the agent attribution when injecting from a tool under an agent', () => {
+      const carrier = { 'x-datadog-tags': '' }
+      let agentId
+      llmobs.trace({ kind: 'agent', name: 'my_agent' }, span => {
+        agentId = span.context().toSpanId()
+        llmobs.trace({ kind: 'tool', name: 'my_tool' }, () => {
+          injectCh.publish({ carrier })
+        })
+      })
+
+      const tags = carrier['x-datadog-tags']
+      assert.ok(tags.includes(`_dd.p.llmobs_parent_agent_id=${agentId}`), tags)
+      assert.ok(tags.includes('_dd.p.llmobs_parent_agent_name=my_agent'), tags)
+    })
+
+    it('does not propagate agent attribution when there is no agent in the chain', () => {
+      const carrier = { 'x-datadog-tags': '' }
+      llmobs.trace({ kind: 'workflow', name: 'my_workflow' }, () => {
+        injectCh.publish({ carrier })
+      })
+
+      const tags = carrier['x-datadog-tags']
+      assert.ok(!tags.includes('_dd.p.llmobs_parent_agent_id'), tags)
+      assert.ok(!tags.includes('_dd.p.llmobs_parent_agent_name'), tags)
+    })
+
+    it('skips an unsafe agent name but still propagates the id', () => {
+      const carrier = { 'x-datadog-tags': '' }
+      let agentId
+      llmobs.trace({ kind: 'agent', name: 'Researcher, v2' }, span => {
+        agentId = span.context().toSpanId()
+        injectCh.publish({ carrier })
+      })
+
+      const tags = carrier['x-datadog-tags']
+      assert.ok(tags.includes(`_dd.p.llmobs_parent_agent_id=${agentId}`), tags)
+      assert.ok(!tags.includes('_dd.p.llmobs_parent_agent_name'), tags)
+    })
+
+    it('propagates an agent name containing "=" (legal in tagset values)', () => {
+      const carrier = { 'x-datadog-tags': '' }
+      llmobs.trace({ kind: 'agent', name: 'model=gpt4' }, () => {
+        injectCh.publish({ carrier })
+      })
+
+      const tags = carrier['x-datadog-tags']
+      assert.ok(tags.includes('_dd.p.llmobs_parent_agent_name=model=gpt4'), tags)
+    })
   })
 })

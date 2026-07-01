@@ -6,6 +6,7 @@ const { before, describe, it } = require('mocha')
 
 const getConfig = require('../../src/config')
 const {
+  agentNameWireSafe,
   encodeUnicode,
   findGenAIAncestorSpanId,
   getFunctionArguments,
@@ -24,6 +25,30 @@ describe('util', () => {
 
     it('should encode only unicode characters in a string', () => {
       assert.strictEqual(encodeUnicode('test 😀'), 'test \\ud83d\\ude00')
+    })
+  })
+
+  describe('agentNameWireSafe', () => {
+    it('accepts a plain ascii name', () => {
+      assert.strictEqual(agentNameWireSafe('my_agent'), true)
+    })
+
+    it('accepts a name containing "=" (legal in tagset values)', () => {
+      assert.strictEqual(agentNameWireSafe('model=gpt4'), true)
+    })
+
+    it('rejects a name containing a comma (the tagset entry delimiter)', () => {
+      assert.strictEqual(agentNameWireSafe('Researcher, v2'), false)
+    })
+
+    it('rejects a name with a byte outside 0x20-0x7E', () => {
+      assert.strictEqual(agentNameWireSafe('café'), false)
+      assert.strictEqual(agentNameWireSafe('tab\tname'), false)
+    })
+
+    it('accepts a name at the 256 byte cap and rejects the first byte over', () => {
+      assert.strictEqual(agentNameWireSafe('a'.repeat(256)), true)
+      assert.strictEqual(agentNameWireSafe('a'.repeat(257)), false)
     })
   })
 
