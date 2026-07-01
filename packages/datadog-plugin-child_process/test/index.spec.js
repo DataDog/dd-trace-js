@@ -12,8 +12,6 @@ const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
 const ChildProcessPlugin = require('../src')
 const { temporaryWarningExceptions } = require('../../dd-trace/test/setup/core')
 
-function noop () {}
-
 function normalizeArgs (methodName, command, options) {
   const args = []
   if (methodName === 'exec' || methodName === 'execSync') {
@@ -424,6 +422,7 @@ describe('Child process plugin', () => {
         meta: {
           component: 'subprocess',
           'cmd.exec': '["echo","bluebird-test"]',
+          'cmd.exit_code': '0',
         },
       })
 
@@ -441,6 +440,20 @@ describe('Child process plugin', () => {
     })
 
     it('should work with concurrent Bluebird promise calls', async () => {
+      const drained = []
+      for (let i = 0; i < 5; i++) {
+        drained.push(expectSomeSpan(agent, {
+          type: 'system',
+          name: 'command_execution',
+          error: 0,
+          meta: {
+            component: 'subprocess',
+            'cmd.exec': `["echo","concurrent-test-${i}"]`,
+            'cmd.exit_code': '0',
+          },
+        }))
+      }
+
       const promises = withBluebird(() => {
         const execFileAsync = util.promisify(childProcess.execFile)
         const calls = []
@@ -458,6 +471,10 @@ describe('Child process plugin', () => {
 
       const results = await Promise.all(promises)
       assert.strictEqual(results.length, 5)
+
+      // Drain every concurrent span so a late flush does not leak into the next
+      // test's matcher, and assert the promisify success exit code is 0.
+      await Promise.all(drained)
     })
 
     it('should handle Bluebird promise rejection properly', async () => {
@@ -468,6 +485,7 @@ describe('Child process plugin', () => {
         meta: {
           component: 'subprocess',
           'cmd.exec': '["node","-invalidFlag"]',
+          'cmd.exit_code': '9',
         },
       })
 
@@ -488,6 +506,7 @@ describe('Child process plugin', () => {
         meta: {
           component: 'subprocess',
           'cmd.exec': '["echo","util-promisify-test"]',
+          'cmd.exit_code': '0',
         },
       })
 
@@ -497,6 +516,22 @@ describe('Child process plugin', () => {
         const result = await callPromise
         assert.strictEqual(result.stdout, 'util-promisify-test\n')
       })()])
+    })
+
+    it('should surface the original error when the promisified method throws synchronously', async () => {
+      const execFileAsync = util.promisify(childProcess.execFile)
+
+      // Passing a non-string file makes execFile throw synchronously inside the
+      // custom-promisify wrapper. The wrapper must publish on the error channel
+      // and rethrow the ORIGINAL error, not a TypeError from calling .publish on
+      // the thrown Error (regression guard for the shadowed `error` channel bug).
+      await assert.rejects(
+        async () => execFileAsync(1234),
+        (error) => {
+          assert.strictEqual(error.code, 'ERR_INVALID_ARG_TYPE')
+          return true
+        }
+      )
     })
   })
 
@@ -548,12 +583,14 @@ describe('Child process plugin', () => {
                 },
               }
 
-              it('should be instrumented', (done) => {
-                expectSomeSpan(agent, lsExpected).then(done, done)
+              it('should be instrumented', async () => {
+                const drained = expectSomeSpan(agent, lsExpected)
 
                 const res = childProcess[methodName]('ls')
                 if (async) {
-                  res.on('close', noop)
+                  await Promise.all([drained, events.once(res, 'close')])
+                } else {
+                  await drained
                 }
               })
 
@@ -583,7 +620,7 @@ describe('Child process plugin', () => {
                 })
               }
 
-              it('command should be scrubbed', (done) => {
+              it('command should be scrubbed', async () => {
                 const expected = {
                   type: 'system',
                   name: 'command_execution',
@@ -594,7 +631,7 @@ describe('Child process plugin', () => {
                     'cmd.exit_code': '0',
                   },
                 }
-                expectSomeSpan(agent, expected).then(done, done)
+                const drained = expectSomeSpan(agent, expected)
 
                 const args = []
                 if (methodName === 'exec' || methodName === 'execSync') {
@@ -606,11 +643,13 @@ describe('Child process plugin', () => {
 
                 const res = childProcess[methodName](...args)
                 if (async) {
-                  res.on('close', noop)
+                  await Promise.all([drained, events.once(res, 'close')])
+                } else {
+                  await drained
                 }
               })
 
-              it('should be instrumented with error code', (done) => {
+              it('should be instrumented with error code', async () => {
                 const command = ['node', '-badOption']
                 const options = {
                   stdio: 'pipe',
@@ -626,19 +665,20 @@ describe('Child process plugin', () => {
                   },
                 }
 
-                expectSomeSpan(agent, expected).then(done, done)
+                const drained = expectSomeSpan(agent, expected)
 
                 const args = normalizeArgs(methodName, command, options)
 
                 if (async) {
                   const res = childProcess[methodName].apply(null, args)
-                  res.on('close', noop)
+                  await Promise.all([drained, events.once(res, 'close')])
                 } else {
                   try {
                     childProcess[methodName].apply(null, args)
                   } catch {
                     // process exit with code 1, exceptions are expected
                   }
+                  await drained
                 }
               })
             })
@@ -677,7 +717,7 @@ describe('Child process plugin', () => {
 
           methods.forEach(({ methodName, async }) => {
             describe(methodName, () => {
-              it('should be instrumented', (done) => {
+              it('should be instrumented', async () => {
                 const expected = {
                   type: 'system',
                   name: 'command_execution',
@@ -688,15 +728,17 @@ describe('Child process plugin', () => {
                     'cmd.exit_code': '0',
                   },
                 }
-                expectSomeSpan(agent, expected).then(done, done)
+                const drained = expectSomeSpan(agent, expected)
 
                 const res = childProcess[methodName]('ls')
                 if (async) {
-                  res.on('close', noop)
+                  await Promise.all([drained, events.once(res, 'close')])
+                } else {
+                  await drained
                 }
               })
 
-              it('command should be scrubbed', (done) => {
+              it('command should be scrubbed', async () => {
                 const expected = {
                   type: 'system',
                   name: 'command_execution',
@@ -707,7 +749,7 @@ describe('Child process plugin', () => {
                     'cmd.exit_code': '0',
                   },
                 }
-                expectSomeSpan(agent, expected).then(done, done)
+                const drained = expectSomeSpan(agent, expected)
 
                 const args = []
                 if (methodName === 'exec' || methodName === 'execSync') {
@@ -719,11 +761,13 @@ describe('Child process plugin', () => {
 
                 const res = childProcess[methodName](...args)
                 if (async) {
-                  res.on('close', noop)
+                  await Promise.all([drained, events.once(res, 'close')])
+                } else {
+                  await drained
                 }
               })
 
-              it('should be instrumented with error code', (done) => {
+              it('should be instrumented with error code', async () => {
                 const command = ['node', '-badOption']
                 const options = {
                   stdio: 'pipe',
@@ -754,24 +798,23 @@ describe('Child process plugin', () => {
                 const args = normalizeArgs(methodName, command, options)
 
                 if (async) {
-                  expectSomeSpan(agent, errorExpected).then(done, done)
+                  const drained = expectSomeSpan(agent, errorExpected)
                   const res = childProcess[methodName].apply(null, args)
-                  res.on('close', noop)
+                  await Promise.all([drained, events.once(res, 'close')])
                 } else {
+                  const drained = methodName === 'spawnSync'
+                    ? expectSomeSpan(agent, noErrorExpected)
+                    : expectSomeSpan(agent, errorExpected)
                   try {
-                    if (methodName === 'spawnSync') {
-                      expectSomeSpan(agent, noErrorExpected).then(done, done)
-                    } else {
-                      expectSomeSpan(agent, errorExpected).then(done, done)
-                    }
                     childProcess[methodName].apply(null, args)
                   } catch {
                     // process exit with code 1, exceptions are expected
                   }
+                  await drained
                 }
               })
 
-              it('should be instrumented with error code (override shell default behavior)', (done) => {
+              it('should be instrumented with error code (override shell default behavior)', async () => {
                 const command = ['node', '-badOption']
                 const options = {
                   stdio: 'pipe',
@@ -808,20 +851,19 @@ describe('Child process plugin', () => {
                 )
 
                 if (async) {
-                  expectSomeSpan(agent, errorExpected).then(done, done)
+                  const drained = expectSomeSpan(agent, errorExpected)
                   const res = childProcess[methodName].apply(null, args)
-                  res.on('close', noop)
+                  await Promise.all([drained, events.once(res, 'close')])
                 } else {
+                  const drained = methodName === 'spawnSync'
+                    ? expectSomeSpan(agent, noErrorExpected)
+                    : expectSomeSpan(agent, errorExpected)
                   try {
-                    if (methodName === 'spawnSync') {
-                      expectSomeSpan(agent, noErrorExpected).then(done, done)
-                    } else {
-                      expectSomeSpan(agent, errorExpected).then(done, done)
-                    }
                     childProcess[methodName].apply(null, args)
                   } catch {
                     // process exit with code 1, exceptions are expected
                   }
+                  await drained
                 }
               })
             })
