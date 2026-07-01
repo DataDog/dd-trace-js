@@ -178,6 +178,20 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
         expectedComponent: 'aws-httpapi',
         expectedStartTime: '1729780025472999936',
       },
+      'aws-missingtimestamp': {
+        headers: {
+          'x-dd-proxy': 'aws-httpapi',
+          'x-dd-proxy-path': '/test',
+          'x-dd-proxy-httpmethod': 'GET',
+          'x-dd-proxy-domain-name': 'example.com',
+          'x-dd-proxy-stage': 'dev',
+        },
+        expectedSpanName: 'aws.httpapi',
+        expectedService: 'example.com',
+        expectedResource: 'GET /test',
+        expectedUrl: 'https://example.com/test',
+        expectedComponent: 'aws-httpapi',
+      },
       'azure-missingtimestamp': {
         headers: {
           'x-dd-proxy': 'azure-gw',
@@ -426,7 +440,34 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
           })
         })
       })
+      it('should should not create a span if timestamp is missing from headers', async () => {
+        const testCase = additionalTestCases['aws-missingtimestamp']
+        await loadTest({})
 
+        await httpClient.get(`http://127.0.0.1:${port}/`, {
+          headers: testCase.headers,
+        })
+
+        await agent.assertSomeTraces(traces => {
+          const spans = traces[0]
+
+          assert.strictEqual(spans.length, 1)
+
+          assertObjectContains(spans[0], {
+            name: 'web.request',
+            service: 'aws-server',
+            type: 'web',
+            resource: 'GET',
+            meta: {
+              component: 'http',
+              'span.kind': 'server',
+              'http.url': `http://127.0.0.1:${port}/`,
+              'http.method': 'GET',
+              'http.status_code': '200',
+            },
+          })
+        })
+      })
       it('should include http.route when x-dd-proxy-resource-path header is present', async () => {
         const testCase = additionalTestCases['with-route']
         await loadTest({})
