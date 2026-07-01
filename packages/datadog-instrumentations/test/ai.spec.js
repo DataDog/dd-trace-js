@@ -5,7 +5,7 @@ const { channel } = require('dc-polyfill')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
-const { wrapModelWithLifecycle } = require('../src/ai')
+const { wrapModelWithLifecycle, wrapTracer } = require('../src/ai')
 
 const doGenerateBeforeChannel = channel('dd-trace:vercel-ai:doGenerate:before')
 const doGenerateAfterChannel = channel('dd-trace:vercel-ai:doGenerate:after')
@@ -412,6 +412,73 @@ describe('wrapModelWithLifecycle', () => {
 
       return assert.rejects(() => model.doStream({ prompt }), e => e === err)
         .finally(unsubscribe)
+    })
+  })
+})
+
+describe('wrapTracer', () => {
+  // Regression: Object.create(span) strips the private-field brand from BridgeSpanBase spans,
+  // so any method that reads #statusCode (e.g. setStatus) would throw
+  // "Cannot read/write private member #statusCode from an object whose class did not declare it".
+  // The fix uses a plain delegating wrapper that always calls through to the real span instance.
+  it('forwards setStatus to the original span without throwing for private-field spans', () => {
+    class PrivateFieldSpan {
+      #statusCode = 0
+
+      spanContext () { return { traceId: '0'.repeat(32), spanId: '0'.repeat(16), traceFlags: 1 } }
+      setAttribute () { return this }
+      setAttributes () { return this }
+      addEvent () { return this }
+      addLink () { return this }
+      addLinks () { return this }
+      setStatus (s) { this.#statusCode = s.code; return this }
+      updateName () { return this }
+      end () { return this }
+      isRecording () { return true }
+      recordException () { return this }
+    }
+
+    const span = new PrivateFieldSpan()
+    const tracer = {
+      startActiveSpan (name, fn) { return fn(span) },
+    }
+
+    wrapTracer(tracer)
+
+    assert.doesNotThrow(() => {
+      tracer.startActiveSpan('test', (freshSpan) => {
+        freshSpan.setStatus({ code: 2 }) // SpanStatusCode.ERROR
+        freshSpan.end()
+      })
+    })
+  })
+
+  it('returns freshSpan from chainable methods so chained end() is not bypassed', () => {
+    const endSpy = sinon.spy()
+    const span = {
+      spanContext () { return { traceId: '', spanId: '', traceFlags: 0 } },
+      setAttribute () { return this },
+      setAttributes () { return this },
+      addEvent () { return this },
+      addLink () { return this },
+      addLinks () { return this },
+      setStatus () { return this },
+      updateName () { return this },
+      end: endSpy,
+      isRecording () { return false },
+      recordException () {},
+    }
+    const tracer = {
+      startActiveSpan (name, fn) { return fn(span) },
+    }
+
+    wrapTracer(tracer)
+
+    tracer.startActiveSpan('test', (freshSpan) => {
+      const returned = freshSpan.setStatus({ code: 0 })
+      assert.strictEqual(returned, freshSpan, 'setStatus must return freshSpan to preserve chaining')
+      returned.end()
+      sinon.assert.calledOnce(endSpy)
     })
   })
 })
