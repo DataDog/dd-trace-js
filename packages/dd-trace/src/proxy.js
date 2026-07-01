@@ -242,12 +242,67 @@ class Tracer extends NoopProxy {
         // We instantiate the client but do not start the Worker here. The worker is started lazily
         getDynamicInstrumentationClient(config)
       }
+
+      // eslint-disable-next-line eslint-rules/eslint-process-env
+      if (process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN) {
+        this.#registerMicroVmRunHook(config)
+      }
     } catch (e) {
       log.error('Error initializing tracer', e)
       // TODO: Should we stop everything started so far?
     }
 
     return this
+  }
+
+  /**
+   * Listens for the MicroVM /run lifecycle event and triggers a one-time
+   * identity reset on first fire.
+   *
+   * @param {import('./config/config-base')} config
+   */
+  #registerMicroVmRunHook (config) {
+    const { channel } = require('dc-polyfill')
+    const ch = channel('http.server.request.start')
+    let done = false
+
+    const resetIdentity = () => {
+      if (done) return
+      done = true
+      ch.unsubscribe(onHttpRequest)
+      this.#refreshIdentity(config)
+    }
+
+    const onHttpRequest = ({ request }) => {
+      if (request.method === 'POST' && request.url === '/aws/lambda-microvms/runtime/v1/run') {
+        resetIdentity()
+      }
+    }
+
+    ch.subscribe(onHttpRequest)
+  }
+
+  /**
+   * Regenerates all clone-specific identities (runtime ID, RC client ID).
+   * No-op outside a MicroVM environment to avoid breaking span correlation.
+   *
+   * @returns {this}
+   */
+  resetRuntimeId () {
+    // eslint-disable-next-line eslint-rules/eslint-process-env
+    if (!this._initialized || !process.env.AWS_LAMBDA_MICROVM_IMAGE_ARN) return this
+    this.#refreshIdentity(getConfig())
+    return this
+  }
+
+  /**
+   * @param {import('./config/config-base')} config
+   */
+  #refreshIdentity (config) {
+    require('./id').reseed()
+    getConfig.refreshRuntimeId(config)
+    require('./remote_config').refreshClientId(config)
+    this._tracer?.refreshMetadata(config)
   }
 
   /**

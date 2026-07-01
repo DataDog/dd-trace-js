@@ -57,6 +57,15 @@ class DatadogTracer extends Tracer {
     this._prioritySampler.configure(env, sampler, config)
   }
 
+  refreshMetadata (config) {
+    if (!this._inmem_cfg) return
+    const storeConfig = require('./tracer_metadata')
+    const metadata = storeConfig(config)
+    if (metadata !== undefined) {
+      this._inmem_cfg = metadata
+    }
+  }
+
   // todo[piochelepiotr] These two methods are not related to the tracer, but to data streams monitoring.
   // They should be moved outside of the tracer in the future.
   setCheckpoint (edgeTags, span, payloadSize = 0) {

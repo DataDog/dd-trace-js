@@ -1,6 +1,7 @@
 'use strict'
 
 const { randomFillSync } = require('crypto')
+const { closeSync, openSync, readSync } = require('fs')
 
 const UINT_MAX = 4_294_967_296
 
@@ -8,6 +9,40 @@ const data = new Uint8Array(8 * 8192)
 const zeroId = new Uint8Array(8)
 
 let batch = 0
+
+// Replaced by fillFromKernel after reseed() on MicroVM clone resume.
+let fill = randomFillSync
+
+// -1 = not yet opened or unavailable; fillFromKernel falls back to randomFillSync.
+let urandomFd = -1
+
+/**
+ * Reads from /dev/urandom, falling back to randomFillSync on any error.
+ * Permanently closes and clears the fd on failure so the hot path never retries.
+ * @param {Uint8Array | Buffer} buffer
+ */
+function fillFromKernel (buffer) {
+  if (urandomFd !== -1) {
+    try {
+      let offset = 0
+      while (offset < buffer.length) {
+        const bytesRead = readSync(urandomFd, buffer, offset, buffer.length - offset, null)
+        if (bytesRead <= 0) break
+        offset += bytesRead
+      }
+      if (offset === buffer.length) return
+    } catch {
+      // fall through to randomFillSync
+    }
+    try {
+      closeSync(urandomFd)
+    } catch {
+      // ignore
+    }
+    urandomFd = -1
+  }
+  randomFillSync(buffer)
+}
 
 // Internal representation of a trace or span ID.
 class Identifier {
@@ -206,7 +241,7 @@ function toNumberString (buffer, radix) {
  */
 function pseudoRandom () {
   if (batch === 0) {
-    randomFillSync(data)
+    fill(data)
   }
 
   batch = (batch + 1) % 8192
@@ -255,6 +290,38 @@ function writeUInt32BE (buffer, value, offset) {
 }
 
 /**
+ * Permanently switches the batch fill source to /dev/urandom and resets the
+ * batch cursor, forcing the next ID batch to draw from post-resume kernel
+ * entropy. Idempotent.
+ */
+function reseed () {
+  if (fill === fillFromKernel) return
+  try {
+    urandomFd = openSync('/dev/urandom', 'r')
+  } catch {
+    // Keep urandomFd = -1; fillFromKernel falls back to randomFillSync.
+  }
+  fill = fillFromKernel
+  batch = 0
+}
+
+/**
+ * UUID v4 from /dev/urandom (falls back to randomFillSync).
+ * Use instead of crypto.randomUUID() after a MicroVM snapshot restore, where
+ * OpenSSL's DRBG may still be frozen from the pre-snapshot state.
+ *
+ * @returns {string}
+ */
+function kernelUUID () {
+  const buf = Buffer.allocUnsafe(16)
+  fillFromKernel(buf)
+  buf[6] = (buf[6] & 0x0F) | 0x40 // version 4
+  buf[8] = (buf[8] & 0x3F) | 0x80 // variant 10xx
+  const h = buf.toString('hex')
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`
+}
+
+/**
  * @param {string} [value]
  * @param {number} [radix]
  * @returns {Identifier}
@@ -264,3 +331,5 @@ module.exports = function createIdentifier (value, radix) {
 }
 
 module.exports.Identifier = Identifier
+module.exports.reseed = reseed
+module.exports.kernelUUID = kernelUUID
