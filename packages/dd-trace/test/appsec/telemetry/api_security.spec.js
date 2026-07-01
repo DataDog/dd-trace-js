@@ -27,8 +27,8 @@ describe('Appsec API Security Telemetry metrics', () => {
   describe('if enabled', () => {
     beforeEach(() => {
       const config = getConfig()
-      config.telemetry.enabled = true
-      config.telemetry.metrics = true
+      config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED = true
+      config.telemetry.DD_TELEMETRY_METRICS_ENABLED = true
 
       appsecTelemetry.enable(config)
     })
@@ -78,8 +78,8 @@ describe('Appsec API Security Telemetry metrics', () => {
   describe('if telemetry is disabled', () => {
     beforeEach(() => {
       const config = getConfig()
-      config.telemetry.enabled = false
-      config.telemetry.metrics = false
+      config.telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED = false
+      config.telemetry.DD_TELEMETRY_METRICS_ENABLED = false
 
       appsecTelemetry.enable(config)
     })

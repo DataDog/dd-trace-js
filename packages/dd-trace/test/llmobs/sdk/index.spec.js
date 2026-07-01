@@ -81,7 +81,7 @@ describe('sdk', () => {
       [false, 'disabled'],
     ]) {
       it(`returns ${value} when llmobs is ${label}`, () => {
-        const enabledOrDisabledLLMObs = new LLMObsSDK(null, { disable () {} }, { llmobs: { enabled: value } })
+        const enabledOrDisabledLLMObs = new LLMObsSDK(null, { disable () {} }, { llmobs: { DD_LLMOBS_ENABLED: value } })
 
         assert.strictEqual(enabledOrDisabledLLMObs.enabled, value)
         enabledOrDisabledLLMObs.disable() // unsubscribe
@@ -163,7 +163,7 @@ describe('sdk', () => {
 
     it('does not disable llmobs if it is already disabled', () => {
       // do not fully enable a disabled llmobs
-      const disabledLLMObs = new LLMObsSDK(null, { disable () {} }, { llmobs: { enabled: false } })
+      const disabledLLMObs = new LLMObsSDK(null, { disable () {} }, { llmobs: { DD_LLMOBS_ENABLED: false } })
       sinon.spy(disabledLLMObs._llmobsModule, 'disable')
 
       disabledLLMObs.disable()
@@ -177,7 +177,7 @@ describe('sdk', () => {
     describe('trace', () => {
       describe('tracing behavior', () => {
         it('starts a span if llmobs is disabled but does not process it in the LLMObs span processor', () => {
-          tracer._tracer._config.llmobs.enabled = false
+          tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = false
 
           llmobs.trace({ kind: 'workflow', name: 'myWorkflow' }, (span, cb) => {
             const tag = LLMObsTagger.tagMap.get(span)
@@ -189,7 +189,7 @@ describe('sdk', () => {
           sinon.assert.called(llmobs._tracer._processor.process)
           sinon.assert.notCalled(LLMObsSpanProcessor.prototype.format)
 
-          tracer._tracer._config.llmobs.enabled = true
+          tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = true
         })
 
         it('throws if the kind is invalid', () => {
@@ -426,7 +426,7 @@ describe('sdk', () => {
     describe('wrap', () => {
       describe('tracing behavior', () => {
         it('starts a span if llmobs is disabled but does not process it in the LLMObs span processor', () => {
-          tracer._tracer._config.llmobs.enabled = false
+          tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = false
 
           const fn = llmobs.wrap({ kind: 'workflow' }, (a) => {
             assert.strictEqual(a, 1)
@@ -439,7 +439,7 @@ describe('sdk', () => {
           sinon.assert.called(llmobs._tracer._processor.process)
           sinon.assert.notCalled(LLMObsSpanProcessor.prototype.format)
 
-          tracer._tracer._config.llmobs.enabled = true
+          tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = true
         })
 
         it('throws if the kind is invalid', () => {
@@ -903,14 +903,14 @@ describe('sdk', () => {
 
   describe('annotate', () => {
     it('returns if llmobs is disabled', () => {
-      tracer._tracer._config.llmobs.enabled = false
+      tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = false
       sinon.spy(llmobs, '_active')
       llmobs.annotate()
 
       sinon.assert.notCalled(llmobs._active)
       llmobs._active.restore()
 
-      tracer._tracer._config.llmobs.enabled = true
+      tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = true
     })
 
     it('throws if no arguments are provided', () => {
@@ -1411,8 +1411,8 @@ describe('sdk', () => {
     let originalApiKey
 
     before(() => {
-      originalApiKey = tracer._tracer._config.apiKey
-      tracer._tracer._config.apiKey = 'test'
+      originalApiKey = tracer._tracer._config.DD_API_KEY
+      tracer._tracer._config.DD_API_KEY = 'test'
     })
 
     beforeEach(() => {
@@ -1423,16 +1423,16 @@ describe('sdk', () => {
     })
 
     after(() => {
-      tracer._tracer._config.apiKey = originalApiKey
+      tracer._tracer._config.DD_API_KEY = originalApiKey
     })
 
     it('does not submit an evaluation if llmobs is disabled', () => {
-      tracer._tracer._config.llmobs.enabled = false
+      tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = false
       llmobs.submitEvaluation()
 
       sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.append)
 
-      tracer._tracer._config.llmobs.enabled = true
+      tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = true
     })
 
     it('throws for an invalid span context', () => {
@@ -1722,7 +1722,7 @@ describe('sdk', () => {
         process.env.DD_TRACE_OTEL_ENABLED = 'true'
         const config = getConfigFresh({ llmobs: { mlApp: 'mlApp', agentlessEnabled: false } })
         delete process.env.DD_TRACE_OTEL_ENABLED
-        config.llmobs.enabled = true
+        config.llmobs.DD_LLMOBS_ENABLED = true
         otelLLMObs = new LLMObsSDK(tracer._tracer, llmobsModule, config)
       })
 
@@ -1743,12 +1743,12 @@ describe('sdk', () => {
 
   describe('flush', () => {
     it('does not flush if llmobs is disabled', () => {
-      tracer._tracer._config.llmobs.enabled = false
+      tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = false
       llmobs.flush()
 
       sinon.assert.notCalled(LLMObsEvalMetricsWriter.prototype.flush)
       sinon.assert.notCalled(LLMObsSpanWriter.prototype.flush)
-      tracer._tracer._config.llmobs.enabled = true
+      tracer._tracer._config.llmobs.DD_LLMOBS_ENABLED = true
     })
 
     it('flushes the evaluation writer and span writer', () => {

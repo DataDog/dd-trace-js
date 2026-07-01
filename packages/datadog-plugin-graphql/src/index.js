@@ -1,12 +1,12 @@
 'use strict'
 
 const pick = require('../../datadog-core/src/utils/src/pick')
+const { DD_MAJOR } = require('../../../version')
 const CompositePlugin = require('../../dd-trace/src/plugins/composite')
 const log = require('../../dd-trace/src/log')
 const GraphQLExecutePlugin = require('./execute')
 const GraphQLParsePlugin = require('./parse')
 const GraphQLValidatePlugin = require('./validate')
-const GraphQLResolvePlugin = require('./resolve')
 
 class GraphQLPlugin extends CompositePlugin {
   static id = 'graphql'
@@ -15,7 +15,9 @@ class GraphQLPlugin extends CompositePlugin {
       execute: GraphQLExecutePlugin,
       parse: GraphQLParsePlugin,
       validate: GraphQLValidatePlugin,
-      resolve: GraphQLResolvePlugin,
+      // resolve plugin is absorbed into execute: per-field data is recorded
+      // synchronously in wrapResolve, and all graphql.resolve spans are
+      // materialized at execute end.
     }
   }
 
@@ -30,11 +32,15 @@ class GraphQLPlugin extends CompositePlugin {
 // config validator helpers
 
 function validateConfig (config) {
+  const collapse = config.collapse === undefined || !!config.collapse
   return {
     ...config,
     depth: getDepth(config),
     variables: getVariablesFilter(config),
-    collapse: config.collapse === undefined || !!config.collapse,
+    collapse,
+    // v5 counted collapsed list indices toward `depth`, so the same query reached a
+    // different depth depending on `collapse`. v6 counts selection-set depth only.
+    countListIndices: DD_MAJOR < 6 && collapse,
     hooks: getHooks(config),
   }
 }
@@ -60,13 +66,19 @@ function getVariablesFilter (config) {
 }
 
 const noop = () => {}
+const noopHooks = { execute: noop, parse: noop, validate: noop, resolve: undefined }
 
 function getHooks ({ hooks }) {
-  const execute = hooks?.execute ?? noop
-  const parse = hooks?.parse ?? noop
-  const validate = hooks?.validate ?? noop
-
-  return { execute, parse, validate }
+  if (!hooks) return noopHooks
+  return {
+    execute: hooks.execute ?? noop,
+    parse: hooks.parse ?? noop,
+    validate: hooks.validate ?? noop,
+    // No noop fallback: `resolve` runs per-field (hot path); the plugin
+    // gates with `if (this.config.hooks.resolve)` so the absent-hook case
+    // skips both the call and the payload-object allocation.
+    resolve: hooks.resolve,
+  }
 }
 
 module.exports = GraphQLPlugin

@@ -6,6 +6,7 @@ on:
       - v3.x
       - v4.x
       - v5.x
+      - v6.x
   workflow_dispatch:
 
 concurrency:
@@ -16,16 +17,17 @@ jobs:
   setup:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    # Space-separated npm dist-tags for each release line.
-    # The latest branch always gets "latest" prepended automatically.
+    # npm dist-tag for each release line.
+    # The latest branch always gets "latest" automatically.
     # Add a line here when creating a new release branch.
     env:
       DIST_TAGS: |
         v3.x latest-node14
         v4.x latest-node16
-        v5.x latest-node18 latest-node20
+        v5.x latest-node18
+        v6.x latest-node22
     outputs:
-      npm_tags: ${{ steps.compute.outputs.npm_tags }}
+      npm_tag: ${{ steps.compute.outputs.npm_tag }}
       is_latest: ${{ steps.compute.outputs.is_latest }}
     steps:
       - id: compute
@@ -47,18 +49,18 @@ jobs:
             | sort -V \
             | tail -1)
 
-          # Collect the tags defined for this branch (everything after the branch name)
-          branch_tags=$(echo "$DIST_TAGS" | awk -v b="$branch" '$1==b{$1=""; sub(/^ /,""); print}')
+          # Collect the tag defined for this branch (field after the branch name)
+          branch_tag=$(echo "$DIST_TAGS" | awk -v b="$branch" '$1==b{print $2}')
 
           if [ "$branch" = "$latest" ]; then
-            npm_tags="latest ${branch_tags:-latest-${branch%.x}}"
+            npm_tag="latest"
             is_latest="true"
           else
-            npm_tags="${branch_tags:-latest-${branch%.x}}"
+            npm_tag="${branch_tag:-latest-${branch%.x}}"
             is_latest="false"
           fi
 
-          echo "npm_tags=$npm_tags" >> "$GITHUB_OUTPUT"
+          echo "npm_tag=$npm_tag" >> "$GITHUB_OUTPUT"
           echo "is_latest=$is_latest" >> "$GITHUB_OUTPUT"
 
   publish:
@@ -88,28 +90,11 @@ jobs:
       - name: Publish
         run: |
           version="${{ fromJson(steps.pkg.outputs.json).version }}"
-          tags=(${{ needs.setup.outputs.npm_tags }})
-
-          # Exchange the GitHub OIDC token for an npm registry token so
-          # that npm publish and npm dist-tag add share the same auth.
-          # npm only runs this exchange internally for publish (oidc.js:141)
-          # and does not persist the token, so dist-tag add would fail
-          # without doing it explicitly here.
-          # Audience format and exchange endpoint from npm/lib/utils/oidc.js.
-          oidc_token=$(curl -sS -fH \
-            "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=npm:registry.npmjs.org" \
-            | jq -r '.value')
-          npm_token=$(curl -sS -fX POST \
-            -H "Authorization: Bearer $oidc_token" \
-            -H "Content-Type: application/json" \
-            "https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/dd-trace" \
-            | jq -r '.token')
-          export NODE_AUTH_TOKEN="$npm_token"
+          tag="${{ needs.setup.outputs.npm_tag }}"
 
           # Idempotent: skip publish if this version already exists so
-          # that a rerun after a partial failure can still repair dist-tags,
-          # git tags, release notes, and docs.
+          # that a rerun after a partial failure can still repair the git
+          # tag and release notes.
           if npm view "dd-trace@$version" version 2>/dev/null | grep -qF "$version"; then
             local_integrity=$(npm pack --dry-run --json 2>/dev/null | jq -r '.[0].integrity')
             published_integrity=$(npm view "dd-trace@$version" dist.integrity 2>/dev/null)
@@ -121,13 +106,8 @@ jobs:
             fi
             echo "Version $version already published with identical content, skipping npm publish"
           else
-            npm publish --tag "${tags[0]}"
+            npm publish --tag "$tag"
           fi
-
-          # Always reconcile all expected dist-tags.
-          for tag in "${tags[@]:1}"; do
-            npm dist-tag add "dd-trace@$version" "$tag"
-          done
       - name: Tag release
         run: |
           version="${{ fromJson(steps.pkg.outputs.json).version }}"

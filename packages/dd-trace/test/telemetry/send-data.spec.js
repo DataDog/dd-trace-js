@@ -83,7 +83,7 @@ describe('sendData', () => {
     sendDataModule.sendData({
       url: '/test',
       tags: { 'runtime-id': '123' },
-      telemetry: { debug: true },
+      telemetry: { DD_TELEMETRY_DEBUG: true },
     }, application, host, 'req-type')
 
     sinon.assert.calledOnce(request)
@@ -161,7 +161,7 @@ describe('sendData', () => {
     sendDataModule.sendData(
       {
         isCiVisibility: true,
-        DD_CIVISIBILITY_AGENTLESS_ENABLED: true,
+        testOptimization: { DD_CIVISIBILITY_AGENTLESS_ENABLED: true },
         tags: { 'runtime-id': '123' },
         site: 'datadoghq.eu',
       },
@@ -184,8 +184,10 @@ describe('sendData', () => {
     sendDataModule.sendData(
       {
         isCiVisibility: true,
-        DD_CIVISIBILITY_AGENTLESS_ENABLED: true,
-        DD_CIVISIBILITY_AGENTLESS_URL: new URL('https://my-intake.example/'),
+        testOptimization: {
+          DD_CIVISIBILITY_AGENTLESS_ENABLED: true,
+          DD_CIVISIBILITY_AGENTLESS_URL: new URL('https://my-intake.example/'),
+        },
         tags: { 'runtime-id': '123' },
         site: 'datadoghq.eu',
       },
@@ -205,7 +207,7 @@ describe('sendData', () => {
 
     sendDataModule.sendData(
       {
-        apiKey: 'secret-key',
+        DD_API_KEY: 'secret-key',
         site: 'datadoghq.eu',
         tags: { 'runtime-id': '123' },
       },
@@ -225,7 +227,7 @@ describe('sendData', () => {
 
     sendDataModule.sendData(
       {
-        apiKey: 'secret-key',
+        DD_API_KEY: 'secret-key',
         site: 'x:notaport',
         tags: { 'runtime-id': '123' },
       },

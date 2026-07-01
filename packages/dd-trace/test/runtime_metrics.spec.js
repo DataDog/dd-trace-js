@@ -326,7 +326,12 @@ function createGarbage (count = 50) {
             return value > 0 && Number.isInteger(value)
           })
           const isGC95Percentile = sinon.match((value) => {
-            return value >= 1e5 && value < 1e8 // In Nanoseconds. 0.1ms to 100ms.
+            // Nanoseconds, 1µs to 100ms. These bounds guard the unit conversion, not the timing:
+            // a sub-microsecond value means the ms→ns conversion (`entry.duration * 1e6`) was
+            // dropped, and a value over 100ms means it was left in milliseconds or seconds. The
+            // floor used to be 0.1ms, which flaked on fast/idle runners where a single scavenge
+            // pause is the only sample for a gc_type and its p95 sits below that.
+            return value >= 1e3 && value < 1e8
           })
           const isHeapSpace = sinon.match((metricName) => {
             return /^heap_space:[a-z_]+$/.test(metricName)
