@@ -6,19 +6,13 @@ const { getProtobufTypes } = require('../otlp/protobuf_loader')
 
 const NS_PER_S = 1e9
 
-// Fixed explicit histogram bucket boundaries (seconds), mirroring the OpenTelemetry spanmetrics
-// connector defaults so the exported histogram is comparable across tracers and backends. Kept in
-// sync with libdatadog's EXPLICIT_BOUNDS_SECONDS.
+// Must match libdatadog's EXPLICIT_BOUNDS_SECONDS and OTel spanmetrics connector defaults.
 const EXPLICIT_BOUNDS_SECONDS = [
   0.002, 0.004, 0.006, 0.008, 0.01, 0.05, 0.1, 0.2, 0.4, 0.8, 1, 1.4, 2, 5, 10, 15,
 ]
 
 /**
- * Buckets a DDSketch's bins into the fixed explicit bounds (see EXPLICIT_BOUNDS_SECONDS). Each bin's
- * representative value (converted to seconds) is accumulated into the matching bucket; values above
- * the last bound land in the trailing overflow bucket and exact zeros in the first bucket.
- *
- * @param {object} sketch - A LogCollapsingLowestDenseDDSketch (positive durations only)
+ * @param {object} sketch
  * @returns {number[]}
  */
 function sketchToFixedHistogram (sketch) {
@@ -46,27 +40,15 @@ function getDeltaTemporality () {
   return _deltaTemporality
 }
 
-// OTel span status code denoting an error (StatusCode.ERROR == 2). Emitted on error data points so the
-// backend can derive error counts from status.code; ok/unset data points carry no status.code.
 const ERROR_STATUS_ATTR = { key: 'status.code', value: { intValue: 2 } }
 
-/**
- * Transforms span stats buckets into an OTLP ExportMetricsServiceRequest containing a single
- * delta `traces.span.sdk.metrics.duration` histogram. Each aggregation key produces up to two
- * data points (ok and error). Errors carry `status.code=ERROR`; `dd.*` attributes are omitted in
- * OTel-semantics mode. Service identity lives on the resource; a data point carries `service.name`
- * only when it differs from the configured default.
- *
- * @class OtlpStatsTransformer
- * @augments OtlpTransformerBase
- */
 class OtlpStatsTransformer extends OtlpTransformerBase {
   #otelSemanticsEnabled
   #defaultService
 
   /**
    * @param {import('@opentelemetry/api').Attributes} resourceAttributes
-   * @param {string} protocol - 'http/protobuf' or 'http/json'
+   * @param {string} protocol
    * @param {boolean} [otelSemanticsEnabled]
    * @param {string} [defaultService]
    */
@@ -79,7 +61,6 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
   /**
    * @param {Array<{timeNs: number, bucket: import('../../span_stats').SpanBuckets}>} drained
    * @param {number} bucketSizeNs
-   * @returns {Buffer}
    */
   transform (drained, bucketSizeNs) {
     const isJson = this.protocol === 'http/json'
@@ -158,7 +139,6 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
 
   /**
    * @param {import('../../span_stats').SpanAggKey} aggKey
-   * @returns {object[]}
    */
   #buildAttributes (aggKey) {
     const raw = { 'span.name': aggKey.resource }
@@ -172,7 +152,6 @@ class OtlpStatsTransformer extends OtlpTransformerBase {
     if (aggKey.method) raw['http.request.method'] = aggKey.method
     if (aggKey.endpoint) raw['http.route'] = aggKey.endpoint
     if (aggKey.rpcStatusCode !== '') {
-      // OTel rpc.response.status_code is the canonical gRPC status NAME; emit the raw value upper-cased.
       raw['rpc.response.status_code'] = String(aggKey.rpcStatusCode).toUpperCase()
     }
 

@@ -45,7 +45,6 @@ function buildResourceAttributes (config) {
   const { service, version, env, ...filteredTags } = config.tags
   Object.assign(resourceAttributes, filteredTags)
 
-  // Tells Datadog Agent OTLP receivers to skip their concentrator; prevents double-counted APM metrics.
   if (config.OTEL_TRACES_SPAN_METRICS_ENABLED) {
     resourceAttributes['_dd.stats_computed'] = 'true'
   }

@@ -68,9 +68,6 @@ class TracerProvider {
       return Promise.reject(new Error('Not started'))
     }
 
-    // The agent exporter buffers spans in a writer that must be flushed explicitly. Other exporters
-    // (e.g. the OTLP trace exporter used when OTEL_TRACES_EXPORTER=otlp) send eagerly and expose no
-    // writer, so only flush when one is present.
     exporter._writer?.flush()
     return this._activeProcessor.forceFlush()
   }

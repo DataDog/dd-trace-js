@@ -13,15 +13,7 @@ const {
   SPAN_KIND,
   GRPC_STATUS_CODE,
 } = require('../../../ext/tags')
-const { ORIGIN_KEY, TOP_LEVEL_KEY, SVC_SRC_KEY } = require('./constants')
-
-// https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
-const GRPC_STATUS_NAMES = [
-  'OK', 'CANCELLED', 'UNKNOWN', 'INVALID_ARGUMENT', 'DEADLINE_EXCEEDED',
-  'NOT_FOUND', 'ALREADY_EXISTS', 'PERMISSION_DENIED', 'RESOURCE_EXHAUSTED',
-  'FAILED_PRECONDITION', 'ABORTED', 'OUT_OF_RANGE', 'UNIMPLEMENTED',
-  'INTERNAL', 'UNAVAILABLE', 'DATA_LOSS', 'UNAUTHENTICATED',
-]
+const { ORIGIN_KEY, TOP_LEVEL_KEY, SVC_SRC_KEY, GRPC_STATUS_NAMES } = require('./constants')
 const { version } = require('./pkg')
 const processTags = require('./process-tags')
 
@@ -84,8 +76,8 @@ class SpanAggStats {
         TopLevelHits: this.topLevelHits,
         Errors: this.topLevelErrorDistribution.count,
         Duration: this.topLevelOkDistribution.sum + this.topLevelErrorDistribution.sum,
-        OkSummary: this.topLevelOkDistribution.toProto(), // TODO: custom proto encoding
-        ErrorSummary: this.topLevelErrorDistribution.toProto(), // TODO: custom proto encoding
+        OkSummary: this.topLevelOkDistribution.toProto(),
+        ErrorSummary: this.topLevelErrorDistribution.toProto(),
       })
     }
     const nonTopLevelHits = this.hits - this.topLevelHits
@@ -117,8 +109,7 @@ class SpanAggKey {
     this.srvSrc = span.meta[SVC_SRC_KEY] || ''
     this.origin = span.meta[ORIGIN_KEY] || ''
     this.spanKind = span.meta[SPAN_KIND] || ''
-    // meta holds a string name (OTel/manual); metrics holds a numeric code (dd gRPC plugin via setTag).
-    // Prefer meta; translate a numeric metrics code to the canonical status NAME string.
+    // dd gRPC plugin sets a numeric code via setTag; OTel/manual sets a string name via meta.
     const grpcCode = span.meta[GRPC_STATUS_CODE] ?? span.metrics?.[GRPC_STATUS_CODE]
     this.rpcStatusCode = typeof grpcCode === 'number'
       ? (GRPC_STATUS_NAMES[grpcCode] ?? String(grpcCode))
@@ -209,7 +200,7 @@ class SpanStatsProcessor {
         Hostname: this.hostname,
         Env: this.env,
         Version: this.version || version,
-        Stats: this.#toLegacyPayload(drained),
+        Stats: this.#v06Payload(drained),
         Lang: 'javascript',
         TracerVersion: pkg.version,
         RuntimeID: this.tags['runtime-id'],
@@ -233,9 +224,6 @@ class SpanStatsProcessor {
       .record(span)
   }
 
-  /**
-   * @returns {Array<{timeNs: number, bucket: SpanBuckets}>}
-   */
   #drainBuckets () {
     const drained = []
     for (const [timeNs, bucket] of this.buckets.entries()) {
@@ -245,11 +233,7 @@ class SpanStatsProcessor {
     return drained
   }
 
-  /**
-   * @param {Array<{timeNs: number, bucket: SpanBuckets}>} drained
-   * @returns {Array}
-   */
-  #toLegacyPayload (drained) {
+  #v06Payload (drained) {
     const { bucketSizeNs } = this
     return drained.map(({ timeNs, bucket }) => ({
       Start: timeNs,

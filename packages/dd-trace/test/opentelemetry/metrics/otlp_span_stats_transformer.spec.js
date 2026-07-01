@@ -130,7 +130,6 @@ describe('OtlpStatsTransformer', () => {
     })
 
     it('translates numeric grpc.status.code from metrics to the canonical status name', () => {
-      // dd gRPC plugin sets grpc.status.code as a number via setTag → span_format routes into metrics
       const span = makeSpan({ meta: {}, metrics: { [GRPC_STATUS_CODE]: 14 } })
       const payload = JSON.parse(transformer.transform(makeDrained(12340000000000, [span]), BUCKET_SIZE_NS))
 
@@ -149,7 +148,7 @@ describe('OtlpStatsTransformer', () => {
     })
 
     it('converts duration to seconds with fixed bounds and a sketch-derived distribution', () => {
-      const spans = [makeSpan({ duration: 1e9 }), makeSpan({ duration: 3e9 })] // 1s and 3s, same group
+      const spans = [makeSpan({ duration: 1e9 }), makeSpan({ duration: 3e9 })]
       const payload = JSON.parse(transformer.transform(makeDrained(12340000000000, spans), BUCKET_SIZE_NS))
       const dp = dataPointsOf(payload)[0]
 
@@ -159,7 +158,6 @@ describe('OtlpStatsTransformer', () => {
       assert.strictEqual(dp.sum, 4)
       assert.deepStrictEqual(dp.explicitBounds, EXPLICIT_BOUNDS_SECONDS)
       assert.strictEqual(dp.bucketCounts.length, EXPLICIT_BOUNDS_SECONDS.length + 1)
-      // 1s and 3s land in two distinct fixed buckets; counts sum to the total.
       assert.strictEqual(dp.bucketCounts.reduce((a, b) => a + b, 0), 2)
       assert.strictEqual(dp.bucketCounts.filter(c => c > 0).length, 2)
     })
@@ -176,7 +174,6 @@ describe('OtlpStatsTransformer', () => {
     })
 
     it('emits at most two data points per group (ok + error) tagged top-level when all hits are top-level', () => {
-      // All spans share one aggregation key: okDistribution gets 2 ok, errorDistribution gets 1 error.
       const spans = [makeTopLevelSpan(), makeTopLevelSpan(), makeTopLevelSpan({ error: 1 })]
       const payload = JSON.parse(transformer.transform(makeDrained(12340000000000, spans), BUCKET_SIZE_NS))
       const points = dataPointsOf(payload)
@@ -226,8 +223,8 @@ describe('OtlpStatsTransformer', () => {
 
     it('emits a single scopeMetrics and tags data points whose service differs from the default', () => {
       const drained = makeDrained(12340000000000, [
-        makeSpan({ service: 'svc', resource: 'GET /foo' }), // default service -> service.name omitted
-        makeSpan({ service: 'svc-other', resource: 'GET /bar' }), // custom service -> service.name emitted
+        makeSpan({ service: 'svc', resource: 'GET /foo' }),
+        makeSpan({ service: 'svc-other', resource: 'GET /bar' }),
       ])
       const payload = JSON.parse(transformer.transform(drained, BUCKET_SIZE_NS))
       const scopeMetrics = payload.resourceMetrics[0].scopeMetrics
@@ -305,8 +302,6 @@ describe('OtlpStatsTransformer', () => {
 
     it('uses delta temporality and native typed attribute values', () => {
       const delta = protoAggregationTemporality.values.AGGREGATION_TEMPORALITY_DELTA
-      // Distinct aggregation keys so the per-group top-level heuristic yields one ok-not-top-level
-      // group and one error-top-level group.
       const spans = [makeSpan({ resource: 'GET /a' }), makeTopLevelSpan({ error: 1, resource: 'GET /b' })]
       const buf = transformer.transform(makeDrained(12340000000000, spans), BUCKET_SIZE_NS)
       const decoded = protoMetricsService.decode(buf)
