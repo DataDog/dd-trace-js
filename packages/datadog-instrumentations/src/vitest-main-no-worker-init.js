@@ -699,7 +699,14 @@ function getRepeatedTestReport (task, testName, testSuiteAbsolutePath, testPrope
         : undefined,
       error,
       finalStatus: isFinalAttempt ? finalAttemptStatus : undefined,
-      hasFailedAllRetries: isFinalAttempt && hasFailure && statuses.every(status => status === 'fail'),
+      hasFailedAllRetries: hasFailedAllManagedRetries(
+        task,
+        testProperties,
+        type,
+        statuses,
+        isFinalAttempt,
+        hasFailure
+      ),
       isRetry: index > 0,
       status: attemptStatus,
     }
@@ -723,6 +730,37 @@ function getRepeatedTestReport (task, testName, testSuiteAbsolutePath, testPrope
     testSuiteAbsolutePath,
     testSuiteStore,
   }
+}
+
+/**
+ * Returns whether a final failed attempt exhausted Datadog-managed retries.
+ *
+ * @param {{
+ *   meta?: { __ddTestOptEfdRetries?: number },
+ *   repeats?: number,
+ *   result?: { retryCount?: number }
+ * }} task
+ * @param {{ isFlakyTestRetries?: boolean }} testProperties
+ * @param {'attempt_to_fix'|'early_flake_detection'|'external'} type
+ * @param {string[]} statuses
+ * @param {boolean} isFinalAttempt
+ * @param {boolean} hasFailure
+ * @returns {boolean}
+ */
+function hasFailedAllManagedRetries (task, testProperties, type, statuses, isFinalAttempt, hasFailure) {
+  if (!isFinalAttempt || !hasFailure || statuses.length === 0 || !statuses.every(status => status === 'fail')) {
+    return false
+  }
+
+  if (type === 'attempt_to_fix') {
+    return true
+  }
+
+  if (type === 'early_flake_detection') {
+    return (task.meta?.__ddTestOptEfdRetries || 0) > 0
+  }
+
+  return testProperties.isFlakyTestRetries === true && (task.result?.retryCount || 0) > 0
 }
 
 function getRepeatedAttemptCount (task, statuses) {
@@ -780,7 +818,14 @@ function reportFinalTestAttempt (testReport) {
     reportTestAttempt(testReport, finalAttempt || {
       error,
       finalStatus,
-      hasFailedAllRetries: (result?.retryCount || 0) > 0,
+      hasFailedAllRetries: hasFailedAllManagedRetries(
+        task,
+        testProperties,
+        'external',
+        ['fail'],
+        true,
+        true
+      ),
       isRetry: errors.length > 1 || (result?.retryCount || 0) > 0 || (result?.repeatCount || 0) > 0,
       status: 'fail',
     })

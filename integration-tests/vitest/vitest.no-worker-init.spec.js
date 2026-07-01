@@ -688,6 +688,7 @@ SUPPORTED_VERSIONS.forEach((version) => {
           assert.strictEqual(retriedTests[1].meta[TEST_IS_RETRY], 'true')
           assert.strictEqual(retriedTests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
           assert.strictEqual(retriedTests[1].meta[TEST_FINAL_STATUS], 'fail')
+          assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in retriedTests[1].meta), inspect(retriedTests[1].meta))
 
           const atrTaggedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr)
           assert.strictEqual(atrTaggedTests.length, 0, inspect(atrTaggedTests.map(test => test.meta)))
