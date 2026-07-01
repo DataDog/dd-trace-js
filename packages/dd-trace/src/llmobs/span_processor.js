@@ -27,6 +27,8 @@ const {
   ML_APP,
   TAGS,
   PARENT_ID_KEY,
+  PARENT_AGENT_NAME,
+  PARENT_AGENT_SPAN_ID,
   SESSION_ID,
   NAME,
   INPUT_PROMPT,
@@ -154,6 +156,20 @@ class LLMObsSpanProcessor {
     if (mlObsTags[TOOL_DEFINITIONS]) {
       meta.tool_definitions = []
       this.#addObject(mlObsTags[TOOL_DEFINITIONS], meta.tool_definitions)
+    }
+
+    // Surface the agent attribution resolved at registration, but only on spans that actually
+    // have an agent ancestor. The id is always present in that case; the name may be missing when
+    // it arrived id-only over distributed propagation (older/unsafe upstream). Emit the name as
+    // explicit `null` then, matching the cross-language wire shape (dd-trace-py sends null, not an
+    // absent key) so the shared backend and system-tests see the same payload.
+    const parentAgentName = mlObsTags[PARENT_AGENT_NAME]
+    const parentAgentSpanId = mlObsTags[PARENT_AGENT_SPAN_ID]
+    if (parentAgentName != null || parentAgentSpanId != null) {
+      meta.agent_attribution = {
+        parent_agent_name: parentAgentName ?? null,
+        parent_agent_span_id: parentAgentSpanId,
+      }
     }
 
     const llmObsSpan = new LLMObservabilitySpan(spanKind)
