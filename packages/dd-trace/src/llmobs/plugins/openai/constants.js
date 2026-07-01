@@ -8,6 +8,11 @@ const IMAGE_FALLBACK = '[image]'
 const FILE_FALLBACK = '[file]'
 const AUDIO_FALLBACK = '[audio]'
 
+// OpenAI audio `format` values that don't map cleanly to `audio/<format>`.
+const AUDIO_MIME_TYPES = {
+  mp3: 'audio/mpeg',
+}
+
 module.exports = {
   INPUT_TYPE_IMAGE,
   INPUT_TYPE_FILE,
@@ -15,4 +20,5 @@ module.exports = {
   IMAGE_FALLBACK,
   FILE_FALLBACK,
   AUDIO_FALLBACK,
+  AUDIO_MIME_TYPES,
 }

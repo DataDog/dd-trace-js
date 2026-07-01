@@ -3800,7 +3800,6 @@ declare namespace tracer {
 
     /**
      * Represents an audio segment attached to an LLM chat model message.
-     * Provide exactly one of `content` (inline base64) or `attachmentKey`.
      */
     interface AudioPart {
       /**
@@ -3811,12 +3810,7 @@ declare namespace tracer {
       /**
        * The audio content as a base64-encoded string
        */
-      content?: string,
-
-      /**
-       * A key referencing audio stored as an attachment
-       */
-      attachmentKey?: string,
+      content: string,
     }
 
     /**

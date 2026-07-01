@@ -8,6 +8,7 @@ const {
   UNKNOWN_MODEL_PROVIDER,
 } = require('../../constants/tags')
 const { audioMimeTypeFromFormat, formatAudioPart, safeJsonParse } = require('../../util')
+const { AUDIO_MIME_TYPES } = require('./constants')
 const {
   extractChatTemplateFromInstructions,
   normalizePromptVariables,
@@ -236,7 +237,7 @@ class OpenAiLLMObsPlugin extends LLMObsPlugin {
       let audioParts
       if (audio) {
         if (audio.data) {
-          audioParts = [formatAudioPart(audio.data, audioMimeTypeFromFormat(outputAudioFormat))]
+          audioParts = [formatAudioPart(audio.data, audioMimeTypeFromFormat(outputAudioFormat, AUDIO_MIME_TYPES))]
         }
         // gpt-audio* / gpt-4o-audio-preview return null content; surface the transcript as text.
         if (!content) content = audio.transcript || ''

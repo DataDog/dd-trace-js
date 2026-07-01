@@ -7,6 +7,7 @@ const {
   IMAGE_FALLBACK,
   FILE_FALLBACK,
   AUDIO_FALLBACK,
+  AUDIO_MIME_TYPES,
 } = require('./constants')
 
 const REGEX_SPECIAL_CHARS = /[.*+?^${}()|[\]\\]/g
@@ -138,7 +139,7 @@ function extractContentParts (parts) {
   for (const part of parts) {
     const partType = part?.type ?? ''
     if (partType === 'text') {
-      extracted.push(String(part.text ?? ''))
+      extracted.push(part.text ?? '')
     } else if (partType === 'image_url') {
       extracted.push(IMAGE_FALLBACK)
     } else if (partType === 'input_audio') {
@@ -147,7 +148,7 @@ function extractContentParts (parts) {
       if (data) {
         // Audio is captured as a structured audio part (rendered as a player), so no text marker
         // is needed. Only fall back to "[audio]" when there's no audio to capture.
-        audioParts.push(formatAudioPart(data, audioMimeTypeFromFormat(inputAudio.format)))
+        audioParts.push(formatAudioPart(data, audioMimeTypeFromFormat(inputAudio.format, AUDIO_MIME_TYPES)))
       } else {
         extracted.push(AUDIO_FALLBACK)
       }

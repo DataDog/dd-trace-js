@@ -362,20 +362,19 @@ function findGenAIAncestorSpanId (span) {
   return null
 }
 
-// OpenAI audio `format` values that don't map cleanly to `audio/<format>`.
-const OPENAI_AUDIO_MIME_TYPES = {
-  mp3: 'audio/mpeg',
-}
-
-// Maps an audio `format` (e.g. "wav", "mp3") to a MIME type. Defaults to
-// `audio/wav` when the format is missing. Mirrors the dd-trace-py helper so
-// the emitted `audio_parts[].mime_type` stays identical across SDKs. A
-// non-string `format` is treated as missing so a malformed auto-instrumented
-// payload can't throw and disable the plugin.
-function audioMimeTypeFromFormat (fmt) {
+// Maps an audio `format` (e.g. "wav", "mp3") to a MIME type. Defaults to `audio/wav` when the
+// format is missing. Provider-specific overrides (e.g. OpenAI's mp3 -> audio/mpeg) are passed in
+// via `mimeTypeLookup` so this stays provider-agnostic. A non-string `format` is treated as missing
+// so a malformed auto-instrumented payload can't throw and disable the plugin.
+/**
+ * @param {string} fmt
+ * @param {Record<string, string>} [mimeTypeLookup]
+ * @returns {string}
+ */
+function audioMimeTypeFromFormat (fmt, mimeTypeLookup = {}) {
   fmt = typeof fmt === 'string' ? fmt.trim().toLowerCase() : ''
   if (!fmt) return 'audio/wav'
-  return OPENAI_AUDIO_MIME_TYPES[fmt] ?? `audio/${fmt}`
+  return mimeTypeLookup[fmt] ?? `audio/${fmt}`
 }
 
 // Builds an audio part from raw audio bytes (base64-encoded) or an existing base64 string. Only

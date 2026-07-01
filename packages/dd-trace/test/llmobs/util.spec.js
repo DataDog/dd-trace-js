@@ -352,17 +352,19 @@ describe('util', () => {
   })
 
   describe('audioMimeTypeFromFormat', () => {
-    it('maps mp3 to audio/mpeg', () => {
-      assert.strictEqual(audioMimeTypeFromFormat('mp3'), 'audio/mpeg')
-    })
-
-    it('maps other formats to audio/<format>', () => {
+    it('maps a format to audio/<format> by default', () => {
       assert.strictEqual(audioMimeTypeFromFormat('wav'), 'audio/wav')
       assert.strictEqual(audioMimeTypeFromFormat('opus'), 'audio/opus')
+      assert.strictEqual(audioMimeTypeFromFormat('mp3'), 'audio/mp3')
+    })
+
+    it('prefers a provider override from mimeTypeLookup', () => {
+      assert.strictEqual(audioMimeTypeFromFormat('mp3', { mp3: 'audio/mpeg' }), 'audio/mpeg')
+      assert.strictEqual(audioMimeTypeFromFormat('wav', { mp3: 'audio/mpeg' }), 'audio/wav')
     })
 
     it('normalizes whitespace and case', () => {
-      assert.strictEqual(audioMimeTypeFromFormat('  MP3 '), 'audio/mpeg')
+      assert.strictEqual(audioMimeTypeFromFormat('  MP3 ', { mp3: 'audio/mpeg' }), 'audio/mpeg')
       assert.strictEqual(audioMimeTypeFromFormat('WAV'), 'audio/wav')
     })
 
