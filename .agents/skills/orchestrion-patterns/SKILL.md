@@ -37,30 +37,30 @@ rewriter schema and edge-case patterns.
 ## Migration Workflow
 
 1. **Inventory the existing hook surface.** Read
-   `packages/datadog-instrumentations/src/<package>.js` before the plugin. List
-   every `addHook`, version range, file path, wrapped class/function/method,
-   `channel(...)` name, channel event method, and `ctx` field produced by the
-   instrumentation.
+  `packages/datadog-instrumentations/src/<package>.js` before the plugin. List
+  every `addHook`, version range, file path, wrapped class/function/method,
+  `channel(...)` name, channel event method, and `ctx` field produced by the
+  instrumentation.
 2. **Extract the behavioral contract.** Read the plugin tests and span
-   assertions. Preserve span names, resources, tags, metrics, services, error
-   behavior, skip/no-span behavior, and parent/child relationships.
+  assertions. Preserve span names, resources, tags, metrics, services, error
+  behavior, skip/no-span behavior, and parent/child relationships.
 3. **Check downstream subscribers.** Grep every old channel name. IAST, AppSec,
-   DSM, or other non-tracing subscribers may need per-call cardinality even when
-   tracing only needs one publish per span. Preserve those channels or migrate
-   all subscribers deliberately with tests.
+  DSM, or other non-tracing subscribers may need per-call cardinality even when
+  tracing only needs one publish per span. Preserve those channels or migrate
+  all subscribers deliberately with tests.
 4. **Map each old wrapping point to a static Orchestrion target.** Verify the
-   actual installed package source under the supported version fixture before
-   choosing `functionQuery` fields. Do not infer kind or file path from the old
-   wrapper shape alone.
+  actual installed package source under the supported version fixture before
+  choosing `functionQuery` fields. Do not infer kind or file path from the old
+  wrapper shape alone.
 5. **Bridge instrumentation with `getHooks`.** After registering the rewriter
-   config, the package instrumentation entrypoint should normally be only the
-   standard `getHooks('<package>')` bridge.
+  config, the package instrumentation entrypoint should normally be only the
+  standard `getHooks('<package>')` bridge.
 6. **Rewrite the plugin around Orchestrion ctx.** Subscribe with
-   `static prefix = 'tracing:orchestrion:<npm-package>:<channelName>'`, read
-   data from `ctx.arguments`, `ctx.self`, `ctx.result`, and `ctx.error`, and
-   pass `ctx` to `startSpan`.
+  `static prefix = 'tracing:orchestrion:<npm-package>:<channelName>'`, read
+  data from `ctx.arguments`, `ctx.self`, `ctx.result`, and `ctx.error`, and
+  pass `ctx` to `startSpan`.
 7. **Verify by contract.** Run the focused plugin tests plus any dependent
-   integration checks discovered from channel subscribers or subclassed plugins.
+  integration checks discovered from channel subscribers or subclassed plugins.
 
 ## Halt Instead of Guessing
 

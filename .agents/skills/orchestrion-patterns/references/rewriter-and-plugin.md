@@ -42,7 +42,7 @@ Choose the kind from the package source, not from the old wrapper:
 | synchronous return or throw | `Sync` | `end(ctx)` |
 | returns a Promise or is `async` | `Async` | `asyncEnd(ctx)` |
 | callback completes operation | `Callback` | `asyncEnd(ctx)` |
-| async generator or async iterable lifecycle | `AsyncIterator` | base channel plus `_next` channel |
+| async generator or async iterable lifecycle | `AsyncIterator` | base channel plus generated `:next` channel |
 
 For callbacks, use `functionQuery.index` when the callback is not always the
 last argument. If an `Async` target can return non-Promise values on early
