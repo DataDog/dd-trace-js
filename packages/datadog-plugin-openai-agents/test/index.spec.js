@@ -28,7 +28,7 @@ createIntegrationTestSuite('openai-agents', '@openai/agents', {
   const { agent } = meta
 
   before(async () => {
-    await testSetup.setup(meta.mod)
+    await testSetup.setup(meta.mod, meta.version)
   })
 
   after(async () => {
@@ -85,6 +85,25 @@ createIntegrationTestSuite('openai-agents', '@openai/agents', {
       })
 
       await testSetup.run()
+      return traceAssertion
+    })
+
+    it('parents the streamed openai.request span under the agent span', async () => {
+      const traceAssertion = agent.assertSomeTraces((traces) => {
+        const flat = traces.flat()
+        const agentSpan = flat.find(s => s.name === 'test_agent')
+        const openaiSpan = flat.find(s => s.name === 'openai.request')
+
+        assert.ok(agentSpan, 'expected an agent span')
+        assert.ok(openaiSpan, 'expected an openai.request span')
+        assert.equal(
+          openaiSpan.parent_id.toString(),
+          agentSpan.span_id.toString(),
+          'streamed openai.request should be a child of the agent span'
+        )
+      })
+
+      await testSetup.runStreamed()
       return traceAssertion
     })
 

@@ -14,6 +14,58 @@ const {
 
 const AGENT_INSTRUCTIONS = 'You are a test agent'
 
+function createResponse (output, model = 'gpt-4-0613') {
+  return {
+    id: 'resp_test',
+    object: 'response',
+    created_at: 0,
+    status: 'completed',
+    instructions: AGENT_INSTRUCTIONS,
+    output,
+    usage: {
+      input_tokens: 1,
+      output_tokens: 1,
+      total_tokens: 2,
+      input_tokens_details: { cached_tokens: 0 },
+      output_tokens_details: { reasoning_tokens: 0 },
+    },
+    model,
+    parallel_tool_calls: true,
+    temperature: 1,
+    text: { format: { type: 'text' } },
+    tool_choice: 'auto',
+    tools: [],
+    top_p: 1,
+    truncation: 'disabled',
+    metadata: {},
+  }
+}
+
+function createMessageOutput (text) {
+  return {
+    id: 'msg_test',
+    type: 'message',
+    status: 'completed',
+    role: 'assistant',
+    content: [{ type: 'output_text', text, annotations: [] }],
+  }
+}
+
+function createFetch (responses) {
+  let index = 0
+
+  return async () => {
+    const response = responses[Math.min(index++, responses.length - 1)]
+    return new Response(JSON.stringify(response), {
+      status: 200,
+      headers: {
+        'content-type': 'application/json',
+        'x-request-id': 'req_test',
+      },
+    })
+  }
+}
+
 describe('integrations', () => {
   describe('openai-agents LLMObs', () => {
     const { getEvents } = useLlmObs({ plugin: 'openai-agents' })
@@ -35,19 +87,35 @@ describe('integrations', () => {
         const openaiPath = require.resolve('openai', { paths: [agentsOpenaiDir] })
         const { OpenAI } = require(openaiPath)
 
-        const vcrClient = new OpenAI({
-          apiKey: process.env.OPENAI_API_KEY ?? 'test',
-          baseURL: 'http://127.0.0.1:9126/vcr/openai',
+        const mockClient = new OpenAI({
+          apiKey: 'test',
+          baseURL: 'https://api.openai.com/v1',
+          fetch: createFetch([createResponse([createMessageOutput('hello')])]),
+        })
+        const toolErrorClient = new OpenAI({
+          apiKey: 'test',
+          baseURL: 'https://api.openai.com/v1',
+          fetch: createFetch([
+            createResponse([{
+              id: 'fc_test',
+              type: 'function_call',
+              call_id: 'call_test',
+              name: 'add',
+              arguments: '{"a":1,"b":2}',
+              status: 'completed',
+            }], 'gpt-4o-mini'),
+            createResponse([createMessageOutput('done')], 'gpt-4o-mini'),
+          ]),
         })
 
         agentsCore.setDefaultModelProvider({
-          createModel: (modelName) => new OpenAIResponsesModel(vcrClient, modelName),
+          createModel: (modelName) => new OpenAIResponsesModel(mockClient, modelName),
         })
 
         agent = new agentsCore.Agent({
           name: 'test_agent',
           instructions: AGENT_INSTRUCTIONS,
-          model: new OpenAIResponsesModel(vcrClient, 'gpt-4'),
+          model: new OpenAIResponsesModel(mockClient, 'gpt-4'),
         })
 
         // Tool with a real parameter schema so the model has something to
@@ -74,7 +142,7 @@ describe('integrations', () => {
         toolErrorAgent = new agentsCore.Agent({
           name: 'addition_agent_with_tool_errors',
           instructions: 'You are a calculator. Use the `add` tool to answer math questions.',
-          model: new OpenAIResponsesModel(vcrClient, 'gpt-4o-mini'),
+          model: new OpenAIResponsesModel(toolErrorClient, 'gpt-4o-mini'),
           tools: [additionErrorTool],
         })
       })
@@ -153,15 +221,10 @@ describe('integrations', () => {
           // throws. The SDK catches the error, surfaces it on the function
           // span, then calls the model again with the error context.
           //
-          // The model retries the same tool call after seeing the error, so
-          // the agent eventually exits with `MaxTurnsExceededError`. We catch
-          // that and assert on the function span the SDK did emit. This is
-          // the canonical error-path coverage for the trace-processor
-          // architecture — direct `getResponse` / `invokeFunctionTool` errors
-          // don't produce spans without going through the runner.
-          //
-          // VCR: cassettes are recorded on first run with a real
-          // `OPENAI_API_KEY` and replayed on subsequent runs.
+          // This is the canonical error-path coverage for the
+          // trace-processor architecture — direct `getResponse` /
+          // `invokeFunctionTool` errors don't produce spans without going
+          // through the runner.
           try {
             await agentsCore.run(toolErrorAgent, 'What is the sum of 1 and 2?', { maxTurns: 2 })
           } catch (err) {

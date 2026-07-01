@@ -8,7 +8,7 @@ function createIntegrationTestSuite (pluginName, packageName, options, testCallb
   describe('Plugin', () => {
     describe(pluginName, () => {
       withVersions(pluginName, packageName, version => {
-        const meta = { agent, tracer: null, mod: null }
+        const meta = { agent, tracer: null, mod: null, version }
 
         describe('without configuration', () => {
           before(async () => {
