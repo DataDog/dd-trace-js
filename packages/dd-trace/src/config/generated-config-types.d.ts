@@ -3,6 +3,7 @@
 
 export interface GeneratedConfig {
   _DD_APM_TRACING_AGENTLESS_ENABLED: boolean;
+  _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: number;
   apmTracingEnabled: boolean;
   appsec: {
     blockedTemplateGraphql: string | undefined;
@@ -494,6 +495,7 @@ export interface GeneratedConfig {
   OTEL_TRACES_EXPORTER: "none" | "otlp" | undefined;
   OTEL_TRACES_SAMPLER: "always_on" | "always_off" | "traceidratio" | "parentbased_always_on" | "parentbased_always_off" | "parentbased_traceidratio";
   OTEL_TRACES_SAMPLER_ARG: number | undefined;
+  OTEL_TRACES_SPAN_METRICS_ENABLED: boolean | undefined;
   peerServiceMapping: Record<string, string>;
   port: string | number;
   profiling: {
@@ -580,6 +582,7 @@ export interface GeneratedConfig {
 
 export interface GeneratedEnvVarConfig {
   _DD_APM_TRACING_AGENTLESS_ENABLED: boolean;
+  _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: number;
   DATADOG_API_KEY: string | undefined;
   DD_ACTION_EXECUTION_ID: string | undefined;
   DD_AGENT_HOST: string;
@@ -1109,4 +1112,5 @@ export interface GeneratedEnvVarConfig {
   OTEL_TRACES_EXPORTER: "none" | "otlp" | undefined;
   OTEL_TRACES_SAMPLER: "always_on" | "always_off" | "traceidratio" | "parentbased_always_on" | "parentbased_always_off" | "parentbased_traceidratio";
   OTEL_TRACES_SAMPLER_ARG: number | undefined;
+  OTEL_TRACES_SPAN_METRICS_ENABLED: boolean | undefined;
 }
