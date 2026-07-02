@@ -139,12 +139,16 @@ class LlmLlmObsPlugin extends LLMObsPlugin {
     }
 
     if (usage) {
-      const inputTokens = (usage.input_tokens ?? 0) +
-        (usage.cache_creation_input_tokens ?? 0) +
-        (usage.cache_read_input_tokens ?? 0)
+      const cacheWriteTokens = usage.cache_creation_input_tokens ?? 0
+      const cacheReadTokens = usage.cache_read_input_tokens ?? 0
+      const inputTokens = (usage.input_tokens ?? 0) + cacheWriteTokens + cacheReadTokens
+      const outputTokens = usage.output_tokens ?? 0
       this._tagger.tagMetrics(span, {
         input_tokens: inputTokens,
-        output_tokens: usage.output_tokens ?? 0,
+        output_tokens: outputTokens,
+        cache_read_input_tokens: cacheReadTokens,
+        cache_write_input_tokens: cacheWriteTokens,
+        total_tokens: inputTokens + outputTokens,
       })
     }
   }

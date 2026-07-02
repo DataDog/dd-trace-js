@@ -60,11 +60,23 @@ describe('Plugin', () => {
       const stream = client.query({
         prompt: PROMPT,
         options: {
-          model: 'sonnet',
+          model: 'claude-sonnet-4-6',
           mcpServers: { local: localToolsServer },
           allowedTools: ['mcp__local__fetch_weather'],
           disallowedTools: ['ToolSearch'],
           settingSources: [],
+          systemPrompt: 'You are a helpful assistant. Use the available tools to answer the user.',
+          skills: [],
+          agents: {
+            'weather-fetcher': {
+              description: 'Fetches weather information for a US state using the fetch_weather tool.',
+              prompt: 'You are a weather fetcher. ' +
+                'Use the fetch_weather tool to get the requested weather. Report the result concisely.',
+              tools: ['mcp__local__fetch_weather'],
+              skills: [],
+              model: 'claude-sonnet-4-6',
+            },
+          },
           cwd: '/tmp',
           pathToClaudeCodeExecutable,
           env: {
@@ -86,48 +98,47 @@ describe('Plugin', () => {
 
       // Subagent prompt is determined by the LLM at the previous step - differs between SDK versions
       const subagentPrompt = is03
-        ? 'Use the fetch_weather tool to get the current weather in New York ' +
-          '(state code: NY) in fahrenheit. Return the full result.'
-        : 'Use the fetch_weather tool to get the current weather in New York ' +
-          '(state code: NY) in fahrenheit. Report back the results.'
+        ? 'Get the current weather for New York (state code: NY) in fahrenheit.'
+        : 'Fetch the current weather for New York state (NY) in fahrenheit ' +
+          'using the available weather tool and return the result.'
 
       const subagentNYResult = is03
-        ? 'The current weather in New York (NY) is **72°F**.'
-        : 'The current weather in New York (NY) is 72 degrees Fahrenheit.'
+        ? 'The current weather in New York (NY) is 72 degrees Fahrenheit.'
+        : 'The current weather for New York state (NY) is **72°F**.'
 
       const outerThinkingText = is03
         ? 'The user wants me to:\n' +
-          '1. Spawn a subagent to get the weather in New York (in fahrenheit)\n' +
-          '2. After that subagent completes, get the weather in California myself (in fahrenheit)\n' +
+          '1. Spawn a subagent to get weather in New York (fahrenheit)\n' +
+          '2. After that subagent completes, get weather in California (fahrenheit) directly (not in a subagent)\n' +
           '\n' +
-          'Let me spawn the subagent for New York first.'
+          'Let me spawn the subagent for New York first, wait for it to complete, ' +
+          "then get California's weather directly."
         : 'The user wants me to:\n' +
           '1. Spawn a subagent to get the weather in New York (in fahrenheit)\n' +
           '2. After that, get the weather in California myself (not in a subagent, in fahrenheit)\n' +
           '\n' +
-          'Let me spawn the subagent for New York first, wait for it to complete, ' +
-          "then get California's weather myself."
+          "Let me spawn a subagent for New York first, then I'll do California myself after."
 
       // The assistant's text preamble before issuing the Agent tool call
       const outerAgentPreamble = is03
         ? 'Sure! Let me first spawn a subagent to fetch the New York weather.'
-        : "Sure! Let me first spawn a subagent to get New York's weather, " +
-          "and then I'll fetch California's weather myself."
+        : "Sure! I'll spawn a subagent to fetch the New York weather first, " +
+          "then fetch California's weather myself once that's done."
 
       // The assistant's text preamble before fetching CA weather directly
       const outerCaPreamble = is03
-        ? "The subagent is done! New York is reporting **72°F**. Now let me fetch California's weather directly:"
-        : "The subagent returned **72°F** for New York! Now let me fetch California's weather myself:"
+        ? "The subagent returned: **New York is currently 72°F.** Now let me fetch California's weather directly!"
+        : "The subagent got New York's weather. Now let me fetch California's myself!"
 
       // The Agent tool's `description` argument (chosen by the LLM at outer step-0); differs by SDK version
-      const agentDescription = is03 ? 'Get weather in New York' : 'Get NY weather'
+      const agentDescription = 'Fetch NY weather'
 
       const agentToolId = is03
-        ? 'toolu_01PNXj5uPeuqpqTFNoLu3hNn'
-        : 'toolu_015xHwpHCj1UL2knRkKiRrc8'
+        ? 'toolu_015X6r1Y3n5xKv93A5sjtePC'
+        : 'toolu_013ciQ8D3nyWL83AJHjYQuv8'
       const caToolId = is03
-        ? 'toolu_01RsSnxr1tzkWf9u1cN3acXT'
-        : 'toolu_012MX38F8b83p5aupfRhs2Jv'
+        ? 'toolu_01Ky5p1tDvL2AC9vM6n49dZ4'
+        : 'toolu_01JnuzK8eUfj4zUC5bJCUZwc'
 
       // [0] root query span
       assertLlmObsSpanEvent(llmobsSpans[0], {
@@ -157,13 +168,26 @@ describe('Plugin', () => {
             content: MOCK_STRING,
             tool_calls: [{
               name: 'Agent',
-              arguments: { description: agentDescription, prompt: subagentPrompt },
+              arguments: is03
+                ? {
+                    description: agentDescription,
+                    subagent_type: 'weather-fetcher',
+                    prompt: subagentPrompt,
+                    run_in_background: false,
+                  }
+                : { description: agentDescription, prompt: subagentPrompt },
               tool_id: MOCK_STRING,
               type: 'tool_use',
             }],
           },
         ],
-        metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER },
+        metrics: {
+          input_tokens: MOCK_NUMBER,
+          output_tokens: MOCK_NUMBER,
+          cache_read_input_tokens: MOCK_NUMBER,
+          cache_write_input_tokens: MOCK_NUMBER,
+          total_tokens: MOCK_NUMBER,
+        },
         sessionId,
         tags: { ml_app: 'test' },
       })
@@ -216,7 +240,13 @@ describe('Plugin', () => {
               }],
             },
           ],
-          metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER },
+          metrics: {
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            cache_read_input_tokens: MOCK_NUMBER,
+            cache_write_input_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+          },
           sessionId,
           tags: { ml_app: 'test' },
         })
@@ -256,7 +286,13 @@ describe('Plugin', () => {
               }],
             },
           ],
-          metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER },
+          metrics: {
+            input_tokens: MOCK_NUMBER,
+            output_tokens: MOCK_NUMBER,
+            cache_read_input_tokens: MOCK_NUMBER,
+            cache_write_input_tokens: MOCK_NUMBER,
+            total_tokens: MOCK_NUMBER,
+          },
           sessionId,
           tags: { ml_app: 'test' },
         })
@@ -314,7 +350,14 @@ describe('Plugin', () => {
             content: outerAgentPreamble,
             tool_calls: [{
               name: 'Agent',
-              arguments: { description: agentDescription, prompt: subagentPrompt },
+              arguments: is03
+                ? {
+                    description: agentDescription,
+                    subagent_type: 'weather-fetcher',
+                    prompt: subagentPrompt,
+                    run_in_background: false,
+                  }
+                : { description: agentDescription, prompt: subagentPrompt },
               tool_id: agentToolId,
               type: 'tool_use',
             }],
@@ -333,7 +376,13 @@ describe('Plugin', () => {
             }],
           },
         ],
-        metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER },
+        metrics: {
+          input_tokens: MOCK_NUMBER,
+          output_tokens: MOCK_NUMBER,
+          cache_read_input_tokens: MOCK_NUMBER,
+          cache_write_input_tokens: MOCK_NUMBER,
+          total_tokens: MOCK_NUMBER,
+        },
         sessionId,
         tags: { ml_app: 'test' },
       })
@@ -378,7 +427,14 @@ describe('Plugin', () => {
             content: outerAgentPreamble,
             tool_calls: [{
               name: 'Agent',
-              arguments: { description: agentDescription, prompt: subagentPrompt },
+              arguments: is03
+                ? {
+                    description: agentDescription,
+                    subagent_type: 'weather-fetcher',
+                    prompt: subagentPrompt,
+                    run_in_background: false,
+                  }
+                : { description: agentDescription, prompt: subagentPrompt },
               tool_id: agentToolId,
               type: 'tool_use',
             }],
@@ -397,7 +453,13 @@ describe('Plugin', () => {
           { role: 'tool', content: 'The weather in CA is 72° in fahrenheit.' },
         ],
         outputMessages: [{ role: 'assistant', content: MOCK_STRING }],
-        metrics: { input_tokens: MOCK_NUMBER, output_tokens: MOCK_NUMBER },
+        metrics: {
+          input_tokens: MOCK_NUMBER,
+          output_tokens: MOCK_NUMBER,
+          cache_read_input_tokens: MOCK_NUMBER,
+          cache_write_input_tokens: MOCK_NUMBER,
+          total_tokens: MOCK_NUMBER,
+        },
         sessionId,
         tags: { ml_app: 'test' },
       })

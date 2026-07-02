@@ -3,6 +3,10 @@
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
+
 const { describe, it, before, beforeEach, afterEach } = require('mocha')
 const {
   FakeAgent,
@@ -57,13 +61,17 @@ describe('esm', () => {
           assert.strictEqual(checkSpansForServiceName(payload, 'claude_agent_sdk.query'), true)
         })
 
+        // Use a fresh HOME so the Claude CLI doesn't pick up a user-level ~/.claude.json (e.g. one that
+        // configures an apiKeyHelper unavailable in CI, which would override the ANTHROPIC_API_KEY env).
+        const isolatedHome = fs.mkdtempSync(path.join(os.tmpdir(), 'claude-agent-sdk-home-'))
         proc = await spawnPluginIntegrationTestProcAndExpectExit(sandboxCwd(), variants[variant], agent.port, {
           NODE_OPTIONS: '--import dd-trace/initialize.mjs',
           ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '<not-a-real-key>',
+          HOME: isolatedHome,
         })
 
         await res
-      }).timeout(20000)
+      }).timeout(30000)
     }
   })
 })

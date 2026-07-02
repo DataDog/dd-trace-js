@@ -117,11 +117,23 @@ describe('Plugin', () => {
         const stream = client.query({
           prompt: PROMPT,
           options: {
-            model: 'sonnet',
+            model: 'claude-sonnet-4-6',
             mcpServers: { local: localToolsServer },
             allowedTools: ['mcp__local__fetch_weather'],
             disallowedTools: ['ToolSearch'],
             settingSources: [],
+            systemPrompt: 'You are a helpful assistant. Use the available tools to answer the user.',
+            skills: [],
+            agents: {
+              'weather-fetcher': {
+                description: 'Fetches weather information for a US state using the fetch_weather tool.',
+                prompt: 'You are a weather fetcher. ' +
+                  'Use the fetch_weather tool to get the requested weather. Report the result concisely.',
+                tools: ['mcp__local__fetch_weather'],
+                skills: [],
+                model: 'claude-sonnet-4-6',
+              },
+            },
             cwd: '/tmp',
             pathToClaudeCodeExecutable,
             env: {
