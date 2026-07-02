@@ -22,7 +22,8 @@ const callbackFinishCh = channel('datadog:fastify:callback:execute')
 const parsingContexts = new WeakMap()
 const cookiesPublished = new WeakSet()
 const bodyPublished = new WeakSet()
-const lastPublishedReqByError = new WeakMap()
+let lastPublishedError
+let lastPublishedReq
 
 function wrapFastify (fastify, hasParsingEvents) {
   if (typeof fastify !== 'function') return fastify
@@ -319,10 +320,13 @@ function publishError (ctx) {
   // The subscribers tag once per request, so the guard collapses only a re-drive
   // of the same error against the same request; a distinct request reusing a
   // cached error object still publishes. Boot hooks carry no request, so their
-  // re-drives share the same `undefined` req and collapse after the first.
+  // re-drives share the same `undefined` req and collapse after the first. The
+  // re-drive re-throws the one caught error on the trailing hop, so a compare
+  // against the previous publish bounds it without a per-error side table.
   const req = ctx.req
-  if (lastPublishedReqByError.has(error) && lastPublishedReqByError.get(error) === req) return
-  lastPublishedReqByError.set(error, req)
+  if (error === lastPublishedError && req === lastPublishedReq) return
+  lastPublishedError = error
+  lastPublishedReq = req
 
   publishErrorChannel(ctx)
 }
