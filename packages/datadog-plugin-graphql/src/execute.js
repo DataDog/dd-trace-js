@@ -129,12 +129,6 @@ class GraphQLExecutePlugin extends TracingPlugin {
       },
     }, ctx)
 
-    // Backfill the top-level graphql.request span (mercurius) with the operation
-    // signature/type now that the document is parsed. The request boundary only
-    // had the raw source + operationName, so this is where the precise resource
-    // becomes known. No-op for drivers that never open a request span. Also cache
-    // it by source so the JIT warm path — where execute never fires — can recover
-    // the same tags at the request boundary.
     backfillRequestSpan(ctx.currentStore?.graphqlRequestSpan, docSource, signature, type, name)
 
     addVariableTags(this.config, span, args.variableValues)
@@ -336,16 +330,18 @@ class GraphQLExecutePlugin extends TracingPlugin {
 // Refine the top-level graphql.request span (mercurius) once the parsed
 // document yields the operation signature/type/name. The request boundary only
 // saw the raw source + operationName; the execute boundary is the first place
-// the precise signature exists. Guarded so it is a no-op for graphql-js/apollo/
-// yoga, which never open a request span, and idempotent across re-entrant
-// execute() calls (yoga's normalizedExecutor) via the ddRequestRefined flag.
-// Caches the metadata by source regardless of whether a request span is open so
-// the JIT warm path (no execute span) can apply the same tags at its boundary.
+// the precise signature exists. No-op for graphql-js/apollo/yoga, which never
+// open a request span, and idempotent across re-entrant execute() calls (yoga's
+// normalizedExecutor) via the ddRequestRefined flag. Only a mercurius request
+// span can consume the source-keyed cache, so the raw query text is stored
+// exclusively when one is present — graphql-js/apollo/yoga never touch the LRU.
 function backfillRequestSpan (requestSpan, docSource, signature, type, name) {
-  if (docSource) cacheRequestOperation(docSource, { signature, type, name })
-
   if (!requestSpan || requestSpan.ddRequestRefined) return
   requestSpan.ddRequestRefined = true
+
+  // Cache the computed metadata by source so the JIT warm path (no execute
+  // span) can recover the same tags at the request boundary.
+  if (docSource) cacheRequestOperation(docSource, { signature, type, name })
 
   if (signature) requestSpan.setTag('resource.name', signature)
   if (type) requestSpan.setTag('graphql.operation.type', type)
