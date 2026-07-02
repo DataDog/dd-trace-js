@@ -79,6 +79,7 @@ export interface GeneratedConfig {
   DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR: string | undefined;
   DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED: boolean;
   DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE: string;
+  DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: boolean | undefined;
   DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE: boolean;
   DD_EXTERNAL_ENV: string | undefined;
   DD_GIT_BRANCH: string | undefined;
@@ -673,6 +674,7 @@ export interface GeneratedEnvVarConfig {
   DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR: string | undefined;
   DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED: boolean;
   DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE: string;
+  DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: boolean | undefined;
   DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE: boolean;
   DD_EXTERNAL_ENV: string | undefined;
   DD_GIT_BRANCH: string | undefined;
