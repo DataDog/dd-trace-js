@@ -79,8 +79,6 @@ try {
     ' --exclude-label=semver-major --exclude-label=only-land-on-next'
   const cherryPickDiffCmd = 'branch-diff --user DataDog --repo dd-trace-js' +
     (isPreRelease ? '' : ' --exclude-label=only-land-on-next')
-  const breakingDiffCmd = 'branch-diff --user DataDog --repo dd-trace-js' +
-    breakingLabels.map(label => ` --require-label=${label}`).join('')
 
   start('Determine version increment')
 
@@ -125,7 +123,7 @@ try {
   }
   const breakingEntries = isPreRelease
     ? getBreakingPullRequestEntries(releaseLine, upperBoundRef)
-    : getBreakingCommitEntries(breakingDiffCmd, `v${releaseLine}.x`, upperBoundRef, contributorBySha)
+    : []
   const notes = createReleaseChangelog(notesEntries, breakingEntries)
   const isMinor = notes.isMinor
   const newPatch = `${releaseLine}.${DD_MINOR}.${DD_PATCH + 1}`
@@ -335,28 +333,6 @@ function getContributorsBySha (base, head) {
   }
 
   return contributors
-}
-
-/**
- * @param {string} diffCmd
- * @param {string} base
- * @param {string} head
- * @param {Map<string, string>} contributorBySha
- */
-function getBreakingCommitEntries (diffCmd, base, head, contributorBySha) {
-  const breakingShas = capture(`${diffCmd} --format=sha --reverse ${base} ${head}`)
-    .split('\n').filter(Boolean)
-  const entries = []
-
-  for (const sha of breakingShas) {
-    entries.push({
-      sha,
-      subject: capture(`git show -s --format=%s ${sha}`),
-      author: contributorBySha.get(sha),
-    })
-  }
-
-  return entries
 }
 
 /**
