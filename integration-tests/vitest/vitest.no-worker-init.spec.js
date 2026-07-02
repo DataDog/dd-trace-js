@@ -349,6 +349,10 @@ SUPPORTED_VERSIONS.forEach((version) => {
           assert.strictEqual(test.meta[TEST_NAME], 'vitest worker env sets DD_VITEST_WORKER')
           assert.strictEqual(test.meta[TEST_STATUS], 'pass')
           assert.strictEqual(test.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
+          assert.ok(
+            Number(test.duration) >= 100 * 1e6,
+            `Expected test duration to include Vitest execution time, got ${Number(test.duration) / 1e6}ms`
+          )
         })
 
         const exitCode = await Promise.all([
@@ -359,6 +363,7 @@ SUPPORTED_VERSIONS.forEach((version) => {
             EXPECT_DD_NODE_OPTIONS_PRESERVED: '--no-warnings',
             EXPECT_DD_NODE_OPTIONS_STRIPPED: '1',
             EXPECT_NO_DD_TRACE_INIT: '1',
+            WAIT_BEFORE_EXPECTATION_MS: '100',
           }),
           payloadsPromise,
         ]).then(([exitCode]) => exitCode)

@@ -910,7 +910,12 @@ function reportTestAttempt (testReport, attempt) {
   testStartCh.runStores(testCtx, () => {})
   testCtx.status = status
   testCtx.task = task
-  if (status === 'pass' && !attempt.isRetry && attempt.finalStatus && result?.duration !== undefined) {
+  if (
+    status === 'pass' &&
+    !attempt.isRetry &&
+    isFinalTestAttempt(testReport, attempt) &&
+    result?.duration !== undefined
+  ) {
     testCtx.duration = result.duration
   }
   testFinishTimeCh.runStores(testCtx, () => {})
@@ -934,6 +939,10 @@ function reportTestAttempt (testReport, attempt) {
     attemptToFixFailed: attempt.attemptToFixFailed,
     ...testCtx.currentStore,
   })
+}
+
+function isFinalTestAttempt (testReport, attempt) {
+  return attempt.finalStatus !== undefined || testReport.finalAttempt === undefined
 }
 
 function getFinalTestStatus (testReport) {

@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
+function wait (ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
 describe('vitest worker env', () => {
-  it('sets DD_VITEST_WORKER', () => {
+  it('sets DD_VITEST_WORKER', async () => {
+    if (process.env.WAIT_BEFORE_EXPECTATION_MS) {
+      await wait(Number(process.env.WAIT_BEFORE_EXPECTATION_MS))
+    }
+
     expect(process.env.DD_VITEST_WORKER).toBe('1')
 
     if (process.env.EXPECT_DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE) {
