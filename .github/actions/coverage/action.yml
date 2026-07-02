@@ -1,13 +1,13 @@
 name: coverage
 description: >-
   Verify a job's coverage output and stash it as an artifact. All Green collects every
-  `coverage-*` artifact, groups them by area, and uploads the groups to Codecov and Datadog —
-  so a commit sends a handful of grouped reports instead of one per matrix cell, which kept
+  `coverage-*` artifact and uploads a single combined report to Codecov and Datadog —
+  so a commit sends one upload per backend instead of one per matrix cell, which kept
   Codecov from silently dropping uploads past its per-commit ceiling.
 
 inputs:
   flags:
-    description: "Coverage flags — the grouping key All Green folds matrix cells by"
+    description: "Coverage flags — identifies the artifact so verify-coverage can report failures clearly"
     required: false
   report-dir:
     description: "Coverage report directory (defaults to 'coverage')"
