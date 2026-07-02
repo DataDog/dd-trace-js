@@ -2927,13 +2927,16 @@ describe('Plugin', () => {
             resolveType: () => 'Widget',
           })
 
-          // Widget.label is reachable only as an interface implementation.
+          // Widget.label is reachable only as an interface implementation, and
+          // Widget.next loops back to the Node interface — the recursive-interface
+          // shape that must terminate the per-schema descent instead of recursing.
           const Widget = new graphql.GraphQLObjectType({
             name: 'Widget',
             interfaces: [Node],
             fields: {
               id: { type: new graphql.GraphQLNonNull(graphql.GraphQLID), resolve: () => '1' },
               label: { type: graphql.GraphQLString, resolve: () => 'a widget' },
+              next: { type: Node, resolve: () => undefined },
             },
           })
 
@@ -2950,7 +2953,7 @@ describe('Plugin', () => {
             types: [Widget],
           })
 
-          const source = 'query { node { id ... on Widget { label } } }'
+          const source = 'query { node { id ... on Widget { label next { id } } } }'
 
           const assertion = agent.assertSomeTraces(traces => {
             const spans = sort(traces[0])
@@ -2984,7 +2987,7 @@ describe('Plugin', () => {
 
           try {
             // The exact operation Apollo Gateway polls subgraphs with.
-            const source = 'query __ApolloServiceHealthCheck__ { hello }'
+            const source = 'query __ApolloServiceHealthCheck__ { __typename }'
             const healthCheck = await graphql.graphql({ schema, source })
             assert.ok(!healthCheck.errors, inspect(healthCheck.errors))
             assert.strictEqual(starts, 0, 'execute span must be skipped for the health-check operation')
@@ -2995,6 +2998,106 @@ describe('Plugin', () => {
           } finally {
             executeCh.unsubscribe(handler)
           }
+        })
+
+        // Operation names are client-controlled: only the gateway's exact
+        // `query __ApolloServiceHealthCheck__ { __typename }` shape is skipped.
+        // Every request that reuses the reserved name but diverges from that
+        // shape must still be traced (and its resolvers must still reach the
+        // AppSec/IAST channels), so the skip can't become a tracing/security
+        // bypass. Each source diverges on a single dimension the shape check reads.
+        const spoofedHealthChecks = {
+          'a real field instead of __typename': 'query __ApolloServiceHealthCheck__ { hello }',
+          'an extra selection alongside __typename': 'query __ApolloServiceHealthCheck__ { __typename hello }',
+          'the mutation operation type': 'mutation __ApolloServiceHealthCheck__ { hello }',
+        }
+
+        for (const [divergence, source] of Object.entries(spoofedHealthChecks)) {
+          it(`should trace an operation that spoofs the health-check name with ${divergence}`, async () => {
+            const helloField = { type: graphql.GraphQLString, resolve: () => 'world' }
+            const schema = new graphql.GraphQLSchema({
+              query: new graphql.GraphQLObjectType({ name: 'Query', fields: { hello: helloField } }),
+              mutation: new graphql.GraphQLObjectType({ name: 'Mutation', fields: { hello: helloField } }),
+            })
+
+            const executeCh = dc.channel('apm:graphql:execute:start')
+            let starts = 0
+            const handler = () => { starts++ }
+            executeCh.subscribe(handler)
+
+            try {
+              const spoofed = await graphql.graphql({ schema, source })
+              assert.ok(!spoofed.errors, inspect(spoofed.errors))
+              assert.strictEqual(starts, 1, 'an operation spoofing the health-check name must still be traced')
+            } finally {
+              executeCh.unsubscribe(handler)
+            }
+          })
+        }
+
+        it('should not let a shared interface hide a second schema\'s implementation fields', async () => {
+          // One Node interface instance, reused across two schemas that each
+          // register a different implementation. resolveType picks the concrete
+          // type off __typename, which the root resolver stamps on the value.
+          const Node = new graphql.GraphQLInterfaceType({
+            name: 'Node',
+            fields: {
+              id: { type: new graphql.GraphQLNonNull(graphql.GraphQLID) },
+            },
+            resolveType: value => value.__typename,
+          })
+
+          // Each impl exposes a distinctly-named field so the graphql.resolve
+          // resource identifies which schema's implementation was wrapped —
+          // `widgetLabel:String` vs `gadgetLabel:String`. A shared `label` would
+          // let the first schema's span satisfy the second schema's assertion.
+          const makeImpl = name => new graphql.GraphQLObjectType({
+            name,
+            interfaces: [Node],
+            fields: {
+              id: { type: new graphql.GraphQLNonNull(graphql.GraphQLID), resolve: () => '1' },
+              [`${name.toLowerCase()}Label`]: { type: graphql.GraphQLString, resolve: () => `a ${name}` },
+            },
+          })
+
+          const makeSchema = impl => new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'Query',
+              fields: {
+                node: { type: Node, resolve: () => ({ __typename: impl.name }) },
+              },
+            }),
+            // Impl reaches the type map only through this explicit registration —
+            // the shape a federated interface implementation has.
+            types: [impl],
+          })
+
+          const firstSchema = makeSchema(makeImpl('Widget'))
+          const secondSchema = makeSchema(makeImpl('Gadget'))
+
+          // Walk the first schema so the shared Node interface is recorded; a
+          // global one-time guard would then stop the second schema's walk before
+          // it reaches Gadget, leaving gadgetLabel unwrapped. getPossibleTypes is
+          // schema-specific, so the interface descent must run per schema.
+          await graphql.graphql({
+            schema: firstSchema,
+            source: 'query { node { id ... on Widget { widgetLabel } } }',
+          })
+
+          const assertion = agent.assertSomeTraces(traces => {
+            const label = sort(traces[0]).find(span =>
+              span.name === 'graphql.resolve' && span.meta['graphql.field.name'] === 'gadgetLabel')
+            assert.ok(label, 'the second schema\'s interface implementation field should be wrapped')
+            assert.strictEqual(label.meta['graphql.field.type'], 'String')
+          }, { spanResourceMatch: /gadgetLabel:String/ })
+
+          await Promise.all([
+            assertion,
+            graphql.graphql({
+              schema: secondSchema,
+              source: 'query { node { id ... on Gadget { gadgetLabel } } }',
+            }),
+          ])
         })
       })
     })

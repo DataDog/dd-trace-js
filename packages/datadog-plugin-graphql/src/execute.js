@@ -28,6 +28,10 @@ const instrumentedArgs = new WeakSet()
 const patchedResolvers = new WeakSet()
 const patchedTypes = new WeakSet()
 
+// Per-schema record of which interfaces have had their (schema-specific)
+// implementations walked, keyed on the caller-owned schema. See wrapFields.
+const walkedInterfaces = new WeakMap()
+
 // Module-level fast path: skip the resolver-side WeakMap lookup entirely
 // when depth=0 disables resolver instrumentation.
 let depthDisabled = false
@@ -114,7 +118,11 @@ class GraphQLExecutePlugin extends TracingPlugin {
     // Apollo Gateway polls every subgraph with this fixed operation to check
     // liveness; tracing it floods traces with health-check noise. Skip it here
     // (no span, no resolver wrapping), the same way mongodb skips heartbeats.
-    if (name === '__ApolloServiceHealthCheck__') {
+    // Operation names are client-controlled, so match the gateway's exact
+    // spec-fixed shape (`query __ApolloServiceHealthCheck__ { __typename }`)
+    // rather than the reserved name alone — a real query spoofing the name
+    // must still get its execute span and its AppSec/IAST resolver channels.
+    if (name === '__ApolloServiceHealthCheck__' && isApolloHealthCheck(operation)) {
       ctx.ddSkipped = true
       return ctx.currentStore
     }
@@ -441,12 +449,28 @@ function wrapResolve (resolve) {
 }
 
 function wrapFields (type, schema) {
-  if (!type || patchedTypes.has(type)) return
+  if (!type) return
+
+  const tag = type[Symbol.toStringTag]
+
+  // Interface implementations are reached only through `getPossibleTypes`, and
+  // that set is schema-specific: the same interface can carry different
+  // implementations in different schemas. Descend before the `patchedTypes`
+  // gate so a schema that reuses an already-wrapped interface still reaches its
+  // own implementations, tracking the descent per (schema, interface) to
+  // terminate cycles. `Symbol.toStringTag` is graphql's realm-agnostic type
+  // discriminator — an interface without an explicit `resolveType` still
+  // resolves its concrete type via `__typename`.
+  if (schema && tag === 'GraphQLInterfaceType' && markInterfaceWalked(schema, type)) {
+    for (const impl of schema.getPossibleTypes(type)) wrapFields(impl, schema)
+  }
+
+  if (patchedTypes.has(type)) return
 
   // Union types (e.g. Apollo Federation's `_Entity`) hold their members on
   // `_types`, not `_fields`. Their member object types are reachable only here,
   // so descend into each to wrap the entity resolvers a `_entities` query runs.
-  if (type[Symbol.toStringTag] === 'GraphQLUnionType') {
+  if (tag === 'GraphQLUnionType') {
     patchedTypes.add(type)
     for (const member of type.getTypes()) wrapFields(member, schema)
     return
@@ -460,14 +484,21 @@ function wrapFields (type, schema) {
     wrapFieldResolve(field)
     wrapFieldType(field, schema)
   }
+}
 
-  // Interface implementations carry their own resolvers and are reachable only
-  // through `getPossibleTypes`; an interface return type alone never wraps them.
-  // `Symbol.toStringTag` is graphql's realm-agnostic type discriminator — an
-  // interface without an explicit `resolveType` still resolves via `__typename`.
-  if (schema && type[Symbol.toStringTag] === 'GraphQLInterfaceType') {
-    for (const impl of schema.getPossibleTypes(type)) wrapFields(impl, schema)
+// Interface → implementations is the only schema-dependent edge in the walk, so
+// its one-time guard is keyed per (schema, interface) instead of the global
+// `patchedTypes`. The schema is caller-owned, so the visited set lives in a
+// side-table rather than on the schema object.
+function markInterfaceWalked (schema, type) {
+  let walked = walkedInterfaces.get(schema)
+  if (walked === undefined) {
+    walked = new WeakSet()
+    walkedInterfaces.set(schema, walked)
   }
+  if (walked.has(type)) return false
+  walked.add(type)
+  return true
 }
 
 function wrapFieldResolve (field) {
@@ -694,6 +725,24 @@ function defaultFieldResolver (source, args, contextValue, info) {
     if (typeof property === 'function') return source[info.fieldName](args, contextValue, info)
     return property
   }
+}
+
+// Apollo Gateway's subgraph health check is the fixed
+// `query __ApolloServiceHealthCheck__ { __typename }`. The caller already
+// matched the reserved name; confirm the rest of the shape so a real operation
+// that merely borrows the name is not silently dropped from tracing/AppSec.
+// See https://github.com/apollographql/federation `HEALTH_CHECK_QUERY`.
+function isApolloHealthCheck (operation) {
+  const selections = operation.selectionSet?.selections
+  if (operation.operation !== 'query' || selections?.length !== 1) return false
+
+  const selection = selections[0]
+  return selection.kind === 'Field' &&
+    selection.name.value === '__typename' &&
+    selection.alias === undefined &&
+    selection.selectionSet === undefined &&
+    selection.arguments?.length === 0 &&
+    selection.directives?.length === 0
 }
 
 function addVariableTags (config, span, variableValues) {
