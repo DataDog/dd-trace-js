@@ -257,24 +257,28 @@ class Kinesis extends BaseAwsSdkPlugin {
       this.tracer.inject(span, 'text_map', ddInfo)
     }
 
-    if (this.config.dsmEnabled) {
-      parsedData._datadog = ddInfo
+    const dsmEnabled = this.config.dsmEnabled
+    if (isEmpty(ddInfo) && !dsmEnabled) return
+
+    parsedData._datadog = ddInfo
+    // Gate on the 1 MiB Kinesis cap before setDSMCheckpoint: a record we can't ship must not
+    // record a checkpoint. The bounded pathway bytes are added after the gate by design.
+    let serialized = JSON.stringify(parsedData)
+    if (Buffer.byteLength(serialized, 'utf8') >= 1_048_576) {
+      log.info('Payload size too large to pass context')
+      return
+    }
+
+    if (dsmEnabled) {
       const dataStreamsContext = this.setDSMCheckpoint(span, params, stream)
       if (dataStreamsContext) {
         DsmPathwayCodec.encode(dataStreamsContext, ddInfo)
+        serialized = JSON.stringify(parsedData)
       }
     }
 
     if (isEmpty(ddInfo)) return
 
-    parsedData._datadog = ddInfo
-    const serialized = JSON.stringify(parsedData)
-    const byteSize = Buffer.byteLength(serialized, 'utf8')
-    // Kinesis max payload size is 1 MiB; bail if our context push tipped us over.
-    if (byteSize >= 1_048_576) {
-      log.info('Payload size too large to pass context')
-      return
-    }
     params.Data = Buffer.from(serialized, 'utf8')
   }
 
