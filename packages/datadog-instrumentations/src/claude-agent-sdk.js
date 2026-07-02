@@ -205,6 +205,7 @@ for (const hook of getHooks('@anthropic-ai/claude-agent-sdk')) {
   hook.file = null
 
   addHook(hook, exports => {
+    console.log('hooking properly')
     if (!querySubscribed) {
       querySubscribed = true
       queryChannel.subscribe({
