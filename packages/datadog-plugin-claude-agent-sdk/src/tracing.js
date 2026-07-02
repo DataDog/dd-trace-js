@@ -11,6 +11,7 @@ class QueryTracingPlugin extends TracingPlugin {
   static prefix = 'tracing:orchestrion:@anthropic-ai/claude-agent-sdk:query'
 
   bindStart (ctx) {
+    console.log('new query span')
     this.startSpan('claude_agent_sdk.query', {
       meta: { 'resource.name': 'claude_agent_sdk.query' },
       startTime: ctx.startTime,
@@ -21,6 +22,7 @@ class QueryTracingPlugin extends TracingPlugin {
 
   asyncEnd (ctx) {
     if (!ctx.streamResolved) return
+    console.log('finishing query span')
 
     ctx.currentStore?.span?.finish(ctx.finishTime)
   }
@@ -33,6 +35,7 @@ class StepTracingPlugin extends TracingPlugin {
   static prefix = 'tracing:apm:claude-agent-sdk:step'
 
   bindStart (ctx) {
+    console.log('new step span', ctx.stepIndex)
     this.startSpan(`step-${ctx.stepIndex}`, {
       meta: { 'resource.name': 'claude_agent_sdk.step' },
       startTime: ctx.startTime,
@@ -42,6 +45,7 @@ class StepTracingPlugin extends TracingPlugin {
   }
 
   end (ctx) {
+    console.log('finishing step span', ctx.stepIndex)
     ctx.currentStore?.span?.finish(ctx.finishTime)
   }
 }
@@ -55,6 +59,8 @@ class ToolTracingPlugin extends TracingPlugin {
   bindStart (ctx) {
     const toolName = ctx.name || 'claude_agent_sdk.tool'
 
+    console.log('new tool span', toolName)
+
     this.startSpan(toolName, {
       meta: { 'resource.name': 'claude_agent_sdk.tool' },
       startTime: ctx.startTime,
@@ -64,6 +70,7 @@ class ToolTracingPlugin extends TracingPlugin {
   }
 
   end (ctx) {
+    console.log('finishing tool span', ctx.name)
     ctx.currentStore?.span?.finish(ctx.finishTime)
   }
 }
@@ -76,6 +83,8 @@ class LlmTracingPlugin extends TracingPlugin {
 
   bindStart (ctx) {
     const { model } = ctx
+
+    console.log('new llm span', model)
 
     const { modelName, modelProvider } = splitModel(model)
     const name = modelName || 'claude_agent_sdk.llm'
@@ -93,6 +102,7 @@ class LlmTracingPlugin extends TracingPlugin {
   }
 
   end (ctx) {
+    console.log('finishing llm span', ctx.model)
     ctx.currentStore?.span?.finish(ctx.finishTime)
   }
 }

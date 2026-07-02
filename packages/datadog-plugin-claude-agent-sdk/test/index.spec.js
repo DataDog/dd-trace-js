@@ -147,9 +147,13 @@ describe('Plugin', () => {
           },
         })
 
+        console.log('query response', stream)
+
         for await (const message of stream) {
           assert.ok(message.type)
         }
+
+        console.log('finished consuming stream')
 
         await tracesPromise
       })

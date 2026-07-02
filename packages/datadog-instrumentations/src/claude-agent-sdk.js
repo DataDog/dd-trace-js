@@ -185,6 +185,7 @@ function wrapQueryAsyncIterator (asyncIterator, ctx) {
         } else {
           const lastChunk = chunks[chunks.length - 1]
           if (lastChunk?.type === 'result') ctx.output = lastChunk.result
+          console.log('processing', chunks.length, 'chunks')
           processChunks(chunks, ctx)
 
           ctx.streamResolved = true
@@ -208,6 +209,7 @@ for (const hook of getHooks('@anthropic-ai/claude-agent-sdk')) {
       querySubscribed = true
       queryChannel.subscribe({
         end (ctx) {
+          console.log('query async end')
           const { result } = ctx
 
           ctx.streamResolved = false
