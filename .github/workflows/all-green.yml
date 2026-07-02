@@ -55,20 +55,21 @@ jobs:
         run: datadog-ci junit upload --service dd-trace-js-tests --auto-discovery junit-results
         env:
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
-      # One Datadog upload per integration, flagged with the integration name so coverage is
-      # attributable in the Datadog UI the same way the Codecov flags attribute it. Datadog reads the
-      # lcov reports; it does not ingest istanbul's JSON.
+      # One Datadog upload per area, flagged with the area name so coverage is attributable in the
+      # Datadog UI the same way the Codecov flags attribute it. Datadog reads the lcov reports; it
+      # does not ingest istanbul's JSON.
       - if: "!cancelled()"
         run: |
           set -o pipefail
           shopt -s nullglob
+          # -P 20 covers today's dozen areas (plus headroom) in a single concurrent batch.
           # shellcheck disable=SC2016 # the inner shell must expand "$1", not the template.
           printf '%s\0' coverage-upload/*/lcov/ | xargs -0 -r -P 20 -I {} \
             bash -c 'datadog-ci coverage upload "$1" --flags "$(basename "$(dirname "$1")")"' _ {}
         env:
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
-      # One Codecov upload per integration via the CLI directly — the codecov-action would re-validate
-      # and re-download the uploader once per group (~100×). Codecov reads branch/function coverage
+      # One Codecov upload per area via the CLI directly — the codecov-action would re-validate
+      # and re-download the uploader once per group. Codecov reads branch/function coverage
       # from the istanbul JSON, so the upload points at each group's `json/` subdirectory.
       # `master-coverage` is the flag `.codecov.yml` gates `codecov/patch` on; attach it only on PRs
       # targeting master so release-branch PRs auto-pass. The SHA/branch/PR are passed explicitly
@@ -96,6 +97,7 @@ jobs:
           codecovcli create-commit "${commit_args[@]}"
           codecovcli create-report --sha "$HEAD_SHA"
           set -o pipefail
+          # -P 20 covers today's dozen areas (plus headroom) in a single concurrent batch.
           # shellcheck disable=SC2016 # the inner shell must expand "$@"/"$dir", not the template.
           printf '%s\0' "${groups[@]}" | xargs -0 -r -P 20 -I {} \
             bash -c 'dir="$1"; shift; codecovcli do-upload "$@" --dir "$dir" -F "$(basename "$(dirname "$dir")")"' \
