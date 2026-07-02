@@ -22,7 +22,12 @@ describe('esm', () => {
   let proc
   let variants
 
-  withVersions('mercurius', 'mercurius', (version, _, resolvedVersion) => {
+  // mercurius 15+ ships fastify 5, which requires Node 20.9+; restrict to the
+  // 13/14 line on older Node so the oldest-LTS CI leg does not sandbox an
+  // unsupported runtime. Mirrors the non-ESM spec's `supportedOnThisNode` gate.
+  const supportedRange = semver.satisfies(process.versions.node, '<20.9.0') ? '<15' : '*'
+
+  withVersions('mercurius', 'mercurius', supportedRange, (version, _, resolvedVersion) => {
     // mercurius <=14 needs fastify 4 (fastify-plugin ^4); 15+ needs fastify 5.
     const fastifyDep = semver.satisfies(resolvedVersion, '>=15') ? 'fastify@5' : 'fastify@4'
 
