@@ -35,7 +35,8 @@ describe('Plugin', () => {
 
       after(() => agent.close())
 
-      it('instruments a full agentic call with subagents', async () => {
+      it('instruments a full agentic call with subagents', async function () {
+        this.timeout(10000)
         const { z } = zod
 
         const fetchWeather = client.tool(

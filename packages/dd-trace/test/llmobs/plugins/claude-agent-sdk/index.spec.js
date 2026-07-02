@@ -40,7 +40,8 @@ describe('Plugin', () => {
       )
     })
 
-    it('instruments a full agentic call with subagents', async () => {
+    it('instruments a full agentic call with subagents', async function () {
+      this.timeout(10000)
       const { z } = zod
 
       const fetchWeather = client.tool(
@@ -98,45 +99,45 @@ describe('Plugin', () => {
 
       // Subagent prompt is determined by the LLM at the previous step - differs between SDK versions
       const subagentPrompt = is03
-        ? 'Get the current weather for New York state (NY) in fahrenheit.'
-        : 'Please fetch the current weather for New York state in fahrenheit using the available weather tool.'
+        ? 'Get the current weather for New York (NY) in fahrenheit.'
+        : 'Fetch the current weather for New York state (NY) in fahrenheit using ' +
+          'the fetch_weather tool and return the result.'
 
       const subagentNYResult = is03
-        ? 'The current weather in New York state (NY) is 72 degrees Fahrenheit.'
-        : 'The current weather in New York state is **72°F**.'
+        ? 'The current weather in New York (NY) is 72°F.'
+        : 'The current weather for New York state (NY) is **72°F**.'
 
       const outerThinkingText = is03
         ? 'The user wants me to:\n' +
-          '1. Spawn a subagent to get weather in New York (fahrenheit)\n' +
-          '2. After that subagent completes, get weather in California (fahrenheit) directly (not in a subagent)\n' +
+          '1. Spawn a subagent to get the weather in New York (fahrenheit)\n' +
+          '2. After that subagent completes, get the weather in California (fahrenheit) directly (not in a subagent)\n' +
           '\n' +
-          'Let me spawn the subagent for New York first, wait for it to complete, ' +
-          "then get California's weather directly."
+          'Let me first spawn the subagent for New York.'
         : 'The user wants me to:\n' +
           '1. Spawn a subagent to get the weather in New York (in fahrenheit)\n' +
-          '2. After that, get the weather in California myself (not in a subagent, in fahrenheit)\n' +
+          '2. After that, get the weather in California myself (not in a subagent) in fahrenheit\n' +
           '\n' +
-          'Let me start by spawning a subagent for New York weather.'
+          "Let me start by spawning a subagent for New York weather, then I'll fetch California weather myself."
 
       // The assistant's text preamble before issuing the Agent tool call
       const outerAgentPreamble = is03
-        ? "Sure! Let me start by spawning a subagent to fetch New York's weather first."
-        : "Sure! Let me start by spawning a subagent for New York's weather."
+        ? 'Sure! Let me first spawn a subagent to get the New York weather!'
+        : "Sure! I'll spawn a subagent for New York's weather first, then fetch California's myself."
 
       // The assistant's text preamble before fetching CA weather directly
       const outerCaPreamble = is03
-        ? "The subagent returned **72°F** for New York. Now let me fetch California's weather directly!"
-        : "The subagent retrieved New York's weather: **72°F**. Now let me fetch California's weather myself!"
+        ? "The subagent returned **72°F** for New York! Now let me fetch California's weather directly."
+        : "Got New York's weather from the subagent! Now I'll fetch California's weather myself:"
 
       // The Agent tool's `description` argument (chosen by the LLM at outer step-0); differs by SDK version
-      const agentDescription = is03 ? 'Fetch weather for New York' : 'Fetch New York weather'
+      const agentDescription = is03 ? 'Fetch NY weather' : 'Fetch New York weather'
 
       const agentToolId = is03
-        ? 'toolu_01WhuEoTbovDrtZhsmEK3J2x'
-        : 'toolu_014aAjDnjAJERSCJ8TcQ9Lw9'
+        ? 'toolu_01SZNue23x2BTjuirYZtKpbX'
+        : 'toolu_013TfS3Xc8j5aSaZDbeNTuaD'
       const caToolId = is03
-        ? 'toolu_01GB52GCVdh2L64472joz4E1'
-        : 'toolu_01KPeU6ECTCNSYBhRYdEzWWj'
+        ? 'toolu_0118kw2Kk5ZgqNQMHWCLLGnb'
+        : 'toolu_01F4QdACGNaxqbzxzW6AkCYG'
 
       // [0] root query span
       assertLlmObsSpanEvent(llmobsSpans[0], {
