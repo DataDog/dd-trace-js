@@ -1,22 +1,27 @@
-import { copyFileSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { argv } from 'node:process'
 import { fileURLToPath } from 'node:url'
 
+import istanbulLibCoverage from 'istanbul-lib-coverage'
+
 /* eslint-disable no-console */
 
-// Sorts the per-cell `coverage-*` artifacts that `download-artifacts.mjs` placed under
-// `coverage-results/` into a single directory under `coverage-upload/`, so the All Green upload
-// steps send one report per backend instead of one per matrix cell (400+). Codecov silently parks
-// uploads past its ~150-per-commit ceiling in `started` (never merged), so the cell-per-upload
-// model dropped coverage; a single upload keeps the count well under that ceiling no matter how
-// many integrations or matrix cells a workflow adds.
+// Merges every downloaded per-cell `coverage-*` artifact into one lcov file and one istanbul JSON
+// file under `coverage-upload/`, so the All Green upload steps send a single physical report to
+// each backend instead of one per matrix cell (400+). Codecov silently parks uploads past its
+// ~150-per-commit ceiling in `started` (never merged), so the cell-per-upload model dropped
+// coverage; beyond that ceiling, both `datadog-ci` and `codecovcli` also pay a real per-file cost
+// reading/packaging a directory before their single network call — one physical file each cuts
+// that client-side overhead to (near) zero regardless of how many cells contributed to it.
 //
-// The reports are not merged here — both backends merge same-flag uploads server-side, so this only
-// copies each cell's already-patched `lcov.info`/`coverage-final.json` into the shared directory.
-// That keeps the harness free of any istanbul dependency in All Green's sparse checkout and passes
-// each report through byte-for-byte, so the `getLineCoverage` patch the producers baked in survives
-// untouched.
+// lcov is a plain-text, per-source-file record format, so concatenating reports is a valid merge on
+// its own (`lcov`/`genhtml` do the same to combine reports). istanbul's JSON keys coverage by
+// absolute file path, and a source file can be exercised by more than one cell (a shared core
+// tracer file is hit by nearly every plugin's tests), so a naive object merge would drop or
+// overwrite one cell's hit counts instead of summing them — `istanbul-lib-coverage`'s `merge` sums
+// per-statement/branch/function hit counts across coverage maps for the same file, which is the
+// same operation `nyc` already runs elsewhere in this repo.
 //
 // Per-integration/per-area flags were dropped: `.codecov.yml` only gates the separate
 // `master-coverage` flag (attached to every upload regardless of grouping), so a finer-grained flag
@@ -28,8 +33,7 @@ const OUTPUT_DIR = 'coverage-upload'
 const ARTIFACT_PREFIX = 'coverage-'
 
 // Codecov reads branch/function coverage from istanbul's JSON; Datadog only ingests the lcov. Each
-// report is routed by format into its own subdirectory so the two upload steps search the one their
-// backend reads. The extension marks which.
+// report is routed by format so the merge step knows how to combine it.
 const REPORTS = new Map([
   ['lcov.info', 'lcov'],
   ['coverage-final.json', 'json'],
@@ -101,6 +105,36 @@ function planCoverageGroups (files) {
   return { reportsByArtifact, artifacts }
 }
 
+/**
+ * Concatenate every cell's lcov report into a single lcov file. lcov's format is a sequence of
+ * independent per-source-file records, so concatenation alone is a valid merge.
+ *
+ * @param {string[]} reportPaths
+ * @returns {string}
+ */
+function mergeLcov (reportPaths) {
+  return reportPaths.map(reportPath => {
+    const contents = readFileSync(reportPath, 'utf8')
+    return contents.endsWith('\n') ? contents : `${contents}\n`
+  }).join('')
+}
+
+/**
+ * Sum per-statement/branch/function hit counts across every cell's istanbul JSON report, so a
+ * source file exercised by more than one cell keeps every cell's coverage instead of only the last
+ * report merged for that file.
+ *
+ * @param {string[]} reportPaths
+ * @returns {object}
+ */
+function mergeCoverageJson (reportPaths) {
+  const map = istanbulLibCoverage.createCoverageMap({})
+  for (const reportPath of reportPaths) {
+    map.merge(JSON.parse(readFileSync(reportPath, 'utf8')))
+  }
+  return map.toJSON()
+}
+
 function main () {
   rmSync(OUTPUT_DIR, { force: true, recursive: true })
 
@@ -112,24 +146,36 @@ function main () {
 
   const { reportsByArtifact, artifacts } = planCoverageGroups(files)
 
-  console.log(`Routing ${reportsByArtifact.size} cell report set(s) into ${OUTPUT_DIR}/.`)
-  const counts = new Map()
+  const reportPathsByFormat = new Map()
   for (const artifact of artifacts) {
     for (const { format, reportPath } of reportsByArtifact.get(artifact)) {
-      const index = counts.get(format) ?? 0
-      const formatDir = join(OUTPUT_DIR, format)
-      mkdirSync(formatDir, { recursive: true })
-      copyFileSync(reportPath, join(formatDir, `${artifact}-${index}.${format}`))
-      counts.set(format, index + 1)
+      const reportPaths = reportPathsByFormat.get(format)
+      if (reportPaths) {
+        reportPaths.push(reportPath)
+      } else {
+        reportPathsByFormat.set(format, [reportPath])
+      }
     }
   }
-  const summary = [...counts].map(([format, count]) => `${count} ${format}`).join(', ')
-  console.log(`  ${artifacts.length} cell(s): ${summary}`)
 
-  writeFileSync(join(OUTPUT_DIR, 'groups.txt'), 'coverage\n')
+  console.log(`Merging ${reportsByArtifact.size} cell report set(s) into ${OUTPUT_DIR}/.`)
+
+  const lcovReportPaths = reportPathsByFormat.get('lcov') ?? []
+  if (lcovReportPaths.length > 0) {
+    mkdirSync(join(OUTPUT_DIR, 'lcov'), { recursive: true })
+    writeFileSync(join(OUTPUT_DIR, 'lcov', 'lcov.info'), mergeLcov(lcovReportPaths))
+  }
+
+  const jsonReportPaths = reportPathsByFormat.get('json') ?? []
+  if (jsonReportPaths.length > 0) {
+    mkdirSync(join(OUTPUT_DIR, 'json'), { recursive: true })
+    writeFileSync(join(OUTPUT_DIR, 'json', 'coverage-final.json'), JSON.stringify(mergeCoverageJson(jsonReportPaths)))
+  }
+
+  console.log(`  ${artifacts.length} cell(s): ${lcovReportPaths.length} lcov, ${jsonReportPaths.length} json`)
 }
 
-export { planCoverageGroups }
+export { mergeCoverageJson, mergeLcov, planCoverageGroups }
 
 if (argv[1] === fileURLToPath(import.meta.url)) {
   main()
