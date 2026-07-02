@@ -1088,10 +1088,19 @@ function getTestSpecificationFile (testSpecification) {
   return testSpecification
 }
 
+function getTestSpecificationOptions (testSpecification) {
+  if (Array.isArray(testSpecification)) {
+    return testSpecification[2]
+  }
+  return testSpecification
+}
+
 function getTestSpecificationPool (testSpecification) {
+  const options = getTestSpecificationOptions(testSpecification)
   const file = getTestSpecificationFile(testSpecification)
   const project = getTestSpecificationProject(testSpecification)
-  return file?.pool ||
+  return options?.pool ||
+    file?.pool ||
     testSpecification?.pool ||
     project?.config?.pool ||
     project?.serializedConfig?.pool ||
@@ -1123,11 +1132,17 @@ function getEffectiveConfigIsolate (config, pool) {
 }
 
 function getTestSpecificationIsolate (testSpecification, pool) {
+  const options = getTestSpecificationOptions(testSpecification)
+  const file = getTestSpecificationFile(testSpecification)
   const project = getTestSpecificationProject(testSpecification)
-  return getPoolOptionsIsolate(project?.config, pool) ??
+  return getPoolOptionsIsolate(options, pool) ??
+    getPoolOptionsIsolate(file, pool) ??
+    getPoolOptionsIsolate(project?.config, pool) ??
     getPoolOptionsIsolate(project?.serializedConfig, pool) ??
     getPoolOptionsIsolate(project, pool) ??
     getPoolOptionsIsolate(testSpecification, pool) ??
+    options?.isolate ??
+    file?.isolate ??
     project?.config?.isolate ??
     project?.serializedConfig?.isolate ??
     project?.isolate ??

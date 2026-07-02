@@ -842,9 +842,18 @@ function getTestSpecificationProject (testSpecification) {
   return testSpecification?.project
 }
 
+function getTestSpecificationOptions (testSpecification) {
+  if (Array.isArray(testSpecification)) {
+    return testSpecification[2]
+  }
+  return testSpecification
+}
+
 function getTestSpecificationPool (testSpecification) {
+  const options = getTestSpecificationOptions(testSpecification)
   const project = getTestSpecificationProject(testSpecification)
-  return project?.config?.pool || project?.serializedConfig?.pool || project?.pool || testSpecification?.pool
+  return options?.pool || project?.config?.pool || project?.serializedConfig?.pool || project?.pool ||
+    testSpecification?.pool
 }
 
 function hasVitestWorkerPoolTestSpecification (testSpecifications) {

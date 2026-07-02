@@ -242,6 +242,21 @@ describe('vitest no-worker init instrumentation selection', () => {
         false
       )
     })
+
+    it('rejects selected test specifications with non-worker tuple pool overrides', () => {
+      const project = {
+        config: {
+          pool: 'forks',
+        },
+      }
+
+      assert.strictEqual(
+        noWorkerInit.shouldUse({ config: { pool: 'forks' } }, '3.2.6', [
+          [project, {}, { pool: 'browser' }],
+        ], options),
+        false
+      )
+    })
   })
 
   describe('configure', () => {
