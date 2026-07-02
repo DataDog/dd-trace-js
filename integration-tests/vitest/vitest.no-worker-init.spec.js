@@ -15,6 +15,7 @@ const {
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const noWorkerInit = require('../../packages/datadog-instrumentations/src/vitest-main-no-worker-init')
+const { testSuiteStartCh } = require('../../packages/datadog-instrumentations/src/vitest-util')
 const {
   ERROR_MESSAGE,
 } = require('../../packages/dd-trace/src/constants')
@@ -260,16 +261,18 @@ describe('vitest no-worker init instrumentation selection', () => {
   })
 
   describe('configure', () => {
-    it('sends EFD retry thresholds to the no-worker setup context', () => {
+    function getNoWorkerReporterContext () {
       const rootProject = { _provided: {} }
-      const ctx = {
+      return {
         config: {},
         reporters: [],
         getRootProject () {
           return rootProject
         },
       }
+    }
 
+    function configureNoWorkerReporter (ctx) {
       noWorkerInit.configure(ctx, '3.2.6', undefined, {
         knownTestsBySuite: {},
         modifiedFiles: {},
@@ -286,11 +289,61 @@ describe('vitest no-worker init instrumentation selection', () => {
           testManagementAttemptToFixRetries: 0,
         },
       })
+    }
+
+    it('sends EFD retry thresholds to the no-worker setup context', () => {
+      const ctx = getNoWorkerReporterContext()
+
+      configureNoWorkerReporter(ctx)
 
       assert.deepStrictEqual(
-        rootProject._provided._ddVitestWorkerSetup.earlyFlakeDetectionRetryThresholds,
+        ctx.getRootProject()._provided._ddVitestWorkerSetup.earlyFlakeDetectionRetryThresholds,
         EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS
       )
+    })
+
+    it('deactivates the no-worker reporter for reused contexts that fall back', () => {
+      const ctx = getNoWorkerReporterContext()
+      const testSuiteStarts = []
+      const onTestSuiteStart = context => testSuiteStarts.push(context.testSuiteAbsolutePath)
+      testSuiteStartCh.subscribe(onTestSuiteStart)
+
+      try {
+        configureNoWorkerReporter(ctx)
+        assert.strictEqual(ctx.reporters.length, 1)
+
+        ctx.reporters[0].onTestModuleStart({
+          id: 'first',
+          moduleId: '/repo/first.test.mjs',
+        })
+        noWorkerInit.deactivate(ctx)
+        ctx.reporters[0].onTestModuleStart({
+          id: 'second',
+          moduleId: '/repo/second.test.mjs',
+        })
+      } finally {
+        testSuiteStartCh.unsubscribe(onTestSuiteStart)
+      }
+
+      assert.deepStrictEqual(testSuiteStarts, ['/repo/first.test.mjs'])
+    })
+  })
+
+  describe('configureWorkerEnv', () => {
+    it('restores Datadog NODE_OPTIONS when no-worker mode falls back', () => {
+      const noWorkerEnv = noWorkerInit.configureWorkerEnv({
+        NODE_OPTIONS: DEFAULT_NODE_OPTIONS,
+      }, true)
+
+      assert.strictEqual(noWorkerEnv.NODE_OPTIONS, '--no-warnings')
+      assert.strictEqual(noWorkerEnv.DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE, '1')
+
+      const workerEnv = noWorkerInit.configureWorkerEnv({
+        NODE_OPTIONS: noWorkerEnv.NODE_OPTIONS,
+      })
+
+      assert.strictEqual(workerEnv.NODE_OPTIONS, DEFAULT_NODE_OPTIONS)
+      assert.ok(!('DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE' in workerEnv))
     })
   })
 })
@@ -889,6 +942,11 @@ SUPPORTED_VERSIONS.forEach((version) => {
           assert.strictEqual(retriedTests.length, 2)
           assert.ok(!(TEST_IS_RETRY in retriedTests[0].meta), inspect(retriedTests[0].meta))
           assert.strictEqual(retriedTests[0].meta[TEST_STATUS], 'fail')
+          assert.ok(
+            Number(retriedTests[0].duration) < 100 * 1e6,
+            'Expected first attempt duration to exclude the delayed final retry, got ' +
+              `${Number(retriedTests[0].duration) / 1e6}ms`
+          )
           assert.strictEqual(retriedTests[1].meta[TEST_IS_RETRY], 'true')
           assert.strictEqual(retriedTests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
           assert.strictEqual(retriedTests[1].meta[TEST_STATUS], 'fail')

@@ -588,10 +588,13 @@ function getNoWorkerInitState () {
   }
 }
 
-function ensureMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
+function ensureMainProcessSetup (ctx, frameworkVersion, testSpecifications, shouldDeactivateOnFallback = false) {
   const shouldInstallNoWorkerInit = shouldUseNoWorkerInit(ctx, frameworkVersion, testSpecifications)
   const specificationsKey = getTestSpecificationsKey(testSpecifications)
   let setupState = mainProcessSetupStates.get(ctx)
+  if (shouldDeactivateOnFallback && setupState?.shouldInstallNoWorkerInit && !shouldInstallNoWorkerInit) {
+    noWorkerInit.deactivate(ctx)
+  }
   if (
     !setupState ||
     setupState.specificationsKey !== specificationsKey ||
@@ -894,7 +897,7 @@ function wrapVitestRunFiles (Vitest, frameworkVersion) {
   }
 
   shimmer.wrap(Vitest.prototype, 'runFiles', runFiles => async function (testSpecifications) {
-    const shouldSkipWorkerInit = await ensureMainProcessSetup(this, frameworkVersion, testSpecifications)
+    const shouldSkipWorkerInit = await ensureMainProcessSetup(this, frameworkVersion, testSpecifications, true)
     markVitestWorkerEnv(this, testSpecifications, shouldSkipWorkerInit)
     return runFiles.apply(this, arguments)
   })

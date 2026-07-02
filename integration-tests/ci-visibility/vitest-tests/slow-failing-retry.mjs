@@ -8,8 +8,8 @@ function wait (ms) {
 
 describe('slow failing retry', () => {
   test('does not double report final failed retry', async () => {
-    if (attempt++ === 0) {
-      await wait(150)
+    if (attempt++ > 0) {
+      await wait(200)
     }
     expect(1).to.equal(2)
   })

@@ -56,6 +56,7 @@ const VITEST_NO_WORKER_INIT_ISOLATE_WARNING =
 const NODE_OPTIONS_QUOTE_RE = /[\s"\\]/
 let hasWarnedDisabledIsolate = false
 let hasWarnedUnsupportedVersion = false
+let nodeOptionsBeforeNoWorkerInit
 
 function noop () {}
 
@@ -174,13 +175,22 @@ function configure (ctx, frameworkVersion, testSpecifications, setupData, option
   installMainProcessReporter(ctx, frameworkVersion, testSessionConfiguration || {}, setupData, state)
 }
 
+function deactivate (ctx) {
+  const installedReporterState = mainProcessReporterStates.get(ctx)
+  if (installedReporterState) {
+    installedReporterState.isActive = false
+  }
+}
+
 function configureWorkerEnv (workerEnv, shouldSkipWorkerInit = false) {
   if (!shouldSkipWorkerInit) {
     delete workerEnv[VITEST_NO_WORKER_INIT_ACTIVE_ENV]
+    restoreDatadogTestOptimizationNodeOptions(workerEnv)
     return workerEnv
   }
 
   workerEnv[VITEST_NO_WORKER_INIT_ACTIVE_ENV] = '1'
+  rememberDatadogTestOptimizationNodeOptions(workerEnv.NODE_OPTIONS)
 
   const nodeOptions = removeDatadogTestOptimizationNodeOptions(workerEnv.NODE_OPTIONS)
   if (nodeOptions) {
@@ -189,6 +199,21 @@ function configureWorkerEnv (workerEnv, shouldSkipWorkerInit = false) {
     delete workerEnv.NODE_OPTIONS
   }
   return workerEnv
+}
+
+function rememberDatadogTestOptimizationNodeOptions (nodeOptions) {
+  if (hasDatadogTestOptimizationNodeOptions(nodeOptions)) {
+    nodeOptionsBeforeNoWorkerInit = nodeOptions
+  }
+}
+
+function restoreDatadogTestOptimizationNodeOptions (workerEnv) {
+  if (!nodeOptionsBeforeNoWorkerInit || hasDatadogTestOptimizationNodeOptions(workerEnv.NODE_OPTIONS)) return
+
+  const strippedNodeOptions = removeDatadogTestOptimizationNodeOptions(nodeOptionsBeforeNoWorkerInit)
+  if (workerEnv.NODE_OPTIONS === strippedNodeOptions || (!workerEnv.NODE_OPTIONS && !strippedNodeOptions)) {
+    workerEnv.NODE_OPTIONS = nodeOptionsBeforeNoWorkerInit
+  }
 }
 
 function addSetupFileToVitestConfigs (ctx, setupFile, testSpecifications) {
@@ -257,6 +282,7 @@ function installMainProcessReporter (ctx, frameworkVersion, testSessionConfigura
 
   const reporterState = {
     frameworkVersion,
+    isActive: true,
     state,
     testSessionConfiguration,
     testOptimizationData,
@@ -279,19 +305,26 @@ function createMainProcessReporter (reporterState) {
 
   return {
     onTestModuleStart (testModule) {
+      if (!isActive()) return
+
       startTestSuite(testModule)
     },
 
     onTestModuleEnd (testModule) {
+      if (!isActive()) return
+
       return reportTestModule(testModule)
     },
 
     onTestCaseResult (testCase) {
+      if (!isActive()) return
+
       const task = getTestCaseTask(testCase)
       recordFinalTaskAttemptResult(task)
     },
 
     onTaskUpdate (packs, events) {
+      if (!isActive()) return
       if (!events) return
 
       for (const event of events) {
@@ -302,6 +335,7 @@ function createMainProcessReporter (reporterState) {
     },
 
     onFinished (files) {
+      if (!isActive()) return
       if (!files) return
 
       for (const file of files) {
@@ -311,6 +345,10 @@ function createMainProcessReporter (reporterState) {
         }
       }
     },
+  }
+
+  function isActive () {
+    return reporterState.isActive === true
   }
 
   function recordTaskAttemptStatus (taskId, status, attemptCount) {
@@ -931,7 +969,7 @@ function reportTestAttempt (testReport, attempt) {
   }
 
   testErrorCh.publish({
-    duration: attempt.isRetry ? undefined : result?.duration,
+    duration: shouldUseTaskDurationForFailure(testReport, attempt) ? result?.duration : undefined,
     error: attempt.error,
     earlyFlakeAbortReason: attempt.earlyFlakeAbortReason,
     finalStatus: attempt.finalStatus,
@@ -943,6 +981,10 @@ function reportTestAttempt (testReport, attempt) {
 
 function isFinalTestAttempt (testReport, attempt) {
   return attempt.finalStatus !== undefined || testReport.finalAttempt === undefined
+}
+
+function shouldUseTaskDurationForFailure (testReport, attempt) {
+  return !attempt.isRetry && attempt.finalStatus !== undefined && testReport.finalAttempt === undefined
 }
 
 function getFinalTestStatus (testReport) {
@@ -1029,6 +1071,35 @@ function removeDatadogTestOptimizationNodeOptions (nodeOptions) {
   }
 
   return serializeNodeOptions(filteredTokens)
+}
+
+function hasDatadogTestOptimizationNodeOptions (nodeOptions) {
+  if (!nodeOptions) return false
+
+  const tokens = splitNodeOptions(nodeOptions)
+  for (let index = 0; index < tokens.length; index++) {
+    const token = tokens[index]
+    const valueSeparator = token.indexOf('=')
+    if (valueSeparator !== -1) {
+      const flag = token.slice(0, valueSeparator)
+      const value = token.slice(valueSeparator + 1)
+      if (shouldRemoveNodeOption(flag, value)) {
+        return true
+      }
+    }
+
+    if (token.startsWith('-r') && token.length > 2 && isDatadogTestOptimizationBootstrap(token.slice(2))) {
+      return true
+    }
+
+    if (
+      DATADOG_TEST_OPTIMIZATION_NODE_OPTION_FLAGS.has(token) &&
+      isDatadogTestOptimizationBootstrap(tokens[index + 1])
+    ) {
+      return true
+    }
+  }
+  return false
 }
 
 function shouldRemoveNodeOption (flag, value) {
@@ -1214,6 +1285,7 @@ function safeWorkspaceProject (ctx) {
 
 module.exports = {
   configure,
+  deactivate,
   configureWorkerEnv,
   shouldUse,
 }
