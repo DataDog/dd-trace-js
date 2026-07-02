@@ -968,27 +968,34 @@ moduleTypes.forEach(({
 
                 const screenshotPayload = mediaPayloads.find(({ media }) => media.contentType === 'image/png')
                 assert.ok(screenshotPayload, `a screenshot should be uploaded to the v2 media endpoint\n${testOutput}`)
-                assert.strictEqual(screenshotPayload.url, `/api/v2/ci/test-runs/${expectedTraceId}/media`)
+                assert.strictEqual(
+                  screenshotPayload.url.split('?')[0],
+                  `/api/v2/ci/test-runs/${expectedTraceId}/media`
+                )
                 assert.strictEqual(screenshotPayload.media.traceId, expectedTraceId)
                 assert.strictEqual(screenshotPayload.headers['dd-api-key'], '1')
 
-                // v2 idempotency key is `<traceId>:<hex(filename)>` (filename hex-encoded so a
-                // non-ASCII title can't break the header), reused on retry so the media service
-                // overwrites instead of duplicating the stored object.
-                const idempotencyKey = screenshotPayload.headers['x-dd-idempotency-key']
-                assert.ok(idempotencyKey, 'media upload should send an X-Dd-Idempotency-Key header')
-                assert.strictEqual(screenshotPayload.media.idempotencyKey, idempotencyKey)
+                // v2 metadata rides the query string, not X-Dd-* headers, so it survives the
+                // Agent's evp_proxy (which strips non-allow-listed headers). The idempotency key is
+                // `<traceId>:<hex(filename)>` (filename hex-encoded so a non-ASCII title and the
+                // proxy's query-charset validation can't break it), reused on retry so the media
+                // service overwrites instead of duplicating the stored object.
+                const { idempotencyKey } = screenshotPayload.media
+                assert.ok(idempotencyKey, 'media upload should send an idempotency_key query param')
                 assert.match(
                   idempotencyKey,
                   new RegExp(`^${expectedTraceId}:`),
                   `idempotency key ${idempotencyKey} should start with the trace id`
                 )
 
-                const capturedAtHeader = screenshotPayload.headers['x-dd-media-captured-at']
-                const capturedAt = Number(capturedAtHeader)
+                const capturedAt = Number(screenshotPayload.media.capturedAt)
                 assert.ok(
                   Number.isInteger(capturedAt) && capturedAt > 0,
-                  `X-Dd-Media-Captured-At should be a positive integer, got ${capturedAtHeader}`
+                  `captured_at_ms should be a positive integer, got ${screenshotPayload.media.capturedAt}`
+                )
+                assert.ok(
+                  !('x-dd-idempotency-key' in screenshotPayload.headers),
+                  'v2 must not send metadata as X-Dd-* headers (the Agent evp_proxy strips them)'
                 )
                 assert.ok(
                   !('test-drive-test-failure-media-bucket' in screenshotPayload.headers),
