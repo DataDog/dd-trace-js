@@ -8,8 +8,13 @@ class LogPropagator {
     this._config = config
   }
 
+  /**
+   * @param {DatadogSpanContext} spanContext
+   * @param {Record<string, unknown>} carrier
+   * @returns {boolean} Whether the `dd` log-correlation object was written.
+   */
   inject (spanContext, carrier) {
-    if (!carrier) return
+    if (!carrier) return false
 
     const dd = {}
     let hasField = false
@@ -36,6 +41,8 @@ class LogPropagator {
     }
 
     if (hasField) carrier.dd = dd
+
+    return hasField
   }
 
   extract (carrier) {

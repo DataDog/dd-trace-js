@@ -137,15 +137,18 @@ const DsmPathwayCodec = {
    * @param {number} dataStreamsContext.pathwayStartNs
    * @param {number} dataStreamsContext.edgeStartNs
    * @param {object} carrier
+   * @returns {boolean} Whether the pathway context was written into `carrier`.
    */
   encode (dataStreamsContext, carrier) {
     if (!dataStreamsContext || !dataStreamsContext.hash) {
-      return
+      return false
     }
     carrier[CONTEXT_PROPAGATION_KEY_BASE64] = encodePathwayContextBase64(dataStreamsContext)
 
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Injected into DSM carrier: ${JSON.stringify(pick(carrier, logKeys))}.`)
+
+    return true
   },
 
   /**

@@ -40,8 +40,9 @@ interface Tracer extends opentracing.Tracer {
    *         inject()).
    * @param  {string} format The format of the carrier.
    * @param  {any} carrier The carrier object.
+   * @returns {boolean} Whether any context was written into the carrier.
    */
-  inject (spanContext: tracer.SpanContext | tracer.Span, format: string, carrier: any): void;
+  inject (spanContext: tracer.SpanContext | tracer.Span, format: string, carrier: any): boolean;
 
   /**
    * Returns a SpanContext instance extracted from `carrier` in the given

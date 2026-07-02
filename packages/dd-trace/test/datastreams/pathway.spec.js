@@ -158,10 +158,18 @@ describe('encoding', () => {
     ctx.hash = computePathwayHash('test-service', 'test-env',
       ['direction:in', 'group:group1', 'topic:topic1', 'type:kafka'], Buffer.from('0000000000000000', 'hex'))
 
-    DsmPathwayCodec.encode(ctx, carrier)
+    const injected = DsmPathwayCodec.encode(ctx, carrier)
 
+    assert.strictEqual(injected, true)
     const expectedBase64Hash = 'Z7CzXmXArPrE58Cfj2LI2cOfj2I='
     assert.strictEqual(carrier['dd-pathway-ctx-base64'], expectedBase64Hash)
+  })
+
+  it('returns false and writes nothing when the pathway context has no hash', () => {
+    const carrier = {}
+
+    assert.strictEqual(DsmPathwayCodec.encode(/** @type {any} */ ({}), carrier), false)
+    assert.deepStrictEqual(carrier, {})
   })
 
   it('should extract the base64 encoded string from the carrier', () => {

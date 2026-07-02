@@ -82,8 +82,7 @@ class Sns extends BaseAwsSdkPlugin {
     let injected = false
     // for now, we only want to inject to the first message, this may change for batches in the future
     if (injectTraceContext) {
-      this.tracer.inject(span, 'text_map', ddInfo)
-      injected = true
+      injected = this.tracer.inject(span, 'text_map', ddInfo)
       // add ddInfo before checking DSM so we can include DD attributes in payload size
       params.MessageAttributes._datadog = {
         DataType: 'Binary',
@@ -100,10 +99,7 @@ class Sns extends BaseAwsSdkPlugin {
       }
 
       const dataStreamsContext = this.setDSMCheckpoint(span, params, topicArn)
-      if (dataStreamsContext?.hash) {
-        DsmPathwayCodec.encode(dataStreamsContext, ddInfo)
-        injected = true
-      }
+      injected = DsmPathwayCodec.encode(dataStreamsContext, ddInfo) || injected
     }
 
     if (injected) {

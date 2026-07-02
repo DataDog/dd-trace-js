@@ -284,8 +284,10 @@ describe('Disabled APM Tracing or Standalone', () => {
 
       const carrier = {}
       const propagator = new TextMapPropagator(config)
-      propagator.inject(span._spanContext, carrier)
+      const injected = propagator.inject(span._spanContext, carrier)
 
+      // The subscriber stripped every key it wrote, so inject must report nothing was written.
+      assert.strictEqual(injected, false)
       assert.ok(!('x-datadog-trace-id' in carrier))
       assert.ok(!('x-datadog-parent-id' in carrier))
       assert.ok(!('x-datadog-sampling-priority' in carrier))
@@ -310,8 +312,10 @@ describe('Disabled APM Tracing or Standalone', () => {
 
       const carrier = {}
       const propagator = new TextMapPropagator(config)
-      propagator.inject(span._spanContext, carrier)
+      const injected = propagator.inject(span._spanContext, carrier)
 
+      // Security-relevant trace (`_dd.p.ts` set): the subscriber keeps the context, so inject reports true.
+      assert.strictEqual(injected, true)
       assert.ok(Object.hasOwn(carrier, 'x-datadog-trace-id'), `Available keys: ${inspect(Object.keys(carrier))}`)
       assert.ok(Object.hasOwn(carrier, 'x-datadog-parent-id'), `Available keys: ${inspect(Object.keys(carrier))}`)
       assert.ok(

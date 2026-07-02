@@ -520,13 +520,54 @@ describe('TextMapPropagator', () => {
 
       config.tracePropagationStyle.inject = []
 
-      propagator.inject(spanContext, carrier)
+      // Legacy baggage is on by default and this context carries a baggage item, so the carrier
+      // is not empty even with no propagation styles — inject still reports true.
+      const injected = propagator.inject(spanContext, carrier)
 
+      assert.strictEqual(injected, true)
       assert.ok(!('x-datadog-trace-id' in carrier))
       assert.ok(!('x-datadog-parent-id' in carrier))
       assert.ok(!('x-datadog-sampling-priority' in carrier))
       assert.ok(!('x-datadog-origin' in carrier))
       assert.ok(!('x-datadog-tags' in carrier))
+    })
+
+    describe('return value', () => {
+      it('returns true when datadog headers are written', () => {
+        const carrier = {}
+        const injected = propagator.inject(createContext(), carrier)
+
+        assert.strictEqual(injected, true)
+        assert.ok('x-datadog-trace-id' in carrier)
+      })
+
+      it('returns false when no style writes and there is no baggage', () => {
+        config.tracePropagationStyle.inject = []
+        config.legacyBaggageEnabled = false
+        baggageItems = {}
+
+        const carrier = {}
+        const injected = propagator.inject(createContext(), carrier)
+
+        assert.strictEqual(injected, false)
+        assert.deepStrictEqual(carrier, {})
+      })
+
+      it('returns true when only baggage is written', () => {
+        config.tracePropagationStyle.inject = ['baggage']
+        setBaggageItem('foo', 'bar')
+
+        const carrier = {}
+        // No spanContext: the datadog/b3/traceparent styles are skipped, baggage still runs.
+        const injected = propagator.inject(null, carrier)
+
+        assert.strictEqual(injected, true)
+        assert.strictEqual(carrier.baggage, 'foo=bar')
+      })
+
+      it('returns false when the carrier is nullish', () => {
+        assert.strictEqual(propagator.inject(createContext(), null), false)
+      })
     })
 
     it('should publish spanContext and carrier', () => {

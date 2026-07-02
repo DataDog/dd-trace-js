@@ -254,8 +254,7 @@ class Kinesis extends BaseAwsSdkPlugin {
     let injected = false
     // For now we only inject to the first message; batches may change later.
     if (injectTraceContext) {
-      this.tracer.inject(span, 'text_map', ddInfo)
-      injected = true
+      injected = this.tracer.inject(span, 'text_map', ddInfo)
     }
 
     const dsmEnabled = this.config.dsmEnabled
