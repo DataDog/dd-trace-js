@@ -238,4 +238,4 @@ for (const hook of getHooks('ai')) {
   })
 }
 
-module.exports = { wrapModelWithLifecycle, wrapTracer }
+module.exports = { wrapModelWithLifecycle }

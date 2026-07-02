@@ -167,6 +167,46 @@ describe('Plugin', () => {
         await checkTraces
       })
 
+      it('does not throw when the tracer uses spans with private class fields (OTel bridge regression)', async () => {
+        // Regression: Object.create(span) breaks private-field brand checks on BridgeSpanBase spans.
+        // Any span method reading a private field (e.g. setStatus → #statusCode) would throw
+        // "Cannot read private member from an object whose class did not declare it".
+        // The delegating wrapper must call through to the real span instance to avoid this.
+        class PrivateFieldSpan {
+          #statusCode = 0
+
+          spanContext () { return { traceId: '0'.repeat(32), spanId: '0'.repeat(16), traceFlags: 1 } }
+          setAttribute () { return this }
+          setAttributes () { return this }
+          addEvent () { return this }
+          addLink () { return this }
+          addLinks () { return this }
+          setStatus (s) { this.#statusCode = s.code; return this }
+          updateName () { return this }
+          end () {}
+          isRecording () { return true }
+          recordException () {}
+        }
+
+        const privateFieldTracer = {
+          startActiveSpan (...args) {
+            const fn = args[args.length - 1]
+            return fn(new PrivateFieldSpan())
+          },
+        }
+
+        const result = await ai.generateText({
+          model: openai('gpt-4o-mini'),
+          system: 'You are a helpful assistant',
+          prompt: 'Hello, OpenAI!',
+          maxTokens: 100,
+          temperature: 0.5,
+          experimental_telemetry: { isEnabled: true, tracer: privateFieldTracer },
+        })
+
+        assert.ok(result.text, 'Expected result to be truthy')
+      })
+
       it('should use the passed in `tracer`', async () => {
         const checkTraces = agent.assertSomeTraces(traces => {
           const generateTextSpan = traces[0][0]
