@@ -842,7 +842,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "false"
+        "default": null
       }
     ],
     "DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE": [
