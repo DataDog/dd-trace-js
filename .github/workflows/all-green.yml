@@ -31,7 +31,7 @@ jobs:
       - uses: ./.github/actions/node
         with:
           version: active
-      - run: yarn add @actions/core @actions/github octokit istanbul-lib-coverage
+      - run: yarn add @actions/core @actions/github octokit
       - run: node scripts/all-green.mjs
         env:
           DELAY: ${{ github.run_attempt == 1 && '1' || '0' }} # 1 minute on first attempt, no delay on reruns
@@ -40,10 +40,8 @@ jobs:
           GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
           POLLING_INTERVAL: 1
           RETRIES: 20
-      # Sort every downloaded per-cell `coverage-*` artifact into a single `coverage-upload/{lcov,json}/`
-      # directory. The reports are not merged here — both backends merge same-flag uploads
-      # server-side — so each cell's report passes through byte-for-byte. Codecov gets the istanbul
-      # JSON (carries branch/function coverage), Datadog gets the lcov.
+      # Merge every downloaded per-cell `coverage-*` artifact's lcov report into a single
+      # `coverage-upload/lcov/lcov.info`, uploaded to both Codecov and Datadog.
       - if: "!cancelled()"
         run: node scripts/group-coverage.mjs
       - if: "!cancelled()"
@@ -63,24 +61,26 @@ jobs:
           datadog-ci junit upload --service dd-trace-js-tests --auto-discovery junit-results &
           pids+=($!)
 
-          # A single Datadog upload for every cell's coverage, flagged `coverage`. Datadog reads
-          # the lcov report; it does not ingest istanbul's JSON.
+          # A single Datadog upload for every cell's coverage, flagged `coverage`.
           if [ -d coverage-upload/lcov ]; then
             datadog-ci coverage upload coverage-upload/lcov --flags coverage &
             pids+=($!)
           fi
 
-          # A single Codecov upload for every cell's coverage via the CLI directly. Codecov reads
-          # branch/function coverage from the istanbul JSON, so the upload points at `json/`.
-          # `master-coverage` is the flag `.codecov.yml` gates `codecov/patch` on; attach it only
-          # on PRs targeting master so release-branch PRs auto-pass. The SHA/branch/PR are passed
-          # explicitly because All Green checks out the merge ref, not the head the other
+          # A single Codecov upload for every cell's coverage via the CLI directly, pointed at the
+          # same lcov report as the Datadog upload. Codecov's own coverage gate (`.codecov.yml`) is
+          # line-based `patch` coverage only, and this repo's `patch-istanbul-lib-coverage.js` already
+          # folds branch/function hit data into lcov's `DA:` records, so a separate istanbul JSON
+          # upload isn't needed for the gate — only Codecov's UI-only branch/function summary widgets
+          # would have used it. `master-coverage` is the flag `.codecov.yml` gates `codecov/patch` on;
+          # attach it only on PRs targeting master so release-branch PRs auto-pass. The SHA/branch/PR
+          # are passed explicitly because All Green checks out the merge ref, not the head the other
           # workflows reported coverage for. No token: the repo uploads tokenless (a Codecov token
           # would have to be an org secret, which forks can't read).
-          if [ -d coverage-upload/json ]; then
+          if [ -d coverage-upload/lcov ]; then
             (
               commit_args=(--sha "$HEAD_SHA" --branch "$HEAD_BRANCH")
-              upload_args=(--sha "$HEAD_SHA" --dir coverage-upload/json -F coverage)
+              upload_args=(--sha "$HEAD_SHA" --dir coverage-upload/lcov -F coverage)
               if [ -n "$PR_NUMBER" ]; then
                 commit_args+=(--pr "$PR_NUMBER")
                 upload_args+=(--pr "$PR_NUMBER")

@@ -213,7 +213,6 @@
     "globals": "^17.7.0",
     "graphql": "*",
     "husky": "^9.1.7",
-    "istanbul-lib-coverage": "^3.2.2",
     "istanbul-lib-report": "^3.0.0",
     "istanbul-reports": "^3.0.2",
     "jszip": "^3.10.1",
