@@ -33,10 +33,6 @@ function getCanForwardDebuggerLogs (err, agentInfo) {
 class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
   constructor (config) {
     super(config)
-    // Screenshot media upload is agentless-only for now. The Datadog Agent's
-    // evp_proxy does not forward POST /api/v2/ci/test-runs/<trace_id>/media
-    // yet, so canUploadTestScreenshots() returns false while this stays undefined.
-    this._testScreenshotUploadUrl = undefined
 
     const {
       tags,
@@ -72,6 +68,9 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
           evpProxyPrefix,
         })
         this._codeCoverageReportUrl = this._url
+        // Screenshot media uploads go through the Agent's evp_proxy: the uploader prefixes the
+        // path with evpProxyPrefix and sets X-Datadog-EVP-Subdomain: api (see uploadTestScreenshot).
+        this._testScreenshotUploadUrl = this._url
         if (testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED) {
           const canFowardLogs = getCanForwardDebuggerLogs(err, agentInfo)
           if (canFowardLogs) {

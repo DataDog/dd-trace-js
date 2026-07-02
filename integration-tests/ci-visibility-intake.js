@@ -239,8 +239,10 @@ class FakeCiVisIntake extends FakeAgent {
         media: {
           traceId: req.params.traceId,
           contentType: req.headers['content-type'],
-          idempotencyKey: req.headers['x-dd-idempotency-key'],
-          capturedAt: req.headers['x-dd-media-captured-at'],
+          // Metadata is carried as query params (not X-Dd-* headers) so it survives the Agent's
+          // evp_proxy, which forwards only an allow-listed header set.
+          idempotencyKey: req.query.idempotency_key,
+          capturedAt: req.query.captured_at_ms,
           content: req.body,
         },
         url: req.url,
