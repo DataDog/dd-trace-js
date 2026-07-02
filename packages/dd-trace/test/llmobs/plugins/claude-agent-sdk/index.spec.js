@@ -204,128 +204,68 @@ describe('Plugin', () => {
         tags: { ml_app: 'test' },
       })
 
-      if (is03) {
-        // 0.3.x: [3]=agent wrapper, [4]=subagent LLM, [5]=subagent step-0
+      // [3]=agent wrapper, [4]=subagent LLM, [5]=subagent step-0
 
-        // [3] Agent (<description>) — the subagent wrapper span
-        assertLlmObsSpanEvent(llmobsSpans[3], {
-          span: apmSpans[3],
-          parentId: llmobsSpans[2].span_id,
-          spanKind: 'agent',
-          name: `Agent (${agentDescription})`,
-          inputValue: subagentPrompt,
-          outputValue: subagentNYResult,
-          sessionId,
-          tags: { ml_app: 'test' },
-        })
+      // [3] Agent (<description>) — the subagent wrapper span
+      assertLlmObsSpanEvent(llmobsSpans[3], {
+        span: apmSpans[3],
+        parentId: llmobsSpans[2].span_id,
+        spanKind: 'agent',
+        name: `Agent (${agentDescription})`,
+        inputValue: subagentPrompt,
+        outputValue: subagentNYResult,
+        sessionId,
+        tags: { ml_app: 'test' },
+      })
 
-        // [4] subagent step-0 LLM — calls the weather tool for NY
-        assertLlmObsSpanEvent(llmobsSpans[4], {
-          span: apmSpans[5],
-          parentId: llmobsSpans[5].span_id,
-          spanKind: 'llm',
-          name: 'claude-sonnet-4-6',
-          modelName: 'claude-sonnet-4-6',
-          modelProvider: 'anthropic',
-          inputMessages: [{ role: 'user', content: subagentPrompt }],
-          outputMessages: [
-            {
-              role: 'assistant',
-              content: '',
-              tool_calls: [{
-                name: 'mcp__local__fetch_weather',
-                arguments: { location: 'NY', units: 'fahrenheit' },
-                tool_id: MOCK_STRING,
-                type: 'tool_use',
-              }],
-            },
-          ],
-          metrics: {
-            input_tokens: MOCK_NUMBER,
-            output_tokens: MOCK_NUMBER,
-            cache_read_input_tokens: MOCK_NUMBER,
-            cache_write_input_tokens: MOCK_NUMBER,
-            total_tokens: MOCK_NUMBER,
+      // [4] subagent step-0 LLM — calls the weather tool for NY
+      assertLlmObsSpanEvent(llmobsSpans[4], {
+        span: apmSpans[5],
+        parentId: llmobsSpans[5].span_id,
+        spanKind: 'llm',
+        name: 'claude-sonnet-4-6',
+        modelName: 'claude-sonnet-4-6',
+        modelProvider: 'anthropic',
+        inputMessages: [{ role: 'user', content: subagentPrompt }],
+        outputMessages: [
+          {
+            role: 'assistant',
+            content: '',
+            tool_calls: [{
+              name: 'mcp__local__fetch_weather',
+              arguments: { location: 'NY', units: 'fahrenheit' },
+              tool_id: MOCK_STRING,
+              type: 'tool_use',
+            }],
           },
-          sessionId,
-          tags: { ml_app: 'test' },
-        })
+        ],
+        metrics: {
+          input_tokens: MOCK_NUMBER,
+          output_tokens: MOCK_NUMBER,
+          cache_read_input_tokens: MOCK_NUMBER,
+          cache_write_input_tokens: MOCK_NUMBER,
+          total_tokens: MOCK_NUMBER,
+        },
+        sessionId,
+        tags: { ml_app: 'test' },
+      })
 
-        // [5] subagent step-0 — no thinking, output is the tool result text
-        assertLlmObsSpanEvent(llmobsSpans[5], {
-          span: apmSpans[4],
-          parentId: llmobsSpans[3].span_id,
-          spanKind: 'step',
-          name: 'step-0',
-          inputValue: '',
-          outputValue: 'The weather in NY is 72° in fahrenheit.',
-          sessionId,
-          tags: { ml_app: 'test' },
-        })
-      } else {
-        // 0.2.x: [3]=subagent LLM, [4]=subagent step-0, [5]=agent wrapper
-
-        // [3] subagent step-0 LLM — calls the weather tool for NY
-        assertLlmObsSpanEvent(llmobsSpans[3], {
-          span: apmSpans[5],
-          parentId: llmobsSpans[4].span_id,
-          spanKind: 'llm',
-          name: 'claude-sonnet-4-6',
-          modelName: 'claude-sonnet-4-6',
-          modelProvider: 'anthropic',
-          inputMessages: [{ role: 'user', content: subagentPrompt }],
-          outputMessages: [
-            {
-              role: 'assistant',
-              content: '',
-              tool_calls: [{
-                name: 'mcp__local__fetch_weather',
-                arguments: { location: 'NY', units: 'fahrenheit' },
-                tool_id: MOCK_STRING,
-                type: 'tool_use',
-              }],
-            },
-          ],
-          metrics: {
-            input_tokens: MOCK_NUMBER,
-            output_tokens: MOCK_NUMBER,
-            cache_read_input_tokens: MOCK_NUMBER,
-            cache_write_input_tokens: MOCK_NUMBER,
-            total_tokens: MOCK_NUMBER,
-          },
-          sessionId,
-          tags: { ml_app: 'test' },
-        })
-
-        // [4] subagent step-0 — no thinking, output is the tool result text
-        assertLlmObsSpanEvent(llmobsSpans[4], {
-          span: apmSpans[4],
-          parentId: llmobsSpans[5].span_id,
-          spanKind: 'step',
-          name: 'step-0',
-          inputValue: '',
-          outputValue: 'The weather in NY is 72° in fahrenheit.',
-          sessionId,
-          tags: { ml_app: 'test' },
-        })
-
-        // [5] Agent (<description>) — the subagent wrapper span
-        assertLlmObsSpanEvent(llmobsSpans[5], {
-          span: apmSpans[3],
-          parentId: llmobsSpans[2].span_id,
-          spanKind: 'agent',
-          name: `Agent (${agentDescription})`,
-          inputValue: subagentPrompt,
-          outputValue: subagentNYResult,
-          sessionId,
-          tags: { ml_app: 'test' },
-        })
-      }
+      // [5] subagent step-0 — no thinking, output is the tool result text
+      assertLlmObsSpanEvent(llmobsSpans[5], {
+        span: apmSpans[4],
+        parentId: llmobsSpans[3].span_id,
+        spanKind: 'step',
+        name: 'step-0',
+        inputValue: '',
+        outputValue: 'The weather in NY is 72° in fahrenheit.',
+        sessionId,
+        tags: { ml_app: 'test' },
+      })
 
       // [6] mcp__local__fetch_weather — NY weather tool call inside subagent
       assertLlmObsSpanEvent(llmobsSpans[6], {
         span: apmSpans[6],
-        parentId: is03 ? llmobsSpans[5].span_id : llmobsSpans[4].span_id,
+        parentId: llmobsSpans[5].span_id,
         spanKind: 'tool',
         name: 'mcp__local__fetch_weather',
         inputValue: '{"location":"NY","units":"fahrenheit"}',
