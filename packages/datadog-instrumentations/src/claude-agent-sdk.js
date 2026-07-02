@@ -11,6 +11,193 @@ const toolCh = tracingChannel('apm:claude-agent-sdk:tool')
 
 const chunkEmitTimes = new WeakMap()
 
+function mergeHooks (userHooks, tracerHooks) {
+  const merged = {}
+
+  for (const event of Object.keys(tracerHooks)) {
+    const userMatchers = userHooks?.[event] || []
+    merged[event] = [...userMatchers, ...tracerHooks[event]]
+  }
+
+  if (userHooks) {
+    for (const event of Object.keys(userHooks)) {
+      if (!merged[event]) merged[event] = userHooks[event]
+    }
+  }
+
+  return merged
+}
+
+function getTool (sessionCtx, id) {
+  let tool = sessionCtx.tools.get(id)
+  if (!tool) {
+    tool = { id }
+    sessionCtx.tools.set(id, tool)
+  }
+  return tool
+}
+
+function buildTracerHooks (sessionCtx) {
+  function onSessionStart (input) {
+    sessionCtx.sessionId = input.session_id
+    sessionCtx.source = input.source
+    sessionCtx.cwd = input.cwd
+    sessionCtx.transcriptPath = input.transcript_path
+    sessionCtx.agentType = input.agent_type
+    sessionCtx.permissionMode = sessionCtx.permissionMode || input.permission_mode
+    return {}
+  }
+
+  function onSessionEnd (input) {
+    sessionCtx.endReason = input.reason
+    return {}
+  }
+
+  function onUserPromptSubmit (input) {
+    sessionCtx.sessionId = sessionCtx.sessionId || input.session_id
+    sessionCtx.prompt = sessionCtx.prompt || input.prompt
+    return {}
+  }
+
+  function onStop (input) {
+    sessionCtx.stopReason = input.stop_reason
+    sessionCtx.lastAssistantMessage = input.last_assistant_message
+    return {}
+  }
+
+  function onPreToolUse (input, toolUseId) {
+    const id = toolUseId || input.tool_use_id
+    if (!id) return {}
+
+    Object.assign(getTool(sessionCtx, id), {
+      id,
+      name: input.tool_name,
+      input: input.tool_input,
+      sessionId: input.session_id,
+      hookStartTime: Date.now(),
+    })
+    return {}
+  }
+
+  function onPostToolUse (input, toolUseId) {
+    const id = toolUseId || input.tool_use_id
+    if (!id) return {}
+
+    Object.assign(getTool(sessionCtx, id), {
+      id,
+      name: input.tool_name || sessionCtx.tools.get(id)?.name,
+      output: input.tool_response,
+      sessionId: input.session_id,
+      hookFinishTime: Date.now(),
+    })
+    return {}
+  }
+
+  function onPostToolUseFailure (input, toolUseId) {
+    const id = toolUseId || input.tool_use_id
+    if (!id) return {}
+
+    Object.assign(getTool(sessionCtx, id), {
+      id,
+      error: input.error,
+      isInterrupt: input.is_interrupt,
+      sessionId: input.session_id,
+      hookFinishTime: Date.now(),
+    })
+    return {}
+  }
+
+  function onSubagentStart (input) {
+    const id = input.agent_id
+    if (!id) return {}
+
+    sessionCtx.subagents.set(id, {
+      id,
+      sessionId: input.session_id,
+      agentType: input.agent_type,
+      hookStartTime: Date.now(),
+    })
+    return {}
+  }
+
+  function onSubagentStop (input) {
+    const id = input.agent_id
+    if (!id) return {}
+
+    const subagent = sessionCtx.subagents.get(id) || { id }
+    Object.assign(subagent, {
+      sessionId: input.session_id,
+      agentType: input.agent_type || subagent.agentType,
+      transcriptPath: input.agent_transcript_path,
+      output: input.last_assistant_message,
+      hookFinishTime: Date.now(),
+    })
+    sessionCtx.subagents.set(id, subagent)
+    return {}
+  }
+
+  return {
+    SessionStart: [{ hooks: [onSessionStart] }],
+    SessionEnd: [{ hooks: [onSessionEnd] }],
+    UserPromptSubmit: [{ hooks: [onUserPromptSubmit] }],
+    Stop: [{ hooks: [onStop] }],
+    PreToolUse: [{ hooks: [onPreToolUse] }],
+    PostToolUse: [{ hooks: [onPostToolUse] }],
+    PostToolUseFailure: [{ hooks: [onPostToolUseFailure] }],
+    SubagentStart: [{ hooks: [onSubagentStart] }],
+    SubagentStop: [{ hooks: [onSubagentStop] }],
+  }
+}
+
+function onQueryStart (ctx) {
+  const { arguments: args } = ctx
+  const queryArg = args?.[0]
+  if (!queryArg) return
+
+  const options = queryArg.options || {}
+  const prompt = queryArg.prompt
+  const sessionCtx = {
+    prompt: typeof prompt === 'string' ? prompt : undefined,
+    model: options.model,
+    resume: options.resume,
+    maxTurns: options.maxTurns,
+    permissionMode: options.permissionMode,
+    tools: new Map(),
+    subagents: new Map(),
+  }
+
+  args[0] = {
+    ...queryArg,
+    options: {
+      ...options,
+      hooks: mergeHooks(options.hooks, buildTracerHooks(sessionCtx)),
+    },
+  }
+  ctx.sessionCtx = sessionCtx
+}
+
+function buildStreamIndex (chunks) {
+  const taskStartedByToolId = new Map()
+  const toolResultIndexById = new Map()
+
+  for (let idx = 0; idx < chunks.length; idx++) {
+    const chunk = chunks[idx]
+    if (chunk.type === 'system' && chunk.subtype === 'task_started' && chunk.tool_use_id) {
+      taskStartedByToolId.set(chunk.tool_use_id, chunk)
+    } else if (chunk.type === 'user') {
+      const content = chunk.message?.content
+      if (!Array.isArray(content)) continue
+      for (const block of content) {
+        if (block.type === 'tool_result' && block.tool_use_id && !toolResultIndexById.has(block.tool_use_id)) {
+          toolResultIndexById.set(block.tool_use_id, idx)
+        }
+      }
+    }
+  }
+
+  return { taskStartedByToolId, toolResultIndexById }
+}
+
 /**
  *
  * @param {Array<Record<string, unknown>>} chunks
@@ -18,20 +205,17 @@ const chunkEmitTimes = new WeakMap()
  * @param {string} toolUseId
  * @returns {number} index in chunks where the next step should start iteration
  */
-function processTool (chunks, startIndex, toolUseId) {
+function processTool (chunks, startIndex, toolUseId, sessionCtx, streamIndex) {
   let chunkIndex = startIndex
   let stepIndex = 0
+  const tool = sessionCtx?.tools.get(toolUseId)
+  const toolResultIndex = streamIndex.toolResultIndexById.get(toolUseId)
+  const scanEnd = toolResultIndex === undefined ? chunks.length : toolResultIndex + 1
 
-  while (chunkIndex < chunks.length) {
+  while (chunkIndex < scanEnd) {
     const chunk = chunks[chunkIndex]
 
-    if (chunk.type === 'user') {
-      const content = chunk.message.content
-      const hasMatchingResult = Array.isArray(content) && content.some(
-        block => block.type === 'tool_result' && block.tool_use_id === toolUseId
-      )
-      if (hasMatchingResult) return chunkIndex + 1
-    }
+    if (chunkIndex === toolResultIndex) return chunkIndex + 1
 
     // only process steps for assistant chunks that belong to this subagent invocation
     if (chunk.type === 'assistant' && chunk.parent_tool_use_id === toolUseId) {
@@ -45,7 +229,16 @@ function processTool (chunks, startIndex, toolUseId) {
         sessionId: chunks[0]?.session_id,
       }
       chunkIndex = stepCh.traceSync(() => {
-        const nextIdx = processStep(chunks, chunkIndex, stepCtx.startTime, toolUseId, undefined, stepCtx)
+        const nextIdx = processStep(
+          chunks,
+          chunkIndex,
+          stepCtx.startTime,
+          toolUseId,
+          undefined,
+          stepCtx,
+          sessionCtx,
+          streamIndex
+        )
         stepCtx.finishTime = chunkEmitTimes.get(chunks[Math.min(nextIdx - 1, chunks.length - 1)])
         return nextIdx
       }, stepCtx)
@@ -54,6 +247,8 @@ function processTool (chunks, startIndex, toolUseId) {
       chunkIndex++
     }
   }
+
+  if (tool?.hookFinishTime) return chunks.length
 
   return chunks.length + 1
 }
@@ -64,7 +259,16 @@ function processTool (chunks, startIndex, toolUseId) {
  * @param {number} startIndex
  * @returns {number} index in chunks where the next step should start iteration
  */
-function processStep (chunks, startIndex, stepStartTime, parentToolUseId = null, initialPrompt, stepCtx = null) {
+function processStep (
+  chunks,
+  startIndex,
+  stepStartTime,
+  parentToolUseId = null,
+  initialPrompt,
+  stepCtx = null,
+  sessionCtx = null,
+  streamIndex
+) {
   for (let idx = startIndex; idx < chunks.length; idx++) {
     const chunk = chunks[idx]
 
@@ -112,22 +316,29 @@ function processStep (chunks, startIndex, stepStartTime, parentToolUseId = null,
     // and independently scans for its own tool_result; take the max to advance past all results
     let nextIdx = messageEndIdx
     for (const { toolUse: { id, name, input }, startTime: toolUseStartTime } of toolUses) {
+      const hookTool = sessionCtx?.tools.get(id)
       // Agent tools emit a system:task_started chunk with a more precise start time
-      const taskStartedChunk = chunks.slice(messageEndIdx).find(
-        c => c.type === 'system' && c.subtype === 'task_started' && c.tool_use_id === id
-      )
+      const taskStartedChunk = streamIndex.taskStartedByToolId.get(id)
       const toolCtx = {
         id,
-        name,
-        input,
-        startTime: taskStartedChunk ? chunkEmitTimes.get(taskStartedChunk) : toolUseStartTime,
+        name: hookTool?.name || name,
+        input: hookTool?.input || input,
+        startTime: hookTool?.hookStartTime ||
+          (taskStartedChunk ? chunkEmitTimes.get(taskStartedChunk) : toolUseStartTime),
         sessionId: chunks[0]?.session_id,
       }
       const toolEndIdx = toolCh.traceSync(() => {
-        const endIdx = processTool(chunks, messageEndIdx, id)
+        const endIdx = processTool(chunks, messageEndIdx, id, sessionCtx, streamIndex)
         const resultChunk = chunks[endIdx - 1]
-        if (resultChunk?.type === 'user') toolCtx.output = resultChunk.message?.content
-        toolCtx.finishTime = chunkEmitTimes.get(chunks[Math.min(endIdx - 1, chunks.length - 1)])
+        if (hookTool?.error) toolCtx.error = hookTool.error
+        if (hookTool?.isInterrupt) toolCtx.isInterrupt = hookTool.isInterrupt
+        if (resultChunk?.type === 'user') {
+          toolCtx.output = resultChunk.message?.content
+        } else if (hookTool?.output) {
+          toolCtx.output = hookTool.output
+        }
+        toolCtx.finishTime = hookTool?.hookFinishTime ||
+          chunkEmitTimes.get(chunks[Math.min(endIdx - 1, chunks.length - 1)])
         return endIdx
       }, toolCtx)
 
@@ -148,9 +359,17 @@ function processStep (chunks, startIndex, stepStartTime, parentToolUseId = null,
 function processChunks (chunks, agentCtx) {
   let chunkIndex = 0
   let stepIndex = 0
+  const sessionCtx = agentCtx.sessionCtx
+  const streamIndex = buildStreamIndex(chunks)
 
   const { type, subtype, ...rest } = chunks[0]
   Object.assign(agentCtx, rest)
+  if (sessionCtx) {
+    if (sessionCtx.sessionId) agentCtx.session_id = sessionCtx.sessionId
+    if (sessionCtx.cwd) agentCtx.cwd = sessionCtx.cwd
+    if (sessionCtx.permissionMode) agentCtx.permissionMode = sessionCtx.permissionMode
+    if (sessionCtx.lastAssistantMessage && !agentCtx.output) agentCtx.output = sessionCtx.lastAssistantMessage
+  }
 
   while (chunkIndex < chunks.length) {
     if (chunks[chunkIndex].type === 'result') break
@@ -160,8 +379,17 @@ function processChunks (chunks, agentCtx) {
 
     const run = agentCtx.runInContext ?? (fn => fn())
     chunkIndex = run(() => stepCh.traceSync(() => {
-      const initialPrompt = agentCtx.arguments?.[0]?.prompt
-      const nextIdx = processStep(chunks, chunkIndex, stepCtx.startTime, null, initialPrompt, stepCtx)
+      const initialPrompt = sessionCtx?.prompt || agentCtx.arguments?.[0]?.prompt
+      const nextIdx = processStep(
+        chunks,
+        chunkIndex,
+        stepCtx.startTime,
+        null,
+        initialPrompt,
+        stepCtx,
+        sessionCtx,
+        streamIndex
+      )
       stepCtx.finishTime = chunkEmitTimes.get(chunks[Math.min(nextIdx - 1, chunks.length - 1)])
       return nextIdx
     }, stepCtx))
@@ -220,6 +448,7 @@ for (const hook of getHooks('@anthropic-ai/claude-agent-sdk')) {
     if (!querySubscribed) {
       querySubscribed = true
       queryChannel.subscribe({
+        start: onQueryStart,
         end (ctx) {
           const { result } = ctx
 

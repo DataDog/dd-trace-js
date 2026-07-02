@@ -1,0 +1,22 @@
+{
+  "name": "plugin-claude-agent-sdk",
+  "run": "node index.js",
+  "run_with_affinity": "bash -c \"taskset -c $CPU_AFFINITY node index.js\"",
+  "cachegrind": false,
+  "iterations": 15,
+  "instructions": true,
+  "variants": {
+    "stream-scan": {
+      "env": {
+        "VARIANT": "stream-scan",
+        "OPERATIONS": "25000"
+      }
+    },
+    "hook-indexed": {
+      "env": {
+        "VARIANT": "hook-indexed",
+        "OPERATIONS": "25000"
+      }
+    }
+  }
+}

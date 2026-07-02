@@ -37,6 +37,7 @@ describe('Plugin', () => {
 
       it('instruments a full agentic call with subagents', async () => {
         const { z } = zod
+        const userPromptSubmissions = []
 
         const fetchWeather = client.tool(
           'fetch_weather',
@@ -135,6 +136,14 @@ describe('Plugin', () => {
               },
             },
             cwd: '/tmp',
+            hooks: {
+              UserPromptSubmit: [{
+                hooks: [async input => {
+                  userPromptSubmissions.push(input.prompt)
+                  return {}
+                }],
+              }],
+            },
             pathToClaudeCodeExecutable,
             env: {
               ANTHROPIC_BASE_URL: 'http://127.0.0.1:9126/vcr/claude-agent-sdk',
@@ -148,6 +157,7 @@ describe('Plugin', () => {
           assert.ok(message.type)
         }
 
+        assert.deepEqual(userPromptSubmissions, [PROMPT])
         await tracesPromise
       })
     })
