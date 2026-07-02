@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.typecheck.json",
+  "include": [
+    "ci-visibility/vitest-tests/typecheck-test-management-fail.test-d.ts"
+  ]
+}

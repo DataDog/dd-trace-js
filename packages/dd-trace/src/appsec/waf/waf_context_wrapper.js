@@ -36,7 +36,7 @@ class WAFContextWrapper {
     }
   }
 
-  run ({ persistent, ephemeral }, raspRule, req) {
+  run ({ persistent, ephemeral }, raspRule, req, rootSpan) {
     if (this.ddwafContext.disposed) {
       log.warn('[ASM] Calling run on a disposed context')
       if (raspRule) {
@@ -156,10 +156,10 @@ class WAFContextWrapper {
       metrics.wafTimeout = result.timeout
 
       if (ruleTriggered) {
-        Reporter.reportAttack(result, req)
+        Reporter.reportAttack(result, req, rootSpan)
       }
 
-      Reporter.reportAttributes(result.attributes, req)
+      Reporter.reportAttributes(result.attributes, req, rootSpan)
 
       return result
     } catch (err) {
@@ -171,7 +171,7 @@ class WAFContextWrapper {
         wafRunFinished.publish({ payload })
       }
 
-      Reporter.reportMetrics(metrics, raspRule, req)
+      Reporter.reportMetrics(metrics, raspRule, req, rootSpan)
     }
   }
 

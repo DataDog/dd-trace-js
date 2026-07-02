@@ -2,6 +2,14 @@
 
 const os = require('os')
 
+const { metrics } = require('@opentelemetry/api')
+
+const { VERSION } = require('../../../../../version')
+const processTags = require('../../process-tags')
+const MeterProvider = require('./meter_provider')
+const PeriodicMetricReader = require('./periodic_metric_reader')
+const OtlpHttpMetricExporter = require('./otlp_http_metric_exporter')
+
 /**
  * @typedef {import('../../config')} Config
  */
@@ -27,11 +35,6 @@ const os = require('os')
  *
  * @package
  */
-
-const { metrics } = require('@opentelemetry/api')
-const MeterProvider = require('./meter_provider')
-const PeriodicMetricReader = require('./periodic_metric_reader')
-const OtlpHttpMetricExporter = require('./otlp_http_metric_exporter')
 
 /**
  * Initializes OpenTelemetry Metrics support
@@ -75,7 +78,53 @@ function initializeOpenTelemetryMetrics (config) {
   metrics.setGlobalMeterProvider(meterProvider)
 }
 
+function buildResourceAttributes (tags, { reportHostname, otelSemanticsEnabled, service, env, serviceVersion } = {}) {
+  const attrs = {
+    'telemetry.sdk.name': 'datadog',
+    'telemetry.sdk.language': 'nodejs',
+    'telemetry.sdk.version': VERSION,
+  }
+  if (service) attrs['service.name'] = service
+  if (serviceVersion) attrs['service.version'] = serviceVersion
+  if (env) attrs['deployment.environment.name'] = env
+  if (reportHostname) attrs['host.name'] = os.hostname()
+
+  if (!otelSemanticsEnabled) {
+    if (tags?.['runtime-id']) attrs['datadog.runtime_id'] = tags['runtime-id']
+    const processTagsObject = processTags.tagsObject
+    if (processTagsObject) {
+      for (const key of Object.keys(processTagsObject)) {
+        attrs[`datadog.${key}`] = processTagsObject[key]
+      }
+    }
+  }
+  return attrs
+}
+
+function createOtlpSpanStatsExporter (config) {
+  const { OtlpStatsExporter } = require('./otlp_span_stats_exporter')
+  const protocol = config.OTEL_EXPORTER_OTLP_METRICS_PROTOCOL || 'http/json'
+  const resourceAttributes = buildResourceAttributes(config.tags, {
+    reportHostname: config.reportHostname,
+    otelSemanticsEnabled: config.DD_TRACE_OTEL_SEMANTICS_ENABLED,
+    service: config.service,
+    env: config.env,
+    serviceVersion: config.version,
+  })
+  return new OtlpStatsExporter(
+    config.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,
+    protocol,
+    resourceAttributes,
+    config.DD_TRACE_OTEL_SEMANTICS_ENABLED,
+    config.service,
+    config.OTEL_EXPORTER_OTLP_METRICS_HEADERS,
+    config.OTEL_EXPORTER_OTLP_METRICS_TIMEOUT
+  )
+}
+
 module.exports = {
   MeterProvider,
   initializeOpenTelemetryMetrics,
+  buildResourceAttributes,
+  createOtlpSpanStatsExporter,
 }

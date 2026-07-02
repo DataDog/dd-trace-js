@@ -2538,6 +2538,8 @@ declare namespace tracer {
       /**
        * The maximum depth of fields/resolvers to instrument. Set to `0` to only
        * instrument the operation or to `-1` to instrument all fields/resolvers.
+       * Counts selection-set nesting (named fields) only; list indices do not
+       * count toward the limit, regardless of `collapse`.
        *
        * @default -1
        */
