@@ -143,13 +143,23 @@ for (const [product, scopes] of PRODUCTS) {
 
 /**
  * @param {CommitEntry[]} entries
+ * @param {CommitEntry[]} [breakingEntries]
  * @returns {ReleaseChangelog}
  */
-function createReleaseChangelog (entries) {
+function createReleaseChangelog (entries, breakingEntries = []) {
   const sections = new Map()
+  const breakingChanges = []
   const contributors = new Set()
   const warnings = []
   let isMinor = false
+
+  for (const entry of breakingEntries) {
+    const change = parseChange(entry, { dropOtherDependencies: false })
+
+    if (change.warning) warnings.push(change.warning)
+    if (entry.author) contributors.add(entry.author)
+    breakingChanges.push(change)
+  }
 
   for (const entry of entries) {
     const change = parseChange(entry)
@@ -168,7 +178,7 @@ function createReleaseChangelog (entries) {
   }
 
   return {
-    markdown: renderMarkdown(sections, contributors),
+    markdown: renderMarkdown(sections, contributors, breakingChanges),
     isMinor,
     warnings,
   }
@@ -176,9 +186,10 @@ function createReleaseChangelog (entries) {
 
 /**
  * @param {CommitEntry} entry
+ * @param {{ dropOtherDependencies?: boolean }} [options]
  * @returns {Change}
  */
-function parseChange (entry) {
+function parseChange (entry, options = {}) {
   const subjectWithPullRequest = parsePullRequest(entry.subject)
   const parsed = parseConventionalSubject(subjectWithPullRequest.subject)
 
@@ -194,13 +205,13 @@ function parseChange (entry) {
   }
 
   const dependency = classifyDependencyBump(parsed.scopes, parsed.subject)
-  if (dependency === 'other') {
+  if (dependency === 'other' && options.dropOtherDependencies !== false) {
     return { drop: true }
   }
 
   return {
     category: CATEGORY_BY_TYPE[parsed.type] || INTERNAL_CATEGORY,
-    product: dependency === 'production' ? DEPENDENCY_PRODUCT : selectProduct(parsed.scopes),
+    product: dependency ? DEPENDENCY_PRODUCT : selectProduct(parsed.scopes),
     subject: parsed.subject,
     pr: subjectWithPullRequest.pr,
     revert: parsed.isRevert,
@@ -321,9 +332,18 @@ function sentenceCase (subject) {
 /**
  * @param {Map<string, Change[]>} sections
  * @param {Set<string>} contributors
+ * @param {Change[]} breakingChanges
  */
-function renderMarkdown (sections, contributors) {
+function renderMarkdown (sections, contributors, breakingChanges) {
   const lines = []
+
+  if (breakingChanges.length > 0) {
+    lines.push('### Breaking Changes')
+    for (const change of breakingChanges.sort(compareChanges)) {
+      lines.push(renderChange(change))
+    }
+    lines.push('')
+  }
 
   for (const category of CATEGORY_ORDER) {
     const changes = sections.get(category)

@@ -71,13 +71,15 @@ try {
   const stableVersion = `${DD_MAJOR}.${DD_MINOR}.${DD_PATCH}`
   const isPreRelease = VERSION !== stableVersion
 
-  // Notes exclude semver-major (gated behind a flag, not user-visible).
+  // Notes list semver-major and only-land-on-next separately as breaking changes.
   // Cherry-pick includes semver-major; only only-land-on-next is fully excluded,
   // except when promoting a pre-release to stable (that's what "next" means).
   const notesDiffCmd = 'branch-diff --user DataDog --repo dd-trace-js' +
-    (isPreRelease ? '' : ' --exclude-label=semver-major --exclude-label=only-land-on-next')
+    ' --exclude-label=semver-major --exclude-label=only-land-on-next'
   const cherryPickDiffCmd = 'branch-diff --user DataDog --repo dd-trace-js' +
     (isPreRelease ? '' : ' --exclude-label=only-land-on-next')
+  const breakingDiffCmd = 'branch-diff --user DataDog --repo dd-trace-js' +
+    ' --require-label=semver-major --require-label=only-land-on-next'
 
   start('Determine version increment')
 
@@ -107,8 +109,10 @@ try {
 
   // notesShas is scoped to upperBoundSha so isMinor and release notes only reflect
   // the capped commits actually included in the proposal, not deferred ones.
-  // Excludes semver-major (gated behind a flag, not user-visible).
+  // Excludes changes that are listed in the dedicated breaking changes section.
   const notesShas = capture(`${notesDiffCmd} --format=sha --reverse v${releaseLine}.x ${upperBoundRef}`)
+    .split('\n').filter(Boolean)
+  const breakingShas = capture(`${breakingDiffCmd} --format=sha --reverse v${releaseLine}.x ${upperBoundRef}`)
     .split('\n').filter(Boolean)
   const contributorBySha = getContributorsBySha(`v${releaseLine}.x`, upperBoundSha)
   const notesEntries = []
@@ -119,7 +123,15 @@ try {
       author: contributorBySha.get(sha),
     })
   }
-  const notes = createReleaseChangelog(notesEntries)
+  const breakingEntries = []
+  for (const sha of breakingShas) {
+    breakingEntries.push({
+      sha,
+      subject: capture(`git show -s --format=%s ${sha}`),
+      author: contributorBySha.get(sha),
+    })
+  }
+  const notes = createReleaseChangelog(notesEntries, breakingEntries)
   const isMinor = notes.isMinor
   const newPatch = `${releaseLine}.${DD_MINOR}.${DD_PATCH + 1}`
   const newMinor = `${releaseLine}.${DD_MINOR + 1}.0`
