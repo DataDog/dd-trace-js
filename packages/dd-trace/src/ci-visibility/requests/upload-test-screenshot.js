@@ -34,6 +34,27 @@ function isValidTraceId (traceId) {
 }
 
 /**
+ * Renders the idempotency key (`${traceId}:${basename(filePath)}`) into a value safe to carry in
+ * the upload's query string. The Agent's evp_proxy validates the forwarded query against a
+ * restrictive charset and rejects a raw Cypress filename (spaces, parens, non-ASCII), so the
+ * filename part is hex-encoded to [0-9a-f]; the decimal trace id and ':' separator are already in
+ * the allowed set and stay readable. Deterministic, so a retried upload reproduces the same key
+ * and the backend's UUIDv5 overwrite-on-retry holds.
+ *
+ * @param {string} idempotencyKey - The raw idempotency key (`<traceId>:<filename>`)
+ * @returns {string} A query-safe, deterministic representation of the key
+ */
+function toIdempotencyQueryValue (idempotencyKey) {
+  const separatorIndex = idempotencyKey.indexOf(':')
+  if (separatorIndex === -1) {
+    return Buffer.from(idempotencyKey, 'utf8').toString('hex')
+  }
+  const traceIdPart = idempotencyKey.slice(0, separatorIndex)
+  const filenamePart = idempotencyKey.slice(separatorIndex + 1)
+  return `${traceIdPart}:${Buffer.from(filenamePart, 'utf8').toString('hex')}`
+}
+
+/**
  * Uploads a single test screenshot to the Test Optimization media intake.
  * The trace id is included in the request path and the body is the raw image bytes.
  *
@@ -85,12 +106,12 @@ function uploadTestScreenshot (
   }
 
   // Metadata rides the query string, not X-Dd-* headers: the Agent's evp_proxy strips
-  // non-allow-listed headers, so header-borne metadata reached the backend empty. URLSearchParams
-  // percent-encodes the raw values, so a non-ASCII filename in the idempotency key can't throw
-  // ERR_INVALID_CHAR the way a raw header value would. capturedAtMs is part of the stored object
-  // key, so it (and the idempotency key) must stay stable across retries.
+  // non-allow-listed headers, so header-borne metadata reached the backend empty. The key is
+  // rendered proxy-safe (see toIdempotencyQueryValue) because evp_proxy also validates the
+  // forwarded query against a restrictive charset. capturedAtMs is a plain integer and part of the
+  // stored object key, so it (and the key) must stay stable across retries.
   const query = new URLSearchParams({
-    idempotency_key: idempotencyKey,
+    idempotency_key: toIdempotencyQueryValue(idempotencyKey),
     captured_at_ms: String(capturedAtMs),
   }).toString()
   const basePath = `${TEST_SCREENSHOT_ENDPOINT_PREFIX}${traceId}${TEST_SCREENSHOT_ENDPOINT_SUFFIX}`

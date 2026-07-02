@@ -60,11 +60,12 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
   })
 
   describe('agentless', () => {
-    it('sends the raw idempotency key and captured-at as query params (not headers)', () => {
+    it('sends the idempotency key (filename hex-encoded) and captured-at as query params (not headers)', () => {
       const basename = 'screenshot.png'
       const { headers, query } = uploadForFile(basename)
 
-      assert.strictEqual(query.get('idempotency_key'), `${traceId}:${basename}`)
+      const expectedKey = `${traceId}:${Buffer.from(basename, 'utf8').toString('hex')}`
+      assert.strictEqual(query.get('idempotency_key'), expectedKey)
       assert.strictEqual(query.get('captured_at_ms'), '1700000000000')
       // Metadata must not travel as X-Dd-* headers anymore (the proxy strips them).
       assert.strictEqual(headers['X-Dd-Idempotency-Key'], undefined)
@@ -79,17 +80,20 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
       assert.strictEqual(headers['X-Datadog-EVP-Subdomain'], undefined)
     })
 
-    it('percent-encodes a non-ASCII filename in the idempotency key so http.request cannot throw', () => {
-      // A real failure screenshot name: the test title has an em-dash (U+2014), the kind of
-      // above-Latin-1 character that makes http.request throw ERR_INVALID_CHAR if sent raw.
+    it('hex-encodes the filename in the idempotency key to the proxy-safe charset', () => {
+      // A real failure screenshot name has spaces and parens (and here an em-dash, U+2014). The
+      // Agent's evp_proxy validates the forwarded query against a restrictive charset and rejects
+      // those, so the filename part is hex-encoded (trace id and ':' stay readable); this also
+      // keeps the path pure ASCII so http.request can't throw ERR_INVALID_CHAR.
       const basename = 'login — redirects to dashboard (failed).png'
       const { path, query } = uploadForFile(basename)
 
-      // The encoded path must be pure ASCII so it never trips ERR_INVALID_CHAR.
+      const key = query.get('idempotency_key')
+      // Only proxy-safe chars: trace id digits, ':', hex filename — no spaces/parens/non-ASCII.
+      assert.match(key, /^\d+:[0-9a-f]+$/)
+      assert.strictEqual(key, `${traceId}:${Buffer.from(basename, 'utf8').toString('hex')}`)
       // eslint-disable-next-line no-control-regex
       assert.match(path, /^[\x00-\x7F]+$/)
-      // URLSearchParams decodes back to the raw key.
-      assert.strictEqual(query.get('idempotency_key'), `${traceId}:${basename}`)
     })
 
     it('is deterministic for a non-ASCII filename', () => {
@@ -112,8 +116,9 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
       assert.strictEqual(headers['X-Datadog-EVP-Subdomain'], 'api')
       // The Agent injects the API key; the client must not send it.
       assert.strictEqual(headers['DD-API-KEY'], undefined)
-      // Metadata still rides the query string so it survives the proxy.
-      assert.strictEqual(query.get('idempotency_key'), `${traceId}:${basename}`)
+      // Metadata still rides the query string (filename hex-encoded) so it survives the proxy.
+      const expectedKey = `${traceId}:${Buffer.from(basename, 'utf8').toString('hex')}`
+      assert.strictEqual(query.get('idempotency_key'), expectedKey)
       assert.strictEqual(query.get('captured_at_ms'), '1700000000000')
     })
   })
