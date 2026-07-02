@@ -271,10 +271,9 @@ class GraphQLExecutePlugin extends TracingPlugin {
     const loc = this.config.source && document && fieldNode && fieldNode.loc
     const source = loc && document.slice(loc.start, loc.end)
 
-    // ctx form: startSpan records field.currentStore = { ...activeStore, span }
-    // (reused for legacyStorage.run) without entering it — an enterWith here
-    // would leak the scope past the synchronous resolver body. callInAsyncScope
-    // runs the resolver in that store so the resolve span is its active scope.
+    // ctx form: startSpan sets field.currentStore = { ...activeStore, span }
+    // without entering it. Only the field's first resolver call runs in that
+    // store (isFirst check in wrapResolve); siblings use field.parentStore.
     const span = this.startSpan('graphql.resolve', {
       service: this.config.service,
       resource: `${fieldName}:${returnType}`,
@@ -394,8 +393,8 @@ function wrapResolve (resolve) {
         pathString,
         collapsedKey: collapsedKey ?? pathString,
         span: null,
-        // Populated by startResolveSpan via startSpan's ctx form: currentStore is
-        // the resolve span's store, reused for legacyStorage.run on every sibling.
+        // Set by startResolveSpan; currentStore is used by the first resolver
+        // call only, siblings use parentStore (see the isFirst check below).
         parentStore: null,
         currentStore: null,
       }
@@ -458,10 +457,8 @@ function wrapFieldType (field) {
   wrapFields(unwrapped)
 }
 
-// Runs the resolver inside `store` (the resolve span's store) so
-// `tracer.scope().active()` inside the resolver is the graphql.resolve span.
-// legacyStorage.run scopes only the synchronous resolver body: a returned
-// promise unwinds the frame, so its continuation runs in the parent scope.
+// Runs the resolver inside `store`, including any code after an internal
+// `await`. A `.then()` the caller attaches afterward runs outside `store`.
 function callInAsyncScope (fn, thisArg, args, abortController, store, cb) {
   if (abortController?.signal.aborted) {
     cb(null, null)
