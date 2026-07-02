@@ -150,6 +150,39 @@ function createGarbage (count = 50) {
       let client
       let Client
 
+      // Builds an isolated runtime_metrics module instance (own module-level state, own
+      // DogStatsD client) so a test can drive it without interference from the shared
+      // `runtimeMetrics`/`client` fixture above. Used wherever a test needs to inject a mock
+      // `@datadog/native-metrics` module, since its `stats` accessor is non-configurable and
+      // can't be sinon.stub()-ed directly on the real module.
+      function createLocalRuntimeMetrics (nativeMetricsModule) {
+        const localClient = {
+          gauge: sinon.spy(),
+          increment: sinon.spy(),
+          histogram: sinon.spy(),
+          flush: sinon.spy(),
+        }
+
+        const LocalClient = sinon.spy(function () {
+          return {
+            gauge: localClient.gauge,
+            increment: localClient.increment,
+            histogram: localClient.histogram,
+            flush: localClient.flush,
+          }
+        })
+        LocalClient.generateClientConfig = DogStatsDClient.generateClientConfig
+
+        const localRuntimeMetrics = proxyquire('../src/runtime_metrics/runtime_metrics', {
+          './client': proxyquire('../src/runtime_metrics/client', {
+            '../dogstatsd': { DogStatsDClient: LocalClient },
+          }),
+          '@datadog/native-metrics': nativeMetricsModule,
+        })
+
+        return { localRuntimeMetrics, localClient }
+      }
+
       beforeEach(() => {
         // This is needed because sinon spies keep references to arguments which
         // breaks tests because the tags parameter is now mutated right after the
@@ -492,46 +525,26 @@ function createGarbage (count = 50) {
             stats: sinon.stub().returns({ cpu: { user: 0, system: 0 }, heap: { spaces: [] }, eventLoop: {}, gc: {} }),
           }
 
-          const localClient = {
-            gauge: sinon.spy(),
-            increment: sinon.spy(),
-            histogram: sinon.spy(),
-            flush: sinon.spy(),
-          }
-
-          const LocalClient = sinon.spy(function () {
-            return {
-              gauge: localClient.gauge,
-              increment: localClient.increment,
-              histogram: localClient.histogram,
-              flush: localClient.flush,
-            }
-          })
-          LocalClient.generateClientConfig = DogStatsDClient.generateClientConfig
-
-          const localRuntimeMetrics = proxyquire('../src/runtime_metrics/runtime_metrics', {
-            './client': proxyquire('../src/runtime_metrics/client', {
-              '../dogstatsd': { DogStatsDClient: LocalClient },
-            }),
-            '@datadog/native-metrics': nativeMetricsModule,
-          })
+          const { localRuntimeMetrics, localClient } = createLocalRuntimeMetrics(nativeMetricsModule)
 
           const configNativeDisabled = {
             ...config,
             runtimeMetrics: { ...config.runtimeMetrics, eventLoop: true, gc: true, native: false },
           }
 
-          localRuntimeMetrics.start(configNativeDisabled)
+          try {
+            localRuntimeMetrics.start(configNativeDisabled)
 
-          // Native metrics should not have been started despite eventLoop and gc being enabled
-          sinon.assert.notCalled(nativeMetricsStart)
+            // Native metrics should not have been started despite eventLoop and gc being enabled
+            sinon.assert.notCalled(nativeMetricsStart)
 
-          // Should still collect basic metrics via the JS fallback path
-          clock.tick(10000)
-          sinon.assert.calledWith(localClient.gauge, 'runtime.node.mem.rss')
-          sinon.assert.calledWith(localClient.gauge, 'runtime.node.cpu.user')
-
-          localRuntimeMetrics.stop()
+            // Should still collect basic metrics via the JS fallback path
+            clock.tick(10000)
+            sinon.assert.calledWith(localClient.gauge, 'runtime.node.mem.rss')
+            sinon.assert.calledWith(localClient.gauge, 'runtime.node.cpu.user')
+          } finally {
+            localRuntimeMetrics.stop()
+          }
         })
       })
 
@@ -600,17 +613,34 @@ function createGarbage (count = 50) {
 
           const totalDiff = Math.abs(totalPercent - userPercent - systemPercent)
           assert(totalDiff <= 0.03, `Total CPU percentage sanity check failed: ${totalDiff} > 0.03`)
+
+          // Physically-motivated ceiling (not a timing assumption): a process cannot consume more
+          // than cpuCount * 100% averaged over a wall-clock window. Catches a systematic
+          // unit-conversion bug (e.g. a dropped *10 in elapsedUsDividedBy100) that a
+          // self-consistency check alone (total == user + system) can't, since such a bug would
+          // scale user/system/total proportionally and still pass that check.
+          const cpuCeiling = os.cpus().length * 100
+          assert(totalPercent <= cpuCeiling, `total CPU usage should not exceed ${cpuCeiling}%, got ${totalPercent}`)
         })
 
         it('should calculate CPU percentages correctly from a known usage delta', () => {
           // Deterministic companion to the busy-loop test above: pins the percent-conversion
           // math with hand-derived values instead of real (and therefore noisy) OS measurements.
-          // process.cpuUsage()/native stats report microseconds; over a 10s (10_000ms) flush
-          // interval, elapsedUsDividedBy100 = 10_000 * 10 = 100_000, so:
-          //   userPercent   = 1_030_000us / 100_000 = 10.30
-          //   systemPercent =    52_000us / 100_000 =  0.52
-          //   totalPercent  = 10.30 + 0.52           = 10.82
+          // process.cpuUsage()/native stats report microseconds.
+          const flushIntervalMs = 10000
           const cpuUsage = { user: 1_030_000, system: 52_000 }
+          const elapsedUsDividedBy100 = flushIntervalMs * 10
+          const userPercentRaw = cpuUsage.user / elapsedUsDividedBy100
+          const systemPercentRaw = cpuUsage.system / elapsedUsDividedBy100
+          const userPercent = userPercentRaw.toFixed(2)
+          const systemPercent = systemPercentRaw.toFixed(2)
+          const totalPercent = (userPercentRaw + systemPercentRaw).toFixed(2)
+
+          const assertCpuGauges = (gauge) => {
+            sinon.assert.calledWith(gauge, 'runtime.node.cpu.user', userPercent)
+            sinon.assert.calledWith(gauge, 'runtime.node.cpu.system', systemPercent)
+            sinon.assert.calledWith(gauge, 'runtime.node.cpu.total', totalPercent)
+          }
 
           // Stop the outer instance from beforeEach: its interval is still registered on the fake
           // clock, and its own captureCpuUsage/captureNativeMetrics call would otherwise consume a
@@ -619,68 +649,45 @@ function createGarbage (count = 50) {
 
           const nowStub = sinon.stub(performance, 'now')
           nowStub.onFirstCall().returns(0) // captured as lastTime on start()
-          nowStub.onSecondCall().returns(10000) // captured as currentTime inside the flush
+          nowStub.onSecondCall().returns(flushIntervalMs) // captured as currentTime inside the flush
 
-          if (nativeMetrics) {
-            // The native module's `stats` accessor is non-configurable, so it can't be sinon.stub()-ed
-            // directly. Inject a mock module instead, the same way the "should not load native metrics"
-            // test above does. The native path also reports a delta directly, unlike
-            // process.cpuUsage()'s cumulative total, so a single stubbed return is enough.
-            const nativeMetricsModule = {
-              start: sinon.spy(),
-              stop: sinon.spy(),
-              stats: sinon.stub().returns({ cpu: cpuUsage, heap: { spaces: [] }, eventLoop: {}, gc: {} }),
-            }
+          let cleanup = () => {}
 
-            const localClient = {
-              gauge: sinon.spy(),
-              increment: sinon.spy(),
-              histogram: sinon.spy(),
-              flush: sinon.spy(),
-            }
-
-            const LocalClient = sinon.spy(function () {
-              return {
-                gauge: localClient.gauge,
-                increment: localClient.increment,
-                histogram: localClient.histogram,
-                flush: localClient.flush,
+          try {
+            if (nativeMetrics) {
+              // The native module's `stats` accessor is non-configurable, so it can't be
+              // sinon.stub()-ed directly. Inject a mock module instead, the same way the "should not
+              // load native metrics" test above does. The native path also reports a delta directly,
+              // unlike process.cpuUsage()'s cumulative total, so a single stubbed return is enough.
+              const nativeMetricsModule = {
+                start: sinon.spy(),
+                stop: sinon.spy(),
+                stats: sinon.stub().returns({ cpu: cpuUsage, heap: { spaces: [] }, eventLoop: {}, gc: {} }),
               }
-            })
-            LocalClient.generateClientConfig = DogStatsDClient.generateClientConfig
 
-            const localRuntimeMetrics = proxyquire('../src/runtime_metrics/runtime_metrics', {
-              './client': proxyquire('../src/runtime_metrics/client', {
-                '../dogstatsd': { DogStatsDClient: LocalClient },
-              }),
-              '@datadog/native-metrics': nativeMetricsModule,
-            })
+              const { localRuntimeMetrics, localClient } = createLocalRuntimeMetrics(nativeMetricsModule)
+              cleanup = () => localRuntimeMetrics.stop()
 
-            localRuntimeMetrics.start(config)
-            clock.tick(10000)
-            localRuntimeMetrics.stop()
+              localRuntimeMetrics.start(config)
+              clock.tick(flushIntervalMs)
 
+              assertCpuGauges(localClient.gauge)
+            } else {
+              const cpuStub = sinon.stub(process, 'cpuUsage')
+              cpuStub.onFirstCall().returns({ user: 0, system: 0 }) // captured as lastCpuUsage on start()
+              cpuStub.onSecondCall().returns(cpuUsage)
+              cleanup = () => cpuStub.restore()
+
+              runtimeMetrics.start(config)
+              client.gauge.resetHistory()
+
+              clock.tick(flushIntervalMs)
+
+              assertCpuGauges(client.gauge)
+            }
+          } finally {
+            cleanup()
             nowStub.restore()
-
-            sinon.assert.calledWith(localClient.gauge, 'runtime.node.cpu.user', '10.30')
-            sinon.assert.calledWith(localClient.gauge, 'runtime.node.cpu.system', '0.52')
-            sinon.assert.calledWith(localClient.gauge, 'runtime.node.cpu.total', '10.82')
-          } else {
-            const cpuStub = sinon.stub(process, 'cpuUsage')
-            cpuStub.onFirstCall().returns({ user: 0, system: 0 }) // captured as lastCpuUsage on start()
-            cpuStub.onSecondCall().returns(cpuUsage)
-
-            runtimeMetrics.start(config)
-            client.gauge.resetHistory()
-
-            clock.tick(10000)
-
-            nowStub.restore()
-            cpuStub.restore()
-
-            sinon.assert.calledWith(client.gauge, 'runtime.node.cpu.user', '10.30')
-            sinon.assert.calledWith(client.gauge, 'runtime.node.cpu.system', '0.52')
-            sinon.assert.calledWith(client.gauge, 'runtime.node.cpu.total', '10.82')
           }
         })
       })
