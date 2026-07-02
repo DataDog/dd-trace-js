@@ -599,6 +599,44 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           eventsPromise,
         ])
       })
+
+      it('reports test events when a custom environment does not call super.handleTestEvent', async () => {
+        const envVars = reportingOption === 'agentless'
+          ? getCiVisAgentlessConfig(receiver.port)
+          : getCiVisEvpProxyConfig(receiver.port)
+        if (reportingOption === 'evp proxy') {
+          receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+        }
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const resourceNames = tests.map(test => test.resource)
+
+            assertObjectContains(resourceNames, [
+              'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests',
+            ])
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...envVars,
+              CUSTOM_TEST_ENVIRONMENT: './ci-visibility/jestEnvironmentNoSuper.js',
+              TESTS_TO_RUN: 'test/ci-visibility-test.js',
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+        assert.strictEqual(exitCode, 0)
+      })
     })
   })
 

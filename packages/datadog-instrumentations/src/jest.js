@@ -88,6 +88,7 @@ const CHILD_MESSAGE_CALL = 1
 const FLUSH_TIMEOUT = 10_000
 const JEST_SESSION_STATE = Symbol.for('dd-trace:jest:session')
 const JEST_BAIL_REPORTER_PATH = require.resolve('./jest/bail-reporter')
+const DD_JEST_HANDLE_TEST_EVENT_WRAPPED = Symbol('dd-trace:jest:handle-test-event-wrapped')
 const isJestWorker = !!getEnvironmentVariable('JEST_WORKER_ID')
 const jestSessionState = globalThis[JEST_SESSION_STATE] || (globalThis[JEST_SESSION_STATE] = {})
 
@@ -157,6 +158,7 @@ const wrappedWorkerInitializers = new WeakSet()
 const publishedRuntimeReferenceErrors = new WeakMap()
 const wrappedCoverageReporters = new WeakSet()
 const coverageReporterRequires = new WeakMap()
+const handledJestEvents = new WeakSet()
 
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 const ATR_RETRY_SUPPRESSION_FLAG = '_ddDisableAtrRetry'
@@ -364,6 +366,16 @@ function wrapConsoleErrorForJestReferenceErrors () {
   }
 }
 
+function isDatadogJestEventHandled (event) {
+  return event && typeof event === 'object' && handledJestEvents.has(event)
+}
+
+function markDatadogJestEventHandled (event) {
+  if (event && typeof event === 'object') {
+    handledJestEvents.add(event)
+  }
+}
+
 function getWrappedEnvironment (BaseEnvironment, jestVersion) {
   return class DatadogEnvironment extends BaseEnvironment {
     constructor (config, context) {
@@ -445,6 +457,45 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           this.isImpactedTestsEnabled = false
         }
       }
+
+      this.wrapCustomHandleTestEvent(DatadogEnvironment.prototype.handleTestEvent)
+    }
+
+    /**
+     * Ensures Datadog handles Jest circus events even when a custom environment overrides
+     * `handleTestEvent` without calling `super.handleTestEvent`.
+     *
+     * @param {(event: object, state: object) => Promise<void>|void} datadogHandleTestEvent
+     * @returns {void}
+     */
+    wrapCustomHandleTestEvent (datadogHandleTestEvent) {
+      const handleTestEvent = this.handleTestEvent
+      if (
+        !handleTestEvent ||
+        handleTestEvent === datadogHandleTestEvent ||
+        handleTestEvent[DD_JEST_HANDLE_TEST_EVENT_WRAPPED]
+      ) {
+        return
+      }
+
+      this.handleTestEvent = function (event, state) {
+        const result = handleTestEvent.call(this, event, state)
+        const runDatadogHandler = value => {
+          if (isDatadogJestEventHandled(event)) return value
+
+          const datadogResult = datadogHandleTestEvent.call(this, event, state)
+          if (typeof datadogResult?.then === 'function') {
+            return datadogResult.then(() => value)
+          }
+          return value
+        }
+
+        if (typeof result?.then === 'function') {
+          return result.then(runDatadogHandler)
+        }
+        return runDatadogHandler(result)
+      }
+      this.handleTestEvent[DD_JEST_HANDLE_TEST_EVENT_WRAPPED] = true
     }
 
     /**
@@ -579,6 +630,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     }
 
     async handleTestEvent (event, state) {
+      if (isDatadogJestEventHandled(event)) return
+      markDatadogJestEventHandled(event)
+
       if (super.handleTestEvent) {
         await super.handleTestEvent(event, state)
       }
