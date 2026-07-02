@@ -322,24 +322,10 @@ function createMainProcessReporter (reporterState) {
     if (attemptCount !== undefined && statuses.length >= attemptCount) return
 
     if (tasksWithRecordedFinalAttempt.has(taskId)) {
-      statuses.splice(statuses.length - 1, 0, status)
+      statuses.splice(-1, 0, status)
       return
     }
     statuses.push(status)
-  }
-
-  function getTaskUpdateAttemptCount (taskId, packs) {
-    if (!packs) return
-
-    for (const pack of packs) {
-      if (pack[0] === taskId) {
-        return getRepeatedAttemptCount({
-          id: taskId,
-          result: pack[1],
-          meta: pack[2],
-        }, [])
-      }
-    }
   }
 
   function recordFinalTaskAttemptResult (task) {
@@ -558,6 +544,20 @@ function createMainProcessReporter (reporterState) {
       isNew,
       testSuite,
       hasDynamicName: isNew && DYNAMIC_NAME_RE.test(testName),
+    }
+  }
+}
+
+function getTaskUpdateAttemptCount (taskId, packs) {
+  if (!packs) return
+
+  for (const pack of packs) {
+    if (pack[0] === taskId) {
+      return getRepeatedAttemptCount({
+        id: taskId,
+        result: pack[1],
+        meta: pack[2],
+      }, [])
     }
   }
 }
