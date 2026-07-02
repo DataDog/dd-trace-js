@@ -5,49 +5,24 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, it } from 'mocha'
 
-import { mergeCoverageJson, mergeLcov, planCoverageGroups } from './group-coverage.mjs'
+import { mergeLcov, planCoverageGroups } from './group-coverage.mjs'
 
 /**
- * One cell's discovered report set: a `lcov` and a `json` entry per Node.js version the cell ran.
+ * One cell's discovered report set: one `lcov` entry per Node.js version the cell ran.
  *
  * @param {string} name
  * @param {object} [options]
  * @param {string} [options.runId]
- * @param {number} [options.versions]  Number of Node.js versions the cell ran (one report set each).
+ * @param {number} [options.versions]  Number of Node.js versions the cell ran (one report each).
  * @returns {Array<{ runId: string, name: string, format: string, reportPath: string }>}
  */
 function files (name, { runId = '1', versions = 1 } = {}) {
   const out = []
   for (let version = 0; version < versions; version++) {
     const dir = `coverage-results/${runId}/${name}/node-2${version}-x`
-    out.push(
-      { runId, name, format: 'lcov', reportPath: `${dir}/lcov.info` },
-      { runId, name, format: 'json', reportPath: `${dir}/coverage-final.json` }
-    )
+    out.push({ runId, name, format: 'lcov', reportPath: `${dir}/lcov.info` })
   }
   return out
-}
-
-/**
- * A minimal valid istanbul FileCoverage entry for one statement, so `mergeCoverageJson` has a
- * realistic shape to merge.
- *
- * @param {string} filePath
- * @param {number} count
- * @returns {object}
- */
-function fileCoverage (filePath, count) {
-  return {
-    [filePath]: {
-      path: filePath,
-      statementMap: { 0: { start: { line: 1, column: 0 }, end: { line: 1, column: 5 } } },
-      fnMap: {},
-      branchMap: {},
-      s: { 0: count },
-      f: {},
-      b: {},
-    },
-  }
 }
 
 describe('group-coverage', () => {
@@ -72,11 +47,10 @@ describe('group-coverage', () => {
       assert.ok(reports.every(report => report.reportPath.includes('/10/')), 'the newer run wins numerically')
     })
 
-    it('keeps both formats across every Node.js version a single artifact carries', () => {
+    it('keeps a report per Node.js version a single artifact carries', () => {
       const { reportsByArtifact } = planCoverageGroups(files('coverage-apm-integrations-axios__a-0', { versions: 2 }))
       const reports = reportsByArtifact.get('coverage-apm-integrations-axios__a-0')
       assert.equal(reports.filter(report => report.format === 'lcov').length, 2)
-      assert.equal(reports.filter(report => report.format === 'json').length, 2)
     })
 
     it('folds every cell into the same single group regardless of flag', () => {
@@ -113,36 +87,6 @@ describe('group-coverage', () => {
         mergeLcov([a, b]),
         'SF:a.js\nDA:1,1\nend_of_record\nSF:b.js\nDA:1,1\nend_of_record\n'
       )
-    })
-  })
-
-  describe('mergeCoverageJson', () => {
-    let dir
-
-    beforeEach(() => {
-      dir = mkdtempSync(join(tmpdir(), 'group-coverage-json-'))
-    })
-
-    afterEach(() => {
-      rmSync(dir, { force: true, recursive: true })
-    })
-
-    it('sums hit counts for a file shared across cells instead of overwriting them', () => {
-      const a = join(dir, 'a.json')
-      const b = join(dir, 'b.json')
-      writeFileSync(a, JSON.stringify(fileCoverage('/shared.js', 2)))
-      writeFileSync(b, JSON.stringify(fileCoverage('/shared.js', 3)))
-      const merged = mergeCoverageJson([a, b])
-      assert.equal(merged['/shared.js'].s[0], 5)
-    })
-
-    it('keeps files that only appear in one report', () => {
-      const a = join(dir, 'a.json')
-      const b = join(dir, 'b.json')
-      writeFileSync(a, JSON.stringify(fileCoverage('/only-a.js', 1)))
-      writeFileSync(b, JSON.stringify(fileCoverage('/only-b.js', 1)))
-      const merged = mergeCoverageJson([a, b])
-      assert.deepEqual(Object.keys(merged).sort(), ['/only-a.js', '/only-b.js'])
     })
   })
 })
