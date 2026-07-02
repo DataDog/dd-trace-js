@@ -799,4 +799,71 @@ describe('dogstatsd', () => {
       assert.strictEqual(aggregator._counters.size, 0)
     })
   })
+
+  describe('generateClientConfig', () => {
+    it('should use the trace agent HTTP proxy when DogStatsD shares the same host', () => {
+      const clientConfig = DogStatsDClient.generateClientConfig({
+        url: new URL('http://localhost:8126'),
+        hostname: 'localhost',
+        dogstatsd: {
+          hostname: 'localhost',
+          port: 8125,
+        },
+        tags: {},
+        runtimeMetricsRuntimeId: false,
+        lookup: dns.lookup,
+      })
+
+      assert.deepStrictEqual(clientConfig.metricsProxyUrl, new URL('http://localhost:8126'))
+    })
+
+    it('should skip the HTTP proxy when DogStatsD host differs from the trace agent host', () => {
+      const clientConfig = DogStatsDClient.generateClientConfig({
+        url: new URL('http://otel-collector:18126'),
+        hostname: 'otel-collector',
+        dogstatsd: {
+          hostname: '10.0.0.5',
+          port: 18125,
+          disableHttpProxy: false,
+        },
+        tags: {},
+        runtimeMetricsRuntimeId: false,
+        lookup: dns.lookup,
+      })
+
+      assert.strictEqual(clientConfig.metricsProxyUrl, undefined)
+    })
+
+    it('should skip the HTTP proxy when disableHttpProxy is set', () => {
+      const clientConfig = DogStatsDClient.generateClientConfig({
+        url: new URL('http://localhost:8126'),
+        hostname: 'localhost',
+        dogstatsd: {
+          hostname: 'localhost',
+          port: 8125,
+          disableHttpProxy: true,
+        },
+        tags: {},
+        runtimeMetricsRuntimeId: false,
+        lookup: dns.lookup,
+      })
+
+      assert.strictEqual(clientConfig.metricsProxyUrl, undefined)
+    })
+
+    it('should use the HTTP proxy for a unix domain socket trace agent', () => {
+      const clientConfig = DogStatsDClient.generateClientConfig({
+        url: new URL('unix:///var/run/datadog/apm.socket'),
+        dogstatsd: {
+          hostname: '127.0.0.1',
+          port: 8125,
+        },
+        tags: {},
+        runtimeMetricsRuntimeId: false,
+        lookup: dns.lookup,
+      })
+
+      assert.deepStrictEqual(clientConfig.metricsProxyUrl, new URL('unix:///var/run/datadog/apm.socket'))
+    })
+  })
 })

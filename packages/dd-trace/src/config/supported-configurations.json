@@ -693,6 +693,16 @@
         "default": "8125"
       }
     ],
+    "DD_DOGSTATSD_DISABLE_HTTP_PROXY": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "configurationNames": [
+          "dogstatsd.disableHttpProxy"
+        ],
+        "default": "false"
+      }
+    ],
     "DD_DYNAMIC_INSTRUMENTATION_CAPTURE_TIMEOUT_MS": [
       {
         "implementation": "A",

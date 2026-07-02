@@ -602,6 +602,16 @@ declare namespace tracer {
        * Programmatic configuration takes precedence over the environment variables listed above.
        */
       port?: number
+
+      /**
+       * Skip sending metrics through the trace agent HTTP DogStatsD proxy and use UDP only.
+       * When unset, the HTTP proxy is skipped automatically if `hostname` differs from the
+       * trace agent host.
+       * @default false
+       * @env DD_DOGSTATSD_DISABLE_HTTP_PROXY
+       * Programmatic configuration takes precedence over the environment variables listed above.
+       */
+      disableHttpProxy?: boolean
     };
 
     /**

@@ -252,18 +252,40 @@ function createGarbage (count = 50) {
 
         it('it should initialize the Dogstatsd client with an IPv6 URL', function () {
           config.url = new URL('http://[::1]:8126')
+          config.dogstatsd.hostname = '[::1]'
 
           runtimeMetrics.stop()
           runtimeMetrics.start(config)
 
           sinon.assert.calledWithMatch(Client, {
             metricsProxyUrl: new URL('http://[::1]:8126'),
-            host: 'localhost',
+            host: '[::1]',
             tags: [
               'str:bar',
               'invalid:t_e_s_t5-:./',
             ],
           })
+        })
+
+        it('should skip the HTTP proxy when DogStatsD host differs from the trace agent host', function () {
+          config.url = new URL('http://otel-collector:18126')
+          config.hostname = 'otel-collector'
+          config.dogstatsd.hostname = '10.0.0.5'
+          config.dogstatsd.port = 18125
+
+          runtimeMetrics.stop()
+          Client.resetHistory()
+          runtimeMetrics.start(config)
+
+          sinon.assert.calledWithMatch(Client, {
+            host: '10.0.0.5',
+            port: 18125,
+            tags: [
+              'str:bar',
+              'invalid:t_e_s_t5-:./',
+            ],
+          })
+          assert.strictEqual(Client.lastCall.args[0].metricsProxyUrl, undefined)
         })
 
         it('should include process tags when propagateProcessTags is enabled', function () {

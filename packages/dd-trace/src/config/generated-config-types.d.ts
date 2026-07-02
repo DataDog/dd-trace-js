@@ -388,6 +388,7 @@ export interface GeneratedConfig {
   DD_TRACE_X_DATADOG_TAGS_MAX_LENGTH: number;
   DD_VITEST_WORKER: string | undefined;
   dogstatsd: {
+    disableHttpProxy: boolean;
     hostname: string;
     port: string | number;
   };
@@ -651,6 +652,7 @@ export interface GeneratedEnvVarConfig {
   DD_DATA_STREAMS_ENABLED: boolean;
   DD_DBM_INJECT_SQL_BASEHASH: boolean;
   DD_DBM_PROPAGATION_MODE: "disabled" | "service" | "full" | "dynamic_service";
+  DD_DOGSTATSD_DISABLE_HTTP_PROXY: boolean;
   DD_DOGSTATSD_HOST: string;
   DD_DOGSTATSD_HOSTNAME: string;
   DD_DOGSTATSD_PORT: string | number;

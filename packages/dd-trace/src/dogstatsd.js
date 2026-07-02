@@ -19,6 +19,33 @@ const TYPE_DISTRIBUTION = 'd'
 const TYPE_HISTOGRAM = 'h'
 
 /**
+ * The trace agent HTTP proxy for DogStatsD only exists on the real Datadog Agent.
+ * When DogStatsD is pointed at a different host (for example node-local UDP to an
+ * OpenTelemetry Collector statsd receiver), skip the proxy and send UDP directly.
+ *
+ * @param {import('./config/config-base')} config - Tracer configuration
+ * @returns {boolean}
+ */
+function shouldUseMetricsHttpProxy (config) {
+  if (config.dogstatsd.disableHttpProxy) {
+    return false
+  }
+
+  const agentUrl = config.url
+  if (!agentUrl) {
+    return false
+  }
+
+  // Unix domain socket trace agent exposes the DogStatsD HTTP proxy on the same socket.
+  if (agentUrl.protocol === 'unix:') {
+    return true
+  }
+
+  const traceHostname = config.hostname || agentUrl.hostname
+  return traceHostname === config.dogstatsd.hostname
+}
+
+/**
  * @import { DogStatsD } from "../../../index.d.ts"
  * @implements {DogStatsD}
  */
@@ -197,7 +224,7 @@ class DogStatsDClient {
       lookup: config.lookup,
     }
 
-    if (config.url) {
+    if (config.url && shouldUseMetricsHttpProxy(config)) {
       clientConfig.metricsProxyUrl = config.url
     }
 
