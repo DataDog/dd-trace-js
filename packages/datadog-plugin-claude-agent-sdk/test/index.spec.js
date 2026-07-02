@@ -54,7 +54,9 @@ describe('Plugin', () => {
         const localToolsServer = client.createSdkMcpServer({ name: 'local', tools: [fetchWeather] })
 
         const tracesPromise = agent.assertSomeTraces(traces => {
+          console.log('got some traces')
           const spans = traces.flat()
+          console.log('spans length', spans.length)
           assert.equal(spans.length, 12)
 
           const spanById = new Map(spans.map(s => [s.span_id.toString(), s]))

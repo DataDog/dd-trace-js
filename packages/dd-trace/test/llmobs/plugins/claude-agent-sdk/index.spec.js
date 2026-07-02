@@ -92,7 +92,8 @@ describe('Plugin', () => {
         assert.ok(message.type)
       }
 
-      const { apmSpans, llmobsSpans } = await getEvents(12)
+      const { apmSpans, llmobsSpans } = await getEvents()
+      assert.equal(llmobsSpans.length, 12)
 
       const sessionId = llmobsSpans[0].session_id
       const is03 = semifies(realVersion, '>=0.3.0')
