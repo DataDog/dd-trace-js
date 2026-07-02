@@ -568,10 +568,11 @@ function createGarbage (count = 50) {
       })
 
       describe('CPU Usage Calculations', () => {
-        it('should report CPU percentages within valid ranges', () => {
-          const startCpuUsage = process.cpuUsage()
+        it('should report positive CPU usage after a real busy loop', () => {
+          // Exercises the real OS/native measurement path end-to-end. Assertions stay loose:
+          // "system" CPU time is dominated by kernel/scheduler noise (context switches, page
+          // faults) that scales with CI runner contention, not with anything this code controls.
           const startTime = Date.now()
-          const startPerformanceNow = performance.now()
           let iterations = 0
           let ticks = 0
           while (Date.now() - startTime < 100) {
@@ -581,68 +582,106 @@ function createGarbage (count = 50) {
               ticks++
             }
           }
-          const cpuUsage = process.cpuUsage()
-          const cpuUsageStub = sinon.stub(process, 'cpuUsage').returns(cpuUsage)
-          const performanceNowStub = sinon.stub(performance, 'now').returns(startPerformanceNow + 10000)
           clock.tick(10000 - ticks)
-          performanceNowStub.restore()
-          cpuUsageStub.restore()
 
-          const timeDivisor = 100_000 // Microseconds * 100 for percent
-
-          const cpuMetrics = new Map([[
-            'runtime.node.cpu.user',
-            Number(((cpuUsage.user - startCpuUsage.user) / timeDivisor).toFixed(2)),
-          ], [
-            'runtime.node.cpu.system',
-            Number(((cpuUsage.system - startCpuUsage.system) / timeDivisor).toFixed(2)),
-          ], [
-            'runtime.node.cpu.total',
-            Number((
-              ((cpuUsage.user - startCpuUsage.user) + (cpuUsage.system - startCpuUsage.system)) / timeDivisor
-            ).toFixed(2)),
-          ]])
-
-          let userPercent = 0
-          let systemPercent = 0
-          let totalPercent = 0
-
+          const cpuMetrics = new Map()
           for (const call of client.gauge.getCalls()) {
-            const metric = call.args[0]
-            const expected = cpuMetrics.get(metric)
-            cpuMetrics.delete(metric)
-            if (expected !== undefined) {
-              const stringValue = call.args[1]
-              assert.match(stringValue, /^\d+(\.\d{1,2})?$/)
-              const number = Number(stringValue)
-              if (metric === 'runtime.node.cpu.user') {
-                assert(
-                  number >= 1,
-                  `${metric} sanity check failed (increase CPU load above with more ticks): ${number}`
-                )
-                userPercent = number
-              }
-              if (metric === 'runtime.node.cpu.system') {
-                assert(number >= 0 && number <= 5, `${metric} sanity check failed: ${number}`)
-                systemPercent = number
-              }
-              if (metric === 'runtime.node.cpu.total') {
-                assert(
-                  // Subtracting 0.1 for time-window/baseline alignment numbers and due to rounding issues.
-                  number >= expected - 0.1 && number <= expected + 1,
-                  `${metric} sanity check failed (increase CPU load above with more ticks): ${number} ${expected}`
-                )
-                totalPercent = number
-              }
-              const epsilon = os.platform() === 'win32' ? 1.5 : 0.5
-              assert(number - expected < epsilon, `${metric} sanity check failed: ${number} ${expected}`)
+            if (call.args[0].startsWith('runtime.node.cpu.')) {
+              cpuMetrics.set(call.args[0], Number(call.args[1]))
             }
           }
 
-          assert.strictEqual(cpuMetrics.size, 0, `All CPU metrics should be matched, missing ${[...cpuMetrics.keys()]}`)
+          const userPercent = cpuMetrics.get('runtime.node.cpu.user')
+          const systemPercent = cpuMetrics.get('runtime.node.cpu.system')
+          const totalPercent = cpuMetrics.get('runtime.node.cpu.total')
+
+          assert(userPercent > 0, `expected user CPU usage after a real busy loop, got ${userPercent}`)
+          assert(systemPercent >= 0, `system CPU usage should never be negative, got ${systemPercent}`)
 
           const totalDiff = Math.abs(totalPercent - userPercent - systemPercent)
           assert(totalDiff <= 0.03, `Total CPU percentage sanity check failed: ${totalDiff} > 0.03`)
+        })
+
+        it('should calculate CPU percentages correctly from a known usage delta', () => {
+          // Deterministic companion to the busy-loop test above: pins the percent-conversion
+          // math with hand-derived values instead of real (and therefore noisy) OS measurements.
+          // process.cpuUsage()/native stats report microseconds; over a 10s (10_000ms) flush
+          // interval, elapsedUsDividedBy100 = 10_000 * 10 = 100_000, so:
+          //   userPercent   = 1_030_000us / 100_000 = 10.30
+          //   systemPercent =    52_000us / 100_000 =  0.52
+          //   totalPercent  = 10.30 + 0.52           = 10.82
+          const cpuUsage = { user: 1_030_000, system: 52_000 }
+
+          // Stop the outer instance from beforeEach: its interval is still registered on the fake
+          // clock, and its own captureCpuUsage/captureNativeMetrics call would otherwise consume a
+          // performance.now() stub slot meant for the local/mocked instance below.
+          runtimeMetrics.stop()
+
+          const nowStub = sinon.stub(performance, 'now')
+          nowStub.onFirstCall().returns(0) // captured as lastTime on start()
+          nowStub.onSecondCall().returns(10000) // captured as currentTime inside the flush
+
+          if (nativeMetrics) {
+            // The native module's `stats` accessor is non-configurable, so it can't be sinon.stub()-ed
+            // directly. Inject a mock module instead, the same way the "should not load native metrics"
+            // test above does. The native path also reports a delta directly, unlike
+            // process.cpuUsage()'s cumulative total, so a single stubbed return is enough.
+            const nativeMetricsModule = {
+              start: sinon.spy(),
+              stop: sinon.spy(),
+              stats: sinon.stub().returns({ cpu: cpuUsage, heap: { spaces: [] }, eventLoop: {}, gc: {} }),
+            }
+
+            const localClient = {
+              gauge: sinon.spy(),
+              increment: sinon.spy(),
+              histogram: sinon.spy(),
+              flush: sinon.spy(),
+            }
+
+            const LocalClient = sinon.spy(function () {
+              return {
+                gauge: localClient.gauge,
+                increment: localClient.increment,
+                histogram: localClient.histogram,
+                flush: localClient.flush,
+              }
+            })
+            LocalClient.generateClientConfig = DogStatsDClient.generateClientConfig
+
+            const localRuntimeMetrics = proxyquire('../src/runtime_metrics/runtime_metrics', {
+              './client': proxyquire('../src/runtime_metrics/client', {
+                '../dogstatsd': { DogStatsDClient: LocalClient },
+              }),
+              '@datadog/native-metrics': nativeMetricsModule,
+            })
+
+            localRuntimeMetrics.start(config)
+            clock.tick(10000)
+            localRuntimeMetrics.stop()
+
+            nowStub.restore()
+
+            sinon.assert.calledWith(localClient.gauge, 'runtime.node.cpu.user', '10.30')
+            sinon.assert.calledWith(localClient.gauge, 'runtime.node.cpu.system', '0.52')
+            sinon.assert.calledWith(localClient.gauge, 'runtime.node.cpu.total', '10.82')
+          } else {
+            const cpuStub = sinon.stub(process, 'cpuUsage')
+            cpuStub.onFirstCall().returns({ user: 0, system: 0 }) // captured as lastCpuUsage on start()
+            cpuStub.onSecondCall().returns(cpuUsage)
+
+            runtimeMetrics.start(config)
+            client.gauge.resetHistory()
+
+            clock.tick(10000)
+
+            nowStub.restore()
+            cpuStub.restore()
+
+            sinon.assert.calledWith(client.gauge, 'runtime.node.cpu.user', '10.30')
+            sinon.assert.calledWith(client.gauge, 'runtime.node.cpu.system', '0.52')
+            sinon.assert.calledWith(client.gauge, 'runtime.node.cpu.total', '10.82')
+          }
         })
       })
 
