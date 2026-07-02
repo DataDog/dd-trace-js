@@ -150,11 +150,8 @@ function createGarbage (count = 50) {
       let client
       let Client
 
-      // Builds an isolated runtime_metrics module instance (own module-level state, own
-      // DogStatsD client) so a test can drive it without interference from the shared
-      // `runtimeMetrics`/`client` fixture above. Used wherever a test needs to inject a mock
-      // `@datadog/native-metrics` module, since its `stats` accessor is non-configurable and
-      // can't be sinon.stub()-ed directly on the real module.
+      // Isolated runtime_metrics instance with its own spy client, for tests that inject a mock
+      // `@datadog/native-metrics` (its `stats` accessor is non-configurable and can't be stubbed).
       function createLocalRuntimeMetrics (nativeMetricsModule) {
         const localClient = {
           gauge: sinon.spy(),
@@ -582,9 +579,8 @@ function createGarbage (count = 50) {
 
       describe('CPU Usage Calculations', () => {
         it('should report positive CPU usage after a real busy loop', () => {
-          // Exercises the real OS/native measurement path end-to-end. Assertions stay loose:
-          // "system" CPU time is dominated by kernel/scheduler noise (context switches, page
-          // faults) that scales with CI runner contention, not with anything this code controls.
+          // Exercises the real measurement path, so assertions check invariants rather than values:
+          // system CPU is dominated by scheduler noise that scales with CI contention, not this code.
           const startTime = Date.now()
           let iterations = 0
           let ticks = 0
@@ -614,19 +610,15 @@ function createGarbage (count = 50) {
           const totalDiff = Math.abs(totalPercent - userPercent - systemPercent)
           assert(totalDiff <= 0.03, `Total CPU percentage sanity check failed: ${totalDiff} > 0.03`)
 
-          // Physically-motivated ceiling (not a timing assumption): a process cannot consume more
-          // than cpuCount * 100% averaged over a wall-clock window. Catches a systematic
-          // unit-conversion bug (e.g. a dropped *10 in elapsedUsDividedBy100) that a
-          // self-consistency check alone (total == user + system) can't, since such a bug would
-          // scale user/system/total proportionally and still pass that check.
+          // Physical ceiling: a process can't exceed cpuCount * 100% over a wall-clock window.
+          // Catches gross unit-conversion regressions the self-consistency check above can't.
           const cpuCeiling = os.cpus().length * 100
           assert(totalPercent <= cpuCeiling, `total CPU usage should not exceed ${cpuCeiling}%, got ${totalPercent}`)
         })
 
         it('should calculate CPU percentages correctly from a known usage delta', () => {
-          // Deterministic companion to the busy-loop test above: pins the percent-conversion
-          // math with hand-derived values instead of real (and therefore noisy) OS measurements.
-          // process.cpuUsage()/native stats report microseconds.
+          // Deterministic companion: pins the percent conversion with fixed values instead of
+          // noisy real measurements. cpuUsage is in microseconds, elapsed in milliseconds.
           const flushIntervalMs = 10000
           const cpuUsage = { user: 1_030_000, system: 52_000 }
           const elapsedUsDividedBy100 = flushIntervalMs * 10
@@ -642,9 +634,8 @@ function createGarbage (count = 50) {
             sinon.assert.calledWith(gauge, 'runtime.node.cpu.total', totalPercent)
           }
 
-          // Stop the outer instance from beforeEach: its interval is still registered on the fake
-          // clock, and its own captureCpuUsage/captureNativeMetrics call would otherwise consume a
-          // performance.now() stub slot meant for the local/mocked instance below.
+          // Stop the beforeEach instance first: its live interval would otherwise fire on the fake
+          // clock and consume a performance.now() stub slot meant for the instance under test.
           runtimeMetrics.stop()
 
           const nowStub = sinon.stub(performance, 'now')
@@ -655,10 +646,8 @@ function createGarbage (count = 50) {
 
           try {
             if (nativeMetrics) {
-              // The native module's `stats` accessor is non-configurable, so it can't be
-              // sinon.stub()-ed directly. Inject a mock module instead, the same way the "should not
-              // load native metrics" test above does. The native path also reports a delta directly,
-              // unlike process.cpuUsage()'s cumulative total, so a single stubbed return is enough.
+              // The native path reports a delta directly (unlike process.cpuUsage()'s cumulative
+              // total), so a single stubbed return is enough.
               const nativeMetricsModule = {
                 start: sinon.spy(),
                 stop: sinon.spy(),
