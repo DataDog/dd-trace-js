@@ -36,6 +36,7 @@ const {
   getOnTestEndHandler,
   getOnTestRetryHandler,
   getOnHookEndHandler,
+  finishDeferredHookEnd,
   getOnFailHandler,
   getOnPendingHandler,
   testFileToSuiteCtx,
@@ -54,6 +55,7 @@ require('./common')
 const MINIMUM_MOCHA_VERSION = DD_MAJOR >= 6 ? '>=8.0.0' : '>=5.2.0'
 
 const patched = new WeakSet()
+const patchedFailedTestReplayHookUp = new WeakSet()
 let hasWarnedDeprecatedMochaVersion = false
 
 const unskippableSuites = []
@@ -382,6 +384,42 @@ function applyTestManagementTestsResponse ({ err, testManagementTests: receivedT
   }
 }
 
+function isFailedTestReplayEnabled () {
+  return config.isTestDynamicInstrumentationEnabled && config.isDiEnabled
+}
+
+function patchFailedTestReplayHookUp (Runner) {
+  if (patchedFailedTestReplayHookUp.has(Runner)) return
+
+  patchedFailedTestReplayHookUp.add(Runner)
+  shimmer.wrap(Runner.prototype, 'hookUp', hookUp => function (name, fn) {
+    const test = name === 'afterEach' && this.test
+    if (!test) {
+      return hookUp.apply(this, arguments)
+    }
+
+    const setProbePromise = test._ddSetProbePromise
+    if (setProbePromise) {
+      delete test._ddSetProbePromise
+    }
+
+    return hookUp.call(this, name, function (...args) {
+      const continueAfterProbe = () => {
+        const deferredHookEndPromise = finishDeferredHookEnd(test)
+        if (deferredHookEndPromise) {
+          return deferredHookEndPromise.then(() => fn.apply(this, args), () => fn.apply(this, args))
+        }
+        return fn.apply(this, args)
+      }
+
+      if (setProbePromise) {
+        return setProbePromise.then(continueAfterProbe, continueAfterProbe)
+      }
+      return continueAfterProbe()
+    })
+  })
+}
+
 function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFinishRequest, localSuites) {
   const ctx = {
     isParallel,
@@ -471,7 +509,7 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     }
   }
 
-  const onReceivedConfiguration = ({ err, libraryConfig, repositoryRoot }) => {
+  const onReceivedConfiguration = ({ err, isTestDynamicInstrumentationEnabled, libraryConfig, repositoryRoot }) => {
     if (err || !skippableSuitesCh.hasSubscribers || !knownTestsCh.hasSubscribers) {
       return mochaGlobalRunCh.runStores(ctx, () => {
         onFinishRequest()
@@ -492,6 +530,8 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     config.isSuitesSkippingEnabled = config.isItrEnabled && libraryConfig.isSuitesSkippingEnabled
     config.isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
     config.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
+    config.isDiEnabled = libraryConfig.isDiEnabled
+    config.isTestDynamicInstrumentationEnabled = isTestDynamicInstrumentationEnabled
 
     getTestOptimizationRequestResults({
       isKnownTestsEnabled: config.isKnownTestsEnabled,
@@ -555,6 +595,9 @@ addHook({
     })
 
     getExecutionConfiguration(runner, false, frameworkVersion, () => {
+      if (isFailedTestReplayEnabled()) {
+        patchFailedTestReplayHookUp(runner.constructor)
+      }
       if (config.isKnownTestsEnabled) {
         const testSuites = this.files.map(file => getTestSuitePath(file, process.cwd()))
         const isFaulty = getIsFaultyEarlyFlakeDetection(
@@ -780,7 +823,13 @@ addHook({
     this.on('retry', getOnTestRetryHandler(config))
 
     // If the hook passes, 'hook end' will be emitted. Otherwise, 'fail' will be emitted
-    this.on('hook end', getOnHookEndHandler(config))
+    this.on('hook end', getOnHookEndHandler(config, {
+      onStart: incrementPendingRootFinalization,
+      onFinish: function (test) {
+        finishRootSuiteAfterFinalAttempt(test)
+        decrementPendingRootFinalization(test)
+      },
+    }))
 
     this.on('hook end', function (hook) {
       const test = hook.ctx?.currentTest

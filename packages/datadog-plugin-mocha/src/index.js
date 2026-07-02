@@ -1,8 +1,5 @@
 'use strict'
 
-// Capture real Date.now at module load time, before any test can install fake timers.
-const realDateNow = Date.now.bind(Date)
-
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
 
@@ -51,8 +48,6 @@ const {
   TELEMETRY_CODE_COVERAGE_NUM_FILES,
   TELEMETRY_TEST_SESSION,
 } = require('../../dd-trace/src/ci-visibility/telemetry')
-
-const BREAKPOINT_SET_GRACE_PERIOD_MS = 200
 
 class MochaPlugin extends CiPlugin {
   static id = 'mocha'
@@ -263,6 +258,7 @@ class MochaPlugin extends CiPlugin {
         span.finish()
         finishAllTraceSpans(span)
         this.activeTestSpan = null
+        this.cancelDiBreakpointHitWait()
         if (this.di && this.libraryConfig?.isDiEnabled && this.runningTestProbe && isLastRetry) {
           this.removeDiProbe(this.runningTestProbe)
           this.runningTestProbe = null
@@ -307,7 +303,7 @@ class MochaPlugin extends CiPlugin {
       return ctx.currentStore
     })
 
-    this.addSub('ci:mocha:test:retry', ({ span, isFirstAttempt, willBeRetried, err, test, isAtrRetry }) => {
+    this.addSub('ci:mocha:test:retry', ({ span, isFirstAttempt, willBeRetried, err, test, isAtrRetry, promises }) => {
       if (span) {
         span.setTag(TEST_STATUS, 'fail')
         if (!isFirstAttempt) {
@@ -330,21 +326,25 @@ class MochaPlugin extends CiPlugin {
         if (isFirstAttempt && willBeRetried && this.di && this.libraryConfig?.isDiEnabled) {
           const probeInformation = this.addDiProbe(err)
           if (probeInformation) {
-            const { file, line, stackIndex } = probeInformation
+            const { file, line, stackIndex, setProbePromise } = probeInformation
             this.runningTestProbe = { file, line }
             this.testErrorStackIndex = stackIndex
             test._ddShouldWaitForHitProbe = true
-            const waitUntil = realDateNow() + BREAKPOINT_SET_GRACE_PERIOD_MS
-            while (realDateNow() < waitUntil) {
-              // TODO: To avoid a race condition, we should wait until `probeInformation.setProbePromise` has resolved.
-              // However, Mocha doesn't have a mechanism for waiting asyncrounously here, so for now, we'll have to
-              // fall back to a fixed syncronous delay.
+            this.prepareDiBreakpointHitWait()
+            if (promises) {
+              promises.setProbePromise = this.waitForDiOperation(setProbePromise)
             }
           }
         }
 
         span.finish()
         finishAllTraceSpans(span)
+      }
+    })
+
+    this.addSub('ci:mocha:test:di:wait', ({ promises }) => {
+      if (this.di) {
+        promises.hitBreakpointPromise = this.waitForDiBreakpointHits()
       }
     })
 

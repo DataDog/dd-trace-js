@@ -84,6 +84,7 @@ const numAttemptToCtx = new Map()
 const newTestsByTestFullname = new Map()
 const attemptToFixTestsByTestFullname = new Map()
 const modifiedTestsByPickleId = new Map()
+const runnerToRetryState = new WeakMap()
 // Pickle IDs for tests that are genuinely new (not in known tests list).
 const newTestPickleIds = new Set()
 const attemptToFixExecutions = new Map()
@@ -662,17 +663,110 @@ function getFinalStatus ({
   }
 }
 
+async function handleRetriedAttempt (runner, state) {
+  const { promises } = state
+  if (promises.hitBreakpointPromise) {
+    await promises.hitBreakpointPromise
+  }
+
+  const setProbePromise = publishRetriedAttempt(runner, state)
+  if (setProbePromise) {
+    await setProbePromise
+    promises.setProbePromise = undefined
+  }
+
+  startRetriedAttempt(state)
+}
+
+function handleRetriedAttemptFromEnvelope (runner, state) {
+  const { promises } = state
+  const publishAndStartRetriedAttempt = () => {
+    publishRetriedAttempt(runner, state)
+    startRetriedAttempt(state)
+  }
+
+  if (promises.hitBreakpointPromise) {
+    promises.hitBreakpointPromise
+      .then(publishAndStartRetriedAttempt, publishAndStartRetriedAttempt)
+      .catch(err => {
+        log.error('Cucumber retry handoff failed after waiting for DI breakpoint hits', err)
+      })
+    return
+  }
+
+  publishAndStartRetriedAttempt()
+}
+
+function publishRetriedAttempt (runner, state) {
+  const { promises } = state
+  let error
+  try {
+    const cucumberResult = runner.getWorstStepResult()
+    error = getErrorFromCucumberResult(cucumberResult)
+  } catch {
+    // ignore error
+  }
+
+  const currentAttempt = state.numAttempt
+  const nextAttempt = currentAttempt + 1
+  const failedAttemptCtx = numAttemptToCtx.get(currentAttempt)
+  const isFirstAttempt = currentAttempt === 0
+  const isAtrRetry = !isFirstAttempt && isFlakyTestRetriesEnabled
+
+  // ATR: record this attempt as failed so when run().finally runs (after retry) we have all statuses
+  if (isFlakyTestRetriesEnabled) {
+    const nameForKey = runner.pickle.name.replace(/\s*\(attempt \d+(?:, retried)?\)\s*$/, '')
+    const atrKey = `${runner.pickle.uri}:${nameForKey}`
+    if (atrStatusesByScenarioKey.has(atrKey)) {
+      atrStatusesByScenarioKey.get(atrKey).push('fail')
+    } else {
+      atrStatusesByScenarioKey.set(atrKey, ['fail'])
+    }
+  }
+
+  // the current span will be finished and a new one will be created
+  testRetryCh.publish({
+    isFirstAttempt,
+    error,
+    isAtrRetry,
+    promises,
+    canWaitForDi: state.testStartPayload.canWaitForDi,
+    ...failedAttemptCtx.currentStore,
+  })
+
+  state.numAttempt = nextAttempt
+  return promises.setProbePromise
+}
+
+function startRetriedAttempt (state) {
+  const { promises, testStartPayload } = state
+  const newCtx = { ...testStartPayload, promises }
+  numAttemptToCtx.set(state.numAttempt, newCtx)
+
+  testStartCh.runStores(newCtx, () => {})
+}
+
 function wrapRun (pl, isLatestVersion, version) {
   if (patched.has(pl)) return
 
   patched.add(pl)
 
+  const canAwaitRetries = typeof pl.prototype.runAttempt === 'function'
+  if (canAwaitRetries) {
+    shimmer.wrap(pl.prototype, 'runAttempt', runAttempt => async function (...args) {
+      const willBeRetried = await runAttempt.apply(this, args)
+      const state = runnerToRetryState.get(this)
+      if (willBeRetried && state) {
+        await handleRetriedAttempt(this, state)
+      }
+      return willBeRetried
+    })
+  }
+
   shimmer.wrap(pl.prototype, 'run', run => function (...args) {
     if (!testFinishCh.hasSubscribers) {
       return run.apply(this, args)
     }
-
-    let numAttempt = 0
 
     const testFileAbsolutePath = this.pickle.uri
     const testSuitePath = getTestSuitePath(testFileAbsolutePath, process.cwd())
@@ -684,58 +778,32 @@ function wrapRun (pl, isLatestVersion, version) {
       testFileAbsolutePath,
       testSourceLine,
       isParallel: !!getEnvironmentVariable('CUCUMBER_WORKER_ID'),
+      canWaitForDi: canAwaitRetries,
     }
     const ctx = testStartPayload
-    numAttemptToCtx.set(numAttempt, ctx)
+    const promises = {}
+    const state = { numAttempt: 0, promises, testStartPayload }
+    numAttemptToCtx.set(state.numAttempt, ctx)
+    runnerToRetryState.set(this, state)
     if (isTestManagementTestsEnabled && getTestProperties(testSuitePath, this.pickle.name).attemptToFix) {
       logAttemptToFixTestExecution(testSuitePath, this.pickle.name, loggedAttemptToFixTests)
     }
     testStartCh.runStores(ctx, () => {})
-    const promises = {}
     try {
-      const onEnvelope = async (testCase) => {
+      const onEnvelope = (testCase) => {
+        if (canAwaitRetries) return
+
         // Only supported from >=8.0.0
         if (testCase?.testCaseFinished) {
           const { testCaseFinished: { willBeRetried } } = testCase
           if (willBeRetried) { // test case failed and will be retried
-            let error
-            try {
-              const cucumberResult = this.getWorstStepResult()
-              error = getErrorFromCucumberResult(cucumberResult)
-            } catch {
-              // ignore error
-            }
-
-            const failedAttemptCtx = numAttemptToCtx.get(numAttempt)
-            const isFirstAttempt = numAttempt++ === 0
-            const isAtrRetry = !isFirstAttempt && isFlakyTestRetriesEnabled
-
-            // ATR: record this attempt as failed so when run().finally runs (after retry) we have all statuses
-            if (isFlakyTestRetriesEnabled) {
-              const nameForKey = this.pickle.name.replace(/\s*\(attempt \d+(?:, retried)?\)\s*$/, '')
-              const atrKey = `${this.pickle.uri}:${nameForKey}`
-              if (atrStatusesByScenarioKey.has(atrKey)) {
-                atrStatusesByScenarioKey.get(atrKey).push('fail')
-              } else {
-                atrStatusesByScenarioKey.set(atrKey, ['fail'])
-              }
-            }
-
-            if (promises.hitBreakpointPromise) {
-              await promises.hitBreakpointPromise
-            }
-
-            // the current span will be finished and a new one will be created
-            testRetryCh.publish({ isFirstAttempt, error, isAtrRetry, ...failedAttemptCtx.currentStore })
-
-            const newCtx = { ...testStartPayload, promises }
-            numAttemptToCtx.set(numAttempt, newCtx)
-
-            testStartCh.runStores(newCtx, () => {})
+            handleRetriedAttemptFromEnvelope(this, state)
           }
         }
       }
-      this.eventBroadcaster.on('envelope', onEnvelope)
+      if (!canAwaitRetries) {
+        this.eventBroadcaster.on('envelope', onEnvelope)
+      }
       let promise
       const executionStart = performance.now()
 
@@ -743,7 +811,10 @@ function wrapRun (pl, isLatestVersion, version) {
         promise = run.apply(this, args)
       })
       promise.finally(async () => {
-        this.eventBroadcaster.removeListener('envelope', onEnvelope)
+        if (!canAwaitRetries) {
+          this.eventBroadcaster.removeListener('envelope', onEnvelope)
+        }
+        runnerToRetryState.delete(this)
         const result = this.getWorstStepResult()
         const { status, skipReason } = isLatestVersion
           ? getStatusFromResultLatest(result)
@@ -851,7 +922,7 @@ function wrapRun (pl, isLatestVersion, version) {
           }
         }
 
-        const attemptCtx = numAttemptToCtx.get(numAttempt)
+        const attemptCtx = numAttemptToCtx.get(state.numAttempt)
 
         const error = getErrorFromCucumberResult(result)
 
@@ -899,7 +970,7 @@ function wrapRun (pl, isLatestVersion, version) {
           error,
           isNew,
           isEfdRetry,
-          isFlakyRetry: numAttempt > 0,
+          isFlakyRetry: state.numAttempt > 0,
           isAttemptToFix,
           isAttemptToFixRetry,
           hasFailedAllRetries,

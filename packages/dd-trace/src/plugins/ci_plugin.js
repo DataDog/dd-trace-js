@@ -1,5 +1,9 @@
 'use strict'
 
+// Capture real timers at module load time, before any test can install fake timers.
+const realSetTimeout = setTimeout
+const realClearTimeout = clearTimeout
+
 const { storage } = require('../../../datadog-core')
 const { COMPONENT } = require('../constants')
 const log = require('../log')
@@ -84,6 +88,7 @@ const {
 } = require('./util/test')
 
 const legacyStorage = storage('legacy')
+const DI_OPERATION_TIMEOUT_MS = 2000
 
 const FRAMEWORK_TO_TRIMMED_COMMAND = {
   vitest: 'vitest run',
@@ -107,6 +112,18 @@ const TEST_FRAMEWORKS_TO_SKIP_GIT_METADATA_EXTRACTION = new Set([
   'mocha',
   'cucumber',
 ])
+
+function withTimeout (promise, timeoutMs) {
+  return new Promise(resolve => {
+    const timeoutId = realSetTimeout(resolve, timeoutMs)
+
+    const done = () => {
+      realClearTimeout(timeoutId)
+      resolve()
+    }
+    promise.then(done, done)
+  })
+}
 
 function setItrSkippingEnabledTagFromLibraryConfig (plugin, frameworkVersion) {
   const libraryCapabilitiesTags = getDefaultLibraryCapabilitiesTags(plugin.constructor.id, frameworkVersion)
@@ -143,6 +160,8 @@ module.exports = class CiPlugin extends Plugin {
     super(...args)
 
     this.fileLineToProbeId = new Map()
+    this.diBreakpointHitPromise = undefined
+    this.diBreakpointHitResolvers = []
     this.rootDir = process.cwd() // fallback in case :session:start events are not emitted
     this._testSuiteSpansByTestSuite = new Map()
     this._pendingWorkerTracesByTestSuite = new Map()
@@ -173,6 +192,7 @@ module.exports = class CiPlugin extends Plugin {
         this.tracer._exporter.addMetadataTags(metadataTags)
         onDone({
           err,
+          isTestDynamicInstrumentationEnabled: this.config.isTestDynamicInstrumentationEnabled,
           libraryConfig,
           repositoryRoot: this.repositoryRoot,
           requestErrorTags: this._getCurrentRequestErrorTags(),
@@ -789,6 +809,11 @@ module.exports = class CiPlugin extends Plugin {
   }
 
   onDiBreakpointHit ({ snapshot }) {
+    for (const resolve of this.diBreakpointHitResolvers) {
+      resolve()
+    }
+    this.diBreakpointHitResolvers.length = 0
+
     if (!this.activeTestSpan || this.activeTestSpan.context()._isFinished) {
       // This is unexpected and is caused by a race condition.
       log.warn('Breakpoint snapshot could not be attached to the active test span')
@@ -820,6 +845,66 @@ module.exports = class CiPlugin extends Plugin {
         span_id: activeTestSpanContext.toSpanId(),
       },
     })
+  }
+
+  /**
+   * Wait for a Dynamic Instrumentation operation without blocking test framework progress forever.
+   *
+   * @param {Promise<void>} promise - Dynamic Instrumentation operation promise.
+   * @returns {Promise<void>}
+   */
+  waitForDiOperation (promise) {
+    return withTimeout(promise, DI_OPERATION_TIMEOUT_MS)
+  }
+
+  /**
+   * Resolve any prepared breakpoint-hit wait when no caller still needs it.
+   */
+  cancelDiBreakpointHitWait () {
+    for (const resolve of this.diBreakpointHitResolvers) {
+      resolve()
+    }
+    this.diBreakpointHitResolvers.length = 0
+  }
+
+  /**
+   * Prepare a wait for the next breakpoint hit before the retried test starts.
+   *
+   * @returns {Promise<void>}
+   */
+  prepareDiBreakpointHitWait () {
+    if (!this.di) return Promise.resolve()
+
+    let resolveHit
+    const hitPromise = new Promise(resolve => {
+      resolveHit = resolve
+      this.diBreakpointHitResolvers.push(resolve)
+    })
+
+    const preparedPromise = hitPromise.finally(() => {
+      const resolverIndex = this.diBreakpointHitResolvers.indexOf(resolveHit)
+      if (resolverIndex !== -1) {
+        this.diBreakpointHitResolvers.splice(resolverIndex, 1)
+      }
+      if (this.diBreakpointHitPromise === preparedPromise) {
+        this.diBreakpointHitPromise = undefined
+      }
+    })
+
+    this.diBreakpointHitPromise = preparedPromise
+    return this.diBreakpointHitPromise
+  }
+
+  /**
+   * Wait until the DI worker has posted any breakpoint hits it was already processing.
+   *
+   * @returns {Promise<void>}
+   */
+  waitForDiBreakpointHits () {
+    if (!this.di) return Promise.resolve()
+    if (this.diBreakpointHitPromise) return this.waitForDiOperation(this.diBreakpointHitPromise)
+
+    return this.waitForDiOperation(this.di.waitForInFlightBreakpointHits())
   }
 
   removeAllDiProbes () {

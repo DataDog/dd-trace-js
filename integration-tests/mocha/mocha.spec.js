@@ -4462,7 +4462,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       })
     })
 
-    onlyLatestIt('reports a passing suite for top-level tests retried with dynamic instrumentation', (done) => {
+    onlyLatestIt('reports a passing suite for root afterEach tests retried with dynamic instrumentation', (done) => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
         di_enabled: true,

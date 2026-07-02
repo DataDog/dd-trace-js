@@ -24,7 +24,10 @@ describe('test visibility with dynamic instrumentation', () => {
   it('can grab local variables', (done) => {
     childProcess = fork(path.join(__dirname, 'target-app', 'test-visibility-dynamic-instrumentation-script.js'))
 
-    childProcess.on('message', ({ snapshot: { language, stack, probe, captures }, probeId }) => {
+    childProcess.on('message', ({ snapshot, probeId }) => {
+      if (!snapshot) return
+
+      const { language, stack, probe, captures } = snapshot
       assert.ok(probeId)
       assert.ok(probe)
       assert.ok(stack)
@@ -42,6 +45,21 @@ describe('test visibility with dynamic instrumentation', () => {
         },
       })
 
+      done()
+    })
+  })
+
+  it('waits for in-flight breakpoint hits', (done) => {
+    childProcess = fork(path.join(__dirname, 'target-app', 'test-visibility-dynamic-instrumentation-script.js'))
+
+    const messages = []
+    childProcess.on('message', (message) => {
+      messages.push(message)
+
+      if (!message.drained) return
+
+      assert.ok(messages[0].snapshot)
+      assert.ok(messages.some(({ drained }) => drained))
       done()
     })
   })

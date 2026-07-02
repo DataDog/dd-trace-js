@@ -161,7 +161,6 @@ const wrappedCoverageReporters = new WeakSet()
 const coverageReporterRequires = new WeakMap()
 const handledJestEvents = new WeakSet()
 
-const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 const ATR_RETRY_SUPPRESSION_FLAG = '_ddDisableAtrRetry'
 const MINIMUM_JEST_VERSION = DD_MAJOR >= 6 ? '>=28.0.0' : '>=24.8.0'
 const MINIMUM_JEST_VERSION_BEFORE_30 = DD_MAJOR >= 6 ? '>=28.0.0 <30.0.0' : '>=24.8.0 <30.0.0'
@@ -1046,18 +1045,13 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             ...ctx.currentStore,
             error: formatJestError(originalError),
             shouldSetProbe,
+            shouldWaitForHitProbe: mightHitBreakpoint,
             promises,
           })
         }
 
-        // After finishing it might take a bit for the snapshot to be handled.
-        // This means that tests retried with DI are BREAKPOINT_HIT_GRACE_PERIOD_MS slower at least.
-        if (status === 'fail' && mightHitBreakpoint) {
-          await new Promise(resolve => {
-            realSetTimeout(() => {
-              resolve()
-            }, BREAKPOINT_HIT_GRACE_PERIOD_MS)
-          })
+        if (promises.hitBreakpointPromise) {
+          await promises.hitBreakpointPromise
         }
 
         let isAtrRetry = false

@@ -31,9 +31,11 @@ const log = require('../../../log')
 const processTags = require('../../../process-tags')
 
 let sessionStarted = false
+let inFlightBreakpointHits = 0
 
 const breakpointIdToProbe = new Map()
 const probeIdToBreakpointId = new Map()
+const breakpointHitDrainRequests = []
 
 const limits = {
   maxReferenceDepth: DEFAULT_MAX_REFERENCE_DEPTH,
@@ -49,32 +51,48 @@ session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint]
     return session.post('Debugger.resume')
   }
 
-  const stack = await getStackFromCallFrames(callFrames)
+  inFlightBreakpointHits++
+  try {
+    const stack = await getStackFromCallFrames(callFrames)
 
-  const { processLocalState } = await getLocalStateForCallFrame(callFrames[0], limits)
+    const { processLocalState } = await getLocalStateForCallFrame(callFrames[0], limits)
 
-  await session.post('Debugger.resume')
+    await session.post('Debugger.resume')
 
-  const snapshot = {
-    id: randomUUID(),
-    timestamp: Date.now(),
-    probe: {
-      id: probe.id,
-      version: '0',
-      location: probe.location,
-    },
-    captures: {
-      lines: { [probe.location.lines[0]]: { locals: processLocalState() } },
-    },
-    stack,
-    language: 'javascript',
+    const snapshot = {
+      id: randomUUID(),
+      timestamp: Date.now(),
+      probe: {
+        id: probe.id,
+        version: '0',
+        location: probe.location,
+      },
+      captures: {
+        lines: { [probe.location.lines[0]]: { locals: processLocalState() } },
+      },
+      stack,
+      language: 'javascript',
+    }
+
+    if (config.propagateProcessTags?.enabled) {
+      snapshot[processTags.DYNAMIC_INSTRUMENTATION_FIELD_NAME] = processTags.tagsObject
+    }
+
+    breakpointHitChannel.postMessage({ snapshot })
+  } finally {
+    inFlightBreakpointHits--
+    drainBreakpointHitRequests()
   }
+})
 
-  if (config.propagateProcessTags?.enabled) {
-    snapshot[processTags.DYNAMIC_INSTRUMENTATION_FIELD_NAME] = processTags.tagsObject
+breakpointHitChannel.on('message', ({ drainRequestId }) => {
+  if (!drainRequestId) return
+
+  if (inFlightBreakpointHits === 0) {
+    breakpointHitChannel.postMessage({ drainRequestId })
+  } else {
+    breakpointHitDrainRequests.push(drainRequestId)
   }
-
-  breakpointHitChannel.postMessage({ snapshot })
 })
 
 breakpointRemoveChannel.on('message', async (probeId) => {
@@ -153,4 +171,13 @@ async function addBreakpoint (probe) {
 function start () {
   sessionStarted = true
   return session.post('Debugger.enable') // return instead of await to reduce number of promises created
+}
+
+function drainBreakpointHitRequests () {
+  if (inFlightBreakpointHits !== 0) return
+
+  for (const drainRequestId of breakpointHitDrainRequests) {
+    breakpointHitChannel.postMessage({ drainRequestId })
+  }
+  breakpointHitDrainRequests.length = 0
 }

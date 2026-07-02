@@ -93,6 +93,29 @@ describe('CiPlugin', () => {
     sinon.assert.calledOnceWithExactly(getCodeOwnersFileEntries, '/repo-root')
   })
 
+  it('starts the DI breakpoint-hit timeout when waiting, not when preparing', async () => {
+    const plugin = createPlugin('jest_worker')
+    const waitForDiOperation = sinon.stub(plugin, 'waitForDiOperation').resolves()
+    plugin.di = {
+      waitForInFlightBreakpointHits: sinon.stub().resolves(),
+    }
+
+    plugin.prepareDiBreakpointHitWait()
+
+    sinon.assert.notCalled(waitForDiOperation)
+
+    const preparedPromise = plugin.diBreakpointHitPromise
+    await plugin.waitForDiBreakpointHits()
+
+    sinon.assert.calledOnceWithExactly(waitForDiOperation, preparedPromise)
+
+    plugin.cancelDiBreakpointHitWait()
+    await preparedPromise
+
+    assert.strictEqual(plugin.diBreakpointHitPromise, undefined)
+    assert.deepStrictEqual(plugin.diBreakpointHitResolvers, [])
+  })
+
   function createPlugin (exporter) {
     class TestPlugin extends CiPlugin {
       static id = 'vitest'

@@ -1,8 +1,5 @@
 'use strict'
 
-// Capture real timers at module load time, before any test can install fake timers.
-const realSetTimeout = setTimeout
-
 const { performance } = require('node:perf_hooks')
 
 const shimmer = require('../../datadog-shimmer')
@@ -18,6 +15,7 @@ const {
   testFinishTimeCh,
   testPassCh,
   testErrorCh,
+  testDiWaitCh,
   testSkipCh,
   testFnCh,
   testSuiteStartCh,
@@ -31,8 +29,6 @@ const {
   isFlakyTestRetriesEnabledForTask,
   getVitestTestProperties,
 } = require('./vitest-util')
-
-const BREAKPOINT_HIT_GRACE_PERIOD_MS = 400
 
 const taskToCtx = new WeakMap()
 const taskToTestProperties = new WeakMap()
@@ -61,11 +57,9 @@ let vitestSetFn = null
 let vitestGetHooks = null
 
 function waitForHitProbe () {
-  return new Promise(resolve => {
-    realSetTimeout(() => {
-      resolve()
-    }, BREAKPOINT_HIT_GRACE_PERIOD_MS)
-  })
+  const promises = {}
+  testDiWaitCh.publish({ promises })
+  return promises.hitBreakpointPromise
 }
 
 function getVitestTestStatus (test, retryCount) {

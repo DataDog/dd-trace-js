@@ -2,9 +2,6 @@
 
 const { performance } = require('node:perf_hooks')
 
-// Capture real timers at module load time, before any test can install fake timers.
-const realSetTimeout = setTimeout
-
 const {
   getTestSuitePath,
   DYNAMIC_NAME_RE,
@@ -19,6 +16,7 @@ const shimmer = require('../../../datadog-shimmer')
 // test channels
 const testStartCh = channel('ci:mocha:test:start')
 const testFinishCh = channel('ci:mocha:test:finish')
+const testDiWaitCh = channel('ci:mocha:test:di:wait')
 // after a test has failed, we'll publish to this channel
 const testRetryCh = channel('ci:mocha:test:retry')
 const errorCh = channel('ci:mocha:test:error')
@@ -28,7 +26,6 @@ const isModifiedCh = channel('ci:mocha:test:is-modified')
 // suite channels
 const testSuiteErrorCh = channel('ci:mocha:test-suite:error')
 
-const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 const testToContext = new WeakMap()
 const originalFns = new WeakMap()
 const testToStartLine = new WeakMap()
@@ -43,6 +40,12 @@ const testsStatuses = new Map()
 const efdRetryCountByTestFullName = new Map()
 const efdSlowAbortedTests = new Set()
 const attemptToFixExecutions = new Map()
+
+function waitForHitProbe () {
+  const promises = {}
+  testDiWaitCh.publish({ promises })
+  return promises.hitBreakpointPromise
+}
 const loggedAttemptToFixTests = new Set()
 
 function getAfterEachHooks (testOrHook) {
@@ -639,14 +642,8 @@ function getOnTestEndHandler (config, finalAttemptHandlers) {
       finalAttemptHandlers?.onStart?.(test)
     }
 
-    // After finishing it might take a bit for the snapshot to be handled.
-    // This means that tests retried with DI are BREAKPOINT_HIT_GRACE_PERIOD_MS slower at least.
     if (test._ddShouldWaitForHitProbe || test._retriedTest?._ddShouldWaitForHitProbe) {
-      await new Promise((resolve) => {
-        realSetTimeout(() => {
-          resolve()
-        }, BREAKPOINT_HIT_GRACE_PERIOD_MS)
-      })
+      await waitForHitProbe()
     }
 
     if (shouldFinishTest) {
@@ -665,7 +662,7 @@ function getOnTestEndHandler (config, finalAttemptHandlers) {
   }
 }
 
-function getOnHookEndHandler (config) {
+function getOnHookEndHandler (config, finalAttemptHandlers) {
   return function (hook) {
     const test = hook.ctx.currentTest
     const afterEachHooks = getAfterEachHooks(hook)
@@ -678,20 +675,56 @@ function getOnHookEndHandler (config) {
         // skip to avoid double-publishing
         if (ctx && (!test._ddIsDisabled || test._ddIsAttemptToFix)) {
           const testFinishInfo = getTestFinishInfo(test, status, config, ctx.err || test.err)
-          if (testFinishInfo.finalStatus !== undefined) {
-            test._ddIsFinalAttempt = true
+          const isFinalAttempt = testFinishInfo.finalStatus !== undefined
+          const publishTestFinish = () => {
+            testFinishCh.publish({
+              status,
+              hasBeenRetried: isMochaRetry(test),
+              isLastRetry: getIsLastRetry(test),
+              ...testFinishInfo,
+              ...ctx.currentStore,
+            })
+            if (isFinalAttempt) {
+              test._ddIsFinalAttempt = true
+            }
           }
-          testFinishCh.publish({
-            status,
-            hasBeenRetried: isMochaRetry(test),
-            isLastRetry: getIsLastRetry(test),
-            ...testFinishInfo,
-            ...ctx.currentStore,
-          })
+          if (test._ddShouldWaitForHitProbe || test._retriedTest?._ddShouldWaitForHitProbe) {
+            if (isFinalAttempt) {
+              finalAttemptHandlers?.onStart?.(test)
+            }
+            test._ddDeferredHookEnd = {
+              waitForHitProbePromise: waitForHitProbe(),
+              publishTestFinish,
+              onFinish: isFinalAttempt ? () => finalAttemptHandlers?.onFinish?.(test) : undefined,
+            }
+            return
+          }
+          publishTestFinish()
         }
       }
     }
   }
+}
+
+function finishDeferredHookEnd (test) {
+  const deferredHookEnd = test?._ddDeferredHookEnd
+  if (!deferredHookEnd) return
+
+  const finish = () => {
+    try {
+      return deferredHookEnd.publishTestFinish()
+    } finally {
+      deferredHookEnd.onFinish?.()
+    }
+  }
+
+  delete test._ddDeferredHookEnd
+  if (!deferredHookEnd.waitForHitProbePromise) return finish()
+
+  return deferredHookEnd.waitForHitProbePromise.then(
+    finish,
+    finish
+  )
 }
 
 function getOnFailHandler (isMain, config) {
@@ -764,14 +797,19 @@ function getOnTestRetryHandler (config) {
         config.isFlakyTestRetriesEnabled &&
         !test._ddIsAttemptToFix &&
         !test._ddIsEfdRetry
+      const promises = {}
       testRetryCh.publish({
         isFirstAttempt,
         err,
         willBeRetried,
         test,
         isAtrRetry,
+        promises,
         ...ctx.currentStore,
       })
+      if (promises.setProbePromise) {
+        test._ddSetProbePromise = promises.setProbePromise
+      }
     }
     const key = getTestToContextKey(test)
     testToContext.delete(key)
@@ -901,6 +939,7 @@ module.exports = {
   getOnTestEndHandler,
   getOnTestRetryHandler,
   getOnHookEndHandler,
+  finishDeferredHookEnd,
   getOnFailHandler,
   getOnPendingHandler,
   testFileToSuiteCtx,

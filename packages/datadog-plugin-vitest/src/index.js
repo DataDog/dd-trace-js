@@ -204,6 +204,7 @@ class VitestPlugin extends CiPlugin {
         }
         span.finish(this.taskToFinishTime.get(task))
         finishAllTraceSpans(span)
+        this.cancelDiBreakpointHitWait()
       }
     })
 
@@ -227,7 +228,8 @@ class VitestPlugin extends CiPlugin {
           const { file, line, stackIndex, setProbePromise } = probeInformation
           this.runningTestProbe = { file, line }
           this.testErrorStackIndex = stackIndex
-          promises.setProbePromise = setProbePromise
+          this.prepareDiBreakpointHitWait()
+          promises.setProbePromise = this.waitForDiOperation(setProbePromise)
         }
       }
       this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', this.getTestTelemetryTags(span))
@@ -254,6 +256,15 @@ class VitestPlugin extends CiPlugin {
         span.finish() // `duration` is empty for retries, so we'll use clock time
       }
       finishAllTraceSpans(span)
+      if (!shouldSetProbe) {
+        this.cancelDiBreakpointHitWait()
+      }
+    })
+
+    this.addSub('ci:vitest:test:di:wait', ({ promises }) => {
+      if (this.di) {
+        promises.hitBreakpointPromise = this.waitForDiBreakpointHits()
+      }
     })
 
     this.addSub('ci:vitest:test:skip', ({
