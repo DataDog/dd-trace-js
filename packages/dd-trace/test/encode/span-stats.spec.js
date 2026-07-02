@@ -49,6 +49,8 @@ describe('span-stats-encode', () => {
       HTTPMethod: 'GET',
       HTTPEndpoint: '/users/:id',
       srv_src: 'kafka',
+      SpanKind: 'server',
+      GRPCStatusCode: 'OK',
       Hits: 30799,
       TopLevelHits: 30799,
       Duration: 1230,
@@ -203,5 +205,31 @@ describe('span-stats-encode', () => {
 
     const decodedStat = decoded.Stats[0].Stats[0]
     assert.strictEqual(decodedStat.srv_src, '')
+  })
+
+  it('should encode SpanKind and GRPCStatusCode', () => {
+    encoder.encode(stats)
+
+    const buffer = encoder.makePayload()
+    const decoded = msgpack.decode(buffer)
+
+    const decodedStat = decoded.Stats[0].Stats[0]
+    assert.strictEqual(decodedStat.SpanKind, 'server')
+    assert.strictEqual(decodedStat.GRPCStatusCode, 'OK')
+  })
+
+  it('should encode SpanKind and GRPCStatusCode as empty strings when not present', () => {
+    const statsWithout = {
+      ...stats,
+      Stats: [{ ...bucket, Stats: [{ ...stat, SpanKind: undefined, GRPCStatusCode: undefined }] }],
+    }
+    encoder.encode(statsWithout)
+
+    const buffer = encoder.makePayload()
+    const decoded = msgpack.decode(buffer)
+
+    const decodedStat = decoded.Stats[0].Stats[0]
+    assert.strictEqual(decodedStat.SpanKind, '')
+    assert.strictEqual(decodedStat.GRPCStatusCode, '')
   })
 })

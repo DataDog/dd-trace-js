@@ -19,6 +19,8 @@ const {
   HTTP_ENDPOINT,
   HTTP_ROUTE,
   HTTP_METHOD,
+  SPAN_KIND,
+  GRPC_STATUS_CODE,
 } = require('../../../ext/tags')
 const {
   DEFAULT_SPAN_NAME,
@@ -178,6 +180,27 @@ describe('SpanAggKey', () => {
     const key = new SpanAggKey(span)
     assert.strictEqual(
       key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,opt.plugin,,')
+  })
+
+  it('should include span kind in aggregation key', () => {
+    const span = { ...basicSpan, meta: { ...basicSpan.meta, [SPAN_KIND]: 'server' } }
+    const key = new SpanAggKey(span)
+    assert.strictEqual(
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,integration,server,')
+  })
+
+  it('should include gRPC status code string in aggregation key', () => {
+    const span = { ...basicSpan, meta: { ...basicSpan.meta, [GRPC_STATUS_CODE]: 'NOT_FOUND' } }
+    const key = new SpanAggKey(span)
+    assert.strictEqual(
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,integration,,NOT_FOUND')
+  })
+
+  it('should translate numeric gRPC status code to canonical name in aggregation key', () => {
+    const span = { ...basicSpan, meta: {}, metrics: { [GRPC_STATUS_CODE]: 14 } }
+    const key = new SpanAggKey(span)
+    assert.strictEqual(
+      key.toString(), 'basic-span,service-name,resource-name,span-type,0,false,,,,,UNAVAILABLE')
   })
 })
 

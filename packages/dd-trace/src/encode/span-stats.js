@@ -31,7 +31,7 @@ class SpanStatsEncoder extends AgentEncoder {
   }
 
   _encodeStat (bytes, stat) {
-    bytes.writeMapPrefix(15)
+    this._encodeMapPrefix(bytes, 17)
 
     this._encodeString(bytes, 'Service')
     const service = stat.Service || DEFAULT_SERVICE_NAME
@@ -79,6 +79,12 @@ class SpanStatsEncoder extends AgentEncoder {
 
     this._encodeString(bytes, 'srv_src')
     this._encodeString(bytes, stat.srv_src || '')
+
+    this._encodeString(bytes, 'SpanKind')
+    this._encodeString(bytes, stat.SpanKind || '')
+
+    this._encodeString(bytes, 'GRPCStatusCode')
+    this._encodeString(bytes, stat.GRPCStatusCode || '')
   }
 
   _encodeBucket (bytes, bucket) {
