@@ -231,7 +231,7 @@ services:
       - VCR_PROVIDER_MAP=claude-agent-sdk=https://api.anthropic.com
       - VCR_JSON_BODY_NORMALIZERS=metadata.user_id,output_config.effort
       - >-
-        VCR_BODY_REGEX_NORMALIZERS=agentId: [a-f0-9]+,SendMessage with to: '[a-f0-9]+',duration_ms: \d+,"events":\[\{"event_type":"ClaudeCodeInternalEvent"[^\]]*\],cc_version=[^;]+,cch=[^;]+,<system-reminder>[\s\S]*?</system-reminder>,(?<="description":")(?:\\.|[^"\\])*,(?:You are an agent for Claude Code|Write the title|Report the result concisely\.|Async agent launched successfully)(?:\\.|[^"\\])*,(?<="signature":")[^"]+
+        VCR_BODY_REGEX_NORMALIZERS=agentId: [a-f0-9]+,SendMessage with to: '[a-f0-9]+',duration_ms: \d+,"events":\[\{"event_type":"ClaudeCodeInternalEvent"[^\]]*\],cc_version=[^;]+,cch=[^;]+,<system-reminder>[\s\S]*?</system-reminder>,(?<="input":\{"description":")[^"]*,(?:You are an agent for Claude Code|Write the title|Report the result concisely\.|Async agent launched successfully)(?:\\.|[^"\\])*,(?<="signature":")[^"]+
       # - AWS_SECRET_ACCESS_KEY # uncomment this line for generating aws service cassettes
     volumes:
       # when there are other products not using the cassette feature from the test agent,

@@ -98,50 +98,45 @@ describe('Plugin', () => {
 
       // Subagent prompt is determined by the LLM at the previous step - differs between SDK versions
       const subagentPrompt = is03
-        ? 'Get the current weather for New York (state code: NY) in fahrenheit.'
-        : 'Use the fetch_weather tool to get the current weather in New York (state code: NY) ' +
-          'in fahrenheit. Return the full result.'
+        ? 'Get the current weather for New York state (NY) in fahrenheit.'
+        : 'Please fetch the current weather for New York state in fahrenheit using the available weather tool.'
 
       const subagentNYResult = is03
-        ? 'The current weather in New York (NY) is 72 degrees Fahrenheit.'
-        : 'I have the weather result for you. Here is the full result returned by the tool:\n\n' +
-          '**The weather in NY is 72° in fahrenheit.**'
+        ? 'The current weather in New York state (NY) is 72 degrees Fahrenheit.'
+        : 'The current weather in New York state is **72°F**.'
 
       const outerThinkingText = is03
         ? 'The user wants me to:\n' +
-          '1. Spawn a subagent to get the weather in New York (in fahrenheit)\n' +
-          '2. After that, get the weather in California myself (in fahrenheit)\n' +
+          '1. Spawn a subagent to get weather in New York (fahrenheit)\n' +
+          '2. After that subagent completes, get weather in California (fahrenheit) directly (not in a subagent)\n' +
           '\n' +
           'Let me spawn the subagent for New York first, wait for it to complete, ' +
-          "then get California's weather myself."
+          "then get California's weather directly."
         : 'The user wants me to:\n' +
           '1. Spawn a subagent to get the weather in New York (in fahrenheit)\n' +
-          '2. After that subagent completes, get the weather in California ' +
-              '(in fahrenheit) directly (not in a subagent)\n' +
+          '2. After that, get the weather in California myself (not in a subagent, in fahrenheit)\n' +
           '\n' +
-          'Let me start by spawning a subagent for New York.'
+          'Let me start by spawning a subagent for New York weather.'
 
       // The assistant's text preamble before issuing the Agent tool call
       const outerAgentPreamble = is03
-        ? "Sure! Let me first spawn a subagent to get New York's weather, " +
-          "and then I'll fetch California's weather myself afterward."
-        : 'Sure! Let me first spawn a subagent to get the weather in New York, ' +
-          "and then I'll fetch California's weather myself afterward."
+        ? "Sure! Let me start by spawning a subagent to fetch New York's weather first."
+        : "Sure! Let me start by spawning a subagent for New York's weather."
 
       // The assistant's text preamble before fetching CA weather directly
       const outerCaPreamble = is03
-        ? "The subagent reports **New York is currently 72°F**. Now let me fetch California's weather myself:"
-        : "The subagent reported **72°F in New York**. Now let me fetch California's weather directly:"
+        ? "The subagent returned **72°F** for New York. Now let me fetch California's weather directly!"
+        : "The subagent retrieved New York's weather: **72°F**. Now let me fetch California's weather myself!"
 
       // The Agent tool's `description` argument (chosen by the LLM at outer step-0); differs by SDK version
       const agentDescription = is03 ? 'Fetch weather for New York' : 'Fetch New York weather'
 
       const agentToolId = is03
-        ? 'toolu_01NEpmZNVM8rq7gCopMLHgrC'
-        : 'toolu_01Bfgp3ec9pjjCFrGR1bzv2s'
+        ? 'toolu_01WhuEoTbovDrtZhsmEK3J2x'
+        : 'toolu_014aAjDnjAJERSCJ8TcQ9Lw9'
       const caToolId = is03
-        ? 'toolu_011hUvHWsb7539di4XHrrhfM'
-        : 'toolu_01DxCjSCq4yv7a79WdNCJBYn'
+        ? 'toolu_01GB52GCVdh2L64472joz4E1'
+        : 'toolu_01KPeU6ECTCNSYBhRYdEzWWj'
 
       // [0] root query span
       assertLlmObsSpanEvent(llmobsSpans[0], {
