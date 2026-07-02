@@ -254,7 +254,7 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
 
     const input = event.value
     const embedding = result?.embedding
-    const embeddingTextResult = `[1 embedding(s) returned with size ${embedding.length}]`
+    const embeddingTextResult = embedding ? `[1 embedding(s) returned with size ${embedding.length}]` : ''
 
     this._tagger.tagEmbeddingIO(span, input, embeddingTextResult)
 
@@ -266,12 +266,12 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
   setTextGenerationTags (span, ctx) {
     const { event, result } = ctx
 
-    const lastUserPrompt = event.messages.reverse().find(message => message.role === 'user').content
+    const lastUserPrompt = event.messages.findLast(message => message.role === 'user')?.content
     const input = Array.isArray(lastUserPrompt) ? lastUserPrompt.map(part => part.text ?? '').join('') : lastUserPrompt
 
     const output =
       ctx.isStream
-        ? this.#lastOutputContentByCallId.get(event.callId).find(part => part.type === 'text').text
+        ? this.#lastOutputContentByCallId.get(event.callId).find(part => part.type === 'text')?.text
         : result._output
 
     this._tagger.tagTextIO(span, input, output)
@@ -316,9 +316,9 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
         tools.map(({ inputSchema, ...rest }) => ({
           ...rest,
           schema: {
-            properties: inputSchema.properties,
-            required: inputSchema.required,
-            type: inputSchema.type,
+            properties: inputSchema?.properties ?? {},
+            required: inputSchema?.required ?? [],
+            type: inputSchema?.type ?? '',
           },
         }))
       )
