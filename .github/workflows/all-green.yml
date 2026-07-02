@@ -40,10 +40,10 @@ jobs:
           GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
           POLLING_INTERVAL: 1
           RETRIES: 20
-      # Sort every downloaded per-cell `coverage-*` artifact into one directory per integration under
-      # `coverage-upload/<group>/{lcov,json}/`. The reports are not merged here — both backends merge
-      # same-flag uploads server-side — so each cell's report passes through byte-for-byte. Codecov
-      # gets the istanbul JSON (carries branch/function coverage), Datadog gets the lcov.
+      # Sort every downloaded per-cell `coverage-*` artifact into a single `coverage-upload/{lcov,json}/`
+      # directory. The reports are not merged here — both backends merge same-flag uploads
+      # server-side — so each cell's report passes through byte-for-byte. Codecov gets the istanbul
+      # JSON (carries branch/function coverage), Datadog gets the lcov.
       - if: "!cancelled()"
         run: node scripts/group-coverage.mjs
       - if: "!cancelled()"
@@ -55,22 +55,16 @@ jobs:
         run: datadog-ci junit upload --service dd-trace-js-tests --auto-discovery junit-results
         env:
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
-      # One Datadog upload per area, flagged with the area name so coverage is attributable in the
-      # Datadog UI the same way the Codecov flags attribute it. Datadog reads the lcov reports; it
-      # does not ingest istanbul's JSON.
+      # A single Datadog upload for every cell's coverage, flagged `coverage`. Datadog reads the lcov
+      # reports; it does not ingest istanbul's JSON.
       - if: "!cancelled()"
         run: |
-          set -o pipefail
-          shopt -s nullglob
-          # -P 20 covers today's dozen areas (plus headroom) in a single concurrent batch.
-          # shellcheck disable=SC2016 # the inner shell must expand "$1", not the template.
-          printf '%s\0' coverage-upload/*/lcov/ | xargs -0 -r -P 20 -I {} \
-            bash -c 'datadog-ci coverage upload "$1" --flags "$(basename "$(dirname "$1")")"' _ {}
+          [ -d coverage-upload/lcov ] || exit 0
+          datadog-ci coverage upload coverage-upload/lcov --flags coverage
         env:
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
-      # One Codecov upload per area via the CLI directly — the codecov-action would re-validate
-      # and re-download the uploader once per group. Codecov reads branch/function coverage
-      # from the istanbul JSON, so the upload points at each group's `json/` subdirectory.
+      # A single Codecov upload for every cell's coverage via the CLI directly. Codecov reads
+      # branch/function coverage from the istanbul JSON, so the upload points at `json/`.
       # `master-coverage` is the flag `.codecov.yml` gates `codecov/patch` on; attach it only on PRs
       # targeting master so release-branch PRs auto-pass. The SHA/branch/PR are passed explicitly
       # because All Green checks out the merge ref, not the head the other workflows reported coverage
@@ -78,30 +72,20 @@ jobs:
       # which forks can't read).
       - if: "!cancelled()"
         run: |
+          [ -d coverage-upload/json ] || exit 0
           commit_args=(--sha "$HEAD_SHA" --branch "$HEAD_BRANCH")
-          upload_args=(--sha "$HEAD_SHA")
+          upload_args=(--sha "$HEAD_SHA" --dir coverage-upload/json -F coverage)
           if [ -n "$PR_NUMBER" ]; then
             commit_args+=(--pr "$PR_NUMBER")
             upload_args+=(--pr "$PR_NUMBER")
           fi
-          master_flag=()
           if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ "$BASE_REF" = "master" ]; then
-            master_flag=(-F master-coverage)
+            upload_args+=(-F master-coverage)
           fi
-          shopt -s nullglob
-          groups=(coverage-upload/*/json/)
-          [ ${#groups[@]} -gt 0 ] || exit 0
           pip install --quiet codecov-cli
-          # create-commit and create-report set up the report once and must finish before any upload;
-          # only the do-upload fan-out is safe to parallelize.
           codecovcli create-commit "${commit_args[@]}"
           codecovcli create-report --sha "$HEAD_SHA"
-          set -o pipefail
-          # -P 20 covers today's dozen areas (plus headroom) in a single concurrent batch.
-          # shellcheck disable=SC2016 # the inner shell must expand "$@"/"$dir", not the template.
-          printf '%s\0' "${groups[@]}" | xargs -0 -r -P 20 -I {} \
-            bash -c 'dir="$1"; shift; codecovcli do-upload "$@" --dir "$dir" -F "$(basename "$(dirname "$dir")")"' \
-              _ {} "${upload_args[@]}" "${master_flag[@]}"
+          codecovcli do-upload "${upload_args[@]}"
         env:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           BASE_REF: ${{ github.base_ref }}
