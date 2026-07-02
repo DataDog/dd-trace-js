@@ -20,6 +20,7 @@ declare const tags: {
   HTTP_RESPONSE_HEADERS: 'http.response.headers'
   HTTP_USERAGENT: 'http.useragent',
   HTTP_CLIENT_IP: 'http.client_ip',
+  GRPC_STATUS_CODE: 'grpc.status.code'
   PATHWAY_HASH: 'pathway.hash'
 }
 
