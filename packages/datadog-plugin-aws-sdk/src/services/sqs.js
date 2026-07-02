@@ -3,7 +3,7 @@
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
 const { DsmPathwayCodec, getHeadersSize } = require('../../../dd-trace/src/datastreams')
-const { extractQueueMetadata, isEmpty } = require('../util')
+const { extractQueueMetadata } = require('../util')
 
 /**
  * @typedef {{
@@ -334,9 +334,11 @@ class Sqs extends BaseAwsSdkPlugin {
     }
 
     const ddInfo = {}
+    let injected = false
     // For now we only inject to the first message; batches may change later.
     if (injectTraceContext) {
       this.tracer.inject(span, 'text_map', ddInfo)
+      injected = true
     }
 
     if (this.config.dsmEnabled) {
@@ -350,13 +352,13 @@ class Sqs extends BaseAwsSdkPlugin {
       if (dataStreamsContext) {
         DsmPathwayCodec.encode(dataStreamsContext, ddInfo)
         params.MessageAttributes._datadog.StringValue = JSON.stringify(ddInfo)
-      } else if (isEmpty(ddInfo)) {
+      } else if (!injected) {
         delete params.MessageAttributes._datadog
       }
       return
     }
 
-    if (isEmpty(ddInfo)) return
+    if (!injected) return
 
     params.MessageAttributes._datadog = {
       DataType: 'String',

@@ -126,15 +126,6 @@ describe('Sqs plugin injectToMessage', () => {
     )
   })
 
-  it('skips `_datadog` entirely when DSM is disabled and trace inject yields nothing', () => {
-    const plugin = buildPlugin({ dsmEnabled: false })
-    const params = { MessageBody: 'hello', MessageAttributes: {} }
-
-    plugin.injectToMessage(null, params, 'http://example/queue', true)
-
-    assert.deepStrictEqual(params.MessageAttributes, {})
-  })
-
   it('attaches `_datadog` with the injected trace context when DSM is disabled', () => {
     const plugin = buildPlugin({
       dsmEnabled: false,

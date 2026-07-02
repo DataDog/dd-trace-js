@@ -2,7 +2,6 @@
 const { DsmPathwayCodec, getHeadersSize } = require('../../../dd-trace/src/datastreams')
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
-const { isEmpty } = require('../util')
 
 class Sns extends BaseAwsSdkPlugin {
   static id = 'sns'
@@ -80,9 +79,11 @@ class Sns extends BaseAwsSdkPlugin {
     }
 
     const ddInfo = {}
+    let injected = false
     // for now, we only want to inject to the first message, this may change for batches in the future
     if (injectTraceContext) {
       this.tracer.inject(span, 'text_map', ddInfo)
+      injected = true
       // add ddInfo before checking DSM so we can include DD attributes in payload size
       params.MessageAttributes._datadog = {
         DataType: 'Binary',
@@ -99,17 +100,18 @@ class Sns extends BaseAwsSdkPlugin {
       }
 
       const dataStreamsContext = this.setDSMCheckpoint(span, params, topicArn)
-      DsmPathwayCodec.encode(dataStreamsContext, ddInfo)
+      if (dataStreamsContext?.hash) {
+        DsmPathwayCodec.encode(dataStreamsContext, ddInfo)
+        injected = true
+      }
     }
 
-    if (isEmpty(ddInfo)) {
-      if (params.MessageAttributes._datadog) {
-        // let's avoid adding any additional information to payload if we failed to inject
-        delete params.MessageAttributes._datadog
-      }
-    } else {
+    if (injected) {
       // BINARY types are automatically base64 encoded
       params.MessageAttributes._datadog.BinaryValue = Buffer.from(JSON.stringify(ddInfo))
+    } else if (params.MessageAttributes._datadog) {
+      // let's avoid adding any additional information to payload if we failed to inject
+      delete params.MessageAttributes._datadog
     }
   }
 

@@ -2,7 +2,6 @@
 const { DsmPathwayCodec, getSizeOrZero } = require('../../../dd-trace/src/datastreams')
 const log = require('../../../dd-trace/src/log')
 const BaseAwsSdkPlugin = require('../base')
-const { isEmpty } = require('../util')
 
 function recordDataAsString (data) {
   return Buffer.isBuffer(data) ? data.toString('utf8') : Buffer.from(data).toString('utf8')
@@ -252,13 +251,15 @@ class Kinesis extends BaseAwsSdkPlugin {
     }
 
     const ddInfo = {}
+    let injected = false
     // For now we only inject to the first message; batches may change later.
     if (injectTraceContext) {
       this.tracer.inject(span, 'text_map', ddInfo)
+      injected = true
     }
 
     const dsmEnabled = this.config.dsmEnabled
-    if (isEmpty(ddInfo) && !dsmEnabled) return
+    if (!injected && !dsmEnabled) return
 
     parsedData._datadog = ddInfo
     // Gate on the 1 MiB Kinesis cap before setDSMCheckpoint: a record we can't ship must not
@@ -273,11 +274,12 @@ class Kinesis extends BaseAwsSdkPlugin {
       const dataStreamsContext = this.setDSMCheckpoint(span, params, stream)
       if (dataStreamsContext) {
         DsmPathwayCodec.encode(dataStreamsContext, ddInfo)
+        injected = true
         serialized = JSON.stringify(parsedData)
       }
     }
 
-    if (isEmpty(ddInfo)) return
+    if (!injected) return
 
     params.Data = Buffer.from(serialized, 'utf8')
   }

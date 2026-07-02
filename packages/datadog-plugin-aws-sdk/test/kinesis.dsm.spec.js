@@ -192,6 +192,23 @@ describe('Kinesis', function () {
         helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, () => {})
       })
 
+      // Regression: a record whose payload only clears the 1 MiB Kinesis cap once the trace
+      // context is attached must not record a produce checkpoint — the context can never ship,
+      // so the size gate bails before `setDSMCheckpoint` and the `putRecord` span carries no
+      // `pathway.hash`.
+      it('records no DSM checkpoint when attaching context would exceed the 1 MiB cap', done => {
+        // Fits under the cap on its own; adding `_datadog` tips it over.
+        const overCapAfterInject = Buffer.from(JSON.stringify({ myData: 'a'.repeat(1048576 - 100) }))
+
+        agent.assertSomeTraces(traces => {
+          const span = traces[0][0]
+          assert.ok(span.resource.startsWith('putRecord'), 'expected a putRecord span')
+          assert.strictEqual(span.meta['pathway.hash'], undefined)
+        }, { spanResourceMatch: /^putRecord/ }).then(done, done)
+
+        helpers.putTestRecord(kinesis, streamNameDSM, overCapAfterInject, () => {})
+      })
+
       it('emits DSM stats to the agent during Kinesis putRecord', done => {
         agent.expectPipelineStats(dsmStats => {
           let statsPointsReceived = 0
