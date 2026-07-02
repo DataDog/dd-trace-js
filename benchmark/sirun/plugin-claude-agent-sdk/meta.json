@@ -6,16 +6,32 @@
   "iterations": 15,
   "instructions": true,
   "variants": {
-    "stream-scan": {
+    "compact-stream-scan": {
       "env": {
+        "SCENARIO": "compact",
         "VARIANT": "stream-scan",
         "OPERATIONS": "25000"
       }
     },
-    "hook-indexed": {
+    "compact-hook-indexed": {
       "env": {
+        "SCENARIO": "compact",
         "VARIANT": "hook-indexed",
         "OPERATIONS": "25000"
+      }
+    },
+    "delayed-noisy-stream-scan": {
+      "env": {
+        "SCENARIO": "delayed-noisy",
+        "VARIANT": "stream-scan",
+        "OPERATIONS": "5000"
+      }
+    },
+    "delayed-noisy-hook-indexed": {
+      "env": {
+        "SCENARIO": "delayed-noisy",
+        "VARIANT": "hook-indexed",
+        "OPERATIONS": "5000"
       }
     }
   }

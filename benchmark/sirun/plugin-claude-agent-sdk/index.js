@@ -3,19 +3,87 @@
 const assert = require('node:assert/strict')
 const guard = require('../startup-guard')
 
-const { VARIANT } = process.env
+const { SCENARIO, VARIANT } = process.env
 const OPERATIONS = Number(process.env.OPERATIONS)
 
-const TURNS = 12
-const TOOLS_PER_TURN = 4
+const SCENARIOS = {
+  compact: {
+    turns: 12,
+    toolsPerTurn: 4,
+    noiseChunks: 0,
+    delayedResults: false,
+  },
+  'delayed-noisy': {
+    turns: 8,
+    toolsPerTurn: 6,
+    noiseChunks: 12,
+    delayedResults: true,
+  },
+}
 
-function buildFixture () {
+function pushNoise (chunks, count, label) {
+  for (let idx = 0; idx < count; idx++) {
+    chunks.push({
+      type: 'assistant',
+      session_id: 'session-1',
+      parent_tool_use_id: null,
+      message: {
+        id: `${label}-noise-${idx}`,
+        model: 'claude-sonnet-4-6',
+        content: [{ type: 'text', text: `noise ${label}-${idx}` }],
+        usage: { input_tokens: 1, output_tokens: 1 },
+      },
+    })
+  }
+}
+
+function pushToolLifecycleChunks (chunks, toolUse, noiseChunks) {
+  chunks.push({ type: 'system', subtype: 'task_started', tool_use_id: toolUse.id })
+
+  if (toolUse.name === 'Agent') {
+    chunks.push({
+      type: 'assistant',
+      session_id: 'session-1',
+      parent_tool_use_id: toolUse.id,
+      message: {
+        id: `subagent-${toolUse.id}`,
+        model: 'claude-sonnet-4-6',
+        content: [{
+          type: 'tool_use',
+          id: `nested-${toolUse.id}`,
+          name: 'mcp__local__fetch_weather',
+          input: toolUse.input,
+        }],
+        usage: { input_tokens: 5, output_tokens: 3 },
+      },
+    })
+  }
+
+  pushNoise(chunks, noiseChunks, `${toolUse.id}-after-start`)
+  chunks.push({
+    type: 'user',
+    session_id: 'session-1',
+    parent_tool_use_id: null,
+    message: {
+      role: 'user',
+      content: [{
+        type: 'tool_result',
+        tool_use_id: toolUse.id,
+        content: [{ type: 'text', text: `result ${toolUse.turn}-${toolUse.tool}` }],
+      }],
+    },
+  })
+}
+
+function buildFixture (scenario) {
   const chunks = []
   const hookTools = new Map()
   const toolUses = []
 
-  for (let turn = 0; turn < TURNS; turn++) {
+  for (let turn = 0; turn < scenario.turns; turn++) {
     const messageId = `msg-${turn}`
+    const pendingToolUses = []
+
     chunks.push({
       type: 'assistant',
       session_id: 'session-1',
@@ -28,7 +96,7 @@ function buildFixture () {
       },
     })
 
-    for (let tool = 0; tool < TOOLS_PER_TURN; tool++) {
+    for (let tool = 0; tool < scenario.toolsPerTurn; tool++) {
       const id = `tool-${turn}-${tool}`
       const name = tool % 3 === 0 ? 'Agent' : 'mcp__local__fetch_weather'
       const input = name === 'Agent'
@@ -47,35 +115,7 @@ function buildFixture () {
         },
       })
       const scanStartIndex = chunks.length
-      chunks.push({ type: 'system', subtype: 'task_started', tool_use_id: id })
-
-      if (name === 'Agent') {
-        chunks.push({
-          type: 'assistant',
-          session_id: 'session-1',
-          parent_tool_use_id: id,
-          message: {
-            id: `subagent-${id}`,
-            model: 'claude-sonnet-4-6',
-            content: [{ type: 'tool_use', id: `nested-${id}`, name: 'mcp__local__fetch_weather', input }],
-            usage: { input_tokens: 5, output_tokens: 3 },
-          },
-        })
-      }
-
-      chunks.push({
-        type: 'user',
-        session_id: 'session-1',
-        parent_tool_use_id: null,
-        message: {
-          role: 'user',
-          content: [{
-            type: 'tool_result',
-            tool_use_id: id,
-            content: [{ type: 'text', text: `result ${turn}-${tool}` }],
-          }],
-        },
-      })
+      pushNoise(chunks, scenario.delayedResults ? scenario.noiseChunks : 0, `${id}-after-use`)
 
       const hookTool = {
         id,
@@ -84,7 +124,21 @@ function buildFixture () {
         output: { content: `result ${turn}-${tool}` },
       }
       hookTools.set(id, hookTool)
-      toolUses.push({ id, name, input, scanStartIndex })
+      const toolUse = { id, name, input, scanStartIndex, turn, tool }
+      toolUses.push(toolUse)
+
+      if (scenario.delayedResults) {
+        pendingToolUses.push(toolUse)
+      } else {
+        pushToolLifecycleChunks(chunks, toolUse, scenario.noiseChunks)
+      }
+    }
+
+    if (scenario.delayedResults) {
+      pushNoise(chunks, scenario.noiseChunks, `turn-${turn}-before-results`)
+      for (const toolUse of pendingToolUses) {
+        pushToolLifecycleChunks(chunks, toolUse, scenario.noiseChunks)
+      }
     }
   }
 
@@ -149,10 +203,12 @@ function runHookIndexed (hookTools, streamIndex, toolUses) {
   return sink
 }
 
-const { chunks, hookTools, toolUses } = buildFixture()
-const streamIndex = buildStreamIndex(chunks)
+const scenario = SCENARIOS[SCENARIO]
+if (scenario === undefined) throw new Error(`Unknown SCENARIO: ${SCENARIO}`)
+
+const { chunks, hookTools, toolUses } = buildFixture(scenario)
 const expected = runStreamScan(chunks, toolUses)
-assert.equal(runHookIndexed(hookTools, streamIndex, toolUses), expected)
+assert.equal(runHookIndexed(hookTools, buildStreamIndex(chunks), toolUses), expected)
 
 let sink = 0
 guard.loopStart()
@@ -162,7 +218,7 @@ if (VARIANT === 'stream-scan') {
   }
 } else if (VARIANT === 'hook-indexed') {
   for (let iteration = 0; iteration < OPERATIONS; iteration++) {
-    sink += runHookIndexed(hookTools, streamIndex, toolUses)
+    sink += runHookIndexed(hookTools, buildStreamIndex(chunks), toolUses)
   }
 } else {
   throw new Error(`Unknown VARIANT: ${VARIANT}`)
