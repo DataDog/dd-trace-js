@@ -267,6 +267,24 @@ describe('NativeSpansInterface', () => {
 
       sinon.assert.notCalled(mockState.flushChangeQueue)
     })
+
+    it('swallows a "span not found" error (orphaned span) instead of crashing the host', () => {
+      // An op referenced a span missing from native storage. The batch is
+      // dropped (spans lost) but this must never throw into application code.
+      mockState.flushChangeQueue = sinon.stub().throws(new Error('span not found: 12345'))
+      nativeSpans.queueOp(OpCode.SetName, spanId, 'test')
+
+      nativeSpans.flushChangeQueue() // must not throw
+
+      assert.strictEqual(nativeSpans._cqbCount, 0) // batch was reset
+    })
+
+    it('rethrows errors other than "span not found"', () => {
+      mockState.flushChangeQueue = sinon.stub().throws(new Error('unexpected wasm fault'))
+      nativeSpans.queueOp(OpCode.SetName, spanId, 'test')
+
+      assert.throws(() => nativeSpans.flushChangeQueue(), /unexpected wasm fault/)
+    })
   })
 
   describe('flushSpans', () => {

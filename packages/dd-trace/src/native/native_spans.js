@@ -3,6 +3,12 @@
 const log = require('../log')
 const { WasmSpanState, wasmMemory } = require('./index')
 
+// A queued op (or an extracted chunk) referenced a span id that is absent from
+// native storage. The wasm error may arrive as an Error or a bare string.
+function isSpanNotFoundError (e) {
+  return /span not found/.test(String(e != null && e.message != null ? e.message : e))
+}
+
 // Default buffer sizes
 const CHANGE_QUEUE_BUFFER_SIZE = 8 * 1024 * 1024 // 8MB
 const STRING_TABLE_INPUT_BUFFER_SIZE = 10 * 1024 // 10KB
@@ -336,6 +342,16 @@ class NativeSpansInterface {
       // surface the failure to the caller.
       this.resetChangeQueue()
       this.#checkDetach()
+      // "span not found" means a queued op referenced a span missing from native
+      // storage — an orphaned span whose Create never landed (a known upstream
+      // defect under heavy span churn; see the native-spans change-buffer
+      // investigation). Resetting drops the remainder of this batch, losing
+      // those spans, but that must NOT crash the host application — so swallow
+      // this specific error. Every other error is a real fault and propagates.
+      if (isSpanNotFoundError(e)) {
+        log.warn('Native spans: dropped a change-queue batch after "span not found"; affected spans were lost', e)
+        return
+      }
       log.error('Error flushing change queue to native spans:', e)
       throw e
     }
