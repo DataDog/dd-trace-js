@@ -600,7 +600,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         ])
       })
 
-      it('reports test events when a custom environment does not call super.handleTestEvent', async () => {
+      const assertCustomEnvironmentReportsTests = async (customTestEnvironment) => {
         const envVars = reportingOption === 'agentless'
           ? getCiVisAgentlessConfig(receiver.port)
           : getCiVisEvpProxyConfig(receiver.port)
@@ -625,7 +625,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             cwd,
             env: {
               ...envVars,
-              CUSTOM_TEST_ENVIRONMENT: './ci-visibility/jestEnvironmentNoSuper.js',
+              CUSTOM_TEST_ENVIRONMENT: customTestEnvironment,
               TESTS_TO_RUN: 'test/ci-visibility-test.js',
             },
           }
@@ -636,6 +636,14 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           eventsPromise,
         ])
         assert.strictEqual(exitCode, 0)
+      }
+
+      it('reports test events when a custom environment does not call super.handleTestEvent', async () => {
+        await assertCustomEnvironmentReportsTests('./ci-visibility/jestEnvironmentNoSuper.js')
+      })
+
+      it('reports test events when a custom environment defines handleTestEvent as an instance field', async () => {
+        await assertCustomEnvironmentReportsTests('./ci-visibility/jestEnvironmentNoSuperInstanceField.js')
       })
     })
   })

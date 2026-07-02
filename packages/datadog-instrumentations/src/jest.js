@@ -462,6 +462,27 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     }
 
     /**
+     * Rechecks custom `handleTestEvent` implementations after subclass instance fields
+     * and constructors have run.
+     *
+     * @returns {Promise<void>|void}
+     */
+    setup () {
+      this.wrapCustomHandleTestEvent(DatadogEnvironment.prototype.handleTestEvent)
+
+      if (super.setup) {
+        const result = super.setup()
+        if (typeof result?.then === 'function') {
+          return result.then(() => {
+            this.wrapCustomHandleTestEvent(DatadogEnvironment.prototype.handleTestEvent)
+          })
+        }
+        this.wrapCustomHandleTestEvent(DatadogEnvironment.prototype.handleTestEvent)
+        return result
+      }
+    }
+
+    /**
      * Ensures Datadog handles Jest circus events even when a custom environment overrides
      * `handleTestEvent` without calling `super.handleTestEvent`.
      *
@@ -488,6 +509,11 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             return datadogResult.then(() => value)
           }
           return value
+        }
+
+        if (event.name === 'add_test') {
+          runDatadogHandler(result)
+          return result
         }
 
         if (typeof result?.then === 'function') {
