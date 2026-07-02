@@ -6,15 +6,23 @@ import { fileURLToPath } from 'node:url'
 /* eslint-disable no-console */
 
 // Sorts the per-cell `coverage-*` artifacts that `download-artifacts.mjs` placed under
-// `coverage-results/` into one directory per integration under `coverage-upload/<group>/`, so the
-// All Green upload steps send ~100 grouped reports to Codecov/Datadog instead of ~430. Codecov
-// silently parks uploads past its ~150-per-commit ceiling in `started` (never merged), so the
-// cell-per-upload model dropped coverage; one upload per integration stays under the ceiling.
+// `coverage-results/` into one directory per top-level area under `coverage-upload/<area>/`, so the
+// All Green upload steps send a handful of grouped reports to Codecov/Datadog instead of one per
+// matrix cell (400+). Codecov silently parks uploads past its ~150-per-commit ceiling in `started`
+// (never merged), so the cell-per-upload model dropped coverage; grouping by area keeps the upload
+// count in the low teens no matter how many integrations or matrix cells a workflow adds.
 //
 // The reports are not merged here — both backends merge same-flag uploads server-side, so this only
-// routes each cell's already-patched `lcov.info` into its group's directory. That keeps the harness
+// routes each cell's already-patched `lcov.info` into its area's directory. That keeps the harness
 // free of any istanbul dependency in All Green's sparse checkout and passes each report through
 // byte-for-byte, so the `getLineCoverage` patch the producers baked in survives untouched.
+//
+// Grouping is by area (one flag per workflow, e.g. `appsec`, `apm-integrations`), not by individual
+// integration: `.codecov.yml` only gates the separate `master-coverage` flag (attached to every
+// upload regardless of area), so a per-integration flag carried no gating weight of its own — it
+// only fed a "coverage by plugin" breakdown in the Codecov/Datadog UI. Areas keep that breakdown at
+// the workflow level while cutting the upload count, and therefore All Green's wall time, by an
+// order of magnitude.
 
 const INPUT_DIR = 'coverage-results'
 const OUTPUT_DIR = 'coverage-upload'
@@ -24,45 +32,35 @@ const ARTIFACT_PREFIX = 'coverage-'
 // varies `spec` outside its flag) still upload distinct artifacts instead of clobbering each other.
 const UNIQUE_SEPARATOR = '__'
 
-// Tokens that name a Node.js major, a library version, or a runtime/OS/module-format axis — all
-// noise for "which integration regressed". Stripping every noise token folds a flag like
-// `apm-integrations-next-oldest-14.2.6` down to its integration `apm-integrations-next`.
-const NOISE_TOKENS = new Set([
-  'latest', 'oldest', 'eol', 'active', 'maintenance', 'all', // Node.js / range_clean aliases
-  'ubuntu', 'macos', 'windows', // runner OS
-  'commonjs', 'esm', // module format
-])
-// A bare version (`14.2.6`, `18`) or a `range_clean` qualifier that packs the operator and version
-// into one dash-token (`gte.5.2.0`, `gte.6.16.0.and.lt.7.0.0`).
-const VERSION_RE = /^(?:gte|gt|lte|lt|eq)?\.?\d+(?:\.\d+)*(?:\.(?:and|or|gte|gt|lte|lt|eq)\b.*)?$/
-
-// Keep a busy area's one-cell libraries from each becoming their own upload: pack them into buckets
-// of at most this many libraries, named for their members so the flag still points at a library.
-const MAX_LIBS_PER_BUCKET = 3
-// Codecov validates flags against `^[\w\.\-]{1,45}$` and silently drops any that fail. `+` is out, so
-// members join with `_`; a name longer than this falls back to a numbered bucket that stays valid.
-const MAX_FLAG_LENGTH = 45
-
-/**
- * @param {string} token
- * @returns {boolean}
- */
-function isNoiseToken (token) {
-  return NOISE_TOKENS.has(token.toLowerCase()) || VERSION_RE.test(token)
-}
+// Every area a coverage flag can start with, longest first so a compound area (`apm-integrations`)
+// matches before a shorter prefix (`apm`) would. Sourced from the `flags:` values set across
+// .github/workflows/*.yml — one area per workflow file that reports coverage.
+const AREAS = [
+  'apm-integrations',
+  'apm-capabilities',
+  'test-optimization',
+  'instrumentations',
+  'serverless',
+  'openfeature',
+  'profiling',
+  'platform',
+  'debugger',
+  'aiguard',
+  'appsec',
+  'llmobs',
+]
 
 /**
- * The integration a per-cell flag belongs to, with every version/OS/tier/format token removed
- * wherever it sits. Node.js tier and library version commonly land in the middle of a flag (e.g.
- * `serverless-aws-sdk-oldest-s3`, where `oldest` is the Node.js tier and `s3` a real sub-suite of
- * the one `aws-sdk` integration), so a tail-only strip would leave the tier stranded mid-flag.
+ * The top-level area a per-cell flag belongs to (e.g. `apm-integrations-kafkajs-18` → `apm-integrations`).
+ * Falls back to the flag's first token when it doesn't match a known area, so an unrecognized flag
+ * still lands in a small group of its own instead of silently disappearing.
  *
  * @param {string} flag
  * @returns {string}
  */
-function integrationOf (flag) {
-  const tokens = flag.split('-').filter(token => !isNoiseToken(token))
-  return tokens.length > 0 ? tokens.join('-') : flag
+function areaOf (flag) {
+  const area = AREAS.find(candidate => flag === candidate || flag.startsWith(`${candidate}-`))
+  return area ?? flag.split('-')[0]
 }
 
 /**
@@ -119,60 +117,13 @@ function collectCoverageFiles (dir, out = [], context = {}) {
 }
 
 /**
- * Assign each integration to an upload group. Integrations exercised by more than one cell stay on
- * their own; the one-cell tail of a busy area is packed into buckets named for their libraries, or a
- * numbered bucket when those names would overrun Codecov's flag length limit.
- *
- * @param {Map<string, string[]>} cellsByIntegration  Integration → artifact names feeding it.
- * @returns {Map<string, string[]>}  Group flag → integrations it owns.
- */
-function planGroups (cellsByIntegration) {
-  const groups = new Map()
-  const singletonsByArea = new Map()
-
-  for (const [integration, cells] of cellsByIntegration) {
-    if (cells.length > 1) {
-      groups.set(integration, [integration])
-      continue
-    }
-    const area = integration.split('-')[0]
-    const list = singletonsByArea.get(area)
-    if (list) {
-      list.push(integration)
-    } else {
-      singletonsByArea.set(area, [integration])
-    }
-  }
-
-  for (const [area, integrations] of singletonsByArea) {
-    integrations.sort()
-    if (integrations.length <= 2) {
-      for (const integration of integrations) {
-        groups.set(integration, [integration])
-      }
-      continue
-    }
-    let bucket = 0
-    for (let i = 0; i < integrations.length; i += MAX_LIBS_PER_BUCKET) {
-      const chunk = integrations.slice(i, i + MAX_LIBS_PER_BUCKET)
-      const named = `${area}-${chunk.map(integration => integration.slice(area.length + 1)).join('_')}`
-      groups.set(named.length <= MAX_FLAG_LENGTH ? named : `${area}-bucket-${bucket}`, chunk)
-      bucket++
-    }
-  }
-
-  return groups
-}
-
-/**
- * Reduce discovered report files to one cell per artifact name and bucket the cells by integration.
- * All Green reruns failed workflows, so the same artifact name can arrive from more than one run;
- * the newest run reflects the cell's final state, so older reuploads are dropped.
+ * Reduce discovered report files to one cell per artifact name and bucket the cells by area. All
+ * Green reruns failed workflows, so the same artifact name can arrive from more than one run; the
+ * newest run reflects the cell's final state, so older reuploads are dropped.
  *
  * @param {Array<{ runId: string, name: string, format: string, reportPath: string }>} files
- * @returns {{ groups: Map<string, string[]>,
- *   reportsByArtifact: Map<string, Array<{ format: string, reportPath: string }>>,
- *   cellsByIntegration: Map<string, string[]> }}
+ * @returns {{ reportsByArtifact: Map<string, Array<{ format: string, reportPath: string }>>,
+ *   cellsByArea: Map<string, string[]> }}
  */
 function planCoverageGroups (files) {
   const newestRunByArtifact = new Map()
@@ -184,7 +135,7 @@ function planCoverageGroups (files) {
   }
 
   const reportsByArtifact = new Map()
-  const cellsByIntegration = new Map()
+  const cellsByArea = new Map()
   for (const { runId, name, format, reportPath } of files) {
     if (runId !== newestRunByArtifact.get(name)) continue
     const existing = reportsByArtifact.get(name)
@@ -193,16 +144,16 @@ function planCoverageGroups (files) {
       continue
     }
     reportsByArtifact.set(name, [{ format, reportPath }])
-    const integration = integrationOf(flagOf(name))
-    const owned = cellsByIntegration.get(integration)
+    const area = areaOf(flagOf(name))
+    const owned = cellsByArea.get(area)
     if (owned) {
       owned.push(name)
     } else {
-      cellsByIntegration.set(integration, [name])
+      cellsByArea.set(area, [name])
     }
   }
 
-  return { groups: planGroups(cellsByIntegration), reportsByArtifact, cellsByIntegration }
+  return { reportsByArtifact, cellsByArea }
 }
 
 function main () {
@@ -214,30 +165,28 @@ function main () {
     return
   }
 
-  const { groups, reportsByArtifact, cellsByIntegration } = planCoverageGroups(files)
+  const { reportsByArtifact, cellsByArea } = planCoverageGroups(files)
 
-  console.log(`Routing ${reportsByArtifact.size} cell report set(s) into ${groups.size} group(s):`)
-  for (const [flag, integrations] of [...groups].sort()) {
+  console.log(`Routing ${reportsByArtifact.size} cell report set(s) into ${cellsByArea.size} area(s):`)
+  for (const [area, artifacts] of [...cellsByArea].sort()) {
     const counts = new Map()
-    for (const integration of integrations) {
-      for (const artifact of cellsByIntegration.get(integration)) {
-        for (const { format, reportPath } of reportsByArtifact.get(artifact)) {
-          const index = counts.get(format) ?? 0
-          const formatDir = join(OUTPUT_DIR, flag, format)
-          mkdirSync(formatDir, { recursive: true })
-          copyFileSync(reportPath, join(formatDir, `${artifact}-${index}.${format}`))
-          counts.set(format, index + 1)
-        }
+    for (const artifact of artifacts) {
+      for (const { format, reportPath } of reportsByArtifact.get(artifact)) {
+        const index = counts.get(format) ?? 0
+        const formatDir = join(OUTPUT_DIR, area, format)
+        mkdirSync(formatDir, { recursive: true })
+        copyFileSync(reportPath, join(formatDir, `${artifact}-${index}.${format}`))
+        counts.set(format, index + 1)
       }
     }
     const summary = [...counts].map(([format, count]) => `${count} ${format}`).join(', ')
-    console.log(`  ${flag} (${integrations.length} integration(s): ${summary})`)
+    console.log(`  ${area} (${artifacts.length} cell(s): ${summary})`)
   }
 
-  writeFileSync(join(OUTPUT_DIR, 'groups.txt'), [...groups.keys()].sort().join('\n') + '\n')
+  writeFileSync(join(OUTPUT_DIR, 'groups.txt'), [...cellsByArea.keys()].sort().join('\n') + '\n')
 }
 
-export { flagOf, integrationOf, planCoverageGroups, planGroups }
+export { areaOf, flagOf, planCoverageGroups }
 
 if (argv[1] === fileURLToPath(import.meta.url)) {
   main()
