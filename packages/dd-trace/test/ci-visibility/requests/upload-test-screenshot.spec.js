@@ -17,9 +17,10 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
   let requestStub
   let uploadTestScreenshot
 
-  // Returns the X-Dd-Idempotency-Key header value the upload would put on the wire for a given
-  // file basename. The file is written with real non-empty bytes so readFileSync succeeds.
-  function uploadHeaderValueForFile (basename) {
+  // Runs an upload for a file with the given basename and returns the request stub's call args
+  // ({ path, headers, query }). The file is written with real non-empty bytes so readFileSync
+  // succeeds. `extra` merges into the upload options (e.g. isEvpProxy / evpProxyPrefix).
+  function uploadForFile (basename, extra = {}) {
     const filePath = join(tmpDir, basename)
     writeFileSync(filePath, 'not-empty')
 
@@ -31,14 +32,15 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
         idempotencyKey: `${traceId}:${basename}`,
         capturedAtMs: 1_700_000_000_000,
         url: new URL('http://localhost:8126'),
+        ...extra,
       },
       () => {}
     )
 
     assert.ok(requestStub.calledOnce)
-    const headers = requestStub.getCall(0).args[1].headers
-    assert.strictEqual(headers['DD-API-KEY'], 'test-api-key')
-    return headers['X-Dd-Idempotency-Key']
+    const { path, headers } = requestStub.getCall(0).args[1]
+    const query = new URL(path, 'http://localhost:8126').searchParams
+    return { path, headers, query }
   }
 
   before(() => {
@@ -57,34 +59,62 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
     uploadTestScreenshot = upload
   })
 
-  it('keeps the trace id verbatim and hex-encodes an ASCII filename', () => {
-    const basename = 'screenshot.png'
-    const headerValue = uploadHeaderValueForFile(basename)
+  describe('agentless', () => {
+    it('sends the raw idempotency key and captured-at as query params (not headers)', () => {
+      const basename = 'screenshot.png'
+      const { headers, query } = uploadForFile(basename)
 
-    const expectedFilenameHex = Buffer.from(basename, 'utf8').toString('hex')
-    assert.strictEqual(headerValue, `${traceId}:${expectedFilenameHex}`)
+      assert.strictEqual(query.get('idempotency_key'), `${traceId}:${basename}`)
+      assert.strictEqual(query.get('captured_at_ms'), '1700000000000')
+      // Metadata must not travel as X-Dd-* headers anymore (the proxy strips them).
+      assert.strictEqual(headers['X-Dd-Idempotency-Key'], undefined)
+      assert.strictEqual(headers['X-Dd-Media-Captured-At'], undefined)
+    })
+
+    it('posts to the media endpoint with the API key and no evp subdomain header', () => {
+      const { path, headers } = uploadForFile('screenshot.png')
+
+      assert.match(path, new RegExp(`^/api/v2/ci/test-runs/${traceId}/media\\?`))
+      assert.strictEqual(headers['DD-API-KEY'], 'test-api-key')
+      assert.strictEqual(headers['X-Datadog-EVP-Subdomain'], undefined)
+    })
+
+    it('percent-encodes a non-ASCII filename in the idempotency key so http.request cannot throw', () => {
+      // A real failure screenshot name: the test title has an em-dash (U+2014), the kind of
+      // above-Latin-1 character that makes http.request throw ERR_INVALID_CHAR if sent raw.
+      const basename = 'login — redirects to dashboard (failed).png'
+      const { path, query } = uploadForFile(basename)
+
+      // The encoded path must be pure ASCII so it never trips ERR_INVALID_CHAR.
+      // eslint-disable-next-line no-control-regex
+      assert.match(path, /^[\x00-\x7F]+$/)
+      // URLSearchParams decodes back to the raw key.
+      assert.strictEqual(query.get('idempotency_key'), `${traceId}:${basename}`)
+    })
+
+    it('is deterministic for a non-ASCII filename', () => {
+      const basename = 'shows 🎉 confetti (failed).png'
+      const first = uploadForFile(basename).path
+      const second = uploadForFile(basename).path
+
+      assert.strictEqual(first, second)
+    })
   })
 
-  it('hex-encodes a non-ASCII filename so http.request cannot throw ERR_INVALID_CHAR', () => {
-    // A real failure screenshot name: the test title has an em-dash (U+2014), the kind of
-    // above-Latin-1 character that makes http.request throw ERR_INVALID_CHAR if sent raw.
-    const basename = 'login — redirects to dashboard (failed).png'
-    const headerValue = uploadHeaderValueForFile(basename)
+  describe('agent (evp_proxy)', () => {
+    const evpProxyPrefix = '/evp_proxy/v4'
 
-    // The whole header value must be ASCII so it never trips ERR_INVALID_CHAR.
-    // eslint-disable-next-line no-control-regex
-    assert.match(headerValue, /^[\x00-\x7F]+$/)
-    assert.match(headerValue, new RegExp(`^${traceId}:[0-9a-f]+$`))
+    it('prefixes the evp_proxy path, sets the EVP subdomain header, and drops the API key', () => {
+      const basename = 'screenshot.png'
+      const { path, headers, query } = uploadForFile(basename, { isEvpProxy: true, evpProxyPrefix })
 
-    const expectedFilenameHex = Buffer.from(basename, 'utf8').toString('hex')
-    assert.strictEqual(headerValue, `${traceId}:${expectedFilenameHex}`)
-  })
-
-  it('is deterministic for a non-ASCII filename', () => {
-    const basename = 'shows 🎉 confetti (failed).png'
-    const first = uploadHeaderValueForFile(basename)
-    const second = uploadHeaderValueForFile(basename)
-
-    assert.strictEqual(first, second)
+      assert.match(path, new RegExp(`^${evpProxyPrefix}/api/v2/ci/test-runs/${traceId}/media\\?`))
+      assert.strictEqual(headers['X-Datadog-EVP-Subdomain'], 'api')
+      // The Agent injects the API key; the client must not send it.
+      assert.strictEqual(headers['DD-API-KEY'], undefined)
+      // Metadata still rides the query string so it survives the proxy.
+      assert.strictEqual(query.get('idempotency_key'), `${traceId}:${basename}`)
+      assert.strictEqual(query.get('captured_at_ms'), '1700000000000')
+    })
   })
 })

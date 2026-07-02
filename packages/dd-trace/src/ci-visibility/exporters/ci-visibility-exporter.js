@@ -493,6 +493,8 @@ class CiVisibilityExporter extends BufferingExporter {
       idempotencyKey,
       capturedAtMs,
       url: this._testScreenshotUploadUrl,
+      isEvpProxy: !!this._isUsingEvpProxy,
+      evpProxyPrefix: this.evpProxyPrefix,
     }, callback)
   }
 }
