@@ -24,14 +24,14 @@
       "env": {
         "SCENARIO": "delayed-noisy",
         "VARIANT": "stream-scan",
-        "OPERATIONS": "10000"
+        "OPERATIONS": "25000"
       }
     },
     "delayed-noisy-hook-indexed": {
       "env": {
         "SCENARIO": "delayed-noisy",
         "VARIANT": "hook-indexed",
-        "OPERATIONS": "10000"
+        "OPERATIONS": "25000"
       }
     }
   }
