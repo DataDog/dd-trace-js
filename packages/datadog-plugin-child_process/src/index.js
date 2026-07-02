@@ -105,7 +105,7 @@ class ChildProcessPlugin extends TracingPlugin {
       // success, where the exit code is 0.
       exitCode = result.status ?? 0
     } else if (result === undefined && error !== undefined) {
-      exitCode = error.status ?? error.code
+      exitCode = error.status ?? error.code ?? 0
     } else {
       exitCode = result
     }

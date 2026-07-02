@@ -292,6 +292,46 @@ describe('Child process plugin', () => {
         sinon.assert.calledOnceWithExactly(spanStub.setTag, 'cmd.exit_code', '0')
         sinon.assert.calledOnceWithExactly(spanStub.finish)
       })
+
+      it('should call setTag with zero when a promisified method returns an output object', () => {
+        sinon.stub(storage('legacy'), 'getStore').returns({ span: spanStub })
+        const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
+
+        shellPlugin.asyncEnd({ result: { stdout: 'test\n', stderr: '' } })
+
+        sinon.assert.calledOnceWithExactly(spanStub.setTag, 'cmd.exit_code', '0')
+        sinon.assert.calledOnceWithExactly(spanStub.finish)
+      })
+
+      it('should call setTag with error status when a promisified method rejects', () => {
+        sinon.stub(storage('legacy'), 'getStore').returns({ span: spanStub })
+        const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
+
+        shellPlugin.asyncEnd({ error: { status: 9 } })
+
+        sinon.assert.calledOnceWithExactly(spanStub.setTag, 'cmd.exit_code', '9')
+        sinon.assert.calledOnceWithExactly(spanStub.finish)
+      })
+
+      it('should call setTag with error code when a promisified method rejects without status', () => {
+        sinon.stub(storage('legacy'), 'getStore').returns({ span: spanStub })
+        const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
+
+        shellPlugin.asyncEnd({ error: { code: 'ENOENT' } })
+
+        sinon.assert.calledOnceWithExactly(spanStub.setTag, 'cmd.exit_code', 'ENOENT')
+        sinon.assert.calledOnceWithExactly(spanStub.finish)
+      })
+
+      it('should call setTag with zero when a promisified method rejects without an exit code', () => {
+        sinon.stub(storage('legacy'), 'getStore').returns({ span: spanStub })
+        const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
+
+        shellPlugin.asyncEnd({ error: {} })
+
+        sinon.assert.calledOnceWithExactly(spanStub.setTag, 'cmd.exit_code', '0')
+        sinon.assert.calledOnceWithExactly(spanStub.finish)
+      })
     })
 
     describe('channel', () => {
