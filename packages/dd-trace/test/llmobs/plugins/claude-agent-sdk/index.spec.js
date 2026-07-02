@@ -110,7 +110,8 @@ describe('Plugin', () => {
       const outerThinkingText = is03
         ? 'The user wants me to:\n' +
           '1. Spawn a subagent to get the weather in New York (fahrenheit)\n' +
-          '2. After that subagent completes, get the weather in California (fahrenheit) directly (not in a subagent)\n' +
+          '2. After that subagent completes, get the weather in California ' +
+              '(fahrenheit) directly (not in a subagent)\n' +
           '\n' +
           'Let me first spawn the subagent for New York.'
         : 'The user wants me to:\n' +
