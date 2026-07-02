@@ -22,7 +22,7 @@ const callbackFinishCh = channel('datadog:fastify:callback:execute')
 const parsingContexts = new WeakMap()
 const cookiesPublished = new WeakSet()
 const bodyPublished = new WeakSet()
-let lastPublishedError
+const lastPublishedReqByError = new WeakMap()
 
 function wrapFastify (fastify, hasParsingEvents) {
   if (typeof fastify !== 'function') return fastify
@@ -314,13 +314,15 @@ function publishError (ctx) {
   if (!error) return
 
   // avvio's boot loop (`_encapsulateThreeParam`) re-invokes the same encapsulated
-  // hook after it throws, re-throwing the same error object on every re-drive
-  // (#9099). Each re-drive is sequential, so the channel's in-flight flag has
-  // already reset; the re-drive carries the one caught error on every hop, so a
-  // reference compare against the previously published error terminates the loop
-  // before the subscriber recurses and boot overflows the stack.
-  if (error === lastPublishedError) return
-  lastPublishedError = error
+  // hook after it throws, re-throwing the same error object on every sequential
+  // re-drive (#9099), recursing the subscriber until boot overflows the stack.
+  // The subscribers tag once per request, so the guard collapses only a re-drive
+  // of the same error against the same request; a distinct request reusing a
+  // cached error object still publishes. Boot hooks carry no request, so their
+  // re-drives share the same `undefined` req and collapse after the first.
+  const req = ctx.req
+  if (lastPublishedReqByError.has(error) && lastPublishedReqByError.get(error) === req) return
+  lastPublishedReqByError.set(error, req)
 
   publishErrorChannel(ctx)
 }

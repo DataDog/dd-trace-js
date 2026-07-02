@@ -197,45 +197,77 @@ describe('fastify instrumentation (unit)', () => {
       // same encapsulated hook after a throw, and the same error object rides
       // every re-drive. Each re-drive is a fresh, sequential hook invocation -
       // not a nested re-entry - so the publish has already returned and a
-      // module-level boolean has reset before the next one runs. Without an
-      // error-keyed guard every re-drive republishes, the channel subscriber
-      // recurses, and the boot overflows the stack. The wrapped hook must
-      // publish the persistent error exactly once no matter how often it is
-      // re-driven.
+      // module-level boolean has reset before the next one runs. Boot hooks
+      // carry no request, so every re-drive publishes with the same (absent)
+      // request; without a request-scoped guard every re-drive republishes, the
+      // channel subscriber recurses, and boot overflows the stack. The wrapped
+      // hook must publish the persistent error exactly once across the re-drive.
       const { app, registered } = buildWrappedAddHook()
       const persistentError = new Error('persistent boom')
       const userHook = sinon.stub().throws(persistentError)
-      app.addHook('preHandler', userHook)
+      app.addHook('onReady', userHook)
       const wrapper = registered[0].fn
 
       let publishCount = 0
       const errorListener = () => { publishCount++ }
       subscribe(errorChannel, errorListener)
 
+      // avvio re-drives the one encapsulated hook, so every hop carries the same
+      // boot context (here the shared trailing `done`); a fresh object per hop
+      // would model distinct requests, not a re-drive.
+      const bootDone = () => {}
       const redrives = 5000
       for (let i = 0; i < redrives; i++) {
-        // Mirror avvio: the throw is caught by fastify's hook wrap and routed to
-        // done(error); here we swallow it and drive the next iteration.
-        assert.throws(() => wrapper({}, {}, () => {}), err => err === persistentError)
+        assert.throws(() => wrapper(bootDone), err => err === persistentError)
       }
 
       assert.strictEqual(publishCount, 1)
     })
 
+    it('republishes the same error for a genuinely distinct request', () => {
+      // #9118 review: the re-drive guard must not outlive a request. Two distinct
+      // requests that reuse one cached Error instance (e.g. a module-level
+      // sentinel routed through reply.send / a rethrowing hook) each need their
+      // own publish, because the subscriber tags web.addError(req, error) per
+      // request. A guard keyed on the error object alone drops request two.
+      const { app, registered } = buildWrappedAddHook()
+      const sharedError = new Error('cached sentinel')
+      const userHook = sinon.stub().callsFake((request, reply, done) => done(sharedError))
+      app.addHook('preHandler', userHook)
+      const wrapper = registered[0].fn
+
+      let publishCount = 0
+      const publishedReqs = []
+      const errorListener = ctx => {
+        publishCount++
+        publishedReqs.push(ctx.req)
+      }
+      subscribe(errorChannel, errorListener)
+
+      const firstReq = { raw: { id: 1 } }
+      const secondReq = { raw: { id: 2 } }
+      wrapper(firstReq, {}, sinon.stub())
+      wrapper(secondReq, {}, sinon.stub())
+
+      assert.strictEqual(publishCount, 2)
+      assert.deepEqual(publishedReqs, [firstReq.raw, secondReq.raw])
+    })
+
     it('republishes a genuinely distinct error on each invocation', () => {
-      // The guard keys on error identity, so distinct errors must each reach the
-      // subscriber - the dedupe only collapses re-drives of the same object.
+      // The guard collapses only a re-drive of the same error against the same
+      // request, so distinct errors must each reach the subscriber.
       const { app, registered } = buildWrappedAddHook()
       const userHook = sinon.stub().callsFake(() => { throw new Error('distinct ' + userHook.callCount) })
-      app.addHook('preHandler', userHook)
+      app.addHook('onReady', userHook)
       const wrapper = registered[0].fn
 
       let publishCount = 0
       const errorListener = () => { publishCount++ }
       subscribe(errorChannel, errorListener)
 
+      const bootDone = () => {}
       for (let i = 0; i < 5; i++) {
-        assert.throws(() => wrapper({}, {}, () => {}))
+        assert.throws(() => wrapper(bootDone))
       }
 
       assert.strictEqual(publishCount, 5)
