@@ -14,38 +14,37 @@ date regardless of our support policy.
 
 ### Minimum versions bumped for test framework integrations
 
-The following test framework versions are no longer instrumented in v6:
+Make sure to update any of the below frameworks to a v6 supported minimum version.
 
 | Framework  | v5 minimum | v6 minimum |
 | :---:      | :---:      | :---:      |
 | Jest       | 24.8.0     | 28.0.0     |
 | Mocha      | 5.2.0      | 8.0.0      |
-| Cypress    | 10.2.0     | 12.0.0     |
+| Cypress    | 6.7.0      | 12.0.0     |
 | Playwright | 1.18.0     | 1.38.0     |
 
-Upgrade to at least the v6 minimum before upgrading `dd-trace` if you are on an
-older version of any of these frameworks.
+### Nx service name default value
 
-### `NX_TASK_TARGET_PROJECT` is now the default service name
+The `NX_TASK_TARGET_PROJECT` environment variable set automatically by `nx`
+is now used as the default test service name `test.service` unless
+`DD_SERVICE` is explicitly set. On v5 this behavior required
+`DD_ENABLE_NX_SERVICE_NAME` to opt in. Remove the opt-in variable if you had
+it set; the behavior is now unconditional.
 
-When `NX_TASK_TARGET_PROJECT` is set and no explicit service name is configured,
-v6 automatically uses it as the service name. On v5 this required opting in with
-`DD_ENABLE_NX_SERVICE_NAME=true`. Set `DD_SERVICE` explicitly if you want a
-different service name when running inside an Nx workspace.
+### Lage test session name default value
 
-### Lage package name is now reported by default
-
-The `LAGE_PACKAGE_NAME` environment variable is now read automatically in CI
-Visibility test sessions. On v5 this required `DD_ENABLE_LAGE_PACKAGE_NAME=true`
-to opt in. Remove the opt-in variable if you had it set; the behavior is now
-unconditional.
+The `LAGE_PACKAGE_NAME` environment variable set automatically by `lage` is
+now used as the default test session name `test_session.name` unless
+`DD_TEST_SESSION_NAME` is explicitly set. On v5 this behavior required
+`DD_ENABLE_LAGE_PACKAGE_NAME=true` to opt in. Remove the opt-in variable if
+you had it set; the behavior is now unconditional.
 
 ### CI test session `test_session.name` is now the trimmed command
 
 The `test_session.name` tag on test session spans now defaults to only the
 framework invocation (e.g. `jest`, `mocha`, `playwright test`, `cucumber-js`)
 rather than the full command line, when no explicit name is otherwise
-configured. The `resource.name` on test session spans is unaffected and still
+configured. The `test.command` tag is unaffected and still
 contains the full command. Update any monitors or dashboards that matched on
 `test_session.name` with the full command string.
 
