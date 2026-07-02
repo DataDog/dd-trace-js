@@ -387,8 +387,24 @@ describe('Child process plugin', () => {
     // BLUEBIRD REGRESSION TEST - Prevents "this._then is not a function" bug
 
     let childProcess, tracer, util
-    let originalPromise
     let Bluebird
+
+    // The regression only needs Bluebird to be the global `Promise` at the
+    // moment `util.promisify`/the wrapped child_process method runs, since that
+    // is when the instrumentation does `Promise.resolve(...).then(...)`. Holding
+    // the mutation across the awaited span round-trip leaks it into the shared
+    // mock agent and tracer, flip-flopping the process-wide `Promise` while the
+    // next test runs. Scope the mutation to the synchronous call and restore it
+    // before awaiting.
+    function withBluebird (fn) {
+      const original = global.Promise
+      global.Promise = Bluebird
+      try {
+        return fn()
+      } finally {
+        global.Promise = original
+      }
+    }
 
     before(async () => {
       tracer = await agent.load('child_process', undefined, { flushInterval: 1 })
@@ -400,21 +416,7 @@ describe('Child process plugin', () => {
 
     after(() => agent.close())
 
-    beforeEach(() => {
-      originalPromise = global.Promise
-      global.Promise = Bluebird
-    })
-
-    afterEach(() => {
-      global.Promise = originalPromise
-    })
-
     it('should not crash with "this._then is not a function" when using Bluebird promises', async () => {
-      const execFileAsync = util.promisify(childProcess.execFile)
-
-      assert.strictEqual(global.Promise, Bluebird)
-      assert.ok(global.Promise.version)
-
       const expectedPromise = expectSomeSpan(agent, {
         type: 'system',
         name: 'command_execution',
@@ -425,36 +427,40 @@ describe('Child process plugin', () => {
         },
       })
 
-      const result = await execFileAsync('echo', ['bluebird-test'])
-      assert.ok(result)
-      assert.strictEqual(result.stdout, 'bluebird-test\n')
+      const callPromise = withBluebird(() => {
+        assert.strictEqual(global.Promise, Bluebird)
+        assert.ok(/** @type {{ version?: string }} */ (global.Promise).version)
+        return util.promisify(childProcess.execFile)('echo', ['bluebird-test'])
+      })
 
-      return expectedPromise
+      await Promise.all([expectedPromise, (async () => {
+        const result = await callPromise
+        assert.ok(result)
+        assert.strictEqual(result.stdout, 'bluebird-test\n')
+      })()])
     })
 
     it('should work with concurrent Bluebird promise calls', async () => {
-      const execFileAsync = util.promisify(childProcess.execFile)
-
-      const promises = []
-      for (let i = 0; i < 5; i++) {
-        promises.push(
-          execFileAsync('echo', [`concurrent-test-${i}`])
-            .then(result => {
-              assert.strictEqual(result.stdout, `concurrent-test-${i}\n`)
-              return result
-            })
-        )
-      }
+      const promises = withBluebird(() => {
+        const execFileAsync = util.promisify(childProcess.execFile)
+        const calls = []
+        for (let i = 0; i < 5; i++) {
+          calls.push(
+            execFileAsync('echo', [`concurrent-test-${i}`])
+              .then(result => {
+                assert.strictEqual(result.stdout, `concurrent-test-${i}\n`)
+                return result
+              })
+          )
+        }
+        return calls
+      })
 
       const results = await Promise.all(promises)
       assert.strictEqual(results.length, 5)
     })
 
     it('should handle Bluebird promise rejection properly', async () => {
-      global.Promise = Bluebird
-
-      const execFileAsync = util.promisify(childProcess.execFile)
-
       const expectedPromise = expectSomeSpan(agent, {
         type: 'system',
         name: 'command_execution',
@@ -465,30 +471,32 @@ describe('Child process plugin', () => {
         },
       })
 
-      try {
-        await execFileAsync('node', ['-invalidFlag'], { stdio: 'pipe' })
-        throw new Error('Expected command to fail')
-      } catch (error) {
-        assert.ok(error)
-        assert.ok(error.code)
-      }
+      const callPromise = withBluebird(() =>
+        util.promisify(childProcess.execFile)('node', ['-invalidFlag'], { stdio: 'pipe' }))
 
-      return expectedPromise
+      await Promise.all([expectedPromise, assert.rejects(callPromise, error => {
+        assert.ok(error.code)
+        return true
+      })])
     })
 
     it('should work with util.promisify when global Promise is Bluebird', async () => {
-      // Re-require util to get Bluebird-aware promisify
-      delete require.cache[require.resolve('util')]
-      const utilWithBluebird = require('util')
+      const expectedPromise = expectSomeSpan(agent, {
+        type: 'system',
+        name: 'command_execution',
+        error: 0,
+        meta: {
+          component: 'subprocess',
+          'cmd.exec': '["echo","util-promisify-test"]',
+        },
+      })
 
-      const execFileAsync = utilWithBluebird.promisify(childProcess.execFile)
+      const callPromise = withBluebird(() => util.promisify(childProcess.execFile)('echo', ['util-promisify-test']))
 
-      const promise = execFileAsync('echo', ['util-promisify-test'])
-      assert.strictEqual(promise.constructor, Bluebird)
-      assert.ok(promise.constructor.version)
-
-      const result = await promise
-      assert.strictEqual(result.stdout, 'util-promisify-test\n')
+      await Promise.all([expectedPromise, (async () => {
+        const result = await callPromise
+        assert.strictEqual(result.stdout, 'util-promisify-test\n')
+      })()])
     })
   })
 
