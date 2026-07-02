@@ -858,6 +858,51 @@ SUPPORTED_VERSIONS.forEach((version) => {
         assert.strictEqual(exitCode, 1, testOutput)
       })
 
+      it('does not double report delayed final failed Vitest retries in no-worker mode', async () => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: false,
+          early_flake_detection: {
+            enabled: false,
+          },
+        })
+
+        const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
+          assertEventCounts(events, {
+            test_session_end: 1,
+            test_module_end: 1,
+            test_suite_end: 1,
+            test: 2,
+          })
+
+          const retriedTests = getTestsByName(
+            getEventContents(events, 'test'),
+            'slow failing retry does not double report final failed retry'
+          )
+          assert.strictEqual(retriedTests.length, 2)
+          assert.ok(!(TEST_IS_RETRY in retriedTests[0].meta), inspect(retriedTests[0].meta))
+          assert.strictEqual(retriedTests[0].meta[TEST_STATUS], 'fail')
+          assert.strictEqual(retriedTests[1].meta[TEST_IS_RETRY], 'true')
+          assert.strictEqual(retriedTests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+          assert.strictEqual(retriedTests[1].meta[TEST_STATUS], 'fail')
+          assert.strictEqual(retriedTests[1].meta[TEST_FINAL_STATUS], 'fail')
+          assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in retriedTests[1].meta), inspect(retriedTests[1].meta))
+        })
+
+        const exitCode = await Promise.all([
+          runVitest({
+            PROJECT_POOL_CONFIG: 'forks',
+            PROJECT_RETRY_CONFIG: '1',
+            TEST_DIR: 'ci-visibility/vitest-tests/slow-failing-retry.mjs',
+          }, './node_modules/.bin/vitest run --project project-pool'),
+          payloadsPromise,
+        ]).then(([exitCode]) => exitCode)
+
+        assert.strictEqual(exitCode, 1, testOutput)
+      })
+
       it('applies no-worker setup data for impacted tests', async () => {
         receiver.setSettings({
           impacted_tests_enabled: true,

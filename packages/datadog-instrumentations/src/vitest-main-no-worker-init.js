@@ -275,6 +275,7 @@ function createMainProcessReporter (reporterState) {
   const testSuiteContexts = new Map()
   const finishedTestModules = new Set()
   const taskAttemptStatuses = new Map()
+  const tasksWithRecordedFinalAttempt = new Set()
 
   return {
     onTestModuleStart (testModule) {
@@ -295,7 +296,7 @@ function createMainProcessReporter (reporterState) {
 
       for (const event of events) {
         if (event[1] === 'test-retried') {
-          recordTaskAttemptStatus(event[0], 'fail')
+          recordTaskAttemptStatus(event[0], 'fail', getTaskUpdateAttemptCount(event[0], packs))
         }
       }
     },
@@ -312,13 +313,33 @@ function createMainProcessReporter (reporterState) {
     },
   }
 
-  function recordTaskAttemptStatus (taskId, status) {
+  function recordTaskAttemptStatus (taskId, status, attemptCount) {
     let statuses = taskAttemptStatuses.get(taskId)
     if (!statuses) {
       statuses = []
       taskAttemptStatuses.set(taskId, statuses)
     }
+    if (attemptCount !== undefined && statuses.length >= attemptCount) return
+
+    if (tasksWithRecordedFinalAttempt.has(taskId)) {
+      statuses.splice(statuses.length - 1, 0, status)
+      return
+    }
     statuses.push(status)
+  }
+
+  function getTaskUpdateAttemptCount (taskId, packs) {
+    if (!packs) return
+
+    for (const pack of packs) {
+      if (pack[0] === taskId) {
+        return getRepeatedAttemptCount({
+          id: taskId,
+          result: pack[1],
+          meta: pack[2],
+        }, [])
+      }
+    }
   }
 
   function recordFinalTaskAttemptResult (task) {
@@ -328,6 +349,7 @@ function createMainProcessReporter (reporterState) {
     const attemptCount = getRepeatedAttemptCount(task, statuses)
     if (statuses.length < attemptCount) {
       statuses.push(getFinalRepeatedTaskStatus(task))
+      tasksWithRecordedFinalAttempt.add(task.id)
     }
   }
 
