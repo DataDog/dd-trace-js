@@ -283,4 +283,4 @@ addHook({ name: 'ai', versions: ['>=7.0.0'] }, exports => {
   return exports
 })
 
-module.exports = { wrapModelWithLifecycle, wrapTracer }
+module.exports = { wrapModelWithLifecycle }
