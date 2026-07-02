@@ -24,6 +24,7 @@ const tmpdir = process.env.RUNNER_TEMP || os.tmpdir()
 const main = 'master'
 const releaseLine = params[0]
 const breakingLabels = ['semver-major', 'only-land-on-next']
+const pullRequestNumberPattern = /\(#([0-9]+)\)$/
 
 // Validate release line argument.
 if (!releaseLine || releaseLine === 'help' || flags.help) {
@@ -350,6 +351,7 @@ function getBreakingPullRequestEntries (releaseLine, upperBoundRef) {
   const mergedAfter = capture(`git log -1 --format=%cs ${previousMajorTag}`)
   const mergedBefore = capture(`git show -s --format=%cs ${upperBoundRef}`)
   const pullRequestsByNumber = new Map()
+  const includedPullRequests = getIncludedPullRequests(previousMajorTag, [`v${releaseLine}.x`, upperBoundRef])
 
   for (const label of breakingLabels) {
     const pullRequests = JSON.parse(capture(
@@ -360,8 +362,7 @@ function getBreakingPullRequestEntries (releaseLine, upperBoundRef) {
     ))
 
     for (const pullRequest of pullRequests) {
-      const oid = pullRequest.mergeCommit?.oid
-      if (!oid || (!isAncestor(oid, `v${releaseLine}.x`) && !isAncestor(oid, upperBoundRef))) continue
+      if (!includedPullRequests.has(pullRequest.number)) continue
 
       pullRequestsByNumber.set(pullRequest.number, pullRequest)
     }
@@ -377,14 +378,23 @@ function getBreakingPullRequestEntries (releaseLine, upperBoundRef) {
 }
 
 /**
- * @param {string} ancestor
- * @param {string} descendant
+ * Release proposal branches are built with cherry-picks, so PR merge commits
+ * often are not ancestors of the release branch even when their changes are
+ * present. Match by the PR number preserved in the commit subject instead.
+ *
+ * @param {string} base
+ * @param {string[]} refs
  */
-function isAncestor (ancestor, descendant) {
-  try {
-    capture(`git merge-base --is-ancestor ${ancestor} ${descendant}`)
-    return true
-  } catch {
-    return false
+function getIncludedPullRequests (base, refs) {
+  const pullRequests = new Set()
+
+  for (const ref of refs) {
+    const subjects = capture(`git log --format=%s ${base}..${ref}`).split('\n')
+    for (const subject of subjects) {
+      const match = subject.match(pullRequestNumberPattern)
+      if (match) pullRequests.add(Number.parseInt(match[1], 10))
+    }
   }
+
+  return pullRequests
 }
