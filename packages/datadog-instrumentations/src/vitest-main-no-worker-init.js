@@ -4,6 +4,7 @@ const path = require('node:path')
 
 const satisfies = require('../../../vendor/dist/semifies')
 
+const { getValueFromEnvSources } = require('../../dd-trace/src/config/helper')
 const log = require('../../dd-trace/src/log')
 const {
   DYNAMIC_NAME_RE,
@@ -12,7 +13,6 @@ const {
   logAttemptToFixTestExecution,
   recordAttemptToFixExecution,
 } = require('../../dd-trace/src/plugins/util/test')
-const { isTrue } = require('../../dd-trace/src/util')
 const {
   getTestName,
   getTypeTasks,
@@ -29,6 +29,9 @@ const {
   testSuiteStartCh,
 } = require('./vitest-util')
 
+// No-worker-init instrumentation for DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT.
+// When enabled, Vitest workers do not initialize dd-trace, so this main-process instrumentation
+// takes over some worker responsibilities, including test span creation and lifecycle reporting.
 const mainProcessReporterStates = new WeakMap()
 const loggedAttemptToFixTests = new Set()
 
@@ -61,8 +64,7 @@ let nodeOptionsBeforeNoWorkerInit
 function noop () {}
 
 function isRequested () {
-  // eslint-disable-next-line eslint-rules/eslint-process-env
-  return isTrue(process.env[VITEST_NO_WORKER_INIT_REQUEST_ENV])
+  return getValueFromEnvSources(VITEST_NO_WORKER_INIT_REQUEST_ENV) === true
 }
 
 function shouldUse (ctx, frameworkVersion, testSpecifications, options) {

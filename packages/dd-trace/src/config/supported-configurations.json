@@ -838,6 +838,13 @@
         "default": "false"
       }
     ],
+    "DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false"
+      }
+    ],
     "DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE": [
       {
         "implementation": "A",
