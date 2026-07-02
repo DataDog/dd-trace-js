@@ -25,6 +25,7 @@ const {
   getEnvironmentVariable,
   getEnvironmentVariables,
   getStableConfigSources,
+  getValueFromEnvSources,
 } = require('./helper')
 const {
   defaults,
@@ -603,6 +604,16 @@ class Config extends ConfigBase {
     if (!this.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) {
       setAndTrack(this, 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', `${defaultOtlpBase}/v1/traces`)
     }
+
+    const autoTraceMetrics = this.OTEL_TRACES_EXPORTER === 'otlp' && this.DD_METRICS_OTEL_ENABLED === true
+    setAndTrack(this, 'OTEL_TRACES_SPAN_METRICS_ENABLED', this.OTEL_TRACES_SPAN_METRICS_ENABLED ?? autoTraceMetrics)
+
+    if (this.OTEL_TRACES_SPAN_METRICS_ENABLED) {
+      this.stats = { ...this.stats, DD_TRACE_STATS_COMPUTATION_ENABLED: true }
+    }
+
+    const flushInterval = getValueFromEnvSources('_DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL')
+    setAndTrack(this, '_DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL', flushInterval)
 
     if (process.platform === 'win32') {
       // OOM monitoring does not work properly on Windows, so it will be disabled.
