@@ -27,6 +27,7 @@ const {
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
   DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
   DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
   EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_EARLY_FLAKE_ENABLED,
@@ -459,6 +460,51 @@ SUPPORTED_VERSIONS.forEach((version) => {
           EXPECT_NO_DD_TRACE_INIT: '1',
         }),
         metadataPromise,
+      ]).then(([exitCode]) => exitCode)
+
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+
+    it('tags skipped no-worker events with request errors when settings fails', async () => {
+      receiver.setSettingsResponseCode(404)
+
+      const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
+        assertEventCounts(events, {
+          test_session_end: 1,
+          test_module_end: 1,
+          test_suite_end: 1,
+          test: 4,
+        })
+
+        for (const type of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+          const [event] = getEventContents(events, type)
+          assert.strictEqual(
+            event.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS],
+            'true',
+            `${type}: ${inspect(event.meta)}`
+          )
+        }
+
+        const skippedTest = getTestByName(
+          getEventContents(events, 'test'),
+          'early flake detection does not retry if the test is skipped'
+        )
+        assert.strictEqual(skippedTest.meta[TEST_STATUS], 'skip')
+        assert.strictEqual(
+          skippedTest.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS],
+          'true',
+          `test: ${inspect(skippedTest.meta)}`
+        )
+      })
+
+      const exitCode = await Promise.all([
+        runVitest({
+          TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection.mjs',
+          POOL_CONFIG: 'forks',
+          EXPECT_DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE: '1',
+          EXPECT_NO_DD_TRACE_INIT: '1',
+        }, './node_modules/.bin/vitest run -t "does not retry if the test is skipped"'),
+        payloadsPromise,
       ]).then(([exitCode]) => exitCode)
 
       assert.strictEqual(exitCode, 0, testOutput)

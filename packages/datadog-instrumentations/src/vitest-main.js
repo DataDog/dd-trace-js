@@ -64,6 +64,7 @@ let testManagementAttemptToFixRetries = 0
 let isDiEnabled = false
 let testCodeCoverageLinesTotal
 let coverageRootDir
+let requestErrorTags = {}
 let isSessionStarted = false
 let isVitestNoWorkerInitActive = false
 let vitestPool = null
@@ -414,15 +415,21 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, s
   }
 
   try {
-    const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh, frameworkVersion, {
+    const {
+      err,
+      libraryConfig,
+      requestErrorTags: receivedRequestErrorTags = {},
+    } = await getChannelPromise(libraryConfigurationCh, frameworkVersion, {
       isVitestNoWorkerInitActive: shouldInstallNoWorkerInit,
     })
+    requestErrorTags = receivedRequestErrorTags
     if (err) {
       resetLibraryConfig()
     } else {
       applyLibraryConfig(libraryConfig)
     }
   } catch {
+    requestErrorTags = {}
     resetLibraryConfig()
   }
 
@@ -597,6 +604,7 @@ function getNoWorkerInitState () {
     isFlakyTestRetriesEnabled,
     isKnownTestsEnabled,
     newTestsWithDynamicNames,
+    requestErrorTags,
     testManagementAttemptToFixRetries,
   }
 }
@@ -806,6 +814,7 @@ function getFinishWrapper (exitOrClose) {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
+      requestErrorTags,
       vitestPool,
       isVitestNoWorkerInitActive,
       onFinish,
