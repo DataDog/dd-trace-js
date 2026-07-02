@@ -464,89 +464,151 @@ SUPPORTED_VERSIONS.forEach((version) => {
       assert.strictEqual(exitCode, 0, testOutput)
     })
 
-    if (version === '3.2.6') {
-      it('preserves no-worker env when the programmatic API collects tests', async () => {
-        const exitCode = await runVitest({
-          TEST_DIR: 'ci-visibility/vitest-tests/vitest-worker-env.mjs',
+    it('preserves no-worker env when the programmatic API collects tests', async () => {
+      const exitCode = await runVitest({
+        TEST_DIR: 'ci-visibility/vitest-tests/vitest-worker-env.mjs',
+        POOL_CONFIG: 'forks',
+        EXPECT_DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE: '1',
+        EXPECT_DD_NODE_OPTIONS_STRIPPED: '1',
+        EXPECT_NO_DD_TRACE_INIT: '1',
+      }, 'node ci-visibility/vitest-tests-programmatic-api/run-no-worker-programmatic-api-collect-before-run.mjs')
+
+      assert.strictEqual(exitCode, 0, testOutput)
+      assert.match(testOutput, /1 passed/, testOutput)
+    })
+
+    it('reports multiple suites with the same parentage as worker instrumentation', async () => {
+      const expectedSuites = [
+        'ci-visibility/vitest-tests/no-worker-suite-context-a-slow.mjs',
+        'ci-visibility/vitest-tests/no-worker-suite-context-b-fast.mjs',
+      ]
+      const expectedTests = [
+        'no-worker suite context fast reports the fast suite test',
+        'no-worker suite context slow reports the slow suite test',
+      ]
+
+      const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
+        assertEventCounts(events, {
+          test_session_end: 1,
+          test_module_end: 1,
+          test_suite_end: 2,
+          test: 2,
+        })
+
+        const suites = getEventContents(events, 'test_suite_end')
+        const tests = getEventContents(events, 'test')
+        assert.deepStrictEqual(sortStrings(suites.map(suite => suite.meta[TEST_SOURCE_FILE])), expectedSuites)
+        assert.deepStrictEqual(sortStrings(tests.map(test => test.meta[TEST_NAME])), expectedTests)
+
+        const suitesBySourceFile = new Map(suites.map(suite => [suite.meta[TEST_SOURCE_FILE], suite]))
+        for (const test of tests) {
+          const suite = suitesBySourceFile.get(test.meta[TEST_SOURCE_FILE])
+          assert.ok(suite, `Could not find suite for ${test.meta[TEST_SOURCE_FILE]}`)
+          assert.strictEqual(test.meta[TEST_SUITE], test.meta[TEST_SOURCE_FILE])
+          assert.strictEqual(test.test_session_id.toString(), suite.test_session_id.toString())
+          assert.strictEqual(test.test_module_id.toString(), suite.test_module_id.toString())
+        }
+      })
+
+      const exitCode = await Promise.all([
+        runVitest({
+          TEST_DIR: 'ci-visibility/vitest-tests/no-worker-suite-context-*.mjs',
           POOL_CONFIG: 'forks',
-          EXPECT_DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE: '1',
-          EXPECT_DD_NODE_OPTIONS_STRIPPED: '1',
-          EXPECT_NO_DD_TRACE_INIT: '1',
-        }, 'node ci-visibility/vitest-tests-programmatic-api/run-no-worker-programmatic-api-collect-before-run.mjs')
+        }),
+        payloadsPromise,
+      ]).then(([exitCode]) => exitCode)
 
-        assert.strictEqual(exitCode, 0, testOutput)
-        assert.match(testOutput, /1 passed/, testOutput)
-      })
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
 
-      it('reports multiple suites with the same parentage as worker instrumentation', async () => {
-        const expectedSuites = [
-          'ci-visibility/vitest-tests/no-worker-suite-context-a-slow.mjs',
-          'ci-visibility/vitest-tests/no-worker-suite-context-b-fast.mjs',
-        ]
-        const expectedTests = [
-          'no-worker suite context fast reports the fast suite test',
-          'no-worker suite context slow reports the slow suite test',
-        ]
-
-        const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
-          assertEventCounts(events, {
-            test_session_end: 1,
-            test_module_end: 1,
-            test_suite_end: 2,
-            test: 2,
-          })
-
-          const suites = getEventContents(events, 'test_suite_end')
-          const tests = getEventContents(events, 'test')
-          assert.deepStrictEqual(sortStrings(suites.map(suite => suite.meta[TEST_SOURCE_FILE])), expectedSuites)
-          assert.deepStrictEqual(sortStrings(tests.map(test => test.meta[TEST_NAME])), expectedTests)
-
-          const suitesBySourceFile = new Map(suites.map(suite => [suite.meta[TEST_SOURCE_FILE], suite]))
-          for (const test of tests) {
-            const suite = suitesBySourceFile.get(test.meta[TEST_SOURCE_FILE])
-            assert.ok(suite, `Could not find suite for ${test.meta[TEST_SOURCE_FILE]}`)
-            assert.strictEqual(test.meta[TEST_SUITE], test.meta[TEST_SOURCE_FILE])
-            assert.strictEqual(test.test_session_id.toString(), suite.test_session_id.toString())
-            assert.strictEqual(test.test_module_id.toString(), suite.test_module_id.toString())
-          }
+    it('reports suite hook failures from the main-process reporter', async () => {
+      const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
+        assertEventCounts(events, {
+          test_session_end: 1,
+          test_module_end: 1,
+          test_suite_end: 1,
         })
 
-        const exitCode = await Promise.all([
-          runVitest({
-            TEST_DIR: 'ci-visibility/vitest-tests/no-worker-suite-context-*.mjs',
-            POOL_CONFIG: 'forks',
-          }),
-          payloadsPromise,
-        ]).then(([exitCode]) => exitCode)
-
-        assert.strictEqual(exitCode, 0, testOutput)
+        const [suite] = getEventContents(events, 'test_suite_end')
+        assert.strictEqual(suite.meta[TEST_STATUS], 'fail')
+        assert.match(suite.meta[ERROR_MESSAGE], /failed before all/)
       })
 
-      it('reports suite hook failures from the main-process reporter', async () => {
-        const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
-          assertEventCounts(events, {
-            test_session_end: 1,
-            test_module_end: 1,
-            test_suite_end: 1,
-          })
+      const exitCode = await Promise.all([
+        runVitest({
+          TEST_DIR: 'ci-visibility/vitest-tests/failed-suite-hook.mjs',
+          POOL_CONFIG: 'forks',
+        }),
+        payloadsPromise,
+      ]).then(([exitCode]) => exitCode)
 
-          const [suite] = getEventContents(events, 'test_suite_end')
-          assert.strictEqual(suite.meta[TEST_STATUS], 'fail')
-          assert.match(suite.meta[ERROR_MESSAGE], /failed before all/)
+      assert.strictEqual(exitCode, 1, testOutput)
+    })
+
+    it('preserves existing string setup files when injecting the no-worker setup file', async () => {
+      const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
+        assertEventCounts(events, {
+          test_session_end: 1,
+          test_module_end: 1,
+          test_suite_end: 1,
+          test: 1,
         })
 
-        const exitCode = await Promise.all([
-          runVitest({
-            TEST_DIR: 'ci-visibility/vitest-tests/failed-suite-hook.mjs',
-            POOL_CONFIG: 'forks',
-          }),
-          payloadsPromise,
-        ]).then(([exitCode]) => exitCode)
-
-        assert.strictEqual(exitCode, 1, testOutput)
+        const [test] = getEventContents(events, 'test')
+        assert.strictEqual(test.meta[TEST_NAME], 'string setup file keeps the configured setup file')
+        assert.strictEqual(test.meta[TEST_STATUS], 'pass')
       })
 
-      it('preserves existing string setup files when injecting the no-worker setup file', async () => {
+      const exitCode = await Promise.all([
+        runVitest({
+          TEST_DIR: 'ci-visibility/vitest-tests/uses-string-setup-file.mjs',
+          POOL_CONFIG: 'forks',
+          VITEST_SETUP_FILE: 'ci-visibility/vitest-tests/string-setup-file.mjs',
+        }),
+        payloadsPromise,
+      ]).then(([exitCode]) => exitCode)
+
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+
+    for (const { name, env } of [
+      {
+        name: 'root isolate disabled',
+        env: {
+          NO_ISOLATE: '1',
+          POOL_CONFIG: 'forks',
+        },
+      },
+      {
+        name: 'root pool isolate disabled',
+        env: {
+          POOL_CONFIG: 'forks',
+          POOL_NO_ISOLATE: '1',
+        },
+      },
+      {
+        name: 'default pool isolate disabled',
+        env: {
+          USE_VITEST_DEFAULT_POOL: '1',
+          POOL_NO_ISOLATE: '1',
+        },
+      },
+      {
+        name: 'project isolate disabled',
+        env: {
+          PROJECT_NO_ISOLATE: '1',
+          PROJECT_POOL_CONFIG: 'forks',
+        },
+      },
+      {
+        name: 'project pool isolate disabled',
+        env: {
+          PROJECT_POOL_CONFIG: 'forks',
+          PROJECT_POOL_NO_ISOLATE: '1',
+        },
+      },
+    ]) {
+      it(`warns and falls back to worker instrumentation when ${name}`, async () => {
         const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
           assertEventCounts(events, {
             test_session_end: 1,
@@ -556,428 +618,365 @@ SUPPORTED_VERSIONS.forEach((version) => {
           })
 
           const [test] = getEventContents(events, 'test')
-          assert.strictEqual(test.meta[TEST_NAME], 'string setup file keeps the configured setup file')
+          assert.strictEqual(test.meta[TEST_NAME], 'vitest worker env sets DD_VITEST_WORKER')
           assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(test.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
         })
 
         const exitCode = await Promise.all([
           runVitest({
-            TEST_DIR: 'ci-visibility/vitest-tests/uses-string-setup-file.mjs',
-            POOL_CONFIG: 'forks',
-            VITEST_SETUP_FILE: 'ci-visibility/vitest-tests/string-setup-file.mjs',
+            TEST_DIR: 'ci-visibility/vitest-tests/vitest-worker-env.mjs',
+            DD_TRACE_DEBUG: 'true',
+            DD_TRACE_LOG_LEVEL: 'warn',
+            EXPECT_DD_TEST_OPT_VITEST_NO_WORKER_INIT_INACTIVE: '1',
+            ...env,
           }),
           payloadsPromise,
         ]).then(([exitCode]) => exitCode)
 
         assert.strictEqual(exitCode, 0, testOutput)
+        assert.match(testOutput, new RegExp(DISABLED_ISOLATE_WARNING), testOutput)
       })
+    }
 
-      for (const { name, env } of [
-        {
-          name: 'root isolate disabled',
-          env: {
-            NO_ISOLATE: '1',
-            POOL_CONFIG: 'forks',
-          },
+    it('applies no-worker setup data for Test Management', async () => {
+      receiver.setSettings({
+        test_management: {
+          enabled: true,
+          attempt_to_fix_retries: 2,
         },
-        {
-          name: 'root pool isolate disabled',
-          env: {
-            POOL_CONFIG: 'forks',
-            POOL_NO_ISOLATE: '1',
-          },
-        },
-        {
-          name: 'default pool isolate disabled',
-          env: {
-            USE_VITEST_DEFAULT_POOL: '1',
-            POOL_NO_ISOLATE: '1',
-          },
-        },
-        {
-          name: 'project isolate disabled',
-          env: {
-            PROJECT_NO_ISOLATE: '1',
-            PROJECT_POOL_CONFIG: 'forks',
-          },
-        },
-        {
-          name: 'project pool isolate disabled',
-          env: {
-            PROJECT_POOL_CONFIG: 'forks',
-            PROJECT_POOL_NO_ISOLATE: '1',
-          },
-        },
-      ]) {
-        it(`warns and falls back to worker instrumentation when ${name}`, async () => {
-          const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
-            assertEventCounts(events, {
-              test_session_end: 1,
-              test_module_end: 1,
-              test_suite_end: 1,
-              test: 1,
-            })
-
-            const [test] = getEventContents(events, 'test')
-            assert.strictEqual(test.meta[TEST_NAME], 'vitest worker env sets DD_VITEST_WORKER')
-            assert.strictEqual(test.meta[TEST_STATUS], 'pass')
-            assert.strictEqual(test.meta[TEST_IS_TEST_FRAMEWORK_WORKER], 'true')
-          })
-
-          const exitCode = await Promise.all([
-            runVitest({
-              TEST_DIR: 'ci-visibility/vitest-tests/vitest-worker-env.mjs',
-              DD_TRACE_DEBUG: 'true',
-              DD_TRACE_LOG_LEVEL: 'warn',
-              EXPECT_DD_TEST_OPT_VITEST_NO_WORKER_INIT_INACTIVE: '1',
-              ...env,
-            }),
-            payloadsPromise,
-          ]).then(([exitCode]) => exitCode)
-
-          assert.strictEqual(exitCode, 0, testOutput)
-          assert.match(testOutput, new RegExp(DISABLED_ISOLATE_WARNING), testOutput)
-        })
-      }
-
-      it('applies no-worker setup data for Test Management', async () => {
-        receiver.setSettings({
-          test_management: {
-            enabled: true,
-            attempt_to_fix_retries: 2,
-          },
-        })
-        receiver.setTestManagementTests({
-          vitest: {
-            suites: {
-              'ci-visibility/vitest-tests/test-disabled.mjs': {
-                tests: {
-                  'disable tests can disable a test': {
-                    properties: {
-                      disabled: true,
-                    },
+      })
+      receiver.setTestManagementTests({
+        vitest: {
+          suites: {
+            'ci-visibility/vitest-tests/test-disabled.mjs': {
+              tests: {
+                'disable tests can disable a test': {
+                  properties: {
+                    disabled: true,
                   },
                 },
               },
-              'ci-visibility/vitest-tests/test-quarantine.mjs': {
-                tests: {
-                  'quarantine tests can quarantine a test': {
-                    properties: {
-                      quarantined: true,
-                    },
+            },
+            'ci-visibility/vitest-tests/test-quarantine.mjs': {
+              tests: {
+                'quarantine tests can quarantine a test': {
+                  properties: {
+                    quarantined: true,
                   },
                 },
               },
-              'ci-visibility/vitest-tests/test-attempt-to-fix.mjs': {
-                tests: {
-                  'attempt to fix tests can attempt to fix a test': {
-                    properties: {
-                      attempt_to_fix: true,
-                    },
+            },
+            'ci-visibility/vitest-tests/test-attempt-to-fix.mjs': {
+              tests: {
+                'attempt to fix tests can attempt to fix a test': {
+                  properties: {
+                    attempt_to_fix: true,
                   },
                 },
               },
             },
           },
-        })
-
-        const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
-          assertEventCounts(events, {
-            test_session_end: 1,
-            test_module_end: 1,
-            test_suite_end: 3,
-            test: 7,
-          })
-
-          const tests = getEventContents(events, 'test')
-          const suites = getEventContents(events, 'test_suite_end')
-          const [testSession] = getEventContents(events, 'test_session_end')
-          assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
-
-          const disabledTest = getTestByName(tests, 'disable tests can disable a test')
-          assert.strictEqual(disabledTest.meta[TEST_STATUS], 'skip')
-          assert.strictEqual(disabledTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
-
-          const quarantinedTest = getTestByName(tests, 'quarantine tests can quarantine a test')
-          assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
-          assert.strictEqual(quarantinedTest.meta[TEST_FINAL_STATUS], 'skip')
-          assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
-
-          const quarantinedSuite = suites.find(suite =>
-            suite.meta[TEST_SOURCE_FILE] === 'ci-visibility/vitest-tests/test-quarantine.mjs'
-          )
-          assert.ok(quarantinedSuite, inspect(suites.map(suite => suite.meta[TEST_SOURCE_FILE])))
-          assert.strictEqual(quarantinedSuite.meta[TEST_STATUS], 'pass')
-          assert.ok(!(ERROR_MESSAGE in quarantinedSuite.meta), inspect(quarantinedSuite.meta))
-
-          const attemptedToFixTests = getTestsByName(tests, 'attempt to fix tests can attempt to fix a test')
-          assert.strictEqual(attemptedToFixTests.length, 3)
-
-          attemptedToFixTests.forEach((test, index) => {
-            assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
-            if (index === 0) {
-              assert.ok(!(TEST_IS_RETRY in test.meta))
-              return
-            }
-            assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
-            assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atf)
-          })
-
-          const finalAttempt = attemptedToFixTests[attemptedToFixTests.length - 1]
-          assert.strictEqual(finalAttempt.meta[TEST_STATUS], 'fail')
-          assert.strictEqual(finalAttempt.meta[TEST_FINAL_STATUS], 'fail')
-          assert.strictEqual(finalAttempt.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
-          assert.strictEqual(finalAttempt.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
-        })
-
-        const exitCode = await Promise.all([
-          runVitest({
-            POOL_CONFIG: 'forks',
-            TEST_DIR: 'ci-visibility/vitest-tests/test-{disabled,quarantine,attempt-to-fix}.mjs',
-          }),
-          payloadsPromise,
-        ]).then(([exitCode]) => exitCode)
-
-        assert.strictEqual(exitCode, 1, testOutput)
+        },
       })
 
-      it('does not skip disabled attempt-to-fix tests in no-worker mode', async () => {
-        receiver.setSettings({
-          test_management: {
-            enabled: true,
-            attempt_to_fix_retries: 2,
-          },
+      const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
+        assertEventCounts(events, {
+          test_session_end: 1,
+          test_module_end: 1,
+          test_suite_end: 3,
+          test: 7,
         })
-        receiver.setTestManagementTests({
-          vitest: {
-            suites: {
-              'ci-visibility/vitest-tests/test-attempt-to-fix.mjs': {
-                tests: {
-                  'attempt to fix tests can attempt to fix a test': {
-                    properties: {
-                      attempt_to_fix: true,
-                      disabled: true,
-                    },
+
+        const tests = getEventContents(events, 'test')
+        const suites = getEventContents(events, 'test_suite_end')
+        const [testSession] = getEventContents(events, 'test_session_end')
+        assert.strictEqual(testSession.meta[TEST_MANAGEMENT_ENABLED], 'true')
+
+        const disabledTest = getTestByName(tests, 'disable tests can disable a test')
+        assert.strictEqual(disabledTest.meta[TEST_STATUS], 'skip')
+        assert.strictEqual(disabledTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+
+        const quarantinedTest = getTestByName(tests, 'quarantine tests can quarantine a test')
+        assert.strictEqual(quarantinedTest.meta[TEST_STATUS], 'fail')
+        assert.strictEqual(quarantinedTest.meta[TEST_FINAL_STATUS], 'skip')
+        assert.strictEqual(quarantinedTest.meta[TEST_MANAGEMENT_IS_QUARANTINED], 'true')
+
+        const quarantinedSuite = suites.find(suite =>
+          suite.meta[TEST_SOURCE_FILE] === 'ci-visibility/vitest-tests/test-quarantine.mjs'
+        )
+        assert.ok(quarantinedSuite, inspect(suites.map(suite => suite.meta[TEST_SOURCE_FILE])))
+        assert.strictEqual(quarantinedSuite.meta[TEST_STATUS], 'pass')
+        assert.ok(!(ERROR_MESSAGE in quarantinedSuite.meta), inspect(quarantinedSuite.meta))
+
+        const attemptedToFixTests = getTestsByName(tests, 'attempt to fix tests can attempt to fix a test')
+        assert.strictEqual(attemptedToFixTests.length, 3)
+
+        attemptedToFixTests.forEach((test, index) => {
+          assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+          if (index === 0) {
+            assert.ok(!(TEST_IS_RETRY in test.meta))
+            return
+          }
+          assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
+          assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atf)
+        })
+
+        const finalAttempt = attemptedToFixTests[attemptedToFixTests.length - 1]
+        assert.strictEqual(finalAttempt.meta[TEST_STATUS], 'fail')
+        assert.strictEqual(finalAttempt.meta[TEST_FINAL_STATUS], 'fail')
+        assert.strictEqual(finalAttempt.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+        assert.strictEqual(finalAttempt.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
+      })
+
+      const exitCode = await Promise.all([
+        runVitest({
+          POOL_CONFIG: 'forks',
+          TEST_DIR: 'ci-visibility/vitest-tests/test-{disabled,quarantine,attempt-to-fix}.mjs',
+        }),
+        payloadsPromise,
+      ]).then(([exitCode]) => exitCode)
+
+      assert.strictEqual(exitCode, 1, testOutput)
+    })
+
+    it('does not skip disabled attempt-to-fix tests in no-worker mode', async () => {
+      receiver.setSettings({
+        test_management: {
+          enabled: true,
+          attempt_to_fix_retries: 2,
+        },
+      })
+      receiver.setTestManagementTests({
+        vitest: {
+          suites: {
+            'ci-visibility/vitest-tests/test-attempt-to-fix.mjs': {
+              tests: {
+                'attempt to fix tests can attempt to fix a test': {
+                  properties: {
+                    attempt_to_fix: true,
+                    disabled: true,
                   },
                 },
               },
             },
           },
-        })
-
-        const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
-          assertEventCounts(events, {
-            test_session_end: 1,
-            test_module_end: 1,
-            test_suite_end: 1,
-            test: 3,
-          })
-
-          const attemptedToFixTests = getTestsByName(
-            getEventContents(events, 'test'),
-            'attempt to fix tests can attempt to fix a test'
-          )
-          assert.strictEqual(attemptedToFixTests.length, 3)
-
-          attemptedToFixTests.forEach((test, index) => {
-            assert.strictEqual(test.meta[TEST_STATUS], 'fail')
-            assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
-            assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
-            if (index === 0) {
-              assert.ok(!(TEST_IS_RETRY in test.meta))
-              return
-            }
-            assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
-            assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atf)
-          })
-
-          const finalAttempt = attemptedToFixTests[attemptedToFixTests.length - 1]
-          assert.strictEqual(finalAttempt.meta[TEST_FINAL_STATUS], 'fail')
-          assert.strictEqual(finalAttempt.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
-          assert.strictEqual(finalAttempt.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
-        })
-
-        const exitCode = await Promise.all([
-          runVitest({
-            POOL_CONFIG: 'forks',
-            TEST_DIR: 'ci-visibility/vitest-tests/test-attempt-to-fix.mjs',
-          }),
-          payloadsPromise,
-        ]).then(([exitCode]) => exitCode)
-
-        assert.strictEqual(exitCode, 1, testOutput)
+        },
       })
 
-      it('applies no-worker setup data for auto test retries', async () => {
-        receiver.setSettings({
-          itr_enabled: false,
-          code_coverage: false,
-          tests_skipping: false,
-          flaky_test_retries_enabled: true,
-          early_flake_detection: {
-            enabled: false,
-          },
+      const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
+        assertEventCounts(events, {
+          test_session_end: 1,
+          test_module_end: 1,
+          test_suite_end: 1,
+          test: 3,
         })
 
-        const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
-          assertEventCounts(events, {
-            test_session_end: 1,
-            test_module_end: 1,
-            test_suite_end: 1,
-            test: 9,
-          })
+        const attemptedToFixTests = getTestsByName(
+          getEventContents(events, 'test'),
+          'attempt to fix tests can attempt to fix a test'
+        )
+        assert.strictEqual(attemptedToFixTests.length, 3)
 
-          const tests = getEventContents(events, 'test')
-          const eventuallyPassingTests = getTestsByName(
-            tests,
-            'flaky test retries can retry tests that eventually pass'
-          )
-          assert.strictEqual(eventuallyPassingTests.length, 4)
-          assert.ok(!(TEST_IS_RETRY in eventuallyPassingTests[0].meta), inspect(eventuallyPassingTests[0].meta))
-          for (const retryTest of eventuallyPassingTests.slice(1)) {
-            assert.strictEqual(retryTest.meta[TEST_IS_RETRY], 'true')
-            assert.strictEqual(retryTest.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+        attemptedToFixTests.forEach((test, index) => {
+          assert.strictEqual(test.meta[TEST_STATUS], 'fail')
+          assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+          assert.strictEqual(test.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+          if (index === 0) {
+            assert.ok(!(TEST_IS_RETRY in test.meta))
+            return
           }
-          assert.strictEqual(eventuallyPassingTests[3].meta[TEST_STATUS], 'pass')
-          assert.strictEqual(eventuallyPassingTests[3].meta[TEST_FINAL_STATUS], 'pass')
-
-          const neverPassingTests = getTestsByName(tests, 'flaky test retries can retry tests that never pass')
-          assert.strictEqual(neverPassingTests.length, 4)
-          assert.ok(!(TEST_IS_RETRY in neverPassingTests[0].meta), inspect(neverPassingTests[0].meta))
-          for (const retryTest of neverPassingTests.slice(1)) {
-            assert.strictEqual(retryTest.meta[TEST_IS_RETRY], 'true')
-            assert.strictEqual(retryTest.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
-          }
-          assert.strictEqual(neverPassingTests[3].meta[TEST_STATUS], 'fail')
-          assert.strictEqual(neverPassingTests[3].meta[TEST_FINAL_STATUS], 'fail')
-          assert.strictEqual(neverPassingTests[3].meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
-
-          const unnecessaryRetryTest = getTestByName(tests, 'flaky test retries does not retry if unnecessary')
-          assert.ok(!(TEST_IS_RETRY in unnecessaryRetryTest.meta), inspect(unnecessaryRetryTest.meta))
-          assert.ok(!(TEST_RETRY_REASON in unnecessaryRetryTest.meta), inspect(unnecessaryRetryTest.meta))
-          assert.strictEqual(unnecessaryRetryTest.meta[TEST_FINAL_STATUS], 'pass')
+          assert.strictEqual(test.meta[TEST_IS_RETRY], 'true')
+          assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atf)
         })
 
-        const exitCode = await Promise.all([
-          runVitest({
-            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '3',
-            POOL_CONFIG: 'forks',
-            TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries.mjs',
-          }),
-          payloadsPromise,
-        ]).then(([exitCode]) => exitCode)
-
-        assert.strictEqual(exitCode, 1, testOutput)
+        const finalAttempt = attemptedToFixTests[attemptedToFixTests.length - 1]
+        assert.strictEqual(finalAttempt.meta[TEST_FINAL_STATUS], 'fail')
+        assert.strictEqual(finalAttempt.meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
+        assert.strictEqual(finalAttempt.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
       })
 
-      it('reports user configured Vitest retries as external retries in no-worker mode', async () => {
-        receiver.setSettings({
-          itr_enabled: false,
-          code_coverage: false,
-          tests_skipping: false,
-          flaky_test_retries_enabled: true,
-          early_flake_detection: {
-            enabled: false,
-          },
-        })
+      const exitCode = await Promise.all([
+        runVitest({
+          POOL_CONFIG: 'forks',
+          TEST_DIR: 'ci-visibility/vitest-tests/test-attempt-to-fix.mjs',
+        }),
+        payloadsPromise,
+      ]).then(([exitCode]) => exitCode)
 
-        const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
-          assertEventCounts(events, {
-            test_session_end: 1,
-            test_module_end: 1,
-            test_suite_end: 1,
-            test: 5,
-          })
+      assert.strictEqual(exitCode, 1, testOutput)
+    })
 
-          const tests = getEventContents(events, 'test')
-          const retriedTests = getTestsByName(tests, 'flaky test retries can retry tests that eventually pass')
-          assert.strictEqual(retriedTests.length, 2)
-          assert.ok(!(TEST_IS_RETRY in retriedTests[0].meta), inspect(retriedTests[0].meta))
-          assert.ok(!(TEST_RETRY_REASON in retriedTests[0].meta), inspect(retriedTests[0].meta))
-          assert.strictEqual(retriedTests[1].meta[TEST_IS_RETRY], 'true')
-          assert.strictEqual(retriedTests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
-          assert.strictEqual(retriedTests[1].meta[TEST_FINAL_STATUS], 'fail')
-          assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in retriedTests[1].meta), inspect(retriedTests[1].meta))
-
-          const atrTaggedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr)
-          assert.strictEqual(atrTaggedTests.length, 0, inspect(atrTaggedTests.map(test => test.meta)))
-        })
-
-        const exitCode = await Promise.all([
-          runVitest({
-            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '3',
-            PROJECT_POOL_CONFIG: 'forks',
-            PROJECT_RETRY_CONFIG: '1',
-            TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries.mjs',
-          }, './node_modules/.bin/vitest run --project project-pool'),
-          payloadsPromise,
-        ]).then(([exitCode]) => exitCode)
-
-        assert.strictEqual(exitCode, 1, testOutput)
+    it('applies no-worker setup data for auto test retries', async () => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: true,
+        early_flake_detection: {
+          enabled: false,
+        },
       })
 
-      it('does not double report delayed final failed Vitest retries in no-worker mode', async () => {
-        receiver.setSettings({
-          itr_enabled: false,
-          code_coverage: false,
-          tests_skipping: false,
-          flaky_test_retries_enabled: false,
-          early_flake_detection: {
-            enabled: false,
-          },
+      const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
+        assertEventCounts(events, {
+          test_session_end: 1,
+          test_module_end: 1,
+          test_suite_end: 1,
+          test: 9,
         })
 
-        const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
-          assertEventCounts(events, {
-            test_session_end: 1,
-            test_module_end: 1,
-            test_suite_end: 1,
-            test: 2,
-          })
+        const tests = getEventContents(events, 'test')
+        const eventuallyPassingTests = getTestsByName(
+          tests,
+          'flaky test retries can retry tests that eventually pass'
+        )
+        assert.strictEqual(eventuallyPassingTests.length, 4)
+        assert.ok(!(TEST_IS_RETRY in eventuallyPassingTests[0].meta), inspect(eventuallyPassingTests[0].meta))
+        for (const retryTest of eventuallyPassingTests.slice(1)) {
+          assert.strictEqual(retryTest.meta[TEST_IS_RETRY], 'true')
+          assert.strictEqual(retryTest.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+        }
+        assert.strictEqual(eventuallyPassingTests[3].meta[TEST_STATUS], 'pass')
+        assert.strictEqual(eventuallyPassingTests[3].meta[TEST_FINAL_STATUS], 'pass')
 
-          const retriedTests = getTestsByName(
-            getEventContents(events, 'test'),
-            'slow failing retry does not double report final failed retry'
-          )
-          assert.strictEqual(retriedTests.length, 2)
-          assert.ok(!(TEST_IS_RETRY in retriedTests[0].meta), inspect(retriedTests[0].meta))
-          assert.strictEqual(retriedTests[0].meta[TEST_STATUS], 'fail')
-          assert.ok(
-            Number(retriedTests[0].duration) < 100 * 1e6,
-            'Expected first attempt duration to exclude the delayed final retry, got ' +
-              `${Number(retriedTests[0].duration) / 1e6}ms`
-          )
-          assert.strictEqual(retriedTests[1].meta[TEST_IS_RETRY], 'true')
-          assert.strictEqual(retriedTests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
-          assert.strictEqual(retriedTests[1].meta[TEST_STATUS], 'fail')
-          assert.strictEqual(retriedTests[1].meta[TEST_FINAL_STATUS], 'fail')
-          assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in retriedTests[1].meta), inspect(retriedTests[1].meta))
-        })
+        const neverPassingTests = getTestsByName(tests, 'flaky test retries can retry tests that never pass')
+        assert.strictEqual(neverPassingTests.length, 4)
+        assert.ok(!(TEST_IS_RETRY in neverPassingTests[0].meta), inspect(neverPassingTests[0].meta))
+        for (const retryTest of neverPassingTests.slice(1)) {
+          assert.strictEqual(retryTest.meta[TEST_IS_RETRY], 'true')
+          assert.strictEqual(retryTest.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atr)
+        }
+        assert.strictEqual(neverPassingTests[3].meta[TEST_STATUS], 'fail')
+        assert.strictEqual(neverPassingTests[3].meta[TEST_FINAL_STATUS], 'fail')
+        assert.strictEqual(neverPassingTests[3].meta[TEST_HAS_FAILED_ALL_RETRIES], 'true')
 
-        const exitCode = await Promise.all([
-          runVitest({
-            PROJECT_POOL_CONFIG: 'forks',
-            PROJECT_RETRY_CONFIG: '1',
-            TEST_DIR: 'ci-visibility/vitest-tests/slow-failing-retry.mjs',
-          }, './node_modules/.bin/vitest run --project project-pool'),
-          payloadsPromise,
-        ]).then(([exitCode]) => exitCode)
-
-        assert.strictEqual(exitCode, 1, testOutput)
+        const unnecessaryRetryTest = getTestByName(tests, 'flaky test retries does not retry if unnecessary')
+        assert.ok(!(TEST_IS_RETRY in unnecessaryRetryTest.meta), inspect(unnecessaryRetryTest.meta))
+        assert.ok(!(TEST_RETRY_REASON in unnecessaryRetryTest.meta), inspect(unnecessaryRetryTest.meta))
+        assert.strictEqual(unnecessaryRetryTest.meta[TEST_FINAL_STATUS], 'pass')
       })
 
-      it('applies no-worker setup data for impacted tests', async () => {
-        receiver.setSettings({
-          impacted_tests_enabled: true,
-          early_flake_detection: {
-            enabled: false,
-          },
+      const exitCode = await Promise.all([
+        runVitest({
+          DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '3',
+          POOL_CONFIG: 'forks',
+          TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries.mjs',
+        }),
+        payloadsPromise,
+      ]).then(([exitCode]) => exitCode)
+
+      assert.strictEqual(exitCode, 1, testOutput)
+    })
+
+    it('reports user configured Vitest retries as external retries in no-worker mode', async () => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: true,
+        early_flake_detection: {
+          enabled: false,
+        },
+      })
+
+      const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
+        assertEventCounts(events, {
+          test_session_end: 1,
+          test_module_end: 1,
+          test_suite_end: 1,
+          test: 5,
         })
 
-        execSync('git checkout -b no-worker-impacted-test', { cwd, stdio: 'ignore' })
-        fs.writeFileSync(
-          path.join(cwd, 'ci-visibility/vitest-tests/impacted-test.mjs'),
-          `import { describe, test, expect } from 'vitest'
+        const tests = getEventContents(events, 'test')
+        const retriedTests = getTestsByName(tests, 'flaky test retries can retry tests that eventually pass')
+        assert.strictEqual(retriedTests.length, 2)
+        assert.ok(!(TEST_IS_RETRY in retriedTests[0].meta), inspect(retriedTests[0].meta))
+        assert.ok(!(TEST_RETRY_REASON in retriedTests[0].meta), inspect(retriedTests[0].meta))
+        assert.strictEqual(retriedTests[1].meta[TEST_IS_RETRY], 'true')
+        assert.strictEqual(retriedTests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+        assert.strictEqual(retriedTests[1].meta[TEST_FINAL_STATUS], 'fail')
+        assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in retriedTests[1].meta), inspect(retriedTests[1].meta))
+
+        const atrTaggedTests = tests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr)
+        assert.strictEqual(atrTaggedTests.length, 0, inspect(atrTaggedTests.map(test => test.meta)))
+      })
+
+      const exitCode = await Promise.all([
+        runVitest({
+          DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '3',
+          PROJECT_POOL_CONFIG: 'forks',
+          PROJECT_RETRY_CONFIG: '1',
+          TEST_DIR: 'ci-visibility/vitest-tests/flaky-test-retries.mjs',
+        }, './node_modules/.bin/vitest run --project project-pool'),
+        payloadsPromise,
+      ]).then(([exitCode]) => exitCode)
+
+      assert.strictEqual(exitCode, 1, testOutput)
+    })
+
+    it('does not double report delayed final failed Vitest retries in no-worker mode', async () => {
+      receiver.setSettings({
+        itr_enabled: false,
+        code_coverage: false,
+        tests_skipping: false,
+        flaky_test_retries_enabled: false,
+        early_flake_detection: {
+          enabled: false,
+        },
+      })
+
+      const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
+        assertEventCounts(events, {
+          test_session_end: 1,
+          test_module_end: 1,
+          test_suite_end: 1,
+          test: 2,
+        })
+
+        const retriedTests = getTestsByName(
+          getEventContents(events, 'test'),
+          'slow failing retry does not double report final failed retry'
+        )
+        assert.strictEqual(retriedTests.length, 2)
+        assert.ok(!(TEST_IS_RETRY in retriedTests[0].meta), inspect(retriedTests[0].meta))
+        assert.strictEqual(retriedTests[0].meta[TEST_STATUS], 'fail')
+        assert.ok(
+          Number(retriedTests[0].duration) < 100 * 1e6,
+          'Expected first attempt duration to exclude the delayed final retry, got ' +
+            `${Number(retriedTests[0].duration) / 1e6}ms`
+        )
+        assert.strictEqual(retriedTests[1].meta[TEST_IS_RETRY], 'true')
+        assert.strictEqual(retriedTests[1].meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+        assert.strictEqual(retriedTests[1].meta[TEST_STATUS], 'fail')
+        assert.strictEqual(retriedTests[1].meta[TEST_FINAL_STATUS], 'fail')
+        assert.ok(!(TEST_HAS_FAILED_ALL_RETRIES in retriedTests[1].meta), inspect(retriedTests[1].meta))
+      })
+
+      const exitCode = await Promise.all([
+        runVitest({
+          PROJECT_POOL_CONFIG: 'forks',
+          PROJECT_RETRY_CONFIG: '1',
+          TEST_DIR: 'ci-visibility/vitest-tests/slow-failing-retry.mjs',
+        }, './node_modules/.bin/vitest run --project project-pool'),
+        payloadsPromise,
+      ]).then(([exitCode]) => exitCode)
+
+      assert.strictEqual(exitCode, 1, testOutput)
+    })
+
+    it('applies no-worker setup data for impacted tests', async () => {
+      receiver.setSettings({
+        impacted_tests_enabled: true,
+        early_flake_detection: {
+          enabled: false,
+        },
+      })
+
+      execSync('git checkout -b no-worker-impacted-test', { cwd, stdio: 'ignore' })
+      fs.writeFileSync(
+        path.join(cwd, 'ci-visibility/vitest-tests/impacted-test.mjs'),
+        `import { describe, test, expect } from 'vitest'
 
 describe('impacted test', () => {
   test('can impacted test', () => {
@@ -985,134 +984,133 @@ describe('impacted test', () => {
   })
 })
 `
-        )
-        execSync('git add ci-visibility/vitest-tests/impacted-test.mjs', { cwd, stdio: 'ignore' })
-        execSync('git commit -m "modify impacted test"', { cwd, stdio: 'ignore' })
+      )
+      execSync('git add ci-visibility/vitest-tests/impacted-test.mjs', { cwd, stdio: 'ignore' })
+      execSync('git commit -m "modify impacted test"', { cwd, stdio: 'ignore' })
 
-        try {
-          const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
-            assertEventCounts(events, {
-              test_session_end: 1,
-              test_module_end: 1,
-              test_suite_end: 1,
-              test: 1,
-            })
-
-            const tests = getEventContents(events, 'test')
-            const impactedTest = getTestByName(tests, 'impacted test can impacted test')
-            assert.strictEqual(impactedTest.meta[TEST_STATUS], 'pass')
-            assert.strictEqual(impactedTest.meta[TEST_IS_MODIFIED], 'true')
-            assert.ok(!(TEST_IS_NEW in impactedTest.meta), inspect(impactedTest.meta))
-            assert.ok(!(TEST_IS_RETRY in impactedTest.meta), inspect(impactedTest.meta))
+      try {
+        const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
+          assertEventCounts(events, {
+            test_session_end: 1,
+            test_module_end: 1,
+            test_suite_end: 1,
+            test: 1,
           })
 
-          const exitCode = await Promise.all([
-            runVitest({
-              GITHUB_BASE_REF: '',
-              POOL_CONFIG: 'forks',
-              TEST_DIR: 'ci-visibility/vitest-tests/impacted-test.mjs',
-            }),
-            payloadsPromise,
-          ]).then(([exitCode]) => exitCode)
-
-          assert.strictEqual(exitCode, 0, testOutput)
-        } finally {
-          execSync('git checkout -', { cwd, stdio: 'ignore' })
-          execSync('git branch -D no-worker-impacted-test', { cwd, stdio: 'ignore' })
-        }
-      })
-
-      it('applies no-worker setup data for early flake detection', async () => {
-        receiver.setSettings({
-          early_flake_detection: {
-            enabled: true,
-            slow_test_retries: {
-              '5s': 2,
-            },
-            faulty_session_threshold: 100,
-          },
-          known_tests_enabled: true,
-        })
-        receiver.setKnownTests({
-          vitest: {
-            'ci-visibility/vitest-tests/early-flake-detection.mjs': [
-              'early flake detection does not retry if it is not new',
-            ],
-          },
-        })
-
-        const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
           const tests = getEventContents(events, 'test')
-          const [testSession] = getEventContents(events, 'test_session_end')
-          assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
-
-          const alwaysPassTests = getTestsByName(tests, 'early flake detection can retry tests that always pass')
-          assert.strictEqual(alwaysPassTests.length, 3)
-          assert.strictEqual(alwaysPassTests[0].meta[TEST_IS_NEW], 'true')
-          assert.ok(!(TEST_IS_RETRY in alwaysPassTests[0].meta))
-          for (const retryTest of alwaysPassTests.slice(1)) {
-            assert.strictEqual(retryTest.meta[TEST_IS_NEW], 'true')
-            assert.strictEqual(retryTest.meta[TEST_IS_RETRY], 'true')
-            assert.strictEqual(retryTest.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
-          }
-
-          const knownTest = getTestByName(tests, 'early flake detection does not retry if it is not new')
-          assert.ok(!(TEST_IS_NEW in knownTest.meta))
-          assert.ok(!(TEST_IS_RETRY in knownTest.meta))
+          const impactedTest = getTestByName(tests, 'impacted test can impacted test')
+          assert.strictEqual(impactedTest.meta[TEST_STATUS], 'pass')
+          assert.strictEqual(impactedTest.meta[TEST_IS_MODIFIED], 'true')
+          assert.ok(!(TEST_IS_NEW in impactedTest.meta), inspect(impactedTest.meta))
+          assert.ok(!(TEST_IS_RETRY in impactedTest.meta), inspect(impactedTest.meta))
         })
 
         const exitCode = await Promise.all([
           runVitest({
-            TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection.mjs',
+            GITHUB_BASE_REF: '',
             POOL_CONFIG: 'forks',
+            TEST_DIR: 'ci-visibility/vitest-tests/impacted-test.mjs',
           }),
           payloadsPromise,
         ]).then(([exitCode]) => exitCode)
 
         assert.strictEqual(exitCode, 0, testOutput)
-      })
+      } finally {
+        execSync('git checkout -', { cwd, stdio: 'ignore' })
+        execSync('git branch -D no-worker-impacted-test', { cwd, stdio: 'ignore' })
+      }
+    })
 
-      it('keeps a failed slow EFD test failed when remaining repeats are no-ops', async () => {
-        receiver.setSettings({
-          early_flake_detection: {
-            enabled: true,
-            slow_test_retries: {
-              '5s': 0,
-              '10s': 2,
-            },
-            faulty_session_threshold: 100,
+    it('applies no-worker setup data for early flake detection', async () => {
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': 2,
           },
-          known_tests_enabled: true,
-        })
-        receiver.setKnownTests({ vitest: {} })
-
-        const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
-          const tests = getEventContents(events, 'test')
-          const [testSession] = getEventContents(events, 'test_session_end')
-          const retriedTests = getTestsByName(tests, 'early flake detection can retry tests that always pass')
-          assert.ok(retriedTests.length > 0, inspect(tests.map(test => test.meta[TEST_NAME])))
-          retriedTests.forEach(test => {
-            assert.strictEqual(test.meta[TEST_STATUS], 'fail', inspect(test.meta))
-          })
-          const finalTest = retriedTests[retriedTests.length - 1]
-          assert.strictEqual(finalTest.meta[TEST_FINAL_STATUS], 'fail')
-          assert.strictEqual(finalTest.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'slow')
-          assert.ok(!(TEST_IS_RETRY in finalTest.meta), inspect(finalTest.meta))
-          assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
-        })
-
-        const exitCode = await Promise.all([
-          runVitest({
-            ALWAYS_FAIL: '1',
-            TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection.mjs',
-            POOL_CONFIG: 'forks',
-          }, './node_modules/.bin/vitest run -t "can retry tests that always pass"'),
-          payloadsPromise,
-        ]).then(([exitCode]) => exitCode)
-
-        assert.strictEqual(exitCode, 1, testOutput)
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
       })
-    }
+      receiver.setKnownTests({
+        vitest: {
+          'ci-visibility/vitest-tests/early-flake-detection.mjs': [
+            'early flake detection does not retry if it is not new',
+          ],
+        },
+      })
+
+      const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
+        const tests = getEventContents(events, 'test')
+        const [testSession] = getEventContents(events, 'test_session_end')
+        assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
+
+        const alwaysPassTests = getTestsByName(tests, 'early flake detection can retry tests that always pass')
+        assert.strictEqual(alwaysPassTests.length, 3)
+        assert.strictEqual(alwaysPassTests[0].meta[TEST_IS_NEW], 'true')
+        assert.ok(!(TEST_IS_RETRY in alwaysPassTests[0].meta))
+        for (const retryTest of alwaysPassTests.slice(1)) {
+          assert.strictEqual(retryTest.meta[TEST_IS_NEW], 'true')
+          assert.strictEqual(retryTest.meta[TEST_IS_RETRY], 'true')
+          assert.strictEqual(retryTest.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+        }
+
+        const knownTest = getTestByName(tests, 'early flake detection does not retry if it is not new')
+        assert.ok(!(TEST_IS_NEW in knownTest.meta))
+        assert.ok(!(TEST_IS_RETRY in knownTest.meta))
+      })
+
+      const exitCode = await Promise.all([
+        runVitest({
+          TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection.mjs',
+          POOL_CONFIG: 'forks',
+        }),
+        payloadsPromise,
+      ]).then(([exitCode]) => exitCode)
+
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+
+    it('keeps a failed slow EFD test failed when remaining repeats are no-ops', async () => {
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': 0,
+            '10s': 2,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+      receiver.setKnownTests({ vitest: {} })
+
+      const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
+        const tests = getEventContents(events, 'test')
+        const [testSession] = getEventContents(events, 'test_session_end')
+        const retriedTests = getTestsByName(tests, 'early flake detection can retry tests that always pass')
+        assert.ok(retriedTests.length > 0, inspect(tests.map(test => test.meta[TEST_NAME])))
+        retriedTests.forEach(test => {
+          assert.strictEqual(test.meta[TEST_STATUS], 'fail', inspect(test.meta))
+        })
+        const finalTest = retriedTests[retriedTests.length - 1]
+        assert.strictEqual(finalTest.meta[TEST_FINAL_STATUS], 'fail')
+        assert.strictEqual(finalTest.meta[TEST_EARLY_FLAKE_ABORT_REASON], 'slow')
+        assert.ok(!(TEST_IS_RETRY in finalTest.meta), inspect(finalTest.meta))
+        assert.strictEqual(testSession.meta[TEST_STATUS], 'fail')
+      })
+
+      const exitCode = await Promise.all([
+        runVitest({
+          ALWAYS_FAIL: '1',
+          TEST_DIR: 'ci-visibility/vitest-tests/early-flake-detection.mjs',
+          POOL_CONFIG: 'forks',
+        }, './node_modules/.bin/vitest run -t "can retry tests that always pass"'),
+        payloadsPromise,
+      ]).then(([exitCode]) => exitCode)
+
+      assert.strictEqual(exitCode, 1, testOutput)
+    })
   })
 })
 
