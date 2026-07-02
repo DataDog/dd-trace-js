@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
-import { describe, it } from 'mocha'
+import { afterEach, beforeEach, describe, it } from 'mocha'
 
-import { planCoverageGroups } from './group-coverage.mjs'
+import { mergeCoverageJson, mergeLcov, planCoverageGroups } from './group-coverage.mjs'
 
 /**
  * One cell's discovered report set: a `lcov` and a `json` entry per Node.js version the cell ran.
@@ -23,6 +26,28 @@ function files (name, { runId = '1', versions = 1 } = {}) {
     )
   }
   return out
+}
+
+/**
+ * A minimal valid istanbul FileCoverage entry for one statement, so `mergeCoverageJson` has a
+ * realistic shape to merge.
+ *
+ * @param {string} filePath
+ * @param {number} count
+ * @returns {object}
+ */
+function fileCoverage (filePath, count) {
+  return {
+    [filePath]: {
+      path: filePath,
+      statementMap: { 0: { start: { line: 1, column: 0 }, end: { line: 1, column: 5 } } },
+      fnMap: {},
+      branchMap: {},
+      s: { 0: count },
+      f: {},
+      b: {},
+    },
+  }
 }
 
 describe('group-coverage', () => {
@@ -65,6 +90,59 @@ describe('group-coverage', () => {
         'coverage-appsec-express__job-0',
         'coverage-mystery-flag__job-0',
       ])
+    })
+  })
+
+  describe('mergeLcov', () => {
+    let dir
+
+    beforeEach(() => {
+      dir = mkdtempSync(join(tmpdir(), 'group-coverage-lcov-'))
+    })
+
+    afterEach(() => {
+      rmSync(dir, { force: true, recursive: true })
+    })
+
+    it('concatenates every report, adding a trailing newline when one is missing', () => {
+      const a = join(dir, 'a.info')
+      const b = join(dir, 'b.info')
+      writeFileSync(a, 'SF:a.js\nDA:1,1\nend_of_record\n')
+      writeFileSync(b, 'SF:b.js\nDA:1,1\nend_of_record') // no trailing newline
+      assert.equal(
+        mergeLcov([a, b]),
+        'SF:a.js\nDA:1,1\nend_of_record\nSF:b.js\nDA:1,1\nend_of_record\n'
+      )
+    })
+  })
+
+  describe('mergeCoverageJson', () => {
+    let dir
+
+    beforeEach(() => {
+      dir = mkdtempSync(join(tmpdir(), 'group-coverage-json-'))
+    })
+
+    afterEach(() => {
+      rmSync(dir, { force: true, recursive: true })
+    })
+
+    it('sums hit counts for a file shared across cells instead of overwriting them', () => {
+      const a = join(dir, 'a.json')
+      const b = join(dir, 'b.json')
+      writeFileSync(a, JSON.stringify(fileCoverage('/shared.js', 2)))
+      writeFileSync(b, JSON.stringify(fileCoverage('/shared.js', 3)))
+      const merged = mergeCoverageJson([a, b])
+      assert.equal(merged['/shared.js'].s[0], 5)
+    })
+
+    it('keeps files that only appear in one report', () => {
+      const a = join(dir, 'a.json')
+      const b = join(dir, 'b.json')
+      writeFileSync(a, JSON.stringify(fileCoverage('/only-a.js', 1)))
+      writeFileSync(b, JSON.stringify(fileCoverage('/only-b.js', 1)))
+      const merged = mergeCoverageJson([a, b])
+      assert.deepEqual(Object.keys(merged).sort(), ['/only-a.js', '/only-b.js'])
     })
   })
 })
