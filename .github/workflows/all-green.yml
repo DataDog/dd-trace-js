@@ -53,17 +53,44 @@ jobs:
       # independent of each other, and each takes roughly the same few seconds, so they run as
       # backgrounded subshells in one step instead of as sequential steps. `wait` on every pid
       # collects each exit code so a failure in any of them still fails the step; their log lines
-      # can interleave, but that's an acceptable trade for running them concurrently.
+      # can interleave, so each is wrapped in `run_timed` to record its own wall-clock time to a
+      # shared file instead, printed as an unambiguous summary once they've all finished.
       - if: "!cancelled()"
         run: |
+          run_timed () {
+            local label="$1"; shift
+            local start=$SECONDS
+            "$@"
+            local code=$?
+            echo "$label: $((SECONDS - start))s" >> "$TIMING_FILE"
+            return $code
+          }
+
+          upload_to_codecov () {
+            commit_args=(--sha "$HEAD_SHA" --branch "$HEAD_BRANCH")
+            upload_args=(--sha "$HEAD_SHA" --dir coverage-upload/lcov -F coverage)
+            if [ -n "$PR_NUMBER" ]; then
+              commit_args+=(--pr "$PR_NUMBER")
+              upload_args+=(--pr "$PR_NUMBER")
+            fi
+            if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ "$BASE_REF" = "master" ]; then
+              upload_args+=(-F master-coverage)
+            fi
+            pip install --quiet codecov-cli
+            codecovcli create-commit "${commit_args[@]}"
+            codecovcli create-report --sha "$HEAD_SHA"
+            codecovcli do-upload "${upload_args[@]}"
+          }
+
+          TIMING_FILE=$(mktemp)
           pids=()
 
-          datadog-ci junit upload --service dd-trace-js-tests --auto-discovery junit-results &
+          run_timed "junit upload" datadog-ci junit upload --service dd-trace-js-tests --auto-discovery junit-results &
           pids+=($!)
 
           # A single Datadog upload for every cell's coverage, flagged `coverage`.
           if [ -d coverage-upload/lcov ]; then
-            datadog-ci coverage upload coverage-upload/lcov --flags coverage &
+            run_timed "datadog coverage upload" datadog-ci coverage upload coverage-upload/lcov --flags coverage &
             pids+=($!)
           fi
 
@@ -78,21 +105,7 @@ jobs:
           # workflows reported coverage for. No token: the repo uploads tokenless (a Codecov token
           # would have to be an org secret, which forks can't read).
           if [ -d coverage-upload/lcov ]; then
-            (
-              commit_args=(--sha "$HEAD_SHA" --branch "$HEAD_BRANCH")
-              upload_args=(--sha "$HEAD_SHA" --dir coverage-upload/lcov -F coverage)
-              if [ -n "$PR_NUMBER" ]; then
-                commit_args+=(--pr "$PR_NUMBER")
-                upload_args+=(--pr "$PR_NUMBER")
-              fi
-              if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ "$BASE_REF" = "master" ]; then
-                upload_args+=(-F master-coverage)
-              fi
-              pip install --quiet codecov-cli
-              codecovcli create-commit "${commit_args[@]}"
-              codecovcli create-report --sha "$HEAD_SHA"
-              codecovcli do-upload "${upload_args[@]}"
-            ) &
+            run_timed "codecov upload" upload_to_codecov &
             pids+=($!)
           fi
 
@@ -100,6 +113,11 @@ jobs:
           for pid in "${pids[@]}"; do
             wait "$pid" || exit_code=1
           done
+
+          echo "Upload timings:"
+          cat "$TIMING_FILE"
+          rm -f "$TIMING_FILE"
+
           exit $exit_code
         env:
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
