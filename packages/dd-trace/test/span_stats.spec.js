@@ -189,18 +189,18 @@ describe('SpanAggKey', () => {
       key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,integration,server,')
   })
 
-  it('should include gRPC status code string in aggregation key', () => {
+  it('should normalize gRPC status name to numeric string in aggregation key', () => {
     const span = { ...basicSpan, meta: { ...basicSpan.meta, [GRPC_STATUS_CODE]: 'NOT_FOUND' } }
     const key = new SpanAggKey(span)
     assert.strictEqual(
-      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,integration,,NOT_FOUND')
+      key.toString(), 'basic-span,service-name,resource-name,span-type,200,false,,,integration,,5')
   })
 
-  it('should translate numeric gRPC status code to canonical name in aggregation key', () => {
+  it('should keep numeric gRPC status code as numeric string in aggregation key', () => {
     const span = { ...basicSpan, meta: {}, metrics: { [GRPC_STATUS_CODE]: 14 } }
     const key = new SpanAggKey(span)
     assert.strictEqual(
-      key.toString(), 'basic-span,service-name,resource-name,span-type,0,false,,,,,UNAVAILABLE')
+      key.toString(), 'basic-span,service-name,resource-name,span-type,0,false,,,,,14')
   })
 })
 

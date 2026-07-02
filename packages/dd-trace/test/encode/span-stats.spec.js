@@ -50,7 +50,7 @@ describe('span-stats-encode', () => {
       HTTPEndpoint: '/users/:id',
       srv_src: 'kafka',
       SpanKind: 'server',
-      GRPCStatusCode: 'OK',
+      GRPCStatusCode: '0',
       Hits: 30799,
       TopLevelHits: 30799,
       Duration: 1230,
@@ -215,7 +215,7 @@ describe('span-stats-encode', () => {
 
     const decodedStat = decoded.Stats[0].Stats[0]
     assert.strictEqual(decodedStat.SpanKind, 'server')
-    assert.strictEqual(decodedStat.GRPCStatusCode, 'OK')
+    assert.strictEqual(decodedStat.GRPCStatusCode, '0')
   })
 
   it('should encode SpanKind and GRPCStatusCode as empty strings when not present', () => {
