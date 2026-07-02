@@ -27,7 +27,9 @@ const {
   DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX,
   DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE,
   DD_CAPABILITIES_TEST_MANAGEMENT_QUARANTINE,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS,
   DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS,
+  DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS,
   EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
   TEST_EARLY_FLAKE_ABORT_REASON,
   TEST_EARLY_FLAKE_ENABLED,
@@ -110,6 +112,16 @@ function gatherCitestcyclePayloads (receiver, assertions) {
     ({ url }) => url === '/api/v2/citestcycle',
     payloads => assertions(getEvents(payloads))
   )
+}
+
+function assertRequestErrorTagOnEvents (events, tag) {
+  for (const type of ['test_session_end', 'test_module_end', 'test_suite_end']) {
+    const [event] = getEventContents(events, type)
+    assert.strictEqual(event.meta[tag], 'true', `${type}: ${inspect(event.meta)}`)
+  }
+
+  const [test] = getEventContents(events, 'test')
+  assert.strictEqual(test.meta[tag], 'true', `test: ${inspect(test.meta)}`)
 }
 
 describe('vitest no-worker init instrumentation selection', () => {
@@ -476,14 +488,7 @@ SUPPORTED_VERSIONS.forEach((version) => {
           test: 4,
         })
 
-        for (const type of ['test_session_end', 'test_module_end', 'test_suite_end']) {
-          const [event] = getEventContents(events, type)
-          assert.strictEqual(
-            event.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS],
-            'true',
-            `${type}: ${inspect(event.meta)}`
-          )
-        }
+        assertRequestErrorTagOnEvents(events, DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS)
 
         const skippedTest = getTestByName(
           getEventContents(events, 'test'),
@@ -504,6 +509,66 @@ SUPPORTED_VERSIONS.forEach((version) => {
           EXPECT_DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE: '1',
           EXPECT_NO_DD_TRACE_INIT: '1',
         }, './node_modules/.bin/vitest run -t "does not retry if the test is skipped"'),
+        payloadsPromise,
+      ]).then(([exitCode]) => exitCode)
+
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+
+    it('tags no-worker events with request errors when known tests fails', async () => {
+      receiver.setSettings({ known_tests_enabled: true })
+      receiver.setKnownTestsResponseCode(404)
+
+      const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
+        assertEventCounts(events, {
+          test_session_end: 1,
+          test_module_end: 1,
+          test_suite_end: 1,
+          test: 1,
+        })
+
+        assertRequestErrorTagOnEvents(events, DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS)
+      })
+
+      const exitCode = await Promise.all([
+        runVitest({
+          TEST_DIR: 'ci-visibility/vitest-tests/vitest-worker-env.mjs',
+          POOL_CONFIG: 'forks',
+          EXPECT_DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE: '1',
+          EXPECT_NO_DD_TRACE_INIT: '1',
+        }),
+        payloadsPromise,
+      ]).then(([exitCode]) => exitCode)
+
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+
+    it('tags no-worker events with request errors when test management tests fails', async () => {
+      receiver.setSettings({
+        test_management: {
+          enabled: true,
+        },
+      })
+      receiver.setTestManagementTestsResponseCode(404)
+
+      const payloadsPromise = gatherCitestcyclePayloads(receiver, events => {
+        assertEventCounts(events, {
+          test_session_end: 1,
+          test_module_end: 1,
+          test_suite_end: 1,
+          test: 1,
+        })
+
+        assertRequestErrorTagOnEvents(events, DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS)
+      })
+
+      const exitCode = await Promise.all([
+        runVitest({
+          TEST_DIR: 'ci-visibility/vitest-tests/vitest-worker-env.mjs',
+          POOL_CONFIG: 'forks',
+          EXPECT_DD_TEST_OPT_VITEST_NO_WORKER_INIT_ACTIVE: '1',
+          EXPECT_NO_DD_TRACE_INIT: '1',
+        }),
         payloadsPromise,
       ]).then(([exitCode]) => exitCode)
 

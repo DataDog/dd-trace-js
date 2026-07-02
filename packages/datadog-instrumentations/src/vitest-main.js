@@ -391,6 +391,20 @@ function resetMainProcessProvidedContext (ctx) {
   }, 'Could not reset Test Optimization context for workers.')
 }
 
+/**
+ * Merges request error tags from a Test Optimization request response into the tags propagated by no-worker mode.
+ *
+ * @param {{ requestErrorTags?: Record<string, string> }|undefined} requestResponse - Request response.
+ */
+function mergeRequestErrorTags (requestResponse) {
+  if (requestResponse?.requestErrorTags) {
+    requestErrorTags = {
+      ...requestErrorTags,
+      ...requestResponse.requestErrorTags,
+    }
+  }
+}
+
 async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, shouldInstallNoWorkerInit) {
   if (!testSessionFinishCh.hasSubscribers) {
     return
@@ -465,6 +479,8 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, s
     getKnownTests: () => getChannelPromise(knownTestsCh),
     getTestManagementTests: () => getChannelPromise(testManagementTestsCh),
   })
+  mergeRequestErrorTags(knownTestsResponse)
+  mergeRequestErrorTags(testManagementTestsResponse)
 
   const flakyTestRetriesConfiguration = configureFlakyTestRetries(ctx, testSpecifications)
   if (flakyTestRetriesConfiguration) {
