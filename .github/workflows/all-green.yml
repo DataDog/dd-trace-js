@@ -51,42 +51,58 @@ jobs:
         id: dd-sts
       - if: "!cancelled()"
         uses: ./.github/actions/datadog-ci
-      - if: "!cancelled()"
-        run: datadog-ci junit upload --service dd-trace-js-tests --auto-discovery junit-results
-        env:
-          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
-      # A single Datadog upload for every cell's coverage, flagged `coverage`. Datadog reads the lcov
-      # reports; it does not ingest istanbul's JSON.
-      - if: "!cancelled()"
-        run: |
-          [ -d coverage-upload/lcov ] || exit 0
-          datadog-ci coverage upload coverage-upload/lcov --flags coverage
-        env:
-          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
-      # A single Codecov upload for every cell's coverage via the CLI directly. Codecov reads
-      # branch/function coverage from the istanbul JSON, so the upload points at `json/`.
-      # `master-coverage` is the flag `.codecov.yml` gates `codecov/patch` on; attach it only on PRs
-      # targeting master so release-branch PRs auto-pass. The SHA/branch/PR are passed explicitly
-      # because All Green checks out the merge ref, not the head the other workflows reported coverage
-      # for. No token: the repo uploads tokenless (a Codecov token would have to be an org secret,
-      # which forks can't read).
+      # The three uploads below (junit → Datadog, coverage → Datadog, coverage → Codecov) are
+      # independent of each other, and each takes roughly the same few seconds, so they run as
+      # backgrounded subshells in one step instead of as sequential steps. `wait` on every pid
+      # collects each exit code so a failure in any of them still fails the step; their log lines
+      # can interleave, but that's an acceptable trade for running them concurrently.
       - if: "!cancelled()"
         run: |
-          [ -d coverage-upload/json ] || exit 0
-          commit_args=(--sha "$HEAD_SHA" --branch "$HEAD_BRANCH")
-          upload_args=(--sha "$HEAD_SHA" --dir coverage-upload/json -F coverage)
-          if [ -n "$PR_NUMBER" ]; then
-            commit_args+=(--pr "$PR_NUMBER")
-            upload_args+=(--pr "$PR_NUMBER")
+          pids=()
+
+          datadog-ci junit upload --service dd-trace-js-tests --auto-discovery junit-results &
+          pids+=($!)
+
+          # A single Datadog upload for every cell's coverage, flagged `coverage`. Datadog reads
+          # the lcov report; it does not ingest istanbul's JSON.
+          if [ -d coverage-upload/lcov ]; then
+            datadog-ci coverage upload coverage-upload/lcov --flags coverage &
+            pids+=($!)
           fi
-          if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ "$BASE_REF" = "master" ]; then
-            upload_args+=(-F master-coverage)
+
+          # A single Codecov upload for every cell's coverage via the CLI directly. Codecov reads
+          # branch/function coverage from the istanbul JSON, so the upload points at `json/`.
+          # `master-coverage` is the flag `.codecov.yml` gates `codecov/patch` on; attach it only
+          # on PRs targeting master so release-branch PRs auto-pass. The SHA/branch/PR are passed
+          # explicitly because All Green checks out the merge ref, not the head the other
+          # workflows reported coverage for. No token: the repo uploads tokenless (a Codecov token
+          # would have to be an org secret, which forks can't read).
+          if [ -d coverage-upload/json ]; then
+            (
+              commit_args=(--sha "$HEAD_SHA" --branch "$HEAD_BRANCH")
+              upload_args=(--sha "$HEAD_SHA" --dir coverage-upload/json -F coverage)
+              if [ -n "$PR_NUMBER" ]; then
+                commit_args+=(--pr "$PR_NUMBER")
+                upload_args+=(--pr "$PR_NUMBER")
+              fi
+              if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ "$BASE_REF" = "master" ]; then
+                upload_args+=(-F master-coverage)
+              fi
+              pip install --quiet codecov-cli
+              codecovcli create-commit "${commit_args[@]}"
+              codecovcli create-report --sha "$HEAD_SHA"
+              codecovcli do-upload "${upload_args[@]}"
+            ) &
+            pids+=($!)
           fi
-          pip install --quiet codecov-cli
-          codecovcli create-commit "${commit_args[@]}"
-          codecovcli create-report --sha "$HEAD_SHA"
-          codecovcli do-upload "${upload_args[@]}"
+
+          exit_code=0
+          for pid in "${pids[@]}"; do
+            wait "$pid" || exit_code=1
+          done
+          exit $exit_code
         env:
+          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           BASE_REF: ${{ github.base_ref }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
