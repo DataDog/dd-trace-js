@@ -113,11 +113,11 @@ Create a manifest that tells a deterministic validator:
 6. Which generated test identities the validator should expect in Datadog payloads.
 
 The manifest is discovery only. The deterministic validator replays any declared setup commands,
-starts the mock intake, runs forced local Basic Reporting with validator-injected Datadog
-environment variables and Test Optimization preloads, runs `ciWiringCommand` without injecting Test
-Optimization preloads when Basic Reporting passed and a CI command is present, then runs advanced
-feature checks. Do not treat a forced local validator pass as proof that CI wiring is correct; report
-the CI wiring result separately.
+starts the mock intake, runs forced local Basic Reporting with the required Datadog setup added to
+the selected test command, runs `ciWiringCommand` with only the CI-provided setup when Basic
+Reporting passed and a CI command is present, then runs advanced feature checks. Do not treat a
+forced local validator pass as proof that CI wiring is correct; report the CI wiring result
+separately.
 
 For Vitest, the validator injects both the Test Optimization init preload and
 `dd-trace/register.js` through `NODE_OPTIONS`. Do not add these preloads to the manifest commands.
@@ -125,8 +125,9 @@ For Vitest, the validator injects both the Test Optimization init preload and
 Before live validation, the deterministic validator also runs `dd-trace/ci/diagnose.js`. Static
 diagnosis can stop live execution for known hard blockers such as unsupported frameworks
 (`node:test`, AVA, tap, Jasmine, Karma, uvu, TestCafe) or unsupported supported-framework versions.
-Advisory findings such as missing static `NODE_OPTIONS` do not block this validator because the
-validator injects Test Optimization initialization itself.
+Advisory findings such as missing static `NODE_OPTIONS` do not block this validator because forced
+local Basic Reporting is intentionally testing whether the project can report when the required
+Datadog setup reaches the test runner directly.
 
 ## Validation Paths
 
@@ -274,6 +275,13 @@ Recognize these CI systems and extract test-command evidence when practical:
   invokes Mocha is still a Mocha run, not a TAP framework entry. Record the reporter detail in the
   Mocha entry's `project.evidence` or `notes`; do not add a separate `tap:*` framework unless a TAP
   runner/package/config/command is actually present.
+- Do not create runnable `custom` framework entries for test commands that use unsupported
+  non-Node or native runtime test runners, such as `bun test` or `deno test`, unless the validator
+  has a real adapter for that runner. Record those commands as omitted evidence instead of failed
+  validation targets. Use top-level `omitted` for a concise human-readable summary, and when useful
+  add a structured top-level `omittedTestCommands` extension containing command, source, reason,
+  classification, and impact. Omitted commands are informational only; they must not affect the
+  validation result.
 - For every framework that is not `runnable`, include a concrete `notes` entry explaining why:
   no package script, no config file, no safe passing test, missing setup step, missing external
   service, unsupported framework, or unsupported version.
@@ -484,6 +492,7 @@ const manifest = {
     */
   ],
   omitted: [],
+  omittedTestCommands: [],
   warnings: []
 }
 
@@ -498,6 +507,8 @@ were detected.
 Use the smallest valid shape:
 
 - repository root, environment, and one framework entry per detected framework
+- top-level `omitted` and optional `omittedTestCommands` for discovered test commands that are not
+  live validation targets, such as unsupported native Bun or Deno test commands
 - `status`, `supportLevel`, `project.evidence`, and `notes`
 - `setup.commands` for required install/build/setup prerequisites that the validator should replay
 - `existingTestCommand` and `preflight` only when a real project test command was selected. When a
@@ -578,6 +589,36 @@ as `${NODE_OPTIONS}` into fields the validator executes. The validator does not 
 substitution for manifest values. If a CI secret is needed only so the command shape matches CI,
 use an explicit safe dummy value such as `dd-validation-placeholder`, record the original secret name
 in CI metadata such as `requiredSecretEnvVars`, and explain it in `unresolved` or `notes`.
+
+Use omitted-command metadata like this when CI or package discovery finds test commands that should
+not become runnable validation entries:
+
+```json
+{
+  "omitted": [
+    "bun test from .github/workflows/ci.yml job bun was not included in live validation because Bun's native test runner is not supported by this validator."
+  ],
+  "omittedTestCommands": [
+    {
+      "command": "bun test",
+      "reason": "Bun's native test runner is not supported by the current dd-trace Test Optimization validator.",
+      "classification": "unsupported-runtime",
+      "impact": "Not included in live validation results.",
+      "source": {
+        "provider": "github-actions",
+        "file": ".github/workflows/ci.yml",
+        "workflow": "ci",
+        "job": "bun",
+        "step": "bun test"
+      }
+    }
+  ]
+}
+```
+
+Do not also create a `custom:bun` or `custom:deno` framework entry for the same command. If another
+supported runner such as Vitest, Jest, or Mocha is present in the same repository, validate that
+supported runner and report the omitted native runtime command separately.
 
 A framework entry must not be marked `runnable` only because a generated validation file passed.
 Basic Reporting uses `forcedLocalCommand` when present and otherwise uses `existingTestCommand`, so
@@ -775,12 +816,13 @@ The validator separates forced local capability from CI wiring when the manifest
 
 Therefore:
 
-- A forced local Basic Reporting pass means the repository can report when the validator injects correct
-  initialization.
-- A CI wiring pass means the CI-shaped command emitted Test Optimization events without validator
-  injected preloads.
+- A forced local Basic Reporting pass means the repository can report when the required Datadog
+  setup reaches the selected test runner directly.
+- A CI wiring pass means the CI-shaped command emitted Test Optimization events using the
+  CI-provided Datadog setup, without the validator adding `dd-trace` preloads.
 - A forced local Basic Reporting failure means the framework/library setup, selected command, or
-  local capability may be unsupported or broken even with correct injection.
+  local capability may be unsupported or broken even when the required Datadog setup reaches the
+  selected command directly.
 - A forced local pass must not be reported as “CI wiring passed” unless the separate CI wiring path
   also proved that the CI-provided initialization reaches the final test process.
 
@@ -887,6 +929,8 @@ Include:
 - Pass/fail/skip summary for advanced feature scenarios.
 - Any frameworks that were detected but not runnable
 - Any frameworks that were runnable but unsupported by the validator
+- Any test commands that were discovered but intentionally omitted from live validation, including
+  the source file/job/step, reason, classification, and impact when available
 - Any setup or preflight commands that failed
 - The validator's diagnosis for each failed scenario
 - The exact test command associated with each failed scenario
@@ -917,7 +961,8 @@ Use this diagnosis language:
   `NODE_OPTIONS=-r dd-trace/ci/init` and the Datadog environment variables are preserved.”
 - “CI wiring skipped because Basic Reporting failed” means no CI wiring conclusion was reached.
 - “Forced local Basic Reporting failed” means the selected command, framework/library setup, or local
-  capability may be unsupported or broken even with correct injection.
+  capability may be unsupported or broken even when the required Datadog setup reaches the selected
+  command directly.
 - “Skipped” means the path was not safely runnable or not supported; include the concrete blocker.
 
 Do not summarize raw payloads unless the validator explicitly includes them in its report.
