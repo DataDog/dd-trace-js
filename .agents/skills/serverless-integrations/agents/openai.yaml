@@ -1,0 +1,4 @@
+interface:
+  display_name: "Serverless Integrations"
+  short_description: "Build dd-trace-js serverless platform integrations."
+  default_prompt: "Create or modify a dd-trace-js serverless platform integration."
