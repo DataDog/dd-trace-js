@@ -40,12 +40,14 @@ Visibility test sessions. On v5 this required `DD_ENABLE_LAGE_PACKAGE_NAME=true`
 to opt in. Remove the opt-in variable if you had it set; the behavior is now
 unconditional.
 
-### CI test session `resource.name` is now the trimmed command
+### CI test session `test_session.name` is now the trimmed command
 
-The `resource.name` on test session spans now contains only the framework
-invocation (e.g. `jest`, `mocha`, `playwright test`, `cucumber-js`) rather than
-the full command line. Update any monitors or dashboards that matched on the full
-command string.
+The `test_session.name` tag on test session spans now defaults to only the
+framework invocation (e.g. `jest`, `mocha`, `playwright test`, `cucumber-js`)
+rather than the full command line, when no explicit name is otherwise
+configured. The `resource.name` on test session spans is unaffected and still
+contains the full command. Update any monitors or dashboards that matched on
+`test_session.name` with the full command string.
 
 ### OpenAI span resource name is now the normalized method name
 
