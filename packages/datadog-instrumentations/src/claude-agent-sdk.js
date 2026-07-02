@@ -26,10 +26,11 @@ function processTool (chunks, startIndex, toolUseId) {
     const chunk = chunks[chunkIndex]
 
     if (chunk.type === 'user') {
-      const outputMessage = chunk.message.content[0]
-      if (outputMessage.type === 'tool_result' && outputMessage.tool_use_id === toolUseId) {
-        return chunkIndex + 1
-      }
+      const content = chunk.message.content
+      const hasMatchingResult = Array.isArray(content) && content.some(
+        block => block.type === 'tool_result' && block.tool_use_id === toolUseId
+      )
+      if (hasMatchingResult) return chunkIndex + 1
     }
 
     // only process steps for assistant chunks that belong to this subagent invocation
@@ -192,6 +193,18 @@ function wrapQueryAsyncIterator (asyncIterator, ctx) {
         }
 
         return result
+      }).catch(error => {
+        if (chunks.length > 0) {
+          try { processChunks(chunks, ctx) } catch {}
+        }
+
+        ctx.error = error
+        queryChannel.error.publish(ctx)
+
+        ctx.streamResolved = true
+        queryChannel.asyncEnd.publish(ctx)
+
+        throw error
       })
     })
     return iterator
