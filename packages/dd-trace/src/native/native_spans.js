@@ -22,17 +22,22 @@ const FLUSH_BUFFER_SIZE = 10 * 1024 // 10KB
  * ## Detach-safety invariant
  *
  * The cached `_cqbView` / `_cqbBytes` views into WASM memory get detached
- * whenever a WASM call grows memory. Rather than re-checking on every
- * queue method entry, every WASM call that can grow memory is followed by
- * `#checkDetach()` at the call site:
- *   - `stringTableInsertOne` (in `getStringId`)
- *   - `flushChangeQueue` (`flush_change_buffer`)
- *   - `prepareChunk` (in `flushSpans`)
+ * whenever a WASM call grows memory. Two things keep them fresh:
  *
- * Inside the queue methods, all `getStringId` resolution runs **before**
- * the local `view`/`buf` snapshots are taken — so any growth during string
- * resolution is handled by the inner `#checkDetach()` and the locals see
- * a fresh view.
+ * 1. Every change-buffer write method (`queueOp`, `queueCreateSpan`,
+ *    `queueBatchMeta`, `queueBatchMetrics`) calls `#checkDetach()` at entry.
+ *    This catches growth from a *prior* call that did not itself refresh —
+ *    notably the async `flushStats` interval, which runs between spans. It is
+ *    also necessary because a queue method may make no growing wasm call of
+ *    its own (e.g. a `queueCreateSpan` whose name is already interned, so
+ *    `getStringId` is a cache hit) and would otherwise never refresh a view
+ *    detached earlier.
+ *
+ * 2. Growth *during* a method is handled at the call site: `stringTableInsertOne`
+ *    (in `getStringId`), `flushChangeQueue`, and `prepareChunk` (in `flushSpans`)
+ *    are each followed by `#checkDetach()`. Since all `getStringId` resolution
+ *    runs **before** the local `view`/`buf` snapshots are taken, those locals
+ *    always see a fresh view.
  *
  * ## Change-buffer wire format
  *
@@ -381,7 +386,9 @@ class NativeSpansInterface {
    * @param {...(string|Array)} args Operation arguments
    */
   queueOp (op, spanId, ...args) {
-    // See class doc: no detach check at entry; getStringId loop refreshes if needed.
+    // Refresh if a prior call grew memory (e.g. the async stats flush); growth
+    // *during* this method is handled by getStringId before the view snapshot.
+    this.#checkDetach()
     let idx = this._cqbIndex
 
     if (idx + 76 > CHANGE_QUEUE_BUFFER_SIZE) {
@@ -520,7 +527,10 @@ class NativeSpansInterface {
    * @param {number} startMs Start time in milliseconds
    */
   queueCreateSpan (spanId, traceId, segmentId, parentId, name, startMs) {
-    // See class doc: no detach check at entry; getStringId loop refreshes if needed.
+    // Refresh if a prior call grew memory. Essential here: when the span name
+    // is already interned, getStringId is a cache hit and makes no wasm call,
+    // so this is the only refresh point (see the detach-safety invariant).
+    this.#checkDetach()
     let idx = this._cqbIndex
 
     if (idx + 64 > CHANGE_QUEUE_BUFFER_SIZE) {
@@ -596,7 +606,7 @@ class NativeSpansInterface {
   queueBatchMeta (spanId, tags) {
     if (tags.length === 0) return
 
-    // See class doc: no detach check at entry; getStringId loop refreshes if needed.
+    this.#checkDetach() // refresh if a prior call grew memory (see queueOp)
     let idx = this._cqbIndex
     const needed = 16 + tags.length * 8
 
@@ -644,7 +654,7 @@ class NativeSpansInterface {
   queueBatchMetrics (spanId, tags) {
     if (tags.length === 0) return
 
-    // See class doc: no detach check at entry; getStringId loop refreshes if needed.
+    this.#checkDetach() // refresh if a prior call grew memory (see queueOp)
     let idx = this._cqbIndex
     const needed = 16 + tags.length * 12
 
