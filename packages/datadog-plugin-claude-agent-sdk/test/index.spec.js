@@ -35,8 +35,7 @@ describe('Plugin', () => {
 
       after(() => agent.close())
 
-      it('instruments a full agentic call with subagents', async function () {
-        this.timeout(10000)
+      it('instruments a full agentic call with subagents', async () => {
         const { z } = zod
 
         const fetchWeather = client.tool(
@@ -54,9 +53,7 @@ describe('Plugin', () => {
         const localToolsServer = client.createSdkMcpServer({ name: 'local', tools: [fetchWeather] })
 
         const tracesPromise = agent.assertSomeTraces(traces => {
-          console.log('got some traces')
           const spans = traces.flat()
-          console.log('spans length', spans.length)
           assert.equal(spans.length, 12)
 
           const spanById = new Map(spans.map(s => [s.span_id.toString(), s]))
@@ -147,13 +144,9 @@ describe('Plugin', () => {
           },
         })
 
-        console.log('query response', stream)
-
         for await (const message of stream) {
           assert.ok(message.type)
         }
-
-        console.log('finished consuming stream')
 
         await tracesPromise
       })
