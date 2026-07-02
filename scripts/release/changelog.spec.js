@@ -194,6 +194,34 @@ describe('release changelog', () => {
     assert.strictEqual(changelog.isMinor, false)
   })
 
+  it('drops regular release note entries already listed as breaking changes', () => {
+    const changelog = createReleaseChangelog([
+      {
+        sha: 'abc001',
+        subject: 'feat(opentelemetry)!: remove legacy propagation mode (#9002)',
+      },
+      {
+        sha: 'abc002',
+        subject: 'fix(core): keep existing behavior stable (#9001)',
+      },
+    ], [
+      {
+        sha: 'abc003',
+        subject: 'feat(opentelemetry)!: remove legacy propagation mode (#9002)',
+      },
+    ])
+
+    assert.strictEqual(changelog.markdown, [
+      '### Breaking Changes',
+      `- **OpenTelemetry:** Remove legacy propagation mode ${prLink(9002)}`,
+      '',
+      '### Fixes',
+      `- **General:** Keep existing behavior stable ${prLink(9001)}`,
+      '',
+    ].join('\n'))
+    assert.strictEqual(changelog.isMinor, false)
+  })
+
   it('handles breaking markers and subjects without pull request numbers', () => {
     const changelog = createReleaseChangelog([
       {

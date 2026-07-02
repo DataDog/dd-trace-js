@@ -23,6 +23,7 @@ const { checkAll } = require('./helpers/requirements')
 const tmpdir = process.env.RUNNER_TEMP || os.tmpdir()
 const main = 'master'
 const releaseLine = params[0]
+const breakingLabels = ['semver-major', 'only-land-on-next']
 
 // Validate release line argument.
 if (!releaseLine || releaseLine === 'help' || flags.help) {
@@ -79,7 +80,7 @@ try {
   const cherryPickDiffCmd = 'branch-diff --user DataDog --repo dd-trace-js' +
     (isPreRelease ? '' : ' --exclude-label=only-land-on-next')
   const breakingDiffCmd = 'branch-diff --user DataDog --repo dd-trace-js' +
-    ' --require-label=semver-major --require-label=only-land-on-next'
+    breakingLabels.map(label => ` --require-label=${label}`).join('')
 
   start('Determine version increment')
 
@@ -96,7 +97,8 @@ try {
   // runs. It equals allMainShas[min(length, MAX_CHERRY_PICKS) - 1] regardless of
   // how many commits are already on the branch (proven by:
   // existingCherryPicked + shasToApply.length = min(allMainShas.length, MAX_CHERRY_PICKS)).
-  const upperBoundSha = allMainShas.at(Math.min(allMainShas.length, MAX_CHERRY_PICKS) - 1)
+  const upperBoundSha = allMainShas.at(Math.min(allMainShas.length, MAX_CHERRY_PICKS) - 1) ||
+    (isPreRelease ? capture(`git rev-parse v${releaseLine}.x`) : undefined)
 
   if (!upperBoundSha) {
     pass('none (already up to date)')
@@ -112,8 +114,6 @@ try {
   // Excludes changes that are listed in the dedicated breaking changes section.
   const notesShas = capture(`${notesDiffCmd} --format=sha --reverse v${releaseLine}.x ${upperBoundRef}`)
     .split('\n').filter(Boolean)
-  const breakingShas = capture(`${breakingDiffCmd} --format=sha --reverse v${releaseLine}.x ${upperBoundRef}`)
-    .split('\n').filter(Boolean)
   const contributorBySha = getContributorsBySha(`v${releaseLine}.x`, upperBoundSha)
   const notesEntries = []
   for (const sha of notesShas) {
@@ -123,14 +123,9 @@ try {
       author: contributorBySha.get(sha),
     })
   }
-  const breakingEntries = []
-  for (const sha of breakingShas) {
-    breakingEntries.push({
-      sha,
-      subject: capture(`git show -s --format=%s ${sha}`),
-      author: contributorBySha.get(sha),
-    })
-  }
+  const breakingEntries = isPreRelease
+    ? getBreakingPullRequestEntries(releaseLine, upperBoundRef)
+    : getBreakingCommitEntries(breakingDiffCmd, `v${releaseLine}.x`, upperBoundRef, contributorBySha)
   const notes = createReleaseChangelog(notesEntries, breakingEntries)
   const isMinor = notes.isMinor
   const newPatch = `${releaseLine}.${DD_MINOR}.${DD_PATCH + 1}`
@@ -340,4 +335,80 @@ function getContributorsBySha (base, head) {
   }
 
   return contributors
+}
+
+/**
+ * @param {string} diffCmd
+ * @param {string} base
+ * @param {string} head
+ * @param {Map<string, string>} contributorBySha
+ */
+function getBreakingCommitEntries (diffCmd, base, head, contributorBySha) {
+  const breakingShas = capture(`${diffCmd} --format=sha --reverse ${base} ${head}`)
+    .split('\n').filter(Boolean)
+  const entries = []
+
+  for (const sha of breakingShas) {
+    entries.push({
+      sha,
+      subject: capture(`git show -s --format=%s ${sha}`),
+      author: contributorBySha.get(sha),
+    })
+  }
+
+  return entries
+}
+
+/**
+ * Semver-major changes are commonly guarded by version checks and backported to
+ * stable branches. Branch comparisons can miss them because the commits exist
+ * on both the previous and next release lines, so the vN.0.0 promotion lists
+ * merged PRs by label across the previous major cycle instead.
+ *
+ * @param {string} releaseLine
+ * @param {string} upperBoundRef
+ */
+function getBreakingPullRequestEntries (releaseLine, upperBoundRef) {
+  const previousReleaseLine = Number.parseInt(releaseLine, 10) - 1
+  const previousMajorTag = `v${previousReleaseLine}.0.0`
+  const mergedAfter = capture(`git log -1 --format=%cs ${previousMajorTag}`)
+  const mergedBefore = capture(`git show -s --format=%cs ${upperBoundRef}`)
+  const pullRequestsByNumber = new Map()
+
+  for (const label of breakingLabels) {
+    const pullRequests = JSON.parse(capture(
+      'gh pr list --repo DataDog/dd-trace-js --state merged --limit 1000' +
+      ` --label=${label}` +
+      ` --search "base:${main} merged:>=${mergedAfter} merged:<=${mergedBefore}"` +
+      ' --json number,title,mergeCommit,author'
+    ))
+
+    for (const pullRequest of pullRequests) {
+      const oid = pullRequest.mergeCommit?.oid
+      if (!oid || (!isAncestor(oid, `v${releaseLine}.x`) && !isAncestor(oid, upperBoundRef))) continue
+
+      pullRequestsByNumber.set(pullRequest.number, pullRequest)
+    }
+  }
+
+  return [...pullRequestsByNumber.values()].map(pullRequest => {
+    return {
+      sha: pullRequest.mergeCommit?.oid || `pull-request-${pullRequest.number}`,
+      subject: `${pullRequest.title} (#${pullRequest.number})`,
+      author: pullRequest.author?.login ? `@${pullRequest.author.login}` : undefined,
+    }
+  })
+}
+
+/**
+ * @param {string} ancestor
+ * @param {string} descendant
+ */
+function isAncestor (ancestor, descendant) {
+  try {
+    capture(`git merge-base --is-ancestor ${ancestor} ${descendant}`)
+    return true
+  } catch {
+    return false
+  }
 }

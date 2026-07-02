@@ -149,6 +149,7 @@ for (const [product, scopes] of PRODUCTS) {
 function createReleaseChangelog (entries, breakingEntries = []) {
   const sections = new Map()
   const breakingChanges = []
+  const breakingPullRequests = new Set()
   const contributors = new Set()
   const warnings = []
   let isMinor = false
@@ -158,6 +159,7 @@ function createReleaseChangelog (entries, breakingEntries = []) {
 
     if (change.warning) warnings.push(change.warning)
     if (entry.author) contributors.add(entry.author)
+    if (change.pr) breakingPullRequests.add(change.pr)
     breakingChanges.push(change)
   }
 
@@ -165,6 +167,7 @@ function createReleaseChangelog (entries, breakingEntries = []) {
     const change = parseChange(entry)
 
     if (change.drop) continue
+    if (change.pr && breakingPullRequests.has(change.pr)) continue
     if (change.warning) warnings.push(change.warning)
     if (change.category === 'Features' && !change.revert) isMinor = true
     if (entry.author) contributors.add(entry.author)
