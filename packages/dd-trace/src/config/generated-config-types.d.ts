@@ -3,7 +3,7 @@
 
 export interface GeneratedConfig {
   _DD_APM_TRACING_AGENTLESS_ENABLED: boolean;
-  apiKey: string | undefined;
+  _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: number;
   apmTracingEnabled: boolean;
   appsec: {
     blockedTemplateGraphql: string | undefined;
@@ -66,21 +66,10 @@ export interface GeneratedConfig {
   DD_ACTION_EXECUTION_ID: string | undefined;
   DD_AGENTLESS_LOG_SUBMISSION_ENABLED: boolean;
   DD_AGENTLESS_LOG_SUBMISSION_URL: string | undefined;
+  DD_API_KEY: string | undefined;
   DD_APM_FLUSH_DEADLINE_MILLISECONDS: number;
   DD_APP_KEY: string | undefined;
   DD_AZURE_RESOURCE_GROUP: string | undefined;
-  DD_CIVISIBILITY_AGENTLESS_ENABLED: boolean;
-  DD_CIVISIBILITY_AGENTLESS_URL: URL | undefined;
-  DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER: string | undefined;
-  DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE: boolean;
-  DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING: boolean;
-  DD_CIVISIBILITY_ENABLED: boolean;
-  DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED: boolean;
-  DD_CIVISIBILITY_MANUAL_API_ENABLED: boolean;
-  DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS: number;
-  DD_CIVISIBILITY_TEST_COMMAND: string | undefined;
-  DD_CIVISIBILITY_TEST_MODULE_ID: string | undefined;
-  DD_CIVISIBILITY_TEST_SESSION_ID: string | undefined;
   DD_CRASHTRACKING_ENABLED: boolean;
   DD_CUSTOM_PARENT_ID: string | undefined;
   DD_CUSTOM_TRACE_ID: string | undefined;
@@ -91,6 +80,7 @@ export interface GeneratedConfig {
   DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR: string | undefined;
   DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED: boolean;
   DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE: string;
+  DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: boolean | undefined;
   DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE: boolean;
   DD_EXTERNAL_ENV: string | undefined;
   DD_GIT_BRANCH: string | undefined;
@@ -158,8 +148,6 @@ export interface GeneratedConfig {
   DD_RUNTIME_METRICS_FLUSH_INTERVAL: number;
   DD_SPAN_SAMPLING_RULES_FILE: string | undefined;
   DD_TELEMETRY_FORWARDER_PATH: string | undefined;
-  DD_TEST_FLEET_CONFIG_PATH: string | undefined;
-  DD_TEST_LOCAL_CONFIG_PATH: string | undefined;
   DD_TEST_SESSION_NAME: string | undefined;
   DD_TRACE_AEROSPIKE_ENABLED: boolean;
   DD_TRACE_AI_ENABLED: boolean;
@@ -245,6 +233,7 @@ export interface GeneratedConfig {
   DD_TRACE_ELASTIC_TRANSPORT_ENABLED: boolean;
   DD_TRACE_ELASTICSEARCH_ENABLED: boolean;
   DD_TRACE_ELECTRON_ENABLED: boolean;
+  DD_TRACE_ENABLED: boolean;
   DD_TRACE_ENCODING_DEBUG: boolean;
   DD_TRACE_EXPERIMENTAL_RUNTIME_ID_ENABLED: boolean;
   DD_TRACE_EXPERIMENTAL_SPAN_COUNTS: boolean;
@@ -338,6 +327,7 @@ export interface GeneratedConfig {
   DD_TRACE_NODE_REDIS_CLIENT_ENABLED: boolean;
   DD_TRACE_NODE_SERIALIZE_ENABLED: boolean;
   DD_TRACE_NYC_ENABLED: boolean;
+  DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP: string;
   DD_TRACE_OPENAI_ENABLED: boolean;
   DD_TRACE_OPENSEARCH_ENABLED: boolean;
   DD_TRACE_OPENSEARCH_PROJECT_OPENSEARCH_ENABLED: boolean;
@@ -372,9 +362,11 @@ export interface GeneratedConfig {
   DD_TRACE_REDIS_CLIENT_ENABLED: boolean;
   DD_TRACE_REDIS_ENABLED: boolean;
   DD_TRACE_REQUEST_ENABLED: boolean;
+  DD_TRACE_RESOURCE_RENAMING_ENABLED: boolean;
   DD_TRACE_RESTIFY_ENABLED: boolean;
   DD_TRACE_RHEA_ENABLED: boolean;
   DD_TRACE_ROUTER_ENABLED: boolean;
+  DD_TRACE_SCOPE: string | undefined;
   DD_TRACE_SELENIUM_ENABLED: boolean;
   DD_TRACE_SELENIUM_WEBDRIVER_ENABLED: boolean;
   DD_TRACE_SEQUELIZE_ENABLED: boolean;
@@ -435,7 +427,6 @@ export interface GeneratedConfig {
       };
     };
   };
-  flakyTestRetriesCount: number;
   flushInterval: number;
   flushMinSpans: number;
   headerTags: string[];
@@ -457,13 +448,6 @@ export interface GeneratedConfig {
     telemetryVerbosity: string;
   };
   inferredProxyServicesEnabled: boolean;
-  isEarlyFlakeDetectionEnabled: boolean;
-  isFlakyTestRetriesEnabled: boolean;
-  isGitUploadEnabled: boolean;
-  isImpactedTestsEnabled: boolean;
-  isIntelligentTestRunnerEnabled: boolean;
-  isTestDynamicInstrumentationEnabled: boolean;
-  isTestManagementEnabled: boolean;
   langchain: {
     DD_LANGCHAIN_SPAN_CHAR_LIMIT: number;
     DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE: number;
@@ -511,20 +495,19 @@ export interface GeneratedConfig {
   OTEL_TRACES_EXPORTER: "none" | "otlp" | undefined;
   OTEL_TRACES_SAMPLER: "always_on" | "always_off" | "traceidratio" | "parentbased_always_on" | "parentbased_always_off" | "parentbased_traceidratio";
   OTEL_TRACES_SAMPLER_ARG: number | undefined;
+  OTEL_TRACES_SPAN_METRICS_ENABLED: boolean | undefined;
   peerServiceMapping: Record<string, string>;
   port: string | number;
   profiling: {
     DD_PROFILING_ENABLED: 'true' | 'false' | 'auto';
   };
   protocolVersion: string;
-  queryStringObfuscation: string;
   rateLimit: number;
   remoteConfig: {
     DD_REMOTE_CONFIGURATION_ENABLED: boolean;
     pollInterval: number;
   };
   reportHostname: boolean;
-  resourceRenamingEnabled: boolean;
   runtimeMetrics: {
     enabled: boolean;
     eventLoop: boolean;
@@ -534,7 +517,6 @@ export interface GeneratedConfig {
   runtimeMetricsRuntimeId: boolean;
   sampleRate: number | undefined;
   samplingRules: import('../../../../index').SamplingRule[];
-  scope: string | undefined;
   service: string;
   serviceMapping: Record<string, string>;
   site: string;
@@ -556,7 +538,31 @@ export interface GeneratedConfig {
     DD_TELEMETRY_LOG_COLLECTION_ENABLED: boolean;
     DD_TELEMETRY_METRICS_ENABLED: boolean;
   };
-  testManagementAttemptToFixRetries: number;
+  testOptimization: {
+    DD_CIVISIBILITY_AGENTLESS_ENABLED: boolean;
+    DD_CIVISIBILITY_AGENTLESS_URL: URL | undefined;
+    DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER: string | undefined;
+    DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE: boolean;
+    DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING: boolean;
+    DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED: boolean;
+    DD_CIVISIBILITY_ENABLED: boolean;
+    DD_CIVISIBILITY_FLAKY_RETRY_COUNT: number;
+    DD_CIVISIBILITY_FLAKY_RETRY_ENABLED: boolean;
+    DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED: boolean;
+    DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: boolean;
+    DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: boolean;
+    DD_CIVISIBILITY_ITR_ENABLED: boolean;
+    DD_CIVISIBILITY_MANUAL_API_ENABLED: boolean;
+    DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS: number;
+    DD_CIVISIBILITY_TEST_COMMAND: string | undefined;
+    DD_CIVISIBILITY_TEST_MODULE_ID: string | undefined;
+    DD_CIVISIBILITY_TEST_SESSION_ID: string | undefined;
+    DD_TEST_FAILED_TEST_REPLAY_ENABLED: boolean;
+    DD_TEST_FLEET_CONFIG_PATH: string | undefined;
+    DD_TEST_LOCAL_CONFIG_PATH: string | undefined;
+    DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES: number;
+    DD_TEST_MANAGEMENT_ENABLED: boolean;
+  };
   traceId128BitGenerationEnabled: boolean;
   traceId128BitLoggingEnabled: boolean;
   tracePropagationStyle: {
@@ -566,7 +572,6 @@ export interface GeneratedConfig {
   traceWebsocketMessagesEnabled: boolean;
   traceWebsocketMessagesInheritSampling: boolean;
   traceWebsocketMessagesSeparateTraces: boolean;
-  tracing: boolean;
   url: string | URL;
   version: string | undefined;
   vertexai: {
@@ -577,6 +582,7 @@ export interface GeneratedConfig {
 
 export interface GeneratedEnvVarConfig {
   _DD_APM_TRACING_AGENTLESS_ENABLED: boolean;
+  _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: number;
   DATADOG_API_KEY: string | undefined;
   DD_ACTION_EXECUTION_ID: string | undefined;
   DD_AGENT_HOST: string;
@@ -671,6 +677,7 @@ export interface GeneratedEnvVarConfig {
   DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_DIR: string | undefined;
   DD_EXPERIMENTAL_TEST_OPT_GIT_CACHE_ENABLED: boolean;
   DD_EXPERIMENTAL_TEST_OPT_SETTINGS_CACHE: string;
+  DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: boolean | undefined;
   DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE: boolean;
   DD_EXTERNAL_ENV: string | undefined;
   DD_GIT_BRANCH: string | undefined;
@@ -1105,4 +1112,5 @@ export interface GeneratedEnvVarConfig {
   OTEL_TRACES_EXPORTER: "none" | "otlp" | undefined;
   OTEL_TRACES_SAMPLER: "always_on" | "always_off" | "traceidratio" | "parentbased_always_on" | "parentbased_always_off" | "parentbased_traceidratio";
   OTEL_TRACES_SAMPLER_ARG: number | undefined;
+  OTEL_TRACES_SPAN_METRICS_ENABLED: boolean | undefined;
 }

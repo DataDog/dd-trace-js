@@ -13,6 +13,8 @@ let testManagementTests = {}
 let isImpactedTestsEnabled = false
 let isModifiedTest = false
 let isTestIsolationEnabled = false
+let hasWarnedMissingBeforeEachTaskResult = false
+let hasWarnedMissingBeforeEachRetryResult = false
 // Array of test names that have been retried and the reason
 const retryReasonsByTestName = new Map()
 // Track test errors suppressed by test management so we can still report them to Datadog.
@@ -84,6 +86,47 @@ function getTestProperties (testName) {
   const { attempt_to_fix: isAttemptToFix, disabled: isDisabled, quarantined: isQuarantined } = properties
 
   return { isAttemptToFix, isDisabled, isQuarantined }
+}
+
+/**
+ * @param {string} message
+ * @returns {void}
+ */
+function warnMissingBeforeEachTaskResult (message) {
+  // eslint-disable-next-line no-console
+  console.warn(message)
+}
+
+/**
+ * @param {object} test
+ * @returns {Cypress.Chainable<{ traceId?: string, shouldSkip?: boolean, shouldDiscard?: boolean }>}
+ */
+function runBeforeEachTask (test) {
+  return cy.task('dd:beforeEach', test).then((taskResult) => {
+    if (taskResult !== undefined && taskResult !== null) {
+      return taskResult
+    }
+
+    if (!hasWarnedMissingBeforeEachTaskResult) {
+      hasWarnedMissingBeforeEachTaskResult = true
+      warnMissingBeforeEachTaskResult('Datadog Cypress dd:beforeEach task returned no result. Retrying once.')
+    }
+
+    return cy.task('dd:beforeEach', test).then((retryTaskResult) => {
+      if (retryTaskResult !== undefined && retryTaskResult !== null) {
+        return retryTaskResult
+      }
+
+      if (!hasWarnedMissingBeforeEachRetryResult) {
+        hasWarnedMissingBeforeEachRetryResult = true
+        warnMissingBeforeEachTaskResult(
+          'Datadog Cypress dd:beforeEach task returned no result after retry. Continuing with an empty task result.'
+        )
+      }
+
+      return {}
+    })
+  })
 }
 
 // Catch test failures for quarantined tests and suppress them
@@ -263,7 +306,8 @@ beforeEach(function () {
     originalWindow = win
   })
 
-  cy.task('dd:beforeEach', {
+  runBeforeEachTask({
+    testId: currentTest.id,
     testName,
     testSuite: Cypress.mocha.getRootSuite().file,
     isEfdRetry: Cypress.mocha.getRunner().suite.ctx.currentTest._ddIsEfdRetry,

@@ -25,6 +25,7 @@ const {
   getEnvironmentVariable,
   getEnvironmentVariables,
   getStableConfigSources,
+  getValueFromEnvSources,
 } = require('./helper')
 const {
   defaults,
@@ -245,12 +246,12 @@ class Config extends ConfigBase {
       let entry = optionsTable[fullName]
       if (!entry) {
         // TODO: Fix this by by changing remote config to use env styles.
-        if (name !== 'tracing' || source !== 'remote_config') {
+        if (name !== 'DD_TRACE_ENABLED' || source !== 'remote_config') {
           log.warn('Unknown option %s with value %o', fullName, value)
           continue
         }
         // @ts-expect-error - The entry is defined in the configurationsTable.
-        entry = configurationsTable.tracing
+        entry = configurationsTable.DD_TRACE_ENABLED
       }
 
       if (entry.nestedProperties) {
@@ -286,7 +287,7 @@ class Config extends ConfigBase {
       }
       // TODO: Coerce mismatched types to the expected type, if possible. E.g., strings <> numbers
       const transformed = value !== undefined && entry.transformer ? entry.transformer(value, fullName, source) : value
-      setAndTrack(this, entry.property, transformed, value, source)
+      setAndTrack(this, entry.property ?? name, transformed, value, source)
     }
   }
 
@@ -370,10 +371,10 @@ class Config extends ConfigBase {
         Math.floor(this.telemetry.DD_TELEMETRY_EXTENDED_HEARTBEAT_INTERVAL * 1000))
     }
 
-    // Enable resourceRenamingEnabled when appsec is enabled and only
+    // Enable resource renaming when appsec is enabled and only
     // if DD_TRACE_RESOURCE_RENAMING_ENABLED is not explicitly set
-    if (!trackedConfigOrigins.has('resourceRenamingEnabled')) {
-      setAndTrack(this, 'resourceRenamingEnabled', this.appsec.enabled ?? false)
+    if (!trackedConfigOrigins.has('DD_TRACE_RESOURCE_RENAMING_ENABLED')) {
+      setAndTrack(this, 'DD_TRACE_RESOURCE_RENAMING_ENABLED', this.appsec.enabled ?? false)
     }
 
     if (!trackedConfigOrigins.has('spanComputePeerService') && this.spanAttributeSchema !== 'v0') {
@@ -603,6 +604,16 @@ class Config extends ConfigBase {
     if (!this.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) {
       setAndTrack(this, 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', `${defaultOtlpBase}/v1/traces`)
     }
+
+    const autoTraceMetrics = this.OTEL_TRACES_EXPORTER === 'otlp' && this.DD_METRICS_OTEL_ENABLED === true
+    setAndTrack(this, 'OTEL_TRACES_SPAN_METRICS_ENABLED', this.OTEL_TRACES_SPAN_METRICS_ENABLED ?? autoTraceMetrics)
+
+    if (this.OTEL_TRACES_SPAN_METRICS_ENABLED) {
+      this.stats = { ...this.stats, DD_TRACE_STATS_COMPUTATION_ENABLED: true }
+    }
+
+    const flushInterval = getValueFromEnvSources('_DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL')
+    setAndTrack(this, '_DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL', flushInterval)
 
     if (process.platform === 'win32') {
       // OOM monitoring does not work properly on Windows, so it will be disabled.
