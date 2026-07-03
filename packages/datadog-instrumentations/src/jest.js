@@ -376,6 +376,49 @@ function markDatadogJestEventHandled (event) {
   }
 }
 
+/**
+ * Wraps a custom Jest environment handler so Datadog still observes events even
+ * when the custom environment does not call `super.handleTestEvent`.
+ *
+ * @param {(event: object, state: object) => Promise<void>|void} handleTestEvent
+ * @param {(event: object, state: object) => Promise<void>|void} datadogHandleTestEvent
+ * @returns {(event: object, state: object) => Promise<void>|void}
+ */
+function getWrappedCustomHandleTestEvent (handleTestEvent, datadogHandleTestEvent) {
+  if (
+    !handleTestEvent ||
+    handleTestEvent === datadogHandleTestEvent ||
+    handleTestEvent[DD_JEST_HANDLE_TEST_EVENT_WRAPPED]
+  ) {
+    return handleTestEvent || datadogHandleTestEvent
+  }
+
+  const wrappedHandleTestEvent = function (event, state) {
+    const result = handleTestEvent.call(this, event, state)
+    const runDatadogHandler = value => {
+      if (isDatadogJestEventHandled(event)) return value
+
+      const datadogResult = datadogHandleTestEvent.call(this, event, state)
+      if (typeof datadogResult?.then === 'function') {
+        return datadogResult.then(() => value)
+      }
+      return value
+    }
+
+    if (event.name === 'add_test') {
+      runDatadogHandler(result)
+      return result
+    }
+
+    if (typeof result?.then === 'function') {
+      return result.then(runDatadogHandler)
+    }
+    return runDatadogHandler(result)
+  }
+  wrappedHandleTestEvent[DD_JEST_HANDLE_TEST_EVENT_WRAPPED] = true
+  return wrappedHandleTestEvent
+}
+
 function getWrappedEnvironment (BaseEnvironment, jestVersion) {
   return class DatadogEnvironment extends BaseEnvironment {
     constructor (config, context) {
@@ -490,38 +533,19 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      * @returns {void}
      */
     wrapCustomHandleTestEvent (datadogHandleTestEvent) {
-      const handleTestEvent = this.handleTestEvent
-      if (
-        !handleTestEvent ||
-        handleTestEvent === datadogHandleTestEvent ||
-        handleTestEvent[DD_JEST_HANDLE_TEST_EVENT_WRAPPED]
-      ) {
-        return
-      }
+      const descriptor = Object.getOwnPropertyDescriptor(this, 'handleTestEvent')
+      let handleTestEvent = getWrappedCustomHandleTestEvent(this.handleTestEvent, datadogHandleTestEvent)
 
-      this.handleTestEvent = function (event, state) {
-        const result = handleTestEvent.call(this, event, state)
-        const runDatadogHandler = value => {
-          if (isDatadogJestEventHandled(event)) return value
-
-          const datadogResult = datadogHandleTestEvent.call(this, event, state)
-          if (typeof datadogResult?.then === 'function') {
-            return datadogResult.then(() => value)
-          }
-          return value
-        }
-
-        if (event.name === 'add_test') {
-          runDatadogHandler(result)
-          return result
-        }
-
-        if (typeof result?.then === 'function') {
-          return result.then(runDatadogHandler)
-        }
-        return runDatadogHandler(result)
-      }
-      this.handleTestEvent[DD_JEST_HANDLE_TEST_EVENT_WRAPPED] = true
+      Object.defineProperty(this, 'handleTestEvent', {
+        configurable: true,
+        enumerable: descriptor?.enumerable ?? false,
+        get () {
+          return handleTestEvent
+        },
+        set (value) {
+          handleTestEvent = getWrappedCustomHandleTestEvent(value, datadogHandleTestEvent)
+        },
+      })
     }
 
     /**

@@ -645,6 +645,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       it('reports test events when a custom environment defines handleTestEvent as an instance field', async () => {
         await assertCustomEnvironmentReportsTests('./ci-visibility/jestEnvironmentNoSuperInstanceField.js')
       })
+
+      it('reports test events when a custom environment assigns handleTestEvent after setup', async () => {
+        await assertCustomEnvironmentReportsTests('./ci-visibility/jestEnvironmentNoSuperAfterSetup.js')
+      })
     })
   })
 
