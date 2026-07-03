@@ -454,6 +454,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.isKnownTestsEnabled = this.testEnvironmentOptions._ddIsKnownTestsEnabled
       this.isTestManagementTestsEnabled = this.testEnvironmentOptions._ddIsTestManagementTestsEnabled
       this.isImpactedTestsEnabled = this.testEnvironmentOptions._ddIsImpactedTestsEnabled
+      this.hasConcurrentTests = false
 
       if (this.isKnownTestsEnabled) {
         earlyFlakeDetectionSlowTestRetries = this.testEnvironmentOptions._ddEarlyFlakeDetectionSlowTestRetries ?? {}
@@ -825,6 +826,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
 
       if (event.name === 'add_test') {
+        if (event.concurrent) {
+          this.hasConcurrentTests = true
+        }
+
         if (event.failing) {
           return
         }
@@ -1011,14 +1016,16 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const promises = {}
         const numRetries = this.global[RETRY_TIMES]
         const numTestExecutions = event.test?.invocations
-        const willBeRetriedByFailedTestReplay = numRetries > 0 && numTestExecutions - 1 < numRetries
-        const mightHitBreakpoint = this.isDiEnabled && numTestExecutions >= 2
+        const willBeRetriedByAutoTestRetry = numRetries > 0 && numTestExecutions - 1 < numRetries
+        const isFailedTestReplayAllowed = !this.hasConcurrentTests
+        const willBeRetriedByFailedTestReplay = isFailedTestReplayAllowed && willBeRetriedByAutoTestRetry
+        const mightHitBreakpoint = this.isDiEnabled && isFailedTestReplayAllowed && numTestExecutions >= 2
 
         // For quarantined tests, track failures so the session can be marked as passing later,
         // and suppress errors so Jest does not mark the test suite as failing.
         // The actual status ('fail') is already captured above for dd-trace reporting.
         // Only suppress on the final execution — not when ATR/EFD/ATF will retry the test.
-        if (!event.test?.[ATR_RETRY_SUPPRESSION_FLAG] && !willBeRetriedByFailedTestReplay) {
+        if (!event.test?.[ATR_RETRY_SUPPRESSION_FLAG] && !willBeRetriedByAutoTestRetry) {
           const quarantineCtx = testContexts.get(event.test)
           if (quarantineCtx?.isQuarantined && !quarantineCtx.isAttemptToFix && event.test.errors?.length) {
             quarantinedFailingTests.add(`${quarantineCtx.suite} › ${quarantineCtx.name}`)

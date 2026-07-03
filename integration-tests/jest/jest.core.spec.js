@@ -656,6 +656,57 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     })
   })
 
+  it('propagates test span context to HTTP requests and hooks during test.concurrent execution', async () => {
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        const spans = events.filter(event => event.type === 'span').map(event => event.content)
+
+        const expectedHttpSpanCountByTestName = new Map([
+          ['jest-test-concurrent-hook-http first concurrent body http is linked to first test span', 1],
+          ['jest-test-concurrent-hook-http second concurrent body http is linked to second test span', 1],
+          ['jest-mixed-concurrent-hook-http serial hook http is linked to serial test span', 3],
+          ['jest-mixed-concurrent-hook-http first mixed concurrent body http is linked to first test span', 1],
+          ['jest-mixed-concurrent-hook-http second mixed concurrent body http is linked to second test span', 1],
+        ])
+        for (const [testName, expectedHttpSpanCount] of expectedHttpSpanCountByTestName) {
+          const concurrentHookTestSpan = tests.find(test => test.meta[TEST_NAME] === testName)
+          assert.ok(concurrentHookTestSpan, `should have concurrent hook test span for ${testName}`)
+          assert.strictEqual(concurrentHookTestSpan.meta[TEST_STATUS], 'pass')
+
+          const concurrentHookHttpSpans = spans.filter(span =>
+            span.name === 'http.request' &&
+            span.trace_id.toString() === concurrentHookTestSpan.trace_id.toString() &&
+            span.parent_id.toString() === concurrentHookTestSpan.span_id.toString()
+          )
+          assert.strictEqual(
+            concurrentHookHttpSpans.length,
+            expectedHttpSpanCount,
+            `should have the expected HTTP spans as children of ${testName}`
+          )
+        }
+      }, 25000)
+
+    childProcess = exec(
+      runTestsCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          DD_SERVICE: undefined,
+          TESTS_TO_RUN: 'test/jest-concurrent-http',
+        },
+      }
+    )
+
+    const [[exitCode]] = await Promise.all([
+      once(childProcess, 'exit'),
+      eventsPromise,
+    ])
+    assert.strictEqual(exitCode, 0)
+  })
+
   const envVarSettings = ['DD_TRACE_ENABLED']
 
   envVarSettings.forEach(envVar => {
@@ -1022,6 +1073,59 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           done()
         }).catch(done)
       })
+    })
+
+    onlyLatestIt('does not run Failed Test Replay for files with concurrent tests', async () => {
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        di_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+          assert.strictEqual(retriedTests.length, 1)
+          const [retriedTest] = retriedTests
+          assert.strictEqual(
+            retriedTest.meta[TEST_NAME],
+            'dynamic instrumentation with concurrent tests serial retry does not use Failed Test Replay'
+          )
+
+          const hasDebugTags = Object.keys(retriedTest.meta)
+            .some(property =>
+              property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED
+            )
+          assert.strictEqual(hasDebugTags, false)
+        })
+
+      const logsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
+          if (payloads.length > 0) {
+            throw new Error('Unexpected logs')
+          }
+        }, 5000)
+
+      childProcess = exec(runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: 'dynamic-instrumentation/concurrent-ftr-disabled',
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            RUN_IN_PARALLEL: 'true',
+          },
+        }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+        logsPromise,
+      ])
+      assert.strictEqual(exitCode, 0)
     })
 
     onlyLatestIt('does not hang when tests use fake timers and Failed Test Replay is enabled', async () => {
