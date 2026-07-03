@@ -19,9 +19,29 @@ const config = {
     include: [
       process.env.TEST_DIR || 'ci-visibility/vitest-tests/test-visibility*',
     ],
-    pool: process.env.POOL_CONFIG || 'forks',
     reporters: ['default'],
   },
+}
+
+const poolConfig = process.env.POOL_CONFIG || 'forks'
+if (!process.env.USE_VITEST_DEFAULT_POOL) {
+  config.test.pool = poolConfig
+}
+
+if (process.env.NO_ISOLATE) {
+  config.test.isolate = false
+}
+
+if (process.env.POOL_NO_ISOLATE) {
+  config.test.poolOptions = {
+    [poolConfig]: {
+      isolate: false,
+    },
+  }
+}
+
+if (process.env.VITEST_SETUP_FILE) {
+  config.test.setupFiles = process.env.VITEST_SETUP_FILE
 }
 
 if (process.env.CUSTOM_SEQUENCER) {
@@ -43,6 +63,16 @@ if (process.env.PROJECT_POOL_CONFIG) {
   }
   if (process.env.PROJECT_RETRY_CONFIG) {
     firstProjectConfig.retry = Number(process.env.PROJECT_RETRY_CONFIG)
+  }
+  if (process.env.PROJECT_NO_ISOLATE) {
+    firstProjectConfig.isolate = false
+  }
+  if (process.env.PROJECT_POOL_NO_ISOLATE) {
+    firstProjectConfig.poolOptions = {
+      [firstProjectConfig.pool]: {
+        isolate: false,
+      },
+    }
   }
   projectConfigs.push({ test: firstProjectConfig })
 

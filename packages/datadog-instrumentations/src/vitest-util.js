@@ -38,9 +38,9 @@ function findExportByName (pkg, name) {
   }
 }
 
-function getChannelPromise (channelToPublishTo, frameworkVersion) {
+function getChannelPromise (channelToPublishTo, frameworkVersion, payload) {
   return new Promise(resolve => {
-    channelToPublishTo.publish({ onDone: resolve, frameworkVersion })
+    channelToPublishTo.publish({ ...payload, onDone: resolve, frameworkVersion })
   })
 }
 
