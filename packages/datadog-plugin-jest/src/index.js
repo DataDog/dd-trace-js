@@ -442,6 +442,7 @@ class JestPlugin extends CiPlugin {
       isAtrRetry,
       finalStatus,
       earlyFlakeAbortReason,
+      promises,
     }) => {
       span.setTag(TEST_STATUS, status)
       if (finalStatus) {
@@ -472,12 +473,27 @@ class JestPlugin extends CiPlugin {
         this.getTestTelemetryTags(span)
       )
 
-      span.finish()
-      finishAllTraceSpans(span)
-      this.activeTestSpan = null
-      if (finalStatus) {
-        this.cancelDiBreakpointHitWait()
+      const finish = () => {
+        span.finish()
+        finishAllTraceSpans(span)
+        this.activeTestSpan = null
       }
+
+      if (finalStatus) {
+        if (promises?.hitBreakpointPromise) {
+          finish()
+          this.cancelDiBreakpointHitWait()
+          return
+        }
+        if (promises && this.diBreakpointHitPromise) {
+          promises.hitBreakpointPromise = this.waitForPreparedDiBreakpointHit().then(finish)
+          return
+        }
+        finish()
+        this.cancelDiBreakpointHitWait()
+        return
+      }
+      finish()
     })
 
     this.addSub('ci:jest:test:err', ({ span, error, shouldSetProbe, shouldWaitForHitProbe, promises }) => {

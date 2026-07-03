@@ -868,6 +868,23 @@ module.exports = class CiPlugin extends Plugin {
   }
 
   /**
+   * Wait for a prepared breakpoint hit before resolving any unused waiters.
+   *
+   * @returns {Promise<void>}
+   */
+  waitForPreparedDiBreakpointHit () {
+    if (!this.diBreakpointHitPromise) {
+      this.cancelDiBreakpointHitWait()
+      return Promise.resolve()
+    }
+
+    return this.waitForDiOperation(this.diBreakpointHitPromise).then(
+      () => this.cancelDiBreakpointHitWait(),
+      () => this.cancelDiBreakpointHitWait()
+    )
+  }
+
+  /**
    * Prepare a wait for the next breakpoint hit before the retried test starts.
    *
    * @returns {Promise<void>}

@@ -727,6 +727,58 @@ function finishDeferredHookEnd (test) {
   )
 }
 
+/**
+ * Runs a Failed Test Replay afterEach hook after pending DI operations that must happen first.
+ *
+ * @param {(...args: unknown[]) => unknown} fn - Original afterEach hook.
+ * @param {object} test - Mocha test currently owning the hook.
+ * @param {Promise<void>|undefined} setProbePromise - Pending probe-set wait, if any.
+ * @param {unknown} hookThis - Hook receiver.
+ * @param {IArguments} args - Arguments passed by Mocha.
+ * @returns {unknown}
+ */
+function runFailedTestReplayAfterEachHook (fn, test, setProbePromise, hookThis, args) {
+  const continueAfterProbe = () => {
+    const deferredHookEndPromise = finishDeferredHookEnd(test)
+    if (deferredHookEndPromise) {
+      return deferredHookEndPromise.then(() => fn.apply(hookThis, args), () => fn.apply(hookThis, args))
+    }
+    return fn.apply(hookThis, args)
+  }
+
+  if (setProbePromise) {
+    return setProbePromise.then(continueAfterProbe, continueAfterProbe)
+  }
+  return continueAfterProbe()
+}
+
+/**
+ * Wraps a Mocha afterEach hook without changing Mocha's callback-style detection.
+ *
+ * @param {(...args: unknown[]) => unknown} fn - Original afterEach hook.
+ * @param {object} test - Mocha test currently owning the hook.
+ * @param {Promise<void>|undefined} setProbePromise - Pending probe-set wait, if any.
+ * @returns {(...args: unknown[]) => unknown}
+ */
+function wrapFailedTestReplayAfterEachHook (fn, test, setProbePromise) {
+  if (fn.length > 0) {
+    return function (done) {
+      try {
+        const result = runFailedTestReplayAfterEachHook(fn, test, setProbePromise, this, arguments)
+        if (result?.then) {
+          result.then(undefined, done)
+        }
+      } catch (err) {
+        done(err)
+      }
+    }
+  }
+
+  return function () {
+    return runFailedTestReplayAfterEachHook(fn, test, setProbePromise, this, arguments)
+  }
+}
+
 function getOnFailHandler (isMain, config) {
   return function (testOrHook, err) {
     const testFile = testOrHook.file
@@ -804,6 +856,7 @@ function getOnTestRetryHandler (config) {
         willBeRetried,
         test,
         isAtrRetry,
+        canWaitForSetProbe: getAfterEachHooks(test).length > 0,
         promises,
         ...ctx.currentStore,
       })
@@ -940,6 +993,7 @@ module.exports = {
   getOnTestRetryHandler,
   getOnHookEndHandler,
   finishDeferredHookEnd,
+  wrapFailedTestReplayAfterEachHook,
   getOnFailHandler,
   getOnPendingHandler,
   testFileToSuiteCtx,

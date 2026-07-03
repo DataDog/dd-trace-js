@@ -679,22 +679,8 @@ async function handleRetriedAttempt (runner, state) {
 }
 
 function handleRetriedAttemptFromEnvelope (runner, state) {
-  const { promises } = state
-  const publishAndStartRetriedAttempt = () => {
-    publishRetriedAttempt(runner, state)
-    startRetriedAttempt(state)
-  }
-
-  if (promises.hitBreakpointPromise) {
-    promises.hitBreakpointPromise
-      .then(publishAndStartRetriedAttempt, publishAndStartRetriedAttempt)
-      .catch(err => {
-        log.error('Cucumber retry handoff failed after waiting for DI breakpoint hits', err)
-      })
-    return
-  }
-
-  publishAndStartRetriedAttempt()
+  publishRetriedAttempt(runner, state)
+  startRetriedAttempt(state)
 }
 
 function publishRetriedAttempt (runner, state) {

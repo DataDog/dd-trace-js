@@ -192,7 +192,7 @@ class VitestPlugin extends CiPlugin {
       return ctx.currentStore
     })
 
-    this.addSub('ci:vitest:test:pass', ({ span, task, finalStatus, earlyFlakeAbortReason }) => {
+    this.addSub('ci:vitest:test:pass', ({ span, task, finalStatus, earlyFlakeAbortReason, promises }) => {
       if (span) {
         this.telemetry.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'test', this.getTestTelemetryTags(span))
         span.setTag(TEST_STATUS, 'pass')
@@ -202,9 +202,21 @@ class VitestPlugin extends CiPlugin {
         if (earlyFlakeAbortReason) {
           span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
         }
-        span.finish(this.taskToFinishTime.get(task))
-        finishAllTraceSpans(span)
-        this.cancelDiBreakpointHitWait()
+        const finish = () => {
+          span.finish(this.taskToFinishTime.get(task))
+          finishAllTraceSpans(span)
+        }
+
+        if (finalStatus) {
+          if (promises && this.diBreakpointHitPromise) {
+            promises.hitBreakpointPromise = this.waitForPreparedDiBreakpointHit().then(finish)
+            return
+          }
+          finish()
+          this.cancelDiBreakpointHitWait()
+          return
+        }
+        finish()
       }
     })
 
@@ -250,12 +262,20 @@ class VitestPlugin extends CiPlugin {
       if (earlyFlakeAbortReason) {
         span.setTag(TEST_EARLY_FLAKE_ABORT_REASON, earlyFlakeAbortReason)
       }
-      if (duration) {
-        span.finish(span._startTime + duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION) // milliseconds
-      } else {
-        span.finish() // `duration` is empty for retries, so we'll use clock time
+      const finish = () => {
+        if (duration) {
+          span.finish(span._startTime + duration - MILLISECONDS_TO_SUBTRACT_FROM_FAILED_TEST_DURATION) // milliseconds
+        } else {
+          span.finish() // `duration` is empty for retries, so we'll use clock time
+        }
+        finishAllTraceSpans(span)
       }
-      finishAllTraceSpans(span)
+
+      if (!shouldSetProbe && finalStatus && promises && this.diBreakpointHitPromise) {
+        promises.hitBreakpointPromise = this.waitForPreparedDiBreakpointHit().then(finish)
+        return
+      }
+      finish()
       if (!shouldSetProbe) {
         this.cancelDiBreakpointHitWait()
       }

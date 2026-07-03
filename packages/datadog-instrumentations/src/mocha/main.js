@@ -36,7 +36,7 @@ const {
   getOnTestEndHandler,
   getOnTestRetryHandler,
   getOnHookEndHandler,
-  finishDeferredHookEnd,
+  wrapFailedTestReplayAfterEachHook,
   getOnFailHandler,
   getOnPendingHandler,
   testFileToSuiteCtx,
@@ -403,20 +403,7 @@ function patchFailedTestReplayHookUp (Runner) {
       delete test._ddSetProbePromise
     }
 
-    return hookUp.call(this, name, function (...args) {
-      const continueAfterProbe = () => {
-        const deferredHookEndPromise = finishDeferredHookEnd(test)
-        if (deferredHookEndPromise) {
-          return deferredHookEndPromise.then(() => fn.apply(this, args), () => fn.apply(this, args))
-        }
-        return fn.apply(this, args)
-      }
-
-      if (setProbePromise) {
-        return setProbePromise.then(continueAfterProbe, continueAfterProbe)
-      }
-      return continueAfterProbe()
-    })
+    return hookUp.call(this, name, wrapFailedTestReplayAfterEachHook(fn, test, setProbePromise))
   })
 }
 

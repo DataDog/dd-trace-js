@@ -666,6 +666,7 @@ addHook({
     })
 
     const testTasks = getTypeTasks(startTestsResponse[0].tasks)
+    const testEventPromises = []
 
     // Only one test task per test, even if there are retries
     for (const task of testTasks) {
@@ -694,12 +695,17 @@ addHook({
           if (testCtx) {
             const isSkippedByTestManagement =
               !attemptToFixTasks.has(task) && (disabledTasks.has(task) || quarantinedTasks.has(task))
+            const promises = {}
             testPassCh.publish({
               task,
               finalStatus: isSkippedByTestManagement ? 'skip' : 'pass',
               earlyFlakeAbortReason: efdSlowAbortedTasks.has(task) ? 'slow' : undefined,
+              promises,
               ...testCtx.currentStore,
             })
+            if (promises.hitBreakpointPromise) {
+              testEventPromises.push(promises.hitBreakpointPromise)
+            }
           }
         } else if (state === 'fail' || isSwitchedStatus) {
           let hasFailedAllRetries = false
@@ -739,6 +745,7 @@ addHook({
 
           if (testCtx) {
             const isRetry = task.result?.retryCount > 0
+            const promises = {}
             // `duration` is the duration of all the retries, so it can't be used if there are retries
 
             let finalStatus
@@ -763,8 +770,12 @@ addHook({
               attemptToFixFailed,
               finalStatus,
               earlyFlakeAbortReason: efdSlowAbortedTasks.has(task) ? 'slow' : undefined,
+              promises,
               ...testCtx.currentStore,
             })
+            if (promises.hitBreakpointPromise) {
+              testEventPromises.push(promises.hitBreakpointPromise)
+            }
           }
           if (errors?.length) {
             testSuiteError = testError // we store the error to bubble it up to the suite
@@ -779,6 +790,8 @@ addHook({
         })
       }
     }
+
+    await Promise.all(testEventPromises)
 
     const testSuiteResult = startTestsResponse[0].result
 

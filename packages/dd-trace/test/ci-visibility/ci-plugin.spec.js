@@ -116,6 +116,21 @@ describe('CiPlugin', () => {
     assert.deepStrictEqual(plugin.diBreakpointHitResolvers, [])
   })
 
+  it('cancels a prepared DI breakpoint-hit wait after waiting for it', async () => {
+    const plugin = createPlugin('jest_worker')
+    const waitForDiOperation = sinon.stub(plugin, 'waitForDiOperation').resolves()
+    plugin.di = {}
+
+    const preparedPromise = plugin.prepareDiBreakpointHitWait()
+
+    await plugin.waitForPreparedDiBreakpointHit()
+    await preparedPromise
+
+    sinon.assert.calledOnceWithExactly(waitForDiOperation, preparedPromise)
+    assert.strictEqual(plugin.diBreakpointHitPromise, undefined)
+    assert.deepStrictEqual(plugin.diBreakpointHitResolvers, [])
+  })
+
   function createPlugin (exporter) {
     class TestPlugin extends CiPlugin {
       static id = 'vitest'

@@ -1069,8 +1069,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           isAtrRetry,
           finalStatus,
           earlyFlakeAbortReason: efdSlowAbortedTests.has(testName) ? 'slow' : undefined,
+          promises,
         })
 
+        if (promises.hitBreakpointPromise) {
+          await promises.hitBreakpointPromise
+        }
         if (promises.isProbeReady) {
           await promises.isProbeReady
         }
