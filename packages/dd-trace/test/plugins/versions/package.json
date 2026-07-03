@@ -182,7 +182,7 @@
     "node-24": "npm:node@24.16.0",
     "node-26": "npm:node@26.2.0",
     "node-serialize": "0.0.4",
-    "npm": "11.17.0",
+    "npm": "11.18.0",
     "nyc": "18.0.0",
     "office-addin-mock": "2.4.6",
     "openai": "6.44.0",
