@@ -147,11 +147,7 @@ describe('test optimization validation cli', () => {
           async close () {}
 
           writeArtifacts () {
-            const intakeDir = path.join(out, 'intake')
-            fs.mkdirSync(intakeDir, { recursive: true })
-            const requestsPath = path.join(intakeDir, 'requests.ndjson')
-            fs.writeFileSync(requestsPath, '')
-            return { requestsPath }
+            return writeEmptyRequestsArtifact(out)
           }
         },
       },
@@ -227,6 +223,116 @@ describe('test optimization validation cli', () => {
       fs.rmSync(tmpDir, { recursive: true, force: true })
     }
   })
+
+  it('treats non-runnable discovery entries as non-blocking skipped diagnostics', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cli-'))
+    const out = path.join(tmpDir, 'results')
+    const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
+    const staticDiagnosisPath = path.join(out, 'static-diagnosis.json')
+    let capturedResults
+    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
+      './mock-intake': {
+        MockIntake: class {
+          constructor () {
+            this.requests = []
+          }
+
+          async start () {}
+          async close () {}
+
+          writeArtifacts () {
+            return writeEmptyRequestsArtifact(out)
+          }
+        },
+      },
+      './setup-runner': {
+        async runSetupCommands () {
+          return { ok: true }
+        },
+      },
+      './static-diagnosis': {
+        getStaticBlocker () {
+          return null
+        },
+        runStaticDiagnosis () {
+          fs.mkdirSync(out, { recursive: true })
+          fs.writeFileSync(staticDiagnosisPath, '{}\n')
+          return {
+            report: {},
+            reportPath: staticDiagnosisPath,
+          }
+        },
+      },
+      './scenarios/basic-reporting': {
+        async runBasicReporting ({ framework }) {
+          return {
+            frameworkId: framework.id,
+            scenario: 'basic-reporting',
+            status: 'pass',
+            diagnosis: 'Basic reporting emitted session, module, suite, and test events.',
+            evidence: {},
+            artifacts: [],
+          }
+        },
+      },
+      './generated-files': {
+        async cleanupGeneratedFiles () {},
+      },
+      './report-writer': {
+        async writeReport ({ results }) {
+          capturedResults = results
+        },
+      },
+    })
+    const manifest = getRunnableManifest(tmpDir)
+    const originalExitCode = process.exitCode
+
+    manifest.frameworks.unshift({
+      id: 'jest:fixture',
+      framework: 'jest',
+      frameworkVersion: '29.7.0',
+      status: 'requires_manual_setup',
+      project: {
+        root: tmpDir,
+      },
+      notes: [
+        'The fixture requires package-specific install and build steps.',
+      ],
+    }, {
+      id: 'node-test:root',
+      framework: 'node:test',
+      frameworkVersion: '22.0.0',
+      status: 'unsupported_by_validator',
+      project: {
+        root: tmpDir,
+      },
+      notes: [
+        'node:test is detected for diagnosis only.',
+      ],
+    })
+    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
+    process.exitCode = undefined
+
+    try {
+      await main(['--manifest', manifestPath, '--out', out, '--scenario', 'basic-reporting'])
+
+      assert.strictEqual(process.exitCode, 0)
+      const statuses = capturedResults.map(result => `${result.frameworkId}:${result.scenario}:${result.status}`)
+
+      assert.deepStrictEqual(statuses, [
+        'jest:fixture:all:skip',
+        'node-test:root:all:skip',
+        'jest:root:basic-reporting:pass',
+      ])
+      assert.match(capturedResults[0].diagnosis, /no runnable validation command/)
+      assert.strictEqual(capturedResults[0].evidence.frameworkStatus, 'requires_manual_setup')
+      assert.match(capturedResults[1].diagnosis, /not supported/)
+      assert.strictEqual(capturedResults[1].evidence.frameworkStatus, 'unsupported_by_validator')
+    } finally {
+      process.exitCode = originalExitCode
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
 })
 
 function getRunnableManifest (root) {
@@ -260,4 +366,12 @@ function getRunnableManifest (root) {
       },
     ],
   }
+}
+
+function writeEmptyRequestsArtifact (out) {
+  const intakeDir = path.join(out, 'intake')
+  fs.mkdirSync(intakeDir, { recursive: true })
+  const requestsPath = path.join(intakeDir, 'requests.ndjson')
+  fs.writeFileSync(requestsPath, '')
+  return { requestsPath }
 }

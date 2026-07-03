@@ -360,7 +360,7 @@ function getFrameworkStatusResult (framework) {
     return {
       frameworkId: framework.id,
       scenario: 'all',
-      status: 'fail',
+      status: 'skip',
       diagnosis: `${frameworkName} is not supported as a Test Optimization test framework.`,
       evidence: {
         ...evidence,
@@ -373,7 +373,7 @@ function getFrameworkStatusResult (framework) {
   return {
     frameworkId: framework.id,
     scenario: 'all',
-    status: 'fail',
+    status: 'skip',
     diagnosis: getFrameworkStatusDiagnosis(framework, evidence),
     evidence: {
       ...evidence,

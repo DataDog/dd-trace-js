@@ -94,13 +94,13 @@ Multi-framework repositories should present each URL separately. A failed static
 emitted when live validation is skipped because static diagnosis found a hard blocker, such as an
 unsupported framework or unsupported framework version.
 
-If a framework is detected but no runnable validation command is available, the payload is also
-failed. Basic reporting was not proven, so the UI should not present that framework as OK.
-Because no live validation was attempted, the failed check has no steps. The failure cause is in
-the check-level `reason`.
+If a framework is detected but no runnable validation command is available, the payload is
+`unknown` with a skipped Basic Reporting check. Basic reporting was not proven, so the UI should not
+present that framework as OK or as a Test Optimization failure. Because no live validation was
+attempted, the skipped check has no steps. The skip cause is in the check-level `reason`.
 
-The same shape is used when a required project setup command, such as install, build, code
-generation, or browser-binary installation, fails before live validation starts. The failed check has
+Required project setup command failures are still failed validation results. If install, build, code
+generation, or browser-binary installation fails before live validation starts, the failed check has
 `steps: []`; the setup command, exit code, and output excerpts are available in the JSON report
 evidence and artifact files.
 

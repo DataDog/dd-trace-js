@@ -361,6 +361,7 @@ function toUiStatus (status) {
 function getPayloadStatus (checks) {
   if (checks.some(check => check.status === 'failed')) return 'failed'
   if (checks.some(check => check.status === 'unknown')) return 'unknown'
+  if (checks.length > 0 && checks.every(check => check.status === 'skipped')) return 'unknown'
   return 'ok'
 }
 

@@ -320,7 +320,7 @@ describe('test optimization validation payload', () => {
         {
           frameworkId: 'cypress:root',
           scenario: 'all',
-          status: 'fail',
+          status: 'skip',
           diagnosis,
           evidence: {
             frameworkStatus: 'requires_manual_setup',
@@ -334,12 +334,12 @@ describe('test optimization validation payload', () => {
       },
     })
 
-    assert.strictEqual(payload.status, 'failed')
+    assert.strictEqual(payload.status, 'unknown')
     assert.deepStrictEqual(payload.checks, [
       {
         id: 'basic-reporting',
         name: 'Basic reporting',
-        status: 'failed',
+        status: 'skipped',
         reason: diagnosis,
         steps: [],
       },
