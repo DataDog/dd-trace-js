@@ -961,7 +961,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
 
         let isModified = this.isTestModified(event.test.asyncError, event.test.fn)
-        if (concurrentCtx?.isModified) {
+        if (concurrentCtx?.isModified || concurrentTestState?.ctx?.isModified) {
           isModified = true
         }
 
@@ -1083,7 +1083,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           })
         }
         if (!isAttemptToFix && this.isImpactedTestsEnabled) {
-          const isModified = this.isTestModified(event.asyncError, event.fn)
+          const concurrentTestState = this.concurrentTestStates.get(event.fn)
+          const isModified = concurrentTestState?.ctx?.isModified ||
+            this.isTestModified(event.asyncError, event.fn)
           if (isModified && !retriedTestsToNumAttempts.has(testFullName) && this.isEarlyFlakeDetectionEnabled) {
             retriedTestsToNumAttempts.set(testFullName, 0)
             testsToBeRetried.add(testFullName)

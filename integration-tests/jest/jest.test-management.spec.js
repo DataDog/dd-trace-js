@@ -2189,13 +2189,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       )
       execSync('git add ci-visibility/test-impacted-test/test-impacted-with-mock.js', { cwd, stdio: 'ignore' })
 
+      const impactedConcurrentPath = path.join(cwd, 'ci-visibility/test-impacted-test/test-impacted-concurrent.js')
+      const impactedConcurrentTest = fs.readFileSync(impactedConcurrentPath, 'utf8')
       fs.writeFileSync(
-        path.join(cwd, 'ci-visibility/test-impacted-test/test-impacted-concurrent.js'),
-        `describe('impacted concurrent tests', () => {
-          test.concurrent('can pass normally', () => {
-            expect(1 + 2).toBe(3)
-          })
-        })`
+        impactedConcurrentPath,
+        impactedConcurrentTest.replace("const label = 'sum'", "const label = 'result'")
       )
       execSync('git add ci-visibility/test-impacted-test/test-impacted-concurrent.js', { cwd, stdio: 'ignore' })
 
@@ -2422,6 +2420,53 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
 
             assert.ok(impactedConcurrentTest, 'impacted concurrent test not found in payloads')
             assert.strictEqual(impactedConcurrentTest.meta[TEST_IS_MODIFIED], 'true')
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-impacted-test/test-impacted-concurrent',
+              GITHUB_BASE_REF: '',
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+
+        assert.strictEqual(exitCode, 0)
+      })
+
+      it('should retry concurrent impacted tests and keep retries marked as modified', async () => {
+        receiver.setSettings({
+          impacted_tests_enabled: true,
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES,
+            },
+          },
+          known_tests_enabled: true,
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const impactedConcurrentTests = tests.filter(test =>
+              test.meta[TEST_SOURCE_FILE] === 'ci-visibility/test-impacted-test/test-impacted-concurrent.js' &&
+              test.meta[TEST_NAME] === 'impacted concurrent tests can pass normally'
+            )
+
+            assert.strictEqual(impactedConcurrentTests.length, NUM_RETRIES + 1)
+            for (const impactedConcurrentTest of impactedConcurrentTests) {
+              assert.strictEqual(impactedConcurrentTest.meta[TEST_IS_MODIFIED], 'true')
+            }
           })
 
         childProcess = exec(
