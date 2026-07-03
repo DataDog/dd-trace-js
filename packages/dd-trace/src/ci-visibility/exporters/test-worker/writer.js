@@ -3,6 +3,11 @@ const { JSONEncoder } = require('../../encode/json-encoder')
 const { getEnvironmentVariable } = require('../../../config/helper')
 const log = require('../../../log')
 
+function getVitestWorkerPort () {
+  const port = globalThis.__vitest_worker__?.ctx?.port
+  return typeof port?.postMessage === 'function' ? port : undefined
+}
+
 class Writer {
   constructor (interprocessCode) {
     this._encoder = new JSONEncoder()
@@ -36,6 +41,18 @@ class Writer {
     const payload = isVitestWorkerOld
       ? { __tinypool_worker_message__: true, interprocessCode: this._interprocessCode, data }
       : [this._interprocessCode, data]
+
+    const vitestWorkerPort = getVitestWorkerPort()
+    if (vitestWorkerPort) {
+      try {
+        vitestWorkerPort.postMessage(payload)
+      } catch (error) {
+        log.error('Error posting message to vitest worker port', error)
+      } finally {
+        onDone()
+      }
+      return
+    }
 
     // child_process workers (jest default, cucumber)
     if (process.send) {
