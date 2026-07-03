@@ -4,6 +4,7 @@ const fs = require('fs')
 const path = require('path')
 
 const { buildCiWiringEnv, runCommand } = require('../command-runner')
+const { getFrameworkCiDiscoveryContradiction } = require('../ci-discovery')
 const { normalizeRequests } = require('../payload-normalizer')
 const { getMissingEventDiagnosis, summarizeTestOutput } = require('./basic-reporting')
 const {
@@ -16,12 +17,12 @@ const {
   skip,
 } = require('./helpers')
 
-async function runCiWiring ({ framework, intake, out, options, basicResult }) {
+async function runCiWiring ({ manifest, framework, intake, out, options, basicResult }) {
   const scenarioName = 'ci-wiring'
 
   try {
     const command = framework.ciWiringCommand
-    if (!command) return getMissingCiWiringCommandResult(framework)
+    if (!command) return getMissingCiWiringCommandResult(framework, manifest)
 
     const outDir = frameworkOutDir(out, framework, scenarioName)
     intake.configure()
@@ -91,7 +92,16 @@ async function runCiWiring ({ framework, intake, out, options, basicResult }) {
   }
 }
 
-function getMissingCiWiringCommandResult (framework) {
+function getMissingCiWiringCommandResult (framework, manifest) {
+  const contradiction = getFrameworkCiDiscoveryContradiction(framework, manifest)
+  if (contradiction) {
+    return fail(framework, 'ci-wiring', contradiction.reason, {
+      ciWiring: framework.ciWiring,
+      ciDiscovery: contradiction.ciDiscovery,
+      recommendation: contradiction.recommendation,
+    })
+  }
+
   const ciWiring = framework.ciWiring
   const status = ciWiring?.status === 'fail' ? 'fail' : 'skip'
   const diagnosis = ciWiring?.diagnosis ||

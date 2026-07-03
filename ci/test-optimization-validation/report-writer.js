@@ -51,6 +51,7 @@ function writeReport ({ manifest, results, out, intake, staticDiagnosis }) {
   const jsonReport = {
     generatedAt: new Date().toISOString(),
     manifestPath: manifest.__path,
+    ciDiscovery: manifest.ciDiscovery,
     results,
     artifacts: {
       ...baseArtifacts,
@@ -89,6 +90,7 @@ function renderMarkdown (report) {
   appendMarkdownResultSection(lines, 'Basic Reporting', getBasicReportingResults(report.results))
   appendMarkdownResultSection(lines, 'CI Wiring', getCiWiringResults(report.results))
   appendMarkdownResultSection(lines, 'Advanced Features', getAdvancedFeatureResults(report.results))
+  appendMarkdownCiDiscovery(lines, report.ciDiscovery)
 
   const diagnosticResults = getDiagnosticOnlyResults(report.results)
   if (diagnosticResults.length > 0) {
@@ -122,7 +124,11 @@ function renderMarkdown (report) {
 function renderHtml (report) {
   const basicReportingSection = renderHtmlResultSection('Basic Reporting', getBasicReportingResults(report.results))
   const ciWiringSection = renderHtmlResultSection('CI Wiring', getCiWiringResults(report.results))
-  const advancedFeaturesSection = renderHtmlResultSection('Advanced Features', getAdvancedFeatureResults(report.results))
+  const advancedFeaturesSection = renderHtmlResultSection(
+    'Advanced Features',
+    getAdvancedFeatureResults(report.results)
+  )
+  const ciDiscoverySection = renderHtmlCiDiscovery(report.ciDiscovery)
   const diagnosticItems = getDiagnosticOnlyResults(report.results).map(result => {
     return `<li><strong>${escapeHtml(result.status.toUpperCase())}</strong> ${escapeHtml(result.frameworkId)} - ` +
       `${escapeHtml(result.diagnosis)}</li>`
@@ -163,6 +169,7 @@ function renderHtml (report) {
     ${basicReportingSection}
     ${ciWiringSection}
     ${advancedFeaturesSection}
+    ${ciDiscoverySection}
     ${diagnosticSection}
     <h2>Framework Context</h2>
     <ul>
@@ -176,6 +183,49 @@ function renderHtml (report) {
 </body>
 </html>
 `
+}
+
+function appendMarkdownCiDiscovery (lines, ciDiscovery) {
+  if (!ciDiscovery) return
+
+  lines.push(
+    '## CI Discovery',
+    '',
+    `- Method: \`${ciDiscovery.method || 'unknown'}\``
+  )
+  appendMarkdownList(lines, 'Searched', ciDiscovery.searched)
+  appendMarkdownList(lines, 'Found', ciDiscovery.found)
+  appendMarkdownList(lines, 'Static diagnosis found', ciDiscovery.staticFound)
+  appendMarkdownList(lines, 'Warnings', ciDiscovery.warnings)
+  appendMarkdownList(lines, 'Contradictions', ciDiscovery.contradictions)
+  appendMarkdownList(lines, 'Notes', ciDiscovery.notes)
+  lines.push('')
+}
+
+function appendMarkdownList (lines, label, values) {
+  if (!Array.isArray(values) || values.length === 0) return
+  lines.push(`- ${label}: ${values.map(value => `\`${value}\``).join(', ')}`)
+}
+
+function renderHtmlCiDiscovery (ciDiscovery) {
+  if (!ciDiscovery) return ''
+
+  return `<h2>CI Discovery</h2>
+    <ul>
+      <li><strong>Method</strong>: <code>${escapeHtml(ciDiscovery.method || 'unknown')}</code></li>
+      ${renderHtmlListItem('Searched', ciDiscovery.searched)}
+      ${renderHtmlListItem('Found', ciDiscovery.found)}
+      ${renderHtmlListItem('Static diagnosis found', ciDiscovery.staticFound)}
+      ${renderHtmlListItem('Warnings', ciDiscovery.warnings)}
+      ${renderHtmlListItem('Contradictions', ciDiscovery.contradictions)}
+      ${renderHtmlListItem('Notes', ciDiscovery.notes)}
+    </ul>`
+}
+
+function renderHtmlListItem (label, values) {
+  if (!Array.isArray(values) || values.length === 0) return ''
+  const formatted = values.map(value => `<code>${escapeHtml(value)}</code>`).join(', ')
+  return `<li><strong>${escapeHtml(label)}</strong>: ${formatted}</li>`
 }
 
 function getKeyArtifacts (artifacts) {

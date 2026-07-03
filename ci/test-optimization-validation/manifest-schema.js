@@ -52,6 +52,10 @@ function validateManifest (manifest) {
     requiredAbsolutePath(manifest.repository, 'root', errors)
   }
 
+  if (manifest.ciDiscovery) {
+    validateCiDiscovery(manifest.ciDiscovery, 'ciDiscovery', errors)
+  }
+
   if (Array.isArray(manifest.frameworks)) {
     validateUniqueFrameworkIds(manifest.frameworks, errors)
     for (const [index, framework] of manifest.frameworks.entries()) {
@@ -60,6 +64,27 @@ function validateManifest (manifest) {
   }
 
   return errors
+}
+
+function validateCiDiscovery (ciDiscovery, prefix, errors) {
+  if (!ciDiscovery || typeof ciDiscovery !== 'object' || Array.isArray(ciDiscovery)) {
+    errors.push(`${prefix} must be an object when present.`)
+    return
+  }
+
+  for (const field of ['searched', 'found', 'staticFound', 'warnings', 'notes', 'contradictions']) {
+    if (ciDiscovery[field] !== undefined) {
+      if (Array.isArray(ciDiscovery[field])) {
+        validateStringArray(ciDiscovery, field, errors, prefix)
+      } else {
+        errors.push(`${prefix}.${field} must be an array when present.`)
+      }
+    }
+  }
+
+  if (ciDiscovery.method !== undefined && typeof ciDiscovery.method !== 'string') {
+    errors.push(`${prefix}.method must be a string when present.`)
+  }
 }
 
 function validateFramework (framework, index, errors) {
@@ -91,12 +116,12 @@ function validateFramework (framework, index, errors) {
   }
 
   if (framework.setup?.commands) {
-    if (!Array.isArray(framework.setup.commands)) {
-      errors.push(`${prefix}.setup.commands must be an array.`)
-    } else {
+    if (Array.isArray(framework.setup.commands)) {
       for (const [commandIndex, command] of framework.setup.commands.entries()) {
         requiredCommand({ command }, 'command', errors, `${prefix}.setup.commands[${commandIndex}]`)
       }
+    } else {
+      errors.push(`${prefix}.setup.commands must be an array.`)
     }
   }
 
@@ -210,12 +235,12 @@ function requiredCommand (target, field, errors, prefix = '') {
     }
   }
   if (value.requiredEnvVars !== undefined) {
-    if (!Array.isArray(value.requiredEnvVars)) {
-      errors.push(`${key}.requiredEnvVars must be an array when present.`)
-    } else {
-      for (const [index, name] of value.requiredEnvVars.entries()) {
+    if (Array.isArray(value.requiredEnvVars)) {
+      for (const [index] of value.requiredEnvVars.entries()) {
         requiredString(value.requiredEnvVars, index, errors, `${key}.requiredEnvVars`)
       }
+    } else {
+      errors.push(`${key}.requiredEnvVars must be an array when present.`)
     }
   }
   if (value.timeoutMs !== undefined && (!Number.isFinite(value.timeoutMs) || value.timeoutMs <= 0)) {

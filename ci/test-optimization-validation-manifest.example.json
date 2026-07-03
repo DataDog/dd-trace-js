@@ -15,6 +15,26 @@
     "requiredEnvVars": [],
     "safeEnv": {}
   },
+  "ciDiscovery": {
+    "searched": [
+      ".github/workflows/*.yml",
+      ".github/workflows/*.yaml",
+      ".gitlab-ci.yml",
+      ".circleci/config.yml",
+      ".buildkite/pipeline.yml",
+      "bitbucket-pipelines.yml",
+      "azure-pipelines.yml",
+      "Jenkinsfile"
+    ],
+    "found": [
+      ".github/workflows/test.yml"
+    ],
+    "method": "explicit-known-ci-paths",
+    "warnings": [],
+    "notes": [
+      "GitHub Actions workflow files were inspected before package scripts."
+    ]
+  },
   "frameworks": [
     {
       "id": "jest:root",

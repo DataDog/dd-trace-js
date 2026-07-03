@@ -33,6 +33,15 @@ const payload = JSON.parse(pako.inflate(compressed, { to: 'string' }))
     "htmlFileUrl": "file:///...",
     "htmlPath": "/..."
   },
+  "ciDiscovery": {
+    "searched": [".github/workflows/*.yml", ".github/workflows/*.yaml"],
+    "found": [".github/workflows/ci.yml"],
+    "staticFound": [".github/workflows/ci.yml"],
+    "method": "explicit-known-ci-paths",
+    "warnings": [],
+    "notes": [],
+    "contradictions": []
+  },
   "framework": {
     "id": "mocha",
     "name": "Mocha",
@@ -57,6 +66,20 @@ produced the result. `packageName` comes from the manifest project name and fall
 referenced `package.json` name when possible. `workingDirectory` is the selected package/workspace
 root. `commandWorkingDirectory` is the literal cwd used to spawn the selected test command, which can
 be different when the command uses package-manager flags such as `--dir`, `--cwd`, or `--prefix`.
+
+`ciDiscovery` is optional. When present, it records the CI inventory used by the runbook/validator:
+
+- `searched`: known CI locations that were checked. Hidden directories such as `.github` must be
+  represented explicitly.
+- `found`: CI files recorded by the manifest author, or static diagnosis when the manifest omitted
+  this field.
+- `staticFound`: CI files independently found by validator static diagnosis.
+- `method`: the discovery method, such as `explicit-known-ci-paths` or `validator-static-diagnosis`.
+- `warnings` and `notes`: user-facing context about discovery limitations.
+- `contradictions`: cases where the manifest claimed no CI while static diagnosis found CI files.
+
+If `contradictions` is non-empty, the UI should treat the CI wiring evidence as incomplete until
+the manifest is regenerated with hidden CI paths inspected explicitly.
 
 ## Validator Artifacts
 

@@ -13,6 +13,10 @@ const { runCiWiring } = require('./scenarios/ci-wiring')
 const { cleanupGeneratedFiles } = require('./generated-files')
 const { serializeDisplayCommand } = require('./command-runner')
 const {
+  annotateCiDiscovery,
+  getFrameworkCiDiscoveryContradiction,
+} = require('./ci-discovery')
+const {
   buildExecutionEnvironmentBlockerResult,
   isLocalSocketPermissionError,
 } = require('./execution-environment')
@@ -120,6 +124,7 @@ async function main (argv) {
     const out = path.resolve(options.out)
     fs.mkdirSync(out, { recursive: true })
     const staticDiagnosis = runStaticDiagnosis({ manifest, out })
+    annotateCiDiscovery({ manifest, diagnosis: staticDiagnosis.report })
 
     const intake = new MockIntake({ out, verbose: options.verbose })
     const results = []
@@ -177,13 +182,13 @@ async function main (argv) {
           results.push(basicResult)
         }
 
-        if (hasCiWiringValidation(framework)) {
+        if (hasCiWiringValidation(framework, manifest)) {
           if (basicResult && basicResult.status !== 'pass') {
             results.push(getSkippedCiWiringAfterBasicFailure(framework, basicResult))
           } else {
             // CI wiring runs after forced local Basic Reporting proves this framework can report when configured.
             // eslint-disable-next-line no-await-in-loop
-            results.push(await runCiWiring({ framework, intake, out, options, basicResult }))
+            results.push(await runCiWiring({ manifest, framework, intake, out, options, basicResult }))
           }
         }
 
@@ -215,8 +220,9 @@ async function main (argv) {
   }
 }
 
-function hasCiWiringValidation (framework) {
-  return framework.ciWiringCommand || framework.ciWiring
+function hasCiWiringValidation (framework, manifest) {
+  return framework.ciWiringCommand || framework.ciWiring ||
+    Boolean(getFrameworkCiDiscoveryContradiction(framework, manifest))
 }
 
 function filterFrameworks (frameworks, targets) {

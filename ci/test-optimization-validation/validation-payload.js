@@ -40,7 +40,7 @@ function buildValidationPayloads ({ manifest, results, artifacts }) {
 
   for (const [frameworkId, frameworkResults] of resultsByFramework) {
     const framework = frameworks.get(frameworkId)
-    const payload = buildFrameworkPayload({ framework, frameworkResults, artifacts })
+    const payload = buildFrameworkPayload({ manifest, framework, frameworkResults, artifacts })
     payloads.push({
       frameworkId,
       payload,
@@ -51,7 +51,7 @@ function buildValidationPayloads ({ manifest, results, artifacts }) {
   return payloads
 }
 
-function buildFrameworkPayload ({ framework, frameworkResults, artifacts }) {
+function buildFrameworkPayload ({ manifest, framework, frameworkResults, artifacts }) {
   const checks = frameworkResults
     .map(result => buildCheck({ result }))
     .filter(Boolean)
@@ -67,7 +67,13 @@ function buildFrameworkPayload ({ framework, frameworkResults, artifacts }) {
       htmlPath: artifacts.htmlPath,
     },
     framework: buildFrameworkContext({ framework, frameworkResults }),
+    ciDiscovery: buildCiDiscoveryContext(manifest),
   }
+}
+
+function buildCiDiscoveryContext (manifest) {
+  if (!manifest?.ciDiscovery) return
+  return manifest.ciDiscovery
 }
 
 function buildFrameworkContext ({ framework, frameworkResults }) {

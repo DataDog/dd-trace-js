@@ -195,6 +195,57 @@ first.
 
 Search CI definitions before broad package-script exploration. Read only the files needed to
 identify test-running jobs and their setup; avoid dumping whole workflow collections into context.
+Hidden CI directories such as `.github`, `.circleci`, and `.buildkite` are part of the primary
+search space. A search that excludes hidden files is incomplete and must not support a "no CI
+workflow found" conclusion.
+
+Start with an explicit CI inventory before broad file search or package-script discovery:
+
+```bash
+find .github/workflows -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) -print 2>/dev/null
+test -f .gitlab-ci.yml && printf '%s\n' .gitlab-ci.yml
+test -f .gitlab-ci.yaml && printf '%s\n' .gitlab-ci.yaml
+find .circleci -maxdepth 2 -type f 2>/dev/null
+find .buildkite -maxdepth 2 -type f 2>/dev/null
+test -f bitbucket-pipelines.yml && printf '%s\n' bitbucket-pipelines.yml
+test -f bitbucket-pipelines.yaml && printf '%s\n' bitbucket-pipelines.yaml
+test -f azure-pipelines.yml && printf '%s\n' azure-pipelines.yml
+test -f azure-pipelines.yaml && printf '%s\n' azure-pipelines.yaml
+test -f Jenkinsfile && printf '%s\n' Jenkinsfile
+```
+
+If you use `rg --files` for supporting discovery, use `rg --files --hidden` or explicitly search
+the CI paths above. Plain `rg --files` usually excludes dot-directories and can miss GitHub Actions,
+CircleCI, and Buildkite.
+
+Record CI inventory evidence in top-level `ciDiscovery`:
+
+```json
+{
+  "ciDiscovery": {
+    "searched": [
+      ".github/workflows/*.yml",
+      ".github/workflows/*.yaml",
+      ".gitlab-ci.yml",
+      ".circleci/config.yml",
+      ".buildkite/pipeline.yml"
+    ],
+    "found": [
+      ".github/workflows/ci.yml"
+    ],
+    "method": "explicit-known-ci-paths",
+    "warnings": [],
+    "notes": [
+      "GitHub Actions workflow files were inspected before package scripts."
+    ]
+  }
+}
+```
+
+If the manifest says `ciWiring.provider` is `none`, records "no CI workflow found", or has an empty
+`ciDiscovery.found`, but validator static diagnosis later finds CI workflow files, treat that as a
+manifest discovery contradiction. Stop live interpretation of CI wiring, preserve artifacts, inspect
+the hidden CI paths explicitly, and update the manifest before rerunning validation.
 
 ### GitHub Actions
 
@@ -475,6 +526,22 @@ const manifest = {
     requiredEnvVars: [],
     safeEnv: {}
   },
+  ciDiscovery: {
+    searched: [
+      '.github/workflows/*.yml',
+      '.github/workflows/*.yaml',
+      '.gitlab-ci.yml',
+      '.circleci/config.yml',
+      '.buildkite/pipeline.yml',
+      'bitbucket-pipelines.yml',
+      'azure-pipelines.yml',
+      'Jenkinsfile'
+    ],
+    found: [],
+    method: 'explicit-known-ci-paths',
+    warnings: [],
+    notes: []
+  },
   frameworks: [
     /*
     {
@@ -512,6 +579,8 @@ were detected.
 Use the smallest valid shape:
 
 - repository root, environment, and one framework entry per detected framework
+- top-level `ciDiscovery` showing which known CI locations were searched, which files were found,
+  and any discovery warnings or notes
 - top-level `omitted` and optional `omittedTestCommands` for discovered test commands that are not
   live validation targets, such as unsupported native Bun or Deno test commands
 - `status`, `supportLevel`, `project.evidence`, and `notes`

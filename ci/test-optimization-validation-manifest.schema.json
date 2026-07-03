@@ -22,6 +22,9 @@
     "environment": {
       "$ref": "#/$defs/environment"
     },
+    "ciDiscovery": {
+      "$ref": "#/$defs/ciDiscovery"
+    },
     "frameworks": {
       "type": "array",
       "items": {
@@ -121,6 +124,51 @@
         },
         "safeEnv": {
           "type": "object"
+        }
+      },
+      "additionalProperties": true
+    },
+    "ciDiscovery": {
+      "type": "object",
+      "properties": {
+        "searched": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "found": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "staticFound": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "method": {
+          "type": "string"
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "contradictions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "additionalProperties": true
