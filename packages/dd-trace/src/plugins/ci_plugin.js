@@ -164,10 +164,6 @@ module.exports = class CiPlugin extends Plugin {
           setItrSkippingEnabledTagFromLibraryConfig(this, frameworkVersion)
         }
 
-        const requestErrorTags = this.testSessionSpan
-          ? getSessionRequestErrorTags(this.testSessionSpan)
-          : Object.fromEntries(this._pendingRequestErrorTags.map(({ tag, value }) => [tag, value]))
-
         const libraryCapabilitiesTags = this.getLibraryCapabilitiesTags(frameworkVersion, ctx)
         const metadataTags = {
           test: {
@@ -175,7 +171,12 @@ module.exports = class CiPlugin extends Plugin {
           },
         }
         this.tracer._exporter.addMetadataTags(metadataTags)
-        onDone({ err, libraryConfig, repositoryRoot: this.repositoryRoot, requestErrorTags })
+        onDone({
+          err,
+          libraryConfig,
+          repositoryRoot: this.repositoryRoot,
+          requestErrorTags: this._getCurrentRequestErrorTags(),
+        })
       })
     })
 
@@ -307,7 +308,7 @@ module.exports = class CiPlugin extends Plugin {
             this.libraryConfig.isKnownTestsEnabled = false
           }
         }
-        onDone({ err, knownTests })
+        onDone({ err, knownTests, requestErrorTags: this._getCurrentRequestErrorTags() })
       })
     })
 
@@ -327,7 +328,7 @@ module.exports = class CiPlugin extends Plugin {
             this.libraryConfig.isTestManagementEnabled = false
           }
         }
-        onDone({ err, testManagementTests })
+        onDone({ err, testManagementTests, requestErrorTags: this._getCurrentRequestErrorTags() })
       })
     })
 
@@ -457,6 +458,18 @@ module.exports = class CiPlugin extends Plugin {
     } else {
       this._pendingRequestErrorTags.push({ tag, value })
     }
+  }
+
+  /**
+   * Returns the current request error tags, including tags queued before session creation.
+   *
+   * @returns {Record<string, string>}
+   */
+  _getCurrentRequestErrorTags () {
+    if (this.testSessionSpan) {
+      return getSessionRequestErrorTags(this.testSessionSpan)
+    }
+    return Object.fromEntries(this._pendingRequestErrorTags.map(({ tag, value }) => [tag, value]))
   }
 
   /**
