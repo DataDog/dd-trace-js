@@ -2146,6 +2146,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           'ci-visibility/test-impacted-test/test-impacted-2.js': [
             'impacted tests 2 can pass normally',
           ],
+          'ci-visibility/test-impacted-test/test-impacted-concurrent.js': [
+            'impacted concurrent tests can pass normally',
+          ],
         },
       })
     })
@@ -2185,6 +2188,16 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         })`
       )
       execSync('git add ci-visibility/test-impacted-test/test-impacted-with-mock.js', { cwd, stdio: 'ignore' })
+
+      fs.writeFileSync(
+        path.join(cwd, 'ci-visibility/test-impacted-test/test-impacted-concurrent.js'),
+        `describe('impacted concurrent tests', () => {
+          test.concurrent('can pass normally', () => {
+            expect(1 + 2).toBe(3)
+          })
+        })`
+      )
+      execSync('git add ci-visibility/test-impacted-test/test-impacted-concurrent.js', { cwd, stdio: 'ignore' })
 
       execSync('git commit -m "modify test-impacted-1.js"', { cwd, stdio: 'ignore' })
     })
@@ -2393,6 +2406,42 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           TESTS_TO_RUN: 'test-impacted-test/test-impacted',
           RUN_IN_PARALLEL: 'true',
         })
+      })
+
+      it('should mark concurrent tests as impacted', async () => {
+        receiver.setSettings({ impacted_tests_enabled: true })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const impactedConcurrentTest = tests.find(test =>
+              test.meta[TEST_SOURCE_FILE] === 'ci-visibility/test-impacted-test/test-impacted-concurrent.js' &&
+              test.meta[TEST_NAME] === 'impacted concurrent tests can pass normally'
+            )
+
+            assert.ok(impactedConcurrentTest, 'impacted concurrent test not found in payloads')
+            assert.strictEqual(impactedConcurrentTest.meta[TEST_IS_MODIFIED], 'true')
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-impacted-test/test-impacted-concurrent',
+              GITHUB_BASE_REF: '',
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+
+        assert.strictEqual(exitCode, 0)
       })
 
       // Regression test: without the fix, _ddModifiedFiles is not injected after worker restart,

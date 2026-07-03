@@ -567,7 +567,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           }
 
           environment.hasConcurrentTests = true
-          const ctx = environment.createConcurrentTestContext(testName, state)
+          const asyncError = environment.isImpactedTestsEnabled
+            ? new Error('Datadog concurrent test registration')
+            : undefined
+          const ctx = environment.createConcurrentTestContext(testName, testFn, asyncError, state)
           const wrappedTestFn = shimmer.wrapFunction(testFn, testFn => function (...args) {
             return environment.runConcurrentTestFn(ctx, testFn, this, args)
           })
@@ -622,10 +625,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      * Creates the context used to start and finish a concurrent test span.
      *
      * @param {string} testName
+     * @param {Function} testFn
+     * @param {Error|undefined} asyncError
      * @param {object} state
      * @returns {object}
      */
-    createConcurrentTestContext (testName, state) {
+    createConcurrentTestContext (testName, testFn, asyncError, state) {
       const testFullName = this.getTestNameFromAddTestEvent({ testName }, state)
       const isNewTest = this.isKnownTestsEnabled && !this.knownTestsForThisSuite?.includes(testFullName)
       const isAttemptToFix = this.isTestManagementTestsEnabled &&
@@ -644,7 +649,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         isJestRetry: false,
         isDisabled: this.testManagementTestsForThisSuite?.disabled?.includes(testFullName),
         isQuarantined: this.testManagementTestsForThisSuite?.quarantined?.includes(testFullName),
-        isModified: false,
+        isModified: this.isTestModified(asyncError, testFn),
         hasDynamicName: isNewTest && DYNAMIC_NAME_RE.test(testFullName),
         testSuiteAbsolutePath: this.testSuiteAbsolutePath,
       }
@@ -656,6 +661,27 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         this.concurrentTestContexts.set(testFullName, contexts)
       }
       return ctx
+    }
+
+    /**
+     * Checks if a test overlaps modified lines for impacted-test detection.
+     *
+     * @param {Error|undefined} asyncError
+     * @param {Function|undefined} testFn
+     * @returns {boolean}
+     */
+    isTestModified (asyncError, testFn) {
+      if (!this.isImpactedTestsEnabled || !asyncError || typeof testFn !== 'function') return false
+
+      const testStartLine = getTestLineStart(asyncError, this.testSuite)
+      const testEndLine = getTestEndLine(testFn, testStartLine)
+      return isModifiedTest(
+        this.testSourceFile,
+        testStartLine,
+        testEndLine,
+        this.modifiedFiles,
+        'jest'
+      )
     }
 
     /**
@@ -902,17 +928,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           }
         }
 
-        let isModified = false
-        if (this.isImpactedTestsEnabled) {
-          const testStartLine = getTestLineStart(event.test.asyncError, this.testSuite)
-          const testEndLine = getTestEndLine(event.test.fn, testStartLine)
-          isModified = isModifiedTest(
-            this.testSourceFile,
-            testStartLine,
-            testEndLine,
-            this.modifiedFiles,
-            'jest'
-          )
+        let isModified = this.isTestModified(event.test.asyncError, event.test.fn)
+        if (concurrentCtx?.isModified) {
+          isModified = true
         }
 
         if (this.isKnownTestsEnabled) {
@@ -1028,15 +1046,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           })
         }
         if (!isAttemptToFix && this.isImpactedTestsEnabled) {
-          const testStartLine = getTestLineStart(event.asyncError, this.testSuite)
-          const testEndLine = getTestEndLine(event.fn, testStartLine)
-          const isModified = isModifiedTest(
-            this.testSourceFile,
-            testStartLine,
-            testEndLine,
-            this.modifiedFiles,
-            'jest'
-          )
+          const isModified = this.isTestModified(event.asyncError, event.fn)
           if (isModified && !retriedTestsToNumAttempts.has(testFullName) && this.isEarlyFlakeDetectionEnabled) {
             retriedTestsToNumAttempts.set(testFullName, 0)
             testsToBeRetried.add(testFullName)
