@@ -17,13 +17,18 @@ function httpRequest (path) {
 
 if (jest.retryTimes) {
   describe('jest-test-concurrent-retry-http', () => {
+    let shouldFail = true
+
     // eslint-disable-next-line sonarjs/stable-tests -- intentional retry verifies concurrent context rebinding
     jest.retryTimes(1)
 
     test.concurrent('retry body http is linked to current attempt span', async () => {
       const statusCode = await httpRequest('/info')
       expect(statusCode).toBe(200)
-      throw new Error('intentional concurrent retry failure')
+      if (shouldFail) {
+        shouldFail = false
+        throw new Error('intentional concurrent retry failure')
+      }
     })
   })
 }

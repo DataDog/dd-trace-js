@@ -754,7 +754,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.strictEqual(retryTestSpans.length, 2)
         assert.deepStrictEqual(
           retryTestSpans.map(test => test.meta[TEST_STATUS]).sort(),
-          ['fail', 'fail'],
+          ['fail', 'pass'],
           inspect(retryTestSpans.map(test => test.meta))
         )
         for (const retryTestSpan of retryTestSpans) {
