@@ -64,6 +64,7 @@ let testManagementAttemptToFixRetries = 0
 let isDiEnabled = false
 let testCodeCoverageLinesTotal
 let coverageRootDir
+let requestErrorTags = {}
 let isSessionStarted = false
 let isVitestNoWorkerInitActive = false
 let vitestPool = null
@@ -390,6 +391,20 @@ function resetMainProcessProvidedContext (ctx) {
   }, 'Could not reset Test Optimization context for workers.')
 }
 
+/**
+ * Merges request error tags from a Test Optimization request response into the tags propagated by no-worker mode.
+ *
+ * @param {{ requestErrorTags?: Record<string, string> }|undefined} requestResponse - Request response.
+ */
+function mergeRequestErrorTags (requestResponse) {
+  if (requestResponse?.requestErrorTags) {
+    requestErrorTags = {
+      ...requestErrorTags,
+      ...requestResponse.requestErrorTags,
+    }
+  }
+}
+
 async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, shouldInstallNoWorkerInit) {
   if (!testSessionFinishCh.hasSubscribers) {
     return
@@ -414,15 +429,21 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, s
   }
 
   try {
-    const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh, frameworkVersion, {
+    const {
+      err,
+      libraryConfig,
+      requestErrorTags: receivedRequestErrorTags = {},
+    } = await getChannelPromise(libraryConfigurationCh, frameworkVersion, {
       isVitestNoWorkerInitActive: shouldInstallNoWorkerInit,
     })
+    requestErrorTags = receivedRequestErrorTags
     if (err) {
       resetLibraryConfig()
     } else {
       applyLibraryConfig(libraryConfig)
     }
   } catch {
+    requestErrorTags = {}
     resetLibraryConfig()
   }
 
@@ -458,6 +479,8 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, s
     getKnownTests: () => getChannelPromise(knownTestsCh),
     getTestManagementTests: () => getChannelPromise(testManagementTestsCh),
   })
+  mergeRequestErrorTags(knownTestsResponse)
+  mergeRequestErrorTags(testManagementTestsResponse)
 
   const flakyTestRetriesConfiguration = configureFlakyTestRetries(ctx, testSpecifications)
   if (flakyTestRetriesConfiguration) {
@@ -597,6 +620,7 @@ function getNoWorkerInitState () {
     isFlakyTestRetriesEnabled,
     isKnownTestsEnabled,
     newTestsWithDynamicNames,
+    requestErrorTags,
     testManagementAttemptToFixRetries,
   }
 }
@@ -806,6 +830,7 @@ function getFinishWrapper (exitOrClose) {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
+      requestErrorTags,
       vitestPool,
       isVitestNoWorkerInitActive,
       onFinish,
