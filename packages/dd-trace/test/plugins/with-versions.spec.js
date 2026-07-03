@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { inspect } = require('node:util')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 
@@ -40,4 +41,27 @@ describe('withVersions', () => {
       { message: /no instrumentation declares the module "loopback"/ }
     )
   })
+
+  // A Node-version gate written as `NODE_MAJOR >= 25 && '>=1.3.0'` collapses to `false` on older Node; the old
+  // `!range` guard treated that as "run every version", so the intended restriction vanished without a trace.
+  for (const badRange of [false, '', null, undefined]) {
+    it(`throws when the range is ${inspect(badRange)} instead of a version string`, () => {
+      assert.throws(
+        () => withVersions('express', 'express', badRange, () => {}),
+        { name: 'TypeError', message: /version range must be a non-empty string/ }
+      )
+    })
+  }
+
+  // Both legitimate shapes reach the module resolver, so they fail with the module error rather than the range
+  // TypeError — proving range validation let them through: the omitted-range function form leaves range undefined,
+  // and an explicit '*' is a valid range.
+  for (const validCall of [
+    () => withVersions('express', 'not-a-real-module', () => {}),
+    () => withVersions('express', 'not-a-real-module', '*', () => {}),
+  ]) {
+    it('lets a valid range through to module resolution', () => {
+      assert.throws(validCall, { message: /no instrumentation declares the module "not-a-real-module"/ })
+    })
+  }
 })
