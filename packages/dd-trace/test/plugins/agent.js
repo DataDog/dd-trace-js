@@ -324,6 +324,10 @@ let availableEndpoints = DEFAULT_AVAILABLE_ENDPOINTS
  * @typedef {TracesCallback | AgentlessCallback} RunCallbackAgainstTracesCallback
  */
 /**
+ * @template T
+ * @typedef {Promise<T> & { cancel: () => void }} CancelablePromise
+ */
+/**
  * Register a callback with expectations to be run on every tracing or stats payload sent to the agent depending
  * on the handlers inputted. If the callback does not throw, the returned promise resolves. If it does,
  * then the agent will wait for additional payloads up until the timeout
@@ -340,10 +344,10 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
   const errors = []
   let resolve
   let reject
-  const promise = new Promise((_resolve, _reject) => {
+  const promise = /** @type {CancelablePromise<unknown>} */ (new Promise((_resolve, _reject) => {
     resolve = _resolve
     reject = _reject
-  })
+  }))
 
   const timeoutMs = options.timeoutMs || 1000
   const rejectionTimeout = setTimeout(() => {
@@ -367,6 +371,10 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
   const handlerPayload = {
     handler,
     spanResourceMatch: options.spanResourceMatch,
+    cancel () {
+      handlers.delete(handlerPayload)
+      clearTimeout(rejectionTimeout)
+    },
   }
 
   /**
@@ -392,8 +400,9 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
     }
   }
 
-  handler.promise = promise
   handlers.add(handlerPayload)
+
+  promise.cancel = handlerPayload.cancel
 
   return promise
 }
@@ -422,20 +431,24 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
 function runCallbackAgainstNoTraces (callback, options = {}, handlers) {
   let resolve
   let reject
-  const promise = new Promise((_resolve, _reject) => {
+  const promise = /** @type {CancelablePromise<void>} */ (new Promise((_resolve, _reject) => {
     resolve = _resolve
     reject = _reject
-  })
-
-  const handlerPayload = {
-    handler,
-    spanResourceMatch: options.spanResourceMatch,
-  }
+  }))
 
   const resolveTimeout = setTimeout(() => {
     handlers.delete(handlerPayload)
     resolve()
   }, options.timeoutMs || 1000)
+
+  const handlerPayload = {
+    handler,
+    spanResourceMatch: options.spanResourceMatch,
+    cancel () {
+      handlers.delete(handlerPayload)
+      clearTimeout(resolveTimeout)
+    },
+  }
 
   /**
    * @type {TracesCallback | AgentlessCallback}
@@ -456,7 +469,29 @@ function runCallbackAgainstNoTraces (callback, options = {}, handlers) {
 
   handlers.add(handlerPayload)
 
+  promise.cancel = handlerPayload.cancel
+
   return promise
+}
+
+/**
+ * Cancel every still-pending timer-bearing expectation in a handler set and clear the set.
+ * Returns how many carried a timer, so the caller can treat a non-zero count as a leak. Bare
+ * `subscribe` handlers have no timer and no promise, so they are cleared but never counted.
+ *
+ * @param {Set<{ cancel?: () => void }>} handlers
+ * @returns {number}
+ */
+function disarmHandlers (handlers) {
+  let armed = 0
+  for (const handlerPayload of handlers) {
+    if (handlerPayload.cancel !== undefined) {
+      handlerPayload.cancel()
+      armed++
+    }
+  }
+  handlers.clear()
+  return armed
 }
 
 module.exports = {
@@ -770,12 +805,20 @@ module.exports = {
    * callbacks before the next test runs. Tests should never call this:
    * `agent.close` already covers per-suite teardown, and per-test
    * expectations are scoped to whichever assertion helper added them.
+   *
+   * This is the framework leak boundary: reset first disarms timers, then fails the test
+   * that left an expectation armed.
    */
   reset () {
-    traceHandlers.clear()
-    statsHandlers.clear()
+    const leaked = disarmHandlers(traceHandlers) + disarmHandlers(statsHandlers)
     llmobsSpanEventsRequests = []
     llmobsEvaluationMetricsRequests = []
+    if (leaked !== 0) {
+      throw new Error(
+        `${leaked} trace expectation(s) were still armed at test teardown. Await or cancel ` +
+        'every assertSomeTraces/assertNoTraces promise before the test ends.'
+      )
+    }
   },
 
   /**
@@ -795,8 +838,8 @@ module.exports = {
     }
     sockets = []
     agent = null
-    traceHandlers.clear()
-    statsHandlers.clear()
+    disarmHandlers(traceHandlers)
+    disarmHandlers(statsHandlers)
     llmobsSpanEventsRequests = []
     llmobsEvaluationMetricsRequests = []
     for (const plugin of plugins) {

@@ -3,7 +3,7 @@
 const util = require('node:util')
 const assert = require('node:assert')
 const { inspect } = require('node:util')
-const { before, beforeEach, after } = require('mocha')
+const { before, beforeEach, afterEach, after } = require('mocha')
 const agent = require('../plugins/agent')
 const { useEnv } = require('../../../../integration-tests/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../src/constants')
@@ -391,7 +391,8 @@ function fromBuffer (spanProperty, isNumber = false) {
  * @param {string} options.plugin
  * @param {object} options.tracerConfigOptions
  * @returns {{
- *   getEvents: () => Promise<{ apmSpans: Array<object>, llmobsSpans: Array<object> }>,
+ *   getEvents: (numLlmObsSpans?: number) => Promise<{ apmSpans: Array<object>, llmobsSpans: Array<object> }>,
+ *   assertNoLlmObsSpans: (windowMs?: number) => Promise<void>,
  *   getEvaluationMetrics: () => Promise<Array<ExpectedLLMObsEvaluationMetrics>>
  * }}
  */
@@ -399,8 +400,9 @@ function useLlmObs ({
   plugin,
   tracerConfigOptions = {},
 } = {}) {
-  /** @type {Promise<Array<Array<object>>>} */
+  /** @type {ReturnType<typeof agent.assertSomeTraces>} */
   let apmTracesPromise
+  const runState = { cancelled: false }
 
   const resetTracesPromises = () => {
     // LLMObs plugin tests drive real SDK calls through the VCR proxy; the first call in a suite
@@ -426,7 +428,15 @@ function useLlmObs ({
     })
   })
 
-  beforeEach(resetTracesPromises)
+  beforeEach(() => {
+    runState.cancelled = false
+    resetTracesPromises()
+  })
+
+  afterEach(() => {
+    runState.cancelled = true
+    apmTracesPromise.cancel()
+  })
 
   after(async () => {
     await agent.close()
@@ -444,13 +454,29 @@ function useLlmObs ({
       // tests should know how many spans they expect to see, otherwise tests will timeout
       const llmobsSpans = []
 
-      while (llmobsSpans.length < numLlmObsSpans) {
+      while (llmobsSpans.length < numLlmObsSpans && !runState.cancelled) {
         await new Promise(resolve => setImmediate(resolve))
         const llmobsSpanEventsRequests = agent.getLlmObsSpanEventsRequests(true)
         llmobsSpans.push(...getLlmObsSpansFromRequests(llmobsSpanEventsRequests))
       }
 
       return { apmSpans, llmobsSpans: llmobsSpans.sort((a, b) => a.start_ns - b.start_ns) }
+    },
+
+    /**
+     * @param {number} [windowMs] - How long to wait for a forbidden span before passing.
+     * @returns {Promise<void>}
+     */
+    assertNoLlmObsSpans: async function (windowMs = 100) {
+      await apmTracesPromise
+      resetTracesPromises()
+
+      const deadline = Date.now() + windowMs
+      while (Date.now() < deadline && !runState.cancelled) {
+        await new Promise(resolve => setImmediate(resolve))
+        const llmobsSpans = getLlmObsSpansFromRequests(agent.getLlmObsSpanEventsRequests(true))
+        assert.equal(llmobsSpans.length, 0, `expected no LLMObs spans, got ${llmobsSpans.length}`)
+      }
     },
 
     getEvaluationMetrics: function () {

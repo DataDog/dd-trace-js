@@ -473,10 +473,12 @@ exports.mochaHooks = {
     watchdog.unref()
   },
   afterEach () {
-    if (_agent) _agent.reset()
     runtimeMetrics.stop()
     storage('legacy').enterWith(undefined)
     storage('baggage').enterWith(undefined)
     extraServices.clear()
+    // Runs last: on a leaked expectation it throws to fail the just-finished test, and this
+    // ordering keeps that throw from skipping the unconditional cleanup above.
+    if (_agent) _agent.reset()
   },
 }
