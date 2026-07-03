@@ -8,9 +8,12 @@ The `hook-indexed` variant models the hook-first approach: SDK hooks provide the
 semantic lifecycle record for each tool, while a single pass over the event
 stream builds cheap chunk indexes for LLM IO enrichment.
 
-The hook-indexed variant rebuilds the stream index inside each measured
-operation. This charges the hook-first approach for the per-trace indexing pass
-instead of benchmarking only Map lookups against repeated stream scans.
+The hook-indexed variant uses the same compact fast path as the integration:
+it first checks the next few chunks for adjacent lifecycle data and only builds
+the full stream index when that local lookup misses. The stream index is still
+rebuilt inside each measured operation when needed, so delayed/noisy traces pay
+the per-trace indexing cost instead of benchmarking only Map lookups against
+repeated stream scans.
 
 Two stream shapes are covered:
 

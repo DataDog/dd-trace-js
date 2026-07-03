@@ -9,6 +9,8 @@ const stepCh = tracingChannel('apm:claude-agent-sdk:step')
 const llmCh = tracingChannel('apm:claude-agent-sdk:llm')
 const toolCh = tracingChannel('apm:claude-agent-sdk:tool')
 
+const LOCAL_LIFECYCLE_LOOKAHEAD = 4
+
 const chunkEmitTimes = new WeakMap()
 
 function mergeHooks (userHooks, tracerHooks) {
@@ -177,25 +179,72 @@ function onQueryStart (ctx) {
 }
 
 function buildStreamIndex (chunks) {
-  const taskStartedByToolId = new Map()
-  const toolResultIndexById = new Map()
+  const lifecycleByToolId = new Map()
 
   for (let idx = 0; idx < chunks.length; idx++) {
     const chunk = chunks[idx]
     if (chunk.type === 'system' && chunk.subtype === 'task_started' && chunk.tool_use_id) {
-      taskStartedByToolId.set(chunk.tool_use_id, chunk)
+      const lifecycle = lifecycleByToolId.get(chunk.tool_use_id) || {}
+      lifecycle.taskStartedChunk = chunk
+      lifecycleByToolId.set(chunk.tool_use_id, lifecycle)
     } else if (chunk.type === 'user') {
       const content = chunk.message?.content
       if (!Array.isArray(content)) continue
       for (const block of content) {
-        if (block.type === 'tool_result' && block.tool_use_id && !toolResultIndexById.has(block.tool_use_id)) {
-          toolResultIndexById.set(block.tool_use_id, idx)
+        if (block.type === 'tool_result' && block.tool_use_id) {
+          const lifecycle = lifecycleByToolId.get(block.tool_use_id) || {}
+          if (lifecycle.toolResultIndex === undefined) lifecycle.toolResultIndex = idx
+          lifecycleByToolId.set(block.tool_use_id, lifecycle)
         }
       }
     }
   }
 
-  return { taskStartedByToolId, toolResultIndexById }
+  return lifecycleByToolId
+}
+
+function scanLocalLifecycle (chunks, startIndex, toolUseId, lifecycle) {
+  lifecycle.taskStartedChunk = undefined
+  lifecycle.toolResultIndex = undefined
+
+  const scanEnd = Math.min(chunks.length, startIndex + LOCAL_LIFECYCLE_LOOKAHEAD)
+
+  for (let idx = startIndex; idx < scanEnd; idx++) {
+    const chunk = chunks[idx]
+    if (chunk.type === 'system' && chunk.subtype === 'task_started' && chunk.tool_use_id === toolUseId) {
+      lifecycle.taskStartedChunk = chunk
+    } else if (chunk.type === 'user') {
+      const content = chunk.message?.content
+      if (!Array.isArray(content)) continue
+      for (const block of content) {
+        if (block.type === 'tool_result' && block.tool_use_id === toolUseId) {
+          lifecycle.toolResultIndex = idx
+          return lifecycle
+        }
+      }
+    }
+  }
+
+  return lifecycle
+}
+
+function createStreamLookup (chunks) {
+  let streamIndex
+  const localLifecycle = {}
+
+  return function getLifecycle (startIndex, toolUseId) {
+    if (streamIndex) return streamIndex.get(toolUseId) || {}
+
+    scanLocalLifecycle(chunks, startIndex, toolUseId, localLifecycle)
+    if (localLifecycle.toolResultIndex !== undefined) return localLifecycle
+
+    streamIndex = streamIndex || buildStreamIndex(chunks)
+    const indexedLifecycle = streamIndex.get(toolUseId)
+    return {
+      taskStartedChunk: localLifecycle.taskStartedChunk || indexedLifecycle?.taskStartedChunk,
+      toolResultIndex: indexedLifecycle?.toolResultIndex,
+    }
+  }
 }
 
 /**
@@ -205,11 +254,11 @@ function buildStreamIndex (chunks) {
  * @param {string} toolUseId
  * @returns {number} index in chunks where the next step should start iteration
  */
-function processTool (chunks, startIndex, toolUseId, sessionCtx, streamIndex) {
+function processTool (chunks, startIndex, toolUseId, sessionCtx, getLifecycle, lifecycle) {
   let chunkIndex = startIndex
   let stepIndex = 0
   const tool = sessionCtx?.tools.get(toolUseId)
-  const toolResultIndex = streamIndex.toolResultIndexById.get(toolUseId)
+  const toolResultIndex = lifecycle.toolResultIndex
   const scanEnd = toolResultIndex === undefined ? chunks.length : toolResultIndex + 1
 
   while (chunkIndex < scanEnd) {
@@ -237,7 +286,7 @@ function processTool (chunks, startIndex, toolUseId, sessionCtx, streamIndex) {
           undefined,
           stepCtx,
           sessionCtx,
-          streamIndex
+          getLifecycle
         )
         stepCtx.finishTime = chunkEmitTimes.get(chunks[Math.min(nextIdx - 1, chunks.length - 1)])
         return nextIdx
@@ -267,7 +316,7 @@ function processStep (
   initialPrompt,
   stepCtx = null,
   sessionCtx = null,
-  streamIndex
+  getLifecycle
 ) {
   for (let idx = startIndex; idx < chunks.length; idx++) {
     const chunk = chunks[idx]
@@ -317,8 +366,9 @@ function processStep (
     let nextIdx = messageEndIdx
     for (const { toolUse: { id, name, input }, startTime: toolUseStartTime } of toolUses) {
       const hookTool = sessionCtx?.tools.get(id)
+      const lifecycle = getLifecycle(messageEndIdx, id)
       // Agent tools emit a system:task_started chunk with a more precise start time
-      const taskStartedChunk = streamIndex.taskStartedByToolId.get(id)
+      const taskStartedChunk = lifecycle.taskStartedChunk
       const toolCtx = {
         id,
         name: hookTool?.name || name,
@@ -328,7 +378,7 @@ function processStep (
         sessionId: chunks[0]?.session_id,
       }
       const toolEndIdx = toolCh.traceSync(() => {
-        const endIdx = processTool(chunks, messageEndIdx, id, sessionCtx, streamIndex)
+        const endIdx = processTool(chunks, messageEndIdx, id, sessionCtx, getLifecycle, lifecycle)
         const resultChunk = chunks[endIdx - 1]
         if (hookTool?.error) toolCtx.error = hookTool.error
         if (hookTool?.isInterrupt) toolCtx.isInterrupt = hookTool.isInterrupt
@@ -360,7 +410,7 @@ function processChunks (chunks, agentCtx) {
   let chunkIndex = 0
   let stepIndex = 0
   const sessionCtx = agentCtx.sessionCtx
-  const streamIndex = buildStreamIndex(chunks)
+  const getLifecycle = createStreamLookup(chunks)
 
   const { type, subtype, ...rest } = chunks[0]
   Object.assign(agentCtx, rest)
@@ -388,7 +438,7 @@ function processChunks (chunks, agentCtx) {
         initialPrompt,
         stepCtx,
         sessionCtx,
-        streamIndex
+        getLifecycle
       )
       stepCtx.finishTime = chunkEmitTimes.get(chunks[Math.min(nextIdx - 1, chunks.length - 1)])
       return nextIdx

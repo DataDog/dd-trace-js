@@ -5,6 +5,7 @@ const guard = require('../startup-guard')
 
 const { SCENARIO, VARIANT } = process.env
 const OPERATIONS = Number(process.env.OPERATIONS)
+const LOCAL_LIFECYCLE_LOOKAHEAD = 4
 
 const SCENARIOS = {
   compact: {
@@ -146,22 +147,70 @@ function buildFixture (scenario) {
 }
 
 function buildStreamIndex (chunks) {
-  const taskStartedByToolId = new Map()
-  const toolResultIndexById = new Map()
+  const lifecycleByToolId = new Map()
 
   for (let idx = 0; idx < chunks.length; idx++) {
     const chunk = chunks[idx]
     if (chunk.type === 'system' && chunk.subtype === 'task_started') {
-      taskStartedByToolId.set(chunk.tool_use_id, idx)
+      const lifecycle = lifecycleByToolId.get(chunk.tool_use_id) || {}
+      lifecycle.taskStartedIndex = idx
+      lifecycleByToolId.set(chunk.tool_use_id, lifecycle)
     } else if (chunk.type === 'user') {
       const content = chunk.message.content
       for (const block of content) {
-        if (block.type === 'tool_result') toolResultIndexById.set(block.tool_use_id, idx)
+        if (block.type === 'tool_result') {
+          const lifecycle = lifecycleByToolId.get(block.tool_use_id) || {}
+          lifecycle.toolResultIndex = idx
+          lifecycleByToolId.set(block.tool_use_id, lifecycle)
+        }
       }
     }
   }
 
-  return { taskStartedByToolId, toolResultIndexById }
+  return lifecycleByToolId
+}
+
+function scanLocalLifecycle (chunks, startIndex, toolUseId, lifecycle) {
+  lifecycle.taskStartedIndex = undefined
+  lifecycle.toolResultIndex = undefined
+
+  const scanEnd = Math.min(chunks.length, startIndex + LOCAL_LIFECYCLE_LOOKAHEAD)
+
+  for (let idx = startIndex; idx < scanEnd; idx++) {
+    const chunk = chunks[idx]
+    if (chunk.type === 'system' && chunk.subtype === 'task_started' && chunk.tool_use_id === toolUseId) {
+      lifecycle.taskStartedIndex = idx
+    } else if (chunk.type === 'user') {
+      const content = chunk.message.content
+      for (const block of content) {
+        if (block.type === 'tool_result' && block.tool_use_id === toolUseId) {
+          lifecycle.toolResultIndex = idx
+          return lifecycle
+        }
+      }
+    }
+  }
+
+  return lifecycle
+}
+
+function createStreamLookup (chunks) {
+  let streamIndex
+  const localLifecycle = {}
+
+  return function getLifecycle (startIndex, toolUseId) {
+    if (streamIndex) return streamIndex.get(toolUseId) || {}
+
+    scanLocalLifecycle(chunks, startIndex, toolUseId, localLifecycle)
+    if (localLifecycle.toolResultIndex !== undefined) return localLifecycle
+
+    streamIndex = streamIndex || buildStreamIndex(chunks)
+    const indexedLifecycle = streamIndex.get(toolUseId)
+    return {
+      taskStartedIndex: localLifecycle.taskStartedIndex ?? indexedLifecycle?.taskStartedIndex,
+      toolResultIndex: indexedLifecycle?.toolResultIndex,
+    }
+  }
 }
 
 function findTaskStartedScan (chunks, startIndex, toolUseId) {
@@ -192,12 +241,13 @@ function runStreamScan (chunks, toolUses) {
   return sink
 }
 
-function runHookIndexed (hookTools, streamIndex, toolUses) {
+function runHookIndexed (hookTools, getLifecycle, toolUses) {
   let sink = 0
   for (const toolUse of toolUses) {
     const tool = hookTools.get(toolUse.id)
-    const taskStartedIndex = streamIndex.taskStartedByToolId.get(toolUse.id)
-    const resultIndex = streamIndex.toolResultIndexById.get(toolUse.id)
+    const lifecycle = getLifecycle(toolUse.scanStartIndex, toolUse.id)
+    const taskStartedIndex = lifecycle.taskStartedIndex
+    const resultIndex = lifecycle.toolResultIndex
     sink += tool.name.length + taskStartedIndex + resultIndex
   }
   return sink
@@ -208,7 +258,7 @@ if (scenario === undefined) throw new Error(`Unknown SCENARIO: ${SCENARIO}`)
 
 const { chunks, hookTools, toolUses } = buildFixture(scenario)
 const expected = runStreamScan(chunks, toolUses)
-assert.equal(runHookIndexed(hookTools, buildStreamIndex(chunks), toolUses), expected)
+assert.equal(runHookIndexed(hookTools, createStreamLookup(chunks), toolUses), expected)
 
 let sink = 0
 guard.loopStart()
@@ -218,7 +268,7 @@ if (VARIANT === 'stream-scan') {
   }
 } else if (VARIANT === 'hook-indexed') {
   for (let iteration = 0; iteration < OPERATIONS; iteration++) {
-    sink += runHookIndexed(hookTools, buildStreamIndex(chunks), toolUses)
+    sink += runHookIndexed(hookTools, createStreamLookup(chunks), toolUses)
   }
 } else {
   throw new Error(`Unknown VARIANT: ${VARIANT}`)
