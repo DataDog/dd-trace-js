@@ -168,12 +168,12 @@
     "opentracing": ">=0.14.7"
   },
   "optionalDependencies": {
-    "@datadog/libdatadog": "0.9.4",
+    "@datadog/libdatadog": "0.12.1",
     "@datadog/native-appsec": "11.0.1",
     "@datadog/native-iast-taint-tracking": "4.2.0",
     "@datadog/native-metrics": "3.1.2",
     "@datadog/openfeature-node-server": "2.0.0",
-    "@datadog/pprof": "5.15.1",
+    "@datadog/pprof": "5.16.0",
     "@datadog/wasm-js-rewriter": "5.0.1",
     "@opentelemetry/api": ">=1.0.0 <1.10.0",
     "@opentelemetry/api-logs": "<1.0.0",
