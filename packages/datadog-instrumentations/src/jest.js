@@ -89,6 +89,7 @@ const FLUSH_TIMEOUT = 10_000
 const JEST_SESSION_STATE = Symbol.for('dd-trace:jest:session')
 const JEST_BAIL_REPORTER_PATH = require.resolve('./jest/bail-reporter')
 const DD_JEST_HANDLE_TEST_EVENT_WRAPPED = Symbol('dd-trace:jest:handle-test-event-wrapped')
+const DD_JEST_HANDLE_TEST_EVENT_DATADOG = Symbol('dd-trace:jest:handle-test-event-datadog')
 const isJestWorker = !!getEnvironmentVariable('JEST_WORKER_ID')
 const jestSessionState = globalThis[JEST_SESSION_STATE] || (globalThis[JEST_SESSION_STATE] = {})
 
@@ -501,6 +502,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
       }
 
+      this[DD_JEST_HANDLE_TEST_EVENT_DATADOG] = DatadogEnvironment.prototype.handleTestEvent
       this.wrapCustomHandleTestEvent(DatadogEnvironment.prototype.handleTestEvent)
     }
 
@@ -2031,6 +2033,19 @@ function cleanupTestSuiteState (testSuiteAbsolutePath) {
   testSuiteJestObjects.delete(testSuiteAbsolutePath)
 }
 
+/**
+ * Rechecks custom handlers after Jest has finished constructing the environment.
+ *
+ * @param {object} environment
+ * @returns {void}
+ */
+function wrapEnvironmentCustomHandleTestEvent (environment) {
+  const datadogHandleTestEvent = environment[DD_JEST_HANDLE_TEST_EVENT_DATADOG]
+  if (typeof environment.wrapCustomHandleTestEvent === 'function' && datadogHandleTestEvent) {
+    environment.wrapCustomHandleTestEvent(datadogHandleTestEvent)
+  }
+}
+
 addHook({
   name: '@jest/core',
   file: 'build/TestScheduler.js',
@@ -2125,6 +2140,9 @@ function jestAdapterWrapper (jestAdapter, jestVersion) {
     if (!environment || !environment.testEnvironmentOptions) {
       return adapter.apply(this, args)
     }
+
+    wrapEnvironmentCustomHandleTestEvent(environment)
+
     testSuiteStartCh.publish({
       testSuite: environment.testSuite,
       testEnvironmentOptions: environment.testEnvironmentOptions,
