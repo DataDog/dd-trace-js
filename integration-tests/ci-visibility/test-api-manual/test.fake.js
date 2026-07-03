@@ -4,28 +4,30 @@ const tracer = require('dd-trace')
 
 const assert = require('assert/strict')
 
-const testStartCh = channel('dd-trace:ci:manual:test:start')
-const testFinishCh = channel('dd-trace:ci:manual:test:finish')
 const testAddTagsCh = channel('dd-trace:ci:manual:test:addTags')
 const testSuite = __filename
+global.testSuite = testSuite
+
+function assertActiveTestSpan () {
+  if (process.env.DD_CIVISIBILITY_MANUAL_API_ENABLED === 'false') return
+  assert.equal(tracer.scope().active().context()._name, 'test-api-manual.test')
+}
 
 describe('can run tests', () => {
-  beforeEach((testName) => {
-    testStartCh.publish({ testName, testSuite })
-  })
-  afterEach((status, error) => {
-    testFinishCh.publish({ status, error })
-  })
   test('first test will pass', () => {
+    assertActiveTestSpan()
     testAddTagsCh.publish({ 'test.custom.tag': 'custom.value' })
     assert.equal(1, 1)
   })
   test('second test will fail', () => {
+    assertActiveTestSpan()
     assert.equal(1, 2)
   })
   test('async test will pass', () => {
+    assertActiveTestSpan()
     return /** @type {Promise<void>} */ (new Promise((resolve) => {
       setTimeout(() => {
+        assertActiveTestSpan()
         assert.equal(1, 1)
         resolve()
       }, 10)
@@ -37,6 +39,7 @@ describe('can run tests', () => {
       return Promise.resolve()
     }
     const testSpan = tracer.scope().active()
+    assert.equal(testSpan.context()._name, 'test-api-manual.test')
     const childSpan = tracer.startSpan('custom.span', {
       childOf: testSpan
     })
