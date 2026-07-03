@@ -314,6 +314,11 @@ Recognize these CI systems and extract test-command evidence when practical:
   test runs and may emit session/module/suite events without per-test events. If no normal
   `vitest run` or `vitest test` command exists, mark that Vitest entry non-runnable and explain
   that only benchmark mode was found.
+- For Jest, record non-default `runner` configuration from `jest.config.*` or `package.json`
+  `jest.runner` in the manifest evidence. Custom Jest runners such as `jest-light-runner` can run
+  tests while bypassing the lifecycle hooks dd-trace uses to report individual suites and tests. If
+  forced local Basic Reporting fails with only session/module events, explain this as a custom
+  runner compatibility issue before discussing CI wiring.
 - Avoid snapshot-update, golden-output, export-matrix, or very broad generated-list tests as the
   representative command when smaller stable tests exist. These files often fail for repository
   state unrelated to test-runner compatibility and can make discovery slow. If such a file is the

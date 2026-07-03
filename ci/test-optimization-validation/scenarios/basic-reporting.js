@@ -195,7 +195,8 @@ function getDebugAwareDiagnosis (currentDiagnosis, evidence) {
 
 function shouldRunDebugRerun (eventLevelFailure, result) {
   return result.timedOut !== true &&
-    eventLevelFailure.kind !== 'vitest-benchmark'
+    eventLevelFailure.kind !== 'vitest-benchmark' &&
+    eventLevelFailure.kind !== 'custom-jest-runner'
 }
 
 function matchesPreflightExitCode (preflight, exitCode) {
@@ -304,6 +305,7 @@ function getMissingEventDiagnosis ({ framework, result, evidence }) {
   const missingLevels = getMissingLevels(evidence)
   const vitestBenchmark = detectVitestBenchmark(framework, result)
   const frameworkSourceTreeRunner = detectFrameworkSourceTreeRunner(framework, result)
+  const customJestRunner = detectCustomJestRunner(framework)
 
   if (vitestBenchmark) {
     return {
@@ -343,6 +345,21 @@ function getMissingEventDiagnosis ({ framework, result, evidence }) {
   }
 
   if (evidence.testEvents === 0) {
+    if (customJestRunner) {
+      return {
+        kind: 'custom-jest-runner',
+        missingLevels,
+        customTestRunner: customJestRunner,
+        signals: customJestRunner.signals,
+        summary: `The selected Jest command uses the custom test runner \`${customJestRunner.name}\`. ` +
+          'Test Optimization initialized, but this runner did not emit the Jest lifecycle events needed to ' +
+          'report individual suites and tests.',
+        recommendation: 'Try a standard Jest runner command for validation, or choose a test command that does not ' +
+          'use the custom runner. If this project must use the custom runner, dd-trace may need explicit support ' +
+          'for that runner before per-test reporting and advanced Test Optimization features can work.',
+      }
+    }
+
     return {
       kind: 'missing-test-events',
       missingLevels,
@@ -397,6 +414,58 @@ function detectVitestBenchmark (framework, result) {
   return signals.length > 0 ? { signals } : null
 }
 
+function detectCustomJestRunner (framework) {
+  if (framework.framework !== 'jest') return null
+
+  const configRunner = findJestRunnerInConfigFiles(framework.project?.configFiles || [])
+  if (configRunner && isCustomJestRunner(configRunner.name)) return configRunner
+
+  const packageRunner = findJestRunnerInPackageJson(framework.project?.packageJson)
+  if (packageRunner && isCustomJestRunner(packageRunner.name)) return packageRunner
+}
+
+function findJestRunnerInConfigFiles (configFiles) {
+  for (const configFile of configFiles) {
+    const content = readFile(configFile)
+    if (!content) continue
+
+    const match = /(?:^|[,{]\s*)runner\s*:\s*['"]([^'"]+)['"]/.exec(content)
+    if (!match) continue
+
+    return {
+      name: match[1],
+      source: configFile,
+      sourceType: 'config',
+      signals: [
+        `Jest config ${configFile} sets runner: ${match[1]}`,
+      ],
+    }
+  }
+}
+
+function findJestRunnerInPackageJson (packageJsonPath) {
+  if (!packageJsonPath) return
+
+  try {
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'))
+    const runner = packageJson.jest?.runner
+    if (typeof runner !== 'string' || runner.length === 0) return
+
+    return {
+      name: runner,
+      source: packageJsonPath,
+      sourceType: 'package.json',
+      signals: [
+        `package.json jest.runner is ${runner}`,
+      ],
+    }
+  } catch {}
+}
+
+function isCustomJestRunner (runner) {
+  return runner !== 'jest-runner'
+}
+
 function detectFrameworkSourceTreeRunner (framework, result) {
   if (framework.framework !== 'mocha') return null
 
@@ -430,6 +499,12 @@ function fileExists (root, filename) {
   } catch {
     return false
   }
+}
+
+function readFile (filename) {
+  try {
+    return fs.readFileSync(filename, 'utf8')
+  } catch {}
 }
 
 function getFailureSummary ({ buildErrors, assertionFailures, exitCode, testEventsWereReported, timedOut }) {

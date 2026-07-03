@@ -71,6 +71,81 @@ describe('test optimization basic reporting diagnosis', () => {
     assert.strictEqual(shouldRunDebugRerun(eventLevelFailure, { exitCode: 0, timedOut: false }), true)
   })
 
+  it('explains missing Jest test events from a custom runner in config', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-jest-runner-'))
+    const configFile = path.join(root, 'jest.config.js')
+
+    try {
+      fs.writeFileSync(configFile, 'module.exports = { runner: "jest-light-runner" }\n')
+
+      const eventLevelFailure = getMissingEventDiagnosis({
+        framework: {
+          framework: 'jest',
+          project: {
+            configFiles: [configFile],
+          },
+        },
+        result: {
+          command: 'node ./node_modules/.bin/jest --ci',
+          stdout: 'PASS packages/example.test.js\n',
+          stderr: '',
+        },
+        evidence: {
+          testSessionEvents: 1,
+          testModuleEvents: 1,
+          testSuiteEvents: 0,
+          testEvents: 0,
+        },
+      })
+
+      assert.strictEqual(eventLevelFailure.kind, 'custom-jest-runner')
+      assert.strictEqual(eventLevelFailure.customTestRunner.name, 'jest-light-runner')
+      assert.strictEqual(eventLevelFailure.customTestRunner.source, configFile)
+      assert.match(eventLevelFailure.summary, /custom test runner `jest-light-runner`/)
+      assert.match(eventLevelFailure.recommendation, /standard Jest runner/)
+      assert.deepStrictEqual(eventLevelFailure.missingLevels, ['test_suite_end', 'test'])
+      assert.strictEqual(shouldRunDebugRerun(eventLevelFailure, { exitCode: 0, timedOut: false }), false)
+    } finally {
+      fs.rmSync(root, { force: true, recursive: true })
+    }
+  })
+
+  it('explains missing Jest test events from package.json custom runner config', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-jest-package-runner-'))
+    const packageJson = path.join(root, 'package.json')
+
+    try {
+      fs.writeFileSync(packageJson, `${JSON.stringify({ jest: { runner: 'jest-runner-eslint' } }, null, 2)}\n`)
+
+      const eventLevelFailure = getMissingEventDiagnosis({
+        framework: {
+          framework: 'jest',
+          project: {
+            packageJson,
+          },
+        },
+        result: {
+          command: 'npm test',
+          stdout: 'PASS lint.test.js\n',
+          stderr: '',
+        },
+        evidence: {
+          testSessionEvents: 1,
+          testModuleEvents: 1,
+          testSuiteEvents: 1,
+          testEvents: 0,
+        },
+      })
+
+      assert.strictEqual(eventLevelFailure.kind, 'custom-jest-runner')
+      assert.strictEqual(eventLevelFailure.customTestRunner.name, 'jest-runner-eslint')
+      assert.strictEqual(eventLevelFailure.customTestRunner.source, packageJson)
+      assert.deepStrictEqual(eventLevelFailure.missingLevels, ['test'])
+    } finally {
+      fs.rmSync(root, { force: true, recursive: true })
+    }
+  })
+
   it('explains framework source-tree runner commands', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-mocha-source-'))
 

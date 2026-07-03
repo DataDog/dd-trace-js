@@ -177,6 +177,14 @@ to four compact samples: one per event level.
     "missingLevels": ["test"],
     "summary": "Test Optimization initialized and emitted higher-level events, but per-test events were missing.",
     "recommendation": "Choose a smaller standard test command, then inspect the debug rerun output.",
+    "customTestRunner": {
+      "name": "jest-light-runner",
+      "source": "/absolute/path/to/jest.config.ts",
+      "sourceType": "config",
+      "signals": [
+        "Jest config /absolute/path/to/jest.config.ts sets runner: jest-light-runner"
+      ]
+    },
     "signals": []
   },
   "debugRerun": {
@@ -251,6 +259,11 @@ contains a structured local cause:
 - `kind: "missing-test-events"` means Test Optimization emitted higher-level events but no per-test
   events. This usually points to an unsupported runner mode, unsupported framework configuration, or
   per-test hooks not firing for the selected command.
+- `kind: "custom-jest-runner"` means the selected Jest command uses a non-default Jest `runner`,
+  such as `jest-light-runner` or `jest-runner-eslint`, and Test Optimization initialized but did not
+  receive per-test events. The runner name and source file are present in
+  `eventLevelFailure.customTestRunner`. This should be shown as a runner-compatibility diagnosis, not
+  as a CI wiring failure.
 - `kind: "no-test-optimization-events"` means no Test Optimization event levels reached the local
   fake intake.
 - `kind: "framework-source-tree-runner"` means the selected command ran the test framework's own

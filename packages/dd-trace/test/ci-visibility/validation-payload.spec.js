@@ -246,6 +246,64 @@ describe('test optimization validation payload', () => {
     assert.strictEqual(payload.checks[0].steps[1].evidence.localDiagnosis.kind, 'tests-ran-tracer-not-initialized')
   })
 
+  it('includes custom Jest runner evidence for missing per-test events', () => {
+    const [{ payload }] = buildValidationPayloads({
+      manifest: {
+        frameworks: [
+          {
+            id: 'jest:root',
+            framework: 'jest',
+            frameworkVersion: '30.4.2',
+          },
+        ],
+      },
+      results: [
+        {
+          frameworkId: 'jest:root',
+          scenario: 'basic-reporting',
+          status: 'fail',
+          diagnosis: 'The selected Jest command uses the custom test runner `jest-light-runner`.',
+          evidence: {
+            commandExitCode: 0,
+            commandOutputSummary: ['1 passed'],
+            testSessionEvents: 1,
+            testModuleEvents: 1,
+            testSuiteEvents: 0,
+            testEvents: 0,
+            eventLevelFailure: {
+              kind: 'custom-jest-runner',
+              missingLevels: ['test_suite_end', 'test'],
+              customTestRunner: {
+                name: 'jest-light-runner',
+                source: '/repo/jest.config.ts',
+                sourceType: 'config',
+                signals: [
+                  'Jest config /repo/jest.config.ts sets runner: jest-light-runner',
+                ],
+              },
+              summary: 'The selected Jest command uses the custom test runner `jest-light-runner`.',
+              recommendation: 'Try a standard Jest runner command for validation.',
+            },
+          },
+          artifacts: [],
+        },
+      ],
+      artifacts: {
+        htmlFileUrl: 'file:///tmp/report.html',
+        htmlPath: '/tmp/report.html',
+      },
+    })
+
+    assert.deepStrictEqual(payload.checks[0].steps[1].evidence.eventLevelFailure.customTestRunner, {
+      name: 'jest-light-runner',
+      source: '/repo/jest.config.ts',
+      sourceType: 'config',
+      signals: [
+        'Jest config /repo/jest.config.ts sets runner: jest-light-runner',
+      ],
+    })
+  })
+
   it('does not emit live-run steps when no validation command was available', () => {
     const diagnosis = 'cypress was detected, but no runnable validation command was available.'
     const [{ payload }] = buildValidationPayloads({
