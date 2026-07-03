@@ -457,6 +457,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.hasConcurrentTests = false
       this.concurrentTestContexts = new Map()
       this.wrappedConcurrentTestFunctions = new WeakSet()
+      this.jestEachBind = undefined
 
       if (this.isKnownTestsEnabled) {
         earlyFlakeDetectionSlowTestRetries = this.testEnvironmentOptions._ddEarlyFlakeDetectionSlowTestRetries ?? {}
@@ -560,40 +561,76 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
       const environment = this
       shimmer.wrap(target, methodName, concurrentTest => {
-        const wrappedConcurrentTest = function (testName, testFn, ...args) {
+        return function wrappedConcurrentTest (testName, testFn, ...args) {
           if (typeof testFn !== 'function') {
             return concurrentTest.apply(this, arguments)
           }
 
           environment.hasConcurrentTests = true
-          const ctx = environment.getConcurrentTestContext(testName, state)
+          const ctx = environment.createConcurrentTestContext(testName, state)
           const wrappedTestFn = shimmer.wrapFunction(testFn, testFn => function (...args) {
             return environment.runConcurrentTestFn(ctx, testFn, this, args)
           })
           return concurrentTest.call(this, testName, wrappedTestFn, ...args)
         }
-
-        environment.wrappedConcurrentTestFunctions.add(wrappedConcurrentTest)
-        return wrappedConcurrentTest
       })
+
+      const wrappedConcurrentTest = target[methodName]
+      this.wrappedConcurrentTestFunctions.add(wrappedConcurrentTest)
+      this.bindConcurrentEach(wrappedConcurrentTest, methodName === 'failing')
     }
 
     /**
-     * Gets the context used to start and finish a concurrent test span.
+     * Rebuilds a concurrent `.each` helper so each generated row calls the wrapped test function.
+     *
+     * @param {Function} concurrentTest
+     * @param {boolean} needsEachError
+     * @returns {void}
+     */
+    bindConcurrentEach (concurrentTest, needsEachError) {
+      if (typeof concurrentTest?.each !== 'function') return
+
+      const bind = this.getJestEachBind()
+      if (typeof bind !== 'function') return
+
+      concurrentTest.each = bind(concurrentTest, false, needsEachError)
+    }
+
+    /**
+     * Gets Jest's table-driven test binder from the user's Jest installation.
+     *
+     * @returns {Function|undefined}
+     */
+    getJestEachBind () {
+      if (this.jestEachBind !== undefined) return this.jestEachBind
+
+      let jestEach
+      try {
+        jestEach = createRequire(path.join(this.rootDir, 'package.json'))('jest-each')
+      } catch {
+        try {
+          jestEach = createRequire(path.join(process.cwd(), 'package.json'))('jest-each')
+        } catch {
+          jestEach = undefined
+        }
+      }
+      this.jestEachBind = jestEach?.bind
+      return this.jestEachBind
+    }
+
+    /**
+     * Creates the context used to start and finish a concurrent test span.
      *
      * @param {string} testName
      * @param {object} state
      * @returns {object}
      */
-    getConcurrentTestContext (testName, state) {
+    createConcurrentTestContext (testName, state) {
       const testFullName = this.getTestNameFromAddTestEvent({ testName }, state)
-      let ctx = this.concurrentTestContexts.get(testFullName)
-      if (ctx) return ctx
-
       const isNewTest = this.isKnownTestsEnabled && !this.knownTestsForThisSuite?.includes(testFullName)
       const isAttemptToFix = this.isTestManagementTestsEnabled &&
         this.testManagementTestsForThisSuite?.attemptToFix?.includes(testFullName)
-      ctx = {
+      const ctx = {
         name: testFullName,
         suite: this.testSuite,
         testSourceFile: this.testSourceFile,
@@ -611,7 +648,30 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         hasDynamicName: isNewTest && DYNAMIC_NAME_RE.test(testFullName),
         testSuiteAbsolutePath: this.testSuiteAbsolutePath,
       }
-      this.concurrentTestContexts.set(testFullName, ctx)
+      let contexts = this.concurrentTestContexts.get(testFullName)
+      if (contexts) {
+        contexts.push(ctx)
+      } else {
+        contexts = [ctx]
+        this.concurrentTestContexts.set(testFullName, contexts)
+      }
+      return ctx
+    }
+
+    /**
+     * Gets the next registered concurrent test context for a full Jest test name.
+     *
+     * @param {string} testName
+     * @returns {object|undefined}
+     */
+    getNextConcurrentTestContext (testName) {
+      const contexts = this.concurrentTestContexts.get(testName)
+      if (!contexts?.length) return
+
+      const ctx = contexts.shift()
+      if (contexts.length === 0) {
+        this.concurrentTestContexts.delete(testName)
+      }
       return ctx
     }
 
@@ -815,7 +875,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
       if (event.name === 'test_start') {
         const testName = getJestTestName(event.test)
-        const concurrentCtx = this.concurrentTestContexts.get(testName)
+        const concurrentCtx = this.getNextConcurrentTestContext(testName)
         if (testsToBeRetried.has(testName)) {
           // This is needed because we're retrying tests with the same name
           this.resetSnapshotState()

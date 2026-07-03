@@ -666,6 +666,8 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         const expectedHttpSpanCountByTestName = new Map([
           ['jest-test-concurrent-hook-http first concurrent body http is linked to first test span', 1],
           ['jest-test-concurrent-hook-http second concurrent body http is linked to second test span', 1],
+          ['jest-test-concurrent-each-http first each row http is linked to its test span', 1],
+          ['jest-test-concurrent-each-http second each row http is linked to its test span', 1],
           ['jest-mixed-concurrent-hook-http serial hook http is linked to serial test span', 3],
           ['jest-mixed-concurrent-hook-http first mixed concurrent body http is linked to first test span', 1],
           ['jest-mixed-concurrent-hook-http second mixed concurrent body http is linked to second test span', 1],
@@ -686,6 +688,27 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             `should have the expected HTTP spans as children of ${testName}`
           )
         }
+
+        const duplicateTestName = 'jest-duplicate-concurrent-http ' +
+          'duplicate concurrent body http is linked to its test span'
+        const duplicateTestSpans = tests.filter(test => test.meta[TEST_NAME] === duplicateTestName)
+        assert.strictEqual(duplicateTestSpans.length, 2)
+
+        const duplicateTraceIds = new Set()
+        for (const duplicateTestSpan of duplicateTestSpans) {
+          duplicateTraceIds.add(duplicateTestSpan.trace_id.toString())
+          const duplicateHttpSpans = spans.filter(span =>
+            span.name === 'http.request' &&
+            span.trace_id.toString() === duplicateTestSpan.trace_id.toString() &&
+            span.parent_id.toString() === duplicateTestSpan.span_id.toString()
+          )
+          assert.strictEqual(
+            duplicateHttpSpans.length,
+            1,
+            `should have an HTTP span as child of duplicate test span ${duplicateTestSpan.span_id}`
+          )
+        }
+        assert.strictEqual(duplicateTraceIds.size, 2)
       }, 25000)
 
     childProcess = exec(
