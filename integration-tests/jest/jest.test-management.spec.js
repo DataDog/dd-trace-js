@@ -1230,6 +1230,69 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         runDisableTest(done, true)
       })
 
+      it('skips disabled concurrent test bodies before they run', async () => {
+        receiver.setSettings({ test_management: { enabled: true } })
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/test-management/test-concurrent-disabled.js': {
+                tests: {
+                  'concurrent disabled tests can disable concurrent test before body runs': {
+                    properties: {
+                      disabled: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        let output = ''
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const disabledTest = tests.find(test =>
+              test.meta[TEST_NAME] === 'concurrent disabled tests can disable concurrent test before body runs'
+            )
+            const passingTest = tests.find(test =>
+              test.meta[TEST_NAME] === 'concurrent disabled tests can run another concurrent test'
+            )
+
+            assert.strictEqual(disabledTest.meta[TEST_STATUS], 'skip')
+            assert.strictEqual(disabledTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+            assert.strictEqual(passingTest.meta[TEST_STATUS], 'pass')
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-management/test-concurrent-disabled',
+              SHOULD_CHECK_RESULTS: '1',
+            },
+          }
+        )
+
+        childProcess.stdout?.on('data', (chunk) => {
+          output += chunk.toString()
+        })
+        childProcess.stderr?.on('data', (chunk) => {
+          output += chunk.toString()
+        })
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+
+        assert.doesNotMatch(output, /I am running concurrent disabled/)
+        assert.strictEqual(exitCode, 0)
+      })
+
       it('pass if disable is not enabled', (done) => {
         receiver.setSettings({ test_management: { enabled: false } })
 

@@ -742,6 +742,90 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     assert.strictEqual(exitCode, 0)
   })
 
+  onlyLatestIt('propagates test span context when test.concurrent is imported from @jest/globals', async () => {
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        const spans = events.filter(event => event.type === 'span').map(event => event.content)
+        const expectedTestNames = [
+          'jest-imported-globals-concurrent-http imported concurrent body http is linked to test span',
+          'jest-imported-globals-concurrent-http imported each row http is linked to test span',
+        ]
+
+        for (const testName of expectedTestNames) {
+          const testSpan = tests.find(test => test.meta[TEST_NAME] === testName)
+          assert.ok(testSpan, `should have imported globals concurrent test span for ${testName}`)
+          assert.strictEqual(testSpan.meta[TEST_STATUS], 'pass')
+
+          const httpSpans = spans.filter(span =>
+            span.name === 'http.request' &&
+            span.trace_id.toString() === testSpan.trace_id.toString() &&
+            span.parent_id.toString() === testSpan.span_id.toString()
+          )
+          assert.strictEqual(httpSpans.length, 1, `should have an HTTP span as child of ${testName}`)
+        }
+      }, 25000)
+
+    childProcess = exec(
+      runTestsCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          DD_SERVICE: undefined,
+          TESTS_TO_RUN: 'test/jest-concurrent-imported-globals-http',
+          DO_NOT_INJECT_GLOBALS: 'true',
+        },
+      }
+    )
+
+    const [[exitCode]] = await Promise.all([
+      once(childProcess, 'exit'),
+      eventsPromise,
+    ])
+    assert.strictEqual(exitCode, 0)
+  })
+
+  onlyLatestIt('propagates test span context for test.concurrent.only.failing', async () => {
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        const spans = events.filter(event => event.type === 'span').map(event => event.content)
+        const testName = 'jest-concurrent-only-failing-http only failing concurrent body http is linked to test span'
+        const testSpan = tests.find(test => test.meta[TEST_NAME] === testName)
+
+        assert.ok(testSpan, `should have concurrent.only.failing test span for ${testName}`)
+        assert.strictEqual(testSpan.meta[TEST_STATUS], 'pass')
+
+        const httpSpans = spans.filter(span =>
+          span.name === 'http.request' &&
+          span.trace_id.toString() === testSpan.trace_id.toString() &&
+          span.parent_id.toString() === testSpan.span_id.toString()
+        )
+        assert.strictEqual(httpSpans.length, 1, `should have an HTTP span as child of ${testName}`)
+      }, 25000)
+
+    childProcess = exec(
+      runTestsCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          DD_SERVICE: undefined,
+          TESTS_TO_RUN: 'test/jest-concurrent-only-failing-http',
+        },
+      }
+    )
+
+    const [[exitCode]] = await Promise.all([
+      once(childProcess, 'exit'),
+      eventsPromise,
+    ])
+    assert.strictEqual(exitCode, 0)
+  })
+
   onlyLatestIt('rebinds test.concurrent retry bodies to the current test span', async () => {
     const eventsPromise = receiver
       .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {

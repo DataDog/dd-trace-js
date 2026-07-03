@@ -153,6 +153,7 @@ const efdNewTestCandidates = new Set()
 // Tests that are genuinely new (not in known tests list).
 const newTests = new Set()
 const testSuiteJestObjects = new Map()
+const testSuiteDatadogEnvironments = new Map()
 const wrappedJestGlobals = new WeakSet()
 const wrappedJestObjects = new WeakSet()
 const wrappedWorkerInitializers = new WeakSet()
@@ -173,6 +174,7 @@ const atrSuppressedErrors = new Map()
 let hasWarnedDeprecatedJestVersion = false
 let isJestCoverageBackfillSupported = false
 let hasFinishedTestSession = false
+let jestEachBind
 
 // Track quarantined tests whose errors were suppressed, keyed by "suite › testName"
 const quarantinedFailingTests = new Set()
@@ -431,6 +433,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.hasSnapshotTests = undefined
       this.testSuiteAbsolutePath = context.testPath
       activeTestSuiteAbsolutePath = this.testSuiteAbsolutePath
+      testSuiteDatadogEnvironments.set(this.testSuiteAbsolutePath, this)
       wrapConsoleErrorForJestReferenceErrors()
       this.globalConfig = config.globalConfig
 
@@ -541,12 +544,27 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      * @returns {void}
      */
     wrapConcurrentTest (state) {
-      const concurrentTest = this.global.test?.concurrent
+      this.concurrentTestState = state
+      this.wrapConcurrentTestGlobals(this.global.test, state)
+    }
+
+    /**
+     * Wraps one Jest `test` function object's concurrent registration methods.
+     *
+     * @param {Function|undefined} test
+     * @param {object} state
+     * @returns {void}
+     */
+    wrapConcurrentTestGlobals (test, state) {
+      if (!state) return
+
+      const concurrentTest = test?.concurrent
       if (typeof concurrentTest !== 'function') return
 
-      this.wrapConcurrentTestFunction(this.global.test, 'concurrent', state)
-      this.wrapConcurrentTestFunction(this.global.test.concurrent, 'only', state)
-      this.wrapConcurrentTestFunction(this.global.test.concurrent, 'failing', state)
+      this.wrapConcurrentTestFunction(test, 'concurrent', state)
+      this.wrapConcurrentTestFunction(test.concurrent, 'only', state)
+      this.wrapConcurrentTestFunction(test.concurrent, 'failing', state)
+      this.wrapConcurrentTestFunction(test.concurrent.only, 'failing', state)
     }
 
     /**
@@ -622,6 +640,11 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      */
     getJestEachBind () {
       if (this.jestEachBind !== undefined) return this.jestEachBind
+
+      if (typeof jestEachBind === 'function') {
+        this.jestEachBind = jestEachBind
+        return this.jestEachBind
+      }
 
       let jestEach
       try {
@@ -735,10 +758,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      * @param {(...args: unknown[]) => unknown} testFn
      * @param {object} thisArg
      * @param {unknown[]} args
-     * @returns {unknown}
+     * @returns {unknown|void}
      */
     runConcurrentTestFn (concurrentTestState, testFn, thisArg, args) {
       const ctx = concurrentTestState.ctx
+      if (ctx.isDisabled && !ctx.isAttemptToFix) return
+
       const runTest = () => testFn.apply(thisArg, args)
       if (ctx.currentStore) {
         return testFnCh.runStores(ctx, runTest)
@@ -913,8 +938,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         await super.handleTestEvent(event, state)
       }
 
-      if (event.name === 'setup' && this.global.test) {
+      if (event.name === 'setup') {
         this.wrapConcurrentTest(state)
+      }
+      if (event.name === 'setup' && this.global.test) {
         const environment = this
         shimmer.wrap(this.global.test, 'each', each => function (...args) {
           const testParameters = getFormattedJestTestParameters(args)
@@ -1344,6 +1371,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         retriedTestsToNumAttempts.clear()
         attemptToFixRetriedTestsStatuses.clear()
         testsToBeRetried.clear()
+        testSuiteDatadogEnvironments.delete(this.testSuiteAbsolutePath)
       }
       if (event.name === 'test_skip' || event.name === 'test_todo') {
         const testName = getJestTestName(event.test)
@@ -2657,6 +2685,14 @@ addHook({
   file: 'build/SearchSource.js',
 }, searchSourceWrapper)
 
+addHook({
+  name: 'jest-each',
+  versions: [MINIMUM_JEST_VERSION],
+}, jestEach => {
+  cacheJestEachBind(jestEach)
+  return jestEach
+})
+
 // from 25.1.0 on, readConfigs becomes async
 addHook({
   name: 'jest-config',
@@ -2751,6 +2787,17 @@ function wrapJestGlobalsForRuntime (runtime) {
   })
 }
 
+function wrapConcurrentJestGlobalsForRuntime (runtime, jestGlobals) {
+  const environment = testSuiteDatadogEnvironments.get(runtime?._testPath)
+  environment?.wrapConcurrentTestGlobals(jestGlobals?.test, environment.concurrentTestState)
+}
+
+function cacheJestEachBind (jestEach) {
+  if (typeof jestEach?.bind === 'function') {
+    jestEachBind = jestEach.bind
+  }
+}
+
 function getLastLoggedReferenceError (runtime) {
   const loggedReferenceErrors = runtime?.loggedReferenceErrors
   if (!loggedReferenceErrors?.size) return
@@ -2829,7 +2876,11 @@ addHook({
   shimmer.wrap(Runtime.prototype, 'requireModule', requireModule => function (from, moduleName) {
     wrapJestGlobalsForRuntime(this)
     try {
-      return requireModule.apply(this, arguments)
+      const returnedValue = requireModule.apply(this, arguments)
+      if (moduleName === '@jest/globals') {
+        wrapConcurrentJestGlobalsForRuntime(this, returnedValue)
+      }
+      return returnedValue
     } catch (error) {
       if (isBetweenTestsReferenceError(error)) {
         reportBetweenTestsReferenceError(this, moduleName, error.message)
@@ -2862,6 +2913,9 @@ addHook({
       let returnedValue
       try {
         returnedValue = requireModuleOrMock.apply(this, arguments)
+        if (moduleName === '@jest/globals') {
+          wrapConcurrentJestGlobalsForRuntime(this, returnedValue)
+        }
       } catch (error) {
         if (isBetweenTestsReferenceError(error)) {
           reportBetweenTestsReferenceError(this, moduleName, error.message)
