@@ -52,6 +52,13 @@ describe('jest-test-concurrent-each-http', () => {
     const statusCode = await httpRequest('/info')
     expect(statusCode).toBe(200)
   })
+
+  test.concurrent.each([
+    [1, 2, 3],
+    [2, 3, 5],
+  ])('parameterized metadata is reported', (a, b, expected) => {
+    expect(a + b).toBe(expected)
+  })
 })
 
 describe('jest-duplicate-concurrent-http', () => {

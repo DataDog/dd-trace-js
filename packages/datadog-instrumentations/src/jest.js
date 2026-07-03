@@ -456,6 +456,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.isImpactedTestsEnabled = this.testEnvironmentOptions._ddIsImpactedTestsEnabled
       this.hasConcurrentTests = false
       this.concurrentTestContexts = new Map()
+      this.activeConcurrentTestStates = new Map()
+      this.concurrentTestStates = new WeakMap()
       this.wrappedConcurrentTestFunctions = new WeakSet()
       this.jestEachBind = undefined
 
@@ -570,10 +572,14 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           const asyncError = environment.isImpactedTestsEnabled
             ? new Error('Datadog concurrent test registration')
             : undefined
-          const ctx = environment.createConcurrentTestContext(testName, testFn, asyncError, state)
+          const concurrentTestState = {
+            ctx: environment.createConcurrentTestContext(testName, testFn, asyncError, state),
+          }
+          concurrentTestState.ctx.concurrentTestState = concurrentTestState
           const wrappedTestFn = shimmer.wrapFunction(testFn, testFn => function (...args) {
-            return environment.runConcurrentTestFn(ctx, testFn, this, args)
+            return environment.runConcurrentTestFn(concurrentTestState, testFn, this, args)
           })
+          environment.concurrentTestStates.set(wrappedTestFn, concurrentTestState)
           return concurrentTest.call(this, testName, wrappedTestFn, ...args)
         }
       })
@@ -596,7 +602,17 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       const bind = this.getJestEachBind()
       if (typeof bind !== 'function') return
 
-      concurrentTest.each = bind(concurrentTest, false, needsEachError)
+      const each = bind(concurrentTest, false, needsEachError)
+      const environment = this
+      concurrentTest.each = function wrappedConcurrentEach (...args) {
+        const testParameters = getFormattedJestTestParameters(args)
+        const eachBind = each.apply(this, args)
+        return function (...args) {
+          const [testName] = args
+          environment.setNameToParams(testName, testParameters)
+          return eachBind.apply(this, args)
+        }
+      }
     }
 
     /**
@@ -702,15 +718,27 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     }
 
     /**
+     * Records formatted parameters for one table-driven Jest test declaration.
+     *
+     * @param {string} name
+     * @param {unknown[]} params
+     * @returns {void}
+     */
+    setNameToParams (name, params) {
+      this.nameToParams[name] = [...params]
+    }
+
+    /**
      * Runs a concurrent test function inside its test span context.
      *
-     * @param {object} ctx
+     * @param {{ ctx: object }} concurrentTestState
      * @param {(...args: unknown[]) => unknown} testFn
      * @param {object} thisArg
      * @param {unknown[]} args
      * @returns {unknown}
      */
-    runConcurrentTestFn (ctx, testFn, thisArg, args) {
+    runConcurrentTestFn (concurrentTestState, testFn, thisArg, args) {
+      const ctx = concurrentTestState.ctx
       const runTest = () => testFn.apply(thisArg, args)
       if (ctx.currentStore) {
         return testFnCh.runStores(ctx, runTest)
@@ -885,16 +913,15 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         await super.handleTestEvent(event, state)
       }
 
-      const setNameToParams = (name, params) => { this.nameToParams[name] = [...params] }
-
       if (event.name === 'setup' && this.global.test) {
         this.wrapConcurrentTest(state)
+        const environment = this
         shimmer.wrap(this.global.test, 'each', each => function (...args) {
           const testParameters = getFormattedJestTestParameters(args)
           const eachBind = each.apply(this, args)
           return function (...args) {
             const [testName] = args
-            setNameToParams(testName, testParameters)
+            environment.setNameToParams(testName, testParameters)
             return eachBind.apply(this, args)
           }
         })
@@ -911,7 +938,12 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         let isNewTest = false
         let numEfdRetry = null
         let numOfAttemptsToFixRetries = null
-        const testParameters = getTestParametersString(this.nameToParams, event.test.name)
+        const concurrentTestState = concurrentCtx?.concurrentTestState ||
+          this.concurrentTestStates.get(event.test.fn) ||
+          this.activeConcurrentTestStates.get(testName)
+        const testParameters = concurrentCtx?.testParameters ||
+          concurrentTestState?.ctx?.testParameters ||
+          getTestParametersString(this.nameToParams, event.test.name)
 
         let isAttemptToFix = false
         let isDisabled = false
@@ -947,7 +979,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
         const isJestRetry = event.test?.invocations > 1
         const hasDynamicName = isNewTest && DYNAMIC_NAME_RE.test(testName)
-        const ctx = concurrentCtx || {}
+        const ctx = concurrentCtx || concurrentTestState?.ctx || {}
         ctx.name = testName
         ctx.suite = this.testSuite
         ctx.testSourceFile = this.testSourceFile
@@ -964,6 +996,11 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         ctx.isModified = isModified
         ctx.hasDynamicName = hasDynamicName
         ctx.testSuiteAbsolutePath = this.testSuiteAbsolutePath
+        if (concurrentTestState) {
+          ctx.concurrentTestState = concurrentTestState
+          concurrentTestState.ctx = ctx
+          this.activeConcurrentTestStates.set(testName, concurrentTestState)
+        }
         testContexts.set(event.test, ctx)
 
         if (isAttemptToFix) {
@@ -1272,6 +1309,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
 
         if (promises.isProbeReady) {
           await promises.isProbeReady
+        }
+        if (ctx.concurrentTestState) {
+          ctx.currentStore = undefined
         }
       }
       if (event.name === 'run_finish') {

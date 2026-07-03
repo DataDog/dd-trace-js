@@ -689,6 +689,18 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           )
         }
 
+        const concurrentParameterizedTests = tests.filter(test =>
+          test.meta[TEST_NAME] === 'jest-test-concurrent-each-http parameterized metadata is reported'
+        )
+        assert.strictEqual(concurrentParameterizedTests.length, 2)
+        assert.deepStrictEqual(
+          concurrentParameterizedTests.map(test => test.meta[TEST_PARAMETERS]).sort(),
+          [
+            JSON.stringify({ arguments: [1, 2, 3], metadata: {} }),
+            JSON.stringify({ arguments: [2, 3, 5], metadata: {} }),
+          ].sort()
+        )
+
         const duplicateTestName = 'jest-duplicate-concurrent-http ' +
           'duplicate concurrent body http is linked to its test span'
         const duplicateTestSpans = tests.filter(test => test.meta[TEST_NAME] === duplicateTestName)
@@ -719,6 +731,74 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           ...getCiVisAgentlessConfig(receiver.port),
           DD_SERVICE: undefined,
           TESTS_TO_RUN: 'test/jest-concurrent-http',
+        },
+      }
+    )
+
+    const [[exitCode]] = await Promise.all([
+      once(childProcess, 'exit'),
+      eventsPromise,
+    ])
+    assert.strictEqual(exitCode, 0)
+  })
+
+  onlyLatestIt('rebinds test.concurrent retry bodies to the current test span', async () => {
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        const spans = events.filter(event => event.type === 'span').map(event => event.content)
+        const retryTestName = 'jest-test-concurrent-retry-http retry body http is linked to current attempt span'
+        const retryTestSpans = tests.filter(test => test.meta[TEST_NAME] === retryTestName)
+
+        assert.strictEqual(retryTestSpans.length, 2)
+        assert.deepStrictEqual(
+          retryTestSpans.map(test => test.meta[TEST_STATUS]).sort(),
+          ['fail', 'fail'],
+          inspect(retryTestSpans.map(test => test.meta))
+        )
+        for (const retryTestSpan of retryTestSpans) {
+          const retryHttpSpans = spans.filter(span =>
+            span.name === 'http.request' &&
+            span.trace_id.toString() === retryTestSpan.trace_id.toString() &&
+            span.parent_id.toString() === retryTestSpan.span_id.toString()
+          )
+          const retryDebug = retryTestSpans.map(test => ({
+            spanId: test.span_id.toString(),
+            traceId: test.trace_id.toString(),
+            status: test.meta[TEST_STATUS],
+            childCount: spans.filter(span =>
+              span.name === 'http.request' &&
+              span.trace_id.toString() === test.trace_id.toString() &&
+              span.parent_id.toString() === test.span_id.toString()
+            ).length,
+          }))
+          assert.strictEqual(
+            retryHttpSpans.length,
+            1,
+            inspect({
+              retryTestName,
+              retryDebug,
+              httpSpans: spans
+                .filter(span => span.name === 'http.request')
+                .map(span => ({
+                  spanId: span.span_id.toString(),
+                  parentId: span.parent_id.toString(),
+                  traceId: span.trace_id.toString(),
+                })),
+            })
+          )
+        }
+      }, 25000)
+
+    childProcess = exec(
+      runTestsCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          DD_SERVICE: undefined,
+          TESTS_TO_RUN: 'test/jest-concurrent-retry-http',
         },
       }
     )
