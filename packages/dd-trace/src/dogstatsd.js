@@ -23,6 +23,10 @@ const TYPE_HISTOGRAM = 'h'
  * When DogStatsD is pointed at a different host (for example node-local UDP to an
  * OpenTelemetry Collector statsd receiver), skip the proxy and send UDP directly.
  *
+ * Compare against `config.url.hostname`, not `config.hostname`. `DD_TRACE_AGENT_URL`
+ * can point at the active trace agent while `DD_AGENT_HOST` / `config.hostname`
+ * still hold a different default.
+ *
  * @param {import('./config/config-base')} config - Tracer configuration
  * @returns {boolean}
  */
@@ -41,8 +45,7 @@ function shouldUseMetricsHttpProxy (config) {
     return true
   }
 
-  const traceHostname = config.hostname || agentUrl.hostname
-  return traceHostname === config.dogstatsd.hostname
+  return agentUrl.hostname === config.dogstatsd.hostname
 }
 
 /**

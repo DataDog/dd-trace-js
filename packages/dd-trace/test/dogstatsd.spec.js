@@ -817,6 +817,22 @@ describe('dogstatsd', () => {
       assert.deepStrictEqual(clientConfig.metricsProxyUrl, new URL('http://localhost:8126'))
     })
 
+    it('should use the HTTP proxy from DD_TRACE_AGENT_URL when DogStatsD shares that host', () => {
+      const clientConfig = DogStatsDClient.generateClientConfig({
+        url: new URL('http://agent:8126'),
+        hostname: '127.0.0.1',
+        dogstatsd: {
+          hostname: 'agent',
+          port: 8125,
+        },
+        tags: {},
+        runtimeMetricsRuntimeId: false,
+        lookup: dns.lookup,
+      })
+
+      assert.deepStrictEqual(clientConfig.metricsProxyUrl, new URL('http://agent:8126'))
+    })
+
     it('should skip the HTTP proxy when DogStatsD host differs from the trace agent host', () => {
       const clientConfig = DogStatsDClient.generateClientConfig({
         url: new URL('http://otel-collector:18126'),
