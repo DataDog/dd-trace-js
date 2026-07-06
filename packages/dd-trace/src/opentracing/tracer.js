@@ -37,13 +37,9 @@ class DatadogTracer {
     // endpoint, not on an OTLP traces endpoint — otherwise users with OTEL_*
     // vars set in their environment (e.g. for a separate telemetry integration)
     // silently lose all test spans.
-    if (config.OTEL_TRACES_EXPORTER === 'otlp' && !config.isCiVisibility) {
-      const { createOtlpTraceExporter } = require('../opentelemetry/trace')
-      this._exporter = createOtlpTraceExporter(config)
-    } else {
-      const Exporter = getExporter(config.experimental.exporter)
-      this._exporter = new Exporter(config, this._prioritySampler)
-    }
+    const { exporter, exporterName } = createExporter(config, this._prioritySampler)
+    this._exporter = exporter
+    this._exporterName = exporterName
 
     let otlpStatsExporter
     if (config.OTEL_TRACES_SPAN_METRICS_ENABLED) {
@@ -64,6 +60,25 @@ class DatadogTracer {
     if (config.reportHostname) {
       this._hostname = os.hostname()
     }
+  }
+
+  /**
+   * @param {import('../config/config-base')} config
+   * @param {string} [exporterName]
+   * @returns {boolean}
+   */
+  configureExporter (config, exporterName = getExporterName(config)) {
+    if (exporterName === this._exporterName) return false
+
+    this._exporter.flush?.(() => {})
+    this._exporter.destroy?.()
+
+    const { exporter, exporterName: nextExporterName } = createExporter(config, this._prioritySampler, exporterName)
+    this._exporter = exporter
+    this._exporterName = nextExporterName
+    this._processor.setExporter(this._exporter)
+    this._url = this._exporter._url
+    return true
   }
 
   startSpan (name, options = {}) {
@@ -161,6 +176,40 @@ function getParent (references = []) {
   }
 
   return parent
+}
+
+/**
+ * @param {import('../config/config-base')} config
+ * @returns {string | undefined}
+ */
+function getExporterName (config) {
+  if (config.OTEL_TRACES_EXPORTER === 'otlp' && !config.isCiVisibility) {
+    return 'otlp'
+  }
+
+  return config.experimental?.exporter
+}
+
+/**
+ * @param {import('../config/config-base')} config
+ * @param {PrioritySampler} prioritySampler
+ * @param {string} [exporterName]
+ * @returns {{ exporter: object, exporterName: string | undefined }}
+ */
+function createExporter (config, prioritySampler, exporterName = getExporterName(config)) {
+  if (exporterName === 'otlp') {
+    const { createOtlpTraceExporter } = require('../opentelemetry/trace')
+    return {
+      exporter: createOtlpTraceExporter(config),
+      exporterName,
+    }
+  }
+
+  const Exporter = getExporter(exporterName)
+  return {
+    exporter: new Exporter(config, prioritySampler),
+    exporterName,
+  }
 }
 
 module.exports = DatadogTracer

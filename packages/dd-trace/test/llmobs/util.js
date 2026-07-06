@@ -4,9 +4,11 @@ const util = require('node:util')
 const assert = require('node:assert')
 const { inspect } = require('node:util')
 const { before, beforeEach, after } = require('mocha')
+const msgpack = require('@msgpack/msgpack')
 const agent = require('../plugins/agent')
 const { useEnv } = require('../../../../integration-tests/helpers')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../src/constants')
+const { LLMOBS_META_STRUCT_KEY } = require('../../src/llmobs/export-mode')
 
 const tracerVersion = require('../../../../package.json').version
 
@@ -436,12 +438,12 @@ function useLlmObs ({
       const apmSpans = await apmTracesPromise
       resetTracesPromises()
 
+      const llmobsSpans = getLlmObsSpansFromApmSpans(apmSpans)
+
       // get llmobs span events requests from the agent
       // because llmobs process spans on span finish and submits periodically,
       // we need to aggregate all of the span events
       // tests should know how many spans they expect to see, otherwise tests will timeout
-      const llmobsSpans = []
-
       while (llmobsSpans.length < numLlmObsSpans) {
         await new Promise(resolve => setImmediate(resolve))
         const llmobsSpanEventsRequests = agent.getLlmObsSpanEventsRequests(true)
@@ -464,6 +466,23 @@ function getLlmObsSpansFromRequests (llmobsSpanEventsRequests) {
   return llmobsSpanEventsRequests
     .flatMap(request => request)
     .map(request => request.spans[0])
+}
+
+function getLlmObsSpansFromApmSpans (apmSpans) {
+  const llmobsSpans = []
+
+  for (const span of apmSpans) {
+    const encodedEvent = span.meta_struct?.[LLMOBS_META_STRUCT_KEY]
+    if (encodedEvent === undefined) continue
+
+    if (Buffer.isBuffer(encodedEvent) || encodedEvent instanceof Uint8Array) {
+      llmobsSpans.push(msgpack.decode(encodedEvent))
+    } else {
+      llmobsSpans.push(encodedEvent)
+    }
+  }
+
+  return llmobsSpans
 }
 
 /**

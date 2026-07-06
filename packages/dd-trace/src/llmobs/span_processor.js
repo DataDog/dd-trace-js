@@ -10,6 +10,14 @@ const {
   ERROR_STACK,
 } = require('../constants')
 const {
+  CACHED_LLMOBS_EVENT_SYMBOL,
+  LLMOBS_META_STRUCT_KEY,
+  LLMObsExportMode,
+  getLLMObsExportMode,
+  getLLMObsWriterExportMode,
+  isLLMObsWriterExportMode,
+} = require('./export-mode')
+const {
   SPAN_KIND,
   MODEL_NAME,
   MODEL_PROVIDER,
@@ -97,6 +105,21 @@ class LLMObsSpanProcessor {
         apiKey: mlObsTags[ROUTING_API_KEY],
         site: mlObsTags[ROUTING_SITE],
       }
+      const mode = this.#getSpanExportMode(routing)
+
+      if (mode === LLMObsExportMode.APM_AGENT || mode === LLMObsExportMode.APM_AGENTLESS) {
+        span.meta_struct ??= {}
+        span.meta_struct[LLMOBS_META_STRUCT_KEY] = formattedEvent
+        if (mode === LLMObsExportMode.APM_AGENT) {
+          span[CACHED_LLMOBS_EVENT_SYMBOL] = {
+            event: formattedEvent,
+            routing,
+          }
+        }
+        return
+      }
+
+      if (!isLLMObsWriterExportMode(mode)) return
 
       const enqueued = this.#writer.append(formattedEvent, routing)
 
@@ -120,6 +143,19 @@ class LLMObsSpanProcessor {
         Span won't be sent to LLM Observability: ${e.message}
       `)
     }
+  }
+
+  /**
+   * Returns the export mode for this span. Per-span LLMObs routing requires
+   * the direct writer because an APM trace cannot carry an alternate API key.
+   *
+   * @param {{ apiKey: string | undefined, site: string | undefined }} routing
+   * @returns {string}
+   */
+  #getSpanExportMode (routing) {
+    if (routing.apiKey) return getLLMObsWriterExportMode(this.#config, this.#writer)
+
+    return getLLMObsExportMode(this.#config, this.#writer)
   }
 
   format (span) {

@@ -6,6 +6,7 @@ const Writer = require('./writer')
 
 class AgentExporter {
   #timer
+  #destroyer
 
   constructor (config, prioritySampler) {
     this._config = config
@@ -25,7 +26,8 @@ class AgentExporter {
       headers,
     })
 
-    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.flush.bind(this))
+    this.#destroyer = this.flush.bind(this)
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.#destroyer)
   }
 
   setUrl (url) {
@@ -58,6 +60,12 @@ class AgentExporter {
     clearTimeout(this.#timer)
     this.#timer = undefined
     this._writer.flush(done)
+  }
+
+  destroy () {
+    clearTimeout(this.#timer)
+    this.#timer = undefined
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(this.#destroyer)
   }
 }
 

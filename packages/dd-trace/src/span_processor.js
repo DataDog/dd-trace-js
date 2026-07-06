@@ -4,6 +4,7 @@ const log = require('./log')
 const spanFormat = require('./span_format')
 const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
+const llmobsSamplingFallbackProcessor = require('./llmobs/sampling-fallback-processor')
 const processTags = require('./process-tags')
 const { applyHttpOtelSemantics } = require('./plugins/util/http-otel-semantics')
 
@@ -36,6 +37,13 @@ class SpanProcessor {
     this._spanSampler.sample(spanContext)
   }
 
+  /**
+   * @param {object} exporter
+   */
+  setExporter (exporter) {
+    this._exporter = exporter
+  }
+
   process (span) {
     const spanContext = span.context()
     const active = []
@@ -51,6 +59,7 @@ class SpanProcessor {
     }
     if (started.length === finished.length || finished.length >= flushMinSpans) {
       this.sample(span)
+      llmobsSamplingFallbackProcessor.processTrace(started, this._config)
       this._gitMetadataTagger.tagGitMetadata(spanContext)
 
       let isFirstSpanInChunk = true

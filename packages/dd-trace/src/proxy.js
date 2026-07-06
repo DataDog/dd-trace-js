@@ -274,9 +274,6 @@ class Tracer extends NoopProxy {
       if (config.appsec.enabled) {
         this._modules.appsec.enable(config)
       }
-      if (config.llmobs.DD_LLMOBS_ENABLED) {
-        this._modules.llmobs.enable(config)
-      }
       if (!this._tracingInitialized) {
         const prioritySampler = config.apmTracingEnabled === false
           ? require('./standalone').configure(config)
@@ -291,6 +288,9 @@ class Tracer extends NoopProxy {
           lazyProxy(this, 'aiguard', () => require('./aiguard/sdk'), this._tracer, config)
         }
         this._tracingInitialized = true
+      }
+      if (config.llmobs.DD_LLMOBS_ENABLED) {
+        this._modules.llmobs.enable(config, this._tracer)
       }
       if (config.experimental.flaggingProvider.enabled) {
         this._modules.openfeature.enable(config)

@@ -63,6 +63,7 @@ describe('Tracer', () => {
 
     processor = {
       process: sinon.spy(),
+      setExporter: sinon.stub(),
     }
     SpanProcessor = sinon.stub().returns(processor)
 
@@ -125,6 +126,21 @@ describe('Tracer', () => {
 
     sinon.assert.calledWith(AgentExporter, config, sampler)
     sinon.assert.calledWith(SpanProcessor, agentExporter, sampler, config)
+  })
+
+  it('should replace the trace exporter', () => {
+    const agentlessExporter = {
+      export: sinon.spy(),
+    }
+    const AgentlessExporter = sinon.stub().returns(agentlessExporter)
+    exporter.withArgs('agentless').returns(AgentlessExporter)
+
+    tracer = new Tracer(config)
+
+    assert.strictEqual(tracer.configureExporter(config, 'agentless'), true)
+    sinon.assert.calledWith(AgentlessExporter, config, prioritySampler)
+    sinon.assert.calledWith(processor.setExporter, agentlessExporter)
+    assert.strictEqual(tracer._exporter, agentlessExporter)
   })
 
   describe('startSpan', () => {

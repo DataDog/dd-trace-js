@@ -2,6 +2,7 @@
 
 const { channel } = require('dc-polyfill')
 
+const exporters = require('../../../../ext/exporters')
 const log = require('../log')
 const { DD_MAJOR } = require('../../../../version')
 const startupLogs = require('../startup-log')
@@ -22,6 +23,7 @@ const LLMObsTagger = require('./tagger')
 const LLMObsSpanWriter = require('./writers/spans')
 const { setAgentStrategy } = require('./writers/util')
 const { INCOMPATIBLE_INITIALIZATION } = require('./constants/text')
+const samplingFallbackProcessor = require('./sampling-fallback-processor')
 
 const spanFinishCh = channel('dd-trace:span:finish')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
@@ -52,8 +54,9 @@ let globalTracerConfig
 
 /**
  * @param {@type import('../config/config-base')} config
+ * @param {import('../tracer') | null} [tracer]
  */
-function enable (config) {
+function enable (config, tracer) {
   globalTracerConfig = config
 
   const startTime = performance.now()
@@ -61,6 +64,7 @@ function enable (config) {
   // span writer append is handled by the span processor
   evalWriter = new LLMObsEvalMetricsWriter(config)
   spanWriter = new LLMObsSpanWriter(config)
+  samplingFallbackProcessor.setWriter(spanWriter)
 
   evalMetricAppendCh.subscribe(handleEvalMetricAppend)
   flushCh.subscribe(handleFlush)
@@ -86,10 +90,27 @@ function enable (config) {
 
     evalWriter?.setAgentless(useAgentless)
     spanWriter?.setAgentless(useAgentless)
+    configureApmAgentless(config, tracer, useAgentless)
 
     telemetry.recordLLMObsEnabled(startTime, config)
     log.debug('[LLMObs] Enabled LLM Observability with configuration: %o', config.llmobs)
   })
+}
+
+/**
+ * @param {import('../config/config-base')} config
+ * @param {import('../tracer') | null | undefined} tracer
+ * @param {boolean} useAgentless
+ */
+function configureApmAgentless (config, tracer, useAgentless) {
+  if (!useAgentless ||
+      config.DD_TRACE_ENABLED !== true ||
+      config.apmTracingEnabled !== true ||
+      (config.OTEL_TRACES_EXPORTER === 'otlp' && !config.isCiVisibility)) {
+    return
+  }
+
+  tracer?.configureExporter(config, exporters.AGENTLESS)
 }
 
 function disable () {
@@ -102,6 +123,7 @@ function disable () {
   spanWriter?.destroy()
   evalWriter?.destroy()
   spanProcessor?.setWriter(null)
+  samplingFallbackProcessor.setWriter(null)
 
   spanWriter = null
   evalWriter = null
