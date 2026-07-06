@@ -1164,4 +1164,38 @@ describe('CI Visibility Exporter', () => {
       })
     })
   })
+
+  describe('canUploadTestScreenshots', () => {
+    it('should return false when there is no upload URL', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: true },
+      })
+      assert.strictEqual(ciVisibilityExporter.canUploadTestScreenshots(), false)
+    })
+
+    it('should return false when the URL is set but screenshots are disabled', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: false },
+      })
+      ciVisibilityExporter._testScreenshotUploadUrl = url
+      assert.strictEqual(ciVisibilityExporter.canUploadTestScreenshots(), false)
+    })
+
+    it('should return false when the URL is set but the screenshots flag is absent (default off)', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({ url })
+      ciVisibilityExporter._testScreenshotUploadUrl = url
+      assert.strictEqual(ciVisibilityExporter.canUploadTestScreenshots(), false)
+    })
+
+    it('should return true when the URL is set and screenshots are enabled', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: true },
+      })
+      ciVisibilityExporter._testScreenshotUploadUrl = url
+      assert.strictEqual(ciVisibilityExporter.canUploadTestScreenshots(), true)
+    })
+  })
 })

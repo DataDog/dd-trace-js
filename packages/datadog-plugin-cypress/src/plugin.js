@@ -40,6 +40,7 @@ module.exports = function CypressPlugin (on, config) {
   }
 
   on('before:run', cypressPlugin.beforeRun.bind(cypressPlugin))
+  on('after:screenshot', cypressPlugin.afterScreenshot.bind(cypressPlugin))
   on('after:spec', cypressPlugin.afterSpec.bind(cypressPlugin))
   on('after:run', cypressPlugin.afterRun.bind(cypressPlugin))
   on('task', cypressPlugin.getTasks())
