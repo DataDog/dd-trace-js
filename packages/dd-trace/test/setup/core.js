@@ -15,27 +15,6 @@ if (process.env.CI) {
 
 process.env.DD_INSTRUMENTATION_TELEMETRY_ENABLED = 'false'
 
-// Ambient Datadog env vars (injected by Datadog-instrumented terminals/CI shells)
-// would redirect span export to the agentless intake instead of the in-process mock
-// agent, silently timing out every span-asserting plugin test, and pollute
-// service/env/version-derived assertions (e.g. DBM `ddpv`). Strip them so the test
-// process starts from a clean, agent-based baseline. Same rationale as the OTEL_*
-// unsets already done in the plugin test command.
-for (const ambient of [
-  '_DD_APM_TRACING_AGENTLESS_ENABLED',
-  'DD_API_KEY',
-  'DD_APP_KEY',
-  'DD_LLMOBS_AGENTLESS_ENABLED',
-  'DD_TRACE_AGENT_URL',
-  'DD_AGENT_HOST',
-  'DD_TRACE_AGENT_PORT',
-  'DD_VERSION',
-  'DD_ENV',
-  'DD_SERVICE',
-]) {
-  delete process.env[ambient]
-}
-
 // If this is a release PR, set the SSI variables.
 if (/^v\d+\.x$/.test(process.env.GITHUB_BASE_REF || '')) {
   process.env.DD_INJECTION_ENABLED = 'true'
