@@ -921,6 +921,17 @@ module.exports = class CiPlugin extends Plugin {
     if (!this.di) return Promise.resolve()
     if (this.diBreakpointHitPromise) return this.waitForDiOperation(this.diBreakpointHitPromise)
 
+    return this.waitForInFlightDiBreakpointHits()
+  }
+
+  /**
+   * Wait until the DI worker has posted breakpoint hits it was already processing.
+   *
+   * @returns {Promise<void>}
+   */
+  waitForInFlightDiBreakpointHits () {
+    if (!this.di) return Promise.resolve()
+
     return this.waitForDiOperation(this.di.waitForInFlightBreakpointHits())
   }
 

@@ -4541,6 +4541,82 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       })
     })
 
+    onlyLatestIt('drains in-flight dynamic instrumentation hits before the next retry', async () => {
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        di_enabled: true,
+      })
+
+      const retrySpanIdsWithDebugInfo = new Set()
+      const diLogSpanIds = []
+      let testOutput = ''
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const retriedTests = tests.filter(
+            test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+          )
+
+          assert.strictEqual(retriedTests.length, 3)
+          for (const retriedTest of retriedTests) {
+            if (retriedTest.meta[DI_ERROR_DEBUG_INFO_CAPTURED] === 'true') {
+              retrySpanIdsWithDebugInfo.add(retriedTest.span_id.toString())
+            }
+          }
+          assert.ok(retrySpanIdsWithDebugInfo.size >= 1)
+        })
+
+      const logsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
+          const diLogs = payloads.flatMap(({ logMessage }) => logMessage)
+          assert.ok(diLogs.length >= 1)
+          for (const diLog of diLogs) {
+            diLogSpanIds.push(diLog.dd.span_id)
+          }
+        }, 5000)
+
+      childProcess = exec(
+        'node ./ci-visibility/run-mocha.js',
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './dynamic-instrumentation/test-hit-breakpoint-multiple-retries',
+            ]),
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '5',
+            DD_TRACE_DEBUG: 'true',
+            DD_TRACE_LOG_LEVEL: 'warn',
+            _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
+          },
+        }
+      )
+
+      childProcess.stdout?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      const stdoutEndPromise = childProcess.stdout ? once(childProcess.stdout, 'end') : Promise.resolve()
+      const stderrEndPromise = childProcess.stderr ? once(childProcess.stderr, 'end') : Promise.resolve()
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+        logsPromise,
+        stdoutEndPromise,
+        stderrEndPromise,
+      ])
+      assert.strictEqual(exitCode, 0, testOutput)
+      assert.doesNotMatch(testOutput, /Breakpoint snapshot could not be attached to the active test span/)
+      for (const diLogSpanId of diLogSpanIds) {
+        assert.ok(retrySpanIdsWithDebugInfo.has(diLogSpanId))
+      }
+    })
+
     onlyLatestIt('reports a passing suite for root afterEach tests retried with dynamic instrumentation', (done) => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,

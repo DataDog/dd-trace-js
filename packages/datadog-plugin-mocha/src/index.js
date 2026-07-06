@@ -313,6 +313,14 @@ class MochaPlugin extends CiPlugin {
       promises,
     }) => {
       if (span) {
+        const finishSpan = () => {
+          span.finish()
+          finishAllTraceSpans(span)
+          if (this.activeTestSpan === span) {
+            this.activeTestSpan = null
+          }
+        }
+
         span.setTag(TEST_STATUS, 'fail')
         if (!isFirstAttempt) {
           span.setTag(TEST_IS_RETRY, 'true')
@@ -345,8 +353,18 @@ class MochaPlugin extends CiPlugin {
           }
         }
 
-        span.finish()
-        finishAllTraceSpans(span)
+        if (!isFirstAttempt &&
+          willBeRetried &&
+          this.di &&
+          this.libraryConfig?.isDiEnabled &&
+          this.runningTestProbe) {
+          if (promises) {
+            promises.finishTestPromise = this.waitForInFlightDiBreakpointHits().then(finishSpan, finishSpan)
+            return
+          }
+        }
+
+        finishSpan()
       }
     })
 

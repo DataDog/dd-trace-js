@@ -642,7 +642,7 @@ function getOnTestEndHandler (config, finalAttemptHandlers) {
       finalAttemptHandlers?.onStart?.(test)
     }
 
-    if (test._ddShouldWaitForHitProbe || test._retriedTest?._ddShouldWaitForHitProbe) {
+    if (test._retriedTest?._ddShouldWaitForHitProbe) {
       await waitForHitProbe()
     }
 
@@ -688,7 +688,7 @@ function getOnHookEndHandler (config, finalAttemptHandlers) {
               test._ddIsFinalAttempt = true
             }
           }
-          if (test._ddShouldWaitForHitProbe || test._retriedTest?._ddShouldWaitForHitProbe) {
+          if (test._retriedTest?._ddShouldWaitForHitProbe) {
             if (isFinalAttempt) {
               finalAttemptHandlers?.onStart?.(test)
             }
@@ -732,12 +732,12 @@ function finishDeferredHookEnd (test) {
  *
  * @param {(...args: unknown[]) => unknown} fn - Original hookUp completion callback.
  * @param {object} test - Mocha test currently owning the hook.
- * @param {Promise<void>|undefined} setProbePromise - Pending probe-set wait, if any.
+ * @param {Promise<void>|undefined} failedTestReplayPromise - Pending Failed Test Replay wait, if any.
  * @param {unknown} hookThis - Callback receiver.
  * @param {IArguments} args - Arguments passed by Mocha.
  * @returns {unknown}
  */
-function runFailedTestReplayHookUpCallback (fn, test, setProbePromise, hookThis, args) {
+function runFailedTestReplayHookUpCallback (fn, test, failedTestReplayPromise, hookThis, args) {
   const continueAfterProbe = () => {
     const deferredHookEndPromise = finishDeferredHookEnd(test)
     if (deferredHookEndPromise) {
@@ -746,8 +746,8 @@ function runFailedTestReplayHookUpCallback (fn, test, setProbePromise, hookThis,
     return fn.apply(hookThis, args)
   }
 
-  if (setProbePromise) {
-    return setProbePromise.then(continueAfterProbe, continueAfterProbe)
+  if (failedTestReplayPromise) {
+    return failedTestReplayPromise.then(continueAfterProbe, continueAfterProbe)
   }
   return continueAfterProbe()
 }
@@ -757,12 +757,12 @@ function runFailedTestReplayHookUpCallback (fn, test, setProbePromise, hookThis,
  *
  * @param {(...args: unknown[]) => unknown} fn - Original hookUp completion callback.
  * @param {object} test - Mocha test currently owning the hook.
- * @param {Promise<void>|undefined} setProbePromise - Pending probe-set wait, if any.
+ * @param {Promise<void>|undefined} failedTestReplayPromise - Pending Failed Test Replay wait, if any.
  * @returns {(...args: unknown[]) => unknown}
  */
-function wrapFailedTestReplayHookUpCallback (fn, test, setProbePromise) {
+function wrapFailedTestReplayHookUpCallback (fn, test, failedTestReplayPromise) {
   return shimmer.wrapCallback(fn, fn => function () {
-    return runFailedTestReplayHookUpCallback(fn, test, setProbePromise, this, arguments)
+    return runFailedTestReplayHookUpCallback(fn, test, failedTestReplayPromise, this, arguments)
   })
 }
 
@@ -846,8 +846,13 @@ function getOnTestRetryHandler (config) {
         promises,
         ...ctx.currentStore,
       })
-      if (promises.setProbePromise) {
-        test._ddSetProbePromise = promises.setProbePromise
+      if (promises.setProbePromise && promises.finishTestPromise) {
+        test._ddFailedTestReplayPromise = Promise.all([
+          promises.setProbePromise,
+          promises.finishTestPromise,
+        ]).then(() => {})
+      } else if (promises.setProbePromise || promises.finishTestPromise) {
+        test._ddFailedTestReplayPromise = promises.setProbePromise || promises.finishTestPromise
       }
     }
     const key = getTestToContextKey(test)

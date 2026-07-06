@@ -398,12 +398,12 @@ function patchFailedTestReplayHookUp (Runner) {
       return hookUp.apply(this, arguments)
     }
 
-    const setProbePromise = test._ddSetProbePromise
-    if (setProbePromise) {
-      delete test._ddSetProbePromise
+    const failedTestReplayPromise = test._ddFailedTestReplayPromise
+    if (failedTestReplayPromise) {
+      delete test._ddFailedTestReplayPromise
     }
 
-    return hookUp.call(this, name, wrapFailedTestReplayHookUpCallback(fn, test, setProbePromise))
+    return hookUp.call(this, name, wrapFailedTestReplayHookUpCallback(fn, test, failedTestReplayPromise))
   })
 }
 
