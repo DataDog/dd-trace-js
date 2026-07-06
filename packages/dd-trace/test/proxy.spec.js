@@ -583,6 +583,31 @@ describe('TracerProxy', () => {
         sinon.assert.match(log.error.firstCall.lastArg, sinon.match(expectedErr))
       })
 
+      it('should surface a fatal config error via the always-on writer even when logging is disabled', () => {
+        const warn = sinon.spy()
+        const ThrowingConfig = sinon.stub().throws(
+          new TypeError("Cannot create property 'version' on string 'team:checkout,tier:backend'")
+        )
+
+        const FatalConfigProxy = proxyquire('../src/proxy', {
+          './tracer': DatadogTracer,
+          './noop/tracer': NoopTracer,
+          './config': ThrowingConfig,
+          './runtime_metrics': runtimeMetrics,
+          './log': log,
+          './log/writer': { warn },
+          './telemetry': telemetry,
+          './remote_config': RemoteConfig,
+        })
+
+        const fatalConfigProxy = new FatalConfigProxy()
+        fatalConfigProxy.init({ tags: 'team:checkout,tier:backend' })
+
+        sinon.assert.calledOnce(log.error)
+        sinon.assert.calledOnce(warn)
+        sinon.assert.match(warn.firstCall.firstArg, sinon.match(/DATADOG TRACER FAILED TO INITIALIZE/))
+      })
+
       it('should start telemetry', () => {
         proxy.init()
 

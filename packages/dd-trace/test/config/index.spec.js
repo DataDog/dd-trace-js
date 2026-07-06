@@ -1617,6 +1617,25 @@ describe('Config', () => {
     })
   })
 
+  it('should normalize a programmatic string tags option into an object', () => {
+    const config = getConfig({ tags: 'team:checkout,tier:backend' })
+
+    assertObjectContains(config.tags, { team: 'checkout', tier: 'backend' })
+    assert.ok(Object.hasOwn(config.tags, 'runtime-id'))
+  })
+
+  it('should normalize a programmatic array tags option into an object', () => {
+    const config = getConfig({ tags: ['team:checkout', 'tier:backend'] })
+
+    assertObjectContains(config.tags, { team: 'checkout', tier: 'backend' })
+  })
+
+  it('should keep a programmatic object tags option as an object', () => {
+    const config = getConfig({ tags: { team: 'checkout', tier: 'backend' } })
+
+    assertObjectContains(config.tags, { team: 'checkout', tier: 'backend' })
+  })
+
   it('should read case-insensitive booleans from environment variables', () => {
     process.env.DD_TRACING_ENABLED = 'False'
     process.env.DD_TRACE_PROPAGATION_EXTRACT_FIRST = 'TRUE'
