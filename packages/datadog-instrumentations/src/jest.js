@@ -163,6 +163,17 @@ const wrappedCoverageReporters = new WeakSet()
 const coverageReporterRequires = new WeakMap()
 const handledJestEvents = new WeakSet()
 
+/**
+ * @typedef {object} ConcurrentTestOptions
+ * @property {(...args: unknown[]) => unknown} [concurrentTest]
+ * @property {unknown} [concurrentTestThisArg]
+ * @property {boolean} [isAttemptToFixRetry]
+ * @property {boolean} [isEfdRetry]
+ * @property {boolean} [isModified]
+ * @property {(...args: unknown[]) => unknown} [sourceTestFn]
+ * @property {string} [testParameters]
+ */
+
 const BREAKPOINT_HIT_GRACE_PERIOD_MS = 200
 const ATR_RETRY_SUPPRESSION_FLAG = '_ddDisableAtrRetry'
 const MINIMUM_JEST_VERSION = DD_MAJOR >= 6 ? '>=28.0.0' : '>=24.8.0'
@@ -485,6 +496,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.hasConcurrentTests = false
       this.concurrentTestContexts = new Map()
       this.concurrentTestStates = new WeakMap()
+      this.concurrentTestSourceFns = new WeakMap()
       this.wrappedConcurrentTestFunctions = new WeakSet()
       this.jestEachBind = undefined
 
@@ -622,7 +634,11 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           const asyncError = environment.isImpactedTestsEnabled
             ? new Error('Datadog concurrent test registration')
             : undefined
-          const wrappedTestFn = environment.createConcurrentTestFn(testName, testFn, asyncError, state)
+          const wrappedTestFn = environment.createConcurrentTestFn(testName, testFn, asyncError, state, {
+            concurrentTest,
+            concurrentTestThisArg: this,
+            sourceTestFn: environment.concurrentTestSourceFns.get(testFn),
+          })
           return concurrentTest.call(this, testName, wrappedTestFn, ...args)
         }
       })
@@ -651,10 +667,14 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         const testParameters = getFormattedJestTestParameters(eachArgs)
         return function (...testArgs) {
           let parameterIndex = 0
+          const sourceTestFn = testArgs[1]
           const concurrentEachTest = function (testName, testFn, ...callArgs) {
             const parameters = testParameters?.[parameterIndex++]
             if (parameters !== undefined) {
               environment.appendNameToParams(testName, parameters)
+            }
+            if (typeof testFn === 'function' && typeof sourceTestFn === 'function') {
+              environment.concurrentTestSourceFns.set(testFn, sourceTestFn)
             }
             return concurrentTest.call(this, testName, testFn, ...callArgs)
           }
@@ -671,13 +691,14 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      * @param {(...args: unknown[]) => unknown} testFn
      * @param {Error|undefined} asyncError
      * @param {object} state
-     * @param {string|undefined} testParameters
-     * @param {boolean|undefined} isModified
+     * @param {ConcurrentTestOptions|undefined} options
      * @returns {(...args: unknown[]) => unknown}
      */
-    createConcurrentTestFn (testName, testFn, asyncError, state, testParameters, isModified) {
+    createConcurrentTestFn (testName, testFn, asyncError, state, options) {
       const concurrentTestState = {
-        ctx: this.createConcurrentTestContext(testName, testFn, asyncError, state, testParameters, isModified),
+        concurrentTest: options?.concurrentTest,
+        concurrentTestThisArg: options?.concurrentTestThisArg,
+        ctx: this.createConcurrentTestContext(testName, testFn, asyncError, state, options),
         state,
         testFn,
       }
@@ -724,30 +745,30 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      * @param {(...args: unknown[]) => unknown} testFn
      * @param {Error|undefined} asyncError
      * @param {object} state
-     * @param {string|undefined} testParameters
-     * @param {boolean|undefined} isModified
+     * @param {ConcurrentTestOptions|undefined} options
      * @returns {object}
      */
-    createConcurrentTestContext (testName, testFn, asyncError, state, testParameters, isModified) {
+    createConcurrentTestContext (testName, testFn, asyncError, state, options) {
       const testFullName = this.getTestNameFromAddTestEvent({ testName }, state)
       const isNewTest = this.isKnownTestsEnabled && !this.knownTestsForThisSuite?.includes(testFullName)
       const isAttemptToFix = this.isTestManagementTestsEnabled &&
         this.testManagementTestsForThisSuite?.attemptToFix?.includes(testFullName)
+      const sourceTestFn = options?.sourceTestFn || testFn
       const ctx = {
         name: testFullName,
         suite: this.testSuite,
         testSourceFile: this.testSourceFile,
         displayName: this.displayName,
-        testParameters: testParameters || getTestParametersString(this.nameToParams, testName),
+        testParameters: options?.testParameters || getTestParametersString(this.nameToParams, testName),
         frameworkVersion: jestVersion,
         isNew: isNewTest,
-        isEfdRetry: false,
+        isEfdRetry: options?.isEfdRetry === true,
         isAttemptToFix,
-        isAttemptToFixRetry: false,
+        isAttemptToFixRetry: options?.isAttemptToFixRetry === true,
         isJestRetry: false,
         isDisabled: this.testManagementTestsForThisSuite?.disabled?.includes(testFullName),
         isQuarantined: this.testManagementTestsForThisSuite?.quarantined?.includes(testFullName),
-        isModified: isModified ?? this.isTestModified(asyncError, testFn),
+        isModified: options?.isModified ?? this.isTestModified(asyncError, sourceTestFn),
         hasDynamicName: isNewTest && DYNAMIC_NAME_RE.test(testFullName),
         testSuiteAbsolutePath: this.testSuiteAbsolutePath,
       }
@@ -1014,19 +1035,32 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       retryType,
     }) {
       const { testName, fn, timeout } = jestEvent
+      const isAttemptToFixRetry = retryType === 'Test Management (Attempt to Fix)'
+      const isEfdRetry = retryType === 'Impacted tests' || retryType === 'Early flake detection'
       for (let retryIndex = 0; retryIndex < retryCount; retryIndex++) {
         const concurrentTestState = this.concurrentTestStates.get(fn)
-        if (concurrentTestState && this.global.test?.concurrent) {
-          const concurrentTest = getOriginalConcurrentTest(this.global.test.concurrent)
+        if (concurrentTestState) {
+          const concurrentTest = concurrentTestState.concurrentTest ||
+            getOriginalConcurrentTest(this.global.test?.concurrent)
+          if (typeof concurrentTest !== 'function') {
+            log.error('%s could not retry concurrent test because test.concurrent is undefined', retryType)
+            continue
+          }
           const retryFn = this.createConcurrentTestFn(
             testName,
             concurrentTestState.testFn,
             undefined,
             concurrentTestState.state,
-            concurrentTestState.ctx.testParameters,
-            concurrentTestState.ctx.isModified
+            {
+              concurrentTest,
+              concurrentTestThisArg: concurrentTestState.concurrentTestThisArg,
+              isAttemptToFixRetry,
+              isEfdRetry,
+              isModified: concurrentTestState.ctx.isModified,
+              testParameters: concurrentTestState.ctx.testParameters,
+            }
           )
-          concurrentTest.call(this.global.test, testName, retryFn, timeout)
+          concurrentTest.call(concurrentTestState.concurrentTestThisArg, testName, retryFn, timeout)
         } else if (this.global.test) {
           this.global.test(testName, fn, timeout)
         } else {
@@ -1129,9 +1163,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         ctx.testParameters = testParameters
         ctx.frameworkVersion = jestVersion
         ctx.isNew = isNewTest
-        ctx.isEfdRetry = numEfdRetry > 0
+        ctx.isEfdRetry = ctx.isEfdRetry || numEfdRetry > 0
         ctx.isAttemptToFix = isAttemptToFix
-        ctx.isAttemptToFixRetry = numOfAttemptsToFixRetries > 0
+        ctx.isAttemptToFixRetry = ctx.isAttemptToFixRetry || numOfAttemptsToFixRetries > 0
         ctx.isJestRetry = isJestRetry
         ctx.isDisabled = isDisabled
         ctx.isQuarantined = isQuarantined
@@ -1167,6 +1201,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             })
             hook.fn = newHookFn
           }
+
           const originalFn = event.test.fn
           originalTestFns.set(event.test, originalFn)
 
@@ -1186,6 +1221,24 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           wrapTestAndHooks()
         } else {
           testStartCh.runStores(ctx, wrapTestAndHooks)
+        }
+      }
+
+      if (event.name === 'hook_start' && (event.hook.type === 'beforeEach' || event.hook.type === 'afterEach')) {
+        const ctx = testContexts.get(event.test) || this.concurrentTestStates.get(event.test?.fn)?.ctx
+        if (ctx?.concurrentTestState && (!ctx.isDisabled || ctx.isAttemptToFix)) {
+          let hookFn = event.hook.fn
+          if (originalHookFns.has(event.hook)) {
+            hookFn = originalHookFns.get(event.hook)
+          } else {
+            originalHookFns.set(event.hook, hookFn)
+          }
+          if (!ctx.currentStore) {
+            testStartCh.runStores(ctx, () => {})
+          }
+          event.hook.fn = shimmer.wrapFunction(hookFn, hookFn => function (...args) {
+            return testFnCh.runStores(ctx, () => hookFn.apply(this, args))
+          })
         }
       }
 

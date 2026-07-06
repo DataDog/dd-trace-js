@@ -820,6 +820,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
                 JSON.stringify({ arguments: ['parameterized row', 3], metadata: {} })
               )
             }
+            const retryTests = concurrentEachTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.strictEqual(retryTests.length, NUM_RETRIES)
+            for (const retryTest of retryTests) {
+              assert.strictEqual(retryTest.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atf)
+            }
           })
 
         childProcess = exec(
@@ -829,6 +834,62 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             env: {
               ...getCiVisAgentlessConfig(receiver.port),
               TESTS_TO_RUN: 'test-management/test-concurrent-attempt-to-fix-each',
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+
+        assert.strictEqual(exitCode, 0)
+      })
+
+      onlyLatestIt('retries concurrent tests imported from @jest/globals for attempt to fix', async () => {
+        const NUM_RETRIES = 3
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: NUM_RETRIES } })
+
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/test-management/test-concurrent-attempt-to-fix-imported-globals.js': {
+                tests: {
+                  'concurrent imported attempt to fix tests can pass normally': {
+                    properties: {
+                      attempt_to_fix: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const importedConcurrentTests = tests.filter(test =>
+              test.meta[TEST_NAME] === 'concurrent imported attempt to fix tests can pass normally'
+            )
+
+            assert.strictEqual(importedConcurrentTests.length, NUM_RETRIES + 1)
+            const retryTests = importedConcurrentTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.strictEqual(retryTests.length, NUM_RETRIES)
+            for (const retryTest of retryTests) {
+              assert.strictEqual(retryTest.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atf)
+            }
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              DO_NOT_INJECT_GLOBALS: 'true',
+              TESTS_TO_RUN: 'test-management/test-concurrent-attempt-to-fix-imported-globals',
             },
           }
         )
@@ -2280,6 +2341,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           ],
           'ci-visibility/test-impacted-test/test-impacted-concurrent.js': [
             'impacted concurrent tests can pass normally',
+            'impacted concurrent tests parameterized row can pass normally',
           ],
         },
       })
@@ -2325,7 +2387,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       const impactedConcurrentTest = fs.readFileSync(impactedConcurrentPath, 'utf8')
       fs.writeFileSync(
         impactedConcurrentPath,
-        impactedConcurrentTest.replace("const label = 'sum'", "const label = 'result'")
+        impactedConcurrentTest
+          .replace("const label = 'sum'", "const label = 'result'")
+          .replace("const eachLabel = 'each-sum'", "const eachLabel = 'each-result'")
       )
       execSync('git add ci-visibility/test-impacted-test/test-impacted-concurrent.js', { cwd, stdio: 'ignore' })
 
@@ -2545,13 +2609,20 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            const impactedConcurrentTest = tests.find(test =>
-              test.meta[TEST_SOURCE_FILE] === 'ci-visibility/test-impacted-test/test-impacted-concurrent.js' &&
-              test.meta[TEST_NAME] === 'impacted concurrent tests can pass normally'
-            )
+            const impactedConcurrentTestNames = [
+              'impacted concurrent tests can pass normally',
+              'impacted concurrent tests parameterized row can pass normally',
+            ]
 
-            assert.ok(impactedConcurrentTest, 'impacted concurrent test not found in payloads')
-            assert.strictEqual(impactedConcurrentTest.meta[TEST_IS_MODIFIED], 'true')
+            for (const testName of impactedConcurrentTestNames) {
+              const impactedConcurrentTest = tests.find(test =>
+                test.meta[TEST_SOURCE_FILE] === 'ci-visibility/test-impacted-test/test-impacted-concurrent.js' &&
+                test.meta[TEST_NAME] === testName
+              )
+
+              assert.ok(impactedConcurrentTest, `impacted concurrent test not found in payloads: ${testName}`)
+              assert.strictEqual(impactedConcurrentTest.meta[TEST_IS_MODIFIED], 'true')
+            }
           })
 
         childProcess = exec(
@@ -2591,14 +2662,26 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
-            const impactedConcurrentTests = tests.filter(test =>
-              test.meta[TEST_SOURCE_FILE] === 'ci-visibility/test-impacted-test/test-impacted-concurrent.js' &&
-              test.meta[TEST_NAME] === 'impacted concurrent tests can pass normally'
-            )
+            const impactedConcurrentTestNames = [
+              'impacted concurrent tests can pass normally',
+              'impacted concurrent tests parameterized row can pass normally',
+            ]
 
-            assert.strictEqual(impactedConcurrentTests.length, NUM_RETRIES + 1)
-            for (const impactedConcurrentTest of impactedConcurrentTests) {
-              assert.strictEqual(impactedConcurrentTest.meta[TEST_IS_MODIFIED], 'true')
+            for (const testName of impactedConcurrentTestNames) {
+              const impactedConcurrentTests = tests.filter(test =>
+                test.meta[TEST_SOURCE_FILE] === 'ci-visibility/test-impacted-test/test-impacted-concurrent.js' &&
+                test.meta[TEST_NAME] === testName
+              )
+
+              assert.strictEqual(impactedConcurrentTests.length, NUM_RETRIES + 1)
+              for (const impactedConcurrentTest of impactedConcurrentTests) {
+                assert.strictEqual(impactedConcurrentTest.meta[TEST_IS_MODIFIED], 'true')
+              }
+              const retryTests = impactedConcurrentTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+              assert.strictEqual(retryTests.length, NUM_RETRIES)
+              for (const retryTest of retryTests) {
+                assert.strictEqual(retryTest.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+              }
             }
           })
 

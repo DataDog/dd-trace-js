@@ -15,4 +15,14 @@ describe('impacted concurrent tests', () => {
 
     expect(`${label}:${result}`).toBe(`${label}:${expected}`)
   })
+
+  test.concurrent.each([
+    ['parameterized row', 1, 2],
+  ])('%s can pass normally', (_label, first, second) => {
+    const result = first + second
+    const eachLabel = 'each-sum'
+    const expected = 3
+
+    expect(`${eachLabel}:${result}`).toBe(`${eachLabel}:${expected}`)
+  })
 })
