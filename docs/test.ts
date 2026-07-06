@@ -96,6 +96,10 @@ tracer.init({
   clientIpHeader: 'x-forwarded-for'
 });
 
+// tags accepts the DD_TAGS string / array forms in addition to an object.
+tracer.init({ tags: 'team:checkout,tier:backend' });
+tracer.init({ tags: ['team:checkout', 'tier:backend'] });
+
 tracer.init({
   runtimeMetrics: {
     enabled: true,
