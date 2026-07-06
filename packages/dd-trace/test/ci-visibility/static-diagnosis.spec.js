@@ -49,6 +49,43 @@ describe('test optimization validation static diagnosis', () => {
     }
   })
 
+  it('marks dd-trace dependency presence as undetermined when the file scan is truncated', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
+    const nestedRoot = path.join(root, 'aaaa')
+
+    fs.mkdirSync(nestedRoot)
+    fs.writeFileSync(path.join(nestedRoot, 'package.json'), JSON.stringify({
+      devDependencies: {
+        jest: '29.7.0',
+      },
+    }))
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      devDependencies: {
+        jest: '29.7.0',
+      },
+      scripts: {
+        test: 'jest',
+      },
+    }))
+
+    try {
+      const report = runDiagnosis({
+        root,
+        maxFiles: 1,
+        execFile () {
+          throw new Error('git unavailable')
+        },
+      })
+      const titles = report.results.map(result => result.title)
+
+      assert.strictEqual(report.truncatedFileScan, true)
+      assert.ok(titles.includes('dd-trace dependency not determined'))
+      assert.ok(!titles.includes('dd-trace dependency not found in package.json'))
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('does not block a root framework entry with an unsupported nested fixture version', () => {
     const diagnosis = getDiagnosisWithNestedMochaError()
     const framework = {

@@ -130,7 +130,7 @@ describe('test optimization validation cli', () => {
     })
   }
 
-  it('skips CI wiring when forced local Basic Reporting fails', async () => {
+  it('skips CI wiring when direct-initialization Basic Reporting fails', async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cli-'))
     const out = path.join(tmpDir, 'results')
     const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
@@ -175,7 +175,7 @@ describe('test optimization validation cli', () => {
             frameworkId: framework.id,
             scenario: 'basic-reporting',
             status: 'fail',
-            diagnosis: 'Forced local Basic Reporting did not emit events.',
+            diagnosis: 'Basic Reporting did not emit events with direct Datadog initialization.',
             evidence: {},
             artifacts: [],
           }
@@ -216,8 +216,20 @@ describe('test optimization validation cli', () => {
         'atr:skip',
         'test-management:skip',
       ])
-      assert.match(capturedResults[1].diagnosis, /Skipped CI wiring validation because forced local Basic Reporting/)
+      assert.match(capturedResults[1].diagnosis, /Skipped CI wiring validation because Basic Reporting/)
       assert.strictEqual(capturedResults[1].evidence.basicReportingStatus, 'fail')
+      assert.deepStrictEqual(capturedResults[1].evidence.featureEligibility, {
+        eligible: false,
+        blockedBy: 'basic-reporting',
+        reasonCode: 'basic-reporting-failed',
+        scenario: 'ci-wiring',
+      })
+      assert.deepStrictEqual(capturedResults[2].evidence.featureEligibility, {
+        eligible: false,
+        blockedBy: 'basic-reporting',
+        reasonCode: 'basic-reporting-failed',
+        scenario: 'efd',
+      })
     } finally {
       process.exitCode = originalExitCode
       fs.rmSync(tmpDir, { recursive: true, force: true })

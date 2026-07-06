@@ -39,9 +39,9 @@ commands fail.
 
 - `./dd-test-optimization-validation-manifest.json`
 - `./dd-test-optimization-validation-results`
-- forced local Basic Reporting results for each supported runnable framework
-- CI wiring findings for each replayable CI test job, or an explicit skip/blocker when forced local
-  Basic Reporting did not pass or CI wiring could not be reproduced locally
+- direct-initialization Basic Reporting results for each supported runnable framework
+- CI wiring findings for each replayable CI test job, or an explicit skip/blocker when Basic
+  Reporting did not pass or CI wiring could not be reproduced locally
 - advanced feature results for each framework whose Basic Reporting passed
 - a concise console report ordered as Basic Reporting, CI wiring, then advanced features
 - any `ci/test/validation#pako:...` UI path or paths emitted by the validator
@@ -55,10 +55,12 @@ commands fail.
 4. Discover every test framework present in the repository.
 5. Install declared project dependencies or run documented setup only when needed for runner
    availability.
-6. Prefer a replayable CI-derived test command as `existingTestCommand` for each framework. Fall
-   back to local package scripts only when CI discovery fails, is unsupported, or cannot be safely
-   replayed.
-7. Run each selected command without adding Datadog instrumentation and record the preflight result.
+6. Prefer the test command identified from CI as `existingTestCommand` for each framework, but keep
+   `existingTestCommand` Datadog-clean: do not include CI-provided `NODE_OPTIONS` or Datadog env in
+   this command. Fall back to local package scripts only when CI discovery fails, is unsupported, or
+   cannot be safely replayed.
+7. Run each selected `existingTestCommand` without adding Datadog instrumentation and record the
+   preflight result.
 8. Immediately write `./dd-test-optimization-validation-manifest.json` with framework detection,
    CI wiring evidence, existing commands, preflight results, and non-runnable reasons.
 9. Create and verify temporary generated validation tests for each runnable framework.
@@ -66,6 +68,22 @@ commands fail.
 11. Update `./dd-test-optimization-validation-manifest.json` with generated test strategies.
 12. Run `dd-trace/ci/validate-test-optimization`.
 13. Report Basic Reporting, CI wiring, and advanced feature results separately, including the UI path.
+
+## Command Roles
+
+Use these roles consistently. Most bad manifests blur these fields.
+
+| Field | Purpose | Datadog env allowed? | May reference generated files? |
+| --- | --- | --- | --- |
+| `existingTestCommand` | Small real project test command used for preflight and direct-initialization Basic Reporting. Prefer the test command selected from CI, but remove CI Datadog initialization. | No. Keep it Datadog-clean. | No. Generated files are not present when Basic Reporting starts. |
+| `preflight` | The dd-trace-less result of `existingTestCommand`. | No. | No. |
+| `forcedLocalCommand` | Optional direct runner command for Basic Reporting when `existingTestCommand` is too broad or wrapper-heavy. | No. The validator adds the required Datadog initialization. | No. Generated files are not present when Basic Reporting starts. |
+| `ciWiringCommand` | Replay of the CI test step to prove whether CI-provided initialization reaches the final test process. | Yes, but only when the CI workflow configured those variables. Preserve CI `NODE_OPTIONS` and Datadog env here. | No. This must represent the CI job's real test command. |
+| `generatedTestStrategy.scenarios[*].runCommand` | Commands for temporary generated tests used by EFD, ATR, and Test Management checks. | No. The validator adds scenario-specific Datadog initialization. | Yes. These commands are the only ones that may target generated validation files. |
+
+For every runnable framework, `existingTestCommand` and `preflight` are required. `forcedLocalCommand`
+is optional and must target an existing, stable project test command or direct project runner command;
+it must not depend on generated validation files.
 
 ## Optional Target Framework
 
@@ -94,12 +112,13 @@ Create a complete, verified manifest and report that distinguish two validation 
 
 1. **CI wiring validation**: does the customer's CI-shaped test command already pass Datadog Test
    Optimization initialization to the process that actually runs tests?
-2. **Forced local capability validation**: can this repository, framework, and installed `dd-trace`
-   report when the required Datadog setup reaches the test runner directly?
+2. **Direct-initialization capability validation**: can this repository, framework, and installed
+   `dd-trace` report when the required Datadog setup reaches the test runner directly?
 
-The CI wiring path is the primary customer question. Forced local Basic Reporting is the prerequisite
-diagnostic control: CI wiring should only be interpreted after the selected framework/test command
-has proven it can report when the required Test Optimization environment reaches the test runner.
+The CI wiring path is the primary customer question. Direct-initialization Basic Reporting is the
+prerequisite diagnostic control: CI wiring should only be interpreted after the selected
+framework/test command has proven it can report when the required Test Optimization environment
+reaches the test runner.
 
 Create a manifest that tells a deterministic validator:
 
@@ -113,10 +132,10 @@ Create a manifest that tells a deterministic validator:
 6. Which generated test identities the validator should expect in Datadog payloads.
 
 The manifest is discovery only. The deterministic validator replays any declared setup commands,
-starts the mock intake, runs forced local Basic Reporting with the required Datadog setup added to
-the selected test command, runs `ciWiringCommand` with only the CI-provided setup when Basic
-Reporting passed and a CI command is present, then runs advanced feature checks. Do not treat a
-forced local validator pass as proof that CI wiring is correct; report the CI wiring result
+starts the mock intake, runs Basic Reporting with the required Datadog setup added directly to the
+selected test command, runs `ciWiringCommand` with only the CI-provided setup when Basic Reporting
+passed and a CI command is present, then runs advanced feature checks. Do not treat a
+direct-initialization validator pass as proof that CI wiring is correct; report the CI wiring result
 separately.
 
 For Vitest, the validator injects both the Test Optimization init preload and
@@ -125,9 +144,9 @@ For Vitest, the validator injects both the Test Optimization init preload and
 Before live validation, the deterministic validator also runs `dd-trace/ci/diagnose.js`. Static
 diagnosis can stop live execution for known hard blockers such as unsupported frameworks
 (`node:test`, AVA, tap, Jasmine, Karma, uvu, TestCafe) or unsupported supported-framework versions.
-Advisory findings such as missing static `NODE_OPTIONS` do not block this validator because forced
-local Basic Reporting is intentionally testing whether the project can report when the required
-Datadog setup reaches the test runner directly.
+Advisory findings such as missing static `NODE_OPTIONS` do not block this validator because
+direct-initialization Basic Reporting is intentionally testing whether the project can report when
+the required Datadog setup reaches the test runner directly.
 
 ## Validation Paths
 
@@ -157,13 +176,14 @@ CI wiring validation can pass only when the CI-shaped command appears to run the
 the CI-provided environment already initializes Test Optimization in the final test process. If you
 cannot prove that locally, report CI wiring as `skip` or `fail` with the concrete reason.
 
-### Forced Local Capability Validation
+### Direct-Initialization Capability Validation
 
-The deterministic validator's forced local scenarios may inject `NODE_OPTIONS=-r dd-trace/ci/init`,
-and for Vitest may also inject `dd-trace/register.js`, while redirecting traffic to the local fake
-intake.
+The deterministic validator's direct-initialization scenarios may inject
+`NODE_OPTIONS=-r dd-trace/ci/init`, and for Vitest may also inject `dd-trace/register.js`, while
+redirecting traffic to the local fake intake.
 
-Forced local scenarios also suppress Datadog side channels that are not part of this validation.
+Direct-initialization scenarios also suppress Datadog side channels that are not part of this
+validation.
 This keeps the fake intake focused on Test Optimization test-cycle events and the scenario-specific
 endpoints the validator intentionally enables:
 
@@ -173,23 +193,32 @@ endpoints the validator intentionally enables:
 - `DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED=false`
 - `DD_TEST_FAILED_TEST_REPLAY_ENABLED=false`
 
-Do not treat those forced-local suppressions as customer CI recommendations. In real CI, git upload
-and impacted-test detection may be required for normal Test Optimization features. In this
-validator, they are disabled because they can create unrelated intake traffic, large git packfile
-uploads, extra debugger/log endpoints, or impacted-test behavior that distracts from the question
-being validated.
+Do not treat those direct-initialization suppressions as customer CI recommendations. In real CI,
+git upload and impacted-test detection may be required for normal Test Optimization features. In
+this validator, they are disabled because they can create unrelated intake traffic, large git
+packfile uploads, extra debugger/log endpoints, or impacted-test behavior that distracts from the
+question being validated.
 
-Forced local validation proves that the framework and `dd-trace` can report when configured
+Direct-initialization validation proves that the framework and `dd-trace` can report when configured
 correctly. It does not prove that the customer's CI workflow is wired correctly.
 
-If forced local Basic Reporting passes but CI wiring fails, explain the differential in customer
-terms: the test command can report data when `dd-trace` is initialized correctly, but the CI-shaped
+If direct-initialization Basic Reporting passes but CI wiring fails, explain the differential in
+customer terms:
+
+- The test command was identified.
+- When that command runs with the required Datadog initialization applied directly, test data is
+  reported correctly to the mock intake.
+- The CI job running the test command was identified.
+- When the command runs with only the context provided by the CI job, test data is not reported to
+  the mock intake.
+
+In customer terms, the tests can report when `dd-trace` is initialized correctly, but the CI-shaped
 path runs the tests without the required Datadog setup reaching the final test runner. This often
 happens when a package manager, monorepo runner, or wrapper sits between the CI workflow command and
 the real test process and drops `NODE_OPTIONS=-r dd-trace/ci/init` or other required Datadog
-environment. If forced local Basic Reporting fails, do not diagnose CI wiring yet; the selected test
-command, dependency setup, framework support, or local Test Optimization capability must be fixed
-first.
+environment. If direct-initialization Basic Reporting fails, do not diagnose CI wiring yet; the
+selected test command, dependency setup, framework support, or local Test Optimization capability
+must be fixed first.
 
 ## CI Workflow Discovery
 
@@ -353,13 +382,14 @@ Recognize these CI systems and extract test-command evidence when practical:
   declared package-manager version. If it does not, use the Corepack-backed command shape that
   matches `packageManager`, or mark the framework `requires_manual_setup` with the observed version
   mismatch.
-- For local fallback and forced local generated-test commands, prefer direct framework runner
+- For local fallback and direct-initialization generated-test commands, prefer direct framework runner
   commands over broad package-script wrappers when both are equivalent and safe. For example, if
   `scripts.test` is only `vitest run`, prefer the package manager's direct runner form such as
-  `pnpm vitest run <file>` over `pnpm test <file>`. This keeps forced local validation focused on
-  the test process and avoids package-script wrappers that can receive `NODE_OPTIONS` without
-  propagating Test Optimization initialization to the final runner. Do not apply this preference to
-  CI wiring validation when the customer's CI job intentionally uses the package-script wrapper.
+  `pnpm vitest run <file>` over `pnpm test <file>`. This keeps direct-initialization validation
+  focused on the test process and avoids package-script wrappers that can receive `NODE_OPTIONS`
+  without propagating Test Optimization initialization to the final runner. Do not apply this
+  preference to CI wiring validation when the customer's CI job intentionally uses the package-script
+  wrapper.
 - Do not use benchmark or performance commands as representative test commands. For Vitest,
   `vitest bench`, benchmark package scripts, and `*.bench.*` files that use `bench` are not normal
   test runs and may emit session/module/suite events without per-test events. If no normal
@@ -368,7 +398,7 @@ Recognize these CI systems and extract test-command evidence when practical:
 - For Jest, record non-default `runner` configuration from `jest.config.*` or `package.json`
   `jest.runner` in the manifest evidence. Custom Jest runners such as `jest-light-runner` can run
   tests while bypassing the lifecycle hooks dd-trace uses to report individual suites and tests. If
-  forced local Basic Reporting fails with only session/module events, explain this as a custom
+  Basic Reporting fails with only session/module events, explain this as a custom
   runner compatibility issue before discussing CI wiring.
 - Avoid snapshot-update, golden-output, export-matrix, or very broad generated-list tests as the
   representative command when smaller stable tests exist. These files often fail for repository
@@ -385,14 +415,19 @@ Recognize these CI systems and extract test-command evidence when practical:
   repository documentation. If the required setup is unclear, mark the framework
   `requires_manual_setup` and explain the missing step in `notes`.
 - Do not include secrets. Record required environment variable names only.
+- `existingTestCommand`, `preflight`, and `forcedLocalCommand` must be Datadog-clean. Do not add
+  `dd-trace/ci/init`, `dd-trace/register.js`, `NODE_OPTIONS`, or Datadog-specific environment
+  variables to them manually. These commands prove that the selected tests run before Datadog is
+  added by the validator.
 - For CI wiring commands, preserve `NODE_OPTIONS` and Datadog-specific environment variables exactly
   when they are configured by the CI workflow. If a secret value is needed for local fake-intake
   replay, use an explicit safe dummy value, not a shell placeholder like `${SECRET_NAME}`, and
-  record the original secret variable name in CI metadata. For forced local or locally invented
-  commands, do not add `dd-trace/ci/init`, `dd-trace/register.js`, `NODE_OPTIONS`, or
-  Datadog-specific env vars manually; the validator owns forced injection and the forced-local
-  side-channel suppressions listed above.
-- All paths must be absolute.
+  record the original secret variable name in CI metadata.
+- Schema path fields must be absolute: `repository.root`, `project.root`, `project.packageJson`,
+  entries in `project.configFiles`, every command `cwd`, generated file paths,
+  `generatedTestStrategy.cleanupPaths`, and generated test identity `file` values. Command
+  arguments may contain relative paths when that is the real command shape, such as a relative test
+  file argument interpreted from the command `cwd`.
 - A generated test strategy is `verified` only if you created the temporary file or files, ran at
   least the stable passing generated scenario without Datadog instrumentation, and deleted the files
   afterward.
@@ -435,8 +470,8 @@ entries being written. Once supported frameworks, non-runnable frameworks, and o
 runnable framework are known, write the basic manifest before doing any more exploration.
 
 For Jest projects with multiple configured projects or custom root directories, verify that generated
-forced-local commands run only the intended file. If `npm test -- <file>` or a package script starts
-unrelated suites, stop that forced-local attempt and use a direct runner command with
+direct-initialization commands run only the intended file. If `npm test -- <file>` or a package script starts
+unrelated suites, stop that direct-initialization attempt and use a direct runner command with
 `--runTestsByPath` and the repository's required config/project flags. Record the broad-run attempt
 in `notes`; do not let it continue as the generated-test preflight. For CI wiring validation,
 preserve the CI test command even when it is broad, and record the breadth explicitly.
@@ -454,16 +489,16 @@ path you are documenting:
 - For CI wiring validation, preserve the CI-defined value exactly as configuration evidence, except
   for replacing secret expansions with placeholders and recording the original variable names. Do
   not move the preload to a different process or rewrite the command into a cleaner local shape.
-- For forced local validation, do not use a package script with inline `NODE_OPTIONS` unless there
+- For direct-initialization validation, do not use a package script with inline `NODE_OPTIONS` unless there
   is no safer command shape. Inline `NODE_OPTIONS` can shadow or interfere with the validator's
   injected Test Optimization preload. Prefer a direct runner command and move only
   project-required, non-Datadog Node options into `command.env.NODE_OPTIONS`; the validator will
   merge that value with its own Test Optimization preloads.
 
 Never add `dd-trace/ci/init`, `dd-trace/register.js`, or Datadog-specific environment variables to
-forced-local manifest commands manually. Record any avoided package script and direct equivalent in
-`notes`. If the package script is the only runnable forced-local form, record that the inline
-`NODE_OPTIONS` may prevent validation and mark the forced-local strategy limited or not possible.
+direct-initialization manifest commands manually. Record any avoided package script and direct
+equivalent in `notes`. If the package script is the only runnable direct-initialization form, record
+that the inline `NODE_OPTIONS` may prevent validation and mark the strategy limited or not possible.
 
 Do not use a test framework's own source-tree runner as customer validation evidence. For example,
 inside the Mocha repository, `node ./bin/mocha.js ...` runs Mocha's local source files rather than
@@ -588,7 +623,7 @@ Use the smallest valid shape:
 - `existingTestCommand` and `preflight` only when a real project test command was selected. When a
   runnable CI test step exists, `existingTestCommand` should be derived from that CI step.
 - optional extension fields such as `ciWiringCommand`, `ciWiring`, and `forcedLocalCommand` when
-  they help separate CI wiring evidence from forced local control evidence. The schema supports
+  they help separate CI wiring evidence from direct-initialization control evidence. The schema supports
   these fields, and the validator executes `ciWiringCommand` when present.
 - `generatedTestStrategy` only when generated tests were verified or deliberately proposed/skipped
 
@@ -624,6 +659,15 @@ are involved:
       "setup-node",
       "install"
     ],
+    "whySelected": "The GitHub Actions unit job runs this step after dependency installation.",
+    "packageScriptExpansionChain": [
+      "pnpm test",
+      "jest"
+    ],
+    "runnerToolChain": [
+      "pnpm test",
+      "jest"
+    ],
     "unresolved": [
       "DD_API_KEY value is secret and was replaced with a placeholder"
     ],
@@ -644,13 +688,13 @@ are involved:
     "timeoutMs": 300000
   },
   "forcedLocalCommand": {
-    "description": "Direct Jest command used only for forced local generated-test probing",
+    "description": "Direct Jest command for an existing stable project test",
     "cwd": "/absolute/path/to/repo/packages/app",
     "argv": [
       "pnpm",
       "jest",
       "--runTestsByPath",
-      "/absolute/path/to/repo/packages/app/src/dd-test-optimization-validation.test.js"
+      "/absolute/path/to/repo/packages/app/src/sum.test.js"
     ],
     "timeoutMs": 300000
   }
@@ -695,9 +739,11 @@ supported runner such as Vitest, Jest, or Mocha is present in the same repositor
 supported runner and report the omitted native runtime command separately.
 
 A framework entry must not be marked `runnable` only because a generated validation file passed.
-Basic Reporting uses `forcedLocalCommand` when present and otherwise uses `existingTestCommand`, so
-at least one of those commands must be a real project test command or a deliberately safe direct
-runner command that can run without the generated files being present.
+For every runnable framework, `existingTestCommand` and `preflight` are required. Basic Reporting
+uses `forcedLocalCommand` when present and otherwise uses `existingTestCommand`; both command roles
+must target real project tests or deliberately safe direct runner commands that can run without the
+generated files being present. Generated files are written only inside advanced scenario preparation,
+after Basic Reporting and CI wiring.
 
 If an existing test command fails because tests fail or the repository is missing generated source,
 compiled artifacts, browser binaries, a dev server, or another project setup step, record the
@@ -824,6 +870,9 @@ uses those notes as the customer-facing reason when Basic Reporting cannot run.
 The generated strategy must give the deterministic validator enough information to recreate
 validation tests without using intelligence.
 
+Generated files are available only for advanced scenarios. Do not reference generated validation
+files from `existingTestCommand`, `preflight`, `forcedLocalCommand`, or `ciWiringCommand`.
+
 For each runnable framework, include generated file contents as `contentLines`. The validator can
 join those lines with newline characters and write the files exactly.
 
@@ -872,33 +921,36 @@ validator shipped with the installed library.
 
 Do not manually evaluate Datadog payloads. Do not inspect or rewrite validator internals. Do not
 decide whether Test Optimization behavior is correct by reading raw intake requests yourself. The
-deterministic validator is the source of truth for local CI wiring replay and forced local feature
-validation.
+deterministic validator is the source of truth for local CI wiring replay and
+direct-initialization feature validation.
 
-The validator separates forced local capability from CI wiring when the manifest includes
+The validator separates direct-initialization capability from CI wiring when the manifest includes
 `ciWiringCommand`:
 
-- Forced local Basic Reporting: injects Test Optimization initialization into the selected command
-  and proves the repository/framework can emit the required event hierarchy when configured
-  correctly. It also sets `DD_CIVISIBILITY_GIT_UPLOAD_ENABLED=false` and other forced-local
-  suppressions so git metadata upload, impacted-test detection, telemetry, and failed-test replay
-  do not distract the fake-intake diagnosis.
+- Basic Reporting: injects Test Optimization initialization directly into the selected command and
+  proves the repository/framework can emit the required event hierarchy when configured correctly.
+  It also sets `DD_CIVISIBILITY_GIT_UPLOAD_ENABLED=false` and other validator suppressions so git
+  metadata upload, impacted-test detection, telemetry, and failed-test replay do not distract the
+  fake-intake diagnosis.
 - CI wiring: runs `ciWiringCommand` with fake-intake transport overrides only. It does not add
   `dd-trace/ci/init`, `dd-trace/register.js`, `DD_CIVISIBILITY_ENABLED`, or `NODE_OPTIONS`. This is
-  only meaningful after forced local Basic Reporting passes.
+  only meaningful after Basic Reporting passes. When this path runs tests but emits no Test
+  Optimization events, the validator may also run a lightweight `NODE_OPTIONS` preload probe to
+  record whether initialization reaches only an intermediate wrapper, such as Nx, Turbo, Lage, npm,
+  pnpm, or Yarn, or reaches the final Jest/Vitest/Mocha/etc. process.
 - Advanced features: EFD, ATR, and Test Management run after Basic Reporting passes.
 
 Therefore:
 
-- A forced local Basic Reporting pass means the repository can report when the required Datadog
+- A Basic Reporting pass means the repository can report when the required Datadog
   setup reaches the selected test runner directly.
 - A CI wiring pass means the CI-shaped command emitted Test Optimization events using the
   CI-provided Datadog setup, without the validator adding `dd-trace` preloads.
-- A forced local Basic Reporting failure means the framework/library setup, selected command, or
+- A Basic Reporting failure means the framework/library setup, selected command, or
   local capability may be unsupported or broken even when the required Datadog setup reaches the
   selected command directly.
-- A forced local pass must not be reported as “CI wiring passed” unless the separate CI wiring path
-  also proved that the CI-provided initialization reaches the final test process.
+- A Basic Reporting pass must not be reported as “CI wiring passed” unless the separate CI wiring
+  path also proved that the CI-provided initialization reaches the final test process.
 
 First, locate the validator module:
 
@@ -996,7 +1048,7 @@ Include:
 - Path to `./dd-test-optimization-validation-manifest.json`
 - Path to `./dd-test-optimization-validation-results`
 - Validator exit code
-- Pass/fail/skip summary for forced local Basic Reporting by framework.
+- Pass/fail/skip summary for direct-initialization Basic Reporting by framework.
 - Pass/fail/skip summary for CI wiring by framework or CI job. If CI wiring was skipped, report
   whether Basic Reporting failed first, the provider was unsupported, workflow logic was unresolved,
   CI config was missing, or local replay was unsafe.
@@ -1010,6 +1062,14 @@ Include:
 - The exact test command associated with each failed scenario
 - The CI provider, workflow/config file, job/stage, step, matrix selection, runner/image/agent label,
   shell, working directory, and inherited environment for each CI-derived command when available
+- The normalized `ciCommandCandidate` details when available: selected provider/workflow/job/step,
+  exact selected command, why it was selected, workflow/job/step env, package script expansion
+  chain, and runner/tool chain
+- Any `initializationProbe` findings when CI wiring ran tests but emitted no Test Optimization
+  events, especially whether `NODE_OPTIONS` reached only a package manager or monorepo wrapper
+  rather than the final test runner process
+- Any structured `monorepoFindings`, such as Turbo env pass-through, Nx executor forwarding, Lage
+  task forwarding, or wrapper-level `NODE_OPTIONS` drops
 - Any unresolved CI expressions, includes, outputs, secrets, shared libraries, orb expansions,
   dynamic pipeline generation, or matrix values that affected replay confidence
 - Relevant stdout/stderr excerpts selected by the validator
@@ -1034,9 +1094,9 @@ Use this diagnosis language:
   monorepo runner, or wrapper between the CI step and the test runner, and make sure
   `NODE_OPTIONS=-r dd-trace/ci/init` and the Datadog environment variables are preserved.”
 - “CI wiring skipped because Basic Reporting failed” means no CI wiring conclusion was reached.
-- “Forced local Basic Reporting failed” means the selected command, framework/library setup, or local
-  capability may be unsupported or broken even when the required Datadog setup reaches the selected
-  command directly.
+- “Basic Reporting failed” means the selected command, framework/library setup, or local capability
+  may be unsupported or broken even when the required Datadog setup reaches the selected command
+  directly.
 - “Skipped” means the path was not safely runnable or not supported; include the concrete blocker.
 
 Do not summarize raw payloads unless the validator explicitly includes them in its report.

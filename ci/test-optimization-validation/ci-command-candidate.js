@@ -1,0 +1,97 @@
+'use strict'
+
+const {
+  getCommandDetails,
+  serializeDisplayCommand,
+} = require('./command-runner')
+
+const SENSITIVE_ENV_PATTERN = /(?:API_?KEY|APP_?KEY|TOKEN|SECRET|PASSWORD|PASS|CREDENTIAL)/i
+
+/**
+ * Builds the normalized CI command metadata shape shared by reports and UI payloads.
+ *
+ * @param {object} framework manifest framework entry
+ * @returns {object|undefined} CI command candidate context when available
+ */
+function buildCiCommandCandidate (framework) {
+  const ciWiring = framework.ciWiring || {}
+  const command = framework.ciWiringCommand
+
+  if (!command && !hasCiWiringContext(ciWiring)) return undefined
+
+  return removeUndefined({
+    provider: ciWiring.provider || undefined,
+    configFile: ciWiring.configFile || undefined,
+    workflow: ciWiring.workflow || undefined,
+    job: ciWiring.job || undefined,
+    step: ciWiring.step || undefined,
+    runner: ciWiring.runner || undefined,
+    shell: ciWiring.shell || undefined,
+    command: command ? serializeDisplayCommand(command) : ciWiring.command,
+    cwd: command?.cwd || ciWiring.workingDirectory,
+    whySelected: ciWiring.whySelected || ciWiring.selectionReason || ciWiring.diagnosis,
+    env: buildCiEnvSummary(ciWiring, command),
+    packageScriptExpansionChain: getFirstArray(
+      ciWiring.packageScriptExpansionChain,
+      ciWiring.scriptExpansionChain,
+      ciWiring.commandExpansion
+    ),
+    runnerToolChain: getFirstArray(
+      ciWiring.runnerToolChain,
+      ciWiring.toolChain,
+      ciWiring.commandChain
+    ),
+    setupCommandIds: ciWiring.setupCommandIds,
+    unresolved: ciWiring.unresolved,
+    commandDetails: command && getCommandDetails(command),
+  })
+}
+
+function buildCiEnvSummary (ciWiring, command) {
+  const summary = removeUndefined({
+    workflow: sanitizeEnv(ciWiring.workflowEnv || ciWiring.env?.workflow),
+    job: sanitizeEnv(ciWiring.jobEnv || ciWiring.env?.job),
+    step: sanitizeEnv(ciWiring.stepEnv || command?.env || ciWiring.env?.step),
+    inherited: sanitizeEnv(ciWiring.inheritedEnv),
+  })
+
+  return Object.keys(summary).length > 0 ? summary : undefined
+}
+
+function sanitizeEnv (env) {
+  if (!env || typeof env !== 'object' || Array.isArray(env)) return undefined
+
+  const sanitized = {}
+  for (const [name, value] of Object.entries(env)) {
+    sanitized[name] = sanitizeEnvValue(name, value)
+  }
+  return Object.keys(sanitized).length > 0 ? sanitized : undefined
+}
+
+function sanitizeEnvValue (name, value) {
+  if (SENSITIVE_ENV_PATTERN.test(name)) return '<redacted>'
+  if (value === undefined) return undefined
+  return String(value)
+}
+
+function hasCiWiringContext (ciWiring) {
+  return Object.keys(ciWiring).length > 0
+}
+
+function getFirstArray (...values) {
+  for (const value of values) {
+    if (Array.isArray(value) && value.length > 0) return value
+  }
+}
+
+function removeUndefined (object) {
+  const result = {}
+  for (const [key, value] of Object.entries(object)) {
+    if (value !== undefined) result[key] = value
+  }
+  return result
+}
+
+module.exports = {
+  buildCiCommandCandidate,
+}

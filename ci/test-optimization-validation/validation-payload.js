@@ -3,6 +3,7 @@
 const fs = require('fs')
 const zlib = require('zlib')
 
+const { buildCiCommandCandidate } = require('./ci-command-candidate')
 const {
   getCommandDetails,
   serializeDisplayCommand,
@@ -67,6 +68,7 @@ function buildFrameworkPayload ({ manifest, framework, frameworkResults, artifac
       htmlPath: artifacts.htmlPath,
     },
     framework: buildFrameworkContext({ framework, frameworkResults }),
+    ciCommandCandidate: buildCiCommandCandidate(framework || {}),
     ciDiscovery: buildCiDiscoveryContext(manifest),
   }
 }

@@ -6,6 +6,7 @@ const fs = require('fs')
 const path = require('path')
 const { pathToFileURL } = require('url')
 
+const { buildCiCommandCandidate } = require('./ci-command-candidate')
 const { normalizeRequests } = require('./payload-normalizer')
 const { buildValidationPayloads } = require('./validation-payload')
 
@@ -52,6 +53,7 @@ function writeReport ({ manifest, results, out, intake, staticDiagnosis }) {
     generatedAt: new Date().toISOString(),
     manifestPath: manifest.__path,
     ciDiscovery: manifest.ciDiscovery,
+    ciCommandCandidates: getCiCommandCandidates(manifest),
     results,
     artifacts: {
       ...baseArtifacts,
@@ -91,6 +93,7 @@ function renderMarkdown (report) {
   appendMarkdownResultSection(lines, 'CI Wiring', getCiWiringResults(report.results))
   appendMarkdownResultSection(lines, 'Advanced Features', getAdvancedFeatureResults(report.results))
   appendMarkdownCiDiscovery(lines, report.ciDiscovery)
+  appendMarkdownCiCommandCandidates(lines, report.ciCommandCandidates)
 
   const diagnosticResults = getDiagnosticOnlyResults(report.results)
   if (diagnosticResults.length > 0) {
@@ -129,6 +132,7 @@ function renderHtml (report) {
     getAdvancedFeatureResults(report.results)
   )
   const ciDiscoverySection = renderHtmlCiDiscovery(report.ciDiscovery)
+  const ciCommandCandidatesSection = renderHtmlCiCommandCandidates(report.ciCommandCandidates)
   const diagnosticItems = getDiagnosticOnlyResults(report.results).map(result => {
     return `<li><strong>${escapeHtml(result.status.toUpperCase())}</strong> ${escapeHtml(result.frameworkId)} - ` +
       `${escapeHtml(result.diagnosis)}</li>`
@@ -170,6 +174,7 @@ function renderHtml (report) {
     ${ciWiringSection}
     ${advancedFeaturesSection}
     ${ciDiscoverySection}
+    ${ciCommandCandidatesSection}
     ${diagnosticSection}
     <h2>Framework Context</h2>
     <ul>
@@ -183,6 +188,21 @@ function renderHtml (report) {
 </body>
 </html>
 `
+}
+
+function getCiCommandCandidates (manifest) {
+  const candidates = []
+
+  for (const framework of manifest.frameworks || []) {
+    const candidate = buildCiCommandCandidate(framework)
+    if (!candidate) continue
+    candidates.push({
+      frameworkId: framework.id,
+      ...candidate,
+    })
+  }
+
+  return candidates
 }
 
 function appendMarkdownCiDiscovery (lines, ciDiscovery) {
@@ -199,6 +219,16 @@ function appendMarkdownCiDiscovery (lines, ciDiscovery) {
   appendMarkdownList(lines, 'Warnings', ciDiscovery.warnings)
   appendMarkdownList(lines, 'Contradictions', ciDiscovery.contradictions)
   appendMarkdownList(lines, 'Notes', ciDiscovery.notes)
+  lines.push('')
+}
+
+function appendMarkdownCiCommandCandidates (lines, candidates) {
+  if (!Array.isArray(candidates) || candidates.length === 0) return
+
+  lines.push('## CI Command Candidates', '')
+  for (const candidate of candidates) {
+    lines.push(`- ${candidate.frameworkId}: ${formatCiCommandCandidate(candidate, { markdown: true })}`)
+  }
   lines.push('')
 }
 
@@ -220,6 +250,36 @@ function renderHtmlCiDiscovery (ciDiscovery) {
       ${renderHtmlListItem('Contradictions', ciDiscovery.contradictions)}
       ${renderHtmlListItem('Notes', ciDiscovery.notes)}
     </ul>`
+}
+
+function renderHtmlCiCommandCandidates (candidates) {
+  if (!Array.isArray(candidates) || candidates.length === 0) return ''
+
+  const items = candidates.map(candidate => {
+    return `<li><code>${escapeHtml(candidate.frameworkId)}</code>: ` +
+      `${escapeHtml(formatCiCommandCandidate(candidate))}</li>`
+  }).join('\n')
+
+  return `<h2>CI Command Candidates</h2>
+    <ul>
+      ${items}
+    </ul>`
+}
+
+function formatCiCommandCandidate (candidate, options = {}) {
+  const format = options.markdown
+    ? value => `\`${value}\``
+    : value => value
+  const parts = [
+    candidate.provider,
+    candidate.workflow && `workflow ${format(candidate.workflow)}`,
+    candidate.job && `job ${format(candidate.job)}`,
+    candidate.step && `step ${format(candidate.step)}`,
+    candidate.command && `command ${format(candidate.command)}`,
+    candidate.cwd && `cwd ${format(candidate.cwd)}`,
+  ].filter(Boolean)
+
+  return parts.length > 0 ? parts.join('; ') : 'CI command metadata was not determined'
 }
 
 function renderHtmlListItem (label, values) {

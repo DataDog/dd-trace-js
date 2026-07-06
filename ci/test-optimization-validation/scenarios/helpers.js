@@ -131,15 +131,67 @@ async function prepareGeneratedScenario (framework, scenarioId) {
 function requireGeneratedScenario (framework, scenarioId, scenarioName) {
   const strategy = framework.generatedTestStrategy
   if (!strategy || strategy.status !== 'verified') {
-    return skip(framework, scenarioName, 'No verified generated test strategy is available.')
+    return skip(
+      framework,
+      scenarioName,
+      'Skipped because no verified generated test strategy is available for this advanced feature.',
+      getGeneratedStrategySkipEvidence(framework, scenarioName, scenarioId)
+    )
   }
 
   const scenario = findGeneratedScenario(framework, scenarioId)
   if (!scenario) {
-    return skip(framework, scenarioName, `Generated scenario "${scenarioId}" is not present in the manifest.`)
+    return skip(
+      framework,
+      scenarioName,
+      `Skipped because generated scenario "${scenarioId}" is not present in the manifest.`,
+      {
+        featureEligibility: {
+          eligible: false,
+          blockedBy: 'generated-scenario',
+          reasonCode: 'generated-scenario-missing',
+          scenario: scenarioName,
+          requiredGeneratedScenario: scenarioId,
+        },
+      }
+    )
   }
 
   return null
+}
+
+/**
+ * Builds stable evidence for advanced feature checks that cannot run without generated tests.
+ *
+ * @param {object} framework manifest framework entry
+ * @param {string} scenarioName advanced scenario name
+ * @param {string} scenarioId required generated scenario id
+ * @returns {object} skip evidence for reports and UI payloads
+ */
+function getGeneratedStrategySkipEvidence (framework, scenarioName, scenarioId) {
+  const strategy = framework.generatedTestStrategy
+  const status = strategy?.status || 'missing'
+  let reasonCode = 'generated-test-strategy-missing'
+
+  if (status === 'proposed') {
+    reasonCode = 'generated-test-strategy-proposed-only'
+  } else if (status === 'not_possible') {
+    reasonCode = 'generated-test-strategy-not-possible'
+  } else if (status !== 'missing') {
+    reasonCode = 'generated-test-strategy-not-verified'
+  }
+
+  return {
+    featureEligibility: {
+      eligible: false,
+      blockedBy: 'generated-test-strategy',
+      reason: strategy?.reason,
+      reasonCode,
+      scenario: scenarioName,
+      strategyStatus: status,
+      requiredGeneratedScenario: scenarioId,
+    },
+  }
 }
 
 function basicEventEvidence (events) {
@@ -327,12 +379,12 @@ function uniqueLines (lines) {
   return unique
 }
 
-function pass (framework, scenario, diagnosis, evidence, outDir) {
-  return result(framework, scenario, 'pass', diagnosis, evidence, outDir)
+function pass (framework, scenario, diagnosis, evidence, outDir, extraArtifacts) {
+  return result(framework, scenario, 'pass', diagnosis, evidence, outDir, extraArtifacts)
 }
 
-function fail (framework, scenario, diagnosis, evidence, outDir) {
-  return result(framework, scenario, 'fail', diagnosis, evidence, outDir)
+function fail (framework, scenario, diagnosis, evidence, outDir, extraArtifacts) {
+  return result(framework, scenario, 'fail', diagnosis, evidence, outDir, extraArtifacts)
 }
 
 function skip (framework, scenario, diagnosis, evidence = {}) {
@@ -343,22 +395,30 @@ function error (framework, scenario, err, outDir) {
   return result(framework, scenario, 'error', err && err.stack ? err.stack : String(err), {}, outDir)
 }
 
-function result (framework, scenario, status, diagnosis, evidence, outDir) {
+function result (framework, scenario, status, diagnosis, evidence, outDir, extraArtifacts) {
+  const artifacts = outDir
+    ? [
+        path.join(outDir, 'command.json'),
+        path.join(outDir, 'stdout.txt'),
+        path.join(outDir, 'stderr.txt'),
+        path.join(outDir, 'events.ndjson'),
+        path.join(outDir, 'result.json'),
+      ]
+    : []
+
+  if (Array.isArray(extraArtifacts)) {
+    artifacts.push(...extraArtifacts)
+  } else if (extraArtifacts && typeof extraArtifacts === 'object') {
+    artifacts.push(...Object.values(extraArtifacts).filter(Boolean))
+  }
+
   return {
     frameworkId: framework.id,
     scenario,
     status,
     diagnosis,
     evidence,
-    artifacts: outDir
-      ? [
-          path.join(outDir, 'command.json'),
-          path.join(outDir, 'stdout.txt'),
-          path.join(outDir, 'stderr.txt'),
-          path.join(outDir, 'events.ndjson'),
-          path.join(outDir, 'result.json'),
-        ]
-      : [],
+    artifacts,
   }
 }
 

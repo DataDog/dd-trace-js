@@ -33,6 +33,27 @@ const payload = JSON.parse(pako.inflate(compressed, { to: 'string' }))
     "htmlFileUrl": "file:///...",
     "htmlPath": "/..."
   },
+  "ciCommandCandidate": {
+    "provider": "github-actions",
+    "configFile": "/absolute/path/to/repo/.github/workflows/ci.yml",
+    "workflow": "ci",
+    "job": "unit",
+    "step": "Run tests",
+    "command": "pnpm test",
+    "cwd": "/absolute/path/to/repo",
+    "whySelected": "The workflow step runs the unit test package script.",
+    "env": {
+      "workflow": {},
+      "job": {
+        "NODE_OPTIONS": "-r dd-trace/ci/init"
+      },
+      "step": {
+        "DD_API_KEY": "<redacted>"
+      }
+    },
+    "packageScriptExpansionChain": ["pnpm test", "nx run-many --target=test"],
+    "runnerToolChain": ["pnpm test", "nx", "jest"]
+  },
   "ciDiscovery": {
     "searched": [".github/workflows/*.yml", ".github/workflows/*.yaml"],
     "found": [".github/workflows/ci.yml"],
@@ -80,6 +101,12 @@ be different when the command uses package-manager flags such as `--dir`, `--cwd
 
 If `contradictions` is non-empty, the UI should treat the CI wiring evidence as incomplete until
 the manifest is regenerated with hidden CI paths inspected explicitly.
+
+`ciCommandCandidate` is optional and appears when the manifest identified a CI test command. It is
+the normalized UI shape for the selected CI provider/workflow/job/step, exact selected command, why
+the command was selected, environment found at workflow/job/step scope, package-script expansion
+chain, and runner/tool chain. Sensitive environment values are redacted; `NODE_OPTIONS` and
+non-secret Datadog configuration are preserved because they are the wiring being diagnosed.
 
 ## Validator Artifacts
 
@@ -306,6 +333,65 @@ the local cause is already known and benchmark reruns can be slow.
 EFD, Auto Test Retries, and Test Management depend on Basic Reporting. When Basic Reporting fails
 for a framework, the validator skips those feature checks and includes the Basic Reporting diagnosis
 as the reason.
+
+CI wiring failures can include an independent initialization probe. The probe is a temporary
+`NODE_OPTIONS` preload that records which Node.js processes received the preload and whether known
+test-runner modules were observed. It is used only as wiring evidence; it is not a Datadog payload.
+
+```json
+{
+  "initializationProbe": {
+    "ran": true,
+    "commandExitCode": 0,
+    "commandTimedOut": false,
+    "processCount": 1,
+    "moduleLoadCount": 0,
+    "reachedAnyNodeProcess": true,
+    "reachedTestRunnerProcess": false,
+    "wrapperSignals": [
+      {
+        "name": "nx",
+        "kind": "wrapper",
+        "pid": 12345,
+        "source": "process-start",
+        "argv": ["node", "/absolute/path/to/tools/nx.js"]
+      }
+    ],
+    "testRunnerSignals": [],
+    "recordsPath": "/absolute/path/to/results/runs/jest-root/ci-wiring/initialization-probe/records.ndjson"
+  },
+  "monorepoFindings": [
+    {
+      "id": "node-options-not-observed-in-test-runner",
+      "tool": "node",
+      "reason": "The initialization probe reached an intermediate Node.js process but not the detected test runner.",
+      "recommendation": "Trace the command chain from the CI step to the test runner and find where NODE_OPTIONS is removed or replaced."
+    }
+  ]
+}
+```
+
+If `initializationProbe.reachedTestRunnerProcess` is `false` while wrapper or package-manager
+signals are present, the UI should explain that initialization reached an intermediate process but
+does not appear to reach Jest, Vitest, Mocha, or the detected final test runner.
+
+Skipped advanced feature checks can include `featureEligibility`:
+
+```json
+{
+  "featureEligibility": {
+    "eligible": false,
+    "blockedBy": "basic-reporting",
+    "reasonCode": "basic-reporting-failed",
+    "scenario": "efd"
+  }
+}
+```
+
+Known `reasonCode` values include `basic-reporting-failed`,
+`generated-test-strategy-missing`, `generated-test-strategy-proposed-only`,
+`generated-test-strategy-not-possible`, `generated-test-strategy-not-verified`, and
+`generated-scenario-missing`.
 
 When the selected Basic Reporting command exits non-zero, `check-events.evidence.commandFailure`
 contains compact stdout/stderr excerpts plus classified build/module-resolution/assertion lines.

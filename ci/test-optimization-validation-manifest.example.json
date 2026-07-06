@@ -95,6 +95,14 @@
           "DD_API_KEY"
         ],
         "setupCommandIds": [],
+        "whySelected": "The GitHub Actions unit job runs this step after dependency installation.",
+        "packageScriptExpansionChain": [
+          "npm test -- test/sum.test.js"
+        ],
+        "runnerToolChain": [
+          "npm test",
+          "jest"
+        ],
         "unresolved": [],
         "diagnosis": "CI wiring command is replayable locally."
       },

@@ -25,6 +25,27 @@ describe('test optimization validation payload', () => {
             existingTestCommand: {
               cwd: '/repo/packages/example-package/test-workdir',
             },
+            ciWiring: {
+              provider: 'github-actions',
+              configFile: '/repo/.github/workflows/test.yml',
+              workflow: 'test',
+              job: 'unit',
+              step: 'Run tests',
+              inheritedEnv: {
+                NODE_OPTIONS: '-r dd-trace/ci/init',
+                DD_API_KEY: 'secret-value',
+              },
+              diagnosis: 'Selected because the workflow step runs the package unit tests.',
+              runnerToolChain: ['pnpm test', 'jest'],
+            },
+            ciWiringCommand: {
+              cwd: '/repo/packages/example-package',
+              argv: ['pnpm', 'test'],
+              env: {
+                NODE_OPTIONS: '-r dd-trace/ci/init',
+                DD_API_KEY: 'secret-value',
+              },
+            },
           },
         ],
       },
@@ -50,6 +71,27 @@ describe('test optimization validation payload', () => {
       },
     })
 
+    assert.deepStrictEqual(payload.ciCommandCandidate, {
+      provider: 'github-actions',
+      configFile: '/repo/.github/workflows/test.yml',
+      workflow: 'test',
+      job: 'unit',
+      step: 'Run tests',
+      command: 'pnpm test',
+      cwd: '/repo/packages/example-package',
+      whySelected: 'Selected because the workflow step runs the package unit tests.',
+      env: {
+        step: {
+          NODE_OPTIONS: '-r dd-trace/ci/init',
+          DD_API_KEY: '<redacted>',
+        },
+        inherited: {
+          NODE_OPTIONS: '-r dd-trace/ci/init',
+          DD_API_KEY: '<redacted>',
+        },
+      },
+      runnerToolChain: ['pnpm test', 'jest'],
+    })
     assert.deepStrictEqual(payload.checks[0].steps.map(step => step.id), [
       'run-tests',
       'check-events',

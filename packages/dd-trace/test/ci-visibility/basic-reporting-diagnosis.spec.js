@@ -14,7 +14,7 @@ const {
 } = require('../../../../ci/test-optimization-validation/scenarios/basic-reporting')
 
 describe('test optimization basic reporting diagnosis', () => {
-  it('uses forcedLocalCommand for forced local Basic Reporting when present', () => {
+  it('uses forcedLocalCommand for direct-initialization Basic Reporting when present', () => {
     const existingTestCommand = { argv: ['npm', 'test'] }
     const forcedLocalCommand = { argv: ['npx', 'jest', '--runTestsByPath', 'test/example.test.js'] }
 
@@ -101,7 +101,7 @@ describe('test optimization basic reporting diagnosis', () => {
       assert.strictEqual(eventLevelFailure.kind, 'custom-jest-runner')
       assert.strictEqual(eventLevelFailure.customTestRunner.name, 'jest-light-runner')
       assert.strictEqual(eventLevelFailure.customTestRunner.source, configFile)
-      assert.match(eventLevelFailure.summary, /custom test runner `jest-light-runner`/)
+      assert.match(eventLevelFailure.summary, /custom Jest-compatible runner: `jest-light-runner`/)
       assert.match(eventLevelFailure.recommendation, /standard Jest runner/)
       assert.deepStrictEqual(eventLevelFailure.missingLevels, ['test_suite_end', 'test'])
       assert.strictEqual(shouldRunDebugRerun(eventLevelFailure, { exitCode: 0, timedOut: false }), false)

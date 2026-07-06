@@ -351,9 +351,10 @@ function getMissingEventDiagnosis ({ framework, result, evidence }) {
         missingLevels,
         customTestRunner: customJestRunner,
         signals: customJestRunner.signals,
-        summary: `The selected Jest command uses the custom test runner \`${customJestRunner.name}\`. ` +
-          'Test Optimization initialized, but this runner did not emit the Jest lifecycle events needed to ' +
-          'report individual suites and tests.',
+        summary: `We detected a custom Jest-compatible runner: \`${customJestRunner.name}\`. The test command ` +
+          'executes tests, but it does not use a currently supported Jest entrypoint. Test Optimization ' +
+          'initialized, but this runner did not emit the Jest lifecycle events needed to report individual ' +
+          'suites and tests.',
         recommendation: 'Try a standard Jest runner command for validation, or choose a test command that does not ' +
           'use the custom runner. If this project must use the custom runner, dd-trace may need explicit support ' +
           'for that runner before per-test reporting and advanced Test Optimization features can work.',

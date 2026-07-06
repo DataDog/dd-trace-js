@@ -237,6 +237,7 @@ function runDiagnosis (options = {}) {
   const textFiles = readTextFiles(root, files)
   const manifests = readPackageManifests(root, textFiles)
   const rootManifest = manifests.find(manifest => manifest.relativePath === 'package.json')
+  const rootPackageJsonState = getRootPackageJsonState(root)
   const scripts = collectScripts(manifests)
   const workflowFiles = textFiles.filter(file => isWorkflowFile(file.relativePath))
   const definitions = getFrameworkDefinitions(DD_MAJOR)
@@ -245,8 +246,8 @@ function runDiagnosis (options = {}) {
   const unsupportedFrameworks = detectUnsupportedFrameworks(UNSUPPORTED_FRAMEWORKS, manifests, scripts)
   const evidence = collectEvidence(textFiles, env)
 
-  checkPackageManifest(results, rootManifest)
-  checkDdTraceDependency(results, manifests)
+  checkPackageManifest(results, rootManifest, rootPackageJsonState)
+  checkDdTraceDependency(results, manifests, { truncatedFileScan: files.truncated, rootPackageJsonState })
   checkSupportedFrameworks(results, supportedFrameworks)
   checkUnsupportedFrameworks(results, unsupportedFrameworks, supportedFrameworks)
   checkInitialization(results, supportedFrameworks, evidence, env)
@@ -420,14 +421,47 @@ function readPackageManifests (root, textFiles) {
 }
 
 /**
+ * Checks whether the repository root has a package.json independently from the text-file scan.
+ *
+ * @param {string} root repository root
+ * @returns {{ exists: boolean }} root package.json state
+ */
+function getRootPackageJsonState (root) {
+  try {
+    return {
+      exists: fs.statSync(path.join(root, 'package.json')).isFile(),
+    }
+  } catch {
+    return {
+      exists: false,
+    }
+  }
+}
+
+/**
  * Checks that a root package.json exists.
  *
  * @param {Array<object>} results mutable result list
  * @param {object|undefined} rootManifest parsed root package manifest
+ * @param {object} rootPackageJsonState root package.json filesystem state
  */
-function checkPackageManifest (results, rootManifest) {
+function checkPackageManifest (results, rootManifest, rootPackageJsonState) {
   if (rootManifest) {
     addResult(results, 'ok', 'Root package.json found', 'Dependency and script checks can inspect package metadata.')
+    return
+  }
+
+  if (rootPackageJsonState.exists) {
+    addResult(
+      results,
+      'warning',
+      'Root package.json not determined',
+      'A root package.json file exists, but static diagnosis could not parse it as scanned text.',
+      {
+        recommendation:
+          'Check whether package.json is readable UTF-8 JSON and smaller than the static diagnosis file limit.',
+      }
+    )
     return
   }
 
@@ -445,8 +479,9 @@ function checkPackageManifest (results, rootManifest) {
  *
  * @param {Array<object>} results mutable result list
  * @param {Array<object>} manifests package manifests
+ * @param {object} options dependency check options
  */
-function checkDdTraceDependency (results, manifests) {
+function checkDdTraceDependency (results, manifests, options = {}) {
   const entries = findDependencyEntries(manifests, ['dd-trace'])
 
   if (entries.length) {
@@ -459,6 +494,18 @@ function checkDdTraceDependency (results, manifests) {
     return
   }
 
+  if (options.truncatedFileScan || (options.rootPackageJsonState?.exists && !hasParsedRootManifest(manifests))) {
+    addResult(
+      results,
+      'warning',
+      'dd-trace dependency not determined',
+      'Static diagnosis did not confirm a dd-trace dependency, but the file scan was incomplete or root package ' +
+        'metadata could not be parsed.',
+      { recommendation: 'Inspect the package that runs tests and install dd-trace there if it is absent.' }
+    )
+    return
+  }
+
   addResult(
     results,
     'warning',
@@ -466,6 +513,16 @@ function checkDdTraceDependency (results, manifests) {
     'The script did not find dd-trace in dependencies or devDependencies.',
     { recommendation: 'Install dd-trace in the project that runs the tests.' }
   )
+}
+
+/**
+ * Checks whether static diagnosis parsed the repository root package manifest.
+ *
+ * @param {Array<object>} manifests parsed package manifests
+ * @returns {boolean} true when the root package.json was parsed
+ */
+function hasParsedRootManifest (manifests) {
+  return manifests.some(manifest => manifest.relativePath === 'package.json')
 }
 
 /**

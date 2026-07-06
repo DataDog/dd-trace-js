@@ -279,7 +279,8 @@
           },
           "then": {
             "required": [
-              "existingTestCommand"
+              "existingTestCommand",
+              "preflight"
             ]
           }
         }
@@ -557,6 +558,30 @@
           }
         },
         "setupCommandIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "whySelected": {
+          "type": "string"
+        },
+        "workflowEnv": {
+          "type": "object"
+        },
+        "jobEnv": {
+          "type": "object"
+        },
+        "stepEnv": {
+          "type": "object"
+        },
+        "packageScriptExpansionChain": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "runnerToolChain": {
           "type": "array",
           "items": {
             "type": "string"

@@ -58,9 +58,9 @@ describe('test optimization CI wiring validation', () => {
 
       assert.strictEqual(result.status, 'fail')
       assert.strictEqual(result.evidence.commandExitCode, 0)
-      assert.match(result.diagnosis, /test command used by the CI job ran tests/)
-      assert.match(result.diagnosis, /Datadog environment configured for the CI job does not reach dd-trace/)
-      assert.match(result.diagnosis, /Forced local Basic Reporting passed/)
+      assert.match(result.diagnosis, /identified the test command and confirmed that it runs tests/)
+      assert.match(result.diagnosis, /initialization configured by the CI job/)
+      assert.match(result.diagnosis, /required Datadog initialization applied directly/)
       assert.deepStrictEqual(result.evidence.forcedLocalBasicReporting, {
         ran: true,
         status: 'pass',
@@ -69,6 +69,76 @@ describe('test optimization CI wiring validation', () => {
     } finally {
       restoreEnv('NODE_OPTIONS', originalNodeOptions)
       restoreEnv('DD_CIVISIBILITY_ENABLED', originalCiVisibilityEnabled)
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
+
+  it('records when NODE_OPTIONS reaches a wrapper but not the test runner', async () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
+    const nxScript = path.join(out, 'nx.js')
+    const jestScript = path.join(out, 'jest.js')
+    const intake = {
+      port: 8126,
+      requests: [],
+      configure () {},
+      resetRequests () {
+        this.requests = []
+      },
+    }
+
+    fs.writeFileSync(jestScript, 'console.log("1 passing")\n')
+    fs.writeFileSync(nxScript, `
+      const { spawnSync } = require('node:child_process')
+      const env = { ...process.env }
+      delete env.NODE_OPTIONS
+      const child = spawnSync(process.execPath, [${JSON.stringify(jestScript)}], {
+        env,
+        stdio: 'inherit'
+      })
+      process.exit(child.status)
+    `)
+
+    try {
+      const result = await runCiWiring({
+        framework: {
+          id: 'jest:nx',
+          framework: 'jest',
+          ciWiring: {
+            provider: 'github-actions',
+            workflow: 'test',
+            job: 'unit',
+            step: 'Run tests',
+            diagnosis: 'Nx target selected from CI workflow.',
+            runnerToolChain: ['pnpm test', 'nx test', 'jest'],
+          },
+          ciWiringCommand: {
+            cwd: out,
+            argv: [process.execPath, nxScript],
+          },
+          preflight: {
+            ran: true,
+            exitCode: 0,
+            observedTestCount: 1,
+          },
+        },
+        intake,
+        out,
+        options: { verbose: false },
+        basicResult: {
+          status: 'pass',
+          diagnosis: 'Basic reporting emitted session, module, suite, and test events.',
+        },
+      })
+
+      assert.strictEqual(result.status, 'fail')
+      assert.strictEqual(result.evidence.initializationProbe.reachedAnyNodeProcess, true)
+      assert.strictEqual(result.evidence.initializationProbe.reachedTestRunnerProcess, false)
+      assert.deepStrictEqual(result.evidence.initializationProbe.wrapperSignals.map(signal => signal.name), ['nx'])
+      assert.match(result.diagnosis, /initialization probe reached nx/)
+      assert.match(result.diagnosis, /did not appear to reach a Jest process/)
+      assert.strictEqual(result.evidence.monorepoFindings[0].id, 'nx-executor-env-forwarding')
+      assert.strictEqual(result.evidence.monorepoFindings.at(-1).id, 'node-options-not-observed-in-test-runner')
+    } finally {
       fs.rmSync(out, { recursive: true, force: true })
     }
   })
@@ -104,8 +174,8 @@ describe('test optimization CI wiring validation', () => {
       })
 
       assert.strictEqual(result.status, 'fail')
-      assert.match(result.diagnosis, /test command used by the CI job ran tests/)
-      assert.match(result.diagnosis, /Forced local Basic Reporting passed/)
+      assert.match(result.diagnosis, /identified the test command and confirmed that it runs tests/)
+      assert.match(result.diagnosis, /required Datadog initialization applied directly/)
     } finally {
       fs.rmSync(out, { recursive: true, force: true })
     }

@@ -186,7 +186,7 @@ async function main (argv) {
           if (basicResult && basicResult.status !== 'pass') {
             results.push(getSkippedCiWiringAfterBasicFailure(framework, basicResult))
           } else {
-            // CI wiring runs after forced local Basic Reporting proves this framework can report when configured.
+            // CI wiring runs after Basic Reporting proves this framework can report when initialized directly.
             // eslint-disable-next-line no-await-in-loop
             results.push(await runCiWiring({ manifest, framework, intake, out, options, basicResult }))
           }
@@ -269,12 +269,19 @@ function getSkippedCiWiringAfterBasicFailure (framework, basicResult) {
     frameworkId: framework.id,
     scenario: 'ci-wiring',
     status: 'skip',
-    diagnosis: 'Skipped CI wiring validation because forced local Basic Reporting did not pass. ' +
-      'Fix the selected test command or local Test Optimization capability before diagnosing CI wiring.',
+    diagnosis: 'Skipped CI wiring validation because Basic Reporting did not pass with direct Datadog ' +
+      'initialization. Fix the selected test command or local Test Optimization capability before diagnosing CI ' +
+      'wiring.',
     evidence: {
       blockedBy: BASIC_REPORTING_SCENARIO,
       basicReportingStatus: basicResult.status,
       basicReportingDiagnosis: basicResult.diagnosis,
+      featureEligibility: {
+        eligible: false,
+        blockedBy: BASIC_REPORTING_SCENARIO,
+        reasonCode: 'basic-reporting-failed',
+        scenario: 'ci-wiring',
+      },
       ciWiring: framework.ciWiring,
     },
     artifacts: [],
@@ -291,6 +298,12 @@ function getSkippedAfterBasicFailure (framework, scenario, basicResult) {
       blockedBy: BASIC_REPORTING_SCENARIO,
       basicReportingStatus: basicResult.status,
       basicReportingDiagnosis: basicResult.diagnosis,
+      featureEligibility: {
+        eligible: false,
+        blockedBy: BASIC_REPORTING_SCENARIO,
+        reasonCode: 'basic-reporting-failed',
+        scenario,
+      },
     },
     artifacts: [],
   }
