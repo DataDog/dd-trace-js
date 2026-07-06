@@ -1,16 +1,6 @@
 'use strict'
 
-/**
- * Returns the value as a string, JSON-stringifying it when it is not already a string.
- * Returns the value unchanged when it is `null` or `undefined`.
- *
- * @param {unknown} value
- * @returns {string|undefined|null}
- */
-function stringifyIfNeeded (value) {
-  if (value == null) return value
-  return typeof value === 'string' ? value : JSON.stringify(value)
-}
+const { stringifyIfNeeded } = require('./utils')
 
 /**
  * Converts a LanguageModelV2FilePart with an image mediaType to an AI Guard style image_url content part.

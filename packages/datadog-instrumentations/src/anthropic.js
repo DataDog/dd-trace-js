@@ -6,6 +6,31 @@ const { addHook } = require('./helpers/instrument')
 
 const anthropicTracingChannel = tracingChannel('apm:anthropic:request')
 const onStreamedChunkCh = channel('apm:anthropic:request:chunk')
+const messagesBeforeChannel = channel('dd-trace:anthropic:messages:before')
+const messagesAfterChannel = channel('dd-trace:anthropic:messages:after')
+
+/**
+ * Publishes a provider-native lifecycle payload to a cancelable lifecycle channel.
+ *
+ * Subscribers push async work into `pending` synchronously during publication and
+ * abort `abortController` with an error before the pushed promise resolves to block.
+ *
+ * @param {object} channel
+ * @param {object} payload
+ * @returns {Promise<void>}
+ */
+function publishLifecycle (channel, payload) {
+  const abortController = new AbortController()
+  const ctx = { ...payload, abortController, pending: [] }
+
+  channel.publish(ctx)
+
+  return Promise.all(ctx.pending).then(() => {
+    if (abortController.signal.aborted) {
+      throw abortController.signal.reason
+    }
+  })
+}
 
 function wrapStreamIterator (iterator, ctx) {
   return function (...args) {
@@ -34,16 +59,20 @@ function wrapStreamIterator (iterator, ctx) {
 
 function wrapCreate (create) {
   return function (...args) {
-    if (!anthropicTracingChannel.start.hasSubscribers) {
+    const options = args[0]
+    const stream = options?.stream
+
+    const hasLifecycle = !stream && (messagesBeforeChannel.hasSubscribers || messagesAfterChannel.hasSubscribers)
+
+    if (!anthropicTracingChannel.start.hasSubscribers && !hasLifecycle) {
       return create.apply(this, args)
     }
-
-    const options = args[0]
-    const stream = options.stream
 
     const ctx = { options, resource: 'create', baseUrl: this._client?.baseURL }
 
     return anthropicTracingChannel.start.runStores(ctx, () => {
+      const parentSpan = hasLifecycle ? ctx.currentStore?.span : undefined
+
       let apiPromise
       try {
         apiPromise = create.apply(this, args)
@@ -52,20 +81,51 @@ function wrapCreate (create) {
         throw error
       }
 
-      shimmer.wrap(apiPromise, 'parse', parse => function (...args) {
-        return parse.apply(this, args)
+      let beforeVerdict
+
+      function getBeforeVerdict () {
+        if (!hasLifecycle || !messagesBeforeChannel.hasSubscribers) return
+
+        beforeVerdict ??= publishLifecycle(messagesBeforeChannel, { args, parentSpan })
+        return beforeVerdict
+      }
+
+      shimmer.wrap(apiPromise, 'parse', parse => function (...parseArgs) {
+        const parsed = parse.apply(this, parseArgs)
+        const verdict = getBeforeVerdict()
+        const parsedAfterBeforeVerdict = verdict
+          ? Promise.all([verdict, parsed]).then(([, response]) => response)
+          : parsed
+
+        return parsedAfterBeforeVerdict
           .then(response => {
             if (stream) {
               shimmer.wrap(response, Symbol.asyncIterator, iterator => wrapStreamIterator(iterator, ctx))
-            } else {
-              finish(ctx, response, null)
+              return response
             }
-
-            return response
+            if (!hasLifecycle || !messagesAfterChannel.hasSubscribers) {
+              finish(ctx, response, null)
+              return response
+            }
+            // Finish after evaluation so a block propagates the error to anthropic.request
+            // and the span wraps its child instead of closing before it.
+            return publishLifecycle(messagesAfterChannel, { args, body: response, parentSpan }).then(() => {
+              finish(ctx, response, null)
+              return response
+            })
           }).catch(error => {
-            finish(ctx, null, error)
+            if (!ctx.finished) finish(ctx, null, error)
             throw error
           })
+      })
+
+      // Gate `.asResponse()` callers on the before verdict so raw-response paths still block.
+      shimmer.wrap(apiPromise, 'asResponse', origAsResponse => function (...asResponseArgs) {
+        const responsePromise = origAsResponse.apply(this, asResponseArgs)
+        const verdict = getBeforeVerdict()
+        return verdict
+          ? Promise.all([verdict, responsePromise]).then(([, response]) => response)
+          : responsePromise
       })
 
       anthropicTracingChannel.end.publish(ctx)
@@ -83,6 +143,7 @@ function finish (ctx, result, error) {
 
   // streamed responses are handled and set separately
   ctx.result ??= result
+  ctx.finished = true
 
   anthropicTracingChannel.asyncEnd.publish(ctx)
 }
