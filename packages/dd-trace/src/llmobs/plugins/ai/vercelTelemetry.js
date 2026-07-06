@@ -165,6 +165,13 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
         } else if (chunk.type === 'text-start') {
           contentById[chunk.id] = { type: 'text', text: '' }
         } else if (chunk.type === 'reasoning-delta' || chunk.type === 'text-delta') {
+          if (!contentById[chunk.id]) {
+            // special-case handling when the start event did not come through as a chunk
+            contentById[chunk.id] = {
+              type: chunk.type === 'reasoning-delta' ? 'reasoning' : 'text',
+              text: '',
+            }
+          }
           contentById[chunk.id].text += chunk.delta
         } else if (chunk.type === 'tool-call') {
           contentById[chunk.toolCallId] = chunk
@@ -271,7 +278,7 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
 
     const output =
       ctx.isStream
-        ? this.#lastOutputContentByCallId.get(event.callId).find(part => part.type === 'text')?.text
+        ? this.#lastOutputContentByCallId.get(event.callId)?.find(part => part.type === 'text')?.text
         : result._output
 
     this._tagger.tagTextIO(span, input, output)
