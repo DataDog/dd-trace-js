@@ -30,6 +30,8 @@ const {
 const log = require('../../../log')
 const processTags = require('../../../process-tags')
 
+processTags.initialize()
+
 let sessionStarted = false
 let inFlightBreakpointHits = 0
 
@@ -42,6 +44,55 @@ const limits = {
   maxCollectionSize: DEFAULT_MAX_COLLECTION_SIZE,
   maxFieldCount: DEFAULT_MAX_FIELD_COUNT,
   maxLength: DEFAULT_MAX_LENGTH,
+}
+
+/**
+ * Remove empty collection arrays before sending snapshots through the Test Optimization logs path.
+ *
+ * @param {object} value - Snapshot object or sub-object.
+ * @returns {void}
+ */
+function removeEmptyCollectionProperties (value) {
+  const stack = [value]
+
+  while (stack.length > 0) {
+    const current = stack.pop()
+    if (!current || typeof current !== 'object') continue
+
+    if (Array.isArray(current)) {
+      for (const item of current) {
+        if (item && typeof item === 'object') {
+          stack.push(item)
+        }
+      }
+      continue
+    }
+
+    if (Array.isArray(current.elements)) {
+      if (current.elements.length === 0) {
+        delete current.elements
+      } else {
+        stack.push(current.elements)
+      }
+    }
+
+    if (Array.isArray(current.entries)) {
+      if (current.entries.length === 0) {
+        delete current.entries
+      } else {
+        stack.push(current.entries)
+      }
+    }
+
+    for (const key of Object.keys(current)) {
+      if (key === 'elements' || key === 'entries') continue
+
+      const child = current[key]
+      if (child && typeof child === 'object') {
+        stack.push(child)
+      }
+    }
+  }
 }
 
 session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint], callFrames } }) => {
@@ -64,7 +115,7 @@ session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint]
       timestamp: Date.now(),
       probe: {
         id: probe.id,
-        version: '0',
+        version: 0,
         location: probe.location,
       },
       captures: {
@@ -74,11 +125,14 @@ session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint]
       language: 'javascript',
     }
 
-    if (config.propagateProcessTags?.enabled) {
-      snapshot[processTags.DYNAMIC_INSTRUMENTATION_FIELD_NAME] = processTags.tagsObject
+    removeEmptyCollectionProperties(snapshot.captures)
+
+    const message = { snapshot }
+    if (config.propagateProcessTags?.enabled && processTags.serialized) {
+      message.processTags = processTags.serialized
     }
 
-    breakpointHitChannel.postMessage({ snapshot })
+    breakpointHitChannel.postMessage(message)
   } finally {
     inFlightBreakpointHits--
     drainBreakpointHitRequests()

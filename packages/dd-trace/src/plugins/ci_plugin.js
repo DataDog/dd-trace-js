@@ -4,6 +4,8 @@
 const realSetTimeout = setTimeout
 const realClearTimeout = clearTimeout
 
+const { threadId } = require('node:worker_threads')
+
 const { storage } = require('../../../datadog-core')
 const { COMPONENT } = require('../constants')
 const log = require('../log')
@@ -16,6 +18,7 @@ const {
 } = require('../ci-visibility/telemetry')
 const getDiClient = require('../ci-visibility/dynamic-instrumentation')
 const { DD_MAJOR } = require('../../../../version')
+const { version: tracerVersion } = require('../../../../package.json')
 const id = require('../id')
 const { OS_VERSION, OS_PLATFORM, OS_ARCHITECTURE, RUNTIME_NAME, RUNTIME_VERSION } = require('./util/env')
 const {
@@ -89,6 +92,8 @@ const {
 
 const legacyStorage = storage('legacy')
 const DI_OPERATION_TIMEOUT_MS = 2000
+const DI_LOGGER_THREAD_ID = threadId === 0 ? `pid:${process.pid}` : `pid:${process.pid};tid:${threadId}`
+const DI_LOGGER_THREAD_NAME = threadId === 0 ? 'MainThread' : `WorkerThread:${threadId}`
 
 const FRAMEWORK_TO_TRIMMED_COMMAND = {
   vitest: 'vitest run',
@@ -808,7 +813,7 @@ module.exports = class CiPlugin extends Plugin {
     return testSpan
   }
 
-  onDiBreakpointHit ({ snapshot }) {
+  onDiBreakpointHit ({ snapshot, processTags }) {
     for (const resolve of this.diBreakpointHitResolvers) {
       resolve()
     }
@@ -837,9 +842,19 @@ module.exports = class CiPlugin extends Plugin {
     )
 
     const activeTestSpanContext = this.activeTestSpan.context()
+    const topStackFrame = snapshot.stack?.[0]
 
     this.tracer._exporter.exportDiLogs(this.testEnvironmentMetadata, {
+      message: '',
+      logger: {
+        name: snapshot.probe.location.file,
+        method: topStackFrame?.function || '',
+        version: tracerVersion,
+        thread_id: DI_LOGGER_THREAD_ID,
+        thread_name: DI_LOGGER_THREAD_NAME,
+      },
       debugger: { snapshot },
+      process_tags: processTags,
       dd: {
         trace_id: activeTestSpanContext.toTraceId(),
         span_id: activeTestSpanContext.toSpanId(),

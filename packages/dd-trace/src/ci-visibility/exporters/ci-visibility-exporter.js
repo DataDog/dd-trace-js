@@ -1,7 +1,9 @@
 'use strict'
 
+const { hostname: getHostname } = require('node:os')
 const URL = require('url').URL
 
+const { version: tracerVersion } = require('../../../../../package.json')
 const { getLibraryConfiguration: getLibraryConfigurationRequest } = require('../requests/get-library-configuration')
 const { getSkippableSuites: getSkippableSuitesRequest } = require('../intelligent-test-runner/get-skippable-suites')
 const { getKnownTests: getKnownTestsRequest } = require('../early-flake-detection/get-known-tests')
@@ -14,6 +16,8 @@ const log = require('../../log')
 const BufferingExporter = require('../../exporters/common/buffering-exporter')
 const { GIT_REPOSITORY_URL, GIT_COMMIT_SHA } = require('../../plugins/util/tags')
 const { sendGitMetadata: sendGitMetadataRequest } = require('./git/git_metadata')
+
+const hostname = getHostname()
 
 function getTestConfigurationTags (tags) {
   if (!tags) {
@@ -36,6 +40,34 @@ function getIsTestSessionTrace (trace) {
 
 const GIT_UPLOAD_TIMEOUT = 60_000 // 60 seconds
 const CAN_USE_CI_VIS_PROTOCOL_TIMEOUT = GIT_UPLOAD_TIMEOUT
+
+function appendLogTag (tags, key, value) {
+  if (value !== undefined) {
+    tags.push(`${key}:${value}`)
+  }
+}
+
+function getLogTags (logMessage, { env, version }, gitRepositoryUrl, gitCommitSha) {
+  const tags = []
+  if (Array.isArray(logMessage.ddtags)) {
+    for (const tag of logMessage.ddtags) {
+      tags.push(tag)
+    }
+  } else if (logMessage.ddtags) {
+    for (const tag of logMessage.ddtags.split(',')) {
+      tags.push(tag)
+    }
+  }
+
+  appendLogTag(tags, 'env', env)
+  appendLogTag(tags, 'version', version)
+  appendLogTag(tags, 'debugger_version', tracerVersion)
+  appendLogTag(tags, 'host_name', hostname)
+  appendLogTag(tags, GIT_COMMIT_SHA, gitCommitSha)
+  appendLogTag(tags, GIT_REPOSITORY_URL, gitRepositoryUrl)
+
+  return tags.join(',')
+}
 
 class CiVisibilityExporter extends BufferingExporter {
   constructor (config) {
@@ -338,21 +370,18 @@ class CiVisibilityExporter extends BufferingExporter {
     const { service, env, version } = this._config
 
     return {
-      ddtags: [
-        ...(logMessage.ddtags || []),
-        `${GIT_REPOSITORY_URL}:${gitRepositoryUrl}`,
-        `${GIT_COMMIT_SHA}:${gitCommitSha}`,
-      ].join(','),
+      ...logMessage,
+      ddtags: getLogTags(logMessage, { env, version }, gitRepositoryUrl, gitCommitSha),
       level: 'error',
       service,
+      hostname,
       dd: {
-        ...(logMessage.dd || []),
+        ...logMessage.dd,
         service,
         env,
         version,
       },
       ddsource: 'dd_debugger',
-      ...logMessage,
     }
   }
 

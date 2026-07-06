@@ -22,9 +22,12 @@ describe('test visibility with dynamic instrumentation', () => {
   })
 
   it('can grab local variables', (done) => {
-    childProcess = fork(path.join(__dirname, 'target-app', 'test-visibility-dynamic-instrumentation-script.js'))
+    childProcess = fork(
+      path.join(__dirname, 'target-app', 'test-visibility-dynamic-instrumentation-script.js'),
+      { env: { ...process.env, DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: 'true' } }
+    )
 
-    childProcess.on('message', ({ snapshot, probeId }) => {
+    childProcess.on('message', ({ snapshot, probeId, processTags }) => {
       if (!snapshot) return
 
       const { language, stack, probe, captures } = snapshot
@@ -32,18 +35,37 @@ describe('test visibility with dynamic instrumentation', () => {
       assert.ok(probe)
       assert.ok(stack)
       assert.strictEqual(language, 'javascript')
+      assert.strictEqual(probe.version, 0)
+      assert.strictEqual(typeof processTags, 'string')
+      assert.match(processTags, /entrypoint\.name:/)
 
       assert.deepStrictEqual(captures, {
         lines: {
-          9: {
+          10: {
             locals: {
               a: { type: 'number', value: '1' },
               b: { type: 'number', value: '2' },
               localVar: { type: 'number', value: '1' },
+              users: { type: 'Array' },
             },
           },
         },
       })
+
+      done()
+    })
+  })
+
+  it('omits empty collection payloads from captured values', (done) => {
+    childProcess = fork(path.join(__dirname, 'target-app', 'test-visibility-dynamic-instrumentation-script.js'))
+
+    childProcess.on('message', ({ snapshot }) => {
+      if (!snapshot) return
+
+      const users = snapshot.captures.lines[10].locals.users
+      assert.strictEqual(users.type, 'Array')
+      assert.strictEqual('elements' in users, false)
+      assert.doesNotMatch(JSON.stringify(snapshot), /"elements":\[\]/)
 
       done()
     })

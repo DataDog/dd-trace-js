@@ -131,6 +131,50 @@ describe('CiPlugin', () => {
     assert.deepStrictEqual(plugin.diBreakpointHitResolvers, [])
   })
 
+  it('exports DI breakpoint hits with the debugger log envelope', () => {
+    const plugin = createPlugin('vitest_worker')
+    const exportDiLogs = sinon.spy()
+    const snapshot = {
+      id: 'snapshot-id',
+      probe: {
+        location: {
+          file: 'test.js',
+          lines: ['23'],
+        },
+      },
+      stack: [{ function: 'test function' }],
+    }
+
+    plugin.tracer._exporter.exportDiLogs = exportDiLogs
+    plugin.activeTestSpan = {
+      context: () => ({
+        _isFinished: false,
+        toTraceId: () => 'trace-id',
+        toSpanId: () => 'span-id',
+      }),
+      setTag: sinon.spy(),
+    }
+    plugin.testErrorStackIndex = 0
+
+    plugin.onDiBreakpointHit({ snapshot, processTags: 'entrypoint.name:test' })
+
+    sinon.assert.calledOnce(exportDiLogs)
+    assert.strictEqual(exportDiLogs.firstCall.args[0], plugin.testEnvironmentMetadata)
+    const logMessage = exportDiLogs.firstCall.args[1]
+    assert.strictEqual(logMessage.message, '')
+    assert.deepStrictEqual(logMessage.debugger, { snapshot })
+    assert.strictEqual(logMessage.process_tags, 'entrypoint.name:test')
+    assert.deepStrictEqual(logMessage.dd, {
+      trace_id: 'trace-id',
+      span_id: 'span-id',
+    })
+    assert.strictEqual(logMessage.logger.name, 'test.js')
+    assert.strictEqual(logMessage.logger.method, 'test function')
+    assert.strictEqual(typeof logMessage.logger.version, 'string')
+    assert.match(logMessage.logger.thread_id, /^pid:\d+/)
+    assert.match(logMessage.logger.thread_name, /^(MainThread|WorkerThread:\d+)$/)
+  })
+
   function createPlugin (exporter) {
     class TestPlugin extends CiPlugin {
       static id = 'vitest'
