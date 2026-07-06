@@ -26,11 +26,14 @@ const contexts = new WeakMap()
 const instrumentedArgs = new WeakSet()
 
 const patchedResolvers = new WeakSet()
-const patchedTypes = new WeakSet()
 
-// Per-schema record of which interfaces have had their (schema-specific)
-// implementations walked, keyed on the caller-owned schema. See wrapFields.
-const walkedInterfaces = new WeakMap()
+// Visited types per caller-owned schema. The walk reaches union members and
+// interface implementations through the schema (`getTypes`/`getPossibleTypes`),
+// so it differs per schema: a global guard would stop the second schema at any
+// type the first already walked and leave its own implementations unwrapped.
+// `patchedResolvers` keeps wrapping idempotent, so re-walking a shared type is
+// safe and this set only terminates cycles.
+const walkedTypes = new WeakMap()
 
 // Module-level fast path: skip the resolver-side WeakMap lookup entirely
 // when depth=0 disables resolver instrumentation.
@@ -449,52 +452,39 @@ function wrapResolve (resolve) {
 }
 
 function wrapFields (type, schema) {
-  if (!type) return
+  if (!type || !markWalked(schema, type)) return
 
   const tag = type[Symbol.toStringTag]
-
-  // Interface implementations are reached only through `getPossibleTypes`, and
-  // that set is schema-specific: the same interface can carry different
-  // implementations in different schemas. Descend before the `patchedTypes`
-  // gate so a schema that reuses an already-wrapped interface still reaches its
-  // own implementations, tracking the descent per (schema, interface) to
-  // terminate cycles. `Symbol.toStringTag` is graphql's realm-agnostic type
-  // discriminator — an interface without an explicit `resolveType` still
-  // resolves its concrete type via `__typename`.
-  if (schema && tag === 'GraphQLInterfaceType' && markInterfaceWalked(schema, type)) {
-    for (const impl of schema.getPossibleTypes(type)) wrapFields(impl, schema)
-  }
-
-  if (patchedTypes.has(type)) return
 
   // Union types (e.g. Apollo Federation's `_Entity`) hold their members on
   // `_types`, not `_fields`. Their member object types are reachable only here,
   // so descend into each to wrap the entity resolvers a `_entities` query runs.
   if (tag === 'GraphQLUnionType') {
-    patchedTypes.add(type)
     for (const member of type.getTypes()) wrapFields(member, schema)
     return
   }
 
-  if (!type._fields) return
+  if (type._fields) {
+    for (const field of Object.values(type._fields)) {
+      wrapFieldResolve(field)
+      wrapFieldType(field, schema)
+    }
+  }
 
-  patchedTypes.add(type)
-
-  for (const field of Object.values(type._fields)) {
-    wrapFieldResolve(field)
-    wrapFieldType(field, schema)
+  // Interface implementations carry their own resolvers and are reachable only
+  // through `getPossibleTypes`; an interface return type alone never wraps them.
+  if (schema && tag === 'GraphQLInterfaceType') {
+    for (const impl of schema.getPossibleTypes(type)) wrapFields(impl, schema)
   }
 }
 
-// Interface → implementations is the only schema-dependent edge in the walk, so
-// its one-time guard is keyed per (schema, interface) instead of the global
-// `patchedTypes`. The schema is caller-owned, so the visited set lives in a
-// side-table rather than on the schema object.
-function markInterfaceWalked (schema, type) {
-  let walked = walkedInterfaces.get(schema)
+// Marks the guard on entry so recursive types (a field looping back to its own
+// type, an interface an implementation returns) terminate the walk.
+function markWalked (schema, type) {
+  let walked = walkedTypes.get(schema)
   if (walked === undefined) {
     walked = new WeakSet()
-    walkedInterfaces.set(schema, walked)
+    walkedTypes.set(schema, walked)
   }
   if (walked.has(type)) return false
   walked.add(type)

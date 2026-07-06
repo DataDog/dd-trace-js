@@ -2863,12 +2863,10 @@ describe('Plugin', () => {
         // the schema APIs these fixtures use, so scope the suite to 15+.
         const supported = semver.satisfies(graphqlVersion, '>=15.0.0')
 
-        before(function () {
+        before(async function () {
           if (!supported) return this.skip()
 
-          tracer = require('../../dd-trace')
-
-          return agent.load('graphql')
+          tracer = await agent.load('graphql')
         })
 
         beforeEach(function () {
@@ -3079,6 +3077,58 @@ describe('Plugin', () => {
           // global one-time guard would then stop the second schema's walk before
           // it reaches Gadget, leaving gadgetLabel unwrapped. getPossibleTypes is
           // schema-specific, so the interface descent must run per schema.
+          await graphql.graphql({
+            schema: firstSchema,
+            source: 'query { node { id ... on Widget { widgetLabel } } }',
+          })
+
+          const assertion = agent.assertSomeTraces(traces => {
+            const label = sort(traces[0]).find(span =>
+              span.name === 'graphql.resolve' && span.meta['graphql.field.name'] === 'gadgetLabel')
+            assert.ok(label, 'the second schema\'s interface implementation field should be wrapped')
+            assert.strictEqual(label.meta['graphql.field.type'], 'String')
+          }, { spanResourceMatch: /gadgetLabel:String/ })
+
+          await Promise.all([
+            assertion,
+            graphql.graphql({
+              schema: secondSchema,
+              source: 'query { node { id ... on Gadget { gadgetLabel } } }',
+            }),
+          ])
+        })
+
+        it('should wrap a second schema\'s implementations when both reuse the same parent type', async () => {
+          const Node = new graphql.GraphQLInterfaceType({
+            name: 'Node',
+            fields: {
+              id: { type: new graphql.GraphQLNonNull(graphql.GraphQLID) },
+            },
+          })
+
+          const makeImpl = name => new graphql.GraphQLObjectType({
+            name,
+            interfaces: [Node],
+            isTypeOf: () => true,
+            fields: {
+              id: { type: new graphql.GraphQLNonNull(graphql.GraphQLID), resolve: () => '1' },
+              [`${name.toLowerCase()}Label`]: { type: graphql.GraphQLString, resolve: () => `a ${name}` },
+            },
+          })
+
+          // The same Query instance in both schemas is the shared parent that a
+          // global walk-guard marks on the first schema, stopping the second
+          // schema's walk before it reaches the `node` field's interface.
+          const Query = new graphql.GraphQLObjectType({
+            name: 'Query',
+            fields: {
+              node: { type: Node, resolve: () => ({}) },
+            },
+          })
+
+          const firstSchema = new graphql.GraphQLSchema({ query: Query, types: [makeImpl('Widget')] })
+          const secondSchema = new graphql.GraphQLSchema({ query: Query, types: [makeImpl('Gadget')] })
+
           await graphql.graphql({
             schema: firstSchema,
             source: 'query { node { id ... on Widget { widgetLabel } } }',
