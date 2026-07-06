@@ -1,6 +1,6 @@
 {
   "name": "dd-trace",
-  "version": "6.0.0-pre",
+  "version": "7.0.0-pre",
   "description": "Datadog APM tracing client for JavaScript",
   "main": "index.js",
   "typings": "index.d.ts",
@@ -61,8 +61,8 @@
     "test:openfeature": "mocha \"packages/dd-trace/test/openfeature/**/*.spec.js\"",
     "test:openfeature:ci": "nyc --silent node init && nyc -- npm run test:openfeature",
     "test:plugins": "node --expose-gc ./node_modules/mocha/bin/mocha.js \"packages/datadog-plugin-@(${PLUGINS})/test/**/${SPEC:-*}*.spec.js\"",
-    "test:plugins:ci": "yarn services && nyc --silent node init && nyc -- npm run test:plugins",
-    "test:plugins:ci:flaky": "yarn services && nyc --silent node init && nyc -- npm run test:plugins -- --bail --retries 2",
+    "test:plugins:ci": "unset _DD_APM_TRACING_AGENTLESS_ENABLED && yarn services && nyc --silent node init && nyc -- npm run test:plugins",
+    "test:plugins:ci:flaky": "unset _DD_APM_TRACING_AGENTLESS_ENABLED && yarn services && nyc --silent node init && nyc -- npm run test:plugins -- --bail --retries 2",
     "test:plugins:upstream": "node ./packages/dd-trace/test/plugins/suite.js",
     "test:profiler": "node scripts/mocha-parallel-files.js --expose-gc --timeout 30000 -- \"packages/dd-trace/test/profiling/**/*.spec.js\"",
     "test:profiler:ci": "nyc --silent node init && nyc -- npm run test:profiler",

@@ -6,7 +6,7 @@ const { channel } = require('dc-polyfill')
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
-const openaiIntegration = require('../../../src/aiguard/integrations/openai')
+const { openai } = require('../../../src/aiguard/integrations')
 const { SOURCE_AUTO } = require('../../../src/aiguard/tags')
 
 const chatCompletionsBeforeChannel = channel('dd-trace:openai:chat.completions:before')
@@ -16,15 +16,14 @@ const responsesAfterChannel = channel('dd-trace:openai:responses:after')
 
 describe('AIGuard OpenAI integration', () => {
   let evaluate
-  let disable
 
   beforeEach(() => {
     evaluate = sinon.stub().resolves()
-    disable = openaiIntegration.enable({ evaluate }, true)
+    openai.enable({ evaluate }, true)
   })
 
   afterEach(() => {
-    disable()
+    openai.disable()
     sinon.restore()
   })
 

@@ -97,11 +97,22 @@ class ChildProcessPlugin extends TracingPlugin {
   }
 
   asyncEnd (ctx) {
-    const { result } = ctx
+    const { result, error } = ctx
+    let exitCode
+
+    if (result !== null && typeof result === 'object') {
+      // util.promisify(execFile) resolves with a { stdout, stderr } object on
+      // success, where the exit code is 0.
+      exitCode = result.status ?? 0
+    } else if (result === undefined && error !== undefined) {
+      exitCode = error.status ?? error.code ?? 0
+    } else {
+      exitCode = result
+    }
 
     const span = ctx.currentStore?.span || this.activeSpan
 
-    span?.setTag('cmd.exit_code', `${result}`)
+    span?.setTag('cmd.exit_code', `${exitCode}`)
     span?.finish()
 
     return ctx.parentStore
