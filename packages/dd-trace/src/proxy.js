@@ -5,6 +5,9 @@ const DatadogTracer = require('./tracer')
 const getConfig = require('./config')
 const runtimeMetrics = require('./runtime_metrics')
 const log = require('./log')
+// Always-on writer (console.warn), not the channel-gated `log`: surfaces a fatal init failure
+// regardless of DD_TRACE_DEBUG, so a silently disabled tracer is impossible.
+const { warn } = require('./log/writer')
 const { setStartupLogPluginManager, startupLog } = require('./startup-log')
 const DynamicInstrumentation = require('./debugger')
 const telemetry = require('./telemetry')
@@ -244,6 +247,7 @@ class Tracer extends NoopProxy {
       }
     } catch (e) {
       log.error('Error initializing tracer', e)
+      warn('DATADOG TRACER FAILED TO INITIALIZE - tracing is disabled: ' + (e?.message ?? e))
       // TODO: Should we stop everything started so far?
     }
 

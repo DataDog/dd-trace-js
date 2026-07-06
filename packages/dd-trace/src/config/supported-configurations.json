@@ -1753,7 +1753,8 @@
         "default": "",
         "configurationNames": [
           "tags"
-        ]
+        ],
+        "transform": "tags"
       }
     ],
     "DD_TELEMETRY_DEBUG": [

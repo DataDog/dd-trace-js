@@ -171,6 +171,17 @@ const transformers = {
       return new URL(value)
     } catch {}
   },
+  tags (value) {
+    // Env-var path already parsed the value into a map object; a programmatic object passes through unchanged.
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      return value
+    }
+    // Programmatic string / array (and any stray primitive) → normalized map, never a bare string.
+    // Without this, a raw string reaches #applyCalculated, which writes properties onto it and throws.
+    const tags = {}
+    tagger.add(tags, value)
+    return tags
+  },
   validatePropagationStyles (value, optionName) {
     value = transformers.toLowerCase(value)
     for (let index = 0; index < value.length; index++) {
