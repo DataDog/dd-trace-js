@@ -764,6 +764,8 @@ function wrapRun (pl, isLatestVersion, version) {
       testFileAbsolutePath,
       testSourceLine,
       isParallel: !!getEnvironmentVariable('CUCUMBER_WORKER_ID'),
+      // Older Cucumber runners do not expose an awaited retry boundary. Failed Test Replay
+      // intentionally skips DI setup there instead of bringing back the synchronous wait.
       canWaitForDi: canAwaitRetries,
     }
     const ctx = testStartPayload
