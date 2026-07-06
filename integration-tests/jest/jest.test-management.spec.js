@@ -46,6 +46,7 @@ const {
   TEST_FINAL_STATUS,
   GIT_COMMIT_SHA,
   GIT_REPOSITORY_URL,
+  TEST_PARAMETERS,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { TELEMETRY_COVERAGE_UPLOAD } = require('../../packages/dd-trace/src/ci-visibility/telemetry')
 const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
@@ -2267,7 +2268,9 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       const impactedConcurrentTest = fs.readFileSync(impactedConcurrentPath, 'utf8')
       fs.writeFileSync(
         impactedConcurrentPath,
-        impactedConcurrentTest.replace("const label = 'sum'", "const label = 'result'")
+        impactedConcurrentTest
+          .replace("const label = 'sum'", "const label = 'result'")
+          .replace('expect(expected).toBe(3)', 'expect(expected).toBe(3 + 0)')
       )
       execSync('git add ci-visibility/test-impacted-test/test-impacted-concurrent.js', { cwd, stdio: 'ignore' })
 
@@ -2537,10 +2540,22 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               test.meta[TEST_SOURCE_FILE] === 'ci-visibility/test-impacted-test/test-impacted-concurrent.js' &&
               test.meta[TEST_NAME] === 'impacted concurrent tests can pass normally'
             )
+            const impactedConcurrentEachTests = tests.filter(test =>
+              test.meta[TEST_SOURCE_FILE] === 'ci-visibility/test-impacted-test/test-impacted-concurrent.js' &&
+              test.meta[TEST_NAME] === 'impacted concurrent tests parameterized row can pass normally'
+            )
 
             assert.strictEqual(impactedConcurrentTests.length, NUM_RETRIES + 1)
             for (const impactedConcurrentTest of impactedConcurrentTests) {
               assert.strictEqual(impactedConcurrentTest.meta[TEST_IS_MODIFIED], 'true')
+            }
+            assert.strictEqual(impactedConcurrentEachTests.length, NUM_RETRIES + 1)
+            for (const impactedConcurrentEachTest of impactedConcurrentEachTests) {
+              assert.strictEqual(impactedConcurrentEachTest.meta[TEST_IS_MODIFIED], 'true')
+              assert.strictEqual(
+                impactedConcurrentEachTest.meta[TEST_PARAMETERS],
+                JSON.stringify({ arguments: ['parameterized row', 3], metadata: {} })
+              )
             }
           })
 
