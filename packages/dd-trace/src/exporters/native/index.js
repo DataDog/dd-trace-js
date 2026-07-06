@@ -264,7 +264,7 @@ class NativeExporter {
       }
       groups.push({
         spanIds: ordered.map(span => span.context()._nativeSpanId),
-        firstIsLocalRoot
+        firstIsLocalRoot,
       })
     }
 

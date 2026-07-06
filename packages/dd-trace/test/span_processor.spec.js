@@ -453,5 +453,4 @@ describe('SpanProcessor', () => {
       )
     })
   })
-
 })

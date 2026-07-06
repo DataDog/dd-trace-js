@@ -416,7 +416,7 @@ describe('NativeSpansInterface', () => {
 
       await nativeSpans.flushSpansGrouped([
         { spanIds: [idA], firstIsLocalRoot: true },
-        { spanIds: [idB], firstIsLocalRoot: false }
+        { spanIds: [idB], firstIsLocalRoot: false },
       ])
 
       // Change queue drained exactly once, up front.
@@ -435,7 +435,7 @@ describe('NativeSpansInterface', () => {
 
       const result = await nativeSpans.flushSpansGrouped([
         { spanIds: [], firstIsLocalRoot: true }, // empty group: skipped entirely
-        { spanIds: [spanId], firstIsLocalRoot: true } // staged nothing (returns false)
+        { spanIds: [spanId], firstIsLocalRoot: true }, // staged nothing (returns false)
       ])
 
       // Empty group never reaches prepareChunk; the non-empty one returns false.
