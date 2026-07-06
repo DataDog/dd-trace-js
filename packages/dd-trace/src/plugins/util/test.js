@@ -269,6 +269,7 @@ const TEST_RETRY_REASON_TYPES = {
   atr: 'auto_test_retry',
   atf: 'attempt_to_fix',
   ext: 'external',
+  osr: 'out_of_session',
 }
 
 const DD_TEST_IS_USER_PROVIDED_SERVICE = '_dd.test.is_user_provided_service'

@@ -45,6 +45,10 @@ const efdSlowAbortedTests = new Set()
 const attemptToFixExecutions = new Map()
 const loggedAttemptToFixTests = new Set()
 
+// Out-of-session retries: tests whose last ATR attempt failed (ATR-exhausted, not quarantined/disabled/ATF).
+const osrCandidates = []
+const OSR_MAX_TESTS = 5
+
 function getAfterEachHooks (testOrHook) {
   const hooks = []
 
@@ -650,6 +654,7 @@ function getOnTestEndHandler (config, finalAttemptHandlers) {
     }
 
     if (shouldFinishTest) {
+      maybeAddOsrCandidate(test, testFinishInfo, config)
       testFinishCh.publish({
         status,
         hasBeenRetried: isMochaRetry(test),
@@ -681,6 +686,7 @@ function getOnHookEndHandler (config) {
           if (testFinishInfo.finalStatus !== undefined) {
             test._ddIsFinalAttempt = true
           }
+          maybeAddOsrCandidate(test, testFinishInfo, config)
           testFinishCh.publish({
             status,
             hasBeenRetried: isMochaRetry(test),
@@ -885,6 +891,137 @@ function getRunTestsWrapper (runTests, config) {
   }
 }
 
+function isOsrCandidate (test, testFinishInfo, config) {
+  if (!config.isOutOfSessionRetriesEnabled) return false
+  if (!config.isFlakyTestRetriesEnabled) return false
+  if (!testFinishInfo.hasFailedAllRetries) return false
+  if (test._ddIsAttemptToFix || test._ddIsQuarantined || test._ddIsDisabled) return false
+  return true
+}
+
+function maybeAddOsrCandidate (test, testFinishInfo, config) {
+  if (isOsrCandidate(test, testFinishInfo, config)) {
+    osrCandidates.push(test)
+  }
+}
+
+function selectOsrCandidates () {
+  // Deduplicate by test object identity, then sample up to OSR_MAX_TESTS.
+  const unique = [...new Set(osrCandidates)]
+  if (unique.length <= OSR_MAX_TESTS) {
+    return unique
+  }
+  // Fisher-Yates partial shuffle to pick OSR_MAX_TESTS without replacement.
+  const result = []
+  const pool = unique.slice()
+  for (let i = 0; i < OSR_MAX_TESTS; i++) {
+    const j = i + Math.floor(Math.random() * (pool.length - i))
+    ;[pool[i], pool[j]] = [pool[j], pool[i]]
+    result.push(pool[i])
+  }
+  return result
+}
+
+/**
+ * Run `testFn` (a mocha test function) returning a promise that resolves to `{ status, error }`.
+ * Handles synchronous, promise-returning, and done-callback styles.
+ * @param {Function} testFn
+ * @returns {Promise<{status: string, error?: Error}>}
+ */
+function runTestFunctionAsync (testFn) {
+  return new Promise((resolve) => {
+    const ctx = {}
+    let settled = false
+
+    function done (err) {
+      if (settled) return
+      settled = true
+      if (err) {
+        resolve({ status: 'fail', error: err instanceof Error ? err : new Error(String(err)) })
+      } else {
+        resolve({ status: 'pass' })
+      }
+    }
+
+    let result
+    try {
+      result = testFn.length > 0
+        ? testFn.call(ctx, done)
+        : testFn.call(ctx)
+    } catch (err) {
+      done(err)
+      return
+    }
+
+    if (result && typeof result.then === 'function') {
+      result.then(() => done(), done)
+    } else if (testFn.length === 0) {
+      done()
+    }
+    // else: done-callback style — wait for done to be called
+  })
+}
+
+/**
+ * Run out-of-session retries for ATR-exhausted tests, publishing test spans for each.
+ * Called after the main mocha run ends, before finishing the session span.
+ * @param {object} config
+ * @param {Function} onDone - callback invoked when all OSR runs (or the timeout) complete
+ */
+function runOutOfSessionRetries (config, onDone) {
+  if (!config.isOutOfSessionRetriesEnabled) {
+    onDone()
+    return
+  }
+
+  const candidates = selectOsrCandidates()
+  // Reset candidates immediately so a re-invocation (e.g. multiple mocha runs) doesn't replay them.
+  osrCandidates.splice(0)
+  if (!candidates.length) {
+    onDone()
+    return
+  }
+
+  let remaining = candidates.length
+
+  function finish () {
+    remaining--
+    if (remaining === 0) {
+      onDone()
+    }
+  }
+
+  for (const test of candidates) {
+    const testStartLine = testToStartLine.get(test)
+    const testInfo = {
+      testName: test.fullTitle(),
+      testSuiteAbsolutePath: test.file,
+      title: test.title,
+      testStartLine,
+    }
+
+    testStartCh.runStores(testInfo, () => {
+      const fn = originalFns.get(test.fn) || test.fn
+      runTestFunctionAsync(fn).then(({ status, error }) => {
+        const ctx = testInfo
+        if (error && ctx.currentStore?.span) {
+          ctx.currentStore.span.setTag('error', error)
+        }
+        testFinishCh.publish({
+          ...ctx.currentStore,
+          status,
+          isOsrRetry: true,
+          finalStatus: status,
+        })
+      }).catch(() => {
+        // Swallow unexpected errors so OSR never breaks the session
+      }).finally(() => {
+        finish()
+      })
+    })
+  }
+}
+
 module.exports = {
   isNewTest,
   getTestProperties,
@@ -913,4 +1050,7 @@ module.exports = {
   testsStatuses,
   attemptToFixExecutions,
   loggedAttemptToFixTests,
+  maybeAddOsrCandidate,
+  runOutOfSessionRetries,
+  osrCandidates,
 }

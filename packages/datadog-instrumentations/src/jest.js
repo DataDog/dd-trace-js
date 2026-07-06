@@ -454,6 +454,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.isKnownTestsEnabled = this.testEnvironmentOptions._ddIsKnownTestsEnabled
       this.isTestManagementTestsEnabled = this.testEnvironmentOptions._ddIsTestManagementTestsEnabled
       this.isImpactedTestsEnabled = this.testEnvironmentOptions._ddIsImpactedTestsEnabled
+      this.isOutOfSessionRetriesEnabled = this.testEnvironmentOptions._ddIsOutOfSessionRetriesEnabled
+      this.osrCandidates = []
 
       if (this.isKnownTestsEnabled) {
         earlyFlakeDetectionSlowTestRetries = this.testEnvironmentOptions._ddEarlyFlakeDetectionSlowTestRetries ?? {}
@@ -1008,6 +1010,13 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           }
         }
 
+        if (failedAllTests && this.isOutOfSessionRetriesEnabled) {
+          const osrCtx = testContexts.get(event.test)
+          if (osrCtx && !osrCtx.isAttemptToFix && !osrCtx.isDisabled && !osrCtx.isQuarantined) {
+            this.osrCandidates.push(event.test)
+          }
+        }
+
         const promises = {}
         const numRetries = this.global[RETRY_TIMES]
         const numTestExecutions = event.test?.invocations
@@ -1082,6 +1091,60 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         }
       }
       if (event.name === 'run_finish') {
+        if (this.isOutOfSessionRetriesEnabled && this.osrCandidates.length > 0) {
+          const unique = [...new Set(this.osrCandidates)]
+          let candidates
+          if (unique.length <= OSR_MAX_TESTS) {
+            candidates = unique
+          } else {
+            // Fisher-Yates partial shuffle to sample up to OSR_MAX_TESTS
+            candidates = unique.slice()
+            for (let i = 0; i < OSR_MAX_TESTS; i++) {
+              const j = i + Math.floor(Math.random() * (candidates.length - i))
+              const tmp = candidates[i]
+              candidates[i] = candidates[j]
+              candidates[j] = tmp
+            }
+            candidates = candidates.slice(0, OSR_MAX_TESTS)
+          }
+          this.osrCandidates = []
+
+          for (const test of candidates) {
+            const originalCtx = testContexts.get(test)
+            if (!originalCtx) continue
+            const osrCtx = {
+              ...originalCtx,
+              isNew: false,
+              isEfdRetry: false,
+              isAttemptToFix: false,
+              isAttemptToFixRetry: false,
+              isJestRetry: false,
+            }
+            await new Promise((resolve) => {
+              testStartCh.runStores(osrCtx, () => {
+                const fn = originalTestFns.get(test) || test.fn
+                runJestTestFunctionAsync(() => testFnCh.runStores(osrCtx, () => fn())).then(({ status, error }) => {
+                  if (error && osrCtx.currentStore?.span) {
+                    osrCtx.currentStore.span.setTag('error', error)
+                  }
+                  testFinishCh.publish({
+                    ...osrCtx.currentStore,
+                    status,
+                    testStartLine: getTestLineStart(test.asyncError, this.testSuite),
+                    isOsrRetry: true,
+                    finalStatus: status,
+                    failedAllTests: false,
+                    attemptToFixPassed: false,
+                    attemptToFixFailed: false,
+                    isAtrRetry: false,
+                  })
+                  resolve()
+                }).catch(resolve)
+              })
+            })
+          }
+        }
+
         for (const [test, errors] of atrSuppressedErrors) {
           // Do not restore errors for non-ATF quarantined tests — they should stay suppressed
           // so Jest doesn't see the failure (prevents --bail from stopping the run).
@@ -2023,6 +2086,51 @@ function shouldWaitForTestSuiteFinish (environment) {
   return isJestWorker && environment.globalConfig?.workerIdleMemoryLimit !== undefined
 }
 
+const OSR_MAX_TESTS = 5
+
+/**
+ * Runs a jest test function (sync, async, or done-callback style) and returns a Promise
+ * resolving to { status: 'pass'|'fail', error: Error|null }.
+ *
+ * @param {Function} testFn
+ * @returns {Promise<{status: string, error: Error|null}>}
+ */
+function runJestTestFunctionAsync (testFn) {
+  return new Promise((resolve) => {
+    try {
+      let result
+      if (testFn.length > 0) {
+        const done = (err) => {
+          if (err) {
+            resolve({ status: 'fail', error: err instanceof Error ? err : new Error(String(err)) })
+          } else {
+            resolve({ status: 'pass', error: null })
+          }
+        }
+        result = testFn(done)
+        if (result && typeof result.then === 'function') {
+          result.then(
+            () => resolve({ status: 'pass', error: null }),
+            (err) => resolve({ status: 'fail', error: err })
+          )
+        }
+      } else {
+        result = testFn()
+        if (result && typeof result.then === 'function') {
+          result.then(
+            () => resolve({ status: 'pass', error: null }),
+            (err) => resolve({ status: 'fail', error: err })
+          )
+        } else {
+          resolve({ status: 'pass', error: null })
+        }
+      }
+    } catch (err) {
+      resolve({ status: 'fail', error: err })
+    }
+  })
+}
+
 function publishTestSuiteFinish (payload, waitForFinish) {
   if (!testSuiteFinishCh.hasSubscribers) return
 
@@ -2362,6 +2470,7 @@ const DD_TEST_ENVIRONMENT_OPTION_KEYS = [
   '_ddTestManagementTests',
   '_ddTestManagementAttemptToFixRetries',
   '_ddModifiedFiles',
+  '_ddIsOutOfSessionRetriesEnabled',
 ]
 
 function removeDatadogTestEnvironmentOptions (testEnvironmentOptions) {
