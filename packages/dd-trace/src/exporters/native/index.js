@@ -235,25 +235,46 @@ class NativeExporter {
     const spans = this._pendingSpans
     this._pendingSpans = []
 
-    // Determine if first span is local root (for trace chunk header)
-    const firstIsLocalRoot = this.#isLocalRoot(spans[0])
-
-    // Add trace-level tags to the first span in the chunk so the WASM
-    // pipeline emits them on the local-root span.
-    if (firstIsLocalRoot && spans.length > 0) {
-      this.#syncTraceTags(spans[0])
+    // Group the batch by trace so each prepared chunk is exactly one trace
+    // (segment). This matters because the pipeline treats a chunk as a single
+    // segment and stamps trace-level tags (sampling priority, `_dd.p.dm`,
+    // origin, top_level) onto its local root. A deferred flush can hold many
+    // traces at once (spans pile up while a send is in flight); lumping them
+    // into one chunk would stamp only the first and mis-group the rest.
+    const byTrace = new Map()
+    for (const span of spans) {
+      const trace = span.context()._trace
+      let group = byTrace.get(trace)
+      if (group === undefined) { group = []; byTrace.set(trace, group) }
+      group.push(span)
     }
 
-    // Collect span ids for native export (the op/flush handle is the span_id).
-    // Note: flushChangeQueue is called inside flushSpans, no need to call it here
-    const spanIds = spans.map(span => span.context()._nativeSpanId)
+    const groups = []
+    for (const group of byTrace.values()) {
+      // The local root leads the chunk so the pipeline treats it as chunk root.
+      const root = group.find(span => this.#isLocalRoot(span))
+      const firstIsLocalRoot = root !== undefined
+      let ordered = group
+      if (firstIsLocalRoot) {
+        // Emit this trace's trace-level tags on its own local root.
+        this.#syncTraceTags(root)
+        if (group[0] !== root) {
+          ordered = [root, ...group.filter(span => span !== root)]
+        }
+      }
+      groups.push({
+        spanIds: ordered.map(span => span.context()._nativeSpanId),
+        firstIsLocalRoot
+      })
+    }
 
     // prepareChunk is synchronous — extract spans from native storage now.
     // sendPreparedChunk is async (HTTP send). We serialize sends so that
     // prepared chunks don't accumulate faster than they can be sent, which
     // would cause unbounded memory growth proportional to total requests.
+    // Note: flushChangeQueue is called inside flushSpansGrouped.
     runtimeMetrics.increment(`${METRIC_PREFIX}.requests`, true)
-    this._nativeSpans.flushSpans(spanIds, firstIsLocalRoot)
+    this._nativeSpans.flushSpansGrouped(groups)
       .then((response) => {
         this.#flushInFlight = false
         runtimeMetrics.increment(`${METRIC_PREFIX}.responses`, true)

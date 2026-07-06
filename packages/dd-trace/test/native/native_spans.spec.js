@@ -46,7 +46,7 @@ describe('NativeSpansInterface', () => {
     // that offset.
     mockState = {
       flushChangeQueue: sinon.stub(),
-      prepareChunk: sinon.stub(),
+      prepareChunk: sinon.stub().returns(true),
       sendPreparedChunk: sinon.stub().resolves('OK'),
       stringTableInsertOne: sinon.stub(),
       stringTableEvict: sinon.stub(),
@@ -403,6 +403,45 @@ describe('NativeSpansInterface', () => {
       // don't accumulate atop a partially-consumed buffer.
       assert.strictEqual(nativeSpans._cqbIndex, 8)
       assert.strictEqual(nativeSpans._cqbCount, 0)
+    })
+
+    it('flushSpansGrouped stages one chunk per group and sends once', async () => {
+      // Each trace is its own group; the pipeline stages a chunk per prepareChunk
+      // and sends them together in a single request.
+      const idA = new Uint8Array([1, 0, 0, 0, 0, 0, 0, 0])
+      const idB = new Uint8Array([2, 0, 0, 0, 0, 0, 0, 0])
+
+      // Queue an op so the up-front drain actually calls into the pipeline.
+      nativeSpans.queueOp(OpCode.SetName, idA, 'x')
+
+      await nativeSpans.flushSpansGrouped([
+        { spanIds: [idA], firstIsLocalRoot: true },
+        { spanIds: [idB], firstIsLocalRoot: false }
+      ])
+
+      // Change queue drained exactly once, up front.
+      sinon.assert.calledOnce(mockState.flushChangeQueue)
+      // One prepareChunk per group, with that group's firstIsLocalRoot.
+      sinon.assert.calledTwice(mockState.prepareChunk)
+      assert.strictEqual(mockState.prepareChunk.getCall(0).args[1], true)
+      assert.strictEqual(mockState.prepareChunk.getCall(1).args[1], false)
+      // A single request carries both staged chunks.
+      sinon.assert.calledOnce(mockState.sendPreparedChunk)
+    })
+
+    it('flushSpansGrouped skips empty groups and does not send when nothing staged', async () => {
+      // prepareChunk reports "no spans" (returns false) -> no send.
+      mockState.prepareChunk = sinon.stub().returns(false)
+
+      const result = await nativeSpans.flushSpansGrouped([
+        { spanIds: [], firstIsLocalRoot: true }, // empty group: skipped entirely
+        { spanIds: [spanId], firstIsLocalRoot: true } // staged nothing (returns false)
+      ])
+
+      // Empty group never reaches prepareChunk; the non-empty one returns false.
+      sinon.assert.calledOnce(mockState.prepareChunk)
+      sinon.assert.notCalled(mockState.sendPreparedChunk)
+      assert.strictEqual(result, 'no spans to flush')
     })
   })
 

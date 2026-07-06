@@ -761,55 +761,81 @@ class NativeSpansInterface {
    * @param {boolean} [firstIsLocalRoot] Whether the first span is the local root (defaults to true)
    * @returns {Promise<string>} Response from the agent
    */
+  /**
+   * Flush one trace's spans. Thin wrapper over {@link flushSpansGrouped} for a
+   * single chunk; the exporter uses the grouped form so each request carries one
+   * chunk per trace.
+   */
   flushSpans (spanIds, firstIsLocalRoot = true) {
-    // Flush any pending change queue operations first
+    return this.flushSpansGrouped([{ spanIds, firstIsLocalRoot }])
+  }
+
+  /**
+   * Prepare one chunk per trace and send them as a single multi-trace request.
+   *
+   * Each group is `{ spanIds, firstIsLocalRoot }` for exactly one trace
+   * (segment), with the local-root span first. Grouping by trace is essential:
+   * `flush_chunk` treats a chunk as a single segment and copies that segment's
+   * trace-level tags (sampling priority, `_dd.p.dm`, origin, top_level) onto its
+   * local root. Passing many traces as one chunk would lump distinct trace_ids
+   * together and stamp only the first — corrupting sampling/grouping under load.
+   *
+   * @param {Array<{spanIds: Uint8Array[], firstIsLocalRoot: boolean}>} groups
+   */
+  flushSpansGrouped (groups) {
+    // Drain all pending ops (creates, tags, per-trace sampling/trace tags) once
+    // up front so every chunk prepared below sees a fully-applied span map.
     this.flushChangeQueue()
 
-    if (spanIds.length === 0) {
+    let prepared = 0
+    for (const group of groups) {
+      const spanIds = group.spanIds
+      if (!spanIds || spanIds.length === 0) continue
+
+      // Ensure flush buffer is large enough (8 bytes per u64 span id). The
+      // buffer is reused across groups: prepareChunk is synchronous and copies
+      // the ids out before returning, so overwriting it next iteration is safe.
+      const requiredSize = spanIds.length * 8
+      if (requiredSize > this._flushBuffer.length) {
+        this._flushBuffer = Buffer.alloc(requiredSize)
+      }
+
+      // Write span ids to the flush buffer as u64 LE (the ids are already LE)
+      let index = 0
+      for (const spanId of spanIds) {
+        this._flushBuffer.set(spanId, index)
+        index += 8
+      }
+
+      try {
+        // prepareChunk extracts this trace's spans and stages a chunk; multiple
+        // calls accumulate in native storage until sendPreparedChunk.
+        const has = this._state.prepareChunk(spanIds.length, group.firstIsLocalRoot, this._flushBuffer)
+        // prepareChunk (flush_change_buffer + flush_chunk) can allocate and grow
+        // WASM memory, detaching our cached views; refresh before the next write.
+        this.#checkDetach()
+        if (has) prepared++
+      } catch (e) {
+        // prepareChunk may throw partway through, after consuming some of the
+        // change queue or growing WASM memory. Reset JS-side queue state and
+        // refresh views so the next caller starts from a known-good baseline.
+        // Already-staged chunks from earlier groups are dropped with the
+        // rejection (they were extracted out of native storage).
+        this.resetChangeQueue()
+        this.#checkDetach()
+        log.error('Error preparing spans to flush:', e)
+        return Promise.reject(e)
+      }
+    }
+
+    if (prepared === 0) {
       return Promise.resolve('no spans to flush')
-    }
-
-    // Ensure flush buffer is large enough (8 bytes per u64 span id)
-    const requiredSize = spanIds.length * 8
-    if (requiredSize > this._flushBuffer.length) {
-      this._flushBuffer = Buffer.alloc(requiredSize)
-    }
-
-    // Write span ids to the flush buffer as u64 LE (the ids are already LE)
-    let index = 0
-    for (const spanId of spanIds) {
-      this._flushBuffer.set(spanId, index)
-      index += 8
-    }
-
-    try {
-      this._state.prepareChunk(spanIds.length, firstIsLocalRoot, this._flushBuffer)
-      // prepareChunk calls flush_change_buffer + flush_chunk in Rust which
-      // can allocate (deferred_meta/metrics Vecs, spans Vec). Any of those
-      // can trigger memory.grow which detaches our cached ArrayBuffer views.
-      // Refresh now so the next queueOp doesn't write through a stale view.
-      this.#checkDetach()
-    } catch (e) {
-      // prepareChunk may throw partway through, after consuming some of the
-      // change queue or growing WASM memory. Reset both pieces of state so
-      // the next caller starts from a known-good baseline:
-      //   - resetChangeQueue() restores _cqbIndex/_cqbCount and zeroes the
-      //     WASM-side header (any half-consumed entries become unreachable).
-      //   - #checkDetach() refreshes _cqbView/_cqbBytes if memory grew before
-      //     the throw, so subsequent writes don't go through detached views.
-      // Note: chunk slot indices may still be referenced by Rust state but
-      // are returned to the free pool by the caller — this is the original
-      // semantics on rejection and a known footgun.
-      this.resetChangeQueue()
-      this.#checkDetach()
-      log.error('Error flushing spans to agent:', e)
-      return Promise.reject(e)
     }
 
     return this._state.sendPreparedChunk()
       .catch(e => {
-        // A send failure is a *network* fault for the already-serialized chunk;
-        // that chunk is lost, which is expected on a transient agent outage.
+        // A send failure is a *network* fault for the already-serialized chunks;
+        // those are lost, which is expected on a transient agent outage.
         //
         // Crucially, do NOT resetChangeQueue() here. sendPreparedChunk is async,
         // so by the time this rejection lands, ops for *other* spans (including

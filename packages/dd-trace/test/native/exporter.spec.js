@@ -34,7 +34,7 @@ describe('NativeExporter', () => {
 
     nativeSpans = {
       flushChangeQueue: sinon.stub(),
-      flushSpans: sinon.stub().resolves('unchanged'),
+      flushSpansGrouped: sinon.stub().resolves('unchanged'),
       setAgentUrl: sinon.stub(),
       setUseV05: sinon.stub(),
       setOtlpEndpoint: sinon.stub(),
@@ -233,9 +233,9 @@ describe('NativeExporter', () => {
       exporter.export([span])
 
       // The exporter doesn't call flushChangeQueue directly; the
-      // change queue is drained inside flushSpans. Assert the visible
+      // change queue is drained inside flushSpansGrouped. Assert the visible
       // public-API call instead.
-      sinon.assert.called(nativeSpans.flushSpans)
+      sinon.assert.called(nativeSpans.flushSpansGrouped)
     })
 
     it('schedules exactly one flush timer after flushInterval ms regardless of repeated export() calls', () => {
@@ -248,11 +248,11 @@ describe('NativeExporter', () => {
       clock.tick(config.flushInterval / 2 - 1)
       exporter.export([createMockSpan(3n)])
 
-      sinon.assert.notCalled(nativeSpans.flushSpans)
+      sinon.assert.notCalled(nativeSpans.flushSpansGrouped)
 
       clock.tick(2)
 
-      sinon.assert.calledOnce(nativeSpans.flushSpans)
+      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
     })
   })
 
@@ -263,17 +263,17 @@ describe('NativeExporter', () => {
 
     it('should do nothing if no pending spans', (done) => {
       exporter.flush(() => {
-        sinon.assert.notCalled(nativeSpans.flushSpans)
+        sinon.assert.notCalled(nativeSpans.flushSpansGrouped)
         done()
       })
     })
 
     // The success path is one observable sequence — splitting it across 5
     // it() blocks paid for 5x mocha-overhead while testing the same flow.
-    // This single test pins all five aspects: flushSpans is called with the
+    // This single test pins all five aspects: flushSpansGrouped is called with the
     // extracted slot indices, _pendingSpans drains, the done callback fires
     // with no error, and pending spans drain once the in-flight send settles.
-    it('end-to-end successful flush: calls flushSpans with span ids, drains pending, fires done',
+    it('end-to-end successful flush: calls flushSpansGrouped with span ids, drains pending, fires done',
       async () => {
         const span1 = createMockSpan(123n)
         const span2 = createMockSpan(456n)
@@ -284,11 +284,13 @@ describe('NativeExporter', () => {
         exporter.flush((err) => { cbErr = err })
         assert.strictEqual(cbErr, undefined)
 
-        // flushSpans called with the extracted span-id array — the native
+        // flushSpansGrouped called with the extracted span-id array — the native
         // pipeline addresses spans by their span id.
-        sinon.assert.called(nativeSpans.flushSpans)
-        const call = nativeSpans.flushSpans.getCall(0)
-        assert.deepStrictEqual(call.args[0], [
+        sinon.assert.called(nativeSpans.flushSpansGrouped)
+        // Two distinct traces -> two per-trace chunks; every span id is present.
+        const groups = nativeSpans.flushSpansGrouped.getCall(0).args[0]
+        const allIds = groups.flatMap(g => g.spanIds)
+        assert.deepStrictEqual(allIds, [
           span1.context()._nativeSpanId,
           span2.context()._nativeSpanId,
         ])
@@ -420,11 +422,9 @@ describe('NativeExporter', () => {
       exporter.export([span])
 
       exporter.flush(() => {
-        sinon.assert.calledWith(
-          nativeSpans.flushSpans,
-          sinon.match.any,
-          true // firstIsLocalRoot
-        )
+        const groups = nativeSpans.flushSpansGrouped.getCall(0).args[0]
+        assert.strictEqual(groups.length, 1)
+        assert.strictEqual(groups[0].firstIsLocalRoot, true)
         done()
       })
     })
@@ -434,7 +434,7 @@ describe('NativeExporter', () => {
       // transient agent failure would leave spans buffered indefinitely
       // until the next export() call woke the exporter back up.
       let rejectSend
-      nativeSpans.flushSpans
+      nativeSpans.flushSpansGrouped
         .onFirstCall().callsFake(() => new Promise((_resolve, reject) => { rejectSend = reject }))
         .onSecondCall().resolves('unchanged')
 
@@ -448,7 +448,7 @@ describe('NativeExporter', () => {
       await clock.tickAsync(0)
       await clock.tickAsync(0)
 
-      sinon.assert.calledTwice(nativeSpans.flushSpans)
+      sinon.assert.calledTwice(nativeSpans.flushSpansGrouped)
       assert.strictEqual(exporter._pendingSpans.length, 0)
     })
 
@@ -457,7 +457,7 @@ describe('NativeExporter', () => {
       // stop instead of looping on the same error every flush.
       const buildErr = new Error('native exporter build failed: invalid config')
       buildErr.name = 'NativeExporterBuildError'
-      nativeSpans.flushSpans.rejects(buildErr)
+      nativeSpans.flushSpansGrouped.rejects(buildErr)
 
       exporter.export([createMockSpan(1n)])
       exporter.flush()
@@ -466,13 +466,13 @@ describe('NativeExporter', () => {
 
       // Buffered spans dropped, and the exporter is now disabled.
       assert.strictEqual(exporter._pendingSpans.length, 0)
-      sinon.assert.calledOnce(nativeSpans.flushSpans)
+      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
 
       // Subsequent export()/flush() are no-ops — no further send attempts.
       exporter.export([createMockSpan(2n)])
       exporter.flush()
       assert.strictEqual(exporter._pendingSpans.length, 0)
-      sinon.assert.calledOnce(nativeSpans.flushSpans)
+      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
     })
 
     it('should not start a new flush while one is in flight', () => {
@@ -480,16 +480,16 @@ describe('NativeExporter', () => {
       // call must not call into native again — the spans should accumulate
       // in `_pendingSpans` and drain after the in-flight settles.
       let resolveSend
-      nativeSpans.flushSpans.callsFake(() => new Promise(resolve => { resolveSend = resolve }))
+      nativeSpans.flushSpansGrouped.callsFake(() => new Promise(resolve => { resolveSend = resolve }))
 
       exporter.export([createMockSpan(1n)])
       exporter.flush()
-      sinon.assert.calledOnce(nativeSpans.flushSpans)
+      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
 
       // Second batch arrives while the first send is still in flight:
       exporter.export([createMockSpan(2n)])
       exporter.flush()
-      sinon.assert.calledOnce(nativeSpans.flushSpans)
+      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
       assert.strictEqual(exporter._pendingSpans.length, 1)
 
       // Settle the in-flight send so afterEach's clock.restore() doesn't
@@ -500,7 +500,7 @@ describe('NativeExporter', () => {
     it('should re-flush queued spans after in-flight settles', async () => {
       // Spans queued during a send should drain on settle, not stay buffered.
       let resolveSend
-      nativeSpans.flushSpans
+      nativeSpans.flushSpansGrouped
         .onFirstCall().callsFake(() => new Promise(resolve => { resolveSend = resolve }))
         .onSecondCall().resolves('unchanged')
 
@@ -515,16 +515,16 @@ describe('NativeExporter', () => {
       await clock.tickAsync(0)
       await clock.tickAsync(0)
 
-      sinon.assert.calledTwice(nativeSpans.flushSpans)
+      sinon.assert.calledTwice(nativeSpans.flushSpansGrouped)
       assert.strictEqual(exporter._pendingSpans.length, 0)
     })
 
-    it('should swallow flushSpans rejections (logged, not propagated to done)', async () => {
+    it('should swallow flushSpansGrouped rejections (logged, not propagated to done)', async () => {
       // flush() calls done() immediately after kicking off the
       // async send, then log.error()s any rejection. Errors no longer
       // surface through the done callback. Verify done is invoked
       // without an argument and the rejection is observed (logged).
-      nativeSpans.flushSpans.rejects(new Error('Network error'))
+      nativeSpans.flushSpansGrouped.rejects(new Error('Network error'))
 
       const span = createMockSpan(1n)
       exporter.export([span])
@@ -549,7 +549,7 @@ describe('NativeExporter', () => {
 
     it('forwards rate_by_service from the agent response to the priority sampler', async () => {
       const rates = { 'service:web,env:prod': 0.5, 'service:db,env:prod': 0.1 }
-      nativeSpans.flushSpans.resolves(JSON.stringify({ rate_by_service: rates }))
+      nativeSpans.flushSpansGrouped.resolves(JSON.stringify({ rate_by_service: rates }))
 
       exporter.export([createMockSpan(1n)])
       exporter.flush()
@@ -564,7 +564,7 @@ describe('NativeExporter', () => {
       // was sent, and these carry no body to parse. None should touch the
       // sampler or log an error.
       for (const sentinel of ['unchanged', 'no spans to flush', '']) {
-        nativeSpans.flushSpans.resolves(sentinel)
+        nativeSpans.flushSpansGrouped.resolves(sentinel)
         exporter.export([createMockSpan(1n)])
         exporter.flush()
         await clock.tickAsync(0)
@@ -575,7 +575,7 @@ describe('NativeExporter', () => {
     })
 
     it('does not update rates when the response body omits rate_by_service', async () => {
-      nativeSpans.flushSpans.resolves(JSON.stringify({ something_else: true }))
+      nativeSpans.flushSpansGrouped.resolves(JSON.stringify({ something_else: true }))
 
       exporter.export([createMockSpan(1n)])
       exporter.flush()
@@ -585,7 +585,7 @@ describe('NativeExporter', () => {
     })
 
     it('swallows malformed JSON in the response without disrupting the flush', async () => {
-      nativeSpans.flushSpans.resolves('this is not json')
+      nativeSpans.flushSpansGrouped.resolves('this is not json')
 
       exporter.export([createMockSpan(1n)])
       exporter.flush()
@@ -624,7 +624,7 @@ describe('NativeExporter', () => {
     })
 
     it('does not publish when the flush rejects', async () => {
-      nativeSpans.flushSpans.rejects(new Error('Network error'))
+      nativeSpans.flushSpansGrouped.rejects(new Error('Network error'))
 
       exporter.export([createMockSpan(1n)])
       exporter.flush()
@@ -662,7 +662,7 @@ describe('NativeExporter', () => {
     it('increments error counters (name + code) on a failed flush', async () => {
       const err = new Error('boom')
       err.code = 'ECONNREFUSED'
-      nativeSpans.flushSpans.rejects(err)
+      nativeSpans.flushSpansGrouped.rejects(err)
       exporter = new NativeExporter(config, prioritySampler, nativeSpans)
       exporter.export([createMockSpan(1n)])
       exporter.flush(() => {})
@@ -694,7 +694,7 @@ describe('NativeExporter', () => {
       _parentId: { toString: () => '0' },
       _isRemote: false,
       // The exporter reads context._nativeSpanId to build the span-id
-      // array passed to nativeSpans.flushSpans.
+      // array passed to nativeSpans.flushSpansGrouped.
       _trace: {
         started: [],
         finished: [],
