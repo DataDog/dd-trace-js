@@ -16,6 +16,10 @@ const {
 } = require('../helpers')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const {
+  finishDeferredHookEnd,
+  wrapFailedTestReplayHookUpCallback,
+} = require('../../packages/datadog-instrumentations/src/mocha/utils')
+const {
   TEST_CODE_COVERAGE_ENABLED,
   TEST_ITR_SKIPPING_ENABLED,
   TEST_ITR_TESTS_SKIPPED,
@@ -114,6 +118,81 @@ const MOCHA_VERSION = requestedMochaVersion === 'oldest' ? oldestMochaVersion : 
 const mochaMajor = MOCHA_VERSION === 'latest' ? Infinity : Number.parseInt(MOCHA_VERSION, 10)
 const supportsMochaRetryEvents = mochaMajor >= 6
 const onlyLatestIt = MOCHA_VERSION === 'latest' ? it : it.skip
+
+describe('mocha failed test replay helpers', () => {
+  describe('finishDeferredHookEnd', () => {
+    it('finishes synchronously when there is no DI wait promise', () => {
+      let finishCount = 0
+      let onFinishCount = 0
+      const test = {
+        _ddDeferredHookEnd: {
+          publishTestFinish () {
+            finishCount++
+          },
+          onFinish () {
+            onFinishCount++
+          },
+        },
+      }
+
+      finishDeferredHookEnd(test)
+
+      assert.strictEqual(finishCount, 1)
+      assert.strictEqual(onFinishCount, 1)
+      assert.strictEqual(test._ddDeferredHookEnd, undefined)
+    })
+  })
+
+  describe('wrapFailedTestReplayHookUpCallback', () => {
+    it('waits for DI setup before continuing afterEach hookUp', async () => {
+      let resolveSetProbe
+      const setProbePromise = new Promise(resolve => {
+        resolveSetProbe = resolve
+      })
+      const err = new Error('test')
+      const suite = {}
+      let receivedArgs
+      function next (err, suite) {
+        receivedArgs = [err, suite]
+      }
+      const wrapped = wrapFailedTestReplayHookUpCallback(next, {}, setProbePromise)
+
+      assert.strictEqual(wrapped.name, 'next')
+      assert.strictEqual(wrapped.length, 2)
+      wrapped(err, suite)
+
+      assert.strictEqual(receivedArgs, undefined)
+
+      resolveSetProbe()
+      await setProbePromise
+      await Promise.resolve()
+
+      assert.deepStrictEqual(receivedArgs, [err, suite])
+    })
+
+    it('runs deferred hook-end finish before continuing afterEach hookUp', async () => {
+      const calls = []
+      const test = {
+        _ddDeferredHookEnd: {
+          waitForHitProbePromise: Promise.resolve(),
+          publishTestFinish () {
+            calls.push('finish')
+          },
+        },
+      }
+      function next () {
+        calls.push('next')
+      }
+
+      const wrapped = wrapFailedTestReplayHookUpCallback(next, test)
+
+      assert.strictEqual(wrapped.length, 0)
+      await wrapped()
+
+      assert.deepStrictEqual(calls, ['finish', 'next'])
+    })
+  })
+})
 
 describe(`mocha@${MOCHA_VERSION}`, function () {
   let receiver
