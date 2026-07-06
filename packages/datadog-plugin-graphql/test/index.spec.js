@@ -2000,6 +2000,89 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with nested executions sharing a contextValue', () => {
+        before(() => {
+          tracer = require('../../dd-trace')
+
+          return agent.load('graphql', {
+            variables: variables => variables,
+          })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          graphql = require(`../../../versions/graphql@${version}`).get()
+        })
+
+        // A resolver that re-enters execute() with the same object contextValue
+        // (Apollo federation and stitching do this) is short-circuited by the
+        // plugin and its resolvers reuse the outer operation's context. The
+        // per-resolver variable tags must still come from each field's own
+        // variableValues, not the outer operation's.
+        it('tags each resolve span with its own operation variables', () => {
+          const outerDocument = graphql.parse('query Outer($x: String) { outer(x: $x) }')
+          const innerDocument = graphql.parse('query Inner($y: String) { inner(y: $y) }')
+
+          const nestedSchema = new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'NestedQuery',
+              fields: {
+                outer: {
+                  type: graphql.GraphQLString,
+                  args: { x: { type: graphql.GraphQLString } },
+                  resolve (source, args, contextValue) {
+                    return graphql.execute({
+                      schema: nestedSchema,
+                      document: innerDocument,
+                      contextValue,
+                      variableValues: { y: 'inner' },
+                    }).then(result => `outer:${result.data.inner}`)
+                  },
+                },
+                inner: {
+                  type: graphql.GraphQLString,
+                  args: { y: { type: graphql.GraphQLString } },
+                  resolve () {
+                    return 'inner-value'
+                  },
+                },
+              },
+            }),
+          })
+
+          const resolveSpans = new Map()
+          const assertion = agent.assertSomeTraces(traces => {
+            for (const trace of traces) {
+              for (const span of trace) {
+                if (span.name === 'graphql.resolve') resolveSpans.set(span.resource, span)
+              }
+            }
+
+            const outerSpan = resolveSpans.get('outer:String')
+            const innerSpan = resolveSpans.get('inner:String')
+            assert.ok(outerSpan, 'expected an outer graphql.resolve span')
+            assert.ok(innerSpan,
+              `expected an inner graphql.resolve span, got: ${[...resolveSpans.keys()].join(', ')}`)
+
+            assert.strictEqual(outerSpan.meta['graphql.variables.x'], 'outer')
+            assert.strictEqual(innerSpan.meta['graphql.variables.y'], 'inner')
+          }, { timeoutMs: 3000 })
+
+          const contextValue = {}
+          const execution = graphql.execute({
+            schema: nestedSchema,
+            document: outerDocument,
+            contextValue,
+            variableValues: { x: 'outer' },
+          })
+
+          return Promise.all([assertion, execution])
+        })
+      })
+
       describe('with an array of variable names', () => {
         before(() => {
           tracer = require('../../dd-trace')

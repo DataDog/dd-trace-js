@@ -34,6 +34,11 @@ const patchedTypes = new WeakSet()
 // when depth=0 disables resolver instrumentation.
 let depthDisabled = false
 
+// Initial key for the per-operation variables-filter cache. A unique sentinel
+// so the first #filterVariables call never falsely matches, even when the
+// operation's variableValues is undefined.
+const NO_VARIABLES_CACHED = Symbol('noVariablesCached')
+
 class AbortError extends Error {
   constructor (message) {
     super(message)
@@ -179,6 +184,10 @@ class GraphQLExecutePlugin extends TracingPlugin {
       abortController,
       executeSpan: span,
       plugin: this,
+      // graphql.resolve variable tags: memoize the filtered result for the
+      // last-seen variableValues object (see #filterVariables).
+      filteredVariablesKey: NO_VARIABLES_CACHED,
+      filteredVariables: undefined,
     }
     ctx.ddRootCtx = rootCtx
     if (isWeakMapKey(contextValue)) {
@@ -291,7 +300,7 @@ class GraphQLExecutePlugin extends TracingPlugin {
     field.span = span
 
     if (fieldNode && this.config.variables && fieldNode.arguments) {
-      const variables = this.config.variables(variableValues)
+      const variables = this.#filterVariables(rootCtx, variableValues)
       for (const arg of fieldNode.arguments) {
         if (arg.value?.name && arg.value.kind === 'Variable' && variables[arg.value.name.value]) {
           const name = arg.value.name.value
@@ -301,6 +310,27 @@ class GraphQLExecutePlugin extends TracingPlugin {
     }
 
     return span
+  }
+
+  // Memoize the user variables filter against the last-seen variableValues
+  // object. graphql hands every resolver in one execute the same coerced
+  // variableValues object, so all arg-bearing fields hit the identity fast
+  // path and the filter runs once per operation. A nested execute() sharing
+  // the same object contextValue reuses the outer rootCtx but carries its own
+  // variableValues; comparing by identity recomputes for it (and any later
+  // fields on that inner object reuse the slot), so each field's tags stay
+  // correct. A single slot beats a WeakMap here: no per-operation allocation,
+  // and the common single-object case is a bare `===` (see the microbenchmark
+  // numbers in the commit body).
+  #filterVariables (rootCtx, variableValues) {
+    if (rootCtx.filteredVariablesKey === variableValues) {
+      return rootCtx.filteredVariables
+    }
+
+    const filtered = this.config.variables(variableValues)
+    rootCtx.filteredVariablesKey = variableValues
+    rootCtx.filteredVariables = filtered
+    return filtered
   }
 
   // Public — called from wrapResolve. endTime reflects when the resolver
