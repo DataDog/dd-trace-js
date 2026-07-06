@@ -657,6 +657,7 @@ addHook({
       testCommand: providedContext.testCommand,
       repositoryRoot: providedContext.repositoryRoot,
       codeOwnersEntries: providedContext.codeOwnersEntries,
+      testEnvironmentMetadata: providedContext.testEnvironmentMetadata,
     }
     testSuiteStartCh.runStores(testSuiteCtx, () => {})
     const startTestsResponse = await startTests.apply(this, arguments)

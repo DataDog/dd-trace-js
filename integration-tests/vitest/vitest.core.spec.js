@@ -2578,7 +2578,7 @@ versions.forEach((version) => {
               cwd,
               env: {
                 ...getCiVisAgentlessConfig(receiver.port),
-                TEST_DIR: 'ci-visibility/vitest-tests/dynamic-instrumentation-multiple-retries.mjs',
+                TEST_DIR: 'ci-visibility/vitest-tests/ftr-multiple-retries.mjs',
                 NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
                 _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
               },
