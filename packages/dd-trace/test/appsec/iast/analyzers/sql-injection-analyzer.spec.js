@@ -61,6 +61,14 @@ describe('sql-injection-analyzer', () => {
     './stored-injection-analyzer': StoredInjectionAnalyzer,
   })
 
+  function getSubscriptionHandler (analyzer, channelName) {
+    const subscription = analyzer._subscriptions.find(({ _channel }) => _channel.name === channelName)
+
+    assert.ok(subscription, `Missing subscription for ${channelName}`)
+
+    return subscription._handler
+  }
+
   afterEach(() => {
     sinon.restore()
   })
@@ -68,21 +76,26 @@ describe('sql-injection-analyzer', () => {
   sqlInjectionAnalyzer.configure(true)
 
   it('should subscribe to mysql, mysql2 and pg start query channel', () => {
-    assert.strictEqual(sqlInjectionAnalyzer._subscriptions.length, 7)
-    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[0]._channel.name, 'apm:mysql:query:start')
-    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[1]._channel.name, 'datadog:mysql2:outerquery:start')
-    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[2]._channel.name, 'apm:pg:query:start')
-    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[3]._channel.name, 'datadog:sequelize:query:finish')
-    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[4]._channel.name, 'datadog:pg:pool:query:finish')
-    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[5]._channel.name, 'datadog:mysql:pool:query:start')
-    assert.strictEqual(sqlInjectionAnalyzer._subscriptions[6]._channel.name, 'datadog:mysql:pool:query:finish')
+    assert.deepStrictEqual(sqlInjectionAnalyzer._subscriptions.map(({ _channel }) => _channel.name), [
+      'apm:mysql:query:start',
+      'tracing:orchestrion:mysql:Connection_query:start',
+      'datadog:mysql2:outerquery:start',
+      'apm:pg:query:start',
+      'datadog:sequelize:query:finish',
+      'datadog:pg:pool:query:finish',
+      'datadog:mysql:pool:query:start',
+      'datadog:mysql:pool:query:finish',
+      'tracing:orchestrion:mysql:Pool_query:end',
+    ])
 
-    assert.strictEqual(sqlInjectionAnalyzer._bindings.length, 5)
-    assert.strictEqual(sqlInjectionAnalyzer._bindings[0]._channel.name, 'datadog:sequelize:query:start')
-    assert.strictEqual(sqlInjectionAnalyzer._bindings[1]._channel.name, 'datadog:pg:pool:query:start')
-    assert.strictEqual(sqlInjectionAnalyzer._bindings[2]._channel.name, 'datadog:knex:raw:start')
-    assert.strictEqual(sqlInjectionAnalyzer._bindings[3]._channel.name, 'datadog:knex:raw:subscribes')
-    assert.strictEqual(sqlInjectionAnalyzer._bindings[4]._channel.name, 'datadog:knex:raw:finish')
+    assert.deepStrictEqual(sqlInjectionAnalyzer._bindings.map(({ _channel }) => _channel.name), [
+      'datadog:sequelize:query:start',
+      'datadog:pg:pool:query:start',
+      'tracing:orchestrion:mysql:Pool_query:start',
+      'datadog:knex:raw:start',
+      'datadog:knex:raw:subscribes',
+      'datadog:knex:raw:finish',
+    ])
   })
 
   it('should not detect vulnerability when no query', () => {
@@ -169,17 +182,21 @@ describe('sql-injection-analyzer', () => {
 
   describe('analyze', () => {
     let sqlInjectionAnalyzer, analyze
+    let getStore, enterWith
 
     const store = {}
     const iastContext = {}
 
     beforeEach(() => {
-      const getStore = sinon.stub().returns(store)
+      getStore = sinon.stub().returns(store)
+      enterWith = sinon.stub()
       const getIastContext = sinon.stub().returns(iastContext)
 
       const datadogCore = {
         storage: () => {
           return {
+            enterWith,
+            getHandle: sinon.stub(),
             getStore,
           }
         },
@@ -199,8 +216,13 @@ describe('sql-injection-analyzer', () => {
         './vulnerability-analyzer': ProxyAnalyzer,
       })
 
-      sqlInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/sql-injection-analyzer', {
+      const StoredInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/stored-injection-analyzer', {
         './injection-analyzer': InjectionAnalyzer,
+      })
+
+      sqlInjectionAnalyzer = proxyquire('../../../../src/appsec/iast/analyzers/sql-injection-analyzer', {
+        './stored-injection-analyzer': StoredInjectionAnalyzer,
+        '../../../../../datadog-core': datadogCore,
       })
       analyze = sinon.stub(sqlInjectionAnalyzer, 'analyze')
       sqlInjectionAnalyzer.configure(true)
@@ -209,15 +231,37 @@ describe('sql-injection-analyzer', () => {
     afterEach(sinon.restore)
 
     it('should call analyze on apm:mysql:query:start', () => {
-      const onMysqlQueryStart = sqlInjectionAnalyzer._subscriptions[0]._handler
+      const onMysqlQueryStart = getSubscriptionHandler(sqlInjectionAnalyzer, 'apm:mysql:query:start')
 
       onMysqlQueryStart({ sql: 'SELECT 1' })
 
       sinon.assert.calledOnceWithMatch(analyze, 'SELECT 1')
     })
 
+    it('should call analyze on orchestrion mysql connection query start', () => {
+      const onMysqlQueryStart = getSubscriptionHandler(
+        sqlInjectionAnalyzer,
+        'tracing:orchestrion:mysql:Connection_query:start'
+      )
+
+      onMysqlQueryStart({ arguments: ['SELECT 1'] })
+
+      sinon.assert.calledOnceWithMatch(analyze, 'SELECT 1')
+    })
+
+    it('should not call analyze on orchestrion mysql connection query start if legacy channel handled it', () => {
+      const onMysqlQueryStart = getSubscriptionHandler(
+        sqlInjectionAnalyzer,
+        'tracing:orchestrion:mysql:Connection_query:start'
+      )
+
+      onMysqlQueryStart({ arguments: ['SELECT 1'], sql: 'SELECT 1' })
+
+      sinon.assert.notCalled(analyze)
+    })
+
     it('should call analyze on apm:mysql2:query:start', () => {
-      const onMysql2QueryStart = sqlInjectionAnalyzer._subscriptions[1]._handler
+      const onMysql2QueryStart = getSubscriptionHandler(sqlInjectionAnalyzer, 'datadog:mysql2:outerquery:start')
 
       onMysql2QueryStart({ sql: 'SELECT 1' })
 
@@ -225,11 +269,45 @@ describe('sql-injection-analyzer', () => {
     })
 
     it('should call analyze on apm:pg:query:start', () => {
-      const onPgQueryStart = sqlInjectionAnalyzer._subscriptions[2]._handler
+      const onPgQueryStart = getSubscriptionHandler(sqlInjectionAnalyzer, 'apm:pg:query:start')
 
       onPgQueryStart({ originalText: 'SELECT 1', query: { text: 'modified-query SELECT 1' } })
 
       sinon.assert.calledOnceWithMatch(analyze, 'SELECT 1')
+    })
+
+    it('should bind analyzed store on orchestrion mysql pool query start', () => {
+      const ctx = { arguments: ['SELECT 1'] }
+
+      const currentStore = sqlInjectionAnalyzer.bindMysqlOrchestrionPoolQuery(ctx)
+
+      sinon.assert.calledOnceWithMatch(analyze, 'SELECT 1', store, 'MYSQL')
+      assert.strictEqual(currentStore.sqlAnalyzed, true)
+      assert.strictEqual(currentStore.sqlParentStore, store)
+      assert.strictEqual(ctx.iastSqlAnalyzed, true)
+    })
+
+    it('should not bind analyzed store on orchestrion mysql pool query start if legacy channel handled it', () => {
+      const currentStore = { sqlAnalyzed: true }
+      getStore.returns(currentStore)
+
+      const ctx = { arguments: ['SELECT 1'] }
+
+      assert.strictEqual(sqlInjectionAnalyzer.bindMysqlOrchestrionPoolQuery(ctx), currentStore)
+      sinon.assert.notCalled(analyze)
+      assert.strictEqual(ctx.iastSqlAnalyzed, undefined)
+    })
+
+    it('should restore parent store when orchestrion mysql pool query callback runs', () => {
+      const callback = sinon.stub()
+      const ctx = { arguments: ['SELECT 1', callback] }
+
+      const currentStore = sqlInjectionAnalyzer.bindMysqlOrchestrionPoolQuery(ctx)
+      getStore.returns(currentStore)
+      ctx.arguments[1]('error', 'result')
+
+      sinon.assert.calledOnceWithExactly(enterWith, store)
+      sinon.assert.calledOnceWithExactly(callback, 'error', 'result')
     })
   })
 
