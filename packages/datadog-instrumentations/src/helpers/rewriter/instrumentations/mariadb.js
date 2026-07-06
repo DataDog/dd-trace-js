@@ -20,12 +20,25 @@ module.exports = [
     },
     channelName: 'Pool_getConnection',
   },
-  // Pool._createConnection — pre-3.4.1 the pool's lazy connection growth
-  // (including `initSql` / `sessionVariables` setup queries) goes through
-  // this method. Clear context so those internal queries don't get
-  // attributed to whatever user span happened to trigger pool growth.
-  // 3.4.1+ moved this work behind private fields, where Pool.getConnection
-  // already covers it.
+  // Pool._createPoolConnection — mariadb 3.4.1 renamed the pool's lazy
+  // connection growth method. Clear context so connection-establishment spans
+  // and internal setup queries don't get attributed to whichever user span
+  // happened to trigger pool growth.
+  {
+    module: {
+      name: 'mariadb',
+      versionRange: '>=3.4.1',
+      filePath: 'lib/pool.js',
+    },
+    functionQuery: {
+      methodName: '_createPoolConnection',
+      className: 'Pool',
+      kind: 'Sync',
+    },
+    channelName: 'Pool_createConnection',
+  },
+  // Pool._createConnection — pre-3.4.1 name for the same lazy connection
+  // growth path.
   {
     module: {
       name: 'mariadb',

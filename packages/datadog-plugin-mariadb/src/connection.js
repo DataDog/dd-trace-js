@@ -102,8 +102,9 @@ class PoolGetConnectionPlugin extends Plugin {
 
     const prefix = 'tracing:orchestrion:mariadb:Pool_getConnection'
 
-    // Save the user's context before start clears it, and return null to clear
-    // context so pool-internal TCP connections don't become children of the user span.
+    // Save the user's context before start clears it. `currentStore` lets
+    // asyncStart restore through a noop store created by pool growth, while
+    // `parentStore` preserves the existing query/command parent contract.
     this.addBind(`${prefix}:start`, ctx => {
       ctx.parentStore = storage('legacy').getStore()
       return null
@@ -136,17 +137,12 @@ class PoolGetConnectionPlugin extends Plugin {
 }
 
 /**
- * Handles Pool._createConnection (v>=3 <3.4.1).
+ * Handles v3 pool connection growth.
  *
- * Pre-3.4.1, the pool's lazy connection growth path runs through
- * `Pool.prototype._createConnection`, which internally executes the pool's
- * `initSql` / `sessionVariables` setup queries on each new connection.
- * Without context clearing, those internal queries inherit whichever user
- * span happened to trigger pool growth and get mis-attributed to the
- * caller. Returning null from `:start` runs the body under a null store.
- *
- * 3.4.1+ moves this work behind private fields and is already covered by
- * `Pool.getConnection`, so this plugin is intentionally scoped to the gap.
+ * The method name is `_createConnection` before 3.4.1 and
+ * `_createPoolConnection` in 3.4.1+. Returning a noop store from `:start`
+ * keeps connection-establishment spans and internal setup queries out of the
+ * caller's active trace.
  */
 class PoolCreateConnectionPlugin extends Plugin {
   static id = 'mariadb'
@@ -154,7 +150,7 @@ class PoolCreateConnectionPlugin extends Plugin {
   constructor () {
     super(...arguments)
 
-    this.addBind('tracing:orchestrion:mariadb:Pool_createConnection:start', () => null)
+    this.addBind('tracing:orchestrion:mariadb:Pool_createConnection:start', () => ({ noop: true }))
   }
 
   configure (config) {
@@ -206,6 +202,7 @@ class V2PoolBaseGetConnectionPlugin extends Plugin {
 
     this.addBind(`${prefix}:start`, ctx => {
       ctx.parentStore = storage('legacy').getStore()
+      ctx.currentStore = ctx.parentStore
       return null
     })
 
