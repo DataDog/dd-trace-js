@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 
+const dc = require('dc-polyfill')
 const { afterEach, before, beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire').noPreserveCache()
 const sinon = require('sinon')
@@ -17,6 +18,43 @@ const { expectedSchema, rawExpectedSchema } = require('./naming')
 describe('Plugin', () => {
   let mysql
   let tracer
+
+  describe('mysql orchestrion plugin', () => {
+    it('ignores connection query end without a query result or active span', () => {
+      const MysqlOrchestrionPlugin = require('../src/orchestrion')
+      const { connectionQuery: ConnectionQueryPlugin } = MysqlOrchestrionPlugin.plugins
+      const plugin = new ConnectionQueryPlugin({}, {})
+      const finish = sinon.stub(plugin, 'finish')
+
+      plugin.end({})
+
+      sinon.assert.notCalled(finish)
+    })
+
+    it('publishes pool query finish when a thenable pool result settles', () => {
+      const MysqlOrchestrionPlugin = require('../src/orchestrion')
+      const { poolQuery: PoolQueryPlugin } = MysqlOrchestrionPlugin.plugins
+      const plugin = new PoolQueryPlugin({}, {})
+      const channel = dc.channel('datadog:mysql:pool:query:finish')
+      const onFinish = sinon.stub()
+      const ctx = {
+        result: {
+          then: sinon.stub().callsFake((resolve) => resolve()),
+        },
+      }
+
+      channel.subscribe(onFinish)
+      try {
+        plugin.end(ctx)
+
+        sinon.assert.calledOnce(ctx.result.then)
+        sinon.assert.calledOnce(onFinish)
+        assert.strictEqual(onFinish.firstCall.args[0], ctx)
+      } finally {
+        channel.unsubscribe(onFinish)
+      }
+    })
+  })
 
   describe('mysql', () => {
     withVersions('mysql', 'mysql', version => {

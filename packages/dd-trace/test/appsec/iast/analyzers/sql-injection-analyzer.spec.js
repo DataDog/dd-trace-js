@@ -249,6 +249,17 @@ describe('sql-injection-analyzer', () => {
       sinon.assert.calledOnceWithMatch(analyze, 'SELECT 1')
     })
 
+    it('should call analyze on orchestrion mysql connection query start with query options', () => {
+      const onMysqlQueryStart = getSubscriptionHandler(
+        sqlInjectionAnalyzer,
+        'tracing:orchestrion:mysql:Connection_query:start'
+      )
+
+      onMysqlQueryStart({ arguments: [{ sql: 'SELECT 1' }] })
+
+      sinon.assert.calledOnceWithMatch(analyze, 'SELECT 1')
+    })
+
     it('should not call analyze on orchestrion mysql connection query start if legacy channel handled it', () => {
       const onMysqlQueryStart = getSubscriptionHandler(
         sqlInjectionAnalyzer,
@@ -274,6 +285,27 @@ describe('sql-injection-analyzer', () => {
       onPgQueryStart({ originalText: 'SELECT 1', query: { text: 'modified-query SELECT 1' } })
 
       sinon.assert.calledOnceWithMatch(analyze, 'SELECT 1')
+    })
+
+    it('should bind analyzed store on mysql pool query start', () => {
+      const onMysqlPoolQueryStart = getSubscriptionHandler(sqlInjectionAnalyzer, 'datadog:mysql:pool:query:start')
+
+      onMysqlPoolQueryStart({ sql: 'SELECT 1' })
+
+      sinon.assert.calledOnceWithMatch(analyze, 'SELECT 1', store, 'MYSQL')
+      sinon.assert.calledOnce(enterWith)
+      assert.strictEqual(enterWith.firstCall.args[0].sqlAnalyzed, true)
+      assert.strictEqual(enterWith.firstCall.args[0].sqlParentStore, store)
+    })
+
+    it('should not bind analyzed store on mysql pool query start if it was already analyzed', () => {
+      getStore.returns({ sqlAnalyzed: true })
+      const onMysqlPoolQueryStart = getSubscriptionHandler(sqlInjectionAnalyzer, 'datadog:mysql:pool:query:start')
+
+      onMysqlPoolQueryStart({ sql: 'SELECT 1' })
+
+      sinon.assert.notCalled(analyze)
+      sinon.assert.notCalled(enterWith)
     })
 
     it('should bind analyzed store on orchestrion mysql pool query start', () => {
@@ -308,6 +340,33 @@ describe('sql-injection-analyzer', () => {
 
       sinon.assert.calledOnceWithExactly(enterWith, store)
       sinon.assert.calledOnceWithExactly(callback, 'error', 'result')
+    })
+
+    it('should restore parent store when orchestrion mysql pool query thenable settles', () => {
+      const currentStore = { sqlAnalyzed: true, sqlParentStore: store }
+      const result = {
+        then: sinon.stub().callsFake((resolve) => resolve()),
+      }
+      getStore.returns(currentStore)
+
+      sqlInjectionAnalyzer.finishMysqlOrchestrionPoolQuery({
+        iastSqlAnalyzed: true,
+        result,
+      })
+
+      sinon.assert.calledOnce(result.then)
+      sinon.assert.calledOnceWithExactly(enterWith, store)
+    })
+
+    it('should not restore parent store when orchestrion mysql pool query was analyzed elsewhere', () => {
+      const result = {
+        then: sinon.stub(),
+      }
+
+      sqlInjectionAnalyzer.finishMysqlOrchestrionPoolQuery({ result })
+
+      sinon.assert.notCalled(result.then)
+      sinon.assert.notCalled(enterWith)
     })
   })
 
