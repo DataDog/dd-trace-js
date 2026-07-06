@@ -202,6 +202,19 @@ describe('SpanAggKey', () => {
     assert.strictEqual(
       key.toString(), 'basic-span,service-name,resource-name,span-type,0,false,,,,,14')
   })
+
+  it('should use rpc.grpc.status_code OTel alias when grpc.status.code is absent', () => {
+    const span = { ...basicSpan, meta: { ...basicSpan.meta, 'rpc.grpc.status_code': '2' }, metrics: {} }
+    const key = new SpanAggKey(span)
+    assert.strictEqual(key.rpcStatusCode, '2')
+  })
+
+  it('should use rpc.response.status_code OTel alias as last resort', () => {
+    const meta = { ...basicSpan.meta, 'rpc.response.status_code': 'INVALID_ARGUMENT' }
+    const span = { ...basicSpan, meta, metrics: {} }
+    const key = new SpanAggKey(span)
+    assert.strictEqual(key.rpcStatusCode, '3')
+  })
 })
 
 describe('SpanAggStats', () => {

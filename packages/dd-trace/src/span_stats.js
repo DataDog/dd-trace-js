@@ -111,7 +111,11 @@ class SpanAggKey {
     this.spanKind = span.meta[SPAN_KIND] || ''
     // dd gRPC plugin sets a numeric code via setTag; OTel/manual sets a string name via meta.
     // Normalize to numeric string to match the Agent's parseGRPCStatusString convention.
-    const grpcCode = span.meta[GRPC_STATUS_CODE] ?? span.metrics?.[GRPC_STATUS_CODE]
+    // Also check OTel semantic aliases (rpc.grpc.status_code, rpc.response.status_code) as
+    // the OTel bridge stores attributes under their original key without remapping.
+    const grpcCode = span.meta[GRPC_STATUS_CODE] ?? span.metrics?.[GRPC_STATUS_CODE] ??
+      span.meta['rpc.grpc.status_code'] ?? span.metrics?.['rpc.grpc.status_code'] ??
+      span.meta['rpc.response.status_code'] ?? span.metrics?.['rpc.response.status_code']
     if (typeof grpcCode === 'number') {
       this.rpcStatusCode = String(grpcCode)
     } else if (grpcCode) {
