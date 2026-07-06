@@ -1624,6 +1624,13 @@ describe('Config', () => {
     assert.ok(Object.hasOwn(config.tags, 'runtime-id'))
   })
 
+  it('should apply the DD_TAGS grammar to a programmatic space-separated string tags option', () => {
+    // Programmatic strings must parse identically to DD_TAGS, including space-separated tags.
+    const config = getConfig({ tags: 'key1:value1 key2:value2' })
+
+    assertObjectContains(config.tags, { key1: 'value1', key2: 'value2' })
+  })
+
   it('should normalize a programmatic array tags option into an object', () => {
     const config = getConfig({ tags: ['team:checkout', 'tier:backend'] })
 

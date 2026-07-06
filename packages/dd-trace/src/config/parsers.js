@@ -176,8 +176,11 @@ const transformers = {
     if (value && typeof value === 'object' && !Array.isArray(value)) {
       return value
     }
-    // Programmatic string / array (and any stray primitive) → normalized map, never a bare string.
-    // Without this, a raw string reaches #applyCalculated, which writes properties onto it and throws.
+    // A programmatic string (e.g. `init({ tags: process.env.DD_TRACE_GLOBAL_TAGS })`) is normalized with
+    // the exact DD_TAGS grammar the env-var path uses (including space-separated tags), so both paths agree.
+    if (typeof value === 'string') {
+      return parsers.MAP(value, 'DD_TAGS')
+    }
     const tags = {}
     tagger.add(tags, value)
     return tags
