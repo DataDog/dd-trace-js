@@ -45,6 +45,10 @@ function buildResourceAttributes (config) {
   const { service, version, env, ...filteredTags } = config.tags
   Object.assign(resourceAttributes, filteredTags)
 
+  if (config.OTEL_TRACES_SPAN_METRICS_ENABLED) {
+    resourceAttributes['_dd.stats_computed'] = 'true'
+  }
+
   return resourceAttributes
 }
 
@@ -59,7 +63,8 @@ function createOtlpTraceExporter (config) {
     config.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
     config.OTEL_EXPORTER_OTLP_TRACES_HEADERS,
     config.OTEL_EXPORTER_OTLP_TRACES_TIMEOUT,
-    buildResourceAttributes(config)
+    buildResourceAttributes(config),
+    config.DD_TRACE_OTEL_SEMANTICS_ENABLED
   )
 }
 

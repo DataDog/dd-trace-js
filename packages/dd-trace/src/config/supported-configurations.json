@@ -111,7 +111,6 @@
         "aliases": [
           "DATADOG_API_KEY"
         ],
-        "internalPropertyName": "apiKey",
         "sensitive": true
       }
     ],
@@ -119,6 +118,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.apiSecurity.enabled",
           "experimental.appsec.apiSecurity.enabled"
@@ -133,6 +133,7 @@
       {
         "implementation": "A",
         "type": "boolean",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.apiSecurity.endpointCollectionEnabled",
           "experimental.appsec.apiSecurity.endpointCollectionEnabled"
@@ -144,6 +145,7 @@
       {
         "implementation": "A",
         "type": "int",
+        "namespace": "appsec",
         "configurationNames": [
           "appsec.apiSecurity.endpointCollectionMessageLimit",
           "experimental.appsec.apiSecurity.endpointCollectionMessageLimit"
@@ -155,7 +157,7 @@
       {
         "implementation": "A",
         "type": "decimal",
-        "internalPropertyName": "appsec.apiSecurity.downstreamBodyAnalysisSampleRate",
+        "namespace": "appsec",
         "default": "0.5"
       }
     ],
@@ -163,7 +165,7 @@
       {
         "implementation": "A",
         "type": "int",
-        "internalPropertyName": "appsec.apiSecurity.maxDownstreamRequestBodyAnalysis",
+        "namespace": "appsec",
         "default": "1"
       }
     ],
@@ -171,7 +173,7 @@
       {
         "implementation": "A",
         "type": "int",
-        "internalPropertyName": "appsec.apiSecurity.maxDownstreamBodyBytes",
+        "namespace": "appsec",
         "default": "10485760"
       }
     ],
@@ -180,7 +182,7 @@
         "implementation": "A",
         "type": "decimal",
         "default": "30",
-        "internalPropertyName": "appsec.apiSecurity.sampleDelay"
+        "namespace": "appsec"
       }
     ],
     "DD_APM_FLUSH_DEADLINE_MILLISECONDS": [
@@ -392,7 +394,7 @@
         "implementation": "B",
         "type": "boolean",
         "default": null,
-        "internalPropertyName": "appsec.sca.enabled"
+        "namespace": "appsec"
       }
     ],
     "DD_APPSEC_STACK_TRACE_ENABLED": [
@@ -447,7 +449,8 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "false"
+        "default": "false",
+        "namespace": "testOptimization"
       }
     ],
     "DD_CIVISIBILITY_AGENTLESS_URL": [
@@ -455,28 +458,32 @@
         "implementation": "A",
         "type": "string",
         "transform": "toURL",
-        "default": null
+        "default": null,
+        "namespace": "testOptimization"
       }
     ],
     "DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER": [
       {
         "implementation": "A",
         "type": "string",
-        "default": null
+        "default": null,
+        "namespace": "testOptimization"
       }
     ],
     "DD_CIVISIBILITY_DANGEROUSLY_FORCE_COVERAGE": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "false"
+        "default": "false",
+        "namespace": "testOptimization"
       }
     ],
     "DD_CIVISIBILITY_DANGEROUSLY_FORCE_TEST_SKIPPING": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "false"
+        "default": "false",
+        "namespace": "testOptimization"
       }
     ],
     "DD_CIVISIBILITY_EARLY_FLAKE_DETECTION_ENABLED": [
@@ -484,14 +491,15 @@
         "implementation": "B",
         "type": "boolean",
         "default": "true",
-        "internalPropertyName": "isEarlyFlakeDetectionEnabled"
+        "namespace": "testOptimization"
       }
     ],
     "DD_CIVISIBILITY_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "false"
+        "default": "false",
+        "namespace": "testOptimization"
       }
     ],
     "DD_CIVISIBILITY_FLAKY_RETRY_COUNT": [
@@ -499,7 +507,7 @@
         "implementation": "A",
         "type": "int",
         "default": "5",
-        "internalPropertyName": "flakyTestRetriesCount"
+        "namespace": "testOptimization"
       }
     ],
     "DD_CIVISIBILITY_FLAKY_RETRY_ENABLED": [
@@ -507,14 +515,15 @@
         "implementation": "A",
         "type": "boolean",
         "default": "true",
-        "internalPropertyName": "isFlakyTestRetriesEnabled"
+        "namespace": "testOptimization"
       }
     ],
     "DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "true"
+        "default": "true",
+        "namespace": "testOptimization"
       }
     ],
     "DD_CIVISIBILITY_GIT_UPLOAD_ENABLED": [
@@ -522,7 +531,7 @@
         "implementation": "A",
         "type": "boolean",
         "default": "true",
-        "internalPropertyName": "isGitUploadEnabled"
+        "namespace": "testOptimization"
       }
     ],
     "DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED": [
@@ -530,7 +539,7 @@
         "implementation": "A",
         "type": "boolean",
         "default": "true",
-        "internalPropertyName": "isImpactedTestsEnabled"
+        "namespace": "testOptimization"
       }
     ],
     "DD_CIVISIBILITY_ITR_ENABLED": [
@@ -538,7 +547,7 @@
         "implementation": "A",
         "type": "boolean",
         "default": "true",
-        "internalPropertyName": "isIntelligentTestRunnerEnabled"
+        "namespace": "testOptimization"
       }
     ],
     "DD_ENABLE_LAGE_PACKAGE_NAME": [
@@ -552,35 +561,40 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "true"
+        "default": "true",
+        "namespace": "testOptimization"
       }
     ],
     "DD_CIVISIBILITY_RUM_FLUSH_WAIT_MILLIS": [
       {
         "implementation": "A",
         "type": "int",
-        "default": "500"
+        "default": "500",
+        "namespace": "testOptimization"
       }
     ],
     "DD_CIVISIBILITY_TEST_COMMAND": [
       {
         "implementation": "A",
         "type": "string",
-        "default": null
+        "default": null,
+        "namespace": "testOptimization"
       }
     ],
     "DD_CIVISIBILITY_TEST_MODULE_ID": [
       {
         "implementation": "A",
         "type": "string",
-        "default": null
+        "default": null,
+        "namespace": "testOptimization"
       }
     ],
     "DD_CIVISIBILITY_TEST_SESSION_ID": [
       {
         "implementation": "A",
         "type": "string",
-        "default": null
+        "default": null,
+        "namespace": "testOptimization"
       }
     ],
     "DD_CODE_ORIGIN_FOR_SPANS_ENABLED": [
@@ -822,6 +836,13 @@
         "implementation": "A",
         "type": "boolean",
         "default": "false"
+      }
+    ],
+    "DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": null
       }
     ],
     "DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE": [
@@ -1094,7 +1115,7 @@
       {
         "implementation": "B",
         "type": "string",
-        "internalPropertyName": "iast.securityControlsConfiguration",
+        "namespace": "iast",
         "default": null
       }
     ],
@@ -1170,7 +1191,7 @@
         "aliases": [
           "DD_TRACE_TELEMETRY_ENABLED"
         ],
-        "internalPropertyName": "telemetry.enabled"
+        "namespace": "telemetry"
       }
     ],
     "DD_INTERNAL_PROFILING_LONG_LIVED_THRESHOLD": [
@@ -1199,7 +1220,7 @@
         "implementation": "A",
         "type": "int",
         "default": "128",
-        "internalPropertyName": "langchain.spanCharLimit"
+        "namespace": "langchain"
       }
     ],
     "DD_LANGCHAIN_SPAN_PROMPT_COMPLETION_SAMPLE_RATE": [
@@ -1207,7 +1228,7 @@
         "implementation": "A",
         "type": "decimal",
         "default": "1",
-        "internalPropertyName": "langchain.spanPromptCompletionSampleRate"
+        "namespace": "langchain"
       }
     ],
     "DD_LLMOBS_AGENTLESS_ENABLED": [
@@ -1225,7 +1246,7 @@
         "implementation": "A",
         "type": "boolean",
         "default": "false",
-        "internalPropertyName": "llmobs.enabled"
+        "namespace": "llmobs"
       }
     ],
     "DD_LLMOBS_ML_APP": [
@@ -1236,6 +1257,16 @@
           "llmobs.mlApp"
         ],
         "default": null
+      }
+    ],
+    "DD_LLMOBS_SAMPLE_RATE": [
+      {
+        "implementation": "A",
+        "type": "decimal",
+        "configurationNames": [
+          "llmobs.sampleRate"
+        ],
+        "default": "1.0"
       }
     ],
     "DD_LOGS_INJECTION": [
@@ -1313,7 +1344,7 @@
         "implementation": "A",
         "type": "int",
         "default": "128",
-        "internalPropertyName": "openai.spanCharLimit"
+        "namespace": "openai"
       }
     ],
     "DD_PIPELINE_EXECUTION_ID": [
@@ -1398,15 +1429,15 @@
         "implementation": "B",
         "type": "string",
         "default": "on",
-        "allowed": "on|off|(gzip|zstd)(-[1-9][0-9]?)?",
-        "transform": "toLowerCase"
+        "allowed": "on|off|gzip(-[1-9])?|zstd(-([1-9]|1[0-9]|2[0-2]))?",
+        "transform": "normalizeProfilingUploadCompression"
       }
     ],
     "DD_PROFILING_ENABLED": [
       {
         "implementation": "B",
         "type": "string",
-        "internalPropertyName": "profiling.enabled",
+        "namespace": "profiling",
         "configurationNames": [
           "profiling"
         ],
@@ -1486,7 +1517,8 @@
       {
         "implementation": "A",
         "type": "int",
-        "default": "524288"
+        "default": "524288",
+        "allowed": "[1-9]\\d*"
       }
     ],
     "DD_PROFILING_PPROF_PREFIX": [
@@ -1567,7 +1599,7 @@
         "aliases": [
           "DD_REMOTE_CONFIG_ENABLED"
         ],
-        "internalPropertyName": "remoteConfig.enabled"
+        "namespace": "remoteConfig"
       }
     ],
     "DD_REMOTE_CONFIG_POLL_INTERVAL_SECONDS": [
@@ -1729,7 +1761,7 @@
         "implementation": "A",
         "type": "boolean",
         "default": "false",
-        "internalPropertyName": "telemetry.debug"
+        "namespace": "telemetry"
       }
     ],
     "DD_TELEMETRY_DEPENDENCY_COLLECTION_ENABLED": [
@@ -1737,7 +1769,7 @@
         "implementation": "A",
         "type": "boolean",
         "default": "true",
-        "internalPropertyName": "telemetry.dependencyCollection"
+        "namespace": "telemetry"
       }
     ],
     "DD_TELEMETRY_FORWARDER_PATH": [
@@ -1752,7 +1784,7 @@
         "implementation": "A",
         "type": "int",
         "default": "86400",
-        "internalPropertyName": "telemetry.extendedHeartbeatInterval"
+        "namespace": "telemetry"
       }
     ],
     "DD_TELEMETRY_HEARTBEAT_INTERVAL": [
@@ -1760,7 +1792,7 @@
         "implementation": "B",
         "type": "decimal",
         "default": "60.0",
-        "internalPropertyName": "telemetry.heartbeatInterval"
+        "namespace": "telemetry"
       }
     ],
     "DD_TELEMETRY_LOG_COLLECTION_ENABLED": [
@@ -1768,7 +1800,7 @@
         "implementation": "A",
         "type": "boolean",
         "default": "true",
-        "internalPropertyName": "telemetry.logCollection"
+        "namespace": "telemetry"
       }
     ],
     "DD_TELEMETRY_METRICS_ENABLED": [
@@ -1776,7 +1808,7 @@
         "implementation": "A",
         "type": "boolean",
         "default": "true",
-        "internalPropertyName": "telemetry.metrics"
+        "namespace": "telemetry"
       }
     ],
     "DD_TEST_FAILED_TEST_REPLAY_ENABLED": [
@@ -1784,21 +1816,31 @@
         "implementation": "A",
         "type": "boolean",
         "default": "true",
-        "internalPropertyName": "isTestDynamicInstrumentationEnabled"
+        "namespace": "testOptimization"
+      }
+    ],
+    "DD_TEST_FAILURE_SCREENSHOTS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": null,
+        "namespace": "testOptimization"
       }
     ],
     "DD_TEST_FLEET_CONFIG_PATH": [
       {
         "implementation": "A",
         "type": "string",
-        "default": null
+        "default": null,
+        "namespace": "testOptimization"
       }
     ],
     "DD_TEST_LOCAL_CONFIG_PATH": [
       {
         "implementation": "A",
         "type": "string",
-        "default": null
+        "default": null,
+        "namespace": "testOptimization"
       }
     ],
     "DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES": [
@@ -1806,7 +1848,7 @@
         "implementation": "C",
         "type": "int",
         "default": "20",
-        "internalPropertyName": "testManagementAttemptToFixRetries"
+        "namespace": "testOptimization"
       }
     ],
     "DD_TEST_MANAGEMENT_ENABLED": [
@@ -1814,7 +1856,7 @@
         "implementation": "A",
         "type": "boolean",
         "default": "true",
-        "internalPropertyName": "isTestManagementEnabled"
+        "namespace": "testOptimization"
       }
     ],
     "DD_TEST_SESSION_NAME": [
@@ -2546,8 +2588,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "true",
-        "internalPropertyName": "tracing"
+        "default": "true"
       }
     ],
     "DD_TRACE_ENCODING_DEBUG": [
@@ -3104,6 +3145,14 @@
         "default": "true"
       }
     ],
+    "_DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL": [
+      {
+        "implementation": "A",
+        "type": "int",
+        "default": "10000",
+        "allowed": "[1-9]\\d*"
+      }
+    ],
     "DD_TRACE_MICROGATEWAY_CORE_ENABLED": [
       {
         "implementation": "A",
@@ -3281,8 +3330,7 @@
       {
         "implementation": "F",
         "type": "string",
-        "default": "(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:\"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:\"|%22)(?:%2[^2]|%[^2]|[^\"%])+(?:\"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}",
-        "internalPropertyName": "queryStringObfuscation"
+        "default": "(?:p(?:ass)?w(?:or)?d|pass(?:_?phrase)?|secret|(?:api_?|private_?|public_?|access_?|secret_?)key(?:_?id)?|token|consumer_?(?:id|key|secret)|sign(?:ed|ature)?|auth(?:entication|orization)?)(?:(?:\\s|%20)*(?:=|%3D)[^&]+|(?:\"|%22)(?:\\s|%20)*(?::|%3A)(?:\\s|%20)*(?:\"|%22)(?:%2[^2]|%[^2]|[^\"%])+(?:\"|%22))|bearer(?:\\s|%20)+[a-z0-9\\._\\-]+|token(?::|%3A)[a-z0-9]{13}|gh[opsu]_[0-9a-zA-Z]{36}|ey[I-L](?:[\\w=-]|%3D)+\\.ey[I-L](?:[\\w=-]|%3D)+(?:\\.(?:[\\w.+\\/=-]|%3D|%2F|%2B)+)?|[\\-]{5}BEGIN(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY[\\-]{5}[^\\-]+[\\-]{5}END(?:[a-z\\s]|%20)+PRIVATE(?:\\s|%20)KEY|ssh-rsa(?:\\s|%20)*(?:[a-z0-9\\/\\.+]|%2F|%5C|%2B){100,}"
       }
     ],
     "DD_TRACE_OPENAI_ENABLED": [
@@ -3321,6 +3369,13 @@
       }
     ],
     "DD_TRACE_OTEL_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "false"
+      }
+    ],
+    "DD_TRACE_OTEL_SEMANTICS_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",
@@ -3615,8 +3670,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "false",
-        "internalPropertyName": "resourceRenamingEnabled"
+        "default": "false"
       }
     ],
     "DD_TRACE_RESTIFY_ENABLED": [
@@ -3667,8 +3721,7 @@
       {
         "implementation": "A",
         "type": "string",
-        "default": null,
-        "internalPropertyName": "scope"
+        "default": null
       }
     ],
     "DD_TRACE_SELENIUM_ENABLED": [
@@ -3746,7 +3799,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "internalPropertyName": "stats.enabled",
+        "namespace": "stats",
         "configurationNames": [
           "stats"
         ],
@@ -3892,7 +3945,7 @@
         "implementation": "A",
         "type": "int",
         "default": "128",
-        "internalPropertyName": "vertexai.spanCharLimit"
+        "namespace": "vertexai"
       }
     ],
     "DD_VERTEXAI_SPAN_PROMPT_COMPLETION_SAMPLE_RATE": [
@@ -3900,7 +3953,7 @@
         "implementation": "A",
         "type": "decimal",
         "default": "1",
-        "internalPropertyName": "vertexai.spanPromptCompletionSampleRate"
+        "namespace": "vertexai"
       }
     ],
     "DD_VITEST_WORKER": [
@@ -4163,6 +4216,13 @@
         "type": "decimal",
         "default": null,
         "allowed": "\\d+(\\.\\d+)?"
+      }
+    ],
+    "OTEL_TRACES_SPAN_METRICS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": null
       }
     ]
   }

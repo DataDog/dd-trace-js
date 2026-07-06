@@ -63,7 +63,7 @@ function shouldTestsRun (type) {
       return version === '12.0.0' || version === '14.5.4' || version === 'latest'
     }
   }
-  if (DD_MAJOR === 6) {
+  if (DD_MAJOR >= 6) {
     if (NODE_MAJOR <= 16) {
       return false
     }
@@ -634,7 +634,7 @@ moduleTypes.forEach(({
                 assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_ATTEMPT_TO_FIX], '5')
                 assert.strictEqual(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
                 // capabilities logic does not overwrite test session name
-                assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session-name')
+                assert.strictEqual(metadata.test_levels[TEST_SESSION_NAME], 'my-test-session-name')
               })
             }, { hardTimeout: 25000 })
 

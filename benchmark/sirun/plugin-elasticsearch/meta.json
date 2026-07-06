@@ -7,13 +7,13 @@
   "instructions": true,
   "variants": {
     "search": {
-      "env": { "VARIANT": "search", "ITERATIONS": "2000000" }
+      "env": { "VARIANT": "search", "OPERATIONS": "2000000" }
     },
     "bulk-index": {
-      "env": { "VARIANT": "bulk-index", "ITERATIONS": "274000" }
+      "env": { "VARIANT": "bulk-index", "OPERATIONS": "274000" }
     },
     "get": {
-      "env": { "VARIANT": "get", "ITERATIONS": "5400000" }
+      "env": { "VARIANT": "get", "OPERATIONS": "5400000" }
     }
   }
 }

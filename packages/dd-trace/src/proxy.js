@@ -138,7 +138,7 @@ class Tracer extends NoopProxy {
         spanleak.startScrubber()
       }
 
-      if (config.remoteConfig.enabled && !config.isCiVisibility) {
+      if (config.remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED && !config.isCiVisibility) {
         const RemoteConfig = require('./remote_config')
         const rc = new RemoteConfig(config)
 
@@ -180,11 +180,11 @@ class Tracer extends NoopProxy {
         openfeatureRemoteConfig.enable(rc, config, () => this.openfeature)
       }
 
-      if (config.profiling.enabled === 'true') {
+      if (config.profiling.DD_PROFILING_ENABLED === 'true') {
         this._profilerStarted = this._startProfiler(config)
       } else {
         this._profilerStarted = false
-        if (config.profiling.enabled === 'auto') {
+        if (config.profiling.DD_PROFILING_ENABLED === 'auto') {
           const { SSIHeuristics } = require('./profiling/ssi-heuristics')
           const ssiHeuristics = new SSIHeuristics(config)
           ssiHeuristics.start()
@@ -216,7 +216,7 @@ class Tracer extends NoopProxy {
 
       this._modules.rewriter.enable(config)
 
-      if (config.tracing && config.DD_CIVISIBILITY_MANUAL_API_ENABLED) {
+      if (config.DD_TRACE_ENABLED && config.testOptimization.DD_CIVISIBILITY_MANUAL_API_ENABLED) {
         const TestApiManualPlugin = require('./ci-visibility/test-api-manual/test-api-manual-plugin')
         this._testApiManualPlugin = new TestApiManualPlugin(this)
         // `shouldGetEnvironmentData` is passed as false so that we only lazily calculate it
@@ -225,7 +225,7 @@ class Tracer extends NoopProxy {
         this._testApiManualPlugin.configure({ ...config, enabled: true }, false)
       }
       if (config.DD_AGENTLESS_LOG_SUBMISSION_ENABLED) {
-        if (config.apiKey) {
+        if (config.DD_API_KEY) {
           const LogSubmissionPlugin = require('./ci-visibility/log-submission/log-submission-plugin')
           const automaticLogPlugin = new LogSubmissionPlugin(this)
           automaticLogPlugin.configure({ ...config, enabled: true })
@@ -237,7 +237,7 @@ class Tracer extends NoopProxy {
         }
       }
 
-      if (config.isTestDynamicInstrumentationEnabled) {
+      if (config.testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED) {
         const getDynamicInstrumentationClient = require('./ci-visibility/dynamic-instrumentation')
         // We instantiate the client but do not start the Worker here. The worker is started lazily
         getDynamicInstrumentationClient(config)
@@ -270,11 +270,11 @@ class Tracer extends NoopProxy {
    * @param {import('./config/config-base')} config - Tracer configuration
    */
   #updateTracing (config) {
-    if (config.tracing !== false) {
+    if (config.DD_TRACE_ENABLED !== false) {
       if (config.appsec.enabled) {
         this._modules.appsec.enable(config)
       }
-      if (config.llmobs.enabled) {
+      if (config.llmobs.DD_LLMOBS_ENABLED) {
         this._modules.llmobs.enable(config)
       }
       if (!this._tracingInitialized) {

@@ -19,7 +19,7 @@ import { isMainThread } from 'worker_threads'
 // This file must support Node.js 12.0.0 syntax
 
 import {
-  iitmExclusions,
+  iitmExclusionRegExp,
   load as hookLoad,
   resolve as hookResolve,
 } from './loader-hook.mjs'
@@ -67,8 +67,7 @@ const [NODE_MAJOR, NODE_MINOR] = process.versions.node.split('.').map(Number)
 const brokenLoaders = NODE_MAJOR === 18 && NODE_MINOR === 0
 
 export async function load (url, context, nextLoad) {
-  const iitmExclusionsMatch = iitmExclusions.some((exclusion) => exclusion.test(url))
-  const loadHook = (brokenLoaders || iitmExclusionsMatch) ? nextLoad : hookLoad
+  const loadHook = (brokenLoaders || iitmExclusionRegExp.test(url)) ? nextLoad : hookLoad
   return insertInit(await loadHook(url, context, nextLoad), url, context)
 }
 
@@ -78,8 +77,8 @@ if (isMainThread) {
   const require = Module.createRequire(import.meta.url)
   require('./init.js')
   if (Module.register) {
-    Module.register('./loader-hook.mjs', import.meta.url, {
-      data: { exclude: iitmExclusions },
-    })
+    // The loader builds its own include/exclude matcher in `initialize`, so no
+    // options need to cross the registration boundary.
+    Module.register('./loader-hook.mjs', import.meta.url)
   }
 }

@@ -253,7 +253,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
             const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
             metadataDicts.forEach(metadata => {
-              assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session')
+              assert.strictEqual(metadata.test_levels[TEST_SESSION_NAME], 'my-test-session')
             })
 
             const events = payloads.flatMap(({ payload }) => payload.events)
@@ -1607,8 +1607,8 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         const metadataDicts = payloads.flatMap(({ payload }) => payload.metadata)
 
         metadataDicts.forEach(metadata => {
-          assert.ok(metadata['*'][TEST_COMMAND])
-          assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session')
+          assert.ok(metadata.test_levels[TEST_COMMAND])
+          assert.strictEqual(metadata.test_levels[TEST_SESSION_NAME], 'my-test-session')
         })
 
         const events = payloads.flatMap(({ payload }) => payload.events)
@@ -5953,7 +5953,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           assert.strictEqual(metadata.test[DD_CAPABILITIES_TEST_MANAGEMENT_DISABLE], '1')
           assert.strictEqual(metadata.test[DD_CAPABILITIES_FAILED_TEST_REPLAY], '1')
           // capabilities logic does not overwrite test session name
-          assert.strictEqual(metadata['*'][TEST_SESSION_NAME], 'my-test-session-name')
+          assert.strictEqual(metadata.test_levels[TEST_SESSION_NAME], 'my-test-session-name')
         })
       })
 
@@ -6122,38 +6122,38 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       fs.writeFileSync(
         path.join(cwd, 'ci-visibility/test-impacted-test/test-impacted-1.js'),
         `const assert = require('assert')
-         let manualRetryAttempts = 0
-         describe('impacted tests', () => {
-           it('can pass normally', function () {
-             if (process.env.SKIP_IMPACTED_NON_MANUAL_RETRY_TESTS) {
-               this.skip()
-             }
-             assert.strictEqual(2 + 2, 3)
-           })
+        let manualRetryAttempts = 0
+        describe('impacted tests', () => {
+          it('can pass normally', function () {
+            if (process.env.SKIP_IMPACTED_NON_MANUAL_RETRY_TESTS) {
+              this.skip()
+            }
+            assert.strictEqual(2 + 2, 3)
+          })
 
-           it('can fail', function () {
-             if (process.env.SKIP_IMPACTED_NON_MANUAL_RETRY_TESTS) {
-               this.skip()
-             }
-             assert.strictEqual(1 + 2, 4)
-           })
+          it('can fail', function () {
+            if (process.env.SKIP_IMPACTED_NON_MANUAL_RETRY_TESTS) {
+              this.skip()
+            }
+            assert.strictEqual(1 + 2, 4)
+          })
 
-           it('${manualRetryTestTitle}', function () {
-             if (process.env.SET_RETRIES_INSIDE_TEST) {
-               this.retries(2)
-             }
-             assert.strictEqual(manualRetryAttempts++ > 0, true)
-           })
-         })`
+          it('${manualRetryTestTitle}', function () {
+            if (process.env.SET_RETRIES_INSIDE_TEST) {
+              this.retries(2)
+            }
+            assert.strictEqual(manualRetryAttempts++ > 0, true)
+          })
+        })`
       )
       fs.writeFileSync(
         path.join(cwd, 'ci-visibility/test-impacted-test/parallel-helper.js'),
         `const assert = require('assert')
-         describe('impacted tests parallel helper', () => {
-           it('can pass normally', () => {
-             assert.strictEqual(1 + 2, 3)
-           })
-         })`
+        describe('impacted tests parallel helper', () => {
+          it('can pass normally', () => {
+            assert.strictEqual(1 + 2, 3)
+          })
+        })`
       )
       execSync('git add ci-visibility/test-impacted-test/test-impacted-1.js', { cwd, stdio: 'ignore' })
       execSync('git commit -m "modify test-impacted-1.js"', { cwd, stdio: 'ignore' })

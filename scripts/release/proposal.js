@@ -23,6 +23,8 @@ const { checkAll } = require('./helpers/requirements')
 const tmpdir = process.env.RUNNER_TEMP || os.tmpdir()
 const main = 'master'
 const releaseLine = params[0]
+const breakingLabels = ['semver-major', 'only-land-on-next']
+const pullRequestNumberPattern = /\(#([0-9]+)\)$/
 
 // Validate release line argument.
 if (!releaseLine || releaseLine === 'help' || flags.help) {
@@ -67,16 +69,19 @@ try {
 
   pass(`v${releaseLine}.x`)
 
-  // Notes exclude semver-major (gated behind a flag, not user-visible).
-  // Cherry-pick includes semver-major; only only-land-on-next is fully excluded.
+  const { DD_MAJOR, DD_MINOR, DD_PATCH, VERSION } = require('../../version')
+  const stableVersion = `${DD_MAJOR}.${DD_MINOR}.${DD_PATCH}`
+  const isPreRelease = VERSION !== stableVersion
+
+  // Notes list semver-major and only-land-on-next separately as breaking changes.
+  // Cherry-pick includes semver-major; only only-land-on-next is fully excluded,
+  // except when promoting a pre-release to stable (that's what "next" means).
   const notesDiffCmd = 'branch-diff --user DataDog --repo dd-trace-js' +
     ' --exclude-label=semver-major --exclude-label=only-land-on-next'
   const cherryPickDiffCmd = 'branch-diff --user DataDog --repo dd-trace-js' +
-    ' --exclude-label=only-land-on-next'
+    (isPreRelease ? '' : ' --exclude-label=only-land-on-next')
 
   start('Determine version increment')
-
-  const { DD_MAJOR, DD_MINOR, DD_PATCH } = require('../../version')
 
   // GitHub rebase limit is 100 commits; reserve one slot for the version bump.
   const MAX_CHERRY_PICKS = 99
@@ -91,17 +96,22 @@ try {
   // runs. It equals allMainShas[min(length, MAX_CHERRY_PICKS) - 1] regardless of
   // how many commits are already on the branch (proven by:
   // existingCherryPicked + shasToApply.length = min(allMainShas.length, MAX_CHERRY_PICKS)).
-  const upperBoundSha = allMainShas.at(Math.min(allMainShas.length, MAX_CHERRY_PICKS) - 1)
+  const upperBoundSha = allMainShas.at(Math.min(allMainShas.length, MAX_CHERRY_PICKS) - 1) ||
+    (isPreRelease ? capture(`git rev-parse v${releaseLine}.x`) : undefined)
 
   if (!upperBoundSha) {
     pass('none (already up to date)')
     process.exit(0)
   }
 
+  // Expand to full SHA to avoid minimist scientific notation coercion in branch-diff.
+  // Abbreviated SHAs like "980e663509" match JS float syntax and become Infinity.
+  const upperBoundRef = capture(`git rev-parse ${upperBoundSha}`)
+
   // notesShas is scoped to upperBoundSha so isMinor and release notes only reflect
   // the capped commits actually included in the proposal, not deferred ones.
-  // Excludes semver-major (gated behind a flag, not user-visible).
-  const notesShas = capture(`${notesDiffCmd} --format=sha --reverse v${releaseLine}.x ${upperBoundSha}`)
+  // Excludes changes that are listed in the dedicated breaking changes section.
+  const notesShas = capture(`${notesDiffCmd} --format=sha --reverse v${releaseLine}.x ${upperBoundRef}`)
     .split('\n').filter(Boolean)
   const contributorBySha = getContributorsBySha(`v${releaseLine}.x`, upperBoundSha)
   const notesEntries = []
@@ -112,15 +122,19 @@ try {
       author: contributorBySha.get(sha),
     })
   }
-  const notes = createReleaseChangelog(notesEntries)
+  const breakingEntries = isPreRelease
+    ? getBreakingPullRequestEntries(releaseLine, upperBoundRef)
+    : []
+  const notes = createReleaseChangelog(notesEntries, breakingEntries)
   const isMinor = notes.isMinor
   const newPatch = `${releaseLine}.${DD_MINOR}.${DD_PATCH + 1}`
   const newMinor = `${releaseLine}.${DD_MINOR + 1}.0`
-  const newVersion = isMinor ? newMinor : newPatch
+  const newVersion = isPreRelease ? stableVersion : (isMinor ? newMinor : newPatch)
   const notesDir = path.join(tmpdir, 'release_notes')
   const notesFile = path.join(notesDir, `v${newVersion}.md`)
 
-  pass(`${isMinor ? 'minor' : 'patch'} (${DD_MAJOR}.${DD_MINOR}.${DD_PATCH} -> ${newVersion})`)
+  const incrementType = isPreRelease ? 'release' : (isMinor ? 'minor' : 'patch')
+  pass(`${incrementType} (${VERSION} -> ${newVersion})`)
 
   start('Checkout release proposal branch')
 
@@ -151,7 +165,7 @@ try {
 
   if (shasToApply.length > 0) {
     // Show only commits being applied; upperBoundSha is the last main SHA that fits.
-    const newChanges = capture(`${cherryPickDiffCmd} v${newVersion}-proposal ${upperBoundSha}`)
+    const newChanges = capture(`${cherryPickDiffCmd} v${newVersion}-proposal ${upperBoundRef}`)
     const truncationNote = truncated
       ? `\n\n⚠️  Applying ${shasToApply.length} of ${proposalShas.length} available commits` +
         ` (GitHub limit: ${MAX_CHERRY_PICKS}). Remaining commits require a separate release.`
@@ -211,19 +225,27 @@ try {
 
   let previousPullRequest
 
-  if (isMinor) {
+  if (isPreRelease) {
     try {
-      previousPullRequest = JSON.parse(capture(`gh pr view ${newMinor} --json isDraft,url`))
+      previousPullRequest = JSON.parse(capture(`gh pr view ${newVersion} --json isDraft,url`))
     } catch {
-      // No existing PR for minor release proposal.
+      // No existing PR for release proposal.
     }
-  }
+  } else {
+    if (isMinor) {
+      try {
+        previousPullRequest = JSON.parse(capture(`gh pr view ${newMinor} --json isDraft,url`))
+      } catch {
+        // No existing PR for minor release proposal.
+      }
+    }
 
-  if (!previousPullRequest) {
-    try {
-      previousPullRequest = JSON.parse(capture(`gh pr view ${newPatch} --json isDraft,url`))
-    } catch {
-      // No existing PR for patch release proposal.
+    if (!previousPullRequest) {
+      try {
+        previousPullRequest = JSON.parse(capture(`gh pr view ${newPatch} --json isDraft,url`))
+      } catch {
+        // No existing PR for patch release proposal.
+      }
     }
   }
 
@@ -259,7 +281,7 @@ try {
   const pullRequest = JSON.parse(capture('gh pr view --json number,url'))
 
   // Close PR and delete branch for any patch proposal if new proposal is minor.
-  if (isMinor) {
+  if (!isPreRelease && isMinor) {
     try {
       run(`gh pr close v${newPatch}-proposal --delete-branch --comment "Superseded by #${pullRequest.number}."`)
     } catch {
@@ -312,4 +334,67 @@ function getContributorsBySha (base, head) {
   }
 
   return contributors
+}
+
+/**
+ * Semver-major changes are commonly guarded by version checks and backported to
+ * stable branches. Branch comparisons can miss them because the commits exist
+ * on both the previous and next release lines, so the vN.0.0 promotion lists
+ * merged PRs by label across the previous major cycle instead.
+ *
+ * @param {string} releaseLine
+ * @param {string} upperBoundRef
+ */
+function getBreakingPullRequestEntries (releaseLine, upperBoundRef) {
+  const previousReleaseLine = Number.parseInt(releaseLine, 10) - 1
+  const previousMajorTag = `v${previousReleaseLine}.0.0`
+  const mergedAfter = capture(`git log -1 --format=%cs ${previousMajorTag}`)
+  const mergedBefore = capture(`git show -s --format=%cs ${upperBoundRef}`)
+  const pullRequestsByNumber = new Map()
+  const includedPullRequests = getIncludedPullRequests(previousMajorTag, [`v${releaseLine}.x`, upperBoundRef])
+
+  for (const label of breakingLabels) {
+    const pullRequests = JSON.parse(capture(
+      'gh pr list --repo DataDog/dd-trace-js --state merged --limit 1000' +
+      ` --label=${label}` +
+      ` --search "base:${main} merged:>=${mergedAfter} merged:<=${mergedBefore}"` +
+      ' --json number,title,mergeCommit,author'
+    ))
+
+    for (const pullRequest of pullRequests) {
+      if (!includedPullRequests.has(pullRequest.number)) continue
+
+      pullRequestsByNumber.set(pullRequest.number, pullRequest)
+    }
+  }
+
+  return [...pullRequestsByNumber.values()].map(pullRequest => {
+    return {
+      sha: pullRequest.mergeCommit?.oid || `pull-request-${pullRequest.number}`,
+      subject: `${pullRequest.title} (#${pullRequest.number})`,
+      author: pullRequest.author?.login ? `@${pullRequest.author.login}` : undefined,
+    }
+  })
+}
+
+/**
+ * Release proposal branches are built with cherry-picks, so PR merge commits
+ * often are not ancestors of the release branch even when their changes are
+ * present. Match by the PR number preserved in the commit subject instead.
+ *
+ * @param {string} base
+ * @param {string[]} refs
+ */
+function getIncludedPullRequests (base, refs) {
+  const pullRequests = new Set()
+
+  for (const ref of refs) {
+    const subjects = capture(`git log --format=%s ${base}..${ref}`).split('\n')
+    for (const subject of subjects) {
+      const match = subject.match(pullRequestNumberPattern)
+      if (match) pullRequests.add(Number.parseInt(match[1], 10))
+    }
+  }
+
+  return pullRequests
 }

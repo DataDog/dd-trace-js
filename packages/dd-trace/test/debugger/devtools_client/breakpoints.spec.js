@@ -10,6 +10,8 @@ const sinon = require('sinon')
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
 require('../../setup/mocha')
 
+const { compileBreakpointCondition } = require('../../../src/debugger/devtools_client/probe_sampler')
+
 describe('breakpoints', function () {
   /** @type {typeof import('../../../src/debugger/devtools_client/breakpoints')} */
   let breakpoints
@@ -23,6 +25,23 @@ describe('breakpoints', function () {
   let sessionMock
   /**
    * @type {{
+   *   getGeneratedPosition: sinon.SinonStub;
+   *   '@noCallThru': boolean;
+   * }}
+   */
+  let sourceMapsMock
+  /**
+   * @type {{
+   *   debug: sinon.SinonStub;
+   *   error: sinon.SinonStub;
+   *   '@noCallThru': boolean;
+   * }}
+   */
+  let logMock
+  /** @type {() => void} */
+  let scriptLoadingStabilizedCallback
+  /**
+   * @type {{
    *   findScriptFromPartialPath: sinon.SinonStub;
    *   clearState: sinon.SinonStub;
    *   locationToBreakpoint: Map<string, {
@@ -33,6 +52,7 @@ describe('breakpoints', function () {
    *   breakpointToProbes: Map<string, Map<string, {
    *     id: string;
    *     version: number;
+   *     samplingIndex: number;
    *     where: { sourceFile: string; lines: string[] };
    *     when: { json: { eq: [{ ref: string; value: unknown }]; dsl: string }; dsl: string };
    *     sampling?: { snapshotsPerSecond: number };
@@ -41,12 +61,12 @@ describe('breakpoints', function () {
    *     location: { file: string; lines: string[] };
    *     templateRequiresEvaluation: boolean;
    *     template: string;
-   *     lastCaptureNs: bigint;
    *     nsBetweenSampling: bigint;
    *     compiledCaptureExpressions?:
    *       import('../../../src/debugger/devtools_client/snapshot').CompiledCaptureExpression[];
    *   }>>;
    *   probeToLocation: Map<string, string>;
+   *   samplingIndexToProbe: Map<number, object>;
    *   '@noCallThru': boolean;
    * }}
    */
@@ -64,9 +84,27 @@ describe('breakpoints', function () {
         }
         return Promise.resolve({})
       }),
+      /**
+       * @param {string} event
+       * @param {() => void} callback
+       */
       on (event, callback) {
-        if (event === 'scriptLoadingStabilized') callback()
+        if (event === 'scriptLoadingStabilized') {
+          scriptLoadingStabilizedCallback = callback
+          callback()
+        }
       },
+      '@noCallThru': true,
+    }
+
+    sourceMapsMock = {
+      getGeneratedPosition: sinon.stub(),
+      '@noCallThru': true,
+    }
+
+    logMock = {
+      debug: sinon.stub(),
+      error: sinon.stub(),
       '@noCallThru': true,
     }
 
@@ -81,12 +119,15 @@ describe('breakpoints', function () {
       locationToBreakpoint: new Map(),
       breakpointToProbes: new Map(),
       probeToLocation: new Map(),
+      samplingIndexToProbe: new Map(),
       '@noCallThru': true,
     }
 
     breakpoints = proxyquire('../../../src/debugger/devtools_client/breakpoints', {
       './session': sessionMock,
+      './source-maps': sourceMapsMock,
       './state': stateMock,
+      './log': logMock,
     })
   })
 
@@ -101,7 +142,7 @@ describe('breakpoints', function () {
           lineNumber: 9,
           columnNumber: 0,
         },
-        condition: undefined,
+        condition: compileBreakpointCondition([{ id: 'probe-1', samplingIndex: 0, nsBetweenSampling: 200000n }]),
       })
       sinon.assert.calledTwice(sessionMock.post)
     })
@@ -135,7 +176,7 @@ describe('breakpoints', function () {
       sinon.assert.calledTwice(stateMock.findScriptFromPartialPath)
     })
 
-    it('should initialize lastCaptureNs to ensure first probe hit is always captured', async function () {
+    it('should set the probe sampling interval', async function () {
       await addProbe({ sampling: { snapshotsPerSecond: 0.5 } })
 
       // Verify the probe was stored in the breakpointToProbes map
@@ -145,15 +186,56 @@ describe('breakpoints', function () {
       const probe = probesAtLocation.get('probe-1')
       assert(probe, 'Probe should be stored in map')
 
-      // Verify lastCaptureNs is initialized to -(2^53 - 1) to ensure first hit is always captured
-      assert.strictEqual(probe.lastCaptureNs, BigInt(Number.MIN_SAFE_INTEGER),
-        'lastCaptureNs should be initialized to -(2^53 - 1) to ensure first probe hit is always captured')
-
       // Verify nsBetweenSampling is calculated correctly
       assert.strictEqual(
         probe.nsBetweenSampling,
         2000000000n,
         'nsBetweenSampling should be 2 seconds for 0.5 samples/second'
+      )
+    })
+
+    it('should translate source-mapped locations before setting the breakpoint', async function () {
+      stateMock.findScriptFromPartialPath.returns({
+        url: 'file:///path/to/test.js',
+        scriptId: 'script-1',
+        sourceMapURL: 'test.js.map',
+        source: 'source',
+      })
+      sourceMapsMock.getGeneratedPosition.resolves({ line: 12, column: 4 })
+
+      await addProbe()
+
+      sinon.assert.calledOnceWithExactly(
+        sourceMapsMock.getGeneratedPosition,
+        'file:///path/to/test.js',
+        'source',
+        10,
+        'test.js.map'
+      )
+      sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
+        location: {
+          scriptId: 'script-1',
+          lineNumber: 11,
+          columnNumber: 4,
+        },
+        condition: compileBreakpointCondition([{ id: 'probe-1', samplingIndex: 0, nsBetweenSampling: 200000n }]),
+      })
+    })
+
+    it('should throw if a source map cannot resolve the generated location', async function () {
+      stateMock.findScriptFromPartialPath.returns({
+        url: 'file:///path/to/test.js',
+        scriptId: 'script-1',
+        sourceMapURL: 'test.js.map',
+        source: 'source',
+      })
+      sourceMapsMock.getGeneratedPosition.resolves({ line: null, column: null })
+
+      await assert.rejects(
+        addProbe(),
+        {
+          message: 'Could not find generated position for file:///path/to/test.js:10:0 (probe: probe-1, version: 1)',
+        }
       )
     })
 
@@ -297,7 +379,19 @@ describe('breakpoints', function () {
         // Add second probe to same location
         await addProbe({ id: 'probe-2' })
 
-        sinon.assert.notCalled(sessionMock.post)
+        sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.removeBreakpoint', { breakpointId })
+        sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
+          location: {
+            scriptId: 'script-1',
+            lineNumber: 9,
+            columnNumber: 0,
+          },
+          condition: compileBreakpointCondition([
+            { id: 'probe-1', samplingIndex: 0, nsBetweenSampling: 200000n },
+            { id: 'probe-2', samplingIndex: 1, nsBetweenSampling: 200000n },
+          ]),
+        })
+        sinon.assert.calledTwice(sessionMock.post)
       })
 
       it('mixed: 2nd probe no condition', async function () {
@@ -312,7 +406,7 @@ describe('breakpoints', function () {
         // Add second probe to same location
         await addProbe({ id: 'probe-2' })
 
-        // Should remove previous breakpoint and create a new one with both conditions
+        // Should remove previous breakpoint and create a new one with both probes in the sampler condition
         sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.removeBreakpoint', { breakpointId })
         sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
           location: {
@@ -320,7 +414,10 @@ describe('breakpoints', function () {
             lineNumber: 9,
             columnNumber: 0,
           },
-          condition: undefined,
+          condition: compileBreakpointCondition([
+            { id: 'probe-1', samplingIndex: 0, nsBetweenSampling: 200000n, condition: '(foo) === (42)' },
+            { id: 'probe-2', samplingIndex: 1, nsBetweenSampling: 200000n },
+          ]),
         })
         sinon.assert.calledTwice(sessionMock.post)
       })
@@ -338,7 +435,19 @@ describe('breakpoints', function () {
           },
         })
 
-        sinon.assert.notCalled(sessionMock.post)
+        sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.removeBreakpoint', { breakpointId })
+        sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
+          location: {
+            scriptId: 'script-1',
+            lineNumber: 9,
+            columnNumber: 0,
+          },
+          condition: compileBreakpointCondition([
+            { id: 'probe-1', samplingIndex: 0, nsBetweenSampling: 200000n },
+            { id: 'probe-2', samplingIndex: 1, nsBetweenSampling: 200000n, condition: '(foo) === (42)' },
+          ]),
+        })
+        sinon.assert.calledTwice(sessionMock.post)
       })
 
       it('all conditions', async function () {
@@ -359,7 +468,7 @@ describe('breakpoints', function () {
           },
         })
 
-        // Should remove previous breakpoint and create a new one with both conditions
+        // Should remove previous breakpoint and create a new one with both probes in the sampler condition
         sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.removeBreakpoint', { breakpointId })
         sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
           location: {
@@ -367,9 +476,10 @@ describe('breakpoints', function () {
             lineNumber: 9,
             columnNumber: 0,
           },
-          condition:
-            '(() => { try { return (foo) === (42) } catch { return false } })() || ' +
-            '(() => { try { return (foo) === (43) } catch { return false } })()',
+          condition: compileBreakpointCondition([
+            { id: 'probe-1', samplingIndex: 0, nsBetweenSampling: 200000n, condition: '(foo) === (42)' },
+            { id: 'probe-2', samplingIndex: 1, nsBetweenSampling: 200000n, condition: '(foo) === (43)' },
+          ]),
         })
         sinon.assert.calledTwice(sessionMock.post)
       })
@@ -382,7 +492,9 @@ describe('breakpoints', function () {
         ])
         sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.enable')
         sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint')
-        sinon.assert.calledTwice(sessionMock.post)
+        sinon.assert.calledWith(sessionMock.post.thirdCall, 'Debugger.removeBreakpoint')
+        sinon.assert.calledWith(sessionMock.post.getCall(3), 'Debugger.setBreakpoint')
+        sinon.assert.callCount(sessionMock.post, 4)
       })
     })
 
@@ -417,6 +529,77 @@ describe('breakpoints', function () {
             'Cannot compile expression: this is an invalid condition (probe: probe-1, version: 1)'
           )
         })
+    })
+
+    it('should wrap errors when setting a new breakpoint fails', async function () {
+      const cause = new Error('inspector failure')
+      sessionMock.post.callsFake((method, { location } = {}) => {
+        if (method === 'Debugger.setBreakpoint') {
+          return Promise.reject(cause)
+        }
+        return Promise.resolve({})
+      })
+
+      await assert.rejects(
+        addProbe(),
+        (err) => {
+          assert(err instanceof Error)
+          assert.strictEqual(err.message, 'Error setting breakpoint for probe probe-1 (version: 1)')
+          assert.strictEqual(err.cause, cause)
+          return true
+        }
+      )
+    })
+
+    it('should wrap errors when replacing a breakpoint while adding a probe fails', async function () {
+      await addProbe()
+      sessionMock.post.resetHistory()
+
+      const cause = new Error('inspector failure')
+      sessionMock.post.callsFake((method, { location } = {}) => {
+        if (method === 'Debugger.removeBreakpoint') {
+          return Promise.reject(cause)
+        }
+        if (method === 'Debugger.setBreakpoint') {
+          return Promise.resolve({
+            breakpointId: `bp-${location.scriptId}:${location.lineNumber}:${location.columnNumber}`,
+          })
+        }
+        return Promise.resolve({})
+      })
+
+      await assert.rejects(
+        addProbe({ id: 'probe-2' }),
+        (err) => {
+          assert(err instanceof Error)
+          assert.strictEqual(err.message, 'Error replacing breakpoint while adding probe probe-2 (version: 1)')
+          assert.strictEqual(err.cause, cause)
+          return true
+        }
+      )
+    })
+
+    it('should wrap errors when setting a replacement breakpoint while adding a probe fails', async function () {
+      await addProbe()
+      sessionMock.post.resetHistory()
+
+      const cause = new Error('inspector failure')
+      sessionMock.post.callsFake((method, { location } = {}) => {
+        if (method === 'Debugger.setBreakpoint') {
+          return Promise.reject(cause)
+        }
+        return Promise.resolve({})
+      })
+
+      await assert.rejects(
+        addProbe({ id: 'probe-2' }),
+        (err) => {
+          assert(err instanceof Error)
+          assert.strictEqual(err.message, 'Error setting breakpoint while adding probe probe-2 (version: 1)')
+          assert.strictEqual(err.cause, cause)
+          return true
+        }
+      )
     })
 
     describe('captureExpressions', function () {
@@ -536,7 +719,11 @@ describe('breakpoints', function () {
 
       await breakpoints.removeBreakpoint({ id: 'probe-1' })
 
-      sinon.assert.calledOnceWithExactly(sessionMock.post, 'Debugger.disable')
+      sinon.assert.calledWith(sessionMock.post.firstCall, 'Runtime.evaluate', {
+        expression: removeProbeExpression('probe-1'),
+      })
+      sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.disable')
+      sinon.assert.calledTwice(sessionMock.post)
       sinon.assert.calledOnce(stateMock.clearState)
     })
 
@@ -547,10 +734,14 @@ describe('breakpoints', function () {
 
       await breakpoints.removeBreakpoint({ id: 'probe-1' })
 
-      sinon.assert.calledOnceWithExactly(sessionMock.post,
+      sinon.assert.calledWith(sessionMock.post.firstCall, 'Runtime.evaluate', {
+        expression: removeProbeExpression('probe-1'),
+      })
+      sinon.assert.calledWith(sessionMock.post.secondCall,
         'Debugger.removeBreakpoint',
         { breakpointId }
       )
+      sinon.assert.calledTwice(sessionMock.post)
       sinon.assert.notCalled(stateMock.clearState)
     })
 
@@ -563,10 +754,13 @@ describe('breakpoints', function () {
         addProbe({ id: 'probe-2', where: { sourceFile: 'test2.js', lines: ['20'] } }),
       ])
 
-      sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.disable')
-      sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.enable')
-      sinon.assert.calledWith(sessionMock.post.thirdCall, 'Debugger.setBreakpoint')
-      sinon.assert.calledThrice(sessionMock.post)
+      sinon.assert.calledWith(sessionMock.post.firstCall, 'Runtime.evaluate', {
+        expression: removeProbeExpression('probe-1'),
+      })
+      sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.disable')
+      sinon.assert.calledWith(sessionMock.post.thirdCall, 'Debugger.enable')
+      sinon.assert.calledWith(sessionMock.post.getCall(3), 'Debugger.setBreakpoint')
+      sinon.assert.callCount(sessionMock.post, 4)
     })
 
     it('should not disable the debugger if a new probe is in the process of being added', async function () {
@@ -580,8 +774,40 @@ describe('breakpoints', function () {
       ])
 
       sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.setBreakpoint')
-      sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.removeBreakpoint')
-      sinon.assert.calledTwice(sessionMock.post)
+      sinon.assert.calledWith(sessionMock.post.secondCall, 'Runtime.evaluate', {
+        expression: removeProbeExpression('probe-1'),
+      })
+      sinon.assert.calledWith(sessionMock.post.thirdCall, 'Debugger.removeBreakpoint')
+      sinon.assert.calledThrice(sessionMock.post)
+    })
+
+    it('should log and continue if removing a probe from the runtime sampler fails', async function () {
+      await addProbe()
+      sessionMock.post.resetHistory()
+      logMock.error.resetHistory()
+
+      const cause = new Error('runtime failure')
+      sessionMock.post.callsFake((method, { location } = {}) => {
+        if (method === 'Runtime.evaluate') {
+          return Promise.reject(cause)
+        }
+        if (method === 'Debugger.setBreakpoint') {
+          return Promise.resolve({
+            breakpointId: `bp-${location.scriptId}:${location.lineNumber}:${location.columnNumber}`,
+          })
+        }
+        return Promise.resolve({})
+      })
+
+      await breakpoints.removeBreakpoint({ id: 'probe-1' })
+
+      sinon.assert.calledWith(
+        logMock.error,
+        '[debugger:devtools_client] Error removing probe %s from sampler',
+        'probe-1',
+        cause
+      )
+      sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.disable')
     })
 
     describe('update breakpoint when removing one of multiple probes at the same location', function () {
@@ -592,7 +818,19 @@ describe('breakpoints', function () {
 
         await breakpoints.removeBreakpoint({ id: 'probe-1' })
 
-        sinon.assert.notCalled(sessionMock.post)
+        sinon.assert.calledWith(sessionMock.post.firstCall, 'Runtime.evaluate', {
+          expression: removeProbeExpression('probe-1'),
+        })
+        sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.removeBreakpoint', { breakpointId })
+        sinon.assert.calledWith(sessionMock.post.thirdCall, 'Debugger.setBreakpoint', {
+          location: {
+            scriptId: 'script-1',
+            lineNumber: 9,
+            columnNumber: 0,
+          },
+          condition: compileBreakpointCondition([{ id: 'probe-2', samplingIndex: 1, nsBetweenSampling: 200000n }]),
+        })
+        sinon.assert.calledThrice(sessionMock.post)
       })
 
       it('mixed: removed probe with no condition', async function () {
@@ -608,16 +846,21 @@ describe('breakpoints', function () {
 
         await breakpoints.removeBreakpoint({ id: 'probe-1' })
 
-        sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.removeBreakpoint', { breakpointId })
-        sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
+        sinon.assert.calledWith(sessionMock.post.firstCall, 'Runtime.evaluate', {
+          expression: removeProbeExpression('probe-1'),
+        })
+        sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.removeBreakpoint', { breakpointId })
+        sinon.assert.calledWith(sessionMock.post.thirdCall, 'Debugger.setBreakpoint', {
           location: {
             scriptId: 'script-1',
             lineNumber: 9,
             columnNumber: 0,
           },
-          condition: '(foo) === (42)',
+          condition: compileBreakpointCondition([
+            { id: 'probe-2', samplingIndex: 1, nsBetweenSampling: 200000n, condition: '(foo) === (42)' },
+          ]),
         })
-        sinon.assert.calledTwice(sessionMock.post)
+        sinon.assert.calledThrice(sessionMock.post)
       })
 
       it('mixed: removed probe with condition', async function () {
@@ -632,7 +875,19 @@ describe('breakpoints', function () {
 
         await breakpoints.removeBreakpoint({ id: 'probe-1' })
 
-        sinon.assert.notCalled(sessionMock.post)
+        sinon.assert.calledWith(sessionMock.post.firstCall, 'Runtime.evaluate', {
+          expression: removeProbeExpression('probe-1'),
+        })
+        sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.removeBreakpoint', { breakpointId })
+        sinon.assert.calledWith(sessionMock.post.thirdCall, 'Debugger.setBreakpoint', {
+          location: {
+            scriptId: 'script-1',
+            lineNumber: 9,
+            columnNumber: 0,
+          },
+          condition: compileBreakpointCondition([{ id: 'probe-2', samplingIndex: 1, nsBetweenSampling: 200000n }]),
+        })
+        sinon.assert.calledThrice(sessionMock.post)
       })
 
       it('all conditions', async function () {
@@ -653,17 +908,150 @@ describe('breakpoints', function () {
 
         await breakpoints.removeBreakpoint({ id: 'probe-1' })
 
-        sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.removeBreakpoint', { breakpointId })
-        sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
+        sinon.assert.calledWith(sessionMock.post.firstCall, 'Runtime.evaluate', {
+          expression: removeProbeExpression('probe-1'),
+        })
+        sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.removeBreakpoint', { breakpointId })
+        sinon.assert.calledWith(sessionMock.post.thirdCall, 'Debugger.setBreakpoint', {
           location: {
             scriptId: 'script-1',
             lineNumber: 9,
             columnNumber: 0,
           },
-          condition: '(foo) === (43)',
+          condition: compileBreakpointCondition([
+            { id: 'probe-2', samplingIndex: 1, nsBetweenSampling: 200000n, condition: '(foo) === (43)' },
+          ]),
         })
-        sinon.assert.calledTwice(sessionMock.post)
+        sinon.assert.calledThrice(sessionMock.post)
       })
+
+      it('should use the new breakpoint id after updating conditions', async function () {
+        let nextBreakpointId = 0
+        sessionMock.post.callsFake((method, { location } = {}) => {
+          if (method === 'Debugger.setBreakpoint') {
+            nextBreakpointId += 1
+            return Promise.resolve({
+              breakpointId: `bp-${nextBreakpointId}`,
+            })
+          }
+          return Promise.resolve({})
+        })
+
+        await addProbe({
+          when: {
+            json: { eq: [{ ref: 'foo' }, 42] },
+            dsl: 'foo = 42',
+          },
+        })
+        await addProbe({
+          id: 'probe-2',
+          when: {
+            json: { eq: [{ ref: 'foo' }, 43] },
+            dsl: 'foo = 43',
+          },
+        })
+        sessionMock.post.resetHistory()
+
+        await breakpoints.removeBreakpoint({ id: 'probe-1' })
+
+        sinon.assert.calledWith(sessionMock.post.firstCall, 'Runtime.evaluate', {
+          expression: removeProbeExpression('probe-1'),
+        })
+        sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.removeBreakpoint', { breakpointId: 'bp-2' })
+        sinon.assert.calledWith(sessionMock.post.thirdCall, 'Debugger.setBreakpoint', {
+          location: {
+            scriptId: 'script-1',
+            lineNumber: 9,
+            columnNumber: 0,
+          },
+          condition: compileBreakpointCondition([
+            { id: 'probe-2', samplingIndex: 1, nsBetweenSampling: 200000n, condition: '(foo) === (43)' },
+          ]),
+        })
+        sinon.assert.calledThrice(sessionMock.post)
+      })
+
+      it('should wrap errors when removing the existing breakpoint fails', async function () {
+        await addProbe()
+        await addProbe({ id: 'probe-2' })
+        sessionMock.post.resetHistory()
+
+        const cause = new Error('inspector failure')
+        sessionMock.post.callsFake((method, { location } = {}) => {
+          if (method === 'Debugger.removeBreakpoint') {
+            return Promise.reject(cause)
+          }
+          if (method === 'Debugger.setBreakpoint') {
+            return Promise.resolve({
+              breakpointId: `bp-${location.scriptId}:${location.lineNumber}:${location.columnNumber}`,
+            })
+          }
+          return Promise.resolve({})
+        })
+
+        await assert.rejects(
+          breakpoints.removeBreakpoint({ id: 'probe-1' }),
+          (err) => {
+            assert(err instanceof Error)
+            assert.strictEqual(err.message, 'Error replacing breakpoint after removing probe from script-1:10:0')
+            assert.strictEqual(err.cause, cause)
+            return true
+          }
+        )
+      })
+
+      it('should wrap errors when setting the replacement breakpoint fails', async function () {
+        await addProbe()
+        await addProbe({ id: 'probe-2' })
+        sessionMock.post.resetHistory()
+
+        const cause = new Error('inspector failure')
+        sessionMock.post.callsFake((method) => {
+          if (method === 'Debugger.setBreakpoint') {
+            return Promise.reject(cause)
+          }
+          return Promise.resolve({})
+        })
+
+        await assert.rejects(
+          breakpoints.removeBreakpoint({ id: 'probe-1' }),
+          (err) => {
+            assert(err instanceof Error)
+            assert.strictEqual(err.message, 'Error setting breakpoint after removing probe from script-1:10:0')
+            assert.strictEqual(err.cause, cause)
+            return true
+          }
+        )
+      })
+    })
+
+    it('should wrap errors when removing a breakpoint fails', async function () {
+      await addProbe()
+      await addProbe({ id: 'probe-2', where: { sourceFile: 'test2.js', lines: ['20'] } })
+      sessionMock.post.resetHistory()
+
+      const cause = new Error('inspector failure')
+      sessionMock.post.callsFake((method, { location } = {}) => {
+        if (method === 'Debugger.removeBreakpoint') {
+          return Promise.reject(cause)
+        }
+        if (method === 'Debugger.setBreakpoint') {
+          return Promise.resolve({
+            breakpointId: `bp-${location.scriptId}:${location.lineNumber}:${location.columnNumber}`,
+          })
+        }
+        return Promise.resolve({})
+      })
+
+      await assert.rejects(
+        breakpoints.removeBreakpoint({ id: 'probe-1' }),
+        (err) => {
+          assert(err instanceof Error)
+          assert.strictEqual(err.message, 'Error removing breakpoint for probe probe-1')
+          assert.strictEqual(err.cause, cause)
+          return true
+        }
+      )
     })
 
     it('should throw error if debugger not started', async function () {
@@ -705,17 +1093,22 @@ describe('breakpoints', function () {
       })
       await breakpoints.modifyBreakpoint(probe)
 
-      sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.disable')
-      sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.enable')
-      sinon.assert.calledWith(sessionMock.post.thirdCall, 'Debugger.setBreakpoint', {
+      sinon.assert.calledWith(sessionMock.post.firstCall, 'Runtime.evaluate', {
+        expression: removeProbeExpression('probe-1'),
+      })
+      sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.disable')
+      sinon.assert.calledWith(sessionMock.post.thirdCall, 'Debugger.enable')
+      sinon.assert.calledWith(sessionMock.post.getCall(3), 'Debugger.setBreakpoint', {
         location: {
           scriptId: 'script-1',
           lineNumber: 9,
           columnNumber: 0,
         },
-        condition: '(foo) === (42)',
+        condition: compileBreakpointCondition([
+          { id: 'probe-1', samplingIndex: 1, nsBetweenSampling: 200000n, condition: '(foo) === (42)' },
+        ]),
       })
-      sinon.assert.calledThrice(sessionMock.post)
+      sinon.assert.callCount(sessionMock.post, 4)
     })
 
     it('should re-add the probe when there are other active probes', async function () {
@@ -733,19 +1126,49 @@ describe('breakpoints', function () {
       })
       await breakpoints.modifyBreakpoint(probe)
 
-      sinon.assert.calledWith(sessionMock.post.firstCall, 'Debugger.removeBreakpoint', { breakpointId })
-      sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.setBreakpoint', {
+      sinon.assert.calledWith(sessionMock.post.firstCall, 'Runtime.evaluate', {
+        expression: removeProbeExpression('probe-1'),
+      })
+      sinon.assert.calledWith(sessionMock.post.secondCall, 'Debugger.removeBreakpoint', { breakpointId })
+      sinon.assert.calledWith(sessionMock.post.thirdCall, 'Debugger.setBreakpoint', {
         location: {
           scriptId: 'script-1',
           lineNumber: 9,
           columnNumber: 0,
         },
-        condition: '(foo) === (42)',
+        condition: compileBreakpointCondition([
+          { id: 'probe-1', samplingIndex: 2, nsBetweenSampling: 200000n, condition: '(foo) === (42)' },
+        ]),
       })
-      sinon.assert.calledTwice(sessionMock.post)
+      sinon.assert.calledThrice(sessionMock.post)
     })
   })
 
+  describe('re-evaluation', function () {
+    it('should log errors from async probe re-evaluation', async function () {
+      await addProbe()
+      logMock.error.resetHistory()
+
+      const cause = new Error('script lookup failure')
+      stateMock.findScriptFromPartialPath.throws(cause)
+
+      scriptLoadingStabilizedCallback()
+      await Promise.resolve()
+
+      sinon.assert.calledWith(
+        logMock.error,
+        '[debugger:devtools_client] Error re-evaluating probe %s',
+        'probe-1',
+        cause
+      )
+    })
+  })
+
+  /**
+   * Add a generated probe.
+   *
+   * @param {object} [probe] - Probe config overrides.
+   */
   async function addProbe (probe) {
     await breakpoints.addBreakpoint(genProbeConfig(probe))
   }
@@ -760,14 +1183,27 @@ describe('breakpoints', function () {
  * @param {object} [config.where] The location information. Defaults to a test file on line 10.
  * @param {object} [config.when] The condition for the probe.
  *   { json: { eq: [{ ref: 'foo' }, 42] }, dsl: 'foo = 42' } by default.
- * @returns {{ id: string; version: number; where: object; when: object; }}
+ * @returns {{ id: string; version: number; where: object; when?: object; }}
  */
 function genProbeConfig ({ id, version, where, when, ...rest } = {}) {
-  return {
+  /** @type {{ id: string; version: number; where: object; when?: object; [key: string]: unknown }} */
+  const probe = {
     id: id || 'probe-1',
     version: version || 1,
     where: where || { sourceFile: 'test.js', lines: ['10'] },
-    when,
     ...rest,
   }
+  if (when !== undefined) probe.when = when
+  return probe
+}
+
+/**
+ * Build the runtime sampler cleanup expression.
+ *
+ * @param {string} id - The probe id.
+ * @returns {string}
+ */
+function removeProbeExpression (id) {
+  return 'globalThis[Symbol.for("dd-trace")]?.[Symbol.for("dd-trace.debugger.probeSampler")]' +
+    `?.remove(${JSON.stringify(id)})`
 }

@@ -47,6 +47,7 @@ const DEFAULT_TEST_MANAGEMENT_TESTS_RESPONSE_STATUS = 200
 class FakeCiVisIntake extends FakeAgent {
   #settings = DEFAULT_SETTINGS
   #settingsResponseStatusCode = 200
+  #mediaResponseStatusCode = 201
   #suitesToSkip = DEFAULT_SUITES_TO_SKIP
   #skippableCoverage = DEFAULT_SKIPPABLE_COVERAGE
   #gitUploadStatus = DEFAULT_GIT_UPLOAD_STATUS
@@ -102,6 +103,12 @@ class FakeCiVisIntake extends FakeAgent {
 
   setSettingsResponseCode (statusCode) {
     this.#settingsResponseStatusCode = statusCode
+  }
+
+  // Lets a test simulate the media endpoint failing (e.g. 500) to verify the
+  // cypress run still completes and reports normally when an upload fails.
+  setMediaResponseStatusCode (statusCode) {
+    this.#mediaResponseStatusCode = statusCode
   }
 
   setWaitingTime (newWaitingTime) {
@@ -220,6 +227,23 @@ class FakeCiVisIntake extends FakeAgent {
         eventFile: eventFile && {
           name: eventFile.fieldname,
           content: JSON.parse(eventFile.buffer.toString('utf8')),
+        },
+        url: req.url,
+      })
+    })
+
+    app.post('/api/v2/ci/test-runs/:traceId/media', express.raw({ limit: Infinity, type: '*/*' }), (req, res) => {
+      res.status(this.#mediaResponseStatusCode).send()
+      this.emit('message', {
+        headers: req.headers,
+        media: {
+          traceId: req.params.traceId,
+          contentType: req.headers['content-type'],
+          // Metadata is carried as query params (not X-Dd-* headers) so it survives the Agent's
+          // evp_proxy, which forwards only an allow-listed header set.
+          idempotencyKey: req.query.idempotency_key,
+          capturedAt: req.query.captured_at_ms,
+          content: req.body,
         },
         url: req.url,
       })
@@ -351,7 +375,7 @@ class FakeCiVisIntake extends FakeAgent {
       this.server = http.createServer(app)
       this.server.on('error', reject)
       this.server.listen(this.port, () => {
-        this.port = this.server.address().port
+        this.port = (/** @type {import('net').AddressInfo} */ (this.server.address())).port
         clearTimeout(timeoutObj)
         resolve(this)
       })
@@ -473,7 +497,7 @@ class FakeCiVisIntake extends FakeAgent {
   // always be faster or as fast as gatherPayloads
   gatherPayloadsMaxTimeout (payloadMatch, onPayload, maxGatheringTime = 15000) {
     const payloads = []
-    return new Promise((resolve, reject) => {
+    return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
       const timeoutId = setTimeout(() => {
         try {
           onPayload(payloads)
@@ -499,7 +523,7 @@ class FakeCiVisIntake extends FakeAgent {
         }
       }
       this.on('message', messageHandler)
-    })
+    }))
   }
 
   gatherPayloads (payloadMatch, gatheringTime = 15000) {
@@ -540,37 +564,7 @@ class FakeCiVisIntake extends FakeAgent {
   }
 
   assertPayloadReceived (fn, messageMatch, timeout) {
-    let resultResolve
-    let resultReject
-    let error
-
-    const timeoutObj = setTimeout(() => {
-      resultReject([error, new Error('timeout')])
-    }, timeout || 15000)
-
-    const messageHandler = (message) => {
-      if (!messageMatch || messageMatch(message)) {
-        try {
-          fn(message)
-          resultResolve()
-        } catch (e) {
-          resultReject(e)
-        }
-        this.off('message', messageHandler)
-      }
-    }
-    this.on('message', messageHandler)
-
-    return new Promise((resolve, reject) => {
-      resultResolve = () => {
-        clearTimeout(timeoutObj)
-        resolve()
-      }
-      resultReject = (e) => {
-        clearTimeout(timeoutObj)
-        reject(e)
-      }
-    })
+    return this.payloadReceived(messageMatch, timeout).then(fn)
   }
 }
 

@@ -7,13 +7,13 @@
   "instructions": true,
   "variants": {
     "small-suite": {
-      "env": { "VARIANT": "small-suite", "ENCODE_COUNT": "20000" }
+      "env": { "VARIANT": "small-suite", "OPERATIONS": "20000" }
     },
     "large-suite": {
-      "env": { "VARIANT": "large-suite", "ENCODE_COUNT": "2400" }
+      "env": { "VARIANT": "large-suite", "OPERATIONS": "2400" }
     },
     "wide-tags": {
-      "env": { "VARIANT": "wide-tags", "ENCODE_COUNT": "6000" }
+      "env": { "VARIANT": "wide-tags", "OPERATIONS": "6000" }
     }
   }
 }

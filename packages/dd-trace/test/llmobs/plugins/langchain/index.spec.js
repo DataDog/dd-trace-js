@@ -75,6 +75,52 @@ describe('integrations', () => {
     throw new Error(`Invalid type: ${type}`)
   }
 
+  // When a provider's own integration is enabled alongside LangChain, the
+  // LangChain model span is demoted to a `workflow` wrapper and the provider
+  // emits the single `llm` span. This avoids two llm spans (and double-counted
+  // tokens/cost) for one underlying call, while keeping the provider's
+  // cache-aware token accounting.
+  describe('langchain with a provider integration also enabled', () => {
+    const { getEvents } = useLlmObs({ plugin: ['langchain', 'anthropic'] })
+
+    withVersions('langchain', ['@langchain/core'], (version) => {
+      beforeEach(() => {
+        langchainAnthropic = require(`../../../../../../versions/@langchain/anthropic@${version}`).get()
+        langchainAnthropicVersion = require(`../../../../../../versions/@langchain/anthropic@${version}`).version()
+      })
+
+      it('emits one llm span from the provider and demotes the langchain span to workflow', async () => {
+        const usingNewerAnthropic = semifies(langchainAnthropicVersion, '>=1.3.22')
+        const modelName = usingNewerAnthropic ? 'claude-haiku-4-5-20251001' : 'claude-3-5-sonnet-20241022'
+
+        const chatModel = getLangChainAnthropicClient('chat', { modelName })
+        await chatModel.invoke('Hello!')
+
+        const { llmobsSpans } = await getEvents(2)
+
+        const workflowSpan = llmobsSpans.find(span => span.name === 'langchain.chat_models.anthropic.ChatAnthropic')
+        const llmSpan = llmobsSpans.find(span => span.name === 'anthropic.request')
+
+        assert.ok(workflowSpan, 'expected a langchain ChatAnthropic span')
+        assert.ok(llmSpan, 'expected an anthropic.request span')
+
+        // exactly one llm-kind span for the single underlying call
+        const llmSpans = llmobsSpans.filter(span => span.meta['span.kind'] === 'llm')
+        assert.equal(llmSpans.length, 1, 'expected exactly one llm span')
+
+        // the langchain span is demoted to a workflow wrapper...
+        assert.equal(workflowSpan.meta['span.kind'], 'workflow')
+        assert.ok(workflowSpan.tags.includes('integration:langchain'))
+
+        // ...and the provider emits the single llm span, nested under it
+        assert.equal(llmSpan.meta['span.kind'], 'llm')
+        assert.equal(llmSpan.meta.model_provider, 'anthropic')
+        assert.ok(llmSpan.tags.includes('integration:anthropic'))
+        assert.equal(llmSpan.parent_id, workflowSpan.span_id)
+      })
+    })
+  })
+
   describe('langchain', () => {
     const { getEvents } = useLlmObs({ plugin: 'langchain' })
 
@@ -118,7 +164,7 @@ describe('integrations', () => {
             .tool
 
           if (semifies(realVersion, '>=1.0')) {
-            MemoryVectorStore = require('../../../../../../versions/@langchain/classic@>=1.0')
+            MemoryVectorStore = require('../../../../../../versions/@langchain/classic@1')
               .get('@langchain/classic/vectorstores/memory')
               .MemoryVectorStore
           } else {

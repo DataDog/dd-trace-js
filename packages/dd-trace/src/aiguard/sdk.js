@@ -63,6 +63,18 @@ class AIGuardClientError extends Error {
   }
 }
 
+/**
+ * Resolves the AI Guard host for a given Datadog site. Sites with a single subdomain level
+ * (e.g. `datadoghq.com`, `ddog-gov.com`) are served from the `app.` subdomain, while regional
+ * sites (e.g. `us3.datadoghq.com`, `ap1.datadoghq.com`) are used as-is.
+ *
+ * @param {string} site - Datadog site (e.g. `datadoghq.com`, `us3.datadoghq.com`)
+ * @returns {string} The host to use for the AI Guard endpoint
+ */
+function aiGuardHost (site) {
+  return site.split('.').length === 2 ? `app.${site}` : site
+}
+
 class AIGuard extends NoopAIGuard {
   #initialized
   #tracer
@@ -81,20 +93,20 @@ class AIGuard extends NoopAIGuard {
   constructor (tracer, config) {
     super()
 
-    if (!config.apiKey || !config.DD_APP_KEY) {
+    if (!config.DD_API_KEY || !config.DD_APP_KEY) {
       log.error('AIGuard: missing api and/or app keys, use env DD_API_KEY and DD_APP_KEY')
       this.#initialized = false
       return
     }
     this.#tracer = tracer
     this.#headers = {
-      'DD-API-KEY': config.apiKey,
+      'DD-API-KEY': config.DD_API_KEY,
       'DD-APPLICATION-KEY': config.DD_APP_KEY,
       'DD-AI-GUARD-VERSION': tracerVersion,
       'DD-AI-GUARD-SOURCE': 'SDK',
       'DD-AI-GUARD-LANGUAGE': 'nodejs',
     }
-    const endpoint = config.experimental.aiguard.endpoint || `https://app.${config.site}/api/v2/ai-guard`
+    const endpoint = config.experimental.aiguard.endpoint || `https://${aiGuardHost(config.site)}/api/v2/ai-guard`
     this.#evaluateUrl = `${endpoint}/evaluate`
     this.#timeout = config.experimental.aiguard.timeout
     this.#maxMessagesLength = config.experimental.aiguard.maxMessagesLength
