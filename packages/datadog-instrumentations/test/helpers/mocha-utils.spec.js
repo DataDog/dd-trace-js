@@ -4,7 +4,7 @@ const assert = require('node:assert/strict')
 
 const {
   finishDeferredHookEnd,
-  wrapFailedTestReplayAfterEachHook,
+  wrapFailedTestReplayHookUpCallback,
 } = require('../../src/mocha/utils')
 
 describe('mocha utils', () => {
@@ -31,36 +31,32 @@ describe('mocha utils', () => {
     })
   })
 
-  describe('wrapFailedTestReplayAfterEachHook', () => {
-    it('keeps callback-style hooks callback-based while waiting for DI setup', async () => {
+  describe('wrapFailedTestReplayHookUpCallback', () => {
+    it('waits for DI setup before continuing afterEach hookUp', async () => {
       let resolveSetProbe
       const setProbePromise = new Promise(resolve => {
         resolveSetProbe = resolve
       })
-      let hookDone
-      let doneCount = 0
-      function hook (done) {
-        hookDone = done
-        done()
+      const err = new Error('test')
+      const suite = {}
+      let receivedArgs
+      function next () {
+        receivedArgs = Array.prototype.slice.call(arguments)
       }
-      function done () {
-        doneCount++
-      }
-      const wrapped = wrapFailedTestReplayAfterEachHook(hook, {}, setProbePromise)
+      const wrapped = wrapFailedTestReplayHookUpCallback(next, {}, setProbePromise)
 
-      assert.strictEqual(wrapped.length, 1)
-      assert.strictEqual(wrapped(done), undefined)
-      assert.strictEqual(doneCount, 0)
+      wrapped(err, suite)
+
+      assert.strictEqual(receivedArgs, undefined)
 
       resolveSetProbe()
       await setProbePromise
       await Promise.resolve()
 
-      assert.strictEqual(hookDone, done)
-      assert.strictEqual(doneCount, 1)
+      assert.deepStrictEqual(receivedArgs, [err, suite])
     })
 
-    it('runs deferred hook-end finish before non-callback hooks', async () => {
+    it('runs deferred hook-end finish before continuing afterEach hookUp', async () => {
       const calls = []
       const test = {
         _ddDeferredHookEnd: {
@@ -70,16 +66,16 @@ describe('mocha utils', () => {
           },
         },
       }
-      function hook () {
-        calls.push('hook')
+      function next () {
+        calls.push('next')
       }
 
-      const wrapped = wrapFailedTestReplayAfterEachHook(hook, test)
+      const wrapped = wrapFailedTestReplayHookUpCallback(next, test)
 
       assert.strictEqual(wrapped.length, 0)
       await wrapped()
 
-      assert.deepStrictEqual(calls, ['finish', 'hook'])
+      assert.deepStrictEqual(calls, ['finish', 'next'])
     })
   })
 })

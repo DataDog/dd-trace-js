@@ -36,7 +36,7 @@ const {
   getOnTestEndHandler,
   getOnTestRetryHandler,
   getOnHookEndHandler,
-  wrapFailedTestReplayAfterEachHook,
+  wrapFailedTestReplayHookUpCallback,
   getOnFailHandler,
   getOnPendingHandler,
   testFileToSuiteCtx,
@@ -403,7 +403,7 @@ function patchFailedTestReplayHookUp (Runner) {
       delete test._ddSetProbePromise
     }
 
-    return hookUp.call(this, name, wrapFailedTestReplayAfterEachHook(fn, test, setProbePromise))
+    return hookUp.call(this, name, wrapFailedTestReplayHookUpCallback(fn, test, setProbePromise))
   })
 }
 

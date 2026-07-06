@@ -728,16 +728,16 @@ function finishDeferredHookEnd (test) {
 }
 
 /**
- * Runs a Failed Test Replay afterEach hook after pending DI operations that must happen first.
+ * Runs a Failed Test Replay hookUp callback after pending DI operations that must happen first.
  *
- * @param {(...args: unknown[]) => unknown} fn - Original afterEach hook.
+ * @param {(...args: unknown[]) => unknown} fn - Original hookUp completion callback.
  * @param {object} test - Mocha test currently owning the hook.
  * @param {Promise<void>|undefined} setProbePromise - Pending probe-set wait, if any.
- * @param {unknown} hookThis - Hook receiver.
+ * @param {unknown} hookThis - Callback receiver.
  * @param {IArguments} args - Arguments passed by Mocha.
  * @returns {unknown}
  */
-function runFailedTestReplayAfterEachHook (fn, test, setProbePromise, hookThis, args) {
+function runFailedTestReplayHookUpCallback (fn, test, setProbePromise, hookThis, args) {
   const continueAfterProbe = () => {
     const deferredHookEndPromise = finishDeferredHookEnd(test)
     if (deferredHookEndPromise) {
@@ -753,29 +753,16 @@ function runFailedTestReplayAfterEachHook (fn, test, setProbePromise, hookThis, 
 }
 
 /**
- * Wraps a Mocha afterEach hook without changing Mocha's callback-style detection.
+ * Wraps Mocha's hookUp completion callback so retries wait for DI before continuing.
  *
- * @param {(...args: unknown[]) => unknown} fn - Original afterEach hook.
+ * @param {(...args: unknown[]) => unknown} fn - Original hookUp completion callback.
  * @param {object} test - Mocha test currently owning the hook.
  * @param {Promise<void>|undefined} setProbePromise - Pending probe-set wait, if any.
  * @returns {(...args: unknown[]) => unknown}
  */
-function wrapFailedTestReplayAfterEachHook (fn, test, setProbePromise) {
-  if (fn.length > 0) {
-    return function (done) {
-      try {
-        const result = runFailedTestReplayAfterEachHook(fn, test, setProbePromise, this, arguments)
-        if (result?.then) {
-          result.then(undefined, done)
-        }
-      } catch (err) {
-        done(err)
-      }
-    }
-  }
-
+function wrapFailedTestReplayHookUpCallback (fn, test, setProbePromise) {
   return function () {
-    return runFailedTestReplayAfterEachHook(fn, test, setProbePromise, this, arguments)
+    return runFailedTestReplayHookUpCallback(fn, test, setProbePromise, this, arguments)
   }
 }
 
@@ -856,7 +843,6 @@ function getOnTestRetryHandler (config) {
         willBeRetried,
         test,
         isAtrRetry,
-        canWaitForSetProbe: getAfterEachHooks(test).length > 0,
         promises,
         ...ctx.currentStore,
       })
@@ -993,7 +979,7 @@ module.exports = {
   getOnTestRetryHandler,
   getOnHookEndHandler,
   finishDeferredHookEnd,
-  wrapFailedTestReplayAfterEachHook,
+  wrapFailedTestReplayHookUpCallback,
   getOnFailHandler,
   getOnPendingHandler,
   testFileToSuiteCtx,

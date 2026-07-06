@@ -1,8 +1,5 @@
 'use strict'
 
-// Capture real time at module load time, before any test can install fake timers.
-const realDateNow = Date.now.bind(Date)
-
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
 
@@ -51,24 +48,6 @@ const {
   TELEMETRY_CODE_COVERAGE_NUM_FILES,
   TELEMETRY_TEST_SESSION,
 } = require('../../dd-trace/src/ci-visibility/telemetry')
-
-const BREAKPOINT_SET_GRACE_PERIOD_MS = 400
-const atomics = globalThis.Atomics
-const syncSleepArray = typeof SharedArrayBuffer === 'function'
-  ? new Int32Array(new SharedArrayBuffer(4))
-  : undefined
-
-function waitForBreakpointSetFallback () {
-  if (syncSleepArray && atomics !== null && typeof atomics === 'object' && typeof atomics.wait === 'function') {
-    atomics.wait(syncSleepArray, 0, 0, BREAKPOINT_SET_GRACE_PERIOD_MS)
-    return
-  }
-
-  const waitUntil = realDateNow() + BREAKPOINT_SET_GRACE_PERIOD_MS
-  while (realDateNow() < waitUntil) {
-    // Fallback only for runtimes without Atomics.wait.
-  }
-}
 
 class MochaPlugin extends CiPlugin {
   static id = 'mocha'
@@ -331,7 +310,6 @@ class MochaPlugin extends CiPlugin {
       err,
       test,
       isAtrRetry,
-      canWaitForSetProbe,
       promises,
     }) => {
       if (span) {
@@ -361,10 +339,8 @@ class MochaPlugin extends CiPlugin {
             this.testErrorStackIndex = stackIndex
             test._ddShouldWaitForHitProbe = true
             this.prepareDiBreakpointHitWait()
-            if (canWaitForSetProbe !== false && promises) {
+            if (promises) {
               promises.setProbePromise = this.waitForDiOperation(setProbePromise)
-            } else {
-              waitForBreakpointSetFallback()
             }
           }
         }
