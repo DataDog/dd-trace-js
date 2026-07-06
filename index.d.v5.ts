@@ -925,11 +925,12 @@ declare namespace tracer {
     };
 
     /**
-     * Global tags that should be assigned to every span.
+     * Global tags that should be assigned to every span. May be provided as an object, or in the same
+     * `key:value,key:value` string (or array of such strings) form accepted by the `DD_TAGS` env var.
      * @env DD_TAGS, OTEL_RESOURCE_ATTRIBUTES
      * Programmatic configuration takes precedence over the environment variables listed above.
      */
-    tags?: { [key: string]: any };
+    tags?: { [key: string]: any } | string | string[];
 
     /**
      * Whether to report the hostname of the service host. This is used when the agent is deployed on a different host and cannot determine the hostname automatically.
