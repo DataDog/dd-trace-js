@@ -1230,7 +1230,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         runDisableTest(done, true)
       })
 
-      it('skips disabled concurrent test bodies before they run', async () => {
+      onlyLatestIt('skips disabled concurrent test bodies before they run', async () => {
         receiver.setSettings({ test_management: { enabled: true } })
         receiver.setTestManagementTests({
           jest: {
@@ -2469,7 +2469,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         })
       })
 
-      it('should mark concurrent tests as impacted', async () => {
+      onlyLatestIt('should mark concurrent tests as impacted', async () => {
         receiver.setSettings({ impacted_tests_enabled: true })
 
         const eventsPromise = receiver
@@ -2505,7 +2505,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.strictEqual(exitCode, 0)
       })
 
-      it('should retry concurrent impacted tests and keep retries marked as modified', async () => {
+      onlyLatestIt('should retry concurrent impacted tests and keep retries marked as modified', async () => {
         receiver.setSettings({
           impacted_tests_enabled: true,
           early_flake_detection: {

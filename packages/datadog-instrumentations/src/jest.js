@@ -620,15 +620,20 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       const bind = this.getJestEachBind()
       if (typeof bind !== 'function') return
 
-      const each = bind(concurrentTest, false, needsEachError)
       const environment = this
-      concurrentTest.each = function wrappedConcurrentEach (...args) {
-        const testParameters = getFormattedJestTestParameters(args)
-        const eachBind = each.apply(this, args)
-        return function (...args) {
-          const [testName] = args
-          environment.setNameToParams(testName, testParameters)
-          return eachBind.apply(this, args)
+      concurrentTest.each = function wrappedConcurrentEach (...eachArgs) {
+        const testParameters = getFormattedJestTestParameters(eachArgs)
+        return function (...testArgs) {
+          let parameterIndex = 0
+          const concurrentEachTest = function (testName, testFn, ...callArgs) {
+            const parameters = testParameters?.[parameterIndex++]
+            if (parameters !== undefined) {
+              environment.appendNameToParams(testName, parameters)
+            }
+            return concurrentTest.call(this, testName, testFn, ...callArgs)
+          }
+          const eachBind = bind(concurrentEachTest, false, needsEachError).apply(this, eachArgs)
+          return eachBind.apply(this, testArgs)
         }
       }
     }
@@ -749,6 +754,21 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      */
     setNameToParams (name, params) {
       this.nameToParams[name] = [...params]
+    }
+
+    /**
+     * Appends formatted parameters for one table-driven Jest test row.
+     *
+     * @param {string} name
+     * @param {unknown[]|object} params
+     * @returns {void}
+     */
+    appendNameToParams (name, params) {
+      if (this.nameToParams[name]) {
+        this.nameToParams[name].push(params)
+      } else {
+        this.nameToParams[name] = [params]
+      }
     }
 
     /**

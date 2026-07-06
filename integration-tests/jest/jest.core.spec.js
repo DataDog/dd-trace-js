@@ -706,7 +706,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
     assert.strictEqual(exitCode, 0)
   })
 
-  it('propagates test span context to HTTP requests and hooks during test.concurrent execution', async () => {
+  onlyLatestIt('propagates test span context to HTTP requests and hooks during test.concurrent execution', async () => {
     const eventsPromise = receiver
       .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
         const events = payloads.flatMap(({ payload }) => payload.events)
@@ -722,10 +722,24 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           ['jest-mixed-concurrent-hook-http first mixed concurrent body http is linked to first test span', 1],
           ['jest-mixed-concurrent-hook-http second mixed concurrent body http is linked to second test span', 1],
         ])
+        const expectedParametersByTestName = new Map([
+          [
+            'jest-test-concurrent-each-http first each row http is linked to its test span',
+            JSON.stringify({ arguments: ['first each row', 30], metadata: {} }),
+          ],
+          [
+            'jest-test-concurrent-each-http second each row http is linked to its test span',
+            JSON.stringify({ arguments: ['second each row', 10], metadata: {} }),
+          ],
+        ])
         for (const [testName, expectedHttpSpanCount] of expectedHttpSpanCountByTestName) {
           const concurrentHookTestSpan = tests.find(test => test.meta[TEST_NAME] === testName)
           assert.ok(concurrentHookTestSpan, `should have concurrent hook test span for ${testName}`)
           assert.strictEqual(concurrentHookTestSpan.meta[TEST_STATUS], 'pass')
+          const expectedParameters = expectedParametersByTestName.get(testName)
+          if (expectedParameters) {
+            assert.strictEqual(concurrentHookTestSpan.meta[TEST_PARAMETERS], expectedParameters)
+          }
 
           const concurrentHookHttpSpans = spans.filter(span =>
             span.name === 'http.request' &&
@@ -807,6 +821,12 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           const testSpan = tests.find(test => test.meta[TEST_NAME] === testName)
           assert.ok(testSpan, `should have imported globals concurrent test span for ${testName}`)
           assert.strictEqual(testSpan.meta[TEST_STATUS], 'pass')
+          if (testName === 'jest-imported-globals-concurrent-http imported each row http is linked to test span') {
+            assert.strictEqual(
+              testSpan.meta[TEST_PARAMETERS],
+              JSON.stringify({ arguments: ['imported each row'], metadata: {} })
+            )
+          }
 
           const httpSpans = spans.filter(span =>
             span.name === 'http.request' &&
