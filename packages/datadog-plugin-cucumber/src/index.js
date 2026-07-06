@@ -1,8 +1,5 @@
 'use strict'
 
-// Capture real time at module load time, before any test can install fake timers.
-const realDateNow = Date.now.bind(Date)
-
 const CiPlugin = require('../../dd-trace/src/plugins/ci_plugin')
 const { storage } = require('../../datadog-core')
 const { getEnvironmentVariable } = require('../../dd-trace/src/config/helper')
@@ -54,23 +51,6 @@ const {
 } = require('../../dd-trace/src/ci-visibility/telemetry')
 
 const isCucumberWorker = !!getEnvironmentVariable('CUCUMBER_WORKER_ID')
-const BREAKPOINT_SET_GRACE_PERIOD_MS = 400
-const atomics = globalThis.Atomics
-const syncSleepArray = typeof SharedArrayBuffer === 'function'
-  ? new Int32Array(new SharedArrayBuffer(4))
-  : undefined
-
-function waitForBreakpointSetFallback () {
-  if (syncSleepArray && atomics !== null && typeof atomics === 'object' && typeof atomics.wait === 'function') {
-    atomics.wait(syncSleepArray, 0, 0, BREAKPOINT_SET_GRACE_PERIOD_MS)
-    return
-  }
-
-  const waitUntil = realDateNow() + BREAKPOINT_SET_GRACE_PERIOD_MS
-  while (realDateNow() < waitUntil) {
-    // Fallback only for runtimes without Atomics.wait.
-  }
-}
 
 class CucumberPlugin extends CiPlugin {
   static id = 'cucumber'
@@ -278,18 +258,14 @@ class CucumberPlugin extends CiPlugin {
         }
       }
       span.setTag('error', error)
-      if (isFirstAttempt && this.di && error && this.libraryConfig?.isDiEnabled) {
+      if (isFirstAttempt && canWaitForDi !== false && promises && this.di && error && this.libraryConfig?.isDiEnabled) {
         const probeInformation = this.addDiProbe(error)
         if (probeInformation) {
           const { file, line, stackIndex, setProbePromise } = probeInformation
           this.runningTestProbe = { file, line }
           this.testErrorStackIndex = stackIndex
           this.prepareDiBreakpointHitWait()
-          if (canWaitForDi !== false && promises) {
-            promises.setProbePromise = this.waitForDiOperation(setProbePromise)
-          } else {
-            waitForBreakpointSetFallback()
-          }
+          promises.setProbePromise = this.waitForDiOperation(setProbePromise)
         }
       }
       span.setTag(TEST_STATUS, 'fail')
