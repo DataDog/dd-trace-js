@@ -134,7 +134,7 @@ function extractInferredProxyContext (headers) {
 
   const detectedProxy = supportedProxies[headers[PROXY_HEADER_SYSTEM]]
 
-  if (detectedProxy.providesTimestamp && !(PROXY_HEADER_START_TIME_MS in headers)) {
+  if (detectedProxy.providesTimestamp && !headers[PROXY_HEADER_START_TIME_MS]) {
     return null
   }
 
