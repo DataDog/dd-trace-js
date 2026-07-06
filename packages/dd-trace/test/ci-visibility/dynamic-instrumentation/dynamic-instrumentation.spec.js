@@ -2,9 +2,13 @@
 
 const assert = require('node:assert/strict')
 const { fork } = require('node:child_process')
+const { EventEmitter } = require('node:events')
 const path = require('node:path')
+const { setImmediate: setImmediatePromise } = require('node:timers/promises')
 
 const { describe, it, afterEach } = require('mocha')
+const proxyquire = require('proxyquire').noCallThru().noPreserveCache()
+const sinon = require('sinon')
 
 require('../../../../dd-trace/test/setup/core')
 
@@ -79,5 +83,113 @@ describe('test visibility with dynamic instrumentation', () => {
       assert.ok(messages.some(({ drained }) => drained))
       done()
     })
+  })
+
+  it('does not acknowledge drains before queued breakpoint hits', async () => {
+    const breakpointSetChannel = new EventEmitter()
+    const breakpointHitChannel = new EventEmitter()
+    const breakpointRemoveChannel = new EventEmitter()
+    const postedBreakpointHits = []
+    let resolveStack
+    const session = new EventEmitter()
+    session.post = sinon.stub()
+    session.post.withArgs('Debugger.enable').resolves()
+    session.post.withArgs('Debugger.setBreakpoint').resolves({ breakpointId: 'breakpoint-id' })
+    session.post.withArgs('Debugger.resume').resolves()
+    breakpointSetChannel.postMessage = sinon.stub()
+    breakpointHitChannel.postMessage = (message) => {
+      postedBreakpointHits.push(message)
+    }
+    breakpointRemoveChannel.postMessage = sinon.stub()
+
+    proxyquire('../../../src/ci-visibility/dynamic-instrumentation/worker', {
+      worker_threads: {
+        workerData: {
+          breakpointSetChannel,
+          breakpointHitChannel,
+          breakpointRemoveChannel,
+        },
+      },
+      crypto: {
+        randomUUID: () => 'snapshot-id',
+      },
+      '../../../debugger/devtools_client/session': session,
+      '../../../debugger/devtools_client/source-maps': {
+        getGeneratedPosition: sinon.stub(),
+      },
+      '../../../debugger/devtools_client/snapshot': {
+        getLocalStateForCallFrame: () => ({
+          processLocalState: () => ({ localVariable: { type: 'number', value: '1' } }),
+        }),
+      },
+      '../../../debugger/devtools_client/snapshot/constants': {
+        DEFAULT_MAX_REFERENCE_DEPTH: 1,
+        DEFAULT_MAX_COLLECTION_SIZE: 1,
+        DEFAULT_MAX_FIELD_COUNT: 1,
+        DEFAULT_MAX_LENGTH: 1,
+      },
+      '../../../debugger/devtools_client/state': {
+        findScriptFromPartialPath: () => ({ url: 'file.js', scriptId: 'script-id' }),
+        getStackFromCallFrames: () => new Promise(resolve => {
+          resolveStack = resolve
+        }),
+      },
+      '../../../log': {
+        error: () => {},
+        warn: () => {},
+      },
+    })
+
+    breakpointSetChannel.emit('message', { id: 'probe-id', file: 'file.js', line: 10 })
+    await setImmediatePromise()
+
+    breakpointHitChannel.emit('message', { drainRequestId: 'drain-id' })
+    session.emit('Debugger.paused', {
+      params: {
+        hitBreakpoints: ['breakpoint-id'],
+        callFrames: [{ callFrameId: 'call-frame-id' }],
+      },
+    })
+
+    await setImmediatePromise()
+    assert.deepStrictEqual(postedBreakpointHits, [])
+
+    resolveStack([{ fileName: 'file.js' }])
+    await setImmediatePromise()
+    await setImmediatePromise()
+
+    assert.deepStrictEqual(postedBreakpointHits, [
+      {
+        snapshot: {
+          id: 'snapshot-id',
+          timestamp: postedBreakpointHits[0].snapshot.timestamp,
+          probe: {
+            id: 'probe-id',
+            version: 0,
+            location: {
+              file: 'file.js',
+              lines: ['10'],
+            },
+          },
+          captures: {
+            lines: {
+              10: {
+                locals: {
+                  localVariable: {
+                    type: 'number',
+                    value: '1',
+                  },
+                },
+              },
+            },
+          },
+          stack: [{ fileName: 'file.js' }],
+          language: 'javascript',
+        },
+      },
+      {
+        drainRequestId: 'drain-id',
+      },
+    ])
   })
 })

@@ -30,6 +30,7 @@ const log = require('../../../log')
 
 let sessionStarted = false
 let inFlightBreakpointHits = 0
+let isBreakpointHitDrainScheduled = false
 
 const breakpointIdToProbe = new Map()
 const probeIdToBreakpointId = new Map()
@@ -126,18 +127,15 @@ session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint]
     breakpointHitChannel.postMessage({ snapshot })
   } finally {
     inFlightBreakpointHits--
-    drainBreakpointHitRequests()
+    scheduleBreakpointHitDrain()
   }
 })
 
 breakpointHitChannel.on('message', ({ drainRequestId }) => {
   if (!drainRequestId) return
 
-  if (inFlightBreakpointHits === 0) {
-    breakpointHitChannel.postMessage({ drainRequestId })
-  } else {
-    breakpointHitDrainRequests.push(drainRequestId)
-  }
+  breakpointHitDrainRequests.push(drainRequestId)
+  scheduleBreakpointHitDrain()
 })
 
 breakpointRemoveChannel.on('message', async (probeId) => {
@@ -225,4 +223,14 @@ function drainBreakpointHitRequests () {
     breakpointHitChannel.postMessage({ drainRequestId })
   }
   breakpointHitDrainRequests.length = 0
+}
+
+function scheduleBreakpointHitDrain () {
+  if (isBreakpointHitDrainScheduled) return
+
+  isBreakpointHitDrainScheduled = true
+  setImmediate(() => {
+    isBreakpointHitDrainScheduled = false
+    drainBreakpointHitRequests()
+  })
 }
