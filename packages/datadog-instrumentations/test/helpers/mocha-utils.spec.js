@@ -40,11 +40,13 @@ describe('mocha utils', () => {
       const err = new Error('test')
       const suite = {}
       let receivedArgs
-      function next () {
-        receivedArgs = Array.prototype.slice.call(arguments)
+      function next (err, suite) {
+        receivedArgs = [err, suite]
       }
       const wrapped = wrapFailedTestReplayHookUpCallback(next, {}, setProbePromise)
 
+      assert.strictEqual(wrapped.name, 'next')
+      assert.strictEqual(wrapped.length, 2)
       wrapped(err, suite)
 
       assert.strictEqual(receivedArgs, undefined)

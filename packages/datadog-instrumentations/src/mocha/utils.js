@@ -761,9 +761,9 @@ function runFailedTestReplayHookUpCallback (fn, test, setProbePromise, hookThis,
  * @returns {(...args: unknown[]) => unknown}
  */
 function wrapFailedTestReplayHookUpCallback (fn, test, setProbePromise) {
-  return function () {
+  return shimmer.wrapCallback(fn, fn => function () {
     return runFailedTestReplayHookUpCallback(fn, test, setProbePromise, this, arguments)
-  }
+  })
 }
 
 function getOnFailHandler (isMain, config) {
