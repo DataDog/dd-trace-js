@@ -808,8 +808,19 @@ class NativeSpansInterface {
 
     return this._state.sendPreparedChunk()
       .catch(e => {
-        // sendPreparedChunk may also fail. The cleanup path is the same.
-        this.resetChangeQueue()
+        // A send failure is a *network* fault for the already-serialized chunk;
+        // that chunk is lost, which is expected on a transient agent outage.
+        //
+        // Crucially, do NOT resetChangeQueue() here. sendPreparedChunk is async,
+        // so by the time this rejection lands, ops for *other* spans (including
+        // their Create) have typically been queued into the shared change buffer
+        // while the send was in flight. Resetting would discard those pending
+        // ops, orphaning spans whose Create never lands in native storage -> a
+        // "span not found" at their next flush (and, before the change-buffer
+        // became tolerant, a cascade that crashed the host). The change buffer
+        // was already drained before prepareChunk, so it holds only that valid
+        // pending work; leave it intact for the next flush. Only refresh views
+        // (memory may have grown during the send) and propagate the error.
         this.#checkDetach()
         log.error('Error flushing spans to agent:', e)
         throw e

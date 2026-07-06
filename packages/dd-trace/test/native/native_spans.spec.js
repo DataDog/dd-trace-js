@@ -369,16 +369,28 @@ describe('NativeSpansInterface', () => {
       assert.notStrictEqual(cqbCountBeforeThrow, 0)
     })
 
-    it('should reset queue state when sendPreparedChunk rejects', async () => {
-      nativeSpans.queueOp(OpCode.SetName, spanId, 'test')
-      assert.notStrictEqual(nativeSpans._cqbCount, 0)
+    it('does not discard the change queue when sendPreparedChunk rejects', async () => {
+      // A send failure must NOT reset the change queue: sendPreparedChunk is
+      // async, so ops for *other* spans (including their Create) are queued
+      // into the shared buffer while the send is in flight. Dropping them would
+      // orphan those spans -> "span not found" at their next flush. Here the
+      // pre-send op is drained by flushSpans' own flushChangeQueue; then, while
+      // the send is "in flight", a new span's op is queued. That op must survive
+      // the rejection.
+      nativeSpans.queueOp(OpCode.SetName, spanId, 'pre-send')
       const err = new Error('send failed')
-      mockState.sendPreparedChunk = sinon.stub().rejects(err)
+      mockState.sendPreparedChunk = sinon.stub().callsFake(() => {
+        // Simulate a span created/finished while the send is in flight.
+        nativeSpans.queueOp(OpCode.SetName, spanId, 'in-flight')
+        return Promise.reject(err)
+      })
 
       await assert.rejects(nativeSpans.flushSpans([spanId], true), err)
 
-      assert.strictEqual(nativeSpans._cqbIndex, 8)
-      assert.strictEqual(nativeSpans._cqbCount, 0)
+      // The op queued during the failed send must be preserved for the next
+      // flush, not reset away.
+      assert.strictEqual(nativeSpans._cqbCount, 1, 'pending op queued during the in-flight send was dropped')
+      sinon.assert.calledOnce(mockState.sendPreparedChunk)
     })
 
     it('should rethrow + recover when flushChangeQueue throws', () => {
