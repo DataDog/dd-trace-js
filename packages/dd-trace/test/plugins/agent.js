@@ -502,6 +502,15 @@ module.exports = {
     })
 
     agent.put('/v0.4/traces', handleTraceRequest)
+
+    // The native (libdatadog) exporter sends traces via POST, whereas the
+    // legacy JS AgentWriter uses PUT. Handle both so `assertSomeTraces` works
+    // regardless of which exporter produced the payload.
+    agent.post('/v0.5/traces', (req, res) => {
+      res.status(404).end()
+    })
+
+    agent.post('/v0.4/traces', handleTraceRequest)
     agent.post('/api/v2/citestcycle', ciVisRequestHandler)
     agent.post('/evp_proxy/v2/api/v2/citestcycle', ciVisRequestHandler)
 
