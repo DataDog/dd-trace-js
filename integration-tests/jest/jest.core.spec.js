@@ -935,6 +935,20 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             )
           }
         }
+        const assertExternalRetryMetadata = (testSpans, expectedRetryCount) => {
+          const retrySpans = testSpans.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.strictEqual(retrySpans.length, expectedRetryCount)
+          for (const retrySpan of retrySpans) {
+            assert.strictEqual(retrySpan.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.ext)
+          }
+
+          const originalSpans = testSpans.filter(test => test.meta[TEST_IS_RETRY] !== 'true')
+          assert.strictEqual(originalSpans.length, testSpans.length - expectedRetryCount)
+          for (const originalSpan of originalSpans) {
+            assert.ok(!(TEST_IS_RETRY in originalSpan.meta))
+            assert.ok(!(TEST_RETRY_REASON in originalSpan.meta))
+          }
+        }
 
         assert.strictEqual(retryTestSpans.length, 2)
         assert.deepStrictEqual(
@@ -943,6 +957,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           inspect(retryTestSpans.map(test => test.meta))
         )
         assertRetryHttpChildren(retryTestName, retryTestSpans)
+        assertExternalRetryMetadata(retryTestSpans, 1)
 
         assert.strictEqual(duplicateRetryTestSpans.length, 4)
         assert.deepStrictEqual(
@@ -952,6 +967,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         )
         assert.strictEqual(new Set(duplicateRetryTestSpans.map(test => test.span_id.toString())).size, 4)
         assertRetryHttpChildren(duplicateRetryTestName, duplicateRetryTestSpans)
+        assertExternalRetryMetadata(duplicateRetryTestSpans, 2)
       }, 25000)
 
     childProcess = exec(

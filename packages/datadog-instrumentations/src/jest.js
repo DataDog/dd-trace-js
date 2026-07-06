@@ -699,6 +699,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         concurrentTest: options?.concurrentTest,
         concurrentTestThisArg: options?.concurrentTestThisArg,
         ctx: this.createConcurrentTestContext(testName, testFn, asyncError, state, options),
+        numExecutions: 0,
         state,
         testFn,
       }
@@ -869,7 +870,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     /**
      * Runs a concurrent test function inside its test span context.
      *
-     * @param {{ ctx: object }} concurrentTestState
+     * @param {{ ctx: object, numExecutions: number }} concurrentTestState
      * @param {(...args: unknown[]) => unknown} testFn
      * @param {object} thisArg
      * @param {unknown[]} args
@@ -886,6 +887,11 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
 
       const runTest = () => testFn.apply(thisArg, args)
+      if (!ctx.isAttemptToFixRetry && !ctx.isEfdRetry) {
+        ctx.isJestRetry = concurrentTestState.numExecutions > 0
+      }
+      concurrentTestState.numExecutions++
+
       if (ctx.currentStore) {
         return testFnCh.runStores(ctx, runTest)
       }
