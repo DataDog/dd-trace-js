@@ -29,13 +29,13 @@ const SG_FILE = path.join(require('os').tmpdir(), 'sg-overview.txt')
 // Curated per-bench judgment the run cannot measure.
 const HIGH_MEANING = new Set([
   'shimmer-runtime', 'shimmer-startup', 'scope', 'id', 'spans', 'encoding',
-  'exporting-pipeline', 'propagation', 'async_hooks', 'url', 'startup', 'fs',
+  'native-spans', 'propagation', 'async_hooks', 'url', 'startup', 'fs',
 ])
 const LOW_MEANING = new Set(['plugin-dns'])
 
 const CRITICAL_PATH = new Set([
   'shimmer-runtime', 'shimmer-startup', 'scope', 'id', 'spans', 'encoding',
-  'exporting-pipeline', 'propagation', 'async_hooks', 'startup',
+  'native-spans', 'propagation', 'async_hooks', 'startup',
 ])
 const LIVE = new Set(['appsec', 'appsec-iast', 'plugin-http', 'plugin-net'])
 const BACKGROUND = new Set(['runtime-metrics', 'profiler', 'log', 'llmobs', 'debugger'])

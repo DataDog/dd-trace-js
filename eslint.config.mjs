@@ -457,7 +457,6 @@ export default [
           // Benchmark stubs that mock the `_tags` field shape on a fake span
           // context (their `getTag`/`getTags` mocks read from `_tags`).
           'benchmark/stubs/span.js',
-          'benchmark/sirun/exporting-pipeline/index.js',
         ],
       }],
       'eslint-rules/eslint-require-export-exists': 'error',

@@ -8,29 +8,37 @@
 // returns a copy. This matters for instrumentation code that reads
 // tags to make routing decisions.
 
-const tracer = require('../../..').init()
+const nock = require('nock')
+
+nock.disableNetConnect()
+nock('http://127.0.0.1:8126').persist().put(/.*/).reply(200, '{}').post(/.*/).reply(200, '{}')
+
+const tracer = require('../../..').init({ hostname: '127.0.0.1', port: 8126 })
 
 const nativeSpans = tracer._tracer._nativeSpans
 const pendingNativeIds = nativeSpans ? [] : null
 
 tracer._tracer._processor.process = function (span) {
   if (pendingNativeIds) {
-    pendingNativeIds.push(span.context()._slotIndex)
+    pendingNativeIds.push(span.context()._nativeSpanId)
   }
-  this._erase(span.context()._trace)
+  this._erase(span.context()._trace, [])
 }
 
-function drainNative () {
+// Extract the accumulated spans (bounds the WASM map) and drain the staged
+// chunk via a mocked-agent send (bounds prepared-chunk memory). Span ids are
+// 8-byte u64 LE.
+async function drainNative () {
   if (!pendingNativeIds || pendingNativeIds.length === 0) return
   nativeSpans.flushChangeQueue()
-  const buf = Buffer.alloc(pendingNativeIds.length * 4)
+  const buf = Buffer.alloc(pendingNativeIds.length * 8)
   let idx = 0
-  for (const slot of pendingNativeIds) {
-    buf.writeUInt32LE(slot, idx)
-    idx += 4
+  for (const spanId of pendingNativeIds) {
+    buf.set(spanId, idx)
+    idx += 8
   }
   nativeSpans._state.prepareChunk(pendingNativeIds.length, false, buf)
-  nativeSpans.freeSlots(pendingNativeIds)
+  await nativeSpans._state.sendPreparedChunk().catch(() => {})
   pendingNativeIds.length = 0
 }
 

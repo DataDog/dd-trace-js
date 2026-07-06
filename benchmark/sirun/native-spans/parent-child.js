@@ -10,7 +10,12 @@
 //   DEPTH=3   — root → parent → child (typical web request)
 //   DEPTH=10  — deep chain (complex orchestration)
 
-const tracer = require('../../..').init()
+const nock = require('nock')
+
+nock.disableNetConnect()
+nock('http://127.0.0.1:8126').persist().put(/.*/).reply(200, '{}').post(/.*/).reply(200, '{}')
+
+const tracer = require('../../..').init({ hostname: '127.0.0.1', port: 8126 })
 
 const nativeSpans = tracer._tracer._nativeSpans
 const pendingNativeIds = nativeSpans ? [] : null
@@ -18,22 +23,25 @@ const DRAIN_THRESHOLD = 5000
 
 tracer._tracer._processor.process = function (span) {
   if (pendingNativeIds) {
-    pendingNativeIds.push(span.context()._slotIndex)
+    pendingNativeIds.push(span.context()._nativeSpanId)
   }
-  this._erase(span.context()._trace)
+  this._erase(span.context()._trace, [])
 }
 
-function drainNative () {
+// Extract the accumulated spans (bounds the WASM map) and drain the staged
+// chunk via a mocked-agent send (bounds prepared-chunk memory). Span ids are
+// 8-byte u64 LE.
+async function drainNative () {
   if (!pendingNativeIds || pendingNativeIds.length === 0) return
   nativeSpans.flushChangeQueue()
-  const buf = Buffer.alloc(pendingNativeIds.length * 4)
+  const buf = Buffer.alloc(pendingNativeIds.length * 8)
   let idx = 0
-  for (const slot of pendingNativeIds) {
-    buf.writeUInt32LE(slot, idx)
-    idx += 4
+  for (const spanId of pendingNativeIds) {
+    buf.set(spanId, idx)
+    idx += 8
   }
   nativeSpans._state.prepareChunk(pendingNativeIds.length, false, buf)
-  nativeSpans.freeSlots(pendingNativeIds)
+  await nativeSpans._state.sendPreparedChunk().catch(() => {})
   pendingNativeIds.length = 0
 }
 
@@ -53,22 +61,26 @@ const tagSets = [
   { 'span.type': 'web', component: 'serializer', 'content.type': 'application/json' },
 ]
 
-for (let i = 0; i < ITERATIONS; i++) {
-  const spans = new Array(depth)
+async function main () {
+  for (let i = 0; i < ITERATIONS; i++) {
+    const spans = new Array(depth)
 
-  // Create the chain top-down
-  for (let d = 0; d < depth; d++) {
-    const opts = d === 0
-      ? { tags: tagSets[d % tagSets.length] }
-      : { childOf: spans[d - 1], tags: tagSets[d % tagSets.length] }
-    spans[d] = tracer.startSpan(`span.depth.${d}`, opts)
+    // Create the chain top-down
+    for (let d = 0; d < depth; d++) {
+      const opts = d === 0
+        ? { tags: tagSets[d % tagSets.length] }
+        : { childOf: spans[d - 1], tags: tagSets[d % tagSets.length] }
+      spans[d] = tracer.startSpan(`span.depth.${d}`, opts)
+    }
+
+    // Finish bottom-up (realistic order)
+    for (let d = depth - 1; d >= 0; d--) {
+      spans[d].finish()
+    }
+
+    if (pendingNativeIds && pendingNativeIds.length >= DRAIN_THRESHOLD) await drainNative()
   }
-
-  // Finish bottom-up (realistic order)
-  for (let d = depth - 1; d >= 0; d--) {
-    spans[d].finish()
-  }
-
-  if (pendingNativeIds && pendingNativeIds.length >= DRAIN_THRESHOLD) drainNative()
+  await drainNative()
 }
-drainNative()
+
+main()
