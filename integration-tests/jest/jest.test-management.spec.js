@@ -437,6 +437,17 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         runAttemptToFixTest(done, { isAttemptToFix: true })
       })
 
+      it('can attempt to fix when a custom environment returns an async add_test result', (done) => {
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
+
+        runAttemptToFixTest(done, {
+          isAttemptToFix: true,
+          extraEnvVars: {
+            CUSTOM_TEST_ENVIRONMENT: './ci-visibility/jestEnvironmentAsyncAddTest.js',
+          },
+        })
+      })
+
       it('can attempt to fix and mark last attempt as passed if every attempt passes', (done) => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
 

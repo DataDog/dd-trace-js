@@ -17,7 +17,15 @@ const {
   isModifiedTest,
 } = require('../../dd-trace/src/plugins/util/test')
 const { addHook } = require('./helpers/instrument')
+const noWorkerInit = require('./vitest-main-no-worker-init')
 const {
+  testStartCh,
+  testPassCh,
+  testErrorCh,
+  testSkipCh,
+  testSuiteStartCh,
+  testSuiteFinishCh,
+  testSuiteErrorCh,
   testSessionStartCh,
   testSessionFinishCh,
   testSessionConfigurationCh,
@@ -31,8 +39,10 @@ const {
   codeCoverageReportCh,
   findExportByName,
   getChannelPromise,
+  getTypeTasks,
   getWorkspaceProject,
   setProvidedContext,
+  getVitestTestProperties,
 } = require('./vitest-util')
 
 const newTestsWithDynamicNames = new Set()
@@ -54,7 +64,9 @@ let testManagementAttemptToFixRetries = 0
 let isDiEnabled = false
 let testCodeCoverageLinesTotal
 let coverageRootDir
+let requestErrorTags = {}
 let isSessionStarted = false
+let isVitestNoWorkerInitActive = false
 let vitestPool = null
 let isMessagePortWrapped = false
 const tinyPoolClassWrappers = new WeakMap()
@@ -96,6 +108,10 @@ function isCliApiPackage (vitestPackage) {
 
 function getVitestExport (vitestPackage) {
   return findExportByName(vitestPackage, 'Vitest')
+}
+
+function getTypecheckerExport (vitestPackage) {
+  return findExportByName(vitestPackage, 'Typechecker')
 }
 
 function getForksPoolWorkerExport (vitestPackage) {
@@ -375,16 +391,35 @@ function resetMainProcessProvidedContext (ctx) {
   }, 'Could not reset Test Optimization context for workers.')
 }
 
-async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
+/**
+ * Merges request error tags from a Test Optimization request response into the tags propagated by no-worker mode.
+ *
+ * @param {{ requestErrorTags?: Record<string, string> }|undefined} requestResponse - Request response.
+ */
+function mergeRequestErrorTags (requestResponse) {
+  if (requestResponse?.requestErrorTags) {
+    requestErrorTags = {
+      ...requestErrorTags,
+      ...requestResponse.requestErrorTags,
+    }
+  }
+}
+
+async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, shouldInstallNoWorkerInit) {
   if (!testSessionFinishCh.hasSubscribers) {
     return
   }
 
   let repositoryRoot = process.cwd()
+  let testSessionConfiguration
   let testFilepaths
   let shouldSendTestProperties = false
+  let testPropertiesByFilepath
+  let knownTests
   let knownTestsBySuite
+  let testManagementTests
   let testManagementTestsBySuite
+  let modifiedFiles
   let impactedTestSuites
   const getCurrentTestFilepaths = async () => {
     if (testFilepaths === undefined) {
@@ -394,34 +429,45 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
   }
 
   try {
-    const { err, libraryConfig } = await getChannelPromise(libraryConfigurationCh, frameworkVersion)
+    const {
+      err,
+      libraryConfig,
+      requestErrorTags: receivedRequestErrorTags = {},
+    } = await getChannelPromise(libraryConfigurationCh, frameworkVersion, {
+      isVitestNoWorkerInitActive: shouldInstallNoWorkerInit,
+    })
+    requestErrorTags = receivedRequestErrorTags
     if (err) {
       resetLibraryConfig()
     } else {
       applyLibraryConfig(libraryConfig)
     }
   } catch {
+    requestErrorTags = {}
     resetLibraryConfig()
   }
 
   resetMainProcessProvidedContext(ctx)
 
   if (testSessionConfigurationCh.hasSubscribers) {
+    testSessionConfiguration = await getChannelPromise(testSessionConfigurationCh, frameworkVersion)
     const {
       testSessionId,
       testModuleId,
       testCommand,
       repositoryRoot: receivedRepositoryRoot,
       codeOwnersEntries,
-    } = await getChannelPromise(testSessionConfigurationCh, frameworkVersion)
+    } = testSessionConfiguration
     repositoryRoot = receivedRepositoryRoot || repositoryRoot
-    setProvidedContext(ctx, {
-      _ddTestSessionId: testSessionId,
-      _ddTestModuleId: testModuleId,
-      _ddTestCommand: testCommand,
-      _ddRepositoryRoot: repositoryRoot,
-      _ddCodeOwnersEntries: codeOwnersEntries,
-    }, 'Could not send test session configuration to workers.')
+    if (!shouldInstallNoWorkerInit) {
+      setProvidedContext(ctx, {
+        _ddTestSessionId: testSessionId,
+        _ddTestModuleId: testModuleId,
+        _ddTestCommand: testCommand,
+        _ddRepositoryRoot: repositoryRoot,
+        _ddCodeOwnersEntries: codeOwnersEntries,
+      }, 'Could not send test session configuration to workers.')
+    }
   }
 
   const {
@@ -433,6 +479,8 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
     getKnownTests: () => getChannelPromise(knownTestsCh),
     getTestManagementTests: () => getChannelPromise(testManagementTestsCh),
   })
+  mergeRequestErrorTags(knownTestsResponse)
+  mergeRequestErrorTags(testManagementTestsResponse)
 
   const flakyTestRetriesConfiguration = configureFlakyTestRetries(ctx, testSpecifications)
   if (flakyTestRetriesConfiguration) {
@@ -449,7 +497,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
     if (currentKnownTestsResponse.err) {
       isEarlyFlakeDetectionEnabled = false
     } else {
-      const knownTests = currentKnownTestsResponse.knownTests
+      knownTests = currentKnownTestsResponse.knownTests
       const currentTestFilepaths = await getCurrentTestFilepaths()
 
       if (isValidKnownTests(knownTests)) {
@@ -466,13 +514,15 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
         } else {
           knownTestsBySuite = knownTests.vitest
           shouldSendTestProperties = true
-          setProvidedContext(ctx, {
-            _ddIsKnownTestsEnabled: isKnownTestsEnabled,
-            _ddIsEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionEnabled,
-            _ddEarlyFlakeDetectionNumRetries:
-              getConfiguredEfdRetryCount(earlyFlakeDetectionSlowTestRetries, earlyFlakeDetectionNumRetries),
-            _ddEarlyFlakeDetectionSlowTestRetries: earlyFlakeDetectionSlowTestRetries,
-          }, 'Could not send known tests to workers so Early Flake Detection will not work.')
+          if (!shouldInstallNoWorkerInit) {
+            setProvidedContext(ctx, {
+              _ddIsKnownTestsEnabled: isKnownTestsEnabled,
+              _ddIsEarlyFlakeDetectionEnabled: isEarlyFlakeDetectionEnabled,
+              _ddEarlyFlakeDetectionNumRetries:
+                getConfiguredEfdRetryCount(earlyFlakeDetectionSlowTestRetries, earlyFlakeDetectionNumRetries),
+              _ddEarlyFlakeDetectionSlowTestRetries: earlyFlakeDetectionSlowTestRetries,
+            }, 'Could not send known tests to workers so Early Flake Detection will not work.')
+          }
         }
       } else {
         isEarlyFlakeDetectionFaulty = true
@@ -481,7 +531,7 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
     }
   }
 
-  if (isDiEnabled) {
+  if (!shouldInstallNoWorkerInit && isDiEnabled) {
     setProvidedContext(ctx, {
       _ddIsDiEnabled: isDiEnabled,
     }, 'Could not send Dynamic Instrumentation configuration to workers.')
@@ -494,55 +544,114 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
       isTestManagementTestsEnabled = false
       log.error('Could not get test management tests.')
     } else {
+      testManagementTests = receivedTestManagementTests
       testManagementTestsBySuite = getTestManagementTestsBySuite(receivedTestManagementTests)
       shouldSendTestProperties = true
-      setProvidedContext(ctx, {
-        _ddIsTestManagementTestsEnabled: isTestManagementTestsEnabled,
-        _ddTestManagementAttemptToFixRetries: testManagementAttemptToFixRetries,
-      }, 'Could not send test management tests to workers so Test Management will not work.')
+      if (!shouldInstallNoWorkerInit) {
+        setProvidedContext(ctx, {
+          _ddIsTestManagementTestsEnabled: isTestManagementTestsEnabled,
+          _ddTestManagementAttemptToFixRetries: testManagementAttemptToFixRetries,
+        }, 'Could not send test management tests to workers so Test Management will not work.')
+      }
     }
   }
 
   if (isImpactedTestsEnabled) {
-    const { err, modifiedFiles } = await getChannelPromise(modifiedFilesCh)
+    const modifiedFilesResponse = await getChannelPromise(modifiedFilesCh)
+    const { err } = modifiedFilesResponse
     if (err) {
       log.error('Could not get modified tests.')
     } else {
+      modifiedFiles = modifiedFilesResponse.modifiedFiles
       impactedTestSuites = getImpactedTestSuites(modifiedFiles)
       shouldSendTestProperties = true
-      setProvidedContext(ctx, {
-        _ddIsImpactedTestsEnabled: isImpactedTestsEnabled,
-      }, 'Could not send modified tests to workers so Impacted Tests will not work.')
+      if (!shouldInstallNoWorkerInit) {
+        setProvidedContext(ctx, {
+          _ddIsImpactedTestsEnabled: isImpactedTestsEnabled,
+        }, 'Could not send modified tests to workers so Impacted Tests will not work.')
+      }
     }
   }
 
   if (shouldSendTestProperties) {
-    setProvidedContext(ctx, {
-      _ddTestPropertiesByFilepath: getTestPropertiesByFilepath(
-        await getCurrentTestFilepaths(),
-        repositoryRoot,
-        knownTestsBySuite,
-        testManagementTestsBySuite,
-        impactedTestSuites
-      ),
-    }, 'Could not send test properties to workers so some Test Optimization features will not work.')
+    testPropertiesByFilepath = getTestPropertiesByFilepath(
+      await getCurrentTestFilepaths(),
+      repositoryRoot,
+      knownTestsBySuite,
+      testManagementTestsBySuite,
+      impactedTestSuites
+    )
+    if (!shouldInstallNoWorkerInit) {
+      setProvidedContext(ctx, {
+        _ddTestPropertiesByFilepath: testPropertiesByFilepath,
+      }, 'Could not send test properties to workers so some Test Optimization features will not work.')
+    }
+  }
+
+  if (shouldInstallNoWorkerInit) {
+    noWorkerInit.configure(ctx, frameworkVersion, testSpecifications, {
+      knownTests,
+      knownTestsBySuite,
+      modifiedFiles,
+      repositoryRoot,
+      flakyTestRetriesConfiguration,
+      testManagementTests,
+      testManagementTestsBySuite,
+      testPropertiesByFilepath: testPropertiesByFilepath || {},
+      testSessionConfiguration,
+    }, {
+      getConfiguredEfdRetryCount,
+      state: getNoWorkerInitState(),
+    })
   }
 
   wrapCoverageProvider(ctx)
   wrapSessionFinish(ctx)
+  return shouldInstallNoWorkerInit
 }
 
-function ensureMainProcessSetup (ctx, frameworkVersion, testSpecifications) {
+function getNoWorkerInitState () {
+  return {
+    attemptToFixExecutions,
+    earlyFlakeDetectionNumRetries,
+    earlyFlakeDetectionSlowTestRetries,
+    isEarlyFlakeDetectionEnabled,
+    isEarlyFlakeDetectionFaulty,
+    isFlakyTestRetriesEnabled,
+    isKnownTestsEnabled,
+    newTestsWithDynamicNames,
+    requestErrorTags,
+    testManagementAttemptToFixRetries,
+  }
+}
+
+function ensureMainProcessSetup (ctx, frameworkVersion, testSpecifications, shouldDeactivateOnFallback = false) {
+  const shouldInstallNoWorkerInit = shouldUseNoWorkerInit(ctx, frameworkVersion, testSpecifications)
   const specificationsKey = getTestSpecificationsKey(testSpecifications)
   let setupState = mainProcessSetupStates.get(ctx)
-  if (!setupState || setupState.specificationsKey !== specificationsKey) {
+  if (shouldDeactivateOnFallback && setupState?.shouldInstallNoWorkerInit && !shouldInstallNoWorkerInit) {
+    noWorkerInit.deactivate(ctx)
+  }
+  if (
+    !setupState ||
+    setupState.specificationsKey !== specificationsKey ||
+    setupState.shouldInstallNoWorkerInit !== shouldInstallNoWorkerInit
+  ) {
     setupState = {
-      setupPromise: runMainProcessSetup(ctx, frameworkVersion, testSpecifications),
+      setupPromise: runMainProcessSetup(ctx, frameworkVersion, testSpecifications, shouldInstallNoWorkerInit),
+      shouldInstallNoWorkerInit,
       specificationsKey,
     }
     mainProcessSetupStates.set(ctx, setupState)
   }
   return setupState.setupPromise
+}
+
+function shouldUseNoWorkerInit (ctx, frameworkVersion, testSpecifications) {
+  return noWorkerInit.shouldUse(ctx, frameworkVersion, testSpecifications, {
+    hasVitestWorkerPoolTestSpecification,
+    isVitestWorkerPool,
+  })
 }
 
 function configureFlakyTestRetries (ctx, testSpecifications) {
@@ -721,7 +830,9 @@ function getFinishWrapper (exitOrClose) {
       isEarlyFlakeDetectionEnabled,
       isEarlyFlakeDetectionFaulty,
       isTestManagementTestsEnabled,
+      requestErrorTags,
       vitestPool,
+      isVitestNoWorkerInitActive,
       onFinish,
     })
 
@@ -772,9 +883,18 @@ function getTestSpecificationProject (testSpecification) {
   return testSpecification?.project
 }
 
+function getTestSpecificationOptions (testSpecification) {
+  if (Array.isArray(testSpecification)) {
+    return testSpecification[2]
+  }
+  return testSpecification
+}
+
 function getTestSpecificationPool (testSpecification) {
+  const options = getTestSpecificationOptions(testSpecification)
   const project = getTestSpecificationProject(testSpecification)
-  return project?.config?.pool || project?.serializedConfig?.pool || project?.pool || testSpecification?.pool
+  return options?.pool || project?.config?.pool || project?.serializedConfig?.pool || project?.pool ||
+    testSpecification?.pool
 }
 
 function hasVitestWorkerPoolTestSpecification (testSpecifications) {
@@ -791,17 +911,22 @@ function hasVitestWorkerPoolTestSpecification (testSpecifications) {
   return false
 }
 
-function shouldMarkVitestWorkerEnv (pool, testSpecifications) {
-  return isVitestWorkerPool(pool) || hasVitestWorkerPoolTestSpecification(testSpecifications) ||
-    (!testSpecifications && pool === undefined)
+function shouldMarkVitestWorkerEnv (pool, testSpecifications, shouldSkipWorkerInit) {
+  if (!shouldSkipWorkerInit) {
+    return isVitestWorkerPool(pool) || hasVitestWorkerPoolTestSpecification(testSpecifications) ||
+      (!testSpecifications && pool === undefined)
+  }
+
+  return isVitestWorkerPool(pool) || pool === undefined || hasVitestWorkerPoolTestSpecification(testSpecifications)
 }
 
-function markVitestWorkerEnv (ctx, testSpecifications) {
+function markVitestWorkerEnv (ctx, testSpecifications, shouldSkipWorkerInit = false) {
   const config = ctx?.config
-  if (!config || !shouldMarkVitestWorkerEnv(config.pool, testSpecifications)) {
+  isVitestNoWorkerInitActive = shouldSkipWorkerInit
+  if (!config || !shouldMarkVitestWorkerEnv(config.pool, testSpecifications, shouldSkipWorkerInit)) {
     return
   }
-  config.env = getVitestWorkerEnv(config.env)
+  config.env = getVitestWorkerEnv(config.env, shouldSkipWorkerInit)
 }
 
 function wrapVitestRunFiles (Vitest, frameworkVersion) {
@@ -810,17 +935,335 @@ function wrapVitestRunFiles (Vitest, frameworkVersion) {
   }
 
   shimmer.wrap(Vitest.prototype, 'runFiles', runFiles => async function (testSpecifications) {
-    markVitestWorkerEnv(this, testSpecifications)
-    await ensureMainProcessSetup(this, frameworkVersion, testSpecifications)
+    const shouldSkipWorkerInit = await ensureMainProcessSetup(this, frameworkVersion, testSpecifications, true)
+    markVitestWorkerEnv(this, testSpecifications, shouldSkipWorkerInit)
     return runFiles.apply(this, arguments)
   })
 
   if (Vitest.prototype.collectTests) {
-    shimmer.wrap(Vitest.prototype, 'collectTests', collectTests => function () {
-      markVitestWorkerEnv(this)
+    shimmer.wrap(Vitest.prototype, 'collectTests', collectTests => function (testSpecifications) {
+      const shouldSkipWorkerInit = shouldUseNoWorkerInit(this, frameworkVersion, testSpecifications)
+      markVitestWorkerEnv(this, testSpecifications, shouldSkipWorkerInit)
       return collectTests.apply(this, arguments)
     })
   }
+}
+
+function getTypecheckTaskStatus (task) {
+  const state = task.result?.state
+  if (state === 'fail') return 'fail'
+  if (state === 'skip' || task.mode === 'skip' || task.mode === 'todo') return 'skip'
+  return 'pass'
+}
+
+/**
+ * Return whether a typecheck suite name represents the synthetic file-level suite.
+ *
+ * @param {string|undefined} suiteName
+ * @param {string} testSuiteAbsolutePath
+ * @returns {boolean}
+ */
+function isTypecheckFileSuiteName (suiteName, testSuiteAbsolutePath) {
+  if (!suiteName || !testSuiteAbsolutePath) return false
+
+  const normalizedSuiteName = path.normalize(suiteName).replaceAll('\\', '/')
+  const normalizedSuitePath = path.normalize(testSuiteAbsolutePath).replaceAll('\\', '/')
+
+  return normalizedSuitePath === normalizedSuiteName || normalizedSuitePath.endsWith(`/${normalizedSuiteName}`)
+}
+
+/**
+ * Return a typecheck test name with describe/suite prefixes and without the file-level suite prefix.
+ *
+ * @param {object} task
+ * @param {string} testSuiteAbsolutePath
+ * @returns {string}
+ */
+function getTypecheckTestName (task, testSuiteAbsolutePath) {
+  let testName = task.name || task.fullTestName
+  let currentTask = task.suite
+
+  while (currentTask) {
+    if (currentTask.name && !isTypecheckFileSuiteName(currentTask.name, testSuiteAbsolutePath)) {
+      testName = `${currentTask.name} ${testName}`
+    }
+    currentTask = currentTask.suite
+  }
+
+  return testName
+}
+
+/**
+ * Return Test Optimization metadata prepared in Vitest's main process setup.
+ *
+ * @param {object|undefined} ctx
+ * @returns {{ testPropertiesByFilepath: object }}
+ */
+function getMainProcessProvidedContext (ctx) {
+  try {
+    const workspaceProject = getWorkspaceProject(ctx)
+    const providedContext = workspaceProject.getProvidedContext?.() || workspaceProject._provided || {}
+
+    return {
+      testPropertiesByFilepath: providedContext._ddTestPropertiesByFilepath || {},
+    }
+  } catch {
+    return {
+      testPropertiesByFilepath: {},
+    }
+  }
+}
+
+/**
+ * Return the Vitest context that owns a Typechecker instance.
+ *
+ * @param {object} typechecker
+ * @returns {object|undefined}
+ */
+function getTypecheckerVitestContext (typechecker) {
+  return typechecker.ctx || typechecker.project?.vitest
+}
+
+/**
+ * Apply Test Management result semantics to Vitest's returned typecheck task result.
+ *
+ * @param {object} task
+ * @param {string} status
+ * @param {{
+ *   isAttemptToFix: boolean,
+ *   isDisabled: boolean,
+ *   isQuarantined: boolean
+ * }} testManagement
+ */
+function updateTypecheckTaskResultForTestManagement (task, status, testManagement) {
+  const { isAttemptToFix, isDisabled, isQuarantined } = testManagement
+  if (isAttemptToFix || !task.result) return
+
+  if (isDisabled) {
+    task.mode = 'skip'
+    task.result.state = 'skip'
+    task.result.errors = []
+    return
+  }
+
+  if (isQuarantined && status === 'fail') {
+    task.result.state = 'pass'
+    task.result.errors = []
+  }
+}
+
+/**
+ * Recompute suite/file typecheck results after Test Management rewrites child test results.
+ *
+ * @param {object} task
+ * @returns {string}
+ */
+function updateTypecheckTaskTreeResult (task) {
+  if (!Array.isArray(task.tasks)) return getTypecheckTaskStatus(task)
+
+  let hasPassedTest = false
+  let hasSkippedTest = false
+  for (const childTask of task.tasks) {
+    const status = updateTypecheckTaskTreeResult(childTask)
+    if (status === 'fail') {
+      task.result = {
+        ...task.result,
+        state: 'fail',
+      }
+      return 'fail'
+    }
+    if (status === 'skip') {
+      hasSkippedTest = true
+    } else {
+      hasPassedTest = true
+    }
+  }
+
+  if (task.result?.errors?.length) return 'fail'
+  if (!hasPassedTest && !hasSkippedTest) return getTypecheckTaskStatus(task)
+
+  task.result = {
+    ...task.result,
+    state: hasPassedTest ? 'pass' : 'skip',
+    errors: [],
+  }
+  return task.result.state
+}
+
+/**
+ * Recompute the aggregate typecheck result after Test Management rewrites file results.
+ *
+ * @param {{
+ *   files?: object[],
+ *   errors?: object[],
+ *   diagnostics?: object[],
+ *   sourceErrors?: object[],
+ *   state?: string
+ * }} result
+ * @returns {boolean}
+ */
+function updateTypecheckResult (result) {
+  if (result.sourceErrors?.length) return false
+
+  let hasPassedFile = false
+  let hasSkippedFile = false
+  for (const file of result.files) {
+    const status = getTypecheckTaskStatus(file)
+    if (status === 'fail') return false
+    if (status === 'skip') {
+      hasSkippedFile = true
+    } else {
+      hasPassedFile = true
+    }
+  }
+
+  if (!hasPassedFile && !hasSkippedFile) return false
+
+  result.state = hasPassedFile ? 'pass' : 'skip'
+  result.errors = []
+  result.diagnostics = []
+  result.sourceErrors = []
+  return true
+}
+
+/**
+ * Clear Vitest's typechecker exit code after all typecheck failures were handled by Test Management.
+ *
+ * @param {{ process?: { exitCode?: number|null } }} typechecker
+ */
+function clearTypecheckerExitCode (typechecker) {
+  if (typechecker?.process?.exitCode == null) return
+
+  typechecker.process.exitCode = 0
+}
+
+function reportTypecheckTest (task, testSuiteAbsolutePath, providedContext) {
+  const testName = getTypecheckTestName(task, testSuiteAbsolutePath)
+  const testProperties = getVitestTestProperties(providedContext, testSuiteAbsolutePath, testName)
+  const isAttemptToFix = testProperties.isAttemptToFix === true
+  const isDisabled = testProperties.isDisabled === true
+  const isQuarantined = testProperties.isQuarantined === true
+  const isModified = testProperties.isModified === true
+  const isSkippedByTestManagement = !isAttemptToFix && isDisabled
+  const status = getTypecheckTaskStatus(task)
+
+  if (status === 'skip' || isSkippedByTestManagement) {
+    testSkipCh.publish({
+      testName,
+      testSuiteAbsolutePath,
+      isNew: testProperties.isNew,
+      isDisabled,
+    })
+    updateTypecheckTaskResultForTestManagement(task, status, { isAttemptToFix, isDisabled, isQuarantined })
+    return
+  }
+
+  const ctx = {
+    testName,
+    testSuiteAbsolutePath,
+    isRetry: false,
+    isNew: testProperties.isNew,
+    hasDynamicName: false,
+    mightHitProbe: false,
+    isAttemptToFix,
+    isDisabled,
+    isQuarantined,
+    isModified,
+  }
+  testStartCh.runStores(ctx, () => {})
+
+  const finalStatus = !isAttemptToFix && isQuarantined ? 'skip' : undefined
+  if (status === 'fail') {
+    testErrorCh.publish({
+      error: task.result?.errors?.[0],
+      finalStatus,
+      ...ctx.currentStore,
+    })
+  } else {
+    testPassCh.publish({
+      task,
+      finalStatus,
+      ...ctx.currentStore,
+    })
+  }
+  updateTypecheckTaskResultForTestManagement(task, status, { isAttemptToFix, isDisabled, isQuarantined })
+}
+
+async function reportTypecheckFile (file, sessionConfiguration, frameworkVersion, providedContext) {
+  const testSuiteAbsolutePath = file.filepath
+  const testSuiteCtx = {
+    testSuiteAbsolutePath,
+    frameworkVersion,
+    testSessionId: sessionConfiguration.testSessionId,
+    testModuleId: sessionConfiguration.testModuleId,
+    testCommand: sessionConfiguration.testCommand,
+    repositoryRoot: sessionConfiguration.repositoryRoot,
+    codeOwnersEntries: sessionConfiguration.codeOwnersEntries,
+  }
+  testSuiteStartCh.runStores(testSuiteCtx, () => {})
+
+  for (const task of getTypeTasks(file.tasks)) {
+    reportTypecheckTest(task, testSuiteAbsolutePath, providedContext)
+  }
+  updateTypecheckTaskTreeResult(file)
+
+  const testSuiteError = file.result?.errors?.[0]
+  if (testSuiteError) {
+    testSuiteCtx.error = testSuiteError
+    testSuiteErrorCh.runStores(testSuiteCtx, () => {})
+  }
+
+  let onFinish
+  const onFinishPromise = new Promise(resolve => {
+    onFinish = resolve
+  })
+  testSuiteFinishCh.publish({
+    status: getTypecheckTaskStatus(file),
+    onFinish,
+    ...testSuiteCtx.currentStore,
+  })
+  await onFinishPromise
+}
+
+async function reportTypecheckResults (result, frameworkVersion, ctx, typechecker) {
+  if (!testSuiteFinishCh.hasSubscribers) return
+  if (!Array.isArray(result?.files)) return
+
+  if (ctx) {
+    await ensureMainProcessSetup(ctx, frameworkVersion, result.files)
+  }
+  const providedContext = getMainProcessProvidedContext(ctx)
+  const sessionConfiguration = testSessionConfigurationCh.hasSubscribers
+    ? await getChannelPromise(testSessionConfigurationCh, frameworkVersion)
+    : {}
+
+  await Promise.all(result.files.map(file => reportTypecheckFile(
+    file,
+    sessionConfiguration,
+    frameworkVersion,
+    providedContext
+  )))
+  if (updateTypecheckResult(result)) {
+    clearTypecheckerExitCode(typechecker)
+  }
+}
+
+function wrapTypechecker (Typechecker, frameworkVersion) {
+  if (!Typechecker?.prototype?.prepareResults) return
+
+  shimmer.wrap(Typechecker.prototype, 'prepareResults', prepareResults => async function () {
+    const result = await prepareResults.apply(this, arguments)
+    await reportTypecheckResults(result, frameworkVersion, getTypecheckerVitestContext(this), this)
+    return result
+  })
+}
+
+function getTypecheckerWrapper (vitestPackage, frameworkVersion) {
+  const typechecker = getTypecheckerExport(vitestPackage)
+  if (typechecker) {
+    wrapTypechecker(typechecker.value, frameworkVersion)
+  }
+  return vitestPackage
 }
 
 function getCreateCliWrapper (vitestPackage, frameworkVersion) {
@@ -885,14 +1328,14 @@ function isVitestTinypoolOptions (options) {
 function markVitestTinypoolOptions (options) {
   if (!isVitestTinypoolOptions(options)) return
 
-  options.env = getVitestWorkerEnv(options.env)
+  options.env = getVitestWorkerEnv(options.env, isVitestNoWorkerInitActive)
 }
 
-function getVitestWorkerEnv (env = {}) {
-  return {
+function getVitestWorkerEnv (env = {}, shouldSkipWorkerInit = false) {
+  return noWorkerInit.configureWorkerEnv({
     ...env,
     DD_VITEST_WORKER: '1',
-  }
+  }, shouldSkipWorkerInit)
 }
 
 function wrapTinyPoolRun (TinyPool) {
@@ -1014,7 +1457,7 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
     // function is async
     shimmer.wrap(forksPoolWorker.value.prototype, 'start', start => function (...args) {
       vitestPool = 'child_process'
-      this.env = getVitestWorkerEnv(this.env)
+      this.env = getVitestWorkerEnv(this.env, isVitestNoWorkerInitActive)
 
       return start.apply(this, args)
     })
@@ -1026,7 +1469,7 @@ function getStartVitestWrapper (cliApiPackage, frameworkVersion) {
     // function is async
     shimmer.wrap(threadsPoolWorker.value.prototype, 'start', start => function (...args) {
       vitestPool = 'worker_threads'
-      this.env = getVitestWorkerEnv(this.env)
+      this.env = getVitestWorkerEnv(this.env, isVitestNoWorkerInitActive)
       return start.apply(this, args)
     })
     shimmer.wrap(threadsPoolWorker.value.prototype, 'on', getWrappedOn)
@@ -1079,6 +1522,18 @@ addHook({
 
   return vitestPackage
 })
+
+addHook({
+  name: 'vitest',
+  versions: ['>=3.2.0 <4.0.0'],
+  filePattern: 'dist/chunks/typechecker.*',
+}, getTypecheckerWrapper)
+
+addHook({
+  name: 'vitest',
+  versions: ['>=4.0.0'],
+  filePattern: 'dist/chunks/index.*',
+}, getTypecheckerWrapper)
 
 addHook({
   name: 'vitest',
