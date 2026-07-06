@@ -402,15 +402,18 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
       return traceAssertion
     })
 
-    it('should finish server request spans for allowlisted unknown methods', async () => {
+    it('should finish server request spans with error for allowlisted unknown methods', async () => {
       const traceAssertion = expectSomeSpan(agent, {
         name: 'mcp.server.request',
         type: 'mcp',
         resource: 'tools/unknown',
+        error: 1,
         meta: {
           component: 'modelcontextprotocol_server',
           '_dd.integration': 'modelcontextprotocol_server',
           'span.kind': 'server',
+          'error.message': 'Method not found',
+          'error.type': 'McpError',
         },
       })
 
@@ -499,11 +502,14 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
 
       let resumeSlowTool
       const holdPromise = new Promise(resolve => { resumeSlowTool = resolve })
+      let markSlowToolStarted
+      const slowToolStarted = new Promise(resolve => { markSlowToolStarted = resolve })
 
       disconnectServer.registerTool(
         'slow-tool',
         { description: 'Slow tool', inputSchema: {} },
         async () => {
+          markSlowToolStarted()
           await holdPromise
           return { content: [{ type: 'text', text: 'done' }] }
         }
@@ -529,8 +535,7 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
       // Fire the request without awaiting — it will block until holdPromise resolves.
       const callPromise = disconnectClient.callTool({ name: 'slow-tool', arguments: {} }).catch(() => {})
 
-      // Give time for the request to reach the server and register an AbortController.
-      await new Promise(resolve => setTimeout(resolve, 50))
+      await slowToolStarted
 
       // Close the server, triggering _onclose() -> _requestHandlerAbortControllers.clear().
       await disconnectServer.close()

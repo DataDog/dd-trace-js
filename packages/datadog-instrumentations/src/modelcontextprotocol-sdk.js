@@ -64,13 +64,17 @@ function wrapRequestHandler (protocol, handler) {
       throw err
     }
 
-    return Promise.resolve(result).then(result => {
-      ctx.result = result
+    if (result && typeof result.then === 'function') {
+      result.then(result => {
+        ctx.result = result
+      }, err => {
+        ctx.error = err
+      })
       return result
-    }, err => {
-      ctx.error = err
-      throw err
-    })
+    }
+
+    ctx.result = result
+    return result
   }
 
   wrappedRequestHandlers.add(wrappedHandler)
@@ -164,6 +168,7 @@ function wrapProtocol (Protocol) {
         // If none was registered (MethodNotFound path), no handler will run and our
         // SDK cleanup hook will never fire — finish the span immediately.
         if (!this._requestHandlerAbortControllers?.has(request.id)) {
+          ctx.error = { name: 'McpError', message: 'Method not found' }
           finishServerRequest(this, request.id)
         }
       })
@@ -197,7 +202,7 @@ function wrapMcpServer (McpServer) {
           shimmer.wrap(tool, 'update', function (update) {
             return function updateWithTrace (updates) {
               const result = update.apply(this, arguments)
-              if (Object.hasOwn(updates ?? {}, 'name')) {
+              if (updates && Object.hasOwn(updates, 'name')) {
                 serverToolRegisteredCh.publish({ tool, name: updates.name || undefined })
               }
               return result

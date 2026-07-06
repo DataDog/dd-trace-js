@@ -3,53 +3,12 @@
 const Plugin = require('../../dd-trace/src/plugins/plugin')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 
-const DISTRIBUTED_TRACE_META_KEY = '_dd_trace_context'
-
-function setIsErrorTag (ctx) {
-  const result = ctx.result
-  if (result?.isError) {
-    const span = ctx.currentStore?.span
-    const errorText = result.content?.find?.(c => c.type === 'text')?.text || 'Tool call returned isError: true'
-    span?.setTag('error', new Error(errorText))
-  }
-}
-
-function tagRequestParams (span, request) {
-  const params = request?.params
-  if (!params) return
-  if (params.name) {
-    span.setTag(request.method === 'prompts/get' ? 'mcp.prompt.name' : 'mcp.tool.name', params.name)
-  }
-  if (params.uri) span.setTag('mcp.resource.uri', params.uri)
-  if (params.arguments) {
-    const argumentKeys = Object.keys(params.arguments)
-    if (argumentKeys.length) {
-      span.setTag('mcp.request.argument_count', argumentKeys.length)
-      span.setTag('mcp.request.argument_keys', argumentKeys.join(','))
-    }
-  }
-}
-
-function tagRequestResult (span, result) {
-  if (!result) return
-  if (result.tools) span.setTag('mcp.tool.names', result.tools.map(t => t.name).join(','))
-  if (result.resources) span.setTag('mcp.resource.uris', result.resources.map(r => r.uri).join(','))
-  if (result.prompts) {
-    span.setTag('mcp.prompt.names', result.prompts.map(p => p.name).join(','))
-    const descriptions = result.prompts.map(p => p.description).filter(Boolean)
-    if (descriptions.length) span.setTag('mcp.prompt.descriptions', descriptions.join(','))
-  }
-  if (Array.isArray(result.content)) {
-    span.setTag('mcp.tool.response.content_count', result.content.length)
-
-    const contentTypes = []
-    for (const item of result.content) {
-      if (item.type) contentTypes.push(item.type)
-    }
-
-    if (contentTypes.length) span.setTag('mcp.tool.response.content_types', contentTypes.join(','))
-  }
-}
+const {
+  DISTRIBUTED_TRACE_META_KEY,
+  tagErrorResult,
+  tagRequestParams,
+  tagRequestResult,
+} = require('./utils')
 
 class McpPlugin extends TracingPlugin {
   bindStart (ctx) {
@@ -103,7 +62,7 @@ class McpToolCallPlugin extends McpPlugin {
   static spanName = 'mcp.client.tool.call'
   static kind = 'client'
   getResource (ctx) { return ctx.arguments?.[0]?.name }
-  onEnd (span, ctx) { setIsErrorTag(ctx) }
+  onEnd (span, ctx) { tagErrorResult(span, ctx.result) }
 }
 
 class McpListToolsPlugin extends McpPlugin {
@@ -165,8 +124,11 @@ class McpServerRequestPlugin extends McpPlugin {
 
   onStart (span, ctx) { tagRequestParams(span, ctx.request) }
   onEnd (span, ctx) {
-    if (ctx.error) span.setTag('error', ctx.error)
-    setIsErrorTag(ctx)
+    if (ctx.error) {
+      span.setTag('error', ctx.error)
+    } else {
+      tagErrorResult(span, ctx.result)
+    }
     tagRequestResult(span, ctx.result)
   }
 }
@@ -189,7 +151,7 @@ class McpServerToolCallPlugin extends McpPlugin {
   }
 
   getResource (ctx) { return this.toolNames.get(ctx.arguments?.[0]) }
-  onEnd (span, ctx) { setIsErrorTag(ctx) }
+  onEnd (span, ctx) { tagErrorResult(span, ctx.result) }
 }
 
 module.exports = [
