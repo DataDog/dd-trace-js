@@ -258,14 +258,18 @@ class CucumberPlugin extends CiPlugin {
         }
       }
       span.setTag('error', error)
-      if (isFirstAttempt && canWaitForDi !== false && promises && this.di && error && this.libraryConfig?.isDiEnabled) {
-        const probeInformation = this.addDiProbe(error)
-        if (probeInformation) {
-          const { file, line, stackIndex, setProbePromise } = probeInformation
-          this.runningTestProbe = { file, line }
-          this.testErrorStackIndex = stackIndex
+      if (canWaitForDi !== false && promises && this.di && error && this.libraryConfig?.isDiEnabled) {
+        if (isFirstAttempt) {
+          const probeInformation = this.addDiProbe(error)
+          if (probeInformation) {
+            const { file, line, stackIndex, setProbePromise } = probeInformation
+            this.runningTestProbe = { file, line }
+            this.testErrorStackIndex = stackIndex
+            this.prepareDiBreakpointHitWait()
+            promises.setProbePromise = this.waitForDiOperation(setProbePromise)
+          }
+        } else if (this.runningTestProbe) {
           this.prepareDiBreakpointHitWait()
-          promises.setProbePromise = this.waitForDiOperation(setProbePromise)
         }
       }
       span.setTag(TEST_STATUS, 'fail')

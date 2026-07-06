@@ -6,5 +6,5 @@ module.exports = function (a, b) {
   if (a > 10) {
     throw new Error('a is too big')
   }
-  return a + b + localVar // location of the breakpoint
+  return a + b + localVar + users.length // location of the breakpoint
 }

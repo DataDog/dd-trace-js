@@ -3503,7 +3503,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint',
+            TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint\\.js$',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
             DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false',
           },
@@ -3550,7 +3550,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint',
+            TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint\\.js$',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
           },
         }
@@ -3631,7 +3631,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint',
+            TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint\\.js$',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
           },
         }
@@ -3765,7 +3765,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            TESTS_TO_RUN: 'dynamic-instrumentation/test-not-hit-breakpoint',
+            TESTS_TO_RUN: 'dynamic-instrumentation/test-not-hit-breakpoint\\.js$',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
           },
         }
@@ -3803,7 +3803,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint',
+            TESTS_TO_RUN: 'dynamic-instrumentation/test-hit-breakpoint\\.js$',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
             TEST_SHOULD_PASS_AFTER_RETRY: '1',
           },

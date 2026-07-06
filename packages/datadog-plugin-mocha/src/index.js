@@ -357,11 +357,10 @@ class MochaPlugin extends CiPlugin {
           willBeRetried &&
           this.di &&
           this.libraryConfig?.isDiEnabled &&
-          this.runningTestProbe) {
-          if (promises) {
-            promises.finishTestPromise = this.waitForInFlightDiBreakpointHits().then(finishSpan, finishSpan)
-            return
-          }
+          this.runningTestProbe &&
+          promises) {
+          promises.finishTestPromise = this.waitForInFlightDiBreakpointHits().then(finishSpan, finishSpan)
+          return
         }
 
         finishSpan()
