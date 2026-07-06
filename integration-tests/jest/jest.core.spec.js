@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 
 const { once } = require('node:events')
 const { fork, exec } = require('child_process')
+const fs = require('node:fs')
 const path = require('path')
 const { inspect } = require('node:util')
 const { assertObjectContains } = require('../helpers')
@@ -98,6 +99,22 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
   beforeEach(async function () {
     receiver = await new FakeCiVisIntake().start()
   })
+
+  // Simulate pnpm-style resolution where Jest loads an environment from an
+  // absolute build file under a different node_modules tree. The file is still
+  // recognizable as jest-environment-node/build/index.js, but resolving the
+  // package root from the test project points somewhere else, so the require
+  // hook must match the build-file instrumentation entry.
+  function copyPackageToIsolatedNodeModules (packageName) {
+    const packagePath = path.join(cwd, 'node_modules', packageName)
+    const isolatedPackagePath = path.join(cwd, 'isolated-store', 'node_modules', packageName)
+
+    fs.rmSync(isolatedPackagePath, { force: true, recursive: true })
+    fs.mkdirSync(path.dirname(isolatedPackagePath), { recursive: true })
+    fs.cpSync(packagePath, isolatedPackagePath, { dereference: true, recursive: true })
+
+    return isolatedPackagePath
+  }
 
   afterEach(async () => {
     childProcess.kill()
@@ -654,6 +671,39 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         await assertCustomEnvironmentReportsTests('./ci-visibility/jestEnvironmentNoSuperSetupAndInstanceField.js')
       })
     })
+  })
+
+  onlyLatestIt('reports test events when Jest loads the node environment from an isolated build file', async () => {
+    const isolatedPackagePath = copyPackageToIsolatedNodeModules('jest-environment-node')
+    const customTestEnvironment = path.join(isolatedPackagePath, 'build/index.js')
+    const eventsPromise = receiver
+      .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+        const events = payloads.flatMap(({ payload }) => payload.events)
+        const tests = events.filter(event => event.type === 'test').map(event => event.content)
+        const resourceNames = tests.map(test => test.resource)
+
+        assertObjectContains(resourceNames, [
+          'ci-visibility/test/ci-visibility-test.js.ci visibility can report tests',
+        ])
+      })
+
+    childProcess = exec(
+      runTestsCommand,
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          CUSTOM_TEST_ENVIRONMENT: customTestEnvironment,
+          TESTS_TO_RUN: 'test/ci-visibility-test.js',
+        },
+      }
+    )
+
+    const [[exitCode]] = await Promise.all([
+      once(childProcess, 'exit'),
+      eventsPromise,
+    ])
+    assert.strictEqual(exitCode, 0)
   })
 
   it('propagates test span context to HTTP requests and hooks during test.concurrent execution', async () => {

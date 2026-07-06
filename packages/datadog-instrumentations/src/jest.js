@@ -1876,7 +1876,19 @@ addHook({
 }, getTestEnvironment)
 
 addHook({
+  name: 'jest-environment-node',
+  file: 'build/index.js',
+  versions: [MINIMUM_JEST_VERSION],
+}, getTestEnvironment)
+
+addHook({
   name: 'jest-environment-jsdom',
+  versions: [MINIMUM_JEST_VERSION],
+}, getTestEnvironment)
+
+addHook({
+  name: 'jest-environment-jsdom',
+  file: 'build/index.js',
   versions: [MINIMUM_JEST_VERSION],
 }, getTestEnvironment)
 
@@ -2342,10 +2354,7 @@ if (DD_MAJOR < 6) {
   })
 }
 
-addHook({
-  name: '@jest/test-sequencer',
-  versions: ['>=28'],
-}, (sequencerPackage, frameworkVersion) => {
+function testSequencerWrapper (sequencerPackage, frameworkVersion) {
   shimmer.wrap(sequencerPackage.default.prototype, 'shard', shard => function (...args) {
     const shardedTests = shard.apply(this, args)
 
@@ -2358,7 +2367,18 @@ addHook({
     return applySuiteSkipping(shardedTests, rootDir, frameworkVersion)
   })
   return sequencerPackage
-})
+}
+
+addHook({
+  name: '@jest/test-sequencer',
+  versions: ['>=28'],
+}, testSequencerWrapper)
+
+addHook({
+  name: '@jest/test-sequencer',
+  file: 'build/index.js',
+  versions: ['>=28'],
+}, testSequencerWrapper)
 
 addHook({
   name: '@jest/core',
