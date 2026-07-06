@@ -766,6 +766,27 @@ function wrapFailedTestReplayHookUpCallback (fn, test, failedTestReplayPromise) 
   })
 }
 
+const patchedFailedTestReplayHookUp = new WeakSet()
+
+function patchFailedTestReplayHookUp (Runner) {
+  if (patchedFailedTestReplayHookUp.has(Runner)) return
+
+  patchedFailedTestReplayHookUp.add(Runner)
+  shimmer.wrap(Runner.prototype, 'hookUp', hookUp => function (name, fn) {
+    const test = name === 'afterEach' && this.test
+    if (!test) {
+      return hookUp.apply(this, arguments)
+    }
+
+    const failedTestReplayPromise = test._ddFailedTestReplayPromise
+    if (failedTestReplayPromise) {
+      delete test._ddFailedTestReplayPromise
+    }
+
+    return hookUp.call(this, name, wrapFailedTestReplayHookUpCallback(fn, test, failedTestReplayPromise))
+  })
+}
+
 function getOnFailHandler (isMain, config) {
   return function (testOrHook, err) {
     const testFile = testOrHook.file
@@ -985,6 +1006,7 @@ module.exports = {
   getOnHookEndHandler,
   finishDeferredHookEnd,
   wrapFailedTestReplayHookUpCallback,
+  patchFailedTestReplayHookUp,
   getOnFailHandler,
   getOnPendingHandler,
   testFileToSuiteCtx,

@@ -36,7 +36,7 @@ const {
   getOnTestEndHandler,
   getOnTestRetryHandler,
   getOnHookEndHandler,
-  wrapFailedTestReplayHookUpCallback,
+  patchFailedTestReplayHookUp,
   getOnFailHandler,
   getOnPendingHandler,
   testFileToSuiteCtx,
@@ -55,7 +55,6 @@ require('./common')
 const MINIMUM_MOCHA_VERSION = DD_MAJOR >= 6 ? '>=8.0.0' : '>=5.2.0'
 
 const patched = new WeakSet()
-const patchedFailedTestReplayHookUp = new WeakSet()
 let hasWarnedDeprecatedMochaVersion = false
 
 const unskippableSuites = []
@@ -386,25 +385,6 @@ function applyTestManagementTestsResponse ({ err, testManagementTests: receivedT
 
 function isFailedTestReplayEnabled () {
   return config.isTestDynamicInstrumentationEnabled && config.isDiEnabled
-}
-
-function patchFailedTestReplayHookUp (Runner) {
-  if (patchedFailedTestReplayHookUp.has(Runner)) return
-
-  patchedFailedTestReplayHookUp.add(Runner)
-  shimmer.wrap(Runner.prototype, 'hookUp', hookUp => function (name, fn) {
-    const test = name === 'afterEach' && this.test
-    if (!test) {
-      return hookUp.apply(this, arguments)
-    }
-
-    const failedTestReplayPromise = test._ddFailedTestReplayPromise
-    if (failedTestReplayPromise) {
-      delete test._ddFailedTestReplayPromise
-    }
-
-    return hookUp.call(this, name, wrapFailedTestReplayHookUpCallback(fn, test, failedTestReplayPromise))
-  })
 }
 
 function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFinishRequest, localSuites) {
@@ -1131,7 +1111,8 @@ addHook({
         (!config.isKnownTestsEnabled &&
         !config.isTestManagementTestsEnabled &&
         !config.isImpactedTestsEnabled &&
-        !config.isFlakyTestRetriesEnabled)) {
+        !config.isFlakyTestRetriesEnabled &&
+        !isFailedTestReplayEnabled())) {
       return run.apply(this, arguments)
     }
 
@@ -1180,6 +1161,10 @@ addHook({
     if (config.isFlakyTestRetriesEnabled) {
       newWorkerArgs._ddIsFlakyTestRetriesEnabled = true
       newWorkerArgs._ddFlakyTestRetriesCount = config.flakyTestRetriesCount
+    }
+
+    if (isFailedTestReplayEnabled()) {
+      newWorkerArgs._ddIsFailedTestReplayEnabled = true
     }
 
     // We pass the known tests for the test file to the worker

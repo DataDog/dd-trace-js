@@ -4664,6 +4664,61 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
       })
     })
 
+    onlyLatestIt('finishes parallel afterEach retries with dynamic instrumentation', async () => {
+      receiver.setSettings({
+        flaky_test_retries_enabled: true,
+        di_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const retriedTests = tests.filter(
+            test => test.meta[TEST_IS_RETRY] === 'true' &&
+              test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr
+          )
+
+          assert.strictEqual(retriedTests.length, 1)
+          assert.strictEqual(retriedTests[0].meta[TEST_STATUS], 'pass')
+          assert.strictEqual(retriedTests[0].meta[TEST_FINAL_STATUS], 'pass')
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisAgentlessConfig(receiver.port),
+            TESTS_TO_RUN: JSON.stringify([
+              './dynamic-instrumentation/parallel-test-hit-breakpoint-after-each',
+              './dynamic-instrumentation/parallel-test-hit-breakpoint-2',
+            ]),
+            RUN_IN_PARALLEL: '1',
+            DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
+            _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
+          },
+        }
+      )
+
+      childProcess.stdout?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      childProcess.stderr?.on('data', (chunk) => {
+        testOutput += chunk.toString()
+      })
+      const stdoutEndPromise = childProcess.stdout ? once(childProcess.stdout, 'end') : Promise.resolve()
+      const stderrEndPromise = childProcess.stderr ? once(childProcess.stderr, 'end') : Promise.resolve()
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+        stdoutEndPromise,
+        stderrEndPromise,
+      ])
+      assert.strictEqual(exitCode, 0, testOutput)
+    })
+
     onlyLatestIt('does not crash if the retry does not hit the breakpoint', (done) => {
       receiver.setSettings({
         flaky_test_retries_enabled: true,
