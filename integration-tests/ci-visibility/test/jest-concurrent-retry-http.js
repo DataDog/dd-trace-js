@@ -15,6 +15,24 @@ function httpRequest (path) {
   })
 }
 
+function wait (durationMs) {
+  return new Promise(resolve => setTimeout(resolve, durationMs))
+}
+
+function getRetryingHttpTest (durationMs) {
+  let shouldFail = true
+
+  return async () => {
+    await wait(durationMs)
+    const statusCode = await httpRequest('/info')
+    expect(statusCode).toBe(200)
+    if (shouldFail) {
+      shouldFail = false
+      throw new Error('intentional duplicate concurrent retry failure')
+    }
+  }
+}
+
 if (jest.retryTimes) {
   describe('jest-test-concurrent-retry-http', () => {
     let shouldFail = true
@@ -30,5 +48,19 @@ if (jest.retryTimes) {
         throw new Error('intentional concurrent retry failure')
       }
     })
+  })
+
+  describe('jest-duplicate-concurrent-retry-http', () => {
+    // eslint-disable-next-line sonarjs/stable-tests -- verifies duplicate concurrent context rebinding
+    jest.retryTimes(1)
+
+    test.concurrent(
+      'duplicate retry body http is linked to current attempt span',
+      getRetryingHttpTest(30)
+    )
+    test.concurrent(
+      'duplicate retry body http is linked to current attempt span',
+      getRetryingHttpTest(10)
+    )
   })
 }

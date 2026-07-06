@@ -90,6 +90,7 @@ const JEST_SESSION_STATE = Symbol.for('dd-trace:jest:session')
 const JEST_BAIL_REPORTER_PATH = require.resolve('./jest/bail-reporter')
 const DD_JEST_HANDLE_TEST_EVENT_WRAPPED = Symbol('dd-trace:jest:handle-test-event-wrapped')
 const DD_JEST_HANDLE_TEST_EVENT_DATADOG = Symbol('dd-trace:jest:handle-test-event-datadog')
+const DD_JEST_CONCURRENT_TEST_ORIGINAL = Symbol('dd-trace:jest:concurrent-test-original')
 const isJestWorker = !!getEnvironmentVariable('JEST_WORKER_ID')
 const jestSessionState = globalThis[JEST_SESSION_STATE] || (globalThis[JEST_SESSION_STATE] = {})
 
@@ -380,6 +381,30 @@ function markDatadogJestEventHandled (event) {
 }
 
 /**
+ * Gets the original Jest concurrent registration function behind a Datadog wrapper.
+ *
+ * @param {(...args: unknown[]) => unknown} concurrentTest
+ * @returns {(...args: unknown[]) => unknown}
+ */
+function getOriginalConcurrentTest (concurrentTest) {
+  return concurrentTest[DD_JEST_CONCURRENT_TEST_ORIGINAL] || concurrentTest
+}
+
+/**
+ * Marks a Datadog concurrent registration wrapper with its original Jest function.
+ *
+ * @param {(...args: unknown[]) => unknown} wrappedConcurrentTest
+ * @param {(...args: unknown[]) => unknown} originalConcurrentTest
+ * @returns {void}
+ */
+function setOriginalConcurrentTest (wrappedConcurrentTest, originalConcurrentTest) {
+  Object.defineProperty(wrappedConcurrentTest, DD_JEST_CONCURRENT_TEST_ORIGINAL, {
+    configurable: true,
+    value: originalConcurrentTest,
+  })
+}
+
+/**
  * Wraps a custom Jest environment handler so Datadog still observes events even
  * when the custom environment does not call `super.handleTestEvent`.
  *
@@ -459,7 +484,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       this.isImpactedTestsEnabled = this.testEnvironmentOptions._ddIsImpactedTestsEnabled
       this.hasConcurrentTests = false
       this.concurrentTestContexts = new Map()
-      this.activeConcurrentTestStates = new Map()
       this.concurrentTestStates = new WeakMap()
       this.wrappedConcurrentTestFunctions = new WeakSet()
       this.jestEachBind = undefined
@@ -576,8 +600,16 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      * @returns {void}
      */
     wrapConcurrentTestFunction (target, methodName, state) {
-      const concurrentTest = target?.[methodName]
-      if (typeof concurrentTest !== 'function' || this.wrappedConcurrentTestFunctions.has(concurrentTest)) return
+      let concurrentTest = target?.[methodName]
+      if (typeof concurrentTest !== 'function') return
+      if (this.wrappedConcurrentTestFunctions.has(concurrentTest)) return
+
+      const originalConcurrentTest = getOriginalConcurrentTest(concurrentTest)
+      if (originalConcurrentTest !== concurrentTest) {
+        target[methodName] = originalConcurrentTest
+        concurrentTest = originalConcurrentTest
+      }
+      if (typeof concurrentTest !== 'function') return
 
       const environment = this
       shimmer.wrap(target, methodName, concurrentTest => {
@@ -603,6 +635,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       })
 
       const wrappedConcurrentTest = target[methodName]
+      setOriginalConcurrentTest(wrappedConcurrentTest, concurrentTest)
       this.wrappedConcurrentTestFunctions.add(wrappedConcurrentTest)
       this.bindConcurrentEach(wrappedConcurrentTest, methodName === 'failing')
     }
@@ -743,6 +776,26 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         this.concurrentTestContexts.delete(testName)
       }
       return ctx
+    }
+
+    /**
+     * Removes one registered concurrent test context from the name fallback queue.
+     *
+     * @param {string} testName
+     * @param {object} ctx
+     * @returns {void}
+     */
+    removeConcurrentTestContext (testName, ctx) {
+      const contexts = this.concurrentTestContexts.get(testName)
+      if (!contexts?.length) return
+
+      const contextIndex = contexts.indexOf(ctx)
+      if (contextIndex === -1) return
+
+      contexts.splice(contextIndex, 1)
+      if (contexts.length === 0) {
+        this.concurrentTestContexts.delete(testName)
+      }
     }
 
     /**
@@ -975,7 +1028,13 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       }
       if (event.name === 'test_start') {
         const testName = getJestTestName(event.test)
-        const concurrentCtx = this.getNextConcurrentTestContext(testName)
+        const concurrentTestState = this.concurrentTestStates.get(event.test.fn)
+        let concurrentCtx = concurrentTestState?.ctx
+        if (concurrentCtx) {
+          this.removeConcurrentTestContext(testName, concurrentCtx)
+        } else {
+          concurrentCtx = this.getNextConcurrentTestContext(testName)
+        }
         if (testsToBeRetried.has(testName)) {
           // This is needed because we're retrying tests with the same name
           this.resetSnapshotState()
@@ -985,9 +1044,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         let isNewTest = false
         let numEfdRetry = null
         let numOfAttemptsToFixRetries = null
-        const concurrentTestState = concurrentCtx?.concurrentTestState ||
-          this.concurrentTestStates.get(event.test.fn) ||
-          this.activeConcurrentTestStates.get(testName)
         const testParameters = concurrentCtx?.testParameters ||
           concurrentTestState?.ctx?.testParameters ||
           getTestParametersString(this.nameToParams, event.test.name)
@@ -1046,7 +1102,6 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         if (concurrentTestState) {
           ctx.concurrentTestState = concurrentTestState
           concurrentTestState.ctx = ctx
-          this.activeConcurrentTestStates.set(testName, concurrentTestState)
         }
         testContexts.set(event.test, ctx)
 
@@ -1083,7 +1138,11 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           event.test.fn = newFn
         }
 
-        if (ctx.currentStore) {
+        if (event.test.concurrent) {
+          if (!ctx.currentStore && event.test.errors?.length) {
+            testStartCh.runStores(ctx, () => {})
+          }
+        } else if (ctx.currentStore) {
           wrapTestAndHooks()
         } else {
           testStartCh.runStores(ctx, wrapTestAndHooks)
@@ -1171,7 +1230,9 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           status = 'fail'
         }
         // restore in case it is retried
-        event.test.fn = originalTestFns.get(event.test)
+        if (originalTestFns.has(event.test)) {
+          event.test.fn = originalTestFns.get(event.test)
+        }
         // If ATR retry is being suppressed for this test (due to EFD or Attempt to Fix taking precedence)
         // and the test has errors for this attempt, store the errors temporarily and clear them
         // so Jest won't treat this attempt as failed (the real status will be reported after retries).

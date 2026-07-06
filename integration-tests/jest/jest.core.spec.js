@@ -904,6 +904,37 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         const spans = events.filter(event => event.type === 'span').map(event => event.content)
         const retryTestName = 'jest-test-concurrent-retry-http retry body http is linked to current attempt span'
         const retryTestSpans = tests.filter(test => test.meta[TEST_NAME] === retryTestName)
+        const duplicateRetryTestName = 'jest-duplicate-concurrent-retry-http ' +
+          'duplicate retry body http is linked to current attempt span'
+        const duplicateRetryTestSpans = tests.filter(test => test.meta[TEST_NAME] === duplicateRetryTestName)
+        const httpSpans = spans.filter(span => span.name === 'http.request')
+        const getHttpChildSpans = testSpan => httpSpans.filter(span =>
+          span.trace_id.toString() === testSpan.trace_id.toString() &&
+          span.parent_id.toString() === testSpan.span_id.toString()
+        )
+        const getRetryDebug = testSpans => testSpans.map(test => ({
+          spanId: test.span_id.toString(),
+          traceId: test.trace_id.toString(),
+          status: test.meta[TEST_STATUS],
+          childCount: getHttpChildSpans(test).length,
+        }))
+        const assertRetryHttpChildren = (testName, testSpans) => {
+          for (const testSpan of testSpans) {
+            assert.strictEqual(
+              getHttpChildSpans(testSpan).length,
+              1,
+              inspect({
+                testName,
+                retryDebug: getRetryDebug(testSpans),
+                httpSpans: httpSpans.map(span => ({
+                  spanId: span.span_id.toString(),
+                  parentId: span.parent_id.toString(),
+                  traceId: span.trace_id.toString(),
+                })),
+              })
+            )
+          }
+        }
 
         assert.strictEqual(retryTestSpans.length, 2)
         assert.deepStrictEqual(
@@ -911,38 +942,16 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           ['fail', 'pass'],
           inspect(retryTestSpans.map(test => test.meta))
         )
-        for (const retryTestSpan of retryTestSpans) {
-          const retryHttpSpans = spans.filter(span =>
-            span.name === 'http.request' &&
-            span.trace_id.toString() === retryTestSpan.trace_id.toString() &&
-            span.parent_id.toString() === retryTestSpan.span_id.toString()
-          )
-          const retryDebug = retryTestSpans.map(test => ({
-            spanId: test.span_id.toString(),
-            traceId: test.trace_id.toString(),
-            status: test.meta[TEST_STATUS],
-            childCount: spans.filter(span =>
-              span.name === 'http.request' &&
-              span.trace_id.toString() === test.trace_id.toString() &&
-              span.parent_id.toString() === test.span_id.toString()
-            ).length,
-          }))
-          assert.strictEqual(
-            retryHttpSpans.length,
-            1,
-            inspect({
-              retryTestName,
-              retryDebug,
-              httpSpans: spans
-                .filter(span => span.name === 'http.request')
-                .map(span => ({
-                  spanId: span.span_id.toString(),
-                  parentId: span.parent_id.toString(),
-                  traceId: span.trace_id.toString(),
-                })),
-            })
-          )
-        }
+        assertRetryHttpChildren(retryTestName, retryTestSpans)
+
+        assert.strictEqual(duplicateRetryTestSpans.length, 4)
+        assert.deepStrictEqual(
+          duplicateRetryTestSpans.map(test => test.meta[TEST_STATUS]).sort(),
+          ['fail', 'fail', 'pass', 'pass'],
+          inspect(duplicateRetryTestSpans.map(test => test.meta))
+        )
+        assert.strictEqual(new Set(duplicateRetryTestSpans.map(test => test.span_id.toString())).size, 4)
+        assertRetryHttpChildren(duplicateRetryTestName, duplicateRetryTestSpans)
       }, 25000)
 
     childProcess = exec(
