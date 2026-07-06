@@ -173,6 +173,7 @@ const handledJestEvents = new WeakSet()
  * @property {boolean} [isEfdRetry]
  * @property {boolean} [isModified]
  * @property {(...args: unknown[]) => unknown} [serialTest]
+ * @property {unknown} [serialTestThisArg]
  * @property {(...args: unknown[]) => unknown} [sourceTestFn]
  * @property {string} [testParameters]
  */
@@ -600,10 +601,10 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       const concurrentTest = test?.concurrent
       if (typeof concurrentTest !== 'function') return
 
-      this.wrapConcurrentTestFunction(test, 'concurrent', state)
-      this.wrapConcurrentTestFunction(test.concurrent, 'only', state)
-      this.wrapConcurrentTestFunction(test.concurrent, 'failing', state)
-      this.wrapConcurrentTestFunction(test.concurrent.only, 'failing', state)
+      this.wrapConcurrentTestFunction(test, 'concurrent', state, test, test)
+      this.wrapConcurrentTestFunction(test.concurrent, 'only', state, test.only, test)
+      this.wrapConcurrentTestFunction(test.concurrent, 'failing', state, test.failing, test)
+      this.wrapConcurrentTestFunction(test.concurrent.only, 'failing', state, test.only?.failing, test.only)
     }
 
     /**
@@ -612,9 +613,11 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      * @param {object} target
      * @param {string} methodName
      * @param {object} state
+     * @param {Function|undefined} serialTest
+     * @param {unknown} serialTestThisArg
      * @returns {void}
      */
-    wrapConcurrentTestFunction (target, methodName, state) {
+    wrapConcurrentTestFunction (target, methodName, state, serialTest, serialTestThisArg) {
       let concurrentTest = target?.[methodName]
       if (typeof concurrentTest !== 'function') return
       if (this.wrappedConcurrentTestFunctions.has(concurrentTest)) return
@@ -640,7 +643,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           const wrappedTestFn = environment.createConcurrentTestFn(testName, testFn, asyncError, state, {
             concurrentTest,
             concurrentTestThisArg: this,
-            serialTest: methodName === 'concurrent' ? target : environment.global.test,
+            serialTest,
+            serialTestThisArg,
             sourceTestFn: environment.concurrentTestSourceFns.get(testFn),
           })
           return concurrentTest.call(this, testName, wrappedTestFn, ...args)
@@ -705,6 +709,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         ctx: this.createConcurrentTestContext(testName, testFn, asyncError, state, options),
         numExecutions: 0,
         serialTest: options?.serialTest,
+        serialTestThisArg: options?.serialTestThisArg,
         state,
         testFn,
       }
@@ -1074,10 +1079,14 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
               isEfdRetry,
               isModified: concurrentTestState.ctx.isModified,
               serialTest: concurrentTestState.serialTest,
+              serialTestThisArg: concurrentTestState.serialTestThisArg,
               testParameters: concurrentTestState.ctx.testParameters,
             }
           )
-          test.call(concurrentTestState.concurrentTestThisArg, testName, retryFn, timeout)
+          const thisArg = forceSerial
+            ? concurrentTestState.serialTestThisArg
+            : concurrentTestState.concurrentTestThisArg
+          test.call(thisArg, testName, retryFn, timeout)
         } else if (this.global.test) {
           this.global.test(testName, fn, timeout)
         } else {

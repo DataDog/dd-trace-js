@@ -1651,6 +1651,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           cwd,
           env: {
             ...getCiVisEvpProxyConfig(receiver.port),
+            DO_NOT_INJECT_GLOBALS: 'true',
             TESTS_TO_RUN: 'test-early-flake-detection/concurrent-test',
           },
         }
