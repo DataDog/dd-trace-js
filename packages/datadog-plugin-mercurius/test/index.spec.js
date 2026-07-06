@@ -212,6 +212,35 @@ describe('Plugin', () => {
         return Promise.all([assertion, axios.post(`http://localhost:${port}/graphql`, { query })])
       })
 
+      it('labels the JIT warm path by the requested operation, not the last one cached for the source', async () => {
+        // Mercurius keys its document LRU by source but compiles the JIT for a
+        // single operationName, and the compiled query then serves that
+        // operation for every later request sharing the source. Here `First`
+        // runs cold (execute caches its tags), then `Second` triggers the JIT
+        // compile — mercurius runs `Second` from now on, and execute stops
+        // firing. A source-only cache would hand the warm `Second` request the
+        // cached `First` tags. Keying by source + operationName keeps them apart.
+        const source = 'query First { hello(name: "first") } query Second { hello(name: "second") }'
+
+        // Cold run selecting `First`: execute fires and caches First's tags.
+        await axios.post(`http://localhost:${port}/graphql`, { query: source, operationName: 'First' })
+        // First `Second` request compiles the JIT for Second (execute skipped).
+        await axios.post(`http://localhost:${port}/graphql`, { query: source, operationName: 'Second' })
+
+        const assertion = agent.assertSomeTraces(traces => {
+          const request = traces[0].find(span => span.name === expectedSchema.server.opName)
+          const execute = traces[0].find(span => span.name === 'graphql.execute')
+          assert.ok(request, 'expected a graphql.request span on the JIT warm path')
+          assert.strictEqual(execute, undefined, 'JIT warm path must not produce a graphql.execute span')
+          assert.strictEqual(request.meta['graphql.operation.name'], 'Second')
+        }, { spanResourceMatch: /Second/ })
+
+        return Promise.all([
+          assertion,
+          axios.post(`http://localhost:${port}/graphql`, { query: source, operationName: 'Second' }),
+        ])
+      })
+
       describe('with the default source config', () => {
         let plainApp
         let plainPort

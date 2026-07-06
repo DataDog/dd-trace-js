@@ -16,8 +16,8 @@ const { extractErrorIntoSpanEvent, getCachedRequestOperation } = require('./util
 // cold path the `execute` sub-plugin backfills the resource/operation tags onto
 // this span via `ctx.currentStore.graphqlRequestSpan` once the document is
 // available, so we never re-parse on the hot path. On the JIT warm path execute
-// never fires, so we recover the same tags from the source-keyed cache the cold
-// path populated.
+// never fires, so we recover the same tags from the cache the cold path
+// populated, keyed by source + operationName.
 class GraphQLRequestPlugin extends TracingPlugin {
   static id = 'graphql'
   static operation = 'request'
@@ -35,9 +35,10 @@ class GraphQLRequestPlugin extends TracingPlugin {
     const docSource = typeof source === 'string' ? source : undefined
 
     // Warm (JIT-compiled) path: execute never fires, so recover the operation
-    // signature/type the cold path cached by source. Empty on the cold path —
-    // execute hasn't run yet — where the execute sub-plugin backfills instead.
-    const cached = getCachedRequestOperation(docSource)
+    // signature/type the cold path cached by source + operationName. Empty on
+    // the cold path — execute hasn't run yet — where the execute sub-plugin
+    // backfills instead.
+    const cached = getCachedRequestOperation(docSource, operationName)
 
     const span = this.startSpan(this.operationName({ id: 'request' }), {
       service: this.config.service || this.serviceName(),

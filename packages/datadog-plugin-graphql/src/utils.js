@@ -6,25 +6,46 @@ const { LRUCache } = require('../../../vendor/dist/lru-cache')
 // document — and therefore the operation signature/type/name — is only known
 // once execute runs. On the JIT warm path execute never fires, so the top-level
 // request span would otherwise be left with only the provisional resource. The
-// cold path caches the computed metadata keyed by the raw query text (the same
-// key mercurius uses for its own LRU); the request boundary reads it back on the
-// warm path. Bounded so a flood of distinct queries can't grow it without limit.
+// cold path caches the computed metadata; the request boundary reads it back on
+// the warm path. Bounded so a flood of distinct queries can't grow it without
+// limit.
+//
+// The key is the operation name plus the raw query text, not the source alone:
+// mercurius keys its document LRU by source but compiles the JIT for a single
+// `operationName`, and the compiled query then serves that operation for every
+// later request that shares the source — regardless of the `operationName` those
+// requests ask for. A source-only key would hand a warm request for operation B
+// the metadata of whichever operation was cached last for that source (A),
+// mislabeling the span. Operation names cannot contain a newline, so it is a
+// safe separator that keeps the two parts from colliding.
 const requestOperationCache = new LRUCache({ max: 500 })
 
 /**
  * @param {string} source - The raw query text; the same key mercurius uses.
+ * @param {string | undefined} operationName - The requested operation name.
+ * @returns {string}
+ */
+function requestOperationKey (source, operationName) {
+  return `${operationName ?? ''}\n${source}`
+}
+
+/**
+ * @param {string} source - The raw query text; the same key mercurius uses.
+ * @param {string | undefined} operationName - The requested operation name.
  * @param {{ signature?: string, type?: string, name?: string }} operation
  */
-function cacheRequestOperation (source, operation) {
-  requestOperationCache.set(source, operation)
+function cacheRequestOperation (source, operationName, operation) {
+  requestOperationCache.set(requestOperationKey(source, operationName), operation)
 }
 
 /**
  * @param {string | undefined} source - undefined for a pre-parsed AST source.
+ * @param {string | undefined} operationName - The requested operation name.
  * @returns {{ signature?: string, type?: string, name?: string } | undefined}
  */
-function getCachedRequestOperation (source) {
-  return requestOperationCache.get(source)
+function getCachedRequestOperation (source, operationName) {
+  if (source === undefined) return
+  return requestOperationCache.get(requestOperationKey(source, operationName))
 }
 
 /**

@@ -129,7 +129,10 @@ class GraphQLExecutePlugin extends TracingPlugin {
       },
     }, ctx)
 
-    backfillRequestSpan(ctx.currentStore?.graphqlRequestSpan, docSource, signature, type, name)
+    // Key the cache by the requested operationName, not the resolved name: an
+    // anonymous request selecting the sole operation still carries a name here,
+    // but the warm-path lookup only has the raw `operationName` argument.
+    backfillRequestSpan(ctx.currentStore?.graphqlRequestSpan, docSource, args.operationName, signature, type, name)
 
     addVariableTags(this.config, span, args.variableValues)
 
@@ -333,15 +336,15 @@ class GraphQLExecutePlugin extends TracingPlugin {
 // the precise signature exists. No-op for graphql-js/apollo/yoga, which never
 // open a request span, and idempotent across re-entrant execute() calls (yoga's
 // normalizedExecutor) via the ddRequestRefined flag. Only a mercurius request
-// span can consume the source-keyed cache, so the raw query text is stored
-// exclusively when one is present — graphql-js/apollo/yoga never touch the LRU.
-function backfillRequestSpan (requestSpan, docSource, signature, type, name) {
+// span can consume the cache, so the metadata is stored exclusively when one is
+// present — graphql-js/apollo/yoga never touch the LRU.
+function backfillRequestSpan (requestSpan, docSource, operationName, signature, type, name) {
   if (!requestSpan || requestSpan.ddRequestRefined) return
   requestSpan.ddRequestRefined = true
 
-  // Cache the computed metadata by source so the JIT warm path (no execute
-  // span) can recover the same tags at the request boundary.
-  if (docSource) cacheRequestOperation(docSource, { signature, type, name })
+  // Cache the computed metadata by source + operationName so the JIT warm path
+  // (no execute span) can recover the same tags at the request boundary.
+  if (docSource) cacheRequestOperation(docSource, operationName, { signature, type, name })
 
   if (signature) requestSpan.setTag('resource.name', signature)
   if (type) requestSpan.setTag('graphql.operation.type', type)
