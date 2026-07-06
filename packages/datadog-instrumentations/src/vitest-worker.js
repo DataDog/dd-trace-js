@@ -378,6 +378,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
         testErrorCh.publish({
           error: testError,
           shouldSetProbe,
+          shouldWaitForHitProbe,
           promises,
           ...ctx.currentStore,
         })

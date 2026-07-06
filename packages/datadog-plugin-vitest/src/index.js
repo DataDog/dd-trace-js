@@ -225,6 +225,7 @@ class VitestPlugin extends CiPlugin {
       duration,
       error,
       shouldSetProbe,
+      shouldWaitForHitProbe,
       promises,
       hasFailedAllRetries,
       attemptToFixFailed,
@@ -276,7 +277,9 @@ class VitestPlugin extends CiPlugin {
         return
       }
       finish()
-      if (!shouldSetProbe) {
+      if (shouldWaitForHitProbe) {
+        this.prepareDiBreakpointHitWait()
+      } else if (!shouldSetProbe) {
         this.cancelDiBreakpointHitWait()
       }
     })

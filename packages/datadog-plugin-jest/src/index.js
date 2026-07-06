@@ -494,6 +494,9 @@ class JestPlugin extends CiPlugin {
         return
       }
       finish()
+      if (status === 'fail' && promises?.hitBreakpointPromise) {
+        this.prepareDiBreakpointHitWait()
+      }
     })
 
     this.addSub('ci:jest:test:err', ({ span, error, shouldSetProbe, shouldWaitForHitProbe, promises }) => {
