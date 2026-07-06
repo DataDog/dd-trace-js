@@ -127,7 +127,7 @@ function extractInferredProxyContext (headers) {
   }
   if (!(headers[PROXY_HEADER_SYSTEM] in supportedProxies)) {
     log.debug('Received headers to create inferred proxy span but headers include an unsupported proxy type: ',
-       headers[PROXY_HEADER_SYSTEM])
+      headers[PROXY_HEADER_SYSTEM])
 
     return null
   }
