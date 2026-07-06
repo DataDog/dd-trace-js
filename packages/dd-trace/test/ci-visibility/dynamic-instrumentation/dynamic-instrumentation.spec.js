@@ -105,6 +105,7 @@ describe('test visibility with dynamic instrumentation', () => {
     proxyquire('../../../src/ci-visibility/dynamic-instrumentation/worker', {
       worker_threads: {
         workerData: {
+          config: {},
           breakpointSetChannel,
           breakpointHitChannel,
           breakpointRemoveChannel,
@@ -191,5 +192,90 @@ describe('test visibility with dynamic instrumentation', () => {
         drainRequestId: 'drain-id',
       },
     ])
+  })
+
+  it('adds process tags to snapshots when process tag propagation is enabled', async () => {
+    const breakpointSetChannel = new EventEmitter()
+    const breakpointHitChannel = new EventEmitter()
+    const breakpointRemoveChannel = new EventEmitter()
+    const postedBreakpointHits = []
+    const session = new EventEmitter()
+    const processTags = {
+      initialize: sinon.stub(),
+      DYNAMIC_INSTRUMENTATION_FIELD_NAME: 'process_tags',
+      tagsObject: {
+        'entrypoint.type': 'script',
+        'package.json.name': 'dd-trace',
+      },
+    }
+    session.post = sinon.stub()
+    session.post.withArgs('Debugger.enable').resolves()
+    session.post.withArgs('Debugger.setBreakpoint').resolves({ breakpointId: 'breakpoint-id' })
+    session.post.withArgs('Debugger.resume').resolves()
+    breakpointSetChannel.postMessage = sinon.stub()
+    breakpointHitChannel.postMessage = (message) => {
+      postedBreakpointHits.push(message)
+    }
+    breakpointRemoveChannel.postMessage = sinon.stub()
+
+    proxyquire('../../../src/ci-visibility/dynamic-instrumentation/worker', {
+      worker_threads: {
+        workerData: {
+          config: {
+            propagateProcessTags: {
+              enabled: true,
+            },
+          },
+          breakpointSetChannel,
+          breakpointHitChannel,
+          breakpointRemoveChannel,
+        },
+      },
+      crypto: {
+        randomUUID: () => 'snapshot-id',
+      },
+      '../../../debugger/devtools_client/session': session,
+      '../../../debugger/devtools_client/source-maps': {
+        getGeneratedPosition: sinon.stub(),
+      },
+      '../../../debugger/devtools_client/snapshot': {
+        getLocalStateForCallFrame: () => ({
+          processLocalState: () => ({ localVariable: { type: 'number', value: '1' } }),
+        }),
+      },
+      '../../../debugger/devtools_client/snapshot/constants': {
+        DEFAULT_MAX_REFERENCE_DEPTH: 1,
+        DEFAULT_MAX_COLLECTION_SIZE: 1,
+        DEFAULT_MAX_FIELD_COUNT: 1,
+        DEFAULT_MAX_LENGTH: 1,
+      },
+      '../../../debugger/devtools_client/state': {
+        findScriptFromPartialPath: () => ({ url: 'file.js', scriptId: 'script-id' }),
+        getStackFromCallFrames: () => [{ fileName: 'file.js' }],
+      },
+      '../../../log': {
+        error: () => {},
+        warn: () => {},
+      },
+      '../../../process-tags': processTags,
+    })
+
+    breakpointSetChannel.emit('message', { id: 'probe-id', file: 'file.js', line: 10 })
+    await setImmediatePromise()
+
+    session.emit('Debugger.paused', {
+      params: {
+        hitBreakpoints: ['breakpoint-id'],
+        callFrames: [{ callFrameId: 'call-frame-id' }],
+      },
+    })
+    await setImmediatePromise()
+
+    assert.strictEqual(processTags.initialize.callCount, 1)
+    assert.strictEqual('processTags' in postedBreakpointHits[0], false)
+    assert.deepStrictEqual(postedBreakpointHits[0].snapshot.process_tags, {
+      'entrypoint.type': 'script',
+      'package.json.name': 'dd-trace',
+    })
   })
 })
