@@ -31,7 +31,7 @@ class SpanStatsEncoder extends AgentEncoder {
   }
 
   _encodeStat (bytes, stat) {
-    this._encodeMapPrefix(bytes, 17)
+    bytes.writeMapPrefix(17)
 
     this._encodeString(bytes, 'Service')
     const service = stat.Service || DEFAULT_SERVICE_NAME
