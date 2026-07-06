@@ -135,6 +135,8 @@ let isConsoleErrorWrapped = false
 const testContexts = new WeakMap()
 const originalTestFns = new WeakMap()
 const originalHookFns = new WeakMap()
+const concurrentHookContextQueues = new WeakMap()
+const concurrentHookFns = new WeakMap()
 const retriedTestsToNumAttempts = new Map()
 const newTestsTestStatuses = new Map()
 const attemptToFixRetriedTestsStatuses = new Map()
@@ -170,6 +172,7 @@ const handledJestEvents = new WeakSet()
  * @property {boolean} [isAttemptToFixRetry]
  * @property {boolean} [isEfdRetry]
  * @property {boolean} [isModified]
+ * @property {(...args: unknown[]) => unknown} [serialTest]
  * @property {(...args: unknown[]) => unknown} [sourceTestFn]
  * @property {string} [testParameters]
  */
@@ -637,6 +640,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           const wrappedTestFn = environment.createConcurrentTestFn(testName, testFn, asyncError, state, {
             concurrentTest,
             concurrentTestThisArg: this,
+            serialTest: methodName === 'concurrent' ? target : environment.global.test,
             sourceTestFn: environment.concurrentTestSourceFns.get(testFn),
           })
           return concurrentTest.call(this, testName, wrappedTestFn, ...args)
@@ -700,6 +704,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
         concurrentTestThisArg: options?.concurrentTestThisArg,
         ctx: this.createConcurrentTestContext(testName, testFn, asyncError, state, options),
         numExecutions: 0,
+        serialTest: options?.serialTest,
         state,
         testFn,
       }
@@ -1037,6 +1042,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     // Generic function to handle test retries
     retryTest ({
       jestEvent,
+      forceSerial,
       retryCount,
       retryType,
     }) {
@@ -1046,10 +1052,14 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
       for (let retryIndex = 0; retryIndex < retryCount; retryIndex++) {
         const concurrentTestState = this.concurrentTestStates.get(fn)
         if (concurrentTestState) {
-          const concurrentTest = concurrentTestState.concurrentTest ||
-            getOriginalConcurrentTest(this.global.test?.concurrent)
-          if (typeof concurrentTest !== 'function') {
-            log.error('%s could not retry concurrent test because test.concurrent is undefined', retryType)
+          const test = forceSerial
+            ? concurrentTestState.serialTest
+            : (
+                concurrentTestState.concurrentTest ||
+                getOriginalConcurrentTest(this.global.test?.concurrent)
+              )
+          if (typeof test !== 'function') {
+            log.error('%s could not retry concurrent test because test is undefined', retryType)
             continue
           }
           const retryFn = this.createConcurrentTestFn(
@@ -1058,15 +1068,16 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             undefined,
             concurrentTestState.state,
             {
-              concurrentTest,
+              concurrentTest: concurrentTestState.concurrentTest,
               concurrentTestThisArg: concurrentTestState.concurrentTestThisArg,
               isAttemptToFixRetry,
               isEfdRetry,
               isModified: concurrentTestState.ctx.isModified,
+              serialTest: concurrentTestState.serialTest,
               testParameters: concurrentTestState.ctx.testParameters,
             }
           )
-          concurrentTest.call(concurrentTestState.concurrentTestThisArg, testName, retryFn, timeout)
+          test.call(concurrentTestState.concurrentTestThisArg, testName, retryFn, timeout)
         } else if (this.global.test) {
           this.global.test(testName, fn, timeout)
         } else {
@@ -1239,12 +1250,29 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           } else {
             originalHookFns.set(event.hook, hookFn)
           }
+          let hookContexts = concurrentHookContextQueues.get(event.hook)
+          if (!hookContexts) {
+            hookContexts = []
+            concurrentHookContextQueues.set(event.hook, hookContexts)
+          }
+          hookContexts.push(ctx)
           if (!ctx.currentStore) {
             testStartCh.runStores(ctx, () => {})
           }
-          event.hook.fn = shimmer.wrapFunction(hookFn, hookFn => function (...args) {
-            return testFnCh.runStores(ctx, () => hookFn.apply(this, args))
-          })
+          let concurrentHookFn = concurrentHookFns.get(event.hook)
+          if (!concurrentHookFn) {
+            concurrentHookFn = shimmer.wrapFunction(hookFn, hookFn => function (...args) {
+              const hookContexts = concurrentHookContextQueues.get(event.hook)
+              const [hookCtx] = hookContexts || []
+              if (hookCtx) {
+                hookContexts.shift()
+                return testFnCh.runStores(hookCtx, () => hookFn.apply(this, args))
+              }
+              return hookFn.apply(this, args)
+            })
+            concurrentHookFns.set(event.hook, concurrentHookFn)
+          }
+          event.hook.fn = concurrentHookFn
         }
       }
 
@@ -1400,6 +1428,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             state.currentDescribeBlock = event.test.parent ?? originalDescribeBlock
             state.hasStarted = false
             this.retryTest({
+              forceSerial: true,
               jestEvent: {
                 testName: event.test.name,
                 fn: event.test.fn,
