@@ -178,8 +178,13 @@ describe('graphql', () => {
   })
 
   it('should block an attack in a batched request', async () => {
-    const agentPromise = agent.assertMessageReceived(({ payload }) => {
+    const agentPromise = agent.assertMessageReceived(({ headers, payload }) => {
+      assert.strictEqual(headers.host, `127.0.0.1:${agent.port}`)
+      assert.ok(Array.isArray(payload), `Expected array, got ${inspect(payload)}`)
+      assert.strictEqual(payload.length, 2)
+      // Apollo server 5 is using Node.js http server instead of express
       assert.strictEqual(payload[1][0].name, 'web.request')
+      assert.strictEqual(payload[1][0].metrics['_dd.appsec.enabled'], 1)
       assert.strictEqual(payload[1][0].meta['appsec.blocked'], 'true')
       assert.strictEqual(payload[1][0].meta['appsec.event'], 'true')
     })
