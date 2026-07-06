@@ -271,6 +271,9 @@ class GraphQLExecutePlugin extends TracingPlugin {
     const loc = this.config.source && document && fieldNode && fieldNode.loc
     const source = loc && document.slice(loc.start, loc.end)
 
+    // ctx form: startSpan sets field.currentStore = { ...activeStore, span }
+    // without entering it. Only the field's first resolver call runs in that
+    // store (isFirst check in wrapResolve); siblings use field.parentStore.
     const span = this.startSpan('graphql.resolve', {
       service: this.config.service,
       resource: `${fieldName}:${returnType}`,
@@ -283,7 +286,9 @@ class GraphQLExecutePlugin extends TracingPlugin {
         'graphql.field.type': baseTypeName,
         'graphql.source': source,
       },
-    }, false)
+    }, field)
+
+    field.span = span
 
     if (fieldNode && this.config.variables && fieldNode.arguments) {
       const variables = this.config.variables(variableValues)
@@ -388,15 +393,22 @@ function wrapResolve (resolve) {
         pathString,
         collapsedKey: collapsedKey ?? pathString,
         span: null,
+        // Set by startResolveSpan; currentStore is used by the first resolver
+        // call only, siblings use parentStore (see the isFirst check below).
+        parentStore: null,
+        currentStore: null,
       }
       rootCtx.fields.set(fieldKey, field)
     }
 
     // Collapsed siblings still publish updateField (master's contract: one
     // publish per resolver call, even when the span is collapsed) and route
-    // through callInAsyncScope so the abort signal stops them mid-flight.
+    // through callInAsyncScope so the abort signal stops them mid-flight. They
+    // run in the parent store, not field.currentStore: the first sibling's
+    // synchronous resolver already finished the shared graphql.resolve span, so
+    // re-entering its store would parent user spans to a closed span.
     if (!isFirst) {
-      return callInAsyncScope(resolve, this, arguments, rootCtx.abortController, (err) => {
+      return callInAsyncScope(resolve, this, arguments, rootCtx.abortController, field.parentStore, (err) => {
         if (updateFieldCh.hasSubscribers) {
           updateFieldCh.publish({ rootCtx, field, error: err, pathString: field.pathString })
         }
@@ -406,9 +418,8 @@ function wrapResolve (resolve) {
     const executeSpan = rootCtx.executeSpan
     const startTime = executeSpan._getTime()
     const span = rootCtx.plugin.startResolveSpan(field, rootCtx, executeSpan, startTime)
-    field.span = span
 
-    return callInAsyncScope(resolve, this, arguments, rootCtx.abortController, (err, res) => {
+    return callInAsyncScope(resolve, this, arguments, rootCtx.abortController, field.currentStore, (err, res) => {
       const endTime = executeSpan._getTime()
       rootCtx.plugin.finishResolveSpan(span, field, err, res, endTime || startTime)
       if (updateFieldCh.hasSubscribers) {
@@ -446,16 +457,16 @@ function wrapFieldType (field) {
   wrapFields(unwrapped)
 }
 
-function callInAsyncScope (fn, thisArg, args, abortController, cb) {
-  cb ??= () => {}
-
+// Runs the resolver inside `store`, including any code after an internal
+// `await`. A `.then()` the caller attaches afterward runs outside `store`.
+function callInAsyncScope (fn, thisArg, args, abortController, store, cb) {
   if (abortController?.signal.aborted) {
     cb(null, null)
     throw new AbortError('Aborted')
   }
 
   try {
-    const result = fn.apply(thisArg, args)
+    const result = legacyStorage.run(store, () => fn.apply(thisArg, args))
     if (typeof result?.then === 'function') {
       return result.then(
         res => { cb(null, res); return res },
@@ -533,14 +544,15 @@ function buildCachedCollapsedPath (path, cache) {
 }
 
 // Depth filtering directly on the linked-list node — no array allocation needed.
-// config.depth < 0 means no limit. In non-collapse mode only string segments
-// count toward depth (array indices are transparent). In collapse mode every
-// node counts (numbers have been conceptually '*'-collapsed).
+// config.depth < 0 means no limit. Only selection-set segments (string keys)
+// count toward depth; list indices are execution artifacts and are transparent.
+// On the v5 line `countListIndices` keeps the legacy behaviour of counting every
+// node when collapsing folds the numeric indices into '*'.
 function shouldInstrumentNode (config, path) {
   if (config.depth < 0) return true
 
   let depth = 0
-  if (config.collapse) {
+  if (config.countListIndices) {
     for (let curr = path; curr; curr = curr.prev) depth++
   } else {
     for (let curr = path; curr; curr = curr.prev) {

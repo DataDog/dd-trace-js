@@ -6,6 +6,11 @@ const { wrapThen } = require('./helpers/promise')
 
 const startCh = channel('datadog:mongoose:model:filter:start')
 const finishCh = channel('datadog:mongoose:model:filter:finish')
+// Bound around the deferred query execution. The `bindStore` transform returns a
+// child store with the analysis marker set, covering the whole async scope that
+// reaches the mongodb driver. `runStores` enters the child only for that scope
+// and restores the parent on its own.
+const execCh = channel('datadog:mongoose:model:filter:exec')
 // this channel is for wrapping the callback of exec methods and handling store context
 const execStartCh = channel('apm:mongoose:exec:start')
 const execFinishCh = channel('apm:mongoose:exec:finish')
@@ -103,7 +108,13 @@ addHook({
         return startCh.runStores(ctx, () => {
           wrapCallbackIfExist(args, ctx)
 
-          const res = method.apply(this, args)
+          // A callback query executes synchronously inside `method.apply`, so the
+          // exec scope (and the deferred driver call it spawns) must be entered
+          // here. A promise query defers execution to a later `exec`/`then`, which
+          // is bound separately below.
+          const res = callbackWrapped
+            ? execCh.runStores(ctx, () => method.apply(this, args))
+            : method.apply(this, args)
 
           // if it is not callback, wrap exec method and its then
           if (!callbackWrapped) {
@@ -113,7 +124,7 @@ addHook({
                   wrapCallbackIfExist(args, ctx)
                 }
 
-                const execResult = originalExec.apply(this, args)
+                const execResult = execCh.runStores(ctx, () => originalExec.apply(this, args))
 
                 if (callbackWrapped || typeof execResult?.then !== 'function') {
                   return execResult

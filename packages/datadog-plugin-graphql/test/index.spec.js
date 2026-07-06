@@ -12,6 +12,7 @@ const semver = require('semver')
 const sinon = require('sinon')
 
 const { assertObjectContains } = require('../../../integration-tests/helpers')
+const { DD_MAJOR } = require('../../../version')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
@@ -948,6 +949,60 @@ describe('Plugin', () => {
           }
         })
 
+        it('parents user spans from every sibling of a collapsed list under a live span', async () => {
+          const Item = new graphql.GraphQLObjectType({
+            name: 'Item',
+            fields: {
+              name: {
+                type: graphql.GraphQLString,
+                resolve () {
+                  tracer.trace('user.work', () => {})
+                  return 'value'
+                },
+              },
+            },
+          })
+          const localSchema = new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'Query',
+              fields: {
+                items: {
+                  type: new graphql.GraphQLList(Item),
+                  resolve: () => [{}, {}],
+                },
+              },
+            }),
+          })
+
+          const [, result] = await Promise.all([
+            agent.assertSomeTraces(traces => {
+              const spans = sort(traces[0])
+              const collapsed = spans.find(span => span.meta?.['graphql.field.path'] === 'items.*.name')
+              const userSpans = spans.filter(span => span.name === 'user.work')
+              const byId = new Map(spans.map(span => [span.span_id.toString(), span]))
+
+              assert.ok(collapsed, 'expected one collapsed items.*.name span')
+              assert.strictEqual(userSpans.length, 2, 'expected one user span per sibling resolver')
+
+              for (const userSpan of userSpans) {
+                const parent = byId.get(userSpan.parent_id.toString())
+                assert.ok(parent, 'user span must parent to a span in the same trace, not an orphaned closed span')
+                const parentStart = BigInt(parent.start)
+                const parentEnd = parentStart + BigInt(parent.duration)
+                const childStart = BigInt(userSpan.start)
+                const childEnd = childStart + BigInt(userSpan.duration)
+                assert.ok(
+                  childStart >= parentStart && childEnd <= parentEnd,
+                  'user span must be contained within its live parent, not start after it finished',
+                )
+              }
+            }, { spanResourceMatch: /items:\[Item]/ }),
+            graphql.graphql({ schema: localSchema, source: '{ items { name } }' }),
+          ])
+
+          assert.ok(!('errors' in result), `Unexpected per-field errors: ${JSON.stringify(result.errors)}`)
+        })
+
         it('should instrument list field resolvers', () => {
           const source = `{
             friends {
@@ -1201,6 +1256,46 @@ describe('Plugin', () => {
           }
 
           graphql.graphql({ schema, source, rootValue }).catch(done)
+        })
+
+        it('should make the resolve span the active scope inside resolvers', async () => {
+          const localSchema = graphql.buildSchema(`
+            type Query { outer: Outer }
+            type Outer { inner: String }
+          `)
+
+          const captures = {}
+          const captureActive = label => {
+            const span = tracer.scope().active()
+            captures[label] = {
+              name: span?.context()._name,
+              resource: span?.context().getTag('resource.name'),
+            }
+          }
+
+          const rootValue = {
+            outer () {
+              captureActive('outer')
+              return {
+                inner () {
+                  captureActive('inner')
+                  return 'value'
+                },
+              }
+            },
+          }
+
+          const result = await graphql.graphql({
+            schema: localSchema,
+            source: '{ outer { inner } }',
+            rootValue,
+          })
+
+          assert.strictEqual(result.data?.outer?.inner, 'value')
+          assert.deepStrictEqual(captures, {
+            outer: { name: 'graphql.resolve', resource: 'outer:Outer' },
+            inner: { name: 'graphql.resolve', resource: 'inner:String' },
+          })
         })
 
         it('should run returned promise in the parent context', () => {
@@ -2045,33 +2140,61 @@ describe('Plugin', () => {
           buildSchema()
         })
 
-        it('should only instrument up to the specified depth', () => {
-          const source = `
-            {
-              human {
-                name
-                address {
-                  civicNumber
-                  street
-                }
-              }
-              friends {
-                name
+        const source = `
+          {
+            human {
+              name
+              address {
+                civicNumber
+                street
               }
             }
-          `
+            friends {
+              name
+            }
+          }
+        `
 
+        // friends.*.name sits two fields deep (friends -> name); the list index
+        // between them is an execution artifact, not a query level, so depth: 2
+        // reaches it. human.address.civicNumber / human.address.street sit three
+        // fields deep and stay gated.
+        const v6DepthTest = DD_MAJOR >= 6 ? it : it.skip
+        v6DepthTest('counts selection-set depth only, so a collapsed list field resolves at its field depth', () => {
           const assertion = agent.assertSomeTraces(traces => {
-            const spans = sort(traces[0])
-            const ignored = spans.filter(span => {
-              return [
-                'human.address.civicNumber',
-                'human.address.street',
-              ].indexOf(span.resource) !== -1
-            })
+            const paths = sort(traces[0])
+              .filter(span => span.name === 'graphql.resolve')
+              .map(span => span.meta['graphql.field.path'])
+              .sort()
 
-            assert.strictEqual(spans.length, 5)
-            assert.strictEqual(ignored.length, 0)
+            assert.deepStrictEqual(paths, [
+              'friends',
+              'friends.*.name',
+              'human',
+              'human.address',
+              'human.name',
+            ])
+          })
+
+          return Promise.all([assertion, graphql.graphql({ schema, source })])
+        })
+
+        // v5 counted the collapsed list index toward depth, so friends.*.name sat
+        // three segments deep and was gated. Pin that contract on the v5 line.
+        const legacyDepthTest = DD_MAJOR < 6 ? it : it.skip
+        legacyDepthTest('counts collapsed list indices toward depth on v5', () => {
+          const assertion = agent.assertSomeTraces(traces => {
+            const paths = sort(traces[0])
+              .filter(span => span.name === 'graphql.resolve')
+              .map(span => span.meta['graphql.field.path'])
+              .sort()
+
+            assert.deepStrictEqual(paths, [
+              'friends',
+              'human',
+              'human.address',
+              'human.name',
+            ])
           })
 
           return Promise.all([assertion, graphql.graphql({ schema, source })])
@@ -2175,6 +2298,50 @@ describe('Plugin', () => {
           } finally {
             startCh.unsubscribe(handler)
           }
+        })
+
+        it('should run depth-gated resolvers in the parent scope and still resolve the data', async () => {
+          const localSchema = graphql.buildSchema(`
+            type Query { outer: Outer }
+            type Outer { middle: Middle }
+            type Middle { inner: String }
+          `)
+
+          const captures = {}
+          const captureActive = label => {
+            captures[label] = tracer.scope().active()?.context()._name
+          }
+
+          const rootValue = {
+            outer () {
+              captureActive('outer')
+              return {
+                middle () {
+                  captureActive('middle')
+                  return {
+                    inner () {
+                      captureActive('inner')
+                      return 'value'
+                    },
+                  }
+                },
+              }
+            },
+          }
+
+          const result = await graphql.graphql({
+            schema: localSchema,
+            source: '{ outer { middle { inner } } }',
+            rootValue,
+          })
+
+          assert.ok(!('errors' in result), `Unexpected per-field errors: ${JSON.stringify(result.errors)}`)
+          assert.strictEqual(result.data?.outer?.middle?.inner, 'value')
+          assert.deepStrictEqual(captures, {
+            outer: 'graphql.resolve',
+            middle: 'graphql.resolve',
+            inner: expectedSchema.server.opName,
+          })
         })
       })
 
