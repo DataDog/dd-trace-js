@@ -156,14 +156,13 @@ describe('CiPlugin', () => {
     }
     plugin.testErrorStackIndex = 0
 
-    plugin.onDiBreakpointHit({ snapshot, processTags: 'entrypoint.name:test' })
+    plugin.onDiBreakpointHit({ snapshot })
 
     sinon.assert.calledOnce(exportDiLogs)
     assert.strictEqual(exportDiLogs.firstCall.args[0], plugin.testEnvironmentMetadata)
     const logMessage = exportDiLogs.firstCall.args[1]
     assert.strictEqual(logMessage.message, '')
     assert.deepStrictEqual(logMessage.debugger, { snapshot })
-    assert.strictEqual(logMessage.process_tags, 'entrypoint.name:test')
     assert.deepStrictEqual(logMessage.dd, {
       trace_id: 'trace-id',
       span_id: 'span-id',

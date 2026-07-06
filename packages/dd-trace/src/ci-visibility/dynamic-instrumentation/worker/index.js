@@ -2,7 +2,6 @@
 
 const {
   workerData: {
-    config,
     breakpointSetChannel,
     breakpointHitChannel,
     breakpointRemoveChannel,
@@ -28,9 +27,6 @@ const {
   getStackFromCallFrames,
 } = require('../../../debugger/devtools_client/state')
 const log = require('../../../log')
-const processTags = require('../../../process-tags')
-
-processTags.initialize()
 
 let sessionStarted = false
 let inFlightBreakpointHits = 0
@@ -127,12 +123,7 @@ session.on('Debugger.paused', async ({ params: { hitBreakpoints: [hitBreakpoint]
 
     removeEmptyCollectionProperties(snapshot.captures)
 
-    const message = { snapshot }
-    if (config.propagateProcessTags?.enabled && processTags.serialized) {
-      message.processTags = processTags.serialized
-    }
-
-    breakpointHitChannel.postMessage(message)
+    breakpointHitChannel.postMessage({ snapshot })
   } finally {
     inFlightBreakpointHits--
     drainBreakpointHitRequests()

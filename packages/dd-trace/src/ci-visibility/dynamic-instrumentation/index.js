@@ -146,7 +146,7 @@ class TestVisDynamicInstrumentation {
       }
     }).unref?.()
 
-    this.breakpointHitChannel.port2.on('message', ({ snapshot, processTags, drainRequestId }) => {
+    this.breakpointHitChannel.port2.on('message', ({ snapshot, drainRequestId }) => {
       if (drainRequestId) {
         const resolve = drainRequestIdToResolveBreakpointHit.get(drainRequestId)
         if (resolve) {
@@ -159,7 +159,7 @@ class TestVisDynamicInstrumentation {
       const { probe: { id: probeId } } = snapshot
       const onHit = this.onHitBreakpointByProbeId.get(probeId)
       if (onHit) {
-        onHit({ snapshot, processTags })
+        onHit({ snapshot })
       } else {
         log.warn('Received a breakpoint hit for an unknown probe')
       }

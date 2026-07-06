@@ -22,12 +22,9 @@ describe('test visibility with dynamic instrumentation', () => {
   })
 
   it('can grab local variables', (done) => {
-    childProcess = fork(
-      path.join(__dirname, 'target-app', 'test-visibility-dynamic-instrumentation-script.js'),
-      { env: { ...process.env, DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED: 'true' } }
-    )
+    childProcess = fork(path.join(__dirname, 'target-app', 'test-visibility-dynamic-instrumentation-script.js'))
 
-    childProcess.on('message', ({ snapshot, probeId, processTags }) => {
+    childProcess.on('message', ({ snapshot, probeId }) => {
       if (!snapshot) return
 
       const { language, stack, probe, captures } = snapshot
@@ -36,8 +33,6 @@ describe('test visibility with dynamic instrumentation', () => {
       assert.ok(stack)
       assert.strictEqual(language, 'javascript')
       assert.strictEqual(probe.version, 0)
-      assert.strictEqual(typeof processTags, 'string')
-      assert.match(processTags, /entrypoint\.name:/)
 
       assert.deepStrictEqual(captures, {
         lines: {

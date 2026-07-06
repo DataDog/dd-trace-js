@@ -813,7 +813,7 @@ module.exports = class CiPlugin extends Plugin {
     return testSpan
   }
 
-  onDiBreakpointHit ({ snapshot, processTags }) {
+  onDiBreakpointHit ({ snapshot }) {
     for (const resolve of this.diBreakpointHitResolvers) {
       resolve()
     }
@@ -854,7 +854,6 @@ module.exports = class CiPlugin extends Plugin {
         thread_name: DI_LOGGER_THREAD_NAME,
       },
       debugger: { snapshot },
-      process_tags: processTags,
       dd: {
         trace_id: activeTestSpanContext.toTraceId(),
         span_id: activeTestSpanContext.toSpanId(),
