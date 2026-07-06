@@ -61,7 +61,7 @@ const {
   DI_DEBUG_ERROR_SNAPSHOT_ID_SUFFIX,
   DI_DEBUG_ERROR_FILE_SUFFIX,
   DI_DEBUG_ERROR_LINE_SUFFIX,
-  getLibraryCapabilitiesTags,
+  getLibraryCapabilitiesTags: getDefaultLibraryCapabilitiesTags,
   getPullRequestDiff,
   getModifiedFilesFromDiff,
   getPullRequestBaseBranch,
@@ -109,7 +109,7 @@ const TEST_FRAMEWORKS_TO_SKIP_GIT_METADATA_EXTRACTION = new Set([
 ])
 
 function setItrSkippingEnabledTagFromLibraryConfig (plugin, frameworkVersion) {
-  const libraryCapabilitiesTags = getLibraryCapabilitiesTags(plugin.constructor.id, frameworkVersion)
+  const libraryCapabilitiesTags = getDefaultLibraryCapabilitiesTags(plugin.constructor.id, frameworkVersion)
 
   if (!libraryCapabilitiesTags[DD_CAPABILITIES_TEST_IMPACT_ANALYSIS] ||
     !plugin.libraryConfig ||
@@ -164,18 +164,19 @@ module.exports = class CiPlugin extends Plugin {
           setItrSkippingEnabledTagFromLibraryConfig(this, frameworkVersion)
         }
 
-        const requestErrorTags = this.testSessionSpan
-          ? getSessionRequestErrorTags(this.testSessionSpan)
-          : Object.fromEntries(this._pendingRequestErrorTags.map(({ tag, value }) => [tag, value]))
-
-        const libraryCapabilitiesTags = getLibraryCapabilitiesTags(this.constructor.id, frameworkVersion)
+        const libraryCapabilitiesTags = this.getLibraryCapabilitiesTags(frameworkVersion, ctx)
         const metadataTags = {
           test: {
             ...libraryCapabilitiesTags,
           },
         }
         this.tracer._exporter.addMetadataTags(metadataTags)
-        onDone({ err, libraryConfig, repositoryRoot: this.repositoryRoot, requestErrorTags })
+        onDone({
+          err,
+          libraryConfig,
+          repositoryRoot: this.repositoryRoot,
+          requestErrorTags: this._getCurrentRequestErrorTags(),
+        })
       })
     })
 
@@ -307,7 +308,7 @@ module.exports = class CiPlugin extends Plugin {
             this.libraryConfig.isKnownTestsEnabled = false
           }
         }
-        onDone({ err, knownTests })
+        onDone({ err, knownTests, requestErrorTags: this._getCurrentRequestErrorTags() })
       })
     })
 
@@ -327,7 +328,7 @@ module.exports = class CiPlugin extends Plugin {
             this.libraryConfig.isTestManagementEnabled = false
           }
         }
-        onDone({ err, testManagementTests })
+        onDone({ err, testManagementTests, requestErrorTags: this._getCurrentRequestErrorTags() })
       })
     })
 
@@ -432,6 +433,15 @@ module.exports = class CiPlugin extends Plugin {
   }
 
   /**
+   * Returns library capability metadata tags for this test framework.
+   * @param {string} frameworkVersion - The test framework version.
+   * @returns {Record<string, string|undefined>}
+   */
+  getLibraryCapabilitiesTags (frameworkVersion) {
+    return getDefaultLibraryCapabilitiesTags(this.constructor.id, frameworkVersion)
+  }
+
+  /**
    * Adds a hidden _dd tag to the test session span when a test-optimization request fails.
    * If the session span does not exist yet (e.g. library-configuration failed before session:start),
    * the tag is queued and applied when the span is created.
@@ -448,6 +458,18 @@ module.exports = class CiPlugin extends Plugin {
     } else {
       this._pendingRequestErrorTags.push({ tag, value })
     }
+  }
+
+  /**
+   * Returns the current request error tags, including tags queued before session creation.
+   *
+   * @returns {Record<string, string>}
+   */
+  _getCurrentRequestErrorTags () {
+    if (this.testSessionSpan) {
+      return getSessionRequestErrorTags(this.testSessionSpan)
+    }
+    return Object.fromEntries(this._pendingRequestErrorTags.map(({ tag, value }) => [tag, value]))
   }
 
   /**
