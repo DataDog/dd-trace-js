@@ -247,7 +247,10 @@ class Tracer extends NoopProxy {
       }
     } catch (e) {
       log.error('Error initializing tracer', e)
-      warn('DATADOG TRACER FAILED TO INITIALIZE - tracing is disabled: ' + (e?.message ?? e))
+      //Custom logger whose warn throws must not turn a swallowed init failure into a crash.
+      try {
+        warn('DATADOG TRACER FAILED TO INITIALIZE - tracing is disabled: ' + (e?.message ?? e))
+      } catch {}
       // TODO: Should we stop everything started so far?
     }
 

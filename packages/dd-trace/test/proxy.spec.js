@@ -608,6 +608,30 @@ describe('TracerProxy', () => {
         sinon.assert.match(warn.firstCall.firstArg, sinon.match(/DATADOG TRACER FAILED TO INITIALIZE/))
       })
 
+      it('should not crash init when the always-on writer itself throws on a fatal config error', () => {
+        // A custom logger whose warn throws must not turn a swallowed init failure into an app crash.
+        const warn = sinon.stub().throws(new Error('logger boom'))
+        const ThrowingConfig = sinon.stub().throws(new TypeError('bad config'))
+
+        const FatalConfigProxy = proxyquire('../src/proxy', {
+          './tracer': DatadogTracer,
+          './noop/tracer': NoopTracer,
+          './config': ThrowingConfig,
+          './runtime_metrics': runtimeMetrics,
+          './log': log,
+          './log/writer': { warn },
+          './telemetry': telemetry,
+          './remote_config': RemoteConfig,
+        })
+
+        const fatalConfigProxy = new FatalConfigProxy()
+
+        // Executes directly: if the guard is missing, the throwing warn propagates and fails the test.
+        fatalConfigProxy.init()
+
+        sinon.assert.calledOnce(warn)
+      })
+
       it('should start telemetry', () => {
         proxy.init()
 
