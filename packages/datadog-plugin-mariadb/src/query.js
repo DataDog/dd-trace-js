@@ -1,8 +1,8 @@
 'use strict'
 
 const { storage } = require('../../datadog-core')
-const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 const DatabasePlugin = require('../../dd-trace/src/plugins/database')
+const { startQuerySpan } = require('../../datadog-plugin-mysql/src/shared')
 
 const DD_SPAN = Symbol('dd-mariadb-span')
 
@@ -79,28 +79,13 @@ class MariadbCommandPlugin extends DatabasePlugin {
     const cmd = ctx.self
     if (!cmd) return
 
-    const conf = this.getConf(ctx, cmd)
-    const sql = cmd.sql
-    const service = this.serviceName({ pluginConfig: this.config, dbConfig: conf, system: this.system })
+    ctx.sql = cmd.sql
+    ctx.conf = this.getConf(ctx, cmd)
+    startQuerySpan(this, ctx, { childOf: this.activeSpan })
 
-    const span = this.startSpan(this.operationName(), {
-      service,
-      resource: sql,
-      type: 'sql',
-      kind: 'client',
-      meta: {
-        'db.type': this.system,
-        'db.user': conf.user,
-        'db.name': conf.database,
-        'out.host': conf.host,
-        [CLIENT_PORT_KEY]: conf.port,
-      },
-      childOf: this.activeSpan,
-    }, ctx)
-
-    cmd.sql = this.injectDbmQuery(span, sql, service.name)
-    cmd[DD_SPAN] = span
-    cmd[DD_PARENT_STORE] = storage('legacy').getStore()
+    cmd.sql = ctx.sql
+    cmd[DD_SPAN] = ctx.currentStore?.span
+    cmd[DD_PARENT_STORE] = ctx.parentStore
   }
 }
 

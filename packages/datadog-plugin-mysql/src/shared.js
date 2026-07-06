@@ -3,23 +3,24 @@
 const { CLIENT_PORT_KEY } = require('../../dd-trace/src/constants')
 
 /**
- * Build the mysql query span and inject DBM propagation into the SQL.
+ * Build a SQL query span and inject DBM propagation into the SQL.
  *
- * Span/DBM logic used by the retained legacy plugin base for mysql2 and mariadb.
- * This helper subscribes to no channels.
- *
- * The caller must populate `ctx.sql` (the original query text) and `ctx.conf`
- * (the connection config) before calling. On return, `ctx.sql` holds the
- * DBM-injected query and `ctx.currentStore` / `ctx.parentStore` are set by
- * `startSpan`.
+ * This helper owns only the common database span shape. It does not subscribe
+ * to diagnostic channels or make assumptions about a library's hook lifecycle.
  *
  * @param {import('../../dd-trace/src/plugins/database')} plugin
- * @param {{ sql: string, conf: object, currentStore?: object, parentStore?: object }} ctx
+ * @param {{
+ *   sql: string,
+ *   conf: { user?: string, database?: string, host?: string, port?: number },
+ *   currentStore?: object,
+ *   parentStore?: object
+ * }} ctx
+ * @param {{ childOf?: object | null }} [options]
  * @returns {object | undefined} the store to enter for the query span
  */
-function startQuerySpan (plugin, ctx) {
+function startQuerySpan (plugin, ctx, options = {}) {
   const service = plugin.serviceName({ pluginConfig: plugin.config, dbConfig: ctx.conf, system: plugin.system })
-  const span = plugin.startSpan(plugin.operationName(), {
+  const startOptions = {
     service,
     resource: ctx.sql,
     type: 'sql',
@@ -31,10 +32,18 @@ function startQuerySpan (plugin, ctx) {
       'out.host': ctx.conf.host,
       [CLIENT_PORT_KEY]: ctx.conf.port,
     },
-  }, ctx)
+  }
+
+  if (options.childOf !== undefined) {
+    startOptions.childOf = options.childOf
+  }
+
+  const span = plugin.startSpan(plugin.operationName(), startOptions, ctx)
   ctx.sql = plugin.injectDbmQuery(span, ctx.sql, service.name)
 
   return ctx.currentStore
 }
 
-module.exports = { startQuerySpan }
+module.exports = {
+  startQuerySpan,
+}
