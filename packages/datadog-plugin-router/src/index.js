@@ -33,12 +33,17 @@ class RouterPlugin extends WebPlugin {
       const span = this.#getMiddlewareSpan(name, childOf)
       context = this.#updateContext(req, context, route, childOf)
 
+      context.storeStack.push(store)
+      const enteredStore = this.enter(span, store)
+
       if (childOf !== span) {
         context.middleware.push(span)
+        // Track the store this middleware span was entered into so its `span`
+        // reference can be released when the request finishes. Otherwise an
+        // async resource created inside the middleware body snapshots this store
+        // and pins the finished span (and its parent chain) forever.
+        context.middlewareStores.push(enteredStore)
       }
-
-      context.storeStack.push(store)
-      this.enter(span, store)
 
       web.patch(req)
       web.setRoute(req, context.route)
@@ -91,6 +96,22 @@ class RouterPlugin extends WebPlugin {
       while ((span = context.middleware.pop())) {
         span.finish()
       }
+
+      // The request/response is fully done, so no async continuation can still
+      // need these spans as the active span. Release every store a middleware
+      // span was entered into (whether the span finished during the request or
+      // just now above), dropping the `span` reference so any async resource
+      // that captured that store no longer retains the finished span or its
+      // parent chain. This is what prevents the unbounded span retention leak.
+      //
+      // Release only happens here (never at `middleware:finish`, which fires
+      // before `next.apply(...)`), so work a middleware schedules to run after
+      // `next()` still sees the correct active span for trace continuity.
+      let store
+
+      while ((store = context.middlewareStores.pop())) {
+        this.releaseSpan(store)
+      }
     })
   }
 
@@ -130,14 +151,17 @@ class RouterPlugin extends WebPlugin {
       return context
     }
 
-    // Five-property shape pinned at allocation so every request shares the
-    // same hidden class — no per-field transitions after construction.
+    // Fixed shape pinned at allocation so every request shares the same hidden
+    // class — no per-field transitions after construction.
     context = {
       span,
       stack: [route],
       route,
       middleware: [],
       storeStack: [],
+      // Parallel to `middleware`: the store each middleware span was entered
+      // into, released at request finish so captured frames stop retaining it.
+      middlewareStores: [],
     }
 
     this.#contexts.set(req, context)
