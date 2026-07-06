@@ -784,6 +784,63 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         assert.strictEqual(exitCode[0], 0)
       })
 
+      onlyLatestIt('preserves concurrent each parameters between attempt to fix retries', async () => {
+        const NUM_RETRIES = 3
+        receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: NUM_RETRIES } })
+
+        receiver.setTestManagementTests({
+          jest: {
+            suites: {
+              'ci-visibility/test-management/test-concurrent-attempt-to-fix-each.js': {
+                tests: {
+                  'concurrent attempt to fix each tests parameterized row can pass normally': {
+                    properties: {
+                      attempt_to_fix: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const concurrentEachTests = tests.filter(test =>
+              test.meta[TEST_NAME] === 'concurrent attempt to fix each tests parameterized row can pass normally'
+            )
+
+            assert.strictEqual(concurrentEachTests.length, NUM_RETRIES + 1)
+            for (const concurrentEachTest of concurrentEachTests) {
+              assert.strictEqual(concurrentEachTest.meta[TEST_MANAGEMENT_IS_ATTEMPT_TO_FIX], 'true')
+              assert.strictEqual(
+                concurrentEachTest.meta[TEST_PARAMETERS],
+                JSON.stringify({ arguments: ['parameterized row', 3], metadata: {} })
+              )
+            }
+          })
+
+        childProcess = exec(
+          runTestsCommand,
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TESTS_TO_RUN: 'test-management/test-concurrent-attempt-to-fix-each',
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+
+        assert.strictEqual(exitCode, 0)
+      })
+
       it('ignores quarantine when attempting to fix a test', (done) => {
         receiver.setSettings({ test_management: { enabled: true, attempt_to_fix_retries: 3 } })
         receiver.setTestManagementTests({
@@ -2268,9 +2325,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       const impactedConcurrentTest = fs.readFileSync(impactedConcurrentPath, 'utf8')
       fs.writeFileSync(
         impactedConcurrentPath,
-        impactedConcurrentTest
-          .replace("const label = 'sum'", "const label = 'result'")
-          .replace('expect(expected).toBe(3)', 'expect(expected).toBe(3 + 0)')
+        impactedConcurrentTest.replace("const label = 'sum'", "const label = 'result'")
       )
       execSync('git add ci-visibility/test-impacted-test/test-impacted-concurrent.js', { cwd, stdio: 'ignore' })
 
@@ -2540,22 +2595,10 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
               test.meta[TEST_SOURCE_FILE] === 'ci-visibility/test-impacted-test/test-impacted-concurrent.js' &&
               test.meta[TEST_NAME] === 'impacted concurrent tests can pass normally'
             )
-            const impactedConcurrentEachTests = tests.filter(test =>
-              test.meta[TEST_SOURCE_FILE] === 'ci-visibility/test-impacted-test/test-impacted-concurrent.js' &&
-              test.meta[TEST_NAME] === 'impacted concurrent tests parameterized row can pass normally'
-            )
 
             assert.strictEqual(impactedConcurrentTests.length, NUM_RETRIES + 1)
             for (const impactedConcurrentTest of impactedConcurrentTests) {
               assert.strictEqual(impactedConcurrentTest.meta[TEST_IS_MODIFIED], 'true')
-            }
-            assert.strictEqual(impactedConcurrentEachTests.length, NUM_RETRIES + 1)
-            for (const impactedConcurrentEachTest of impactedConcurrentEachTests) {
-              assert.strictEqual(impactedConcurrentEachTest.meta[TEST_IS_MODIFIED], 'true')
-              assert.strictEqual(
-                impactedConcurrentEachTest.meta[TEST_PARAMETERS],
-                JSON.stringify({ arguments: ['parameterized row', 3], metadata: {} })
-              )
             }
           })
 

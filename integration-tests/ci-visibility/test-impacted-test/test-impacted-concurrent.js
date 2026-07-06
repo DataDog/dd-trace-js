@@ -15,10 +15,4 @@ describe('impacted concurrent tests', () => {
 
     expect(`${label}:${result}`).toBe(`${label}:${expected}`)
   })
-
-  test.concurrent.each([
-    ['parameterized row', 3],
-  ])('%s can pass normally', (_label, expected) => {
-    expect(expected).toBe(3)
-  })
 })
