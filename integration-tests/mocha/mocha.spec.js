@@ -4691,7 +4691,7 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
             TESTS_TO_RUN: JSON.stringify([
-              './dynamic-instrumentation/parallel-test-hit-breakpoint-after-each',
+              './dynamic-instrumentation/mocha-parallel-test-hit-breakpoint-after-each',
               './dynamic-instrumentation/parallel-test-hit-breakpoint-2',
             ]),
             RUN_IN_PARALLEL: '1',
