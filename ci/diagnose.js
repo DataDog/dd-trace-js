@@ -1491,7 +1491,10 @@ function findLocations (textFiles, pattern) {
  */
 function collectTextFiles (root, maxFiles) {
   const files = []
+  const seen = new Set()
   files.truncated = false
+
+  addTextFileIfPresent('package.json')
 
   function walk (dir, relativeDir) {
     if (files.length >= maxFiles) {
@@ -1525,12 +1528,32 @@ function collectTextFiles (root, maxFiles) {
       }
 
       if (entry.isFile() && isTextFileName(entry.name)) {
-        const normalizedPath = normalizeRelativePath(relativePath)
-        if (!SKIPPED_FILES.has(normalizedPath)) {
-          files.push(relativePath)
-        }
+        addTextFile(relativePath)
       }
     }
+  }
+
+  function addTextFileIfPresent (relativePath) {
+    try {
+      if (!fs.statSync(path.join(root, relativePath)).isFile()) return
+    } catch {
+      return
+    }
+
+    addTextFile(relativePath)
+  }
+
+  function addTextFile (relativePath) {
+    const normalizedPath = normalizeRelativePath(relativePath)
+    if (seen.has(normalizedPath) || SKIPPED_FILES.has(normalizedPath)) return
+
+    if (files.length >= maxFiles) {
+      files.truncated = true
+      return
+    }
+
+    seen.add(normalizedPath)
+    files.push(relativePath)
   }
 
   walk(root, '')
