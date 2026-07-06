@@ -624,6 +624,7 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
             : undefined
           const concurrentTestState = {
             ctx: environment.createConcurrentTestContext(testName, testFn, asyncError, state),
+            testFn,
           }
           concurrentTestState.ctx.concurrentTestState = concurrentTestState
           const wrappedTestFn = shimmer.wrapFunction(testFn, testFn => function (...args) {
@@ -835,7 +836,13 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
      */
     runConcurrentTestFn (concurrentTestState, testFn, thisArg, args) {
       const ctx = concurrentTestState.ctx
-      if (ctx.isDisabled && !ctx.isAttemptToFix) return
+      if (ctx.isDisabled && !ctx.isAttemptToFix) {
+        const done = args[0]
+        if (typeof done === 'function') {
+          done()
+        }
+        return
+      }
 
       const runTest = () => testFn.apply(thisArg, args)
       if (ctx.currentStore) {
@@ -988,8 +995,13 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
     }) {
       const { testName, fn, timeout } = jestEvent
       for (let retryIndex = 0; retryIndex < retryCount; retryIndex++) {
-        if (this.global.test) {
-          this.global.test(testName, fn, timeout)
+        const concurrentTestState = this.concurrentTestStates.get(fn)
+        const retry = jestEvent.concurrent && this.global.test?.concurrent
+          ? this.global.test.concurrent
+          : this.global.test
+        const retryFn = concurrentTestState?.testFn || fn
+        if (retry) {
+          retry(testName, retryFn, timeout)
         } else {
           log.error('%s could not retry test because global.test is undefined', retryType)
         }
@@ -1138,7 +1150,8 @@ function getWrappedEnvironment (BaseEnvironment, jestVersion) {
           event.test.fn = newFn
         }
 
-        if (event.test.concurrent) {
+        const isConcurrentTest = event.test.concurrent || ctx.concurrentTestState
+        if (isConcurrentTest) {
           if (!ctx.currentStore && event.test.errors?.length) {
             testStartCh.runStores(ctx, () => {})
           }

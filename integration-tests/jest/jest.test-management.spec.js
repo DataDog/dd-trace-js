@@ -1242,6 +1242,11 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
                       disabled: true,
                     },
                   },
+                  'concurrent disabled tests can disable done concurrent test before body runs': {
+                    properties: {
+                      disabled: true,
+                    },
+                  },
                 },
               },
             },
@@ -1256,12 +1261,17 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
             const disabledTest = tests.find(test =>
               test.meta[TEST_NAME] === 'concurrent disabled tests can disable concurrent test before body runs'
             )
+            const disabledDoneTest = tests.find(test =>
+              test.meta[TEST_NAME] === 'concurrent disabled tests can disable done concurrent test before body runs'
+            )
             const passingTest = tests.find(test =>
               test.meta[TEST_NAME] === 'concurrent disabled tests can run another concurrent test'
             )
 
             assert.strictEqual(disabledTest.meta[TEST_STATUS], 'skip')
             assert.strictEqual(disabledTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
+            assert.strictEqual(disabledDoneTest.meta[TEST_STATUS], 'skip')
+            assert.strictEqual(disabledDoneTest.meta[TEST_MANAGEMENT_IS_DISABLED], 'true')
             assert.strictEqual(passingTest.meta[TEST_STATUS], 'pass')
           })
 
@@ -1290,6 +1300,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
         ])
 
         assert.doesNotMatch(output, /I am running concurrent disabled/)
+        assert.doesNotMatch(output, /I am running concurrent disabled done/)
         assert.strictEqual(exitCode, 0)
       })
 
@@ -2517,6 +2528,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           known_tests_enabled: true,
         })
 
+        let output = ''
         const eventsPromise = receiver
           .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
@@ -2544,11 +2556,19 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           }
         )
 
+        childProcess.stdout?.on('data', (chunk) => {
+          output += chunk.toString()
+        })
+        childProcess.stderr?.on('data', (chunk) => {
+          output += chunk.toString()
+        })
+
         const [[exitCode]] = await Promise.all([
           once(childProcess, 'exit'),
           eventsPromise,
         ])
 
+        assert.doesNotMatch(output, /I am running concurrent hooks/)
         assert.strictEqual(exitCode, 0)
       })
 
