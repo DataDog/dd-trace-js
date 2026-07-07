@@ -107,7 +107,7 @@
         "diagnosis": "CI wiring command is replayable locally."
       },
       "ciWiringCommand": {
-        "description": "CI test step replayed without validator-injected preloads",
+        "description": "CI test step replayed with only the Datadog initialization configured by CI",
         "cwd": "/absolute/path/to/repo",
         "argv": [
           "npm",

@@ -8,6 +8,7 @@ const { buildCiWiringEnv, runCommand } = require('../command-runner')
 const { getFrameworkCiDiscoveryContradiction } = require('../ci-discovery')
 const { runInitializationProbe } = require('../init-probe')
 const { normalizeRequests } = require('../payload-normalizer')
+const { sanitizeForReport } = require('../redaction')
 const { getMissingEventDiagnosis, summarizeTestOutput } = require('./basic-reporting')
 const {
   basicEventEvidence,
@@ -40,8 +41,12 @@ async function runCiWiring ({ manifest, framework, intake, out, options, basicRe
 
     await wait(1000)
     const events = normalizeRequests(intake.requests)
-    fs.writeFileSync(path.join(outDir, 'events.ndjson'), events.map(event => JSON.stringify(event)).join('\n') + '\n')
-    fs.writeFileSync(path.join(outDir, 'result.json'), `${JSON.stringify(result, null, 2)}\n`)
+    const sanitizedEvents = sanitizeForReport(events)
+    fs.writeFileSync(
+      path.join(outDir, 'events.ndjson'),
+      sanitizedEvents.map(event => JSON.stringify(event)).join('\n') + '\n'
+    )
+    fs.writeFileSync(path.join(outDir, 'result.json'), `${JSON.stringify(sanitizeForReport(result), null, 2)}\n`)
 
     const evidence = {
       commandExitCode: result.exitCode,
@@ -159,7 +164,7 @@ function getCiWiringEventFailure ({ framework, result, evidence, basicResult }) 
       ...localFailure,
       kind: 'ci-wiring-no-test-optimization-events',
       summary: getCiWiringTestsRanSummary({ basicResult, evidence, framework }),
-      recommendation: getCiWiringTestsRanRecommendation({ basicResult }),
+      recommendation: getCiWiringTestsRanRecommendation({ basicResult, evidence }),
     }
   }
 
@@ -173,26 +178,32 @@ function getCiWiringEventFailure ({ framework, result, evidence, basicResult }) 
 }
 
 function getCiWiringTestsRanSummary ({ basicResult, evidence, framework }) {
-  const summary = 'The validator identified the test command and confirmed that it runs tests. When the same ' +
-    'command ran with the initialization configured by the CI job, no Test Optimization events reached the mock ' +
-    'intake.'
+  const summary = 'The test command used by the CI job was identified and ran tests. When it ran with only the ' +
+    'environment and setup described by the CI job, no Test Optimization events reached the mock intake.'
   const probeSummary = getInitializationProbeSummary(evidence.initializationProbe, framework)
 
   if (basicResult?.status === 'pass') {
-    return `${summary} When the validator ran the selected test command with the required Datadog initialization ` +
-      `applied directly, test data was reported correctly.${probeSummary}`
+    return `${summary} The same selected test command reported test data when the validator supplied the ` +
+      `required Datadog initialization directly, so this repository can report when dd-trace is initialized ` +
+      `correctly.${probeSummary}`
   }
 
   return `${summary}${probeSummary}`
 }
 
-function getCiWiringTestsRanRecommendation ({ basicResult }) {
-  const recommendation = 'Verify that the CI workflow sets NODE_OPTIONS with dd-trace/ci/init for the final ' +
-    'test runner, and that any package manager, monorepo runner, or wrapper preserves it.'
+function getCiWiringTestsRanRecommendation ({ basicResult, evidence }) {
+  const probeReachedTestRunner = evidence.initializationProbe?.ran === true &&
+    evidence.initializationProbe.reachedTestRunnerProcess === true
+  const recommendation = probeReachedTestRunner
+    ? 'Verify that the CI workflow actually sets NODE_OPTIONS with dd-trace/ci/init and the required Datadog ' +
+      'environment variables. The NODE_OPTIONS probe reached the test runner for this command shape, so focus ' +
+      'on missing or incomplete CI Datadog configuration before wrapper propagation.'
+    : 'Verify that the CI workflow sets NODE_OPTIONS with dd-trace/ci/init for the final test runner, and that ' +
+      'any package manager, monorepo runner, or wrapper preserves it.'
 
   if (basicResult?.status === 'pass') {
     return `${recommendation} Compare the passing direct-initialization command with the CI job command to find ` +
-      'where the Datadog environment is dropped.'
+      'where the Datadog setup differs.'
   }
 
   return recommendation
@@ -222,17 +233,19 @@ function getInitializationProbeSummary (probe, framework) {
   }
 
   if (probe.reachedTestRunnerProcess) {
-    return ` The initialization probe reached a ${frameworkName} process, so NODE_OPTIONS appears to reach ` +
-      'the test runner; inspect the CI Datadog environment and runner support next.'
+    return ` The NODE_OPTIONS probe reached a ${frameworkName} process, so NODE_OPTIONS can reach the test ` +
+      'runner in this command shape; inspect whether the CI workflow actually configures the required Datadog ' +
+      'initialization and environment.'
   }
 
   const wrappers = formatToolNames([...probe.wrapperSignals, ...probe.packageManagerSignals])
   if (wrappers) {
-    return ` The initialization probe reached ${wrappers}, but it did not appear to reach a ${frameworkName} ` +
-      'process. This usually means NODE_OPTIONS is dropped before the final test runner starts.'
+    return ` The NODE_OPTIONS probe reached ${wrappers}, but it did not appear to reach a ${frameworkName} ` +
+      'process. This usually means a package manager, monorepo runner, or wrapper removes NODE_OPTIONS before ' +
+      'the tests start.'
   }
 
-  return ` The initialization probe reached a Node.js process, but it did not appear to reach a ${frameworkName} ` +
+  return ` The NODE_OPTIONS probe reached a Node.js process, but it did not appear to reach a ${frameworkName} ` +
     'process.'
 }
 
@@ -281,7 +294,7 @@ function getMonorepoFindings ({ framework, command, probe }) {
     findings.push({
       id: 'node-options-not-observed-in-test-runner',
       tool: 'node',
-      reason: 'The initialization probe reached an intermediate Node.js process but not the detected test runner.',
+      reason: 'The NODE_OPTIONS probe reached an intermediate Node.js process but not the detected test runner.',
       recommendation: 'Trace the command chain from the CI step to the test runner and find where NODE_OPTIONS is ' +
         'removed or replaced.',
     })
@@ -327,8 +340,8 @@ function getDisplayFrameworkName (frameworkName) {
 
 function commandOutputShowsTestsRan (lines) {
   return lines.some(line => {
-    return /\b\d+\s+(?:passing|passed)\b/i.test(line) ||
-      /\btests?\b.*\bpassed\b/i.test(line) ||
+    return /\b\d+\s+(?:passing|passed|failing|failed)\b/i.test(line) ||
+      /\btests?\b.*\b(?:passed|failed)\b/i.test(line) ||
       /\bSuccessfully ran target\b.*\btest\b/i.test(line) ||
       /\bsuccess:\s*[1-9]\d*\b/i.test(line) ||
       /\bTasks:\s*[1-9]\d*\s+successful\b/i.test(line)

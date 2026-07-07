@@ -6,6 +6,7 @@ const os = require('node:os')
 const path = require('node:path')
 
 const {
+  buildCiWiringEnv,
   buildDatadogEnv,
   getBaseEnv,
   getCommandDetails,
@@ -38,6 +39,20 @@ describe('test optimization validation command runner', () => {
     assert.strictEqual(env.DD_INSTRUMENTATION_TELEMETRY_ENABLED, 'false')
     assert.strictEqual(env.DD_TEST_FAILED_TEST_REPLAY_ENABLED, 'false')
     assert.match(env.NODE_OPTIONS, /\/ci\/init\.js/)
+  })
+
+  it('disables unrelated Datadog side channels during CI wiring replay', () => {
+    const env = buildCiWiringEnv({
+      intake: { port: 1234 },
+    })
+
+    assert.strictEqual(env.DD_CIVISIBILITY_GIT_UPLOAD_ENABLED, 'false')
+    assert.strictEqual(env.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED, 'false')
+    assert.strictEqual(env.DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED, 'false')
+    assert.strictEqual(env.DD_INSTRUMENTATION_TELEMETRY_ENABLED, 'false')
+    assert.strictEqual(env.DD_TEST_FAILED_TEST_REPLAY_ENABLED, 'false')
+    assert.strictEqual(env.DD_CIVISIBILITY_ENABLED, undefined)
+    assert.strictEqual(env.NODE_OPTIONS, undefined)
   })
 
   it('collapses node and corepack runtime plumbing for display commands', () => {
@@ -82,6 +97,39 @@ describe('test optimization validation command runner', () => {
       assert.match(result.stderr, /ENOENT/)
       assert.ok(fs.existsSync(path.join(outDir, 'command.json')))
       assert.ok(fs.existsSync(path.join(outDir, 'stderr.txt')))
+    } finally {
+      fs.rmSync(outDir, { recursive: true, force: true })
+    }
+  })
+
+  it('redacts secret-like values from command artifacts', async () => {
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-runner-'))
+
+    try {
+      await runCommand({
+        cwd: outDir,
+        usesShell: true,
+        shellCommand: `DD_API_KEY=command-secret ${process.execPath} ` +
+          '-e "console.log(\'DD_API_KEY=stdout-secret\'); console.error(\'Authorization: Bearer stderr-secret\')"',
+        displayCommand: 'DD_API_KEY=display-secret node --token display-token test',
+        timeoutMs: 1000,
+      }, {
+        outDir,
+      })
+
+      const commandArtifact = fs.readFileSync(path.join(outDir, 'command.json'), 'utf8')
+      assert.doesNotMatch(commandArtifact, /command-secret/)
+      assert.doesNotMatch(commandArtifact, /display-secret/)
+      assert.doesNotMatch(commandArtifact, /display-token/)
+      assert.match(commandArtifact, /DD_API_KEY=<redacted>/)
+      assert.match(commandArtifact, /--token <redacted>/)
+
+      const stdoutArtifact = fs.readFileSync(path.join(outDir, 'stdout.txt'), 'utf8')
+      const stderrArtifact = fs.readFileSync(path.join(outDir, 'stderr.txt'), 'utf8')
+      assert.doesNotMatch(stdoutArtifact, /stdout-secret/)
+      assert.doesNotMatch(stderrArtifact, /stderr-secret/)
+      assert.match(stdoutArtifact, /DD_API_KEY=<redacted>/)
+      assert.match(stderrArtifact, /Authorization: <redacted>/)
     } finally {
       fs.rmSync(outDir, { recursive: true, force: true })
     }

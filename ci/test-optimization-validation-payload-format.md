@@ -1,24 +1,16 @@
 # Test Optimization Validation Payload Format
 
-The validation UI receives a compact JSON payload encoded into a relative path:
+The validator writes one JSON payload per framework inside the detailed Markdown report:
 
 ```text
-ci/test/validation#pako:<base64url(deflate(JSON.stringify(payload)))>
+dd-test-optimization-validation-results/report.md
 ```
 
-To decode it:
-
-1. Read the value after `#pako:`.
-2. Base64url-decode it.
-3. Inflate it with pako.
-4. Parse the inflated string as JSON.
-
-The validation UI decodes the payload with:
-
-```js
-const compressed = Buffer.from(encoded, 'base64url')
-const payload = JSON.parse(pako.inflate(compressed, { to: 'string' }))
-```
+The Markdown report is a local/internal diagnostic artifact, not a public-shareable report. It may
+include repository paths, package names, CI workflow/job/step names, commands, runner/tool chains,
+and sanitized environment variable structure. Secret-like values are redacted on a best-effort
+basis, but callers should review and redact the generated report and artifacts before sharing
+outside trusted channels.
 
 ## Top-Level Payload
 
@@ -30,8 +22,7 @@ const payload = JSON.parse(pako.inflate(compressed, { to: 'string' }))
   "status": "ok",
   "checks": [],
   "artifacts": {
-    "htmlFileUrl": "file:///...",
-    "htmlPath": "/..."
+    "reportPath": "/absolute/path/to/dd-test-optimization-validation-results/report.md"
   },
   "ciCommandCandidate": {
     "provider": "github-actions",
@@ -77,9 +68,9 @@ const payload = JSON.parse(pako.inflate(compressed, { to: 'string' }))
 }
 ```
 
-`status` is `ok`, `failed`, or `unknown`. The validator's local JSON report may use `blocked` for
-execution-environment blockers, but the pako/UI payload maps that to `unknown` for compatibility
-with the current validation UI.
+`status` is `ok`, `failed`, or `unknown`. The validator's execution results may use `blocked` for
+execution-environment blockers, but validation payloads map that to `unknown` for compatibility
+with payload consumers.
 
 `framework.language` is currently hardcoded to `javascript`. `workingDirectory`, `projectRoot`,
 and `packageJson` come from the manifest framework entry so the UI can show which workspace package
@@ -110,14 +101,13 @@ non-secret Datadog configuration are preserved because they are the wiring being
 
 ## Validator Artifacts
 
-`dd-trace/ci/validate-test-optimization.js` writes one payload per framework entry that produced a
-validator result:
+`dd-trace/ci/validate-test-optimization.js` writes one detailed Markdown report with one embedded
+payload per framework entry that produced a validator result:
 
-- `validation-payloads.json`: array of `{ frameworkId, payload, url }`
-- `validation-urls.txt`: one `frameworkId: ci/test/validation#pako:...` line per framework
-- `validation-url.txt`: first emitted URL for simple single-framework consumers
+- `report.md`: readable execution details plus a `Validation Payloads JSON` section containing an
+  array of `{ frameworkId, payload }`
 
-Multi-framework repositories should present each URL separately. A failed static-only payload is
+Multi-framework repositories should present each payload separately. A failed static-only payload is
 emitted when live validation is skipped because static diagnosis found a hard blocker, such as an
 unsupported framework or unsupported framework version.
 
@@ -128,8 +118,8 @@ attempted, the skipped check has no steps. The skip cause is in the check-level 
 
 Required project setup command failures are still failed validation results. If install, build, code
 generation, or browser-binary installation fails before live validation starts, the failed check has
-`steps: []`; the setup command, exit code, and output excerpts are available in the JSON report
-evidence and artifact files.
+`steps: []`; the setup command, exit code, and output excerpts are available in the Markdown report
+and artifact files.
 
 ## Checks
 
@@ -273,7 +263,7 @@ execution-environment blocker instead of an ordinary Basic Reporting failure:
   "reason": "The current agent sandbox blocks localhost sockets, so the validator could not start the fake Datadog intake.",
   "remediation": [
     "Rerun the validator command shown below from the host shell",
-    "In Codex, approve running that single validator command outside the sandbox",
+    "Rerun in an agent mode that allows localhost sockets or with sandbox restrictions disabled for this command",
     "Rerun in CI"
   ],
   "evidence": {
@@ -291,7 +281,8 @@ execution-environment blocker instead of an ordinary Basic Reporting failure:
 ```
 
 This means no Test Optimization conclusion was reached. The UI should tell the user to preserve the
-manifest/artifacts and rerun live validation from a host shell, by approving the single validator command to run outside the agent sandbox, or from CI.
+manifest/artifacts and rerun live validation from a host shell, CI, or an agent mode that allows
+localhost sockets for the validator command.
 
 When live basic reporting runs and fails, the `basic-reporting` check and its `check-events` step
 evidence include a concise local diagnosis in `reason`. Examples:
@@ -334,9 +325,10 @@ EFD, Auto Test Retries, and Test Management depend on Basic Reporting. When Basi
 for a framework, the validator skips those feature checks and includes the Basic Reporting diagnosis
 as the reason.
 
-CI wiring failures can include an independent initialization probe. The probe is a temporary
-`NODE_OPTIONS` preload that records which Node.js processes received the preload and whether known
-test-runner modules were observed. It is used only as wiring evidence; it is not a Datadog payload.
+CI wiring failures can include an independent initialization probe. In user-facing text, describe
+this as a `NODE_OPTIONS` probe: a temporary preload that records which Node.js processes received
+the preload and whether known test-runner modules were observed. It is used only as wiring evidence;
+it is not a Datadog payload.
 
 ```json
 {
@@ -364,7 +356,7 @@ test-runner modules were observed. It is used only as wiring evidence; it is not
     {
       "id": "node-options-not-observed-in-test-runner",
       "tool": "node",
-      "reason": "The initialization probe reached an intermediate Node.js process but not the detected test runner.",
+      "reason": "The NODE_OPTIONS probe reached an intermediate Node.js process but not the detected test runner.",
       "recommendation": "Trace the command chain from the CI step to the test runner and find where NODE_OPTIONS is removed or replaced."
     }
   ]

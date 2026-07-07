@@ -14,6 +14,7 @@ const {
   findTestsByIdentity,
   normalizeRequests,
 } = require('../payload-normalizer')
+const { sanitizeForReport } = require('../redaction')
 
 const ANSI_PATTERN = new RegExp(`${String.fromCharCode(27)}${String.raw`\[[0-?]*[ -/]*[@-~]`}`, 'g')
 
@@ -40,8 +41,12 @@ async function runInstrumentedCommand ({ framework, intake, out, scenarioName, c
 
   await wait(1000)
   const events = normalizeRequests(intake.requests)
-  fs.writeFileSync(path.join(outDir, 'events.ndjson'), events.map(event => JSON.stringify(event)).join('\n') + '\n')
-  fs.writeFileSync(path.join(outDir, 'result.json'), `${JSON.stringify(result, null, 2)}\n`)
+  const sanitizedEvents = sanitizeForReport(events)
+  fs.writeFileSync(
+    path.join(outDir, 'events.ndjson'),
+    sanitizedEvents.map(event => JSON.stringify(event)).join('\n') + '\n'
+  )
+  fs.writeFileSync(path.join(outDir, 'result.json'), `${JSON.stringify(sanitizeForReport(result), null, 2)}\n`)
 
   return { result, events, outDir }
 }

@@ -1,15 +1,13 @@
 'use strict'
 
 const fs = require('fs')
-const zlib = require('zlib')
 
 const { buildCiCommandCandidate } = require('./ci-command-candidate')
 const {
   getCommandDetails,
   serializeDisplayCommand,
 } = require('./command-runner')
-
-const VALIDATION_APP_PATH = 'ci/test/validation'
+const { sanitizeForReport } = require('./redaction')
 
 const CHECKS = {
   'ci-wiring': {
@@ -45,7 +43,6 @@ function buildValidationPayloads ({ manifest, results, artifacts }) {
     payloads.push({
       frameworkId,
       payload,
-      url: getValidationAppUrl(payload),
     })
   }
 
@@ -57,20 +54,19 @@ function buildFrameworkPayload ({ manifest, framework, frameworkResults, artifac
     .map(result => buildCheck({ result }))
     .filter(Boolean)
 
-  return {
+  return sanitizeForReport({
     version: 2,
     source: 'dd-trace-js',
     type: 'test-optimization-validation',
     status: getPayloadStatus(checks),
     checks,
     artifacts: {
-      htmlFileUrl: artifacts.htmlFileUrl,
-      htmlPath: artifacts.htmlPath,
+      reportPath: artifacts.reportPath,
     },
     framework: buildFrameworkContext({ framework, frameworkResults }),
     ciCommandCandidate: buildCiCommandCandidate(framework || {}),
     ciDiscovery: buildCiDiscoveryContext(manifest),
-  }
+  })
 }
 
 function buildCiDiscoveryContext (manifest) {
@@ -387,14 +383,6 @@ function isProblemStatus (status) {
   return status === 'fail' || status === 'error' || status === 'blocked'
 }
 
-function getValidationAppUrl (payload) {
-  return `${VALIDATION_APP_PATH}#pako:${encodeValidationPayload(payload)}`
-}
-
-function encodeValidationPayload (payload) {
-  return zlib.deflateSync(Buffer.from(JSON.stringify(payload))).toString('base64url')
-}
-
 function groupBy (values, getKey) {
   const groups = new Map()
   for (const value of values) {
@@ -423,6 +411,4 @@ function stringify (value) {
 
 module.exports = {
   buildValidationPayloads,
-  encodeValidationPayload,
-  getValidationAppUrl,
 }

@@ -4,8 +4,7 @@ const {
   getCommandDetails,
   serializeDisplayCommand,
 } = require('./command-runner')
-
-const SENSITIVE_ENV_PATTERN = /(?:API_?KEY|APP_?KEY|TOKEN|SECRET|PASSWORD|PASS|CREDENTIAL)/i
+const { sanitizeEnv } = require('./redaction')
 
 /**
  * Builds the normalized CI command metadata shape shared by reports and UI payloads.
@@ -56,22 +55,6 @@ function buildCiEnvSummary (ciWiring, command) {
   })
 
   return Object.keys(summary).length > 0 ? summary : undefined
-}
-
-function sanitizeEnv (env) {
-  if (!env || typeof env !== 'object' || Array.isArray(env)) return undefined
-
-  const sanitized = {}
-  for (const [name, value] of Object.entries(env)) {
-    sanitized[name] = sanitizeEnvValue(name, value)
-  }
-  return Object.keys(sanitized).length > 0 ? sanitized : undefined
-}
-
-function sanitizeEnvValue (name, value) {
-  if (SENSITIVE_ENV_PATTERN.test(name)) return '<redacted>'
-  if (value === undefined) return undefined
-  return String(value)
 }
 
 function hasCiWiringContext (ciWiring) {

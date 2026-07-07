@@ -4,36 +4,35 @@
 
 const fs = require('fs')
 const path = require('path')
-const { pathToFileURL } = require('url')
 
 const { buildCiCommandCandidate } = require('./ci-command-candidate')
 const { normalizeRequests } = require('./payload-normalizer')
+const { sanitizeForReport, sanitizeString } = require('./redaction')
 const { buildValidationPayloads } = require('./validation-payload')
 
 const CI_WIRING_SCENARIO = 'ci-wiring'
+const SHARING_WARNING =
+  'The generated Markdown report and run artifacts are local/internal diagnostics and are not ' +
+  'public-shareable as-is. They may include repository paths, package names, CI workflow/job/step names, ' +
+  'commands, runner/tool chains, and sanitized environment variable structure. Secret-like values are redacted ' +
+  'on a best-effort basis, but review and redact before sharing outside trusted channels.'
 
 function writeReport ({ manifest, results, out, intake, staticDiagnosis }) {
   const intakeArtifacts = intake.writeArtifacts()
   const normalizedEvents = normalizeRequests(intake.requests)
   const normalizedPath = path.join(out, 'intake', 'payloads.normalized.ndjson')
+  const sanitizedEvents = sanitizeForReport(normalizedEvents)
   fs.writeFileSync(
     normalizedPath,
-    normalizedEvents.map(event => JSON.stringify(event)).join('\n') + '\n'
+    sanitizedEvents.map(event => JSON.stringify(event)).join('\n') + '\n'
   )
 
   const reportPath = path.join(out, 'report.md')
-  const reportJsonPath = path.join(out, 'report.json')
-  const reportHtmlPath = path.join(out, 'report.html')
-  const validationPayloadsPath = path.join(out, 'validation-payloads.json')
-  const validationUrlsPath = path.join(out, 'validation-urls.txt')
-  const validationUrlPath = path.join(out, 'validation-url.txt')
   const baseArtifacts = {
-    htmlFileUrl: pathToFileURL(reportHtmlPath).href,
-    htmlPath: reportHtmlPath,
     manifest: manifest.__path,
     normalizedPayloads: normalizedPath,
     report: reportPath,
-    reportJson: reportJsonPath,
+    reportPath,
     requests: intakeArtifacts.requestsPath,
     staticDiagnosis: staticDiagnosis && staticDiagnosis.reportPath,
   }
@@ -43,40 +42,35 @@ function writeReport ({ manifest, results, out, intake, staticDiagnosis }) {
     artifacts: baseArtifacts,
   })
 
-  fs.writeFileSync(validationPayloadsPath, `${JSON.stringify(validationPayloads, null, 2)}\n`)
-  fs.writeFileSync(validationUrlsPath, validationPayloads.map(payload => {
-    return `${payload.frameworkId}: ${payload.url}`
-  }).join('\n') + '\n')
-  fs.writeFileSync(validationUrlPath, validationPayloads[0] ? `${validationPayloads[0].url}\n` : '')
-
-  const jsonReport = {
+  const sanitizedManifest = sanitizeForReport(stripPrivateFields(manifest))
+  const sanitizedResults = sanitizeForReport(results)
+  const report = {
     generatedAt: new Date().toISOString(),
+    sharingWarning: SHARING_WARNING,
     manifestPath: manifest.__path,
-    ciDiscovery: manifest.ciDiscovery,
-    ciCommandCandidates: getCiCommandCandidates(manifest),
-    results,
+    ciDiscovery: sanitizeForReport(manifest.ciDiscovery),
+    ciCommandCandidates: sanitizeForReport(getCiCommandCandidates(manifest)),
+    omitted: sanitizeForReport(getStringArray(manifest.omitted)),
+    omittedTestCommands: sanitizeForReport(
+      Array.isArray(manifest.omittedTestCommands) ? manifest.omittedTestCommands : []
+    ),
+    results: sanitizedResults,
+    staticDiagnosisNotes: getStaticDiagnosisNotes(staticDiagnosis?.report),
+    staticDiagnosisReport: sanitizeForReport(staticDiagnosis?.report),
+    manifest: sanitizedManifest,
     artifacts: {
       ...baseArtifacts,
-      validationPayloads: validationPayloadsPath,
-      validationUrl: validationUrlPath,
-      validationUrls: validationUrlsPath,
     },
     validation: validationPayloads.map(payload => ({
       frameworkId: payload.frameworkId,
       framework: payload.payload.framework,
-      url: payload.url,
+      payload: payload.payload,
     })),
   }
 
-  fs.writeFileSync(reportJsonPath, `${JSON.stringify(jsonReport, null, 2)}\n`)
-  fs.writeFileSync(
-    path.join(out, 'manifest.normalized.json'),
-    `${JSON.stringify(stripPrivateFields(manifest), null, 2)}\n`
-  )
-  fs.writeFileSync(reportPath, renderMarkdown(jsonReport))
-  fs.writeFileSync(reportHtmlPath, renderHtml(jsonReport))
+  fs.writeFileSync(reportPath, renderMarkdown(report))
 
-  console.log(renderConsoleSummary(results, out))
+  console.log(renderConsoleSummary(sanitizedResults, reportPath))
 }
 
 function renderMarkdown (report) {
@@ -84,6 +78,8 @@ function renderMarkdown (report) {
     '# Datadog Test Optimization Validation Report',
     '',
     `Generated at: ${report.generatedAt}`,
+    '',
+    `> ${report.sharingWarning}`,
     '',
     '## Summary',
     '',
@@ -93,7 +89,10 @@ function renderMarkdown (report) {
   appendMarkdownResultSection(lines, 'CI Wiring', getCiWiringResults(report.results))
   appendMarkdownResultSection(lines, 'Advanced Features', getAdvancedFeatureResults(report.results))
   appendMarkdownCiDiscovery(lines, report.ciDiscovery)
+  appendMarkdownStaticDiagnosisNotes(lines, report.staticDiagnosisNotes)
   appendMarkdownCiCommandCandidates(lines, report.ciCommandCandidates)
+  appendMarkdownOmittedCommands(lines, report)
+  appendMarkdownResultDetails(lines, report.results)
 
   const diagnosticResults = getDiagnosticOnlyResults(report.results)
   if (diagnosticResults.length > 0) {
@@ -115,79 +114,15 @@ function renderMarkdown (report) {
     lines.push(`- ${name}: \`${artifactPath}\``)
   }
 
-  lines.push('', '## Validation UI', '')
-  for (const validation of report.validation) {
-    lines.push(`- ${validation.frameworkId}: ${validation.url}`)
-  }
-  lines.push('')
+  appendMarkdownJsonSection(lines, 'Validation Payloads JSON', report.validation.map(validation => ({
+    frameworkId: validation.frameworkId,
+    payload: validation.payload,
+  })))
+  appendMarkdownJsonSection(lines, 'Execution Results JSON', report.results)
+  appendMarkdownJsonSection(lines, 'Normalized Manifest JSON', report.manifest)
+  appendMarkdownJsonSection(lines, 'Static Diagnosis JSON', report.staticDiagnosisReport)
 
   return lines.join('\n')
-}
-
-function renderHtml (report) {
-  const basicReportingSection = renderHtmlResultSection('Basic Reporting', getBasicReportingResults(report.results))
-  const ciWiringSection = renderHtmlResultSection('CI Wiring', getCiWiringResults(report.results))
-  const advancedFeaturesSection = renderHtmlResultSection(
-    'Advanced Features',
-    getAdvancedFeatureResults(report.results)
-  )
-  const ciDiscoverySection = renderHtmlCiDiscovery(report.ciDiscovery)
-  const ciCommandCandidatesSection = renderHtmlCiCommandCandidates(report.ciCommandCandidates)
-  const diagnosticItems = getDiagnosticOnlyResults(report.results).map(result => {
-    return `<li><strong>${escapeHtml(result.status.toUpperCase())}</strong> ${escapeHtml(result.frameworkId)} - ` +
-      `${escapeHtml(result.diagnosis)}</li>`
-  }).join('\n')
-  const diagnosticSection = diagnosticItems
-    ? `<h2>Diagnostic-only and Blocked Frameworks</h2>
-    <ul>
-      ${diagnosticItems}
-    </ul>`
-    : ''
-  const contextItems = report.validation.map(validation => {
-    return `<li><code>${escapeHtml(validation.frameworkId)}</code>: ` +
-      `${escapeHtml(formatFrameworkContext(validation.framework))}</li>`
-  }).join('\n')
-  const validationItems = report.validation.map(validation => {
-    return `<li><code>${escapeHtml(validation.frameworkId)}</code>: <code>${escapeHtml(validation.url)}</code></li>`
-  }).join('\n')
-
-  return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>Datadog Test Optimization Validation Report</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 32px; color: #1f2933; }
-    main { max-width: 960px; }
-    h1 { font-size: 28px; margin-bottom: 8px; }
-    h2 { font-size: 20px; margin-top: 32px; }
-    li { margin: 8px 0; }
-    code { background: #f4f6f8; border-radius: 4px; padding: 2px 4px; word-break: break-all; }
-  </style>
-</head>
-<body>
-  <main>
-    <h1>Datadog Test Optimization Validation Report</h1>
-    <p>Generated at: ${escapeHtml(report.generatedAt)}</p>
-    <h2>Summary</h2>
-    ${basicReportingSection}
-    ${ciWiringSection}
-    ${advancedFeaturesSection}
-    ${ciDiscoverySection}
-    ${ciCommandCandidatesSection}
-    ${diagnosticSection}
-    <h2>Framework Context</h2>
-    <ul>
-      ${contextItems}
-    </ul>
-    <h2>Validation UI</h2>
-    <ul>
-      ${validationItems}
-    </ul>
-  </main>
-</body>
-</html>
-`
 }
 
 function getCiCommandCandidates (manifest) {
@@ -203,6 +138,30 @@ function getCiCommandCandidates (manifest) {
   }
 
   return candidates
+}
+
+function getStringArray (values) {
+  if (!Array.isArray(values)) return []
+  return values.filter(value => typeof value === 'string')
+}
+
+function getStaticDiagnosisNotes (diagnosis) {
+  const results = Array.isArray(diagnosis?.results) ? diagnosis.results : []
+  const notes = []
+
+  if (results.some(isMissingStaticInitializationResult)) {
+    notes.push(
+      'Static diagnosis reported missing NODE_OPTIONS/dd-trace/ci/init. In this validation report, that is a ' +
+      'CI wiring/static configuration finding, not a direct-initialization Basic Reporting blocker.'
+    )
+  }
+
+  return notes
+}
+
+function isMissingStaticInitializationResult (result) {
+  return result?.title === 'Missing Test Optimization initialization' ||
+    result?.title === 'CI workflows do not show Test Optimization initialization'
 }
 
 function appendMarkdownCiDiscovery (lines, ciDiscovery) {
@@ -222,14 +181,57 @@ function appendMarkdownCiDiscovery (lines, ciDiscovery) {
   lines.push('')
 }
 
+function appendMarkdownStaticDiagnosisNotes (lines, notes) {
+  if (!Array.isArray(notes) || notes.length === 0) return
+
+  lines.push('## Static Diagnosis Notes', '')
+  for (const note of notes) {
+    lines.push(`- ${note}`)
+  }
+  lines.push('')
+}
+
 function appendMarkdownCiCommandCandidates (lines, candidates) {
   if (!Array.isArray(candidates) || candidates.length === 0) return
 
   lines.push('## CI Command Candidates', '')
   for (const candidate of candidates) {
-    lines.push(`- ${candidate.frameworkId}: ${formatCiCommandCandidate(candidate, { markdown: true })}`)
+    lines.push(`- ${candidate.frameworkId}: ${formatCiCommandCandidateSummary(candidate, { markdown: true })}`)
+    for (const detail of formatCiCommandCandidateDetails(candidate, { markdown: true })) {
+      lines.push(`  - ${detail}`)
+    }
   }
   lines.push('')
+}
+
+function appendMarkdownOmittedCommands (lines, report) {
+  const omitted = getStringArray(report.omitted)
+  const omittedTestCommands = Array.isArray(report.omittedTestCommands) ? report.omittedTestCommands : []
+  if (omitted.length === 0 && omittedTestCommands.length === 0) return
+
+  lines.push('## Omitted Test Commands', '')
+  for (const note of omitted) {
+    lines.push(`- ${note}`)
+  }
+  for (const command of omittedTestCommands) {
+    lines.push(`- ${formatOmittedTestCommand(command, { markdown: true })}`)
+  }
+  lines.push('')
+}
+
+function appendMarkdownResultDetails (lines, results) {
+  const details = results.filter(shouldRenderResultDetails)
+  if (details.length === 0) return
+
+  lines.push('## Failed and Blocked Result Details', '')
+  for (const result of details) {
+    lines.push(`### ${result.status.toUpperCase()} ${result.frameworkId} ${result.scenario}`, '')
+    lines.push(result.diagnosis, '')
+    for (const detail of getResultDetailLines(result, { markdown: true })) {
+      lines.push(`- ${detail}`)
+    }
+    lines.push('')
+  }
 }
 
 function appendMarkdownList (lines, label, values) {
@@ -237,36 +239,13 @@ function appendMarkdownList (lines, label, values) {
   lines.push(`- ${label}: ${values.map(value => `\`${value}\``).join(', ')}`)
 }
 
-function renderHtmlCiDiscovery (ciDiscovery) {
-  if (!ciDiscovery) return ''
+function appendMarkdownJsonSection (lines, title, value) {
+  if (value === undefined) return
 
-  return `<h2>CI Discovery</h2>
-    <ul>
-      <li><strong>Method</strong>: <code>${escapeHtml(ciDiscovery.method || 'unknown')}</code></li>
-      ${renderHtmlListItem('Searched', ciDiscovery.searched)}
-      ${renderHtmlListItem('Found', ciDiscovery.found)}
-      ${renderHtmlListItem('Static diagnosis found', ciDiscovery.staticFound)}
-      ${renderHtmlListItem('Warnings', ciDiscovery.warnings)}
-      ${renderHtmlListItem('Contradictions', ciDiscovery.contradictions)}
-      ${renderHtmlListItem('Notes', ciDiscovery.notes)}
-    </ul>`
+  lines.push('', `## ${title}`, '', '```json', JSON.stringify(value, null, 2), '```')
 }
 
-function renderHtmlCiCommandCandidates (candidates) {
-  if (!Array.isArray(candidates) || candidates.length === 0) return ''
-
-  const items = candidates.map(candidate => {
-    return `<li><code>${escapeHtml(candidate.frameworkId)}</code>: ` +
-      `${escapeHtml(formatCiCommandCandidate(candidate))}</li>`
-  }).join('\n')
-
-  return `<h2>CI Command Candidates</h2>
-    <ul>
-      ${items}
-    </ul>`
-}
-
-function formatCiCommandCandidate (candidate, options = {}) {
+function formatCiCommandCandidateSummary (candidate, options = {}) {
   const format = options.markdown
     ? value => `\`${value}\``
     : value => value
@@ -282,18 +261,265 @@ function formatCiCommandCandidate (candidate, options = {}) {
   return parts.length > 0 ? parts.join('; ') : 'CI command metadata was not determined'
 }
 
-function renderHtmlListItem (label, values) {
+function formatCiCommandCandidateDetails (candidate, options = {}) {
+  const details = []
+  const format = options.markdown
+    ? value => `\`${value}\``
+    : value => value
+
+  if (candidate.whySelected) {
+    details.push(`Selected because: ${candidate.whySelected}`)
+  }
+
+  const envSummary = formatCiEnvSummary(candidate.env, { format })
+  if (envSummary) {
+    details.push(`Environment found in CI: ${envSummary}`)
+  }
+
+  const expansion = formatChain(candidate.packageScriptExpansionChain, { format })
+  if (expansion) {
+    details.push(`Package script expansion: ${expansion}`)
+  }
+
+  const toolChain = formatChain(candidate.runnerToolChain, { format })
+  if (toolChain) {
+    details.push(`Runner/tool chain: ${toolChain}`)
+  }
+
+  const setupCommands = formatChain(candidate.setupCommandIds, { format })
+  if (setupCommands) {
+    details.push(`Required setup command ids: ${setupCommands}`)
+  }
+
+  const unresolved = formatChain(candidate.unresolved, { format })
+  if (unresolved) {
+    details.push(`Unresolved replay details: ${unresolved}`)
+  }
+
+  const commandDetails = formatCommandDetails(candidate.commandDetails)
+  if (commandDetails) {
+    details.push(`Command display details: ${commandDetails}`)
+  }
+
+  return details
+}
+
+function formatCiEnvSummary (env, { format }) {
+  if (!env || typeof env !== 'object') return ''
+
+  const parts = []
+  for (const scope of ['workflow', 'job', 'step', 'inherited']) {
+    const values = formatEnvPairs(env[scope], { format })
+    if (values) parts.push(`${scope} ${values}`)
+  }
+  return parts.join('; ')
+}
+
+function formatEnvPairs (env, { format }) {
+  if (!env || typeof env !== 'object') return ''
+
+  const pairs = []
+  for (const [name, value] of Object.entries(env)) {
+    pairs.push(format(`${name}=${value}`))
+  }
+  return pairs.join(', ')
+}
+
+function formatChain (values, { format }) {
   if (!Array.isArray(values) || values.length === 0) return ''
-  const formatted = values.map(value => `<code>${escapeHtml(value)}</code>`).join(', ')
-  return `<li><strong>${escapeHtml(label)}</strong>: ${formatted}</li>`
+  return values.map(value => format(value)).join(' -> ')
+}
+
+function formatCommandDetails (details) {
+  if (!details || typeof details !== 'object') return ''
+
+  const parts = []
+  if (details.runtimeWrapper) parts.push(`runtime wrapper ${details.runtimeWrapper}`)
+  if (details.packageManager) parts.push(`package manager ${details.packageManager}`)
+  if (details.pathAdjusted) parts.push('PATH adjusted')
+  if (details.exactCommandCollapsed) parts.push('display command collapsed runtime plumbing')
+  return parts.join('; ')
+}
+
+function shouldRenderResultDetails (result) {
+  return result.status === 'fail' || result.status === 'error' || result.status === 'blocked'
+}
+
+function getResultDetailLines (result, options = {}) {
+  const evidence = result.evidence || {}
+  const format = options.markdown
+    ? value => `\`${value}\``
+    : value => value
+  const lines = []
+  const command = readResultCommand(result) || getEvidenceCommand(evidence)
+
+  if (command?.command) lines.push(`Command: ${format(command.command)}`)
+  if (command?.cwd) lines.push(`Cwd: ${format(command.cwd)}`)
+  if (command?.exitCode !== undefined) lines.push(`Exit code: ${format(command.exitCode)}`)
+  if (command?.timedOut !== undefined) lines.push(`Timed out: ${format(command.timedOut)}`)
+  if (command?.durationMs !== undefined) lines.push(`Duration ms: ${format(command.durationMs)}`)
+
+  if (Array.isArray(evidence.commandOutputSummary) && evidence.commandOutputSummary.length > 0) {
+    lines.push(`Command output summary: ${formatList(evidence.commandOutputSummary, { format })}`)
+  }
+
+  if (evidence.reason) lines.push(`Reason: ${evidence.reason}`)
+  if (evidence.error) lines.push(`Error: ${format(evidence.error)}`)
+  if (evidence.errorCode) lines.push(`Error code: ${format(evidence.errorCode)}`)
+  if (evidence.errorSyscall) lines.push(`Error syscall: ${format(evidence.errorSyscall)}`)
+  if (evidence.errorAddress) lines.push(`Error address: ${format(evidence.errorAddress)}`)
+  if (Array.isArray(evidence.remediation) && evidence.remediation.length > 0) {
+    lines.push(`Remediation: ${formatList(evidence.remediation, { format })}`)
+  }
+  if (evidence.rerunCommand) lines.push(`Rerun command: ${format(evidence.rerunCommand)}`)
+
+  appendExcerptLine(lines, 'Stdout excerpt', evidence.commandFailure?.stdoutExcerpt, { format })
+  appendExcerptLine(lines, 'Stderr excerpt', evidence.commandFailure?.stderrExcerpt, { format })
+  appendExcerptLine(lines, 'Debug lines', evidence.debugRerun?.debugLines, { format })
+  appendExcerptLine(lines, 'Debug stdout excerpt', evidence.debugRerun?.stdoutExcerpt, { format })
+  appendExcerptLine(lines, 'Debug stderr excerpt', evidence.debugRerun?.stderrExcerpt, { format })
+  appendSetupFailureLines(lines, evidence, { format })
+  appendEventFailureLines(lines, evidence, { format })
+  appendInitializationProbeLines(lines, evidence.initializationProbe, { format })
+  appendMonorepoFindingLines(lines, evidence.monorepoFindings, { format })
+
+  if (evidence.recommendation) {
+    lines.push(`Recommendation: ${evidence.recommendation}`)
+  }
+  if (Array.isArray(result.artifacts) && result.artifacts.length > 0) {
+    lines.push(`Artifacts: ${formatList(result.artifacts, { format })}`)
+  }
+
+  return lines.length > 0 ? lines : ['No additional structured evidence was recorded.']
+}
+
+function readResultCommand (result) {
+  const commandArtifact = (result.artifacts || []).find(artifact => path.basename(artifact) === 'command.json')
+  if (!commandArtifact) return
+
+  try {
+    const artifact = JSON.parse(fs.readFileSync(commandArtifact, 'utf8'))
+    return {
+      command: sanitizeString(artifact.displayCommand || artifact.command),
+      cwd: artifact.cwd,
+      durationMs: artifact.durationMs,
+      exitCode: artifact.exitCode,
+      timedOut: artifact.timedOut,
+    }
+  } catch {}
+}
+
+function getEvidenceCommand (evidence) {
+  const setupCommand = evidence.setupCommand
+  if (!setupCommand) return
+
+  return {
+    command: sanitizeString(setupCommand.command),
+    cwd: setupCommand.cwd,
+    exitCode: setupCommand.exitCode,
+    timedOut: setupCommand.timedOut,
+  }
+}
+
+function appendExcerptLine (lines, label, values, { format }) {
+  if (!Array.isArray(values) || values.length === 0) return
+  lines.push(`${label}: ${formatList(values, { format })}`)
+}
+
+function appendSetupFailureLines (lines, evidence, { format }) {
+  const setupCommand = evidence.setupCommand
+  if (!setupCommand) return
+
+  lines.push(`Setup failed: ${setupCommand.description || setupCommand.id || setupCommand.command}`)
+  if (setupCommand.stdoutSummary) {
+    lines.push(`Setup stdout excerpt: ${format(setupCommand.stdoutSummary)}`)
+  }
+  if (setupCommand.stderrSummary) {
+    lines.push(`Setup stderr excerpt: ${format(setupCommand.stderrSummary)}`)
+  }
+}
+
+function appendEventFailureLines (lines, evidence, { format }) {
+  const failure = evidence.eventLevelFailure
+  if (!failure) return
+
+  if (failure.kind) lines.push(`Event failure kind: ${format(failure.kind)}`)
+  if (Array.isArray(failure.missingLevels) && failure.missingLevels.length > 0) {
+    lines.push(`Missing event levels: ${formatList(failure.missingLevels, { format })}`)
+  }
+  if (failure.recommendation) {
+    lines.push(`Event recommendation: ${failure.recommendation}`)
+  }
+}
+
+function appendInitializationProbeLines (lines, probe, { format }) {
+  if (!probe || probe.ran !== true) return
+
+  lines.push(`NODE_OPTIONS probe: reached Node process ${format(probe.reachedAnyNodeProcess)}, ` +
+    `reached test runner ${format(probe.reachedTestRunnerProcess)}, processes ${format(probe.processCount || 0)}`)
+  appendToolSignalLine(lines, 'Probe test runner signals', probe.testRunnerSignals, { format })
+  appendToolSignalLine(lines, 'Probe wrapper signals', probe.wrapperSignals, { format })
+  appendToolSignalLine(lines, 'Probe package manager signals', probe.packageManagerSignals, { format })
+  if (probe.recordsPath) lines.push(`Probe records: ${format(probe.recordsPath)}`)
+}
+
+function appendToolSignalLine (lines, label, signals, { format }) {
+  if (!Array.isArray(signals) || signals.length === 0) return
+
+  const values = signals.map(signal => {
+    const parts = [signal.name, signal.pid && `pid ${signal.pid}`, signal.cwd && `cwd ${signal.cwd}`].filter(Boolean)
+    return parts.join(' ')
+  })
+  lines.push(`${label}: ${formatList(values, { format })}`)
+}
+
+function appendMonorepoFindingLines (lines, findings, { format }) {
+  if (!Array.isArray(findings) || findings.length === 0) return
+
+  for (const finding of findings) {
+    const parts = [
+      finding.id,
+      finding.tool && `tool ${finding.tool}`,
+      finding.reason,
+      finding.recommendation && `Recommendation: ${finding.recommendation}`,
+    ].filter(Boolean)
+    lines.push(`Monorepo finding: ${formatList(parts, { format })}`)
+  }
+}
+
+function formatOmittedTestCommand (command, options = {}) {
+  const format = options.markdown
+    ? value => `\`${value}\``
+    : value => value
+  const source = command.source || {}
+  const sourceParts = [
+    source.provider,
+    source.file,
+    source.workflow && `workflow ${source.workflow}`,
+    source.job && `job ${source.job}`,
+    source.step && `step ${source.step}`,
+  ].filter(Boolean)
+  const parts = [
+    command.command && `command ${format(command.command)}`,
+    command.classification && `classification ${format(command.classification)}`,
+    command.reason,
+    command.impact,
+    sourceParts.length > 0 && `source ${sourceParts.join('; ')}`,
+  ].filter(Boolean)
+
+  return parts.join('; ')
+}
+
+function formatList (values, { format }) {
+  return values.map(value => format(value)).join(', ')
 }
 
 function getKeyArtifacts (artifacts) {
   return [
-    ['HTML report', artifacts.htmlFileUrl],
-    ['Validation URLs', artifacts.validationUrls],
-    ['JSON report', artifacts.reportJson],
+    ['Markdown report', artifacts.report],
     ['Manifest', artifacts.manifest],
+    ['Normalized intake payloads', artifacts.normalizedPayloads],
+    ['Sanitized intake requests', artifacts.requests],
     ['Static diagnosis', artifacts.staticDiagnosis],
   ]
 }
@@ -313,7 +539,7 @@ function formatFrameworkContext (framework, options = {}) {
   ].join('; ')
 }
 
-function renderConsoleSummary (results, out) {
+function renderConsoleSummary (results, reportPath) {
   const lines = ['', 'Datadog Test Optimization validation summary:']
   const basicReportingResults = getBasicReportingResults(results)
   const ciWiringResults = getCiWiringResults(results)
@@ -350,8 +576,9 @@ function renderConsoleSummary (results, out) {
   }
 
   lines.push(
-    `Artifacts: ${out}`,
-    `Validation URLs: ${path.join(out, 'validation-urls.txt')}`
+    `Detailed report: ${reportPath}`,
+    `Run artifacts: ${path.dirname(reportPath)}`,
+    `Sharing warning: ${SHARING_WARNING}`
   )
   return lines.join('\n')
 }
@@ -411,20 +638,6 @@ function appendMarkdownResultSection (lines, title, results) {
   lines.push('')
 }
 
-function renderHtmlResultSection (title, results) {
-  if (results.length === 0) return ''
-
-  const items = results.map(result => {
-    return `<li><strong>${escapeHtml(result.status.toUpperCase())}</strong> ${escapeHtml(result.frameworkId)} ` +
-      `${escapeHtml(result.scenario)} - ${escapeHtml(result.diagnosis)}</li>`
-  }).join('\n')
-
-  return `<h3>${escapeHtml(title)}</h3>
-    <ul>
-      ${items}
-    </ul>`
-}
-
 function isDiagnosticOnlyResult (result) {
   if (result.scenario !== 'all') return false
   return result.evidence?.frameworkStatus ||
@@ -436,15 +649,6 @@ function stripPrivateFields (manifest) {
   const copy = { ...manifest }
   delete copy.__path
   return copy
-}
-
-function escapeHtml (value) {
-  return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll('\'', '&#39;')
 }
 
 module.exports = { writeReport }

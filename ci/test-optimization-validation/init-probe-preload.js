@@ -6,6 +6,8 @@ const fs = require('node:fs')
 const Module = require('node:module')
 const path = require('node:path')
 
+const { sanitizeForReport } = require('./redaction')
+
 const PROBE_FILE_ENV = 'DD_TEST_OPTIMIZATION_INIT_PROBE_FILE'
 const probeFile = process.env[PROBE_FILE_ENV]
 const seenModuleLoads = new Set()
@@ -142,11 +144,12 @@ function detectTool (value) {
 function writeRecord (type, data) {
   try {
     fs.mkdirSync(path.dirname(probeFile), { recursive: true })
-    fs.appendFileSync(probeFile, `${JSON.stringify({
+    const record = sanitizeForReport({
       type,
       time: new Date().toISOString(),
       ...data,
-    })}\n`)
+    })
+    fs.appendFileSync(probeFile, `${JSON.stringify(record)}\n`)
   } catch {
     // The probe must never change test behavior.
   }

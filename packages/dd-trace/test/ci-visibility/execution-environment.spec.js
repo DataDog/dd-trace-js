@@ -32,7 +32,7 @@ describe('test optimization execution environment diagnosis', () => {
     assert.strictEqual(result.evidence.errorSyscall, 'listen')
     assert.deepStrictEqual(result.evidence.remediation, [
       'Rerun the validator command shown below from the host shell',
-      'In Codex, approve running that single validator command outside the sandbox',
+      'Rerun in an agent mode that allows localhost sockets or with sandbox restrictions disabled for this command',
       'Rerun in CI',
     ])
   })

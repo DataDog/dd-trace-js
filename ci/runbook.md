@@ -44,7 +44,16 @@ commands fail.
   Reporting did not pass or CI wiring could not be reproduced locally
 - advanced feature results for each framework whose Basic Reporting passed
 - a concise console report ordered as Basic Reporting, CI wiring, then advanced features
-- any `ci/test/validation#pako:...` UI path or paths emitted by the validator
+- `./dd-test-optimization-validation-results/report.md`
+
+## Privacy and Sharing Warning
+
+The generated Markdown report and run artifacts, including low-level intake request artifacts, are
+local/internal diagnostic outputs. They may include repository paths, package names, CI
+workflow/job/step names, commands, runner/tool chains, validation payload JSON, and sanitized
+environment variable structure. Secret-like values are redacted on a best-effort basis, but these
+files are not public-shareable as-is. Review and redact them before sharing outside trusted
+channels.
 
 ## Happy Path
 
@@ -67,7 +76,8 @@ commands fail.
 10. Delete temporary files.
 11. Update `./dd-test-optimization-validation-manifest.json` with generated test strategies.
 12. Run `dd-trace/ci/validate-test-optimization`.
-13. Report Basic Reporting, CI wiring, and advanced feature results separately, including the UI path.
+13. Report Basic Reporting, CI wiring, and advanced feature results separately, including the
+    detailed Markdown report path.
 
 ## Command Roles
 
@@ -78,12 +88,17 @@ Use these roles consistently. Most bad manifests blur these fields.
 | `existingTestCommand` | Small real project test command used for preflight and direct-initialization Basic Reporting. Prefer the test command selected from CI, but remove CI Datadog initialization. | No. Keep it Datadog-clean. | No. Generated files are not present when Basic Reporting starts. |
 | `preflight` | The dd-trace-less result of `existingTestCommand`. | No. | No. |
 | `forcedLocalCommand` | Optional direct runner command for Basic Reporting when `existingTestCommand` is too broad or wrapper-heavy. | No. The validator adds the required Datadog initialization. | No. Generated files are not present when Basic Reporting starts. |
-| `ciWiringCommand` | Replay of the CI test step to prove whether CI-provided initialization reaches the final test process. | Yes, but only when the CI workflow configured those variables. Preserve CI `NODE_OPTIONS` and Datadog env here. | No. This must represent the CI job's real test command. |
+| `ciWiringCommand` | Replay of the CI test step to prove whether CI-provided initialization reaches the final test process. | Yes, but only when the CI workflow configured those variables. See CI evidence note below. | No. This must represent the CI job's real test command. |
 | `generatedTestStrategy.scenarios[*].runCommand` | Commands for temporary generated tests used by EFD, ATR, and Test Management checks. | No. The validator adds scenario-specific Datadog initialization. | Yes. These commands are the only ones that may target generated validation files. |
 
 For every runnable framework, `existingTestCommand` and `preflight` are required. `forcedLocalCommand`
 is optional and must target an existing, stable project test command or direct project runner command;
 it must not depend on generated validation files.
+
+During live validation, the validator may overlay fake-intake transport variables and
+noise-suppression variables on commands it runs. Those overlays are diagnostic plumbing for the
+local mock intake; they are not customer CI recommendations and must not be interpreted as proof
+that the CI job had those settings.
 
 ## Optional Target Framework
 
@@ -182,10 +197,10 @@ The deterministic validator's direct-initialization scenarios may inject
 `NODE_OPTIONS=-r dd-trace/ci/init`, and for Vitest may also inject `dd-trace/register.js`, while
 redirecting traffic to the local fake intake.
 
-Direct-initialization scenarios also suppress Datadog side channels that are not part of this
-validation.
-This keeps the fake intake focused on Test Optimization test-cycle events and the scenario-specific
-endpoints the validator intentionally enables:
+Live validation also suppresses Datadog side channels that are not part of this validation. These
+suppressions apply to direct-initialization checks and CI wiring replay; they do not initialize
+`dd-trace` or make CI wiring pass. They only keep the fake intake focused on Test Optimization
+test-cycle events and the scenario-specific endpoints the validator intentionally enables:
 
 - `DD_INSTRUMENTATION_TELEMETRY_ENABLED=false`
 - `DD_CIVISIBILITY_GIT_UPLOAD_ENABLED=false`
@@ -193,11 +208,11 @@ endpoints the validator intentionally enables:
 - `DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED=false`
 - `DD_TEST_FAILED_TEST_REPLAY_ENABLED=false`
 
-Do not treat those direct-initialization suppressions as customer CI recommendations. In real CI,
-git upload and impacted-test detection may be required for normal Test Optimization features. In
-this validator, they are disabled because they can create unrelated intake traffic, large git
-packfile uploads, extra debugger/log endpoints, or impacted-test behavior that distracts from the
-question being validated.
+Do not treat those validator suppressions as customer CI recommendations. In real CI, git upload
+and impacted-test detection may be required for normal Test Optimization features. In this
+validator, they are disabled because they can create unrelated intake traffic, large git packfile
+uploads, extra debugger/log endpoints, or impacted-test behavior that distracts from the question
+being validated.
 
 Direct-initialization validation proves that the framework and `dd-trace` can report when configured
 correctly. It does not prove that the customer's CI workflow is wired correctly.
@@ -419,10 +434,11 @@ Recognize these CI systems and extract test-command evidence when practical:
   `dd-trace/ci/init`, `dd-trace/register.js`, `NODE_OPTIONS`, or Datadog-specific environment
   variables to them manually. These commands prove that the selected tests run before Datadog is
   added by the validator.
-- For CI wiring commands, preserve `NODE_OPTIONS` and Datadog-specific environment variables exactly
-  when they are configured by the CI workflow. If a secret value is needed for local fake-intake
-  replay, use an explicit safe dummy value, not a shell placeholder like `${SECRET_NAME}`, and
-  record the original secret variable name in CI metadata.
+- For CI wiring commands, record `NODE_OPTIONS` and Datadog-specific environment variables exactly
+  as the CI workflow configured them, except secret values must be replaced with explicit safe dummy
+  values, not shell placeholders like `${SECRET_NAME}`. Record the original secret variable names in
+  CI metadata. The validator may still add fake-intake transport and noise-suppression variables at
+  execution time; those validator overlays are diagnostic plumbing, not customer CI configuration.
 - Schema path fields must be absolute: `repository.root`, `project.root`, `project.packageJson`,
   entries in `project.configFiles`, every command `cwd`, generated file paths,
   `generatedTestStrategy.cleanupPaths`, and generated test identity `file` values. Command
@@ -488,7 +504,16 @@ path you are documenting:
 
 - For CI wiring validation, preserve the CI-defined value exactly as configuration evidence, except
   for replacing secret expansions with placeholders and recording the original variable names. Do
-  not move the preload to a different process or rewrite the command into a cleaner local shape.
+  not move the preload to a different process or rewrite the command into a cleaner local shape. If
+  the CI step uses a simple leading shell assignment such as
+  `NODE_OPTIONS="-r dd-trace/ci/init" pnpm test`, and representing that value in
+  `ciWiringCommand.env.NODE_OPTIONS` preserves the same process semantics, prefer that structured
+  representation. It lets the validator's `NODE_OPTIONS` probe temporarily replace the Datadog
+  preload and check whether a preload reaches the final test runner. If the inline assignment cannot
+  be represented safely, keep the shell command exact and record that probe limitation in `notes` or
+  `ciWiring.unresolved`.
+  The validator may overlay fake-intake transport and noise-suppression variables when it executes
+  this command. Do not copy those validator-added values back into the CI evidence.
 - For direct-initialization validation, do not use a package script with inline `NODE_OPTIONS` unless there
   is no safer command shape. Inline `NODE_OPTIONS` can shadow or interfere with the validator's
   injected Test Optimization preload. Prefer a direct runner command and move only
@@ -836,7 +861,7 @@ and record the expected runtime and the observed failure.
 
 Respect the repository's declared package-manager version before classifying a command as broken.
 If `package.json` declares `packageManager`, verify that the selected command resolves that package
-manager to the declared version, especially when using Codex-managed runtimes, Volta, Mise, asdf,
+manager to the declared version, especially when using agent-managed runtimes, Volta, Mise, asdf,
 nvm, fnm, or Corepack. A command that passes without Datadog can still fail under validation if
 `NODE_OPTIONS` reaches a package-manager wrapper from a different toolchain instead of the final
 test runner. When a runtime manager is needed only to select Node, avoid `runtime-manager -- pnpm`
@@ -929,15 +954,20 @@ The validator separates direct-initialization capability from CI wiring when the
 
 - Basic Reporting: injects Test Optimization initialization directly into the selected command and
   proves the repository/framework can emit the required event hierarchy when configured correctly.
-  It also sets `DD_CIVISIBILITY_GIT_UPLOAD_ENABLED=false` and other validator suppressions so git
-  metadata upload, impacted-test detection, telemetry, and failed-test replay do not distract the
-  fake-intake diagnosis.
-- CI wiring: runs `ciWiringCommand` with fake-intake transport overrides only. It does not add
-  `dd-trace/ci/init`, `dd-trace/register.js`, `DD_CIVISIBILITY_ENABLED`, or `NODE_OPTIONS`. This is
-  only meaningful after Basic Reporting passes. When this path runs tests but emits no Test
-  Optimization events, the validator may also run a lightweight `NODE_OPTIONS` preload probe to
-  record whether initialization reaches only an intermediate wrapper, such as Nx, Turbo, Lage, npm,
-  pnpm, or Yarn, or reaches the final Jest/Vitest/Mocha/etc. process.
+  Like every live-validation scenario, it also uses validator suppressions such as
+  `DD_CIVISIBILITY_GIT_UPLOAD_ENABLED=false` so git metadata upload, impacted-test detection,
+  telemetry, and failed-test replay do not distract the fake-intake diagnosis.
+- CI wiring: runs `ciWiringCommand` with the CI-provided initialization recorded in the manifest,
+  plus fake-intake transport overrides and validator noise suppressions. It does not add
+  `dd-trace/ci/init`, `dd-trace/register.js`, `DD_CIVISIBILITY_ENABLED`, or `NODE_OPTIONS` beyond
+  what the manifest says CI configured. This is only meaningful after Basic Reporting passes. The
+  fake-intake and suppression overlays are diagnostic plumbing, not customer CI recommendations; do
+  not treat them as evidence that CI had those variables. The suppressions disable unrelated side
+  channels such as git upload, telemetry, impacted-test detection, and failed-test replay so the
+  fake intake stays readable. When this path runs tests but emits no Test Optimization events, the
+  validator may also run a lightweight
+  `NODE_OPTIONS` preload probe to record whether a preload can reach only an intermediate wrapper,
+  such as Nx, Turbo, Lage, npm, pnpm, or Yarn, or reaches the final Jest/Vitest/Mocha/etc. process.
 - Advanced features: EFD, ATR, and Test Management run after Basic Reporting passes.
 
 Therefore:
@@ -996,11 +1026,11 @@ The validator is responsible for:
 8. Reading and decoding intake payloads.
 9. Evaluating Basic Reporting, CI wiring, EFD, ATR, and Test Management behavior in that order.
 10. Cleaning up temporary validation files.
-11. Writing a validation report, validation UI payloads, and artifacts.
+11. Writing a detailed Markdown validation report and run artifacts.
 
 Manifest generation and static diagnosis can run in a restricted agent sandbox. Live validation
 cannot: the local mock intake must be allowed to bind to `127.0.0.1`, and the test process must be
-allowed to connect back to that localhost socket. Some Codex/agent modes block one or both
+allowed to connect back to that localhost socket. Some agent sandbox modes block one or both
 directions.
 
 If the validator reports that the fake intake failed with `EPERM` or `EACCES` on `listen` or
@@ -1041,18 +1071,26 @@ If the validator itself cannot run, stop and report:
 
 ## Phase 3: Report Results
 
-When validation finishes, report the result to the user.
+When validation finishes, show a concise summary in the console or local agent response, then link
+to the detailed Markdown report at `./dd-test-optimization-validation-results/report.md`.
 
-Include:
+Treat the generated report and artifacts as local/internal diagnostics. They are useful for
+debugging, but they can reveal repository and CI metadata even after secret-like values are redacted.
+Tell the user to review and redact them before external sharing.
+
+The console or local agent response should include:
 
 - Path to `./dd-test-optimization-validation-manifest.json`
-- Path to `./dd-test-optimization-validation-results`
+- Path to `./dd-test-optimization-validation-results/report.md`
 - Validator exit code
 - Pass/fail/skip summary for direct-initialization Basic Reporting by framework.
 - Pass/fail/skip summary for CI wiring by framework or CI job. If CI wiring was skipped, report
   whether Basic Reporting failed first, the provider was unsupported, workflow logic was unresolved,
   CI config was missing, or local replay was unsafe.
 - Pass/fail/skip summary for advanced feature scenarios.
+
+The detailed Markdown report should contain the full diagnostic context:
+
 - Any frameworks that were detected but not runnable
 - Any frameworks that were runnable but unsupported by the validator
 - Any test commands that were discovered but intentionally omitted from live validation, including
@@ -1073,8 +1111,8 @@ Include:
 - Any unresolved CI expressions, includes, outputs, secrets, shared libraries, orb expansions,
   dynamic pipeline generation, or matrix values that affected replay confidence
 - Relevant stdout/stderr excerpts selected by the validator
-- Path to `validation-urls.txt`
-- The relative `ci/test/validation#pako:...` UI path or paths emitted by the validator
+- An embedded `Validation Payloads JSON` section for each framework payload
+- Embedded `Execution Results JSON` and `Normalized Manifest JSON` sections
 - Artifact paths for detailed inspection
 
 Use this diagnosis language:

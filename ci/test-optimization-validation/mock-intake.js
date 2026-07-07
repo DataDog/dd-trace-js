@@ -9,6 +9,7 @@ const path = require('path')
 const zlib = require('zlib')
 
 const { decodeBody } = require('./payload-decoder')
+const { sanitizeForReport } = require('./redaction')
 
 const DEFAULT_SETTINGS = {
   code_coverage: false,
@@ -172,7 +173,10 @@ class MockIntake {
     const intakeDir = path.join(this.out, 'intake')
     fs.mkdirSync(intakeDir, { recursive: true })
     const requestsPath = path.join(intakeDir, 'requests.ndjson')
-    fs.writeFileSync(requestsPath, this.requests.map(request => JSON.stringify(request)).join('\n') + '\n')
+    fs.writeFileSync(
+      requestsPath,
+      this.requests.map(request => JSON.stringify(sanitizeForReport(request))).join('\n') + '\n'
+    )
     return { requestsPath }
   }
 }

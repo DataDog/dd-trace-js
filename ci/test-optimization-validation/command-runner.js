@@ -6,6 +6,8 @@ const fs = require('fs')
 const path = require('path')
 const { spawn } = require('child_process')
 
+const { sanitizeString } = require('./redaction')
+
 const INIT_PATH = path.resolve(__dirname, '..', 'init.js')
 const REGISTER_PATH = path.resolve(__dirname, '..', '..', 'register.js')
 const CLEAN_ENV_ALLOWLIST = new Set([
@@ -27,6 +29,15 @@ const CLEAN_ENV_ALLOWLIST = new Set([
   'WINDIR',
   'windir',
 ])
+const VALIDATION_SUPPRESSION_ENV = {
+  DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+  // Live validation only needs test-cycle events and explicitly configured scenario endpoints.
+  // Extra side channels can produce noisy fake-intake traffic or race the final test event flush.
+  DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
+  DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED: 'false',
+  DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: 'false',
+  DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false',
+}
 
 function runCommand (command, { env = {}, envMode = 'inherit', outDir, label, verbose = false } = {}) {
   const startedAt = Date.now()
@@ -108,11 +119,11 @@ function runCommand (command, { env = {}, envMode = 'inherit', outDir, label, ve
       result.artifacts.stderr = path.join(outDir, 'stderr.txt')
       result.artifacts.command = path.join(outDir, 'command.json')
 
-      fs.writeFileSync(result.artifacts.stdout, result.stdout)
-      fs.writeFileSync(result.artifacts.stderr, result.stderr)
+      fs.writeFileSync(result.artifacts.stdout, sanitizeString(result.stdout))
+      fs.writeFileSync(result.artifacts.stderr, sanitizeString(result.stderr))
       fs.writeFileSync(result.artifacts.command, `${JSON.stringify({
-        command: result.command,
-        displayCommand: result.displayCommand,
+        command: sanitizeString(result.command),
+        displayCommand: sanitizeString(result.displayCommand),
         commandDetails: result.commandDetails,
         cwd: result.cwd,
         exitCode: result.exitCode,
@@ -142,13 +153,7 @@ function buildDatadogEnv ({ intake, scenario, framework }) {
     DD_TRACE_AGENT_URL: `http://127.0.0.1:${intake.port}`,
     DD_CIVISIBILITY_AGENTLESS_ENABLED: '0',
     DD_CIVISIBILITY_ENABLED: '1',
-    DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
-    // Live validation only needs test-cycle events and explicitly configured scenario endpoints.
-    // Extra side channels can produce noisy fake-intake traffic or race the final test event flush.
-    DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
-    DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED: 'false',
-    DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: 'false',
-    DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false',
+    ...VALIDATION_SUPPRESSION_ENV,
     DD_SERVICE: 'dd-test-optimization-validation',
     DD_ENV: 'local-validation',
     DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
@@ -162,7 +167,7 @@ function buildCiWiringEnv ({ intake }) {
     DD_TRACE_AGENT_PORT: String(intake.port),
     DD_TRACE_AGENT_URL: `http://127.0.0.1:${intake.port}`,
     DD_CIVISIBILITY_AGENTLESS_URL: `http://127.0.0.1:${intake.port}`,
-    DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'false',
+    ...VALIDATION_SUPPRESSION_ENV,
   }
 }
 

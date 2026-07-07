@@ -58,9 +58,9 @@ describe('test optimization CI wiring validation', () => {
 
       assert.strictEqual(result.status, 'fail')
       assert.strictEqual(result.evidence.commandExitCode, 0)
-      assert.match(result.diagnosis, /identified the test command and confirmed that it runs tests/)
-      assert.match(result.diagnosis, /initialization configured by the CI job/)
-      assert.match(result.diagnosis, /required Datadog initialization applied directly/)
+      assert.match(result.diagnosis, /test command used by the CI job was identified and ran tests/)
+      assert.match(result.diagnosis, /environment and setup described by the CI job/)
+      assert.match(result.diagnosis, /required Datadog initialization directly/)
       assert.deepStrictEqual(result.evidence.forcedLocalBasicReporting, {
         ran: true,
         status: 'pass',
@@ -69,6 +69,50 @@ describe('test optimization CI wiring validation', () => {
     } finally {
       restoreEnv('NODE_OPTIONS', originalNodeOptions)
       restoreEnv('DD_CIVISIBILITY_ENABLED', originalCiVisibilityEnabled)
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
+
+  it('redacts secret-like event data in CI wiring events artifacts', async () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
+    const intake = {
+      port: 8126,
+      requests: [
+        testIntakeRequest({
+          API_KEY: 'ci-wiring-event-api-key-secret',
+          command: 'TOKEN=ci-wiring-event-token-secret npm test',
+          message: 'SECRET=ci-wiring-event-secret',
+        }),
+      ],
+      configure () {},
+      resetRequests () {},
+    }
+
+    try {
+      await runCiWiring({
+        framework: {
+          id: 'vitest:root',
+          framework: 'vitest',
+          ciWiringCommand: {
+            cwd: out,
+            argv: [process.execPath, '-e', 'console.log("no tests selected")'],
+          },
+        },
+        intake,
+        out,
+        options: { verbose: false },
+      })
+
+      const events = fs.readFileSync(path.join(out, 'runs', 'vitest-root', 'ci-wiring', 'events.ndjson'), 'utf8')
+      assert.match(events, /<redacted>/)
+      for (const secret of [
+        'ci-wiring-event-api-key-secret',
+        'ci-wiring-event-token-secret',
+        'ci-wiring-event-secret',
+      ]) {
+        assert.doesNotMatch(events, new RegExp(secret))
+      }
+    } finally {
       fs.rmSync(out, { recursive: true, force: true })
     }
   })
@@ -134,7 +178,7 @@ describe('test optimization CI wiring validation', () => {
       assert.strictEqual(result.evidence.initializationProbe.reachedAnyNodeProcess, true)
       assert.strictEqual(result.evidence.initializationProbe.reachedTestRunnerProcess, false)
       assert.deepStrictEqual(result.evidence.initializationProbe.wrapperSignals.map(signal => signal.name), ['nx'])
-      assert.match(result.diagnosis, /initialization probe reached nx/)
+      assert.match(result.diagnosis, /NODE_OPTIONS probe reached nx/)
       assert.match(result.diagnosis, /did not appear to reach a Jest process/)
       assert.strictEqual(result.evidence.monorepoFindings[0].id, 'nx-executor-env-forwarding')
       assert.strictEqual(result.evidence.monorepoFindings.at(-1).id, 'node-options-not-observed-in-test-runner')
@@ -174,8 +218,50 @@ describe('test optimization CI wiring validation', () => {
       })
 
       assert.strictEqual(result.status, 'fail')
-      assert.match(result.diagnosis, /identified the test command and confirmed that it runs tests/)
-      assert.match(result.diagnosis, /required Datadog initialization applied directly/)
+      assert.match(result.diagnosis, /test command used by the CI job was identified and ran tests/)
+      assert.match(result.diagnosis, /required Datadog initialization directly/)
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
+
+  it('probes CI wiring when test output shows failing tests', async () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
+    const intake = {
+      port: 8126,
+      requests: [],
+      configure () {},
+      resetRequests () {
+        this.requests = []
+      },
+    }
+
+    try {
+      const result = await runCiWiring({
+        framework: {
+          id: 'vitest:root',
+          framework: 'vitest',
+          ciWiringCommand: {
+            cwd: out,
+            argv: [process.execPath, '-e', 'console.log("Tests  1 failed | 2 passed (3)"); process.exit(1)'],
+          },
+        },
+        intake,
+        out,
+        options: { verbose: false },
+        basicResult: {
+          status: 'pass',
+          diagnosis: 'Basic reporting emitted session, module, suite, and test events.',
+        },
+      })
+
+      assert.strictEqual(result.status, 'fail')
+      assert.strictEqual(result.evidence.commandExitCode, 1)
+      assert.match(result.diagnosis, /test command used by the CI job was identified and ran tests/)
+      assert.match(result.diagnosis, /required Datadog initialization directly/)
+      assert.strictEqual(result.evidence.initializationProbe.ran, true)
+      assert.strictEqual(result.evidence.initializationProbe.reachedAnyNodeProcess, true)
+      assert.strictEqual(result.evidence.initializationProbe.reachedTestRunnerProcess, false)
     } finally {
       fs.rmSync(out, { recursive: true, force: true })
     }
@@ -187,5 +273,28 @@ function restoreEnv (name, value) {
     delete process.env[name]
   } else {
     process.env[name] = value
+  }
+}
+
+function testIntakeRequest (meta) {
+  return {
+    method: 'POST',
+    url: '/api/v2/citestcycle',
+    payload: {
+      events: [
+        {
+          type: 'test',
+          content: {
+            name: 'example test',
+            meta: {
+              'test.name': 'example test',
+              'test.status': 'pass',
+              ...meta,
+            },
+            metrics: {},
+          },
+        },
+      ],
+    },
   }
 }

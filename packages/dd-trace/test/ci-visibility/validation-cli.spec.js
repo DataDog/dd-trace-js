@@ -13,6 +13,13 @@ const {
   parseArgs,
 } = require('../../../../ci/test-optimization-validation/cli')
 
+function readMarkdownJsonSection (markdown, title) {
+  const pattern = new RegExp(`## ${title}\\n\\n\`\`\`json\\n([\\s\\S]*?)\\n\`\`\``)
+  const match = pattern.exec(markdown)
+  assert.ok(match, `Expected ${title} section`)
+  return JSON.parse(match[1])
+}
+
 describe('test optimization validation cli', () => {
   it('normalizes copied framework targets with a trailing colon', () => {
     assert.strictEqual(normalizeFrameworkTarget(' vitest:root-unit: '), 'vitest:root-unit')
@@ -109,19 +116,24 @@ describe('test optimization validation cli', () => {
       try {
         await main(['--manifest', manifestPath, '--out', out])
 
-        const report = JSON.parse(fs.readFileSync(path.join(out, 'report.json'), 'utf8'))
-        const validationPayloads = JSON.parse(fs.readFileSync(path.join(out, 'validation-payloads.json'), 'utf8'))
+        const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
+        const reportResults = readMarkdownJsonSection(markdown, 'Execution Results JSON')
+        const validationPayloads = readMarkdownJsonSection(markdown, 'Validation Payloads JSON')
         const summary = logs.join('\n')
 
         assert.strictEqual(process.exitCode, 1)
-        assert.strictEqual(report.results[0].status, 'blocked')
-        assert.strictEqual(report.results[0].evidence.blockedByExecutionEnvironment, true)
-        assert.strictEqual(report.results[0].evidence.errorCode, code)
+        assert.strictEqual(reportResults[0].status, 'blocked')
+        assert.strictEqual(reportResults[0].evidence.blockedByExecutionEnvironment, true)
+        assert.strictEqual(reportResults[0].evidence.errorCode, code)
         assert.strictEqual(validationPayloads[0].payload.status, 'unknown')
         assert.strictEqual(validationPayloads[0].payload.checks[0].id, 'execution-environment')
         assert.strictEqual(validationPayloads[0].payload.checks[0].status, 'unknown')
         assert.match(summary, /environment blocks localhost sockets/)
         assert.match(summary, /Rerun the validator outside the restricted sandbox/)
+        assert.match(summary, /Detailed report: .*report\.md/)
+        assert.strictEqual(fs.existsSync(path.join(out, 'report.json')), false)
+        assert.strictEqual(fs.existsSync(path.join(out, 'report.html')), false)
+        assert.strictEqual(fs.existsSync(path.join(out, 'validation-payloads.json')), false)
       } finally {
         console.log = originalLog
         process.exitCode = originalExitCode

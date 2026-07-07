@@ -66,8 +66,7 @@ describe('test optimization validation payload', () => {
         },
       ],
       artifacts: {
-        htmlFileUrl: 'file:///tmp/report.html',
-        htmlPath: '/tmp/report.html',
+        reportPath: '/tmp/report.md',
       },
     })
 
@@ -96,6 +95,9 @@ describe('test optimization validation payload', () => {
       'run-tests',
       'check-events',
     ])
+    assert.deepStrictEqual(payload.artifacts, {
+      reportPath: '/tmp/report.md',
+    })
     assert.deepStrictEqual(payload.framework, {
       id: 'mocha',
       name: 'Mocha',
@@ -148,8 +150,7 @@ describe('test optimization validation payload', () => {
           },
         ],
         artifacts: {
-          htmlFileUrl: 'file:///tmp/report.html',
-          htmlPath: '/tmp/report.html',
+          reportPath: '/tmp/report.md',
         },
       })
 
@@ -199,7 +200,8 @@ describe('test optimization validation payload', () => {
             errorAddress: '127.0.0.1',
             remediation: [
               'Rerun the validator command shown below from the host shell',
-              'In Codex, approve running that single validator command outside the sandbox',
+              'Rerun in an agent mode that allows localhost sockets or with sandbox restrictions disabled for ' +
+                'this command',
               'Rerun in CI',
             ],
             rerunCommand: 'node /repo/node_modules/dd-trace/ci/validate-test-optimization.js --manifest manifest.json',
@@ -208,8 +210,7 @@ describe('test optimization validation payload', () => {
         },
       ],
       artifacts: {
-        htmlFileUrl: 'file:///tmp/report.html',
-        htmlPath: '/tmp/report.html',
+        reportPath: '/tmp/report.md',
       },
     })
 
@@ -220,7 +221,7 @@ describe('test optimization validation payload', () => {
     assert.strictEqual(payload.checks[0].reason, reason)
     assert.deepStrictEqual(payload.checks[0].remediation, [
       'Rerun the validator command shown below from the host shell',
-      'In Codex, approve running that single validator command outside the sandbox',
+      'Rerun in an agent mode that allows localhost sockets or with sandbox restrictions disabled for this command',
       'Rerun in CI',
     ])
     assert.deepStrictEqual(payload.checks[0].evidence, {
@@ -274,8 +275,7 @@ describe('test optimization validation payload', () => {
         },
       ],
       artifacts: {
-        htmlFileUrl: 'file:///tmp/report.html',
-        htmlPath: '/tmp/report.html',
+        reportPath: '/tmp/report.md',
       },
     })
 
@@ -286,6 +286,80 @@ describe('test optimization validation payload', () => {
       '1 passing (1ms)',
     ])
     assert.strictEqual(payload.checks[0].steps[1].evidence.localDiagnosis.kind, 'tests-ran-tracer-not-initialized')
+  })
+
+  it('redacts secret-like values from validation payload evidence', () => {
+    const [validationPayload] = buildValidationPayloads({
+      manifest: {
+        frameworks: [
+          {
+            id: 'vitest:root',
+            framework: 'vitest',
+            frameworkVersion: '4.1.9',
+            ciWiring: {
+              provider: 'github-actions',
+              workflow: 'test',
+              stepEnv: {
+                DD_API_KEY: 'payload-step-secret',
+              },
+            },
+            ciWiringCommand: {
+              cwd: '/repo',
+              usesShell: true,
+              shellCommand: 'DD_API_KEY=payload-command-secret pnpm test --token payload-flag-secret',
+              env: {
+                DD_API_KEY: 'payload-env-secret',
+              },
+            },
+          },
+        ],
+      },
+      results: [
+        {
+          frameworkId: 'vitest:root',
+          scenario: 'ci-wiring',
+          status: 'fail',
+          diagnosis: 'The CI job ran tests but no Test Optimization events reached the intake.',
+          evidence: {
+            commandExitCode: 0,
+            commandOutputSummary: ['DD_API_KEY=payload-output-secret Tests 1 passed'],
+            ciWiring: {
+              inheritedEnv: {
+                ACCESS_TOKEN: 'payload-inherited-secret',
+              },
+            },
+            eventLevelFailure: {
+              recommendation: 'Rerun without Authorization: Bearer payload-bearer-secret',
+            },
+          },
+          artifacts: [],
+        },
+      ],
+      artifacts: {
+        reportPath: '/tmp/report.md',
+      },
+    })
+    const { payload } = validationPayload
+    const serializedPayload = JSON.stringify(payload)
+
+    assert.deepStrictEqual(Object.keys(validationPayload).sort(), ['frameworkId', 'payload'])
+    assert.match(serializedPayload, /<redacted>/)
+    assert.strictEqual(payload.ciCommandCandidate.env.step.DD_API_KEY, '<redacted>')
+    assert.strictEqual(
+      payload.checks[0].steps[1].evidence.ciWiring.inheritedEnv.ACCESS_TOKEN,
+      '<redacted>'
+    )
+    for (const secret of [
+      'payload-step-secret',
+      'payload-command-secret',
+      'payload-flag-secret',
+      'payload-env-secret',
+      'payload-output-secret',
+      'payload-inherited-secret',
+      'payload-bearer-secret',
+    ]) {
+      assert.doesNotMatch(serializedPayload, new RegExp(secret))
+    }
   })
 
   it('includes custom Jest runner evidence for missing per-test events', () => {
@@ -331,8 +405,7 @@ describe('test optimization validation payload', () => {
         },
       ],
       artifacts: {
-        htmlFileUrl: 'file:///tmp/report.html',
-        htmlPath: '/tmp/report.html',
+        reportPath: '/tmp/report.md',
       },
     })
 
@@ -371,8 +444,7 @@ describe('test optimization validation payload', () => {
         },
       ],
       artifacts: {
-        htmlFileUrl: 'file:///tmp/report.html',
-        htmlPath: '/tmp/report.html',
+        reportPath: '/tmp/report.md',
       },
     })
 
