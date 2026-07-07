@@ -153,7 +153,7 @@ function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod, shell) {
       asyncStart.publish(context)
 
       asyncEnd.publish(context)
-      return Promise.reject(err)
+      throw err
     }
 
     function resolve (result) {
@@ -164,7 +164,7 @@ function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod, shell) {
       return result
     }
 
-    return Promise.resolve(result).then(resolve, reject)
+    return result.then(resolve, reject)
   }
 }
 

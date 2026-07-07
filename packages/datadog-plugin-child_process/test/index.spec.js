@@ -428,11 +428,10 @@ describe('Child process plugin', () => {
     let Bluebird
 
     // The regression only needs Bluebird to be the global `Promise` at the
-    // moment `util.promisify`/the wrapped child_process method runs, since that
-    // is when the instrumentation does `Promise.resolve(...).then(...)`. Holding
-    // the mutation across the awaited span round-trip leaks it into the shared
-    // mock agent and tracer, flip-flopping the process-wide `Promise` while the
-    // next test runs. Scope the mutation to the synchronous call and restore it
+    // moment `util.promisify`/the wrapped child_process method runs. Holding the
+    // mutation across the awaited span round-trip leaks it into the shared mock
+    // agent and tracer, flip-flopping the process-wide `Promise` while the next
+    // test runs. Scope the mutation to the synchronous call and restore it
     // before awaiting.
     function withBluebird (fn) {
       const original = global.Promise
