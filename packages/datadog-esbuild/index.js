@@ -13,6 +13,7 @@ const {
   matchesOptionalPeerFile,
   rewriteOptionalPeerLoads,
 } = require('../datadog-instrumentations/src/helpers/optional-peer-bundler')
+const { otelApiPackagesToExternalize } = require('../datadog-instrumentations/src/helpers/otel-api-externals')
 const { processModule, isESMFile } = require('./src/utils')
 const log = require('./src/log')
 
@@ -146,12 +147,14 @@ ${build.initialOptions.banner.js}`
     build.initialOptions.external.push('@openfeature/core')
   }
 
-  // The OpenTelemetry API packages are optional peers the application owns. The bridge captures
-  // the application's copy through the `@opentelemetry/api` instrumentation, which only fires on a
-  // runtime require. Bundling them would inline a second copy that the instrumentation never sees,
-  // so the bridge would register its provider on the wrong copy and silently downgrade every span
-  // to a no-op (issue #6882). Mark them external so the require survives for interception.
-  for (const otelApiPackage of ['@opentelemetry/api', '@opentelemetry/api-logs']) {
+  // Keep an OpenTelemetry API package external only when the application declares its own copy: the
+  // bridge captures that copy through the `@opentelemetry/api` instrumentation, which fires on a
+  // runtime require, so bundling it would inline a second copy the instrumentation never sees and the
+  // bridge would register on the wrong one, downgrading every span to a no-op (issue #6882). A
+  // package the application does not declare is left to bundle, so dd-trace's own fallback copy is
+  // inlined and the bundle stays self-contained.
+  const workingDir = build.initialOptions.absWorkingDir || process.cwd()
+  for (const otelApiPackage of otelApiPackagesToExternalize(workingDir)) {
     build.initialOptions.external ??= []
     build.initialOptions.external.push(otelApiPackage)
     externalModules.add(otelApiPackage)
