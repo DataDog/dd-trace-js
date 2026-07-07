@@ -43,11 +43,6 @@ function rewrite (content, filename, format) {
 
   filename = filename.replace('file://', '')
 
-  // `Module.prototype._compile` doesn't pass a `format` — infer ESM from the
-  // filename so ESM sources loaded via Node's sync `require(esm)` path (or
-  // any other caller that omits `format`) still route to the ESM transformer.
-  if (!format && filename.endsWith('.mjs')) format = 'module'
-
   const moduleType = format === 'module' ? 'esm' : 'cjs'
   const [modulePath] = filename.split('/node_modules/').reverse()
   const moduleParts = modulePath.split('/')
@@ -55,8 +50,6 @@ function rewrite (content, filename, format) {
   const moduleName = moduleParts.slice(0, splitIndex).join('/')
   const filePath = moduleParts.slice(splitIndex).join('/')
   const version = getVersion(filename, filePath)
-
-  if (!version) return content
 
   if (disabled.has(moduleName)) return content
 
