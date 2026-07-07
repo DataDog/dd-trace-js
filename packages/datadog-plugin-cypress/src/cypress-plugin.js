@@ -148,6 +148,13 @@ function getScreenshotFilePath (screenshot) {
   return typeof screenshot === 'string' ? screenshot : screenshot?.path
 }
 
+function isFailureScreenshotByMetadata (screenshot, screenshotFilePath) {
+  if (screenshot !== null && typeof screenshot === 'object' && screenshot.testFailure !== undefined) {
+    return screenshot.testFailure === true
+  }
+  return screenshotFilePath.includes('(failed)')
+}
+
 /**
  * Resolves a screenshot's capture time (epoch ms) for the media upload. Cypress
  * screenshot objects carry an ISO `takenAt`; falls back to the file's mtime, then
@@ -175,7 +182,13 @@ function getScreenshotCapturedAtMs (screenshot, filePath) {
 
 function isFailureScreenshotForUpload (screenshot) {
   const screenshotFilePath = getScreenshotFilePath(screenshot)
-  return !!screenshotFilePath && (screenshot?.testFailure === true || screenshotFilePath.includes('(failed)'))
+  if (!screenshotFilePath) {
+    return false
+  }
+  if (screenshot !== null && typeof screenshot === 'object') {
+    return screenshot.testFailure === true
+  }
+  return screenshotFilePath.includes('(failed)')
 }
 
 function isFailureScreenshot (screenshot) {
@@ -183,7 +196,7 @@ function isFailureScreenshot (screenshot) {
   // Require an explicit failure signal: prefer the `testFailure` metadata, and fall back to the
   // '(failed)' filename marker only when the RunResult omits `testFailure`. This keeps manual
   // cy.screenshot() captures out of the failure-screenshot upload (privacy).
-  return !!screenshotFilePath && (screenshot?.testFailure === true || screenshotFilePath.includes('(failed)'))
+  return !!screenshotFilePath && isFailureScreenshotByMetadata(screenshot, screenshotFilePath)
 }
 
 function getAttemptScreenshots (cypressTest, attemptIndex) {
@@ -516,6 +529,7 @@ class CypressPlugin {
   loggedAttemptToFixTests = new Set()
   uploadedScreenshotPaths = new Set()
   screenshotUploadPromisesByTraceId = new Map()
+  afterScreenshotHandler = undefined
   lastFinishedTest = null
   pendingScreenshotUploads = []
 
@@ -621,6 +635,19 @@ class CypressPlugin {
     this.libraryConfigurationPromise = undefined
     this._timeOrigin = 0
     this._perfOrigin = 0
+  }
+
+  /**
+   * Returns a stable after:screenshot handler so auto-instrumentation can recognize
+   * the handler registered by the manual plugin and avoid treating it as a user hook.
+   *
+   * @returns {Function} Datadog after:screenshot handler
+   */
+  getAfterScreenshotHandler () {
+    if (!this.afterScreenshotHandler) {
+      this.afterScreenshotHandler = this.afterScreenshot.bind(this)
+    }
+    return this.afterScreenshotHandler
   }
 
   /**

@@ -951,6 +951,11 @@ moduleTypes.forEach(({
           return () => testOutput
         }
 
+        function decodeKeyFilename (key) {
+          const [, hexFilename] = (key || '').split(':')
+          return hexFilename ? Buffer.from(hexFilename, 'hex').toString('utf8') : ''
+        }
+
         onlyAgentlessIt('uploads failure screenshots to the v2 media endpoint', async function () {
           const getTestOutput = runCypressWithFailureScreenshots('cypress/e2e/basic-fail.js')
 
@@ -1055,10 +1060,6 @@ moduleTypes.forEach(({
                 const [screenshotPayload] = screenshotPayloads
                 assert.strictEqual(screenshotPayload.media.traceId, expectedTraceId)
 
-                const decodeKeyFilename = (key) => {
-                  const [, hexFilename] = (key || '').split(':')
-                  return hexFilename ? Buffer.from(hexFilename, 'hex').toString('utf8') : ''
-                }
                 assert.match(
                   decodeKeyFilename(screenshotPayload.media.idempotencyKey),
                   /\(failed\)/,
@@ -1083,6 +1084,70 @@ moduleTypes.forEach(({
             receiverPromise,
           ])
         })
+
+        onlyAgentlessIt(
+          'uploads after the user after:screenshot handler with auto-instrumentation and manual plugin',
+          async function () {
+            const legacyConfigFile = type === 'esm'
+              ? 'cypress-legacy-plugin.config.mjs'
+              : 'cypress-legacy-plugin.config.js'
+            let testOutput = ''
+            childProcess = exec(
+              `./node_modules/.bin/cypress run --config-file ${legacyConfigFile}`,
+              {
+                cwd,
+                env: {
+                  ...getEnvVars(receiver.port),
+                  CYPRESS_BASE_URL: webAppBaseUrl,
+                  SPEC_PATTERN: 'cypress/e2e/basic-fail.js',
+                  CYPRESS_ENABLE_FAILURE_SCREENSHOTS: 'true',
+                  CYPRESS_ENABLE_AFTER_SCREENSHOT_CUSTOM: 'true',
+                  DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true',
+                },
+              }
+            )
+            childProcess.stdout?.on('data', (d) => { testOutput += d.toString() })
+            childProcess.stderr?.on('data', (d) => { testOutput += d.toString() })
+
+            const receiverPromise = receiver
+              .gatherPayloadsUntilChildExit(
+                childProcess,
+                ({ url }) => url.startsWith('/api/v2/ci/test-runs/') || url.endsWith('/api/v2/citestcycle'),
+                (payloads) => {
+                  const mediaPayloads = payloads.filter(({ url }) => url.startsWith('/api/v2/ci/test-runs/'))
+                  const screenshotPayloads = mediaPayloads.filter(({ media }) => media.contentType === 'image/png')
+
+                  assert.strictEqual(
+                    screenshotPayloads.length,
+                    1,
+                    `Datadog should upload once, after the user after:screenshot handler\n${testOutput}`
+                  )
+                  assert.match(
+                    decodeKeyFilename(screenshotPayloads[0].media.idempotencyKey),
+                    / datadog-renamed\.png$/,
+                    `the uploaded screenshot should use the user handler's renamed path\n${testOutput}`
+                  )
+
+                  const failedTest = payloads
+                    .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+                    .flatMap(({ payload }) => payload.events)
+                    .filter(event => event.type === 'test')
+                    .find(event => event.content.resource === 'cypress/e2e/basic-fail.js.basic fail suite can fail')
+
+                  assert.ok(failedTest, `failed test event should be reported\n${testOutput}`)
+                  assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')
+                }, { hardTimeout: 60000 })
+              .catch((error) => {
+                error.message += `\nCypress output:\n${testOutput}`
+                throw error
+              })
+
+            await Promise.all([
+              once(childProcess, 'exit'),
+              receiverPromise,
+            ])
+          }
+        )
 
         onlyAgentlessIt('continues normally when the media upload endpoint fails', async function () {
           receiver.setMediaResponseStatusCode(500)
