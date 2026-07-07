@@ -517,6 +517,11 @@ exports.mochaHooks = {
     runtimeMetrics.stop()
     storage('legacy').enterWith(undefined)
     storage('baggage').enterWith(undefined)
+    // LLMObs keeps its own async-context store (see src/llmobs/storage.js). Like
+    // `legacy`, its last-entered `{ ...parent, span }` frame pins a finished span
+    // until overwritten, so clear it per test too — otherwise the retention rides
+    // into the next test / teardown and the span-leak detector flags it.
+    storage('llmobs').enterWith(undefined)
     extraServices.clear()
     // Runs last: on a leaked expectation it throws to fail the just-finished test, and this
     // ordering keeps that throw from skipping the unconditional cleanup above.
