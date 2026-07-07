@@ -7,7 +7,7 @@ const ddpv = require('mocha/package.json').version
 const semver = require('semver')
 const sinon = require('sinon')
 
-const MongodbCorePlugin = require('../../datadog-plugin-mongodb-core/src/index')
+const MongodbCorePlugin = require('../../datadog-plugin-mongodb-core/src/query')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const { temporaryWarningExceptions } = require('../../dd-trace/test/setup/core')
