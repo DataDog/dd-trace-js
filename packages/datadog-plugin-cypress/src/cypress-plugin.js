@@ -186,6 +186,8 @@ function isFailureScreenshotForUpload (screenshot) {
     return false
   }
   if (screenshot !== null && typeof screenshot === 'object') {
+    // after:screenshot details omit testFailure for manual cy.screenshot() captures, so this
+    // path cannot safely fall back to the '(failed)' filename marker.
     return screenshot.testFailure === true
   }
   return screenshotFilePath.includes('(failed)')
