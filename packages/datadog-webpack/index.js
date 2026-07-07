@@ -81,6 +81,21 @@ class DatadogWebpackPlugin {
       }
     })
 
+    // The OpenTelemetry API packages are optional peers the application owns. The bridge captures
+    // the application's copy through the @opentelemetry/api instrumentation, which only fires on a
+    // runtime require. Bundling them would inline a second copy the instrumentation never sees, so
+    // the bridge would register its provider on the wrong copy and silently downgrade every span to
+    // a no-op (issue #6882). Mark them external so the require survives for interception. The
+    // `commonjs` type forces a CommonJS require regardless of the user's externalsType.
+    const externals = Array.isArray(compiler.options.externals)
+      ? compiler.options.externals
+      : [compiler.options.externals].filter(Boolean)
+    externals.push({
+      '@opentelemetry/api': 'commonjs @opentelemetry/api',
+      '@opentelemetry/api-logs': 'commonjs @opentelemetry/api-logs',
+    })
+    compiler.options.externals = externals
+
     const gitMetadata = getGitMetadata()
     if (gitMetadata.repositoryURL || gitMetadata.commitSHA) {
       const banner =
