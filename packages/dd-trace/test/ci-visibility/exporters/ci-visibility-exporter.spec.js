@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const cp = require('node:child_process')
 const fs = require('node:fs')
+const { hostname: getHostname } = require('node:os')
 const zlib = require('node:zlib')
 const { inspect } = require('node:util')
 
@@ -12,6 +13,7 @@ const sinon = require('sinon')
 const nock = require('nock')
 
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
+const { version: tracerVersion } = require('../../../../../package.json')
 require('../../../../dd-trace/test/setup/core')
 const CiVisibilityExporterBase = require('../../../src/ci-visibility/exporters/ci-visibility-exporter')
 const { defaults: { hostname, port } } = require('../../../src/config/defaults')
@@ -1109,6 +1111,7 @@ describe('CI Visibility Exporter', () => {
         }
         const diLog = {
           message: 'log',
+          ddtags: ['custom:value'],
           debugger: {
             snapshot: {
               id: '1234',
@@ -1131,6 +1134,10 @@ describe('CI Visibility Exporter', () => {
               language: 'javascript',
             },
           },
+          dd: {
+            trace_id: '12345',
+            span_id: '67890',
+          },
         }
         const ciVisibilityExporter = new CiVisibilityExporter({
           env: 'ci',
@@ -1150,18 +1157,63 @@ describe('CI Visibility Exporter', () => {
           diLog
         )
         sinon.assert.calledWith(ciVisibilityExporter._logsWriter.append, sinon.match({
-          ddtags: 'git.repository_url:https://github.com/datadog/dd-trace-js.git,git.commit.sha:1234',
+          ...diLog,
+          ddtags: [
+            'custom:value',
+            'env:ci',
+            'version:1.0.0',
+            `debugger_version:${tracerVersion}`,
+            `host_name:${getHostname()}`,
+            'git.commit.sha:1234',
+            'git.repository_url:https://github.com/datadog/dd-trace-js.git',
+          ].join(','),
           level: 'error',
           ddsource: 'dd_debugger',
           service: 'my-service',
+          hostname: getHostname(),
           dd: {
+            trace_id: '12345',
+            span_id: '67890',
             service: 'my-service',
             env: 'ci',
             version: '1.0.0',
           },
-          ...diLog,
         }))
       })
+    })
+  })
+
+  describe('canUploadTestScreenshots', () => {
+    it('should return false when there is no upload URL', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: true },
+      })
+      assert.strictEqual(ciVisibilityExporter.canUploadTestScreenshots(), false)
+    })
+
+    it('should return false when the URL is set but screenshots are disabled', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: false },
+      })
+      ciVisibilityExporter._testScreenshotUploadUrl = url
+      assert.strictEqual(ciVisibilityExporter.canUploadTestScreenshots(), false)
+    })
+
+    it('should return false when the URL is set but the screenshots flag is absent (default off)', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({ url })
+      ciVisibilityExporter._testScreenshotUploadUrl = url
+      assert.strictEqual(ciVisibilityExporter.canUploadTestScreenshots(), false)
+    })
+
+    it('should return true when the URL is set and screenshots are enabled', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: true },
+      })
+      ciVisibilityExporter._testScreenshotUploadUrl = url
+      assert.strictEqual(ciVisibilityExporter.canUploadTestScreenshots(), true)
     })
   })
 })

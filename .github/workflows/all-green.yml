@@ -63,7 +63,7 @@ jobs:
           set -o pipefail
           shopt -s nullglob
           # shellcheck disable=SC2016 # the inner shell must expand "$1", not the template.
-          printf '%s\0' coverage-upload/*/lcov/ | xargs -0 -r -P 10 -I {} \
+          printf '%s\0' coverage-upload/*/lcov/ | xargs -0 -r -P 20 -I {} \
             bash -c 'datadog-ci coverage upload "$1" --flags "$(basename "$(dirname "$1")")"' _ {}
         env:
           DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
@@ -97,7 +97,7 @@ jobs:
           codecovcli create-report --sha "$HEAD_SHA"
           set -o pipefail
           # shellcheck disable=SC2016 # the inner shell must expand "$@"/"$dir", not the template.
-          printf '%s\0' "${groups[@]}" | xargs -0 -r -P 10 -I {} \
+          printf '%s\0' "${groups[@]}" | xargs -0 -r -P 20 -I {} \
             bash -c 'dir="$1"; shift; codecovcli do-upload "$@" --dir "$dir" -F "$(basename "$(dirname "$dir")")"' \
               _ {} "${upload_args[@]}" "${master_flag[@]}"
         env:

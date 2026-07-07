@@ -13,6 +13,7 @@ const {
   getOnPendingHandler,
   getOnTestRetryHandler,
   getRunTestsWrapper,
+  patchFailedTestReplayHookUp,
 } = require('./utils')
 require('./common')
 
@@ -21,6 +22,10 @@ const MINIMUM_MOCHA_VERSION = DD_MAJOR >= 6 ? '>=8.0.0' : '>=5.2.0'
 const workerFinishCh = channel('ci:mocha:worker:finish')
 
 const config = {}
+
+function isFailedTestReplayEnabled () {
+  return config.isTestDynamicInstrumentationEnabled && config.isDiEnabled
+}
 
 addHook({
   name: 'mocha',
@@ -60,6 +65,11 @@ addHook({
       delete this.options._ddIsFlakyTestRetriesEnabled
       delete this.options._ddFlakyTestRetriesCount
     }
+    if (this.options._ddIsFailedTestReplayEnabled) {
+      config.isTestDynamicInstrumentationEnabled = true
+      config.isDiEnabled = true
+      delete this.options._ddIsFailedTestReplayEnabled
+    }
     return run.apply(this, args)
   })
 
@@ -77,6 +87,9 @@ addHook({
   shimmer.wrap(Runner.prototype, 'run', run => function (...args) {
     if (!workerFinishCh.hasSubscribers) {
       return run.apply(this, args)
+    }
+    if (isFailedTestReplayEnabled()) {
+      patchFailedTestReplayHookUp(Runner)
     }
     // We flush when the worker ends with its test file (a mocha instance in a worker runs a single test file)
     this.once('end', () => {
