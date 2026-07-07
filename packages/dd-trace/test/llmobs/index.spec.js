@@ -252,6 +252,11 @@ describe('module', () => {
 
         sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, true)
         sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, true)
+        sinon.assert.calledWith(
+          logger.debug,
+          '[LLMObs] Using %s writer transport for span and evaluation events',
+          'agentless/direct intake'
+        )
       })
 
       it('configures APM agentless export when APM tracing is enabled', () => {
@@ -260,12 +265,14 @@ describe('module', () => {
             agentlessEnabled: true,
           },
         })
+        tracer.configureExporter.returns(true)
 
         llmobsModule.enable(config, tracer)
 
         assert.strictEqual(config.experimental.exporter, 'agentless')
         assert.strictEqual(config.getOrigin('experimental.exporter'), 'calculated')
         sinon.assert.calledWith(tracer.configureExporter, config, 'agentless')
+        sinon.assert.calledWith(logger.debug, '[LLMObs] Swapped APM trace exporter to agentless intake')
       })
     })
   })
@@ -280,6 +287,11 @@ describe('module', () => {
 
       sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, false)
       sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, false)
+      sinon.assert.calledWith(
+        logger.debug,
+        '[LLMObs] Using %s writer transport for span and evaluation events',
+        'Agent EVP proxy'
+      )
     })
   })
 

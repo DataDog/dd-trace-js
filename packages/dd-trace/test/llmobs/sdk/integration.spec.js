@@ -183,6 +183,7 @@ describe('end to end sdk integration tests', () => {
 
       // Meta-struct delivery does not use the writer-submitted marker.
       for (const apmSpan of apmSpans) {
+        assert.equal(apmSpan.type, 'llm')
         assert.equal(apmSpan.meta['_dd.llmobs.submitted'], undefined)
       }
     })
@@ -198,6 +199,8 @@ describe('end to end sdk integration tests', () => {
 
       assert.ok(plainApmSpan)
       assert.ok(sdkSpan)
+      assert.equal(plainApmSpan.type, undefined)
+      assert.equal(sdkSpan.type, 'llm')
       assert.equal(plainApmSpan.meta['_dd.llmobs.submitted'], undefined)
       assert.equal(sdkSpan.meta['_dd.llmobs.submitted'], undefined)
 

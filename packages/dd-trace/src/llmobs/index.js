@@ -90,6 +90,10 @@ function enable (config, tracer) {
 
     evalWriter?.setAgentless(useAgentless)
     spanWriter?.setAgentless(useAgentless)
+    log.debug(
+      '[LLMObs] Using %s writer transport for span and evaluation events',
+      useAgentless ? 'agentless/direct intake' : 'Agent EVP proxy'
+    )
     configureApmAgentless(config, tracer, useAgentless)
 
     telemetry.recordLLMObsEnabled(startTime, config)
@@ -110,7 +114,9 @@ function configureApmAgentless (config, tracer, useAgentless) {
     return
   }
 
-  tracer?.configureExporter(config, exporters.AGENTLESS)
+  if (tracer?.configureExporter(config, exporters.AGENTLESS)) {
+    log.debug('[LLMObs] Swapped APM trace exporter to agentless intake')
+  }
 }
 
 function disable () {

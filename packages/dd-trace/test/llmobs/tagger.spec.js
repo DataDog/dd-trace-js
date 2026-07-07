@@ -69,11 +69,13 @@ describe('tagger', () => {
         tagger.registerLLMObsSpan(span, 'llm')
 
         assert.deepStrictEqual(Tagger.tagMap.get(span), undefined)
+        assert.strictEqual(spanContext._tags['span.type'], undefined)
       })
 
       it('tags an llm obs span with basic and default properties', () => {
         tagger.registerLLMObsSpan(span, { kind: 'workflow' })
 
+        assert.strictEqual(spanContext._tags['span.type'], 'llm')
         assert.deepStrictEqual(Tagger.tagMap.get(span), {
           '_ml_obs.meta.span.kind': 'workflow',
           '_ml_obs.meta.ml_app': 'my-default-ml-app',
