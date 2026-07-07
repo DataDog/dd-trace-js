@@ -40,7 +40,7 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
       lookup,
       protocolVersion,
       headers,
-      isTestDynamicInstrumentationEnabled,
+      testOptimization,
     } = config
 
     fetchAgentInfo(this._url, (err, agentInfo) => {
@@ -68,7 +68,10 @@ class AgentProxyCiVisibilityExporter extends CiVisibilityExporter {
           evpProxyPrefix,
         })
         this._codeCoverageReportUrl = this._url
-        if (isTestDynamicInstrumentationEnabled) {
+        // Screenshot media uploads go through the Agent's evp_proxy: the uploader prefixes the
+        // path with evpProxyPrefix and sets X-Datadog-EVP-Subdomain: api (see uploadTestScreenshot).
+        this._testScreenshotUploadUrl = this._url
+        if (testOptimization.DD_TEST_FAILED_TEST_REPLAY_ENABLED) {
           const canFowardLogs = getCanForwardDebuggerLogs(err, agentInfo)
           if (canFowardLogs) {
             const DynamicInstrumentationLogsWriter = require('../agentless/di-logs-writer')

@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const cp = require('node:child_process')
 const fs = require('node:fs')
+const { hostname: getHostname } = require('node:os')
 const zlib = require('node:zlib')
 const { inspect } = require('node:util')
 
@@ -12,9 +13,18 @@ const sinon = require('sinon')
 const nock = require('nock')
 
 const { assertObjectContains } = require('../../../../../integration-tests/helpers')
+const { version: tracerVersion } = require('../../../../../package.json')
 require('../../../../dd-trace/test/setup/core')
-const CiVisibilityExporter = require('../../../src/ci-visibility/exporters/ci-visibility-exporter')
+const CiVisibilityExporterBase = require('../../../src/ci-visibility/exporters/ci-visibility-exporter')
 const { defaults: { hostname, port } } = require('../../../src/config/defaults')
+
+// The real tracer Config always carries a `testOptimization` namespace object.
+// Default it here so the partial config stand-ins below mirror that guarantee.
+class CiVisibilityExporter extends CiVisibilityExporterBase {
+  constructor (config) {
+    super({ testOptimization: {}, ...config })
+  }
+}
 
 describe('CI Visibility Exporter', () => {
   const url = new URL(`http://${hostname}:${port}`)
@@ -41,7 +51,10 @@ describe('CI Visibility Exporter', () => {
         .post('/api/v2/git/repository/packfile')
         .reply(202, '')
 
-      const ciVisibilityExporter = new CiVisibilityExporter({ url, isGitUploadEnabled: true })
+      const ciVisibilityExporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true },
+      })
 
       ciVisibilityExporter._gitUploadPromise.then((err) => {
         assert.ok(err == null, `Expected ${err} == null`)
@@ -57,7 +70,10 @@ describe('CI Visibility Exporter', () => {
         .post('/api/v2/git/repository/search_commits')
         .reply(404)
 
-      const ciVisibilityExporter = new CiVisibilityExporter({ url, isGitUploadEnabled: true })
+      const ciVisibilityExporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true },
+      })
 
       ciVisibilityExporter._gitUploadPromise.then((err) => {
         assert.match(err.message, /Error fetching commits to exclude/)
@@ -79,7 +95,10 @@ describe('CI Visibility Exporter', () => {
         .post('/api/v2/git/repository/packfile')
         .reply(202, '')
 
-      const ciVisibilityExporter = new CiVisibilityExporter({ url, isGitUploadEnabled: true })
+      const ciVisibilityExporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true },
+      })
 
       ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
       ciVisibilityExporter.sendGitMetadata('https://custom-git@datadog.com')
@@ -96,7 +115,10 @@ describe('CI Visibility Exporter', () => {
         .post('/api/v2/git/repository/packfile')
         .reply(202, '')
 
-      const ciVisibilityExporter = new CiVisibilityExporter({ url, isGitUploadEnabled: true })
+      const ciVisibilityExporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true },
+      })
       ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
       ciVisibilityExporter.getLibraryConfiguration({}, () => {})
       ciVisibilityExporter._gitUploadPromise.then(() => {
@@ -125,7 +147,7 @@ describe('CI Visibility Exporter', () => {
 
         const ciVisibilityExporter = new CiVisibilityExporter({
           url,
-          isIntelligentTestRunnerEnabled: true,
+          testOptimization: { DD_CIVISIBILITY_ITR_ENABLED: true },
           tags: {
             'test.configuration.my_custom_config': 'my_custom_config_value',
           },
@@ -159,7 +181,7 @@ describe('CI Visibility Exporter', () => {
           }))
         const ciVisibilityExporter = new CiVisibilityExporter({
           url,
-          isIntelligentTestRunnerEnabled: true,
+          testOptimization: { DD_CIVISIBILITY_ITR_ENABLED: true },
         })
         const testConfiguration = {
           tag: 'v1.0.0',
@@ -193,7 +215,10 @@ describe('CI Visibility Exporter', () => {
             },
           }))
 
-        const ciVisibilityExporter = new CiVisibilityExporter({ url, isIntelligentTestRunnerEnabled: true })
+        const ciVisibilityExporter = new CiVisibilityExporter({
+          url,
+          testOptimization: { DD_CIVISIBILITY_ITR_ENABLED: true },
+        })
 
         ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
           assertObjectContains(libraryConfig, {
@@ -223,7 +248,10 @@ describe('CI Visibility Exporter', () => {
             },
           }))
 
-        const ciVisibilityExporter = new CiVisibilityExporter({ url, isIntelligentTestRunnerEnabled: true })
+        const ciVisibilityExporter = new CiVisibilityExporter({
+          url,
+          testOptimization: { DD_CIVISIBILITY_ITR_ENABLED: true },
+        })
         assert.strictEqual(ciVisibilityExporter.shouldRequestSkippableSuites(), false)
 
         ciVisibilityExporter.getLibraryConfiguration({}, () => {
@@ -258,7 +286,7 @@ describe('CI Visibility Exporter', () => {
           }))
 
         const ciVisibilityExporter = new CiVisibilityExporter({
-          url, isIntelligentTestRunnerEnabled: true,
+          url, testOptimization: { DD_CIVISIBILITY_ITR_ENABLED: true },
         })
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
         ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
@@ -299,7 +327,7 @@ describe('CI Visibility Exporter', () => {
           }))
 
         const ciVisibilityExporter = new CiVisibilityExporter({
-          url, isIntelligentTestRunnerEnabled: true,
+          url, testOptimization: { DD_CIVISIBILITY_ITR_ENABLED: true },
         })
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
         ciVisibilityExporter.getLibraryConfiguration({}, (err, libraryConfig) => {
@@ -336,7 +364,10 @@ describe('CI Visibility Exporter', () => {
           .post('/api/v2/ci/tests/skippable')
           .reply(200)
 
-        const ciVisibilityExporter = new CiVisibilityExporter({ url, isIntelligentTestRunnerEnabled: true })
+        const ciVisibilityExporter = new CiVisibilityExporter({
+          url,
+          testOptimization: { DD_CIVISIBILITY_ITR_ENABLED: true },
+        })
 
         ciVisibilityExporter._resolveCanUseCiVisProtocol(false)
         ciVisibilityExporter._resolveGit()
@@ -377,8 +408,10 @@ describe('CI Visibility Exporter', () => {
 
         const ciVisibilityExporter = new CiVisibilityExporter({
           url,
-          isIntelligentTestRunnerEnabled: true,
-          isGitUploadEnabled: true,
+          testOptimization: {
+            DD_CIVISIBILITY_ITR_ENABLED: true,
+            DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true,
+          },
           tags: {
             'test.configuration.my_custom_config_2': 'my_custom_config_value_2',
           },
@@ -421,8 +454,10 @@ describe('CI Visibility Exporter', () => {
 
         const ciVisibilityExporter = new CiVisibilityExporter({
           url,
-          isIntelligentTestRunnerEnabled: true,
-          isGitUploadEnabled: true,
+          testOptimization: {
+            DD_CIVISIBILITY_ITR_ENABLED: true,
+            DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true,
+          },
         })
 
         ciVisibilityExporter._libraryConfig = { isSuitesSkippingEnabled: true }
@@ -443,7 +478,10 @@ describe('CI Visibility Exporter', () => {
           .post('/api/v2/ci/tests/skippable')
           .reply(200)
 
-        const ciVisibilityExporter = new CiVisibilityExporter({ url, isIntelligentTestRunnerEnabled: true })
+        const ciVisibilityExporter = new CiVisibilityExporter({
+          url,
+          testOptimization: { DD_CIVISIBILITY_ITR_ENABLED: true },
+        })
 
         ciVisibilityExporter._libraryConfig = { isSuitesSkippingEnabled: true }
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
@@ -491,8 +529,10 @@ describe('CI Visibility Exporter', () => {
           })
         const ciVisibilityExporter = new CiVisibilityExporter({
           url,
-          isIntelligentTestRunnerEnabled: true,
-          isGitUploadEnabled: true,
+          testOptimization: {
+            DD_CIVISIBILITY_ITR_ENABLED: true,
+            DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true,
+          },
         })
         ciVisibilityExporter._libraryConfig = { isSuitesSkippingEnabled: true }
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
@@ -538,8 +578,10 @@ describe('CI Visibility Exporter', () => {
           })
         const ciVisibilityExporter = new CiVisibilityExporter({
           url,
-          isIntelligentTestRunnerEnabled: true,
-          isGitUploadEnabled: true,
+          testOptimization: {
+            DD_CIVISIBILITY_ITR_ENABLED: true,
+            DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: true,
+          },
         })
         ciVisibilityExporter._libraryConfig = { isSuitesSkippingEnabled: true }
         ciVisibilityExporter._resolveCanUseCiVisProtocol(true)
@@ -766,7 +808,14 @@ describe('CI Visibility Exporter', () => {
       })
 
       it('should return an error if the request fails', (done) => {
+        // A 5xx triggers one jittered 5–7.5 s retry in the request helper, so the endpoint is
+        // hit twice and the retry delay must collapse to 0 ms to stay under the mocha timeout.
+        const realSetTimeout = setTimeout
+        sinon.stub(global, 'setTimeout').callsFake((fn, delay, ...args) =>
+          realSetTimeout(fn, delay > 100 ? 0 : delay, ...args))
         const scope = nock(url)
+          .post('/api/v2/ci/libraries/tests')
+          .reply(500)
           .post('/api/v2/ci/libraries/tests')
           .reply(500)
         const ciVisibilityExporter = new CiVisibilityExporter({ url })
@@ -1025,7 +1074,7 @@ describe('CI Visibility Exporter', () => {
         const log = { message: 'log' }
         const ciVisibilityExporter = new CiVisibilityExporter({
           url,
-          isTestDynamicInstrumentationEnabled: true,
+          testOptimization: { DD_TEST_FAILED_TEST_REPLAY_ENABLED: true },
         })
         ciVisibilityExporter.exportDiLogs(log)
         ciVisibilityExporter._export = sinon.spy()
@@ -1043,7 +1092,7 @@ describe('CI Visibility Exporter', () => {
         const log = { message: 'log' }
         const ciVisibilityExporter = new CiVisibilityExporter({
           url,
-          isTestDynamicInstrumentationEnabled: true,
+          testOptimization: { DD_TEST_FAILED_TEST_REPLAY_ENABLED: true },
         })
         ciVisibilityExporter._isInitialized = true
         ciVisibilityExporter._logsWriter = writer
@@ -1062,6 +1111,7 @@ describe('CI Visibility Exporter', () => {
         }
         const diLog = {
           message: 'log',
+          ddtags: ['custom:value'],
           debugger: {
             snapshot: {
               id: '1234',
@@ -1084,12 +1134,16 @@ describe('CI Visibility Exporter', () => {
               language: 'javascript',
             },
           },
+          dd: {
+            trace_id: '12345',
+            span_id: '67890',
+          },
         }
         const ciVisibilityExporter = new CiVisibilityExporter({
           env: 'ci',
           version: '1.0.0',
           url,
-          isTestDynamicInstrumentationEnabled: true,
+          testOptimization: { DD_TEST_FAILED_TEST_REPLAY_ENABLED: true },
           service: 'my-service',
         })
         ciVisibilityExporter._isInitialized = true
@@ -1103,18 +1157,63 @@ describe('CI Visibility Exporter', () => {
           diLog
         )
         sinon.assert.calledWith(ciVisibilityExporter._logsWriter.append, sinon.match({
-          ddtags: 'git.repository_url:https://github.com/datadog/dd-trace-js.git,git.commit.sha:1234',
+          ...diLog,
+          ddtags: [
+            'custom:value',
+            'env:ci',
+            'version:1.0.0',
+            `debugger_version:${tracerVersion}`,
+            `host_name:${getHostname()}`,
+            'git.commit.sha:1234',
+            'git.repository_url:https://github.com/datadog/dd-trace-js.git',
+          ].join(','),
           level: 'error',
           ddsource: 'dd_debugger',
           service: 'my-service',
+          hostname: getHostname(),
           dd: {
+            trace_id: '12345',
+            span_id: '67890',
             service: 'my-service',
             env: 'ci',
             version: '1.0.0',
           },
-          ...diLog,
         }))
       })
+    })
+  })
+
+  describe('canUploadTestScreenshots', () => {
+    it('should return false when there is no upload URL', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: true },
+      })
+      assert.strictEqual(ciVisibilityExporter.canUploadTestScreenshots(), false)
+    })
+
+    it('should return false when the URL is set but screenshots are disabled', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: false },
+      })
+      ciVisibilityExporter._testScreenshotUploadUrl = url
+      assert.strictEqual(ciVisibilityExporter.canUploadTestScreenshots(), false)
+    })
+
+    it('should return false when the URL is set but the screenshots flag is absent (default off)', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({ url })
+      ciVisibilityExporter._testScreenshotUploadUrl = url
+      assert.strictEqual(ciVisibilityExporter.canUploadTestScreenshots(), false)
+    })
+
+    it('should return true when the URL is set and screenshots are enabled', () => {
+      const ciVisibilityExporter = new CiVisibilityExporter({
+        url,
+        testOptimization: { DD_TEST_FAILURE_SCREENSHOTS_ENABLED: true },
+      })
+      ciVisibilityExporter._testScreenshotUploadUrl = url
+      assert.strictEqual(ciVisibilityExporter.canUploadTestScreenshots(), true)
     })
   })
 })

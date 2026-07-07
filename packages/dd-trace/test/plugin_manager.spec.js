@@ -29,6 +29,9 @@ describe('Plugin Manager', () => {
       plugins: true,
       spanAttributeSchema: 'v0',
       spanRemoveIntegrationFromService: false,
+      // The real tracer Config always carries the testOptimization namespace;
+      // #getSharedConfig reads it, so the stand-in must provide it too.
+      testOptimization: {},
       ...overrides,
     }
   }
@@ -368,7 +371,7 @@ describe('Plugin Manager', () => {
       pm.configure(makeTracerConfig({
         serviceMapping: { two: 'deux' },
         logInjection: true,
-        queryStringObfuscation: '.*',
+        DD_TRACE_OBFUSCATION_QUERY_STRING_REGEXP: '.*',
         clientIpEnabled: true,
       }))
       loadChannel.publish({ name: 'two' })

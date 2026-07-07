@@ -229,7 +229,7 @@ class BaseLLMObsWriter {
     }
 
     if (this._agentless) {
-      options.headers['DD-API-KEY'] = this._config.apiKey || ''
+      options.headers['DD-API-KEY'] = this._config.DD_API_KEY || ''
     } else {
       options.headers[EVP_SUBDOMAIN_HEADER_NAME] = this._intake
     }

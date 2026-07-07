@@ -113,7 +113,7 @@ function shouldTestsRun (type) {
       return version === '12.0.0' || version === '14.5.4' || version === 'latest'
     }
   }
-  if (DD_MAJOR === 6) {
+  if (DD_MAJOR >= 6) {
     if (NODE_MAJOR <= 16) {
       return false
     }
@@ -315,6 +315,54 @@ moduleTypes.forEach(({
       } finally {
         fs.writeFileSync(supportFilePath, originalSupportContent)
       }
+    })
+
+    over10It('retries when dd:beforeEach returns no result once', async () => {
+      const envVars = getCiVisAgentlessConfig(receiver.port)
+      let testOutput = ''
+
+      childProcess = exec(testCommand, {
+        cwd,
+        env: {
+          ...envVars,
+          CYPRESS_BASE_URL: webAppBaseUrl,
+          CYPRESS_DD_BEFORE_EACH_NO_RESULT_ONCE: '1',
+          SPEC_PATTERN: 'cypress/e2e/basic-pass.js',
+        },
+      })
+      childProcess.stdout?.on('data', (data) => { testOutput += data })
+      childProcess.stderr?.on('data', (data) => { testOutput += data })
+
+      const receiverPromise = receiver
+        .gatherPayloadsUntilChildExit(
+          childProcess,
+          ({ url }) => url.endsWith('/api/v2/citestcycle'),
+          (payloads) => {
+            const events = payloads
+              .flatMap(({ payload }) => payload.events)
+              .filter(event => event.type === 'test')
+            const passedTest = events.find(event =>
+              event.content.resource === 'cypress/e2e/basic-pass.js.basic pass suite can pass'
+            )
+
+            assertObjectContains(passedTest?.content, {
+              meta: {
+                [TEST_STATUS]: 'pass',
+                [TEST_FRAMEWORK]: 'cypress',
+              },
+            })
+          },
+          { hardTimeout: 60000 }
+        )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        receiverPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0, 'cypress process should exit successfully')
+      assert.match(testOutput, /\[datadog:test\] dd:beforeEach call 1/)
+      assert.match(testOutput, /\[datadog:test\] dd:beforeEach call 2/)
     })
 
     over10It('preserves config returned from setupNodeEvents', async () => {

@@ -1446,8 +1446,8 @@ describe('sdk', () => {
     let originalApiKey
 
     before(() => {
-      originalApiKey = tracer._tracer._config.apiKey
-      tracer._tracer._config.apiKey = 'test'
+      originalApiKey = tracer._tracer._config.DD_API_KEY
+      tracer._tracer._config.DD_API_KEY = 'test'
     })
 
     beforeEach(() => {
@@ -1458,7 +1458,7 @@ describe('sdk', () => {
     })
 
     after(() => {
-      tracer._tracer._config.apiKey = originalApiKey
+      tracer._tracer._config.DD_API_KEY = originalApiKey
     })
 
     it('does not submit an evaluation if llmobs is disabled', () => {

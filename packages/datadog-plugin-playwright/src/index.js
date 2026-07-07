@@ -87,7 +87,7 @@ class PlaywrightPlugin extends CiPlugin {
       if (isEarlyFlakeDetectionFaulty) {
         this.testSessionSpan.setTag(TEST_EARLY_FLAKE_ABORT_REASON, 'faulty')
       }
-      if (this.numFailedSuites > 0) {
+      if (status === 'fail' && this.numFailedSuites > 0) {
         let errorMessage = `Test suites failed: ${this.numFailedSuites}.`
         if (this.numFailedTests > 0) {
           errorMessage += ` Tests failed: ${this.numFailedTests}`
@@ -108,11 +108,12 @@ class PlaywrightPlugin extends CiPlugin {
       finishAllTraceSpans(this.testSessionSpan)
       this.telemetry.count(TELEMETRY_TEST_SESSION, {
         provider: this.ciProviderName,
-        autoInjected: !!this._tracerConfig.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
+        autoInjected: !!this._tracerConfig.testOptimization.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
       })
       appClosingTelemetry()
       this.tracer._exporter.flush(onDone)
       this.numFailedTests = 0
+      this.numFailedSuites = 0
     })
 
     this.addBind('ci:playwright:test-suite:start', (ctx) => {
@@ -408,7 +409,7 @@ class PlaywrightPlugin extends CiPlugin {
         }
         stepSpan.finish(stepStartTime + stepDuration)
       }
-      if (testStatus === 'fail') {
+      if (finalStatus === 'fail') {
         this.numFailedTests++
       }
 

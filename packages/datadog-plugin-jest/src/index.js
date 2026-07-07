@@ -61,15 +61,6 @@ const isJestWorker = !!getEnvironmentVariable('JEST_WORKER_ID')
 // https://github.com/facebook/jest/blob/d6ad15b0f88a05816c2fe034dd6900d28315d570/packages/jest-worker/src/types.ts#L38
 const CHILD_MESSAGE_END = 2
 
-function withTimeout (promise, timeoutMs) {
-  return new Promise(resolve => {
-    realSetTimeout(resolve, timeoutMs)
-
-    // Also resolve if the original promise resolves
-    promise.then(resolve)
-  })
-}
-
 class JestPlugin extends CiPlugin {
   static id = 'jest'
 
@@ -177,7 +168,7 @@ class JestPlugin extends CiPlugin {
 
         this.telemetry.count(TELEMETRY_TEST_SESSION, {
           provider: this.ciProviderName,
-          autoInjected: !!this._tracerConfig.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
+          autoInjected: !!this._tracerConfig.testOptimization.DD_CIVISIBILITY_AUTO_INSTRUMENTATION_PROVIDER,
         })
 
         appClosingTelemetry()
@@ -451,6 +442,7 @@ class JestPlugin extends CiPlugin {
       isAtrRetry,
       finalStatus,
       earlyFlakeAbortReason,
+      promises,
     }) => {
       span.setTag(TEST_STATUS, status)
       if (finalStatus) {
@@ -481,12 +473,33 @@ class JestPlugin extends CiPlugin {
         this.getTestTelemetryTags(span)
       )
 
-      span.finish()
-      finishAllTraceSpans(span)
-      this.activeTestSpan = null
+      const finish = () => {
+        span.finish()
+        finishAllTraceSpans(span)
+        this.activeTestSpan = null
+      }
+
+      if (finalStatus) {
+        if (promises?.hitBreakpointPromise) {
+          finish()
+          this.cancelDiBreakpointHitWait()
+          return
+        }
+        if (promises && this.diBreakpointHitPromise) {
+          promises.hitBreakpointPromise = this.waitForPreparedDiBreakpointHit().then(finish)
+          return
+        }
+        finish()
+        this.cancelDiBreakpointHitWait()
+        return
+      }
+      finish()
+      if (status === 'fail' && promises?.hitBreakpointPromise) {
+        this.prepareDiBreakpointHitWait()
+      }
     })
 
-    this.addSub('ci:jest:test:err', ({ span, error, shouldSetProbe, promises }) => {
+    this.addSub('ci:jest:test:err', ({ span, error, shouldSetProbe, shouldWaitForHitProbe, promises }) => {
       if (error && span) {
         span.setTag(TEST_STATUS, 'fail')
         span.setTag('error', getFormattedError(error, this.repositoryRoot))
@@ -494,8 +507,11 @@ class JestPlugin extends CiPlugin {
           const probeInformation = this.addDiProbe(error)
           if (probeInformation) {
             const { setProbePromise } = probeInformation
-            promises.isProbeReady = withTimeout(setProbePromise, 2000)
+            this.prepareDiBreakpointHitWait()
+            promises.isProbeReady = this.waitForDiOperation(setProbePromise)
           }
+        } else if (shouldWaitForHitProbe && this.di) {
+          promises.hitBreakpointPromise = this.waitForDiBreakpointHits()
         }
       }
     })

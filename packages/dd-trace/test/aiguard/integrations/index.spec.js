@@ -56,4 +56,34 @@ describe('AIGuard integration wiring', () => {
     const disabledCtx = publishChatBefore()
     assert.strictEqual(disabledCtx.pending.length, 0)
   })
+
+  it('enables and disables providers through the integrations index', () => {
+    const openaiIntegration = {
+      enable: sinon.stub(),
+      disable: sinon.stub(),
+    }
+    const vercelAiIntegration = {
+      enable: sinon.stub(),
+      disable: sinon.stub(),
+    }
+    const integrations = proxyquire('../../../src/aiguard/integrations', {
+      './openai': openaiIntegration,
+      './vercel-ai': vercelAiIntegration,
+    })
+    const aiguard = { evaluate }
+
+    integrations.enable(aiguard, true)
+    integrations.disable()
+
+    sinon.assert.calledOnceWithExactly(openaiIntegration.enable, aiguard, true)
+    sinon.assert.calledOnceWithExactly(vercelAiIntegration.enable, aiguard, true)
+    sinon.assert.calledOnce(openaiIntegration.disable)
+    sinon.assert.calledOnce(vercelAiIntegration.disable)
+    sinon.assert.callOrder(
+      openaiIntegration.enable,
+      vercelAiIntegration.enable,
+      vercelAiIntegration.disable,
+      openaiIntegration.disable,
+    )
+  })
 })
