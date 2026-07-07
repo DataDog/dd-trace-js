@@ -20,7 +20,7 @@ describe('esm', () => {
   let proc
   let variants
 
-  withVersions('grpc', '@grpc/grpc-js', NODE_MAJOR >= 25 && '>=1.3.0', version => {
+  withVersions('grpc', '@grpc/grpc-js', NODE_MAJOR >= 25 ? '>=1.3.0' : '*', version => {
     useSandbox([`'@grpc/grpc-js@${version}'`, '@grpc/proto-loader'], false, [
       './packages/datadog-plugin-grpc/test/integration-test/*',
       './packages/datadog-plugin-grpc/test/*'])

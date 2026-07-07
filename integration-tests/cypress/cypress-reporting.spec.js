@@ -50,7 +50,7 @@ function shouldTestsRun (type) {
       return version === '12.0.0' || version === '14.5.4' || version === 'latest'
     }
   }
-  if (DD_MAJOR === 6) {
+  if (DD_MAJOR >= 6) {
     if (NODE_MAJOR <= 16) {
       return false
     }
@@ -914,6 +914,199 @@ moduleTypes.forEach(({
       } finally {
         fs.rmSync(subprojectDir, { recursive: true, force: true })
       }
+    })
+
+    const reportMethods = [
+      { name: 'evp proxy', getEnvVars: getCiVisEvpProxyConfig },
+      { name: 'agentless', getEnvVars: getCiVisAgentlessConfig },
+    ]
+
+    reportMethods.forEach(({ name: reportMethod, getEnvVars }) => {
+      context(`reporting with ${reportMethod}`, () => {
+        // 6.7.0 uses a flat JSON config that can't read env to enable screenshots, so over10It skips it.
+        // TODO: use over10It for evp proxy too once the Agent can forward the media endpoint.
+        const onlyAgentlessIt = reportMethod === 'agentless' ? over10It : it.skip
+
+        function runCypressWithFailureScreenshots (specToRun) {
+          let testOutput = ''
+          childProcess = exec(
+            testCommand,
+            {
+              cwd,
+              env: {
+                ...getEnvVars(receiver.port),
+                CYPRESS_BASE_URL: webAppBaseUrl,
+                SPEC_PATTERN: specToRun,
+                CYPRESS_ENABLE_FAILURE_SCREENSHOTS: 'true',
+                DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true',
+              },
+            }
+          )
+          childProcess.stdout?.on('data', (d) => { testOutput += d.toString() })
+          childProcess.stderr?.on('data', (d) => { testOutput += d.toString() })
+          return () => testOutput
+        }
+
+        onlyAgentlessIt('uploads failure screenshots to the v2 media endpoint', async function () {
+          const getTestOutput = runCypressWithFailureScreenshots('cypress/e2e/basic-fail.js')
+
+          const receiverPromise = receiver
+            .gatherPayloadsUntilChildExit(
+              childProcess,
+              ({ url }) => url.startsWith('/api/v2/ci/test-runs/') || url.endsWith('/api/v2/citestcycle'),
+              (payloads) => {
+                const testOutput = getTestOutput()
+                const mediaPayloads = payloads.filter(({ url }) => url.startsWith('/api/v2/ci/test-runs/'))
+                const failedTest = payloads
+                  .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+                  .flatMap(({ payload }) => payload.events)
+                  .filter(event => event.type === 'test')
+                  .find(event => event.content.resource === 'cypress/e2e/basic-fail.js.basic fail suite can fail')
+
+                assert.ok(failedTest, `failed test event should be reported\n${testOutput}`)
+                const expectedTraceId = failedTest.content.trace_id.toString()
+
+                const screenshotPayload = mediaPayloads.find(({ media }) => media.contentType === 'image/png')
+                assert.ok(screenshotPayload, `a screenshot should be uploaded to the v2 media endpoint\n${testOutput}`)
+                assert.strictEqual(
+                  screenshotPayload.url.split('?')[0],
+                  `/api/v2/ci/test-runs/${expectedTraceId}/media`
+                )
+                assert.strictEqual(screenshotPayload.media.traceId, expectedTraceId)
+                assert.strictEqual(screenshotPayload.headers['dd-api-key'], '1')
+
+                // v2 metadata rides the query string, not X-Dd-* headers, so it survives the
+                // Agent's evp_proxy (which strips non-allow-listed headers). The idempotency key is
+                // `<traceId>:<hex(filename)>` (filename hex-encoded so a non-ASCII title and the
+                // proxy's query-charset validation can't break it), reused on retry so the media
+                // service overwrites instead of duplicating the stored object.
+                const { idempotencyKey } = screenshotPayload.media
+                assert.ok(idempotencyKey, 'media upload should send an idempotency_key query param')
+                assert.match(
+                  idempotencyKey,
+                  new RegExp(`^${expectedTraceId}:`),
+                  `idempotency key ${idempotencyKey} should start with the trace id`
+                )
+
+                const capturedAt = Number(screenshotPayload.media.capturedAt)
+                assert.ok(
+                  Number.isInteger(capturedAt) && capturedAt > 0,
+                  `captured_at_ms should be a positive integer, got ${screenshotPayload.media.capturedAt}`
+                )
+                assert.ok(
+                  !('x-dd-idempotency-key' in screenshotPayload.headers),
+                  'v2 must not send metadata as X-Dd-* headers (the Agent evp_proxy strips them)'
+                )
+                assert.ok(
+                  !('test-drive-test-failure-media-bucket' in screenshotPayload.headers),
+                  'v2 must not send the v1 test-drive-test-failure-media-bucket header'
+                )
+                assert.deepStrictEqual(
+                  [...screenshotPayload.media.content.subarray(0, 8)],
+                  [137, 80, 78, 71, 13, 10, 26, 10]
+                )
+              }, { hardTimeout: 60000 })
+            .catch((error) => {
+              error.message += `\nCypress output:\n${getTestOutput()}`
+              throw error
+            })
+
+          await Promise.all([
+            once(childProcess, 'exit'),
+            receiverPromise,
+          ])
+        })
+
+        onlyAgentlessIt('uploads only the auto failure frame, not a manual cy.screenshot()', async function () {
+          const getTestOutput = runCypressWithFailureScreenshots('cypress/e2e/manual-screenshot-before-fail.js')
+
+          const receiverPromise = receiver
+            .gatherPayloadsUntilChildExit(
+              childProcess,
+              ({ url }) => url.startsWith('/api/v2/ci/test-runs/') || url.endsWith('/api/v2/citestcycle'),
+              (payloads) => {
+                const testOutput = getTestOutput()
+                const mediaPayloads = payloads.filter(({ url }) => url.startsWith('/api/v2/ci/test-runs/'))
+                const failedTest = payloads
+                  .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+                  .flatMap(({ payload }) => payload.events)
+                  .filter(event => event.type === 'test')
+                  .find(event =>
+                    event.content.resource ===
+                      'cypress/e2e/manual-screenshot-before-fail.js.manual screenshot before fail suite ' +
+                      'takes a manual screenshot then fails'
+                  )
+
+                assert.ok(failedTest, `failed test event should be reported\n${testOutput}`)
+                const expectedTraceId = failedTest.content.trace_id.toString()
+
+                const screenshotPayloads = mediaPayloads.filter(({ media }) => media.contentType === 'image/png')
+                assert.strictEqual(
+                  screenshotPayloads.length,
+                  1,
+                  `only the auto failure screenshot should be uploaded\n${testOutput}`
+                )
+                const [screenshotPayload] = screenshotPayloads
+                assert.strictEqual(screenshotPayload.media.traceId, expectedTraceId)
+
+                const decodeKeyFilename = (key) => {
+                  const [, hexFilename] = (key || '').split(':')
+                  return hexFilename ? Buffer.from(hexFilename, 'hex').toString('utf8') : ''
+                }
+                assert.match(
+                  decodeKeyFilename(screenshotPayload.media.idempotencyKey),
+                  /\(failed\)/,
+                  `the uploaded screenshot should be the auto failure frame\n${testOutput}`
+                )
+
+                const manualUpload = mediaPayloads.find(({ media }) =>
+                  decodeKeyFilename(media.idempotencyKey).includes('before-failure')
+                )
+                assert.ok(
+                  !manualUpload,
+                  `the manual cy.screenshot() must not be uploaded to the media endpoint\n${testOutput}`
+                )
+              }, { hardTimeout: 60000 })
+            .catch((error) => {
+              error.message += `\nCypress output:\n${getTestOutput()}`
+              throw error
+            })
+
+          await Promise.all([
+            once(childProcess, 'exit'),
+            receiverPromise,
+          ])
+        })
+
+        onlyAgentlessIt('continues normally when the media upload endpoint fails', async function () {
+          receiver.setMediaResponseStatusCode(500)
+          const getTestOutput = runCypressWithFailureScreenshots('cypress/e2e/basic-fail.js')
+
+          const receiverPromise = receiver
+            .gatherPayloadsUntilChildExit(
+              childProcess,
+              ({ url }) => url.endsWith('/api/v2/citestcycle'),
+              (payloads) => {
+                const testOutput = getTestOutput()
+                const failedTest = payloads
+                  .flatMap(({ payload }) => payload.events)
+                  .filter(event => event.type === 'test')
+                  .find(event => event.content.resource === 'cypress/e2e/basic-fail.js.basic fail suite can fail')
+
+                assert.ok(failedTest, `the failed test should still be reported when media upload fails\n${testOutput}`)
+                assert.strictEqual(failedTest.content.meta[TEST_STATUS], 'fail')
+              }, { hardTimeout: 60000 })
+            .catch((error) => {
+              error.message += `\nCypress output:\n${getTestOutput()}`
+              throw error
+            })
+
+          await Promise.all([
+            once(childProcess, 'exit'),
+            receiverPromise,
+          ])
+        })
+      })
     })
   })
 })

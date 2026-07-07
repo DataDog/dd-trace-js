@@ -6,6 +6,7 @@ on:
       - v3.x
       - v4.x
       - v5.x
+      - v6.x
   workflow_dispatch:
 
 concurrency:
@@ -24,6 +25,7 @@ jobs:
         v3.x latest-node14
         v4.x latest-node16
         v5.x latest-node18
+        v6.x latest-node22
     outputs:
       npm_tag: ${{ steps.compute.outputs.npm_tag }}
       is_latest: ${{ steps.compute.outputs.is_latest }}
