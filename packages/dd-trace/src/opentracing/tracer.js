@@ -3,6 +3,8 @@
 const os = require('os')
 const { URL, format } = require('url')
 const SpanProcessor = require('../span_processor')
+const JsSpanProcessor = require('../js_span_processor')
+const getExporter = require('../exporter')
 const PrioritySampler = require('../priority_sampler')
 const formats = require('../../../../ext/formats')
 const log = require('../log')
@@ -47,39 +49,54 @@ class DatadogTracer {
     this._enableGetRumData = config.experimental.enableGetRumData
     this._traceId128BitGenerationEnabled = config.traceId128BitGenerationEnabled
 
-    // Native spans are the only supported pipeline. libdatadog is a required
-    // dependency; if NativeSpansInterface construction fails, that's a hard
-    // error and we let it propagate to the caller.
-    const NativeSpansInterface = getNativeModule().NativeSpansInterface
+    // Test Optimization / CI Visibility has its own event model and intake and
+    // cannot ride the native (WASM) pipeline, so it runs on the JS span path:
+    // plain JS spans, the JS span processor (span_format), and a CI-vis
+    // exporter (agentless / agent-proxy / test-worker) selected by getExporter.
+    // Regular APM tracing uses the native pipeline below.
+    if (config.isCiVisibility) {
+      this._isCiVisibility = true
+      const Exporter = getExporter(config.experimental.exporter)
+      this._exporter = new Exporter(config, this._prioritySampler)
+      this._processor = new JsSpanProcessor(this._exporter, this._prioritySampler, config)
+      this._url = this._exporter._url
 
-    const { url, hostname = defaults.hostname, port } = config
-    const agentUrl = url || new URL(format({
-      protocol: 'http:',
-      hostname,
-      port,
-    }))
+      log.debug('CI Visibility mode enabled (JS span pipeline)')
+    } else {
+      // Native spans are the only supported APM pipeline. libdatadog is a
+      // required dependency; if NativeSpansInterface construction fails, that's
+      // a hard error and we let it propagate to the caller.
+      const NativeSpansInterface = getNativeModule().NativeSpansInterface
 
-    this._nativeSpans = new NativeSpansInterface({
-      agentUrl: agentUrl.toString(),
-      tracerVersion: pkg.version,
-      lang: 'nodejs',
-      langVersion: process.version,
-      langInterpreter: process.jsEngine || 'v8',
-      pid: process.pid,
-      tracerService: config.service,
-      statsEnabled: config.stats?.enabled || false,
-      hostname: config.hostname || os.hostname(),
-      env: config.env || '',
-      appVersion: config.version || '',
-      runtimeId: config.tags?.['runtime-id'] || '',
-      otelSemanticsEnabled: config.DD_TRACE_OTEL_SEMANTICS_ENABLED || false,
-    })
+      const { url, hostname = defaults.hostname, port } = config
+      const agentUrl = url || new URL(format({
+        protocol: 'http:',
+        hostname,
+        port,
+      }))
 
-    this._exporter = new NativeExporter(config, this._prioritySampler, this._nativeSpans)
-    this._processor = new SpanProcessor(this._exporter, this._prioritySampler, config, this._nativeSpans)
-    this._url = agentUrl
+      this._nativeSpans = new NativeSpansInterface({
+        agentUrl: agentUrl.toString(),
+        tracerVersion: pkg.version,
+        lang: 'nodejs',
+        langVersion: process.version,
+        langInterpreter: process.jsEngine || 'v8',
+        pid: process.pid,
+        tracerService: config.service,
+        statsEnabled: config.stats?.enabled || false,
+        hostname: config.hostname || os.hostname(),
+        env: config.env || '',
+        appVersion: config.version || '',
+        runtimeId: config.tags?.['runtime-id'] || '',
+        otelSemanticsEnabled: config.DD_TRACE_OTEL_SEMANTICS_ENABLED || false,
+      })
 
-    log.debug('Native spans mode enabled')
+      this._exporter = new NativeExporter(config, this._prioritySampler, this._nativeSpans)
+      this._processor = new SpanProcessor(this._exporter, this._prioritySampler, config, this._nativeSpans)
+      this._url = agentUrl
+
+      log.debug('Native spans mode enabled')
+    }
 
     this._propagators = {
       [formats.TEXT_MAP]: new TextMapPropagator(config),
@@ -108,15 +125,21 @@ class DatadogTracer {
       links: options.links,
     }
 
-    const NativeDatadogSpan = getNativeModule().NativeDatadogSpan
-    const span = new NativeDatadogSpan(
-      this,
-      this._processor,
-      this._prioritySampler,
-      fields,
-      this._debug,
-      this._nativeSpans
-    )
+    let span
+    if (this._isCiVisibility) {
+      // CI Visibility uses plain JS spans (see the constructor).
+      span = new Span(this, this._processor, this._prioritySampler, fields, this._debug)
+    } else {
+      const NativeDatadogSpan = getNativeModule().NativeDatadogSpan
+      span = new NativeDatadogSpan(
+        this,
+        this._processor,
+        this._prioritySampler,
+        fields,
+        this._debug,
+        this._nativeSpans
+      )
+    }
 
     // As per unified service tagging spec if a span is created with a service name different from the global
     // service name it will not inherit the global version value
