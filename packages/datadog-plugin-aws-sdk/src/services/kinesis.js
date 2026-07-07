@@ -12,6 +12,15 @@ function recordDataAsString (data) {
 // delete on consume, so their working set is ~the active shard count.
 const MAX_TRACKED_SHARD_ITERATORS = 1000
 
+// Kinesis rejects a record once its data blob reaches 1 MiB.
+const KINESIS_MAX_RECORD_BYTES = 1_048_576
+
+// The DSM pathway field (`dd-pathway-ctx-base64`) always serializes to a fixed 55 bytes: a
+// 21-char key, a 28-char base64 value, and 6 bytes of JSON framing. Mirrors PATHWAY_HEADER_BYTES
+// in dd-trace/src/datastreams/processor.js. Reserved in the size gate so setDSMCheckpoint never
+// runs for a record that would ship over the cap once the pathway context is attached.
+const DSM_PATHWAY_FIELD_BYTES = 55
+
 class Kinesis extends BaseAwsSdkPlugin {
   static id = 'kinesis'
   static peerServicePrecursors = ['streamname']
@@ -262,9 +271,12 @@ class Kinesis extends BaseAwsSdkPlugin {
 
     parsedData._datadog = ddInfo
     // Gate on the 1 MiB Kinesis cap before setDSMCheckpoint: a record we can't ship must not
-    // record a checkpoint. The bounded pathway bytes are added after the gate by design.
+    // record a checkpoint. When DSM runs, reserve the fixed-size pathway field the encode below
+    // appends after the gate, so a record that only fits without it records no checkpoint and
+    // never gets written over the cap.
     let serialized = JSON.stringify(parsedData)
-    if (Buffer.byteLength(serialized, 'utf8') >= 1_048_576) {
+    const reservedBytes = dsmEnabled ? DSM_PATHWAY_FIELD_BYTES : 0
+    if (Buffer.byteLength(serialized, 'utf8') + reservedBytes >= KINESIS_MAX_RECORD_BYTES) {
       log.info('Payload size too large to pass context')
       return
     }
