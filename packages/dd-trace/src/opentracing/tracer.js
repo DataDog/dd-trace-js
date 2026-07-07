@@ -45,7 +45,12 @@ class DatadogTracer {
       this._exporter = new Exporter(config, this._prioritySampler)
     }
 
-    this._processor = new SpanProcessor(this._exporter, this._prioritySampler, config)
+    let otlpStatsExporter
+    if (config.OTEL_TRACES_SPAN_METRICS_ENABLED) {
+      const { createOtlpSpanStatsExporter } = require('../opentelemetry/metrics')
+      otlpStatsExporter = createOtlpSpanStatsExporter(config)
+    }
+    this._processor = new SpanProcessor(this._exporter, this._prioritySampler, config, otlpStatsExporter)
     this._url = this._exporter._url
     this._enableGetRumData = config.experimental.enableGetRumData
     this._traceId128BitGenerationEnabled = config.traceId128BitGenerationEnabled
