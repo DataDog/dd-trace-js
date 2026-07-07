@@ -137,6 +137,12 @@ class NativeSpansInterface {
       runtimeId: options.runtimeId || '',
     }
 
+    // When DD_TRACE_OTEL_SEMANTICS_ENABLED is set, the span context holds the
+    // Datadog HTTP tags out of the WASM store and syncs the OTel-named ones at
+    // finish (WASM has no remove-meta op, so eagerly-synced DD keys couldn't be
+    // dropped). Read on the hot tag-sync path, so keep it a plain field.
+    this.otelSemanticsEnabled = options.otelSemanticsEnabled || false
+
     // Flush buffer for span export
     this._flushBuffer = Buffer.alloc(FLUSH_BUFFER_SIZE)
 

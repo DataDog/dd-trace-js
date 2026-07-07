@@ -4,6 +4,13 @@ const DatadogSpanContext = require('../opentracing/span_context')
 const { BASE_SERVICE, MEASURED } = require('../../../../ext/tags')
 const { IGNORE_OTEL_ERROR } = require('../constants')
 const { OpCode } = require('./index')
+const {
+  applyHttpOtelSemantics,
+  DD_HTTP_META_KEYS,
+  NETWORK_DESTINATION_PORT,
+  OTEL_OUTPUT_META_KEYS,
+  OTEL_OUTPUT_METRIC_KEYS,
+} = require('../plugins/util/http-otel-semantics')
 
 /**
  * NativeSpanContext extends DatadogSpanContext to store span data in native Rust storage.
@@ -158,6 +165,9 @@ class NativeSpanContext extends DatadogSpanContext {
     // Symbol keys are for internal JS use only (e.g., IGNORE_OTEL_ERROR)
     if (typeof key === 'symbol') return
     if (value === undefined || value === null) return
+    // Under OTEL semantics, DD HTTP keys are held out of WASM and remapped at
+    // finish; guard here too so the fast paths below can't leak them.
+    if (this.#isOtelDeferredKey(key)) return
 
     // Fast path: non-special string tags skip the switch dispatch entirely
     if (typeof value === 'string' && !SPECIAL_KEYS.has(key)) {
@@ -203,6 +213,7 @@ class NativeSpanContext extends DatadogSpanContext {
     for (const key of Object.keys(tags)) {
       const value = tags[key]
       if (value === undefined || value === null) continue
+      if (this.#isOtelDeferredKey(key)) continue
 
       if (SPECIAL_KEYS.has(key)) {
         this.#syncTagToNative(key, value)
@@ -230,6 +241,7 @@ class NativeSpanContext extends DatadogSpanContext {
   syncOneTagToNative (key, value) {
     if (value === undefined || value === null) return
     if (typeof key === 'symbol') return
+    if (this.#isOtelDeferredKey(key)) return
 
     if (SPECIAL_KEYS.has(key)) {
       this.#syncTagToNative(key, value)
@@ -255,10 +267,29 @@ class NativeSpanContext extends DatadogSpanContext {
    * @param {string} key - Tag key
    * @param {unknown} value - Tag value
    */
+  /**
+   * Under DD_TRACE_OTEL_SEMANTICS_ENABLED the Datadog HTTP tags are remapped to
+   * OpenTelemetry names at finish (see `applyOtelHttpSemantics`). WASM has no
+   * remove-meta op, so these keys are held out of the store during the span's
+   * life (they stay in the JS tag cache for runtime consumers and for the remap
+   * to read) rather than syncing DD names we could never drop.
+   *
+   * @param {string} key
+   * @returns {boolean}
+   */
+  #isOtelDeferredKey (key) {
+    return this.#nativeSpans.otelSemanticsEnabled &&
+      (DD_HTTP_META_KEYS.has(key) || key === NETWORK_DESTINATION_PORT)
+  }
+
   #syncTagToNative (key, value) {
     if (value === undefined || value === null) {
       return
     }
+
+    // Belt-and-suspenders: the batch paths guard this before dispatching here,
+    // but setTag can also reach a special key directly. See #isOtelDeferredKey.
+    if (this.#isOtelDeferredKey(key)) return
 
     // Handle special span properties that have dedicated OpCodes
     switch (key) {
@@ -438,6 +469,74 @@ class NativeSpanContext extends DatadogSpanContext {
       this._nativeSpanId,
       String(name)
     )
+  }
+
+  /**
+   * Apply the OpenTelemetry HTTP semantic-convention remap to this span's
+   * native output at finish. The Datadog HTTP tags were held out of the WASM
+   * store during the span's life (see `#syncTagToNative`), so build a formatted
+   * view from the JS tag cache, run the shared `applyHttpOtelSemantics`, and
+   * sync the resulting OTel meta/metrics (plus any error/resource change) into
+   * WASM. No-op for non-HTTP spans. Only invoked when the tracer runs with
+   * DD_TRACE_OTEL_SEMANTICS_ENABLED.
+   *
+   * Divergence from master: because the DD HTTP tags are held out of WASM
+   * entirely (not just renamed at serialization), the native trace-stats
+   * concentrator (which runs in WASM at flush) sees the OTel names rather than
+   * the DD `http.status_code`/etc. Master kept the DD tags on the span so stats
+   * were unaffected. This only matters for the OTEL-semantics + native-stats
+   * intersection and is an accepted limitation of the opt-in flag.
+   */
+  applyOtelHttpSemantics () {
+    const tags = this.getTags()
+    if (tags['http.method'] === undefined && tags['http.url'] === undefined) return
+
+    // Rebuild the {meta, metrics} view the way the native span categorizes tags
+    // (strings -> meta, finite numbers -> metrics), forcing http.status_code to
+    // a meta string (its native special case) so the remap reads it.
+    const meta = {}
+    const metrics = {}
+    for (const key of Object.keys(tags)) {
+      const value = tags[key]
+      if (value === null || value === undefined) continue
+      if (key === 'http.status_code') {
+        meta[key] = String(value)
+      } else if (typeof value === 'number') {
+        if (!Number.isNaN(value)) metrics[key] = value
+      } else if (typeof value === 'boolean') {
+        metrics[key] = value ? 1 : 0
+      } else {
+        meta[key] = String(value)
+      }
+    }
+
+    const resourceBefore = typeof tags['resource.name'] === 'string' ? tags['resource.name'] : undefined
+    const errorBefore = tags.error ? 1 : 0
+    const view = { meta, metrics, error: errorBefore, resource: resourceBefore }
+
+    applyHttpOtelSemantics(view)
+
+    const spanId = this._nativeSpanId
+    for (const key of OTEL_OUTPUT_META_KEYS) {
+      const value = view.meta[key]
+      if (value !== undefined) {
+        this.#nativeSpans.queueOp(OpCode.SetMetaAttr, spanId, key, String(value))
+      }
+    }
+    for (const key of OTEL_OUTPUT_METRIC_KEYS) {
+      const value = view.metrics[key]
+      if (value !== undefined) {
+        this.#nativeSpans.queueOp(OpCode.SetMetricAttr, spanId, key, ['f64', value])
+      }
+    }
+    // The remap flips error on for error responses; it never clears it.
+    if (view.error === 1 && errorBefore !== 1) {
+      this.#nativeSpans.queueOp(OpCode.SetError, spanId, ['i32', 1])
+    }
+    // Only the unknown-verb (_OTHER) path rewrites the resource.
+    if (typeof view.resource === 'string' && view.resource !== resourceBefore) {
+      this.#nativeSpans.queueOp(OpCode.SetResourceName, spanId, view.resource)
+    }
   }
 }
 

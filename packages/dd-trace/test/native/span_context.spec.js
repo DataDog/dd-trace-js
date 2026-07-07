@@ -367,4 +367,65 @@ describe('NativeSpanContext', () => {
       )
     })
   })
+
+  describe('OTEL semantics (DD_TRACE_OTEL_SEMANTICS_ENABLED)', () => {
+    beforeEach(() => {
+      nativeSpans.otelSemanticsEnabled = true
+      spanContext = new NativeSpanContext(nativeSpans, { traceId: id, spanId: id })
+      nativeSpans.queueOp.resetHistory()
+      nativeSpans.queueBatchMeta.resetHistory()
+      nativeSpans.queueBatchMetrics.resetHistory()
+    })
+
+    it('holds DD HTTP keys out of WASM across setTag, batch, and single-sync paths', () => {
+      spanContext.setTag('http.url', 'http://h/p')
+      spanContext.syncToNativeOnly({ 'http.method': 'GET', 'out.host': 'h' })
+      spanContext.syncOneTagToNative('http.useragent', 'curl/8')
+
+      const opKeys = nativeSpans.queueOp.getCalls().map(c => c.args[2])
+      const batchKeys = nativeSpans.queueBatchMeta.getCalls().flatMap(c => c.args[1].map(([k]) => k))
+      for (const k of ['http.url', 'http.method', 'out.host', 'http.useragent']) {
+        assert.ok(!opKeys.includes(k) && !batchKeys.includes(k), `${k} leaked to WASM`)
+      }
+      // setTag still populates the JS cache (only the WASM sync is skipped) so
+      // the finish-time remap can read the DD tag. (syncToNativeOnly/
+      // syncOneTagToNative sync WASM only; their callers write the cache.)
+      assert.strictEqual(spanContext.getTag('http.url'), 'http://h/p')
+    })
+
+    it('remaps DD HTTP tags to OTel names at finish (server span)', () => {
+      spanContext.setTag('span.kind', 'server')
+      spanContext.setTag('http.method', 'GET')
+      spanContext.setTag('http.url', 'http://example.test:8080/users?q=1')
+      spanContext.setTag('http.status_code', 200)
+      nativeSpans.queueOp.resetHistory()
+
+      spanContext.applyOtelHttpSemantics()
+
+      const meta = nativeSpans.queueOp.getCalls()
+        .filter(c => c.args[0] === OpCode.SetMetaAttr)
+        .map(c => [c.args[2], c.args[3]])
+      const metrics = nativeSpans.queueOp.getCalls()
+        .filter(c => c.args[0] === OpCode.SetMetricAttr)
+        .map(c => [c.args[2], c.args[3]])
+
+      assert.deepStrictEqual(meta.find(([k]) => k === 'http.request.method'), ['http.request.method', 'GET'])
+      assert.deepStrictEqual(meta.find(([k]) => k === 'url.path'), ['url.path', '/users'])
+      assert.deepStrictEqual(meta.find(([k]) => k === 'server.address'), ['server.address', 'example.test'])
+      assert.deepStrictEqual(
+        metrics.find(([k]) => k === 'http.response.status_code'),
+        ['http.response.status_code', ['f64', 200]]
+      )
+      assert.deepStrictEqual(metrics.find(([k]) => k === 'server.port'), ['server.port', ['f64', 8080]])
+      // DD names are never emitted to WASM
+      assert.ok(!meta.some(([k]) => k === 'http.url' || k === 'http.method' || k === 'http.status_code'))
+    })
+
+    it('applyOtelHttpSemantics is a no-op for non-HTTP spans', () => {
+      spanContext.setTag('custom.tag', 'v')
+      nativeSpans.queueOp.resetHistory()
+      spanContext.applyOtelHttpSemantics()
+      sinon.assert.notCalled(nativeSpans.queueOp)
+    })
+  })
 })

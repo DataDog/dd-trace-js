@@ -72,6 +72,7 @@ class DatadogTracer {
       env: config.env || '',
       appVersion: config.version || '',
       runtimeId: config.tags?.['runtime-id'] || '',
+      otelSemanticsEnabled: config.DD_TRACE_OTEL_SEMANTICS_ENABLED || false,
     })
 
     this._exporter = new NativeExporter(config, this._prioritySampler, this._nativeSpans)

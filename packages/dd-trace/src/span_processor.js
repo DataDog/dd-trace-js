@@ -193,13 +193,21 @@ class SpanProcessor {
       // them. When native stats are enabled the concentrator handles stats
       // aggregation during flush_chunk.
       const finishedSpansToExport = []
+      const otelSemantics = this._config.DD_TRACE_OTEL_SEMANTICS_ENABLED
 
       for (const span of started) {
         if (span._duration === undefined) {
           active.push(span)
         } else {
           finishedSpansToExport.push(span)
-          const serviceName = span.context().getTag('service.name')
+          const context = span.context()
+          // Remap Datadog HTTP tags to OpenTelemetry names on the native span
+          // before export. Done at finish (not per setTag) because the remap
+          // needs the full tag set (URL decomposition, status -> error).
+          if (otelSemantics && typeof context.applyOtelHttpSemantics === 'function') {
+            context.applyOtelHttpSemantics()
+          }
+          const serviceName = context.getTag('service.name')
           if (typeof serviceName === 'string' && serviceName.length > 0) {
             registerExtraService(serviceName)
           }
