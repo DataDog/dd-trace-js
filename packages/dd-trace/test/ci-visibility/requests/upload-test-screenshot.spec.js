@@ -80,6 +80,31 @@ describe('ci-visibility/requests/upload-test-screenshot', () => {
       assert.strictEqual(headers['X-Datadog-EVP-Subdomain'], undefined)
     })
 
+    it('reports an error when the request helper drops the upload', () => {
+      const basename = 'screenshot.png'
+      const filePath = join(tmpDir, basename)
+      writeFileSync(filePath, 'not-empty')
+      requestStub.callsFake((_payload, _options, cb) => cb(null))
+
+      let callbackError
+      uploadTestScreenshot(
+        {
+          filePath,
+          traceId,
+          idempotencyKey: `${traceId}:${basename}`,
+          capturedAtMs: 1_700_000_000_000,
+          url: new URL('http://localhost:8126'),
+        },
+        (err) => {
+          callbackError = err
+        }
+      )
+
+      assert.ok(requestStub.calledOnce)
+      assert.ok(callbackError)
+      assert.match(callbackError.message, /dropped/)
+    })
+
     it('hex-encodes the filename in the idempotency key to the proxy-safe charset', () => {
       // A real failure screenshot name has spaces and parens (and here an em-dash, U+2014). The
       // Agent's evp_proxy validates the forwarded query against a restrictive charset and rejects

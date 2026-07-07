@@ -1618,7 +1618,7 @@ class CypressPlugin {
       }
     }
 
-    const finishSpec = () => {
+    const finishSuite = () => {
       if (this.testSuiteSpan) {
         const status = getSuiteStatus(stats)
         this.testSuiteSpan.setTag(TEST_STATUS, status)
@@ -1630,7 +1630,9 @@ class CypressPlugin {
         this.testSuiteSpan = null
         this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
       }
+    }
 
+    const waitForScreenshotUploads = () => {
       if (screenshotUploadPromises.length > 0 || this.pendingScreenshotUploads.length > 0) {
         const pendingScreenshotUploads = this.pendingScreenshotUploads
         this.pendingScreenshotUploads = []
@@ -1638,11 +1640,18 @@ class CypressPlugin {
       }
     }
 
+    finishSuite()
+
+    const screenshotUploadsPromise = waitForScreenshotUploads()
     if (testSpanFinishPromises.length > 0) {
-      return Promise.all(testSpanFinishPromises).then(finishSpec)
+      const testSpansPromise = Promise.all(testSpanFinishPromises).then(() => null)
+      if (screenshotUploadsPromise) {
+        return Promise.all([testSpansPromise, screenshotUploadsPromise]).then(() => null)
+      }
+      return testSpansPromise
     }
 
-    return finishSpec()
+    return screenshotUploadsPromise
   }
 
   /**
