@@ -226,17 +226,15 @@ class Tracer extends NoopProxy {
         }
       }
 
-      // OTel logs/metrics pipelines must be initialized BEFORE runtimeMetrics.start so that
-      // when the OTLP runtime metrics module calls metrics.getMeterProvider(), it gets the
-      // real provider, otherwise instruments register on the noop provider and never export.
+      // The OTLP logs/metrics pipelines must initialize BEFORE runtimeMetrics.start so that when
+      // the OTLP runtime-metrics module calls metrics.getMeterProvider() it gets the real provider,
+      // otherwise its instruments register on the noop provider and never export.
       if (config.DD_LOGS_OTEL_ENABLED) {
-        const { initializeOpenTelemetryLogs } = require('./opentelemetry/logs')
-        initializeOpenTelemetryLogs(config)
+        require('./opentelemetry/logs').initializeOpenTelemetryLogs(config)
       }
 
       if (config.DD_METRICS_OTEL_ENABLED) {
-        const { initializeOpenTelemetryMetrics } = require('./opentelemetry/metrics')
-        initializeOpenTelemetryMetrics(config)
+        require('./opentelemetry/metrics').initializeOpenTelemetryMetrics(config)
       }
 
       if (config.runtimeMetrics.enabled) {

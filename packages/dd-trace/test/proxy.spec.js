@@ -29,6 +29,8 @@ describe('TracerProxy', () => {
   let Config
   let config
   let runtimeMetrics
+  let initializeOpenTelemetryMetrics
+  let initializeOpenTelemetryLogs
   let log
   let profiler
   let appsec
@@ -178,6 +180,9 @@ describe('TracerProxy', () => {
       start: sinon.spy(),
     }
 
+    initializeOpenTelemetryMetrics = sinon.spy()
+    initializeOpenTelemetryLogs = sinon.spy()
+
     profiler = {
       start: sinon.spy(),
     }
@@ -251,6 +256,8 @@ describe('TracerProxy', () => {
       './config': Config,
       './plugin_manager': PluginManager,
       './runtime_metrics': runtimeMetrics,
+      './opentelemetry/metrics': { initializeOpenTelemetryMetrics, '@noCallThru': true },
+      './opentelemetry/logs': { initializeOpenTelemetryLogs, '@noCallThru': true },
       './log': log,
       './profiler': profiler,
       './appsec': appsec,
@@ -557,6 +564,37 @@ describe('TracerProxy', () => {
         proxy.init()
 
         sinon.assert.called(runtimeMetrics.start)
+      })
+
+      it('should register OTel metrics before starting runtimeMetrics', () => {
+        config.DD_METRICS_OTEL_ENABLED = true
+        config.runtimeMetrics.enabled = true
+
+        proxy.init()
+
+        // The OTLP backend must start after the meter provider so its instruments bind to the
+        // real meter rather than the noop one.
+        sinon.assert.called(initializeOpenTelemetryMetrics)
+        sinon.assert.called(runtimeMetrics.start)
+        sinon.assert.callOrder(initializeOpenTelemetryMetrics, runtimeMetrics.start)
+      })
+
+      it('should register OTel metrics without starting runtimeMetrics when they are disabled', () => {
+        config.DD_METRICS_OTEL_ENABLED = true
+        config.runtimeMetrics.enabled = false
+
+        proxy.init()
+
+        sinon.assert.called(initializeOpenTelemetryMetrics)
+        sinon.assert.notCalled(runtimeMetrics.start)
+      })
+
+      it('should register OTel logs when enabled', () => {
+        config.DD_LOGS_OTEL_ENABLED = true
+
+        proxy.init()
+
+        sinon.assert.called(initializeOpenTelemetryLogs)
       })
 
       it('should expose noop metrics methods prior to initialization', () => {

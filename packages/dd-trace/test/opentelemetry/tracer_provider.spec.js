@@ -7,6 +7,7 @@ const sinon = require('sinon')
 const { trace } = require('@opentelemetry/api')
 
 require('../setup/core')
+require('./use-otel-api')
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const Tracer = require('../../src/opentelemetry/tracer')
 const { MultiSpanProcessor, NoopSpanProcessor } = require('../../src/opentelemetry/span_processor')

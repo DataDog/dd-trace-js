@@ -1,9 +1,9 @@
 'use strict'
 
-const api = require('@opentelemetry/api')
 const { AUTO_KEEP } = require('../../../../ext/priority')
 const DatadogSpanContext = require('../opentracing/span_context')
 const id = require('../id')
+const api = require('./api').getApi()
 
 function newContext () {
   const spanId = id()

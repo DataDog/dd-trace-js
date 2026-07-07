@@ -12,6 +12,7 @@ const sinon = require('sinon')
 const { metrics } = require('@opentelemetry/api')
 
 require('./setup/core')
+require('./opentelemetry/use-otel-api')
 const { NODE_MAJOR, NODE_MINOR } = require('../../../version')
 const { DogStatsDClient } = require('../src/dogstatsd')
 
@@ -1110,8 +1111,8 @@ function loadOtlpRuntimeMetricsTestModule (overrides = {}) {
   const monitorEventLoopDelay = overrides.monitorEventLoopDelay ?? realPerfHooks.monitorEventLoopDelay
 
   const otlpMetrics = proxyquire.noCallThru()('../src/runtime_metrics/otlp_runtime_metrics', {
-    '@opentelemetry/api': {
-      metrics: { getMeterProvider: () => ({ getMeter: () => mockMeter }) },
+    '../opentelemetry/api': {
+      getApi: () => ({ metrics: { getMeterProvider: () => ({ getMeter: () => mockMeter }) } }),
     },
     '../log': { debug () {}, error () {} },
     'node:perf_hooks': {
@@ -1418,8 +1419,8 @@ describe('otlp_runtime_metrics', () => {
     }
     const errorLog = sinon.spy()
     const otlpMetricsFailing = proxyquire.noCallThru()('../src/runtime_metrics/otlp_runtime_metrics', {
-      '@opentelemetry/api': {
-        metrics: { getMeterProvider: () => ({ getMeter: () => throwingMeter }) },
+      '../opentelemetry/api': {
+        getApi: () => ({ metrics: { getMeterProvider: () => ({ getMeter: () => throwingMeter }) } }),
       },
       '../log': { debug () {}, error: errorLog },
       './client': {

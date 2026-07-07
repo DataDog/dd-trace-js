@@ -386,6 +386,38 @@ describe('Config', () => {
     assert.strictEqual(indexFile, proxy)
   })
 
+  // The OTel bridge binds to the application's @opentelemetry/api at require time and falls back to
+  // the copy bundled with dd-trace when the application has none, so config no longer probes whether
+  // the peer is installed: an enabled flag simply stays enabled. Config keeps only the two
+  // relationships that stand on their own config values — the log-injection mutual exclusion and the
+  // OTEL_METRICS_EXPORTER=none opt-out.
+  it('keeps DD_METRICS_OTEL_ENABLED enabled without probing for @opentelemetry/api', () => {
+    process.env.DD_METRICS_OTEL_ENABLED = 'true'
+
+    const config = getConfig({})
+
+    assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, true)
+    assert.ok(log.warn.getCalls().every((call) => !/is not installed/.test(call.args[0])))
+  })
+
+  it('disables log injection when DD_LOGS_OTEL_ENABLED is set', () => {
+    process.env.DD_LOGS_OTEL_ENABLED = 'true'
+
+    const config = getConfig({ logInjection: true })
+
+    assert.strictEqual(config.DD_LOGS_OTEL_ENABLED, true)
+    assert.strictEqual(config.logInjection, false)
+  })
+
+  it('disables DD_METRICS_OTEL_ENABLED when OTEL_METRICS_EXPORTER is explicitly none', () => {
+    process.env.DD_METRICS_OTEL_ENABLED = 'true'
+    process.env.OTEL_METRICS_EXPORTER = 'none'
+
+    const config = getConfig({})
+
+    assert.strictEqual(config.DD_METRICS_OTEL_ENABLED, false)
+  })
+
   it('should initialize with OTEL environment variables when DD env vars are not set', () => {
     process.env.OTEL_SERVICE_NAME = 'otel_service'
     process.env.OTEL_LOG_LEVEL = 'debug'
