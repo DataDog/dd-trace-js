@@ -249,8 +249,16 @@ function unformatSpanEvents (span) {
  */
 function handleTraceRequest (req, res) {
   res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
+  const trace = req.body
+  // libdatadog's v0.4 msgpack encoder omits `error` when it is 0 (the agent
+  // protocol treats an absent field as its default, and the real agent does the
+  // same). The legacy JS AgentWriter always emitted `error: 0`, so backfill it
+  // here for the native exporter. This only fills the 0 default — an expected
+  // `error: 1` that arrived absent stays absent and still fails its assertion.
+  for (const span of trace.flat(Infinity)) {
+    if (span && span.error === undefined) span.error = 0
+  }
   for (const { handler, spanResourceMatch } of traceHandlers) {
-    const trace = req.body
     const spans = trace.flatMap(span => span)
     if (isMatchingTrace(spans, spanResourceMatch)) {
       handler(trace)
