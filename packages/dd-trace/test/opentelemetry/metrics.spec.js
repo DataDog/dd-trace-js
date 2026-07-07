@@ -10,6 +10,7 @@ const proxyquire = require('proxyquire')
 const { metrics } = require('@opentelemetry/api')
 
 require('../setup/core')
+require('./use-otel-api')
 const { protoMetricsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
 const { getConfigFresh } = require('../helpers/config')
 const { DEFAULT_MAX_MEASUREMENT_QUEUE_SIZE } = require('../../src/opentelemetry/metrics/constants')
@@ -55,8 +56,10 @@ describe('OpenTelemetry Meter Provider', () => {
     metrics.disable()
     const config = getConfigFresh()
     if (config.DD_METRICS_OTEL_ENABLED) {
-      const { initializeOpenTelemetryMetrics } =
-        proxyquire.noPreserveCache()('../../src/opentelemetry/metrics', {})
+      // Cache-preserving proxyquire so the deep `require('../api')` resolves the holder seeded
+      // by use-otel-api rather than a fresh, unseeded copy; initializeOpenTelemetryMetrics is
+      // re-callable and builds a new provider each call, so no per-test reload is needed.
+      const { initializeOpenTelemetryMetrics } = proxyquire('../../src/opentelemetry/metrics', {})
       initializeOpenTelemetryMetrics(config)
     }
     return { config, meterProvider: metrics.getMeterProvider() }

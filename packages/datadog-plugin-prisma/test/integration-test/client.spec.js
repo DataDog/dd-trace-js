@@ -211,6 +211,9 @@ const prismaClientConfigs = [{
   serverFile: 'server-ts-v7-otel.mjs',
   schema: `./packages/datadog-plugin-prisma/test/${SCHEMA_FIXTURES.tsEsmV7}`,
   configFile: `./packages/datadog-plugin-prisma/test/${SCHEMA_FIXTURES.tsEsmV7Config}`,
+  // The OTel fixture imports @opentelemetry/api directly. v6 declares it as an optional peer
+  // dependency, so it is no longer bundled and the sandbox has to install it explicitly.
+  extraDeps: ['@opentelemetry/api'],
   env: {
     PRISMA_CLIENT_OUTPUT: './generated/prisma',
     DATABASE_URL: TEST_DATABASE_URL,
@@ -265,7 +268,7 @@ describe('esm', () => {
 
         if (isPrismaV7) paths.push(config.configFile)
 
-        const deps = [`@prisma/client@${version}`]
+        const deps = [`@prisma/client@${version}`, ...(config.extraDeps ?? [])]
         for (const ext of externals['@prisma/client']) {
           if (ext.node && !semifies(semver.clean(process.version), ext.node)) continue
           if (ext.dep === '@prisma/client') {

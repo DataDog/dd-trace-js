@@ -1,7 +1,7 @@
 'use strict'
 
-const { SeverityNumber } = require('@opentelemetry/api-logs')
-const { trace } = require('@opentelemetry/api')
+const { SeverityNumber } = require('../api').getApiLogs()
+const { trace } = require('../api').getApi()
 
 const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
 const { getProtobufTypes } = require('../otlp/protobuf_loader')

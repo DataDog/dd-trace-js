@@ -11,6 +11,7 @@ const { logs } = require('@opentelemetry/api-logs')
 const { trace, context } = require('@opentelemetry/api')
 
 require('../setup/core')
+require('./use-otel-api')
 const { protoLogsService } = require('../../src/opentelemetry/otlp/protobuf_loader').getProtobufTypes()
 const { getConfigFresh } = require('../helpers/config')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
@@ -40,8 +41,10 @@ describe('OpenTelemetry Logs', () => {
     logs.disable()
     const config = getConfigFresh()
     if (config.DD_LOGS_OTEL_ENABLED) {
-      const { initializeOpenTelemetryLogs } =
-        proxyquire.noPreserveCache()('../../src/opentelemetry/logs', {})
+      // Cache-preserving proxyquire so the deep `require('../api')` resolves the holder seeded
+      // by use-otel-api rather than a fresh, unseeded copy; initializeOpenTelemetryLogs is
+      // re-callable and builds a new provider each call, so no per-test reload is needed.
+      const { initializeOpenTelemetryLogs } = proxyquire('../../src/opentelemetry/logs', {})
       initializeOpenTelemetryLogs(config)
     }
     return { config, logs, loggerProvider: logs.getLoggerProvider() }
@@ -53,13 +56,16 @@ describe('OpenTelemetry Logs', () => {
     process.env.DD_LOGS_OTEL_ENABLED = 'true'
     process.env.OTEL_BSP_MAX_EXPORT_BATCH_SIZE = maxExportBatchSize
 
-    const proxy = proxyquire.noPreserveCache()('../../src/proxy', {
+    // Cache-preserving proxyquire so the reloaded proxy's deep `require('./opentelemetry/api')`
+    // resolves the holder seeded by use-otel-api; a fresh, unseeded holder would leave the
+    // deferred logs pipeline waiting forever.
+    const proxy = proxyquire('../../src/proxy', {
       './config': getConfigFresh,
     })
-    const TracerProxy = proxyquire.noPreserveCache()('../../src', {
+    const TracerProxy = proxyquire('../../src', {
       './proxy': proxy,
     })
-    const tracer = proxyquire.noPreserveCache()('../../', {
+    const tracer = proxyquire('../../', {
       './src': TracerProxy,
     })
     tracer._initialized = false

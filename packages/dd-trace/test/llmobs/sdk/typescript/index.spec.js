@@ -78,8 +78,12 @@ describe('typescript', () => {
   for (const version of testVersions) {
     // TODO: Figure out the real version without using `npm show` as it causes rate limit errors.
     context(`with version ${version}`, () => {
+      // dd-trace's index.d.ts imports @opentelemetry/api for the OTel bridge types. v6 declares
+      // it as an optional peer dependency, so the sandbox has to install it for tsc to resolve it.
       useSandbox(
-        ['@types/node', `typescript@${version}`], false, ['./packages/dd-trace/test/llmobs/sdk/typescript/*']
+        ['@types/node', '@opentelemetry/api', `typescript@${version}`],
+        false,
+        ['./packages/dd-trace/test/llmobs/sdk/typescript/*']
       )
 
       beforeEach(async () => {

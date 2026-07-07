@@ -2,8 +2,6 @@
 
 const os = require('os')
 
-const { metrics } = require('@opentelemetry/api')
-
 const { VERSION } = require('../../../../../version')
 const processTags = require('../../process-tags')
 const MeterProvider = require('./meter_provider')
@@ -41,6 +39,7 @@ const OtlpHttpMetricExporter = require('./otlp_http_metric_exporter')
  * @param {import('../../config/config-base')} config - Tracer configuration instance
  */
 function initializeOpenTelemetryMetrics (config) {
+  const { metrics } = require('../api').getApi()
   const resourceAttributes = {
     'service.name': config.service,
     'service.version': config.version,

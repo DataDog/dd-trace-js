@@ -11,6 +11,7 @@ const { hrTime, timeInputToHrTime } = require('../../../../vendor/dist/@opentele
 const { AUTO_KEEP, AUTO_REJECT, USER_KEEP } = require('../../../../ext/priority')
 const { storage } = require('../../../datadog-core')
 require('../setup/core')
+require('./use-otel-api')
 require('../../').init()
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 const Tracer = require('../../src/opentelemetry/tracer')
