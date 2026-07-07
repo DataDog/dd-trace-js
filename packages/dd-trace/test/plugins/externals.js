@@ -116,6 +116,12 @@ module.exports = {
       versions: ['^3'],
     },
   ],
+  'claude-agent-sdk': [
+    {
+      name: 'zod',
+      versions: ['^4.0.0'],
+    },
+  ],
   'cookie-parser': [
     {
       name: 'express',

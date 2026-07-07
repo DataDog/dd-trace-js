@@ -1819,6 +1819,14 @@
         "namespace": "testOptimization"
       }
     ],
+    "DD_TEST_FAILURE_SCREENSHOTS_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": null,
+        "namespace": "testOptimization"
+      }
+    ],
     "DD_TEST_FLEET_CONFIG_PATH": [
       {
         "implementation": "A",
@@ -1940,6 +1948,13 @@
       }
     ],
     "DD_TRACE_ANTHROPIC_ENABLED": [
+      {
+        "implementation": "A",
+        "type": "boolean",
+        "default": "true"
+      }
+    ],
+    "DD_TRACE_CLAUDE_AGENT_SDK_ENABLED": [
       {
         "implementation": "A",
         "type": "boolean",

@@ -213,6 +213,7 @@ export interface GeneratedConfig {
   DD_TRACE_BUNYAN_ENABLED: boolean;
   DD_TRACE_CASSANDRA_DRIVER_ENABLED: boolean;
   DD_TRACE_CHILD_PROCESS_ENABLED: boolean;
+  DD_TRACE_CLAUDE_AGENT_SDK_ENABLED: boolean;
   DD_TRACE_COLLECTIONS_ENABLED: boolean;
   DD_TRACE_COMMONPLUGIN_ENABLED: boolean;
   DD_TRACE_CONFLUENTINC_KAFKA_JAVASCRIPT_ENABLED: boolean;
@@ -558,6 +559,7 @@ export interface GeneratedConfig {
     DD_CIVISIBILITY_TEST_MODULE_ID: string | undefined;
     DD_CIVISIBILITY_TEST_SESSION_ID: string | undefined;
     DD_TEST_FAILED_TEST_REPLAY_ENABLED: boolean;
+    DD_TEST_FAILURE_SCREENSHOTS_ENABLED: boolean | undefined;
     DD_TEST_FLEET_CONFIG_PATH: string | undefined;
     DD_TEST_LOCAL_CONFIG_PATH: string | undefined;
     DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES: number;
@@ -790,6 +792,7 @@ export interface GeneratedEnvVarConfig {
   DD_TELEMETRY_LOG_COLLECTION_ENABLED: boolean;
   DD_TELEMETRY_METRICS_ENABLED: boolean;
   DD_TEST_FAILED_TEST_REPLAY_ENABLED: boolean;
+  DD_TEST_FAILURE_SCREENSHOTS_ENABLED: boolean | undefined;
   DD_TEST_FLEET_CONFIG_PATH: string | undefined;
   DD_TEST_LOCAL_CONFIG_PATH: string | undefined;
   DD_TEST_MANAGEMENT_ATTEMPT_TO_FIX_RETRIES: number;
@@ -868,6 +871,7 @@ export interface GeneratedEnvVarConfig {
   DD_TRACE_BUNYAN_ENABLED: boolean;
   DD_TRACE_CASSANDRA_DRIVER_ENABLED: boolean;
   DD_TRACE_CHILD_PROCESS_ENABLED: boolean;
+  DD_TRACE_CLAUDE_AGENT_SDK_ENABLED: boolean;
   DD_TRACE_CLIENT_IP_ENABLED: boolean;
   DD_TRACE_CLIENT_IP_HEADER: string | undefined;
   DD_TRACE_CLOUD_PAYLOAD_TAGGING_MAX_DEPTH: number;
