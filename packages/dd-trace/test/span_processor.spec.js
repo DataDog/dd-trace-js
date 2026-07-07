@@ -172,6 +172,30 @@ describe('SpanProcessor', () => {
     assert.deepStrictEqual(prio[0].args[3], ['f64', 2])
   })
 
+  it('mirrors trace propagation tags (_dd.p.tid) to native trace meta', () => {
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+    finishedSpan.context()._nativeSpanId = 55
+    // 128-bit trace-id high bits carried as a trace-level propagation tag.
+    trace.tags['_dd.p.tid'] = '640cfd8d00000000'
+    prioritySampler.sample = sinon.stub().callsFake((c) => {
+      c._sampling.priority = 1
+      c._sampling.mechanism = 3
+    })
+
+    processor.process(finishedSpan)
+
+    const tid = nativeSpans.queueOp.getCalls()
+      .filter(c => c.args[0] === fakeOpCode.SetTraceMetaAttr && c.args[2] === '_dd.p.tid')
+    assert.strictEqual(tid.length, 1)
+    assert.strictEqual(tid[0].args[3], '640cfd8d00000000')
+    // `_dd.p.dm` is written by the sampling path only — the trace-tags sync
+    // skips it, so it must still appear exactly once (no duplicate).
+    const dm = nativeSpans.queueOp.getCalls()
+      .filter(c => c.args[0] === fakeOpCode.SetTraceMetaAttr && c.args[2] === '_dd.p.dm')
+    assert.strictEqual(dm.length, 1)
+  })
+
   it('should erase the trace once finished', () => {
     trace.started = [finishedSpan]
     trace.finished = [finishedSpan]

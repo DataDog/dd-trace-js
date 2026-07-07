@@ -86,6 +86,38 @@ class SpanProcessor {
 
     // Add decision maker tag
     this._addDecisionMaker(root)
+
+    // Mirror the remaining trace-level propagation tags (`_dd.p.tid`,
+    // `_dd.p.ts`, other `_dd.p.*`, `baggage.*`) into native storage so the
+    // WASM exporter stamps them onto the exported chunk, matching what the JS
+    // formatter did. `_dd.p.dm` is handled by the sampling path above.
+    if (spanContext._nativeSpanId !== undefined) {
+      this._syncTraceTagsToNative(spanContext, spanContext._nativeSpanId)
+    }
+  }
+
+  /**
+   * Sync the trace-level tags (chunk/propagation tags such as `_dd.p.tid`)
+   * into native storage. String tags become trace meta, finite numbers become
+   * trace metrics. `_dd.p.dm` is skipped because it is written by the sampling
+   * path (`_syncSamplingToNative` / `_addDecisionMaker`); syncing it again here
+   * would emit a duplicate SetTraceMetaAttr.
+   *
+   * @param {object} spanContext - The span context
+   * @param {number} spanId - The native span id (op handle)
+   * @private
+   */
+  _syncTraceTagsToNative (spanContext, spanId) {
+    const traceTags = spanContext._trace.tags
+    for (const key of Object.keys(traceTags)) {
+      if (key === DECISION_MAKER_KEY) continue
+      const value = traceTags[key]
+      if (typeof value === 'string') {
+        this._nativeSpans.queueOp(native.OpCode.SetTraceMetaAttr, spanId, key, value)
+      } else if (typeof value === 'number' && !Number.isNaN(value)) {
+        this._nativeSpans.queueOp(native.OpCode.SetTraceMetricsAttr, spanId, key, ['f64', value])
+      }
+    }
   }
 
   /**
