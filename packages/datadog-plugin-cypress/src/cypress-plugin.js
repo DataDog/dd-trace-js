@@ -79,6 +79,8 @@ const {
   getMaxEfdRetryCount,
   getPullRequestBaseBranch,
   TEST_FINAL_STATUS,
+  TEST_FAILURE_SCREENSHOT_UPLOADED,
+  TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
   getTestOptimizationRequestResults,
 } = require('../../dd-trace/src/plugins/util/test')
 const { isMarkedAsUnskippable } = require('../../datadog-plugin-jest/src/util')
@@ -139,9 +141,18 @@ const CYPRESS_STATUS_TO_TEST_STATUS = {
 }
 
 const SCREENSHOT_ATTEMPT_RE = /\(attempt \d+\)/
+const SCREENSHOT_UPLOAD_RESULT_UPLOADED = 'uploaded'
+const SCREENSHOT_UPLOAD_RESULT_ERROR = 'error'
 
 function getScreenshotFilePath (screenshot) {
   return typeof screenshot === 'string' ? screenshot : screenshot?.path
+}
+
+function isFailureScreenshotByMetadata (screenshot, screenshotFilePath) {
+  if (screenshot !== null && typeof screenshot === 'object' && screenshot.testFailure !== undefined) {
+    return screenshot.testFailure === true
+  }
+  return screenshotFilePath.includes('(failed)')
 }
 
 /**
@@ -171,7 +182,15 @@ function getScreenshotCapturedAtMs (screenshot, filePath) {
 
 function isFailureScreenshotForUpload (screenshot) {
   const screenshotFilePath = getScreenshotFilePath(screenshot)
-  return !!screenshotFilePath && (screenshot?.testFailure === true || screenshotFilePath.includes('(failed)'))
+  if (!screenshotFilePath) {
+    return false
+  }
+  if (screenshot !== null && typeof screenshot === 'object') {
+    // after:screenshot details omit testFailure for manual cy.screenshot() captures, so this
+    // path cannot safely fall back to the '(failed)' filename marker.
+    return screenshot.testFailure === true
+  }
+  return screenshotFilePath.includes('(failed)')
 }
 
 function isFailureScreenshot (screenshot) {
@@ -179,7 +198,7 @@ function isFailureScreenshot (screenshot) {
   // Require an explicit failure signal: prefer the `testFailure` metadata, and fall back to the
   // '(failed)' filename marker only when the RunResult omits `testFailure`. This keeps manual
   // cy.screenshot() captures out of the failure-screenshot upload (privacy).
-  return !!screenshotFilePath && (screenshot?.testFailure === true || screenshotFilePath.includes('(failed)'))
+  return !!screenshotFilePath && isFailureScreenshotByMetadata(screenshot, screenshotFilePath)
 }
 
 function getAttemptScreenshots (cypressTest, attemptIndex) {
@@ -219,6 +238,27 @@ function getTestScreenshots (cypressTest, attemptIndex, specScreenshots) {
   }
   const titleParts = Array.isArray(cypressTest.title) ? cypressTest.title : []
   return specScreenshots.filter(screenshot => isScreenshotForTestAttempt(screenshot, titleParts, attemptIndex))
+}
+
+function getScreenshotUploadResult (uploadResults) {
+  let hasUploaded = false
+  for (const uploadResult of uploadResults) {
+    if (uploadResult === SCREENSHOT_UPLOAD_RESULT_ERROR) {
+      return SCREENSHOT_UPLOAD_RESULT_ERROR
+    }
+    if (uploadResult === SCREENSHOT_UPLOAD_RESULT_UPLOADED) {
+      hasUploaded = true
+    }
+  }
+  return hasUploaded ? SCREENSHOT_UPLOAD_RESULT_UPLOADED : undefined
+}
+
+function setScreenshotUploadTags (testSpan, uploadResult) {
+  if (uploadResult === SCREENSHOT_UPLOAD_RESULT_ERROR) {
+    testSpan.setTag(TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR, 'true')
+  } else if (uploadResult === SCREENSHOT_UPLOAD_RESULT_UPLOADED) {
+    testSpan.setTag(TEST_FAILURE_SCREENSHOT_UPLOADED, 'true')
+  }
 }
 
 function getSessionStatus (summary) {
@@ -490,6 +530,8 @@ class CypressPlugin {
   attemptToFixExecutions = new Map()
   loggedAttemptToFixTests = new Set()
   uploadedScreenshotPaths = new Set()
+  screenshotUploadPromisesByTraceId = new Map()
+  afterScreenshotHandler = undefined
   lastFinishedTest = null
   pendingScreenshotUploads = []
 
@@ -578,6 +620,7 @@ class CypressPlugin {
     this.attemptToFixExecutions = new Map()
     this.loggedAttemptToFixTests = new Set()
     this.uploadedScreenshotPaths = new Set()
+    this.screenshotUploadPromisesByTraceId = new Map()
     this.lastFinishedTest = null
     this.pendingScreenshotUploads = []
     this.activeTestSpan = null
@@ -594,6 +637,50 @@ class CypressPlugin {
     this.libraryConfigurationPromise = undefined
     this._timeOrigin = 0
     this._perfOrigin = 0
+  }
+
+  /**
+   * Returns a stable after:screenshot handler so auto-instrumentation can recognize
+   * the handler registered by the manual plugin and avoid treating it as a user hook.
+   *
+   * @returns {Function} Datadog after:screenshot handler
+   */
+  getAfterScreenshotHandler () {
+    if (!this.afterScreenshotHandler) {
+      this.afterScreenshotHandler = this.afterScreenshot.bind(this)
+    }
+    return this.afterScreenshotHandler
+  }
+
+  /**
+   * Tracks a screenshot upload by its owning test trace id so the test event can be tagged
+   * before the span is finished.
+   *
+   * @param {string} traceId - Test trace id used for the upload
+   * @param {Promise<string|undefined>} uploadPromise - Promise resolving to the upload outcome
+   * @returns {void}
+   */
+  addScreenshotUploadPromise (traceId, uploadPromise) {
+    const uploadPromises = this.screenshotUploadPromisesByTraceId.get(traceId)
+    if (uploadPromises) {
+      uploadPromises.push(uploadPromise)
+    } else {
+      this.screenshotUploadPromisesByTraceId.set(traceId, [uploadPromise])
+    }
+  }
+
+  /**
+   * Returns the aggregate upload outcome for all screenshots associated with a test trace id.
+   *
+   * @param {string} traceId - Test trace id used for the upload
+   * @returns {Promise<string|undefined>|undefined} Promise resolving to the aggregate upload outcome
+   */
+  getScreenshotUploadResultPromise (traceId) {
+    const uploadPromises = this.screenshotUploadPromisesByTraceId.get(traceId)
+    if (!uploadPromises?.length) {
+      return
+    }
+    return Promise.all(uploadPromises).then(getScreenshotUploadResult)
   }
 
   /**
@@ -1341,6 +1428,7 @@ class CypressPlugin {
     const specScreenshots = screenshots || []
     const finishedTests = this.finishedTestsByFile[spec.relative] || []
     const screenshotUploadPromises = []
+    const testSpanFinishPromises = []
 
     if (!this.testSuiteSpan) {
       // dd:testSuiteStart hasn't been triggered for whatever reason
@@ -1448,8 +1536,9 @@ class CypressPlugin {
           latestError = new Error(cypressTest.displayError)
         }
 
+        let failedTestTraceId
         if (cypressTestStatus === 'fail' || finishedTest.testStatus === 'fail' || cypressTest.displayError) {
-          const failedTestTraceId = finishedTest.testSpan.context().toTraceId()
+          failedTestTraceId = finishedTest.testSpan.context().toTraceId()
           const testScreenshots = getTestScreenshots(cypressTest, attemptIndex, specScreenshots)
           const screenshotUploadPromise = this.uploadTestScreenshots({
             screenshots: testScreenshots,
@@ -1516,27 +1605,55 @@ class CypressPlugin {
           }
         }
 
-        finishedTest.testSpan.finish(finishedTest.finishTime)
+        const screenshotUploadResultPromise = failedTestTraceId
+          ? this.getScreenshotUploadResultPromise(failedTestTraceId)
+          : undefined
+        if (screenshotUploadResultPromise) {
+          testSpanFinishPromises.push(screenshotUploadResultPromise.then((uploadResult) => {
+            setScreenshotUploadTags(finishedTest.testSpan, uploadResult)
+            this.screenshotUploadPromisesByTraceId.delete(failedTestTraceId)
+            finishedTest.testSpan.finish(finishedTest.finishTime)
+          }))
+        } else {
+          finishedTest.testSpan.finish(finishedTest.finishTime)
+        }
       }
     }
 
-    if (this.testSuiteSpan) {
-      const status = getSuiteStatus(stats)
-      this.testSuiteSpan.setTag(TEST_STATUS, status)
+    const finishSuite = () => {
+      if (this.testSuiteSpan) {
+        const status = getSuiteStatus(stats)
+        this.testSuiteSpan.setTag(TEST_STATUS, status)
 
-      if (latestError) {
-        this.testSuiteSpan.setTag('error', latestError)
+        if (latestError) {
+          this.testSuiteSpan.setTag('error', latestError)
+        }
+        this.testSuiteSpan.finish()
+        this.testSuiteSpan = null
+        this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
       }
-      this.testSuiteSpan.finish()
-      this.testSuiteSpan = null
-      this.ciVisEvent(TELEMETRY_EVENT_FINISHED, 'suite')
     }
 
-    if (screenshotUploadPromises.length > 0 || this.pendingScreenshotUploads.length > 0) {
-      const pendingScreenshotUploads = this.pendingScreenshotUploads
-      this.pendingScreenshotUploads = []
-      return Promise.all([...pendingScreenshotUploads, ...screenshotUploadPromises]).then(() => null)
+    const waitForScreenshotUploads = () => {
+      if (screenshotUploadPromises.length > 0 || this.pendingScreenshotUploads.length > 0) {
+        const pendingScreenshotUploads = this.pendingScreenshotUploads
+        this.pendingScreenshotUploads = []
+        return Promise.all([...pendingScreenshotUploads, ...screenshotUploadPromises]).then(() => null)
+      }
     }
+
+    finishSuite()
+
+    const screenshotUploadsPromise = waitForScreenshotUploads()
+    if (testSpanFinishPromises.length > 0) {
+      const testSpansPromise = Promise.all(testSpanFinishPromises).then(() => null)
+      if (screenshotUploadsPromise) {
+        return Promise.all([testSpansPromise, screenshotUploadsPromise]).then(() => null)
+      }
+      return testSpansPromise
+    }
+
+    return screenshotUploadsPromise
   }
 
   /**
@@ -1545,7 +1662,7 @@ class CypressPlugin {
    * @param {object} options - Upload options
    * @param {Array<object|string>} options.screenshots - Cypress screenshot objects or screenshot paths
    * @param {string} options.traceId - Test trace id used as the screenshot key
-   * @returns {Promise<void>|undefined}
+   * @returns {Promise<string|undefined>|undefined}
    */
   uploadTestScreenshots ({ screenshots, traceId }) {
     const exporter = this.tracer?._tracer?._exporter
@@ -1574,14 +1691,16 @@ class CypressPlugin {
           traceId,
           idempotencyKey,
           capturedAtMs,
-        }, () => {
-          resolve()
+        }, (err) => {
+          resolve(err ? SCREENSHOT_UPLOAD_RESULT_ERROR : SCREENSHOT_UPLOAD_RESULT_UPLOADED)
         })
       }))
     }
 
     if (uploadPromises.length > 0) {
-      return Promise.all(uploadPromises).then(() => {})
+      const uploadPromise = Promise.all(uploadPromises).then(getScreenshotUploadResult)
+      this.addScreenshotUploadPromise(traceId, uploadPromise)
+      return uploadPromise
     }
   }
 
