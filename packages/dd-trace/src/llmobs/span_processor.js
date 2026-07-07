@@ -236,7 +236,7 @@ class LLMObsSpanProcessor {
     }
 
     if (event.parent_id !== undefined) metaStruct.parent_id = event.parent_id
-    if (mlObsTags[NAME]) metaStruct.name = mlObsTags[NAME]
+    if (event.name !== undefined) metaStruct.name = event.name
     if (mlObsTags[ML_APP]) metaStruct.ml_app = mlObsTags[ML_APP]
     if (event.session_id) metaStruct.session_id = event.session_id
 

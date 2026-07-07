@@ -6,6 +6,7 @@ const { beforeEach, describe, it } = require('mocha')
 const proxyquire = require('proxyquire')
 const sinon = require('sinon')
 
+const exporters = require('../../../../ext/exporters')
 const LLMObsTagger = require('../../src/llmobs/tagger')
 const {
   CACHED_LLMOBS_EVENT_SYMBOL,
@@ -839,6 +840,46 @@ describe('span processor', () => {
       assert.strictEqual(span[CACHED_LLMOBS_EVENT_SYMBOL].event.span_id, '456')
     })
 
+    it('attaches the LLMObs data struct to meta_struct while APM exporter routing is deferred', () => {
+      const apmTags = {}
+      span = {
+        _name: 'test',
+        _startTime: 0,
+        _duration: 1,
+        context () {
+          return {
+            _tags: apmTags,
+            getTags () { return this._tags },
+            getTag (key) { return this._tags[key] },
+            setTag (key, value) { this._tags[key] = value },
+            toTraceId () { return '123' },
+            toSpanId () { return '456' },
+          }
+        },
+      }
+
+      processor = new LLMObsSpanProcessor({
+        DD_TRACE_ENABLED: true,
+        apmTracingEnabled: true,
+        experimental: { exporter: exporters.DEFERRED },
+        llmobs: { DD_LLMOBS_ENABLED: true },
+      })
+      processor.setWriter(writer)
+
+      LLMObsTagger.tagMap.set(span, {
+        '_ml_obs.meta.span.kind': 'llm',
+      })
+
+      processor.process(span)
+
+      sinon.assert.notCalled(writer.append)
+      assert.strictEqual(apmTags[LLMOBS_SUBMITTED_TAG_KEY], undefined)
+      assert.strictEqual(span.meta_struct[LLMOBS_META_STRUCT_KEY].trace_id, '123')
+      assert.strictEqual(span.meta_struct[LLMOBS_META_STRUCT_KEY].name, 'test')
+      assert.deepStrictEqual(span.meta_struct[LLMOBS_META_STRUCT_KEY].meta.span, { kind: 'llm' })
+      assert.strictEqual(span[CACHED_LLMOBS_EVENT_SYMBOL].event.span_id, '456')
+    })
+
     it('attaches the LLMObs data struct without caching the event in APM agentless mode', () => {
       span = {
         _name: 'test',
@@ -872,6 +913,7 @@ describe('span processor', () => {
 
       sinon.assert.notCalled(writer.append)
       assert.strictEqual(span.meta_struct[LLMOBS_META_STRUCT_KEY].trace_id, '123')
+      assert.strictEqual(span.meta_struct[LLMOBS_META_STRUCT_KEY].name, 'test')
       assert.deepStrictEqual(span.meta_struct[LLMOBS_META_STRUCT_KEY].meta.span, { kind: 'llm' })
       assert.strictEqual(span.meta_struct[LLMOBS_META_STRUCT_KEY].tags.ddtrace_version, 'x.y.z')
       assert.ok(!('ddtrace.version' in span.meta_struct[LLMOBS_META_STRUCT_KEY].tags))

@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 
 const { describe, it } = require('mocha')
 
+const exporters = require('../../../../ext/exporters')
 const {
   LLMObsExportMode,
   getLLMObsExportMode,
@@ -14,6 +15,15 @@ describe('LLMObs export mode', () => {
     assert.strictEqual(getLLMObsExportMode({
       DD_TRACE_ENABLED: true,
       apmTracingEnabled: true,
+      llmobs: { DD_LLMOBS_ENABLED: true },
+    }), LLMObsExportMode.APM_AGENT)
+  })
+
+  it('uses APM agent mode while APM routing is deferred', () => {
+    assert.strictEqual(getLLMObsExportMode({
+      DD_TRACE_ENABLED: true,
+      apmTracingEnabled: true,
+      experimental: { exporter: exporters.DEFERRED },
       llmobs: { DD_LLMOBS_ENABLED: true },
     }), LLMObsExportMode.APM_AGENT)
   })

@@ -34,7 +34,10 @@ function getLLMObsExportMode (config, writer) {
       writer?._agentless === true) {
     return LLMObsExportMode.APM_AGENTLESS
   }
-  if (exporter === undefined || exporter === '' || exporter === exporters.AGENT) {
+  if (exporter === undefined ||
+      exporter === '' ||
+      exporter === exporters.AGENT ||
+      exporter === exporters.DEFERRED) {
     return LLMObsExportMode.APM_AGENT
   }
 
