@@ -32,6 +32,7 @@ const stream = query({
     mcpServers: { local: localToolsServer },
     tools: ['Agent'],
     allowedTools: ['mcp__local__fetch_weather'],
+    disallowedTools: ['Monitor', 'PushNotification', 'RemoteTrigger'],
     settingSources: [],
     systemPrompt: 'You are a helpful assistant. Use the available tools to answer the user.',
     skills: [],
