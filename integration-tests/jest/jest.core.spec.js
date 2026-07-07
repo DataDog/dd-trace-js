@@ -1340,7 +1340,7 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
           cwd,
           env: {
             ...getCiVisAgentlessConfig(receiver.port),
-            TESTS_TO_RUN: 'dynamic-instrumentation/test-',
+            TESTS_TO_RUN: 'dynamic-instrumentation/test-(hit-breakpoint|not-hit-breakpoint)\\.js$',
             DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '1',
             RUN_IN_PARALLEL: 'true',
           },
