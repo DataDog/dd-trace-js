@@ -772,7 +772,7 @@ describe('span processor', () => {
       assert.strictEqual(apmTags['_dd.llmobs.submitted'], undefined)
     })
 
-    it('attaches the span event to meta_struct in APM agent mode', () => {
+    it('attaches the LLMObs data struct to meta_struct in APM agent mode', () => {
       const apmTags = {}
       span = {
         _name: 'test',
@@ -799,17 +799,47 @@ describe('span processor', () => {
 
       LLMObsTagger.tagMap.set(span, {
         '_ml_obs.meta.span.kind': 'llm',
+        '_ml_obs.meta.ml_app': 'my-app',
+        '_ml_obs.name': 'llm-name',
+        '_ml_obs.sample_rate': '1',
+        '_ml_obs.sampling_decision': '1',
       })
 
       processor.process(span)
 
       sinon.assert.notCalled(writer.append)
       assert.strictEqual(apmTags['_dd.llmobs.submitted'], undefined)
-      assert.strictEqual(span.meta_struct[LLMOBS_META_STRUCT_KEY].span_id, '456')
-      assert.strictEqual(span[CACHED_LLMOBS_EVENT_SYMBOL].event, span.meta_struct[LLMOBS_META_STRUCT_KEY])
+      assert.deepStrictEqual(span.meta_struct[LLMOBS_META_STRUCT_KEY], {
+        trace_id: '123',
+        name: 'llm-name',
+        ml_app: 'my-app',
+        meta: {
+          span: { kind: 'llm' },
+          input: {},
+          output: {},
+          model_name: 'custom',
+          model_provider: 'custom',
+        },
+        metrics: {},
+        tags: {
+          version: '',
+          env: '',
+          service: '',
+          source: 'integration',
+          ml_app: 'my-app',
+          'ddtrace.version': 'x.y.z',
+          error: '0',
+          language: 'javascript',
+        },
+        _dd: {
+          sample_rate: '1',
+          sampling_decision: '1',
+        },
+      })
+      assert.strictEqual(span[CACHED_LLMOBS_EVENT_SYMBOL].event.span_id, '456')
     })
 
-    it('attaches the span event without caching it in APM agentless mode', () => {
+    it('attaches the LLMObs data struct without caching the event in APM agentless mode', () => {
       span = {
         _name: 'test',
         _startTime: 0,
@@ -841,7 +871,10 @@ describe('span processor', () => {
       processor.process(span)
 
       sinon.assert.notCalled(writer.append)
-      assert.strictEqual(span.meta_struct[LLMOBS_META_STRUCT_KEY].span_id, '456')
+      assert.strictEqual(span.meta_struct[LLMOBS_META_STRUCT_KEY].trace_id, '123')
+      assert.deepStrictEqual(span.meta_struct[LLMOBS_META_STRUCT_KEY].meta.span, { kind: 'llm' })
+      assert.strictEqual(span.meta_struct[LLMOBS_META_STRUCT_KEY].tags.ddtrace_version, 'x.y.z')
+      assert.ok(!('ddtrace.version' in span.meta_struct[LLMOBS_META_STRUCT_KEY].tags))
       assert.strictEqual(span[CACHED_LLMOBS_EVENT_SYMBOL], undefined)
     })
 
@@ -879,7 +912,8 @@ describe('span processor', () => {
       processor.process(span)
 
       sinon.assert.notCalled(writer.append)
-      assert.strictEqual(span.meta_struct[LLMOBS_META_STRUCT_KEY].span_id, '456')
+      assert.strictEqual(span.meta_struct[LLMOBS_META_STRUCT_KEY].trace_id, '123')
+      assert.deepStrictEqual(span.meta_struct[LLMOBS_META_STRUCT_KEY].meta.span, { kind: 'llm' })
       assert.strictEqual(span[CACHED_LLMOBS_EVENT_SYMBOL], undefined)
     })
 

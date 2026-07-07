@@ -472,17 +472,64 @@ function getLlmObsSpansFromApmSpans (apmSpans) {
   const llmobsSpans = []
 
   for (const span of apmSpans) {
-    const encodedEvent = span.meta_struct?.[LLMOBS_META_STRUCT_KEY]
-    if (encodedEvent === undefined) continue
+    let llmobsData = span.meta_struct?.[LLMOBS_META_STRUCT_KEY]
+    if (llmobsData === undefined) continue
 
-    if (Buffer.isBuffer(encodedEvent) || encodedEvent instanceof Uint8Array) {
-      llmobsSpans.push(msgpack.decode(encodedEvent))
-    } else {
-      llmobsSpans.push(encodedEvent)
+    if (Buffer.isBuffer(llmobsData) || llmobsData instanceof Uint8Array) {
+      llmobsData = msgpack.decode(llmobsData)
     }
+
+    llmobsSpans.push(getLlmObsSpanEventFromApmSpan(span, llmobsData))
   }
 
   return llmobsSpans
+}
+
+function getLlmObsSpanEventFromApmSpan (span, llmobsData) {
+  const spanId = fromBuffer(span.span_id)
+  const traceId = llmobsData.trace_id
+  const spanEvent = {
+    trace_id: traceId,
+    span_id: spanId,
+    parent_id: llmobsData.parent_id ?? 'undefined',
+    name: llmobsData.name ?? span.name,
+    start_ns: fromBuffer(span.start, true),
+    duration: fromBuffer(span.duration, true),
+    status: span.error ? 'error' : 'ok',
+    meta: getLlmObsSpanEventMeta(llmobsData.meta ?? {}),
+    metrics: llmobsData.metrics ?? {},
+    tags: Object.entries(llmobsData.tags ?? {}).map(([key, value]) => `${key}:${value}`),
+    _dd: {
+      ...(llmobsData._dd ?? {}),
+      span_id: spanId,
+      trace_id: traceId,
+      apm_trace_id: traceId,
+    },
+  }
+
+  if (llmobsData.session_id) spanEvent.session_id = llmobsData.session_id
+  if (llmobsData.config) spanEvent.config = llmobsData.config
+  if (llmobsData.span_links) spanEvent.span_links = llmobsData.span_links
+
+  return spanEvent
+}
+
+function getLlmObsSpanEventMeta (llmobsMeta) {
+  const meta = {}
+
+  for (const [key, value] of Object.entries(llmobsMeta)) {
+    if (key === 'span') {
+      meta['span.kind'] = value.kind
+    } else if (key === 'error') {
+      meta[ERROR_MESSAGE] = value.message
+      meta[ERROR_TYPE] = value.type
+      meta[ERROR_STACK] = value.stack
+    } else {
+      meta[key] = value
+    }
+  }
+
+  return meta
 }
 
 /**

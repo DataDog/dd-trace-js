@@ -110,7 +110,7 @@ class LLMObsSpanProcessor {
 
       if (mode === LLMObsExportMode.APM_AGENT || mode === LLMObsExportMode.APM_AGENTLESS) {
         span.meta_struct ??= {}
-        span.meta_struct[LLMOBS_META_STRUCT_KEY] = formattedEvent
+        span.meta_struct[LLMOBS_META_STRUCT_KEY] = this.#formatMetaStruct(formattedEvent, mlObsTags, mode)
         if (mode === LLMObsExportMode.APM_AGENT) {
           span[CACHED_LLMOBS_EVENT_SYMBOL] = {
             event: formattedEvent,
@@ -210,6 +210,109 @@ class LLMObsSpanProcessor {
     if (!hasOtherStructuredMetadata) {
       span.meta_struct = undefined
     }
+  }
+
+  /**
+   * Formats the compact LLMObs struct that rides inside APM span meta_struct.
+   * This mirrors dd-trace-py's `_llmobs` struct; the full LLMObs span event is
+   * only used for direct writer submission and fallback rescue.
+   *
+   * @param {object} event
+   * @param {Record<string, unknown>} mlObsTags
+   * @param {string} mode
+   * @returns {object}
+   */
+  #formatMetaStruct (event, mlObsTags, mode) {
+    const dd = {}
+    if (mlObsTags[SAMPLE_RATE] !== undefined) dd.sample_rate = mlObsTags[SAMPLE_RATE]
+    if (mlObsTags[SAMPLING_DECISION] !== undefined) dd.sampling_decision = mlObsTags[SAMPLING_DECISION]
+
+    const metaStruct = {
+      trace_id: event.trace_id,
+      meta: this.#formatMetaStructMeta(event.meta),
+      metrics: event.metrics,
+      tags: this.#formatMetaStructTags(this.#getTagsObject(event.tags), mode),
+      _dd: dd,
+    }
+
+    if (event.parent_id !== undefined) metaStruct.parent_id = event.parent_id
+    if (mlObsTags[NAME]) metaStruct.name = mlObsTags[NAME]
+    if (mlObsTags[ML_APP]) metaStruct.ml_app = mlObsTags[ML_APP]
+    if (event.session_id) metaStruct.session_id = event.session_id
+
+    return metaStruct
+  }
+
+  /**
+   * Converts the JS writer event meta shape to the LLMObs meta_struct shape.
+   *
+   * @param {object} eventMeta
+   * @returns {object}
+   */
+  #formatMetaStructMeta (eventMeta) {
+    const meta = {}
+
+    for (const [key, value] of Object.entries(eventMeta)) {
+      if (key === 'span.kind') {
+        meta.span = { kind: value }
+      } else if (key === ERROR_MESSAGE) {
+        this.#getMetaStructError(meta).message = value
+      } else if (key === ERROR_TYPE) {
+        this.#getMetaStructError(meta).type = value
+      } else if (key === ERROR_STACK) {
+        this.#getMetaStructError(meta).stack = value
+      } else {
+        meta[key] = value
+      }
+    }
+
+    return meta
+  }
+
+  /**
+   * Returns `meta.error`, initializing it once.
+   *
+   * @param {object} meta
+   * @returns {object}
+   */
+  #getMetaStructError (meta) {
+    if (!meta.error) meta.error = {}
+    return meta.error
+  }
+
+  /**
+   * Converts writer tags back to the Python meta_struct tag map.
+   *
+   * @param {string[]} tags
+   * @returns {Record<string, string>}
+   */
+  #getTagsObject (tags) {
+    const tagsObject = {}
+
+    for (const tag of tags) {
+      const separator = tag.indexOf(':')
+      if (separator === -1) continue
+      tagsObject[tag.slice(0, separator)] = tag.slice(separator + 1)
+    }
+
+    return tagsObject
+  }
+
+  /**
+   * Normalizes tag keys for the APM agentless intake.
+   *
+   * @param {Record<string, string>} tags
+   * @param {string} mode
+   * @returns {Record<string, string>}
+   */
+  #formatMetaStructTags (tags, mode) {
+    if (mode !== LLMObsExportMode.APM_AGENTLESS) return tags
+
+    const normalizedTags = {}
+    for (const [key, value] of Object.entries(tags)) {
+      normalizedTags[key.replaceAll('.', '_')] = value
+    }
+    return normalizedTags
   }
 
   /**
