@@ -434,7 +434,7 @@ describe("EventBridge plugin requestInject", () => {
     const originalInfo = log.info;
     const calls = [];
     log.info = (...args) => calls.push(args);
-    plugin.getInjectedEntryDetail = () => makeEventDetail(513 * 1024);
+    plugin.injectDetail = () => makeEventDetail(513 * 1024);
     const request = {
       operation: "putEvents",
       params: {
@@ -465,7 +465,7 @@ describe("EventBridge plugin requestInject", () => {
     const calls = [];
     log.info = (...args) => calls.push(args);
     const injectedDetail = makeEventDetail(499 * 1024);
-    plugin.getInjectedEntryDetail = () => injectedDetail;
+    plugin.injectDetail = () => injectedDetail;
     const request = {
       operation: "putEvents",
       params: {
