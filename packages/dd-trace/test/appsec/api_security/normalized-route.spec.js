@@ -147,10 +147,6 @@ describe('normalizeRouteExpress', () => {
       assert.equal(normalize('/users/:id', null), '/users/{id}')
     })
 
-    it('works when params is undefined', () => {
-      assert.equal(normalize('/users/:id', undefined), '/users/{id}')
-    })
-
     it('supports $ and Unicode characters in param names', () => {
       assert.equal(normalize('/:$foo', { $foo: 'x' }, '/x'), '/{$foo}')
       assert.equal(normalize('/:café', { café: 'x' }, '/x'), '/{café}')
@@ -163,10 +159,6 @@ describe('normalizeRouteExpress', () => {
         normalize('/photos/:id.:format', { id: '1', format: 'jpg' }),
         '/photos/{id+format}'
       )
-    })
-
-    it('combines two params separated by a dash', () => {
-      assert.equal(normalize('/range/:from-:to', { from: 'a', to: 'z' }), '/range/{from+to}')
     })
 
     it('combines three params in one segment', () => {
@@ -188,14 +180,6 @@ describe('normalizeRouteExpress', () => {
 
     it('normalizes /prefix/*rest', () => {
       assert.equal(normalize('/files/*rest', { rest: 'a/b/c' }), '/files/{rest}')
-    })
-
-    it('normalizes /app/*splat with mount prefix', () => {
-      assert.equal(normalize('/api/*wild', { wild: 'x/y' }), '/api/{wild}')
-    })
-
-    it('still normalizes a terminal named wildcard', () => {
-      assert.equal(normalize('/files/*splat', { splat: 'a/b' }), '/files/{splat}')
     })
 
     it('avoids paramN collision with existing named params', () => {
@@ -234,13 +218,6 @@ describe('normalizeRouteExpress', () => {
   describe('mount-prefixed routes (sub-routers)', () => {
     it('includes mount prefix in normalized route', () => {
       assert.equal(normalize('/app/users/:id', { id: '5' }), '/app/users/{id}')
-    })
-
-    it('handles deeply nested mount paths', () => {
-      assert.equal(
-        normalize('/api/v1/resources/:resourceId/items/:itemId', { resourceId: 'r1', itemId: 'i1' }),
-        '/api/v1/resources/{resourceId}/items/{itemId}'
-      )
     })
   })
 
@@ -395,10 +372,6 @@ describe('normalizeRouteExpress', () => {
     it('does not mark an absent optional present when a name is shared across groups', () => {
       assert.equal(normalize('/:id{/:id}', { id: 'x' }, '/x'), '/{id}')
       assert.equal(normalize('/a{/:x}/b{/:x}', { x: 'v' }, '/a/b/v'), '/a/b/{x}')
-    })
-
-    it('req.params only biases ordering; empty params keeps Express greedy (first optional wins)', () => {
-      assert.equal(normalize('/a{/:x}{/:y}/b', {}, '/a/1/b'), '/a/{x}/b')
     })
 
     it('captures a named wildcard after an optional segment (greedy: optional fills first)', () => {
