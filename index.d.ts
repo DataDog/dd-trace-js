@@ -2188,15 +2188,15 @@ declare namespace tracer {
 
     /**
      * This plugin automatically instruments the
-     * [@anthropic-ai/claude-agent-sdk](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) module.
-     */
-    interface claude_agent_sdk extends Instrumentation {}
-
-    /**
-     * This plugin automatically instruments the
      * [anthropic](https://www.npmjs.com/package/@anthropic-ai/sdk) module.
      */
     interface anthropic extends Instrumentation {}
+
+    /**
+     * This plugin automatically instruments the
+     * [@anthropic-ai/claude-agent-sdk](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) module.
+     */
+    interface claude_agent_sdk extends Instrumentation {}
 
     /**
      * Currently this plugin automatically instruments
