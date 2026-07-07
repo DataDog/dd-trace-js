@@ -60,18 +60,18 @@ channels.
 1. Discover CI workflow definitions before choosing local package scripts.
 2. Identify CI jobs, stages, or steps that install dependencies, set up Node, and run tests.
 3. Reproduce the CI test command shape as faithfully as practical and record whether the CI wiring
-   appears to provide Test Optimization initialization to the final test process.
+    appears to provide Test Optimization initialization to the final test process.
 4. Discover every test framework present in the repository.
 5. Install declared project dependencies or run documented setup only when needed for runner
-   availability.
+    availability.
 6. Prefer the test command identified from CI as `existingTestCommand` for each framework, but keep
-   `existingTestCommand` Datadog-clean: do not include CI-provided `NODE_OPTIONS` or Datadog env in
-   this command. Fall back to local package scripts only when CI discovery fails, is unsupported, or
-   cannot be safely replayed.
+    `existingTestCommand` Datadog-clean: do not include CI-provided `NODE_OPTIONS` or Datadog env in
+    this command. Fall back to local package scripts only when CI discovery fails, is unsupported, or
+    cannot be safely replayed.
 7. Run each selected `existingTestCommand` without adding Datadog instrumentation and record the
-   preflight result.
+    preflight result.
 8. Immediately write `./dd-test-optimization-validation-manifest.json` with framework detection,
-   CI wiring evidence, existing commands, preflight results, and non-runnable reasons.
+    CI wiring evidence, existing commands, preflight results, and non-runnable reasons.
 9. Create and verify temporary generated validation tests for each runnable framework.
 10. Delete temporary files.
 11. Update `./dd-test-optimization-validation-manifest.json` with generated test strategies.
@@ -126,9 +126,9 @@ an unrelated framework as a substitute.
 Create a complete, verified manifest and report that distinguish two validation paths:
 
 1. **CI wiring validation**: does the customer's CI-shaped test command already pass Datadog Test
-   Optimization initialization to the process that actually runs tests?
+    Optimization initialization to the process that actually runs tests?
 2. **Direct-initialization capability validation**: can this repository, framework, and installed
-   `dd-trace` report when the required Datadog setup reaches the test runner directly?
+    `dd-trace` report when the required Datadog setup reaches the test runner directly?
 
 The CI wiring path is the primary customer question. Direct-initialization Basic Reporting is the
 prerequisite diagnostic control: CI wiring should only be interpreted after the selected
@@ -139,9 +139,9 @@ Create a manifest that tells a deterministic validator:
 
 1. Which test frameworks are present.
 2. Which CI jobs or steps appear to run those frameworks, and how much of their runtime shape can be
-   replayed locally.
+    replayed locally.
 3. How to set up and run a small existing passing test subset for each framework, preferring the
-   CI-derived command when one is available.
+    CI-derived command when one is available.
 4. How to create temporary validation tests for each framework.
 5. How to run only those generated validation tests.
 6. Which generated test identities the validator should expect in Datadog payloads.
@@ -461,17 +461,17 @@ Recognize these CI systems and extract test-command evidence when practical:
 1. Detect repository root, package manager, workspace manager, Node version, and git metadata.
 2. Inspect CI workflow definitions and identify test-running jobs or stages.
 3. For each replayable CI test job, derive a `ciWiringCommand` with setup commands, environment,
-   working directory, shell, and selected matrix values. If a CI job cannot be replayed, record the
-   unresolved blocker immediately.
+    working directory, shell, and selected matrix values. If a CI job cannot be replayed, record the
+    unresolved blocker immediately.
 4. Inspect package scripts, workspace packages, lockfiles, config files, and dependencies.
 5. Resolve dependency/setup requirements for each candidate command.
 6. For each framework/package/workspace, identify a small existing passing test command, preferring
-   a replayable CI-derived command over a local package-script guess.
+    a replayable CI-derived command over a local package-script guess.
 7. Run that selected command without adding Datadog instrumentation and record the preflight result.
 8. Write the manifest immediately with the CI wiring evidence, existing-command, and preflight
-   information collected so far.
+    information collected so far.
 9. For each runnable framework, create a temporary generated validation test strategy for the forced
-   local control.
+    local control.
 10. Prove the generated passing test runs without Datadog instrumentation.
 11. Delete all temporary files and record cleanup success.
 12. Update the existing manifest with generated strategy details.
@@ -789,18 +789,18 @@ cannot serve the app, or browser binaries are missing, run one bounded setup sea
 framework `requires_manual_setup`:
 
 1. Inspect the selected package's `package.json` for `pretest`, `prepare`, `build`, `build:*`,
-   `install`, `postinstall`, `playwright install`, or a script invoked by the test server such as
-   `serve-app`.
+    `install`, `postinstall`, `playwright install`, or a script invoked by the test server such as
+    `serve-app`.
 2. Inspect the repository root package scripts for the canonical build/setup command when the
-   selected package imports the root package or links it through a workspace, portal, or local
-   dependency.
+    selected package imports the root package or links it through a workspace, portal, or local
+    dependency.
 3. Prefer the smallest obvious setup command that belongs to the selected package or its linked root
-   package. Run at most one setup attempt for this framework before continuing.
+    package. Run at most one setup attempt for this framework before continuing.
 4. After the setup attempt, rerun the same dd-trace-less preflight command. If it now collects tests,
-   record the setup command in `setup.commands` and keep the framework `runnable`.
+    record the setup command in `setup.commands` and keep the framework `runnable`.
 5. If the setup attempt fails or the preflight still fails before collection, keep the framework
-   non-runnable and record the attempted setup command, its exit code, and the post-setup preflight
-   failure in `notes`.
+    non-runnable and record the attempted setup command, its exit code, and the post-setup preflight
+    failure in `notes`.
 
 For Playwright specifically, transform errors mentioning TypeScript syntax, `declare` fields,
 uncompiled source, missing browser binaries, missing build output, or a web server that starts but

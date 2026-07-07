@@ -11,7 +11,7 @@ describe('test optimization validation manifest schema', () => {
         cwd: '/repo',
         argv: ['npm', 'test'],
         env: {
-          NODE_OPTIONS: '${NODE_OPTIONS}',
+          NODE_OPTIONS: '$' + '{NODE_OPTIONS}',
         },
       },
     }))
@@ -26,7 +26,7 @@ describe('test optimization validation manifest schema', () => {
     const errors = validateManifest(getManifest({
       forcedLocalCommand: {
         cwd: '/repo',
-        argv: ['npm', 'test', '--', '${TEST_FILE}'],
+        argv: ['npm', 'test', '--', '$' + '{TEST_FILE}'],
       },
     }))
 

@@ -13,7 +13,13 @@ describe('test optimization CI wiring validation', () => {
     const originalNodeOptions = process.env.NODE_OPTIONS
     const originalCiVisibilityEnabled = process.env.DD_CIVISIBILITY_ENABLED
     const script = `
-      const leaked = ['NODE_OPTIONS', 'DD_CIVISIBILITY_ENABLED'].filter(name => process.env[name])
+      const leaked = []
+      if (String(process.env.NODE_OPTIONS || '').includes('dd-validation-ambient-ci-init')) {
+        leaked.push('NODE_OPTIONS')
+      }
+      if (process.env.DD_CIVISIBILITY_ENABLED === 'ambient-ci-visibility-enabled') {
+        leaked.push('DD_CIVISIBILITY_ENABLED')
+      }
       if (leaked.length > 0) {
         process.stderr.write('leaked ' + leaked.join(','))
         process.exit(42)
@@ -30,7 +36,7 @@ describe('test optimization CI wiring validation', () => {
     }
 
     process.env.NODE_OPTIONS = '--require /tmp/dd-validation-ambient-ci-init.js'
-    process.env.DD_CIVISIBILITY_ENABLED = '1'
+    process.env.DD_CIVISIBILITY_ENABLED = 'ambient-ci-visibility-enabled'
 
     try {
       const result = await runCiWiring({

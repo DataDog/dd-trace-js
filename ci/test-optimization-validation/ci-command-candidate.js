@@ -16,7 +16,7 @@ function buildCiCommandCandidate (framework) {
   const ciWiring = framework.ciWiring || {}
   const command = framework.ciWiringCommand
 
-  if (!command && !hasCiWiringContext(ciWiring)) return undefined
+  if (!command && !hasCiWiringContext(ciWiring)) return
 
   return removeUndefined({
     provider: ciWiring.provider || undefined,

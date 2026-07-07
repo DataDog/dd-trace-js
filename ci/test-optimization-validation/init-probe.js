@@ -97,9 +97,9 @@ function isSeparatedPreloadFlag (token) {
 }
 
 function isInlineDatadogPreload (token) {
-  return (/^--require=/.test(token) && isDatadogPreload(token.slice('--require='.length))) ||
-    (/^--import=/.test(token) && isDatadogPreload(token.slice('--import='.length))) ||
-    (/^-r\S+/.test(token) && isDatadogPreload(token.slice(2)))
+  return (token.startsWith('--require=') && isDatadogPreload(token.slice('--require='.length))) ||
+    (token.startsWith('--import=') && isDatadogPreload(token.slice('--import='.length))) ||
+    (token.startsWith('-r') && token.length > 2 && isDatadogPreload(token.slice(2)))
 }
 
 function isDatadogPreload (value) {

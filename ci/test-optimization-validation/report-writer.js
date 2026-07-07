@@ -225,8 +225,7 @@ function appendMarkdownResultDetails (lines, results) {
 
   lines.push('## Failed and Blocked Result Details', '')
   for (const result of details) {
-    lines.push(`### ${result.status.toUpperCase()} ${result.frameworkId} ${result.scenario}`, '')
-    lines.push(result.diagnosis, '')
+    lines.push(`### ${result.status.toUpperCase()} ${result.frameworkId} ${result.scenario}`, '', result.diagnosis, '')
     for (const detail of getResultDetailLines(result, { markdown: true })) {
       lines.push(`- ${detail}`)
     }

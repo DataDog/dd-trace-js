@@ -6,7 +6,6 @@ const path = require('path')
 const {
   basicEventEvidence,
   error,
-  fail,
   failWithDebugRerun,
   findInterestingLines,
   hasAllBasicEventTypes,

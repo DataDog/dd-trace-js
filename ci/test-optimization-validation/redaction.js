@@ -60,7 +60,7 @@ const SECRET_FLAG_PATTERN = new RegExp(
   String.raw`(--(?:${SECRET_FLAG_SOURCE})(?:-[A-Za-z0-9]+)*)(=|\s+)` + SECRET_VALUE_SOURCE,
   'gi'
 )
-const AUTH_HEADER_PATTERN = /\b(Bearer)\s+[A-Za-z0-9._~+/=-]+/gi
+const AUTH_HEADER_PATTERN = /\b(Bearer)\s+\S+/gi
 const SECRET_HEADER_PATTERN = new RegExp(
   String.raw`\b((?:dd-api-key|x-api-key|api-key|authorization|proxy-authorization|token|cookie|set-cookie)` +
     String.raw`)\s*:\s*("[^"]*"|'[^']*'|[^\r\n,}]+)`,
@@ -91,7 +91,7 @@ const SECRET_NAME_ONLY_KEYS = new Set([
  * @returns {unknown} sanitized copy
  */
 function sanitizeForReport (value) {
-  return sanitizeValue(value, undefined, new WeakSet())
+  return sanitizeValue(value, new WeakSet())
 }
 
 /**
@@ -101,13 +101,13 @@ function sanitizeForReport (value) {
  * @returns {object|undefined} sanitized environment map
  */
 function sanitizeEnv (env) {
-  if (!env || typeof env !== 'object' || Array.isArray(env)) return undefined
+  if (!env || typeof env !== 'object' || Array.isArray(env)) return
 
   const sanitized = {}
   for (const [name, value] of Object.entries(env)) {
     sanitized[name] = sanitizeEnvValue(name, value)
   }
-  return Object.keys(sanitized).length > 0 ? sanitized : undefined
+  if (Object.keys(sanitized).length > 0) return sanitized
 }
 
 /**
@@ -119,7 +119,7 @@ function sanitizeEnv (env) {
  */
 function sanitizeEnvValue (name, value) {
   if (isSensitiveName(name)) return REDACTED
-  if (value === undefined) return undefined
+  if (value === undefined) return
   return sanitizeString(String(value))
 }
 
@@ -131,11 +131,11 @@ function sanitizeEnvValue (name, value) {
  */
 function sanitizeString (value) {
   return value
-    .replace(SECRET_ASSIGNMENT_PATTERN, `$1=${REDACTED}`)
-    .replace(SECRET_FLAG_PATTERN, `$1$2${REDACTED}`)
-    .replace(SECRET_HEADER_PATTERN, `$1: ${REDACTED}`)
-    .replace(AUTH_HEADER_PATTERN, `$1 ${REDACTED}`)
-    .replace(URL_CREDENTIAL_PATTERN, `$1${REDACTED}$3`)
+    .replaceAll(SECRET_ASSIGNMENT_PATTERN, `$1=${REDACTED}`)
+    .replaceAll(SECRET_FLAG_PATTERN, `$1$2${REDACTED}`)
+    .replaceAll(SECRET_HEADER_PATTERN, `$1: ${REDACTED}`)
+    .replaceAll(AUTH_HEADER_PATTERN, `$1 ${REDACTED}`)
+    .replaceAll(URL_CREDENTIAL_PATTERN, `$1${REDACTED}$3`)
 }
 
 /**
@@ -152,7 +152,7 @@ function isSensitiveName (name) {
     SENSITIVE_PASS_NAME_PATTERN.test(normalized)
 }
 
-function sanitizeValue (value, key, seen) {
+function sanitizeValue (value, seen, key) {
   if (typeof value === 'string') {
     if (key && isSensitiveName(key) && !SECRET_NAME_ONLY_KEYS.has(key)) return REDACTED
     return sanitizeString(value)
@@ -163,7 +163,7 @@ function sanitizeValue (value, key, seen) {
   seen.add(value)
 
   if (Array.isArray(value)) {
-    const sanitized = value.map(item => sanitizeValue(item, key, seen))
+    const sanitized = value.map(item => sanitizeValue(item, seen, key))
     seen.delete(value)
     return sanitized
   }
@@ -180,7 +180,7 @@ function sanitizeValue (value, key, seen) {
       sanitized[entryKey] = REDACTED
       continue
     }
-    sanitized[entryKey] = sanitizeValue(entryValue, entryKey, seen)
+    sanitized[entryKey] = sanitizeValue(entryValue, seen, entryKey)
   }
   seen.delete(value)
   return sanitized

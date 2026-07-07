@@ -36,7 +36,7 @@ function getLocalhostBlockedReason () {
 }
 
 function getLocalhostBlockedRemediation () {
-  return LOCALHOST_BLOCKED_REMEDIATION.slice()
+  return [...LOCALHOST_BLOCKED_REMEDIATION]
 }
 
 function buildExecutionEnvironmentBlockerResult ({ framework, error, rerunCommand }) {

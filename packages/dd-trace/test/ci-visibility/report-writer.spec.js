@@ -1,5 +1,7 @@
 'use strict'
 
+/* eslint-disable no-console */
+
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
@@ -649,7 +651,7 @@ describe('test optimization validation report writer', () => {
       assert.match(markdown, /Cwd: `/)
       assert.match(markdown, /Exit code: `1`/)
       assert.match(markdown, /Timed out: `false`/)
-      assert.match(markdown, /Command output summary: `Tests  1 failed \| 2 passed \(3\)`/)
+      assert.match(markdown, /Command output summary: `Tests {2}1 failed \| 2 passed \(3\)`/)
       assert.match(markdown, /Stderr excerpt: `AssertionError: expected true to be false`/)
       assert.match(markdown, /Event failure kind: `ci-wiring-no-test-optimization-events`/)
       assert.match(markdown, /NODE_OPTIONS probe: reached Node process `true`, reached test runner `false`/)

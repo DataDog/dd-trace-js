@@ -184,7 +184,7 @@ function getCiWiringTestsRanSummary ({ basicResult, evidence, framework }) {
 
   if (basicResult?.status === 'pass') {
     return `${summary} The same selected test command reported test data when the validator supplied the ` +
-      `required Datadog initialization directly, so this repository can report when dd-trace is initialized ` +
+      'required Datadog initialization directly, so this repository can report when dd-trace is initialized ' +
       `correctly.${probeSummary}`
   }
 
