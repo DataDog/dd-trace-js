@@ -30,8 +30,8 @@ const stream = query({
   options: {
     model: 'claude-sonnet-4-6',
     mcpServers: { local: localToolsServer },
+    tools: ['Agent'],
     allowedTools: ['mcp__local__fetch_weather'],
-    disallowedTools: ['ToolSearch'],
     settingSources: [],
     systemPrompt: 'You are a helpful assistant. Use the available tools to answer the user.',
     skills: [],
