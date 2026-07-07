@@ -44,7 +44,6 @@ const MAX_MATCH_STEPS = 10_000
 // Per-route compiled-entry cache, keyed on the raw route string.
 const routeCache = new Map()
 
-// Per-segment matching regex cache.
 const segmentRegexCache = new Map()
 
 /**
@@ -72,8 +71,6 @@ const segmentRegexCache = new Map()
  *   variants?: Map<number, string | null>
  * }} CompiledRoute
  */
-
-// Adapter: path-to-regexp v8 token tree → flat segment model
 
 /**
  * Convert path-to-regexp's nested token tree into our flat segment model. Text tokens are split
@@ -126,7 +123,6 @@ function tokensToSegments (ptTokens) {
   }
   if (cur) segments.push(cur)
 
-  // A trailing empty top-level segment denotes a declared trailing slash.
   let trailingSlash = false
   if (segments.length > 0) {
     const last = segments[segments.length - 1]
@@ -138,8 +134,6 @@ function tokensToSegments (ptTokens) {
 
   return { segments, groupParent, trailingSlash }
 }
-
-// Compiler: token tree → segment templates + cached entry
 
 /**
  * Compile a raw route string into a CompiledRoute, or null when unsupported.
@@ -212,8 +206,6 @@ function compileRoute (route, parse) {
 
 const EMPTY_SET = new Set()
 
-// Group helpers
-
 /**
  * True when group `g` (and its whole ancestor chain) is present. Group 0 is always present.
  * @param {number} g
@@ -245,8 +237,6 @@ function isStrictDescendant (g, ancestor, groupParent) {
   }
   return false
 }
-
-// Renderer: segment templates + present-group set → normalized string
 
 /**
  * URL-encode characters outside the RFC-1103 static-constant alphabet [A-Za-z0-9.-~_].
@@ -371,8 +361,6 @@ function renderRoute (compiled, present) {
   return compiled.trailingSlash && normalized !== '/' ? normalized + '/' : normalized
 }
 
-// Per-segment matching regex (resolves intra-segment optional groups)
-
 /**
  * Build (and cache) a regex that matches a single URL segment against a route segment, plus the
  * list of intra-segment optional group ids (each has a named marker capture in the regex).
@@ -486,8 +474,6 @@ function getWildcardPrefixRegex (seg, wIdx) {
   wildcardPrefixCache.set(seg, re)
   return re
 }
-
-// Presence resolution from the request URL (rule 6)
 
 /**
  * Resolve which optional groups are present by matching the route segments against the URL
@@ -635,8 +621,6 @@ function matchSegmentHere (compiled, si, urlSegs, ui, present, params) {
   return false
 }
 
-// Presence resolution from req.params (fallback when no URL path is available)
-
 /**
  * Best-effort presence from req.params: an optional group is present iff one of its param
  * tokens has a truthy own-property value in params. Static-only optional groups can't be
@@ -663,8 +647,6 @@ function resolvePresenceFromParams (compiled, params) {
   }
   return present
 }
-
-// Public API
 
 /**
  * Compute a stable bitmask key for a present-group set (group ids are small, route-local).

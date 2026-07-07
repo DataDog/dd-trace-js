@@ -29,10 +29,9 @@ addHook({ name: 'path-to-regexp', versions: ['*'] }, moduleExports => {
     }
   }
 
-  // 8.x exposes `parse(path) => TokenData { tokens: [...] }`. Consumers (AppSec route
-  // normalization) use the token tree to normalize routes without re-implementing the parser.
-  // Older majors either lack `parse` (0.1.x) or return a different token shape — capture only the
-  // 8.x form, identified by a `.tokens` array on the result.
+  // Capture only path-to-regexp 8.x's `parse()` (Express 5), identified by a `.tokens` array on the
+  // result. AppSec route normalization consumes this token tree; older majors lack `parse` (0.1.x)
+  // or return a different shape.
   if (typeof moduleExports?.parse === 'function') {
     const parse = moduleExports.parse
     parseTokens = pattern => {
