@@ -64,7 +64,9 @@ class ToolTracingPlugin extends TracingPlugin {
   }
 
   end (ctx) {
-    ctx.currentStore?.span?.finish(ctx.finishTime)
+    const span = ctx.currentStore?.span
+    if (ctx.error) this.addError(ctx.error, span)
+    span?.finish(ctx.finishTime)
   }
 }
 

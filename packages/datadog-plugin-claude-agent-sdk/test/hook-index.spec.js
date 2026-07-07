@@ -83,6 +83,24 @@ function loadInstrumentation () {
   return fakeDc
 }
 
+function subscribeDownstream (channels) {
+  const noop = () => {}
+  channels.get('orchestrion:@anthropic-ai/claude-agent-sdk:query').subscribe({
+    asyncEnd: noop,
+    error: noop,
+  })
+  channels.get('apm:claude-agent-sdk:step').subscribe({ start: noop, end: noop })
+  channels.get('apm:claude-agent-sdk:llm').subscribe({ start: noop, end: noop })
+  channels.get('apm:claude-agent-sdk:tool').subscribe({ start: noop, end: noop, error: noop })
+}
+
+function loadActiveInstrumentation () {
+  const fakeDc = loadInstrumentation()
+  subscribeDownstream(fakeDc.channels)
+
+  return fakeDc
+}
+
 async function runHooks (hooks, event, input, toolUseId) {
   const matchers = hooks[event] || []
   for (const matcher of matchers) {
@@ -107,6 +125,24 @@ function makeStream (chunks) {
   }
 }
 
+function makeClosableStream (chunks) {
+  return {
+    [Symbol.asyncIterator] () {
+      let idx = 0
+      return {
+        next () {
+          if (idx >= chunks.length) return Promise.resolve({ done: true })
+
+          return Promise.resolve({ done: false, value: chunks[idx++] })
+        },
+        return () {
+          return Promise.resolve({ done: true })
+        },
+      }
+    },
+  }
+}
+
 function makeFailingStream (chunks, error) {
   return {
     [Symbol.asyncIterator] () {
@@ -123,8 +159,37 @@ function makeFailingStream (chunks, error) {
 }
 
 describe('claude-agent-sdk hook index instrumentation', () => {
-  it('merges SDK hooks and enriches spans from hook lifecycle data', async () => {
+  it('does not add tracer hooks when no downstream subscribers exist', async () => {
     const { channels, events } = loadInstrumentation()
+    const queryChannel = channels.get('orchestrion:@anthropic-ai/claude-agent-sdk:query')
+    const queryArg = { prompt: 'hello', options: {} }
+    const ctx = {
+      arguments: [queryArg],
+      result: makeStream([
+        { type: 'system', subtype: 'init', session_id: 'stream-session' },
+        { type: 'result', result: 'done' },
+      ]),
+    }
+
+    queryChannel.start.publish(ctx)
+    queryChannel.end.publish(ctx)
+
+    for await (const message of ctx.result) {
+      assert.ok(message.type)
+    }
+
+    assert.equal(ctx.arguments[0], queryArg)
+    assert.equal(ctx.arguments[0].options.hooks, undefined)
+    assert.equal(ctx.claudeAgentSdkTracing, undefined)
+    assert.equal(ctx.streamResolved, undefined)
+    assert.equal(events.some(event =>
+      event.channelName === 'orchestrion:@anthropic-ai/claude-agent-sdk:query' &&
+      event.point === 'asyncEnd'
+    ), false)
+  })
+
+  it('merges SDK hooks and enriches spans from hook lifecycle data', async () => {
+    const { channels, events } = loadActiveInstrumentation()
     const queryChannel = channels.get('orchestrion:@anthropic-ai/claude-agent-sdk:query')
     const userPromptSubmissions = []
     const customHook = () => ({})
@@ -224,7 +289,20 @@ describe('claude-agent-sdk hook index instrumentation', () => {
               type: 'tool_result',
               tool_use_id: 'tool-success',
               content: 'CA is 72F',
+            }, {
+              type: 'tool_result',
+              tool_use_id: 'sibling-tool',
+              content: 'sibling result',
             }],
+          },
+        },
+        {
+          type: 'assistant',
+          message: {
+            id: 'msg-3',
+            model: 'claude-sonnet-4-6',
+            usage: { input_tokens: 2, output_tokens: 1 },
+            content: [{ type: 'text', text: 'after failed tool' }],
           },
         },
         { type: 'result', result: 'done' },
@@ -266,6 +344,7 @@ describe('claude-agent-sdk hook index instrumentation', () => {
     await runHooks(hooks, 'PostToolUse', {
       session_id: 'hook-session',
       tool_use_id: 'tool-success',
+      tool_input: { location: 'CA', units: 'fahrenheit' },
       tool_response: 'CA is 72F',
     })
     await runHooks(hooks, 'PreToolUse', {
@@ -309,14 +388,17 @@ describe('claude-agent-sdk hook index instrumentation', () => {
     assert.equal(ctx.cwd, '/project')
     assert.equal(ctx.permissionMode, 'acceptEdits')
     assert.equal(ctx.output, 'done')
+    assert.equal(typeof ctx.finishTime, 'number')
 
     const starts = events.filter(event => event.point === 'start')
     const stepStart = starts.find(event => event.channelName === 'apm:claude-agent-sdk:step')
     const llmStart = starts.find(event => event.channelName === 'apm:claude-agent-sdk:llm')
+    const llmStarts = starts.filter(event => event.channelName === 'apm:claude-agent-sdk:llm')
     const toolStarts = starts.filter(event => event.channelName === 'apm:claude-agent-sdk:tool')
 
     assert.equal(stepStart.ctx.stepIndex, 0)
     assert.equal(llmStart.ctx.model, 'claude-sonnet-4-6')
+    assert.equal(llmStarts.length, 4)
     assert.equal(toolStarts.length, 3)
 
     const agentTool = toolStarts.find(event => event.ctx.id === 'agent-tool').ctx
@@ -325,7 +407,7 @@ describe('claude-agent-sdk hook index instrumentation', () => {
 
     const successTool = toolStarts.find(event => event.ctx.id === 'tool-success').ctx
     assert.equal(successTool.name, 'mcp__local__fetch_weather')
-    assert.deepEqual(successTool.input, { location: 'CA' })
+    assert.deepEqual(successTool.input, { location: 'CA', units: 'fahrenheit' })
     assert.deepEqual(successTool.output, [{
       type: 'tool_result',
       tool_use_id: 'tool-success',
@@ -336,6 +418,12 @@ describe('claude-agent-sdk hook index instrumentation', () => {
     assert.equal(failedTool.name, 'mcp__local__fetch_weather')
     assert.equal(failedTool.error, 'permission denied')
     assert.equal(failedTool.isInterrupt, true)
+    assert.ok(events.some(event =>
+      event.channelName === 'apm:claude-agent-sdk:tool' &&
+      event.point === 'error' &&
+      event.ctx.id === 'tool-failure' &&
+      event.ctx.error === 'permission denied'
+    ))
 
     assert.ok(events.some(event =>
       event.channelName === 'orchestrion:@anthropic-ai/claude-agent-sdk:query' &&
@@ -344,7 +432,7 @@ describe('claude-agent-sdk hook index instrumentation', () => {
   })
 
   it('publishes query errors from the wrapped async iterator', async () => {
-    const { channels, events } = loadInstrumentation()
+    const { channels, events } = loadActiveInstrumentation()
     const queryChannel = channels.get('orchestrion:@anthropic-ai/claude-agent-sdk:query')
     const error = new Error('stream failed')
     const ctx = {
@@ -382,5 +470,57 @@ describe('claude-agent-sdk hook index instrumentation', () => {
       event.channelName === 'orchestrion:@anthropic-ai/claude-agent-sdk:query' &&
       event.point === 'asyncEnd'
     ))
+  })
+
+  it('finalizes spans when the async iterator is closed early', async () => {
+    const { channels, events } = loadActiveInstrumentation()
+    const queryChannel = channels.get('orchestrion:@anthropic-ai/claude-agent-sdk:query')
+    const ctx = {
+      arguments: [{ prompt: 'hello' }],
+      result: makeClosableStream([
+        {
+          type: 'system',
+          subtype: 'init',
+          session_id: 'stream-session',
+        },
+        {
+          type: 'assistant',
+          message: {
+            id: 'msg-1',
+            model: 'claude-sonnet-4-6',
+            usage: { input_tokens: 1, output_tokens: 1 },
+            content: [{ type: 'text', text: 'partial response' }],
+          },
+        },
+        {
+          type: 'assistant',
+          message: {
+            id: 'msg-2',
+            model: 'claude-sonnet-4-6',
+            usage: { input_tokens: 1, output_tokens: 1 },
+            content: [{ type: 'text', text: 'unread response' }],
+          },
+        },
+      ]),
+    }
+
+    queryChannel.start.publish(ctx)
+    queryChannel.end.publish(ctx)
+
+    const iterator = ctx.result[Symbol.asyncIterator]()
+    assert.equal((await iterator.next()).done, false)
+    assert.equal((await iterator.next()).done, false)
+    assert.deepEqual(await iterator.return(), { done: true })
+
+    assert.equal(ctx.streamResolved, true)
+    assert.equal(typeof ctx.finishTime, 'number')
+    assert.ok(events.some(event =>
+      event.channelName === 'orchestrion:@anthropic-ai/claude-agent-sdk:query' &&
+      event.point === 'asyncEnd'
+    ))
+    assert.equal(events.filter(event =>
+      event.channelName === 'apm:claude-agent-sdk:llm' &&
+      event.point === 'start'
+    ).length, 1)
   })
 })

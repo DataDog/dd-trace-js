@@ -13,6 +13,14 @@ const LOCAL_LIFECYCLE_LOOKAHEAD = 4
 
 const chunkEmitTimes = new WeakMap()
 
+function hasDownstreamSubscribers () {
+  return queryChannel.asyncEnd.hasSubscribers ||
+    queryChannel.error.hasSubscribers ||
+    stepCh.start.hasSubscribers ||
+    llmCh.start.hasSubscribers ||
+    toolCh.start.hasSubscribers
+}
+
 function mergeHooks (userHooks, tracerHooks) {
   const merged = {}
 
@@ -85,9 +93,11 @@ function buildTracerHooks (sessionCtx) {
     const id = toolUseId || input.tool_use_id
     if (!id) return {}
 
-    Object.assign(getTool(sessionCtx, id), {
+    const tool = getTool(sessionCtx, id)
+    Object.assign(tool, {
       id,
-      name: input.tool_name || sessionCtx.tools.get(id)?.name,
+      name: input.tool_name || tool.name,
+      input: input.tool_input === undefined ? tool.input : input.tool_input,
       output: input.tool_response,
       sessionId: input.session_id,
       hookFinishTime: Date.now(),
@@ -99,8 +109,11 @@ function buildTracerHooks (sessionCtx) {
     const id = toolUseId || input.tool_use_id
     if (!id) return {}
 
-    Object.assign(getTool(sessionCtx, id), {
+    const tool = getTool(sessionCtx, id)
+    Object.assign(tool, {
       id,
+      name: input.tool_name || tool.name,
+      input: input.tool_input === undefined ? tool.input : input.tool_input,
       error: input.error,
       isInterrupt: input.is_interrupt,
       sessionId: input.session_id,
@@ -152,6 +165,8 @@ function buildTracerHooks (sessionCtx) {
 }
 
 function onQueryStart (ctx) {
+  if (!hasDownstreamSubscribers()) return
+
   const { arguments: args } = ctx
   const queryArg = args?.[0]
   if (!queryArg) return
@@ -176,6 +191,7 @@ function onQueryStart (ctx) {
     },
   }
   ctx.sessionCtx = sessionCtx
+  ctx.claudeAgentSdkTracing = true
 }
 
 function buildStreamIndex (chunks) {
@@ -247,6 +263,29 @@ function createStreamLookup (chunks) {
   }
 }
 
+function getToolScanEnd (chunks, startIndex, toolUseId, toolResultIndex) {
+  if (toolResultIndex !== undefined) return toolResultIndex + 1
+
+  for (let idx = startIndex; idx < chunks.length; idx++) {
+    const chunk = chunks[idx]
+    if (chunk.type === 'result') return idx
+    if (chunk.type === 'assistant' && chunk.parent_tool_use_id !== toolUseId) return idx
+  }
+
+  return chunks.length
+}
+
+function getToolResultContent (chunk, toolUseId) {
+  if (chunk?.type !== 'user') return
+
+  const content = chunk.message?.content
+  if (!Array.isArray(content)) return
+
+  for (const block of content) {
+    if (block.type === 'tool_result' && block.tool_use_id === toolUseId) return [block]
+  }
+}
+
 /**
  *
  * @param {Array<Record<string, unknown>>} chunks
@@ -259,7 +298,7 @@ function processTool (chunks, startIndex, toolUseId, sessionCtx, getLifecycle, l
   let stepIndex = 0
   const tool = sessionCtx?.tools.get(toolUseId)
   const toolResultIndex = lifecycle.toolResultIndex
-  const scanEnd = toolResultIndex === undefined ? chunks.length : toolResultIndex + 1
+  const scanEnd = getToolScanEnd(chunks, startIndex, toolUseId, toolResultIndex)
 
   while (chunkIndex < scanEnd) {
     const chunk = chunks[chunkIndex]
@@ -297,7 +336,7 @@ function processTool (chunks, startIndex, toolUseId, sessionCtx, getLifecycle, l
     }
   }
 
-  if (tool?.hookFinishTime) return chunks.length
+  if (tool?.hookFinishTime) return scanEnd
 
   return chunks.length + 1
 }
@@ -380,10 +419,14 @@ function processStep (
       const toolEndIdx = toolCh.traceSync(() => {
         const endIdx = processTool(chunks, messageEndIdx, id, sessionCtx, getLifecycle, lifecycle)
         const resultChunk = chunks[endIdx - 1]
-        if (hookTool?.error) toolCtx.error = hookTool.error
         if (hookTool?.isInterrupt) toolCtx.isInterrupt = hookTool.isInterrupt
-        if (resultChunk?.type === 'user') {
-          toolCtx.output = resultChunk.message?.content
+        if (hookTool?.error) {
+          toolCtx.error = hookTool.error
+          toolCh.error.publish(toolCtx)
+        }
+        const resultOutput = getToolResultContent(resultChunk, id)
+        if (resultOutput) {
+          toolCtx.output = resultOutput
         } else if (hookTool?.output) {
           toolCtx.output = hookTool.output
         }
@@ -448,6 +491,35 @@ function processChunks (chunks, agentCtx) {
   }
 }
 
+function finishStream (chunks, ctx, error) {
+  if (ctx.streamResolved) return
+
+  let processError
+  if (chunks.length > 0) {
+    const lastChunk = chunks[chunks.length - 1]
+    if (lastChunk?.type === 'result') ctx.output = lastChunk.result
+
+    try {
+      processChunks(chunks, ctx)
+    } catch (e) {
+      processError = e
+    }
+  }
+
+  const finalError = error || processError
+  ctx.finishTime = Date.now()
+
+  if (finalError) {
+    ctx.error = finalError
+    queryChannel.error.publish(ctx)
+  }
+
+  ctx.streamResolved = true
+  queryChannel.asyncEnd.publish(ctx)
+
+  if (processError && !error) throw processError
+}
+
 function wrapQueryAsyncIterator (asyncIterator, ctx) {
   const chunks = []
 
@@ -462,29 +534,28 @@ function wrapQueryAsyncIterator (asyncIterator, ctx) {
           chunks.push(value)
           chunkEmitTimes.set(value, chunkEmitTime)
         } else {
-          const lastChunk = chunks[chunks.length - 1]
-          if (lastChunk?.type === 'result') ctx.output = lastChunk.result
-          processChunks(chunks, ctx)
-
-          ctx.streamResolved = true
-          queryChannel.asyncEnd.publish(ctx)
+          finishStream(chunks, ctx)
         }
 
         return result
       }).catch(error => {
-        if (chunks.length > 0) {
-          try { processChunks(chunks, ctx) } catch {}
-        }
-
-        ctx.error = error
-        queryChannel.error.publish(ctx)
-
-        ctx.streamResolved = true
-        queryChannel.asyncEnd.publish(ctx)
-
+        finishStream(chunks, ctx, error)
         throw error
       })
     })
+
+    if (typeof iterator.return === 'function') {
+      iterator.return = shimmer.wrapCallback(iterator.return, iteratorReturn => function () {
+        return iteratorReturn.apply(this, arguments).then(result => {
+          finishStream(chunks, ctx)
+          return result
+        }).catch(error => {
+          finishStream(chunks, ctx, error)
+          throw error
+        })
+      })
+    }
+
     return iterator
   }
 }
@@ -500,6 +571,8 @@ for (const hook of getHooks('@anthropic-ai/claude-agent-sdk')) {
       queryChannel.subscribe({
         start: onQueryStart,
         end (ctx) {
+          if (!ctx.claudeAgentSdkTracing) return
+
           const { result } = ctx
 
           ctx.streamResolved = false

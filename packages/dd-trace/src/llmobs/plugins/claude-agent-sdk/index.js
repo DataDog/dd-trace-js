@@ -7,6 +7,28 @@ const { splitModel } = require('../../../../../datadog-plugin-claude-agent-sdk/s
 
 const subagentToolIds = new Set()
 
+function getToolOutputText (raw) {
+  if (raw == null) return
+
+  if (Array.isArray(raw)) {
+    const output = []
+    for (const block of raw) {
+      const text = getToolOutputText(block)
+      if (text) output.push(text)
+    }
+    return output.join('\n') || undefined
+  }
+
+  if (raw.type === 'tool_result') return getToolOutputText(raw.content)
+  if (raw.type === 'text') return raw.text
+  if (raw.type === 'tool_reference') return raw.tool_name
+  if (raw.content !== undefined) return getToolOutputText(raw.content)
+
+  if (typeof raw === 'string') return raw
+
+  return JSON.stringify(raw)
+}
+
 function buildOutputMessages (chunks, llmStartIdx, llmEndIdx) {
   let thinking = ''
   let text = ''
@@ -73,6 +95,7 @@ class QueryLLMObsPlugin extends LLMObsPlugin {
 }
 
 class StepLlmObsPlugin extends LLMObsPlugin {
+  static integration = 'claude-agent-sdk'
   static id = 'claude_agent_sdk_step_llmobs'
   static system = 'claude-agent-sdk'
   static prefix = 'tracing:apm:claude-agent-sdk:step'
@@ -98,13 +121,7 @@ class StepLlmObsPlugin extends LLMObsPlugin {
     const thinking = outputMessages.find(m => m.role === 'thinking')?.content ?? ''
 
     const output = toolOutputs?.length
-      ? toolOutputs.map(raw => {
-        const content = raw?.[0]?.content
-        if (!Array.isArray(content)) return ''
-        return content.find(b => b.type === 'text')?.text ??
-          content.find(b => b.type === 'tool_reference')?.tool_name ??
-          ''
-      }).filter(Boolean).join('\n')
+      ? getToolOutputText(toolOutputs)
       : outputMessages.find(m => m.role === 'assistant')?.content ?? ''
 
     this._tagger.tagTextIO(span, thinking, output)
@@ -112,6 +129,7 @@ class StepLlmObsPlugin extends LLMObsPlugin {
 }
 
 class LlmLlmObsPlugin extends LLMObsPlugin {
+  static integration = 'claude-agent-sdk'
   static id = 'claude_agent_sdk_llm_llmobs'
   static system = 'claude-agent-sdk'
   static prefix = 'tracing:apm:claude-agent-sdk:llm'
@@ -208,6 +226,7 @@ class LlmLlmObsPlugin extends LLMObsPlugin {
 }
 
 class ToolLlmObsPlugin extends LLMObsPlugin {
+  static integration = 'claude-agent-sdk'
   static id = 'claude_agent_sdk_tool_llmobs'
   static system = 'claude-agent-sdk'
   static prefix = 'tracing:apm:claude-agent-sdk:tool'
@@ -230,19 +249,13 @@ class ToolLlmObsPlugin extends LLMObsPlugin {
       const description = ctx.input?.description
       this._tagger.changeKind(span, 'agent')
       if (description) this._tagger._setTag(span, NAME, `${ctx.name} (${description})`)
-      const output = ctx.output?.[0]?.content?.find?.(b => b.type === 'text')?.text
+      const output = getToolOutputText(ctx.output)
       this._tagger.tagTextIO(span, ctx.input?.prompt, output)
       return
     }
 
     const input = ctx.input ? JSON.stringify(ctx.input) : undefined
-    const raw = ctx.output
-    let output
-    if (Array.isArray(raw)) {
-      output = raw.map(b => b.text ?? JSON.stringify(b)).join('\n')
-    } else if (raw != null) {
-      output = String(raw)
-    }
+    const output = getToolOutputText(ctx.output)
     this._tagger.tagTextIO(span, input, output)
   }
 }

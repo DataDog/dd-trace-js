@@ -196,7 +196,7 @@ describe('Plugin', () => {
           total_tokens: MOCK_NUMBER,
         },
         sessionId,
-        tags: { ml_app: 'test' },
+        tags: { ml_app: 'test', integration: 'claude-agent-sdk' },
       })
 
       // [2] outer step-0 — input is the LLM's thinking text
@@ -208,7 +208,7 @@ describe('Plugin', () => {
         inputValue: outerThinkingText,
         outputValue: subagentNYResult,
         sessionId,
-        tags: { ml_app: 'test' },
+        tags: { ml_app: 'test', integration: 'claude-agent-sdk' },
       })
 
       // [3]=agent wrapper, [4]=subagent LLM, [5]=subagent step-0
@@ -222,7 +222,7 @@ describe('Plugin', () => {
         inputValue: subagentPrompt,
         outputValue: subagentNYResult,
         sessionId,
-        tags: { ml_app: 'test' },
+        tags: { ml_app: 'test', integration: 'claude-agent-sdk' },
       })
 
       // [4] subagent step-0 LLM — calls the weather tool for NY
@@ -254,7 +254,7 @@ describe('Plugin', () => {
           total_tokens: MOCK_NUMBER,
         },
         sessionId,
-        tags: { ml_app: 'test' },
+        tags: { ml_app: 'test', integration: 'claude-agent-sdk' },
       })
 
       // [5] subagent step-0 — no thinking, output is the tool result text
@@ -266,7 +266,7 @@ describe('Plugin', () => {
         inputValue: '',
         outputValue: 'The weather in NY is 72° in fahrenheit.',
         sessionId,
-        tags: { ml_app: 'test' },
+        tags: { ml_app: 'test', integration: 'claude-agent-sdk' },
       })
 
       // [6] mcp__local__fetch_weather — NY weather tool call inside subagent
@@ -276,9 +276,9 @@ describe('Plugin', () => {
         spanKind: 'tool',
         name: 'mcp__local__fetch_weather',
         inputValue: '{"location":"NY","units":"fahrenheit"}',
-        outputValue: MOCK_STRING,
+        outputValue: 'The weather in NY is 72° in fahrenheit.',
         sessionId,
-        tags: { ml_app: 'test' },
+        tags: { ml_app: 'test', integration: 'claude-agent-sdk' },
       })
 
       // [7] outer step-1 LLM — fetches CA weather directly after subagent result
@@ -335,7 +335,7 @@ describe('Plugin', () => {
           total_tokens: MOCK_NUMBER,
         },
         sessionId,
-        tags: { ml_app: 'test' },
+        tags: { ml_app: 'test', integration: 'claude-agent-sdk' },
       })
 
       // [8] outer step-1 — no thinking, output is the CA tool result
@@ -347,7 +347,7 @@ describe('Plugin', () => {
         inputValue: '',
         outputValue: 'The weather in CA is 72° in fahrenheit.',
         sessionId,
-        tags: { ml_app: 'test' },
+        tags: { ml_app: 'test', integration: 'claude-agent-sdk' },
       })
 
       // [9] mcp__local__fetch_weather — CA weather tool call in outer agent
@@ -357,9 +357,9 @@ describe('Plugin', () => {
         spanKind: 'tool',
         name: 'mcp__local__fetch_weather',
         inputValue: '{"location":"CA","units":"fahrenheit"}',
-        outputValue: MOCK_STRING,
+        outputValue: 'The weather in CA is 72° in fahrenheit.',
         sessionId,
-        tags: { ml_app: 'test' },
+        tags: { ml_app: 'test', integration: 'claude-agent-sdk' },
       })
 
       // [10] outer step-2 LLM — final summary after both results are in
@@ -416,7 +416,7 @@ describe('Plugin', () => {
           total_tokens: MOCK_NUMBER,
         },
         sessionId,
-        tags: { ml_app: 'test' },
+        tags: { ml_app: 'test', integration: 'claude-agent-sdk' },
       })
 
       // [11] outer step-2 — no thinking, output is the final LLM summary
@@ -428,7 +428,7 @@ describe('Plugin', () => {
         inputValue: '',
         outputValue: MOCK_STRING,
         sessionId,
-        tags: { ml_app: 'test' },
+        tags: { ml_app: 'test', integration: 'claude-agent-sdk' },
       })
     })
   })
