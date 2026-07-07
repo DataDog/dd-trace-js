@@ -14,17 +14,7 @@
     "@apollo/subgraph": "2.14.0",
     "@aws/durable-execution-sdk-js": "2.0.0",
     "@aws/durable-execution-sdk-js-testing": "1.1.1",
-<<<<<<< HEAD
-    "@aws-sdk/client-bedrock-runtime": "3.1075.0",
-    "@aws-sdk/client-dynamodb": "3.1075.0",
-    "@aws-sdk/client-eventbridge": "3.1075.0",
-    "@aws-sdk/client-kinesis": "3.1075.0",
-    "@aws-sdk/client-lambda": "3.1075.0",
-    "@aws-sdk/client-s3": "3.1075.0",
-    "@aws-sdk/client-sfn": "3.1075.0",
-    "@aws-sdk/client-sns": "3.1075.0",
-    "@aws-sdk/client-sqs": "3.1075.0",
-=======
+    "@aws-sdk/client-eventbridge": "3.1079.0",
     "@aws-sdk/client-bedrock-runtime": "3.1079.0",
     "@aws-sdk/client-dynamodb": "3.1079.0",
     "@aws-sdk/client-kinesis": "3.1079.0",
@@ -33,7 +23,6 @@
     "@aws-sdk/client-sfn": "3.1079.0",
     "@aws-sdk/client-sns": "3.1079.0",
     "@aws-sdk/client-sqs": "3.1079.0",
->>>>>>> master
     "@aws-sdk/node-http-handler": "3.374.0",
     "@aws-sdk/smithy-client": "3.374.0",
     "@azure/cosmos": "4.9.3",

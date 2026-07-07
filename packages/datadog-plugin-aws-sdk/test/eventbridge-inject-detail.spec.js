@@ -434,7 +434,7 @@ describe("EventBridge plugin requestInject", () => {
     const originalInfo = log.info;
     const calls = [];
     log.info = (...args) => calls.push(args);
-    plugin.getInjectedEntryDetail = () => makeEventDetail(501 * 1024);
+    plugin.getInjectedEntryDetail = () => makeEventDetail(513 * 1024);
     const request = {
       operation: "putEvents",
       params: {
@@ -455,7 +455,33 @@ describe("EventBridge plugin requestInject", () => {
     );
     assert.strictEqual(calls.length, 1);
     assert.ok(calls[0][0].includes("Payload size too large"));
-    assert.ok(2 * 550 * 1024 > EVENTBRIDGE_REQUEST_MAX_BYTES);
+  });
+
+  it("batch propagation proceeds when injected request is under 1mb", () => {
+    const plugin = buildChannelPlugin({
+      batchPropagationEnabled: true,
+    });
+    const originalInfo = log.info;
+    const calls = [];
+    log.info = (...args) => calls.push(args);
+    const injectedDetail = makeEventDetail(499 * 1024);
+    plugin.getInjectedEntryDetail = () => injectedDetail;
+    const request = {
+      operation: "putEvents",
+      params: {
+        Entries: [{ Detail: '{"id":1}' }, { Detail: '{"id":2}' }],
+      },
+    };
+
+    try {
+      publishRequest(plugin, request);
+    } finally {
+      log.info = originalInfo;
+    }
+
+    assert.strictEqual(calls.length, 0);
+    assert.strictEqual(request.params.Entries[0].Detail, injectedDetail);
+    assert.strictEqual(request.params.Entries[1].Detail, injectedDetail);
   });
 
   it("uses the event bus and detail type in the DSM checkpoint tags", () => {
