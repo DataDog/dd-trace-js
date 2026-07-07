@@ -1,8 +1,11 @@
 'use strict'
 
+const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const GraphQLParsePlugin = require('./parse')
-const { extractErrorIntoSpanEvent } = require('./utils')
+const { extractErrorIntoSpanEvent, refineRequestSpan } = require('./utils')
+
+const legacyStorage = storage('legacy')
 
 class GraphQLValidatePlugin extends TracingPlugin {
   static id = 'graphql'
@@ -14,6 +17,22 @@ class GraphQLValidatePlugin extends TracingPlugin {
     const document = ctx.arguments?.[1]
     const docSource = document ? GraphQLParsePlugin.documentSources.get(document) : undefined
     const source = this.config.source && document && docSource
+
+    // Refine the top-level graphql.request span (mercurius) from the parsed
+    // document. validate is the first boundary that has it and precedes both
+    // execute and any pre-execute rejection (unknown field, GET mutation), so a
+    // failing request still ends up with a resource and operation tags. The
+    // request span and its operation name ride the active store the request
+    // boundary entered (validate's own `ctx.currentStore` is not populated
+    // yet). No-op for graphql-js/apollo/yoga, which never open a request span.
+    const requestStore = legacyStorage.getStore()
+    refineRequestSpan(
+      requestStore?.graphqlRequestSpan,
+      document,
+      docSource,
+      requestStore?.graphqlRequestOperationName,
+      this.config.signature
+    )
 
     this.startSpan('graphql.validate', {
       service: this.config.service,

@@ -13,10 +13,10 @@ const { extractErrorIntoSpanEvent, getCachedRequestOperation } = require('./util
 // The entry boundary only hands us the raw `source` (string or pre-parsed AST)
 // and `operationName`; the parsed document — and therefore the precise
 // operation signature — is only known once mercurius parses internally. On the
-// cold path the `execute` sub-plugin backfills the resource/operation tags onto
+// cold path the `validate` sub-plugin refines the resource/operation tags onto
 // this span via `ctx.currentStore.graphqlRequestSpan` once the document is
-// available, so we never re-parse on the hot path. On the JIT warm path execute
-// never fires, so we recover the same tags from the cache the cold path
+// available, so we never re-parse on the hot path. On the JIT warm path no
+// sub-span fires, so we recover the same tags from the cache the cold path
 // populated, keyed by source + operationName.
 class GraphQLRequestPlugin extends TracingPlugin {
   static id = 'graphql'
@@ -43,9 +43,9 @@ class GraphQLRequestPlugin extends TracingPlugin {
     const span = this.startSpan(this.operationName({ id: 'request' }), {
       service: this.config.service || this.serviceName(),
       // The cached signature is the precise resource; otherwise provisional and
-      // refined by the execute sub-plugin once the document is parsed.
+      // refined by the validate sub-plugin once the document is parsed.
       // `operationName` is the best name at the boundary; falls back to the
-      // operation kind in execute.
+      // operation signature once validate sees the document.
       resource: cached?.signature || operationName || undefined,
       kind: this.constructor.kind,
       type: this.constructor.type,
@@ -56,15 +56,19 @@ class GraphQLRequestPlugin extends TracingPlugin {
       },
     }, ctx)
 
-    // Hand the span to the execute sub-plugin running inside this store so it
-    // can backfill the resource + operation tags from the parsed document.
+    // Hand the span and the requested operation name to the validate sub-plugin
+    // running inside this store so it can refine the resource + operation tags
+    // from the parsed document (validate is the first boundary that has it).
     ctx.currentStore.graphqlRequestSpan = span
+    ctx.currentStore.graphqlRequestOperationName = operationName
 
     return ctx.currentStore
   }
 
   asyncEnd (ctx) {
+    /* istanbul ignore next: currentStore is populated for the request lifecycle; activeSpan is base-plugin fallback. */
     const span = ctx?.currentStore?.span || this.activeSpan
+    /* istanbul ignore if: startSpan always populates currentStore for the request lifecycle. */
     if (!span) return ctx.parentStore
 
     const result = ctx.result
@@ -81,7 +85,9 @@ class GraphQLRequestPlugin extends TracingPlugin {
   }
 
   error (ctx) {
+    /* istanbul ignore next: currentStore is populated for request errors; activeSpan is base-plugin fallback. */
     const span = ctx?.currentStore?.span || this.activeSpan
+    /* istanbul ignore else: errors are only routed after the request span has started. */
     if (span && ctx?.error) {
       span.setTag('error', ctx.error)
     }

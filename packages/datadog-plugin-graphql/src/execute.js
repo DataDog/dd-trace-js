@@ -5,11 +5,9 @@ const dc = require('dc-polyfill')
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const GraphQLParsePlugin = require('./parse')
-const { cacheRequestOperation, extractErrorIntoSpanEvent, getSignature } = require('./utils')
+const { extractErrorIntoSpanEvent, getOperation, getSignature } = require('./utils')
 
 const legacyStorage = storage('legacy')
-
-const types = new Set(['query', 'mutation', 'subscription'])
 
 const iastResolveCh = dc.channel('apm:graphql:resolve:start')
 const resolverStartCh = dc.channel('datadog:graphql:resolver:start')
@@ -128,11 +126,6 @@ class GraphQLExecutePlugin extends TracingPlugin {
         'graphql.source': source,
       },
     }, ctx)
-
-    // Key the cache by the requested operationName, not the resolved name: an
-    // anonymous request selecting the sole operation still carries a name here,
-    // but the warm-path lookup only has the raw `operationName` argument.
-    backfillRequestSpan(ctx.currentStore?.graphqlRequestSpan, docSource, args.operationName, signature, type, name)
 
     addVariableTags(this.config, span, args.variableValues)
 
@@ -328,27 +321,6 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
     span.finish(endTime)
   }
-}
-
-// Refine the top-level graphql.request span (mercurius) once the parsed
-// document yields the operation signature/type/name. The request boundary only
-// saw the raw source + operationName; the execute boundary is the first place
-// the precise signature exists. No-op for graphql-js/apollo/yoga, which never
-// open a request span, and idempotent across re-entrant execute() calls (yoga's
-// normalizedExecutor) via the ddRequestRefined flag. Only a mercurius request
-// span can consume the cache, so the metadata is stored exclusively when one is
-// present — graphql-js/apollo/yoga never touch the LRU.
-function backfillRequestSpan (requestSpan, docSource, operationName, signature, type, name) {
-  if (!requestSpan || requestSpan.ddRequestRefined) return
-  requestSpan.ddRequestRefined = true
-
-  // Cache the computed metadata by source + operationName so the JIT warm path
-  // (no execute span) can recover the same tags at the request boundary.
-  if (docSource) cacheRequestOperation(docSource, operationName, { signature, type, name })
-
-  if (signature) requestSpan.setTag('resource.name', signature)
-  if (type) requestSpan.setTag('graphql.operation.type', type)
-  if (name) requestSpan.setTag('graphql.operation.name', name)
 }
 
 // --- resolver wrapping --------------------------------------------------------
@@ -694,17 +666,6 @@ function defaultFieldResolver (source, args, contextValue, info) {
     const property = source[info.fieldName]
     if (typeof property === 'function') return source[info.fieldName](args, contextValue, info)
     return property
-  }
-}
-
-function getOperation (document, operationName) {
-  if (!document || !Array.isArray(document.definitions)) return
-
-  for (const definition of document.definitions) {
-    if (definition && types.has(definition.operation) &&
-        (!operationName || definition.name?.value === operationName)) {
-      return definition
-    }
   }
 }
 

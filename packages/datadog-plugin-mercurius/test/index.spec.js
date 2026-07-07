@@ -118,8 +118,9 @@ describe('Plugin', () => {
           assert.ok(request, 'expected a graphql.request span')
           assert.ok(execute, 'expected a graphql.execute span')
           assert.strictEqual(execute.parent_id.toString(), request.span_id.toString())
-          // The request span's resource is backfilled from the execute span's
-          // computed operation signature, so the two must match.
+          // Both spans derive the resource from the same operation signature
+          // (the request span in validate, the execute span in execute), so the
+          // two must match.
           assert.strictEqual(request.resource, execute.resource)
         }, { spanResourceMatch: /Nested/ })
 
@@ -138,18 +139,30 @@ describe('Plugin', () => {
         return Promise.all([assertion, axios.post(`http://localhost:${port}/graphql`, { query })])
       })
 
-      it('tags the request span when validation fails before execute', () => {
+      it('tags and labels the request span when validation fails before execute', () => {
         // An unknown field fails validation inside fastifyGraphQl, before
-        // graphql.execute runs. The request span is rejected by the wrapped
-        // promise, so the orchestrion error event tags it even though no
-        // execute span (and no backfill) ever happens.
+        // graphql.execute runs. validate still sees the parsed document, so the
+        // request span is refined with the operation signature/type/name there —
+        // even for a named query sent without a separate operationName argument,
+        // and even though no execute span ever fires. Without that the error span
+        // finishes with a bare resource and no operation tags, which makes these
+        // traces hard to group.
         const query = 'query BadQuery { nope }'
 
         const assertion = agent.assertSomeTraces(traces => {
           const request = traces[0].find(span => span.name === expectedSchema.server.opName)
+          const execute = traces[0].find(span => span.name === 'graphql.execute')
           assert.ok(request, 'expected a graphql.request span')
-          assert.strictEqual(request.error, 1)
-        })
+          assert.strictEqual(execute, undefined, 'validation failure must not produce a graphql.execute span')
+          assertObjectContains(request, {
+            error: 1,
+            meta: {
+              'graphql.operation.type': 'query',
+              'graphql.operation.name': 'BadQuery',
+            },
+          })
+          assert.match(request.resource, /BadQuery/)
+        }, { spanResourceMatch: /BadQuery/ })
 
         return Promise.all([
           assertion,
@@ -182,6 +195,25 @@ describe('Plugin', () => {
         return Promise.all([assertion, app.graphql(query)])
       })
 
+      it('opens a request span for a pre-parsed document without a source tag', () => {
+        const resolvedMercurius = require(`../../../versions/mercurius@${version}`).version()
+        if (!semver.satisfies(resolvedMercurius, '>=15')) {
+          return
+        }
+
+        const query = 'query ParsedAst { hello(name: "ast") }'
+        const document = require('../../../versions/graphql').get().parse(query)
+
+        const assertion = agent.assertSomeTraces(traces => {
+          const request = traces[0].find(span => span.name === expectedSchema.server.opName)
+          assert.ok(request, 'expected a graphql.request span for a parsed AST')
+          assert.strictEqual(request.meta['graphql.operation.name'], 'ParsedAst')
+          assert.ok(!('graphql.source' in request.meta), 'graphql.source must be absent for a parsed AST')
+        }, { spanResourceMatch: /ParsedAst/ })
+
+        return Promise.all([assertion, app.graphql(document)])
+      })
+
       it('carries the operation signature on the JIT warm path', async () => {
         // jit:1 compiles the query after its first run; subsequent runs take the
         // JIT path, which bypasses graphql.execute. The request span is the only
@@ -212,17 +244,19 @@ describe('Plugin', () => {
         return Promise.all([assertion, axios.post(`http://localhost:${port}/graphql`, { query })])
       })
 
-      it('labels the JIT warm path by the requested operation, not the last one cached for the source', async () => {
-        // Mercurius keys its document LRU by source but compiles the JIT for a
-        // single operationName, and the compiled query then serves that
-        // operation for every later request sharing the source. Here `First`
-        // runs cold (execute caches its tags), then `Second` triggers the JIT
-        // compile — mercurius runs `Second` from now on, and execute stops
-        // firing. A source-only cache would hand the warm `Second` request the
-        // cached `First` tags. Keying by source + operationName keeps them apart.
+      it('labels a JIT-only sibling operation from the shared document, not the last one cached', async () => {
+        // Mercurius parses a multi-operation document once and keys its LRU by
+        // source, but compiles the JIT for a single operationName; the compiled
+        // query then serves that operation for every later request sharing the
+        // source, and neither validate nor execute fires. Here `First` runs cold
+        // and `Second` is only ever served through the JIT path, so its metadata
+        // has to be cached from the single cold parse — not left to a `Second`
+        // execute that never happens. Both operations are labeled with their own
+        // signature and type, never the sibling's.
         const source = 'query First { hello(name: "first") } query Second { hello(name: "second") }'
 
-        // Cold run selecting `First`: execute fires and caches First's tags.
+        // Cold run selecting `First`: validate refines the span and caches every
+        // named operation in the document, `Second` included.
         await axios.post(`http://localhost:${port}/graphql`, { query: source, operationName: 'First' })
         // First `Second` request compiles the JIT for Second (execute skipped).
         await axios.post(`http://localhost:${port}/graphql`, { query: source, operationName: 'Second' })
@@ -232,7 +266,14 @@ describe('Plugin', () => {
           const execute = traces[0].find(span => span.name === 'graphql.execute')
           assert.ok(request, 'expected a graphql.request span on the JIT warm path')
           assert.strictEqual(execute, undefined, 'JIT warm path must not produce a graphql.execute span')
-          assert.strictEqual(request.meta['graphql.operation.name'], 'Second')
+          assertObjectContains(request, {
+            meta: {
+              'graphql.operation.type': 'query',
+              'graphql.operation.name': 'Second',
+            },
+          })
+          assert.match(request.resource, /Second/)
+          assert.doesNotMatch(request.resource, /First/)
         }, { spanResourceMatch: /Second/ })
 
         return Promise.all([
