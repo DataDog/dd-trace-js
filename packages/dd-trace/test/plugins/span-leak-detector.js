@@ -42,13 +42,23 @@ const gc = typeof global.gc === 'function' ? global.gc : undefined
 const MAX_GC_CYCLES = 10
 
 /**
- * Upper bound on finished spans that may still be reachable at teardown without
- * indicating a leak. Benign retention is the handful of most-recent traces whose
- * async-context frames have not been overwritten yet (see above); a sweep of the
- * http/http2 suites topped out at two, so this is that measured maximum plus one
- * slot of margin. It is an absolute cap, not a per-request allowance: a #9227-style
- * leak retains one span per request and blows past it by orders of magnitude, so
- * the margin costs no detection power.
+ * Default upper bound on finished spans that may still be reachable at teardown
+ * without indicating a leak. Benign retention is the handful of most-recent
+ * traces whose async-context frames have not been overwritten yet (see above); a
+ * sweep of the http/http2 suites topped out at two, so this is that measured
+ * maximum plus one slot of margin. It is an absolute cap, not a per-request
+ * allowance: a #9227-style leak retains one span per request and blows past it by
+ * orders of magnitude, so the margin costs no detection power.
+ *
+ * A few suites exercise upstream libraries that pin a *fixed* number of finished
+ * spans regardless of request count — e.g. `@grpc/grpc-js` keeps a cleared
+ * `Timeout` on each pooled `Subchannel`, and under AsyncContextFrame that timer
+ * retains the `{ ...store, span }` frame active when the subchannel was built.
+ * That retention does not scale, so it is not the leak this detector hunts, but
+ * it does exceed the default. Those suites raise the bound with
+ * {@link SpanLeakDetector#setBaseline} in a `before` hook and restore it with
+ * {@link SpanLeakDetector#resetBaseline} in `after`, so every other suite keeps
+ * the tight default.
  */
 const BASELINE_RETAINED = 3
 
@@ -57,6 +67,7 @@ class SpanLeakDetector {
   #trackedCount = 0
   #collectedCount = 0
   #armed = false
+  #baseline = BASELINE_RETAINED
   #onFinish = span => {
     this.#trackedCount++
     this.#registry.register(span)
@@ -91,6 +102,34 @@ class SpanLeakDetector {
   }
 
   /**
+   * Raise (or lower) the retention bound for a suite whose upstream dependency
+   * pins a fixed, non-scaling number of finished spans (see {@link BASELINE_RETAINED}).
+   * Call in a `before` hook and undo with {@link SpanLeakDetector#resetBaseline}
+   * in `after` so the tight default still guards every other suite. The bound is
+   * an absolute cap, so pick the smallest value that clears the known
+   * pool-sized retention — a real per-request leak still scales past it.
+   *
+   * @param {number} limit Maximum reachable finished spans to tolerate.
+   * @returns {void}
+   */
+  setBaseline (limit) {
+    if (!Number.isInteger(limit) || limit < 0) {
+      throw new TypeError(`span-leak baseline must be a non-negative integer, got ${limit}`)
+    }
+    this.#baseline = limit
+  }
+
+  /**
+   * Restore the default retention bound. Pair with
+   * {@link SpanLeakDetector#setBaseline} in the same suite's `after` hook.
+   *
+   * @returns {void}
+   */
+  resetBaseline () {
+    this.#baseline = BASELINE_RETAINED
+  }
+
+  /**
    * Force GC and assert that finished-span retention has not grown with the
    * request count. Call once the tracer has flushed and no test-owned reference
    * to a span remains (i.e. at agent teardown, after expectation callbacks are
@@ -119,7 +158,7 @@ class SpanLeakDetector {
     // run after collection and V8 may need more than one pass).
     for (
       let cycle = 0;
-      cycle < MAX_GC_CYCLES && this.#trackedCount - this.#collectedCount > BASELINE_RETAINED;
+      cycle < MAX_GC_CYCLES && this.#trackedCount - this.#collectedCount > this.#baseline;
       cycle++
     ) {
       await new Promise(resolve => setImmediate(resolve))
@@ -129,12 +168,13 @@ class SpanLeakDetector {
 
     const retained = this.#trackedCount - this.#collectedCount
     const tracked = this.#trackedCount
+    const baseline = this.#baseline
     this.#reset()
 
     assert.ok(
-      retained <= BASELINE_RETAINED,
+      retained <= baseline,
       `${retained} of ${tracked} finished spans were still reachable after flush + GC ` +
-      `(at most ${BASELINE_RETAINED} may survive as recently-created traces whose async-context ` +
+      `(at most ${baseline} may survive as recently-created traces whose async-context ` +
       'frames have not been overwritten yet). Retention is growing with the request count — a ' +
       'tracer-owned structure is pinning finished spans, commonly an async-context frame that ' +
       'captured a `{ ...store, span }` object without a matching `releaseSpan` ' +

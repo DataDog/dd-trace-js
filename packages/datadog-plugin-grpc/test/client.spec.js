@@ -12,6 +12,7 @@ const { assertObjectContains } = require('../../../integration-tests/helpers')
 const loader = require('../../../versions/@grpc/proto-loader').get()
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
+const spanLeakDetector = require('../../dd-trace/test/plugins/span-leak-detector')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { defaults } = require('../../dd-trace/src/config/defaults')
 const { NODE_MAJOR } = require('../../../version')
@@ -23,6 +24,14 @@ const pkgs = NODE_MAJOR > 14 ? ['@grpc/grpc-js'] : ['grpc', '@grpc/grpc-js']
 
 describe('Plugin', () => {
   describe('grpc/client', () => {
+    // `@grpc/grpc-js` pools `Subchannel`s and keeps a cleared `Timeout` on each;
+    // under AsyncContextFrame that timer pins the `{ ...store, span }` frame from
+    // when the subchannel was built, so a fixed (non-scaling) count of finished
+    // spans stays reachable. Tolerate that pool-sized retention here without
+    // loosening the detector for other suites.
+    before(() => spanLeakDetector.setBaseline(50))
+    after(() => spanLeakDetector.resetBaseline())
+
     withVersions('grpc', pkgs, NODE_MAJOR >= 25 && '>=1.3.0' || '*', (version, pkg, resolvedVersion) => {
       let grpc
       let port = 0

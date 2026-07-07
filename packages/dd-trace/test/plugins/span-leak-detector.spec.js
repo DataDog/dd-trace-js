@@ -120,4 +120,61 @@ describe('span-leak-detector', () => {
     )
     assert.strictEqual(retainedSpans.length, BASELINE_RETAINED + 1)
   })
+
+  it('tolerates retention up to a raised baseline', async () => {
+    const detector = new SpanLeakDetector()
+    const raised = 8
+    detector.setBaseline(raised)
+    detector.arm()
+
+    // A suite backing an upstream lib that pins a fixed pool-sized count of spans
+    // raises the bound; exactly that many survivors must still pass.
+    const pooledSpans = publishRetained(raised)
+
+    await detector.assertNoRetainedSpans()
+    assert.strictEqual(pooledSpans.length, raised)
+  })
+
+  it('reports a leak when retention exceeds the raised baseline by one', async () => {
+    const detector = new SpanLeakDetector()
+    const raised = 8
+    detector.setBaseline(raised)
+    detector.arm()
+
+    // One past the raised bound is the smallest retention that still signals
+    // growth beyond the tolerated pool, so it must trip even with the higher cap.
+    const retainedSpans = publishRetained(raised + 1)
+
+    await assert.rejects(
+      () => detector.assertNoRetainedSpans(),
+      new RegExp(`${raised + 1} of ${raised + 1} finished spans were still reachable after flush \\+ GC ` +
+        `\\(at most ${raised} may survive`)
+    )
+    assert.strictEqual(retainedSpans.length, raised + 1)
+  })
+
+  it('restores the default baseline after resetBaseline', async () => {
+    const detector = new SpanLeakDetector()
+    detector.setBaseline(8)
+    detector.resetBaseline()
+    detector.arm()
+
+    // After reset the tight default guards again: one past BASELINE_RETAINED must
+    // trip, proving the raised bound did not linger into the next suite.
+    const retainedSpans = publishRetained(BASELINE_RETAINED + 1)
+
+    await assert.rejects(
+      () => detector.assertNoRetainedSpans(),
+      new RegExp(`${BASELINE_RETAINED + 1} of ${BASELINE_RETAINED + 1} finished spans were still reachable`)
+    )
+    assert.strictEqual(retainedSpans.length, BASELINE_RETAINED + 1)
+  })
+
+  it('rejects a non-integer or negative baseline', () => {
+    const detector = new SpanLeakDetector()
+
+    assert.throws(() => detector.setBaseline(-1), { name: 'TypeError' })
+    assert.throws(() => detector.setBaseline(1.5), { name: 'TypeError' })
+    assert.throws(() => detector.setBaseline('5'), { name: 'TypeError' })
+  })
 })
