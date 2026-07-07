@@ -5,7 +5,9 @@ const SpanContext = require('../../dd-trace/src/opentracing/span_context')
 const id = require('../../dd-trace/src/id')
 const log = require('../../dd-trace/src/log')
 
-// WeakMap to track push receive spans by request
+// Track each request's push-receive span and the store it was entered into, so
+// the store's `span` can be nulled at request finish (a captured async-context
+// frame would otherwise pin the finished span).
 const pushReceiveSpans = new WeakMap()
 
 class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
@@ -35,10 +37,13 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
   }
 
   #finishPushReceiveSpan (req) {
-    const pushReceiveSpan = pushReceiveSpans.get(req)
-    if (pushReceiveSpan && !pushReceiveSpan._duration) {
-      pushReceiveSpan.finish()
+    const entry = pushReceiveSpans.get(req)
+    if (entry && !entry.span._duration) {
+      entry.span.finish()
       pushReceiveSpans.delete(req)
+      // The request is done; null the span on the store entered for it so a
+      // captured async-context frame stops retaining the finished span.
+      entry.store.span = null
     }
   }
 
@@ -90,8 +95,8 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
       return
     }
 
-    this.enter(pushReceiveSpan, { req, res })
-    pushReceiveSpans.set(req, pushReceiveSpan)
+    const store = this.enter(pushReceiveSpan, { req, res })
+    pushReceiveSpans.set(req, { span: pushReceiveSpan, store })
   }
 
   #parseMessage (req) {

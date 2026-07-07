@@ -34,6 +34,10 @@ class TestApiManualPlugin extends CiPlugin {
         }
         testSpan.finish()
         finishAllTraceSpans(testSpan)
+        // Null the span on the entered store so a captured async-context frame no
+        // longer retains the finished test span. `store` is the frame entered for
+        // this test at `:start`; the same read already drives `finish` above.
+        store.span = null
       }
     })
     this.unconfiguredAddSub('dd-trace:ci:manual:test:addTags', (tags) => {

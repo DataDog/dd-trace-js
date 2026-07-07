@@ -38,7 +38,12 @@ class RouterPlugin extends WebPlugin {
       }
 
       context.storeStack.push(store)
-      this.enter(span, store)
+      // Keep the entered store for the whole request so its `span` can be nulled
+      // at request finish. `context.middleware` is drained early at
+      // `middleware:finish`, so it cannot serve as the release list; a middleware
+      // span finished mid-request would otherwise stay pinned by any async
+      // resource that captured its frame.
+      context.enteredStores.push(this.enter(span, store))
 
       web.patch(req)
       web.setRoute(req, context.route)
@@ -91,6 +96,17 @@ class RouterPlugin extends WebPlugin {
       while ((span = context.middleware.pop())) {
         span.finish()
       }
+
+      // The request/response is fully done: no async continuation can still need
+      // a middleware span as the active span. Null the `span` on every store we
+      // entered so an async resource that captured that frame no longer retains
+      // the finished span or its parent chain. This happens only here — never at
+      // `middleware:finish`, which fires before `next.apply(...)`, so work a
+      // middleware schedules after `next()` still sees the correct active span.
+      let store
+      while ((store = context.enteredStores.pop())) {
+        store.span = null
+      }
     })
   }
 
@@ -130,14 +146,17 @@ class RouterPlugin extends WebPlugin {
       return context
     }
 
-    // Five-property shape pinned at allocation so every request shares the
-    // same hidden class — no per-field transitions after construction.
+    // Fixed shape pinned at allocation so every request shares the same hidden
+    // class — no per-field transitions after construction.
     context = {
       span,
       stack: [route],
       route,
       middleware: [],
       storeStack: [],
+      // Every store entered for this request, retained until request finish so
+      // its `span` can be nulled there (see the `request:finish` handler).
+      enteredStores: [],
     }
 
     this.#contexts.set(req, context)
