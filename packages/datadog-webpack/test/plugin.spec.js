@@ -1,6 +1,9 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
 const { describe, it } = require('mocha')
 
 const DatadogWebpackPlugin = require('../index')
@@ -50,9 +53,9 @@ describe('DatadogWebpackPlugin', () => {
       assert.equal(tapped[0], 'DatadogWebpackPlugin')
     })
 
-    function applyToExternals (externals) {
+    function applyToExternals (externals, context) {
       const compiler = {
-        options: { optimization: {}, externals },
+        options: { optimization: {}, externals, context },
         hooks: {
           environment: { tap: () => {} },
           thisCompilation: { tap: () => {} },
@@ -61,6 +64,17 @@ describe('DatadogWebpackPlugin', () => {
       }
       new DatadogWebpackPlugin().apply(compiler)
       return compiler.options.externals
+    }
+
+    function manifestDir (manifest) {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-webpack-otel-'))
+      fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify(manifest))
+      return dir
+    }
+
+    function otelExternalEntry (externals) {
+      if (!Array.isArray(externals)) return undefined
+      return externals.find(entry => entry && typeof entry === 'object' && '@opentelemetry/api' in entry)
     }
 
     it('externalizes both OpenTelemetry API peers as a commonjs require', () => {
@@ -84,6 +98,22 @@ describe('DatadogWebpackPlugin', () => {
 
       assert.ok(externals.includes('pg'), 'should preserve the user external')
       assert.ok('@opentelemetry/api' in externals.at(-1), 'should externalize @opentelemetry/api')
+    })
+
+    it('bundles a package the application does not depend on so the bundle stays self-contained', () => {
+      const context = manifestDir({ name: 'app', dependencies: {} })
+
+      const externals = applyToExternals(undefined, context)
+
+      assert.strictEqual(otelExternalEntry(externals), undefined)
+    })
+
+    it('externalizes only the package the application declares', () => {
+      const context = manifestDir({ name: 'app', dependencies: { '@opentelemetry/api': '^1.9.0' } })
+
+      const entry = otelExternalEntry(applyToExternals(undefined, context))
+
+      assert.deepStrictEqual(entry, { '@opentelemetry/api': 'commonjs @opentelemetry/api' })
     })
   })
 
