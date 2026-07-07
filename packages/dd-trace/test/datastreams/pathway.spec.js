@@ -167,8 +167,9 @@ describe('encoding', () => {
 
   it('returns false and writes nothing when the pathway context has no hash', () => {
     const carrier = {}
+    const contextWithoutHash = /** @type {{ hash: Buffer, pathwayStartNs: number, edgeStartNs: number }} */ ({})
 
-    assert.strictEqual(DsmPathwayCodec.encode(/** @type {any} */ ({}), carrier), false)
+    assert.strictEqual(DsmPathwayCodec.encode(contextWithoutHash, carrier), false)
     assert.deepStrictEqual(carrier, {})
   })
 

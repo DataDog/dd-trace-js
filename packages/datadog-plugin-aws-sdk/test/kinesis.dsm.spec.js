@@ -202,7 +202,7 @@ describe('Kinesis', function () {
 
         agent.assertSomeTraces(traces => {
           const span = traces[0][0]
-          assert.ok(span.resource.startsWith('putRecord'), 'expected a putRecord span')
+          assert.match(span.resource, /^putRecord/)
           assert.strictEqual(span.meta['pathway.hash'], undefined)
         }, { spanResourceMatch: /^putRecord/ }).then(done, done)
 

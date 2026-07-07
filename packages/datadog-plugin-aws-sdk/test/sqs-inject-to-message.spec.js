@@ -18,7 +18,7 @@ const QueueUrl = 'http://127.0.0.1:4566/00000000000000000000/test-queue'
  *
  * @param {object} options
  * @param {boolean} [options.dsmEnabled]
- * @param {(span: unknown, format: string, info: object) => void} [options.inject]
+ * @param {(span: unknown, format: string, info: object) => boolean} [options.inject]
  * @param {(format: string, attrs: object) => unknown} [options.extract]
  * @param {(carrier: object) => void} [options.decodeDataStreamsContext]
  * @param {(tags: string[], span: unknown, payloadSize: number) => unknown} [options.setCheckpoint]
@@ -27,7 +27,7 @@ const QueueUrl = 'http://127.0.0.1:4566/00000000000000000000/test-queue'
  */
 function buildPlugin ({
   dsmEnabled = false,
-  inject = () => {},
+  inject = () => false,
   extract = () => undefined,
   decodeDataStreamsContext = () => {},
   setCheckpoint = () => null,
@@ -68,7 +68,7 @@ describe('Sqs plugin injectToMessage', () => {
   it('passes the injected trace context as the size placeholder', () => {
     const plugin = buildPlugin({
       dsmEnabled: true,
-      inject: (span, format, info) => { info['x-datadog-trace-id'] = '123' },
+      inject: (span, format, info) => { info['x-datadog-trace-id'] = '123'; return true },
     })
     const params = { MessageBody: 'hello', MessageAttributes: {} }
 
@@ -92,7 +92,7 @@ describe('Sqs plugin injectToMessage', () => {
   it('keeps the trace-only `_datadog` when DSM yields no context', () => {
     const plugin = buildPlugin({
       dsmEnabled: true,
-      inject: (span, format, info) => { info['x-datadog-trace-id'] = '123' },
+      inject: (span, format, info) => { info['x-datadog-trace-id'] = '123'; return true },
     })
     const params = { MessageBody: 'hello', MessageAttributes: {} }
 
@@ -129,7 +129,7 @@ describe('Sqs plugin injectToMessage', () => {
   it('attaches `_datadog` with the injected trace context when DSM is disabled', () => {
     const plugin = buildPlugin({
       dsmEnabled: false,
-      inject: (span, format, info) => { info['x-datadog-trace-id'] = '123' },
+      inject: (span, format, info) => { info['x-datadog-trace-id'] = '123'; return true },
     })
     const params = { MessageBody: 'hello', MessageAttributes: {} }
 
@@ -144,7 +144,7 @@ describe('Sqs plugin injectToMessage', () => {
   it('skips injection at the SQS quota of 10 attributes', () => {
     const plugin = buildPlugin({
       dsmEnabled: true,
-      inject: (span, format, info) => { info['x-datadog-trace-id'] = '123' },
+      inject: (span, format, info) => { info['x-datadog-trace-id'] = '123'; return true },
     })
     const MessageAttributes = {}
     for (let i = 0; i < 10; i++) {
@@ -162,7 +162,7 @@ describe('Sqs plugin injectToMessage', () => {
   it('still injects when one slot is free at the SQS quota boundary', () => {
     const plugin = buildPlugin({
       dsmEnabled: false,
-      inject: (span, format, info) => { info['x-datadog-trace-id'] = '123' },
+      inject: (span, format, info) => { info['x-datadog-trace-id'] = '123'; return true },
     })
     const MessageAttributes = {}
     for (let i = 0; i < 9; i++) {
@@ -181,7 +181,7 @@ describe('Sqs plugin injectToMessage', () => {
   it('counts only own keys against the SQS quota when the object inherits enumerable keys', () => {
     const plugin = buildPlugin({
       dsmEnabled: false,
-      inject: (span, format, info) => { info['x-datadog-trace-id'] = '123' },
+      inject: (span, format, info) => { info['x-datadog-trace-id'] = '123'; return true },
     })
     const inherited = {}
     for (let i = 0; i < 12; i++) {
