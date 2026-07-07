@@ -217,6 +217,20 @@ describe('normalizeRouteExpress', () => {
     })
   })
 
+  describe('wildcard with a static prefix in its segment', () => {
+    // 'v*rest' → the 'v' prefix must match the URL segment start before the wildcard consumes the
+    // rest. Combined with an optional group so presence resolution runs the backtracking matcher.
+    it('resolves the optional as present when the prefix matches after it', () => {
+      assert.equal(normalize('/files{/:opt}/v*rest', {}, '/files/x/vY/z'), '/files/{opt}/{rest}')
+    })
+
+    it('backtracks past a prefix mismatch: greedy opt=vY fails the v-prefix, so opt is absent', () => {
+      // opt-present is tried first (opt=vY), but then the wildcard prefix 'v' fails against 'z';
+      // the matcher backtracks and matches with opt absent and the wildcard segment 'vY'.
+      assert.equal(normalize('/files{/:opt}/v*rest', {}, '/files/vY/z'), '/files/{rest}')
+    })
+  })
+
   describe('mount-prefixed routes (sub-routers)', () => {
     it('includes mount prefix in normalized route', () => {
       assert.equal(normalize('/app/users/:id', { id: '5' }), '/app/users/{id}')

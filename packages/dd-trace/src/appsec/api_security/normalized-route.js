@@ -142,12 +142,9 @@ function tokensToSegments (ptTokens) {
  * @returns {CompiledRoute | null}
  */
 function compileRoute (route, parse) {
-  let parsed
-  try {
-    parsed = parse(route)
-  } catch {
-    return null
-  }
+  // `parse` (the getParse adapter) returns undefined on a parser throw or an unexpected shape, so
+  // it never throws here.
+  const parsed = parse(route)
   if (!Array.isArray(parsed?.tokens)) return null
 
   const { segments, groupParent, trailingSlash } = tokensToSegments(parsed.tokens)
@@ -399,16 +396,10 @@ function getSegmentMatcher (seg, groupParent) {
       openGroup = t.group
     }
 
-    if (t.type === 'static') {
-      // Match against the encoded form so non-ASCII static optionals match the (percent-encoded)
-      // request URL, e.g. route 'café' vs URL segment 'caf%C3%A9'.
-      pattern += escapeRegex(encodeStaticSegment(t.text))
-    } else if (t.type === 'param') {
-      // Generic, lazy single-segment matcher.
-      pattern += '[^/]+?'
-    } else { // wildcard inside a single-segment match (rare); match the rest of the segment
-      pattern += '[^/]*'
-    }
+    // Static: match the encoded form so non-ASCII optionals match the percent-encoded URL (route
+    // 'café' vs URL segment 'caf%C3%A9'). Otherwise param → generic lazy single-segment matcher;
+    // wildcard segments never reach here (matchSegmentHere routes them to the catch-all branch).
+    pattern += t.type === 'static' ? escapeRegex(encodeStaticSegment(t.text)) : '[^/]+?'
   }
   if (openGroup !== 0) pattern += ')?'
 
