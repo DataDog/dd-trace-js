@@ -70,6 +70,28 @@ describe('helpers/instrument', () => {
 
       sinon.assert.calledTwice(listener)
     })
+
+    it('republishes the same error object on each sequential publish', () => {
+      // koa, router, connect and restify republish the one thrown error once per
+      // unwound middleware layer so each layer's span gets tagged. The shared
+      // publisher must not collapse those repeats by error identity - only the
+      // synchronous re-entry above is dropped.
+      const errorChannel = channel('apm:test:publish-error:same-object')
+      const publishError = createErrorPublisher(errorChannel)
+      const listener = sinon.stub()
+      const error = new Error('boom')
+
+      errorChannel.subscribe(listener)
+      try {
+        publishError({ error })
+        publishError({ error })
+        publishError({ error })
+      } finally {
+        errorChannel.unsubscribe(listener)
+      }
+
+      sinon.assert.calledThrice(listener)
+    })
   })
 
   describe('AsyncResource', () => {

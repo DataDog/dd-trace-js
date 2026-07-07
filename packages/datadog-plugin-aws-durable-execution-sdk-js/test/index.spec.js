@@ -219,6 +219,17 @@ createIntegrationTestSuite('aws-durable-execution-sdk-js', '@aws/durable-executi
     return tracePromise
   })
 
+  it('sets span type to serverless on execute and operation spans', async () => {
+    const tracePromise = agent.assertSomeTraces(traces => {
+      // handler.js (execute span) and context.js (operation spans) both declare
+      // `static type = 'serverless'`; assert it reaches the emitted span.type.
+      assertSpanByName(traces, { name: 'aws.durable.execute', type: 'serverless' })
+      assertSpanByName(traces, { name: 'aws.durable.step', type: 'serverless' })
+    })
+    await invokeHandler(async (event, ctx) => ctx.step(async () => {}))
+    return tracePromise
+  })
+
   for (const { span, errorMessage, run } of [
     {
       span: 'aws.durable.step',

@@ -266,7 +266,12 @@ describe('exporters/agent', function () {
     })
 
     it('should backoff up to the uploadTimeout', async () => {
-      const uploadTimeout = 100
+      // The socket timeout is enforced now (see sendRequest), and the test
+      // agent runs in this same process, so the per-attempt timeout must be
+      // comfortably larger than the in-process request handling. Otherwise the
+      // timeout would fire before the handler's 500/destroy response and this
+      // test would assert on a timeout error instead of the intended HTTP 500.
+      const uploadTimeout = 2000
       const exporter = newAgentExporter({ url, uploadTimeout })
 
       const start = new Date()
@@ -318,6 +323,37 @@ describe('exporters/agent', function () {
         // Retry is 1-indexed so add 1 to i
         assert.strictEqual(call.args[0].timeout, initialTimeout * 2 ** (i + 1))
       }
+    })
+
+    it('should time out and reject instead of hanging when the agent never responds', async function () {
+      // Regression test: options.timeout only emits a 'timeout' event, it does
+      // not abort the socket. Without a handler that destroys the request, a
+      // stalled upload hangs forever — the export promise never settles and
+      // this test would time out. The mocha timeout below is the guard.
+      this.timeout(10000)
+
+      const uploadTimeout = 100
+      const exporter = newAgentExporter({ url, uploadTimeout })
+      const start = new Date()
+      const end = new Date()
+      const tags = { 'runtime-id': RUNTIME_ID }
+      const profiles = await createProfiles()
+
+      // Never respond: hold every request open so the client socket times out.
+      app.post('/profiling/v1/input', upload.any(), () => {})
+
+      let failed = false
+      try {
+        await exporter.export({ profiles, start, end, tags })
+      } catch {
+        failed = true
+      }
+
+      assert.strictEqual(failed, true, 'export should reject after exhausting timeout retries, not hang')
+      // computeRetries(100) => 1 initial attempt + retries, so the timeout must
+      // have been enforced repeatedly rather than the first attempt hanging.
+      assert.ok(http.request.getCalls().length > 1,
+        `expected multiple attempts (timeout enforced + retried), got ${http.request.getCalls().length}`)
     })
 
     it('should log exports and handle http errors gracefully', async function () {

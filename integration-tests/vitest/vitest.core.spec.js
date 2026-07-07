@@ -904,6 +904,32 @@ versions.forEach((version) => {
           )
           assert.strictEqual(cleanupHookHttpSpans.length, 2,
             'should have 2 http spans from beforeEach and its returned cleanup as children of test span')
+
+          const concurrentHookTestNames = [
+            'vitest-test-concurrent-hook-http first concurrent hook http is linked to first test span',
+            'vitest-test-concurrent-hook-http second concurrent hook http is linked to second test span',
+            'vitest-describe-concurrent-hook-http first inherited concurrent hook http is linked to first test span',
+            'vitest-describe-concurrent-hook-http second inherited concurrent hook http is linked to second test span',
+            'vitest-mixed-concurrent-hook-http serial hook http is linked to serial test span',
+            'vitest-mixed-concurrent-hook-http first mixed concurrent hook http is linked to first test span',
+            'vitest-mixed-concurrent-hook-http second mixed concurrent hook http is linked to second test span',
+          ]
+          for (const testName of concurrentHookTestNames) {
+            const concurrentHookTestSpan = tests.find(test => test.meta[TEST_NAME] === testName)
+            assert.ok(concurrentHookTestSpan, `should have concurrent hook test span for ${testName}`)
+            assert.strictEqual(concurrentHookTestSpan.meta[TEST_STATUS], 'pass')
+
+            const concurrentHookHttpSpans = spans.filter(span =>
+              span.name === 'http.request' &&
+              span.trace_id.toString() === concurrentHookTestSpan.trace_id.toString() &&
+              span.parent_id.toString() === concurrentHookTestSpan.span_id.toString()
+            )
+            assert.strictEqual(
+              concurrentHookHttpSpans.length,
+              3,
+              `should have beforeEach, test body, and afterEach HTTP spans as children of ${testName}`
+            )
+          }
         }, 25000)
 
       childProcess = exec(
@@ -2510,6 +2536,129 @@ versions.forEach((version) => {
               done()
             }).catch(done)
           })
+        })
+
+        it('runs multiple retries with dynamic instrumentation', async () => {
+          receiver.setSettings({
+            flaky_test_retries_enabled: true,
+            di_enabled: true,
+          })
+
+          const retrySpanIdsWithDebugInfo = new Set()
+          const diLogSpanIds = []
+          let testOutput = ''
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+              assert.strictEqual(retriedTests.length, 3)
+              for (const retriedTest of retriedTests) {
+                if (retriedTest.meta[DI_ERROR_DEBUG_INFO_CAPTURED] === 'true') {
+                  retrySpanIdsWithDebugInfo.add(retriedTest.span_id.toString())
+                }
+              }
+              assert.strictEqual(retrySpanIdsWithDebugInfo.size, 2)
+            })
+
+          const logsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
+              const diLogs = payloads.flatMap(({ logMessage }) => logMessage)
+              assert.strictEqual(diLogs.length, 2)
+              for (const diLog of diLogs) {
+                diLogSpanIds.push(diLog.dd.span_id)
+              }
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run --retry=3',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_DIR: 'ci-visibility/vitest-tests/ftr-multiple-retries.mjs',
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+                _DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1',
+              },
+            }
+          )
+
+          childProcess.stdout?.on('data', (chunk) => {
+            testOutput += chunk.toString()
+          })
+          childProcess.stderr?.on('data', (chunk) => {
+            testOutput += chunk.toString()
+          })
+          const stdoutEndPromise = childProcess.stdout ? once(childProcess.stdout, 'end') : Promise.resolve()
+          const stderrEndPromise = childProcess.stderr ? once(childProcess.stderr, 'end') : Promise.resolve()
+
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'exit'),
+            eventsPromise,
+            logsPromise,
+            stdoutEndPromise,
+            stderrEndPromise,
+          ])
+          assert.strictEqual(exitCode, 0, testOutput)
+          assert.doesNotMatch(testOutput, /Breakpoint snapshot could not be attached to the active test span/)
+          for (const diLogSpanId of diLogSpanIds) {
+            assert.ok(retrySpanIdsWithDebugInfo.has(diLogSpanId))
+          }
+        })
+
+        it('does not run Failed Test Replay for files with concurrent tests', async () => {
+          receiver.setSettings({
+            flaky_test_retries_enabled: true,
+            di_enabled: true,
+          })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+
+              assert.strictEqual(retriedTests.length, 1)
+              const [retriedTest] = retriedTests
+              assert.strictEqual(
+                retriedTest.meta[TEST_NAME],
+                'dynamic instrumentation with concurrent tests serial retry does not use Failed Test Replay'
+              )
+
+              const hasDebugTags = Object.keys(retriedTest.meta)
+                .some(property =>
+                  property.startsWith(DI_DEBUG_ERROR_PREFIX) || property === DI_ERROR_DEBUG_INFO_CAPTURED
+                )
+              assert.strictEqual(hasDebugTags, false)
+            })
+
+          const logsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/logs'), (payloads) => {
+              if (payloads.length > 0) {
+                throw new Error('Unexpected logs')
+              }
+            }, 5000)
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run --retry=1',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_DIR: 'ci-visibility/vitest-tests/concurrent-ftr-disabled.mjs',
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              },
+            }
+          )
+
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'exit'),
+            eventsPromise,
+            logsPromise,
+          ])
+          assert.strictEqual(exitCode, 0)
         })
 
         it('does not crash if the retry does not hit the breakpoint', (done) => {

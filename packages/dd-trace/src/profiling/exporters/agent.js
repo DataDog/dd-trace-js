@@ -42,6 +42,19 @@ function sendRequest (options, form, callback) {
   storage('legacy').run({ noop: true }, () => {
     requestCounter.inc()
     const start = perf.now()
+
+    // Ensure the callback runs at most once per request. The 'timeout' handler
+    // below can fire after a response was already received (e.g. on a lingering
+    // keep-alive socket, once it goes idle); without this guard that would
+    // invoke the callback a second time and corrupt the retry accounting in
+    // AgentExporter.export.
+    let settled = false
+    const done = (err, res) => {
+      if (settled) return
+      settled = true
+      callback(err, res)
+    }
+
     const req = request(options, res => {
       durationDistribution.track(perf.now() - start)
       countStatusCode(res.statusCode)
@@ -49,16 +62,28 @@ function sendRequest (options, form, callback) {
         statusCodeErrorCounter.inc()
         const error = new Error(`HTTP Error ${res.statusCode}`)
         error.status = res.statusCode
-        callback(error)
+        done(error)
       } else {
-        callback(null, res)
+        done(null, res)
       }
     })
 
     req.on('error', (err) => {
       networkErrorCounter.inc()
-      callback(err)
+      done(err)
     })
+
+    // `options.timeout` sets the socket's idle timeout, which only emits a
+    // 'timeout' event — per the Node docs it does NOT abort the request. Without
+    // destroying the socket here, a stalled upload hangs indefinitely: no
+    // 'error' fires, so the retry/backoff in AgentExporter.export never runs and
+    // the export promise never settles. Destroying the request makes the
+    // 'error' handler above run, which drives the retry (see the trace exporter
+    // in ../common/request.js, which likewise aborts the request on timeout).
+    req.on('timeout', () => {
+      req.destroy(new Error(`Profiling agent export timed out after ${options.timeout}ms`))
+    })
+
     if (form) {
       sizeDistribution.track(form.size())
       form.pipe(req)

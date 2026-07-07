@@ -20,6 +20,7 @@ const {
   TEST_MANAGEMENT_IS_DISABLED,
   TEST_MANAGEMENT_IS_QUARANTINED,
 } = require('../../packages/dd-trace/src/plugins/util/test')
+const { ERROR_MESSAGE } = require('../../packages/dd-trace/src/constants')
 
 const { PLAYWRIGHT_VERSION } = process.env
 
@@ -128,6 +129,9 @@ versions.forEach((version) => {
           .gatherPayloadsMaxTimeout(({ url }) => url === '/api/v2/citestcycle', (payloads) => {
             const events = payloads.flatMap(({ payload }) => payload.events)
             const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+            const testModule = events.find(event => event.type === 'test_module_end').content
+            const testSuites = events.filter(event => event.type === 'test_suite_end').map(event => event.content)
 
             const eventuallyPassingTests = tests.filter(
               test => test.meta[TEST_NAME] === 'playwright should eventually pass after retrying'
@@ -145,6 +149,21 @@ versions.forEach((version) => {
             const nonFinalRuns = eventuallyPassingTests.filter(t => !(TEST_FINAL_STATUS in t.meta))
             assert.strictEqual(nonFinalRuns.length, eventuallyPassingTests.length - 1,
               'All other ATR runs should not have TEST_FINAL_STATUS')
+
+            if (version === latest) {
+              assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+              assert.strictEqual(testSession.error, 0)
+              assert.strictEqual(testSession.meta[ERROR_MESSAGE], undefined)
+              assert.strictEqual(testModule.meta[TEST_STATUS], 'pass')
+              assert.strictEqual(testModule.error, 0)
+              assert.strictEqual(testModule.meta[ERROR_MESSAGE], undefined)
+              assert.ok(testSuites.length > 0, 'Expected test suite events')
+              for (const testSuite of testSuites) {
+                assert.strictEqual(testSuite.meta[TEST_STATUS], 'pass')
+                assert.strictEqual(testSuite.error, 0)
+                assert.strictEqual(testSuite.meta[ERROR_MESSAGE], undefined)
+              }
+            }
           }, RETRY_FINAL_STATUS_TIMEOUT)
 
         // --retries=2 is passed via CLI so test.info().retry increments correctly across all playwright versions.

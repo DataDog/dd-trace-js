@@ -36,6 +36,7 @@ const {
   getOnTestEndHandler,
   getOnTestRetryHandler,
   getOnHookEndHandler,
+  patchFailedTestReplayHookUp,
   getOnFailHandler,
   getOnPendingHandler,
   testFileToSuiteCtx,
@@ -382,6 +383,10 @@ function applyTestManagementTestsResponse ({ err, testManagementTests: receivedT
   }
 }
 
+function isFailedTestReplayEnabled () {
+  return config.isTestDynamicInstrumentationEnabled && config.isDiEnabled
+}
+
 function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFinishRequest, localSuites) {
   const ctx = {
     isParallel,
@@ -471,7 +476,7 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     }
   }
 
-  const onReceivedConfiguration = ({ err, libraryConfig, repositoryRoot }) => {
+  const onReceivedConfiguration = ({ err, isTestDynamicInstrumentationEnabled, libraryConfig, repositoryRoot }) => {
     if (err || !skippableSuitesCh.hasSubscribers || !knownTestsCh.hasSubscribers) {
       return mochaGlobalRunCh.runStores(ctx, () => {
         onFinishRequest()
@@ -492,6 +497,8 @@ function getExecutionConfiguration (runner, isParallel, frameworkVersion, onFini
     config.isSuitesSkippingEnabled = config.isItrEnabled && libraryConfig.isSuitesSkippingEnabled
     config.isFlakyTestRetriesEnabled = libraryConfig.isFlakyTestRetriesEnabled
     config.flakyTestRetriesCount = libraryConfig.flakyTestRetriesCount
+    config.isDiEnabled = libraryConfig.isDiEnabled
+    config.isTestDynamicInstrumentationEnabled = isTestDynamicInstrumentationEnabled
 
     getTestOptimizationRequestResults({
       isKnownTestsEnabled: config.isKnownTestsEnabled,
@@ -555,6 +562,9 @@ addHook({
     })
 
     getExecutionConfiguration(runner, false, frameworkVersion, () => {
+      if (isFailedTestReplayEnabled()) {
+        patchFailedTestReplayHookUp(runner.constructor)
+      }
       if (config.isKnownTestsEnabled) {
         const testSuites = this.files.map(file => getTestSuitePath(file, process.cwd()))
         const isFaulty = getIsFaultyEarlyFlakeDetection(
@@ -780,7 +790,13 @@ addHook({
     this.on('retry', getOnTestRetryHandler(config))
 
     // If the hook passes, 'hook end' will be emitted. Otherwise, 'fail' will be emitted
-    this.on('hook end', getOnHookEndHandler(config))
+    this.on('hook end', getOnHookEndHandler(config, {
+      onStart: incrementPendingRootFinalization,
+      onFinish: function (test) {
+        finishRootSuiteAfterFinalAttempt(test)
+        decrementPendingRootFinalization(test)
+      },
+    }))
 
     this.on('hook end', function (hook) {
       const test = hook.ctx?.currentTest
@@ -1095,7 +1111,8 @@ addHook({
         (!config.isKnownTestsEnabled &&
         !config.isTestManagementTestsEnabled &&
         !config.isImpactedTestsEnabled &&
-        !config.isFlakyTestRetriesEnabled)) {
+        !config.isFlakyTestRetriesEnabled &&
+        !isFailedTestReplayEnabled())) {
       return run.apply(this, arguments)
     }
 
@@ -1144,6 +1161,10 @@ addHook({
     if (config.isFlakyTestRetriesEnabled) {
       newWorkerArgs._ddIsFlakyTestRetriesEnabled = true
       newWorkerArgs._ddFlakyTestRetriesCount = config.flakyTestRetriesCount
+    }
+
+    if (isFailedTestReplayEnabled()) {
+      newWorkerArgs._ddIsFailedTestReplayEnabled = true
     }
 
     // We pass the known tests for the test file to the worker

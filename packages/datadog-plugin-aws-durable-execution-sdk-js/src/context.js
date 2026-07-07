@@ -50,6 +50,7 @@ class BaseContextPlugin extends TracingPlugin {
 
     this.startSpan(spanName, {
       resource,
+      type: this.constructor.type,
       kind: this.constructor.kind,
       meta,
       metrics,

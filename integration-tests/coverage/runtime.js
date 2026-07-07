@@ -1,9 +1,11 @@
 'use strict'
 
-const { existsSync, mkdirSync, readFileSync, realpathSync, rmSync } = require('node:fs')
+const { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync } = require('node:fs')
 const path = require('node:path')
 const { fileURLToPath } = require('node:url')
 
+// IPC sentinel `helpers#stopProc` sends to a connected child on Windows, where SIGTERM is forceful
+// and skips the signal-flush hook. The child flushes its V8 coverage on receipt and exits cleanly.
 const FLUSH_SIGNAL_KEY = '__ddCovFlush'
 // `_DD_*` marks these as internal to the harness. Test files that opt children out
 // reference the name as a literal (`_DD_TRACE_INTEGRATION_COVERAGE_DISABLE: '1'`) so a
@@ -11,13 +13,21 @@ const FLUSH_SIGNAL_KEY = '__ddCovFlush'
 const COLLECTOR_ENV = '_DD_TRACE_INTEGRATION_COVERAGE_COLLECTOR'
 const DISABLE_ENV = '_DD_TRACE_INTEGRATION_COVERAGE_DISABLE'
 const ROOT_ENV = '_DD_TRACE_INTEGRATION_COVERAGE_ROOT'
+// Set on a child that already carries a foreign `NODE_V8_COVERAGE` (e.g. a fixture exercising
+// Node's own test-runner coverage). We leave the child's directory untouched so its own tooling
+// still works, and name our collector here so the child's profiles get copied in on the way out.
+const COPY_BACK_ENV = '_DD_TRACE_INTEGRATION_COVERAGE_COPY_BACK'
+// Node writes one raw V8 coverage JSON per process into the directory named by this variable.
+// We point every process in the tree at a shared directory so a single pass converts them all.
+const V8_COVERAGE_ENV = 'NODE_V8_COVERAGE'
 const REPO_ROOT = path.resolve(__dirname, '..', '..')
+
+// Preloaded into every Node descendant via NODE_OPTIONS. Under V8 coverage it does no
+// instrumentation — V8 collects automatically from NODE_V8_COVERAGE — it only re-installs the
+// child_process / worker_threads patch so a grandchild spawned with a *custom* env (which would
+// otherwise drop the inherited NODE_V8_COVERAGE) still has the directory injected.
 const CHILD_BOOTSTRAP_PATH = path.join(__dirname, 'child-bootstrap.js')
 const BOOTSTRAP_REQUIRE_ARG = `--require=${CHILD_BOOTSTRAP_PATH}`
-
-const PRE_INSTRUMENTED_SENTINEL = '.nyc-pre-instrumented'
-// POSIX-style so `path.isAbsolute` matches on both POSIX and Windows.
-const PRE_INSTRUMENTED_ROOT = '/__DD_TRACE_PRE_INSTRUMENTED__'
 
 const packageNameCache = new Map()
 const rootCache = new Map()
@@ -69,16 +79,48 @@ function getCollectorRoot (env = process.env) {
 function resetCollectorRoot () {
   const root = getCollectorRoot()
   rmSync(root, { force: true, recursive: true })
-  mkdirSync(path.join(root, 'sandboxes'), { recursive: true })
+  mkdirSync(getV8CoverageDir(root), { recursive: true })
   return root
 }
 
 /**
- * @param {string} folder
+ * Directory every process in the tree writes its raw V8 coverage JSON into. A single shared
+ * directory (rather than per-sandbox dirs) lets the finalize step convert and merge in one pass,
+ * and survives sandbox teardown because it lives under the repo-root collector, not the sandbox.
+ *
+ * @param {string} [collectorRoot]
  * @returns {string}
  */
-function getSandboxCollectorDir (folder) {
-  return path.join(getCollectorRoot(), 'sandboxes', path.basename(folder))
+function getV8CoverageDir (collectorRoot = getCollectorRoot()) {
+  return path.join(collectorRoot, 'v8')
+}
+
+/**
+ * Copy every raw V8 profile from `fromDir` into `toDir`, prefixing each file name so profiles from
+ * different source directories can't collide (V8 names them `coverage-<pid>-<ts>-<seq>.json`, which
+ * repeats across trees). Used to fold a child's own `NODE_V8_COVERAGE` output into our collector
+ * when we left that variable untouched. Synchronous and best-effort: it runs from signal handlers
+ * and process teardown where async work is unsafe, and never throws — a missed copy costs coverage,
+ * never a failed test.
+ *
+ * @param {string | undefined} fromDir
+ * @param {string | undefined} toDir
+ * @returns {number} count of profiles copied
+ */
+function copyV8ProfilesSync (fromDir, toDir) {
+  if (!fromDir || !toDir || fromDir === toDir) return 0
+  let copied = 0
+  try {
+    const prefix = `copied-${process.pid}-`
+    for (const name of readdirSync(fromDir)) {
+      if (!name.endsWith('.json') || name.startsWith('copied-')) continue
+      try {
+        copyFileSync(path.join(fromDir, name), path.join(toDir, prefix + name))
+        copied++
+      } catch {}
+    }
+  } catch {}
+  return copied
 }
 
 /**
@@ -86,26 +128,6 @@ function getSandboxCollectorDir (folder) {
  */
 function getMergedReportDir () {
   return path.join(REPO_ROOT, 'coverage', `node-${process.version}${labelSuffix()}`)
-}
-
-/**
- * @param {string} coverageRoot
- * @returns {{ reportDir: string, tempDir: string }}
- */
-function getSandboxNycPaths (coverageRoot) {
-  return {
-    reportDir: path.join(coverageRoot, 'coverage', 'integration-tests'),
-    tempDir: path.join(coverageRoot, '.nyc_output', 'integration-tests'),
-  }
-}
-
-/**
- * @param {string | undefined} coverageRoot
- * @returns {boolean}
- */
-function isPreInstrumentedSandbox (coverageRoot) {
-  if (!coverageRoot) return false
-  return existsSync(path.join(coverageRoot, PRE_INSTRUMENTED_SENTINEL))
 }
 
 /**
@@ -189,8 +211,8 @@ function resolveCoverageRoot (options = {}) {
 }
 
 /**
- * Must be Node's first `--require` so a caller-supplied preloader (e.g. `-r dd-trace/ci/init`)
- * can't run first and leave its module graph uninstrumented.
+ * Prepend the bootstrap require to an existing NODE_OPTIONS. Must be first so a caller-supplied
+ * preloader (e.g. `-r dd-trace/ci/init`) can't run before the child_process patch is reinstalled.
  *
  * @param {string | undefined} nodeOptions
  * @returns {string}
@@ -201,6 +223,25 @@ function prependBootstrapRequire (nodeOptions) {
 }
 
 /**
+ * Overlay the coverage env onto a child's environment so it (and its descendants) collect native
+ * V8 coverage into the shared collector directory. Prepends the bootstrap require to `NODE_OPTIONS`
+ * (so the child re-patches child_process and the coverage env keeps flowing into grandchildren
+ * spawned with a custom env) and carries `ROOT_ENV` so descendants keep recognising coverage as
+ * active.
+ *
+ * `NODE_V8_COVERAGE` is not a private harness channel — Node's own test runner, c8 and other tools
+ * read it from the child env. So we only *set* it when the child does not already carry one; a
+ * child that brought its own directory (e.g. a fixture running `node --test
+ * --experimental-test-coverage`) keeps it, and we record our collector in `COPY_BACK_ENV` instead
+ * so `child-bootstrap`/`stopProc` fold that child's profiles into the collector on the way out.
+ * Overwriting unconditionally would silently redirect the fixture's own coverage — usually leaving
+ * its assertions green against empty data.
+ *
+ * A child that sets `DISABLE_ENV` opts its whole subtree out: `ROOT_ENV`/`COPY_BACK_ENV` are
+ * stripped, and `NODE_V8_COVERAGE` is blanked only when it is the directory *we* injected (Node
+ * copies the parent's value to a child even when a custom env omits it, so omitting is not enough),
+ * while a foreign directory the child set itself is preserved.
+ *
  * @param {NodeJS.ProcessEnv | undefined} env
  * @param {object} [options]
  * @param {string} [options.cwd]
@@ -210,15 +251,30 @@ function prependBootstrapRequire (nodeOptions) {
 function applyCoverageEnv (env, options = {}) {
   if (!isCoverageActive()) return env
   const baseEnv = env || process.env
+  const ownDir = getV8CoverageDir()
   if (baseEnv[DISABLE_ENV]) {
-    const { [ROOT_ENV]: _omit, ...rest } = baseEnv
+    const { [ROOT_ENV]: _root, [COPY_BACK_ENV]: _copyBack, ...rest } = baseEnv
+    if (rest[V8_COVERAGE_ENV] === undefined || rest[V8_COVERAGE_ENV] === ownDir) rest[V8_COVERAGE_ENV] = ''
     return rest
   }
   const root = resolveCoverageRoot(options)
   if (!root) return env
+  const childDir = baseEnv[V8_COVERAGE_ENV]
+  if (childDir && childDir !== ownDir) {
+    // Leave the child's own directory in place; copy its profiles into our collector on exit.
+    const { [COPY_BACK_ENV]: _drop, ...rest } = baseEnv
+    return {
+      ...rest,
+      [ROOT_ENV]: canonicalizePath(root),
+      [COPY_BACK_ENV]: ownDir,
+      NODE_OPTIONS: prependBootstrapRequire(baseEnv.NODE_OPTIONS),
+    }
+  }
+  const { [COPY_BACK_ENV]: _drop, ...rest } = baseEnv
   return {
-    ...baseEnv,
+    ...rest,
     [ROOT_ENV]: canonicalizePath(root),
+    [V8_COVERAGE_ENV]: ownDir,
     NODE_OPTIONS: prependBootstrapRequire(baseEnv.NODE_OPTIONS),
   }
 }
@@ -227,20 +283,19 @@ module.exports = {
   BOOTSTRAP_REQUIRE_ARG,
   CHILD_BOOTSTRAP_PATH,
   COLLECTOR_ENV,
+  COPY_BACK_ENV,
   DISABLE_ENV,
   FLUSH_SIGNAL_KEY,
-  PRE_INSTRUMENTED_ROOT,
-  PRE_INSTRUMENTED_SENTINEL,
   REPO_ROOT,
   ROOT_ENV,
+  V8_COVERAGE_ENV,
   applyCoverageEnv,
   canonicalizePath,
+  copyV8ProfilesSync,
   getCollectorRoot,
   getMergedReportDir,
-  getSandboxCollectorDir,
-  getSandboxNycPaths,
+  getV8CoverageDir,
   isCoverageActive,
-  isPreInstrumentedSandbox,
   prependBootstrapRequire,
   resetCollectorRoot,
   resolveCoverageRoot,

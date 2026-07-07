@@ -840,6 +840,8 @@ function testEndHandler ({
     test._ddHasFailedAllRetries = true
   }
 
+  const willRetry = testWillRetry(test, testStatus)
+
   // this handles tests that do not go through the worker process (because they're skipped)
   if (shouldCreateTestSpan) {
     const testResult = results.at(-1)
@@ -850,7 +852,7 @@ function testEndHandler ({
       !test._ddIsEfdRetry
 
     const finalStatus = getFinalStatus({
-      isFinalExecution: !testWillRetry(test, testStatus),
+      isFinalExecution: !willRetry,
       isDisabled: test._ddIsDisabled,
       isQuarantined: test._ddIsQuarantined,
       isAtrRetry,
@@ -888,17 +890,19 @@ function testEndHandler ({
     }
   }
 
-  if (testSuiteToTestStatuses.has(testSuiteAbsolutePath)) {
-    testSuiteToTestStatuses.get(testSuiteAbsolutePath).push(testStatus)
-  } else {
-    testSuiteToTestStatuses.set(testSuiteAbsolutePath, [testStatus])
+  if (!willRetry) {
+    if (testSuiteToTestStatuses.has(testSuiteAbsolutePath)) {
+      testSuiteToTestStatuses.get(testSuiteAbsolutePath).push(testStatus)
+    } else {
+      testSuiteToTestStatuses.set(testSuiteAbsolutePath, [testStatus])
+    }
+
+    if (error) {
+      addErrorToTestSuite(testSuiteAbsolutePath, error)
+    }
   }
 
-  if (error) {
-    addErrorToTestSuite(testSuiteAbsolutePath, error)
-  }
-
-  if (!testWillRetry(test, testStatus)) {
+  if (!willRetry) {
     remainingTestsByFile[testSuiteAbsolutePath] = remainingTestsByFile[testSuiteAbsolutePath]
       .filter(currentTest => currentTest !== test)
   }

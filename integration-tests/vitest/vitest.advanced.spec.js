@@ -150,7 +150,32 @@ versions.forEach((version) => {
             })
           })`
         )
-        execSync('git add ci-visibility/vitest-tests/impacted-test.mjs', { cwd, stdio: 'ignore' })
+        fs.writeFileSync(
+          path.join(cwd, 'ci-visibility/vitest-tests/concurrent-impacted-test.mjs'),
+          `import { describe, test, expect } from 'vitest'
+          function wait (ms) {
+            return new Promise(resolve => setTimeout(resolve, ms))
+          }
+          describe('concurrent impacted test', () => {
+            test.concurrent('can mark first concurrent impacted test', async () => {
+              await wait(20)
+              expect(1 + 2).to.equal(3)
+            })
+            test.concurrent('can mark second concurrent impacted test', async () => {
+              await wait(10)
+              expect(2 + 2).to.equal(4)
+            })
+            test('can mark a non-concurrent impacted test in the same suite', async () => {
+              await wait(5)
+              expect(3 + 2).to.equal(5)
+            })
+          })`
+        )
+        execSync(
+          'git add ci-visibility/vitest-tests/impacted-test.mjs ' +
+            'ci-visibility/vitest-tests/concurrent-impacted-test.mjs',
+          { cwd, stdio: 'ignore' }
+        )
         execSync('git commit -m "modify impacted-test.mjs"', { cwd, stdio: 'ignore' })
       })
 
@@ -261,6 +286,52 @@ versions.forEach((version) => {
           runImpactedTest(done, { isModified: true })
         })
 
+        it('supports test.concurrent with impacted tests', async () => {
+          receiver.setSettings({ impacted_tests_enabled: true })
+
+          const eventsPromise = receiver
+            .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+              const events = payloads.flatMap(({ payload }) => payload.events)
+              const tests = events.filter(event => event.type === 'test').map(event => event.content)
+              const concurrentImpactedTests = tests.filter(
+                test => test.meta[TEST_SOURCE_FILE] === 'ci-visibility/vitest-tests/concurrent-impacted-test.mjs'
+              )
+
+              assert.strictEqual(concurrentImpactedTests.length, 3)
+              assertObjectContains(concurrentImpactedTests.map(test => test.meta[TEST_NAME]), [
+                'concurrent impacted test can mark first concurrent impacted test',
+                'concurrent impacted test can mark second concurrent impacted test',
+                'concurrent impacted test can mark a non-concurrent impacted test in the same suite',
+              ])
+
+              for (const test of concurrentImpactedTests) {
+                assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+                assert.strictEqual(test.meta[TEST_IS_MODIFIED], 'true')
+                assert.ok(!(TEST_IS_NEW in test.meta))
+                assert.ok(!(TEST_IS_RETRY in test.meta))
+              }
+            })
+
+          childProcess = exec(
+            './node_modules/.bin/vitest run',
+            {
+              cwd,
+              env: {
+                ...getCiVisAgentlessConfig(receiver.port),
+                TEST_DIR: 'ci-visibility/vitest-tests/concurrent-impacted-test.mjs',
+                NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init --no-warnings',
+                GITHUB_BASE_REF: '',
+              },
+            }
+          )
+
+          const [[exitCode]] = await Promise.all([
+            once(childProcess, 'exit'),
+            eventsPromise,
+          ])
+          assert.strictEqual(exitCode, 0)
+        })
+
         it('should not be detected as impacted if disabled', (done) => {
           receiver.setSettings({ impacted_tests_enabled: false })
 
@@ -295,6 +366,168 @@ versions.forEach((version) => {
           })
           runImpactedTest(done, { isModified: true, isEfd: true, isNew: true })
         })
+      })
+    })
+
+    context('test.concurrent advanced features', () => {
+      it('supports test.concurrent with auto test retries', async () => {
+        receiver.setSettings({
+          itr_enabled: false,
+          code_coverage: false,
+          tests_skipping: false,
+          flaky_test_retries_enabled: true,
+          early_flake_detection: { enabled: false },
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+
+            const eventuallyPassingTests = tests.filter(
+              test => test.meta[TEST_NAME] ===
+                'concurrent flaky test retries can retry concurrent tests that eventually pass'
+            )
+            assert.strictEqual(eventuallyPassingTests.length, 2)
+            assert.strictEqual(eventuallyPassingTests.filter(test => test.meta[TEST_STATUS] === 'fail').length, 1)
+            assert.strictEqual(eventuallyPassingTests.filter(test => test.meta[TEST_STATUS] === 'pass').length, 1)
+            assert.strictEqual(
+              eventuallyPassingTests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr)
+                .length,
+              1
+            )
+
+            const neverPassingTests = tests.filter(
+              test => test.meta[TEST_NAME] ===
+                'concurrent flaky test retries can retry concurrent tests that never pass'
+            )
+            assert.strictEqual(neverPassingTests.length, 3)
+            assert.strictEqual(neverPassingTests.filter(test => test.meta[TEST_STATUS] === 'fail').length, 3)
+            assert.strictEqual(
+              neverPassingTests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr).length,
+              2
+            )
+
+            const notRetriedTests = tests.filter(
+              test => test.meta[TEST_NAME] ===
+                'concurrent flaky test retries does not retry concurrent tests if unnecessary'
+            )
+            assert.strictEqual(notRetriedTests.length, 1)
+            assert.strictEqual(notRetriedTests[0].meta[TEST_STATUS], 'pass')
+            assert.ok(!(TEST_IS_RETRY in notRetriedTests[0].meta))
+            assert.ok(!(TEST_RETRY_REASON in notRetriedTests[0].meta))
+
+            const mixedNonConcurrentTests = tests.filter(
+              test => test.meta[TEST_NAME] ===
+                'concurrent flaky test retries can retry non-concurrent tests in a mixed suite'
+            )
+            assert.strictEqual(mixedNonConcurrentTests.length, 2)
+            assert.strictEqual(mixedNonConcurrentTests.filter(test => test.meta[TEST_STATUS] === 'fail').length, 1)
+            assert.strictEqual(mixedNonConcurrentTests.filter(test => test.meta[TEST_STATUS] === 'pass').length, 1)
+            assert.strictEqual(
+              mixedNonConcurrentTests.filter(test => test.meta[TEST_RETRY_REASON] === TEST_RETRY_REASON_TYPES.atr)
+                .length,
+              1
+            )
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/concurrent-flaky-test-retries.mjs',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+              DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+        assert.strictEqual(exitCode, 1)
+      })
+
+      it('supports test.concurrent with early flake detection', async () => {
+        receiver.setKnownTests({ vitest: {} })
+        receiver.setSettings({
+          early_flake_detection: {
+            enabled: true,
+            slow_test_retries: {
+              '5s': NUM_RETRIES_EFD,
+            },
+            faulty_session_threshold: 100,
+          },
+          known_tests_enabled: true,
+        })
+
+        const eventsPromise = receiver
+          .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+            const events = payloads.flatMap(({ payload }) => payload.events)
+            const tests = events.filter(event => event.type === 'test').map(event => event.content)
+            const testSession = events.find(event => event.type === 'test_session_end').content
+
+            assert.strictEqual(testSession.meta[TEST_STATUS], 'pass')
+            assert.strictEqual(testSession.meta[TEST_EARLY_FLAKE_ENABLED], 'true')
+            assert.strictEqual(tests.length, (NUM_RETRIES_EFD + 1) * 3)
+
+            const retriedTests = tests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+            assert.strictEqual(retriedTests.length, NUM_RETRIES_EFD * 3)
+            for (const test of tests) {
+              assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+            }
+            for (const test of retriedTests) {
+              assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+            }
+
+            const eventuallyPassingTests = tests.filter(
+              test => test.meta[TEST_NAME] ===
+                'concurrent early flake detection can retry concurrent tests that eventually pass'
+            )
+            assert.strictEqual(eventuallyPassingTests.length, NUM_RETRIES_EFD + 1)
+            assert.strictEqual(eventuallyPassingTests.filter(test => test.meta[TEST_STATUS] === 'fail').length, 1)
+            assert.strictEqual(
+              eventuallyPassingTests.filter(test => test.meta[TEST_STATUS] === 'pass').length,
+              NUM_RETRIES_EFD
+            )
+
+            const alwaysPassingTests = tests.filter(
+              test => test.meta[TEST_NAME] ===
+                'concurrent early flake detection can retry concurrent tests that always pass'
+            )
+            assert.strictEqual(alwaysPassingTests.length, NUM_RETRIES_EFD + 1)
+            assert.strictEqual(alwaysPassingTests.filter(test => test.meta[TEST_STATUS] === 'pass').length,
+              NUM_RETRIES_EFD + 1)
+
+            const mixedNonConcurrentTests = tests.filter(
+              test => test.meta[TEST_NAME] ===
+                'concurrent early flake detection can retry non-concurrent tests in a mixed suite'
+            )
+            assert.strictEqual(mixedNonConcurrentTests.length, NUM_RETRIES_EFD + 1)
+            assert.strictEqual(mixedNonConcurrentTests.filter(test => test.meta[TEST_STATUS] === 'pass').length,
+              NUM_RETRIES_EFD + 1)
+          })
+
+        childProcess = exec(
+          './node_modules/.bin/vitest run',
+          {
+            cwd,
+            env: {
+              ...getCiVisAgentlessConfig(receiver.port),
+              TEST_DIR: 'ci-visibility/vitest-tests/concurrent-early-flake-detection.mjs',
+              NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+            },
+          }
+        )
+
+        const [[exitCode]] = await Promise.all([
+          once(childProcess, 'exit'),
+          eventsPromise,
+        ])
+        assert.strictEqual(exitCode, 0)
       })
     })
 

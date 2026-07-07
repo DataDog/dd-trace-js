@@ -436,6 +436,7 @@ function createMainProcessReporter (reporterState) {
       testCommand: testSessionConfiguration.testCommand,
       repositoryRoot: testSessionConfiguration.repositoryRoot,
       codeOwnersEntries: testSessionConfiguration.codeOwnersEntries,
+      requestErrorTags: reporterState.state.requestErrorTags,
       isTestFrameworkWorker: true,
       isVitestNoWorkerInitActive: true,
     }
@@ -852,6 +853,7 @@ function getRepeatedTaskStatuses (task, status) {
 function reportFinalTestAttempt (testReport) {
   const {
     errors,
+    state,
     status,
     task,
     testName,
@@ -867,6 +869,7 @@ function reportFinalTestAttempt (testReport) {
       isNew: testProperties.isNew,
       isDisabled: testProperties.isDisabled,
       isTestFrameworkWorker: true,
+      requestErrorTags: state.requestErrorTags,
       ...testSuiteStore,
     })
     return
@@ -929,6 +932,7 @@ function reportTestAttempt (testReport, attempt) {
     isRetryReasonAtr: !testProperties.isAttemptToFix && !testProperties.isEarlyFlakeDetection &&
       testProperties.isFlakyTestRetries,
     isTestFrameworkWorker: true,
+    requestErrorTags: state.requestErrorTags,
   }
   if (testProperties.isAttemptToFix) {
     recordAttemptToFixExecution(state.attemptToFixExecutions, {

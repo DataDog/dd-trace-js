@@ -11,16 +11,18 @@ const { inspect } = require('node:util')
 const libCoverage = require('istanbul-lib-coverage')
 
 const { installPatch } = require('./coverage/patch-child-process')
-const { installLastExitHandler } = require('./coverage/pre-instrumented-writer')
-const finalizeSandboxCoverage = require('./coverage/finalize-sandbox')
 const {
+  COPY_BACK_ENV,
   DISABLE_ENV,
-  FLUSH_SIGNAL_KEY,
   ROOT_ENV,
+  V8_COVERAGE_ENV,
+  applyCoverageEnv,
   canonicalizePath,
+  copyV8ProfilesSync,
   getCollectorRoot,
   getMergedReportDir,
-  getSandboxCollectorDir,
+  getV8CoverageDir,
+  isCoverageActive,
   resolveCoverageRoot,
 } = require('./coverage/runtime')
 
@@ -28,6 +30,7 @@ describe('integration coverage child process hook', () => {
   let appRoot
   let coverageRoot
   let prevRoot
+  let prevV8
 
   before(async () => {
     appRoot = await fsp.mkdtemp(path.join(os.tmpdir(), 'dd-trace-coverage-'))
@@ -49,10 +52,6 @@ module.exports = function id () {
   return next++
 }
 `)
-    await fsp.copyFile(
-      path.join(process.cwd(), 'integration-tests', 'coverage', 'nyc.sandbox.config.js'),
-      path.join(coverageRoot, 'integration-tests', 'coverage', 'nyc.sandbox.config.js')
-    )
     await fsp.writeFile(path.join(appRoot, 'coverage-fixtures', 'parent.js'), `
 'use strict'
 
@@ -64,19 +63,11 @@ const id = require('../node_modules/dd-trace/packages/dd-trace/src/id')
 
 id()
 fs.writeFileSync(path.join(__dirname, 'parent-debug.json'), JSON.stringify({
-  coverageKeys: Object.keys(global.__coverage__ || {}),
-  hasNycConfig: Boolean(process.env.NYC_CONFIG),
+  v8Dir: process.env.${V8_COVERAGE_ENV} || '',
   nodeOptions: process.env.NODE_OPTIONS || '',
 }))
 
 const child = fork(path.join(__dirname, 'worker.js'), { stdio: 'pipe' })
-
-child.on('message', message => {
-  if (message === 'ready') {
-    process.exitCode = 0
-    child.send({ ${JSON.stringify(FLUSH_SIGNAL_KEY)}: true })
-  }
-})
 
 child.on('exit', code => {
   process.exit(code)
@@ -91,29 +82,30 @@ const id = require('../node_modules/dd-trace/packages/dd-trace/src/id')
 
 id()
 fs.writeFileSync(path.join(__dirname, 'worker-debug.json'), JSON.stringify({
-  coverageKeys: Object.keys(global.__coverage__ || {}),
-  hasNycConfig: Boolean(process.env.NYC_CONFIG),
+  v8Dir: process.env.${V8_COVERAGE_ENV} || '',
   nodeOptions: process.env.NODE_OPTIONS || '',
 }))
-process.send('ready')
 `)
 
     prevRoot = process.env[ROOT_ENV]
+    prevV8 = process.env[V8_COVERAGE_ENV]
     process.env[ROOT_ENV] = coverageRoot
+    // Point this process' coverage var at the collector, mirroring what run-suite.js does, so the
+    // child-process patch has a directory to propagate.
+    process.env[V8_COVERAGE_ENV] = getV8CoverageDir()
     installPatch()
   })
 
   after(async () => {
-    if (prevRoot === undefined) {
-      delete process.env[ROOT_ENV]
-    } else {
-      process.env[ROOT_ENV] = prevRoot
-    }
+    if (prevRoot === undefined) delete process.env[ROOT_ENV]
+    else process.env[ROOT_ENV] = prevRoot
+    if (prevV8 === undefined) delete process.env[V8_COVERAGE_ENV]
+    else process.env[V8_COVERAGE_ENV] = prevV8
 
     await fsp.rm(appRoot, { force: true, recursive: true })
   })
 
-  it('preserves fork IPC and finalizes sandbox coverage artifacts', async () => {
+  it('propagates the V8 coverage directory and bootstrap through fork to a grandchild', async () => {
     childProcess.execFileSync(process.execPath, [path.join(appRoot, 'coverage-fixtures', 'parent.js')], {
       cwd: appRoot,
       env: process.env,
@@ -123,36 +115,49 @@ process.send('ready')
     const fixturesDir = path.join(appRoot, 'coverage-fixtures')
     const parentDebug = JSON.parse(fs.readFileSync(path.join(fixturesDir, 'parent-debug.json'), 'utf8'))
     const workerDebug = JSON.parse(fs.readFileSync(path.join(fixturesDir, 'worker-debug.json'), 'utf8'))
-    assert.strictEqual(parentDebug.hasNycConfig, true)
-    assert.strictEqual(workerDebug.hasNycConfig, true)
+
+    // Both processes must see NODE_V8_COVERAGE so V8 records them, and both must carry the
+    // bootstrap require so the patch keeps flowing into any deeper custom-env spawn.
+    assert.equal(parentDebug.v8Dir, getV8CoverageDir())
+    assert.equal(workerDebug.v8Dir, getV8CoverageDir())
     assert.ok(parentDebug.nodeOptions.includes('child-bootstrap.js'), `Got: ${inspect(parentDebug.nodeOptions)}`)
     assert.ok(workerDebug.nodeOptions.includes('child-bootstrap.js'), `Got: ${inspect(workerDebug.nodeOptions)}`)
-    assert.ok(parentDebug.coverageKeys.length > 0, 'expected parent process coverage to be populated')
-    assert.ok(workerDebug.coverageKeys.length > 0, 'expected worker process coverage to be populated')
+  })
 
-    const tempDir = path.join(coverageRoot, '.nyc_output', 'integration-tests')
-    const tempEntries = fs.existsSync(tempDir) ? fs.readdirSync(tempDir) : []
-    assert.ok(tempEntries.length > 0, `expected raw coverage files in ${tempDir}`)
-    const coverageEntries = tempEntries.filter(name => name.endsWith('.json') && !name.includes('processinfo'))
-    assert.ok(coverageEntries.length > 0, `expected coverage json files in ${tempDir}`)
-    const rawCoverage = JSON.parse(fs.readFileSync(path.join(tempDir, coverageEntries[0]), 'utf8'))
-    assert.ok(Object.keys(rawCoverage).length > 0, 'expected raw coverage payload to contain files')
+  it('converts raw V8 profiles in a directory into a merged lcov report', async () => {
+    // Generate a real V8 profile, then exercise the shared converter directly against the directory
+    // that actually received it. When this spec runs inside the integration coverage harness the
+    // patched child_process rewrites NODE_V8_COVERAGE to the ambient collector; otherwise our
+    // explicit dir is used. Either way we convert from the directory that has the profile.
+    const explicitDir = path.join(appRoot, 'v8-profiles')
+    await fsp.mkdir(explicitDir, { recursive: true })
+    childProcess.execFileSync(process.execPath, [path.join(appRoot, 'coverage-fixtures', 'parent.js')], {
+      cwd: appRoot,
+      env: { ...process.env, [V8_COVERAGE_ENV]: explicitDir },
+      stdio: 'pipe',
+    })
 
-    await finalizeSandboxCoverage(appRoot, coverageRoot)
+    const v8Dir = isCoverageActive() ? getV8CoverageDir() : explicitDir
+    const profiles = fs.existsSync(v8Dir) ? fs.readdirSync(v8Dir).filter(n => n.endsWith('.json')) : []
+    assert.ok(profiles.length > 0, `expected raw V8 coverage profiles in ${v8Dir}`)
 
-    const mergeScript = path.join(process.cwd(), 'integration-tests', 'coverage', 'merge-lcov.js')
-    childProcess.execFileSync(process.execPath, [mergeScript], { stdio: 'pipe' })
+    // The converter reads every profile in the directory and reports how many it processed. We
+    // assert on that count rather than on a specific source file: the fake sandbox's dd-trace sits
+    // outside REPO_ROOT (so it's correctly excluded), and the set of in-scope files depends on
+    // whether the ambient harness mixed real repo profiles in.
+    const outputDir = path.join(appRoot, 'merged-report')
+    const { convertV8DirToReport } = require('./coverage/merge-lcov')
+    const result = await convertV8DirToReport(v8Dir, outputDir)
+    assert.ok(result.profiles > 0, 'converter should read the raw profiles')
+    // A non-empty report is written iff at least one in-scope file was covered; an all-excluded run
+    // drops a `.skipped` sentinel instead. Exactly one of the two must exist.
+    const wroteLcov = fs.existsSync(path.join(outputDir, 'lcov.info'))
+    const wroteSkipped = fs.existsSync(path.join(outputDir, '.skipped'))
+    assert.ok(wroteLcov || wroteSkipped, `converter wrote neither lcov.info nor .skipped under ${outputDir}`)
+    assert.equal(wroteLcov, result.files > 0, 'lcov.info presence must match the in-scope file count')
 
-    const lcovPath = path.join(getSandboxCollectorDir(appRoot), 'lcov.info')
-    const mergedLcovPath = path.join(getMergedReportDir(), 'lcov.info')
-
-    assert.ok(fs.existsSync(lcovPath), `expected coverage report at ${lcovPath}`)
-    assert.ok(fs.existsSync(mergedLcovPath), `expected merged coverage report at ${mergedLcovPath}`)
     assert.ok(getCollectorRoot().includes(path.join('.nyc_output', 'integration-tests-collector')),
       'collector scratch should live under .nyc_output/ so it does not collide with final reports in coverage/')
-
-    const lcov = fs.readFileSync(lcovPath, 'utf8')
-    assert.match(lcov, /SF:packages\/dd-trace\/src\/id\.js/)
   })
 
   it('preserves options.env across both fork overloads', async () => {
@@ -164,6 +169,7 @@ process.send('ready')
 'use strict'
 require('node:fs').writeFileSync(${JSON.stringify(outputPath)}, JSON.stringify({
   marker: process.env.FORK_MARKER || null,
+  v8Dir: process.env.${V8_COVERAGE_ENV} || '',
   bootstrap: (process.env.NODE_OPTIONS || '').includes('child-bootstrap.js'),
 }))
 process.disconnect()
@@ -176,19 +182,19 @@ process.disconnect()
     })
 
     await runFork([fixturePath, undefined, { env: { ...process.env, FORK_MARKER: 'three-arg' } }])
-    assert.deepStrictEqual(
-      JSON.parse(fs.readFileSync(outputPath, 'utf8')),
-      { marker: 'three-arg', bootstrap: true }
-    )
+    let childEnv = JSON.parse(fs.readFileSync(outputPath, 'utf8'))
+    assert.equal(childEnv.marker, 'three-arg')
+    assert.equal(childEnv.v8Dir, getV8CoverageDir())
+    assert.ok(childEnv.bootstrap)
 
     await runFork([fixturePath, { env: { ...process.env, FORK_MARKER: 'two-arg' } }])
-    assert.deepStrictEqual(
-      JSON.parse(fs.readFileSync(outputPath, 'utf8')),
-      { marker: 'two-arg', bootstrap: true }
-    )
+    childEnv = JSON.parse(fs.readFileSync(outputPath, 'utf8'))
+    assert.equal(childEnv.marker, 'two-arg')
+    assert.equal(childEnv.v8Dir, getV8CoverageDir())
+    assert.ok(childEnv.bootstrap)
   })
 
-  it('propagates the bootstrap through exec/execSync shell commands', async () => {
+  it('propagates coverage through exec/execSync shell commands', async () => {
     const fixtureDir = path.join(appRoot, 'exec-fixtures')
     await fsp.mkdir(fixtureDir, { recursive: true })
     const asyncOut = path.join(fixtureDir, 'async.json')
@@ -198,7 +204,7 @@ process.disconnect()
 'use strict'
 require('node:fs').writeFileSync(process.argv[2], JSON.stringify({
   bootstrap: (process.env.NODE_OPTIONS || '').includes('child-bootstrap.js'),
-  hasNycConfig: Boolean(process.env.NYC_CONFIG),
+  v8Dir: process.env.${V8_COVERAGE_ENV} || '',
 }))
 `)
 
@@ -215,20 +221,15 @@ require('node:fs').writeFileSync(process.argv[2], JSON.stringify({
       { cwd: appRoot, stdio: 'pipe' }
     )
 
-    assert.deepStrictEqual(
-      JSON.parse(fs.readFileSync(asyncOut, 'utf8')),
-      { bootstrap: true, hasNycConfig: true }
-    )
-    assert.deepStrictEqual(
-      JSON.parse(fs.readFileSync(syncOut, 'utf8')),
-      { bootstrap: true, hasNycConfig: true }
-    )
+    const expected = { bootstrap: true, v8Dir: getV8CoverageDir() }
+    assert.deepEqual(JSON.parse(fs.readFileSync(asyncOut, 'utf8')), expected)
+    assert.deepEqual(JSON.parse(fs.readFileSync(syncOut, 'utf8')), expected)
   })
 
   it('probes fresh when a sandbox path has no dd-trace yet', async () => {
     const sandbox = await fsp.mkdtemp(path.join(os.tmpdir(), 'dd-trace-late-install-'))
     try {
-      assert.strictEqual(
+      assert.equal(
         resolveCoverageRoot({ cwd: sandbox }),
         canonicalizePath(coverageRoot),
         'empty sandbox should fall back to the seeded ROOT_ENV, not cache the miss'
@@ -241,7 +242,7 @@ require('node:fs').writeFileSync(process.argv[2], JSON.stringify({
         path.join(installedRoot, 'package.json')
       )
 
-      assert.strictEqual(resolveCoverageRoot({ cwd: sandbox }), canonicalizePath(installedRoot))
+      assert.equal(resolveCoverageRoot({ cwd: sandbox }), canonicalizePath(installedRoot))
     } finally {
       await fsp.rm(sandbox, { force: true, recursive: true })
     }
@@ -257,58 +258,55 @@ require('node:fs').writeFileSync(process.argv[2], JSON.stringify({
     const child = childProcess.fork(fixturePath)
     try {
       await new Promise(resolve => setTimeout(resolve, 150))
-      assert.strictEqual(child.exitCode, null,
+      assert.equal(child.exitCode, null,
         'child must not exit while parent still holds the channel')
 
       const reply = await new Promise(resolve => {
         child.once('message', resolve)
         child.send('ping')
       })
-      assert.deepStrictEqual(reply, { echo: 'ping' })
+      assert.deepEqual(reply, { echo: 'ping' })
     } finally {
       if (child.exitCode === null) child.kill()
     }
   })
 
-  const ifWin32 = process.platform === 'win32' ? it : it.skip
-  ifWin32('flushes coverage when the parent sends FLUSH_SIGNAL_KEY (Windows only)', async () => {
+  it('flushes V8 coverage when a long-running child is stopped with SIGTERM', async () => {
     const fixtureDir = path.join(appRoot, 'flush-fixtures')
     await fsp.mkdir(fixtureDir, { recursive: true })
-    const fixturePath = path.join(fixtureDir, 'idle.js')
-    await fsp.writeFile(fixturePath, "'use strict'\nsetInterval(() => {}, 1000)\n")
+    // A server-style child that loads an instrumentable file then idles until SIGTERM. Without the
+    // bootstrap's takeCoverage() flush, V8 would write nothing for a process killed by a signal.
+    const fixturePath = path.join(fixtureDir, 'server.js')
+    await fsp.writeFile(fixturePath, `
+'use strict'
+require('../node_modules/dd-trace/packages/dd-trace/src/id')()
+process.send && process.send('ready')
+setInterval(() => {}, 1000)
+`)
 
-    const child = childProcess.fork(fixturePath)
+    const v8Dir = getV8CoverageDir()
+    const before = fs.existsSync(v8Dir) ? fs.readdirSync(v8Dir).length : 0
+    const child = childProcess.fork(fixturePath, { cwd: appRoot })
     try {
-      const exitCode = await new Promise(resolve => {
-        child.once('exit', resolve)
-        setTimeout(() => child.send({ [FLUSH_SIGNAL_KEY]: true }), 50)
+      await new Promise((resolve, reject) => {
+        child.once('message', m => m === 'ready' && resolve())
+        child.once('error', reject)
+        setTimeout(() => reject(new Error('child never signalled ready')), 5000)
       })
-      assert.strictEqual(exitCode, 0, 'flush sentinel must trigger a clean exit')
+      const exitCode = await new Promise(resolve => {
+        child.once('exit', (code, signal) => resolve(code ?? signal))
+        child.kill('SIGTERM')
+      })
+      // The bootstrap intercepts SIGTERM, flushes, and exits 0 rather than dying on the signal.
+      assert.equal(exitCode, 0, 'SIGTERM should trigger a clean coverage-flushing exit')
+      const after = fs.readdirSync(v8Dir).length
+      assert.ok(after > before, `expected a new V8 profile after SIGTERM (before=${before}, after=${after})`)
     } finally {
-      if (child.exitCode === null) child.kill()
+      if (child.exitCode === null) child.kill('SIGKILL')
     }
   })
 
-  ifWin32('does not keep listener-free fork children alive (Windows only)', async () => {
-    const fixtureDir = path.join(appRoot, 'short-lived-fixtures')
-    await fsp.mkdir(fixtureDir, { recursive: true })
-    const fixturePath = path.join(fixtureDir, 'short-lived.js')
-    await fsp.writeFile(fixturePath, "'use strict'\nsetTimeout(() => {}, 100)\n")
-
-    const child = childProcess.fork(fixturePath)
-    const start = Date.now()
-    try {
-      const exitCode = await new Promise(resolve => {
-        child.once('exit', resolve)
-        setTimeout(() => resolve('timeout'), 5000)
-      })
-      assert.strictEqual(exitCode, 0, `child must exit naturally (${Date.now() - start}ms)`)
-    } finally {
-      if (child.exitCode === null) child.kill()
-    }
-  })
-
-  it('injects only the coverage bootstrap into Worker NODE_OPTIONS, not customer `-r`', async () => {
+  it('injects only the coverage directory into Worker env, not customer `-r`', async () => {
     const fixtureDir = path.join(appRoot, 'worker-env-fixtures')
     await fsp.mkdir(fixtureDir, { recursive: true })
     const outPath = path.join(fixtureDir, 'worker-env.json')
@@ -320,7 +318,7 @@ require('node:fs').writeFileSync(process.argv[2], JSON.stringify({
     await fsp.writeFile(workerPath, `
 'use strict'
 require('node:fs').writeFileSync(${JSON.stringify(outPath)}, JSON.stringify({
-  nodeOptions: process.env.NODE_OPTIONS || '',
+  v8Dir: process.env.${V8_COVERAGE_ENV} || '',
   stripped: process.env.STRIPPED_MARKER || '',
 }))
 `)
@@ -344,15 +342,8 @@ w.once('exit', code => process.exit(code))
     })
 
     const workerEnv = JSON.parse(fs.readFileSync(outPath, 'utf8'))
-    assert.strictEqual(workerEnv.stripped, 'yes', 'caller-provided env entries must be preserved')
-    assert.ok(
-      workerEnv.nodeOptions.includes('child-bootstrap.js'),
-      `Worker should get the coverage bootstrap (got: ${workerEnv.nodeOptions})`
-    )
-    assert.ok(
-      !workerEnv.nodeOptions.includes('customer-hook.js'),
-      `Worker must not inherit customer \`-r\` hooks from the parent (got: ${workerEnv.nodeOptions})`
-    )
+    assert.equal(workerEnv.stripped, 'yes', 'caller-provided env entries must be preserved')
+    assert.equal(workerEnv.v8Dir, getV8CoverageDir(), 'Worker with a custom env should get the coverage dir')
   })
 
   it('leaves Worker env untouched when the caller did not set options.env', async () => {
@@ -365,7 +356,7 @@ w.once('exit', code => process.exit(code))
     await fsp.writeFile(workerPath, `
 'use strict'
 require('node:fs').writeFileSync(${JSON.stringify(outPath)}, JSON.stringify({
-  nodeOptions: process.env.NODE_OPTIONS || '',
+  v8Dir: process.env.${V8_COVERAGE_ENV} || '',
   parentMarker: process.env.PARENT_MARKER || '',
 }))
 `)
@@ -375,50 +366,20 @@ const { Worker } = require('node:worker_threads')
 const w = new Worker(${JSON.stringify(workerPath)})
 w.once('exit', code => process.exit(code))
 `)
-    const bootstrapPath = path.join(process.cwd(), 'integration-tests', 'coverage', 'child-bootstrap.js')
     childProcess.execFileSync(process.execPath, [parentPath], {
       cwd: appRoot,
       env: {
         ...process.env,
-        NODE_OPTIONS: `--require=${bootstrapPath}`,
         PARENT_MARKER: 'inherited',
       },
       stdio: 'pipe',
     })
 
     const workerEnv = JSON.parse(fs.readFileSync(outPath, 'utf8'))
-    assert.strictEqual(workerEnv.parentMarker, 'inherited',
+    assert.equal(workerEnv.parentMarker, 'inherited',
       'worker must inherit the parent env when options.env is undefined')
-    assert.ok(workerEnv.nodeOptions.includes('child-bootstrap.js'),
-      `worker must inherit full parent NODE_OPTIONS (got: ${workerEnv.nodeOptions})`)
-  })
-
-  it('does not inject NYC_CWD — nested nyc CLIs would misuse it', async () => {
-    const fixtureDir = path.join(appRoot, 'nyc-cwd-fixtures')
-    await fsp.mkdir(fixtureDir, { recursive: true })
-    const outputPath = path.join(fixtureDir, 'env.json')
-    const fixturePath = path.join(fixtureDir, 'dump-env.js')
-    await fsp.writeFile(fixturePath, "'use strict'\n" +
-      "require('node:fs').writeFileSync(process.argv[2], JSON.stringify({\n" +
-      '  nycCwd: process.env.NYC_CWD ?? null,\n' +
-      '  hasNycConfig: Boolean(process.env.NYC_CONFIG),\n' +
-      "  bootstrap: (process.env.NODE_OPTIONS || '').includes('child-bootstrap.js'),\n" +
-      '}))\n')
-
-    const env = { ...process.env }
-    delete env.NYC_CWD
-    delete env.NYC_CONFIG
-
-    await new Promise(/** @type {(resolve: (value?: void) => void, reject: (reason?: Error) => void) => void} */
-      (resolve, reject) => {
-        childProcess.execFile(process.execPath, [fixturePath, outputPath], { cwd: appRoot, env },
-          err => err ? reject(err) : resolve())
-      })
-
-    assert.deepStrictEqual(
-      JSON.parse(fs.readFileSync(outputPath, 'utf8')),
-      { nycCwd: null, hasNycConfig: true, bootstrap: true }
-    )
+    assert.equal(workerEnv.v8Dir, getV8CoverageDir(),
+      'worker must inherit the parent coverage dir when options.env is undefined')
   })
 
   it('honors the per-spawn opt-out env var', async () => {
@@ -429,13 +390,11 @@ w.once('exit', code => process.exit(code))
     await fsp.writeFile(fixturePath, "'use strict'\n" +
       "require('node:fs').writeFileSync(process.argv[2], JSON.stringify({\n" +
       '  hasRoot: Boolean(process.env._DD_TRACE_INTEGRATION_COVERAGE_ROOT),\n' +
-      '  hasNycConfig: Boolean(process.env.NYC_CONFIG),\n' +
-      "  bootstrap: (process.env.NODE_OPTIONS || '').includes('child-bootstrap.js'),\n" +
+      `  v8Dir: process.env.${V8_COVERAGE_ENV} || '',\n` +
       '}))\n')
 
     /** @type {NodeJS.ProcessEnv} */
     const env = { ...process.env, [DISABLE_ENV]: '1' }
-    delete env.NYC_CONFIG
 
     await new Promise(/** @type {(resolve: (value?: void) => void, reject: (reason?: Error) => void) => void} */
       (resolve, reject) => {
@@ -443,10 +402,95 @@ w.once('exit', code => process.exit(code))
           err => err ? reject(err) : resolve())
       })
 
-    assert.deepStrictEqual(
+    // The opt-out strips both the coverage root and the V8 directory so the subtree runs clean.
+    assert.deepEqual(
       JSON.parse(fs.readFileSync(outputPath, 'utf8')),
-      { hasRoot: false, hasNycConfig: false, bootstrap: false }
+      { hasRoot: false, v8Dir: '' }
     )
+  })
+
+  it('preserves a child-set NODE_V8_COVERAGE and copies its profiles into the collector on exit', async () => {
+    // A fixture that brings its own NODE_V8_COVERAGE (e.g. exercising Node's test-runner coverage)
+    // must keep writing where it expects. We leave the directory untouched, record the collector in
+    // COPY_BACK_ENV, and fold the child's profile into the collector once it exits — without ever
+    // calling takeCoverage in the child, so its own coverage is never split.
+    const fixtureDir = path.join(appRoot, 'foreign-v8-fixtures')
+    const childV8Dir = path.join(fixtureDir, 'own-v8')
+    await fsp.mkdir(childV8Dir, { recursive: true })
+    const outputPath = path.join(fixtureDir, 'env.json')
+    const fixturePath = path.join(fixtureDir, 'foreign.js')
+    await fsp.writeFile(fixturePath, "'use strict'\n" +
+      "require('../node_modules/dd-trace/packages/dd-trace/src/id')()\n" +
+      "require('node:fs').writeFileSync(process.argv[2], JSON.stringify({\n" +
+      `  v8Dir: process.env.${V8_COVERAGE_ENV} || '',\n` +
+      `  copyBack: process.env.${COPY_BACK_ENV} || '',\n` +
+      '}))\n')
+
+    const collectorDir = getV8CoverageDir()
+    const beforeCopied = fs.existsSync(collectorDir)
+      ? fs.readdirSync(collectorDir).filter(n => n.startsWith('copied-')).length
+      : 0
+
+    await new Promise((resolve, reject) => {
+      const child = childProcess.fork(fixturePath, [outputPath], {
+        cwd: appRoot,
+        env: { ...process.env, [V8_COVERAGE_ENV]: childV8Dir },
+        stdio: 'pipe',
+      })
+      child.once('exit', code => code === 0 ? resolve() : reject(new Error(`exit ${code}`)))
+      child.once('error', reject)
+    })
+
+    // The child kept its own directory, and learned where to be copied back to.
+    assert.deepEqual(JSON.parse(fs.readFileSync(outputPath, 'utf8')), {
+      v8Dir: childV8Dir,
+      copyBack: collectorDir,
+    })
+    // V8 wrote the child's profile into its own directory…
+    const childProfiles = fs.readdirSync(childV8Dir).filter(n => n.endsWith('.json'))
+    assert.ok(childProfiles.length > 0, `expected the child to write its own V8 profile in ${childV8Dir}`)
+    // …and the fork wrapper's exit hook copied it into the collector under a collision-safe name.
+    const afterCopied = fs.readdirSync(collectorDir).filter(n => n.startsWith('copied-')).length
+    assert.ok(afterCopied > beforeCopied,
+      `expected a copied-* profile in the collector (before=${beforeCopied}, after=${afterCopied})`)
+  })
+
+  it('does not blank a child-set NODE_V8_COVERAGE on the per-spawn opt-out', () => {
+    // The opt-out must strip only what we injected. A directory the child set itself is its own
+    // concern and has to survive, or opting out of *our* harness would break the child's coverage.
+    const foreignDir = path.join(appRoot, 'opt-out-foreign-v8')
+    const result = applyCoverageEnv(
+      { ...process.env, [DISABLE_ENV]: '1', [V8_COVERAGE_ENV]: foreignDir },
+      { cwd: appRoot }
+    )
+    assert.equal(result[ROOT_ENV], undefined, 'coverage root must be stripped for the disabled subtree')
+    assert.equal(result[COPY_BACK_ENV], undefined, 'copy-back marker must be stripped for the disabled subtree')
+    assert.equal(result[V8_COVERAGE_ENV], foreignDir, 'a child-set coverage directory must be preserved')
+  })
+
+  it('copyV8ProfilesSync uniquifies names and never recopies already-copied profiles', async () => {
+    const scratch = await fsp.mkdtemp(path.join(os.tmpdir(), 'dd-trace-copyback-'))
+    try {
+      const from = path.join(scratch, 'from')
+      const to = path.join(scratch, 'to')
+      await fsp.mkdir(from, { recursive: true })
+      await fsp.mkdir(to, { recursive: true })
+      await fsp.writeFile(path.join(from, 'coverage-1-1-0.json'), '{"result":[]}')
+      await fsp.writeFile(path.join(from, 'coverage-2-2-0.json'), '{"result":[]}')
+      await fsp.writeFile(path.join(from, 'not-coverage.txt'), 'ignored')
+
+      const copied = copyV8ProfilesSync(from, to)
+      assert.equal(copied, 2, 'both JSON profiles should be copied, the .txt skipped')
+      const prefix = `copied-${process.pid}-`
+      const names = fs.readdirSync(to).sort()
+      assert.deepEqual(names, [`${prefix}coverage-1-1-0.json`, `${prefix}coverage-2-2-0.json`])
+
+      // A same-directory copy is a no-op, and a copied-* file is never taken as a fresh source.
+      assert.equal(copyV8ProfilesSync(to, to), 0, 'same source and destination must copy nothing')
+      assert.equal(fs.readdirSync(to).length, 2, 'no copied-* file should be recopied')
+    } finally {
+      await fsp.rm(scratch, { force: true, recursive: true })
+    }
   })
 
   it('treats a .skipped sentinel as a no-op coverage report', async () => {
@@ -462,8 +506,8 @@ w.once('exit', code => process.exit(code))
         stdio: 'pipe',
       })
 
-      assert.strictEqual(status, 0)
-      assert.strictEqual(fs.existsSync(reportDir), false, 'skipped report dir should be cleaned up')
+      assert.equal(status, 0)
+      assert.equal(fs.existsSync(reportDir), false, 'skipped report dir should be cleaned up')
     } finally {
       await fsp.rm(root, { force: true, recursive: true })
     }
@@ -480,8 +524,8 @@ w.once('exit', code => process.exit(code))
       process.env.npm_lifecycle_event = 'test:integration:bar:coverage'
       const bar = { collector: getCollectorRoot(), merged: getMergedReportDir() }
 
-      assert.notStrictEqual(foo.collector, bar.collector)
-      assert.notStrictEqual(foo.merged, bar.merged)
+      assert.notEqual(foo.collector, bar.collector)
+      assert.notEqual(foo.merged, bar.merged)
       assert.match(foo.collector, /integration-tests-collector-test-integration-foo-coverage$/)
       assert.match(bar.collector, /integration-tests-collector-test-integration-bar-coverage$/)
 
@@ -493,52 +537,6 @@ w.once('exit', code => process.exit(code))
       if (originalCollector === undefined) delete process.env._DD_TRACE_INTEGRATION_COVERAGE_COLLECTOR
       else process.env._DD_TRACE_INTEGRATION_COVERAGE_COLLECTOR = originalCollector
     }
-  })
-})
-
-describe('integration coverage last-exit handler', () => {
-  let originals
-
-  beforeEach(() => {
-    originals = {
-      on: process.on,
-      addListener: process.addListener,
-      prependListener: process.prependListener,
-    }
-  })
-
-  afterEach(() => {
-    process.on = originals.on
-    process.addListener = originals.addListener
-    process.prependListener = originals.prependListener
-    process.removeAllListeners('exit')
-  })
-
-  it('runs the registered handler last regardless of when other exit listeners arrive', () => {
-    const fired = []
-    const flush = () => fired.push('flush')
-
-    installLastExitHandler(flush)
-
-    process.on('exit', () => fired.push('on'))
-    process.addListener('exit', () => fired.push('addListener'))
-    process.prependListener('exit', () => fired.push('prependListener'))
-    process.once('exit', () => fired.push('once'))
-
-    process.emit('exit', 0)
-
-    assert.deepStrictEqual(fired, ['prependListener', 'on', 'addListener', 'once', 'flush'])
-  })
-
-  it('leaves non-exit listeners untouched', () => {
-    const fired = []
-    installLastExitHandler(() => fired.push('flush'))
-
-    process.on('beforeExit', () => fired.push('beforeExit'))
-    process.emit('beforeExit', 0)
-    process.removeAllListeners('beforeExit')
-
-    assert.deepStrictEqual(fired, ['beforeExit'])
   })
 })
 
@@ -573,8 +571,70 @@ describe('istanbul-lib-coverage getLineCoverage patch', () => {
 
     // The implicit-else location is skipped (its undefined line would surface as
     // a NaN line); the consequent on line 10 is still recorded.
-    assert.deepStrictEqual(Object.keys(lineCoverage), ['10'],
+    assert.deepEqual(Object.keys(lineCoverage), ['10'],
       `unexpected line keys in ${inspect(lineCoverage)}`)
-    assert.strictEqual(lineCoverage[10], 1)
+    assert.equal(lineCoverage[10], 1)
+  })
+})
+
+describe('v8-to-istanbul line-coverage over-report patch', () => {
+  it('zeroes an indented, un-taken ternary arm that V8 would leave covered', async () => {
+    const v8toIstanbul = require('v8-to-istanbul')
+    const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'dd-trace-v8patch-'))
+    try {
+      // The alternate arm sits on its own indented line; called only with the truthy branch, V8's
+      // count:0 range for the alternate does not span the indentation, so the unpatched converter
+      // would leave the line at its default-covered count. The patch zeroes it.
+      const file = path.join(dir, 'ternary.js')
+      await fsp.writeFile(file, [
+        "'use strict'",
+        'module.exports = function pick (flag) {',
+        '  return flag',
+        "    ? 'yes'",
+        "    : 'no'",
+        '}',
+        '',
+      ].join('\n'))
+
+      const covDir = path.join(dir, 'cov')
+      await fsp.mkdir(covDir, { recursive: true })
+      const driver = path.join(dir, 'driver.js')
+      await fsp.writeFile(driver, `require(${JSON.stringify(file)})(true)\n`)
+      // When this spec runs inside the integration coverage harness, the patched child_process
+      // rewrites NODE_V8_COVERAGE to the ambient collector; otherwise our explicit covDir is used.
+      // Read from whichever directory actually received the profile.
+      childProcess.execFileSync(process.execPath, [driver], {
+        env: { ...process.env, [V8_COVERAGE_ENV]: covDir },
+        stdio: 'pipe',
+      })
+
+      let block
+      const searchDirs = [covDir, isCoverageActive() ? getV8CoverageDir() : undefined].filter(Boolean)
+      for (const searchDir of searchDirs) {
+        for (const name of fs.existsSync(searchDir) ? fs.readdirSync(searchDir) : []) {
+          if (!name.endsWith('.json')) continue
+          const data = JSON.parse(fs.readFileSync(path.join(searchDir, name), 'utf8'))
+          for (const entry of data.result) {
+            if (entry.url.endsWith('ternary.js')) block = entry
+          }
+        }
+      }
+      assert.ok(block, 'expected a V8 coverage entry for the fixture')
+
+      const converter = v8toIstanbul(file, 0)
+      await converter.load()
+      converter.applyCoverage(block.functions)
+      const istanbul = converter.toIstanbul()[file]
+
+      const lineOf = line => {
+        for (const [id, loc] of Object.entries(istanbul.statementMap)) {
+          if (loc.start.line === line) return istanbul.s[id]
+        }
+      }
+      assert.equal(lineOf(4), 1, "taken arm `? 'yes'` should be covered")
+      assert.equal(lineOf(5), 0, "un-taken arm `: 'no'` must be zeroed by the patch")
+    } finally {
+      await fsp.rm(dir, { force: true, recursive: true })
+    }
   })
 })

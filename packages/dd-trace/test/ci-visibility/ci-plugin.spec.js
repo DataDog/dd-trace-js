@@ -93,6 +93,87 @@ describe('CiPlugin', () => {
     sinon.assert.calledOnceWithExactly(getCodeOwnersFileEntries, '/repo-root')
   })
 
+  it('starts the DI breakpoint-hit timeout when waiting, not when preparing', async () => {
+    const plugin = createPlugin('jest_worker')
+    const waitForDiOperation = sinon.stub(plugin, 'waitForDiOperation').resolves()
+    plugin.di = {
+      waitForInFlightBreakpointHits: sinon.stub().resolves(),
+    }
+
+    plugin.prepareDiBreakpointHitWait()
+
+    sinon.assert.notCalled(waitForDiOperation)
+
+    const preparedPromise = plugin.diBreakpointHitPromise
+    await plugin.waitForDiBreakpointHits()
+
+    sinon.assert.calledOnceWithExactly(waitForDiOperation, preparedPromise)
+
+    plugin.cancelDiBreakpointHitWait()
+    await preparedPromise
+
+    assert.strictEqual(plugin.diBreakpointHitPromise, undefined)
+    assert.deepStrictEqual(plugin.diBreakpointHitResolvers, [])
+  })
+
+  it('cancels a prepared DI breakpoint-hit wait after waiting for it', async () => {
+    const plugin = createPlugin('jest_worker')
+    const waitForDiOperation = sinon.stub(plugin, 'waitForDiOperation').resolves()
+    plugin.di = {}
+
+    const preparedPromise = plugin.prepareDiBreakpointHitWait()
+
+    await plugin.waitForPreparedDiBreakpointHit()
+    await preparedPromise
+
+    sinon.assert.calledOnceWithExactly(waitForDiOperation, preparedPromise)
+    assert.strictEqual(plugin.diBreakpointHitPromise, undefined)
+    assert.deepStrictEqual(plugin.diBreakpointHitResolvers, [])
+  })
+
+  it('exports DI breakpoint hits with the debugger log envelope', () => {
+    const plugin = createPlugin('vitest_worker')
+    const exportDiLogs = sinon.spy()
+    const snapshot = {
+      id: 'snapshot-id',
+      probe: {
+        location: {
+          file: 'test.js',
+          lines: ['23'],
+        },
+      },
+      stack: [{ function: 'test function' }],
+    }
+
+    plugin.tracer._exporter.exportDiLogs = exportDiLogs
+    plugin.activeTestSpan = {
+      context: () => ({
+        _isFinished: false,
+        toTraceId: () => 'trace-id',
+        toSpanId: () => 'span-id',
+      }),
+      setTag: sinon.spy(),
+    }
+    plugin.testErrorStackIndex = 0
+
+    plugin.onDiBreakpointHit({ snapshot })
+
+    sinon.assert.calledOnce(exportDiLogs)
+    assert.strictEqual(exportDiLogs.firstCall.args[0], plugin.testEnvironmentMetadata)
+    const logMessage = exportDiLogs.firstCall.args[1]
+    assert.strictEqual(logMessage.message, '')
+    assert.deepStrictEqual(logMessage.debugger, { snapshot })
+    assert.deepStrictEqual(logMessage.dd, {
+      trace_id: 'trace-id',
+      span_id: 'span-id',
+    })
+    assert.strictEqual(logMessage.logger.name, 'test.js')
+    assert.strictEqual(logMessage.logger.method, 'test function')
+    assert.strictEqual(typeof logMessage.logger.version, 'string')
+    assert.match(logMessage.logger.thread_id, /^pid:\d+/)
+    assert.match(logMessage.logger.thread_name, /^(MainThread|WorkerThread:\d+)$/)
+  })
+
   function createPlugin (exporter) {
     class TestPlugin extends CiPlugin {
       static id = 'vitest'

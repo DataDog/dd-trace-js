@@ -2,15 +2,11 @@
 
 const log = require('../log')
 const { incomingHttpRequestStart } = require('./channels')
-const openaiIntegration = require('./integrations/openai')
-const vercelAiIntegration = require('./integrations/vercel-ai')
+const integrations = require('./integrations')
 const AIGuard = require('./sdk')
 
 let isEnabled = false
 let aiguard
-let block
-let disableOpenAIIntegration
-let disableVercelAiIntegration
 
 function onIncomingHttpRequestStart () {
   // No-op: subscribing ensures the HTTP plugin spreads req onto the store
@@ -21,31 +17,30 @@ function enable (tracer, config) {
 
   try {
     aiguard = new AIGuard(tracer, config)
-    block = config.experimental?.aiguard?.block !== false
+    const block = config.experimental?.aiguard?.block !== false
 
     incomingHttpRequestStart.subscribe(onIncomingHttpRequestStart)
-    disableOpenAIIntegration = openaiIntegration.enable(aiguard, block)
-    disableVercelAiIntegration = vercelAiIntegration.enable(aiguard, block)
+    integrations.enable(aiguard, block)
 
     isEnabled = true
   } catch (err) {
     log.error('AIGuard: unexpected error during initialization: %s', err.message)
-    disable()
+    reset()
   }
 }
 
 function disable () {
   if (!isEnabled) return
 
+  reset()
+}
+
+function reset () {
   incomingHttpRequestStart.unsubscribe(onIncomingHttpRequestStart)
-  disableOpenAIIntegration?.()
-  disableVercelAiIntegration?.()
+  integrations.disable()
 
   aiguard = undefined
   isEnabled = false
-  block = false
-  disableOpenAIIntegration = undefined
-  disableVercelAiIntegration = undefined
 }
 
 module.exports = { enable, disable }

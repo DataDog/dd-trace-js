@@ -18,7 +18,14 @@ class CypressPlugin extends Plugin {
       // Mirrors the guard in the manual plugin entrypoint (plugin.js).
       if (this._tracer._tracer instanceof NoopTracer) return
 
-      const { on, config, userAfterSpecHandlers, userAfterRunHandlers, cleanupWrapper } = payload
+      const {
+        on,
+        config,
+        userAfterSpecHandlers,
+        userAfterRunHandlers,
+        userAfterScreenshotHandlers,
+        cleanupWrapper,
+      } = payload
 
       const registerAfterRunWithCleanup = (afterRunHandler) => {
         on('after:run', (results) => {
@@ -34,16 +41,54 @@ class CypressPlugin extends Plugin {
       }
 
       const cypressPlugin = require('./cypress-plugin')
+      const datadogAfterScreenshotHandler = cypressPlugin.getAfterScreenshotHandler()
+
+      // Cypress keeps a single after:screenshot handler, so registering the
+      // plugin's would drop any user handler (e.g. one that moves/renames a
+      // screenshot). Chain the user handler(s) first, threading the returned
+      // { path, size, dimensions } forward — Cypress uses the final path for
+      // downstream steps — then run the plugin's afterScreenshot on those
+      // details and propagate the value back to Cypress. The user handler runs
+      // regardless of whether screenshot upload is enabled.
+      const registerAfterScreenshot = (afterScreenshotHandler) => {
+        const filteredUserAfterScreenshotHandlers = userAfterScreenshotHandlers.filter(
+          handler => handler !== afterScreenshotHandler
+        )
+        if (filteredUserAfterScreenshotHandlers.length === 0) {
+          if (afterScreenshotHandler) on('after:screenshot', afterScreenshotHandler)
+          return
+        }
+
+        on('after:screenshot', (details) => {
+          const chain = filteredUserAfterScreenshotHandlers.reduce(
+            (p, h) => p.then((latestDetails) => Promise.resolve(h(latestDetails)).then(
+              // Merge the user handler's (possibly partial) return into the running details
+              // rather than replacing them, so Cypress metadata such as `testFailure` and
+              // `takenAt` survives a handler that only returns { path, size, dimensions }.
+              (returned) => (returned == null ? latestDetails : { ...latestDetails, ...returned })
+            )),
+            Promise.resolve(details)
+          )
+          return chain.then((finalDetails) => {
+            if (afterScreenshotHandler) afterScreenshotHandler(finalDetails)
+            return finalDetails
+          })
+        })
+      }
 
       if (cypressPlugin._isInit) {
-        // Already initialized by manual plugin call — just chain user handlers
+        // Already initialized by manual plugin call — just chain user handlers.
+        // Pass the plugin's afterScreenshot so chaining a user handler doesn't drop the upload
+        // (the chained registration replaces the one plugin.js set, so it must include it).
         for (const h of userAfterSpecHandlers) on('after:spec', h)
+        registerAfterScreenshot(datadogAfterScreenshotHandler)
         registerAfterRunWithCleanup()
         payload.registered = true
         return
       }
 
       on('before:run', cypressPlugin.beforeRun.bind(cypressPlugin))
+      registerAfterScreenshot(datadogAfterScreenshotHandler)
 
       on('after:spec', (spec, results) => {
         const chain = userAfterSpecHandlers.reduce(
