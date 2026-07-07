@@ -4,10 +4,21 @@ coverage:
   precision: 2
   status:
     # The coverage action only attaches `master-coverage` on PRs targeting
-    # master; other PRs auto-pass codecov/patch via the rule below.
+    # master; other PRs auto-pass these statuses via the rules below.
     default_rules:
       flag_coverage_not_uploaded_behavior: pass
-    project: off
+    # Ratchet: overall coverage may not drop below the PR's base at all. `auto`
+    # compares against the base commit and `threshold: 0%` allows no degradation,
+    # so any PR that lowers total coverage fails the project status.
+    project:
+      default:
+        target: auto
+        threshold: 0%
+        if_not_found: success
+        if_ci_failed: success
+        only_pulls: true
+        flags:
+          - master-coverage
     patch:
       default:
         target: 95%

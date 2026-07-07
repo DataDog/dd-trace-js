@@ -1,8 +1,5 @@
 'use strict'
 
-// Capture real timers at module load time, before any test can install fake timers.
-const realSetTimeout = setTimeout
-
 const { performance } = require('node:perf_hooks')
 
 const shimmer = require('../../datadog-shimmer')
@@ -18,6 +15,7 @@ const {
   testFinishTimeCh,
   testPassCh,
   testErrorCh,
+  testDiWaitCh,
   testSkipCh,
   testFnCh,
   testSuiteStartCh,
@@ -32,39 +30,36 @@ const {
   getVitestTestProperties,
 } = require('./vitest-util')
 
-const BREAKPOINT_HIT_GRACE_PERIOD_MS = 400
-
 const taskToCtx = new WeakMap()
 const taskToTestProperties = new WeakMap()
 const taskToStatuses = new WeakMap()
 const taskToReportedErrorCount = new WeakMap()
 const attemptToFixTaskToStatuses = new WeakMap()
+const fileToHasConcurrentTests = new WeakMap()
 const originalHookFns = new WeakMap()
 const newTasks = new WeakSet()
 const dynamicNameTasks = new WeakSet()
 const disabledTasks = new WeakSet()
 const quarantinedTasks = new WeakSet()
 const attemptToFixTasks = new WeakSet()
+const attemptToFixRetryTasks = new WeakSet()
 const modifiedTasks = new WeakSet()
+const efdRetryTasks = new WeakSet()
 const efdDeterminedRetries = new WeakMap()
 const efdSlowAbortedTasks = new WeakSet()
 const efdExecutionStartByTask = new WeakMap()
 const efdSkippedRetryResults = new WeakMap()
 const attemptToFixExecutions = new Map()
 const loggedAttemptToFixTests = new Set()
-let isRetryReasonEfd = false
-let isRetryReasonAttemptToFix = false
 const switchedStatuses = new WeakSet()
 let vitestGetFn = null
 let vitestSetFn = null
 let vitestGetHooks = null
 
 function waitForHitProbe () {
-  return new Promise(resolve => {
-    realSetTimeout(() => {
-      resolve()
-    }, BREAKPOINT_HIT_GRACE_PERIOD_MS)
-  })
+  const promises = {}
+  testDiWaitCh.publish({ promises })
+  return promises.hitBreakpointPromise
 }
 
 function getVitestTestStatus (test, retryCount) {
@@ -138,6 +133,70 @@ function wrapBeforeEachCleanupResult (task, result) {
   return result
 }
 
+/**
+ * Returns whether a Vitest task tree includes any concurrent task.
+ *
+ * @param {Array<{ type?: string, concurrent?: boolean, tasks?: object[] }>|undefined} tasks
+ * @returns {boolean}
+ */
+function hasConcurrentTask (tasks) {
+  if (!tasks) return false
+
+  for (const task of tasks) {
+    if (task.concurrent === true) return true
+    if (hasConcurrentTask(task.tasks)) return true
+  }
+
+  return false
+}
+
+/**
+ * Returns whether a Vitest file includes any concurrent test.
+ *
+ * @param {{ tasks?: object[] }} file
+ * @returns {boolean}
+ */
+function hasConcurrentTests (file) {
+  const cached = fileToHasConcurrentTests.get(file)
+  if (cached !== undefined) return cached
+
+  const hasConcurrent = hasConcurrentTask(file.tasks)
+  fileToHasConcurrentTests.set(file, hasConcurrent)
+  return hasConcurrent
+}
+
+/**
+ * Gets the task associated with a Vitest hook invocation.
+ *
+ * @param {unknown[]} args
+ * @param {object} fallbackTask
+ * @returns {object}
+ */
+function getTaskFromHookArgs (args, fallbackTask) {
+  return args[0]?.task || fallbackTask
+}
+
+/**
+ * Wraps a Vitest hook so it runs inside the span context for the current test.
+ *
+ * @param {'beforeEach'|'afterEach'} hookType
+ * @param {Function} fn
+ * @param {object} fallbackTask
+ * @returns {Function}
+ */
+function wrapSuiteHookFn (hookType, fn, fallbackTask) {
+  return shimmer.wrapFunction(fn, fn => function (...args) {
+    const task = getTaskFromHookArgs(args, fallbackTask)
+    const result = testFnCh.runStores(taskToCtx.get(task), () => fn.apply(this, args))
+
+    if (hookType === 'beforeEach') {
+      return wrapBeforeEachCleanupResult(task, result)
+    }
+
+    return result
+  })
+}
+
 function wrapVitestTestRunner (VitestTestRunner) {
   // `onBeforeRunTask` is run before any repetition or attempt is run
   // `onBeforeRunTask` is an async function
@@ -163,7 +222,9 @@ function wrapVitestTestRunner (VitestTestRunner) {
         isQuarantined,
       } = testProperties
       if (isAttemptToFix) {
-        isRetryReasonAttemptToFix = task.repeats !== testManagementAttemptToFixRetries
+        if (task.repeats !== testManagementAttemptToFixRetries) {
+          attemptToFixRetryTasks.add(task)
+        }
         disableFrameworkRetries(task)
         task.repeats = testManagementAttemptToFixRetries
         attemptToFixTasks.add(task)
@@ -183,7 +244,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
 
     if (isImpactedTestsEnabled && testProperties.isModified) {
       if (isEarlyFlakeDetectionEnabled) {
-        isRetryReasonEfd = true
+        efdRetryTasks.add(task)
         disableFrameworkRetries(task)
         task.repeats = numRepeats
       }
@@ -193,7 +254,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
 
     if (isKnownTestsEnabled && testProperties.isNew && !attemptToFixTasks.has(task)) {
       if (isEarlyFlakeDetectionEnabled && !modifiedTasks.has(task)) {
-        isRetryReasonEfd = true
+        efdRetryTasks.add(task)
         disableFrameworkRetries(task)
         task.repeats = numRepeats
       }
@@ -267,6 +328,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
     }
 
     const { retry: numAttempt, repeats: numRepetition } = retryInfo
+    const isFailedTestReplayAllowed = !hasConcurrentTests(task.file)
     const isEfdManagedTask = isEarlyFlakeDetectionEnabled && taskToStatuses.has(task) && !attemptToFixTasks.has(task)
 
     if (isEfdManagedTask && numRepetition > 0 && !efdDeterminedRetries.has(task)) {
@@ -303,19 +365,20 @@ function wrapVitestTestRunner (VitestTestRunner) {
 
     // We finish the previous test here because we know it has failed already
     if (numAttempt > 0) {
-      const shouldWaitForHitProbe = isDiEnabled && numAttempt > 1
+      const shouldWaitForHitProbe = isDiEnabled && isFailedTestReplayAllowed && numAttempt > 1
       if (shouldWaitForHitProbe) {
         await waitForHitProbe()
       }
 
       const promises = {}
-      const shouldSetProbe = isDiEnabled && numAttempt === 1
+      const shouldSetProbe = isDiEnabled && isFailedTestReplayAllowed && numAttempt === 1
       const ctx = taskToCtx.get(task)
       const testError = getCurrentAttemptTestError(task, task.result?.errors)
       if (ctx) {
         testErrorCh.publish({
           error: testError,
           shouldSetProbe,
+          shouldWaitForHitProbe,
           promises,
           ...ctx.currentStore,
         })
@@ -377,18 +440,18 @@ function wrapVitestTestRunner (VitestTestRunner) {
 
     const isRetryReasonAtr = numAttempt > 0 &&
       isFlakyTestRetriesEnabledForTask(providedContext, task) &&
-      !isRetryReasonAttemptToFix &&
-      !isRetryReasonEfd
+      !attemptToFixRetryTasks.has(task) &&
+      !efdRetryTasks.has(task)
 
     const ctx = {
       testName,
       testSuiteAbsolutePath: task.file.filepath,
       isRetry: numAttempt > 0 || numRepetition > 0,
-      isRetryReasonEfd,
-      isRetryReasonAttemptToFix: isRetryReasonAttemptToFix && numRepetition > 0,
+      isRetryReasonEfd: efdRetryTasks.has(task),
+      isRetryReasonAttemptToFix: attemptToFixRetryTasks.has(task) && numRepetition > 0,
       isNew,
       hasDynamicName: dynamicNameTasks.has(task),
-      mightHitProbe: isDiEnabled && numAttempt > 0,
+      mightHitProbe: isDiEnabled && isFailedTestReplayAllowed && numAttempt > 0,
       isAttemptToFix: attemptToFixTasks.has(task),
       isDisabled: disabledTasks.has(task),
       isQuarantined: quarantinedTasks.has(task),
@@ -429,17 +492,9 @@ function wrapVitestTestRunner (VitestTestRunner) {
           if (!hookArray) continue
           for (let i = 0; i < hookArray.length; i++) {
             const currentFn = hookArray[i]
-            const originalFn = originalHookFns.get(currentFn) || currentFn
-            const wrappedFn = shimmer.wrapFunction(originalFn, fn => function (...args) {
-              const result = testFnCh.runStores(taskToCtx.get(task), () => fn.apply(this, args))
-
-              if (hookType === 'beforeEach') {
-                return wrapBeforeEachCleanupResult(task, result)
-              }
-
-              return result
-            })
-            originalHookFns.set(wrappedFn, originalFn)
+            if (originalHookFns.has(currentFn)) continue
+            const wrappedFn = wrapSuiteHookFn(hookType, currentFn, task)
+            originalHookFns.set(wrappedFn, currentFn)
             hookArray[i] = wrappedFn
           }
         }
@@ -468,6 +523,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
       const ctx = taskToCtx.get(task)
 
       const { isDiEnabled } = getProvidedContext()
+      const isFailedTestReplayAllowed = !hasConcurrentTests(task.file)
 
       if (efdSkippedRetryResults.has(task)) {
         task.result = efdSkippedRetryResults.get(task)
@@ -475,7 +531,7 @@ function wrapVitestTestRunner (VitestTestRunner) {
         return result
       }
 
-      if (isDiEnabled && retryInfo.retry > 1) {
+      if (isDiEnabled && isFailedTestReplayAllowed && retryInfo.retry > 1) {
         await waitForHitProbe()
       }
 
@@ -601,6 +657,7 @@ addHook({
       testCommand: providedContext.testCommand,
       repositoryRoot: providedContext.repositoryRoot,
       codeOwnersEntries: providedContext.codeOwnersEntries,
+      testEnvironmentMetadata: providedContext.testEnvironmentMetadata,
     }
     testSuiteStartCh.runStores(testSuiteCtx, () => {})
     const startTestsResponse = await startTests.apply(this, arguments)
@@ -611,6 +668,7 @@ addHook({
     })
 
     const testTasks = getTypeTasks(startTestsResponse[0].tasks)
+    const testEventPromises = []
 
     // Only one test task per test, even if there are retries
     for (const task of testTasks) {
@@ -639,12 +697,17 @@ addHook({
           if (testCtx) {
             const isSkippedByTestManagement =
               !attemptToFixTasks.has(task) && (disabledTasks.has(task) || quarantinedTasks.has(task))
+            const promises = {}
             testPassCh.publish({
               task,
               finalStatus: isSkippedByTestManagement ? 'skip' : 'pass',
               earlyFlakeAbortReason: efdSlowAbortedTasks.has(task) ? 'slow' : undefined,
+              promises,
               ...testCtx.currentStore,
             })
+            if (promises.hitBreakpointPromise) {
+              testEventPromises.push(promises.hitBreakpointPromise)
+            }
           }
         } else if (state === 'fail' || isSwitchedStatus) {
           let hasFailedAllRetries = false
@@ -684,6 +747,7 @@ addHook({
 
           if (testCtx) {
             const isRetry = task.result?.retryCount > 0
+            const promises = {}
             // `duration` is the duration of all the retries, so it can't be used if there are retries
 
             let finalStatus
@@ -708,8 +772,12 @@ addHook({
               attemptToFixFailed,
               finalStatus,
               earlyFlakeAbortReason: efdSlowAbortedTasks.has(task) ? 'slow' : undefined,
+              promises,
               ...testCtx.currentStore,
             })
+            if (promises.hitBreakpointPromise) {
+              testEventPromises.push(promises.hitBreakpointPromise)
+            }
           }
           if (errors?.length) {
             testSuiteError = testError // we store the error to bubble it up to the suite
@@ -724,6 +792,8 @@ addHook({
         })
       }
     }
+
+    await Promise.all(testEventPromises)
 
     const testSuiteResult = startTestsResponse[0].result
 

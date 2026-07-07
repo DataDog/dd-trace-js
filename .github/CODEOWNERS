@@ -11,6 +11,8 @@
 /benchmark/sirun/appsec-iast/ @DataDog/asm-js
 /benchmark/sirun/iast/ @DataDog/asm-js
 /integration-tests/appsec/ @DataDog/asm-js
+/integration-tests/graphql/ @DataDog/asm-js
+/integration-tests/standalone-asm/ @DataDog/asm-js
 /packages/dd-trace/src/appsec/ @DataDog/asm-js
 /packages/dd-trace/test/appsec/ @DataDog/asm-js
 
@@ -70,6 +72,7 @@
 /integration-tests/electron/ @DataDog/apm-idm-js
 /integration-tests/esbuild/ @DataDog/apm-idm-js
 /integration-tests/webpack/ @DataDog/apm-idm-js
+/integration-tests/pino/ @DataDog/apm-idm-js
 /integration-tests/pino.spec.js @DataDog/apm-idm-js
 
 /packages/datadog-esbuild/ @DataDog/apm-idm-js
@@ -223,12 +226,15 @@
 /benchmark/sirun/test-codeowners/ @DataDog/ci-app-libraries
 /benchmark/sirun/test-optimization/ @DataDog/ci-app-libraries
 
+/integration-tests/log_injection/ @DataDog/apm-sdk-capabilities-js
 /integration-tests/log_injection.spec.js @DataDog/apm-sdk-capabilities-js
 /integration-tests/opentelemetry/ @DataDog/apm-sdk-capabilities-js
 /integration-tests/opentelemetry-logs.spec.js @DataDog/apm-sdk-capabilities-js
 /integration-tests/opentelemetry-traces.spec.js @DataDog/apm-sdk-capabilities-js
 /integration-tests/opentelemetry.spec.js @DataDog/apm-sdk-capabilities-js
+/integration-tests/remote_config/ @DataDog/apm-sdk-capabilities-js
 /integration-tests/remote_config.spec.js @DataDog/apm-sdk-capabilities-js
+/integration-tests/telemetry-forwarder.sh @DataDog/apm-sdk-capabilities-js
 /integration-tests/telemetry.spec.js @DataDog/apm-sdk-capabilities-js
 
 /packages/dd-trace/src/telemetry/ @DataDog/apm-sdk-capabilities-js
@@ -336,14 +342,20 @@
 /integration-tests/bun/ @DataDog/lang-platform-js
 /integration-tests/coverage/ @DataDog/lang-platform-js
 /integration-tests/coverage-child-process.spec.js @DataDog/lang-platform-js
+/integration-tests/coverage-merge-lcov.spec.js @DataDog/lang-platform-js
 /integration-tests/coverage-fixtures/ @DataDog/lang-platform-js
 /integration-tests/crashtracking/ @DataDog/lang-platform-js
+/integration-tests/helpers/ @DataDog/lang-platform-js
+/integration-tests/init/ @DataDog/lang-platform-js
 /integration-tests/init.spec.js @DataDog/lang-platform-js
+/integration-tests/memory-leak/ @DataDog/lang-platform-js
 /integration-tests/mocha-parallel-files-fixtures/ @DataDog/lang-platform-js
 /integration-tests/mocha-parallel-files.spec.js @DataDog/lang-platform-js
+/integration-tests/package-guardrails/ @DataDog/lang-platform-js
 /integration-tests/package-guardrails.spec.js @DataDog/lang-platform-js
-/integration-tests/package-guardrails/flush.js @DataDog/lang-platform-js
+/integration-tests/startup/ @DataDog/lang-platform-js
 /integration-tests/startup.spec.js @DataDog/lang-platform-js
+/integration-tests/tsconfig.json @DataDog/lang-platform-js
 
 /packages/datadog-core/ @DataDog/lang-platform-js
 /packages/datadog-shimmer/ @DataDog/lang-platform-js
