@@ -17,6 +17,7 @@ const {
   IS_SERVERLESS,
   getIsGCPFunction,
   getIsAzureFunction,
+  isSomethingUnderNDA,
 } = require('../serverless')
 const { ORIGIN_KEY, DATADOG_MINI_AGENT_PATH } = require('../constants')
 const { appendRules } = require('../payload-tagging/config')
@@ -321,6 +322,7 @@ class Config extends ConfigBase {
 
   // Handles values calculated from a mixture of options and env vars
   #applyCalculated () {
+    const logCaptureEnabledIsRC = trackedConfigOrigins.get('logCaptureEnabled') === 'remote_config'
     undo(this, 'calculated')
 
     if (this.url ||
@@ -558,6 +560,10 @@ class Config extends ConfigBase {
       setAndTrack(this, 'remoteConfig.DD_REMOTE_CONFIGURATION_ENABLED', false)
     }
 
+    if (!logCaptureEnabledIsRC && !trackedConfigOrigins.has('logCaptureEnabled')) {
+      setAndTrack(this, 'logCaptureEnabled', isSomethingUnderNDA())
+    }
+
     // TODO: Should this unconditionally be disabled?
     if (getEnvironmentVariable('JEST_WORKER_ID') &&
         !trackedConfigOrigins.has('telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED')) {
@@ -625,6 +631,26 @@ class Config extends ConfigBase {
       deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_CPU_ENABLED')
       deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_TIMELINE_ENABLED')
       deactivateIfEnabledAndWarnOnWindows(this, 'DD_PROFILING_ASYNC_CONTEXT_FRAME_ENABLED')
+    }
+
+    // Normalize logCaptureProtocol: strip any '://' suffix, lowercase, add trailing colon,
+    // then validate — only 'http:' and 'https:' are supported; warn and fall back to 'http:'.
+    if (this.logCaptureProtocol) {
+      const rawProtocol = this.logCaptureProtocol
+      let protocol = rawProtocol.toLowerCase().replace(/:\/\/.*$/, '')
+      if (!protocol.endsWith(':')) {
+        protocol += ':'
+      }
+      if (protocol !== 'http:' && protocol !== 'https:') {
+        log.warn('logCaptureProtocol: unsupported value %j, falling back to http:', rawProtocol)
+        protocol = 'http:'
+      }
+      const origin = trackedConfigOrigins.get('logCaptureProtocol')
+      if (origin === undefined) {
+        set(this, 'logCaptureProtocol', protocol)
+      } else {
+        setAndTrack(this, 'logCaptureProtocol', protocol, rawProtocol, /** @type {TelemetrySource} */ (origin))
+      }
     }
 
     // Single tags update is tracked as a calculated value.

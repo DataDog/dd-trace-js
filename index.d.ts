@@ -1363,6 +1363,71 @@ declare namespace tracer {
      */
     traceWebsocketMessagesSeparateTraces?: boolean
 
+    /**
+     * Whether to enable log capture (forwarding application logs to Datadog).
+     * Defaults to true in serverless environments, false otherwise.
+     * @default false
+     * @env DD_LOG_CAPTURE_ENABLED
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    logCaptureEnabled?: boolean
+
+    /**
+     * Hostname of the log intake endpoint.
+     * @default 'localhost'
+     * @env DD_LOG_CAPTURE_HOST
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    logCaptureHost?: string
+
+    /**
+     * Port of the log intake endpoint.
+     * @default 10517
+     * @env DD_LOG_CAPTURE_PORT
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    logCapturePort?: number
+
+    /**
+     * Protocol for the log intake endpoint ('http:' or 'https:').
+     * @default 'http:'
+     * @env DD_LOG_CAPTURE_PROTOCOL
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    logCaptureProtocol?: string
+
+    /**
+     * URL path for the log intake endpoint.
+     * @default '/logs'
+     * @env DD_LOG_CAPTURE_PATH
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    logCapturePath?: string
+
+    /**
+     * Maximum number of log records to buffer before forcing a flush.
+     * @default 1000
+     * @env DD_LOG_CAPTURE_MAX_BUFFER_SIZE
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    logCaptureMaxBufferSize?: number
+
+    /**
+     * Interval in milliseconds between periodic log flushes.
+     * @default 5000
+     * @env DD_LOG_CAPTURE_FLUSH_INTERVAL_MS
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    logCaptureFlushIntervalMs?: number
+
+    /**
+     * Timeout in milliseconds for log intake HTTP requests.
+     * @default 5000
+     * @env DD_LOG_CAPTURE_TIMEOUT_MS
+     * Programmatic configuration takes precedence over the environment variables listed above.
+     */
+    logCaptureTimeoutMs?: number
+
   }
 
   /**

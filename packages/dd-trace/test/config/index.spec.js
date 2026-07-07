@@ -1702,6 +1702,180 @@ describe('Config', () => {
     assert.strictEqual(config.appsec.eventTracking.mode, 'anonymous')
   })
 
+  it('should read DD_LOG_CAPTURE_ENABLED', () => {
+    process.env.DD_LOG_CAPTURE_ENABLED = 'true'
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureEnabled, true)
+    delete process.env.DD_LOG_CAPTURE_ENABLED
+  })
+
+  it('should default logCaptureEnabled to true when SOMETHING_UNDER_NDA is something-under-nda', () => {
+    process.env.SOMETHING_UNDER_NDA = 'something-under-nda'
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureEnabled, true)
+    delete process.env.SOMETHING_UNDER_NDA
+  })
+
+  it('should not override DD_LOG_CAPTURE_ENABLED=false when SOMETHING_UNDER_NDA is something-under-nda', () => {
+    process.env.SOMETHING_UNDER_NDA = 'something-under-nda'
+    process.env.DD_LOG_CAPTURE_ENABLED = 'false'
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureEnabled, false)
+    delete process.env.SOMETHING_UNDER_NDA
+    delete process.env.DD_LOG_CAPTURE_ENABLED
+  })
+
+  it('should not default logCaptureEnabled to true when SOMETHING_UNDER_NDA is not something-under-nda', () => {
+    process.env.SOMETHING_UNDER_NDA = 'on-demand'
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureEnabled, false)
+    delete process.env.SOMETHING_UNDER_NDA
+  })
+
+  it('should restore logCaptureEnabled to SOMETHING_UNDER_NDA default after remote config rollback', () => {
+    process.env.SOMETHING_UNDER_NDA = 'something-under-nda'
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureEnabled, true)
+
+    config.setRemoteConfig({ logCaptureEnabled: false })
+    assert.strictEqual(config.logCaptureEnabled, false)
+
+    config.setRemoteConfig(null)
+    assert.strictEqual(config.logCaptureEnabled, true)
+
+    delete process.env.SOMETHING_UNDER_NDA
+  })
+
+  it('should respect DD_LOG_CAPTURE_ENABLED=false even in serverless environment', () => {
+    process.env.SOMETHING_UNDER_NDA = 'something-under-nda'
+    process.env.DD_LOG_CAPTURE_ENABLED = 'false'
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureEnabled, false)
+    delete process.env.DD_LOG_CAPTURE_ENABLED
+    delete process.env.SOMETHING_UNDER_NDA
+  })
+
+  it('should default logCaptureHost to localhost', () => {
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureHost, 'localhost')
+  })
+
+  it('should default logCapturePort to 10517', () => {
+    const config = getConfig()
+    assert.strictEqual(config.logCapturePort, 10517)
+  })
+
+  it('should read DD_LOG_CAPTURE_HOST', () => {
+    process.env.DD_LOG_CAPTURE_HOST = 'my-intake.internal'
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureHost, 'my-intake.internal')
+    delete process.env.DD_LOG_CAPTURE_HOST
+  })
+
+  it('should read DD_LOG_CAPTURE_PORT', () => {
+    process.env.DD_LOG_CAPTURE_PORT = '8080'
+    const config = getConfig()
+    assert.strictEqual(config.logCapturePort, 8080)
+    delete process.env.DD_LOG_CAPTURE_PORT
+  })
+
+  it('should read DD_LOG_CAPTURE_PATH', () => {
+    process.env.DD_LOG_CAPTURE_PATH = '/custom-logs'
+    const config = getConfig()
+    assert.strictEqual(config.logCapturePath, '/custom-logs')
+    delete process.env.DD_LOG_CAPTURE_PATH
+  })
+
+  it('should read DD_LOG_CAPTURE_PROTOCOL', () => {
+    process.env.DD_LOG_CAPTURE_PROTOCOL = 'https:'
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureProtocol, 'https:')
+    delete process.env.DD_LOG_CAPTURE_PROTOCOL
+  })
+
+  it('should normalize DD_LOG_CAPTURE_PROTOCOL without trailing colon', () => {
+    process.env.DD_LOG_CAPTURE_PROTOCOL = 'https'
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureProtocol, 'https:')
+    delete process.env.DD_LOG_CAPTURE_PROTOCOL
+  })
+
+  it('should normalize DD_LOG_CAPTURE_PROTOCOL to lowercase', () => {
+    process.env.DD_LOG_CAPTURE_PROTOCOL = 'HTTPS'
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureProtocol, 'https:')
+    delete process.env.DD_LOG_CAPTURE_PROTOCOL
+  })
+
+  it('should normalize DD_LOG_CAPTURE_PROTOCOL uppercase without colon', () => {
+    process.env.DD_LOG_CAPTURE_PROTOCOL = 'HTTPS:'
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureProtocol, 'https:')
+    delete process.env.DD_LOG_CAPTURE_PROTOCOL
+  })
+
+  it('should read DD_LOG_CAPTURE_MAX_BUFFER_SIZE', () => {
+    process.env.DD_LOG_CAPTURE_MAX_BUFFER_SIZE = '500'
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureMaxBufferSize, 500)
+    delete process.env.DD_LOG_CAPTURE_MAX_BUFFER_SIZE
+  })
+
+  it('should read DD_LOG_CAPTURE_FLUSH_INTERVAL_MS', () => {
+    process.env.DD_LOG_CAPTURE_FLUSH_INTERVAL_MS = '2000'
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureFlushIntervalMs, 2000)
+    delete process.env.DD_LOG_CAPTURE_FLUSH_INTERVAL_MS
+  })
+
+  it('should read DD_LOG_CAPTURE_TIMEOUT_MS', () => {
+    process.env.DD_LOG_CAPTURE_TIMEOUT_MS = '3000'
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureTimeoutMs, 3000)
+    delete process.env.DD_LOG_CAPTURE_TIMEOUT_MS
+  })
+
+  it('should normalize logCaptureProtocol option to lowercase with colon', () => {
+    const config = getConfig({ logCaptureProtocol: 'HTTPS:' })
+    assert.strictEqual(config.logCaptureProtocol, 'https:')
+  })
+
+  it('should preserve the origin of logCaptureProtocol after normalization', () => {
+    process.env.DD_LOG_CAPTURE_PROTOCOL = 'HTTPS'
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureProtocol, 'https:')
+    assert.strictEqual(config.getOrigin('logCaptureProtocol'), 'env_var')
+    delete process.env.DD_LOG_CAPTURE_PROTOCOL
+  })
+
+  it('should normalize logCaptureProtocol option without trailing colon', () => {
+    const config = getConfig({ logCaptureProtocol: 'HTTPS' })
+    assert.strictEqual(config.logCaptureProtocol, 'https:')
+  })
+
+  it('should normalize logCaptureProtocol option lowercase without colon', () => {
+    const config = getConfig({ logCaptureProtocol: 'https' })
+    assert.strictEqual(config.logCaptureProtocol, 'https:')
+  })
+
+  it('should normalize logCaptureProtocol stripping :// suffix', () => {
+    const config = getConfig({ logCaptureProtocol: 'https://' })
+    assert.strictEqual(config.logCaptureProtocol, 'https:')
+  })
+
+  it('should fall back to http: and warn for unsupported logCaptureProtocol', () => {
+    process.env.DD_LOG_CAPTURE_PROTOCOL = 'ftp'
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureProtocol, 'http:')
+    delete process.env.DD_LOG_CAPTURE_PROTOCOL
+  })
+
+  it('should not track logCaptureProtocol origin when using the default value', () => {
+    const config = getConfig()
+    assert.strictEqual(config.logCaptureProtocol, 'http:')
+    assert.strictEqual(config.getOrigin('logCaptureProtocol'), 'default')
+  })
+
   it('should initialize from the options', () => {
     const logger = {
       warn: sinon.spy(),
