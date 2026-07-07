@@ -155,6 +155,7 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
 
       if (!done) return
 
+      ctx.result ??= {}
       const contentById = {}
 
       for (const chunk of chunks) {
@@ -279,7 +280,7 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
     const output =
       ctx.isStream
         ? this.#lastOutputContentByCallId.get(event.callId)?.find(part => part.type === 'text')?.text
-        : result._output
+        : result?._output
 
     this._tagger.tagTextIO(span, input, output)
 
@@ -311,7 +312,8 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
     const inputMessages = formatLanguageModelInputMessages(instructions, messages)
 
     // output messages
-    const outputMessages = formatLanguageModelOutputMessages(result.content)
+    const outputMessages =
+      result ? formatLanguageModelOutputMessages(result.content) : [{ role: 'assistant', content: '' }]
 
     this._tagger.tagLLMIO(span, inputMessages, outputMessages)
 
@@ -334,6 +336,8 @@ class VercelAiTelemetryPlugin extends BaseLLMObsPlugin {
     // metadata
     const metadata = getGenerationMetadataFromEvent(event)
     this._tagger.tagMetadata(span, metadata)
+
+    if (!result) return
 
     // metrics
     const { usage } = result
