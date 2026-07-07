@@ -12,18 +12,23 @@ const { SERVICE_NAME, RESOURCE_NAME, SPAN_KIND } = require('../../../../ext/tags
 const kinds = require('../../../../ext/kinds')
 
 const id = require('../id')
-const api = require('./api').getApi()
+const { getApi } = require('./api')
 const BridgeSpanBase = require('./bridge-span-base')
 const SpanContext = require('./span_context')
 const spanEndingHook = require('./span-ending-hook')
 const { setOtelOperationName, setOtelResource } = require('./span-helpers')
 
+// SpanKind is an OTel spec enum of fixed numeric constants, identical across every copy of the API,
+// so reading it from whichever copy is resolved at load time is safe (unlike context keys or the
+// global provider, which are per-copy and must be read at use time — see issue #6882).
+const { SpanKind } = getApi()
+
 const spanKindNames = {
-  [api.SpanKind.INTERNAL]: kinds.INTERNAL,
-  [api.SpanKind.SERVER]: kinds.SERVER,
-  [api.SpanKind.CLIENT]: kinds.CLIENT,
-  [api.SpanKind.PRODUCER]: kinds.PRODUCER,
-  [api.SpanKind.CONSUMER]: kinds.CONSUMER,
+  [SpanKind.INTERNAL]: kinds.INTERNAL,
+  [SpanKind.SERVER]: kinds.SERVER,
+  [SpanKind.CLIENT]: kinds.CLIENT,
+  [SpanKind.PRODUCER]: kinds.PRODUCER,
+  [SpanKind.CONSUMER]: kinds.CONSUMER,
 }
 
 /**
@@ -45,7 +50,7 @@ function spanNameMapper (spanName, kind, attributes) {
   const opName = attributes['operation.name']
   if (opName) return opName
 
-  const { INTERNAL, SERVER, CLIENT } = api.SpanKind
+  const { INTERNAL, SERVER, CLIENT } = SpanKind
 
   // HTTP server and client requests
   // TODO: Drop http.method when http.request.method is supported.
@@ -249,7 +254,7 @@ class Span extends BridgeSpanBase {
    */
   end (timeInput) {
     if (this.ended) {
-      api.diag.error('You can only call end() on a span once.')
+      getApi().diag.error('You can only call end() on a span once.')
       return
     }
 

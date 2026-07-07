@@ -4,6 +4,7 @@ const assert = require('node:assert/strict')
 
 const { describe, it } = require('mocha')
 const sinon = require('sinon')
+const proxyquire = require('proxyquire').noCallThru().noPreserveCache()
 const { trace } = require('@opentelemetry/api')
 
 require('../setup/core')
@@ -122,5 +123,39 @@ describe('OTel TracerProvider', () => {
 
     provider.forceFlush()
     sinon.assert.calledOnce(processor.forceFlush)
+  })
+
+  // Regression for issue #6882: when the bridge is loaded before the application requires its own
+  // @opentelemetry/api copy, register() must still bind the global provider to that copy once it is
+  // captured. Snapshotting the API at module load would register on dd-trace's fallback copy while
+  // the application reads its own, silently downgrading every span to a no-op.
+  it('registers on the @opentelemetry/api copy captured after the module loaded', () => {
+    const holder = proxyquire('../../src/opentelemetry/api', {})
+
+    const setGlobalTracerProvider = sinon.stub().returns(true)
+    const setGlobalContextManager = sinon.spy()
+    const setGlobalPropagator = sinon.spy()
+    const applicationCopy = {
+      trace: { setGlobalTracerProvider, getTracerProvider: () => ({ setDelegate () {} }) },
+      context: { setGlobalContextManager },
+      propagation: { setGlobalPropagator },
+    }
+
+    const FreshTracerProvider = proxyquire('../../src/opentelemetry/tracer_provider', {
+      './api': holder,
+      '../../': {},
+      './context_manager': class {},
+      './tracer': class {},
+      './span_processor': { MultiSpanProcessor: class {}, NoopSpanProcessor: class {} },
+    })
+
+    // The application requires its own copy only now, after the bridge module has been loaded.
+    holder.setApi(holder.API, applicationCopy)
+
+    const provider = new FreshTracerProvider()
+    provider.register()
+
+    sinon.assert.calledOnceWithExactly(setGlobalTracerProvider, provider)
+    sinon.assert.calledOnceWithExactly(setGlobalContextManager, provider._contextManager)
   })
 })

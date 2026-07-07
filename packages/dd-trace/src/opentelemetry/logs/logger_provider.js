@@ -1,7 +1,5 @@
 'use strict'
-const otelApi = require('../api')
-const { logs } = otelApi.getApiLogs()
-const { context } = otelApi.getApi()
+const { getApi, getApiLogs } = require('../api')
 const log = require('../../log')
 const ContextManager = require('../context_manager')
 const Logger = require('./logger')
@@ -78,6 +76,10 @@ class LoggerProvider {
       log.warn('Cannot register after shutdown')
       return
     }
+    // Read the API at register time so the global provider and context manager bind to the copy the
+    // application captured, not a copy snapshotted before capture (issue #6882).
+    const { context } = getApi()
+    const { logs } = getApiLogs()
     // Set context manager, this is required to correlate logs to spans
     context.setGlobalContextManager(this.#contextManager)
     logs.setGlobalLoggerProvider(this)

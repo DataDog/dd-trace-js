@@ -8,7 +8,7 @@ const id = require('../id')
 const log = require('../log')
 const TextMapPropagator = require('../opentracing/propagation/text_map')
 const TraceState = require('../opentracing/propagation/tracestate')
-const api = require('./api').getApi()
+const { getApi } = require('./api')
 const SpanContext = require('./span_context')
 const Span = require('./span')
 const Sampler = require('./sampler')
@@ -91,7 +91,14 @@ class Tracer {
     return spanContext
   }
 
-  startSpan (name, options = {}, context = api.context.active()) {
+  startSpan (name, options = {}, context) {
+    // Read the API at call time, not module load: the application's copy is captured on its own
+    // require, which may happen after this module loaded. A snapshotted copy would use different
+    // per-copy context keys than the application and lose the parent span (issue #6882).
+    const api = getApi()
+    if (context === undefined) {
+      context = api.context.active()
+    }
     // remove span from context in case a root span is requested via options
     if (options.root) {
       context = api.trace.deleteSpan(context)
@@ -157,6 +164,7 @@ class Tracer {
       return
     }
 
+    const api = getApi()
     const parentContext = context || api.context.active()
     const span = this.startSpan(name, options, parentContext)
     const contextWithSpanSet = api.trace.setSpan(parentContext, span)

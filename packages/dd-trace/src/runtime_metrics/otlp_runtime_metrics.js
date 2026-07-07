@@ -3,7 +3,7 @@
 const v8 = require('node:v8')
 const process = require('node:process')
 const { performance, monitorEventLoopDelay, PerformanceObserver, constants } = require('node:perf_hooks')
-const { metrics } = require('../opentelemetry/api').getApi()
+const { getApi } = require('../opentelemetry/api')
 const log = require('../log')
 const { createMetricsClient } = require('./client')
 
@@ -67,6 +67,9 @@ module.exports = {
     }, config.DD_RUNTIME_METRICS_FLUSH_INTERVAL ?? 10_000)
     flushInterval.unref?.()
 
+    // Read the meter provider at start time so it matches the copy the application captured and the
+    // one initializeOpenTelemetryMetrics registered on, not a copy snapshotted at module load (#6882).
+    const { metrics } = getApi()
     meter = metrics.getMeterProvider().getMeter(METER_NAME)
 
     const trackEventLoop = config.runtimeMetrics.eventLoop !== false

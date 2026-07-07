@@ -3,7 +3,7 @@
 const { AUTO_KEEP } = require('../../../../ext/priority')
 const DatadogSpanContext = require('../opentracing/span_context')
 const id = require('../id')
-const api = require('./api').getApi()
+const { getApi } = require('./api')
 
 function newContext () {
   const spanId = id()
@@ -38,7 +38,7 @@ class SpanContext {
 
   get traceState () {
     const ts = this._ddContext._tracestate
-    return api.createTraceState(ts ? ts.toString() : '')
+    return getApi().createTraceState(ts ? ts.toString() : '')
   }
 }
 

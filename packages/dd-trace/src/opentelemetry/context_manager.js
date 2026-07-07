@@ -2,7 +2,7 @@
 
 const { storage } = require('../../../datadog-core')
 const { getAllBaggageItems, setAllBaggageItems, removeAllBaggageItems } = require('../baggage')
-const { trace, ROOT_CONTEXT, propagation } = require('./api').getApi()
+const { getApi } = require('./api')
 
 const ActiveSpanProxy = require('./active-span-proxy')
 const SpanContext = require('./span_context')
@@ -14,6 +14,10 @@ class ContextManager {
 
   // converts dd to otel
   active () {
+    // The application's copy is captured on its own require; read it here rather than at module
+    // load so context keys match the copy the application uses (issue #6882). OTel context keys are
+    // per-copy symbols, so a span written with one copy is invisible to another.
+    const { trace, ROOT_CONTEXT, propagation } = getApi()
     const store = this._store.getStore()
     const baseContext = store || ROOT_CONTEXT
     const activeSpan = storage('legacy').getStore()?.span
@@ -67,6 +71,7 @@ class ContextManager {
 
   // converts otel to dd
   with (context, fn, thisArg, ...args) {
+    const { trace, propagation } = getApi()
     const span = trace.getSpan(context)
     const run = () => {
       const cb = thisArg == null ? fn : fn.bind(thisArg)
