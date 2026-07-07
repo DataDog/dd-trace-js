@@ -8,6 +8,7 @@ const testStartCh = channel('ci:vitest:test:start')
 const testFinishTimeCh = channel('ci:vitest:test:finish-time')
 const testPassCh = channel('ci:vitest:test:pass')
 const testErrorCh = channel('ci:vitest:test:error')
+const testDiWaitCh = channel('ci:vitest:test:di:wait')
 const testSkipCh = channel('ci:vitest:test:skip')
 const testFnCh = channel('ci:vitest:test:fn')
 
@@ -115,6 +116,7 @@ function getProvidedContext () {
       _ddTestCommand: testCommand,
       _ddRepositoryRoot: repositoryRoot,
       _ddCodeOwnersEntries: codeOwnersEntries,
+      _ddTestEnvironmentMetadata: testEnvironmentMetadata,
     } = globalThis.__vitest_worker__.providedContext
 
     return {
@@ -136,6 +138,7 @@ function getProvidedContext () {
       testCommand,
       repositoryRoot,
       codeOwnersEntries,
+      testEnvironmentMetadata,
     }
   } catch {
     log.error('Vitest workers could not parse provided context, so some features will not work.')
@@ -158,6 +161,7 @@ function getProvidedContext () {
       testCommand: undefined,
       repositoryRoot: undefined,
       codeOwnersEntries: undefined,
+      testEnvironmentMetadata: undefined,
     }
   }
 }
@@ -220,6 +224,7 @@ module.exports = {
   testFinishTimeCh,
   testPassCh,
   testErrorCh,
+  testDiWaitCh,
   testSkipCh,
   testFnCh,
   testSuiteStartCh,
