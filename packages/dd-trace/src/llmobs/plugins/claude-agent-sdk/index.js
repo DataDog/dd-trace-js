@@ -27,7 +27,7 @@ function getToolOutputText (raw) {
   }
 
   if (raw.type === 'tool_result') return getToolOutputText(raw.content)
-  if (raw.type === 'text') return raw.text
+  if (raw.type === 'text') return normalizeToolOutputString(raw.text)
   if (raw.type === 'tool_reference') return raw.tool_name
   if (raw.content !== undefined) return getToolOutputText(raw.content)
 
@@ -216,12 +216,7 @@ class LlmLlmObsPlugin extends LLMObsPlugin {
           if (block.type === 'text') {
             messages.push({ role: 'user', content: block.text ?? '' })
           } else if (block.type === 'tool_result') {
-            const raw = block.content
-            const text = Array.isArray(raw)
-              ? raw.find(b => b.type === 'text')?.text ??
-                raw.find(b => b.type === 'tool_reference')?.tool_name ??
-                ''
-              : String(raw ?? '')
+            const text = getToolOutputText(block.content) ?? ''
             messages.push({ role: 'tool', content: text })
           }
         }
