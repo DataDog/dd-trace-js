@@ -89,6 +89,17 @@ describeNotWindows('crashtracker', () => {
       sinon.assert.calledOnce(binding.init)
     })
 
+    it('should resolve frames out-of-process on Linux and in-process elsewhere', () => {
+      crashtracker.start(config)
+
+      const initConfig = binding.init.firstCall.args[0]
+      const expected = os.platform() === 'linux'
+        ? 'EnabledWithSymbolsInReceiver'
+        : 'EnabledWithInprocessSymbols'
+
+      assert.strictEqual(initConfig.resolve_frames, expected)
+    })
+
     it('should handle unix sockets', () => {
       config.url = new URL('unix:///var/datadog/apm/test.socket')
 

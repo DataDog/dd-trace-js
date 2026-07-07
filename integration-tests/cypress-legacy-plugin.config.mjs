@@ -1,5 +1,16 @@
+import fs from 'node:fs'
+
 import { defineConfig } from 'cypress'
 import ddTracePlugin from 'dd-trace/ci/cypress/plugin.js'
+
+function renameScreenshot (details) {
+  const renamedPath = details.path.replace(/\.png$/, ' datadog-renamed.png')
+  try {
+    fs.unlinkSync(renamedPath)
+  } catch {}
+  fs.renameSync(details.path, renamedPath)
+  return { path: renamedPath }
+}
 
 export default defineConfig({
   defaultCommandTimeout: 1000,
@@ -13,10 +24,14 @@ export default defineConfig({
         const { default: ddAfterSpec } = await import('dd-trace/ci/cypress/after-spec.js')
         on('after:spec', (...args) => ddAfterSpec(...args))
       }
-      return ddTracePlugin(on, config)
+      const resolvedConfig = ddTracePlugin(on, config)
+      if (process.env.CYPRESS_ENABLE_AFTER_SCREENSHOT_CUSTOM) {
+        on('after:screenshot', renameScreenshot)
+      }
+      return resolvedConfig
     },
     specPattern: process.env.SPEC_PATTERN || 'cypress/e2e/**/*.cy.js',
   },
   video: false,
-  screenshotOnRunFailure: false,
+  screenshotOnRunFailure: process.env.CYPRESS_ENABLE_FAILURE_SCREENSHOTS === 'true',
 })
