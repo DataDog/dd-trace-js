@@ -124,6 +124,21 @@ module.exports.setup = function (build) {
   const isSourceMapEnabled = !!build.initialOptions.sourcemap ||
     ['internal', 'both'].includes(build.initialOptions.sourcemap)
   const externalModules = new Set(build.initialOptions.external || [])
+
+  // `@datadog/libdatadog` ships platform-specific native/.wasm binaries that it
+  // loads at runtime by reading its own `prebuilds/` directory and dynamically
+  // requiring the resolved file (see its load.js). Bundling it inlines that
+  // loader, so `__dirname` points at the output bundle instead of the package
+  // and the binaries can't be found. It is a hard, always-loaded dependency of
+  // the native span pipeline, so externalize it automatically (webpack users
+  // list it in `externals`; here the plugin does it for them) — it resolves
+  // from node_modules at runtime.
+  if (!externalModules.has('@datadog/libdatadog')) {
+    externalModules.add('@datadog/libdatadog')
+    build.initialOptions.external ??= []
+    build.initialOptions.external.push('@datadog/libdatadog')
+  }
+
   build.initialOptions.banner ??= {}
   build.initialOptions.banner.js ??= ''
   if (DD_IAST_ENABLED) {
