@@ -17,7 +17,29 @@ function captureOptionalPeerOnLoad () {
   return onLoad
 }
 
+function setupExternal (initialOptions = {}) {
+  ddPlugin.setup({ initialOptions, onResolve () {}, onLoad () {} })
+  return initialOptions.external
+}
+
 describe('datadog-esbuild plugin', () => {
+  describe('OpenTelemetry API externalization', () => {
+    it('marks both OpenTelemetry API peers external so the bundle shares the application copy', () => {
+      const external = setupExternal()
+
+      assert.ok(external.includes('@opentelemetry/api'), 'should externalize @opentelemetry/api')
+      assert.ok(external.includes('@opentelemetry/api-logs'), 'should externalize @opentelemetry/api-logs')
+    })
+
+    it('keeps the externals supplied by the build', () => {
+      const external = setupExternal({ external: ['pg'] })
+
+      assert.ok(external.includes('pg'), 'should preserve user externals')
+      assert.ok(external.includes('@opentelemetry/api'), 'should externalize @opentelemetry/api')
+      assert.ok(external.includes('@opentelemetry/api-logs'), 'should externalize @opentelemetry/api-logs')
+    })
+  })
+
   describe('optional peer bundling', () => {
     it('rewrites the installed peer load in flagging_provider into a literal require', () => {
       const onLoad = captureOptionalPeerOnLoad()

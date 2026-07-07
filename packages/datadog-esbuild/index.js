@@ -146,6 +146,17 @@ ${build.initialOptions.banner.js}`
     build.initialOptions.external.push('@openfeature/core')
   }
 
+  // The OpenTelemetry API packages are optional peers the application owns. The bridge captures
+  // the application's copy through the `@opentelemetry/api` instrumentation, which only fires on a
+  // runtime require. Bundling them would inline a second copy that the instrumentation never sees,
+  // so the bridge would register its provider on the wrong copy and silently downgrade every span
+  // to a no-op (issue #6882). Mark them external so the require survives for interception.
+  for (const otelApiPackage of ['@opentelemetry/api', '@opentelemetry/api-logs']) {
+    build.initialOptions.external ??= []
+    build.initialOptions.external.push(otelApiPackage)
+    externalModules.add(otelApiPackage)
+  }
+
   const esmBuild = isESMBuild(build)
   if (
     esmBuild &&

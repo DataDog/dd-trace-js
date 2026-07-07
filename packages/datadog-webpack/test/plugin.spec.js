@@ -49,6 +49,42 @@ describe('DatadogWebpackPlugin', () => {
       plugin.apply(compiler)
       assert.equal(tapped[0], 'DatadogWebpackPlugin')
     })
+
+    function applyToExternals (externals) {
+      const compiler = {
+        options: { optimization: {}, externals },
+        hooks: {
+          environment: { tap: () => {} },
+          thisCompilation: { tap: () => {} },
+          normalModuleFactory: { tap: () => {} },
+        },
+      }
+      new DatadogWebpackPlugin().apply(compiler)
+      return compiler.options.externals
+    }
+
+    it('externalizes both OpenTelemetry API peers as a commonjs require', () => {
+      const externals = applyToExternals()
+
+      assert.deepStrictEqual(externals.at(-1), {
+        '@opentelemetry/api': 'commonjs @opentelemetry/api',
+        '@opentelemetry/api-logs': 'commonjs @opentelemetry/api-logs',
+      })
+    })
+
+    it('keeps externals supplied as an array', () => {
+      const externals = applyToExternals(['pg'])
+
+      assert.ok(externals.includes('pg'), 'should preserve user externals')
+      assert.ok('@opentelemetry/api' in externals.at(-1), 'should externalize @opentelemetry/api')
+    })
+
+    it('keeps a single non-array external', () => {
+      const externals = applyToExternals('pg')
+
+      assert.ok(externals.includes('pg'), 'should preserve the user external')
+      assert.ok('@opentelemetry/api' in externals.at(-1), 'should externalize @opentelemetry/api')
+    })
   })
 
   describe('optional peer bundling', () => {
