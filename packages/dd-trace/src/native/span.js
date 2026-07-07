@@ -13,8 +13,8 @@ const { encode: encodeMsgpack } = require('../msgpack')
 const NativeSpanContext = require('./span_context')
 const { OpCode } = require('./index')
 
-// Mirrors the base `_addTags` so subscribers (e.g. the wall profiler's web-tag
-// refresh) still receive tag updates on the native fast path.
+// Republished from the `addTags` override so subscribers (e.g. the wall
+// profiler's web-tag refresh) still receive tag updates on the native path.
 const tagsUpdateCh = channel('dd-trace:span:tags:update')
 
 // Build the native trace id passed to queueCreateSpan. When 128-bit ids are in
@@ -312,8 +312,8 @@ class NativeDatadogSpan extends DatadogSpan {
 
   /**
    * Override `setTag` for a single-tag fast path that avoids the
-   * `{ [key]: value }` literal + parsedTags round-trip the parent
-   * does via `_addTags`, and short-circuits prioritySampler.sample
+   * `{ [key]: value }` literal + parsedTags round-trip the batched
+   * `addTags` path does, and short-circuits prioritySampler.sample
    * once a priority is decided (sample() early-returns but still
    * pays `_getContext()` + arg setup).
    *
@@ -336,15 +336,18 @@ class NativeDatadogSpan extends DatadogSpan {
   }
 
   /**
-   * Override `_addTags` (called by the inherited `addTags`) to route
-   * batched tag writes through the native span context. Accepts a
-   * plain `{k: v}` object (fast path), a `'k1:v1,k2:v2'` string, or
-   * an array of such strings.
+   * Override `addTags` to route batched tag writes through the native span
+   * context. The base v6 `addTags` merges tags straight into the JS tag cache
+   * and no longer dispatches to a `_addTags` hook, so without this override
+   * every tag applied via `addTags` (config.tags, options.tags, `span.type`,
+   * `_dd.base_service`, the inferred-proxy meta bag, etc.) would land only in
+   * the JS cache and never reach the WASM span. Accepts a plain `{k: v}`
+   * object (fast path), a `'k1:v1,k2:v2'` string, or an array of such strings.
    *
    * @param {Record<string, unknown> | string | string[]} keyValuePairs
-   * @returns {void}
+   * @returns {this}
    */
-  _addTags (keyValuePairs) {
+  addTags (keyValuePairs) {
     const tags = this._spanContext.getTags()
 
     // Fast path: plain object (the hot path from instrumentations).
@@ -360,7 +363,7 @@ class NativeDatadogSpan extends DatadogSpan {
         this._prioritySampler.sample(this, false)
       }
       if (tagsUpdateCh.hasSubscribers) tagsUpdateCh.publish(this)
-      return
+      return this
     }
 
     // Slow path: string or array input.
@@ -373,6 +376,7 @@ class NativeDatadogSpan extends DatadogSpan {
       this._prioritySampler.sample(this, false)
     }
     if (tagsUpdateCh.hasSubscribers) tagsUpdateCh.publish(this)
+    return this
   }
 
   /**
