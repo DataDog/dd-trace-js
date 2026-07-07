@@ -284,7 +284,7 @@ describe('GraphQL', () => {
 
       sinon.stub(web, 'root').returns(rootSpan)
 
-      startGraphqlResolver.publish({ context, resolverInfo })
+      startGraphqlResolver.publish({ abortController, resolverInfo })
 
       sinon.assert.called(context.abortController.abort)
 
