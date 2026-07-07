@@ -19,13 +19,26 @@ function convertAnthropicImageBlock (block) {
 }
 
 /**
- * Extracts a stable text marker from an Anthropic document block.
+ * Extracts text from an Anthropic document block.
+ * Inline `text` and `content` sources are normalized to their actual text so
+ * prompt-injections embedded in document content reach AI Guard for evaluation.
+ * URL sources return the URL; base64 / unknown sources fall back to title or [file].
  *
  * @param {AnthropicDocumentBlock} block
- * @returns {string}
+ * @returns {string|Array<object>}
  */
 function convertAnthropicDocumentBlock (block) {
-  return block.source?.url ?? block.title ?? FILE_FALLBACK
+  const source = block.source
+  if (source) {
+    if (source.type === 'text' && typeof source.text === 'string') return source.text
+    if (source.type === 'url' && typeof source.url === 'string') return source.url
+    if (source.type === 'content' && Array.isArray(source.content)) {
+      const { parts, hasImages } = walkContentBlocks(source.content)
+      const content = partsToContent(parts, hasImages)
+      if (content != null) return content
+    }
+  }
+  return block.title ?? FILE_FALLBACK
 }
 
 /**
