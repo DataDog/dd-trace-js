@@ -12,10 +12,13 @@ const libCoverage = require('istanbul-lib-coverage')
 
 const { installPatch } = require('./coverage/patch-child-process')
 const {
+  COPY_BACK_ENV,
   DISABLE_ENV,
   ROOT_ENV,
   V8_COVERAGE_ENV,
+  applyCoverageEnv,
   canonicalizePath,
+  copyV8ProfilesSync,
   getCollectorRoot,
   getMergedReportDir,
   getV8CoverageDir,
@@ -404,6 +407,90 @@ w.once('exit', code => process.exit(code))
       JSON.parse(fs.readFileSync(outputPath, 'utf8')),
       { hasRoot: false, v8Dir: '' }
     )
+  })
+
+  it('preserves a child-set NODE_V8_COVERAGE and copies its profiles into the collector on exit', async () => {
+    // A fixture that brings its own NODE_V8_COVERAGE (e.g. exercising Node's test-runner coverage)
+    // must keep writing where it expects. We leave the directory untouched, record the collector in
+    // COPY_BACK_ENV, and fold the child's profile into the collector once it exits — without ever
+    // calling takeCoverage in the child, so its own coverage is never split.
+    const fixtureDir = path.join(appRoot, 'foreign-v8-fixtures')
+    const childV8Dir = path.join(fixtureDir, 'own-v8')
+    await fsp.mkdir(childV8Dir, { recursive: true })
+    const outputPath = path.join(fixtureDir, 'env.json')
+    const fixturePath = path.join(fixtureDir, 'foreign.js')
+    await fsp.writeFile(fixturePath, "'use strict'\n" +
+      "require('../node_modules/dd-trace/packages/dd-trace/src/id')()\n" +
+      "require('node:fs').writeFileSync(process.argv[2], JSON.stringify({\n" +
+      `  v8Dir: process.env.${V8_COVERAGE_ENV} || '',\n` +
+      `  copyBack: process.env.${COPY_BACK_ENV} || '',\n` +
+      '}))\n')
+
+    const collectorDir = getV8CoverageDir()
+    const beforeCopied = fs.existsSync(collectorDir)
+      ? fs.readdirSync(collectorDir).filter(n => n.startsWith('copied-')).length
+      : 0
+
+    await new Promise((resolve, reject) => {
+      const child = childProcess.fork(fixturePath, [outputPath], {
+        cwd: appRoot,
+        env: { ...process.env, [V8_COVERAGE_ENV]: childV8Dir },
+        stdio: 'pipe',
+      })
+      child.once('exit', code => code === 0 ? resolve() : reject(new Error(`exit ${code}`)))
+      child.once('error', reject)
+    })
+
+    // The child kept its own directory, and learned where to be copied back to.
+    assert.deepEqual(JSON.parse(fs.readFileSync(outputPath, 'utf8')), {
+      v8Dir: childV8Dir,
+      copyBack: collectorDir,
+    })
+    // V8 wrote the child's profile into its own directory…
+    const childProfiles = fs.readdirSync(childV8Dir).filter(n => n.endsWith('.json'))
+    assert.ok(childProfiles.length > 0, `expected the child to write its own V8 profile in ${childV8Dir}`)
+    // …and the fork wrapper's exit hook copied it into the collector under a collision-safe name.
+    const afterCopied = fs.readdirSync(collectorDir).filter(n => n.startsWith('copied-')).length
+    assert.ok(afterCopied > beforeCopied,
+      `expected a copied-* profile in the collector (before=${beforeCopied}, after=${afterCopied})`)
+  })
+
+  it('does not blank a child-set NODE_V8_COVERAGE on the per-spawn opt-out', () => {
+    // The opt-out must strip only what we injected. A directory the child set itself is its own
+    // concern and has to survive, or opting out of *our* harness would break the child's coverage.
+    const foreignDir = path.join(appRoot, 'opt-out-foreign-v8')
+    const result = applyCoverageEnv(
+      { ...process.env, [DISABLE_ENV]: '1', [V8_COVERAGE_ENV]: foreignDir },
+      { cwd: appRoot }
+    )
+    assert.equal(result[ROOT_ENV], undefined, 'coverage root must be stripped for the disabled subtree')
+    assert.equal(result[COPY_BACK_ENV], undefined, 'copy-back marker must be stripped for the disabled subtree')
+    assert.equal(result[V8_COVERAGE_ENV], foreignDir, 'a child-set coverage directory must be preserved')
+  })
+
+  it('copyV8ProfilesSync uniquifies names and never recopies already-copied profiles', async () => {
+    const scratch = await fsp.mkdtemp(path.join(os.tmpdir(), 'dd-trace-copyback-'))
+    try {
+      const from = path.join(scratch, 'from')
+      const to = path.join(scratch, 'to')
+      await fsp.mkdir(from, { recursive: true })
+      await fsp.mkdir(to, { recursive: true })
+      await fsp.writeFile(path.join(from, 'coverage-1-1-0.json'), '{"result":[]}')
+      await fsp.writeFile(path.join(from, 'coverage-2-2-0.json'), '{"result":[]}')
+      await fsp.writeFile(path.join(from, 'not-coverage.txt'), 'ignored')
+
+      const copied = copyV8ProfilesSync(from, to)
+      assert.equal(copied, 2, 'both JSON profiles should be copied, the .txt skipped')
+      const prefix = `copied-${process.pid}-`
+      const names = fs.readdirSync(to).sort()
+      assert.deepEqual(names, [`${prefix}coverage-1-1-0.json`, `${prefix}coverage-2-2-0.json`])
+
+      // A same-directory copy is a no-op, and a copied-* file is never taken as a fresh source.
+      assert.equal(copyV8ProfilesSync(to, to), 0, 'same source and destination must copy nothing')
+      assert.equal(fs.readdirSync(to).length, 2, 'no copied-* file should be recopied')
+    } finally {
+      await fsp.rm(scratch, { force: true, recursive: true })
+    }
   })
 
   it('treats a .skipped sentinel as a no-op coverage report', async () => {

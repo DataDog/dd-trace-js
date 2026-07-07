@@ -4,8 +4,10 @@ const childProcess = require('node:child_process')
 const workerThreads = require('node:worker_threads')
 
 const {
+  COPY_BACK_ENV,
   V8_COVERAGE_ENV,
   applyCoverageEnv,
+  copyV8ProfilesSync,
   getV8CoverageDir,
   isCoverageActive,
   resolveCoverageRoot,
@@ -84,7 +86,19 @@ function installPatch () {
 
   childProcess.fork = function (modulePath, args, options) {
     const n = normalizeArgs(args, options)
-    return originalFork.call(this, modulePath, n.args, patchOptions(n.options, modulePath))
+    const patched = patchOptions(n.options, modulePath)
+    const child = originalFork.call(this, modulePath, n.args, patched)
+    // When we preserved the child's own NODE_V8_COVERAGE (see applyCoverageEnv), fold that child's
+    // profiles into the collector once it exits. This is the graceful path: the child exits on its
+    // own, V8 writes its single teardown profile into the child's directory, and we copy it after —
+    // never calling takeCoverage in the child, so its own coverage counters are never split. A
+    // forced stop before this fires is handled in-child (child-bootstrap flush paths); the copy is
+    // idempotent, so both running is harmless.
+    const foreignDir = patched?.env?.[COPY_BACK_ENV] ? patched.env[V8_COVERAGE_ENV] : undefined
+    if (foreignDir) {
+      child.once('exit', () => { copyV8ProfilesSync(foreignDir, getV8CoverageDir()) })
+    }
+    return child
   }
 
   const wrapSpawnLike = original => function (command, args, options) {

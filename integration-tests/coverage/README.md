@@ -57,10 +57,24 @@ merge-lcov.js  (called by run-suite.js after mocha exits; converts every V8
 
 | Name | Purpose |
 | --- | --- |
-| `NODE_V8_COVERAGE` | Node's native coverage output directory. Pointed at the shared collector for every process in the tree. |
+| `NODE_V8_COVERAGE` | Node's native coverage output directory. Pointed at the shared collector for every process in the tree — unless the child already carries its own value (see below), in which case that is left intact. |
 | `_DD_TRACE_INTEGRATION_COVERAGE_ROOT` | Set to the resolved dd-trace root. Presence activates the harness for the whole process tree. |
 | `_DD_TRACE_INTEGRATION_COVERAGE_COLLECTOR` | Optional override for the collector directory. |
-| `_DD_TRACE_INTEGRATION_COVERAGE_DISABLE` | Per-spawn opt-out. Set it in the child env you pass to `fork`/`exec`/`spawn` to run that subtree without coverage. The harness blanks `NODE_V8_COVERAGE` for the child (omitting is not enough — Node copies the parent's value to children otherwise). |
+| `_DD_TRACE_INTEGRATION_COVERAGE_COPY_BACK` | Set on a child that brought its own `NODE_V8_COVERAGE`. Names the collector so the child's profiles are copied in on exit; managed by the harness, not set by hand. |
+| `_DD_TRACE_INTEGRATION_COVERAGE_DISABLE` | Per-spawn opt-out. Set it in the child env you pass to `fork`/`exec`/`spawn` to run that subtree without coverage. The harness blanks `NODE_V8_COVERAGE` only when it is the value the harness itself injected (omitting is not enough — Node copies the parent's value to children otherwise); a directory the child set for itself is preserved. |
+
+### Children that set their own `NODE_V8_COVERAGE`
+
+`NODE_V8_COVERAGE` is not private to this harness — Node's own test runner
+(`node --test --experimental-test-coverage`), `c8`, and other tools read it from
+the child env. Overwriting it unconditionally would silently redirect such a
+fixture's own coverage into our collector, usually leaving its assertions green
+against empty data. So when a child already carries a `NODE_V8_COVERAGE`, the
+harness leaves it in place and instead records the collector in
+`_DD_TRACE_INTEGRATION_COVERAGE_COPY_BACK`. The forked child's profiles are then
+copied into the collector on exit (best-effort — see below), never by calling
+`v8.takeCoverage()` in the child, so the child's own coverage counters are never
+split.
 
 ## Output layout
 
@@ -107,9 +121,19 @@ checkout does not race on shared state.
 V8 writes its coverage profile only on a clean exit. A server-style fixture that
 the harness stops with `SIGTERM` would otherwise contribute nothing, so
 `child-bootstrap.js` intercepts `SIGTERM`/`SIGINT`, calls `v8.takeCoverage()`,
-and exits cleanly. A fixture killed with `SIGKILL` cannot be intercepted and
-will not contribute coverage — prefer `SIGTERM` when stopping coverage-relevant
-processes.
+and exits cleanly. On Windows `SIGTERM` is forceful and skips that hook, so
+`helpers#stopProc` first asks a connected child to flush via an IPC sentinel
+(`__ddCovFlush`) and the bootstrap flushes and exits on receipt. A fixture killed
+with `SIGKILL` cannot be intercepted and will not contribute coverage — prefer
+`SIGTERM` when stopping coverage-relevant processes.
+
+For a child that kept its own `NODE_V8_COVERAGE`, these forced-stop paths also
+copy its profiles into the collector after flushing (the counter reset from
+`v8.takeCoverage()` is moot for a process being terminated). A gracefully
+exiting such child is handled instead by a copy on its `exit` event, after V8's
+own single teardown write — best-effort by nature: a hard `process.exit()` or
+`SIGKILL` can still miss the copy, which only under-reports our own coverage and
+never affects the fixture's behavior or its assertions.
 
 ## Zero-test matrix combinations
 

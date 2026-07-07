@@ -15,7 +15,11 @@ const execAsync = promisify(exec)
 
 const id = require('../../packages/dd-trace/src/id')
 const { getCappedRange } = require('../../packages/dd-trace/test/plugins/versions')
-const { resolveCoverageRoot } = require('../coverage/runtime')
+const {
+  FLUSH_SIGNAL_KEY,
+  isCoverageActive,
+  resolveCoverageRoot,
+} = require('../coverage/runtime')
 const { FakeCiVisIntake } = require('../ci-visibility-intake')
 const FakeAgent = require('./fake-agent')
 const { BUN, withBun } = require('./bun')
@@ -283,6 +287,14 @@ async function stopProc (proc, options = {}) {
 
   const signal = options.signal ?? 'SIGTERM'
   const timeoutMs = options.timeoutMs ?? defaultStopProcTimeoutMs
+
+  // Windows SIGTERM is forceful and skips the child's signal-flush hook, so ask the bootstrap to
+  // flush its V8 coverage via the IPC sentinel first and give it a chance to exit cleanly. Any
+  // preserved foreign-directory profiles are folded into the collector on the ensuing `exit`.
+  if (process.platform === 'win32' && isCoverageActive() && proc.connected) {
+    proc.send({ [FLUSH_SIGNAL_KEY]: true }, () => {})
+    if (await waitForProcExit(proc, timeoutMs)) return
+  }
 
   proc.kill(signal)
 
