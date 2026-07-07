@@ -6,21 +6,17 @@ const { W3CTraceContextPropagator } = require('../../../../vendor/dist/@opentele
 const tracer = require('../../')
 
 const ContextManager = require('./context_manager')
-const { MultiSpanProcessor, NextSpanProcessor } = require('./span_processor')
+const { MultiSpanProcessor, NoopSpanProcessor } = require('./span_processor')
 const Tracer = require('./tracer')
 
 class TracerProvider {
-  // Always-on internal processor; corrects Next.js' root request span on finish. Kept out
-  // of `_processors` so the public list stays user-owned and survives `addSpanProcessor`.
-  #nextProcessor = new NextSpanProcessor()
-
   constructor (config = {}) {
     this.config = config
     this.resource = config.resource
 
     this._processors = []
     this._tracers = new Map()
-    this._activeProcessor = new MultiSpanProcessor([this.#nextProcessor])
+    this._activeProcessor = new NoopSpanProcessor()
     this._contextManager = new ContextManager()
   }
 
@@ -42,7 +38,7 @@ class TracerProvider {
     }
     this._processors.push(spanProcessor)
     this._activeProcessor = new MultiSpanProcessor(
-      [this.#nextProcessor, ...this._processors]
+      this._processors
     )
   }
 

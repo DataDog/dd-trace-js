@@ -15,6 +15,7 @@ const kinds = require('../../../../ext/kinds')
 const id = require('../id')
 const BridgeSpanBase = require('./bridge-span-base')
 const SpanContext = require('./span_context')
+const { runSpanEndingHook } = require('./span-ending-hook')
 const { setOtelOperationName, setOtelResource } = require('./span-helpers')
 
 const spanKindNames = {
@@ -250,10 +251,10 @@ class Span extends BridgeSpanBase {
     const hrEndTime = timeInputToHrTime(timeInput || (performance.now() + timeOrigin))
     const endTime = hrTimeToMilliseconds(hrEndTime)
 
-    // `onEnding` runs while the DD span is still unfinished so processors can mutate it before
-    // `finish()` formats and exports the trace (it does so synchronously once the last span in
-    // the trace finishes). `onEnd` only sees the already-built payload.
-    this._spanProcessor.onEnding(this)
+    // Runs while the DD span is still unfinished so a framework instrumentation can rewrite the
+    // operation name / resource before `finish()` formats and (synchronously, for the last span in
+    // the trace) exports it. `onEnd` only ever sees the already-built payload. See span-ending-hook.js.
+    runSpanEndingHook(this._ddSpan)
     this._ddSpan.finish(endTime)
     this._spanProcessor.onEnd(this)
   }

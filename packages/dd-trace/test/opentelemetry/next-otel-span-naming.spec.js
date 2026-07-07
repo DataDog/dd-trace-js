@@ -9,6 +9,12 @@ require('../setup/core')
 
 const tracer = require('../../').init()
 
+// Requiring the Next.js instrumentation registers the bridge pre-finish hook that corrects Next's
+// own OTel root request span. In OTel-bridge mode Next emits these spans directly, so the
+// correction lives in the instrumentation (loaded regardless of `plugins: false`) rather than in
+// the bridge, which owns no Next knowledge.
+require('../../../datadog-instrumentations/src/next')
+
 const TracerProvider = require('../../src/opentelemetry/tracer_provider')
 
 const NEXT_HANDLE_REQUEST = 'BaseServer.handleRequest'
@@ -54,7 +60,7 @@ function startNextRootSpan ({ method = 'GET', initialName } = {}) {
 function finishNextRootSpan (span, { method, route, rsc = false } = {}) {
   // Next sets the resolved name on `next.span_name`, then calls `updateName`,
   // then `end()`. `updateName` routes through the OTel-default operation-name
-  // semantics, which is the behaviour the processor has to correct on finish.
+  // semantics, which is the behaviour the correction has to fix on finish.
   if (route) {
     const name = rsc ? `RSC ${method} ${route}` : `${method} ${route}`
     span.setAttributes({
@@ -71,7 +77,7 @@ function finishNextRootSpan (span, { method, route, rsc = false } = {}) {
   span.end()
 }
 
-describe('OTel Next.js span processor', () => {
+describe('Next.js OTel bridge span naming', () => {
   it('rewrites a routed Next root request span to next.request + "GET /route" resource', () => {
     const exported = captureExportedRootSpan(() => {
       finishNextRootSpan(startNextRootSpan({ method: 'GET' }), { method: 'GET', route: '/products/[slug]' })
