@@ -711,6 +711,30 @@ describe('createWrapRouterMethod', () => {
       assert.strictEqual(errorEvent.data.req, req)
       assert.strictEqual(downstreamError, failure)
     })
+
+    it('publishes next/finish once when a handler calls next() and then rejects', async () => {
+      subscribeAll()
+      const wrapMethod = createWrapRouterMethod(namespace, compileRegex)
+      const router = { stack: [] }
+
+      const failure = new Error('late-rejection')
+      const wrappedUse = wrapMethod(asyncErrorsUse)
+      wrappedUse.call(router, '/foo', async function (req, res, next) {
+        next()
+        throw failure
+      })
+
+      const req = {}
+      let downstreamCalls = 0
+      router.stack[0].handle_request(req, {}, () => { downstreamCalls++ })
+
+      await new Promise(resolve => setImmediate(resolve))
+
+      // The clean `next()` finishes the span; the host's rejection pass calls the
+      // same continuation again, but the tracer must not re-tag or re-finish.
+      assert.deepStrictEqual(events.map(e => e.label), ['enter', 'next', 'finish', 'exit'])
+      assert.strictEqual(downstreamCalls, 2)
+    })
   })
 
   describe('legacy handle replacement (host without prototype dispatch)', () => {

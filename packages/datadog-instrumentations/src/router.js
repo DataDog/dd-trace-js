@@ -92,13 +92,21 @@ function createLayerDispatchWrappers (name) {
   function wrapNext (req, originalNext) {
     // Per layer dispatch, N per request. Named `next`/arity-1 mirrors the
     // router continuation so wrapCallback skips its name/length rewrite.
+    let published = false
     return shimmer.wrapCallback(originalNext, original => function next (error) {
-      if (error && error !== 'route' && error !== 'router') {
-        publishError({ req, error })
-      }
+      // A handler that calls `next()` and then rejects (`next(); await bg()`)
+      // makes the host call this continuation twice. Publish once so the second
+      // pass cannot tag the already-finished span's parent with a late error.
+      if (!published) {
+        published = true
 
-      nextChannel.publish({ req })
-      finishChannel.publish({ req })
+        if (error && error !== 'route' && error !== 'router') {
+          publishError({ req, error })
+        }
+
+        nextChannel.publish({ req })
+        finishChannel.publish({ req })
+      }
 
       original.apply(this, arguments)
     })
@@ -189,6 +197,9 @@ function createLayerDispatchWrappers (name) {
   return { wrapLayerRequest, wrapLayerError, wrapLegacyHandle }
 }
 
+/**
+ * @param {{ handle_request?: unknown, handleRequest?: unknown }} layer
+ */
 function hasLayerDispatch (layer) {
   return typeof layer.handle_request === 'function' || typeof layer.handleRequest === 'function'
 }
