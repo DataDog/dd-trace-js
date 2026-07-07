@@ -241,7 +241,7 @@ function incomingHttpEndTranslator ({ req, res }) {
   // This hook runs before span finish, so ensure route/endpoint tags are available before API Security sampling runs.
   web.setRouteOrEndpointTag(req)
 
-  if (config?.appsec?.apiSecurity?.enabled) {
+  if (config?.appsec?.DD_API_SECURITY_ENABLED) {
     try {
       const normalized = normalizeRoute(req)
       if (normalized !== null) {
