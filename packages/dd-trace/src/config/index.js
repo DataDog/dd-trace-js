@@ -568,12 +568,14 @@ class Config extends ConfigBase {
     // Experimental agentless APM span intake
     // When enabled, sends spans directly to Datadog intake without an agent
     // TODO: Replace this with a proper configuration
+    const llmobsApmTracingEnabled = this.llmobs.DD_LLMOBS_ENABLED &&
+      this.DD_TRACE_ENABLED !== false &&
+      this.apmTracingEnabled !== false &&
+      this.OTEL_TRACES_EXPORTER !== 'otlp'
     const apmAgentlessEnabled = isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED')) ||
-      (this.llmobs.DD_LLMOBS_ENABLED &&
+      (llmobsApmTracingEnabled &&
         this.llmobs.agentlessEnabled === true &&
-        this.DD_TRACE_ENABLED !== false &&
-        this.apmTracingEnabled !== false &&
-        this.OTEL_TRACES_EXPORTER !== 'otlp')
+        !trackedConfigOrigins.has('experimental.exporter'))
     if (apmAgentlessEnabled) {
       setAndTrack(this, 'experimental.exporter', 'agentless')
       // Disable client-side stats computation
@@ -588,25 +590,43 @@ class Config extends ConfigBase {
       if (!trackedConfigOrigins.has('traceId128BitGenerationEnabled')) {
         setAndTrack(this, 'traceId128BitGenerationEnabled', false)
       }
+    } else if (llmobsApmTracingEnabled &&
+        this.llmobs.agentlessEnabled == null &&
+        !trackedConfigOrigins.has('experimental.exporter') &&
+        (this.experimental?.exporter === undefined ||
+        this.experimental?.exporter === '' ||
+        this.experimental?.exporter === exporters.AGENT)) {
+      setAndTrack(this, 'experimental.exporter', exporters.DEFERRED)
     }
 
     if (this.llmobs.DD_LLMOBS_ENABLED &&
         this.DD_TRACE_ENABLED !== false &&
         this.apmTracingEnabled !== false &&
         this.OTEL_TRACES_EXPORTER !== 'otlp' &&
-        (this.experimental?.exporter === undefined ||
+        (this.experimental?.exporter === exporters.DEFERRED ||
+        this.experimental?.exporter === undefined ||
         this.experimental?.exporter === '' ||
         this.experimental?.exporter === exporters.AGENT) &&
         this.protocolVersion === '0.5') {
-      if (trackedConfigOrigins.has('protocolVersion')) {
+      const protocolVersionOrigin = trackedConfigOrigins.get('protocolVersion')
+      if (protocolVersionOrigin === 'code') {
         log.warn(
           // eslint-disable-next-line eslint-rules/eslint-log-printf-style
           'DD_TRACE_AGENT_PROTOCOL_VERSION=v0.5 is ' +
           'incompatible with LLM Observability agent-based export; ' +
-          'using v0.4 so meta_struct payloads can be sent.'
+          'meta_struct payloads may not be sent.'
         )
+      } else {
+        if (trackedConfigOrigins.has('protocolVersion')) {
+          log.warn(
+            // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+            'DD_TRACE_AGENT_PROTOCOL_VERSION=v0.5 is ' +
+            'incompatible with LLM Observability agent-based export; ' +
+            'using v0.4 so meta_struct payloads can be sent.'
+          )
+        }
+        setAndTrack(this, 'protocolVersion', '0.4')
       }
-      setAndTrack(this, 'protocolVersion', '0.4')
     }
 
     // Apply all fallbacks to the calculated config.

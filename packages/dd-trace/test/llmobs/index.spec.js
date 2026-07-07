@@ -360,6 +360,18 @@ describe('module', () => {
           sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, false)
           sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, false)
         })
+
+        it('resolves the deferred APM exporter to the Agent exporter', () => {
+          const config = getConfigFresh({
+            llmobs: {
+              mlApp: 'test',
+            },
+          })
+
+          llmobsModule.enable(config, tracer)
+
+          sinon.assert.calledWith(tracer.configureExporter, config, 'agent')
+        })
       })
     })
 

@@ -4,6 +4,7 @@ const os = require('os')
 const SpanProcessor = require('../span_processor')
 const PrioritySampler = require('../priority_sampler')
 const formats = require('../../../../ext/formats')
+const exporters = require('../../../../ext/exporters')
 const log = require('../log')
 const runtimeMetrics = require('../runtime_metrics')
 const getExporter = require('../exporter')
@@ -18,6 +19,24 @@ const SpanContext = require('./span_context')
 
 const REFERENCE_CHILD_OF = 'child_of'
 const REFERENCE_FOLLOWS_FROM = 'follows_from'
+
+/**
+ * @param {string | undefined} exporterName
+ * @returns {boolean}
+ */
+function isAgentExporterName (exporterName) {
+  return exporterName === undefined || exporterName === '' || exporterName === exporters.AGENT
+}
+
+/**
+ * @param {string | undefined} currentExporterName
+ * @param {string | undefined} nextExporterName
+ * @returns {boolean}
+ */
+function isSameExporterName (currentExporterName, nextExporterName) {
+  return currentExporterName === nextExporterName ||
+    (isAgentExporterName(currentExporterName) && isAgentExporterName(nextExporterName))
+}
 
 class DatadogTracer {
   constructor (config, prioritySampler) {
@@ -68,10 +87,10 @@ class DatadogTracer {
    * @returns {boolean}
    */
   configureExporter (config, exporterName = getExporterName(config)) {
-    if (exporterName === this._exporterName) return false
+    if (isSameExporterName(this._exporterName, exporterName)) return false
 
     const { exporter, exporterName: nextExporterName } = createExporter(config, this._prioritySampler, exporterName)
-    if (!this._exporter.transferPendingTo?.(exporter)) {
+    if (!this._exporter.transferPendingTo?.(exporter, nextExporterName)) {
       this._exporter.flush?.(() => {})
     }
     this._exporter.destroy?.()

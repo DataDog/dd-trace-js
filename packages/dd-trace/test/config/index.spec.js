@@ -19,6 +19,7 @@ const { getEnvironmentVariable, getEnvironmentVariables } = require('../../src/c
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { DD_MAJOR } = require('../../../../version')
 const StableConfig = require('../../src/config/stable')
+const exporters = require('../../../../ext/exporters')
 
 const GRPC_CLIENT_ERROR_STATUSES = defaults.DD_GRPC_CLIENT_ERROR_STATUSES
 const GRPC_SERVER_ERROR_STATUSES = defaults.DD_GRPC_SERVER_ERROR_STATUSES
@@ -4752,6 +4753,21 @@ rules:
   })
 
   context('LLMObs agent-based export', () => {
+    it('should use the deferred exporter when LLMObs chooses Agent routing automatically', () => {
+      const config = getConfig({ llmobs: { mlApp: 'test' } })
+
+      assert.strictEqual(config.experimental.exporter, exporters.DEFERRED)
+      assert.strictEqual(config.getOrigin('experimental.exporter'), 'calculated')
+    })
+
+    it('should not use the deferred exporter when an exporter is explicitly configured', () => {
+      process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'log'
+      const config = getConfig({ llmobs: { mlApp: 'test' } })
+
+      assert.strictEqual(config.experimental.exporter, 'log')
+      assert.strictEqual(config.getOrigin('experimental.exporter'), 'env_var')
+    })
+
     it('should enable agentless exporter when LLMObs agentless is explicitly enabled', () => {
       const config = getConfig({ llmobs: { agentlessEnabled: true } })
 

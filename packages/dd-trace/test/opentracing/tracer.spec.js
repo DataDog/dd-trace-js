@@ -11,6 +11,7 @@ const opentracing = require('opentracing')
 require('../setup/core')
 const SpanContext = require('../../src/opentracing/span_context')
 const formats = require('../../../../ext/formats')
+const exporters = require('../../../../ext/exporters')
 
 const Reference = opentracing.Reference
 
@@ -23,10 +24,12 @@ describe('Tracer', () => {
   let PrioritySampler
   let prioritySampler
   let AgentExporter
+  let DeferredExporter
   let SpanProcessor
   let processor
   let exporter
   let agentExporter
+  let deferredExporter
   let spanContext
   let fields
   let carrier
@@ -60,6 +63,11 @@ describe('Tracer', () => {
       export: sinon.spy(),
     }
     AgentExporter = sinon.stub().returns(agentExporter)
+
+    deferredExporter = {
+      export: sinon.spy(),
+    }
+    DeferredExporter = sinon.stub().returns(deferredExporter)
 
     processor = {
       process: sinon.spy(),
@@ -143,6 +151,25 @@ describe('Tracer', () => {
     assert.strictEqual(tracer._exporter, agentlessExporter)
   })
 
+  it('should use the deferred APM exporter when configured', () => {
+    exporter.withArgs(exporters.DEFERRED).returns(DeferredExporter)
+    config.experimental.exporter = exporters.DEFERRED
+
+    tracer = new Tracer(config)
+
+    sinon.assert.calledWith(DeferredExporter, config, prioritySampler)
+    sinon.assert.calledWith(SpanProcessor, deferredExporter, prioritySampler, config)
+    assert.strictEqual(tracer._exporter, deferredExporter)
+    assert.strictEqual(tracer._exporterName, exporters.DEFERRED)
+  })
+
+  it('should not replace the default Agent exporter when asked to configure the Agent exporter', () => {
+    tracer = new Tracer(config)
+
+    assert.strictEqual(tracer.configureExporter(config, 'agent'), false)
+    sinon.assert.notCalled(processor.setExporter)
+  })
+
   it('should move pending traces when replacing the trace exporter supports transfer', () => {
     agentExporter.flush = sinon.stub()
     agentExporter.destroy = sinon.stub()
@@ -157,7 +184,7 @@ describe('Tracer', () => {
     tracer = new Tracer(config)
 
     assert.strictEqual(tracer.configureExporter(config, 'agentless'), true)
-    sinon.assert.calledOnceWithExactly(agentExporter.transferPendingTo, agentlessExporter)
+    sinon.assert.calledOnceWithExactly(agentExporter.transferPendingTo, agentlessExporter, 'agentless')
     sinon.assert.notCalled(agentExporter.flush)
     sinon.assert.calledOnce(agentExporter.destroy)
     assert.strictEqual(tracer._exporter, agentlessExporter)
@@ -177,7 +204,7 @@ describe('Tracer', () => {
     tracer = new Tracer(config)
 
     assert.strictEqual(tracer.configureExporter(config, 'agentless'), true)
-    sinon.assert.calledOnceWithExactly(agentExporter.transferPendingTo, agentlessExporter)
+    sinon.assert.calledOnceWithExactly(agentExporter.transferPendingTo, agentlessExporter, 'agentless')
     sinon.assert.calledOnce(agentExporter.flush)
     sinon.assert.calledOnce(agentExporter.destroy)
   })

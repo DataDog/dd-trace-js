@@ -94,7 +94,7 @@ function enable (config, tracer) {
       '[LLMObs] Using %s writer transport for span and evaluation events',
       useAgentless ? 'agentless/direct intake' : 'Agent EVP proxy'
     )
-    configureApmAgentless(config, tracer, useAgentless)
+    configureApmExporter(config, tracer, useAgentless)
 
     telemetry.recordLLMObsEnabled(startTime, config)
     log.debug('[LLMObs] Enabled LLM Observability with configuration: %o', config.llmobs)
@@ -106,15 +106,19 @@ function enable (config, tracer) {
  * @param {import('../tracer') | null | undefined} tracer
  * @param {boolean} useAgentless
  */
-function configureApmAgentless (config, tracer, useAgentless) {
-  if (!useAgentless ||
-      config.DD_TRACE_ENABLED !== true ||
+function configureApmExporter (config, tracer, useAgentless) {
+  if (config.DD_TRACE_ENABLED !== true ||
       config.apmTracingEnabled !== true ||
       (config.OTEL_TRACES_EXPORTER === 'otlp' && !config.isCiVisibility)) {
     return
   }
 
-  if (tracer?.configureExporter(config, exporters.AGENTLESS)) {
+  if (!useAgentless && config.experimental?.exporter !== exporters.DEFERRED) {
+    return
+  }
+
+  const exporter = useAgentless ? exporters.AGENTLESS : exporters.AGENT
+  if (tracer?.configureExporter(config, exporter) && useAgentless) {
     log.debug('[LLMObs] Swapped APM trace exporter to agentless intake')
   }
 }
