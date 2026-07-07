@@ -1295,6 +1295,36 @@ describe('Plugin', () => {
           })
         })
 
+        it('records a span event on the request span when a middleware calls next() more than once', done => {
+          const app = express()
+
+          app.use(function twice (req, res, next) {
+            next()
+            next()
+          })
+          app.get('/user', (req, res) => res.status(200).send())
+
+          appListener = app.listen(0, 'localhost', () => {
+            const port = appListener.address().port
+
+            agent
+              .assertSomeTraces(traces => {
+                const spans = sort(traces[0])
+                // Span events serialize into `meta.events` on the default
+                // (non-native) encoder path the test agent uses.
+                const events = JSON.parse(spans[0].meta.events)
+                assertObjectContains(events.find(event => event.name === 'middleware.next_called_again'), {
+                  name: 'middleware.next_called_again',
+                  attributes: { 'middleware.name': 'twice', with_error: false },
+                })
+              })
+              .then(done)
+              .catch(done)
+
+            axios.get(`http://localhost:${port}/user`).catch(done)
+          })
+        })
+
         it('should handle middleware exceptions', done => {
           const app = express()
           const error = new Error('boom')

@@ -67,6 +67,7 @@ describe('createWrapRouterMethod', () => {
   let nextChannel
   let finishChannel
   let errorChannel
+  let repeatChannel
   let events
   let subscriptions
 
@@ -77,6 +78,7 @@ describe('createWrapRouterMethod', () => {
     nextChannel = dc.channel(`apm:${namespace}:middleware:next`)
     finishChannel = dc.channel(`apm:${namespace}:middleware:finish`)
     errorChannel = dc.channel(`apm:${namespace}:middleware:error`)
+    repeatChannel = dc.channel(`apm:${namespace}:middleware:repeat`)
     const { wrapLayerRequest, wrapLayerError } = createLayerDispatchWrappers(namespace)
     FakeLayer = makeLayerClass(wrapLayerRequest, wrapLayerError)
     events = []
@@ -100,6 +102,7 @@ describe('createWrapRouterMethod', () => {
       ['next', nextChannel],
       ['finish', finishChannel],
       ['error', errorChannel],
+      ['repeat', repeatChannel],
     ]
     for (const [label, channel] of all) {
       const listener = (data) => events.push({ label, data })
@@ -731,9 +734,37 @@ describe('createWrapRouterMethod', () => {
       await new Promise(resolve => setImmediate(resolve))
 
       // The clean `next()` finishes the span; the host's rejection pass calls the
-      // same continuation again, but the tracer must not re-tag or re-finish.
-      assert.deepStrictEqual(events.map(e => e.label), ['enter', 'next', 'finish', 'exit'])
+      // same continuation again. The tracer must not re-tag or re-finish, but it
+      // does surface the repeat so the plugin can annotate the request span.
+      assert.deepStrictEqual(events.map(e => e.label), ['enter', 'next', 'finish', 'exit', 'repeat'])
+      assert.strictEqual(events.at(-1).data.error, failure)
+      assert.strictEqual(events.at(-1).data.req, req)
       assert.strictEqual(downstreamCalls, 2)
+    })
+  })
+
+  describe('repeated continuation (double next)', () => {
+    it('publishes repeat with the layer name every time the continuation is called again', () => {
+      subscribeAll()
+      const wrapMethod = createWrapRouterMethod(namespace, compileRegex)
+      const router = { stack: [] }
+
+      const wrappedUse = wrapMethod(makeFakeUse({ layerPath: '/foo' }))
+      wrappedUse.call(router, '/foo', function named (req, res, next) {
+        next()
+        next()
+        next('route')
+      })
+
+      router.stack[0].handle_request({}, {}, () => {})
+
+      // All three `next` calls run synchronously inside the dispatch, so both
+      // repeats publish before the `finally` emits `exit`.
+      assert.deepStrictEqual(events.map(e => e.label), ['enter', 'next', 'finish', 'repeat', 'repeat', 'exit'])
+      const repeats = events.filter(e => e.label === 'repeat')
+      assert.strictEqual(repeats[0].data.name, 'named')
+      assert.strictEqual(repeats[0].data.error, undefined)
+      assert.strictEqual(repeats[1].data.error, 'route')
     })
   })
 

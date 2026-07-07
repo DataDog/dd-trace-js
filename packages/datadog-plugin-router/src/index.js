@@ -81,6 +81,15 @@ class RouterPlugin extends WebPlugin {
       span.setTag('error', error)
     })
 
+    this.addSub(`apm:${this.constructor.id}:middleware:repeat`, ({ req, name, error }) => {
+      // The middleware span already finished on the first `next`, so record the
+      // repeat on the still-live request span instead of a finished one.
+      web.root(req)?.addEvent('middleware.next_called_again', {
+        'middleware.name': name || '<anonymous>',
+        with_error: error !== undefined && error !== 'route' && error !== 'router',
+      })
+    })
+
     this.addSub('apm:http:server:request:finish', ({ req }) => {
       const context = this.#contexts.get(req)
 
