@@ -28,6 +28,8 @@ const {
   TEST_SUITE,
   TEST_CODE_OWNERS,
   TEST_NAME,
+  TEST_FAILURE_SCREENSHOT_UPLOADED,
+  TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE, ERROR_TYPE, COMPONENT } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
@@ -284,6 +286,8 @@ moduleTypes.forEach(({
           )
           assert.ok(passTestEvent, 'passing cypress.test event exists')
           assert.ok(failTestEvent, 'failing cypress.test event exists')
+          assert.strictEqual(failTestEvent.content.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], undefined)
+          assert.strictEqual(failTestEvent.content.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
 
           const stepEvents = events.filter(event => event.type === 'span' && event.content.name === 'cypress.step')
           assert.ok(stepEvents.length > 0, 'cypress.step spans exist')
@@ -947,6 +951,11 @@ moduleTypes.forEach(({
           return () => testOutput
         }
 
+        function decodeKeyFilename (key) {
+          const [, hexFilename] = (key || '').split(':')
+          return hexFilename ? Buffer.from(hexFilename, 'hex').toString('utf8') : ''
+        }
+
         onlyAgentlessIt('uploads failure screenshots to the v2 media endpoint', async function () {
           const getTestOutput = runCypressWithFailureScreenshots('cypress/e2e/basic-fail.js')
 
@@ -964,6 +973,8 @@ moduleTypes.forEach(({
                   .find(event => event.content.resource === 'cypress/e2e/basic-fail.js.basic fail suite can fail')
 
                 assert.ok(failedTest, `failed test event should be reported\n${testOutput}`)
+                assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')
+                assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
                 const expectedTraceId = failedTest.content.trace_id.toString()
 
                 const screenshotPayload = mediaPayloads.find(({ media }) => media.contentType === 'image/png')
@@ -1049,10 +1060,6 @@ moduleTypes.forEach(({
                 const [screenshotPayload] = screenshotPayloads
                 assert.strictEqual(screenshotPayload.media.traceId, expectedTraceId)
 
-                const decodeKeyFilename = (key) => {
-                  const [, hexFilename] = (key || '').split(':')
-                  return hexFilename ? Buffer.from(hexFilename, 'hex').toString('utf8') : ''
-                }
                 assert.match(
                   decodeKeyFilename(screenshotPayload.media.idempotencyKey),
                   /\(failed\)/,
@@ -1078,6 +1085,70 @@ moduleTypes.forEach(({
           ])
         })
 
+        onlyAgentlessIt(
+          'uploads after the user after:screenshot handler with auto-instrumentation and manual plugin',
+          async function () {
+            const legacyConfigFile = type === 'esm'
+              ? 'cypress-legacy-plugin.config.mjs'
+              : 'cypress-legacy-plugin.config.js'
+            let testOutput = ''
+            childProcess = exec(
+              `./node_modules/.bin/cypress run --config-file ${legacyConfigFile}`,
+              {
+                cwd,
+                env: {
+                  ...getEnvVars(receiver.port),
+                  CYPRESS_BASE_URL: webAppBaseUrl,
+                  SPEC_PATTERN: 'cypress/e2e/basic-fail.js',
+                  CYPRESS_ENABLE_FAILURE_SCREENSHOTS: 'true',
+                  CYPRESS_ENABLE_AFTER_SCREENSHOT_CUSTOM: 'true',
+                  DD_TEST_FAILURE_SCREENSHOTS_ENABLED: 'true',
+                },
+              }
+            )
+            childProcess.stdout?.on('data', (d) => { testOutput += d.toString() })
+            childProcess.stderr?.on('data', (d) => { testOutput += d.toString() })
+
+            const receiverPromise = receiver
+              .gatherPayloadsUntilChildExit(
+                childProcess,
+                ({ url }) => url.startsWith('/api/v2/ci/test-runs/') || url.endsWith('/api/v2/citestcycle'),
+                (payloads) => {
+                  const mediaPayloads = payloads.filter(({ url }) => url.startsWith('/api/v2/ci/test-runs/'))
+                  const screenshotPayloads = mediaPayloads.filter(({ media }) => media.contentType === 'image/png')
+
+                  assert.strictEqual(
+                    screenshotPayloads.length,
+                    1,
+                    `Datadog should upload once, after the user after:screenshot handler\n${testOutput}`
+                  )
+                  assert.match(
+                    decodeKeyFilename(screenshotPayloads[0].media.idempotencyKey),
+                    / datadog-renamed\.png$/,
+                    `the uploaded screenshot should use the user handler's renamed path\n${testOutput}`
+                  )
+
+                  const failedTest = payloads
+                    .filter(({ url }) => url.endsWith('/api/v2/citestcycle'))
+                    .flatMap(({ payload }) => payload.events)
+                    .filter(event => event.type === 'test')
+                    .find(event => event.content.resource === 'cypress/e2e/basic-fail.js.basic fail suite can fail')
+
+                  assert.ok(failedTest, `failed test event should be reported\n${testOutput}`)
+                  assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')
+                }, { hardTimeout: 60000 })
+              .catch((error) => {
+                error.message += `\nCypress output:\n${testOutput}`
+                throw error
+              })
+
+            await Promise.all([
+              once(childProcess, 'exit'),
+              receiverPromise,
+            ])
+          }
+        )
+
         onlyAgentlessIt('continues normally when the media upload endpoint fails', async function () {
           receiver.setMediaResponseStatusCode(500)
           const getTestOutput = runCypressWithFailureScreenshots('cypress/e2e/basic-fail.js')
@@ -1095,6 +1166,8 @@ moduleTypes.forEach(({
 
                 assert.ok(failedTest, `the failed test should still be reported when media upload fails\n${testOutput}`)
                 assert.strictEqual(failedTest.content.meta[TEST_STATUS], 'fail')
+                assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], 'true')
+                assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], undefined)
               }, { hardTimeout: 60000 })
             .catch((error) => {
               error.message += `\nCypress output:\n${getTestOutput()}`
