@@ -1608,6 +1608,63 @@ describe(`jest@${JEST_VERSION} commonJS`, () => {
       })
     })
 
+    onlyLatestIt('retries new concurrent tests', async () => {
+      receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
+      receiver.setKnownTests({ jest: {} })
+      const NUM_RETRIES_EFD = 3
+      receiver.setSettings({
+        early_flake_detection: {
+          enabled: true,
+          slow_test_retries: {
+            '5s': NUM_RETRIES_EFD,
+          },
+          faulty_session_threshold: 100,
+        },
+        known_tests_enabled: true,
+      })
+
+      const eventsPromise = receiver
+        .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          const tests = events.filter(event => event.type === 'test').map(event => event.content)
+          const concurrentTests = tests.filter(test =>
+            test.meta[TEST_SUITE] === 'ci-visibility/test-early-flake-detection/concurrent-test.js' &&
+            test.meta[TEST_NAME] === 'early flake detection concurrent tests can pass normally'
+          )
+
+          assert.strictEqual(concurrentTests.length, NUM_RETRIES_EFD + 1)
+          for (const test of concurrentTests) {
+            assert.strictEqual(test.meta[TEST_IS_NEW], 'true')
+            assert.strictEqual(test.meta[TEST_STATUS], 'pass')
+          }
+
+          const retriedTests = concurrentTests.filter(test => test.meta[TEST_IS_RETRY] === 'true')
+          assert.strictEqual(retriedTests.length, NUM_RETRIES_EFD)
+          for (const retryTest of retriedTests) {
+            assert.strictEqual(retryTest.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.efd)
+          }
+        })
+
+      childProcess = exec(
+        runTestsCommand,
+        {
+          cwd,
+          env: {
+            ...getCiVisEvpProxyConfig(receiver.port),
+            DO_NOT_INJECT_GLOBALS: 'true',
+            TESTS_TO_RUN: 'test-early-flake-detection/concurrent-test',
+          },
+        }
+      )
+
+      const [[exitCode]] = await Promise.all([
+        once(childProcess, 'exit'),
+        eventsPromise,
+      ])
+
+      assert.strictEqual(exitCode, 0)
+    })
+
     it('sets TEST_HAS_FAILED_ALL_RETRIES when all EFD attempts fail', (done) => {
       receiver.setInfoResponse({ endpoints: ['/evp_proxy/v4'] })
       // fail-test.js will be considered new and will always fail
