@@ -12,8 +12,6 @@ const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
 const ChildProcessPlugin = require('../src')
 const { temporaryWarningExceptions } = require('../../dd-trace/test/setup/core')
 
-function noop () {}
-
 function normalizeArgs (methodName, command, options) {
   const args = []
   if (methodName === 'exec' || methodName === 'execSync') {
@@ -294,6 +292,46 @@ describe('Child process plugin', () => {
         sinon.assert.calledOnceWithExactly(spanStub.setTag, 'cmd.exit_code', '0')
         sinon.assert.calledOnceWithExactly(spanStub.finish)
       })
+
+      it('should call setTag with zero when a promisified method returns an output object', () => {
+        sinon.stub(storage('legacy'), 'getStore').returns({ span: spanStub })
+        const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
+
+        shellPlugin.asyncEnd({ result: { stdout: 'test\n', stderr: '' } })
+
+        sinon.assert.calledOnceWithExactly(spanStub.setTag, 'cmd.exit_code', '0')
+        sinon.assert.calledOnceWithExactly(spanStub.finish)
+      })
+
+      it('should call setTag with error status when a promisified method rejects', () => {
+        sinon.stub(storage('legacy'), 'getStore').returns({ span: spanStub })
+        const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
+
+        shellPlugin.asyncEnd({ error: { status: 9 } })
+
+        sinon.assert.calledOnceWithExactly(spanStub.setTag, 'cmd.exit_code', '9')
+        sinon.assert.calledOnceWithExactly(spanStub.finish)
+      })
+
+      it('should call setTag with error code when a promisified method rejects without status', () => {
+        sinon.stub(storage('legacy'), 'getStore').returns({ span: spanStub })
+        const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
+
+        shellPlugin.asyncEnd({ error: { code: 'ENOENT' } })
+
+        sinon.assert.calledOnceWithExactly(spanStub.setTag, 'cmd.exit_code', 'ENOENT')
+        sinon.assert.calledOnceWithExactly(spanStub.finish)
+      })
+
+      it('should call setTag with zero when a promisified method rejects without an exit code', () => {
+        sinon.stub(storage('legacy'), 'getStore').returns({ span: spanStub })
+        const shellPlugin = new ChildProcessPlugin(tracerStub, configStub)
+
+        shellPlugin.asyncEnd({ error: {} })
+
+        sinon.assert.calledOnceWithExactly(spanStub.setTag, 'cmd.exit_code', '0')
+        sinon.assert.calledOnceWithExactly(spanStub.finish)
+      })
     })
 
     describe('channel', () => {
@@ -387,8 +425,24 @@ describe('Child process plugin', () => {
     // BLUEBIRD REGRESSION TEST - Prevents "this._then is not a function" bug
 
     let childProcess, tracer, util
-    let originalPromise
     let Bluebird
+
+    // The regression only needs Bluebird to be the global `Promise` at the
+    // moment `util.promisify`/the wrapped child_process method runs, since that
+    // is when the instrumentation does `Promise.resolve(...).then(...)`. Holding
+    // the mutation across the awaited span round-trip leaks it into the shared
+    // mock agent and tracer, flip-flopping the process-wide `Promise` while the
+    // next test runs. Scope the mutation to the synchronous call and restore it
+    // before awaiting.
+    function withBluebird (fn) {
+      const original = global.Promise
+      global.Promise = Bluebird
+      try {
+        return fn()
+      } finally {
+        global.Promise = original
+      }
+    }
 
     before(async () => {
       tracer = await agent.load('child_process', undefined, { flushInterval: 1 })
@@ -400,21 +454,7 @@ describe('Child process plugin', () => {
 
     after(() => agent.close())
 
-    beforeEach(() => {
-      originalPromise = global.Promise
-      global.Promise = Bluebird
-    })
-
-    afterEach(() => {
-      global.Promise = originalPromise
-    })
-
     it('should not crash with "this._then is not a function" when using Bluebird promises', async () => {
-      const execFileAsync = util.promisify(childProcess.execFile)
-
-      assert.strictEqual(global.Promise, Bluebird)
-      assert.ok(global.Promise.version)
-
       const expectedPromise = expectSomeSpan(agent, {
         type: 'system',
         name: 'command_execution',
@@ -422,39 +462,62 @@ describe('Child process plugin', () => {
         meta: {
           component: 'subprocess',
           'cmd.exec': '["echo","bluebird-test"]',
+          'cmd.exit_code': '0',
         },
       })
 
-      const result = await execFileAsync('echo', ['bluebird-test'])
-      assert.ok(result)
-      assert.strictEqual(result.stdout, 'bluebird-test\n')
+      const callPromise = withBluebird(() => {
+        assert.strictEqual(global.Promise, Bluebird)
+        assert.ok(/** @type {{ version?: string }} */ (global.Promise).version)
+        return util.promisify(childProcess.execFile)('echo', ['bluebird-test'])
+      })
 
-      return expectedPromise
+      await Promise.all([expectedPromise, (async () => {
+        const result = await callPromise
+        assert.ok(result)
+        assert.strictEqual(result.stdout, 'bluebird-test\n')
+      })()])
     })
 
     it('should work with concurrent Bluebird promise calls', async () => {
-      const execFileAsync = util.promisify(childProcess.execFile)
-
-      const promises = []
+      const drained = []
       for (let i = 0; i < 5; i++) {
-        promises.push(
-          execFileAsync('echo', [`concurrent-test-${i}`])
-            .then(result => {
-              assert.strictEqual(result.stdout, `concurrent-test-${i}\n`)
-              return result
-            })
-        )
+        drained.push(expectSomeSpan(agent, {
+          type: 'system',
+          name: 'command_execution',
+          error: 0,
+          meta: {
+            component: 'subprocess',
+            'cmd.exec': `["echo","concurrent-test-${i}"]`,
+            'cmd.exit_code': '0',
+          },
+        }))
       }
+
+      const promises = withBluebird(() => {
+        const execFileAsync = util.promisify(childProcess.execFile)
+        const calls = []
+        for (let i = 0; i < 5; i++) {
+          calls.push(
+            execFileAsync('echo', [`concurrent-test-${i}`])
+              .then(result => {
+                assert.strictEqual(result.stdout, `concurrent-test-${i}\n`)
+                return result
+              })
+          )
+        }
+        return calls
+      })
 
       const results = await Promise.all(promises)
       assert.strictEqual(results.length, 5)
+
+      // Drain every concurrent span so a late flush does not leak into the next
+      // test's matcher, and assert the promisify success exit code is 0.
+      await Promise.all(drained)
     })
 
     it('should handle Bluebird promise rejection properly', async () => {
-      global.Promise = Bluebird
-
-      const execFileAsync = util.promisify(childProcess.execFile)
-
       const expectedPromise = expectSomeSpan(agent, {
         type: 'system',
         name: 'command_execution',
@@ -462,33 +525,53 @@ describe('Child process plugin', () => {
         meta: {
           component: 'subprocess',
           'cmd.exec': '["node","-invalidFlag"]',
+          'cmd.exit_code': '9',
         },
       })
 
-      try {
-        await execFileAsync('node', ['-invalidFlag'], { stdio: 'pipe' })
-        throw new Error('Expected command to fail')
-      } catch (error) {
-        assert.ok(error)
-        assert.ok(error.code)
-      }
+      const callPromise = withBluebird(() =>
+        util.promisify(childProcess.execFile)('node', ['-invalidFlag'], { stdio: 'pipe' }))
 
-      return expectedPromise
+      await Promise.all([expectedPromise, assert.rejects(callPromise, error => {
+        assert.ok(error.code)
+        return true
+      })])
     })
 
     it('should work with util.promisify when global Promise is Bluebird', async () => {
-      // Re-require util to get Bluebird-aware promisify
-      delete require.cache[require.resolve('util')]
-      const utilWithBluebird = require('util')
+      const expectedPromise = expectSomeSpan(agent, {
+        type: 'system',
+        name: 'command_execution',
+        error: 0,
+        meta: {
+          component: 'subprocess',
+          'cmd.exec': '["echo","util-promisify-test"]',
+          'cmd.exit_code': '0',
+        },
+      })
 
-      const execFileAsync = utilWithBluebird.promisify(childProcess.execFile)
+      const callPromise = withBluebird(() => util.promisify(childProcess.execFile)('echo', ['util-promisify-test']))
 
-      const promise = execFileAsync('echo', ['util-promisify-test'])
-      assert.strictEqual(promise.constructor, Bluebird)
-      assert.ok(promise.constructor.version)
+      await Promise.all([expectedPromise, (async () => {
+        const result = await callPromise
+        assert.strictEqual(result.stdout, 'util-promisify-test\n')
+      })()])
+    })
 
-      const result = await promise
-      assert.strictEqual(result.stdout, 'util-promisify-test\n')
+    it('should surface the original error when the promisified method throws synchronously', async () => {
+      const execFileAsync = util.promisify(childProcess.execFile)
+
+      // Passing a non-string file makes execFile throw synchronously inside the
+      // custom-promisify wrapper. The wrapper must publish on the error channel
+      // and rethrow the ORIGINAL error, not a TypeError from calling .publish on
+      // the thrown Error (regression guard for the shadowed `error` channel bug).
+      await assert.rejects(
+        async () => execFileAsync(1234),
+        (error) => {
+          assert.strictEqual(error.code, 'ERR_INVALID_ARG_TYPE')
+          return true
+        }
+      )
     })
   })
 
@@ -540,12 +623,14 @@ describe('Child process plugin', () => {
                 },
               }
 
-              it('should be instrumented', (done) => {
-                expectSomeSpan(agent, lsExpected).then(done, done)
+              it('should be instrumented', async () => {
+                const drained = expectSomeSpan(agent, lsExpected)
 
                 const res = childProcess[methodName]('ls')
                 if (async) {
-                  res.on('close', noop)
+                  await Promise.all([drained, events.once(res, 'close')])
+                } else {
+                  await drained
                 }
               })
 
@@ -575,7 +660,7 @@ describe('Child process plugin', () => {
                 })
               }
 
-              it('command should be scrubbed', (done) => {
+              it('command should be scrubbed', async () => {
                 const expected = {
                   type: 'system',
                   name: 'command_execution',
@@ -586,7 +671,7 @@ describe('Child process plugin', () => {
                     'cmd.exit_code': '0',
                   },
                 }
-                expectSomeSpan(agent, expected).then(done, done)
+                const drained = expectSomeSpan(agent, expected)
 
                 const args = []
                 if (methodName === 'exec' || methodName === 'execSync') {
@@ -598,11 +683,13 @@ describe('Child process plugin', () => {
 
                 const res = childProcess[methodName](...args)
                 if (async) {
-                  res.on('close', noop)
+                  await Promise.all([drained, events.once(res, 'close')])
+                } else {
+                  await drained
                 }
               })
 
-              it('should be instrumented with error code', (done) => {
+              it('should be instrumented with error code', async () => {
                 const command = ['node', '-badOption']
                 const options = {
                   stdio: 'pipe',
@@ -618,19 +705,20 @@ describe('Child process plugin', () => {
                   },
                 }
 
-                expectSomeSpan(agent, expected).then(done, done)
+                const drained = expectSomeSpan(agent, expected)
 
                 const args = normalizeArgs(methodName, command, options)
 
                 if (async) {
                   const res = childProcess[methodName].apply(null, args)
-                  res.on('close', noop)
+                  await Promise.all([drained, events.once(res, 'close')])
                 } else {
                   try {
                     childProcess[methodName].apply(null, args)
                   } catch {
                     // process exit with code 1, exceptions are expected
                   }
+                  await drained
                 }
               })
             })
@@ -669,7 +757,7 @@ describe('Child process plugin', () => {
 
           methods.forEach(({ methodName, async }) => {
             describe(methodName, () => {
-              it('should be instrumented', (done) => {
+              it('should be instrumented', async () => {
                 const expected = {
                   type: 'system',
                   name: 'command_execution',
@@ -680,15 +768,17 @@ describe('Child process plugin', () => {
                     'cmd.exit_code': '0',
                   },
                 }
-                expectSomeSpan(agent, expected).then(done, done)
+                const drained = expectSomeSpan(agent, expected)
 
                 const res = childProcess[methodName]('ls')
                 if (async) {
-                  res.on('close', noop)
+                  await Promise.all([drained, events.once(res, 'close')])
+                } else {
+                  await drained
                 }
               })
 
-              it('command should be scrubbed', (done) => {
+              it('command should be scrubbed', async () => {
                 const expected = {
                   type: 'system',
                   name: 'command_execution',
@@ -699,7 +789,7 @@ describe('Child process plugin', () => {
                     'cmd.exit_code': '0',
                   },
                 }
-                expectSomeSpan(agent, expected).then(done, done)
+                const drained = expectSomeSpan(agent, expected)
 
                 const args = []
                 if (methodName === 'exec' || methodName === 'execSync') {
@@ -711,11 +801,13 @@ describe('Child process plugin', () => {
 
                 const res = childProcess[methodName](...args)
                 if (async) {
-                  res.on('close', noop)
+                  await Promise.all([drained, events.once(res, 'close')])
+                } else {
+                  await drained
                 }
               })
 
-              it('should be instrumented with error code', (done) => {
+              it('should be instrumented with error code', async () => {
                 const command = ['node', '-badOption']
                 const options = {
                   stdio: 'pipe',
@@ -746,24 +838,23 @@ describe('Child process plugin', () => {
                 const args = normalizeArgs(methodName, command, options)
 
                 if (async) {
-                  expectSomeSpan(agent, errorExpected).then(done, done)
+                  const drained = expectSomeSpan(agent, errorExpected)
                   const res = childProcess[methodName].apply(null, args)
-                  res.on('close', noop)
+                  await Promise.all([drained, events.once(res, 'close')])
                 } else {
+                  const drained = methodName === 'spawnSync'
+                    ? expectSomeSpan(agent, noErrorExpected)
+                    : expectSomeSpan(agent, errorExpected)
                   try {
-                    if (methodName === 'spawnSync') {
-                      expectSomeSpan(agent, noErrorExpected).then(done, done)
-                    } else {
-                      expectSomeSpan(agent, errorExpected).then(done, done)
-                    }
                     childProcess[methodName].apply(null, args)
                   } catch {
                     // process exit with code 1, exceptions are expected
                   }
+                  await drained
                 }
               })
 
-              it('should be instrumented with error code (override shell default behavior)', (done) => {
+              it('should be instrumented with error code (override shell default behavior)', async () => {
                 const command = ['node', '-badOption']
                 const options = {
                   stdio: 'pipe',
@@ -800,20 +891,19 @@ describe('Child process plugin', () => {
                 )
 
                 if (async) {
-                  expectSomeSpan(agent, errorExpected).then(done, done)
+                  const drained = expectSomeSpan(agent, errorExpected)
                   const res = childProcess[methodName].apply(null, args)
-                  res.on('close', noop)
+                  await Promise.all([drained, events.once(res, 'close')])
                 } else {
+                  const drained = methodName === 'spawnSync'
+                    ? expectSomeSpan(agent, noErrorExpected)
+                    : expectSomeSpan(agent, errorExpected)
                   try {
-                    if (methodName === 'spawnSync') {
-                      expectSomeSpan(agent, noErrorExpected).then(done, done)
-                    } else {
-                      expectSomeSpan(agent, errorExpected).then(done, done)
-                    }
                     childProcess[methodName].apply(null, args)
                   } catch {
                     // process exit with code 1, exceptions are expected
                   }
+                  await drained
                 }
               })
             })

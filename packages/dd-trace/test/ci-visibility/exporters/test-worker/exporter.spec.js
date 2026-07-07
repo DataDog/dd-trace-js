@@ -160,6 +160,7 @@ describe('CI Visibility Test Worker Exporter', () => {
     afterEach(() => {
       delete process.env.DD_VITEST_WORKER
       delete process.env.TINYPOOL_WORKER_ID
+      delete globalThis.__vitest_worker__
     })
 
     it('can export traces (vitest >=4)', () => {
@@ -184,6 +185,25 @@ describe('CI Visibility Test Worker Exporter', () => {
         interprocessCode: VITEST_WORKER_TRACE_PAYLOAD_CODE,
         data: JSON.stringify([trace]),
       })
+    })
+
+    it('can export traces through the worker port in legacy thread workers (vitest <4)', () => {
+      process.env.DD_VITEST_WORKER = '1'
+      delete process.send
+      const postMessage = sinon.spy()
+      const trace = [{ type: 'test' }]
+      globalThis.__vitest_worker__ = {
+        ctx: {
+          port: {
+            postMessage,
+          },
+        },
+      }
+      const vitestWorkerExporter = new TestWorkerCiVisibilityExporter()
+      vitestWorkerExporter.export(trace)
+      vitestWorkerExporter.flush()
+      sinon.assert.calledWith(postMessage, [VITEST_WORKER_TRACE_PAYLOAD_CODE, JSON.stringify([trace])])
+      sinon.assert.notCalled(send)
     })
 
     it('does not break if process.send is undefined', () => {
