@@ -38,6 +38,7 @@ function describeWriter (protocolVersion) {
       encode: sinon.stub(),
       count: sinon.stub().returns(0),
       makePayload: sinon.stub().returns([]),
+      reset: sinon.stub(),
     }
 
     url = new URL('http://localhost:8126')
@@ -73,6 +74,24 @@ function describeWriter (protocolVersion) {
 
       sinon.assert.calledWith(encoder.encode, [span])
     })
+
+    it('should drain tracked traces without flushing them', () => {
+      writer = new Writer({ url, prioritySampler, protocolVersion, trackPayloads: true })
+      const trace = [span]
+
+      writer.append(trace)
+
+      assert.deepStrictEqual(writer.drain(), [trace])
+      sinon.assert.calledOnce(encoder.reset)
+      sinon.assert.notCalled(request)
+    })
+
+    it('should report disabled payload tracking', () => {
+      writer.append([span])
+
+      assert.strictEqual(writer.drain(), undefined)
+      sinon.assert.notCalled(encoder.reset)
+    })
   })
 
   describe('setUrl', () => {
@@ -102,6 +121,16 @@ function describeWriter (protocolVersion) {
       writer.flush()
 
       sinon.assert.called(encoder.makePayload)
+    })
+
+    it('should clear tracked traces after flushing them', () => {
+      writer = new Writer({ url, prioritySampler, protocolVersion, trackPayloads: true })
+      writer.append([span])
+      encoder.count.returns(1)
+
+      writer.flush()
+
+      assert.deepStrictEqual(writer.drain(), [])
     })
 
     it('should call callback when empty', (done) => {

@@ -15,6 +15,7 @@ const { getConfigFresh } = require('../helpers/config')
 const { removeDestroyHandler } = require('./util')
 
 const spanFinishCh = channel('dd-trace:span:finish')
+const traceSampledCh = channel('dd-trace:trace:sampled')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
 const injectCh = channel('dd-trace:span:inject')
@@ -26,6 +27,8 @@ describe('module', () => {
 
   let LLMObsSpanWriterSpy
   let LLMObsEvalMetricsWriterSpy
+  let LLMObsSpanProcessorSpy
+  let llmobsSpanProcessor
   let fetchAgentInfoStub
   let tracer
 
@@ -47,6 +50,14 @@ describe('module', () => {
       setAgentless: sinon.stub(),
     })
 
+    llmobsSpanProcessor = {
+      process: sinon.stub(),
+      processSampledTrace: sinon.stub(),
+      setUserSpanProcessor: sinon.stub(),
+      setWriter: sinon.stub(),
+    }
+    LLMObsSpanProcessorSpy = sinon.stub().returns(llmobsSpanProcessor)
+
     fetchAgentInfoStub = sinon.stub()
     tracer = {
       configureExporter: sinon.stub(),
@@ -55,6 +66,7 @@ describe('module', () => {
     const llmobsModuleProxyRequireMeta = {
       './writers/spans': LLMObsSpanWriterSpy,
       './writers/evaluations': LLMObsEvalMetricsWriterSpy,
+      './span_processor': LLMObsSpanProcessorSpy,
       '../log': logger,
       './storage': {
         storage: {
@@ -394,6 +406,15 @@ describe('module', () => {
     sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().append, payload, undefined)
   })
 
+  it('processes sampled trace chunks through the LLMObs span processor', () => {
+    llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+    const spans = [{ name: 'root' }]
+
+    traceSampledCh.publish({ spans })
+
+    sinon.assert.calledOnceWithExactly(llmobsSpanProcessor.processSampledTrace, spans)
+  })
+
   it('removes all subscribers when disabling', () => {
     llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
 
@@ -402,6 +423,7 @@ describe('module', () => {
     assert.strictEqual(injectCh.hasSubscribers, false)
     assert.strictEqual(evalMetricAppendCh.hasSubscribers, false)
     assert.strictEqual(spanFinishCh.hasSubscribers, false)
+    assert.strictEqual(traceSampledCh.hasSubscribers, false)
     assert.strictEqual(flushCh.hasSubscribers, false)
   })
 })

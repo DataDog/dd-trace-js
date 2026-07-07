@@ -23,9 +23,9 @@ const LLMObsTagger = require('./tagger')
 const LLMObsSpanWriter = require('./writers/spans')
 const { setAgentStrategy } = require('./writers/util')
 const { INCOMPATIBLE_INITIALIZATION } = require('./constants/text')
-const samplingFallbackProcessor = require('./sampling-fallback-processor')
 
 const spanFinishCh = channel('dd-trace:span:finish')
+const traceSampledCh = channel('dd-trace:trace:sampled')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
 const injectCh = channel('dd-trace:span:inject')
@@ -64,7 +64,6 @@ function enable (config, tracer) {
   // span writer append is handled by the span processor
   evalWriter = new LLMObsEvalMetricsWriter(config)
   spanWriter = new LLMObsSpanWriter(config)
-  samplingFallbackProcessor.setWriter(spanWriter)
 
   evalMetricAppendCh.subscribe(handleEvalMetricAppend)
   flushCh.subscribe(handleFlush)
@@ -74,6 +73,7 @@ function enable (config, tracer) {
   spanProcessor = new LLMObsSpanProcessor(config)
   spanProcessor.setWriter(spanWriter)
   spanFinishCh.subscribe(handleSpanProcess)
+  traceSampledCh.subscribe(handleTraceSampled)
 
   // distributed tracing for llmobs
   injectCh.subscribe(handleLLMObsInjection)
@@ -117,13 +117,13 @@ function disable () {
   if (evalMetricAppendCh.hasSubscribers) evalMetricAppendCh.unsubscribe(handleEvalMetricAppend)
   if (flushCh.hasSubscribers) flushCh.unsubscribe(handleFlush)
   if (spanFinishCh.hasSubscribers) spanFinishCh.unsubscribe(handleSpanProcess)
+  if (traceSampledCh.hasSubscribers) traceSampledCh.unsubscribe(handleTraceSampled)
   if (injectCh.hasSubscribers) injectCh.unsubscribe(handleLLMObsInjection)
   if (registerUserSpanProcessorCh.hasSubscribers) registerUserSpanProcessorCh.unsubscribe(handleRegisterProcessor)
 
   spanWriter?.destroy()
   evalWriter?.destroy()
   spanProcessor?.setWriter(null)
-  samplingFallbackProcessor.setWriter(null)
 
   spanWriter = null
   evalWriter = null
@@ -184,6 +184,10 @@ function handleRegisterProcessor (userSpanProcessor) {
 
 function handleSpanProcess (span) {
   spanProcessor.process(span)
+}
+
+function handleTraceSampled ({ spans }) {
+  spanProcessor?.processSampledTrace(spans)
 }
 
 function handleEvalMetricAppend ({ payload, routing }) {

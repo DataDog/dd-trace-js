@@ -11,7 +11,7 @@ const {
   CACHED_LLMOBS_EVENT_SYMBOL,
   LLMOBS_META_STRUCT_KEY,
 } = require('../../src/llmobs/export-mode')
-const { ROUTING_API_KEY, ROUTING_SITE } = require('../../src/llmobs/constants/tags')
+const { LLMOBS_SUBMITTED_TAG_KEY, ROUTING_API_KEY, ROUTING_SITE } = require('../../src/llmobs/constants/tags')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 
 describe('span processor', () => {
@@ -924,4 +924,142 @@ describe('span processor', () => {
       assert.strictEqual(span.meta_struct, undefined)
     })
   })
+
+  describe('processSampledTrace', () => {
+    const agentConfig = {
+      DD_TRACE_ENABLED: true,
+      apmTracingEnabled: true,
+      llmobs: { DD_LLMOBS_ENABLED: true },
+    }
+
+    beforeEach(() => {
+      processor = new LLMObsSpanProcessor(agentConfig)
+      processor.setWriter(writer)
+      writer.append.returns(true)
+    })
+
+    it('rescues cached LLMObs events when the APM agent trace is auto-rejected', () => {
+      const event = { span_id: '123' }
+      const routing = { apiKey: undefined, site: undefined }
+      const { span, tags } = createSampledTraceSpan({ priority: 0, event, routing })
+
+      processor.processSampledTrace([span])
+
+      sinon.assert.calledOnceWithExactly(writer.append, event, routing)
+      assert.strictEqual(tags[LLMOBS_SUBMITTED_TAG_KEY], '1')
+      assert.strictEqual(span.meta_struct, undefined)
+    })
+
+    it('rescues cached LLMObs events when the APM agent trace is user-rejected', () => {
+      const event = { span_id: '123' }
+      const { span } = createSampledTraceSpan({ priority: -1, event })
+
+      processor.processSampledTrace([span])
+
+      sinon.assert.calledOnce(writer.append)
+      assert.strictEqual(span.meta_struct, undefined)
+    })
+
+    it('leaves kept APM agent traces on the meta_struct path', () => {
+      const event = { span_id: '123' }
+      const { span, tags } = createSampledTraceSpan({ priority: 1, event })
+
+      processor.processSampledTrace([span])
+
+      sinon.assert.notCalled(writer.append)
+      assert.deepStrictEqual(span.meta_struct, { [LLMOBS_META_STRUCT_KEY]: event })
+      assert.strictEqual(tags[LLMOBS_SUBMITTED_TAG_KEY], undefined)
+    })
+
+    it('does not rescue APM agentless traces', () => {
+      const event = { span_id: '123' }
+      const { span } = createSampledTraceSpan({ priority: 0, event })
+      processor = new LLMObsSpanProcessor({
+        ...agentConfig,
+        experimental: { exporter: 'agentless' },
+      })
+      processor.setWriter(writer)
+
+      processor.processSampledTrace([span])
+
+      sinon.assert.notCalled(writer.append)
+      assert.deepStrictEqual(span.meta_struct, { [LLMOBS_META_STRUCT_KEY]: event })
+    })
+
+    it('does not rescue runtime-detected APM agentless traces', () => {
+      const event = { span_id: '123' }
+      const { span } = createSampledTraceSpan({ priority: 0, event })
+      writer._agentless = true
+
+      processor.processSampledTrace([span])
+
+      sinon.assert.notCalled(writer.append)
+      assert.deepStrictEqual(span.meta_struct, { [LLMOBS_META_STRUCT_KEY]: event })
+    })
+
+    it('scrubs half-built LLMObs meta_struct payloads on rejected APM agent traces', () => {
+      const event = { span_id: '123' }
+      const other = { value: true }
+      const { span } = createSampledTraceSpan({
+        priority: 0,
+        event: undefined,
+        metaStruct: {
+          [LLMOBS_META_STRUCT_KEY]: event,
+          other,
+        },
+      })
+
+      processor.processSampledTrace([span])
+
+      sinon.assert.notCalled(writer.append)
+      assert.deepStrictEqual(span.meta_struct, { other })
+    })
+
+    it('does not mark the span as submitted when fallback writer drops the event', () => {
+      const event = { span_id: '123' }
+      const { span, tags } = createSampledTraceSpan({ priority: 0, event })
+      writer.append.returns(false)
+
+      processor.processSampledTrace([span])
+
+      assert.strictEqual(tags[LLMOBS_SUBMITTED_TAG_KEY], undefined)
+      assert.strictEqual(span.meta_struct, undefined)
+    })
+
+    it('scrubs meta_struct and logs when fallback writer throws', () => {
+      const event = { span_id: '123' }
+      const { span, tags } = createSampledTraceSpan({ priority: 0, event })
+      writer.append.throws(new Error('boom'))
+
+      processor.processSampledTrace([span])
+
+      assert.strictEqual(tags[LLMOBS_SUBMITTED_TAG_KEY], undefined)
+      assert.strictEqual(span.meta_struct, undefined)
+      sinon.assert.calledOnce(log.warn)
+    })
+  })
 })
+
+function createSampledTraceSpan ({ priority, event, routing = {}, metaStruct } = {}) {
+  const tags = {}
+  const context = {
+    _sampling: { priority },
+    _tags: tags,
+    setTag (key, value) {
+      this._tags[key] = value
+    },
+  }
+  const span = {
+    _duration: 1,
+    meta_struct: metaStruct ?? { [LLMOBS_META_STRUCT_KEY]: event },
+    context () {
+      return context
+    },
+  }
+
+  if (event !== undefined) {
+    span[CACHED_LLMOBS_EVENT_SYMBOL] = { event, routing }
+  }
+
+  return { span, tags }
+}

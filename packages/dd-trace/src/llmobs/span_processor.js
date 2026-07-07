@@ -9,6 +9,7 @@ const {
   ERROR_TYPE,
   ERROR_STACK,
 } = require('../constants')
+const { AUTO_REJECT } = require('../../../../ext/priority')
 const {
   CACHED_LLMOBS_EVENT_SYMBOL,
   LLMOBS_META_STRUCT_KEY,
@@ -142,6 +143,72 @@ class LLMObsSpanProcessor {
         Failed to append span to LLM Observability writer, likely due to an unserializable property.
         Span won't be sent to LLM Observability: ${e.message}
       `)
+    }
+  }
+
+  /**
+   * Resubmits cached LLMObs events when the local APM agent path will drop the trace.
+   *
+   * @param {Array<import('../opentracing/span')>} spans
+   * @returns {void}
+   */
+  processSampledTrace (spans) {
+    if (!this.#config.llmobs.DD_LLMOBS_ENABLED ||
+        !this.#writer ||
+        getLLMObsExportMode(this.#config, this.#writer) !== LLMObsExportMode.APM_AGENT) {
+      return
+    }
+
+    const samplingPriority = spans[0]?.context()?._sampling?.priority
+    if (samplingPriority === undefined || samplingPriority > AUTO_REJECT) return
+
+    for (const span of spans) {
+      if (span._duration === undefined) continue
+      if (!span.meta_struct?.[LLMOBS_META_STRUCT_KEY]) continue
+
+      const cached = span[CACHED_LLMOBS_EVENT_SYMBOL]
+      if (!cached) {
+        this.#scrubLLMObsMetaStruct(span)
+        continue
+      }
+
+      try {
+        const enqueued = this.#writer.append(cached.event, cached.routing)
+        if (enqueued) {
+          span.context().setTag(LLMOBS_SUBMITTED_TAG_KEY, '1')
+        }
+      } catch (error) {
+        logger.warn(
+          'Failed to rescue LLM Observability span event from a sampled-out APM trace: %s',
+          error.message
+        )
+      } finally {
+        this.#scrubLLMObsMetaStruct(span)
+      }
+    }
+  }
+
+  /**
+   * Removes the LLMObs event from APM trace metadata without disturbing other structured metadata.
+   *
+   * @param {import('../opentracing/span')} span
+   * @returns {void}
+   */
+  #scrubLLMObsMetaStruct (span) {
+    const metaStruct = span.meta_struct
+    if (!metaStruct) return
+
+    let hasOtherStructuredMetadata = false
+    for (const key of Object.keys(metaStruct)) {
+      if (key !== LLMOBS_META_STRUCT_KEY) {
+        hasOtherStructuredMetadata = true
+        break
+      }
+    }
+
+    delete metaStruct[LLMOBS_META_STRUCT_KEY]
+    if (!hasOtherStructuredMetadata) {
+      span.meta_struct = undefined
     }
   }
 

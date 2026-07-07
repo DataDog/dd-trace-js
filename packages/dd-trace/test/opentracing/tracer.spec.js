@@ -143,6 +143,45 @@ describe('Tracer', () => {
     assert.strictEqual(tracer._exporter, agentlessExporter)
   })
 
+  it('should move pending traces when replacing the trace exporter supports transfer', () => {
+    agentExporter.flush = sinon.stub()
+    agentExporter.destroy = sinon.stub()
+    agentExporter.transferPendingTo = sinon.stub().returns(true)
+
+    const agentlessExporter = {
+      export: sinon.spy(),
+    }
+    const AgentlessExporter = sinon.stub().returns(agentlessExporter)
+    exporter.withArgs('agentless').returns(AgentlessExporter)
+
+    tracer = new Tracer(config)
+
+    assert.strictEqual(tracer.configureExporter(config, 'agentless'), true)
+    sinon.assert.calledOnceWithExactly(agentExporter.transferPendingTo, agentlessExporter)
+    sinon.assert.notCalled(agentExporter.flush)
+    sinon.assert.calledOnce(agentExporter.destroy)
+    assert.strictEqual(tracer._exporter, agentlessExporter)
+  })
+
+  it('should flush the old trace exporter when pending traces cannot be transferred', () => {
+    agentExporter.flush = sinon.stub()
+    agentExporter.destroy = sinon.stub()
+    agentExporter.transferPendingTo = sinon.stub().returns(false)
+
+    const agentlessExporter = {
+      export: sinon.spy(),
+    }
+    const AgentlessExporter = sinon.stub().returns(agentlessExporter)
+    exporter.withArgs('agentless').returns(AgentlessExporter)
+
+    tracer = new Tracer(config)
+
+    assert.strictEqual(tracer.configureExporter(config, 'agentless'), true)
+    sinon.assert.calledOnceWithExactly(agentExporter.transferPendingTo, agentlessExporter)
+    sinon.assert.calledOnce(agentExporter.flush)
+    sinon.assert.calledOnce(agentExporter.destroy)
+  })
+
   describe('startSpan', () => {
     it('should start a span', () => {
       fields.tags = { foo: 'bar' }

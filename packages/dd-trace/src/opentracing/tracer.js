@@ -70,10 +70,12 @@ class DatadogTracer {
   configureExporter (config, exporterName = getExporterName(config)) {
     if (exporterName === this._exporterName) return false
 
-    this._exporter.flush?.(() => {})
+    const { exporter, exporterName: nextExporterName } = createExporter(config, this._prioritySampler, exporterName)
+    if (!this._exporter.transferPendingTo?.(exporter)) {
+      this._exporter.flush?.(() => {})
+    }
     this._exporter.destroy?.()
 
-    const { exporter, exporterName: nextExporterName } = createExporter(config, this._prioritySampler, exporterName)
     this._exporter = exporter
     this._exporterName = nextExporterName
     this._processor.setExporter(this._exporter)

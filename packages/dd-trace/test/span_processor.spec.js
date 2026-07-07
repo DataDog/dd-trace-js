@@ -3,11 +3,14 @@
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
 
+const { channel } = require('dc-polyfill')
 const { describe, it, beforeEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
 require('./setup/core')
+
+const traceSampledCh = channel('dd-trace:trace:sampled')
 
 describe('SpanProcessor', () => {
   let prioritySampler
@@ -82,6 +85,24 @@ describe('SpanProcessor', () => {
     processor.process(finishedSpan)
 
     sinon.assert.calledWith(prioritySampler.sample, finishedSpan.context())
+  })
+
+  it('should publish a sampled trace chunk before formatting spans', () => {
+    const handler = sinon.stub()
+    traceSampledCh.subscribe(handler)
+
+    try {
+      trace.started = [finishedSpan]
+      trace.finished = [finishedSpan]
+
+      processor.process(finishedSpan)
+
+      sinon.assert.calledOnce(handler)
+      assert.deepStrictEqual(handler.getCall(0).args[0], { spans: [finishedSpan] })
+      sinon.assert.callOrder(prioritySampler.sample, handler, spanFormat)
+    } finally {
+      traceSampledCh.unsubscribe(handler)
+    }
   })
 
   it('should generate sampling priority when sampling manually', () => {
