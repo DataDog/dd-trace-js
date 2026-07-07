@@ -53,34 +53,35 @@ class SpanProcessor {
   _sampleNative (span, spanContext) {
     const root = spanContext._trace.started[0]
 
-    // Already sampled - return early
-    if (spanContext._sampling.priority !== undefined) return
     if (!root) return // noop span
 
-    // Check for manual override tags first (stays in JS)
-    const manualPriority = this._prioritySampler._getPriorityFromTags(
-      spanContext.getTags(),
-      spanContext
-    )
+    // Decide a priority only if one hasn't been set yet. A priority may already
+    // be set before the span is processed — AppSec force-keep, a manual
+    // keep/drop via the API, or a value propagated from upstream — in which case
+    // we keep it but still mirror it into native storage below. (Previously an
+    // early return here skipped that sync, so those traces reached the exporter
+    // without `_sampling_priority_v1`.)
+    if (spanContext._sampling.priority === undefined) {
+      // Check for manual override tags first (stays in JS)
+      const manualPriority = this._prioritySampler._getPriorityFromTags(
+        spanContext.getTags(),
+        spanContext
+      )
 
-    if (this._prioritySampler.validate(manualPriority)) {
-      // Manual override - set in JS context
-      spanContext._sampling.priority = manualPriority
-      spanContext._sampling.mechanism = SAMPLING_MECHANISM_MANUAL
-
-      // Sync manual decision to native storage
-      const spanId = spanContext._nativeSpanId
-      if (spanId !== undefined) {
-        this._syncSamplingToNative(spanContext, spanId)
+      if (this._prioritySampler.validate(manualPriority)) {
+        // Manual override - set in JS context
+        spanContext._sampling.priority = manualPriority
+        spanContext._sampling.mechanism = SAMPLING_MECHANISM_MANUAL
+      } else {
+        // Use JS-side sampling
+        this._prioritySampler.sample(spanContext)
       }
-    } else {
-      // Use JS-side sampling
-      this._prioritySampler.sample(spanContext)
+    }
 
-      // Sync sampling decision to native storage if span is in native storage
-      if (spanContext._nativeSpanId !== undefined) {
-        this._syncSamplingToNative(spanContext, spanContext._nativeSpanId)
-      }
+    // Mirror the sampling decision (however it was made) into native storage so
+    // the WASM exporter emits `_sampling_priority_v1` (+ `_dd.p.dm`).
+    if (spanContext._nativeSpanId !== undefined) {
+      this._syncSamplingToNative(spanContext, spanContext._nativeSpanId)
     }
 
     // Add decision maker tag

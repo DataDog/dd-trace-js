@@ -150,6 +150,28 @@ describe('SpanProcessor', () => {
     assert.strictEqual(trace.tags['_dd.p.dm'], undefined)
   })
 
+  it('mirrors a pre-set sampling priority (AppSec force-keep / manual keep / propagation) to native without re-sampling', () => {
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+    const ctx = finishedSpan.context()
+    ctx._nativeSpanId = 123
+    // Priority decided before the span is processed (e.g. AppSec force-keep).
+    ctx._sampling.priority = 2 // USER_KEEP
+    ctx._sampling.mechanism = 4
+
+    processor.process(finishedSpan)
+
+    // A priority is already set, so we must not re-run the sampler...
+    sinon.assert.notCalled(prioritySampler.sample)
+    // ...but the priority must still be mirrored to native storage, otherwise
+    // the WASM exporter omits `_sampling_priority_v1` (regression that broke the
+    // AppSec system-tests: KeyError '_sampling_priority_v1').
+    const prio = nativeSpans.queueOp.getCalls()
+      .filter(c => c.args[0] === fakeOpCode.SetTraceMetricsAttr && c.args[2] === '_sampling_priority_v1')
+    assert.strictEqual(prio.length, 1)
+    assert.deepStrictEqual(prio[0].args[3], ['f64', 2])
+  })
+
   it('should erase the trace once finished', () => {
     trace.started = [finishedSpan]
     trace.finished = [finishedSpan]
