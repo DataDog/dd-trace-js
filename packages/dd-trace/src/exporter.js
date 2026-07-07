@@ -15,6 +15,8 @@ module.exports = function getExporter (name) {
       return require('./exporters/agent')
     case exporters.AGENTLESS:
       return require('./exporters/agentless')
+    case exporters.DEFERRED:
+      return require('./exporters/deferred')
     case exporters.DATADOG:
       return require('./ci-visibility/exporters/agentless')
     case exporters.AGENT_PROXY:

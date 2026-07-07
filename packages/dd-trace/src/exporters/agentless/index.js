@@ -17,6 +17,7 @@ const { computeIntakeUrl } = require('./intake')
 class AgentlessExporter {
   #timer
   #config
+  #destroyer
 
   /**
    * @param {object} config - Configuration object
@@ -56,7 +57,8 @@ class AgentlessExporter {
 
     const ddTrace = globalThis[Symbol.for('dd-trace')]
     if (ddTrace?.beforeExitHandlers) {
-      ddTrace.beforeExitHandlers.add(this.flush.bind(this))
+      this.#destroyer = this.flush.bind(this)
+      ddTrace.beforeExitHandlers.add(this.#destroyer)
     } else {
       log.error('dd-trace global not properly initialized. beforeExit handler not registered for agentless exporter.')
     }
@@ -124,6 +126,14 @@ class AgentlessExporter {
     } catch (err) {
       log.error('Failed to flush traces: %s', err.message)
       done()
+    }
+  }
+
+  destroy () {
+    clearTimeout(this.#timer)
+    this.#timer = undefined
+    if (this.#destroyer) {
+      globalThis[Symbol.for('dd-trace')]?.beforeExitHandlers?.delete(this.#destroyer)
     }
   }
 }

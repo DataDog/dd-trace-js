@@ -45,8 +45,7 @@ function formatSpan (span, isFirstSpan) {
 
 /**
  * Converts a span to JSON-serializable format.
- * IDs are converted to lowercase hex strings. Start time is converted from
- * nanoseconds to seconds for the intake format.
+ * IDs are converted to lowercase hex strings.
  * @param {object} span - The formatted span
  * @returns {object} JSON-serializable span object
  */
@@ -59,7 +58,7 @@ function spanToJSON (span) {
     resource: span.resource,
     service: span.service,
     error: span.error,
-    start: Math.floor(span.start / 1e9),
+    start: span.start,
     duration: span.duration,
     meta: span.meta,
     metrics: span.metrics,

@@ -6,6 +6,7 @@ const Writer = require('./writer')
 
 class AgentExporter {
   #timer
+  #destroyer
 
   constructor (config, prioritySampler) {
     this._config = config
@@ -23,9 +24,11 @@ class AgentExporter {
       lookup,
       protocolVersion,
       headers,
+      trackPayloads: true,
     })
 
-    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.flush.bind(this))
+    this.#destroyer = this.flush.bind(this)
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.add(this.#destroyer)
   }
 
   setUrl (url) {
@@ -58,6 +61,32 @@ class AgentExporter {
     clearTimeout(this.#timer)
     this.#timer = undefined
     this._writer.flush(done)
+  }
+
+  /**
+   * Moves pending traces to a replacement exporter instead of sending them through this exporter.
+   *
+   * @param {{ export: (spans: object[]) => void }} exporter - Exporter that should receive pending traces.
+   * @returns {boolean} Whether pending trace tracking was enabled and handled.
+   */
+  transferPendingTo (exporter) {
+    const pendingPayloads = this._writer.drain()
+    if (pendingPayloads === undefined) return false
+
+    clearTimeout(this.#timer)
+    this.#timer = undefined
+
+    for (const payload of pendingPayloads) {
+      exporter.export(payload)
+    }
+
+    return true
+  }
+
+  destroy () {
+    clearTimeout(this.#timer)
+    this.#timer = undefined
+    globalThis[Symbol.for('dd-trace')].beforeExitHandlers.delete(this.#destroyer)
   }
 }
 

@@ -5,6 +5,8 @@ const { EVP_PROXY_AGENT_BASE_PATH } = require('../constants/writers')
 const telemetry = require('../telemetry')
 const { fetchAgentInfo } = require('../../agent/info')
 
+const NORMALIZED_EVP_PROXY_AGENT_BASE_PATH = EVP_PROXY_AGENT_BASE_PATH.replace(/\/+$/, '')
+
 /**
  * @param {import('../../config/config-base')} config
  */
@@ -23,7 +25,10 @@ function setAgentStrategy (config, setWritersAgentlessValue) {
     }
 
     const endpoints = agentInfo.endpoints
-    const hasEndpoint = Array.isArray(endpoints) && endpoints.includes(EVP_PROXY_AGENT_BASE_PATH)
+    const hasEndpoint = Array.isArray(endpoints) && endpoints.some(endpoint => (
+      typeof endpoint === 'string' &&
+      endpoint.replace(/\/+$/, '') === NORMALIZED_EVP_PROXY_AGENT_BASE_PATH
+    ))
     setWritersAgentlessValue(!hasEndpoint)
   })
 }

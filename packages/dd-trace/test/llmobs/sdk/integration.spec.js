@@ -166,7 +166,7 @@ describe('end to end sdk integration tests', () => {
   })
 
   describe('otel correlation bridge tags', () => {
-    it('writes llmobs_trace_id, llmobs_parent_id, and _dd.llmobs.submitted to apm span meta', async () => {
+    it('writes llmobs_trace_id and llmobs_parent_id to apm span meta', async () => {
       let workflowSpanCtx
       llmobs.trace({ kind: 'workflow', name: 'wf' }, span => {
         workflowSpanCtx = { traceId: span.context().toTraceId(true), spanId: span.context().toSpanId() }
@@ -181,13 +181,14 @@ describe('end to end sdk integration tests', () => {
       assert.equal(firstSpan.meta.llmobs_trace_id, workflowSpanCtx.traceId)
       assert.equal(firstSpan.meta.llmobs_parent_id, workflowSpanCtx.spanId)
 
-      // Every SDK-tagged apm span carries the submitted marker.
+      // Meta-struct delivery does not use the writer-submitted marker.
       for (const apmSpan of apmSpans) {
-        assert.equal(apmSpan.meta['_dd.llmobs.submitted'], '1')
+        assert.equal(apmSpan.type, 'llm')
+        assert.equal(apmSpan.meta['_dd.llmobs.submitted'], undefined)
       }
     })
 
-    it('does not mark non-llmobs apm spans with _dd.llmobs.submitted', async () => {
+    it('does not mark meta-struct submitted apm spans with _dd.llmobs.submitted', async () => {
       tracer.trace('plainApm', () => {
         llmobs.trace({ kind: 'workflow', name: 'wf' }, () => {})
       })
@@ -198,8 +199,10 @@ describe('end to end sdk integration tests', () => {
 
       assert.ok(plainApmSpan)
       assert.ok(sdkSpan)
+      assert.equal(plainApmSpan.type, undefined)
+      assert.equal(sdkSpan.type, 'llm')
       assert.equal(plainApmSpan.meta['_dd.llmobs.submitted'], undefined)
-      assert.equal(sdkSpan.meta['_dd.llmobs.submitted'], '1')
+      assert.equal(sdkSpan.meta['_dd.llmobs.submitted'], undefined)
 
       // bridge tags still flow to the local trace's chunk meta
       const firstSpan = apmSpans[0]

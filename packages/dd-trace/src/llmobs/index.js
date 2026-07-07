@@ -2,6 +2,7 @@
 
 const { channel } = require('dc-polyfill')
 
+const exporters = require('../../../../ext/exporters')
 const log = require('../log')
 const { DD_MAJOR } = require('../../../../version')
 const startupLogs = require('../startup-log')
@@ -24,6 +25,7 @@ const { setAgentStrategy } = require('./writers/util')
 const { INCOMPATIBLE_INITIALIZATION } = require('./constants/text')
 
 const spanFinishCh = channel('dd-trace:span:finish')
+const traceSampledCh = channel('dd-trace:trace:sampled')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
 const injectCh = channel('dd-trace:span:inject')
@@ -52,8 +54,9 @@ let globalTracerConfig
 
 /**
  * @param {@type import('../config/config-base')} config
+ * @param {import('../tracer') | null} [tracer]
  */
-function enable (config) {
+function enable (config, tracer) {
   globalTracerConfig = config
 
   const startTime = performance.now()
@@ -70,6 +73,7 @@ function enable (config) {
   spanProcessor = new LLMObsSpanProcessor(config)
   spanProcessor.setWriter(spanWriter)
   spanFinishCh.subscribe(handleSpanProcess)
+  traceSampledCh.subscribe(handleTraceSampled)
 
   // distributed tracing for llmobs
   injectCh.subscribe(handleLLMObsInjection)
@@ -86,16 +90,44 @@ function enable (config) {
 
     evalWriter?.setAgentless(useAgentless)
     spanWriter?.setAgentless(useAgentless)
+    log.debug(
+      '[LLMObs] Using %s writer transport for span and evaluation events',
+      useAgentless ? 'agentless/direct intake' : 'Agent EVP proxy'
+    )
+    configureApmExporter(config, tracer, useAgentless)
 
     telemetry.recordLLMObsEnabled(startTime, config)
     log.debug('[LLMObs] Enabled LLM Observability with configuration: %o', config.llmobs)
   })
 }
 
+/**
+ * @param {import('../config/config-base')} config
+ * @param {import('../tracer') | null | undefined} tracer
+ * @param {boolean} useAgentless
+ */
+function configureApmExporter (config, tracer, useAgentless) {
+  if (config.DD_TRACE_ENABLED !== true ||
+      config.apmTracingEnabled !== true ||
+      (config.OTEL_TRACES_EXPORTER === 'otlp' && !config.isCiVisibility)) {
+    return
+  }
+
+  if (!useAgentless && config.experimental?.exporter !== exporters.DEFERRED) {
+    return
+  }
+
+  const exporter = useAgentless ? exporters.AGENTLESS : exporters.AGENT
+  if (tracer?.configureExporter(config, exporter) && useAgentless) {
+    log.debug('[LLMObs] Swapped APM trace exporter to agentless intake')
+  }
+}
+
 function disable () {
   if (evalMetricAppendCh.hasSubscribers) evalMetricAppendCh.unsubscribe(handleEvalMetricAppend)
   if (flushCh.hasSubscribers) flushCh.unsubscribe(handleFlush)
   if (spanFinishCh.hasSubscribers) spanFinishCh.unsubscribe(handleSpanProcess)
+  if (traceSampledCh.hasSubscribers) traceSampledCh.unsubscribe(handleTraceSampled)
   if (injectCh.hasSubscribers) injectCh.unsubscribe(handleLLMObsInjection)
   if (registerUserSpanProcessorCh.hasSubscribers) registerUserSpanProcessorCh.unsubscribe(handleRegisterProcessor)
 
@@ -162,6 +194,10 @@ function handleRegisterProcessor (userSpanProcessor) {
 
 function handleSpanProcess (span) {
   spanProcessor.process(span)
+}
+
+function handleTraceSampled ({ spans }) {
+  spanProcessor?.processSampledTrace(spans)
 }
 
 function handleEvalMetricAppend ({ payload, routing }) {

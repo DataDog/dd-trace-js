@@ -3,6 +3,7 @@ module.exports = {
   LOG: 'log',
   AGENT: 'agent',
   AGENTLESS: 'agentless',
+  DEFERRED: 'deferred',
   DATADOG: 'datadog',
   AGENT_PROXY: 'agent_proxy',
   JEST_WORKER: 'jest_worker',

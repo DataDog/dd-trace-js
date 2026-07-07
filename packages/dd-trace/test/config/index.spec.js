@@ -19,6 +19,7 @@ const { getEnvironmentVariable, getEnvironmentVariables } = require('../../src/c
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { DD_MAJOR } = require('../../../../version')
 const StableConfig = require('../../src/config/stable')
+const exporters = require('../../../../ext/exporters')
 
 const GRPC_CLIENT_ERROR_STATUSES = defaults.DD_GRPC_CLIENT_ERROR_STATUSES
 const GRPC_SERVER_ERROR_STATUSES = defaults.DD_GRPC_SERVER_ERROR_STATUSES
@@ -4748,6 +4749,64 @@ rules:
       const config = getConfig()
       assert.notStrictEqual(config.experimental.exporter, 'agentless')
       assert.notStrictEqual(config.sampler.rateLimit, -1)
+    })
+  })
+
+  context('LLMObs agent-based export', () => {
+    it('should use the deferred exporter when LLMObs chooses Agent routing automatically', () => {
+      const config = getConfig({ llmobs: { mlApp: 'test' } })
+
+      assert.strictEqual(config.experimental.exporter, exporters.DEFERRED)
+      assert.strictEqual(config.getOrigin('experimental.exporter'), 'calculated')
+    })
+
+    it('should not use the deferred exporter when an exporter is explicitly configured', () => {
+      process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'log'
+      const config = getConfig({ llmobs: { mlApp: 'test' } })
+
+      assert.strictEqual(config.experimental.exporter, 'log')
+      assert.strictEqual(config.getOrigin('experimental.exporter'), 'env_var')
+    })
+
+    it('should enable agentless exporter when LLMObs agentless is explicitly enabled', () => {
+      const config = getConfig({ llmobs: { agentlessEnabled: true } })
+
+      assert.strictEqual(config.experimental.exporter, 'agentless')
+      assert.strictEqual(config.getOrigin('experimental.exporter'), 'calculated')
+    })
+
+    it('should force v0.4 trace protocol when LLMObs uses the agent APM path', () => {
+      process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
+      const config = getConfig({ llmobs: { agentlessEnabled: false } })
+
+      assert.strictEqual(config.protocolVersion, '0.4')
+      sinon.assert.calledWithMatch(log.warn, /LLM Observability agent-based export/)
+    })
+
+    it('should keep v0.5 trace protocol when LLMObs uses agentless APM', () => {
+      process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
+      process.env.DD_LLMOBS_ENABLED = 'true'
+      process.env._DD_APM_TRACING_AGENTLESS_ENABLED = 'true'
+      const config = getConfig()
+
+      assert.strictEqual(config.protocolVersion, '0.5')
+    })
+
+    it('should keep v0.5 trace protocol when LLMObs explicitly uses agentless APM', () => {
+      process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
+      const config = getConfig({ llmobs: { agentlessEnabled: true } })
+
+      assert.strictEqual(config.protocolVersion, '0.5')
+    })
+
+    it('should keep v0.5 trace protocol when APM tracing is disabled', () => {
+      process.env.DD_TRACE_AGENT_PROTOCOL_VERSION = '0.5'
+      process.env.DD_LLMOBS_ENABLED = 'true'
+      const config = getConfig({
+        apmTracingEnabled: false,
+      })
+
+      assert.strictEqual(config.protocolVersion, '0.5')
     })
   })
 

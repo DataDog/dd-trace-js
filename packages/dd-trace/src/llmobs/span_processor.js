@@ -9,6 +9,15 @@ const {
   ERROR_TYPE,
   ERROR_STACK,
 } = require('../constants')
+const { AUTO_REJECT } = require('../../../../ext/priority')
+const {
+  CACHED_LLMOBS_EVENT_SYMBOL,
+  LLMOBS_META_STRUCT_KEY,
+  LLMObsExportMode,
+  getLLMObsExportMode,
+  getLLMObsWriterExportMode,
+  isLLMObsWriterExportMode,
+} = require('./export-mode')
 const {
   SPAN_KIND,
   MODEL_NAME,
@@ -97,6 +106,21 @@ class LLMObsSpanProcessor {
         apiKey: mlObsTags[ROUTING_API_KEY],
         site: mlObsTags[ROUTING_SITE],
       }
+      const mode = this.#getSpanExportMode(routing)
+
+      if (mode === LLMObsExportMode.APM_AGENT || mode === LLMObsExportMode.APM_AGENTLESS) {
+        span.meta_struct ??= {}
+        span.meta_struct[LLMOBS_META_STRUCT_KEY] = this.#formatMetaStruct(formattedEvent, mlObsTags, mode)
+        if (mode === LLMObsExportMode.APM_AGENT) {
+          span[CACHED_LLMOBS_EVENT_SYMBOL] = {
+            event: formattedEvent,
+            routing,
+          }
+        }
+        return
+      }
+
+      if (!isLLMObsWriterExportMode(mode)) return
 
       const enqueued = this.#writer.append(formattedEvent, routing)
 
@@ -120,6 +144,188 @@ class LLMObsSpanProcessor {
         Span won't be sent to LLM Observability: ${e.message}
       `)
     }
+  }
+
+  /**
+   * Resubmits cached LLMObs events when the local APM agent path will drop the trace.
+   *
+   * @param {Array<import('../opentracing/span')>} spans
+   * @returns {void}
+   */
+  processSampledTrace (spans) {
+    if (!this.#config.llmobs.DD_LLMOBS_ENABLED ||
+        !this.#writer ||
+        getLLMObsExportMode(this.#config, this.#writer) !== LLMObsExportMode.APM_AGENT) {
+      return
+    }
+
+    const samplingPriority = spans[0]?.context()?._sampling?.priority
+    if (samplingPriority === undefined || samplingPriority > AUTO_REJECT) return
+
+    for (const span of spans) {
+      if (span._duration === undefined) continue
+      if (!span.meta_struct?.[LLMOBS_META_STRUCT_KEY]) continue
+
+      const cached = span[CACHED_LLMOBS_EVENT_SYMBOL]
+      if (!cached) {
+        this.#scrubLLMObsMetaStruct(span)
+        continue
+      }
+
+      try {
+        const enqueued = this.#writer.append(cached.event, cached.routing)
+        if (enqueued) {
+          span.context().setTag(LLMOBS_SUBMITTED_TAG_KEY, '1')
+        }
+      } catch (error) {
+        logger.warn(
+          'Failed to rescue LLM Observability span event from a sampled-out APM trace: %s',
+          error.message
+        )
+      } finally {
+        this.#scrubLLMObsMetaStruct(span)
+      }
+    }
+  }
+
+  /**
+   * Removes the LLMObs event from APM trace metadata without disturbing other structured metadata.
+   *
+   * @param {import('../opentracing/span')} span
+   * @returns {void}
+   */
+  #scrubLLMObsMetaStruct (span) {
+    const metaStruct = span.meta_struct
+    if (!metaStruct) return
+
+    let hasOtherStructuredMetadata = false
+    for (const key of Object.keys(metaStruct)) {
+      if (key !== LLMOBS_META_STRUCT_KEY) {
+        hasOtherStructuredMetadata = true
+        break
+      }
+    }
+
+    delete metaStruct[LLMOBS_META_STRUCT_KEY]
+    if (!hasOtherStructuredMetadata) {
+      span.meta_struct = undefined
+    }
+  }
+
+  /**
+   * Formats the compact LLMObs struct that rides inside APM span meta_struct.
+   * This mirrors dd-trace-py's `_llmobs` struct; the full LLMObs span event is
+   * only used for direct writer submission and fallback rescue.
+   *
+   * @param {object} event
+   * @param {Record<string, unknown>} mlObsTags
+   * @param {string} mode
+   * @returns {object}
+   */
+  #formatMetaStruct (event, mlObsTags, mode) {
+    const dd = {}
+    if (mlObsTags[SAMPLE_RATE] !== undefined) dd.sample_rate = mlObsTags[SAMPLE_RATE]
+    if (mlObsTags[SAMPLING_DECISION] !== undefined) dd.sampling_decision = mlObsTags[SAMPLING_DECISION]
+
+    const metaStruct = {
+      trace_id: event.trace_id,
+      meta: this.#formatMetaStructMeta(event.meta),
+      metrics: event.metrics,
+      tags: this.#formatMetaStructTags(this.#getTagsObject(event.tags), mode),
+      _dd: dd,
+    }
+
+    if (event.parent_id !== undefined) metaStruct.parent_id = event.parent_id
+    if (event.name !== undefined) metaStruct.name = event.name
+    if (mlObsTags[ML_APP]) metaStruct.ml_app = mlObsTags[ML_APP]
+    if (event.session_id) metaStruct.session_id = event.session_id
+
+    return metaStruct
+  }
+
+  /**
+   * Converts the JS writer event meta shape to the LLMObs meta_struct shape.
+   *
+   * @param {object} eventMeta
+   * @returns {object}
+   */
+  #formatMetaStructMeta (eventMeta) {
+    const meta = {}
+
+    for (const [key, value] of Object.entries(eventMeta)) {
+      if (key === 'span.kind') {
+        meta.span = { kind: value }
+      } else if (key === ERROR_MESSAGE) {
+        this.#getMetaStructError(meta).message = value
+      } else if (key === ERROR_TYPE) {
+        this.#getMetaStructError(meta).type = value
+      } else if (key === ERROR_STACK) {
+        this.#getMetaStructError(meta).stack = value
+      } else {
+        meta[key] = value
+      }
+    }
+
+    return meta
+  }
+
+  /**
+   * Returns `meta.error`, initializing it once.
+   *
+   * @param {object} meta
+   * @returns {object}
+   */
+  #getMetaStructError (meta) {
+    if (!meta.error) meta.error = {}
+    return meta.error
+  }
+
+  /**
+   * Converts writer tags back to the Python meta_struct tag map.
+   *
+   * @param {string[]} tags
+   * @returns {Record<string, string>}
+   */
+  #getTagsObject (tags) {
+    const tagsObject = {}
+
+    for (const tag of tags) {
+      const separator = tag.indexOf(':')
+      if (separator === -1) continue
+      tagsObject[tag.slice(0, separator)] = tag.slice(separator + 1)
+    }
+
+    return tagsObject
+  }
+
+  /**
+   * Normalizes tag keys for the APM agentless intake.
+   *
+   * @param {Record<string, string>} tags
+   * @param {string} mode
+   * @returns {Record<string, string>}
+   */
+  #formatMetaStructTags (tags, mode) {
+    if (mode !== LLMObsExportMode.APM_AGENTLESS) return tags
+
+    const normalizedTags = {}
+    for (const [key, value] of Object.entries(tags)) {
+      normalizedTags[key.replaceAll('.', '_')] = value
+    }
+    return normalizedTags
+  }
+
+  /**
+   * Returns the export mode for this span. Per-span LLMObs routing requires
+   * the direct writer because an APM trace cannot carry an alternate API key.
+   *
+   * @param {{ apiKey: string | undefined, site: string | undefined }} routing
+   * @returns {string}
+   */
+  #getSpanExportMode (routing) {
+    if (routing.apiKey) return getLLMObsWriterExportMode(this.#config, this.#writer)
+
+    return getLLMObsExportMode(this.#config, this.#writer)
   }
 
   format (span) {

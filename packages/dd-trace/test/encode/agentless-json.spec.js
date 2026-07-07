@@ -119,7 +119,7 @@ describe('AgentlessJSONEncoder', () => {
       assert.strictEqual(span.meta['_dd.p.tid'], undefined)
     })
 
-    it('should include span fields with start time converted to seconds', () => {
+    it('should include span fields with start time in nanoseconds', () => {
       encoder.encode(data)
 
       const buffer = encoder.makePayload()
@@ -132,7 +132,7 @@ describe('AgentlessJSONEncoder', () => {
         service: 'test-service',
         type: 'web',
         error: 0,
-        start: 1234567890,
+        start: 1234567890000000000,
         duration: 5000000,
       })
       assert.deepStrictEqual(span.meta, { foo: 'bar', '_dd.compute_stats': '1' })

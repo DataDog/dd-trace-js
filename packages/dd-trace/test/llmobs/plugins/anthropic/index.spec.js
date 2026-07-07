@@ -75,7 +75,7 @@ describe('Plugin', () => {
         const apmMeta = apmSpans[0].meta
         assert.match(apmMeta.llmobs_trace_id, /^[0-9a-f]{32}$/)
         assert.ok(apmMeta.llmobs_parent_id)
-        assert.strictEqual(apmMeta['_dd.llmobs.submitted'], '1')
+        assert.strictEqual(apmMeta['_dd.llmobs.submitted'], undefined)
       })
 
       it('sets model_provider to unknown for unrecognized base URLs', async () => {

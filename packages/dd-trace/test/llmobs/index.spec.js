@@ -15,6 +15,7 @@ const { getConfigFresh } = require('../helpers/config')
 const { removeDestroyHandler } = require('./util')
 
 const spanFinishCh = channel('dd-trace:span:finish')
+const traceSampledCh = channel('dd-trace:trace:sampled')
 const evalMetricAppendCh = channel('llmobs:eval-metric:append')
 const flushCh = channel('llmobs:writers:flush')
 const injectCh = channel('dd-trace:span:inject')
@@ -26,7 +27,10 @@ describe('module', () => {
 
   let LLMObsSpanWriterSpy
   let LLMObsEvalMetricsWriterSpy
+  let LLMObsSpanProcessorSpy
+  let llmobsSpanProcessor
   let fetchAgentInfoStub
+  let tracer
 
   /** @type {import('sinon').SinonStub} */
   let startupLogStub
@@ -46,11 +50,23 @@ describe('module', () => {
       setAgentless: sinon.stub(),
     })
 
+    llmobsSpanProcessor = {
+      process: sinon.stub(),
+      processSampledTrace: sinon.stub(),
+      setUserSpanProcessor: sinon.stub(),
+      setWriter: sinon.stub(),
+    }
+    LLMObsSpanProcessorSpy = sinon.stub().returns(llmobsSpanProcessor)
+
     fetchAgentInfoStub = sinon.stub()
+    tracer = {
+      configureExporter: sinon.stub(),
+    }
 
     const llmobsModuleProxyRequireMeta = {
       './writers/spans': LLMObsSpanWriterSpy,
       './writers/evaluations': LLMObsEvalMetricsWriterSpy,
+      './span_processor': LLMObsSpanProcessorSpy,
       '../log': logger,
       './storage': {
         storage: {
@@ -236,6 +252,27 @@ describe('module', () => {
 
         sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, true)
         sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, true)
+        sinon.assert.calledWith(
+          logger.debug,
+          '[LLMObs] Using %s writer transport for span and evaluation events',
+          'agentless/direct intake'
+        )
+      })
+
+      it('configures APM agentless export when APM tracing is enabled', () => {
+        const config = getConfigFresh({
+          llmobs: {
+            agentlessEnabled: true,
+          },
+        })
+        tracer.configureExporter.returns(true)
+
+        llmobsModule.enable(config, tracer)
+
+        assert.strictEqual(config.experimental.exporter, 'agentless')
+        assert.strictEqual(config.getOrigin('experimental.exporter'), 'calculated')
+        sinon.assert.calledWith(tracer.configureExporter, config, 'agentless')
+        sinon.assert.calledWith(logger.debug, '[LLMObs] Swapped APM trace exporter to agentless intake')
       })
     })
   })
@@ -250,6 +287,11 @@ describe('module', () => {
 
       sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, false)
       sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, false)
+      sinon.assert.calledWith(
+        logger.debug,
+        '[LLMObs] Using %s writer transport for span and evaluation events',
+        'Agent EVP proxy'
+      )
     })
   })
 
@@ -292,12 +334,23 @@ describe('module', () => {
           sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, true)
           sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, true)
         })
+
+        it('configures APM agentless export when APM tracing is enabled', () => {
+          const config = getConfigFresh()
+          config.DD_API_KEY = 'test'
+          config.site = 'datadoghq.com'
+
+          llmobsModule.enable(config, tracer)
+
+          assert.notStrictEqual(config.experimental.exporter, 'agentless')
+          sinon.assert.calledWith(tracer.configureExporter, config, 'agentless')
+        })
       })
 
       describe('when the agent has the correct proxy endpoint', () => {
         beforeEach(() => {
           fetchAgentInfoStub.callsFake((url, cb) => {
-            cb(null, { endpoints: ['/evp_proxy/v2/'] })
+            cb(null, { endpoints: ['/evp_proxy/v2'] })
           })
         })
 
@@ -306,6 +359,18 @@ describe('module', () => {
 
           sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, false)
           sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, false)
+        })
+
+        it('resolves the deferred APM exporter to the Agent exporter', () => {
+          const config = getConfigFresh({
+            llmobs: {
+              mlApp: 'test',
+            },
+          })
+
+          llmobsModule.enable(config, tracer)
+
+          sinon.assert.calledWith(tracer.configureExporter, config, 'agent')
         })
       })
     })
@@ -340,6 +405,17 @@ describe('module', () => {
           sinon.assert.calledWith(LLMObsSpanWriterSpy().setAgentless, true)
           sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().setAgentless, true)
         })
+
+        it('configures APM agentless export when APM tracing is enabled', () => {
+          const config = getConfigFresh()
+          config.DD_API_KEY = 'test'
+          config.site = 'datadoghq.com'
+
+          llmobsModule.enable(config, tracer)
+
+          assert.notStrictEqual(config.experimental.exporter, 'agentless')
+          sinon.assert.calledWith(tracer.configureExporter, config, 'agentless')
+        })
       })
     })
   })
@@ -354,6 +430,15 @@ describe('module', () => {
     sinon.assert.calledWith(LLMObsEvalMetricsWriterSpy().append, payload, undefined)
   })
 
+  it('processes sampled trace chunks through the LLMObs span processor', () => {
+    llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
+    const spans = [{ name: 'root' }]
+
+    traceSampledCh.publish({ spans })
+
+    sinon.assert.calledOnceWithExactly(llmobsSpanProcessor.processSampledTrace, spans)
+  })
+
   it('removes all subscribers when disabling', () => {
     llmobsModule.enable({ llmobs: { mlApp: 'test', agentlessEnabled: false } })
 
@@ -362,6 +447,7 @@ describe('module', () => {
     assert.strictEqual(injectCh.hasSubscribers, false)
     assert.strictEqual(evalMetricAppendCh.hasSubscribers, false)
     assert.strictEqual(spanFinishCh.hasSubscribers, false)
+    assert.strictEqual(traceSampledCh.hasSubscribers, false)
     assert.strictEqual(flushCh.hasSubscribers, false)
   })
 })

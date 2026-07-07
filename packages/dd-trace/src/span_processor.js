@@ -1,11 +1,15 @@
 'use strict'
 
+const { channel } = require('dc-polyfill')
+
 const log = require('./log')
 const spanFormat = require('./span_format')
 const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
 const processTags = require('./process-tags')
 const { applyHttpOtelSemantics } = require('./plugins/util/http-otel-semantics')
+
+const traceSampledCh = channel('dd-trace:trace:sampled')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
@@ -36,6 +40,13 @@ class SpanProcessor {
     this._spanSampler.sample(spanContext)
   }
 
+  /**
+   * @param {object} exporter
+   */
+  setExporter (exporter) {
+    this._exporter = exporter
+  }
+
   process (span) {
     const spanContext = span.context()
     const active = []
@@ -51,6 +62,7 @@ class SpanProcessor {
     }
     if (started.length === finished.length || finished.length >= flushMinSpans) {
       this.sample(span)
+      traceSampledCh.publish({ spans: started })
       this._gitMetadataTagger.tagGitMetadata(spanContext)
 
       let isFirstSpanInChunk = true

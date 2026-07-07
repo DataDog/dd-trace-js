@@ -1,5 +1,6 @@
 'use strict'
 
+const { SPAN_TYPE } = require('../../../../ext/tags')
 const log = require('../log')
 const Sampler = require('../sampler')
 const { formatKnuthRate } = require('../util')
@@ -123,6 +124,7 @@ class LLMObsTagger {
     }
 
     this._register(span)
+    span.setTag?.(SPAN_TYPE, 'llm')
 
     // When the registering span sits below an OTel `gen_ai.*` ancestor, use
     // that ancestor as the parent_id fallback and suppress the bridge

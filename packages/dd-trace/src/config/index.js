@@ -4,10 +4,11 @@ const fs = require('node:fs')
 const os = require('node:os')
 const { URL, format } = require('node:url')
 
+const exporters = require('../../../../ext/exporters')
 const rfdc = require('../../../../vendor/dist/rfdc')({ proto: false, circles: false })
 const uuid = require('../../../../vendor/dist/crypto-randomuuid') // we need to keep the old uuid dep because of cypress
-const set = require('../../../datadog-core/src/utils/src/set')
 const { DD_MAJOR, NODE_MAJOR } = require('../../../../version')
+const set = require('../../../datadog-core/src/utils/src/set')
 const log = require('../log')
 const pkg = require('../pkg')
 const { isTrue } = require('../util')
@@ -567,8 +568,15 @@ class Config extends ConfigBase {
     // Experimental agentless APM span intake
     // When enabled, sends spans directly to Datadog intake without an agent
     // TODO: Replace this with a proper configuration
-    const agentlessEnabled = isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED'))
-    if (agentlessEnabled) {
+    const llmobsApmTracingEnabled = this.llmobs.DD_LLMOBS_ENABLED &&
+      this.DD_TRACE_ENABLED !== false &&
+      this.apmTracingEnabled !== false &&
+      this.OTEL_TRACES_EXPORTER !== 'otlp'
+    const apmAgentlessEnabled = isTrue(getEnvironmentVariable('_DD_APM_TRACING_AGENTLESS_ENABLED')) ||
+      (llmobsApmTracingEnabled &&
+        this.llmobs.agentlessEnabled === true &&
+        !trackedConfigOrigins.has('experimental.exporter'))
+    if (apmAgentlessEnabled) {
       setAndTrack(this, 'experimental.exporter', 'agentless')
       // Disable client-side stats computation
       setAndTrack(this, 'stats.DD_TRACE_STATS_COMPUTATION_ENABLED', false)
@@ -581,6 +589,43 @@ class Config extends ConfigBase {
       // Agentless intake only accepts 64-bit trace IDs; disable 128-bit generation
       if (!trackedConfigOrigins.has('traceId128BitGenerationEnabled')) {
         setAndTrack(this, 'traceId128BitGenerationEnabled', false)
+      }
+    } else if (llmobsApmTracingEnabled &&
+        this.llmobs.agentlessEnabled == null &&
+        !trackedConfigOrigins.has('experimental.exporter') &&
+        (this.experimental?.exporter === undefined ||
+        this.experimental?.exporter === '' ||
+        this.experimental?.exporter === exporters.AGENT)) {
+      setAndTrack(this, 'experimental.exporter', exporters.DEFERRED)
+    }
+
+    if (this.llmobs.DD_LLMOBS_ENABLED &&
+        this.DD_TRACE_ENABLED !== false &&
+        this.apmTracingEnabled !== false &&
+        this.OTEL_TRACES_EXPORTER !== 'otlp' &&
+        (this.experimental?.exporter === exporters.DEFERRED ||
+        this.experimental?.exporter === undefined ||
+        this.experimental?.exporter === '' ||
+        this.experimental?.exporter === exporters.AGENT) &&
+        this.protocolVersion === '0.5') {
+      const protocolVersionOrigin = trackedConfigOrigins.get('protocolVersion')
+      if (protocolVersionOrigin === 'code') {
+        log.warn(
+          // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+          'DD_TRACE_AGENT_PROTOCOL_VERSION=v0.5 is ' +
+          'incompatible with LLM Observability agent-based export; ' +
+          'meta_struct payloads may not be sent.'
+        )
+      } else {
+        if (trackedConfigOrigins.has('protocolVersion')) {
+          log.warn(
+            // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+            'DD_TRACE_AGENT_PROTOCOL_VERSION=v0.5 is ' +
+            'incompatible with LLM Observability agent-based export; ' +
+            'using v0.4 so meta_struct payloads can be sent.'
+          )
+        }
+        setAndTrack(this, 'protocolVersion', '0.4')
       }
     }
 

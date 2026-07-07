@@ -25,6 +25,7 @@ describe('Exporter', () => {
     span = {}
     writer = {
       append: sinon.spy(),
+      drain: sinon.stub().returns(undefined),
       flush: sinon.spy(),
       setUrl: sinon.spy(),
     }
@@ -63,6 +64,11 @@ describe('Exporter', () => {
     const url = new URL('http://[::1]:8126/')
     exporter = new Exporter({ url, flushInterval, stats }, prioritySampler)
     sinon.assert.calledWithMatch(Writer, { url })
+  })
+
+  it('should track pending payloads', () => {
+    exporter = new Exporter({ url, flushInterval }, prioritySampler)
+    sinon.assert.calledWithMatch(Writer, { trackPayloads: true })
   })
 
   describe('when interval is set to a positive number', () => {
@@ -122,6 +128,40 @@ describe('Exporter', () => {
       const url = new URL('http://example2.com')
       assert.deepStrictEqual(exporter._url, url)
       sinon.assert.calledWith(writer.setUrl, url)
+    })
+  })
+
+  describe('transferPendingTo', () => {
+    beforeEach(() => {
+      exporter = new Exporter({ url, flushInterval, llmobs: { DD_LLMOBS_ENABLED: true } }, prioritySampler)
+    })
+
+    it('should move pending traces to the replacement exporter', () => {
+      const pending = [
+        [{ name: 'first' }],
+        [{ name: 'second' }],
+      ]
+      const nextExporter = {
+        export: sinon.spy(),
+      }
+
+      writer.drain.returns(pending)
+
+      assert.strictEqual(exporter.transferPendingTo(nextExporter), true)
+      assert.deepStrictEqual(nextExporter.export.getCall(0).args[0], pending[0])
+      assert.deepStrictEqual(nextExporter.export.getCall(1).args[0], pending[1])
+      sinon.assert.notCalled(writer.flush)
+    })
+
+    it('should return false when pending trace tracking is disabled', () => {
+      const nextExporter = {
+        export: sinon.spy(),
+      }
+
+      writer.drain.returns(undefined)
+
+      assert.strictEqual(exporter.transferPendingTo(nextExporter), false)
+      sinon.assert.notCalled(nextExporter.export)
     })
   })
 })
