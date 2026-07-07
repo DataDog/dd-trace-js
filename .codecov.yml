@@ -27,3 +27,6 @@ coverage:
         only_pulls: true
         flags:
           - master-coverage
+
+ignore:
+  - "benchmark/sirun/**"

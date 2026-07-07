@@ -225,6 +225,33 @@ jobs:
         with:
           id: ${{ github.job }}
 
+  claude-agent-sdk:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    env:
+      PLUGINS: claude-agent-sdk
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: ./.github/actions/testagent/start
+      # The SDK is ESM-only. Tests use dynamic import() to load it.
+      - uses: ./.github/actions/node/active-lts
+      - uses: ./.github/actions/install
+      - run: yarn test:plugins:ci
+      - run: yarn test:llmobs:plugins:ci
+        shell: bash
+      - uses: ./.github/actions/coverage
+        with:
+          flags: llmobs-${{ github.job }}
+      - if: always()
+        uses: ./.github/actions/testagent/logs
+        with:
+          suffix: llmobs-${{ github.job }}
+      - uses: ./.github/actions/upload-junit-artifacts
+        if: "!cancelled()"
+        with:
+          id: ${{ github.job }}
+
   google-genai:
     runs-on: ubuntu-latest
     permissions:
