@@ -38,7 +38,7 @@ describe('test optimization validation command runner', () => {
     assert.strictEqual(env.DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED, 'false')
     assert.strictEqual(env.DD_INSTRUMENTATION_TELEMETRY_ENABLED, 'false')
     assert.strictEqual(env.DD_TEST_FAILED_TEST_REPLAY_ENABLED, 'false')
-    assert.match(env.NODE_OPTIONS, /\/ci\/init\.js/)
+    assert.match(env.NODE_OPTIONS, /[\\/]ci[\\/]init\.js/)
   })
 
   it('disables unrelated Datadog side channels during CI wiring replay', () => {
@@ -109,8 +109,9 @@ describe('test optimization validation command runner', () => {
       await runCommand({
         cwd: outDir,
         usesShell: true,
-        shellCommand: `DD_API_KEY=command-secret ${process.execPath} ` +
-          '-e "console.log(\'DD_API_KEY=stdout-secret\'); console.error(\'Authorization: Bearer stderr-secret\')"',
+        shellCommand: `${JSON.stringify(process.execPath)} ` +
+          '-e "console.log(\'DD_API_KEY=stdout-secret\'); console.error(\'Authorization: Bearer stderr-secret\')" ' +
+          '-- DD_API_KEY=command-secret --token command-token',
         displayCommand: 'DD_API_KEY=display-secret node --token display-token test',
         timeoutMs: 1000,
       }, {
@@ -119,6 +120,7 @@ describe('test optimization validation command runner', () => {
 
       const commandArtifact = fs.readFileSync(path.join(outDir, 'command.json'), 'utf8')
       assert.doesNotMatch(commandArtifact, /command-secret/)
+      assert.doesNotMatch(commandArtifact, /command-token/)
       assert.doesNotMatch(commandArtifact, /display-secret/)
       assert.doesNotMatch(commandArtifact, /display-token/)
       assert.match(commandArtifact, /DD_API_KEY=<redacted>/)

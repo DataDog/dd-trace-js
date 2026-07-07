@@ -1,6 +1,7 @@
 'use strict'
 
 const fs = require('fs')
+const path = require('path')
 
 const { buildCiCommandCandidate } = require('./ci-command-candidate')
 const {
@@ -317,7 +318,7 @@ function readResultCommand (result) {
 }
 
 function readResultCommandInfo (result) {
-  const commandArtifact = (result.artifacts || []).find(artifact => artifact.endsWith('/command.json'))
+  const commandArtifact = (result.artifacts || []).find(artifact => path.basename(artifact) === 'command.json')
   if (!commandArtifact) return {}
 
   try {

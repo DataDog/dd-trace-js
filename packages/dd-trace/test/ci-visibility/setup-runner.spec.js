@@ -40,8 +40,8 @@ describe('test optimization validation setup runner', () => {
     assert.match(setup.failure.diagnosis, /Required setup command failed/)
     assert.strictEqual(setup.failure.evidence.setupCommand.exitCode, 2)
     assert.match(setup.failure.evidence.setupCommand.stderrSummary, /missing build artifact/)
-    assert.ok(setup.artifacts.some(artifact => artifact.endsWith('/command.json')))
-    assert.ok(setup.failure.artifacts.some(artifact => artifact.endsWith('/command.json')))
+    assert.ok(setup.artifacts.some(artifact => path.basename(artifact) === 'command.json'))
+    assert.ok(setup.failure.artifacts.some(artifact => path.basename(artifact) === 'command.json'))
 
     fs.rmSync(out, { recursive: true, force: true })
   })

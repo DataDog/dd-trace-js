@@ -286,7 +286,8 @@ function parseArgv (argv) {
 }
 
 function isEnvExecutable (value) {
-  return value === 'env' || value.endsWith('/env')
+  const name = getExecutableName(value)
+  return name === 'env' || name === 'env.exe'
 }
 
 function isEnvAssignment (value) {
@@ -294,11 +295,17 @@ function isEnvAssignment (value) {
 }
 
 function isNodeExecutable (value = '') {
-  return value === 'node' || value.endsWith('/node')
+  const name = getExecutableName(value)
+  return name === 'node' || name === 'node.exe'
 }
 
 function isCorepackScript (value = '') {
-  return value === 'corepack' || value.endsWith('/corepack') || value.endsWith('/corepack.js')
+  const name = getExecutableName(value)
+  return name === 'corepack' || name === 'corepack.exe' || name === 'corepack.js'
+}
+
+function getExecutableName (value = '') {
+  return String(value).split(/[\\/]/).pop().toLowerCase()
 }
 
 module.exports = {
