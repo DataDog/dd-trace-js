@@ -260,6 +260,32 @@ function getGenerationMetadata (tags) {
 }
 
 /**
+ * Get the generation metadata from the span tags (maxSteps, maxRetries, etc.)
+ * Additionally, set telemetry metadata from manual telemetry tags.
+ * @param {Record<string, unknown>} event
+ * @returns {Record<string, unknown> | null}
+ */
+function getGenerationMetadataFromEvent (event) {
+  /** @type {Record<string, unknown>} */
+  const metadata = {}
+
+  for (const [key, value] of Object.entries(event)) {
+    const transformedKey = key.replaceAll(/[A-Z]/g, letter => '_' + letter.toLowerCase())
+    if (!MODEL_METADATA_KEYS.has(transformedKey)) {
+      if (key === 'runtimeContext') { // custom telemetry metadata
+        Object.assign(metadata, value)
+      }
+
+      continue
+    }
+
+    metadata[transformedKey] = value
+  }
+
+  return Object.keys(metadata).length ? metadata : null
+}
+
+/**
  * Get the tool name from the span tags.
  * If the tool name is a parsable number, or is not found, null is returned.
  * Older versions of the ai sdk would tag the tool name as its index in the tools array.
@@ -348,4 +374,5 @@ module.exports = {
   getToolCallResultContent,
   getLlmObsSpanName,
   getTelemetryMetadata,
+  getGenerationMetadataFromEvent,
 }
