@@ -3,8 +3,7 @@
 **Required default for new instrumentations when a source function can be
 matched.** Orchestrion rewrites a library at load time (CJS + ESM) and injects
 `diagnostics_channel` publishes into the matched function. Prefer it for static
-source hooks, ESM support, and avoiding runtime monkey-patching; use shimmer
-only when the work exists only as a runtime value.
+source hooks, ESM support, and avoiding runtime monkey-patching.
 
 Engine: `@apm-js-collab/code-transformer` (mirror of
 [nodejs/orchestrion-js](https://github.com/nodejs/orchestrion-js)), vendored at
@@ -33,8 +32,11 @@ idle methods, inspect the generated transform or microbench the path before
 claiming a perf win.
 
 Reach for shimmer only when no source node can be matched (for example, a method
-constructed entirely at runtime) or the instrumentation must mutate arguments
-before the original function is invoked. Leave a code comment naming that reason.
+constructed entirely at runtime) or when arguments must be changed before
+Orchestrion's `bindStart` / subscribers can run. Mutating `ctx.arguments` from
+`bindStart` is applied before the wrapped function runs; the GraphQL abort
+pattern below depends on that. When shimmer is still necessary, leave a code
+comment naming the reason.
 
 ## Required Files
 

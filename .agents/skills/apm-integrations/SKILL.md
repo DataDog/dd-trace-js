@@ -36,7 +36,7 @@ Both layers are always needed for a new integration.
 
 ## Instrumentation: Orchestrion First
 
-**Orchestrion is the required default when the work exists as a source function.** It rewrites matched CJS/ESM source from JSON config, avoiding runtime monkey-patching and ESM's static-binding traps. Start there for top-level declarations, class/object methods, named expressions, and assignments to named receivers; use shimmer only when the work is created entirely at runtime or arguments must be mutated before the original call.
+**Orchestrion is the required default when the work exists as a source function.** It rewrites matched CJS/ESM source from JSON config, avoiding runtime monkey-patching and ESM's static-binding traps. Start there for top-level declarations, class/object methods, named expressions, and assignments to named receivers. Use shimmer only when the work is created entirely at runtime or the argument mutation cannot happen from Orchestrion's `bindStart` / subscriber lifecycle.
 
 Config lives in `packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/<name>.js`. See [Orchestrion Reference](references/orchestrion.md) for the full config format and examples.
 
@@ -46,7 +46,7 @@ Shimmer (`addHook` + `shimmer.wrap`) should **only** be used when orchestrion ca
 
 - **Dynamic method interception** — methods created at runtime or on prototype chains that orchestrion's static analysis cannot reach
 - **Factory patterns** — wrapping return values of factory functions
-- **Argument modification** — instrumentations that need to mutate arguments before the original call
+- **Pre-lifecycle argument modification** — arguments must be changed before Orchestrion's `bindStart` / subscribers can run
 
 If none of these apply, use orchestrion. For shimmer patterns, refer to existing shimmer-based instrumentations in the codebase (e.g., `packages/datadog-instrumentations/src/pg.js`). Always try to use Orchestrion when beginning a new integration!
 
