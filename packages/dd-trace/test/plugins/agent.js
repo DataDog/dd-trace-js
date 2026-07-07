@@ -12,6 +12,7 @@ const semifies = require('semifies')
 
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 const { storage } = require('../../../datadog-core')
+const spanLeakDetector = require('./span-leak-detector')
 
 // Modules that close over the previous `Config` / `TracerProxy` singletons.
 // Evicted whenever `agent.load`'s gate decides the tracer must rebuild.
@@ -428,6 +429,10 @@ module.exports = {
 
     currentIntegrationName = getCurrentIntegrationName()
 
+    // Track finished spans for the retention assertion in `close()`. Idempotent
+    // and inert without `--expose-gc`, so it is safe to arm on every load.
+    spanLeakDetector.arm()
+
     const tracerConfigJson = JSON.stringify(tracerConfig)
     if (
       !loaded ||
@@ -736,12 +741,17 @@ module.exports = {
 
     tracer.llmobs.disable()
 
-    return /** @type {Promise<void>} */ (new Promise(resolve => {
+    return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
       this.server.on('close', () => {
         this.server = null
         this.port = null
 
-        resolve()
+        // Expectation callbacks (which can hold spans) were cleared above and
+        // the server is closed, so no legitimate reference to a finished span
+        // remains beyond the last trace's root (see the detector). Assert
+        // retention did not grow with the request count, then resolve. A leak
+        // rejects `close()`, surfacing as a suite teardown failure.
+        spanLeakDetector.assertNoRetainedSpans().then(resolve, reject)
       })
     }))
   },
