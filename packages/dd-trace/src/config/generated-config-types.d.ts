@@ -421,6 +421,7 @@ export interface GeneratedConfig {
     exporter: string;
     flaggingProvider: {
       enabled: boolean;
+      evaluationCountsEnabled: boolean;
       initializationTimeoutMs: number;
       spanEnrichment: {
         enabled: boolean;
@@ -681,6 +682,7 @@ export interface GeneratedEnvVarConfig {
   DD_EXPERIMENTAL_TEST_OPT_VITEST_NO_WORKER_INIT: boolean | undefined;
   DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE: boolean;
   DD_EXTERNAL_ENV: string | undefined;
+  DD_FLAGGING_EVALUATION_COUNTS_ENABLED: boolean;
   DD_GIT_BRANCH: string | undefined;
   DD_GIT_COMMIT_AUTHOR_DATE: string | undefined;
   DD_GIT_COMMIT_AUTHOR_EMAIL: string | undefined;

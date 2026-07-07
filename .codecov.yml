@@ -16,3 +16,6 @@ coverage:
         only_pulls: true
         flags:
           - master-coverage
+
+ignore:
+  - "packages/dd-trace/test/openfeature/**"

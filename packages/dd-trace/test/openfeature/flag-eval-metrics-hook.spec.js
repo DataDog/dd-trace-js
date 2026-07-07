@@ -9,8 +9,8 @@ const proxyquire = require('proxyquire')
 
 require('../setup/core')
 
-describe('EvalMetricsHook', () => {
-  let EvalMetricsHook
+describe('FlagEvalMetricsHook', () => {
+  let FlagEvalMetricsHook
   let mockCounter
   let mockMeter
   let mockOtelApi
@@ -36,7 +36,7 @@ describe('EvalMetricsHook', () => {
       debug: sinon.spy(),
     }
 
-    EvalMetricsHook = proxyquire('../../src/openfeature/eval-metrics-hook', {
+    FlagEvalMetricsHook = proxyquire('../../src/openfeature/flag-eval-metrics-hook', {
       '@opentelemetry/api': mockOtelApi,
       '../log': log,
     })
@@ -56,7 +56,7 @@ describe('EvalMetricsHook', () => {
 
   describe('finally()', () => {
     it('should be a no-op when disabled', () => {
-      const metrics = new EvalMetricsHook(makeConfig(false))
+      const metrics = new FlagEvalMetricsHook(makeConfig(false))
       metrics.finally(hookContext(), evalDetails())
 
       sinon.assert.notCalled(mockCounter.add)
@@ -64,7 +64,7 @@ describe('EvalMetricsHook', () => {
     })
 
     it('should create counter lazily on first call', () => {
-      const metrics = new EvalMetricsHook(makeConfig(true))
+      const metrics = new FlagEvalMetricsHook(makeConfig(true))
       sinon.assert.notCalled(mockOtelApi.metrics.getMeter)
 
       metrics.finally(hookContext('my-flag'), evalDetails())
@@ -77,7 +77,7 @@ describe('EvalMetricsHook', () => {
     })
 
     it('should cache the counter after first call', () => {
-      const metrics = new EvalMetricsHook(makeConfig(true))
+      const metrics = new FlagEvalMetricsHook(makeConfig(true))
       metrics.finally(hookContext(), evalDetails())
       metrics.finally(hookContext(), evalDetails())
 
@@ -85,7 +85,7 @@ describe('EvalMetricsHook', () => {
     })
 
     it('should add counter with basic attributes', () => {
-      const metrics = new EvalMetricsHook(makeConfig(true))
+      const metrics = new FlagEvalMetricsHook(makeConfig(true))
       metrics.finally(hookContext('my-flag'), evalDetails())
 
       sinon.assert.calledOnce(mockCounter.add)
@@ -99,7 +99,7 @@ describe('EvalMetricsHook', () => {
     })
 
     it('should lowercase the reason', () => {
-      const metrics = new EvalMetricsHook(makeConfig(true))
+      const metrics = new FlagEvalMetricsHook(makeConfig(true))
       metrics.finally(hookContext(), evalDetails({ reason: 'DEFAULT' }))
 
       const [, attributes] = mockCounter.add.firstCall.args
@@ -107,7 +107,7 @@ describe('EvalMetricsHook', () => {
     })
 
     it('should use empty string for variant when variant is undefined', () => {
-      const metrics = new EvalMetricsHook(makeConfig(true))
+      const metrics = new FlagEvalMetricsHook(makeConfig(true))
       metrics.finally(hookContext(), evalDetails({ variant: undefined }))
 
       const [, attributes] = mockCounter.add.firstCall.args
@@ -115,7 +115,7 @@ describe('EvalMetricsHook', () => {
     })
 
     it('should include error.type when errorCode is set', () => {
-      const metrics = new EvalMetricsHook(makeConfig(true))
+      const metrics = new FlagEvalMetricsHook(makeConfig(true))
       metrics.finally(
         hookContext('flag'),
         evalDetails({ variant: undefined, reason: 'ERROR', errorCode: 'TYPE_MISMATCH' })
@@ -131,7 +131,7 @@ describe('EvalMetricsHook', () => {
     })
 
     it('should lowercase errorCode in error.type', () => {
-      const metrics = new EvalMetricsHook(makeConfig(true))
+      const metrics = new FlagEvalMetricsHook(makeConfig(true))
       metrics.finally(hookContext(), evalDetails({ reason: 'ERROR', errorCode: 'FLAG_NOT_FOUND' }))
 
       const [, attributes] = mockCounter.add.firstCall.args
@@ -139,7 +139,7 @@ describe('EvalMetricsHook', () => {
     })
 
     it('should omit error.type when errorCode is falsy', () => {
-      const metrics = new EvalMetricsHook(makeConfig(true))
+      const metrics = new FlagEvalMetricsHook(makeConfig(true))
       metrics.finally(hookContext(), evalDetails())
 
       const [, attributes] = mockCounter.add.firstCall.args
@@ -147,7 +147,7 @@ describe('EvalMetricsHook', () => {
     })
 
     it('should include allocation_key when set', () => {
-      const metrics = new EvalMetricsHook(makeConfig(true))
+      const metrics = new FlagEvalMetricsHook(makeConfig(true))
       metrics.finally(
         hookContext('flag'),
         evalDetails({ flagMetadata: { allocationKey: 'default-allocation' } })
@@ -163,7 +163,7 @@ describe('EvalMetricsHook', () => {
     })
 
     it('should omit allocation_key when flagMetadata is absent', () => {
-      const metrics = new EvalMetricsHook(makeConfig(true))
+      const metrics = new FlagEvalMetricsHook(makeConfig(true))
       metrics.finally(hookContext(), evalDetails())
 
       const [, attributes] = mockCounter.add.firstCall.args
@@ -174,7 +174,7 @@ describe('EvalMetricsHook', () => {
     })
 
     it('should omit allocation_key when flagMetadata is empty', () => {
-      const metrics = new EvalMetricsHook(makeConfig(true))
+      const metrics = new FlagEvalMetricsHook(makeConfig(true))
       metrics.finally(hookContext(), evalDetails({ flagMetadata: {} }))
 
       const [, attributes] = mockCounter.add.firstCall.args
@@ -186,7 +186,7 @@ describe('EvalMetricsHook', () => {
 
     it('should skip when OTel api throws', () => {
       mockOtelApi.metrics.getMeter.throws(new Error('OTel not ready'))
-      const metrics = new EvalMetricsHook(makeConfig(true))
+      const metrics = new FlagEvalMetricsHook(makeConfig(true))
 
       metrics.finally(hookContext(), evalDetails())
 
@@ -201,7 +201,7 @@ describe('EvalMetricsHook', () => {
     })
 
     it('should handle null/undefined hookContext gracefully', () => {
-      const metrics = new EvalMetricsHook(makeConfig(true))
+      const metrics = new FlagEvalMetricsHook(makeConfig(true))
       metrics.finally(undefined, evalDetails())
       metrics.finally(null, evalDetails())
 
@@ -210,7 +210,7 @@ describe('EvalMetricsHook', () => {
     })
 
     it('should handle null/undefined evaluationDetails gracefully', () => {
-      const metrics = new EvalMetricsHook(makeConfig(true))
+      const metrics = new FlagEvalMetricsHook(makeConfig(true))
       metrics.finally(hookContext(), undefined)
       metrics.finally(hookContext(), null)
 
