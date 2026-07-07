@@ -447,14 +447,14 @@ class NativeSpansInterface {
               view.setUint32(idx, 0, true)
               view.setUint32(idx + 4, 0, true)
             } else {
-              const b = value._buffer ?? value
+              const b = typeof value.toBuffer === 'function' ? value.toBuffer() : (value._buffer ?? value)
               buf[idx] = b[7]; buf[idx + 1] = b[6]; buf[idx + 2] = b[5]; buf[idx + 3] = b[4]
               buf[idx + 4] = b[3]; buf[idx + 5] = b[2]; buf[idx + 6] = b[1]; buf[idx + 7] = b[0]
             }
             idx += 8
             break
           case 'id128': {
-            const b = value._buffer ?? value
+            const b = typeof value.toBuffer === 'function' ? value.toBuffer() : (value._buffer ?? value)
             if (b.length > 8) {
               buf[idx] = b[15]; buf[idx + 1] = b[14]; buf[idx + 2] = b[13]; buf[idx + 3] = b[12]
               buf[idx + 4] = b[11]; buf[idx + 5] = b[10]; buf[idx + 6] = b[9]; buf[idx + 7] = b[8]
@@ -568,7 +568,9 @@ class NativeSpansInterface {
     idx += 8
 
     // Args: [trace_id u128][segment_id u64][parent_id u64][name_id u32][start i64]
-    const tb = traceId._buffer ?? traceId
+    // `Identifier` keeps its bytes in a private field (v6 refactor); read via
+    // toBuffer(). Fall back to a raw buffer/Uint8Array for callers that pass one.
+    const tb = typeof traceId?.toBuffer === 'function' ? traceId.toBuffer() : (traceId._buffer ?? traceId)
     if (tb.length > 8) {
       buf[idx] = tb[15]; buf[idx + 1] = tb[14]; buf[idx + 2] = tb[13]; buf[idx + 3] = tb[12]
       buf[idx + 4] = tb[11]; buf[idx + 5] = tb[10]; buf[idx + 6] = tb[9]; buf[idx + 7] = tb[8]
@@ -592,7 +594,10 @@ class NativeSpansInterface {
     if (parentId === null || parentId === undefined) {
       view.setUint32(idx, 0, true); view.setUint32(idx + 4, 0, true)
     } else {
-      const pb = parentId._buffer ?? parentId
+      // `Identifier` keeps its bytes in a private field (v6 refactor); read via
+      // toBuffer() — `._buffer` is undefined, which previously zeroed parent_id
+      // and exported every child span as a root.
+      const pb = typeof parentId.toBuffer === 'function' ? parentId.toBuffer() : (parentId._buffer ?? parentId)
       buf[idx] = pb[7]; buf[idx + 1] = pb[6]; buf[idx + 2] = pb[5]; buf[idx + 3] = pb[4]
       buf[idx + 4] = pb[3]; buf[idx + 5] = pb[2]; buf[idx + 6] = pb[1]; buf[idx + 7] = pb[0]
     }
