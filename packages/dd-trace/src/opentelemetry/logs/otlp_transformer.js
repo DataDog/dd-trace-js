@@ -1,7 +1,11 @@
 'use strict'
 
-const { SeverityNumber } = require('../api').getApiLogs()
-const { trace } = require('../api').getApi()
+const { getApi, getApiLogs } = require('../api')
+
+// SeverityNumber is an OTel spec enum of fixed numeric constants, identical across every copy of
+// the API, so reading it at load time is safe. `trace` is read at use time because it resolves
+// span context keys, which are per-copy (issue #6882).
+const { SeverityNumber } = getApiLogs()
 
 const OtlpTransformerBase = require('../otlp/otlp_transformer_base')
 const { getProtobufTypes } = require('../otlp/protobuf_loader')
@@ -183,7 +187,7 @@ class OtlpTransformer extends OtlpTransformerBase {
   #extractSpanContext (logContext) {
     if (!logContext) return null
 
-    const activeSpan = trace.getSpan(logContext)
+    const activeSpan = getApi().trace.getSpan(logContext)
     if (activeSpan) {
       return activeSpan.spanContext()
     }
