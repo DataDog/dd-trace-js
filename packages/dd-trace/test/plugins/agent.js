@@ -741,6 +741,18 @@ module.exports = {
 
     tracer.llmobs.disable()
 
+    // Clear the async-context stores so the last request's `{ ...store, span }`
+    // frame stops pinning its finished span before the leak assertion runs. The
+    // global `afterEach` already does this between tests, but `close()` must not
+    // depend on a sibling hook having fired: a suite that finishes an op in an
+    // `after` hook (or calls `close()` outside the mocha lifecycle) would leave
+    // the last frame live and trip the detector on a benign, recency-bound span.
+    // `llmobs` is a separate store from `legacy`; both (and `baggage`) can hold a
+    // finished span, so reset all three.
+    storage('legacy').enterWith(undefined)
+    storage('baggage').enterWith(undefined)
+    storage('llmobs').enterWith(undefined)
+
     return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
       this.server.on('close', () => {
         this.server = null
