@@ -81,7 +81,7 @@ const web = {
     }
   },
 
-  setFramework (req, name, config, frameworkVersion) {
+  setFramework (req, name, config) {
     const context = this.patch(req)
     const span = context.span
 
@@ -90,9 +90,6 @@ const web = {
     span.context()._name = `${name}.request`
     span.context().setTag('component', name)
     span._integrationName = name
-
-    // Optional: record the framework's major version (e.g. for route-syntax dialect decisions).
-    if (frameworkVersion !== undefined) context.frameworkVersion = frameworkVersion
 
     web.setConfig(req, config)
   },

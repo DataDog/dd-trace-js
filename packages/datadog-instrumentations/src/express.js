@@ -17,15 +17,10 @@ const {
 const handleChannel = channel('apm:express:request:handle')
 const routeAddedChannel = channel('apm:express:route:added')
 
-// Major version of the most recently hooked express, used by consumers (e.g. AppSec route
-// normalization) that need the path-to-regexp dialect. A process loads one express major in
-// practice, so a module-level value is sufficient.
-let expressMajor
-
 function wrapHandle (handle) {
   return function handleWithTrace (...args) {
     if (handleChannel.hasSubscribers) {
-      handleChannel.publish({ req: args[0], expressMajor })
+      handleChannel.publish({ req: args[0] })
     }
 
     return Reflect.apply(handle, this, args)
@@ -152,8 +147,7 @@ function wrapAppUse (use) {
   }
 }
 
-addHook({ name: 'express', versions: ['>=4'], file: 'lib/express.js' }, (express, version) => {
-  expressMajor = Number.parseInt(version, 10) || undefined
+addHook({ name: 'express', versions: ['>=4'], file: 'lib/express.js' }, express => {
   shimmer.wrap(express.application, 'handle', wrapHandle)
   shimmer.wrap(express.application, 'all', wrapAppAll)
   shimmer.wrap(express.application, 'route', wrapAppRoute)

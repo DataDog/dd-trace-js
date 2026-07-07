@@ -51,7 +51,7 @@ const segmentRegexCache = new Map()
  * @typedef {{ type: 'slash', group: number }
  *   | { type: 'static', text: string, group: number }
  *   | { type: 'param', name: string, group: number }
- *   | { type: 'wildcard', name: string | null, group: number, zeroOrMore: boolean }} RouteToken
+ *   | { type: 'wildcard', name: string | null, group: number }} RouteToken
  *
  * `group` is the id of the innermost enclosing optional `{...}` group (0 = top-level, always
  * present). A slash token also carries the group of its enclosing braces.
@@ -101,7 +101,7 @@ function tokensToSegments (ptTokens) {
       } else if (token.type === 'param') {
         flat.push({ type: 'param', name: token.name, group })
       } else if (token.type === 'wildcard') {
-        flat.push({ type: 'wildcard', name: token.name ?? null, group, zeroOrMore: true })
+        flat.push({ type: 'wildcard', name: token.name ?? null, group })
       } else if (token.type === 'group') {
         nextGroupId++
         const groupId = nextGroupId
@@ -612,12 +612,8 @@ function matchSegmentHere (compiled, si, urlSegs, ui, present, params) {
       if (ui >= urlSegs.length) return false
       if (!getWildcardPrefixRegex(seg, wIdx).test(urlSegs[ui])) return false
     }
-    if (ui >= urlSegs.length) {
-      // Optional catch-all ({/*path}) matching zero segments → treat as absent (Express drops it).
-      if (wildcard.group !== 0) return false
-      // Required catch-all needs at least one segment.
-      if (!wildcard.zeroOrMore) return false
-    }
+    // Optional catch-all ({/*path}) matching zero segments → treat as absent (Express drops it).
+    if (ui >= urlSegs.length && wildcard.group !== 0) return false
     if (wildcard.group !== 0) present.add(wildcard.group)
     return matchSegments(compiled, si + 1, urlSegs, urlSegs.length, present, params)
   }
@@ -772,6 +768,4 @@ module.exports = {
   // exported for unit testing
   tokensToSegments,
   compileRoute,
-  renderRoute,
-  resolvePresenceFromUrl,
 }
