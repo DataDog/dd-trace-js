@@ -28,6 +28,8 @@ const {
   TEST_SUITE,
   TEST_CODE_OWNERS,
   TEST_NAME,
+  TEST_FAILURE_SCREENSHOT_UPLOADED,
+  TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
 } = require('../../packages/dd-trace/src/plugins/util/test')
 const { ERROR_MESSAGE, ERROR_TYPE, COMPONENT } = require('../../packages/dd-trace/src/constants')
 const { DD_MAJOR, NODE_MAJOR } = require('../../version')
@@ -284,6 +286,8 @@ moduleTypes.forEach(({
           )
           assert.ok(passTestEvent, 'passing cypress.test event exists')
           assert.ok(failTestEvent, 'failing cypress.test event exists')
+          assert.strictEqual(failTestEvent.content.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], undefined)
+          assert.strictEqual(failTestEvent.content.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
 
           const stepEvents = events.filter(event => event.type === 'span' && event.content.name === 'cypress.step')
           assert.ok(stepEvents.length > 0, 'cypress.step spans exist')
@@ -964,6 +968,8 @@ moduleTypes.forEach(({
                   .find(event => event.content.resource === 'cypress/e2e/basic-fail.js.basic fail suite can fail')
 
                 assert.ok(failedTest, `failed test event should be reported\n${testOutput}`)
+                assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], 'true')
+                assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], undefined)
                 const expectedTraceId = failedTest.content.trace_id.toString()
 
                 const screenshotPayload = mediaPayloads.find(({ media }) => media.contentType === 'image/png')
@@ -1095,6 +1101,8 @@ moduleTypes.forEach(({
 
                 assert.ok(failedTest, `the failed test should still be reported when media upload fails\n${testOutput}`)
                 assert.strictEqual(failedTest.content.meta[TEST_STATUS], 'fail')
+                assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR], 'true')
+                assert.strictEqual(failedTest.content.meta[TEST_FAILURE_SCREENSHOT_UPLOADED], undefined)
               }, { hardTimeout: 60000 })
             .catch((error) => {
               error.message += `\nCypress output:\n${getTestOutput()}`
