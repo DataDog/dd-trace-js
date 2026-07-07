@@ -2037,6 +2037,64 @@ describe('Plugin', () => {
         })
       })
 
+      describe('with configured error extensions', () => {
+        before(() => {
+          tracer = require('../../dd-trace')
+
+          return agent.load('graphql', { errorExtensions: ['code', 'extra'] })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          graphql = require(`../../../versions/graphql@${version}`).get()
+          buildSchema()
+        })
+
+        it('traces with the configured extensions resolved', () => {
+          const source = '{ hello(name: "world") }'
+
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
+
+            assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+          })
+
+          return Promise.all([assertion, graphql.graphql({ schema, source })])
+        })
+      })
+
+      describe('with invalid configuration', () => {
+        before(() => {
+          tracer = require('../../dd-trace')
+
+          return agent.load('graphql', { depth: 'all', variables: 5, errorExtensions: 'code' })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        beforeEach(() => {
+          graphql = require(`../../../versions/graphql@${version}`).get()
+          buildSchema()
+        })
+
+        it('falls back to defaults and still traces', () => {
+          const source = '{ hello(name: "world") }'
+
+          const assertion = agent.assertSomeTraces(traces => {
+            const spans = sort(traces[0])
+
+            assert.strictEqual(spans[0].name, expectedSchema.server.opName)
+          })
+
+          return Promise.all([assertion, graphql.graphql({ schema, source })])
+        })
+      })
+
       describe('with a depth of 0', () => {
         before(() => {
           tracer = require('../../dd-trace')
