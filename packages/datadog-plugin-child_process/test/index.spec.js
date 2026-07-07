@@ -479,19 +479,28 @@ describe('Child process plugin', () => {
     })
 
     it('should work with concurrent Bluebird promise calls', async () => {
-      const drained = []
+      const expectedCommands = new Set()
       for (let i = 0; i < 5; i++) {
-        drained.push(expectSomeSpan(agent, {
-          type: 'system',
-          name: 'command_execution',
-          error: 0,
-          meta: {
-            component: 'subprocess',
-            'cmd.exec': `["echo","concurrent-test-${i}"]`,
-            'cmd.exit_code': '0',
-          },
-        }))
+        expectedCommands.add(`["echo","concurrent-test-${i}"]`)
       }
+      const foundCommands = new Set()
+      const drained = agent.assertSomeTraces((traces) => {
+        for (const trace of traces) {
+          for (const span of trace) {
+            const command = span.meta?.['cmd.exec']
+
+            if (span.name !== 'command_execution' || !expectedCommands.has(command)) continue
+
+            assert.strictEqual(span.type, 'system')
+            assert.strictEqual(span.error, 0)
+            assert.strictEqual(span.meta.component, 'subprocess')
+            assert.strictEqual(span.meta['cmd.exit_code'], '0')
+            foundCommands.add(command)
+          }
+        }
+
+        assert.deepStrictEqual(foundCommands, expectedCommands)
+      }, { timeoutMs: 5000 })
 
       const promises = withBluebird(() => {
         const execFileAsync = util.promisify(childProcess.execFile)
@@ -513,7 +522,7 @@ describe('Child process plugin', () => {
 
       // Drain every concurrent span so a late flush does not leak into the next
       // test's matcher, and assert the promisify success exit code is 0.
-      await Promise.all(drained)
+      await drained
     })
 
     it('should handle Bluebird promise rejection properly', async () => {

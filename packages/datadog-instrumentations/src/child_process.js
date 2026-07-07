@@ -3,13 +3,13 @@
 const { errorMonitor } = require('events')
 const util = require('util')
 
-const dc = require('dc-polyfill')
 const shimmer = require('../../datadog-shimmer')
 const {
   addHook,
+  tracingChannel,
 } = require('./helpers/instrument')
 
-const childProcessChannel = dc.tracingChannel('datadog:child_process:execution')
+const childProcessChannel = tracingChannel('datadog:child_process:execution')
 const NativePromise = Promise
 
 // ignored exec method because it calls to execFile directly
@@ -130,13 +130,43 @@ function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod, shell) {
     const context = createContextFromChildProcessInfo(childProcessInfo)
     context.callArgs = callArgs
 
-    return childProcessChannel.tracePromise(function () {
-      if (context.abortController.signal.aborted) {
-        return NativePromise.reject(context.abortController.signal.reason || new Error('Aborted'))
-      }
+    // Keep this off tracePromise so promise normalization uses the cached
+    // native constructor instead of a process-wide Promise replacement.
+    const { start, end, asyncStart, asyncEnd, error: errorChannel } = childProcessChannel
 
-      return customPromisifyMethod.apply(this, context.callArgs)
-    }, context, this)
+    function reject (err) {
+      context.error = err
+      errorChannel.publish(context)
+      asyncStart.publish(context)
+
+      asyncEnd.publish(context)
+      return NativePromise.reject(err)
+    }
+
+    function resolve (result) {
+      context.result = result
+      asyncStart.publish(context)
+
+      asyncEnd.publish(context)
+      return result
+    }
+
+    return start.runStores(context, () => {
+      try {
+        const promise = context.abortController.signal.aborted
+          ? NativePromise.reject(context.abortController.signal.reason || new Error('Aborted'))
+          : customPromisifyMethod.apply(this, context.callArgs)
+
+        return NativePromise.resolve(promise).then(resolve, reject)
+      } catch (err) {
+        context.error = err
+        errorChannel.publish(context)
+
+        throw err
+      } finally {
+        end.publish(context)
+      }
+    })
   }
 }
 
