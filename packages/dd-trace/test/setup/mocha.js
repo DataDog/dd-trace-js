@@ -482,6 +482,15 @@ exports.mochaHooks = {
     // until overwritten, so clear it per test too — otherwise the retention rides
     // into the next test / teardown and the span-leak detector flags it.
     storage('llmobs').enterWith(undefined)
+    // Sinon records a `new Error()` per stubbed call in its `errorsWithCallStack`
+    // history. Each captured stack pins the async-context frame live at call time
+    // — including the traced callback's scope, which binds the finished span — so
+    // any suite that stubs a function called inside a span keeps every such span
+    // reachable until the stub is restored. Restoring happens in each suite's own
+    // hooks, but the history (and its retained frames) outlives individual `it`s;
+    // clearing it per test releases the spans without disturbing stub behavior
+    // (`resetHistory` keeps fakes' configured behavior, unlike `reset`/`restore`).
+    sinon.resetHistory()
     extraServices.clear()
   },
 }
