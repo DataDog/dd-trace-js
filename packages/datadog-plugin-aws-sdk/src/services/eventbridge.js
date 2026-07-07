@@ -1,19 +1,19 @@
-"use strict";
+'use strict'
 
 const {
   DsmPathwayCodec,
   getHeadersSize,
   getSizeOrZero,
-} = require("../../../dd-trace/src/datastreams");
-const log = require("../../../dd-trace/src/log");
-const BaseAwsSdkPlugin = require("../base");
+} = require('../../../dd-trace/src/datastreams')
+const log = require('../../../dd-trace/src/log')
+const BaseAwsSdkPlugin = require('../base')
 
-const DEFAULT_EVENT_BUS = "default";
-const DEFAULT_DETAIL_TYPE = "unknown";
+const DEFAULT_EVENT_BUS = 'default'
+const DEFAULT_DETAIL_TYPE = 'unknown'
 // EventBridge enforces this limit over the whole PutEvents request (the sum of
 // every entry), not over a single entry. 1 MiB == 1,048,576 bytes.
 const MAX_PUT_EVENTS_BYTES = 1024 * 1024
-// DSM adds a fixed "dd-pathway-ctx-base64" key to the _datadog object.
+// DSM adds a fixed 'dd-pathway-ctx-base64' key to the _datadog object.
 // The pathway context is always 20 bytes binary → 28 chars in base64.
 // Full JSON contribution: ,"dd-pathway-ctx-base64":"<28 chars>" = 55 bytes.
 const DSM_PATHWAY_FIELD_BYTES = 55
@@ -29,34 +29,34 @@ const DSM_PATHWAY_FIELD_BYTES = 55
  * @returns {number}
  * @see https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-putevents.html
  */
-function putEventEntrySize(entry, detail = entry.Detail) {
-  let size = entry.Time == null ? 0 : 14;
-  if (entry.Source != null) size += Buffer.byteLength(entry.Source);
-  if (entry.DetailType != null) size += Buffer.byteLength(entry.DetailType);
-  if (detail != null) size += Buffer.byteLength(detail);
+function putEventEntrySize (entry, detail = entry.Detail) {
+  let size = entry.Time == null ? 0 : 14
+  if (entry.Source != null) size += Buffer.byteLength(entry.Source)
+  if (entry.DetailType != null) size += Buffer.byteLength(entry.DetailType)
+  if (detail != null) size += Buffer.byteLength(detail)
   if (entry.Resources != null) {
     for (const resource of entry.Resources) {
-      if (resource != null) size += Buffer.byteLength(resource);
+      if (resource != null) size += Buffer.byteLength(resource)
     }
   }
-  return size;
+  return size
 }
 
 class EventBridge extends BaseAwsSdkPlugin {
-  static id = "eventbridge";
-  static isPayloadReporter = true;
+  static id = 'eventbridge'
+  static isPayloadReporter = true
 
-  generateTags(params, operation, response) {
-    if (!params?.source) return;
-    const rulename = params.Name ?? "";
+  generateTags (params, operation, response) {
+    if (!params?.source) return
+    const rulename = params.Name ?? ''
     return {
-      "resource.name": operation
+      'resource.name': operation
         ? `${operation} ${params.source}`
         : params.source,
-      "aws.eventbridge.source": `${params.source}`,
-      "messaging.system": "aws_eventbridge",
-      rulename: `${rulename}`,
-    };
+      'aws.eventbridge.source': params.source,
+      'messaging.system': 'aws_eventbridge',
+      rulename,
+    }
   }
 
   /**
@@ -133,15 +133,15 @@ class EventBridge extends BaseAwsSdkPlugin {
    * @param {boolean} dsmEnabled
    * @returns {void}
    */
-  injectToEntry(span, entry, injectTraceContext, dsmEnabled) {
+  injectToEntry (span, entry, injectTraceContext, dsmEnabled) {
     const finalData = this.getInjectedEntryDetail(
       span,
       entry,
       injectTraceContext,
       dsmEnabled,
-    );
+    )
     if (finalData !== undefined) {
-      entry.Detail = finalData;
+      entry.Detail = finalData
     }
   }
 
@@ -154,12 +154,12 @@ class EventBridge extends BaseAwsSdkPlugin {
    * @param {boolean} dsmEnabled
    * @returns {string|undefined}
    */
-  getInjectedEntryDetail(span, entry, injectTraceContext, dsmEnabled) {
-    if (!entry?.Detail) return;
+  getInjectedEntryDetail (span, entry, injectTraceContext, dsmEnabled) {
+    if (!entry?.Detail) return
 
-    const ddInfo = {};
+    const ddInfo = {}
     if (injectTraceContext) {
-      this.tracer.inject(span, "text_map", ddInfo);
+      this.tracer.inject(span, 'text_map', ddInfo)
     }
 
     if (dsmEnabled) {
@@ -167,20 +167,20 @@ class EventBridge extends BaseAwsSdkPlugin {
       // on-wire payload, then fold the encoded pathway into a copy. `ddInfo`
       // stays trace-only so we can fall back to it below if the combined
       // payload no longer fits or should not be propagated.
-      const dataStreamsContext = this.setDSMCheckpoint(span, entry, ddInfo);
+      const dataStreamsContext = this.setDSMCheckpoint(span, entry, ddInfo)
       if (dataStreamsContext) {
-        const carrier = { ...ddInfo };
-        DsmPathwayCodec.encode(dataStreamsContext, carrier);
-        const finalData = this.injectDetail(entry.Detail, carrier);
+        const carrier = { ...ddInfo }
+        DsmPathwayCodec.encode(dataStreamsContext, carrier)
+        const finalData = this.injectDetail(entry.Detail, carrier)
         if (finalData !== undefined) {
-          return finalData;
+          return finalData
         }
       }
     }
 
-    if (!injectTraceContext) return;
+    if (!injectTraceContext) return
 
-    return this.injectDetail(entry.Detail, ddInfo);
+    return this.injectDetail(entry.Detail, ddInfo)
   }
 
   /**
@@ -190,20 +190,20 @@ class EventBridge extends BaseAwsSdkPlugin {
    * @param {object} ddInfo
    * @returns {string|undefined}
    */
-  injectDetail(detail, ddInfo) {
-    let finalData;
+  injectDetail (detail, ddInfo) {
+    let finalData
     try {
       finalData = BaseAwsSdkPlugin.injectFieldIntoJsonObject(
         detail,
-        "_datadog",
+        '_datadog',
         ddInfo,
-      );
+      )
     } catch (error) {
-      log.error("EventBridge error injecting request", error);
-      return;
+      log.error('EventBridge error injecting request', error)
+      return
     }
 
-    return finalData;
+    return finalData
   }
 
   /**
@@ -214,20 +214,20 @@ class EventBridge extends BaseAwsSdkPlugin {
    * @param {object} [ddInfo] trace context folded into the measured payload size
    * @returns {object|null|undefined}
    */
-  setDSMCheckpoint(span, entry, ddInfo) {
-    const eventBus = entry.EventBusName || DEFAULT_EVENT_BUS;
-    const detailType = entry.DetailType || DEFAULT_DETAIL_TYPE;
-    const payloadSize = getHeadersSize(entry) + getSizeOrZero(ddInfo);
+  setDSMCheckpoint (span, entry, ddInfo) {
+    const eventBus = entry.EventBusName || DEFAULT_EVENT_BUS
+    const detailType = entry.DetailType || DEFAULT_DETAIL_TYPE
+    const payloadSize = getHeadersSize(entry) + getSizeOrZero(ddInfo)
     return this.tracer.setCheckpoint(
       [
-        "direction:out",
+        'direction:out',
         `exchange:${eventBus}`,
         `topic:${detailType}`,
-        "type:eventbridge",
+        'type:eventbridge',
       ],
       span,
       payloadSize,
-    );
+    )
   }
 }
-module.exports = EventBridge;
+module.exports = EventBridge
