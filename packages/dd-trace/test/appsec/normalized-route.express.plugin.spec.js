@@ -85,13 +85,26 @@ withVersions('express', 'express', version => {
       }))
     }
 
+    // Normalized-route support is Express 5 only (it reuses path-to-regexp v8's parser, which
+    // Express 4 does not ship). On Express 4 the tag must be absent; on Express 5 it must equal
+    // the expected normalized route.
+    function assertNormalizedRoute (span, expected) {
+      if (isExpress4) {
+        assert.ok(
+          !Object.hasOwn(span.meta, '_dd.appsec.normalized_route'),
+          'Express 4 must not set the normalized route tag'
+        )
+      } else {
+        assert.equal(span.meta['_dd.appsec.normalized_route'], expected)
+      }
+    }
+
     it('sets normalized route for a simple named param', async () => {
       enableAppsecWithApiSecurity()
       await axios.get('/users/42')
 
       await agent.assertSomeTraces((traces) => {
-        const span = traces[0][0]
-        assert.equal(span.meta['_dd.appsec.normalized_route'], '/users/{id}')
+        assertNormalizedRoute(traces[0][0], '/users/{id}')
       })
     })
 
@@ -100,8 +113,7 @@ withVersions('express', 'express', version => {
       await axios.get('/health')
 
       await agent.assertSomeTraces((traces) => {
-        const span = traces[0][0]
-        assert.equal(span.meta['_dd.appsec.normalized_route'], '/health')
+        assertNormalizedRoute(traces[0][0], '/health')
       })
     })
 
@@ -110,8 +122,7 @@ withVersions('express', 'express', version => {
       await axios.get('/api/posts/99')
 
       await agent.assertSomeTraces((traces) => {
-        const span = traces[0][0]
-        assert.equal(span.meta['_dd.appsec.normalized_route'], '/api/posts/{postId}')
+        assertNormalizedRoute(traces[0][0], '/api/posts/{postId}')
       })
     })
 
@@ -120,8 +131,7 @@ withVersions('express', 'express', version => {
       await axios.get('/photos/1.jpg')
 
       await agent.assertSomeTraces((traces) => {
-        const span = traces[0][0]
-        assert.equal(span.meta['_dd.appsec.normalized_route'], '/photos/{id+format}')
+        assertNormalizedRoute(traces[0][0], '/photos/{id+format}')
       })
     })
 
@@ -130,30 +140,18 @@ withVersions('express', 'express', version => {
       await axios.get('/files/a/b/c.txt')
 
       await agent.assertSomeTraces((traces) => {
-        const span = traces[0][0]
-        const expected = isExpress4 ? '/files/{param1}' : '/files/{splat}'
-        assert.equal(span.meta['_dd.appsec.normalized_route'], expected)
+        assertNormalizedRoute(traces[0][0], '/files/{splat}')
       })
     })
 
     if (isExpress4) {
-      it('sets normalized route including optional param when present (Express 4)', async () => {
+      it('does NOT set normalized route on Express 4 (unsupported)', async () => {
         enableAppsecWithApiSecurity()
         await axios.get('/items/7')
 
         await agent.assertSomeTraces((traces) => {
           const span = traces[0][0]
-          assert.equal(span.meta['_dd.appsec.normalized_route'], '/items/{id}')
-        })
-      })
-
-      it('sets normalized route excluding optional param when absent (Express 4)', async () => {
-        enableAppsecWithApiSecurity()
-        await axios.get('/items')
-
-        await agent.assertSomeTraces((traces) => {
-          const span = traces[0][0]
-          assert.equal(span.meta['_dd.appsec.normalized_route'], '/items')
+          assert.ok(!Object.hasOwn(span.meta, '_dd.appsec.normalized_route'))
         })
       })
     } else {
