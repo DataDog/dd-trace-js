@@ -5,7 +5,7 @@ const dc = require('dc-polyfill')
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const GraphQLParsePlugin = require('./parse')
-const { extractErrorIntoSpanEvent, getOperation, getSignature } = require('./utils')
+const { extractErrorIntoSpanEvent, getOperation, getSignature, isApolloHealthCheck } = require('./utils')
 
 const legacyStorage = storage('legacy')
 
@@ -118,14 +118,17 @@ class GraphQLExecutePlugin extends TracingPlugin {
     const name = operation?.name?.value
     const source = this.config.source && docSource
 
-    // Apollo Gateway polls every subgraph with this fixed operation to check
-    // liveness; tracing it floods traces with health-check noise. Skip it here
-    // (no span, no resolver wrapping), the same way mongodb skips heartbeats.
-    // Operation names are client-controlled, so match the gateway's exact
-    // spec-fixed shape (`query __ApolloServiceHealthCheck__ { __typename }`)
-    // rather than the reserved name alone — a real query spoofing the name
-    // must still get its execute span and its AppSec/IAST resolver channels.
-    if (name === '__ApolloServiceHealthCheck__' && isApolloHealthCheck(operation)) {
+    // Apollo Gateway polls every subgraph with a fixed health-check query;
+    // tracing it floods traces with heartbeat noise. Skip it (no span, no
+    // resolver wrapping), the same way mongodb skips heartbeats. On the cold
+    // path the parse plugin already matched the source and marked the document;
+    // on the warm path Apollo Server serves a cached document so parse never
+    // ran, and only the operation shape is left to match. Operation names are
+    // client-controlled, so `isApolloHealthCheck` confirms the exact
+    // `{ __typename }` shape rather than the reserved name alone — a real query
+    // spoofing the name still gets its span and its AppSec/IAST channels.
+    if ((document && GraphQLParsePlugin.healthCheckDocuments.has(document)) ||
+        (name === '__ApolloServiceHealthCheck__' && isApolloHealthCheck(operation))) {
       ctx.ddSkipped = true
       return ctx.currentStore
     }
@@ -715,24 +718,6 @@ function defaultFieldResolver (source, args, contextValue, info) {
     if (typeof property === 'function') return source[info.fieldName](args, contextValue, info)
     return property
   }
-}
-
-// Apollo Gateway's subgraph health check is the fixed
-// `query __ApolloServiceHealthCheck__ { __typename }`. The caller already
-// matched the reserved name; confirm the rest of the shape so a real operation
-// that merely borrows the name is not silently dropped from tracing/AppSec.
-// See https://github.com/apollographql/federation `HEALTH_CHECK_QUERY`.
-function isApolloHealthCheck (operation) {
-  const selections = operation.selectionSet?.selections
-  if (operation.operation !== 'query' || selections?.length !== 1) return false
-
-  const selection = selections[0]
-  return selection.kind === 'Field' &&
-    selection.name.value === '__typename' &&
-    selection.alias === undefined &&
-    selection.selectionSet === undefined &&
-    selection.arguments?.length === 0 &&
-    selection.directives?.length === 0
 }
 
 function addVariableTags (config, span, variableValues) {

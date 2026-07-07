@@ -15,6 +15,14 @@ class GraphQLValidatePlugin extends TracingPlugin {
   bindStart (ctx) {
     // validate(schema, documentAST, rules, options, typeInfo)
     const document = ctx.arguments?.[1]
+
+    // The parse plugin marks documents parsed from an Apollo health-check poll;
+    // skip validation's span so the poll produces no graphql spans.
+    if (document && GraphQLParsePlugin.healthCheckDocuments.has(document)) {
+      ctx.ddSkipped = true
+      return ctx.currentStore
+    }
+
     const docSource = document ? GraphQLParsePlugin.documentSources.get(document) : undefined
     const source = this.config.source && document && docSource
 
@@ -52,6 +60,8 @@ class GraphQLValidatePlugin extends TracingPlugin {
   }
 
   end (ctx) {
+    if (ctx.ddSkipped) return ctx.parentStore
+
     const document = ctx.ddDocument
     const errors = ctx.result
     const span = ctx?.currentStore?.span || this.activeSpan

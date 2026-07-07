@@ -2965,7 +2965,7 @@ describe('Plugin', () => {
           return Promise.all([assertion, graphql.graphql({ schema, source })])
         })
 
-        it('should skip the execute span for the federation health-check operation', async () => {
+        it('should create no graphql spans for the federation health-check operation', async () => {
           const schema = new graphql.GraphQLSchema({
             query: new graphql.GraphQLObjectType({
               name: 'Query',
@@ -2975,24 +2975,76 @@ describe('Plugin', () => {
             }),
           })
 
-          // bindStart publishes apm:graphql:execute:start only after it commits to
-          // tracing the operation, so a 0 count proves the health-check was skipped
-          // before span creation. The normal operation below proves the counter fires.
+          // A health-check poll must produce no graphql spans at all — not
+          // parse, validate, execute, or resolve. graphql.graphql runs parse and
+          // validate before execute, so skipping only execute would still leave
+          // per-poll parse/validate heartbeat spans. Count every graphql span the
+          // agent receives across both operations: the health-check must add
+          // none, so the only parse/validate spans are the sentinel's one each.
+          const graphqlSpans = new Map()
+          const collect = traces => {
+            for (const trace of traces) {
+              for (const span of trace) {
+                if (span.name.startsWith('graphql.')) {
+                  graphqlSpans.set(span.name, (graphqlSpans.get(span.name) ?? 0) + 1)
+                }
+              }
+            }
+          }
+          agent.subscribe(collect)
+
+          try {
+            // The exact operation Apollo Gateway polls subgraphs with.
+            const healthCheck = await graphql.graphql({
+              schema,
+              source: 'query __ApolloServiceHealthCheck__ { __typename }',
+            })
+            assert.ok(!healthCheck.errors, inspect(healthCheck.errors))
+
+            const sentinel = await graphql.graphql({ schema, source: 'query { hello }' })
+            assert.ok(!sentinel.errors, inspect(sentinel.errors))
+
+            // parse, validate and execute flush as separate traces; retry until
+            // the sentinel's parse and validate have both arrived, then the
+            // counts prove the health-check contributed neither.
+            await agent.assertSomeTraces(() => {
+              assert.strictEqual(graphqlSpans.get('graphql.parse'), 1,
+                'only the sentinel query may emit a graphql.parse span')
+              assert.strictEqual(graphqlSpans.get('graphql.validate'), 1,
+                'only the sentinel query may emit a graphql.validate span')
+            })
+          } finally {
+            agent.unsubscribe(collect)
+          }
+        })
+
+        it('should skip a health-check document that reaches execute without an instrumented parse', async () => {
+          // Warm path: Apollo Server serves a documentStore-cached document, so
+          // parse and validate never run and the parse-side marker is absent —
+          // only execute sees the poll, and the operation-shape check is the sole
+          // gate. A structurally cloned document (no reference the parse plugin
+          // marked) reproduces that: the shape check must still skip it.
+          const schema = new graphql.GraphQLSchema({
+            query: new graphql.GraphQLObjectType({
+              name: 'Query',
+              fields: {
+                hello: { type: graphql.GraphQLString, resolve: () => 'world' },
+              },
+            }),
+          })
+
+          const document = JSON.parse(JSON.stringify(
+            graphql.parse('query __ApolloServiceHealthCheck__ { __typename }')))
+
           const executeCh = dc.channel('apm:graphql:execute:start')
           let starts = 0
           const handler = () => { starts++ }
           executeCh.subscribe(handler)
 
           try {
-            // The exact operation Apollo Gateway polls subgraphs with.
-            const source = 'query __ApolloServiceHealthCheck__ { __typename }'
-            const healthCheck = await graphql.graphql({ schema, source })
-            assert.ok(!healthCheck.errors, inspect(healthCheck.errors))
-            assert.strictEqual(starts, 0, 'execute span must be skipped for the health-check operation')
-
-            const normal = await graphql.graphql({ schema, source: 'query { hello }' })
-            assert.ok(!normal.errors, inspect(normal.errors))
-            assert.strictEqual(starts, 1, 'a normal operation must still be traced')
+            const result = await graphql.execute({ schema, document })
+            assert.ok(!result.errors, inspect(result.errors))
+            assert.strictEqual(starts, 0, 'the cached health-check document must skip its execute span')
           } finally {
             executeCh.unsubscribe(handler)
           }
