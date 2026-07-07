@@ -32,7 +32,8 @@ jobs:
   main:
     needs:
       - build-artifacts
-    uses: DataDog/system-tests/.github/workflows/system-tests.yml@main
+    # TEST-ONLY: run against system-tests PR #7271 (pabloerhard/nodejs-node22). Revert to @main before merge.
+    uses: DataDog/system-tests/.github/workflows/system-tests.yml@pabloerhard/nodejs-node22
     permissions:
       contents: read
       id-token: write

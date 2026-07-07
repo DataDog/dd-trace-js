@@ -49,6 +49,10 @@ variables:
   SYSTEM_TESTS_LIBRARY: nodejs
   REPO_NOTIFICATION_CHANNEL: "#notifications-apm-js"
 
+  # TEST-ONLY: run SSI/system-tests against system-tests PR #7271 (pabloerhard/nodejs-node22).
+  # Revert to the default (main) before merge.
+  SYSTEM_TESTS_REF: pabloerhard/nodejs-node22
+
   # One pipeline injection package size ratchet
   OCI_PACKAGE_MAX_SIZE_BYTES: 30_000_000
   LIB_INJECTION_IMAGE_MAX_SIZE_BYTES: 50_000_000
@@ -61,6 +65,9 @@ configure_system_tests:
       when: never
     - if: $DANGEROUSLY_SKIP_SHARED_PIPELINE_TESTS == "true"
       when: never
+    # TEST-ONLY: force SSI tests on the pabloerhard/test-ssi branch. Remove before merge.
+    - if: $CI_COMMIT_BRANCH == "pabloerhard/test-ssi" || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == "pabloerhard/test-ssi"
+      when: on_success
     - if: $CI_COMMIT_BRANCH == "master" || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^v\d+\.\d+\.\d+-proposal$/ || $CI_MERGE_REQUEST_LABELS =~ /run-ssi-tests/
       when: on_success
     - when: never
@@ -71,6 +78,9 @@ system_tests:
       when: never
     - if: $DANGEROUSLY_SKIP_SHARED_PIPELINE_TESTS == "true"
       when: never
+    # TEST-ONLY: force SSI tests on the pabloerhard/test-ssi branch. Remove before merge.
+    - if: $CI_COMMIT_BRANCH == "pabloerhard/test-ssi" || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME == "pabloerhard/test-ssi"
+      when: on_success
     - if: $CI_COMMIT_BRANCH == "master" || $CI_MERGE_REQUEST_SOURCE_BRANCH_NAME =~ /^v\d+\.\d+\.\d+-proposal$/ || $CI_MERGE_REQUEST_LABELS =~ /run-ssi-tests/
       when: on_success
     - when: never
