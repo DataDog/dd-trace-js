@@ -351,6 +351,9 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
 
   const timeoutMs = options.timeoutMs || 1000
   const rejectionTimeout = setTimeout(() => {
+    // The promise settles here, so drop the handler from the set. Otherwise reset()'s leak guard
+    // would flag this already-rejected expectation as still armed at teardown.
+    handlers.delete(handlerPayload)
     if (errors.length === 0) {
       reject(new Error(`No matching trace received within ${timeoutMs}ms.`))
       return
@@ -392,6 +395,7 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
       resolve(result)
     } catch (error) {
       if (/** @type {RunCallbackAgainstTracesOptions} */ (options).rejectFirst) {
+        handlers.delete(handlerPayload)
         clearTimeout(rejectionTimeout)
         reject(error)
       } else {

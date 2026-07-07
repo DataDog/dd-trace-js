@@ -456,7 +456,7 @@ describe('Plugin', () => {
               region: 'us-east-1',
             })
             total++
-          }).catch(() => {}, { timeoutMs: 100 })
+          }, { timeoutMs: 100 }).catch(() => {})
 
           agent.assertSomeTraces(traces => {
             const span = traces[0][0]
@@ -467,7 +467,7 @@ describe('Plugin', () => {
             })
 
             total++
-          }).catch((e) => {}, { timeoutMs: 100 })
+          }, { timeoutMs: 100 }).catch(() => {})
 
           sqs.sendMessage({
             MessageBody: 'test body',

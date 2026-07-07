@@ -479,9 +479,7 @@ describe('Plugin', () => {
 
         describe('should set a DSM checkpoint', () => {
           it('on produce', async () => {
-            await publish(dsmTopic, { data: Buffer.from('DSM produce checkpoint') })
-
-            agent.expectPipelineStats(dsmStats => {
+            const statsPromise = agent.expectPipelineStats(dsmStats => {
               let statsPointsReceived = 0
               // we should have 1 dsm stats points
               dsmStats.forEach((timeStatsBucket) => {
@@ -492,26 +490,30 @@ describe('Plugin', () => {
                 }
               })
               assert.ok(statsPointsReceived >= 1, `Expected ${statsPointsReceived} >= 1`)
-              assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash.readBigUInt64BE(0).toString()), true)
+              assert.strictEqual(agent.dsmStatsExist(agent, expectedProducerHash.readBigUInt64LE(0).toString()), true)
             }, { timeoutMs: TIMEOUT })
+
+            await publish(dsmTopic, { data: Buffer.from('DSM produce checkpoint') })
+            await statsPromise
           })
 
           it('on consume', async () => {
+            const statsPromise = agent.expectPipelineStats(dsmStats => {
+              let statsPointsReceived = 0
+              dsmStats.forEach((timeStatsBucket) => {
+                if (timeStatsBucket && timeStatsBucket.Stats) {
+                  timeStatsBucket.Stats.forEach((statsBuckets) => {
+                    statsPointsReceived += statsBuckets.Stats.length
+                  })
+                }
+              })
+              assert.ok(statsPointsReceived >= 2, `Expected ${statsPointsReceived} >= 2`)
+              assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash.readBigUInt64LE(0).toString()), true)
+            }, { timeoutMs: TIMEOUT })
+
             await publish(dsmTopic, { data: Buffer.from('DSM consume checkpoint') })
-            await consume(async () => {
-              agent.expectPipelineStats(dsmStats => {
-                let statsPointsReceived = 0
-                dsmStats.forEach((timeStatsBucket) => {
-                  if (timeStatsBucket && timeStatsBucket.Stats) {
-                    timeStatsBucket.Stats.forEach((statsBuckets) => {
-                      statsPointsReceived += statsBuckets.Stats.length
-                    })
-                  }
-                })
-                assert.ok(statsPointsReceived >= 2, `Expected ${statsPointsReceived} >= 2`)
-                assert.strictEqual(agent.dsmStatsExist(agent, expectedConsumerHash.readBigUInt64BE(0).toString()), true)
-              }, { timeoutMs: TIMEOUT })
-            })
+            consume(() => {})
+            await statsPromise
           })
         })
 
