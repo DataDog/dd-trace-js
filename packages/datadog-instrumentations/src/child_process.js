@@ -10,6 +10,7 @@ const {
 } = require('./helpers/instrument')
 
 const childProcessChannel = dc.tracingChannel('datadog:child_process:execution')
+const NativePromise = Promise
 
 // ignored exec method because it calls to execFile directly
 const execAsyncMethods = ['execFile', 'spawn', 'fork']
@@ -129,42 +130,13 @@ function wrapChildProcessCustomPromisifyMethod (customPromisifyMethod, shell) {
     const context = createContextFromChildProcessInfo(childProcessInfo)
     context.callArgs = callArgs
 
-    const { start, end, asyncStart, asyncEnd, error: errorChannel } = childProcessChannel
-    start.publish(context)
-
-    let result
-    if (context.abortController.signal.aborted) {
-      result = Promise.reject(context.abortController.signal.reason || new Error('Aborted'))
-    } else {
-      try {
-        result = customPromisifyMethod.apply(this, context.callArgs)
-      } catch (error) {
-        context.error = error
-        errorChannel.publish(context)
-        throw error
-      } finally {
-        end.publish(context)
+    return childProcessChannel.tracePromise(function () {
+      if (context.abortController.signal.aborted) {
+        return NativePromise.reject(context.abortController.signal.reason || new Error('Aborted'))
       }
-    }
 
-    function reject (err) {
-      context.error = err
-      errorChannel.publish(context)
-      asyncStart.publish(context)
-
-      asyncEnd.publish(context)
-      throw err
-    }
-
-    function resolve (result) {
-      context.result = result
-      asyncStart.publish(context)
-
-      asyncEnd.publish(context)
-      return result
-    }
-
-    return result.then(resolve, reject)
+      return customPromisifyMethod.apply(this, context.callArgs)
+    }, context, this)
   }
 }
 
