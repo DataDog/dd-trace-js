@@ -54,6 +54,15 @@ function ensureCodecovCommit (options) {
 }
 
 /**
+ * @returns {boolean} whether any run has registered a Codecov commit/report for this ref. False
+ * on Dependabot PRs, whose coverage artifacts are skipped, so no run ever calls `uploadCoverage`
+ * with a non-empty coverage dir.
+ */
+export function hasCodecovCommit () {
+  return commitAndReport !== undefined
+}
+
+/**
  * Merge and upload one workflow run's coverage to Datadog and Codecov, if it produced any. Only
  * lcov is uploaded: both backends read it, and this repo's `patch-istanbul-lib-coverage.js`
  * already folds branch/function hit data into lcov's `DA:` records, so no separate istanbul JSON
