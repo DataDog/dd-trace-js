@@ -10,7 +10,7 @@ const satisfies = require('semifies')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { withNamingSchema, withVersions } = require('../../dd-trace/test/setup/mocha')
 const agent = require('../../dd-trace/test/plugins/agent')
-const spanLeakDetector = require('../../dd-trace/test/plugins/span-leak-detector')
+const { withSpanLeakBaseline } = require('../../dd-trace/test/plugins/span-leak-detector')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const { defaults } = require('../../dd-trace/src/config/defaults')
 const { NODE_MAJOR } = require('../../../version')
@@ -26,8 +26,7 @@ describe('Plugin', () => {
     // when the subchannel was built, so a fixed (non-scaling) count of finished
     // spans stays reachable. Tolerate that pool-sized retention here without
     // loosening the detector for other suites.
-    before(() => spanLeakDetector.setBaseline(50))
-    after(() => spanLeakDetector.resetBaseline())
+    withSpanLeakBaseline(50)
 
     withVersions('grpc', pkgs, NODE_MAJOR >= 25 ? '>=1.3.0' : '*', (version, pkg, resolvedVersion) => {
       let grpc

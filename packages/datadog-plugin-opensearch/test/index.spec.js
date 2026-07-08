@@ -9,7 +9,7 @@ const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/c
 const agent = require('../../dd-trace/test/plugins/agent')
 const { breakThen, unbreakThen } = require('../../dd-trace/test/plugins/helpers')
 const { withNamingSchema, withPeerService, withVersions } = require('../../dd-trace/test/setup/mocha')
-const spanLeakDetector = require('../../dd-trace/test/plugins/span-leak-detector')
+const { withSpanLeakBaseline } = require('../../dd-trace/test/plugins/span-leak-detector')
 const { expectedSchema, rawExpectedSchema } = require('./naming')
 describe('Plugin', () => {
   let opensearch
@@ -20,8 +20,7 @@ describe('Plugin', () => {
   // connection was opened, so a fixed (non-scaling) count of finished spans
   // stays reachable. Tolerate that pool-sized retention here without loosening
   // the detector for other suites.
-  before(() => spanLeakDetector.setBaseline(30))
-  after(() => spanLeakDetector.resetBaseline())
+  withSpanLeakBaseline(30)
 
   withVersions('opensearch', ['@opensearch-project/opensearch'], (version, moduleName) => {
     const metaModule = require(`../../../versions/${moduleName}@${version}`)

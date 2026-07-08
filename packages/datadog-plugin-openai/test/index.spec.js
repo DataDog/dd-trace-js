@@ -14,6 +14,7 @@ const { DogStatsDClient } = require('../../dd-trace/src/dogstatsd')
 const { NoopExternalLogger } = require('../../dd-trace/src/external-logger/src')
 const Sampler = require('../../dd-trace/src/sampler')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { withSpanLeakBaseline } = require('../../dd-trace/test/plugins/span-leak-detector')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const tracerRequirePath = '../../dd-trace'
 
@@ -37,6 +38,12 @@ function assertWithResponseOwnership (promise, realVersion) {
 }
 
 describe('Plugin', () => {
+  // The OpenAI HTTP client keeps a pooled keep-alive connection whose timer
+  // captures the async-context frame active when the request ran, so a fixed
+  // (non-scaling) number of finished spans stays reachable at teardown. Tolerate
+  // it without loosening the detector for other suites.
+  withSpanLeakBaseline(20)
+
   let openai
   let toFile
   let clock

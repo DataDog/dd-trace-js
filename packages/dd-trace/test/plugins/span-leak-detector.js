@@ -3,6 +3,7 @@
 const assert = require('node:assert')
 
 const { channel } = require('dc-polyfill')
+const { after, before } = require('mocha')
 
 const finishCh = channel('dd-trace:span:finish')
 
@@ -188,7 +189,26 @@ class SpanLeakDetector {
   }
 }
 
-module.exports = new SpanLeakDetector()
+const detector = new SpanLeakDetector()
+
+/**
+ * Register mocha hooks that raise the retention bound for the enclosing suite
+ * and restore the default afterwards. For suites whose upstream dependency pins
+ * a fixed, non-scaling number of finished spans through a pending timer or
+ * pooled handle (see {@link BASELINE_RETAINED}): the count exceeds the tight
+ * default but does not grow per request, so it is not the leak the detector
+ * hunts. Call once at the top of the suite's `describe`.
+ *
+ * @param {number} limit Maximum reachable finished spans to tolerate in the suite.
+ * @returns {void}
+ */
+function withSpanLeakBaseline (limit) {
+  before(() => detector.setBaseline(limit))
+  after(() => detector.resetBaseline())
+}
+
+module.exports = detector
+module.exports.withSpanLeakBaseline = withSpanLeakBaseline
 // Exposed for the detector's own spec, which asserts both the retained and the
 // freed outcome against fresh instances without a real agent teardown.
 module.exports.SpanLeakDetector = SpanLeakDetector

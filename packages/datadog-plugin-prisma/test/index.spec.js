@@ -13,6 +13,7 @@ const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { storage } = require('../../datadog-core')
 const { ERROR_MESSAGE, ERROR_TYPE, ERROR_STACK } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { withSpanLeakBaseline } = require('../../dd-trace/test/plugins/span-leak-detector')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { expectedSchema } = require('./naming')
 
@@ -113,6 +114,12 @@ function createEngineDbQuerySpan (queryText) {
 }
 
 describe('Plugin', () => {
+  // Prisma's query engine keeps a pooled connection whose timer captures the
+  // async-context frame active when the query ran, so a fixed (non-scaling)
+  // number of finished spans stays reachable at teardown. Tolerate it without
+  // loosening the detector for other suites.
+  withSpanLeakBaseline(15)
+
   let prisma
   let prismaClient
   let tracingHelper

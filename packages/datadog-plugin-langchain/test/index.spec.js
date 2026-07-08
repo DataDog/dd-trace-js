@@ -9,11 +9,18 @@ const semifies = require('semifies')
 const { assertObjectContains, useEnv } = require('../../../integration-tests/helpers')
 const iastFilter = require('../../dd-trace/src/appsec/iast/taint-tracking/filter')
 const agent = require('../../dd-trace/test/plugins/agent')
+const { withSpanLeakBaseline } = require('../../dd-trace/test/plugins/span-leak-detector')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 const isDdTrace = iastFilter.isDdTrace
 
 describe('Plugin', () => {
+  // The provider HTTP client keeps a pooled keep-alive connection whose timer
+  // captures the async-context frame active when the request ran, so a fixed
+  // (non-scaling) number of finished spans stays reachable at teardown. Tolerate
+  // it without loosening the detector for other suites.
+  withSpanLeakBaseline(20)
+
   let langchainOpenai
   let langchainAnthropic
   let langchainGoogleGenAI
