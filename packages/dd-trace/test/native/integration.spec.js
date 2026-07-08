@@ -89,9 +89,11 @@ describe('Native Spans Integration', () => {
 
     const linksTag = JSON.parse(span.context().getTags()['_dd.span_links'])
     assert.strictEqual(linksTag.length, 1)
-    const eventsTag = JSON.parse(span.context().getTags()['_dd.span_events'])
-    assert.strictEqual(eventsTag.length, 1)
-    assert.strictEqual(eventsTag[0].name, 'event-1')
+    // Native span events are on by default, so the event is queued to the native
+    // top-level `span_events` field (not the `_dd.span_events` meta fallback);
+    // assert the recorded event list directly.
+    assert.strictEqual(span._events.length, 1)
+    assert.strictEqual(span._events[0].name, 'event-1')
 
     setTimeout(() => {
       const exported = exportedSpans.find(s => s.context()._name === 'lifecycle')

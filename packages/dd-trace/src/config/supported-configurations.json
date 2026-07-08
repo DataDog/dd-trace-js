@@ -3266,7 +3266,7 @@
       {
         "implementation": "A",
         "type": "boolean",
-        "default": "false"
+        "default": "true"
       }
     ],
     "DD_TRACE_NATS_ENABLED": [
