@@ -853,21 +853,19 @@ describe('Inferred Proxy Spans - various edge case tests', function () {
     await agent.assertSomeTraces(traces => {
       const spans = traces[0]
 
-      assert.strictEqual(spans.length, 1)
+      assert.strictEqual(spans.length, 2)
 
       assertObjectContains(spans[0], {
-        name: 'web.request',
-        service: 'aws-server',
-        type: 'web',
-        resource: 'GET',
+        name: 'azure.app-gateway',
+        service: 'example.com',
+        resource: 'GET /test',
         meta: {
-          component: 'http',
-          'span.kind': 'server',
-          'http.url': `http://127.0.0.1:${port}/`,
-          'http.method': 'GET',
-          'http.status_code': '200',
+          'http.url': 'https://example.com/test',
         },
       })
+
+      assertObjectContains(spans[1], {
+        name: 'web.request',
+      })
     })
-  })
 })
