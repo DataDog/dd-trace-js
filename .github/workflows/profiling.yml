@@ -32,6 +32,7 @@ jobs:
       - uses: ./.github/actions/install
       - run: yarn test:profiler:ci
       - run: yarn test:integration:profiler:coverage
+      - run: yarn test:otel-thread-ctx
       - uses: ./.github/actions/coverage
         with:
           flags: profiling-macos
@@ -60,6 +61,7 @@ jobs:
       - uses: ./.github/actions/node/latest
       - run: yarn test:profiler:ci
       - run: yarn test:integration:profiler:coverage
+      - run: yarn test:otel-thread-ctx
       - uses: ./.github/actions/coverage
         with:
           flags: profiling-ubuntu
@@ -118,6 +120,7 @@ jobs:
           ) | ForEach-Object { "$_=" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8 }
       - run: yarn test:profiler:ci
       - run: yarn test:integration:profiler:coverage
+      - run: yarn test:otel-thread-ctx
       - uses: ./.github/actions/node-crash-report
         if: failure()
       # Upload any WER minidumps that landed during this job, even on
