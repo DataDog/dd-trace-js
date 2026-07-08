@@ -434,22 +434,20 @@ describe('Plugin', () => {
           return agent.close()
         })
 
-        it('should allow disabling a specific service', (done) => {
-          let total = 0
+        it('should allow disabling a specific service', async () => {
+          // s3 is disabled, so its request must never be traced within the window.
+          const listBucketsNotTraced = agent.assertNoTraces(traces => {
+            for (const trace of traces) {
+              for (const span of trace) {
+                if (span.name === 'aws.request' && span.resource === 'listBuckets') {
+                  throw new Error('listBuckets must not be traced when s3 is disabled')
+                }
+              }
+            }
+          })
 
-          agent.assertSomeTraces(traces => {
-            const span = sort(traces[0])[0]
-
-            assertObjectContains(span, {
-              name: 'aws.request',
-              resource: 'listBuckets',
-              service: 'test',
-            })
-
-            total++
-          }, { timeoutMs: 100 }).catch(() => {})
-
-          agent.assertSomeTraces(traces => {
+          // sqs stays enabled, so its request must be traced.
+          const listQueuesTraced = agent.assertSomeTraces(traces => {
             const span = sort(traces[0])[0]
 
             assertObjectContains(span, {
@@ -457,21 +455,12 @@ describe('Plugin', () => {
               resource: 'listQueues',
               service: 'test',
             })
-
-            total++
-          }, { timeoutMs: 100 }).catch((e) => {})
+          })
 
           s3.listBuckets({}, () => {})
           sqs.listQueues({}, () => {})
 
-          setTimeout(() => {
-            try {
-              assert.strictEqual(total, 1)
-              done()
-            } catch (e) {
-              done(e)
-            }
-          }, 250)
+          await Promise.all([listBucketsNotTraced, listQueuesTraced])
         })
       })
 

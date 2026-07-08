@@ -437,10 +437,20 @@ describe('Plugin', () => {
           return agent.close()
         })
 
-        it('should allow disabling a specific span kind of a service', (done) => {
-          let total = 0
+        it('should allow disabling a specific span kind of a service', async () => {
+          // The consumer span kind is disabled, so receiveMessage must never be traced.
+          const receiveMessageNotTraced = agent.assertNoTraces(traces => {
+            for (const trace of traces) {
+              for (const span of trace) {
+                if (span.name === 'aws.request' && span.resource === `receiveMessage ${QueueUrl}`) {
+                  throw new Error('receiveMessage must not be traced when the consumer is disabled')
+                }
+              }
+            }
+          })
 
-          agent.assertSomeTraces(traces => {
+          // The producer stays enabled, so sendMessage must be traced.
+          const sendMessageTraced = agent.assertSomeTraces(traces => {
             const span = traces[0][0]
 
             assertObjectContains(span, {
@@ -455,19 +465,7 @@ describe('Plugin', () => {
               aws_service: 'SQS',
               region: 'us-east-1',
             })
-            total++
-          }, { timeoutMs: 100 }).catch(() => {})
-
-          agent.assertSomeTraces(traces => {
-            const span = traces[0][0]
-
-            assertObjectContains(span, {
-              name: 'aws.request',
-              resource: `receiveMessage ${QueueUrl}`,
-            })
-
-            total++
-          }, { timeoutMs: 100 }).catch(() => {})
+          })
 
           sqs.sendMessage({
             MessageBody: 'test body',
@@ -479,14 +477,7 @@ describe('Plugin', () => {
             MessageAttributeNames: ['.*'],
           }, () => {})
 
-          setTimeout(() => {
-            try {
-              assert.strictEqual(total, 1)
-              done()
-            } catch (e) {
-              done(e)
-            }
-          }, 250)
+          await Promise.all([receiveMessageNotTraced, sendMessageTraced])
         })
 
         it('should not create a consumer span when the consumer is disabled', async () => {
