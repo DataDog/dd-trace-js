@@ -421,8 +421,7 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
               '_dd.inferred_span': 1,
             },
           })
-          assert.notStrictEqual(spans[0].start.toString(), null)
-
+          assert.match(spans[0].start.toString(), /^\d+$/)
           assert.strictEqual(spans[0].span_id.toString(), spans[1].parent_id.toString())
 
           assertObjectContains(spans[1], {
