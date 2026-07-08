@@ -1,8 +1,6 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-/* eslint-disable no-console */
-
 // Merges one workflow run's downloaded per-cell `coverage-*` artifact lcov reports into a single
 // lcov file under `coverage-upload/<run-id>/`, scoped to that run alone. All Green calls this as
 // soon as a sibling workflow finishes, instead of waiting for every workflow to complete before
@@ -130,7 +128,6 @@ function mergeRunCoverage (runId, inputDir = INPUT_DIR, outputDir = OUTPUT_DIR) 
   mkdirSync(runOutputDir, { recursive: true })
   writeFileSync(join(runOutputDir, 'lcov.info'), mergeLcov(reportPaths))
 
-  console.log(`Merged ${artifacts.length} cell(s) of run ${runId} into ${runOutputDir}/lcov.info`)
   return runOutputDir
 }
 
