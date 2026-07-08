@@ -83,7 +83,7 @@ class DatadogTracer {
         langInterpreter: process.jsEngine || 'v8',
         pid: process.pid,
         tracerService: config.service,
-        statsEnabled: config.stats?.enabled || false,
+        statsEnabled: config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED || false,
         hostname: config.hostname || os.hostname(),
         env: config.env || '',
         appVersion: config.version || '',
