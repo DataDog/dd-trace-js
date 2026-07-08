@@ -32,97 +32,32 @@ jobs:
         with:
           version: active
       - run: yarn add @actions/core @actions/github octokit
+      - uses: ./.github/actions/dd-sts-api-key
+        id: dd-sts
+      - uses: ./.github/actions/datadog-ci
+      - run: pip install --quiet codecov-cli
+      # Polls sibling workflows and, as soon as each one reaches a final state, downloads its
+      # artifacts, merges its lcov reports, and uploads its junit/coverage to Datadog and Codecov —
+      # instead of waiting for every workflow to finish before downloading or uploading anything.
+      # Codecov's coverage gate (`.codecov.yml`) is line-based `patch` coverage only, and this repo's
+      # `patch-istanbul-lib-coverage.js` already folds branch/function hit data into lcov's `DA:`
+      # records, so only lcov is uploaded — no separate istanbul JSON report is needed for the gate.
+      # `master-coverage` is the flag `.codecov.yml` gates `codecov/patch` on; attached only on PRs
+      # targeting master so release-branch PRs auto-pass. The SHA/PR are passed explicitly because
+      # All Green checks out the merge ref, not the head the other workflows reported coverage for.
+      # No Codecov token: the repo uploads tokenless (a token would have to be an org secret, which
+      # forks can't read).
       - run: node scripts/all-green.mjs
         env:
+          BASE_REF: ${{ github.base_ref }}
+          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
           DELAY: ${{ github.run_attempt == 1 && '2.5' || '0' }} # 2.5 minutes on first attempt, no delay on reruns
-          RUN_ATTEMPT: ${{ github.run_attempt }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
           GITHUB_PR_NUMBER: ${{ github.event.pull_request.number }}
           GITHUB_TOKEN: ${{ steps.octo-sts.outputs.token }}
-          POLLING_INTERVAL: 0.5
-          RETRIES: 30
-      # Merge every downloaded per-cell `coverage-*` artifact's lcov report into a single
-      # `coverage-upload/lcov/lcov.info`, uploaded to both Codecov and Datadog.
-      - if: "!cancelled()"
-        run: node scripts/group-coverage.mjs
-      - if: "!cancelled()"
-        uses: ./.github/actions/dd-sts-api-key
-        id: dd-sts
-      - if: "!cancelled()"
-        uses: ./.github/actions/datadog-ci
-      # The three uploads below (junit → Datadog, coverage → Datadog, coverage → Codecov) are
-      # independent of each other, and each takes roughly the same few seconds, so they run as
-      # backgrounded subshells in one step instead of as sequential steps. `wait` on every pid
-      # collects each exit code so a failure in any of them still fails the step; their log lines
-      # can interleave, so each is wrapped in `run_timed` to record its own wall-clock time to a
-      # shared file instead, printed as an unambiguous summary once they've all finished.
-      - if: "!cancelled()"
-        run: |
-          run_timed () {
-            local label="$1"; shift
-            local start=$SECONDS
-            "$@"
-            local code=$?
-            echo "$label: $((SECONDS - start))s" >> "$TIMING_FILE"
-            return $code
-          }
-
-          upload_to_codecov () {
-            commit_args=(--sha "$HEAD_SHA" --branch "$HEAD_BRANCH")
-            upload_args=(--sha "$HEAD_SHA" --dir coverage-upload/lcov -F coverage)
-            if [ -n "$PR_NUMBER" ]; then
-              commit_args+=(--pr "$PR_NUMBER")
-              upload_args+=(--pr "$PR_NUMBER")
-            fi
-            if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ "$BASE_REF" = "master" ]; then
-              upload_args+=(-F master-coverage)
-            fi
-            pip install --quiet codecov-cli
-            codecovcli create-commit "${commit_args[@]}"
-            codecovcli create-report --sha "$HEAD_SHA"
-            codecovcli do-upload "${upload_args[@]}"
-          }
-
-          TIMING_FILE=$(mktemp)
-          pids=()
-
-          run_timed "junit upload" datadog-ci junit upload --service dd-trace-js-tests --auto-discovery junit-results &
-          pids+=($!)
-
-          # A single Datadog upload for every cell's coverage, flagged `coverage`.
-          if [ -d coverage-upload/lcov ]; then
-            run_timed "datadog coverage upload" datadog-ci coverage upload coverage-upload/lcov --flags coverage &
-            pids+=($!)
-          fi
-
-          # A single Codecov upload for every cell's coverage via the CLI directly, pointed at the
-          # same lcov report as the Datadog upload. Codecov's own coverage gate (`.codecov.yml`) is
-          # line-based `patch` coverage only, and this repo's `patch-istanbul-lib-coverage.js` already
-          # folds branch/function hit data into lcov's `DA:` records, so a separate istanbul JSON
-          # upload isn't needed for the gate — only Codecov's UI-only branch/function summary widgets
-          # would have used it. `master-coverage` is the flag `.codecov.yml` gates `codecov/patch` on;
-          # attach it only on PRs targeting master so release-branch PRs auto-pass. The SHA/branch/PR
-          # are passed explicitly because All Green checks out the merge ref, not the head the other
-          # workflows reported coverage for. No token: the repo uploads tokenless (a Codecov token
-          # would have to be an org secret, which forks can't read).
-          if [ -d coverage-upload/lcov ]; then
-            run_timed "codecov upload" upload_to_codecov &
-            pids+=($!)
-          fi
-
-          exit_code=0
-          for pid in "${pids[@]}"; do
-            wait "$pid" || exit_code=1
-          done
-
-          echo "Upload timings:"
-          cat "$TIMING_FILE"
-          rm -f "$TIMING_FILE"
-
-          exit $exit_code
-        env:
-          DD_API_KEY: ${{ steps.dd-sts.outputs.api_key }}
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
-          BASE_REF: ${{ github.base_ref }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           HEAD_BRANCH: ${{ github.head_ref || github.ref_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          POLLING_INTERVAL: 0.5
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          RETRIES: 30
+          RUN_ATTEMPT: ${{ github.run_attempt }}
