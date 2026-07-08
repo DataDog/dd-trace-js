@@ -35,6 +35,19 @@ Use only the command that works in this repository. Do not run unrestricted recu
 commands across `node_modules`, workspace caches, or the whole repository unless all resolver
 commands fail.
 
+## Anchor Repository Root
+
+At the start of discovery, record the repository root and return to it before root-relative
+commands:
+
+```bash
+REPO_ROOT=$(pwd)
+```
+
+After running package-level preflights or generated-test commands, do not assume the shell stayed at
+the repository root. Prefix later discovery and manifest-writing commands with `cd "$REPO_ROOT"` or
+use absolute paths.
+
 ## What You Produce
 
 - `./dd-test-optimization-validation-manifest.json`
@@ -102,6 +115,7 @@ interpreted as proof that CI had those settings.
 
 Do not wait for a perfect manifest. Write the checkpoint manifest as soon as you have one supported
 framework, one representative CI test command when available, and a Datadog-clean preflight result.
+In large monorepos, do not enumerate every package before checkpointing.
 
 1. Discover CI workflow definitions before choosing local package scripts.
 2. Identify CI jobs, stages, or steps that install dependencies, set up Node, and run tests.
@@ -136,6 +150,11 @@ framework, one representative CI test command when available, and a Datadog-clea
 - Prefer the smallest reliable passing test command.
 - Try at most one representative existing command and one smaller fallback per framework before
   recording the failure.
+- In large monorepos, validate one representative command per distinct framework/runner shape,
+  working directory shape, setup requirement, and CI environment shape. Record duplicate packages or
+  jobs as omitted or duplicate CI candidates instead of live-replaying every package.
+- If a command shape requires a full monorepo build, Docker, databases, browser binaries, or
+  external services, omit it unless that setup is already available or documented and cheap to run.
 - Do not use benchmark/performance commands as representative test commands.
 - For Jest, record custom `runner` configuration. Custom runners can run tests while bypassing the
   lifecycle hooks dd-trace uses for individual suites and tests.
@@ -256,6 +275,15 @@ Live validation requires localhost sockets. If the fake intake fails with `EPERM
 misconfiguration. Preserve the manifest and artifacts, then ask the user to rerun live validation
 from CI, the host shell, or an agent mode that allows localhost sockets. See
 `ci/test-optimization-validation-runbook-troubleshooting.md`.
+
+Host-shell fallback command:
+
+```bash
+cd "$REPO_ROOT"
+node node_modules/dd-trace/ci/validate-test-optimization.js \
+  --manifest ./dd-test-optimization-validation-manifest.json \
+  --out ./dd-test-optimization-validation-results
+```
 
 ## Report Results
 

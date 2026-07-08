@@ -688,4 +688,75 @@ describe('test optimization validation report writer', () => {
       fs.rmSync(tmpDir, { recursive: true, force: true })
     }
   })
+
+  it('marks skipped framework entries as diagnostic-only in the human report', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
+    const out = path.join(tmpDir, 'results')
+    const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
+    const packageJsonPath = path.join(tmpDir, 'package.json')
+    const manifest = {
+      __path: manifestPath,
+      repository: {
+        root: tmpDir,
+      },
+      frameworks: [
+        {
+          id: 'jest:db-package',
+          framework: 'jest',
+          frameworkVersion: '29.7.0',
+          project: {
+            name: 'example',
+            root: tmpDir,
+            packageJson: packageJsonPath,
+          },
+        },
+      ],
+    }
+    const results = [
+      {
+        frameworkId: 'jest:db-package',
+        scenario: 'all',
+        status: 'skip',
+        diagnosis: 'jest was detected, but no runnable validation command was available.',
+        evidence: {
+          frameworkStatus: 'requires_external_service',
+        },
+        artifacts: [],
+      },
+    ]
+    const intake = {
+      requests: [],
+      writeArtifacts () {
+        const intakeDir = path.join(out, 'intake')
+        fs.mkdirSync(intakeDir, { recursive: true })
+        const requestsPath = path.join(intakeDir, 'requests.ndjson')
+        fs.writeFileSync(requestsPath, '')
+        return { requestsPath }
+      },
+    }
+    const originalLog = console.log
+
+    fs.mkdirSync(out, { recursive: true })
+    fs.writeFileSync(packageJsonPath, `${JSON.stringify({ name: 'example' }, null, 2)}\n`)
+    console.log = () => {}
+
+    try {
+      writeReport({
+        manifest,
+        results,
+        out,
+        intake,
+      })
+
+      const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
+
+      assert.match(markdown, /## Diagnostic-only and Blocked Frameworks/)
+      assert.match(markdown, /SKIP jest:db-package/)
+      assert.match(markdown, /Diagnostic-only: no live Test Optimization conclusion was reached/)
+      assert.match(markdown, /not safely validated in this environment/)
+    } finally {
+      console.log = originalLog
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
 })

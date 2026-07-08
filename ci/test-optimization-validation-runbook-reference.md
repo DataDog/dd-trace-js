@@ -117,6 +117,15 @@ Recognize these CI systems and extract test-command evidence when practical:
   wiring validation when the customer's CI job intentionally uses the wrapper.
 - If a package script appears to accept a file argument, verify that it really narrows execution.
   Some scripts ignore extra arguments and can run thousands of tests when one file was passed.
+- For large monorepos, group packages and CI jobs by command shape before running them. A command
+  shape includes framework, package manager, wrapper or monorepo tool, working directory layout,
+  required setup, and CI environment. Live-replay one small representative per shape; record the
+  other packages or matrix entries as duplicate candidates or omitted commands with source metadata.
+- If a framework is validator-supported but only available through commands that need heavy setup
+  such as a full monorepo build, Docker, databases, browser downloads, generated clients, or
+  external services, mark it `requires_external_service` or `requires_manual_setup` unless that
+  setup is already available and documented. This is diagnostic-only and should not make the live
+  validation look like a Test Optimization failure.
 - Avoid snapshot-update, golden-output, export-matrix, generated-list, benchmark, or very broad
   tests as representative commands when smaller stable tests exist.
 - Treat dependency setup as part of test-command discovery. Before reporting that a runner is

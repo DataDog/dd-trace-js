@@ -48,6 +48,20 @@ intake and test process can use localhost.
 This restriction is not specific to subagents. A user running the validator from the repository root
 inside the same restricted sandbox can hit the same blocker.
 
+If a restricted agent already produced `./dd-test-optimization-validation-manifest.json`, preserve
+that manifest and rerun only live validation from the host shell:
+
+```bash
+cd /absolute/path/to/repository
+node node_modules/dd-trace/ci/validate-test-optimization.js \
+  --manifest ./dd-test-optimization-validation-manifest.json \
+  --out ./dd-test-optimization-validation-results
+```
+
+If the package manager requires a different resolver, keep the same command shape that resolved the
+validator in the restricted run, but execute it from an environment where both binding and
+connecting to `127.0.0.1` are allowed.
+
 ## Validation Path Interpretation
 
 - Basic Reporting injects Test Optimization initialization directly into the selected command and

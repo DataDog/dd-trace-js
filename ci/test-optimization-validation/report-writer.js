@@ -99,6 +99,10 @@ function renderMarkdown (report) {
     lines.push('', '## Diagnostic-only and Blocked Frameworks', '')
     for (const result of diagnosticResults) {
       lines.push(`- ${result.status.toUpperCase()} ${result.frameworkId}: ${result.diagnosis}`)
+      lines.push(
+        '  - Diagnostic-only: no live Test Optimization conclusion was reached for this framework. ' +
+        'This records why the framework was not safely validated in this environment.'
+      )
     }
   }
 
