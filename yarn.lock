@@ -1059,10 +1059,10 @@
   dependencies:
     undici-types "~5.26.4"
 
-"@types/sinon@^21.0.1":
-  version "21.0.1"
-  resolved "https://registry.yarnpkg.com/@types/sinon/-/sinon-21.0.1.tgz#f995e2afdf15be832d5f1645803d82a8eb95a1bc"
-  integrity sha512-5yoJSqLbjH8T9V2bksgRayuhpZy+723/z6wBOR+Soe4ZlXC0eW8Na71TeaZPUWDQvM7LYKa9UGFc6LRqxiR5fQ==
+"@types/sinon@^22.0.0":
+  version "22.0.0"
+  resolved "https://registry.yarnpkg.com/@types/sinon/-/sinon-22.0.0.tgz#396af07c4452efb57950ec260d450acedf025508"
+  integrity sha512-TDbVpbccc2HfiqHR09Argj3mHV1KMW7sCCKj52fsl8lbRLkEn7fB1966EWhOKWUBcqfBueZuPoA7/OK1CKiy3g==
   dependencies:
     "@types/sinonjs__fake-timers" "*"
 
@@ -1984,12 +1984,12 @@ eslint-module-utils@^2.12.1:
   dependencies:
     debug "^3.2.7"
 
-eslint-plugin-cypress@^6.4.1:
-  version "6.4.1"
-  resolved "https://registry.yarnpkg.com/eslint-plugin-cypress/-/eslint-plugin-cypress-6.4.1.tgz#2aa64e5a2dcc56b8b916fdf8398a81b31a61c462"
-  integrity sha512-8mnfR3q0Lr41Fu9SYZGeZ5nbSBgtS44+bbtSs7k0KvfoQ2pPmK43IvaTP6FGTfwBTN6S7w027CpqjrLAd65AYA==
+eslint-plugin-cypress@^6.4.2:
+  version "6.4.2"
+  resolved "https://registry.yarnpkg.com/eslint-plugin-cypress/-/eslint-plugin-cypress-6.4.2.tgz#fdc641737d243fde5dfca5e600a4074ecc2c5fd7"
+  integrity sha512-OIGJP5y6/cyMxBtMASP/iBM7Pv4ZHccE9uI8MhtAZDrdNDYDwHgKa/3Khrr+FGRr9hSIfNYstGRhSmbcLURWYA==
   dependencies:
-    globals "^17.6.0"
+    globals "^17.7.0"
 
 eslint-plugin-es-x@^7.8.0:
   version "7.8.0"
@@ -2025,10 +2025,10 @@ eslint-plugin-import@^2.32.0:
     string.prototype.trimend "^1.0.9"
     tsconfig-paths "^3.15.0"
 
-eslint-plugin-jsdoc@^63.0.8:
-  version "63.0.8"
-  resolved "https://registry.yarnpkg.com/eslint-plugin-jsdoc/-/eslint-plugin-jsdoc-63.0.8.tgz#d8838d0b23983e11030d7acc54d5e338db921f72"
-  integrity sha512-0rLBDD03N6aL+axOtkSSaUoqhHOPKe+I1gS6dLEwm9zjqAd1e78Z7cilTnkNRQ8wOiEvzR6mvl6IDu7jiTR8UA==
+eslint-plugin-jsdoc@^63.0.10:
+  version "63.0.10"
+  resolved "https://registry.yarnpkg.com/eslint-plugin-jsdoc/-/eslint-plugin-jsdoc-63.0.10.tgz#a2a3340184513160473953c07e539e314f1371c5"
+  integrity sha512-A9UIWsCquaKnit7rasXxYf12hhGIdDRjv65/RUE3AxbT6rdKBvr3MjH37g3gP+g4ipQMXuMn9slFKjO+vqNfkg==
   dependencies:
     "@es-joy/jsdoccomment" "~0.87.0"
     "@es-joy/resolve.exports" "1.2.0"
@@ -2053,10 +2053,10 @@ eslint-plugin-mocha@^11.3.0:
     "@eslint-community/eslint-utils" "^4.4.1"
     globals "^15.14.0"
 
-eslint-plugin-n@^18.2.0:
-  version "18.2.0"
-  resolved "https://registry.yarnpkg.com/eslint-plugin-n/-/eslint-plugin-n-18.2.0.tgz#264530a08db399a2dc9b3d94d82a5181bb9c28ef"
-  integrity sha512-Hf7bfQ5qBC1U/E5jLM9s3pE5su4HHnPmPxVsYzHgS3X0Eg7/9cK7lf+JBx29YEyZ09DqJ34bS/bcb4Dyv3Th9w==
+eslint-plugin-n@^18.2.1:
+  version "18.2.1"
+  resolved "https://registry.yarnpkg.com/eslint-plugin-n/-/eslint-plugin-n-18.2.1.tgz#6f0227d408ee82c06350902c7cb850e2c96d9f4e"
+  integrity sha512-aO3C9//yq8JIvYOi/T+jPvcZ9hZzpwzbR8esrYpFtgE9vpbyM8kn42AQOtIqYspVmpaSWr8X+nrlQuAJYxXAaw==
   dependencies:
     "@eslint-community/eslint-utils" "^4.5.0"
     enhanced-resolve "^5.17.1"
@@ -3411,10 +3411,10 @@ negotiator@^1.0.0:
   resolved "https://registry.yarnpkg.com/negotiator/-/negotiator-1.0.0.tgz#b6c91bb47172d69f93cfd7c357bbb529019b5f6a"
   integrity sha512-8Ofs/AUQh8MaEcrlq5xOX0CQ9ypTF5dl78mjlMNfOK08fzpgTHQRQPBxcPlEtIw0yRpws+Zo/3r+5WRby7u3Gg==
 
-nock@^14.0.15:
-  version "14.0.15"
-  resolved "https://registry.yarnpkg.com/nock/-/nock-14.0.15.tgz#23f9978fb20d8b3607dc263f4978cb89648f550b"
-  integrity sha512-S0a47C9pLvcYx/Ugf0H30BVBEcUgMMBDk9VJIDlJ8XGrfH2QDUD4Tgdp45qDIiHttokBG+IbsOtsvIjGR/j3bg==
+nock@^14.0.16:
+  version "14.0.16"
+  resolved "https://registry.yarnpkg.com/nock/-/nock-14.0.16.tgz#d92dcc85ecf704791ef0bacb2447f81ea5ec52f4"
+  integrity sha512-8r4KEc6nT1D/fdLD/R1BO1CPaVEL8o40u/guFRJlXabN7vr3RmMqyjsY5Krt0nMwhsOAwXQ/mtN5vy5Jh3aErg==
   dependencies:
     "@mswjs/interceptors" "^0.41.0"
     json-stringify-safe "^5.0.1"
@@ -4759,10 +4759,10 @@ word-wrap@^1.2.5:
   resolved "https://registry.yarnpkg.com/word-wrap/-/word-wrap-1.2.5.tgz#d2c45c6dd4fbce621a66f136cbe328afd0410b34"
   integrity sha512-BN22B5eaMMI9UMtjrGd5g5eCYPpCPDUy0FJXbYsaT5zYxjFOckS53SQDE3pWkVoWpHXVb3BrYcEN4Twa55B5cA==
 
-workerpool@^10.0.2:
-  version "10.0.2"
-  resolved "https://registry.yarnpkg.com/workerpool/-/workerpool-10.0.2.tgz#09e3cbf65d08296e82f7cc3df7c70fa8c6a1fd69"
-  integrity sha512-8PCeZlCwu0+8hXruze1ahYNsY+M0LOCmbmySZ9BWWqWIXP9TAXa6FZCxACTDL/0j47pFcC4xW98Gr8nAC5oymg==
+workerpool@^10.0.3:
+  version "10.0.3"
+  resolved "https://registry.yarnpkg.com/workerpool/-/workerpool-10.0.3.tgz#e9914112d0169a974fc1b4c2fda00388bbd70b61"
+  integrity sha512-6z2Iis68Wqth93/G/wJP9u+R3O+d2XTlgWChGCwuT1qLbBsOYueGRZuJ++v3mtDP5KjYdy+WzvWC+VWETSVXJA==
 
 workerpool@^9.2.0:
   version "9.3.4"
