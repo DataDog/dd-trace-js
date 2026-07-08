@@ -72,11 +72,10 @@ describe('otel-sdk-trace', () => {
   })
 
   describe('hook registration', () => {
-    it('wraps NodeTracerProvider with the dd-trace TracerProvider', () => {
+    it('wraps sdk-trace-node NodeTracerProvider with the dd-trace TracerProvider', () => {
       const tracerProvider = function FakeTracerProvider () {}
       const { addHook, wrap } = loadWithEnv({ ddTraceOtelEnabled: true }, { TracerProvider: tracerProvider })
 
-      sinon.assert.calledOnce(addHook)
       const [hookOptions, transform] = addHook.firstCall.args
       assert.deepStrictEqual(hookOptions, {
         name: '@opentelemetry/sdk-trace-node',
@@ -87,8 +86,33 @@ describe('otel-sdk-trace', () => {
       const mod = { NodeTracerProvider: function OriginalProvider () {} }
       assert.equal(transform(mod), mod)
 
-      sinon.assert.calledOnceWithExactly(wrap, mod, 'NodeTracerProvider', sinon.match.func)
+      sinon.assert.calledWithExactly(wrap, mod, 'NodeTracerProvider', sinon.match.func)
       assert.equal(wrap.firstCall.args[2](), tracerProvider)
+    })
+
+    // sdk-node >= 0.220.0 builds its provider from sdk-trace's TracerProvider, so this second hook
+    // is what keeps DD_TRACE_OTEL_ENABLED spans flowing on the newer SDK.
+    it('wraps sdk-trace TracerProvider with the dd-trace TracerProvider', () => {
+      const tracerProvider = function FakeTracerProvider () {}
+      const { addHook, wrap } = loadWithEnv({ ddTraceOtelEnabled: true }, { TracerProvider: tracerProvider })
+
+      const [hookOptions, transform] = addHook.secondCall.args
+      assert.deepStrictEqual(hookOptions, {
+        name: '@opentelemetry/sdk-trace',
+        file: 'build/src/TracerProvider.js',
+        versions: ['*'],
+      })
+
+      const mod = { TracerProvider: function OriginalProvider () {} }
+      assert.equal(transform(mod), mod)
+
+      sinon.assert.calledWithExactly(wrap, mod, 'TracerProvider', sinon.match.func)
+      assert.equal(wrap.firstCall.args[2](), tracerProvider)
+    })
+
+    it('registers exactly the two provider hooks when enabled', () => {
+      const { addHook } = loadWithEnv({ ddTraceOtelEnabled: true })
+      sinon.assert.calledTwice(addHook)
     })
   })
 })
