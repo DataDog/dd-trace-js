@@ -661,7 +661,7 @@ Object.entries(proxyConfigs).forEach(([proxyType, config]) => {
   })
 })
 
-describe('Inferred Proxy Spans - various empty headers', function () {
+describe('Inferred Proxy Spans - various edge case tests', function () {
   let http
   let appListener
   let port
@@ -810,6 +810,41 @@ describe('Inferred Proxy Spans - various empty headers', function () {
         'x-dd-proxy': '',
         'x-dd-proxy-request-time-ms': '',
         'x-dd-proxy-path': '/test',
+        'x-dd-proxy-httpmethod': 'GET',
+        'x-dd-proxy-domain-name': 'example.com',
+        'x-dd-proxy-stage': 'dev',
+      },
+    })
+
+    await agent.assertSomeTraces(traces => {
+      const spans = traces[0]
+
+      assert.strictEqual(spans.length, 1)
+
+      assertObjectContains(spans[0], {
+        name: 'web.request',
+        service: 'aws-server',
+        type: 'web',
+        resource: 'GET',
+        meta: {
+          component: 'http',
+          'span.kind': 'server',
+          'http.url': `http://127.0.0.1:${port}/`,
+          'http.method': 'GET',
+          'http.status_code': '200',
+        },
+      })
+    })
+  })
+
+  it('should prepend a forward-slash to path if one is not provided.', async () => {
+    await loadTest({})
+
+    await httpClient.get(`http://127.0.0.1:${port}/`, {
+      headers: {
+        'x-dd-proxy': '',
+        'x-dd-proxy-request-time-ms': '',
+        'x-dd-proxy-path': 'test',
         'x-dd-proxy-httpmethod': 'GET',
         'x-dd-proxy-domain-name': 'example.com',
         'x-dd-proxy-stage': 'dev',

@@ -143,7 +143,11 @@ function extractInferredProxyContext (headers) {
       ? Number.parseInt(headers[PROXY_HEADER_START_TIME_MS], 10)
       : Date.now(),
     method: headers[PROXY_HEADER_HTTPMETHOD],
-    path: headers[PROXY_HEADER_PATH],
+    path: headers[PROXY_HEADER_PATH]
+      ? (headers[PROXY_HEADER_PATH].startsWith('/')
+          ? headers[PROXY_HEADER_PATH]
+          : '/' + headers[PROXY_HEADER_PATH])
+      : headers[PROXY_HEADER_PATH],
     stage: headers[PROXY_HEADER_STAGE],
     domainName: headers[PROXY_HEADER_DOMAIN],
     proxySystemName: headers[PROXY_HEADER_SYSTEM],
