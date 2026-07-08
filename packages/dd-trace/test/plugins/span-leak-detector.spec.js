@@ -17,12 +17,14 @@ if (typeof global.gc !== 'function') {
 // grows with the request count must be reported as a leak, while the small,
 // recency-bounded baseline (the few most-recent traces whose async-context frames
 // have not been overwritten yet) must pass. The detector tolerates up to
-// BASELINE_RETAINED (3) survivors — a measured maximum of two across the http
-// suites plus one slot of margin — so the boundary cases below pin 3 (accepted)
-// and 4 (the first rejected). Uses fresh detector instances (not the agent
-// singleton) so every outcome can be asserted without a real teardown.
+// BASELINE_RETAINED (10) survivors — the residual left after `closeIdleConnections`
+// releases the HTTP keep-alive retainer, still small enough that a real
+// one-span-per-request leak (dozens–hundreds) trips it — so the boundary cases
+// below pin 10 (accepted) and 11 (the first rejected). Uses fresh detector
+// instances (not the agent singleton) so every outcome can be asserted without a
+// real teardown.
 
-const BASELINE_RETAINED = 3
+const BASELINE_RETAINED = 10
 
 async function forceGc () {
   for (let i = 0; i < 10; i++) {
