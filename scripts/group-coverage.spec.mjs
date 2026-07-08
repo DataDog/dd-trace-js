@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, it } from 'mocha'
 
-import { mergeLcov, planCoverageGroups } from './group-coverage.mjs'
+import { mergeLcov, mergeRunCoverage, planCoverageGroups } from './group-coverage.mjs'
 
 /**
  * One cell's discovered report set: one `lcov` entry per Node.js version the cell ran.
@@ -87,6 +87,50 @@ describe('group-coverage', () => {
         mergeLcov([a, b]),
         'SF:a.js\nDA:1,1\nend_of_record\nSF:b.js\nDA:1,1\nend_of_record\n'
       )
+    })
+  })
+
+  describe('mergeRunCoverage', () => {
+    let dir
+
+    beforeEach(() => {
+      dir = mkdtempSync(join(tmpdir(), 'group-coverage-run-'))
+    })
+
+    afterEach(() => {
+      rmSync(dir, { force: true, recursive: true })
+    })
+
+    it('merges only the given run\'s cells into <output>/<runId>/lcov/lcov.info', () => {
+      const input = join(dir, 'coverage-results')
+      const output = join(dir, 'coverage-upload')
+      const cellDir = join(input, '42', 'coverage-apm-integrations-axios__a-0', 'node-20-x')
+      mkdirSync(cellDir, { recursive: true })
+      writeFileSync(join(cellDir, 'lcov.info'), 'SF:a.js\nDA:1,1\nend_of_record\n')
+
+      const outputDir = mergeRunCoverage('42', input, output)
+
+      assert.equal(outputDir, join(output, '42', 'lcov'))
+      assert.equal(
+        readFileSync(join(outputDir, 'lcov.info'), 'utf8'),
+        'SF:a.js\nDA:1,1\nend_of_record\n'
+      )
+    })
+
+    it('returns null when the run produced no coverage', () => {
+      const input = join(dir, 'coverage-results')
+      mkdirSync(input, { recursive: true })
+      assert.equal(mergeRunCoverage('42', input, join(dir, 'coverage-upload')), null)
+    })
+
+    it('ignores other runs\' cells', () => {
+      const input = join(dir, 'coverage-results')
+      const otherCellDir = join(input, '7', 'coverage-appsec-express__job-0', 'node-20-x')
+      mkdirSync(otherCellDir, { recursive: true })
+      writeFileSync(join(otherCellDir, 'lcov.info'), 'SF:b.js\nDA:1,1\nend_of_record\n')
+
+      assert.equal(mergeRunCoverage('42', input, join(dir, 'coverage-upload')), null)
+      assert.equal(existsSync(join(dir, 'coverage-upload', '42')), false)
     })
   })
 })
