@@ -842,7 +842,7 @@ describe('Inferred Proxy Spans - various edge case tests', function () {
 
     await httpClient.get(`http://127.0.0.1:${port}/`, {
       headers: {
-        'x-dd-proxy': '',
+        'x-dd-proxy': 'azure-gw',
         'x-dd-proxy-request-time-ms': '',
         'x-dd-proxy-path': 'test',
         'x-dd-proxy-httpmethod': 'GET',
