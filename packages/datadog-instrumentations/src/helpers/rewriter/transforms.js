@@ -28,20 +28,29 @@ function waitForAsyncEnd (_state, node) {
     return
   }
 
-  const returnIndex = statements.findIndex(statement => (
-    statement.type === 'ReturnStatement' && statement.argument?.name === 'result'
-  ))
+  const returnStatement = statements.find(statement =>
+    statement.type === 'ReturnStatement' && statement.argument
+  )
 
-  if (returnIndex === -1) return
+  // The generated fulfillment handler always ends in a return; this only guards
+  // against a future template shape the transform can no longer splice into.
+  /* istanbul ignore next */
+  if (!returnStatement) return
 
   const waitStatements = parse(`
     function wrapper () {
       const __apm$asyncEndPromise = __apm$ctx.asyncEndPromise;
       if (__apm$asyncEndPromise && typeof __apm$asyncEndPromise.then === 'function') {
-        return __apm$asyncEndPromise.then(() => result, () => result);
+        return __apm$asyncEndPromise.then(() => __apm$result, () => __apm$result);
       }
     }
   `).body[0].body.body
 
-  statements.splice(returnIndex, 0, ...waitStatements)
+  // Resolve to whatever the fulfillment handler returns (its return argument),
+  // so a subscriber that reassigned `__apm$ctx.result` in `asyncEnd` still wins.
+  const { arguments: onSettled } = waitStatements[1].consequent.body[0].argument
+  onSettled[0].body = structuredClone(returnStatement.argument)
+  onSettled[1].body = structuredClone(returnStatement.argument)
+
+  statements.splice(statements.indexOf(returnStatement), 0, ...waitStatements)
 }
