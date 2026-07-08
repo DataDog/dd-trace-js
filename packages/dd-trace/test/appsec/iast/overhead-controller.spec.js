@@ -17,9 +17,16 @@ const id = require('../../../src/id')
 const DatadogSpanContext = require('../../../src/opentracing/span_context')
 const { getConfigFresh } = require('../../helpers/config')
 const agent = require('../../plugins/agent')
+const { withSpanLeakBaseline } = require('../../plugins/span-leak-detector')
 const { testInRequest } = require('./utils')
 
 describe('Overhead controller', () => {
+  // Node's per-connection HTTP keep-alive timer captures the async-context frame
+  // active when the request ran, so a fixed (non-scaling) number of finished
+  // spans stays reachable at teardown. Tolerate it without loosening the detector
+  // for other suites.
+  withSpanLeakBaseline(15)
+
   let oceContextKey, overheadController, web
 
   describe('unit tests', () => {

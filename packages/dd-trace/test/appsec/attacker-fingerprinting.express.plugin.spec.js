@@ -8,11 +8,18 @@ const { inspect } = require('node:util')
 const axios = require('axios')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
+const { withSpanLeakBaseline } = require('../plugins/span-leak-detector')
 const { getConfigFresh } = require('../helpers/config')
 const { withVersions } = require('../../../dd-trace/test/setup/mocha')
 
 withVersions('express', 'express', expressVersion => {
   describe('Attacker fingerprinting', () => {
+    // Node's per-connection HTTP keep-alive timer captures the async-context
+    // frame active when the request ran, so a fixed (non-scaling) number of
+    // finished spans stays reachable at teardown. Tolerate it without loosening
+    // the detector for other suites.
+    withSpanLeakBaseline(25)
+
     let port, server
 
     before(() => {

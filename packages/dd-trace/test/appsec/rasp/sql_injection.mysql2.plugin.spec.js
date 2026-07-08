@@ -7,10 +7,17 @@ const Axios = require('axios')
 const agent = require('../../plugins/agent')
 const appsec = require('../../../src/appsec')
 const getConfig = require('../../../src/config')
+const { withSpanLeakBaseline } = require('../../plugins/span-leak-detector')
 const { withVersions } = require('../../setup/mocha')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
 describe('RASP - sql_injection', () => {
+  // Node's per-connection HTTP keep-alive timer captures the async-context frame
+  // active when the request ran, so a fixed (non-scaling) number of finished
+  // spans stays reachable at teardown. Tolerate it without loosening the detector
+  // for other suites.
+  withSpanLeakBaseline(15)
+
   withVersions('mysql2', 'express', expressVersion => {
     withVersions('mysql2', 'mysql2', mysql2Version => {
       describe('sql injection with mysql2', () => {

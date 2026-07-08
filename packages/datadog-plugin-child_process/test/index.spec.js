@@ -9,6 +9,7 @@ const sinon = require('sinon')
 const { storage } = require('../../datadog-core')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { expectSomeSpan } = require('../../dd-trace/test/plugins/helpers')
+const { withSpanLeakBaseline } = require('../../dd-trace/test/plugins/span-leak-detector')
 const ChildProcessPlugin = require('../src')
 const { temporaryWarningExceptions } = require('../../dd-trace/test/setup/core')
 
@@ -26,6 +27,12 @@ function normalizeArgs (methodName, command, options) {
 }
 
 describe('Child process plugin', () => {
+  // A spawned child process keeps a handle whose timer captures the async-context
+  // frame active when it was created, so a fixed (non-scaling) number of finished
+  // spans stays reachable at teardown. Tolerate it without loosening the detector
+  // for other suites.
+  withSpanLeakBaseline(25)
+
   describe('unit tests', () => {
     let tracerStub, configStub, spanStub
 

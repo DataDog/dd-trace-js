@@ -12,12 +12,19 @@ const { describe, it, before, after } = require('mocha')
 
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
+const { withSpanLeakBaseline } = require('../plugins/span-leak-detector')
 const { withVersions } = require('../setup/mocha')
 
 const { getConfigFresh } = require('../helpers/config')
 
 withVersions('stripe', 'stripe', version => {
   describe('Stripe Payment Events', () => {
+    // Node's per-connection HTTP keep-alive timer captures the async-context
+    // frame active when the webhook request ran, so a fixed (non-scaling) number
+    // of finished spans stays reachable at teardown. Tolerate it without
+    // loosening the detector for other suites.
+    withSpanLeakBaseline(15)
+
     const WEBHOOK_SECRET = 'whsec_FAKE'
 
     let server, axios

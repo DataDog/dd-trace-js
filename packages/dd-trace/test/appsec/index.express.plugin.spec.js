@@ -12,11 +12,18 @@ const { describe, it, before, beforeEach, afterEach, after } = require('mocha')
 const { NODE_MAJOR } = require('../../../../version')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
+const { withSpanLeakBaseline } = require('../plugins/span-leak-detector')
 const { withVersions } = require('../setup/mocha')
 
 const { getConfigFresh } = require('../helpers/config')
 
 const { blockedTemplateJson: json, setTestBlockingTemplates } = require('./utils')
+
+// Node's per-connection HTTP keep-alive timer captures the async-context frame
+// active when the request ran, so a fixed (non-scaling) number of finished spans
+// stays reachable at teardown. Tolerate it without loosening the detector for
+// other suites.
+withSpanLeakBaseline(25)
 
 withVersions('express', 'express', version => {
   if (semver.intersects(version, '<=4.10.5') && NODE_MAJOR >= 24) {

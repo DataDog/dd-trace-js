@@ -1,5 +1,6 @@
 'use strict'
 
+const { withSpanLeakBaseline } = require('../../dd-trace/test/plugins/span-leak-detector')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 const { NODE_MAJOR } = require('../../../version')
 
@@ -86,6 +87,12 @@ const helpers = {
   withAwsSdkVersions,
 
   setup () {
+    // The AWS SDK's pooled HTTP connection keeps a keep-alive timer that captures
+    // the async-context frame active when the request ran, so a fixed (non-scaling)
+    // number of finished spans stays reachable at teardown. Tolerate it without
+    // loosening the detector for other suites.
+    withSpanLeakBaseline(25)
+
     before(() => {
       process.env.AWS_SECRET_ACCESS_KEY = '0000000000/00000000000000000000000000000'
       process.env.AWS_ACCESS_KEY_ID = '00000000000000000000'

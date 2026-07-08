@@ -4,6 +4,7 @@ const assert = require('node:assert')
 const semifies = require('semifies')
 const agent = require('../../dd-trace/test/plugins/agent')
 const { assertObjectContains, useEnv } = require('../../../integration-tests/helpers')
+const { withSpanLeakBaseline } = require('../../dd-trace/test/plugins/span-leak-detector')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 const { NODE_MAJOR } = require('../../../version')
@@ -51,6 +52,12 @@ describe('Plugin', () => {
   useEnv({
     OPENAI_API_KEY: '<not-a-real-key>',
   })
+
+  // The provider HTTP client keeps a pooled keep-alive connection whose timer
+  // captures the async-context frame active when the request ran, so a fixed
+  // (non-scaling) number of finished spans stays reachable at teardown. Tolerate
+  // it without loosening the detector for other suites.
+  withSpanLeakBaseline(20)
 
   withVersions('ai', 'ai', range, (version, _, realVersion) => {
     let ai
