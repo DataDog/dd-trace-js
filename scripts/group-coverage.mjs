@@ -1,17 +1,13 @@
-import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { argv } from 'node:process'
-import { fileURLToPath } from 'node:url'
 
 /* eslint-disable no-console */
 
-// Merges every downloaded per-cell `coverage-*` artifact's lcov report into a single lcov file under
-// `coverage-upload/`, so the All Green upload steps send one physical report to each backend instead
-// of one per matrix cell (400+). Codecov silently parks uploads past its ~150-per-commit ceiling in
-// `started` (never merged), so the cell-per-upload model dropped coverage; beyond that ceiling, both
-// `datadog-ci` and `codecovcli` also pay a real per-file cost reading/packaging a directory before
-// their single network call — one physical file cuts that client-side overhead to (near) zero
-// regardless of how many cells contributed to it.
+// Merges one workflow run's downloaded per-cell `coverage-*` artifact lcov reports into a single
+// lcov file under `coverage-upload/<run-id>/`, scoped to that run alone. All Green calls this as
+// soon as a sibling workflow finishes, instead of waiting for every workflow to complete before
+// merging and uploading anything — the goal is for each workflow's coverage to reach Datadog and
+// Codecov shortly after that workflow finishes, in parallel with the rest still running.
 //
 // lcov is a plain-text, per-source-file record format, so concatenating reports is a valid merge on
 // its own (`lcov`/`genhtml` do the same to combine reports) — no per-file hit-count summing is
@@ -114,42 +110,28 @@ function mergeLcov (reportPaths) {
   }).join('')
 }
 
-function main () {
-  rmSync(OUTPUT_DIR, { force: true, recursive: true })
-
-  const files = collectCoverageFiles(INPUT_DIR)
-  if (files.length === 0) {
-    console.log(`No coverage reports found under ${INPUT_DIR}/.`)
-    return
-  }
+/**
+ * Merge a single workflow run's downloaded lcov reports into one file for upload.
+ *
+ * @param {string|number} runId
+ * @param {string} [inputDir]
+ * @param {string} [outputDir]
+ * @returns {string|null} Directory containing the merged `lcov.info`, or null if the run has none.
+ */
+function mergeRunCoverage (runId, inputDir = INPUT_DIR, outputDir = OUTPUT_DIR) {
+  const files = collectCoverageFiles(join(inputDir, String(runId)), [], { runId: String(runId) })
+  if (files.length === 0) return null
 
   const { reportsByArtifact, artifacts } = planCoverageGroups(files)
+  const reportPaths = artifacts.flatMap(artifact => reportsByArtifact.get(artifact).map(r => r.reportPath))
+  if (reportPaths.length === 0) return null
 
-  const reportPathsByFormat = new Map()
-  for (const artifact of artifacts) {
-    for (const { format, reportPath } of reportsByArtifact.get(artifact)) {
-      const reportPaths = reportPathsByFormat.get(format)
-      if (reportPaths) {
-        reportPaths.push(reportPath)
-      } else {
-        reportPathsByFormat.set(format, [reportPath])
-      }
-    }
-  }
+  const runOutputDir = join(outputDir, String(runId), 'lcov')
+  mkdirSync(runOutputDir, { recursive: true })
+  writeFileSync(join(runOutputDir, 'lcov.info'), mergeLcov(reportPaths))
 
-  console.log(`Merging ${reportsByArtifact.size} cell report set(s) into ${OUTPUT_DIR}/.`)
-
-  const lcovReportPaths = reportPathsByFormat.get('lcov') ?? []
-  if (lcovReportPaths.length > 0) {
-    mkdirSync(join(OUTPUT_DIR, 'lcov'), { recursive: true })
-    writeFileSync(join(OUTPUT_DIR, 'lcov', 'lcov.info'), mergeLcov(lcovReportPaths))
-  }
-
-  console.log(`  ${artifacts.length} cell(s): ${lcovReportPaths.length} lcov`)
+  console.log(`Merged ${artifacts.length} cell(s) of run ${runId} into ${runOutputDir}/lcov.info`)
+  return runOutputDir
 }
 
-export { mergeLcov, planCoverageGroups }
-
-if (argv[1] === fileURLToPath(import.meta.url)) {
-  main()
-}
+export { mergeLcov, mergeRunCoverage, planCoverageGroups }
