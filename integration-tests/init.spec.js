@@ -288,6 +288,9 @@ if (semver.satisfies(process.versions.node, '>=14.13.1')) {
 
     if (semver.satisfies(process.versions.node, '>=20.6.0')) {
       context('as --import', () => {
+        // The loader hook is skipped on bailout, so --import children exit on their
+        // own; killing them would mask a regression that keeps the process alive.
+        setShouldKill(false)
         testInjectionScenarios('import', 'initialize.mjs', true)
         testRuntimeVersionChecks('import', 'initialize.mjs')
       })
