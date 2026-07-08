@@ -22,14 +22,18 @@ class GraphQLValidatePlugin extends TracingPlugin {
     // document. validate is the first boundary that has it and precedes both
     // execute and any pre-execute rejection (unknown field, GET mutation), so a
     // failing request still ends up with a resource and operation tags. The
-    // request span and its operation name ride the active store the request
-    // boundary entered (validate's own `ctx.currentStore` is not populated
-    // yet). No-op for graphql-js/apollo/yoga, which never open a request span.
+    // request span, its operation name, and the raw source ride the active
+    // store the request boundary entered (validate's own `ctx.currentStore` is
+    // not populated yet). The cache is keyed by that raw source, not the parsed
+    // document — for a pre-parsed AST mercurius validates a structuredClone, so
+    // the document here is a different object from the one the boundary saw and
+    // recovers on the warm path. No-op for graphql-js/apollo/yoga, which never
+    // open a request span.
     const requestStore = legacyStorage.getStore()
     refineRequestSpan(
       requestStore?.graphqlRequestSpan,
       document,
-      docSource,
+      requestStore?.graphqlRequestSource,
       requestStore?.graphqlRequestOperationName,
       this.config.signature
     )

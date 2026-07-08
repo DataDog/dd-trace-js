@@ -26,6 +26,17 @@ const operationTypes = new Set(['query', 'mutation', 'subscription'])
 // safe separator that keeps the two parts from colliding.
 const requestOperationCache = new LRUCache({ max: 500 })
 
+// Mercurius also accepts a pre-parsed document AST as the source, which reaches
+// the request boundary as an object rather than query text — so there is no
+// string to key the LRU by. Mercurius keys its own document LRU by that source
+// object's identity, and the same object reaches the boundary on the warm path,
+// so a WeakMap keyed by the caller-owned document recovers the metadata without
+// mutating the document and releases with it. The value carries the requested
+// operation name so a JIT-only sibling selection is not handed another
+// operation's metadata (same reason the string cache keys by operation name).
+/** @type {WeakMap<object, Map<string | undefined, RequestOperation>>} */
+const documentOperationCache = new WeakMap()
+
 /**
  * @param {string} source - The raw query text; the same key mercurius uses.
  * @param {string | undefined} operationName - The requested operation name.
@@ -36,13 +47,30 @@ function requestOperationKey (source, operationName) {
 }
 
 /**
- * @param {string | undefined} source - undefined for a pre-parsed AST source.
+ * @param {unknown} source - Query text on the common path; a pre-parsed
+ *   document AST otherwise. Any other shape (mercurius rejects it before
+ *   execute) has no cache entry and yields undefined.
  * @param {string | undefined} operationName - The requested operation name.
  * @returns {RequestOperation | undefined}
  */
 function getCachedRequestOperation (source, operationName) {
-  if (source === undefined) return
-  return requestOperationCache.get(requestOperationKey(source, operationName))
+  if (typeof source === 'string') {
+    return requestOperationCache.get(requestOperationKey(source, operationName))
+  }
+  if (source === null || typeof source !== 'object') return
+  return documentOperationCache.get(source)?.get(operationName)
+}
+
+/**
+ * A string source keys the text LRU; a document AST keys the WeakMap. Any other
+ * shape has no usable key — mercurius rejects it before execute, so the warm
+ * path never reaches the request span for it either.
+ *
+ * @param {unknown} source
+ * @returns {source is string | object}
+ */
+function isCacheableSource (source) {
+  return typeof source === 'string' || (source !== null && typeof source === 'object')
 }
 
 /**
@@ -82,11 +110,16 @@ function getOperation (document, operationName) {
  *
  * @param {import('../../dd-trace/src/opentracing/span') | undefined} requestSpan
  * @param {import('graphql').DocumentNode | undefined} document
- * @param {string | undefined} docSource - undefined for a pre-parsed AST source.
+ * @param {unknown} requestSource - The raw source the request boundary saw:
+ *   query text on the common path, a pre-parsed document AST otherwise. The
+ *   cache is keyed by it, not by the parsed document, so the request boundary
+ *   recovers the metadata on the warm path from the same value mercurius keys
+ *   its own document LRU by. Any other shape has no usable key and is not
+ *   cached (the warm path never reaches this span for it either).
  * @param {string | undefined} operationName - The requested operation name.
  * @param {boolean} calculateSignature - The graphql plugin's `signature` config.
  */
-function refineRequestSpan (requestSpan, document, docSource, operationName, calculateSignature) {
+function refineRequestSpan (requestSpan, document, requestSource, operationName, calculateSignature) {
   /* istanbul ignore if: validate only refines after the request span and parsed document exist. */
   if (!requestSpan || requestSpan.ddRequestRefined || !document) return
   requestSpan.ddRequestRefined = true
@@ -100,11 +133,11 @@ function refineRequestSpan (requestSpan, document, docSource, operationName, cal
   if (type) requestSpan.setTag('graphql.operation.type', type)
   if (name) requestSpan.setTag('graphql.operation.name', name)
 
-  if (docSource === undefined) return
+  if (!isCacheableSource(requestSource)) return
 
   // Cache the selected operation under the requested name (undefined selects
   // the document's first operation, so it shares the entry with that name).
-  cacheRequestOperation(docSource, operationName, { signature, type, name })
+  cacheRequestOperation(requestSource, operationName, { signature, type, name })
 
   // Cache every named operation so a JIT-only sibling selection is labeled from
   // this single parse instead of falling back to a bare operation name.
@@ -113,7 +146,7 @@ function refineRequestSpan (requestSpan, document, docSource, operationName, cal
     if (definitionName === undefined || !operationTypes.has(definition.operation)) continue
     if (definitionName === operationName) continue
 
-    cacheRequestOperation(docSource, definitionName, {
+    cacheRequestOperation(requestSource, definitionName, {
       signature: getSignature(document, definitionName, definition.operation, calculateSignature),
       type: definition.operation,
       name: definitionName,
@@ -122,12 +155,23 @@ function refineRequestSpan (requestSpan, document, docSource, operationName, cal
 }
 
 /**
- * @param {string} source - The raw query text; the same key mercurius uses.
+ * @param {string | import('graphql').DocumentNode} source - Query text keys the
+ *   text LRU; a caller-owned document AST keys the WeakMap (never mutated).
  * @param {string | undefined} operationName - The requested operation name.
  * @param {RequestOperation} operation
  */
 function cacheRequestOperation (source, operationName, operation) {
-  requestOperationCache.set(requestOperationKey(source, operationName), operation)
+  if (typeof source === 'string') {
+    requestOperationCache.set(requestOperationKey(source, operationName), operation)
+    return
+  }
+
+  let operations = documentOperationCache.get(source)
+  if (operations === undefined) {
+    operations = new Map()
+    documentOperationCache.set(source, operations)
+  }
+  operations.set(operationName, operation)
 }
 
 /**

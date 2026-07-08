@@ -31,14 +31,16 @@ class GraphQLRequestPlugin extends TracingPlugin {
     const operationName = ctx.arguments?.[3]
 
     // `source` is the request text on the common path, but mercurius also
-    // accepts a pre-parsed document AST; only a string is the query text.
+    // accepts a pre-parsed document AST; only a string is the query text, and
+    // `graphql.source` carries only the text form.
     const docSource = typeof source === 'string' ? source : undefined
 
     // Warm (JIT-compiled) path: execute never fires, so recover the operation
-    // signature/type the cold path cached by source + operationName. Empty on
-    // the cold path — execute hasn't run yet — where the execute sub-plugin
-    // backfills instead.
-    const cached = getCachedRequestOperation(docSource, operationName)
+    // signature/type the cold path cached, keyed by source + operationName —
+    // by query text for a string, by document identity for a pre-parsed AST.
+    // Empty on the cold path — validate hasn't refined yet — where the request
+    // span is refined from the parsed document instead.
+    const cached = getCachedRequestOperation(source, operationName)
 
     const span = this.startSpan(this.operationName({ id: 'request' }), {
       service: this.config.service || this.serviceName(),
@@ -56,11 +58,16 @@ class GraphQLRequestPlugin extends TracingPlugin {
       },
     }, ctx)
 
-    // Hand the span and the requested operation name to the validate sub-plugin
-    // running inside this store so it can refine the resource + operation tags
-    // from the parsed document (validate is the first boundary that has it).
+    // Hand the span, the requested operation name, and the raw source to the
+    // validate sub-plugin running inside this store so it can refine the
+    // resource + operation tags from the parsed document (validate is the first
+    // boundary that has it) and cache them keyed by the source the request
+    // boundary saw. The raw source is the cache key — validate sees mercurius's
+    // internally parsed document, not the caller's source, and for a pre-parsed
+    // AST the two are different objects.
     ctx.currentStore.graphqlRequestSpan = span
     ctx.currentStore.graphqlRequestOperationName = operationName
+    ctx.currentStore.graphqlRequestSource = source
 
     return ctx.currentStore
   }
