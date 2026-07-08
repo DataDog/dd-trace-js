@@ -356,7 +356,9 @@ function expectedLLMObsTags ({
 }) {
   const version = span.meta?.version ?? ''
   const env = span.meta?.env ?? ''
-  const service = span.meta?.service ?? ''
+  // `service` is a top-level span field on the v0.4 wire (not a meta entry);
+  // fall back to meta for any producer that puts it there.
+  const service = span.service ?? span.meta?.service ?? ''
 
   const spanTags = [
     `version:${version}`,
