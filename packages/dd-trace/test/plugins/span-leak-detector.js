@@ -44,24 +44,52 @@ const MAX_GC_CYCLES = 10
 
 /**
  * Default upper bound on finished spans that may still be reachable at teardown
- * without indicating a leak. Benign retention is the handful of most-recent
- * traces whose async-context frames have not been overwritten yet (see above); a
- * sweep of the http/http2 suites topped out at two, so this is that measured
- * maximum plus one slot of margin. It is an absolute cap, not a per-request
- * allowance: a #9227-style leak retains one span per request and blows past it by
- * orders of magnitude, so the margin costs no detection power.
+ * without indicating a leak. Benign retention has two sources: the handful of
+ * most-recent traces whose async-context frames have not been overwritten yet
+ * (see above), and the small residue that survives `releaseKeepAliveRetainers`
+ * on HTTP-server suites (a middleware `next` closure still holding the last
+ * request's `req`). Both are recency-bounded, not per-request: an http-suite
+ * sweep tops out at a handful, so 10 covers it with margin. It is an absolute
+ * cap, not a per-request allowance — a #9227-style leak retains one span per
+ * request and blows past 10 by orders of magnitude, so the margin costs no
+ * detection power.
  *
  * A few suites exercise upstream libraries that pin a *fixed* number of finished
- * spans regardless of request count — e.g. `@grpc/grpc-js` keeps a cleared
- * `Timeout` on each pooled `Subchannel`, and under AsyncContextFrame that timer
- * retains the `{ ...store, span }` frame active when the subchannel was built.
- * That retention does not scale, so it is not the leak this detector hunts, but
- * it does exceed the default. Those suites raise the bound with
- * {@link SpanLeakDetector#setBaseline} in a `before` hook and restore it with
- * {@link SpanLeakDetector#resetBaseline} in `after`, so every other suite keeps
- * the tight default.
+ * spans regardless of request count, through a retainer `closeIdleConnections`
+ * cannot reach — e.g. `@grpc/grpc-js` keeps a cleared `Timeout` on each pooled
+ * `Subchannel`, and under AsyncContextFrame that timer retains the
+ * `{ ...store, span }` frame active when the subchannel was built. That retention
+ * does not scale, but it exceeds the default, so those suites raise the bound
+ * with {@link SpanLeakDetector#withSpanLeakBaseline}, keeping the tight default
+ * for every other suite.
  */
-const BASELINE_RETAINED = 3
+const BASELINE_RETAINED = 10
+
+/**
+ * Close idle connections on every live HTTP/net server so their per-connection
+ * keep-alive timers stop pinning finished spans. Node arms a keep-alive/headers
+ * `Timeout` per connection; under AsyncContextFrame that timer's callback closes
+ * over the `{ ...store, span }` frame active when the request ran, and it stays in
+ * the active-timer list — reachable from the still-open `Server` — until it fires.
+ * That is the dominant retainer for HTTP-server suites (express, fastify, koa,
+ * connect, the AppSec/IAST specs). Releasing it at the source lets those suites
+ * keep the tight default instead of each raising a baseline for benign residue.
+ *
+ * Best-effort: `_getActiveHandles` is internal and its entries vary by Node
+ * version, so guard every access. `closeIdleConnections` (Node >=18.2) only drops
+ * sockets with no in-flight request, so it never interrupts real work; the
+ * assertion runs at agent teardown, after the suite's requests have completed.
+ *
+ * @returns {void}
+ */
+function releaseKeepAliveRetainers () {
+  const handles = process._getActiveHandles?.()
+  if (handles === undefined) return
+
+  for (const handle of handles) {
+    handle?.closeIdleConnections?.()
+  }
+}
 
 class SpanLeakDetector {
   #registry
@@ -165,6 +193,8 @@ class SpanLeakDetector {
       this.#reset()
       return
     }
+
+    releaseKeepAliveRetainers()
 
     // Let any pending flush / microtasks settle, then force GC and give the
     // registry callbacks a turn. Repeat until retention is within the baseline or
