@@ -279,13 +279,17 @@ class NativeDatadogSpan extends DatadogSpan {
     if (startTime) spanContext._trace.startTime = startTime
     spanContext._isRemote = false
 
-    // Same formula as the parent's later
-    // `this._startTime = fields.startTime || this._getTime()`.
-    // Sub-microsecond `performance.now()` drift between the two
-    // computations is below export resolution.
+    // Compute the start time once and pin it onto `fields.startTime` so the
+    // parent constructor's `this._startTime = fields.startTime || this._getTime()`
+    // reuses this exact value instead of calling `performance.now()` again after
+    // this method returns. Otherwise the WASM span's `start` (sent below) and the
+    // JS `_startTime` (read by consumers like LLMObs) would drift by the
+    // intervening constructor work, and the exported span's start+duration would
+    // not add up to its finish time.
     const createStartTime = fields.startTime === undefined
       ? spanContext._trace.startTime + now() - spanContext._trace.ticks
       : fields.startTime
+    fields.startTime = createStartTime
 
     // CreateSpan carries the name natively, so we set it silently on
     // the JS side and shadow `_syncNameToNative` with a no-op for the
