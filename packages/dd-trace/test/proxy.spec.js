@@ -395,6 +395,16 @@ describe('TracerProxy', () => {
         sinon.assert.calledWith(openfeatureProvider._setConfiguration, flagConfig)
       })
 
+      it('should not recreate the openfeature provider when remote config reconfigures the tracer', () => {
+        config.experimental.flaggingProvider.enabled = true
+
+        proxy.init()
+
+        handlers.get('APM_TRACING')(createApmTracingTransaction('ffe-reconfig', { DD_TRACE_ENABLED: true }, 'modify'))
+
+        sinon.assert.calledOnce(OpenFeatureProvider)
+      })
+
       it('should support applying remote config', () => {
         const RemoteConfigProxy = proxyquire('../src/proxy', {
           './tracer': DatadogTracer,
