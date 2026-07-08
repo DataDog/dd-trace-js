@@ -8,6 +8,8 @@
 // the library, replace the custom registration with the built-in option and
 // remove the entry here.
 
+const clone = require('../../../../../vendor/dist/rfdc')({ proto: false, circles: false })
+
 const { parse, query } = require('./compiler')
 
 module.exports = { waitForAsyncEnd }
@@ -28,14 +30,14 @@ function waitForAsyncEnd (_state, node) {
     return
   }
 
-  const returnStatement = statements.find(statement =>
+  const returnIndex = statements.findIndex(statement =>
     statement.type === 'ReturnStatement' && statement.argument
   )
 
   // The generated fulfillment handler always ends in a return; this only guards
   // against a future template shape the transform can no longer splice into.
   /* istanbul ignore next */
-  if (!returnStatement) return
+  if (returnIndex === -1) return
 
   const waitStatements = parse(`
     function wrapper () {
@@ -48,9 +50,10 @@ function waitForAsyncEnd (_state, node) {
 
   // Resolve to whatever the fulfillment handler returns (its return argument),
   // so a subscriber that reassigned `__apm$ctx.result` in `asyncEnd` still wins.
+  const returnArgument = statements[returnIndex].argument
   const { arguments: onSettled } = waitStatements[1].consequent.body[0].argument
-  onSettled[0].body = structuredClone(returnStatement.argument)
-  onSettled[1].body = structuredClone(returnStatement.argument)
+  onSettled[0].body = clone(returnArgument)
+  onSettled[1].body = clone(returnArgument)
 
-  statements.splice(statements.indexOf(returnStatement), 0, ...waitStatements)
+  statements.splice(returnIndex, 0, ...waitStatements)
 }
