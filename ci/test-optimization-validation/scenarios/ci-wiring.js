@@ -14,10 +14,12 @@ const {
   basicEventEvidence,
   error,
   fail,
+  findInterestingLines,
   frameworkOutDir,
   hasAllBasicEventTypes,
   pass,
   skip,
+  tailInterestingLines,
 } = require('./helpers')
 
 async function runCiWiring ({ manifest, framework, intake, out, options, basicResult }) {
@@ -61,6 +63,8 @@ async function runCiWiring ({ manifest, framework, intake, out, options, basicRe
     }
 
     if (!hasAllBasicEventTypes(events)) {
+      evidence.commandFailure = summarizeCiCommandFailure(result, evidence)
+      evidence.debugSignals = summarizeCiDebugSignals(result)
       const probe = await maybeRunInitializationProbe({ command, framework, intake, options, outDir, result, evidence })
       if (probe.summary) evidence.initializationProbe = probe.summary
       evidence.monorepoFindings = getMonorepoFindings({ framework, command, probe: probe.summary })
@@ -168,12 +172,24 @@ function getCiWiringEventFailure ({ framework, result, evidence, basicResult }) 
     }
   }
 
+  const commandFailure = evidence.commandFailure || summarizeCiCommandFailure(result, evidence)
+  if (commandFailure.kind !== 'ci-wiring-command-result-unknown') {
+    return {
+      ...localFailure,
+      kind: commandFailure.kind,
+      missingLevels: localFailure.missingLevels,
+      signals: commandFailure.signals,
+      summary: commandFailure.summary,
+      recommendation: commandFailure.recommendation,
+    }
+  }
+
   return {
     ...localFailure,
-    summary: 'The CI test command did not emit Test Optimization events with the initialization configured by CI. ' +
-      localFailure.summary,
-    recommendation: 'Verify the selected CI step is the real test step and that CI-provided Test Optimization ' +
-      'initialization reaches the final test process.',
+    summary: 'The CI-shaped command did not emit Test Optimization events, and the validator could not determine ' +
+      'from its output whether tests ran. Review the recorded stdout/stderr artifacts for the selected CI step.',
+    recommendation: 'Verify the selected CI step is the real test step, then rerun after making the command output ' +
+      'or preflight evidence identify the test runner result.',
   }
 }
 
@@ -207,6 +223,121 @@ function getCiWiringTestsRanRecommendation ({ basicResult, evidence }) {
   }
 
   return recommendation
+}
+
+function summarizeCiCommandFailure (result, evidence) {
+  const output = `${result.stdout || ''}\n${result.stderr || ''}`
+  const preloadFailure = detectDatadogPreloadResolutionFailure(output)
+  const testsRan = commandOutputShowsTestsRan(evidence.commandOutputSummary || [])
+  const common = {
+    exitCode: result.exitCode,
+    stderrExcerpt: tailInterestingLines(result.stderr),
+    stdoutExcerpt: tailInterestingLines(result.stdout),
+  }
+
+  if (preloadFailure) {
+    return {
+      ...common,
+      kind: 'ci-wiring-preload-resolution-failed',
+      signals: preloadFailure.signals,
+      summary: 'The CI-shaped command failed before tests started because Node could not resolve the Test ' +
+        'Optimization preload `dd-trace/ci/init` from the command working directory.',
+      recommendation: 'Make sure `dd-trace` is installed where the CI command starts, or run the CI command from ' +
+        'the package working directory that can resolve `dd-trace/ci/init`. After the preload resolves, rerun CI ' +
+        'wiring validation to check whether the required Datadog setup reaches the final test runner.',
+    }
+  }
+
+  if (result.timedOut === true) {
+    return {
+      ...common,
+      kind: 'ci-wiring-command-timed-out',
+      signals: [],
+      summary: 'The CI-shaped command timed out before the validator could observe Test Optimization events.',
+      recommendation: 'Choose a smaller representative CI test command or record the setup needed to make the ' +
+        'selected command complete within the validation timeout.',
+    }
+  }
+
+  if (result.exitCode !== 0 && !testsRan) {
+    const termination = Number.isInteger(result.exitCode) ? `exited ${result.exitCode}` : 'failed'
+    const buildErrors = findInterestingLines(output, [
+      /Cannot find module/,
+      /Module not found/,
+      /Error \[ERR_MODULE_NOT_FOUND\]/,
+      /Could not resolve /,
+      /command not found/,
+      /No test files found/,
+    ])
+
+    return {
+      ...common,
+      buildErrors,
+      kind: 'ci-wiring-command-failed-before-tests',
+      signals: buildErrors,
+      summary: `The CI-shaped command ${termination} before the validator observed any tests running. ` +
+        'No CI wiring conclusion about Test Optimization initialization was reached for this command.',
+      recommendation: 'Fix or document the command/setup failure first. CI wiring can only be interpreted after ' +
+        'the selected CI-shaped command reaches the test runner.',
+    }
+  }
+
+  if (result.exitCode === 0 && !testsRan) {
+    return {
+      ...common,
+      kind: 'ci-wiring-no-observed-tests',
+      signals: [],
+      summary: 'The CI-shaped command exited 0, but the validator did not observe test-runner output or Test ' +
+        'Optimization events.',
+      recommendation: 'Verify that the selected CI step actually runs tests. If it is a wrapper with unusual ' +
+        'output, record preflight observedTestCount or choose a representative command whose output identifies ' +
+        'the test result.',
+    }
+  }
+
+  return {
+    ...common,
+    kind: 'ci-wiring-command-result-unknown',
+    signals: [],
+    summary: 'The CI-shaped command result did not explain why Test Optimization events were missing.',
+    recommendation: 'Review stdout, stderr, and debug lines for the selected CI-shaped command.',
+  }
+}
+
+function detectDatadogPreloadResolutionFailure (output) {
+  if (!/dd-trace(?:\/ci\/init)?/.test(output)) return null
+  if (!/MODULE_NOT_FOUND|ERR_MODULE_NOT_FOUND|Cannot find module|Cannot find package/.test(output)) return null
+
+  const signals = findInterestingLines(output, [
+    /Cannot find module ['"]dd-trace\/ci\/init['"]/,
+    /Cannot find package ['"]dd-trace['"]/,
+    /Error \[ERR_MODULE_NOT_FOUND\].*dd-trace\/ci\/init/,
+    /MODULE_NOT_FOUND/,
+    /internal\/preload/,
+  ], 8)
+
+  return { signals }
+}
+
+function summarizeCiDebugSignals (result) {
+  const output = `${result.stdout || ''}\n${result.stderr || ''}`
+  const lines = findInterestingLines(output, [
+    /dd-trace/i,
+    /datadog/i,
+    /ci visibility/i,
+    /test optimization/i,
+    /ECONNREFUSED/,
+    /ECONNRESET/,
+    /ETIMEDOUT/,
+    /socket hang up/,
+    /failed to send/i,
+    /writer/i,
+  ], 12)
+
+  return {
+    debugEnvEnabled: true,
+    lines,
+  }
 }
 
 function summarizeBasicReportingResult (basicResult) {

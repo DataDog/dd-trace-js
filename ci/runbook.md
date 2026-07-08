@@ -57,6 +57,9 @@ channels.
 
 ## Happy Path
 
+Follow this short execution path before reading reference sections in detail. Do not wait for a
+perfect manifest before writing the checkpoint file.
+
 1. Discover CI workflow definitions before choosing local package scripts.
 2. Identify CI jobs, stages, or steps that install dependencies, set up Node, and run tests.
 3. Reproduce the CI test command shape as faithfully as practical and record whether the CI wiring
@@ -79,6 +82,10 @@ channels.
 13. Report Basic Reporting, CI wiring, and advanced feature results separately, including the
     detailed Markdown report path.
 
+If you have already identified one supported framework, one representative CI test command, and a
+Datadog-clean preflight result, write the checkpoint manifest immediately. Continue enrichment from
+that file instead of holding all details in the agent context.
+
 ## Command Roles
 
 Use these roles consistently. Most bad manifests blur these fields.
@@ -96,9 +103,10 @@ is optional and must target an existing, stable project test command or direct p
 it must not depend on generated validation files.
 
 During live validation, the validator may overlay fake-intake transport variables and
-noise-suppression variables on commands it runs. Those overlays are diagnostic plumbing for the
-local mock intake; they are not customer CI recommendations and must not be interpreted as proof
-that the CI job had those settings.
+noise-suppression variables on commands it runs. For CI wiring, it may also enable dd-trace debug
+logging to classify whether the tracer initialized, sent data, or failed before loading. Those
+overlays are diagnostic plumbing for the local mock intake; they are not customer CI
+recommendations and must not be interpreted as proof that the CI job had those settings.
 
 ## Optional Target Framework
 
@@ -405,6 +413,11 @@ Recognize these CI systems and extract test-command evidence when practical:
   without propagating Test Optimization initialization to the final runner. Do not apply this
   preference to CI wiring validation when the customer's CI job intentionally uses the package-script
   wrapper.
+- If a package script appears to accept a file argument, verify that it really narrows execution.
+  Some scripts ignore or reinterpret extra arguments and can run thousands of tests even when a
+  single file was passed. If the first attempt runs a broad suite, stop after it completes or times
+  out, record it in `notes`, and use the one allowed smaller fallback through a direct runner
+  command.
 - Do not use benchmark or performance commands as representative test commands. For Vitest,
   `vitest bench`, benchmark package scripts, and `*.bench.*` files that use `bench` are not normal
   test runs and may emit session/module/suite events without per-test events. If no normal
@@ -476,9 +489,25 @@ Recognize these CI systems and extract test-command evidence when practical:
 11. Delete all temporary files and record cleanup success.
 12. Update the existing manifest with generated strategy details.
 
+Use hidden-file-aware, shell-safe CI discovery. Prefer commands such as:
+
+```bash
+rg --files --hidden .github/workflows .circleci .gitlab-ci.yml Jenkinsfile 2>/dev/null
+```
+
+or a quoted `find` command. Do not rely on unguarded shell globs such as
+`.github/workflows/*.yaml`; shells like zsh can fail the command before discovery starts when a
+glob has no match.
+
 For each framework, try at most one representative existing command and one smaller fallback command
 before recording the failure. Do not keep inventing alternate runner commands after two attempts.
 Record the best failure evidence and continue to the next framework.
+
+When multiple CI providers or jobs run the same command shape, run one representative live replay
+and record the others as duplicate CI command candidates or omitted test commands with source
+metadata. Run multiple CI wiring commands live only when the command, working directory, setup, or
+environment differs in a way that can affect Test Optimization initialization. This avoids repeated
+generated-test runs contaminating each other and keeps the report focused.
 
 Cap discovery output. Do not dump full lockfiles, schemas, package-manager internals, or exhaustive
 file lists into the agent context. Read only the manifest example/schema fields needed for the
@@ -898,6 +927,12 @@ validation tests without using intelligence.
 Generated files are available only for advanced scenarios. Do not reference generated validation
 files from `existingTestCommand`, `preflight`, `forcedLocalCommand`, or `ciWiringCommand`.
 
+When generated files live in a nested package, prefer setting the command `cwd` to that package
+directory over relying on `npm --prefix ... exec` or similar package-manager routing for generated
+test execution. Some package-manager `exec` forms preserve the original process cwd for test-runner
+config resolution, which can make a generated file look missing even though it exists in the nested
+package.
+
 For each runnable framework, include generated file contents as `contentLines`. The validator can
 join those lines with newline characters and write the files exactly.
 
@@ -1132,6 +1167,11 @@ Use this diagnosis language:
   monorepo runner, or wrapper between the CI step and the test runner, and make sure
   `NODE_OPTIONS=-r dd-trace/ci/init` and the Datadog environment variables are preserved.”
 - “CI wiring skipped because Basic Reporting failed” means no CI wiring conclusion was reached.
+- “CI wiring command failed before tests ran” means no CI wiring conclusion was reached. Report the
+  command/setup blocker first. If Node could not resolve `dd-trace/ci/init`, say that the
+  CI-shaped command failed before tests started because the Test Optimization preload was not
+  resolvable from the command working directory; then fix installation, package manager resolution,
+  or `cwd` before interpreting CI wiring.
 - “Basic Reporting failed” means the selected command, framework/library setup, or local capability
   may be unsupported or broken even when the required Datadog setup reaches the selected command
   directly.

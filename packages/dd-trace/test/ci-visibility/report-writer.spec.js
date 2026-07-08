@@ -195,6 +195,21 @@ describe('test optimization validation report writer', () => {
         diagnosis: 'The test command used by the CI job was identified and ran tests.',
         evidence: {
           commandExitCode: 0,
+          commandFailure: {
+            kind: 'ci-wiring-preload-resolution-failed',
+            summary: 'The CI-shaped command failed before tests started because Node could not resolve the ' +
+              'Test Optimization preload.',
+            recommendation: 'Make sure dd-trace is installed where the CI command starts.',
+            signals: [
+              "Error: Cannot find module 'dd-trace/ci/init'",
+            ],
+          },
+          debugSignals: {
+            debugEnvEnabled: true,
+            lines: [
+              'dd-trace debug line',
+            ],
+          },
         },
         artifacts: [],
       },
@@ -234,6 +249,10 @@ describe('test optimization validation report writer', () => {
       assert.match(markdown, /Package script expansion: `pnpm test` -> `vitest run`/)
       assert.match(markdown, /Runner\/tool chain: `GitHub Actions ubuntu-latest` -> `pnpm test` -> `vitest`/)
       assert.match(markdown, /Unresolved replay details: `Matrix node version was approximated locally\.`/)
+      assert.match(markdown, /Command failure: The CI-shaped command failed before tests started/)
+      assert.match(markdown, /Command failure recommendation: Make sure dd-trace is installed/)
+      assert.match(markdown, /Command failure signals: `Error: Cannot find module 'dd-trace\/ci\/init'`/)
+      assert.match(markdown, /CI debug lines: `dd-trace debug line`/)
     } finally {
       console.log = originalLog
       fs.rmSync(tmpDir, { recursive: true, force: true })

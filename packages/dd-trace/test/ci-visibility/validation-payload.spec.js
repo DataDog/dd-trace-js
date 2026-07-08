@@ -288,6 +288,58 @@ describe('test optimization validation payload', () => {
     assert.strictEqual(payload.checks[0].steps[1].evidence.localDiagnosis.kind, 'tests-ran-tracer-not-initialized')
   })
 
+  it('includes CI wiring command failure and debug evidence', () => {
+    const [{ payload }] = buildValidationPayloads({
+      manifest: {
+        frameworks: [
+          {
+            id: 'mocha:fixture',
+            framework: 'mocha',
+            frameworkVersion: '11.7.6',
+          },
+        ],
+      },
+      results: [
+        {
+          frameworkId: 'mocha:fixture',
+          scenario: 'ci-wiring',
+          status: 'fail',
+          diagnosis: 'The CI-shaped command failed before tests started.',
+          evidence: {
+            commandExitCode: 1,
+            commandFailure: {
+              kind: 'ci-wiring-preload-resolution-failed',
+              summary: 'Node could not resolve dd-trace/ci/init.',
+              recommendation: 'Install dd-trace where the CI command starts.',
+              signals: [
+                "Cannot find module 'dd-trace/ci/init'",
+              ],
+            },
+            debugSignals: {
+              debugEnvEnabled: true,
+              lines: [
+                'dd-trace debug enabled',
+              ],
+            },
+          },
+          artifacts: [],
+        },
+      ],
+      artifacts: {
+        reportPath: '/tmp/report.md',
+      },
+    })
+
+    const evidence = payload.checks[0].steps[1].evidence
+    assert.strictEqual(evidence.commandFailure.kind, 'ci-wiring-preload-resolution-failed')
+    assert.deepStrictEqual(evidence.commandFailure.signals, [
+      "Cannot find module 'dd-trace/ci/init'",
+    ])
+    assert.deepStrictEqual(evidence.debugSignals.lines, [
+      'dd-trace debug enabled',
+    ])
+  })
+
   it('redacts secret-like values from validation payload evidence', () => {
     const [validationPayload] = buildValidationPayloads({
       manifest: {

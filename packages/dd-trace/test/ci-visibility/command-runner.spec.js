@@ -51,6 +51,8 @@ describe('test optimization validation command runner', () => {
     assert.strictEqual(env.DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED, 'false')
     assert.strictEqual(env.DD_INSTRUMENTATION_TELEMETRY_ENABLED, 'false')
     assert.strictEqual(env.DD_TEST_FAILED_TEST_REPLAY_ENABLED, 'false')
+    assert.strictEqual(env.DD_TRACE_DEBUG, '1')
+    assert.strictEqual(env.DD_TRACE_LOG_LEVEL, 'debug')
     assert.strictEqual(env.DD_CIVISIBILITY_ENABLED, undefined)
     assert.strictEqual(env.NODE_OPTIONS, undefined)
   })
