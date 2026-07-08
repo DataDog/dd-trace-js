@@ -250,11 +250,6 @@ describe('normalizeRouteExpress', () => {
       assert.equal(normalize('/api{/:version}/users', {}, '/api/users'), '/api/users')
     })
 
-    it('normalizes {.:format} extension optional in same segment', () => {
-      assert.equal(normalize('/photos/:id{.:format}', { id: '1', format: 'jpg' }), '/photos/{id+format}')
-      assert.equal(normalize('/photos/:id{.:format}', { id: '1' }), '/photos/{id}')
-    })
-
     it('normalizes {/:id.:format} multi-param optional segment', () => {
       assert.equal(normalize('/posts{/:id.:format}', {}, '/posts/1.json'), '/posts/{id+format}')
       assert.equal(normalize('/posts{/:id.:format}', {}, '/posts'), '/posts')
@@ -298,19 +293,23 @@ describe('normalizeRouteExpress', () => {
   })
 
   describe('un-representable single-segment shapes (returns null, not a wrong tag)', () => {
-    // Our per-segment matcher uses a delimiter-agnostic '[^/]+?' for each param, so it can assign
-    // params differently from path-to-regexp's delimiter-aware alternatives when a segment has more
-    // than one optional group. Rather than emit a wrong combination we omit the tag.
-    it('rejects two independent optional groups in one segment', () => {
-      // path-to-regexp matches '/x-y.z' as { a: 'x-y', b: 'z' } → we would mis-assign, so → null.
-      assert.equal(normalize('/:a{.:b}{-:c}', {}, '/x-y.z'), null)
-      assert.equal(normalize('/:a{.:b}{-:c}', {}, '/x.y-z'), null)
-      assert.equal(normalize('/:a{.:b}{-:c}', {}, '/x'), null)
+    // A param/wildcard inside an intra-segment optional group needs path-to-regexp's delimiter-aware
+    // matching to resolve presence; our generic '[^/]+?' matcher can't, so we omit the tag rather
+    // than emit a wrong combination.
+    it('rejects a param inside an intra-segment optional group', () => {
+      // path-to-regexp matches '/photos/1..' as { id: '1..' } (format absent) → we would mis-assign.
+      assert.equal(normalize('/photos/:id{.:format}', {}, '/photos/1.jpg'), null)
+      assert.equal(normalize('/:a{-:b}', {}, '/x--'), null)
+      assert.equal(normalize('/:a{.:b}c', {}, '/x.yc'), null)
     })
 
-    it('rejects a nested optional group with trailing tokens in one segment', () => {
-      // '/:a{.:b{.:c}-:d}' on '/x.y-z' is { a:'x', b:'y', d:'z' } in path-to-regexp → null here.
+    it('rejects two independent, and nested, optional groups in one segment', () => {
+      assert.equal(normalize('/:a{.:b}{-:c}', {}, '/x.y-z'), null)
       assert.equal(normalize('/:a{.:b{.:c}-:d}', {}, '/x.y-z'), null)
+    })
+
+    it('rejects an optional group before a wildcard in the same segment', () => {
+      assert.equal(normalize('/:a{.:b}-*rest', {}, '/x.y-/def'), null)
     })
 
     it('rejects a wildcard with suffix tokens in its segment (non-terminal catch-all)', () => {
@@ -318,20 +317,18 @@ describe('normalizeRouteExpress', () => {
       assert.equal(normalize('/*a-*b', {}, '/x-y'), null)
     })
 
-    it('still supports a single intra-segment optional group', () => {
-      assert.equal(normalize('/photos/:id{.:format}', {}, '/photos/1.jpg'), '/photos/{id+format}')
-      assert.equal(normalize('/photos/:id{.:format}', {}, '/photos/1'), '/photos/{id}')
+    it('still supports a static-only intra-segment optional group', () => {
+      assert.equal(normalize('/foo{bar}', {}, '/foobar'), '/foobar')
+      assert.equal(normalize('/foo{bar}', {}, '/foo'), '/foo')
+      // trailing static after the optional group exercises the mid-segment group close
+      assert.equal(normalize('/foo{bar}baz', {}, '/foobarbaz'), '/foobarbaz')
+      assert.equal(normalize('/foo{bar}baz', {}, '/foobaz'), '/foobaz')
     })
 
-    it('supports an intra-segment optional group followed by a static suffix', () => {
-      assert.equal(normalize('/:a{.:b}c', {}, '/x.yc'), '/{a+b}')
-      assert.equal(normalize('/:a{.:b}c', {}, '/xc'), '/{a}')
-    })
-
-    it('rolls back intra-segment markers when a later segment fails, then falls back to params', () => {
-      // '/x.y' matches the first segment (marker recorded), but '/w' != '/z' fails the tail, so the
-      // URL match is abandoned and params (empty) decide: the optional is absent.
-      assert.equal(normalize('/x{.:y}/z', {}, '/x.y/w'), '/x/z')
+    it('rolls back a static intra-segment marker when a later segment fails, then uses params', () => {
+      // '/foobar' matches the first segment (marker recorded), but '/w' != '/z' fails the tail, so
+      // the URL match is abandoned and params (empty) decide: the optional static is absent.
+      assert.equal(normalize('/foo{bar}/z', {}, '/foobar/w'), '/foo/z')
     })
   })
 

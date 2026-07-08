@@ -70,7 +70,7 @@ const segmentRegexCache = new Map()
  *   optionalGroups: number[],
  *   trailingSlash: boolean,
  *   precomputed: string | null,
- *   variants?: Map<number, string | null>
+ *   variants?: Map<number, string>
  * }} CompiledRoute
  */
 
@@ -165,9 +165,10 @@ function compileRoute (route, parse) {
     if (cleaned[s].tokens.some(t => t.type === 'wildcard')) return null
   }
 
-  // Reject single-segment shapes the delimiter-agnostic per-segment matcher would mis-assign:
-  // a non-terminal wildcard in a segment ('/files/*path.:ext', '/*a-*b'), or more than one
-  // intra-segment optional group ('/:a{.:b}{-:c}', nested '/:a{.:b{.:c}-:d}').
+  // Reject single-segment shapes the delimiter-agnostic per-segment matcher can't resolve like
+  // path-to-regexp does: a non-terminal wildcard in a segment ('/files/*path.:ext', '/*a-*b'), a
+  // param/wildcard inside an intra-segment optional group ('/:a{.:b}c', '/:a{.:b}-*rest'), or more
+  // than one intra-segment optional group ('/:a{.:b}{-:c}'). Static-only optional groups are fine.
   for (const seg of cleaned) {
     const intraGroups = new Set()
     seg.wildcardIndex = -1
@@ -177,7 +178,10 @@ function compileRoute (route, parse) {
         if (k !== seg.tokens.length - 1) return null
         seg.wildcardIndex = k
       }
-      if (isStrictDescendant(t.group, seg.group, groupParent)) intraGroups.add(t.group)
+      if (isStrictDescendant(t.group, seg.group, groupParent)) {
+        if (t.type === 'param' || t.type === 'wildcard') return null
+        intraGroups.add(t.group)
+      }
     }
     if (intraGroups.size > 1) return null
   }
@@ -283,14 +287,11 @@ function encodeParamName (name) {
 
 /**
  * Render the normalized route for a given set of present optional groups.
- * Returns null when the route cannot be represented (e.g. a non-terminal catch-all).
  * @param {CompiledRoute} compiled
  * @param {Set<number>} present
- * @returns {string | null}
+ * @returns {string}
  */
 function renderRoute (compiled, present) {
-  if (compiled.precomputed !== null) return compiled.precomputed
-
   const { segments, groupParent } = compiled
 
   // Pass 1: collect the present dynamic tokens (param/wildcard) in declaration order.
@@ -339,10 +340,8 @@ function renderRoute (compiled, present) {
   // Pass 3: build each segment string (same present-token iteration order as pass 1).
   const out = []
   let dynPtr = 0
-  let catchAllSeen = false
   for (const seg of segments) {
     if (!groupActive(seg.group, groupParent, present)) continue
-    if (catchAllSeen) return null // a present segment after a catch-all → non-terminal, unsafe
 
     let staticText = ''
     const paramNames = []
@@ -363,7 +362,6 @@ function renderRoute (compiled, present) {
       // Catch-all is terminal (rule 5). A static prefix is subsumed into the single element, but
       // any preceding dynamic params in the same segment are combined with it via '+'.
       out.push(`{${paramNames.join('+')}}`)
-      catchAllSeen = true
     } else if (paramNames.length === 0) {
       if (staticText !== '') out.push(encodeStaticSegment(staticText))
     } else if (paramNames.length === 1) {
@@ -612,18 +610,6 @@ function presenceBitmask (optionalGroups, present) {
 }
 
 /**
- * Normalize an Express route string to the RFC-1103 _dd.appsec.normalized_route format.
- * Express 5 only: `parse` is path-to-regexp v8's `parse()`. Returns null when `parse` is
- * unavailable (Express 4 ships path-to-regexp 0.x, which has no `parse()`).
- *
- * @param {string} route - Express route string (e.g. the value of the http.route span tag)
- * @param {object|null|undefined} params - req.params from the matched request
- * @param {string|undefined} urlPath - URL path without query string; used to resolve optional
- *   elements (and to recover parent params dropped by mergeParams=false sub-routers)
- * @param {((pattern: string) => { tokens: PathToRegexpToken[] } | undefined) | undefined} parse
- * @returns {string|null} Normalized route, or null when normalization is not possible
- */
-/**
  * Split a URL path into its non-empty segments in a single pass (no intermediate `filter`).
  * @param {string} urlPath
  * @returns {string[]}
@@ -640,6 +626,18 @@ function splitPathSegments (urlPath) {
   return segments
 }
 
+/**
+ * Normalize an Express route string to the RFC-1103 _dd.appsec.normalized_route format.
+ * Express 5 only: `parse` is path-to-regexp v8's `parse()`. Returns null when `parse` is
+ * unavailable (Express 4 ships path-to-regexp 0.x, which has no `parse()`).
+ *
+ * @param {string} route - Express route string (e.g. the value of the http.route span tag)
+ * @param {object|null|undefined} params - req.params from the matched request
+ * @param {string|undefined} urlPath - URL path without query string; used to resolve optional
+ *   elements (and to recover parent params dropped by mergeParams=false sub-routers)
+ * @param {((pattern: string) => { tokens: PathToRegexpToken[] } | undefined) | undefined} parse
+ * @returns {string|null} Normalized route, or null when normalization is not possible
+ */
 function normalizeRouteExpress (route, params, urlPath, parse) {
   if (typeof route !== 'string' || !route) return null
   if (typeof parse !== 'function') return null
