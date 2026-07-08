@@ -26,9 +26,10 @@ function spawnUpload (command, args) {
     let output = ''
     child.stdout.on('data', chunk => { output += chunk })
     child.stderr.on('data', chunk => { output += chunk })
+    child.on('error', err => { output += err.message })
     child.on('close', code => {
       const seconds = ((Date.now() - start) / 1000).toFixed(1)
-      resolve({ step: `${command} ${args[0]}`, seconds, code, output })
+      resolve({ step: `${command} ${args[0]}`, seconds, code: code ?? 1, output })
     })
   })
 }
