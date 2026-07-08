@@ -117,6 +117,21 @@ async function main () {
       'the relocation dir must not resolve the peer, otherwise the test proves nothing'
     )
 
+    // The native span pipeline requires `@datadog/libdatadog`, a native module
+    // that ships platform .wasm/.node binaries and is therefore externalized
+    // (it can't be bundled). In a real standalone deploy the external native
+    // deps travel with the bundle, so make it resolvable from the relocation
+    // dir. The point of this test is that the *bundled* OpenFeature peer
+    // survives — not the externalized native deps — and the peer is left
+    // unresolvable above.
+    const relocatedDatadog = path.join(tmpDir, 'node_modules', '@datadog')
+    fs.mkdirSync(relocatedDatadog, { recursive: true })
+    fs.symlinkSync(
+      path.dirname(require.resolve('@datadog/libdatadog')),
+      path.join(relocatedDatadog, 'libdatadog'),
+      'junction'
+    )
+
     const runOutput = execFileSync(process.execPath, [relocated], { encoding: 'utf8' })
     assert(
       runOutput.includes('PROVIDER_OK'),
