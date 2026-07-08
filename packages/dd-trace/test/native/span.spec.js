@@ -266,6 +266,32 @@ describe('NativeDatadogSpan', () => {
       assert.strictEqual(typeof args[5], 'number') // startMs
     })
 
+    it('defaults the resource to the operation name when no resource.name is supplied', () => {
+      // The JS formatter defaulted resource to the span name; native has no
+      // format step, so the span must queue SetResourceName(name) at creation.
+      span = new NativeDatadogSpan(tracer, processor, prioritySampler, {
+        operationName: 'test-operation',
+      }, false, nativeSpans)
+
+      const resourceOps = nativeSpans.queueOp.getCalls()
+        .filter(c => c.args[0] === OpCode.SetResourceName)
+        .map(c => c.args[2])
+      assert.deepStrictEqual(resourceOps, ['test-operation'])
+    })
+
+    it('skips the default resource when a string resource.name is supplied at creation', () => {
+      span = new NativeDatadogSpan(tracer, processor, prioritySampler, {
+        operationName: 'test-operation',
+        tags: { 'resource.name': 'GET /users' },
+      }, false, nativeSpans)
+
+      // No default SetResourceName op is queued at creation...
+      const resourceOps = nativeSpans.queueOp.getCalls().filter(c => c.args[0] === OpCode.SetResourceName)
+      assert.strictEqual(resourceOps.length, 0)
+      // ...the explicit resource.name is synced through the tag path instead.
+      sinon.assert.calledWith(span.context().syncToNativeOnly, sinon.match({ 'resource.name': 'GET /users' }))
+    })
+
     it('gives child spans the same 128-bit native trace id as the root (not zero-padded)', () => {
       const root = new NativeDatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'root',

@@ -311,6 +311,18 @@ class NativeDatadogSpan extends DatadogSpan {
       createStartTime
     )
 
+    // Default the resource to the operation name. The JS formatter defaulted
+    // `resource` to the span name at serialization time (only overriding it
+    // when `resource.name` is a string); the native pipeline has no format
+    // step, so a span created without a string `resource.name` (e.g.
+    // `tracer.trace('ai_guard')`) would otherwise export an empty resource.
+    // A string `resource.name` supplied at creation skips this default (the
+    // constructor syncs it instead); one set later via `setTag` overrides it
+    // via a subsequent SetResourceName op.
+    if (typeof fields.tags?.['resource.name'] !== 'string') {
+      nativeSpans.queueOp(OpCode.SetResourceName, spanContext._nativeSpanId, operationName)
+    }
+
     return spanContext
   }
 
