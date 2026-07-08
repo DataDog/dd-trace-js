@@ -10,8 +10,10 @@ const {
   HTTP_ENDPOINT,
   HTTP_ROUTE,
   HTTP_METHOD,
+  SPAN_KIND,
+  GRPC_STATUS_CODE,
 } = require('../../../ext/tags')
-const { ORIGIN_KEY, TOP_LEVEL_KEY, SVC_SRC_KEY } = require('./constants')
+const { ORIGIN_KEY, TOP_LEVEL_KEY, SVC_SRC_KEY, GRPC_STATUS_NAMES } = require('./constants')
 const { version } = require('./pkg')
 const processTags = require('./process-tags')
 
@@ -27,43 +29,32 @@ class SpanAggStats {
     this.aggKey = aggKey
     this.hits = 0
     this.topLevelHits = 0
-    this.errors = 0
-    this.duration = 0
-    this.okDistribution = new LogCollapsingLowestDenseDDSketch()
-    this.errorDistribution = new LogCollapsingLowestDenseDDSketch()
+    this.topLevelOkDistribution = new LogCollapsingLowestDenseDDSketch()
+    this.topLevelErrorDistribution = new LogCollapsingLowestDenseDDSketch()
+    this.nonTopLevelOkDistribution = new LogCollapsingLowestDenseDDSketch()
+    this.nonTopLevelErrorDistribution = new LogCollapsingLowestDenseDDSketch()
   }
 
   record (span) {
     const durationNs = span.duration
     this.hits++
-    this.duration += durationNs
-
-    if (span.metrics[TOP_LEVEL_KEY]) {
-      this.topLevelHits++
-    }
-
+    const isTopLevel = Boolean(span.metrics[TOP_LEVEL_KEY])
+    if (isTopLevel) this.topLevelHits++
     if (span.error) {
-      this.errors++
-      this.errorDistribution.accept(durationNs)
+      if (isTopLevel) this.topLevelErrorDistribution.accept(durationNs)
+      else this.nonTopLevelErrorDistribution.accept(durationNs)
     } else {
-      this.okDistribution.accept(durationNs)
+      if (isTopLevel) this.topLevelOkDistribution.accept(durationNs)
+      else this.nonTopLevelOkDistribution.accept(durationNs)
     }
   }
 
   toJSON () {
     const {
-      name,
-      service,
-      resource,
-      type,
-      statusCode,
-      synthetics,
-      method,
-      endpoint,
-      srvSrc,
+      name, service, resource, type, statusCode, synthetics, method, endpoint, srvSrc,
+      spanKind, rpcStatusCode,
     } = this.aggKey
-
-    return {
+    const base = {
       Name: name,
       Service: service,
       Resource: resource,
@@ -73,13 +64,34 @@ class SpanAggStats {
       HTTPMethod: method,
       HTTPEndpoint: endpoint,
       srv_src: srvSrc,
-      Hits: this.hits,
-      TopLevelHits: this.topLevelHits,
-      Errors: this.errors,
-      Duration: this.duration,
-      OkSummary: this.okDistribution.toProto(), // TODO: custom proto encoding
-      ErrorSummary: this.errorDistribution.toProto(), // TODO: custom proto encoding
+      SpanKind: spanKind,
+      GRPCStatusCode: rpcStatusCode,
     }
+    const rows = []
+    if (this.topLevelHits > 0) {
+      rows.push({
+        ...base,
+        Hits: this.topLevelHits,
+        TopLevelHits: this.topLevelHits,
+        Errors: this.topLevelErrorDistribution.count,
+        Duration: this.topLevelOkDistribution.sum + this.topLevelErrorDistribution.sum,
+        OkSummary: this.topLevelOkDistribution.toProto(),
+        ErrorSummary: this.topLevelErrorDistribution.toProto(),
+      })
+    }
+    const nonTopLevelHits = this.hits - this.topLevelHits
+    if (nonTopLevelHits > 0) {
+      rows.push({
+        ...base,
+        Hits: nonTopLevelHits,
+        TopLevelHits: 0,
+        Errors: this.nonTopLevelErrorDistribution.count,
+        Duration: this.nonTopLevelOkDistribution.sum + this.nonTopLevelErrorDistribution.sum,
+        OkSummary: this.nonTopLevelOkDistribution.toProto(), // TODO: custom proto encoding
+        ErrorSummary: this.nonTopLevelErrorDistribution.toProto(), // TODO: custom proto encoding
+      })
+    }
+    return rows
   }
 }
 
@@ -94,6 +106,12 @@ class SpanAggKey {
     this.endpoint = span.meta[HTTP_ROUTE] || span.meta[HTTP_ENDPOINT] || ''
     this.method = span.meta[HTTP_METHOD] || ''
     this.srvSrc = span.meta[SVC_SRC_KEY] || ''
+    this.spanKind = span.meta[SPAN_KIND] || ''
+    // dd gRPC plugin sets a numeric code via setTag; OTel/manual sets a string name via meta.
+    const grpcCode = span.meta[GRPC_STATUS_CODE] ?? span.metrics?.[GRPC_STATUS_CODE]
+    this.rpcStatusCode = typeof grpcCode === 'number'
+      ? (GRPC_STATUS_NAMES[grpcCode] ?? String(grpcCode))
+      : (grpcCode ?? '')
   }
 
   toString () {
@@ -107,6 +125,8 @@ class SpanAggKey {
       this.method,
       this.endpoint,
       this.srvSrc,
+      this.spanKind,
+      this.rpcStatusCode,
     ].join(',')
   }
 }
@@ -139,55 +159,58 @@ class SpanStatsProcessor {
     stats: {
       DD_TRACE_STATS_COMPUTATION_ENABLED: enabled = false,
       interval = 10,
-    },
+    } = {},
     hostname,
     port,
     url,
     env,
     tags,
-    version,
-  } = {}) {
-    this.exporter = new SpanStatsExporter({
-      hostname,
-      port,
-      tags,
-      url,
-    })
-    this.interval = interval
-    this.bucketSizeNs = interval * 1e9
+    version: appVersion,
+    _DD_TRACE_METRICS_OTEL_FLUSH_INTERVAL: flushIntervalMs,
+  } = {}, otlpExporter) {
+    if (!otlpExporter) {
+      this.exporter = new SpanStatsExporter({ hostname, port, tags, url })
+    }
+    const intervalMs = otlpExporter ? (flushIntervalMs ?? 10_000) : interval * 1e3
+    this.interval = intervalMs / 1e3
+    this.bucketSizeNs = intervalMs * 1e6
     this.buckets = new TimeBuckets()
     this.hostname = os.hostname()
     this.enabled = enabled
+    this.otlpExporter = otlpExporter || null
     this.env = env
     this.tags = tags || {}
     this.sequence = 0
-    this.version = version
+    this.version = appVersion
 
-    if (this.enabled) {
-      this.timer = setInterval(this.onInterval.bind(this), interval * 1e3)
+    if (this.enabled || this.otlpExporter) {
+      this.timer = setInterval(this.onInterval.bind(this), intervalMs)
       this.timer.unref?.()
     }
   }
 
   onInterval () {
-    const serialized = this._serializeBuckets()
-    if (!serialized) return
+    const drained = this.#drainBuckets()
 
-    this.exporter.export({
-      Hostname: this.hostname,
-      Env: this.env,
-      Version: this.version || version,
-      Stats: serialized,
-      Lang: 'javascript',
-      TracerVersion: pkg.version,
-      RuntimeID: this.tags['runtime-id'],
-      Sequence: ++this.sequence,
-      ProcessTags: processTags.serialized,
-    })
+    if (this.enabled && !this.otlpExporter) {
+      this.exporter.export({
+        Hostname: this.hostname,
+        Env: this.env,
+        Version: this.version || version,
+        Stats: this.#toV06Payload(drained),
+        Lang: 'javascript',
+        TracerVersion: pkg.version,
+        RuntimeID: this.tags['runtime-id'],
+        Sequence: ++this.sequence,
+        ProcessTags: processTags.serialized,
+      })
+    } else if (this.otlpExporter && drained.length > 0) {
+      this.otlpExporter.export(drained, this.bucketSizeNs)
+    }
   }
 
   onSpanFinished (span) {
-    if (!this.enabled) return
+    if (!this.enabled && !this.otlpExporter) return
     if (!span.metrics[TOP_LEVEL_KEY] && !span.metrics[MEASURED]) return
 
     const spanEndNs = span.start + span.duration
@@ -198,27 +221,22 @@ class SpanStatsProcessor {
       .record(span)
   }
 
-  _serializeBuckets () {
-    const { bucketSizeNs } = this
-    const serializedBuckets = []
-
+  #drainBuckets () {
+    const drained = []
     for (const [timeNs, bucket] of this.buckets.entries()) {
-      const bucketAggStats = []
-
-      for (const stats of bucket.values()) {
-        bucketAggStats.push(stats.toJSON())
-      }
-
-      serializedBuckets.push({
-        Start: timeNs,
-        Duration: bucketSizeNs,
-        Stats: bucketAggStats,
-      })
+      drained.push({ timeNs, bucket })
     }
-
     this.buckets.clear()
+    return drained
+  }
 
-    return serializedBuckets
+  #toV06Payload (drained) {
+    const { bucketSizeNs } = this
+    return drained.map(({ timeNs, bucket }) => ({
+      Start: timeNs,
+      Duration: bucketSizeNs,
+      Stats: [...bucket.values()].flatMap(stats => stats.toJSON()),
+    }))
   }
 }
 

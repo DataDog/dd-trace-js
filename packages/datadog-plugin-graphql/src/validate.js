@@ -38,7 +38,7 @@ class GraphQLValidatePlugin extends TracingPlugin {
     if (errors?.length) {
       span.setTag('error', errors[0])
       for (const err of errors) {
-        extractErrorIntoSpanEvent(this._tracerConfig, span, err)
+        extractErrorIntoSpanEvent(this.config, span, err)
       }
     }
 

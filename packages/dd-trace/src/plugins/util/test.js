@@ -95,6 +95,8 @@ const TEST_IS_RUM_ACTIVE = 'test.is_rum_active'
 const TEST_CODE_OWNERS = 'test.codeowners'
 const TEST_SOURCE_FILE = 'test.source.file'
 const TEST_SOURCE_START = 'test.source.start'
+const TEST_FAILURE_SCREENSHOT_UPLOADED = 'test.failure_screenshot.uploaded'
+const TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR = 'test.failure_screenshot.upload_error'
 const LIBRARY_VERSION = 'library_version'
 const TEST_COMMAND = 'test.command'
 const TEST_MODULE = 'test.module'
@@ -112,6 +114,12 @@ const TEST_RETRY_REASON = 'test.retry_reason'
 const TEST_HAS_FAILED_ALL_RETRIES = 'test.has_failed_all_retries'
 const TEST_IS_MODIFIED = 'test.is_modified'
 const TEST_HAS_DYNAMIC_NAME = '_dd.has_dynamic_name'
+const EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS = [
+  { limitMs: 5 * 1000, key: '5s' },
+  { limitMs: 10 * 1000, key: '10s' },
+  { limitMs: 30 * 1000, key: '30s' },
+  { limitMs: 5 * 60 * 1000, key: '5m' },
+]
 const CI_APP_ORIGIN = 'ciapp-test'
 
 // Matches patterns that are almost certainly runtime-generated values in test names:
@@ -427,6 +435,8 @@ module.exports = {
   TEST_SKIP_REASON,
   TEST_IS_RUM_ACTIVE,
   TEST_SOURCE_FILE,
+  TEST_FAILURE_SCREENSHOT_UPLOADED,
+  TEST_FAILURE_SCREENSHOT_UPLOAD_ERROR,
   CI_APP_ORIGIN,
   LIBRARY_VERSION,
   JEST_WORKER_TRACE_PAYLOAD_CODE,
@@ -493,6 +503,7 @@ module.exports = {
   removeInvalidMetadata,
   parseAnnotations,
   getIsFaultyEarlyFlakeDetection,
+  EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS,
   getEfdRetryCount,
   getMaxEfdRetryCount,
   TEST_BROWSER_DRIVER,
@@ -1447,13 +1458,7 @@ function parseAnnotations (annotations) {
  * @returns {number}
  */
 function getEfdRetryCount (durationMs, slowTestRetries) {
-  const thresholds = [
-    { limitMs: 5 * 1000, key: '5s' },
-    { limitMs: 10 * 1000, key: '10s' },
-    { limitMs: 30 * 1000, key: '30s' },
-    { limitMs: 5 * 60 * 1000, key: '5m' },
-  ]
-  for (const { limitMs, key } of thresholds) {
+  for (const { limitMs, key } of EARLY_FLAKE_DETECTION_RETRY_THRESHOLDS) {
     if (durationMs < limitMs) {
       return slowTestRetries[key] ?? 0
     }
@@ -1616,7 +1621,7 @@ function isFailedTestReplaySupported (testFramework, frameworkVersion) {
     : true
 }
 
-function getLibraryCapabilitiesTags (testFramework, frameworkVersion) {
+function getLibraryCapabilitiesTags (testFramework, frameworkVersion, options = {}) {
   return {
     [DD_CAPABILITIES_TEST_IMPACT_ANALYSIS]: isTiaSupported(testFramework)
       ? '1'
@@ -1638,7 +1643,8 @@ function getLibraryCapabilitiesTags (testFramework, frameworkVersion) {
       isAttemptToFixSupported(testFramework, frameworkVersion)
         ? '5'
         : undefined,
-    [DD_CAPABILITIES_FAILED_TEST_REPLAY]: isFailedTestReplaySupported(testFramework, frameworkVersion)
+    [DD_CAPABILITIES_FAILED_TEST_REPLAY]: !options.omitFailedTestReplay &&
+      isFailedTestReplaySupported(testFramework, frameworkVersion)
       ? '1'
       : undefined,
   }
