@@ -458,6 +458,94 @@ describe('dogstatsd', () => {
     client.flush()
   })
 
+  describe('generateClientConfig', () => {
+    // `origin` mirrors what Config.getOrigin('dogstatsd.hostname') returns: 'calculated'/'default'
+    // when the host was derived from the agent, and a user source ('env_var', 'code', ...) when set.
+    function generateClientConfig ({ hostname, url, origin }) {
+      return DogStatsDClient.generateClientConfig({
+        lookup: dns.lookup,
+        tags: {},
+        url: url === undefined ? undefined : new URL(url),
+        dogstatsd: { hostname, port: 8125 },
+        getOrigin: () => origin,
+      })
+    }
+
+    it('routes through the agent proxy when the host is agent-derived (calculated)', () => {
+      const clientConfig = generateClientConfig({
+        hostname: '127.0.0.1', url: 'http://127.0.0.1:8126', origin: 'calculated',
+      })
+
+      assert.deepStrictEqual(clientConfig.metricsProxyUrl, new URL('http://127.0.0.1:8126'))
+      assert.strictEqual(clientConfig.host, '127.0.0.1')
+    })
+
+    it('routes through the agent proxy when the host is agent-derived (default)', () => {
+      const clientConfig = generateClientConfig({
+        hostname: 'localhost', url: 'http://localhost:8126', origin: 'default',
+      })
+
+      assert.deepStrictEqual(clientConfig.metricsProxyUrl, new URL('http://localhost:8126'))
+    })
+
+    it('routes through the agent proxy when the derived host differs from a remote agent URL host', () => {
+      // DD_TRACE_AGENT_URL resolves the agent to a different host than the 127.0.0.1 default, but the
+      // DogStatsD host was never configured (origin 'calculated'), so metrics still belong on the proxy.
+      const clientConfig = generateClientConfig({
+        hostname: '127.0.0.1', url: 'http://agent:8126', origin: 'calculated',
+      })
+
+      assert.deepStrictEqual(clientConfig.metricsProxyUrl, new URL('http://agent:8126'))
+    })
+
+    it('routes through the agent proxy when an explicit host matches the agent URL host', () => {
+      const clientConfig = generateClientConfig({
+        hostname: 'agent', url: 'http://agent:8126', origin: 'env_var',
+      })
+
+      assert.deepStrictEqual(clientConfig.metricsProxyUrl, new URL('http://agent:8126'))
+    })
+
+    it('sends metrics over UDP when an explicit host diverges from the agent host', () => {
+      const clientConfig = generateClientConfig({
+        hostname: '10.0.0.5', url: 'http://127.0.0.1:8126', origin: 'env_var',
+      })
+
+      assert.strictEqual(clientConfig.metricsProxyUrl, undefined)
+      assert.strictEqual(clientConfig.host, '10.0.0.5')
+    })
+
+    it('sends metrics over UDP when an explicit host diverges from a remote agent URL host', () => {
+      const clientConfig = generateClientConfig({
+        hostname: '10.0.0.5', url: 'http://agent:8126', origin: 'env_var',
+      })
+
+      assert.strictEqual(clientConfig.metricsProxyUrl, undefined)
+    })
+
+    it('routes through the socket proxy when the host is agent-derived for a unix-socket agent', () => {
+      const clientConfig = generateClientConfig({
+        hostname: '127.0.0.1', url: 'unix:///var/run/datadog/apm.socket', origin: 'calculated',
+      })
+
+      assert.deepStrictEqual(clientConfig.metricsProxyUrl, new URL('unix:///var/run/datadog/apm.socket'))
+    })
+
+    it('sends metrics over UDP when an explicit host is set alongside a unix-socket agent', () => {
+      const clientConfig = generateClientConfig({
+        hostname: '10.0.0.5', url: 'unix:///var/run/datadog/apm.socket', origin: 'env_var',
+      })
+
+      assert.strictEqual(clientConfig.metricsProxyUrl, undefined)
+    })
+
+    it('sends metrics over UDP when there is no agent URL', () => {
+      const clientConfig = generateClientConfig({ hostname: '10.0.0.5', url: undefined, origin: 'env_var' })
+
+      assert.strictEqual(clientConfig.metricsProxyUrl, undefined)
+    })
+  })
+
   describe('CustomMetrics', () => {
     it('.gauge()', () => {
       client = createCustomMetrics()

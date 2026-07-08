@@ -197,8 +197,17 @@ class DogStatsDClient {
       lookup: config.lookup,
     }
 
+    // The trace agent's /dogstatsd/v2/proxy endpoint only exists on the real Datadog Agent. Route
+    // metrics through it while DogStatsD still targets the agent: either the host was left to the
+    // agent-derived default or it matches the resolved agent URL host. An explicit host pointing
+    // elsewhere must reach it over UDP, otherwise its metrics are silently dropped (e.g. the
+    // OpenTelemetry Collector answers the unknown proxy path with HTTP 200, masking the loss).
     if (config.url) {
-      clientConfig.metricsProxyUrl = config.url
+      const dogstatsdHostOrigin = config.getOrigin('dogstatsd.hostname')
+      const dogstatsdHostExplicit = dogstatsdHostOrigin !== 'default' && dogstatsdHostOrigin !== 'calculated'
+      if (!dogstatsdHostExplicit || config.dogstatsd.hostname === config.url.hostname) {
+        clientConfig.metricsProxyUrl = config.url
+      }
     }
 
     return clientConfig
