@@ -8,6 +8,8 @@
 // the library, replace the custom registration with the built-in option and
 // remove the entry here.
 
+const assert = require('node:assert')
+
 const clone = require('../../../../../vendor/dist/rfdc')({ proto: false, circles: false })
 
 const { parse, query } = require('./compiler')
@@ -34,10 +36,10 @@ function waitForAsyncEnd (_state, node) {
     statement.type === 'ReturnStatement' && statement.argument
   )
 
-  // The generated fulfillment handler always ends in a return; this only guards
-  // against a future template shape the transform can no longer splice into.
-  /* istanbul ignore next */
-  if (returnIndex === -1) return
+  // The generated fulfillment handler always ends in a return; a miss means the
+  // upstream template changed and the caller's try/catch falls back to the
+  // unwrapped source.
+  assert(returnIndex !== -1, 'waitForAsyncEnd: no return statement to wait on')
 
   const waitStatements = parse(`
     function wrapper () {
