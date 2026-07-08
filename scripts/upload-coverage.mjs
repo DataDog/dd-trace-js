@@ -23,15 +23,15 @@ function codecovUploadArgs (coverageDir, { sha, branch, prNumber, eventName, bas
  *
  * @param {{ id: number, name: string }} run
  * @param {{ sha: string, branch: string, prNumber?: string, eventName: string, baseRef: string }} options
- * @returns {Promise<void>}
+ * @returns {Promise<import('./run-upload.mjs').UploadResult[]>}
  */
-export async function uploadCoverage (run, options) {
+export function uploadCoverage (run, options) {
   const coverageDir = mergeRunCoverage(run.id)
-  if (!coverageDir) return
+  if (!coverageDir) return []
 
-  await Promise.all([
-    runUpload(run.name, 'datadog-ci', ['coverage', 'upload', coverageDir, '--flags', 'coverage']),
-    runUpload(run.name, 'codecovcli', codecovUploadArgs(coverageDir, options)),
+  return Promise.all([
+    runUpload('datadog-ci', ['coverage', 'upload', coverageDir, '--flags', 'coverage']),
+    runUpload('codecovcli', codecovUploadArgs(coverageDir, options)),
   ])
 }
 
@@ -42,8 +42,8 @@ export async function uploadCoverage (run, options) {
  * the rest have arrived.
  *
  * @param {string} sha
- * @returns {Promise<void>}
+ * @returns {Promise<import('./run-upload.mjs').UploadResult>}
  */
-export async function sendCodecovNotifications (sha) {
-  await runUpload('codecov', 'codecovcli', ['send-notifications', '--sha', sha])
+export function sendCodecovNotifications (sha) {
+  return runUpload('codecovcli', ['send-notifications', '--sha', sha])
 }
