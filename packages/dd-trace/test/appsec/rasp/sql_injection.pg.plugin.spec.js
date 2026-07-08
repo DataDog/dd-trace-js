@@ -11,16 +11,10 @@ const appsec = require('../../../src/appsec')
 const { wafRunFinished } = require('../../../src/appsec/channels')
 const addresses = require('../../../src/appsec/addresses')
 const getConfig = require('../../../src/config')
-const { withSpanLeakBaseline } = require('../../plugins/span-leak-detector')
 const { withVersions } = require('../../setup/mocha')
 const { checkRaspExecutedAndNotThreat, checkRaspExecutedAndHasThreat } = require('./utils')
 
 describe('RASP - sql_injection', () => {
-  // Node's per-connection HTTP keep-alive timer captures the async-context frame
-  // active when the request ran, so a fixed (non-scaling) number of finished
-  // spans stays reachable at teardown. Tolerate it without loosening the detector
-  // for other suites.
-  withSpanLeakBaseline(15)
 
   withVersions('pg', 'express', expressVersion => {
     withVersions('pg', 'pg', pgVersion => {

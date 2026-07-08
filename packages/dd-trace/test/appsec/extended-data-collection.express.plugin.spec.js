@@ -9,17 +9,10 @@ const msgpack = require('@msgpack/msgpack')
 const { withVersions } = require('../setup/mocha')
 const agent = require('../plugins/agent')
 const appsec = require('../../src/appsec')
-const { withSpanLeakBaseline } = require('../plugins/span-leak-detector')
 const { getConfigFresh } = require('../helpers/config')
 const { createDeepObject } = require('./utils')
 
 describe('extended data collection', () => {
-  // Node's per-connection HTTP keep-alive timer captures the async-context frame
-  // active when the request ran, so a fixed (non-scaling) number of finished
-  // spans stays reachable at teardown. Tolerate it without loosening the detector
-  // for other suites.
-  withSpanLeakBaseline(25)
-
   before(() => {
     return agent.load(['express', 'http'], { client: false })
   })
