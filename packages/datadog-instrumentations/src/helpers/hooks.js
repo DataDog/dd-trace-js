@@ -73,7 +73,6 @@ module.exports = {
   cypress: () => require('../cypress'),
   'dd-trace-api': () => require('../dd-trace-api'),
   elasticsearch: () => require('../elasticsearch'),
-  electron: () => require('../electron'),
   express: () => require('../express'),
   'express-mongo-sanitize': () => require('../express-mongo-sanitize'),
   'express-session': () => require('../express-session'),

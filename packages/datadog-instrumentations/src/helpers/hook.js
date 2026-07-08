@@ -16,10 +16,7 @@ function getVersion (moduleBaseDir) {
     return requirePackageJson(moduleBaseDir, /** @type {import('module').Module} */ (module)).version
   }
 
-  // In a packaged Electron binary, built-in modules (like 'electron', 'electron/main') have no
-  // moduleBaseDir. Use the Electron version for version checks when available, otherwise fall back
-  // to the Node.js version.
-  return process.versions?.electron ?? process.version
+  return process.version
 }
 
 /**

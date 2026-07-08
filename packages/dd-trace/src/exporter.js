@@ -7,8 +7,6 @@ const constants = require('./constants')
 
 module.exports = function getExporter (name) {
   switch (name) {
-    case exporters.ELECTRON:
-      return require('./exporters/electron')
     case exporters.LOG:
       return require('./exporters/log')
     case exporters.AGENT:

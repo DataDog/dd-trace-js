@@ -54,10 +54,6 @@ const web = {
       serviceName: httpPluginClientService,
       serviceSource: optionServiceSource,
     },
-    'electron:net:request': {
-      opName: () => 'http.request',
-      serviceName: httpPluginClientService,
-    },
   },
   server: {
     'apollo.gateway.request': {

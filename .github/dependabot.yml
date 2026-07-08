@@ -329,7 +329,6 @@ updates:
         patterns:
           - "@babel/*"
           - "@cucumber/*"
-          - "@electron/*"
           - "@fast-check/jest"
           - "@happy-dom/jest-environment"
           - "@jest/*"
@@ -338,7 +337,6 @@ updates:
           - "babel-jest"
           - "cypress"
           - "cypress-fail-fast"
-          - "electron"
           - "esbuild"
           - "jest"
           - "jest-*"

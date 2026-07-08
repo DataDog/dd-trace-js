@@ -320,8 +320,6 @@ tracer.use('cucumber', { service: 'cucumber-service' });
 tracer.use('dns');
 tracer.use('elasticsearch');
 tracer.use('elasticsearch', elasticsearchOptions);
-tracer.use('electron');
-tracer.use('electron', { net: false, ipc: false });
 tracer.use('express');
 tracer.use('express', httpServerOptions);
 tracer.use('fastify');

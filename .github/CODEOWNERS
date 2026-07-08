@@ -69,7 +69,6 @@
 /benchmark/sirun/plugin-ws/ @DataDog/apm-idm-js
 /benchmark/sirun/url/ @DataDog/apm-idm-js
 
-/integration-tests/electron/ @DataDog/apm-idm-js
 /integration-tests/esbuild/ @DataDog/apm-idm-js
 /integration-tests/webpack/ @DataDog/apm-idm-js
 /integration-tests/pino/ @DataDog/apm-idm-js
@@ -79,7 +78,6 @@
 /packages/datadog-webpack/ @DataDog/apm-idm-js
 /packages/datadog-plugin-*/ @DataDog/apm-idm-js
 /packages/datadog-instrumentations/ @DataDog/apm-idm-js
-/packages/dd-trace/src/exporters/electron/ @DataDog/apm-idm-js
 /packages/dd-trace/src/plugins/ @DataDog/apm-idm-js
 /packages/dd-trace/test/plugins/ @DataDog/apm-idm-js
 /packages/dd-trace/src/service-naming/ @DataDog/apm-idm-js
@@ -303,7 +301,6 @@
 /.github/workflows/appsec.yml @DataDog/asm-js
 /.github/workflows/debugger.yml @DataDog/debugger-nodejs
 /.github/workflows/instrumentation.yml @DataDog/apm-idm-js
-/.github/workflows/electron.yml @DataDog/apm-idm-js
 /.github/workflows/serverless.yml @DataDog/serverless-aws @DataDog/apm-serverless
 /.github/workflows/llmobs.yml @DataDog/ml-observability
 /.github/workflows/openfeature.yml @DataDog/feature-flagging-and-experimentation-sdk

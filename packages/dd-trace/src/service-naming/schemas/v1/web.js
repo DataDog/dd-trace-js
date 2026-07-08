@@ -50,10 +50,6 @@ const web = {
       opName: () => 'undici.request',
       serviceName: httpPluginClientService,
     },
-    'electron:net:request': {
-      opName: () => 'http.client.request',
-      serviceName: httpPluginClientService,
-    },
   },
   server: {
     'apollo.gateway.request': {
