@@ -1,0 +1,49 @@
+{
+  "request": {
+    "method": "POST",
+    "url": "https://api.openai.com/v1/responses",
+    "headers": {
+      "Connection": "keep-alive",
+      "Content-Type": "application/json",
+      "User-Agent": "ai/7.0.0-beta.183 ai-sdk/provider-utils/4.0.29 runtime/node.js/24",
+      "Accept": "*/*",
+      "Accept-Language": "*",
+      "sec-fetch-mode": "cors",
+      "Accept-Encoding": "gzip, deflate",
+      "Content-Length": "3154"
+    },
+    "body": "{\"model\":\"gpt-4o-mini\",\"input\":[{\"role\":\"system\",\"content\":\"You are a travel assistant. Check weather for all cities before making a recommendation.\"},{\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"I want to visit New York, Miami, or Seattle this weekend for outdoor activities. Check the weather in all three cities, then get activity recommendations for the best destination.\"}]},{\"type\":\"function_call\",\"call_id\":\"call_ixQNyqgo2oPAgEQAuVryMbmT\",\"name\":\"getWeather\",\"arguments\":\"{\\\"city\\\":\\\"New York, NY\\\"}\",\"id\":\"fc_056c72baeacf4501016a398e140a6c819d9cba993db420915f\"},{\"type\":\"function_call\",\"call_id\":\"call_CDYXdRnSrxsuaS0BZrRuPCr2\",\"name\":\"getWeather\",\"arguments\":\"{\\\"city\\\":\\\"Miami, FL\\\"}\",\"id\":\"fc_056c72baeacf4501016a398e140a78819d9e990c465dc82593\"},{\"type\":\"function_call\",\"call_id\":\"call_I0LgBUxmcg5UiSCvolnL67k3\",\"name\":\"getWeather\",\"arguments\":\"{\\\"city\\\":\\\"Seattle, WA\\\"}\",\"id\":\"fc_056c72baeacf4501016a398e140a80819d94ee49de21693558\"},{\"type\":\"function_call_output\",\"call_id\":\"call_ixQNyqgo2oPAgEQAuVryMbmT\",\"output\":\"{\\\"city\\\":\\\"New York, NY\\\",\\\"tempF\\\":58,\\\"conditions\\\":\\\"overcast\\\"}\"},{\"type\":\"function_call_output\",\"call_id\":\"call_CDYXdRnSrxsuaS0BZrRuPCr2\",\"output\":\"{\\\"city\\\":\\\"Miami, FL\\\",\\\"tempF\\\":84,\\\"conditions\\\":\\\"sunny\\\"}\"},{\"type\":\"function_call_output\",\"call_id\":\"call_I0LgBUxmcg5UiSCvolnL67k3\",\"output\":\"{\\\"city\\\":\\\"Seattle, WA\\\",\\\"tempF\\\":52,\\\"conditions\\\":\\\"overcast\\\"}\"},{\"type\":\"function_call\",\"call_id\":\"call_CZa5IywP0duszwV81TIO85nV\",\"name\":\"getActivities\",\"arguments\":\"{\\\"city\\\":\\\"New York, NY\\\",\\\"tempF\\\":58}\",\"id\":\"fc_056c72baeacf4501016a398e18db2c819dae941e15e8bfecb8\"},{\"type\":\"function_call\",\"call_id\":\"call_omdaczteg2UnfzORgBzSfTif\",\"name\":\"getActivities\",\"arguments\":\"{\\\"city\\\":\\\"Miami, FL\\\",\\\"tempF\\\":84}\",\"id\":\"fc_056c72baeacf4501016a398e18db78819dbf3a3eeb97e60096\"},{\"type\":\"function_call\",\"call_id\":\"call_7jYfuwbYn63JnPQ9LgZXhhWr\",\"name\":\"getActivities\",\"arguments\":\"{\\\"city\\\":\\\"Seattle, WA\\\",\\\"tempF\\\":52}\",\"id\":\"fc_056c72baeacf4501016a398e18db88819db621c3e33bec6933\"},{\"type\":\"function_call_output\",\"call_id\":\"call_CZa5IywP0duszwV81TIO85nV\",\"output\":\"{\\\"city\\\":\\\"New York, NY\\\",\\\"activities\\\":[\\\"museums\\\",\\\"indoor dining\\\",\\\"shopping\\\"]}\"},{\"type\":\"function_call_output\",\"call_id\":\"call_omdaczteg2UnfzORgBzSfTif\",\"output\":\"{\\\"city\\\":\\\"Miami, FL\\\",\\\"activities\\\":[\\\"beach\\\",\\\"outdoor dining\\\",\\\"water sports\\\"]}\"},{\"type\":\"function_call_output\",\"call_id\":\"call_7jYfuwbYn63JnPQ9LgZXhhWr\",\"output\":\"{\\\"city\\\":\\\"Seattle, WA\\\",\\\"activities\\\":[\\\"museums\\\",\\\"indoor dining\\\",\\\"shopping\\\"]}\"}],\"temperature\":0,\"store\":false,\"tools\":[{\"type\":\"function\",\"name\":\"getWeather\",\"description\":\"Get current temperature and sky conditions for a city\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\",\"description\":\"City name, e.g. \\\"Miami, FL\\\"\"}},\"required\":[\"city\"]}},{\"type\":\"function\",\"name\":\"getActivities\",\"description\":\"Get recommended activities for a city given the current temperature\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"},\"tempF\":{\"type\":\"number\",\"description\":\"Current temperature in Fahrenheit\"}},\"required\":[\"city\",\"tempF\"]}}],\"tool_choice\":\"auto\"}"
+  },
+  "response": {
+    "status": {
+      "code": 200,
+      "message": "OK"
+    },
+    "headers": {
+      "Date": "Mon, 22 Jun 2026 19:33:47 GMT",
+      "Content-Type": "application/json",
+      "Transfer-Encoding": "chunked",
+      "Connection": "keep-alive",
+      "CF-Ray": "a0fdafbe8cfc2450-BOS",
+      "CF-Cache-Status": "DYNAMIC",
+      "Server": "cloudflare",
+      "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+      "X-Content-Type-Options": "nosniff",
+      "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+      "openai-processing-ms": "2481",
+      "openai-project": "proj_gt6TQZPRbZfoY2J9AQlEJMpd",
+      "openai-version": "2020-10-01",
+      "x-ratelimit-limit-requests": "30000",
+      "x-ratelimit-limit-tokens": "150000000",
+      "x-ratelimit-remaining-requests": "29999",
+      "x-ratelimit-remaining-tokens": "149999377",
+      "x-ratelimit-reset-requests": "2ms",
+      "x-ratelimit-reset-tokens": "0s",
+      "x-request-id": "req_bde7e58bee5c458cb5dbfa3a85eb1cc7",
+      "set-cookie": "__cf_bm=A0lj1WdNO82NNHDckZ75TuJDubar8EkrMtv0gDt8eDE-1782156825.3697178-1.0.1.1-vYmIzeBFxZDEpT0XcZ7qPeRbkIw625vtRuKAtNUQiGPM6Caj4rEPpLDHoUqjPqosxJ8fCmK9aaJNfQtyqzdmXCwcZUbkaOnxX0Z8KOnRdxsWi51Y85YlMi.0tv0wE583; HttpOnly; SameSite=None; Secure; Path=/; Domain=api.openai.com; Expires=Mon, 22 Jun 2026 20:03:47 GMT",
+      "Content-Encoding": "gzip",
+      "alt-svc": "h3=\":443\"; ma=86400"
+    },
+    "body": "{\n  \"id\": \"resp_056c72baeacf4501016a398e197390819daabe6870f622a2fd\",\n  \"object\": \"response\",\n  \"created_at\": 1782156825,\n  \"status\": \"completed\",\n  \"background\": false,\n  \"billing\": {\n    \"payer\": \"developer\"\n  },\n  \"completed_at\": 1782156827,\n  \"error\": null,\n  \"frequency_penalty\": 0.0,\n  \"incomplete_details\": null,\n  \"instructions\": null,\n  \"max_output_tokens\": null,\n  \"max_tool_calls\": null,\n  \"model\": \"gpt-4o-mini-2024-07-18\",\n  \"moderation\": null,\n  \"output\": [\n    {\n      \"id\": \"msg_056c72baeacf4501016a398e19e678819dbf7ddea1e7b9b23c\",\n      \"type\": \"message\",\n      \"status\": \"completed\",\n      \"content\": [\n        {\n          \"type\": \"output_text\",\n          \"annotations\": [],\n          \"logprobs\": [],\n          \"text\": \"Here's the weather and activity recommendations for New York, Miami, and Seattle this weekend:\\n\\n### New York, NY\\n- **Temperature:** 58\\u00b0F\\n- **Conditions:** Overcast\\n- **Recommended Activities:** Museums, indoor dining, shopping\\n\\n### Miami, FL\\n- **Temperature:** 84\\u00b0F\\n- **Conditions:** Sunny\\n- **Recommended Activities:** Beach, outdoor dining, water sports\\n\\n### Seattle, WA\\n- **Temperature:** 52\\u00b0F\\n- **Conditions:** Overcast\\n- **Recommended Activities:** Museums, indoor dining, shopping\\n\\n### Recommendation\\n**Miami** is the best destination for outdoor activities this weekend, with sunny weather and options for the beach, outdoor dining, and water sports. Enjoy your trip!\"\n        }\n      ],\n      \"role\": \"assistant\"\n    }\n  ],\n  \"parallel_tool_calls\": true,\n  \"presence_penalty\": 0.0,\n  \"previous_response_id\": null,\n  \"prompt_cache_key\": null,\n  \"prompt_cache_retention\": \"in_memory\",\n  \"reasoning\": {\n    \"context\": null,\n    \"effort\": null,\n    \"summary\": null\n  },\n  \"safety_identifier\": null,\n  \"service_tier\": \"default\",\n  \"store\": false,\n  \"temperature\": 0.0,\n  \"text\": {\n    \"format\": {\n      \"type\": \"text\"\n    },\n    \"verbosity\": \"medium\"\n  },\n  \"tool_choice\": \"auto\",\n  \"tools\": [\n    {\n      \"type\": \"function\",\n      \"description\": \"Get current temperature and sky conditions for a city\",\n      \"name\": \"getWeather\",\n      \"parameters\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"city\": {\n            \"type\": \"string\",\n            \"description\": \"City name, e.g. \\\"Miami, FL\\\"\"\n          }\n        },\n        \"required\": [\n          \"city\"\n        ],\n        \"additionalProperties\": false\n      },\n      \"strict\": true\n    },\n    {\n      \"type\": \"function\",\n      \"description\": \"Get recommended activities for a city given the current temperature\",\n      \"name\": \"getActivities\",\n      \"parameters\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"city\": {\n            \"type\": \"string\"\n          },\n          \"tempF\": {\n            \"type\": \"number\",\n            \"description\": \"Current temperature in Fahrenheit\"\n          }\n        },\n        \"required\": [\n          \"city\",\n          \"tempF\"\n        ],\n        \"additionalProperties\": false\n      },\n      \"strict\": true\n    }\n  ],\n  \"top_logprobs\": 0,\n  \"top_p\": 1.0,\n  \"truncation\": \"disabled\",\n  \"usage\": {\n    \"input_tokens\": 405,\n    \"input_tokens_details\": {\n      \"cached_tokens\": 0\n    },\n    \"output_tokens\": 152,\n    \"output_tokens_details\": {\n      \"reasoning_tokens\": 0\n    },\n    \"total_tokens\": 557\n  },\n  \"user\": null,\n  \"metadata\": {}\n}"
+  }
+}
