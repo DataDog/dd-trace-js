@@ -135,7 +135,7 @@ function wrapCreate (create) {
 
         return gated
           .then(response => {
-            if (!ctx.finished) finish(ctx, null, null)
+            if (!stream && !ctx.finished) finish(ctx, null, null)
             return response
           })
           .catch(error => {
