@@ -303,7 +303,27 @@ class NativeExporter {
     // would cause unbounded memory growth proportional to total requests.
     // Note: flushChangeQueue is called inside flushSpansGrouped.
     runtimeMetrics.increment(`${METRIC_PREFIX}.requests`, true)
-    this._nativeSpans.flushSpansGrouped(groups)
+    // At `flushInterval: 0` the legacy AgentWriter sent one trace per request
+    // (each finished trace flushed immediately). The batched single-payload form
+    // — used at flushInterval>0 to cut request overhead — would instead deliver
+    // several coalesced traces in one payload, which any `traces[0]` consumer
+    // (and the test agent, which asserts one trace per payload) sees as trace
+    // reordering. When a deferred flush coalesced multiple traces at
+    // flushInterval:0, send each group as its own payload to preserve that
+    // one-trace-per-request contract. Each call is the same single-group
+    // `flushSpansGrouped` shape `flushSpans` wraps; the first call drains the
+    // whole change queue so every group's spans (and their trace tags) are
+    // materialized before any `prepareChunk`. A send failure rejects the chain
+    // into the handler below and leaves later groups unsent — acceptable since
+    // flushInterval:0 only runs against a local test agent or a short-lived
+    // lambda.
+    const sendGrouped = this._config.flushInterval === 0 && groups.length > 1
+      ? groups.reduce(
+        (previous, group) => previous.then(() => this._nativeSpans.flushSpansGrouped([group])),
+        Promise.resolve('no spans to flush')
+      )
+      : this._nativeSpans.flushSpansGrouped(groups)
+    sendGrouped
       .then((response) => {
         this.#flushInFlight = false
         runtimeMetrics.increment(`${METRIC_PREFIX}.responses`, true)

@@ -301,6 +301,34 @@ describe('NativeExporter', () => {
         await clock.tickAsync(0)
       })
 
+    it('sends one payload per trace at flushInterval:0 when a flush coalesced multiple traces',
+      async () => {
+        // flushInterval:0 mirrors the legacy AgentWriter's one-trace-per-request
+        // behaviour. When several traces pile up during an in-flight send and
+        // drain together, each must ship as its own payload so a `traces[0]`
+        // consumer isn't handed a coalesced multi-trace payload.
+        exporter = new NativeExporter({ ...config, flushInterval: 0 }, prioritySampler, nativeSpans)
+        const span1 = createMockSpan(123n)
+        const span2 = createMockSpan(456n)
+        exporter.export([span1, span2])
+
+        // Drain the sequenced per-group sends.
+        await clock.tickAsync(0)
+        await clock.tickAsync(0)
+
+        sinon.assert.calledTwice(nativeSpans.flushSpansGrouped)
+        assert.strictEqual(nativeSpans.flushSpansGrouped.getCall(0).args[0].length, 1)
+        assert.strictEqual(nativeSpans.flushSpansGrouped.getCall(1).args[0].length, 1)
+      })
+
+    it('sends one batched payload at flushInterval:0 for a single trace', async () => {
+      exporter = new NativeExporter({ ...config, flushInterval: 0 }, prioritySampler, nativeSpans)
+      exporter.export([createMockSpan(1n)])
+      await clock.tickAsync(0)
+      sinon.assert.calledOnce(nativeSpans.flushSpansGrouped)
+      assert.strictEqual(nativeSpans.flushSpansGrouped.getCall(0).args[0].length, 1)
+    })
+
     it('should sync trace tags to first span', (done) => {
       const span = createMockSpan(1n)
       // Make this span a local root by setting parentId to null
