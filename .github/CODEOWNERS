@@ -78,6 +78,7 @@
 /packages/datadog-webpack/ @DataDog/apm-idm-js
 /packages/datadog-plugin-*/ @DataDog/apm-idm-js
 /packages/datadog-instrumentations/ @DataDog/apm-idm-js
+/packages/dd-trace/src/exporters/electron/ @DataDog/apm-idm-js
 /packages/dd-trace/src/plugins/ @DataDog/apm-idm-js
 /packages/dd-trace/test/plugins/ @DataDog/apm-idm-js
 /packages/dd-trace/src/service-naming/ @DataDog/apm-idm-js
