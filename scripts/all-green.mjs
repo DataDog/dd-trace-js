@@ -116,7 +116,7 @@ const processingPromises = []
  * @returns {Promise<void>}
  */
 async function processRun (run) {
-  await downloadArtifacts(octokit, { owner, repo, token: GITHUB_TOKEN, runs: [run] })
+  const { downloaded, failed } = await downloadArtifacts(octokit, { owner, repo, token: GITHUB_TOKEN, runs: [run] })
 
   const [junitResults, coverageResults] = await Promise.all([
     uploadJunit(run),
@@ -128,7 +128,8 @@ async function processRun (run) {
       baseRef: BASE_REF,
     }),
   ])
-  logUploads(run.name, [...junitResults, ...coverageResults])
+  const downloadSummary = failed > 0 ? `${downloaded} artifact(s), ${failed} failed` : `${downloaded} artifact(s)`
+  logUploads(`${run.name} (${downloadSummary})`, [...junitResults, ...coverageResults])
 }
 
 /**
@@ -149,7 +150,6 @@ function scheduleProcessing (runs) {
 
   for (const run of settled) {
     processedRunIds.add(run.id)
-    console.log(`Workflow run ${run.id} (${run.name}) finished, downloading and uploading its reports.`)
     processingPromises.push(
       processRun(run).catch(err => {
         console.error(`Failed to process workflow run ${run.id} (${run.name}): ${err.message}`)
