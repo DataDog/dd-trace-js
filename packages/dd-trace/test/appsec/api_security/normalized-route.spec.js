@@ -317,6 +317,22 @@ describe('normalizeRouteExpress', () => {
       assert.equal(normalize('/*a-*b', {}, '/x-y'), null)
     })
 
+    it('rejects an optional group that directly spans more than one URL segment', () => {
+      // '{/:b/:c}' is atomic in path-to-regexp; an adjacent optional can otherwise steal a segment.
+      assert.equal(normalize('{/:a}{/:b/:c}', {}, '/B/C'), null)
+      assert.equal(normalize('/x{/:a/:b}', {}, '/x/1/2'), null)
+    })
+
+    it('rejects an optional trailing/interior slash group', () => {
+      assert.equal(normalize('/users{/}', {}, '/users/'), null)
+      assert.equal(normalize('/items{/:id/}', {}, '/items/42/'), null)
+    })
+
+    it('rejects adjacent dynamic tokens with no static between (Express rejects these too)', () => {
+      assert.equal(normalize('/:a:b', { a: '1', b: '2' }, '/12'), null)
+      assert.equal(normalize('/:a*rest', {}, '/1/2'), null)
+    })
+
     it('still supports a static-only intra-segment optional group', () => {
       assert.equal(normalize('/foo{bar}', {}, '/foobar'), '/foobar')
       assert.equal(normalize('/foo{bar}', {}, '/foo'), '/foo')
@@ -390,6 +406,12 @@ describe('normalizeRouteExpress', () => {
       // path-to-regexp is greedy left-to-right: {/:id} takes the first URL segment, *rest the rest.
       assert.equal(normalize('/files{/:id}/*rest', {}, '/files/x/y/z'), '/files/{id}/{rest}')
     })
+
+    it('does not mark a preceding optional present when a required wildcard needs the last segment', () => {
+      // The required '*rest' needs >=1 segment, so '/files/x' assigns rest=x and id is absent —
+      // it must not shift x into {/:id} and let the wildcard match zero segments.
+      assert.equal(normalize('/files{/:id}/*rest', {}, '/files/x'), '/files/{rest}')
+    })
   })
 
   describe('static segment encoding (UTF-8 correctness)', () => {
@@ -408,9 +430,13 @@ describe('normalizeRouteExpress', () => {
       assert.equal(normalize('/path/🚀', {}), '/path/%F0%9F%9A%80')
     })
 
-    it('matches a non-ASCII static optional against the percent-encoded URL', () => {
-      assert.equal(normalize('/posts{/café}', {}, '/posts/caf%C3%A9'), '/posts/caf%C3%A9')
+    it('matches a static optional against the literal route text (as Express does), encodes output', () => {
+      // The URL is matched against the literal route text (what path-to-regexp/Express match), not
+      // a re-encoded form; the encoded form is only for the rendered output.
+      assert.equal(normalize('/posts{/café}', {}, '/posts/café'), '/posts/caf%C3%A9')
       assert.equal(normalize('/posts{/café}', {}, '/posts'), '/posts')
+      // A route static that itself contains '%' must not be double-encoded when matching.
+      assert.equal(normalize('/x{/a%40b}', {}, '/x/a%40b'), '/x/a%2540b')
     })
 
     it('treats backslash-escaped reserved chars as static (Express 5)', () => {
