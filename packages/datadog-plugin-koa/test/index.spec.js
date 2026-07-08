@@ -14,7 +14,6 @@ const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { storage } = require('../../datadog-core')
 const { ERROR_TYPE } = require('../../dd-trace/src/constants')
 const agent = require('../../dd-trace/test/plugins/agent')
-const { withSpanLeakBaseline } = require('../../dd-trace/test/plugins/span-leak-detector')
 const { withVersions } = require('../../dd-trace/test/setup/mocha')
 
 const sort = spans => spans.sort((a, b) => a.start.toString() >= b.start.toString() ? 1 : -1)
@@ -23,12 +22,6 @@ describe('Plugin', () => {
   let tracer
   let Koa
   let appListener
-
-  // Node's per-connection HTTP keep-alive timer captures the async-context frame
-  // active when the request ran; the handful of most-recent servers whose timers
-  // have not fired at teardown keep that fixed (non-scaling) number of finished
-  // spans reachable. Tolerate it without loosening the detector for other suites.
-  withSpanLeakBaseline(15)
 
   describe('koa', () => {
     withVersions('koa', 'koa', (version, _, realVersion) => {
