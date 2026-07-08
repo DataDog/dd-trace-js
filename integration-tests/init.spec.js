@@ -160,6 +160,8 @@ false
 Found incompatible runtime Node.js ${process.versions.node}, Supported runtimes: Node.js \
 >=${NODE_MAJOR + 1} <${MAX_NODE_MAJOR}.
 DD_INJECT_FORCE enabled, allowing unsupported runtimes and continuing.
+Native spans interface initialized
+Native spans mode enabled
 Application instrumentation bootstrapping complete
 true
 `, telemetryForced))
@@ -202,6 +204,8 @@ false
 Found incompatible runtime Node.js ${process.versions.node}, Supported runtimes: Node.js \
 ${engines.node} <${NODE_MAJOR}.
 DD_INJECT_FORCE enabled, allowing unsupported runtimes and continuing.
+Native spans interface initialized
+Native spans mode enabled
 Application instrumentation bootstrapping complete
 true
 `, telemetryForced))
