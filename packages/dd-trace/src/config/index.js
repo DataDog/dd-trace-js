@@ -564,6 +564,12 @@ class Config extends ConfigBase {
       setAndTrack(this, 'telemetry.DD_INSTRUMENTATION_TELEMETRY_ENABLED', false)
     }
 
+    // Electron apps route spans through the host app's IPC bridge to the main process
+    // instead of sending them to an agent.
+    if (process.versions.electron && !trackedConfigOrigins.has('experimental.exporter')) {
+      setAndTrack(this, 'experimental.exporter', 'electron')
+    }
+
     // Experimental agentless APM span intake
     // When enabled, sends spans directly to Datadog intake without an agent
     // TODO: Replace this with a proper configuration

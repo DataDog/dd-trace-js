@@ -4798,6 +4798,47 @@ rules:
     })
   })
 
+  context('Electron environment', () => {
+    let originalElectronVersion
+
+    beforeEach(() => {
+      originalElectronVersion = process.versions.electron
+    })
+
+    afterEach(() => {
+      if (originalElectronVersion === undefined) {
+        delete process.versions.electron
+      } else {
+        process.versions.electron = originalElectronVersion
+      }
+    })
+
+    it('should not default to the electron exporter outside of Electron', () => {
+      delete process.versions.electron
+      const config = getConfig()
+      assert.notStrictEqual(config.experimental.exporter, 'electron')
+    })
+
+    it('should default to the electron exporter when running in Electron', () => {
+      process.versions.electron = '42.1.0'
+      const config = getConfig()
+      assert.strictEqual(config.experimental.exporter, 'electron')
+    })
+
+    it('should let an explicit exporter override the electron default', () => {
+      process.versions.electron = '42.1.0'
+      const config = getConfig({ experimental: { exporter: 'agent' } })
+      assert.strictEqual(config.experimental.exporter, 'agent')
+    })
+
+    it('should let the environment variable override the electron default', () => {
+      process.versions.electron = '42.1.0'
+      process.env.DD_TRACE_EXPERIMENTAL_EXPORTER = 'agent'
+      const config = getConfig()
+      assert.strictEqual(config.experimental.exporter, 'agent')
+    })
+  })
+
   describe('should detect when service name is inferred', () => {
     it('should set isServiceNameInferred to false when DD_SERVICE is defined ', () => {
       process.env.DD_SERVICE = 'test-service'
