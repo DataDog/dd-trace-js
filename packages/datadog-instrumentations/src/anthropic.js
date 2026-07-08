@@ -82,6 +82,7 @@ function wrapCreate (create) {
       }
 
       let beforeVerdict
+      let parseResult
 
       function getBeforeVerdict () {
         if (!hasLifecycle || !messagesBeforeChannel.hasSubscribers) return
@@ -91,13 +92,15 @@ function wrapCreate (create) {
       }
 
       shimmer.wrap(apiPromise, 'parse', parse => function (...parseArgs) {
+        if (parseResult) return parseResult
+
         const parsed = parse.apply(this, parseArgs)
         const verdict = getBeforeVerdict()
         const parsedAfterBeforeVerdict = verdict
           ? Promise.all([verdict, parsed]).then(([, response]) => response)
           : parsed
 
-        return parsedAfterBeforeVerdict
+        parseResult = parsedAfterBeforeVerdict
           .then(response => {
             if (stream) {
               shimmer.wrap(response, Symbol.asyncIterator, iterator => wrapStreamIterator(iterator, ctx))
@@ -117,16 +120,20 @@ function wrapCreate (create) {
             if (!ctx.finished) finish(ctx, null, error)
             throw error
           })
+
+        return parseResult
       })
 
       // Gate `.asResponse()` callers on the before verdict so raw-response paths still block.
-      shimmer.wrap(apiPromise, 'asResponse', origAsResponse => function (...asResponseArgs) {
-        const responsePromise = origAsResponse.apply(this, asResponseArgs)
-        const verdict = getBeforeVerdict()
-        return verdict
-          ? Promise.all([verdict, responsePromise]).then(([, response]) => response)
-          : responsePromise
-      })
+      if (hasLifecycle && typeof apiPromise.asResponse === 'function') {
+        shimmer.wrap(apiPromise, 'asResponse', origAsResponse => function (...asResponseArgs) {
+          const responsePromise = origAsResponse.apply(this, asResponseArgs)
+          const verdict = getBeforeVerdict()
+          return verdict
+            ? Promise.all([verdict, responsePromise]).then(([, response]) => response)
+            : responsePromise
+        })
+      }
 
       anthropicTracingChannel.end.publish(ctx)
 

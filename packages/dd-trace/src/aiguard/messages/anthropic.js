@@ -46,10 +46,11 @@ function convertAnthropicDocumentBlock (block) {
  * `parts` collects renderable content (text/image/document); `toolCalls` and
  * `toolResults` collect tool_use / tool_result blocks respectively.
  *
- * `thinking` / `redacted_thinking` and any unknown block types are dropped —
- * internal reasoning is not conversation, and speculative shape mapping for
- * newer block types (server_tool_use, mcp_tool_*, etc.) risks misleading AI
- * Guard, which is trained on chat-style shapes.
+ * `thinking` / `redacted_thinking` are dropped — internal reasoning is not
+ * conversation and must not reach AI Guard. Unknown block types fall through to
+ * a best-effort text extraction: if the block carries a `text` field it is
+ * included (so text-bearing extension types such as `search_result` are
+ * evaluated); purely structural blocks without a `text` field are dropped.
  *
  * @param {Array<AnthropicContentBlock>} blocks
  * @returns {{
@@ -79,9 +80,17 @@ function walkContentBlocks (blocks) {
         }
         break
       }
-      case 'document':
-        out.parts.push({ type: 'text', text: convertAnthropicDocumentBlock(block) })
+      case 'document': {
+        const docContent = convertAnthropicDocumentBlock(block)
+        if (Array.isArray(docContent)) {
+          // Document contained images; spread parts into the outer walker and propagate the flag.
+          out.hasImages = true
+          for (const part of docContent) out.parts.push(part)
+        } else {
+          out.parts.push({ type: 'text', text: docContent })
+        }
         break
+      }
       case 'tool_use':
         out.toolCalls.push({
           id: block.id ?? block.name,
@@ -97,6 +106,14 @@ function walkContentBlocks (blocks) {
           tool_call_id: block.tool_use_id,
           content: convertAnthropicToolResultContent(block.content),
         })
+        break
+      case 'thinking':
+      case 'redacted_thinking':
+        break
+      default:
+        // Best-effort: extract text from any block with a `text` field so that
+        // text-bearing extension types (e.g. search_result) reach AI Guard for evaluation.
+        if (typeof block.text === 'string') out.parts.push({ type: 'text', text: block.text })
         break
     }
   }

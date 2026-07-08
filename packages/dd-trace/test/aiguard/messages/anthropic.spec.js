@@ -99,6 +99,21 @@ describe('aiguard/messages/anthropic', () => {
       assert.strictEqual(convertAnthropicBlocksToContent(blocks), 'Part one.\nPart two.')
     })
 
+    it('propagates image parts from a document source.type === content block to the outer walker', () => {
+      const blocks = [{
+        type: 'document',
+        source: {
+          type: 'content',
+          content: [
+            { type: 'image', source: { type: 'url', url: 'https://example.com/x.png' } },
+          ],
+        },
+      }]
+      assert.deepStrictEqual(convertAnthropicBlocksToContent(blocks), [
+        { type: 'image_url', image_url: { url: 'https://example.com/x.png' } },
+      ])
+    })
+
     it('falls back to title when document source.type === content yields nothing', () => {
       const blocks = [{ type: 'document', title: 'empty.pdf', source: { type: 'content', content: [] } }]
       assert.strictEqual(convertAnthropicBlocksToContent(blocks), 'empty.pdf')
@@ -471,7 +486,7 @@ describe('aiguard/messages/anthropic', () => {
       assert.deepStrictEqual(convertAnthropicMessage(message), [{ role: 'assistant', content: 'final answer' }])
     })
 
-    it('drops unknown block types silently', () => {
+    it('drops unknown block types that carry no text field', () => {
       const message = {
         role: 'assistant',
         content: [
@@ -480,6 +495,17 @@ describe('aiguard/messages/anthropic', () => {
         ],
       }
       assert.deepStrictEqual(convertAnthropicMessage(message), [{ role: 'assistant', content: 'answer' }])
+    })
+
+    it('extracts text from unknown block types that carry a text field', () => {
+      const message = {
+        role: 'user',
+        content: [
+          { type: 'search_result', text: 'result text' },
+          { type: 'text', text: 'follow up' },
+        ],
+      }
+      assert.deepStrictEqual(convertAnthropicMessage(message), [{ role: 'user', content: 'result text\nfollow up' }])
     })
 
     it('skips text blocks whose text is not a string', () => {
