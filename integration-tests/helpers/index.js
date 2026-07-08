@@ -51,16 +51,30 @@ async function runAndCheckOutput (filename, cwd, expectedOut, expectedSource) {
   let out = await new Promise((resolve, reject) => {
     proc.once('error', reject)
     const out = []
+    let killTimer
+
+    // Some Node.js versions leave a lingering loader-thread child that never
+    // exits on its own (see setShouldKill). Kill the process after a period
+    // of inactivity rather than a fixed delay from spawn, so a slow/loaded
+    // machine still gets a fair chance to produce its output before being
+    // killed.
+    function armKillTimer () {
+      clearTimeout(killTimer)
+      killTimer = setTimeout(() => {
+        if (proc.exitCode === null) proc.kill()
+      }, 5000)
+    }
+
     proc.stdout.on('data', data => {
       out.push(data)
+      if (shouldKill) armKillTimer()
     })
     proc.stderr.pipe(process.stdout)
-    proc.once('exit', () => resolve(Buffer.concat(out).toString('utf8')))
-    if (shouldKill) {
-      setTimeout(() => {
-        if (proc.exitCode === null) proc.kill()
-      }, 1000) // TODO this introduces flakiness. find a better way to end the process.
-    }
+    proc.once('exit', () => {
+      clearTimeout(killTimer)
+      resolve(Buffer.concat(out).toString('utf8'))
+    })
+    if (shouldKill) armKillTimer()
   })
   if (typeof expectedOut === 'function') {
     expectedOut(out)
