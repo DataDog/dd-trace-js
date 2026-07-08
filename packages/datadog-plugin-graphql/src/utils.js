@@ -1,5 +1,12 @@
 'use strict'
 
+/**
+ * @param {{ errorExtensions?: string[] }} config Resolved plugin config; `errorExtensions` lists the
+ *   GraphQL error `extensions` keys to copy onto the span event.
+ * @param {import('../../dd-trace/src/opentracing/span')} span
+ * @param {{ name?: string, message?: string, stack?: string, locations?: Array<{ line: number, column: number }>,
+ *   path?: Array<string|number>, extensions?: Record<string, unknown> }} exc
+ */
 function extractErrorIntoSpanEvent (config, span, exc) {
   const attributes = {}
 
@@ -29,8 +36,8 @@ function extractErrorIntoSpanEvent (config, span, exc) {
     attributes.message = exc.message
   }
 
-  if (config.DD_TRACE_GRAPHQL_ERROR_EXTENSIONS) {
-    for (const ext of config.DD_TRACE_GRAPHQL_ERROR_EXTENSIONS) {
+  if (config.errorExtensions) {
+    for (const ext of config.errorExtensions) {
       if (exc.extensions?.[ext]) {
         const value = exc.extensions[ext]
 
