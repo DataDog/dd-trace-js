@@ -3,14 +3,21 @@ import { Octokit } from 'octokit'
 import { summary } from '@actions/core'
 import { context } from '@actions/github'
 import { downloadArtifacts } from './download-artifacts.mjs'
+import { uploadJunit } from './upload-junit.mjs'
+import { uploadCoverage, sendCodecovNotifications } from './upload-coverage.mjs'
 
 /* eslint-disable no-console */
 
 const {
+  BASE_REF,
   DELAY,
+  GITHUB_EVENT_NAME,
   GITHUB_SHA,
   GITHUB_TOKEN,
+  HEAD_BRANCH,
+  HEAD_SHA,
   POLLING_INTERVAL,
+  PR_NUMBER,
   RETRIES,
   RUN_ATTEMPT,
 } = process.env
@@ -94,8 +101,66 @@ async function getRuns () {
   }
 }
 
+// Runs whose reports have already been downloaded/merged/uploaded, and the resulting promises —
+// each sibling workflow's coverage and junit reports go out as soon as that workflow reaches a
+// final state, instead of waiting for every workflow to finish before downloading or uploading
+// anything, so a fast workflow's reports land while slower ones are still running.
+const processedRunIds = new Set()
+const processingPromises = []
+
+/**
+ * Download, merge, and upload a single finished workflow run's junit and coverage reports.
+ *
+ * @param {{ id: number, name: string }} run
+ * @returns {Promise<void>}
+ */
+async function processRun (run) {
+  await downloadArtifacts(octokit, { owner, repo, token: GITHUB_TOKEN, runs: [run] })
+
+  await Promise.all([
+    uploadJunit(run),
+    uploadCoverage(run, {
+      sha: HEAD_SHA,
+      branch: HEAD_BRANCH,
+      prNumber: PR_NUMBER,
+      eventName: GITHUB_EVENT_NAME,
+      baseRef: BASE_REF,
+    }),
+  ])
+}
+
+/**
+ * Kick off processing for any run that just reached a final state and hasn't been processed yet.
+ * A run is final once it's completed and either isn't retried (its conclusion isn't in
+ * `pollingRetryConclusions`) or already went through a retry attempt.
+ *
+ * @param {Array<{ id: number, name: string, status: string, conclusion: string }>} runs
+ */
+function scheduleProcessing (runs) {
+  if (!process.env.GITHUB_ACTIONS) return
+
+  const settled = runs.filter(r =>
+    r.status === 'completed' &&
+    (!pollingRetryConclusions.has(r.conclusion) || retriedRunIds.has(r.id)) &&
+    !processedRunIds.has(r.id)
+  )
+
+  for (const run of settled) {
+    processedRunIds.add(run.id)
+    console.log(`Workflow run ${run.id} (${run.name}) finished, downloading and uploading its reports.`)
+    processingPromises.push(
+      processRun(run).catch(err => {
+        console.error(`Failed to process workflow run ${run.id} (${run.name}): ${err.message}`)
+        process.exitCode = 1
+      })
+    )
+  }
+}
+
 async function pollUntilDone () {
   const runs = await getRuns()
+
+  scheduleProcessing(runs)
 
   // Check before modifying retriedRunIds to avoid false positives on freshly requeued runs.
   const retryFailed = runs.filter(r =>
@@ -198,8 +263,13 @@ async function checkAllGreen () {
 
   await printSummary(runs)
 
+  console.log(`Waiting for ${processingPromises.length} workflow run report upload(s) to finish.`)
+  await Promise.all(processingPromises)
+
+  // Codecov's `manual_trigger` (`.codecov.yml`) holds off computing/posting the coverage status
+  // until this fires, since uploads land one sibling workflow at a time rather than all at once.
   if (process.env.GITHUB_ACTIONS) {
-    await downloadArtifacts(octokit, { owner, repo, token: GITHUB_TOKEN, runs })
+    await sendCodecovNotifications(HEAD_SHA)
   }
 
   if (!done) {
