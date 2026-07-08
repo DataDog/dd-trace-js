@@ -90,12 +90,21 @@ function sendTelemetry (name, tags, resultMetadata, synchronous) {
   // before any instrumentation is active, so it never traces the forwarder. It exists since
   // Node 0.11.12; the guardrails still target >=0.8, which predates the exit bug anyway.
   if (synchronous && spawnSync) {
+    // Bound the blocking send: this telemetry is best-effort and the whole point of the
+    // synchronous path is to avoid a hung exit, so a forwarder that wedges must not become a
+    // new hard hang. On timeout spawnSync kills the child and returns error.code ETIMEDOUT.
     var result = spawnSync(telemetryForwarderPath, ['library_entrypoint'], {
       input: payload,
-      stdio: ['pipe', 'ignore', 'ignore']
+      stdio: ['pipe', 'ignore', 'ignore'],
+      timeout: 1000,
+      killSignal: 'SIGKILL'
     })
     if (result.error) {
-      log.error('Failed to spawn telemetry forwarder')
+      if (result.error.code === 'ETIMEDOUT') {
+        log.error('Telemetry forwarder timed out')
+      } else {
+        log.error('Failed to spawn telemetry forwarder')
+      }
     } else if (result.status) {
       log.error('Telemetry forwarder exited with code', result.status)
     }
