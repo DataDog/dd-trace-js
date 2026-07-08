@@ -1,5 +1,6 @@
 'use strict'
 
+const { HTTP_ROUTE } = require('../../../../../ext/tags')
 const web = require('../../plugins/util/web')
 const { getParse } = require('../../../../datadog-instrumentations/src/path-to-regexp')
 
@@ -11,9 +12,9 @@ const { getParse } = require('../../../../datadog-instrumentations/src/path-to-r
  *   2. No empty elements (consecutive slashes are collapsed).
  *   3. Static segments: only [A-Za-z0-9.-~_]; other chars are percent-encoded (UTF-8).
  *   4. Dynamic params: {name}. Param names may contain any char except /?#+{} (those are
- *      URL-encoded; + is the reserved combining marker). Nameless params (unnamed wildcards
- *      and shadowed duplicate names) get a paramN placeholder, declaration-ordered, skipping
- *      any N that collides with a surviving framework-supplied name. All names end up unique.
+ *      URL-encoded; + is the reserved combining marker). Shadowed duplicate names (an earlier
+ *      occurrence of a name Express keeps only the last of) get a paramN placeholder,
+ *      declaration-ordered, skipping any N that collides with a surviving name. Names end up unique.
  *   5. One URL segment = one atomic element. Multiple params in one segment combine as {a+b}.
  *      A catch-all is a single terminal element.
  *   6. Optional path elements (Express 5 `{/:id}`, optional static groups, optional catch-alls)
@@ -49,15 +50,15 @@ const routeCache = new Map()
  * @typedef {{ type: 'slash', group: number }
  *   | { type: 'static', text: string, group: number }
  *   | { type: 'param', name: string, group: number }
- *   | { type: 'wildcard', name: string | null, group: number }} RouteToken
+ *   | { type: 'wildcard', name: string, group: number }} RouteToken
  *
  * `group` is the id of the innermost enclosing optional `{...}` group (0 = top-level, always
  * present). A slash token also carries the group of its enclosing braces.
  *
  * `wildcardIndex` is the index of the segment's terminal wildcard token, or -1 (set at compile).
- * `matcher`/`prefixRegex` are compiled lazily on first use and cached on the segment.
+ * `matcher` (the per-segment URL regex + presence markers) is compiled lazily and cached here.
  * @typedef {{ group: number, tokens: RouteToken[], wildcardIndex: number,
- *   matcher?: { regex: RegExp, presence: { id: number, name: string }[] }, prefixRegex?: RegExp }} RouteSegment
+ *   matcher?: { regex: RegExp, presence: { id: number, name: string }[] } }} RouteSegment
  *
  * @typedef {{ type: 'text', value: string }
  *   | { type: 'param', name: string }
@@ -100,7 +101,7 @@ function tokensToSegments (ptTokens) {
       } else if (token.type === 'param') {
         flat.push({ type: 'param', name: token.name, group })
       } else if (token.type === 'wildcard') {
-        flat.push({ type: 'wildcard', name: token.name ?? null, group })
+        flat.push({ type: 'wildcard', name: token.name, group })
       } else if (token.type === 'group') {
         nextGroupId++
         const groupId = nextGroupId
@@ -198,15 +199,21 @@ function compileRoute (route, parse) {
     if (intraGroups.size > 1) return null
   }
 
-  // An optional group that directly spans more than one URL segment ('{/:a/:b}') is atomic in
+  // An optional group that spans more than one URL segment ('{/:a/:b}', '{b/:c}{/:d}') is atomic in
   // path-to-regexp (all its segments present or all absent), but our matcher toggles them
-  // independently and a sibling optional can steal one; omit rather than mis-assign.
-  const directSegmentCount = new Map()
-  for (const seg of cleaned) {
-    if (seg.group !== 0) directSegmentCount.set(seg.group, (directSegmentCount.get(seg.group) ?? 0) + 1)
-  }
-  for (const count of directSegmentCount.values()) {
-    if (count > 1) return null
+  // independently and a sibling optional can steal one; omit rather than mis-assign. A group
+  // "appears" in a segment as the segment's group or as any of its tokens' groups.
+  const groupFirstSegment = new Map()
+  for (let s = 0; s < cleaned.length; s++) {
+    const seg = cleaned[s]
+    const groupsHere = new Set()
+    if (seg.group !== 0) groupsHere.add(seg.group)
+    for (const t of seg.tokens) if (t.group !== 0) groupsHere.add(t.group)
+    for (const g of groupsHere) {
+      const first = groupFirstSegment.get(g)
+      if (first !== undefined && first !== s) return null
+      groupFirstSegment.set(g, s)
+    }
   }
 
   // Collapse "structural-only" optional groups — a `{...}` that wraps only nested group(s) and has
@@ -226,6 +233,16 @@ function compileRoute (route, parse) {
   }
 
   const optionalGroups = [...represented].sort((a, b) => a - b)
+
+  // A wildcard preceded by tokens in its segment ('v*rest', 'p{q}*rest') can't be presence-resolved
+  // consistently with path-to-regexp once the route also has optional groups (the backtracking
+  // matcher would run); omit rather than mis-assign. Without optional groups the route is
+  // precomputed and the matcher never runs, so a prefixed wildcard alone is fine.
+  if (optionalGroups.length > 0) {
+    for (const seg of cleaned) {
+      if (seg.wildcardIndex > 0) return null
+    }
+  }
 
   // Guard against pathological routes: too many optional groups makes the presence bitmask
   // (1 << i) overflow 32 bits and the backtracking matcher blow up. Omit rather than risk a
@@ -317,40 +334,38 @@ function encodeParamName (name) {
 function renderRoute (compiled, present) {
   const { segments, groupParent } = compiled
 
-  // Pass 1: collect the present dynamic tokens (param/wildcard) in declaration order.
+  // Pass 1: collect the present dynamic tokens (param/wildcard) in declaration order. A dynamic
+  // token never sits in a deeper group than its segment (the compile guard rejects that), so an
+  // active segment group implies the token is active — only static tokens need the per-token check.
   const dyn = []
   for (const seg of segments) {
     if (!groupActive(seg.group, groupParent, present)) continue
     for (const t of seg.tokens) {
-      if (t.type === 'static') continue
-      if (!groupActive(t.group, groupParent, present)) continue
-      dyn.push(t)
+      if (t.type !== 'static') dyn.push(t)
     }
   }
 
   // Pass 2: resolve names. Uniqueness is computed on ENCODED names (the form that appears in the
   // output), so two distinct raw names that encode identically don't collide. A token keeps its
-  // name iff it is the LAST present occurrence of that encoded name (the value Express keeps in
-  // req.params); earlier duplicates and unnamed wildcards become paramN placeholders, skipping
-  // any N equal to a surviving name.
+  // name iff it is the LAST occurrence of that encoded name (the value Express keeps in
+  // req.params); earlier duplicates become paramN placeholders, skipping any N equal to a
+  // surviving name. (Every dyn token has a name — v8 rejects unnamed params/wildcards.)
   const encodedNames = new Array(dyn.length)
   const lastIndexByName = new Map()
   for (let idx = 0; idx < dyn.length; idx++) {
-    if (dyn[idx].name != null) {
-      encodedNames[idx] = encodeParamName(dyn[idx].name)
-      lastIndexByName.set(encodedNames[idx], idx)
-    }
+    encodedNames[idx] = encodeParamName(dyn[idx].name)
+    lastIndexByName.set(encodedNames[idx], idx)
   }
   const used = new Set()
   for (let idx = 0; idx < dyn.length; idx++) {
-    if (encodedNames[idx] != null && lastIndexByName.get(encodedNames[idx]) === idx) {
+    if (lastIndexByName.get(encodedNames[idx]) === idx) {
       used.add(encodedNames[idx])
     }
   }
   const resolvedNames = new Array(dyn.length)
   let counter = 1
   for (let idx = 0; idx < dyn.length; idx++) {
-    if (encodedNames[idx] != null && lastIndexByName.get(encodedNames[idx]) === idx) {
+    if (lastIndexByName.get(encodedNames[idx]) === idx) {
       resolvedNames[idx] = encodedNames[idx]
     } else {
       while (used.has(`param${counter}`)) counter++
@@ -464,25 +479,6 @@ function markerName (groupId) {
 }
 
 /**
- * Build (and cache on the segment) a start-anchored, case-insensitive regex for the tokens
- * preceding a wildcard in a segment (e.g. 'v' in 'v*rest'), to validate the prefix before the
- * catch-all consumes. Matches literal route text (see getSegmentMatcher).
- * @param {RouteSegment} seg
- * @param {number} wIdx - index of the wildcard token in seg.tokens
- * @returns {RegExp}
- */
-function getWildcardPrefixRegex (seg, wIdx) {
-  if (seg.prefixRegex !== undefined) return seg.prefixRegex
-  let pfx = ''
-  for (let k = 0; k < wIdx; k++) {
-    const t = seg.tokens[k]
-    pfx += t.type === 'static' ? escapeRegex(t.text) : '[^/]+?'
-  }
-  seg.prefixRegex = new RegExp('^' + pfx, 'i')
-  return seg.prefixRegex
-}
-
-/**
  * Resolve which optional groups are present by matching the route segments against the URL
  * path segments. Matching is greedy present-first, mirroring path-to-regexp v8's left-to-right
  * assignment — so the resolved presence matches what Express itself matched.
@@ -546,12 +542,9 @@ function matchSegmentHere (compiled, si, urlSegs, ui, present) {
   const wIdx = seg.wildcardIndex
 
   if (wIdx !== -1) {
+    // Only bare wildcard segments reach the matcher: a prefixed wildcard ('v*rest') coexisting with
+    // optional groups is rejected at compile, and without optional groups the route is precomputed.
     const wildcard = seg.tokens[wIdx]
-    // Tokens before the wildcard (e.g. 'v' in 'v*rest') must match the URL segment start first.
-    if (wIdx > 0) {
-      if (ui >= urlSegs.length) return false
-      if (!getWildcardPrefixRegex(seg, wIdx).test(urlSegs[ui])) return false
-    }
     // A wildcard needs at least one URL segment. Zero left → this segment can't match: an optional
     // catch-all backtracks to absent, and a required one (path-to-regexp requires >=1) fails.
     if (ui >= urlSegs.length) return false
@@ -622,6 +615,9 @@ function presenceBitmask (optionalGroups, present) {
 
 /**
  * Split a URL path into its non-empty segments in a single pass (no intermediate `filter`).
+ * Empty segments from consecutive slashes are dropped; a malformed URL with interior '//' can
+ * therefore resolve an optional group slightly differently from path-to-regexp — an accepted
+ * edge, since such URLs are not produced by normal routing.
  * @param {string} urlPath
  * @returns {string[]}
  */
@@ -699,8 +695,8 @@ function normalizeRouteExpress (route, params, urlPath, parse) {
  * @returns {string|null} Normalized route, or null when normalization is not possible
  */
 function normalizeRoute (req) {
-  const context = web.getContext(req)
-  const component = context?.span?.context()?.getTag?.('component')
+  const spanContext = web.root(req)?.context()
+  const component = spanContext?.getTag?.('component')
 
   // eslint-disable-next-line sonarjs/no-small-switch
   switch (component) {
@@ -710,11 +706,10 @@ function normalizeRoute (req) {
       // also accepts, but those normalize identically, so the output stays correct.
       const parse = getParse()
       if (parse === undefined) return null
-      const paths = context.paths
-      // Same route reconstruction as web.js's http.route. The router plugin maps a bare '/' (and
-      // '*') to '', so root yields route '' → null — intentionally matching http.route, which is
-      // itself omitted for the empty route.
-      const route = paths && (paths.length > 1 ? paths.join('') : paths[0])
+      // Reuse the http.route tag set by web.setRouteOrEndpointTag (called just before this hook)
+      // instead of re-deriving it from context.paths. It is undefined for the empty (root) route,
+      // which yields null here — matching http.route's own omission for that case.
+      const route = spanContext.getTag(HTTP_ROUTE)
       return normalizeRouteExpress(route, req.params, req.originalUrl || req.url, parse)
     }
     default:

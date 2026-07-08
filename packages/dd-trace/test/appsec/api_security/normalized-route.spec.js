@@ -199,17 +199,17 @@ describe('normalizeRouteExpress', () => {
     })
   })
 
-  describe('wildcard with a static prefix in its segment', () => {
-    // 'v*rest' → the 'v' prefix must match the URL segment start before the wildcard consumes the
-    // rest. Combined with an optional group so presence resolution runs the backtracking matcher.
-    it('resolves the optional as present when the prefix matches after it', () => {
-      assert.equal(normalize('/files{/:opt}/v*rest', {}, '/files/x/vY/z'), '/files/{opt}/{rest}')
+  describe('wildcard with a prefix in its segment', () => {
+    it('normalizes a prefixed wildcard when the route has no optional groups (precomputed)', () => {
+      assert.equal(normalize('/files/v*rest', {}, '/files/vY/z'), '/files/{rest}')
+      assert.equal(normalize('/x/:a-*rest', {}, '/x/y-z/w'), '/x/{a+rest}')
     })
 
-    it('backtracks past a prefix mismatch: greedy opt=vY fails the v-prefix, so opt is absent', () => {
-      // opt-present is tried first (opt=vY), but then the wildcard prefix 'v' fails against 'z';
-      // the matcher backtracks and matches with opt absent and the wildcard segment 'vY'.
-      assert.equal(normalize('/files{/:opt}/v*rest', {}, '/files/vY/z'), '/files/{rest}')
+    it('rejects a prefixed wildcard once the route also has an optional group', () => {
+      // A prefixed wildcard can't be presence-resolved consistently with path-to-regexp when the
+      // backtracking matcher runs (which optional groups require), so we omit the tag.
+      assert.equal(normalize('/files{/:opt}/v*rest', {}, '/files/x/vY/z'), null)
+      assert.equal(normalize('/a{/:id}/p{q}*rest', {}, '/a/1/pZ/w'), null)
     })
   })
 
@@ -317,10 +317,12 @@ describe('normalizeRouteExpress', () => {
       assert.equal(normalize('/*a-*b', {}, '/x-y'), null)
     })
 
-    it('rejects an optional group that directly spans more than one URL segment', () => {
-      // '{/:b/:c}' is atomic in path-to-regexp; an adjacent optional can otherwise steal a segment.
+    it('rejects an optional group that spans more than one URL segment', () => {
+      // A group is atomic in path-to-regexp; an adjacent optional can otherwise steal a segment.
       assert.equal(normalize('{/:a}{/:b/:c}', {}, '/B/C'), null)
       assert.equal(normalize('/x{/:a/:b}', {}, '/x/1/2'), null)
+      // group owns a token in one segment ('ab') and a full later segment ('/:c')
+      assert.equal(normalize('/a{b/:c}{/:d}', {}, '/a/d'), null)
     })
 
     it('rejects an optional trailing/interior slash group', () => {
