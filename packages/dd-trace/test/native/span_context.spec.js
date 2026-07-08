@@ -182,6 +182,27 @@ describe('NativeSpanContext', () => {
       sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetError, leSpanId, ['i32', 1])
     })
 
+    it('routes a bare `service` tag to meta (parity with the JS formatter), not SetServiceName', () => {
+      // The global config stamps a bare `service` tag on every span; the JS
+      // span formatter has no `case 'service'`, so it lands in meta.service.
+      // `service.name` remains the only route to the native service field.
+      nativeSpans.queueOp.resetHistory()
+      spanContext.setTag('service', 'test')
+      sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetMetaAttr, leSpanId, 'service', 'test')
+      const serviceNameCalls = nativeSpans.queueOp.getCalls().filter(c => c.args[0] === OpCode.SetServiceName)
+      assert.strictEqual(serviceNameCalls.length, 0, 'bare `service` must not queue SetServiceName')
+    })
+
+    it('extracts error meta from a plain error-shaped object (duck-typed like util.isError)', () => {
+      // gRPC tags `error` with a plain `{ message, code }` object (not an Error
+      // instance). Mirror the JS formatter's extractError so error.message meta
+      // is still emitted.
+      nativeSpans.queueOp.resetHistory()
+      spanContext.setTag('error', { message: 'foobar', code: 5 })
+      sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetError, leSpanId, ['i32', 1])
+      sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetMetaAttr, leSpanId, 'error.message', 'foobar')
+    })
+
     it('should set _dd.measured when span.kind is non-internal', () => {
       // span.kind:client, server, producer, consumer → _dd.measured = 1
       // span.kind:internal → no _dd.measured

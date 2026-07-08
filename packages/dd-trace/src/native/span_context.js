@@ -29,7 +29,7 @@ const {
 // Tags that have dedicated OpCodes or special handling in syncTagToNative.
 // Everything else is a plain meta string or metric number.
 const SPECIAL_KEYS = new Set([
-  'service.name', 'service', 'resource.name', 'span.type',
+  'service.name', 'resource.name', 'span.type',
   'error', 'http.status_code', 'error.type', 'span.kind',
 ])
 
@@ -313,18 +313,6 @@ class NativeSpanContext extends DatadogSpanContext {
         }
         return
 
-      case 'service':
-        // Treat the bare `service` key as an alias for `service.name`. We
-        // already routed `service.name` through SetServiceName above; if a
-        // caller writes the alias, fall through to the same opcode rather
-        // than queueing a meta tag.
-        this.#nativeSpans.queueOp(
-          OpCode.SetServiceName,
-          this._nativeSpanId,
-          String(value)
-        )
-        return
-
       case 'resource.name':
         this.#nativeSpans.queueOp(
           OpCode.SetResourceName,
@@ -354,8 +342,11 @@ class NativeSpanContext extends DatadogSpanContext {
           ['i32', value ? 1 : 0]
         )
         // Error objects: also extract error.type/message/stack as meta tags so
-        // consumers don't need to introspect the underlying Error.
-        if (value instanceof Error) {
+        // consumers don't need to introspect the underlying Error. Mirror
+        // util.isError (duck-typed on `.message`) so plain error-shaped objects
+        // — e.g. gRPC's `{ message, code }` — get the same meta extraction the
+        // JS formatter's extractError performs.
+        if (value?.message || value instanceof Error) {
           if (value.name) {
             this.#nativeSpans.queueOp(OpCode.SetMetaAttr, this._nativeSpanId, 'error.type', String(value.name))
           }
