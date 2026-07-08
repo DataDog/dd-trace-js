@@ -9,8 +9,6 @@ const { parse: rawParse } = require('path-to-regexp')
 const {
   normalizeRouteExpress,
   normalizeRoute,
-  tokensToSegments,
-  compileRoute,
 } = require('../../../src/appsec/api_security/normalized-route')
 
 // Mirror the contract of the path-to-regexp instrumentation adapter (getParse): return the v8
@@ -299,24 +297,41 @@ describe('normalizeRouteExpress', () => {
     })
   })
 
-  describe('multiple independent optional groups in one segment (rule 5 combination)', () => {
-    // Two independent optional groups within one URL segment (distinct delimiters). Each group's
-    // presence is detected via its own named marker in the per-segment regex; present params
-    // combine into one atomic element.
-    it('all present → single combined element', () => {
-      assert.equal(normalize('/:a{.:b}{-:c}', {}, '/x.y-z'), '/{a+b+c}')
+  describe('un-representable single-segment shapes (returns null, not a wrong tag)', () => {
+    // Our per-segment matcher uses a delimiter-agnostic '[^/]+?' for each param, so it can assign
+    // params differently from path-to-regexp's delimiter-aware alternatives when a segment has more
+    // than one optional group. Rather than emit a wrong combination we omit the tag.
+    it('rejects two independent optional groups in one segment', () => {
+      // path-to-regexp matches '/x-y.z' as { a: 'x-y', b: 'z' } → we would mis-assign, so → null.
+      assert.equal(normalize('/:a{.:b}{-:c}', {}, '/x-y.z'), null)
+      assert.equal(normalize('/:a{.:b}{-:c}', {}, '/x.y-z'), null)
+      assert.equal(normalize('/:a{.:b}{-:c}', {}, '/x'), null)
     })
 
-    it('only the base param present', () => {
-      assert.equal(normalize('/:a{.:b}{-:c}', {}, '/x'), '/{a}')
+    it('rejects a nested optional group with trailing tokens in one segment', () => {
+      // '/:a{.:b{.:c}-:d}' on '/x.y-z' is { a:'x', b:'y', d:'z' } in path-to-regexp → null here.
+      assert.equal(normalize('/:a{.:b{.:c}-:d}', {}, '/x.y-z'), null)
     })
 
-    it('first optional present', () => {
-      assert.equal(normalize('/:a{.:b}{-:c}', {}, '/x.y'), '/{a+b}')
+    it('rejects a wildcard with suffix tokens in its segment (non-terminal catch-all)', () => {
+      assert.equal(normalize('/files/*path.:ext', {}, '/files/a/b.txt'), null)
+      assert.equal(normalize('/*a-*b', {}, '/x-y'), null)
     })
 
-    it('second optional present', () => {
-      assert.equal(normalize('/:a{.:b}{-:c}', {}, '/x-z'), '/{a+c}')
+    it('still supports a single intra-segment optional group', () => {
+      assert.equal(normalize('/photos/:id{.:format}', {}, '/photos/1.jpg'), '/photos/{id+format}')
+      assert.equal(normalize('/photos/:id{.:format}', {}, '/photos/1'), '/photos/{id}')
+    })
+
+    it('supports an intra-segment optional group followed by a static suffix', () => {
+      assert.equal(normalize('/:a{.:b}c', {}, '/x.yc'), '/{a+b}')
+      assert.equal(normalize('/:a{.:b}c', {}, '/xc'), '/{a}')
+    })
+
+    it('rolls back intra-segment markers when a later segment fails, then falls back to params', () => {
+      // '/x.y' matches the first segment (marker recorded), but '/w' != '/z' fails the tail, so the
+      // URL match is abandoned and params (empty) decide: the optional is absent.
+      assert.equal(normalize('/x{.:y}/z', {}, '/x.y/w'), '/x/z')
     })
   })
 
@@ -463,50 +478,6 @@ describe('normalizeRouteExpress', () => {
     // there is no active web span (web.root(req) is undefined → component undefined → null).
     it('returns null when there is no active web span', () => {
       assert.equal(normalizeRoute({ originalUrl: '/x', params: {} }), null)
-    })
-  })
-
-  describe('tokensToSegments (adapter)', () => {
-    it('splits a text token on "/" into slash + static tokens and drops the leading empty', () => {
-      const { segments, trailingSlash } = tokensToSegments(parse('/users/:id').tokens)
-      assert.equal(trailingSlash, false)
-      assert.deepEqual(segments.map(s => s.tokens.map(t => t.type)), [['static'], ['param']])
-      assert.equal(segments[0].tokens[0].text, 'users')
-      assert.equal(segments[1].tokens[0].name, 'id')
-    })
-
-    it('records optional group nesting in groupParent', () => {
-      const { groupParent } = tokensToSegments(parse('/a{/:b{/:c}}').tokens)
-      // inner group (2) nested under outer (1) which is top-level (0)
-      assert.equal(groupParent.get(1), 0)
-      assert.equal(groupParent.get(2), 1)
-    })
-
-    it('flags a declared trailing slash', () => {
-      const { trailingSlash } = tokensToSegments(parse('/users/').tokens)
-      assert.equal(trailingSlash, true)
-    })
-  })
-
-  describe('compileRoute', () => {
-    it('precomputes the result for a route with no optional groups', () => {
-      const compiled = compileRoute('/users/:id', parse)
-      assert.equal(compiled.precomputed, '/users/{id}')
-      assert.equal(compiled.optionalGroups.length, 0)
-    })
-
-    it('returns an entry with optional groups (no precomputed value) for optional routes', () => {
-      const compiled = compileRoute('/items{/:id}', parse)
-      assert.equal(compiled.precomputed, null)
-      assert.ok(compiled.optionalGroups.length > 0)
-    })
-
-    it('returns null for unsupported routes (parser throws)', () => {
-      assert.equal(compileRoute('/path(\\.ext)?', parse), null)
-    })
-
-    it('compiles the root route to "/"', () => {
-      assert.equal(compileRoute('/', parse).precomputed, '/')
     })
   })
 })
