@@ -124,16 +124,25 @@ function wrapCreate (create) {
         return parseResult
       })
 
-      // Gate `.asResponse()` callers on the before verdict so raw-response paths still block.
-      if (hasLifecycle && typeof apiPromise.asResponse === 'function') {
-        shimmer.wrap(apiPromise, 'asResponse', origAsResponse => function (...asResponseArgs) {
-          const responsePromise = origAsResponse.apply(this, asResponseArgs)
-          const verdict = getBeforeVerdict()
-          return verdict
-            ? Promise.all([verdict, responsePromise]).then(([, response]) => response)
-            : responsePromise
-        })
-      }
+      // Gate `.asResponse()` callers on the before verdict so raw-response paths still block,
+      // and finish the span so it is not leaked when the caller never invokes `.parse()`.
+      shimmer.wrap(apiPromise, 'asResponse', origAsResponse => function (...asResponseArgs) {
+        const responsePromise = origAsResponse.apply(this, asResponseArgs)
+        const verdict = hasLifecycle ? getBeforeVerdict() : undefined
+        const gated = verdict
+          ? Promise.all([verdict, responsePromise]).then(([, response]) => response)
+          : responsePromise
+
+        return gated
+          .then(response => {
+            if (!ctx.finished) finish(ctx, null, null)
+            return response
+          })
+          .catch(error => {
+            if (!ctx.finished) finish(ctx, null, error)
+            throw error
+          })
+      })
 
       anthropicTracingChannel.end.publish(ctx)
 
@@ -143,6 +152,8 @@ function wrapCreate (create) {
 }
 
 function finish (ctx, result, error) {
+  if (ctx.finished) return
+
   if (error) {
     ctx.error = error
     anthropicTracingChannel.error.publish(ctx)

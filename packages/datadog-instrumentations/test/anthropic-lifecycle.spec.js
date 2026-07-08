@@ -22,6 +22,10 @@ class FakeAPIPromise {
     return Promise.resolve(this._rawResponse)
   }
 
+  withResponse () {
+    return Promise.all([this.parse(), this.asResponse()]).then(([data, response]) => ({ data, response }))
+  }
+
   then (onFulfilled, onRejected) {
     return this.parse().then(onFulfilled, onRejected)
   }
@@ -236,6 +240,89 @@ describe('anthropic lifecycle instrumentation', () => {
       () => messages.create({ messages: [{ role: 'user', content: 'Hi' }] }).asResponse(),
       e => e === err
     ).finally(unsubscribe)
+  })
+
+  it('publishes asyncEnd when the caller uses asResponse() without parse()', () => {
+    const apmChannel = tracingChannel('apm:anthropic:request')
+    const apmHandlers = { start () {} }
+    let asyncEndCtx
+    apmHandlers.asyncEnd = ctx => { asyncEndCtx = ctx }
+    apmChannel.subscribe(apmHandlers)
+
+    const messages = new Messages()
+    messages._nextApiPromise = new FakeAPIPromise({ role: 'assistant', content: [] })
+
+    return messages.create({ messages: [{ role: 'user', content: 'Hi' }] }).asResponse()
+      .then(() => {
+        assert.ok(asyncEndCtx, 'asyncEnd was not published')
+        assert.strictEqual(asyncEndCtx.finished, true)
+      })
+      .finally(() => apmChannel.unsubscribe(apmHandlers))
+  })
+
+  it('publishes asyncEnd exactly once when both asResponse() and parse() are called', () => {
+    const apmChannel = tracingChannel('apm:anthropic:request')
+    const apmHandlers = { start () {} }
+    let asyncEndCount = 0
+    apmHandlers.asyncEnd = () => { asyncEndCount++ }
+    apmChannel.subscribe(apmHandlers)
+
+    const messages = new Messages()
+    messages._nextApiPromise = new FakeAPIPromise({ role: 'assistant', content: [] })
+    const apiPromise = messages.create({ messages: [{ role: 'user', content: 'Hi' }] })
+
+    return Promise.all([apiPromise.asResponse(), apiPromise.parse()])
+      .then(() => assert.strictEqual(asyncEndCount, 1))
+      .finally(() => apmChannel.unsubscribe(apmHandlers))
+  })
+
+  it('publishes asyncEnd when the caller uses withResponse() without parse()', () => {
+    const apmChannel = tracingChannel('apm:anthropic:request')
+    const apmHandlers = { start () {} }
+    let asyncEndCtx
+    apmHandlers.asyncEnd = ctx => { asyncEndCtx = ctx }
+    apmChannel.subscribe(apmHandlers)
+
+    const body = { role: 'assistant', content: [{ type: 'text', text: 'Hi' }] }
+    const messages = new Messages()
+    messages._nextApiPromise = new FakeAPIPromise(body)
+
+    return messages.create({ messages: [{ role: 'user', content: 'Hello' }] }).withResponse()
+      .then(({ data, response }) => {
+        assert.strictEqual(data, body)
+        assert.ok(response.ok)
+        assert.ok(asyncEndCtx, 'asyncEnd was not published')
+        assert.strictEqual(asyncEndCtx.finished, true)
+      })
+      .finally(() => apmChannel.unsubscribe(apmHandlers))
+  })
+
+  it('propagates before lifecycle rejection through withResponse()', () => {
+    const err = lifecycleAbortError()
+    const unsubscribe = subscribeWithHandler([messagesBeforeChannel], ctx => blockLifecycle(ctx, err))
+    const messages = new Messages()
+    messages._nextApiPromise = new FakeAPIPromise({ role: 'assistant', content: [] })
+
+    return assert.rejects(
+      () => messages.create({ messages: [{ role: 'user', content: 'Hi' }] }).withResponse(),
+      e => e === err
+    ).finally(unsubscribe)
+  })
+
+  it('publishes asyncEnd exactly once when withResponse() and parse() are both called', () => {
+    const apmChannel = tracingChannel('apm:anthropic:request')
+    const apmHandlers = { start () {} }
+    let asyncEndCount = 0
+    apmHandlers.asyncEnd = () => { asyncEndCount++ }
+    apmChannel.subscribe(apmHandlers)
+
+    const messages = new Messages()
+    messages._nextApiPromise = new FakeAPIPromise({ role: 'assistant', content: [] })
+    const apiPromise = messages.create({ messages: [{ role: 'user', content: 'Hi' }] })
+
+    return Promise.all([apiPromise.withResponse(), apiPromise.parse()])
+      .then(() => assert.strictEqual(asyncEndCount, 1))
+      .finally(() => apmChannel.unsubscribe(apmHandlers))
   })
 
   it('publishes the before lifecycle once when the same APIPromise is consumed multiple ways', () => {

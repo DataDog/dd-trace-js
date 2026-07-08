@@ -30,12 +30,17 @@ function convertAnthropicImageBlock (block) {
 function convertAnthropicDocumentBlock (block) {
   const source = block.source
   if (source) {
-    if (source.type === 'text' && typeof source.text === 'string') return source.text
+    // PlainTextSource stores inline text in `data`, not `text`.
+    if (source.type === 'text' && typeof source.data === 'string') return source.data
     if (source.type === 'url' && typeof source.url === 'string') return source.url
-    if (source.type === 'content' && Array.isArray(source.content)) {
-      const { parts, hasImages } = walkContentBlocks(source.content)
-      const content = partsToContent(parts, hasImages)
-      if (content != null) return content
+    if (source.type === 'content') {
+      // ContentBlockSource.content is string | Array<ContentBlockSourceContent>.
+      if (typeof source.content === 'string') return source.content
+      if (Array.isArray(source.content)) {
+        const { parts, hasImages } = walkContentBlocks(source.content)
+        const content = partsToContent(parts, hasImages)
+        if (content != null) return content
+      }
     }
   }
   return block.title ?? FILE_FALLBACK
@@ -46,11 +51,12 @@ function convertAnthropicDocumentBlock (block) {
  * `parts` collects renderable content (text/image/document); `toolCalls` and
  * `toolResults` collect tool_use / tool_result blocks respectively.
  *
- * `thinking` / `redacted_thinking` are dropped — internal reasoning is not
- * conversation and must not reach AI Guard. Unknown block types fall through to
- * a best-effort text extraction: if the block carries a `text` field it is
- * included (so text-bearing extension types such as `search_result` are
- * evaluated); purely structural blocks without a `text` field are dropped.
+ * `search_result` blocks have their text inside `content: Array<TextBlockParam>`,
+ * not a top-level `text` field; they are walked explicitly so RAG-injected text
+ * reaches AI Guard for evaluation.
+ * `thinking` / `redacted_thinking` are dropped — internal reasoning must not reach
+ * AI Guard. Unknown block types fall through to a best-effort `text`-field extraction;
+ * purely structural blocks without a `text` field are dropped silently.
  *
  * @param {Array<AnthropicContentBlock>} blocks
  * @returns {{
@@ -107,12 +113,36 @@ function walkContentBlocks (blocks) {
           content: convertAnthropicToolResultContent(block.content),
         })
         break
+      case 'search_result':
+      case 'mid_conv_system': {
+        // search_result: content is Array<TextBlockParam> — RAG results may contain prompt injection.
+        // mid_conv_system: mid-conversation system instructions injected into the conversation.
+        if (Array.isArray(block.content)) {
+          const inner = walkContentBlocks(block.content)
+          for (const part of inner.parts) out.parts.push(part)
+          if (inner.hasImages) out.hasImages = true
+        }
+        break
+      }
+      case 'web_fetch_tool_result': {
+        // WebFetchBlock carries a full DocumentBlockParam; fetched web content is a RAG-injection vector.
+        const inner = block.content
+        if (inner && inner.type === 'web_fetch_result' && inner.content) {
+          const docContent = convertAnthropicDocumentBlock(inner.content)
+          if (Array.isArray(docContent)) {
+            out.hasImages = true
+            for (const part of docContent) out.parts.push(part)
+          } else {
+            out.parts.push({ type: 'text', text: docContent })
+          }
+        }
+        break
+      }
       case 'thinking':
       case 'redacted_thinking':
         break
       default:
-        // Best-effort: extract text from any block with a `text` field so that
-        // text-bearing extension types (e.g. search_result) reach AI Guard for evaluation.
+        // Best-effort for any future text-bearing block type.
         if (typeof block.text === 'string') out.parts.push({ type: 'text', text: block.text })
         break
     }
