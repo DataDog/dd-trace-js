@@ -173,6 +173,7 @@ describe('Plugin', () => {
         // "Cannot read private member from an object whose class did not declare it".
         // The delegating wrapper must call through to the real span instance to avoid this.
         class PrivateFieldSpan {
+          // eslint-disable-next-line no-unused-private-class-members
           #statusCode = 0
 
           spanContext () { return { traceId: '0'.repeat(32), spanId: '0'.repeat(16), traceFlags: 1 } }
