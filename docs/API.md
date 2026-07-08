@@ -49,6 +49,7 @@ tracer.use('pg', {
 <h5 id="cypress"></h5>
 <h5 id="dns"></h5>
 <h5 id="elasticsearch"></h5>
+<h5 id="electron"></h5>
 <h5 id="express"></h5>
 <h5 id="fastify"></h5>
 <h5 id="fetch"></h5>
@@ -132,6 +133,7 @@ tracer.use('pg', {
 * [cypress](./interfaces/export_.plugins.cypress.html)
 * [dns](./interfaces/export_.plugins.dns.html)
 * [elasticsearch](./interfaces/export_.plugins.elasticsearch.html)
+* [electron](./interfaces/export_.plugins.electron.html)
 * [express](./interfaces/export_.plugins.express.html)
 * [fastify](./interfaces/export_.plugins.fastify.html)
 * [fetch](./interfaces/export_.plugins.fetch.html)
