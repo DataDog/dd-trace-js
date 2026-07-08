@@ -16,9 +16,9 @@ const execFileAsync = promisify(execFile)
  * @param {string} opts.repo
  * @param {string} opts.token
  * @param {Array<{id: number}>} opts.runs
+ * @returns {Promise<{ downloaded: number, failed: number }>}
  */
 export async function downloadArtifacts (octokit, { owner, repo, token, runs }) {
-  console.log(`Listing artifacts for ${runs.length} workflow run(s)...`)
   const artifactLists = await Promise.all(
     runs.map(run =>
       octokit.paginate(octokit.rest.actions.listWorkflowRunArtifacts, {
@@ -33,7 +33,7 @@ export async function downloadArtifacts (octokit, { owner, repo, token, runs }) 
       .map(a => ({ runId, artifact: a }))
   )
 
-  console.log(`Downloading ${toDownload.length} artifact(s)...`)
+  let failed = 0
   await Promise.all(toDownload.map(async ({ runId, artifact }) => {
     const baseDir = artifact.name.startsWith('junit-') ? 'junit-results' : 'coverage-results'
     const dir = join(baseDir, String(runId), artifact.name)
@@ -49,10 +49,12 @@ export async function downloadArtifacts (octokit, { owner, repo, token, runs }) 
       await pipeline(Readable.fromWeb(response.body), createWriteStream(tmpFile))
       await execFileAsync('unzip', ['-oq', '-d', dir, tmpFile])
     } catch (err) {
+      failed++
       console.error(`Failed to download ${artifact.name} from run ${runId}: ${err.message}`)
     } finally {
       try { unlinkSync(tmpFile) } catch {}
     }
   }))
-  console.log('Artifact download complete.')
+
+  return { downloaded: toDownload.length - failed, failed }
 }
