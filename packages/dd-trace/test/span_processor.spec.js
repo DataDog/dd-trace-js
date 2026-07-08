@@ -196,6 +196,32 @@ describe('SpanProcessor', () => {
     assert.strictEqual(dm.length, 1)
   })
 
+  it('mirrors git metadata trace tags to native (tagGitMetadata runs after sample)', () => {
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+    finishedSpan.context()._nativeSpanId = 77
+    // GitMetadataTagger writes `_dd.git.*` onto trace.tags during process(),
+    // AFTER sample(); the trace-tags sync must run after it or these are lost.
+    processor._gitMetadataTagger = {
+      tagGitMetadata: (ctx) => {
+        ctx._trace.tags['_dd.git.repository_url'] = 'https://github.com/x/y'
+        ctx._trace.tags['_dd.git.commit.sha'] = 'abc123'
+      },
+    }
+    prioritySampler.sample = sinon.stub().callsFake((c) => {
+      c._sampling.priority = 1
+      c._sampling.mechanism = 3
+    })
+
+    processor.process(finishedSpan)
+
+    const metaKeys = nativeSpans.queueOp.getCalls()
+      .filter(c => c.args[0] === fakeOpCode.SetTraceMetaAttr)
+      .map(c => c.args[2])
+    assert.ok(metaKeys.includes('_dd.git.repository_url'), 'expected _dd.git.repository_url synced to native')
+    assert.ok(metaKeys.includes('_dd.git.commit.sha'), 'expected _dd.git.commit.sha synced to native')
+  })
+
   it('should erase the trace once finished', () => {
     trace.started = [finishedSpan]
     trace.finished = [finishedSpan]

@@ -86,14 +86,6 @@ class SpanProcessor {
 
     // Add decision maker tag
     this._addDecisionMaker(root)
-
-    // Mirror the remaining trace-level propagation tags (`_dd.p.tid`,
-    // `_dd.p.ts`, other `_dd.p.*`, `baggage.*`) into native storage so the
-    // WASM exporter stamps them onto the exported chunk, matching what the JS
-    // formatter did. `_dd.p.dm` is handled by the sampling path above.
-    if (spanContext._nativeSpanId !== undefined) {
-      this._syncTraceTagsToNative(spanContext, spanContext._nativeSpanId)
-    }
   }
 
   /**
@@ -221,6 +213,14 @@ class SpanProcessor {
     if (started.length === finished.length || finished.length >= flushMinSpans) {
       this.sample(span)
       this._gitMetadataTagger.tagGitMetadata(spanContext)
+
+      // Mirror trace-level tags (`_dd.p.tid`, other `_dd.p.*`, `baggage.*`, and
+      // the git metadata tagged just above) into native storage now that all
+      // trace tags are set — tagGitMetadata runs after sample(), so this must
+      // come after it. `_dd.p.dm` is handled by the sampling path.
+      if (spanContext._nativeSpanId !== undefined) {
+        this._syncTraceTagsToNative(spanContext, spanContext._nativeSpanId)
+      }
 
       // Pass raw spans to the native exporter; the WASM pipeline serializes
       // them. When native stats are enabled the concentrator handles stats
