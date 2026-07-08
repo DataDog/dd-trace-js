@@ -274,9 +274,12 @@ describe('init.js', () => {
 // or on 18.0.0 in particular.
 if (semver.satisfies(process.versions.node, '>=14.13.1')) {
   describe('initialize.mjs', () => {
-    // Node 20.0.0 can leave short-lived loader-based children alive after they
-    // print the expected output, so terminate them after a short grace period.
-    setShouldKill(process.versions.node === '20.0.0')
+    // The first patch of a major version's loader-thread implementation (e.g. 20.0.0,
+    // 22.0.0) can leave short-lived loader-based children alive after they print the
+    // expected output, so terminate them after a short grace period. Later patches
+    // within the same major (e.g. 20.1.0+, 22.1.0+) stabilize the loader thread's exit
+    // behavior and don't need this.
+    setShouldKill(['20.0.0', '22.0.0'].includes(process.versions.node))
     useSandbox()
     stubTracerIfNeeded()
 
