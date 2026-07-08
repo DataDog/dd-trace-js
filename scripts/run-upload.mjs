@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { setTimeout as sleep } from 'node:timers/promises'
 
 /* eslint-disable no-console */
 
@@ -11,15 +12,14 @@ import { spawn } from 'node:child_process'
  */
 
 /**
- * Run a report-upload CLI, buffering its output instead of streaming it live: several of these run
- * concurrently, so their combined stdout would interleave into unreadable noise. Sets
- * `process.exitCode` on a non-zero exit so a failed upload still fails the All Green job.
+ * Spawn a report-upload CLI once, buffering its output instead of streaming it live: several of
+ * these run concurrently, so their combined stdout would interleave into unreadable noise.
  *
  * @param {string} command
  * @param {string[]} args
  * @returns {Promise<UploadResult>}
  */
-export function runUpload (command, args) {
+function spawnUpload (command, args) {
   return new Promise(resolve => {
     const start = Date.now()
     const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] })
@@ -28,10 +28,58 @@ export function runUpload (command, args) {
     child.stderr.on('data', chunk => { output += chunk })
     child.on('close', code => {
       const seconds = ((Date.now() - start) / 1000).toFixed(1)
-      if (code !== 0) process.exitCode = 1
       resolve({ step: `${command} ${args[0]}`, seconds, code, output })
     })
   })
+}
+
+/**
+ * Run a report-upload CLI once. Sets `process.exitCode` on a non-zero exit so a failed upload
+ * still fails the All Green job.
+ *
+ * @param {string} command
+ * @param {string[]} args
+ * @returns {Promise<UploadResult>}
+ */
+export async function runUpload (command, args) {
+  const result = await spawnUpload(command, args)
+  if (result.code !== 0) process.exitCode = 1
+  return result
+}
+
+/**
+ * @param {string} command
+ * @param {string[]} args
+ * @param {number} retries
+ * @param {number} delayMs
+ * @param {number} attempt
+ * @returns {Promise<UploadResult>}
+ */
+async function attemptUpload (command, args, retries, delayMs, attempt) {
+  const result = await spawnUpload(command, args)
+  if (result.code === 0 || attempt > retries) return result
+  console.log(`[retry ${attempt}/${retries}] ${command} ${args[0]} exited ${result.code}, retrying`)
+  await sleep(delayMs)
+  return attemptUpload(command, args, retries, delayMs, attempt + 1)
+}
+
+/**
+ * Run a report-upload CLI, retrying on failure with a backoff delay. `codecovcli` calls pass
+ * `--fail-on-error`, so a rejected request (e.g. hitting Codecov mid-outage) now surfaces as a
+ * non-zero exit instead of being silently logged and ignored — retrying absorbs the transient
+ * failures that flag exposes, without masking a persistent one, which still fails the job once
+ * retries are exhausted.
+ *
+ * @param {string} command
+ * @param {string[]} args
+ * @param {number} [retries]
+ * @param {number} [delayMs]
+ * @returns {Promise<UploadResult>}
+ */
+export async function runUploadWithRetry (command, args, retries = 2, delayMs = 2000) {
+  const result = await attemptUpload(command, args, retries, delayMs, 1)
+  if (result.code !== 0) process.exitCode = 1
+  return result
 }
 
 /**
