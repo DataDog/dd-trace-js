@@ -376,6 +376,23 @@ describe('log', () => {
         assert.strictEqual(console.error.secondCall.args[0].message, 'cause')
       })
 
+      it('should not format an error stack while detecting a message + Error', () => {
+        const prepareStackTrace = Error.prepareStackTrace
+        Error.prepareStackTrace = () => {
+          throw new Error('stack formatting failed')
+        }
+
+        try {
+          log.error('this is an error', new Error('cause'))
+        } finally {
+          Error.prepareStackTrace = prepareStackTrace
+        }
+
+        sinon.assert.called(console.error)
+        assert.strictEqual(console.error.firstCall.args[0].message, 'this is an error')
+        assert.strictEqual(console.error.secondCall.args[0].message, 'cause')
+      })
+
       it('should allow a templated message', () => {
         log.error('this is an error of type: %s code: %i', 'ERR', 42)
 

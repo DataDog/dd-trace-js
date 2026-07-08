@@ -1,6 +1,6 @@
 'use strict'
 
-const { describe, it, beforeEach } = require('mocha')
+const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
 
@@ -90,18 +90,23 @@ describe('telemetry logs', () => {
     let logCollectorAdd
     let telemetryLog
     let errorLog
+    let logs
 
     beforeEach(() => {
       telemetryLog = dc.channel('datadog:telemetry:log')
       errorLog = dc.channel('datadog:log:error')
 
       logCollectorAdd = sinon.stub()
-      const logs = proxyquire('../../../src/telemetry/logs', {
+      logs = proxyquire('../../../src/telemetry/logs', {
         './log-collector': {
           add: logCollectorAdd,
         },
       })
       logs.start(defaultConfig)
+    })
+
+    afterEach(() => {
+      logs.stop()
     })
 
     it('should be not called with DEBUG level', () => {
@@ -156,6 +161,27 @@ describe('telemetry logs', () => {
           level: 'ERROR',
           errorType: 'Error',
           stack_trace: stack,
+        }))
+      })
+
+      it('should omit stack_trace when formatting an Error stack throws', () => {
+        const error = new Error('message')
+        const prepareStackTrace = Error.prepareStackTrace
+        Error.prepareStackTrace = () => {
+          throw new Error('stack formatting failed')
+        }
+
+        try {
+          errorLog.publish({ cause: error, sendViaTelemetry: true })
+        } finally {
+          Error.prepareStackTrace = prepareStackTrace
+        }
+
+        sinon.assert.calledOnceWithExactly(logCollectorAdd, match({
+          message: 'Generic Error',
+          level: 'ERROR',
+          errorType: 'Error',
+          stack_trace: undefined,
         }))
       })
 

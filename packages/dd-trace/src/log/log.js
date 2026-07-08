@@ -35,7 +35,7 @@ class Log {
     }
 
     const maybeError = args.at(-1)
-    if (maybeError && typeof maybeError === 'object' && maybeError.stack) { // maybeError instanceof Error?
+    if (hasErrorStack(maybeError)) {
       cause = args.pop()
       if (cause instanceof NoTransmitError) sendViaTelemetry = false
     }
@@ -57,6 +57,10 @@ class Log {
 
     return new Log(message, args, cause, delegate, sendViaTelemetry)
   }
+}
+
+function hasErrorStack (value) {
+  return Boolean(value && typeof value === 'object' && (value instanceof Error || 'stack' in value))
 }
 
 /**
