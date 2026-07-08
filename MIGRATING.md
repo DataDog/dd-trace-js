@@ -4,6 +4,30 @@ This guide describes the steps to upgrade dd-trace from a major version to the
 next. If you are having any issues related to migrating, please feel free to
 open an issue or contact our [support](https://www.datadoghq.com/support/) team.
 
+## 6.0 to 7.0 (unreleased)
+
+### `tracer.inject` returns whether it wrote to the carrier
+
+`tracer.inject(spanContext, format, carrier)` now returns a `boolean`: `true`
+when it wrote any context into the carrier, `false` when it wrote nothing (for
+example under `DD_TRACE_PROPAGATION_STYLE_INJECT=none`, or when APM tracing is
+disabled and the trace is stripped after injection). It previously returned
+`void`. The runtime already returned this value on v6; only the TypeScript
+declaration changes, so `const wrote: void = tracer.inject(...)` (or returning
+`tracer.inject(...)` from a `void` function) no longer type-checks. Drop the
+`void` annotation, or read the boolean:
+
+```ts
+// Before (v6): return type declared void
+tracer.inject(span, 'text_map', carrier)
+
+// After (v7): the return type is boolean
+const wrote = tracer.inject(span, 'text_map', carrier)
+if (wrote) {
+  // the carrier now carries propagatable context
+}
+```
+
 ## 5.0 to 6.0
 
 ### Node 18 and 20 are no longer supported
