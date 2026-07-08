@@ -163,7 +163,7 @@
     "version.js"
   ],
   "dependencies": {
-    "@datadog/libdatadog": "0.12.2",
+    "@datadog/libdatadog": "0.13.0",
     "dc-polyfill": "^0.1.11",
     "import-in-the-middle": "^3.2.0",
     "opentracing": ">=0.14.7"

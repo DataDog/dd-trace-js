@@ -89,6 +89,10 @@ class DatadogTracer {
         appVersion: config.version || '',
         runtimeId: config.tags?.['runtime-id'] || '',
         otelSemanticsEnabled: config.DD_TRACE_OTEL_SEMANTICS_ENABLED || false,
+        // Advertise Datadog-Client-Computed-Stats when we compute stats
+        // client-side or run in APM-standalone (apmTracingEnabled=false), so the
+        // agent skips its own APM stats/sampling for these traces.
+        clientComputedStats: config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED || config.apmTracingEnabled === false,
       })
 
       this._exporter = new NativeExporter(config, this._prioritySampler, this._nativeSpans)

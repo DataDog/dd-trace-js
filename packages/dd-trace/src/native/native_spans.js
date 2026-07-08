@@ -116,6 +116,8 @@ class NativeSpansInterface {
    * @param {string} [options.env] Environment for stats payload (defaults to '')
    * @param {string} [options.appVersion] App version for stats payload (defaults to '')
    * @param {string} [options.runtimeId] Runtime ID for stats payload (defaults to '')
+   * @param {boolean} [options.clientComputedStats] Send the Datadog-Client-Computed-Stats
+   *   header so the agent skips its own APM stats/sampling (defaults to false)
    */
   constructor (options) {
     if (!WasmSpanState) {
@@ -135,6 +137,7 @@ class NativeSpansInterface {
       env: options.env || '',
       appVersion: options.appVersion || '',
       runtimeId: options.runtimeId || '',
+      clientComputedStats: options.clientComputedStats || false,
     }
 
     // When DD_TRACE_OTEL_SEMANTICS_ENABLED is set, the span context holds the
@@ -512,7 +515,7 @@ class NativeSpansInterface {
 
   /**
    * Construct a fresh WasmSpanState bound to the given agent URL. Used by
-   * the constructor and `setAgentUrl()` so the 14-argument signature lives
+   * the constructor and `setAgentUrl()` so the 15-argument signature lives
    * in exactly one place.
    *
    * @param {string} url Agent URL
@@ -535,6 +538,7 @@ class NativeSpansInterface {
       opts.env,
       opts.appVersion,
       opts.runtimeId,
+      opts.clientComputedStats,
     )
   }
 
