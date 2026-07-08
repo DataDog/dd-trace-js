@@ -19,6 +19,31 @@ const firstFlushChannel = channel('dd-trace:exporter:first-flush')
 // emitted around each send attempt.
 const METRIC_PREFIX = 'datadog.tracer.node.exporter.agent'
 
+// JS-side debug view of the spans being exported. The native pipeline
+// serializes in WASM, so mirror the legacy AgentWriter's `Encoding payload`
+// debug log here for observability: name/resource/service plus meta, merging
+// the trace-level tags (e.g. `_dd.git.repository_url`) that the WASM exporter
+// stamps onto the chunk. Only built when DD_TRACE_DEBUG is on (log.debug lazy).
+function formatSpansForDebug (spans) {
+  try {
+    return JSON.stringify(
+      spans.map(span => {
+        const ctx = span.context()
+        return {
+          name: ctx._name,
+          resource: ctx.getTag('resource.name'),
+          service: ctx.getTag('service.name'),
+          meta: { ...ctx._trace?.tags, ...ctx.getTags() },
+        }
+      }),
+      (_key, value) => (typeof value === 'bigint' ? value.toString() : value)
+    )
+  } catch {
+    // A pathological tag value (e.g. circular) must never throw out of export().
+    return '[unserializable]'
+  }
+}
+
 /**
  * NativeExporter sends spans to the Datadog agent via the native
  * `NativeSpansInterface`, which handles serialization and HTTP transport
@@ -188,6 +213,10 @@ class NativeExporter {
    */
   export (spans) {
     if (this.#disabled) return
+
+    // eslint-disable-next-line eslint-rules/eslint-log-printf-style
+    log.debug(() => `Encoding payload: ${formatSpansForDebug(spans)}`)
+
     // Collect spans for batch export
     for (const span of spans) {
       this._pendingSpans.push(span)
