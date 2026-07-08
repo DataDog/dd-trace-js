@@ -81,7 +81,8 @@ For queue, event, and batch triggers:
 - add span links when multiple upstream contexts are present;
 - tag trigger type, resource, region/account/project identifiers, and runtime metadata with existing tag naming
   patterns where possible;
-- avoid high-cardinality resource names unless existing serverless integrations already use that shape.
+- avoid high-cardinality resource names. Do not include request ids, message ids, object keys, event ids, or payload
+  values in the resource name.
 
 ## Registration And Naming
 

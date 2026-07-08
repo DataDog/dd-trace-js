@@ -1,7 +1,7 @@
 # Testing Guide
 
-Serverless integration tests need both local behavioral coverage and deployed probe coverage when a platform
-integration is added or materially changed.
+Serverless integration tests need both local behavioral coverage and deployed verification when a platform integration
+is added or materially changed.
 
 ## Local Test Matrix
 
@@ -60,3 +60,54 @@ Every bug fix should include:
 - the failing lifecycle path;
 - sibling lifecycle paths that share the same completion or error code;
 - a disabled-instrumentation case if the bug touches registration or event publication.
+
+## Deployed Verification
+
+Local tests cannot prove that a serverless integration works in the real provider lifecycle. When a platform
+integration is added or materially changed, include a deployed verification plan.
+
+In this guide, a probe is a temporary deployed sample function or app used to verify provider behavior and Datadog
+ingestion. It is not a dd-trace-js runtime feature.
+
+Use the narrowest mode that answers the risk:
+
+- Manual: document commands for a maintainer to deploy, invoke, query, and clean up.
+- Semi-automated: provide scripts that deploy and invoke, while the maintainer supplies credentials.
+- CI-automated: run only when repository policy and provider credentials already support it.
+
+Do not require permanent infrastructure for deployed verification unless the project already has that pattern.
+
+The deployed app should:
+
+- use the dd-trace-js version under test;
+- enable the new serverless integration explicitly when needed;
+- emit one deterministic child span inside the handler;
+- support success and error invocations;
+- include a unique probe id in tags, for example `dd.apm.probe_id:<uuid>`;
+- keep resource names and payloads low-cardinality;
+- clean up provider resources after the run.
+
+The verification must confirm traces reached Datadog, not only that invocation logs exist. Query by the unique probe
+id and assert:
+
+- one invocation root span exists per invocation;
+- the root span has `type:serverless` and the expected service/resource;
+- the deterministic child span is parented under the invocation span;
+- errors are tagged on failing invocations;
+- distributed context or span links appear for trigger types that carry upstream context;
+- no duplicate root spans are emitted for one invocation.
+
+If Datadog trace search is eventually consistent, poll with a bounded timeout and report the query window used.
+
+Record the provider, region, runtime version, deployed app commit or package version, invocation ids, probe id, and
+Datadog query used. When the verification is manual, include the expected trace shape and cleanup command in the
+workflow output or PR description.
+
+Classify deployed verification failures by layer:
+
+- deployment failed: provider or packaging issue;
+- invocation failed before user handler: runtime wrapper or bootstrap issue;
+- logs show spans but Datadog has no trace: writer, flush, or mini-agent issue;
+- root span exists without children: async context binding issue;
+- children exist without root: invocation start or parent extraction issue;
+- duplicate roots: handler wrapping or completion path issue.
