@@ -3,6 +3,7 @@ import { Octokit } from 'octokit'
 import { summary } from '@actions/core'
 import { context } from '@actions/github'
 import { downloadArtifacts } from './download-artifacts.mjs'
+import { logUploads } from './run-upload.mjs'
 import { uploadJunit } from './upload-junit.mjs'
 import { uploadCoverage, sendCodecovNotifications } from './upload-coverage.mjs'
 
@@ -117,7 +118,7 @@ const processingPromises = []
 async function processRun (run) {
   await downloadArtifacts(octokit, { owner, repo, token: GITHUB_TOKEN, runs: [run] })
 
-  await Promise.all([
+  const [junitResults, coverageResults] = await Promise.all([
     uploadJunit(run),
     uploadCoverage(run, {
       sha: HEAD_SHA,
@@ -127,6 +128,7 @@ async function processRun (run) {
       baseRef: BASE_REF,
     }),
   ])
+  logUploads(run.name, [...junitResults, ...coverageResults])
 }
 
 /**
@@ -269,7 +271,7 @@ async function checkAllGreen () {
   // Codecov's `manual_trigger` (`.codecov.yml`) holds off computing/posting the coverage status
   // until this fires, since uploads land one sibling workflow at a time rather than all at once.
   if (process.env.GITHUB_ACTIONS) {
-    await sendCodecovNotifications(HEAD_SHA)
+    logUploads('codecov', [await sendCodecovNotifications(HEAD_SHA)])
   }
 
   if (!done) {
