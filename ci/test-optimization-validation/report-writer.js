@@ -374,6 +374,15 @@ function getResultDetailLines (result, options = {}) {
 
   appendExcerptLine(lines, 'Stdout excerpt', evidence.commandFailure?.stdoutExcerpt, { format })
   appendExcerptLine(lines, 'Stderr excerpt', evidence.commandFailure?.stderrExcerpt, { format })
+  if (evidence.commandFailure?.summary) {
+    lines.push(`Command failure: ${evidence.commandFailure.summary}`)
+  }
+  if (evidence.commandFailure?.recommendation) {
+    lines.push(`Command failure recommendation: ${evidence.commandFailure.recommendation}`)
+  }
+  appendExcerptLine(lines, 'Command failure signals', evidence.commandFailure?.signals, { format })
+  appendExcerptLine(lines, 'Command build/setup errors', evidence.commandFailure?.buildErrors, { format })
+  appendExcerptLine(lines, 'CI debug lines', evidence.debugSignals?.lines, { format })
   appendExcerptLine(lines, 'Debug lines', evidence.debugRerun?.debugLines, { format })
   appendExcerptLine(lines, 'Debug stdout excerpt', evidence.debugRerun?.stdoutExcerpt, { format })
   appendExcerptLine(lines, 'Debug stderr excerpt', evidence.debugRerun?.stderrExcerpt, { format })

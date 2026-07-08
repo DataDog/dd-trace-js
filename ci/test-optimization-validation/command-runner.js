@@ -167,6 +167,8 @@ function buildCiWiringEnv ({ intake }) {
     DD_TRACE_AGENT_PORT: String(intake.port),
     DD_TRACE_AGENT_URL: `http://127.0.0.1:${intake.port}`,
     DD_CIVISIBILITY_AGENTLESS_URL: `http://127.0.0.1:${intake.port}`,
+    DD_TRACE_DEBUG: '1',
+    DD_TRACE_LOG_LEVEL: 'debug',
     ...VALIDATION_SUPPRESSION_ENV,
   }
 }

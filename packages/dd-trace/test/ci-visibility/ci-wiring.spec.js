@@ -272,6 +272,127 @@ describe('test optimization CI wiring validation', () => {
       fs.rmSync(out, { recursive: true, force: true })
     }
   })
+
+  it('classifies dd-trace preload resolution failures before test execution', async () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
+    const intake = {
+      port: 8126,
+      requests: [],
+      configure () {},
+      resetRequests () {
+        this.requests = []
+      },
+    }
+
+    try {
+      const result = await runCiWiring({
+        framework: {
+          id: 'mocha:fixture',
+          framework: 'mocha',
+          ciWiringCommand: {
+            cwd: out,
+            argv: [process.execPath, '-e', 'console.log("this should not run")'],
+            env: {
+              NODE_OPTIONS: '-r dd-trace/ci/init',
+            },
+          },
+        },
+        intake,
+        out,
+        options: { verbose: false },
+        basicResult: {
+          status: 'pass',
+          diagnosis: 'Basic reporting emitted session, module, suite, and test events.',
+        },
+      })
+
+      assert.strictEqual(result.status, 'fail')
+      assert.strictEqual(result.evidence.commandExitCode, 1)
+      assert.strictEqual(result.evidence.commandFailure.kind, 'ci-wiring-preload-resolution-failed')
+      assert.strictEqual(result.evidence.eventLevelFailure.kind, 'ci-wiring-preload-resolution-failed')
+      assert.match(result.diagnosis, /failed before tests started/)
+      assert.match(result.diagnosis, /could not resolve.*dd-trace\/ci\/init/)
+      assert.doesNotMatch(result.diagnosis, /selected command may not have executed tests/)
+      assert.strictEqual(result.evidence.initializationProbe, undefined)
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
+
+  it('classifies CI-shaped command failures before observed test output', async () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
+    const intake = {
+      port: 8126,
+      requests: [],
+      configure () {},
+      resetRequests () {
+        this.requests = []
+      },
+    }
+
+    try {
+      const result = await runCiWiring({
+        framework: {
+          id: 'vitest:root',
+          framework: 'vitest',
+          ciWiringCommand: {
+            cwd: out,
+            argv: [process.execPath, '-e', 'console.error("No test files found"); process.exit(3)'],
+          },
+        },
+        intake,
+        out,
+        options: { verbose: false },
+      })
+
+      assert.strictEqual(result.status, 'fail')
+      assert.strictEqual(result.evidence.commandExitCode, 3)
+      assert.strictEqual(result.evidence.commandFailure.kind, 'ci-wiring-command-failed-before-tests')
+      assert.strictEqual(result.evidence.eventLevelFailure.kind, 'ci-wiring-command-failed-before-tests')
+      assert.match(result.diagnosis, /exited 3 before the validator observed any tests running/)
+      assert.match(result.diagnosis, /No CI wiring conclusion/)
+      assert.doesNotMatch(result.diagnosis, /process may not have connected to the local intake/)
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
+
+  it('does not classify unrelated preload failures as dd-trace preload failures', async () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
+    const intake = {
+      port: 8126,
+      requests: [],
+      configure () {},
+      resetRequests () {
+        this.requests = []
+      },
+    }
+
+    try {
+      const result = await runCiWiring({
+        framework: {
+          id: 'mocha:fixture',
+          framework: 'mocha',
+          ciWiringCommand: {
+            cwd: out,
+            argv: [process.execPath, '-e', 'console.log("this should not run")'],
+            env: {
+              NODE_OPTIONS: '-r ./missing-preload.js',
+            },
+          },
+        },
+        intake,
+        out,
+        options: { verbose: false },
+      })
+
+      assert.strictEqual(result.status, 'fail')
+      assert.strictEqual(result.evidence.commandFailure.kind, 'ci-wiring-command-failed-before-tests')
+      assert.notStrictEqual(result.evidence.eventLevelFailure.kind, 'ci-wiring-preload-resolution-failed')
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
 })
 
 function restoreEnv (name, value) {
