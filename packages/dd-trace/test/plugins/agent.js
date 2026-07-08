@@ -365,6 +365,7 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
   const handlerPayload = {
     handler,
     spanResourceMatch: options.spanResourceMatch,
+    rejectionTimeout,
   }
 
   /**
@@ -394,6 +395,24 @@ function runCallbackAgainstTraces (callback, options = {}, handlers) {
   handlers.add(handlerPayload)
 
   return promise
+}
+
+/**
+ * Drop every pending expectation and clear the rejection timer each one armed.
+ * A handler whose trace never matched keeps its `setTimeout` pending, and under
+ * AsyncContextFrame that timer retains the `{ ...store, span }` frame active when
+ * `assertSomeTraces` was called — pinning the request's finished span past agent
+ * teardown until the timer fires. Clearing the set alone orphans those timers;
+ * clear their timeouts too so the span-leak detector sees no benign retention.
+ *
+ * @param {Set<{ rejectionTimeout?: NodeJS.Timeout }>} handlers
+ * @returns {void}
+ */
+function clearHandlers (handlers) {
+  for (const handlerPayload of handlers) {
+    clearTimeout(handlerPayload.rejectionTimeout)
+  }
+  handlers.clear()
 }
 
 module.exports = {
@@ -699,8 +718,8 @@ module.exports = {
    * expectations are scoped to whichever assertion helper added them.
    */
   reset () {
-    traceHandlers.clear()
-    statsHandlers.clear()
+    clearHandlers(traceHandlers)
+    clearHandlers(statsHandlers)
     llmobsSpanEventsRequests = []
     llmobsEvaluationMetricsRequests = []
   },
@@ -722,8 +741,8 @@ module.exports = {
     }
     sockets = []
     agent = null
-    traceHandlers.clear()
-    statsHandlers.clear()
+    clearHandlers(traceHandlers)
+    clearHandlers(statsHandlers)
     llmobsSpanEventsRequests = []
     llmobsEvaluationMetricsRequests = []
     for (const plugin of plugins) {

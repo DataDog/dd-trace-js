@@ -443,6 +443,18 @@ function insertVersionDep (dir, pkgName, version) {
 
 const ORIGINAL_PROCESS_EXIT = process.exit
 
+// Track whether any span finished during the current test. Sinon's per-call
+// `errorsWithCallStack` history retains the async-context frame — and thus a
+// finished span — live at call time, so `resetHistory()` after a span-touching
+// test releases those spans (see the afterEach below). But `resetHistory()` also
+// wipes call args / counts, which breaks the legitimate pattern of recording in
+// a `before` hook and asserting `secondCall` / `thirdCall` across sibling `it`s
+// (e.g. startup-log, telemetry heartbeat). Those suites never finish a span, so
+// gate the reset on real span activity: clear history only when it can actually
+// pin a span.
+let spanFinishedThisTest = false
+dc.channel('dd-trace:span:finish').subscribe(() => { spanFinishedThisTest = true })
+
 // The watchdog fires if the process fails to exit after all suites have finished. The typical cause is a `before`
 // hook that throws after starting the tracer — the `agent.load` / RC socket stays open, mocha drains no further,
 // and the job silently times out. 120 s is well above the longest real per-suite teardown (≤30 s observed) so clean
@@ -472,6 +484,9 @@ exports.mochaHooks = {
     // Unref so a clean run (no leak) always exits without waiting for the timer.
     watchdog.unref()
   },
+  beforeEach () {
+    spanFinishedThisTest = false
+  },
   afterEach () {
     if (_agent) _agent.reset()
     runtimeMetrics.stop()
@@ -490,7 +505,13 @@ exports.mochaHooks = {
     // hooks, but the history (and its retained frames) outlives individual `it`s;
     // clearing it per test releases the spans without disturbing stub behavior
     // (`resetHistory` keeps fakes' configured behavior, unlike `reset`/`restore`).
-    sinon.resetHistory()
+    // Only reset when a span actually finished this test: `resetHistory()` also
+    // wipes call args / counts, which breaks suites that record in a `before` hook
+    // and assert `secondCall` / `thirdCall` across sibling `it`s. Those suites
+    // finish no span, so the history cannot pin one and the reset is unnecessary.
+    if (spanFinishedThisTest) {
+      sinon.resetHistory()
+    }
     extraServices.clear()
   },
 }
