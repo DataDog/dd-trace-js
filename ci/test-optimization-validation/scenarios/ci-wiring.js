@@ -63,7 +63,10 @@ async function runCiWiring ({ manifest, framework, intake, out, options, basicRe
     }
 
     if (!hasAllBasicEventTypes(events)) {
-      evidence.commandFailure = summarizeCiCommandFailure(result, evidence)
+      const commandFailure = summarizeCiCommandFailure(result, evidence)
+      if (commandFailure.kind !== 'ci-wiring-command-result-unknown') {
+        evidence.commandFailure = commandFailure
+      }
       evidence.debugSignals = summarizeCiDebugSignals(result)
       const probe = await maybeRunInitializationProbe({ command, framework, intake, options, outDir, result, evidence })
       if (probe.summary) evidence.initializationProbe = probe.summary
@@ -227,7 +230,6 @@ function getCiWiringTestsRanRecommendation ({ basicResult, evidence }) {
 
 function summarizeCiCommandFailure (result, evidence) {
   const output = `${result.stdout || ''}\n${result.stderr || ''}`
-  const preloadFailure = detectDatadogPreloadResolutionFailure(output)
   const testsRan = commandOutputShowsTestsRan(evidence.commandOutputSummary || [])
   const common = {
     exitCode: result.exitCode,
@@ -235,6 +237,17 @@ function summarizeCiCommandFailure (result, evidence) {
     stdoutExcerpt: tailInterestingLines(result.stdout),
   }
 
+  if (testsRan) {
+    return {
+      ...common,
+      kind: 'ci-wiring-command-result-unknown',
+      signals: [],
+      summary: 'The CI-shaped command ran tests; missing Test Optimization events are reported separately.',
+      recommendation: 'Review CI wiring event failure evidence.',
+    }
+  }
+
+  const preloadFailure = detectDatadogPreloadResolutionFailure(output)
   if (preloadFailure) {
     return {
       ...common,

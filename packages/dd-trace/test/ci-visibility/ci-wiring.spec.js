@@ -273,6 +273,51 @@ describe('test optimization CI wiring validation', () => {
     }
   })
 
+  it('does not report preload resolution failure when output proves tests ran', async () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
+    const intake = {
+      port: 8126,
+      requests: [],
+      configure () {},
+      resetRequests () {
+        this.requests = []
+      },
+    }
+
+    try {
+      const result = await runCiWiring({
+        framework: {
+          id: 'vitest:root',
+          framework: 'vitest',
+          ciWiringCommand: {
+            cwd: out,
+            argv: [
+              process.execPath,
+              '-e',
+              'console.log("Tests  1 failed | 2 passed (3)"); ' +
+                'console.error("Cannot find module dd-trace/ci/init"); process.exit(1)',
+            ],
+          },
+        },
+        intake,
+        out,
+        options: { verbose: false },
+        basicResult: {
+          status: 'pass',
+          diagnosis: 'Basic reporting emitted session, module, suite, and test events.',
+        },
+      })
+
+      assert.strictEqual(result.status, 'fail')
+      assert.strictEqual(result.evidence.commandFailure, undefined)
+      assert.strictEqual(result.evidence.eventLevelFailure.kind, 'ci-wiring-no-test-optimization-events')
+      assert.match(result.diagnosis, /test command used by the CI job was identified and ran tests/)
+      assert.doesNotMatch(result.diagnosis, /failed before tests started/)
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
+
   it('classifies dd-trace preload resolution failures before test execution', async () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
     const intake = {
