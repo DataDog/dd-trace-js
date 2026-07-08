@@ -868,4 +868,5 @@ describe('Inferred Proxy Spans - various edge case tests', function () {
         name: 'web.request',
       })
     })
+  })
 })
