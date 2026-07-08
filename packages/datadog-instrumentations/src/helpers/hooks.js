@@ -48,6 +48,7 @@ module.exports = {
   '@langchain/core': { esmFirst: true, fn: () => require('../langchain') },
   '@node-redis/client': () => require('../redis'),
   '@opensearch-project/opensearch': () => require('../opensearch'),
+  '@opentelemetry/sdk-trace': () => require('../otel-sdk-trace'),
   '@opentelemetry/sdk-trace-node': () => require('../otel-sdk-trace'),
   '@prisma/client': { esmFirst: true, fn: () => require('../prisma') },
   './runtime/library.js': () => require('../prisma'),
