@@ -268,12 +268,6 @@ async function checkAllGreen () {
   console.log(`Waiting for ${processingPromises.length} workflow run report upload(s) to finish.`)
   await Promise.all(processingPromises)
 
-  // Codecov's `manual_trigger` (`.codecov.yml`) holds off computing/posting the coverage status
-  // until this fires, since uploads land one sibling workflow at a time rather than all at once.
-  if (process.env.GITHUB_ACTIONS) {
-    logUploads('codecov', [await sendCodecovNotifications(HEAD_SHA)])
-  }
-
   if (!done) {
     console.log(`State is still pending after ${RETRIES} retries.`)
     await cancelRunningWorkflows(runs)
@@ -284,6 +278,14 @@ async function checkAllGreen () {
   const failedRuns = runs.filter(r =>
     failureConclusions.has(r.conclusion) && !staleFailureRunIds.has(r.id)
   )
+
+  // Codecov's `manual_trigger` (`.codecov.yml`) holds off computing/posting the coverage status
+  // until this fires, since uploads land one sibling workflow at a time rather than all at once.
+  // Only notify when every sibling workflow passed — a failing suite's coverage is expected to be
+  // low, and posting it would report a misleadingly low status against an otherwise healthy commit.
+  if (process.env.GITHUB_ACTIONS && failedRuns.length === 0) {
+    logUploads('codecov', [await sendCodecovNotifications(HEAD_SHA)])
+  }
 
   if (failedRuns.length === 0) {
     console.log('All jobs were successful.')
