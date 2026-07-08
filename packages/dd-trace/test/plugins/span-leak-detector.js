@@ -85,6 +85,19 @@ class SpanLeakDetector {
   }
 
   /**
+   * Number of finished spans seen since the detector was last reset. Reused by
+   * the global test hooks to detect per-test span activity without adding a
+   * second subscriber to `dd-trace:span:finish` (a bare `channel(...).subscribe`
+   * would flip `hasSubscribers`, which some unit tests assert on). Zero when the
+   * detector is inert or unarmed.
+   *
+   * @returns {number}
+   */
+  trackedCount () {
+    return this.#trackedCount
+  }
+
+  /**
    * Start tracking finished spans. Idempotent so repeated `agent.load` calls in
    * one suite do not double-subscribe (which would inflate the tracked count and
    * leak the finish handler across load/close cycles).

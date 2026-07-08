@@ -16,6 +16,7 @@ require('./core')
 const { engines, nodeMaxMajor } = require('../../../../package.json')
 
 const externals = require('../plugins/externals')
+const spanLeakDetector = require('../plugins/span-leak-detector')
 const { resolvePluginVersions, brokenVersionReason } = require('../plugins/versions')
 const runtimeMetrics = require('../../src/runtime_metrics')
 const Nomenclature = require('../../src/service-naming')
@@ -443,17 +444,13 @@ function insertVersionDep (dir, pkgName, version) {
 
 const ORIGINAL_PROCESS_EXIT = process.exit
 
-// Track whether any span finished during the current test. Sinon's per-call
-// `errorsWithCallStack` history retains the async-context frame — and thus a
-// finished span — live at call time, so `resetHistory()` after a span-touching
-// test releases those spans (see the afterEach below). But `resetHistory()` also
-// wipes call args / counts, which breaks the legitimate pattern of recording in
-// a `before` hook and asserting `secondCall` / `thirdCall` across sibling `it`s
-// (e.g. startup-log, telemetry heartbeat). Those suites never finish a span, so
-// gate the reset on real span activity: clear history only when it can actually
-// pin a span.
-let spanFinishedThisTest = false
-dc.channel('dd-trace:span:finish').subscribe(() => { spanFinishedThisTest = true })
+// Reuse the span-leak detector's finish counter to detect per-test span activity
+// (see the afterEach sinon reset). Subscribing to `dd-trace:span:finish` here
+// directly would flip the channel's `hasSubscribers`, which some unit tests
+// assert stays false after teardown; the detector already subscribes (only while
+// armed, i.e. an agent is loaded), so read its count instead of adding a second
+// subscriber.
+let spanCountAtTestStart = 0
 
 // The watchdog fires if the process fails to exit after all suites have finished. The typical cause is a `before`
 // hook that throws after starting the tracer — the `agent.load` / RC socket stays open, mocha drains no further,
@@ -485,7 +482,7 @@ exports.mochaHooks = {
     watchdog.unref()
   },
   beforeEach () {
-    spanFinishedThisTest = false
+    spanCountAtTestStart = spanLeakDetector.trackedCount()
   },
   afterEach () {
     if (_agent) _agent.reset()
@@ -509,7 +506,7 @@ exports.mochaHooks = {
     // wipes call args / counts, which breaks suites that record in a `before` hook
     // and assert `secondCall` / `thirdCall` across sibling `it`s. Those suites
     // finish no span, so the history cannot pin one and the reset is unnecessary.
-    if (spanFinishedThisTest) {
+    if (spanLeakDetector.trackedCount() !== spanCountAtTestStart) {
       sinon.resetHistory()
     }
     extraServices.clear()
