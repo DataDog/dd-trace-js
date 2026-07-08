@@ -233,4 +233,49 @@ for (const hook of getHooks('ai')) {
   })
 }
 
+const aiSdkTelemetryChannel = tracingChannel('ai:telemetry')
+const aiSdkTelemetryStreamedChunkChannel = channel('dd-trace:vercel-ai:chunk')
+
+// for testing, and possibly actual instrumentation use, we want to
+// guard against double-subscribing to the asyncEnd channel of the
+// vercel ai-provided tracingChannel
+let subscribed = false
+
+// as of the v7 release, the ai sdk does not automatically aggregate streamed responses
+// we will handle emitting the chunks directly for products to handle
+addHook({ name: 'ai', versions: ['>=7.0.0'] }, exports => {
+  if (subscribed) return exports
+  subscribed = true
+
+  // ai sdk v7 only supported on node.js 22+
+  // inlining this import here so we only import in those cases
+  // eslint-disable-next-line n/no-unsupported-features/node-builtins
+  const { TransformStream } = require('node:stream/web')
+
+  aiSdkTelemetryChannel.subscribe({
+    asyncEnd (ctx) {
+      // guard against this event being re-emitted.
+      if (!ctx.isStream || !ctx.result?.stream || ctx.streamConsumed) return
+
+      const transform = new TransformStream({
+        transform (chunk, controller) {
+          const done = chunk.type === 'finish'
+
+          aiSdkTelemetryStreamedChunkChannel.publish({ ctx, chunk, done })
+
+          if (done) {
+            aiSdkTelemetryChannel.asyncEnd.publish(ctx)
+          }
+
+          controller.enqueue(chunk) // pass through value
+        },
+      })
+
+      ctx.result.stream = ctx.result.stream.pipeThrough(transform)
+    },
+  })
+
+  return exports
+})
+
 module.exports = { wrapModelWithLifecycle }

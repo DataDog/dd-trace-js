@@ -151,6 +151,30 @@ function isMatchingTrace (spans, spanResourceMatch) {
   return !!spans.find(span => spanResourceMatch.test(span.resource))
 }
 
+/**
+ * Pick the span an `assertFirstTraceSpan` assertion runs against. With a
+ * `spanResourceMatch` the first span whose resource matches wins, so callers can
+ * target a nested child (e.g. a per-command write under a `bulkWrite` parent)
+ * without it having to be `traces[0][0]`. Without a matcher the first span of the
+ * first trace is used.
+ *
+ * @param {import('../../src/opentracing/span')[][]} traces
+ * @param {RegExp} [spanResourceMatch]
+ * @returns {import('../../src/opentracing/span')}
+ */
+function findFirstTraceSpan (traces, spanResourceMatch) {
+  if (spanResourceMatch) {
+    for (const trace of traces) {
+      for (const span of trace) {
+        if (spanResourceMatch.test(span.resource)) {
+          return span
+        }
+      }
+    }
+  }
+  return traces[0][0]
+}
+
 function ciVisRequestHandler (request, response) {
   response.status(200).send('OK')
   for (const { handler, spanResourceMatch } of traceHandlers) {
@@ -738,7 +762,11 @@ module.exports = {
   },
 
   /**
-   * Same as assertSomeTraces() but only provides the first span (traces[0][0])
+   * Same as assertSomeTraces() but only provides a single span. By default that
+   * is the first span of the first trace (traces[0][0]); pass a
+   * `spanResourceMatch` in the options to target the first span whose resource
+   * matches it instead, which lets a nested child span (e.g. a per-command write
+   * under a `bulkWrite` parent) be asserted without being traces[0][0].
    * This callback gets executed once for every payload received by the agent.
    *
    * @param {testAssertionSpanCallback|Record<string|symbol, unknown>} callbackOrExpected - runs once per agent payload
@@ -747,9 +775,10 @@ module.exports = {
    */
   assertFirstTraceSpan (callbackOrExpected, options) {
     return runCallbackAgainstTraces(function (traces) {
+      const span = findFirstTraceSpan(traces, options?.spanResourceMatch)
       if (typeof callbackOrExpected !== 'function') {
         try {
-          assertObjectContains(traces[0][0], callbackOrExpected)
+          assertObjectContains(span, callbackOrExpected)
         } catch (error) {
           // Enrich error with actual and expected traces for Node.js < 22.17.0
           if (semifies(process.version, '<22.17.0')) {
@@ -759,7 +788,7 @@ module.exports = {
           throw error
         }
       } else {
-        return callbackOrExpected(traces[0][0])
+        return callbackOrExpected(span)
       }
     }, options, traceHandlers)
   },
