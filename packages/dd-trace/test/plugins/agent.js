@@ -250,13 +250,15 @@ function unformatSpanEvents (span) {
 function handleTraceRequest (req, res) {
   res.status(200).send({ rate_by_service: { 'service:,env:': 1 } })
   const trace = req.body
-  // libdatadog's v0.4 msgpack encoder omits `error` when it is 0 (the agent
-  // protocol treats an absent field as its default, and the real agent does the
-  // same). The legacy JS AgentWriter always emitted `error: 0`, so backfill it
-  // here for the native exporter. This only fills the 0 default — an expected
-  // `error: 1` that arrived absent stays absent and still fails its assertion.
+  // libdatadog's v0.4 msgpack encoder omits `error` and `parent_id` when they
+  // are 0 (the agent protocol treats an absent field as its default, and the
+  // real agent does the same). The legacy JS AgentWriter always emitted both, so
+  // backfill them here for the native exporter. This only fills the 0 default —
+  // an expected non-zero value that arrived absent stays absent and still fails
+  // its assertion. `parent_id` is decoded as BigInt (useBigInt64), so backfill 0n.
   for (const span of trace.flat(Infinity)) {
     if (span && span.error === undefined) span.error = 0
+    if (span && span.parent_id === undefined) span.parent_id = 0n
   }
   for (const { handler, spanResourceMatch } of traceHandlers) {
     const spans = trace.flatMap(span => span)
