@@ -5,7 +5,7 @@ import { context } from '@actions/github'
 import { downloadArtifacts } from './download-artifacts.mjs'
 import { logUploads } from './run-upload.mjs'
 import { uploadJunit } from './upload-junit.mjs'
-import { uploadCoverage, sendCodecovNotifications } from './upload-coverage.mjs'
+import { uploadCoverage, sendCodecovNotifications, hasCodecovCommit } from './upload-coverage.mjs'
 
 /* eslint-disable no-console */
 
@@ -283,7 +283,9 @@ async function checkAllGreen () {
   // until this fires, since uploads land one sibling workflow at a time rather than all at once.
   // Only notify when every sibling workflow passed — a failing suite's coverage is expected to be
   // low, and posting it would report a misleadingly low status against an otherwise healthy commit.
-  if (process.env.GITHUB_ACTIONS && failedRuns.length === 0) {
+  // Also skip when no run ever registered a commit/report (e.g. Dependabot PRs, whose coverage
+  // artifacts are skipped) — notifying then would target a report that was never created.
+  if (process.env.GITHUB_ACTIONS && failedRuns.length === 0 && hasCodecovCommit()) {
     logUploads('codecov', [await sendCodecovNotifications(HEAD_SHA)])
   }
 
