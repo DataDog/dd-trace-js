@@ -60,6 +60,10 @@ const SECRET_FLAG_PATTERN = new RegExp(
   String.raw`(--(?:${SECRET_FLAG_SOURCE})(?:-[A-Za-z0-9]+)*)(=|\s+)` + SECRET_VALUE_SOURCE,
   'gi'
 )
+const SECRET_FLAG_NAME_PATTERN = new RegExp(
+  String.raw`^--(?:${SECRET_FLAG_SOURCE})(?:-[A-Za-z0-9]+)*$`,
+  'i'
+)
 const AUTH_HEADER_PATTERN = /\b(Bearer)\s+\S+/gi
 const SECRET_HEADER_NAME_SOURCE = [
   'dd-api-key',
@@ -173,7 +177,7 @@ function sanitizeValue (value, seen, key) {
   seen.add(value)
 
   if (Array.isArray(value)) {
-    const sanitized = value.map(item => sanitizeValue(item, seen, key))
+    const sanitized = sanitizeArray(value, seen, key)
     seen.delete(value)
     return sanitized
   }
@@ -193,6 +197,31 @@ function sanitizeValue (value, seen, key) {
     sanitized[entryKey] = sanitizeValue(entryValue, seen, entryKey)
   }
   seen.delete(value)
+  return sanitized
+}
+
+/**
+ * Redacts secret flag/value pairs in arrays such as argv before sanitizing nested values.
+ *
+ * @param {Array<unknown>} value array to sanitize
+ * @param {WeakSet<object>} seen objects currently being sanitized
+ * @param {string|undefined} key parent key
+ * @returns {Array<unknown>} sanitized array
+ */
+function sanitizeArray (value, seen, key) {
+  const sanitized = []
+
+  for (let index = 0; index < value.length; index++) {
+    const item = value[index]
+    if (typeof item === 'string' && SECRET_FLAG_NAME_PATTERN.test(item) && index + 1 < value.length) {
+      sanitized.push(sanitizeString(item), REDACTED)
+      index++
+      continue
+    }
+
+    sanitized.push(sanitizeValue(item, seen, key))
+  }
+
   return sanitized
 }
 

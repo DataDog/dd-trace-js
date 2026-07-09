@@ -13,7 +13,7 @@ describe('test optimization auto test retries diagnosis', () => {
     }, {
       failedAttempts: 1,
       passedAttempts: 0,
-      retryLikeEvents: 0,
+      autoTestRetryEvents: 0,
     })
 
     assert.match(diagnosis, /Auto Test Retries was enabled/)

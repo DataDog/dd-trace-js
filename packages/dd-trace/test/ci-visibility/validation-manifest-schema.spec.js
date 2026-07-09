@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict')
 const path = require('node:path')
 
+const jsonSchema = require('../../../../ci/test-optimization-validation-manifest.schema.json')
 const { validateManifest } = require('../../../../ci/test-optimization-validation/manifest-schema')
 
 describe('test optimization validation manifest schema', () => {
@@ -88,6 +89,26 @@ describe('test optimization validation manifest schema', () => {
       'frameworks[0].generatedTestStrategy.testDirectory must be an absolute path when present.',
       'frameworks[0].generatedTestStrategy.cleanupPaths[0] must be an absolute path.',
     ])
+  })
+
+  it('publishes absolute-path constraints for path fields in the JSON schema', () => {
+    const absolutePathRef = { $ref: '#/$defs/absolutePathString' }
+    const nullableAbsolutePath = {
+      anyOf: [
+        absolutePathRef,
+        { type: 'null' },
+      ],
+    }
+
+    assert.deepStrictEqual(jsonSchema.$defs.repository.properties.root, absolutePathRef)
+    assert.deepStrictEqual(jsonSchema.$defs.project.properties.root, absolutePathRef)
+    assert.deepStrictEqual(jsonSchema.$defs.project.properties.packageJson, nullableAbsolutePath)
+    assert.deepStrictEqual(jsonSchema.$defs.project.properties.configFiles.items, absolutePathRef)
+    assert.deepStrictEqual(jsonSchema.$defs.command.properties.cwd, absolutePathRef)
+    assert.deepStrictEqual(jsonSchema.$defs.generatedTestStrategy.properties.testDirectory, nullableAbsolutePath)
+    assert.deepStrictEqual(jsonSchema.$defs.generatedTestStrategy.properties.cleanupPaths.items, absolutePathRef)
+    assert.deepStrictEqual(jsonSchema.$defs.generatedFile.properties.path, absolutePathRef)
+    assert.deepStrictEqual(jsonSchema.$defs.testIdentity.properties.file, nullableAbsolutePath)
   })
 
   it('requires verified generated strategies to include every validation scenario', () => {

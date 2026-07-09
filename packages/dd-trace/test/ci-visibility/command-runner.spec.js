@@ -5,6 +5,8 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 
+const proxyquire = require('proxyquire').noCallThru().noPreserveCache()
+
 const {
   buildCiWiringEnv,
   buildDatadogEnv,
@@ -24,6 +26,33 @@ describe('test optimization validation command runner', () => {
       ),
       '--import ./src/dev-loader.js --import dd-trace/register.js -r dd-trace/ci/init'
     )
+  })
+
+  it('does not inject --import for Vitest on Node versions that do not support it', () => {
+    const { withCiPreloads } = proxyquire('../../../../ci/test-optimization-validation/command-runner', {
+      '../../version': {
+        NODE_MAJOR: 18,
+        NODE_MINOR: 17,
+      },
+    })
+    const nodeOptions = withCiPreloads('', { framework: 'vitest' })
+
+    assert.doesNotMatch(nodeOptions, /--import/)
+    assert.match(nodeOptions, /[\\/]ci[\\/]init\.js/)
+  })
+
+  it('injects --import for Vitest on Node versions that support it', () => {
+    const { withCiPreloads } = proxyquire('../../../../ci/test-optimization-validation/command-runner', {
+      '../../version': {
+        NODE_MAJOR: 18,
+        NODE_MINOR: 18,
+      },
+    })
+    const nodeOptions = withCiPreloads('', { framework: 'vitest' })
+
+    assert.match(nodeOptions, /--import/)
+    assert.match(nodeOptions, /[\\/]register\.js/)
+    assert.match(nodeOptions, /[\\/]ci[\\/]init\.js/)
   })
 
   it('disables unrelated Datadog side channels during forced local validation', () => {

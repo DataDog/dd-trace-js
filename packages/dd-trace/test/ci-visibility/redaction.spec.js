@@ -94,4 +94,29 @@ describe('test optimization validation redaction', () => {
     assert.doesNotMatch(output, /password-colon-secret/)
     assert.doesNotMatch(output, /authorization-colon-secret/)
   })
+
+  it('redacts split secret flag values in arrays', () => {
+    const report = sanitizeForReport({
+      argv: ['node', 'test.js', '--api-key', 'api-key-secret', '--token', 'token-secret', '--safe', 'visible'],
+      nested: {
+        processArgv: ['vitest', '--client-secret', 'client-secret-value'],
+      },
+    })
+
+    assert.deepStrictEqual(report.argv, [
+      'node',
+      'test.js',
+      '--api-key',
+      '<redacted>',
+      '--token',
+      '<redacted>',
+      '--safe',
+      'visible',
+    ])
+    assert.deepStrictEqual(report.nested.processArgv, [
+      'vitest',
+      '--client-secret',
+      '<redacted>',
+    ])
+  })
 })

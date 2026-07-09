@@ -6,6 +6,7 @@ const fs = require('fs')
 const path = require('path')
 const { spawn } = require('child_process')
 
+const { NODE_MAJOR, NODE_MINOR } = require('../../version')
 const { sanitizeString } = require('./redaction')
 
 const INIT_PATH = path.resolve(__dirname, '..', 'init.js')
@@ -218,7 +219,7 @@ function buildCiWiringEnv ({ intake }) {
 function withCiPreloads (nodeOptions = '', framework) {
   let result = nodeOptions.trim()
 
-  if (framework?.framework === 'vitest' && !hasRegister(result)) {
+  if (framework?.framework === 'vitest' && supportsImportPreload() && !hasRegister(result)) {
     result = `--import ${formatNodeRequire(REGISTER_PATH)}${result ? ` ${result}` : ''}`
   }
 
@@ -234,6 +235,16 @@ function mergeNodeOptions (...nodeOptions) {
     .map(value => String(value || '').trim())
     .filter(Boolean)
     .join(' ')
+}
+
+/**
+ * Checks whether the current Node.js version supports --import in NODE_OPTIONS.
+ *
+ * @returns {boolean} true when --import can be used
+ */
+function supportsImportPreload () {
+  if (NODE_MAJOR > 18) return true
+  return NODE_MAJOR === 18 && NODE_MINOR >= 18
 }
 
 function hasCiInit (nodeOptions) {

@@ -52,9 +52,9 @@
         "root"
       ],
       "properties": {
-        "root": {
-          "type": "string"
-        },
+      "root": {
+        "$ref": "#/$defs/absolutePathString"
+      },
         "gitRemote": {
           "type": [
             "string",
@@ -298,21 +298,25 @@
             "null"
           ]
         },
-        "root": {
-          "type": "string"
-        },
-        "packageJson": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "configFiles": {
-          "type": "array",
-          "items": {
-            "type": "string"
+      "root": {
+        "$ref": "#/$defs/absolutePathString"
+      },
+      "packageJson": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/absolutePathString"
+          },
+          {
+            "type": "null"
           }
-        },
+        ]
+      },
+      "configFiles": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/absolutePathString"
+        }
+      },
         "evidence": {
           "type": "array",
           "items": {
@@ -385,9 +389,9 @@
         "description": {
           "type": "string"
         },
-        "cwd": {
-          "$ref": "#/$defs/executableString"
-        },
+      "cwd": {
+        "$ref": "#/$defs/absolutePathString"
+      },
         "argv": {
           "type": "array",
           "items": {
@@ -450,12 +454,22 @@
         }
       ]
     },
-    "executableString": {
-      "type": "string",
-      "not": {
-        "pattern": "\\$\\{[^}]+\\}"
+  "executableString": {
+    "type": "string",
+    "not": {
+      "pattern": "\\$\\{[^}]+\\}"
+    }
+  },
+  "absolutePathString": {
+    "allOf": [
+      {
+        "$ref": "#/$defs/executableString"
+      },
+      {
+        "pattern": "^(?:/|[A-Za-z]:[\\\\/]|\\\\\\\\)"
       }
-    },
+    ]
+  },
     "preflight": {
       "type": "object",
       "properties": {
@@ -632,12 +646,16 @@
             "unknown"
           ]
         },
-        "testDirectory": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
+      "testDirectory": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/absolutePathString"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
         "moduleSystem": {
           "enum": [
             "commonjs",
@@ -670,12 +688,12 @@
         "verification": {
           "$ref": "#/$defs/verification"
         },
-        "cleanupPaths": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
+      "cleanupPaths": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/absolutePathString"
+        }
+      },
         "limitations": {
           "type": "array",
           "items": {
@@ -764,9 +782,9 @@
         "contentLines"
       ],
       "properties": {
-        "path": {
-          "type": "string"
-        },
+      "path": {
+        "$ref": "#/$defs/absolutePathString"
+      },
         "role": {
           "enum": [
             "test",
@@ -838,12 +856,16 @@
         "name": {
           "type": "string"
         },
-        "file": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
+      "file": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/absolutePathString"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
         "parameters": {
           "type": [
             "object",

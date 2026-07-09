@@ -19,7 +19,7 @@ describe('test optimization validation advanced features', () => {
       },
       tests: [
         { testName: 'generated test', testStatus: 'pass' },
-        { testName: 'generated test', testStatus: 'pass', isRetry: true },
+        { testName: 'generated test', testStatus: 'pass', isRetry: true, retryReason: 'early_flake_detection' },
       ],
     })
     const { runEarlyFlakeDetection } = proxyquire(
@@ -33,6 +33,36 @@ describe('test optimization validation advanced features', () => {
     assert.match(result.diagnosis, /reported Early Flake Detection retry evidence/)
     assert.match(result.diagnosis, /command exited 1/)
     assert.strictEqual(result.evidence.commandExitCode, 1)
+  })
+
+  it('requires Datadog Early Flake Detection retry evidence for EFD pass', async () => {
+    const outDir = path.join('/tmp', 'dd-validation-efd')
+    const helpers = buildScenarioHelpers({
+      commandExitCode: 0,
+      outDir,
+      scenario: {
+        id: 'basic-pass',
+        runCommand: {
+          cwd: outDir,
+          argv: ['node', 'test.js'],
+        },
+      },
+      tests: [
+        { testName: 'generated test', testStatus: 'pass' },
+        { testName: 'generated test', testStatus: 'pass', isRetry: true, retryReason: 'external' },
+      ],
+    })
+    const { runEarlyFlakeDetection } = proxyquire(
+      '../../../../ci/test-optimization-validation/scenarios/early-flake-detection',
+      { './helpers': helpers }
+    )
+
+    const result = await runEarlyFlakeDetection(getRunOptions(outDir))
+
+    assert.strictEqual(result.status, 'fail')
+    assert.match(result.diagnosis, /did not appear to be retried for Early Flake Detection/)
+    assert.strictEqual(result.evidence.earlyFlakeRetryEvents, 0)
+    assert.strictEqual(result.evidence.externalRetryEvents, 1)
   })
 
   it('fails Test Management when quarantined evidence is emitted by a nonzero command', async () => {

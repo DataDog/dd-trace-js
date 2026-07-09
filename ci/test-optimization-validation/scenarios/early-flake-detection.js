@@ -71,7 +71,8 @@ async function runEarlyFlakeDetection ({ framework, intake, out, options }) {
     outDir = run.outDir
 
     const tests = testsForDiscoveredScenario(run.events, scenario, discovery)
-    const retriedTests = tests.filter(test => test.isRetry || test.retryReason === 'early_flake_detection')
+    const earlyFlakeRetryEvents = tests.filter(test => test.retryReason === 'early_flake_detection')
+    const externalRetryEvents = tests.filter(test => test.isRetry && test.retryReason !== 'early_flake_detection')
     const evidence = {
       ...discoveryEvidence(discovery),
       commandExitCode: run.result.exitCode,
@@ -79,7 +80,8 @@ async function runEarlyFlakeDetection ({ framework, intake, out, options }) {
       settingsRequested: requestsUrlIncludes(intake, '/api/v2/libraries/tests/services/setting'),
       knownTestsRequested: requestsUrlIncludes(intake, '/api/v2/ci/libraries/tests'),
       matchingTestEvents: tests.length,
-      retryLikeEvents: retriedTests.length,
+      earlyFlakeRetryEvents: earlyFlakeRetryEvents.length,
+      externalRetryEvents: externalRetryEvents.length,
       earlyFlakeTaggedEvents: tests.filter(test => test.earlyFlakeEnabled).length,
       samples: testEventSamples(tests),
     }
@@ -116,7 +118,7 @@ async function runEarlyFlakeDetection ({ framework, intake, out, options }) {
       })
     }
 
-    if (tests.length < 2 || retriedTests.length === 0) {
+    if (tests.length < 2 || earlyFlakeRetryEvents.length === 0) {
       return failWithDebugRerun({
         command: scenario.runCommand,
         configureIntake: configureEarlyFlakeDetection,
