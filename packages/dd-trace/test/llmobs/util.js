@@ -358,7 +358,11 @@ function expectedLLMObsTags ({
   const env = span.meta?.env ?? ''
   // `service` is a top-level span field on the v0.4 wire (not a meta entry);
   // fall back to meta for any producer that puts it there.
-  const service = span.service ?? span.meta?.service ?? ''
+  // LLMObs reports the base tracer service, not a plugin-schematized service
+  // name (e.g. aws-sdk's `test-aws-bedrockruntime`). `_dd.base_service` holds it
+  // when the span's service was schematized; otherwise the bare `meta.service`
+  // (== config.service) does.
+  const service = span.meta?.['_dd.base_service'] ?? span.meta?.service ?? span.service ?? ''
 
   const spanTags = [
     `version:${version}`,
