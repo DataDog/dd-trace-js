@@ -10,6 +10,7 @@ const proxyquire = require('proxyquire')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
 const id = require('../../src/id')
+const { MAX_SIZE, OverflowError } = require('../../src/msgpack')
 
 const {
   MAX_NAME_LENGTH,
@@ -128,6 +129,44 @@ describe('agentless-ci-visibility-encode', () => {
     encoder.makePayload()
 
     assert.strictEqual(encoder.count(), 0)
+  })
+
+  it('clears the subclass _eventCount when the chunk cap fires mid-encode', () => {
+    // Encode a fine trace so `_eventCount` is non-zero before the cap
+    // fires. The regression this pins is the inherited `AgentEncoder.encode`
+    // catch path calling `this._reset()` (base helper) instead of
+    // `this.reset()` (virtual): the base helper clears `_traceBytes` and the
+    // string cache but leaves `_eventCount` stale, so the next `makePayload`
+    // patches the `events` array prefix with a count larger than the bytes
+    // that actually made it through.
+    encoder.encode(trace)
+    assert.ok(encoder._eventCount > 0, 'precondition: _eventCount must be primed before the cap fires')
+
+    sinon.stub(encoder._traceBytes, 'reserve').callsFake(() => {
+      throw new OverflowError(MAX_SIZE + 1)
+    })
+
+    encoder.encode(trace)
+
+    assert.strictEqual(
+      encoder._eventCount, 0,
+      'overflow must route through the subclass reset() and clear _eventCount'
+    )
+  })
+
+  it('throws ERR_MSGPACK_CHUNK_OVERFLOW when the assembled payload exceeds the cap', () => {
+    // The events live in `_traceBytes` and the metadata prefix is encoded into
+    // a fresh chunk at flush time, then both are concatenated. Each chunk is
+    // capped on its own, so the metadata prefix and the events can both sit
+    // under MAX_SIZE while the assembled buffer blows past it. The metadata
+    // prefix is also built inside `makePayload`, so an oversized metadata tag
+    // overflows here and not during `encode` — both paths have to surface the
+    // tagged error so the writer can drop the payload instead of crashing.
+    encoder.encode(trace)
+
+    encoder._traceBytes.length = MAX_SIZE + 1
+
+    assert.throws(() => encoder.makePayload(), OverflowError)
   })
 
   it('should truncate name, service, type and resource when they are too long', () => {
