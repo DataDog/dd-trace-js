@@ -161,6 +161,32 @@ describe('AIGuard Anthropic integration', () => {
     sinon.assert.notCalled(evaluate)
   })
 
+  it('evaluates after-payloads where body is a JSON string (from response.text())', async () => {
+    const args = [{ messages: [{ role: 'user', content: 'Hello' }] }]
+    const body = { role: 'assistant', content: [{ type: 'text', text: 'Hi' }] }
+    const ctx = publish(messagesAfterChannel, { args, body: JSON.stringify(body) })
+
+    assert.strictEqual(ctx.pending.length, 1)
+    await Promise.all(ctx.pending)
+
+    sinon.assert.calledOnceWithExactly(evaluate, [
+      { role: 'user', content: 'Hello' },
+      { role: 'assistant', content: 'Hi' },
+    ], {
+      block: true,
+      source: SOURCE_AUTO,
+      integration: 'anthropic',
+    })
+  })
+
+  it('declines after-payloads where body is an invalid JSON string', () => {
+    const args = [{ messages: [{ role: 'user', content: 'Hello' }] }]
+    const ctx = publish(messagesAfterChannel, { args, body: 'not-json' })
+
+    assert.strictEqual(ctx.pending.length, 0)
+    sinon.assert.notCalled(evaluate)
+  })
+
   it('aborts with the original AIGuardAbortError', async () => {
     const err = Object.assign(new Error('blocked'), { name: 'AIGuardAbortError' })
     evaluate.rejects(err)

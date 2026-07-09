@@ -11,7 +11,11 @@ const messagesAfterChannel = channel('dd-trace:anthropic:messages:after')
 class FakeAPIPromise {
   constructor (body) {
     this._body = body
-    this._rawResponse = { ok: true }
+    this._rawResponse = {
+      ok: true,
+      json: () => Promise.resolve(body),
+      text: () => Promise.resolve(JSON.stringify(body)),
+    }
   }
 
   parse () {
@@ -340,5 +344,88 @@ describe('anthropic lifecycle instrumentation', () => {
     ])
       .then(() => assert.strictEqual(calls.length, 1))
       .finally(unsubscribe)
+  })
+
+  it('publishes after lifecycle when asResponse() body is consumed via response.json()', () => {
+    const body = { role: 'assistant', content: [{ type: 'text', text: 'Hello!' }] }
+    const { calls, unsubscribe } = subscribeAutoResolve([
+      messagesBeforeChannel,
+      messagesAfterChannel,
+    ])
+    const messages = new Messages()
+    messages._nextApiPromise = new FakeAPIPromise(body)
+
+    const args = [{ messages: [{ role: 'user', content: 'Hi' }] }]
+    return messages.create(...args).asResponse()
+      .then(response => response.json())
+      .then(data => {
+        assert.strictEqual(data, body)
+        assert.strictEqual(calls.length, 2)
+        assert.deepStrictEqual(calls[1].body, body)
+      })
+      .finally(unsubscribe)
+  })
+
+  it('publishes after lifecycle when asResponse() body is consumed via response.text()', () => {
+    const body = { role: 'assistant', content: [{ type: 'text', text: 'Hello!' }] }
+    const { calls, unsubscribe } = subscribeAutoResolve([
+      messagesBeforeChannel,
+      messagesAfterChannel,
+    ])
+    const messages = new Messages()
+    messages._nextApiPromise = new FakeAPIPromise(body)
+
+    return messages.create([{ messages: [{ role: 'user', content: 'Hi' }] }]).asResponse()
+      .then(response => response.text())
+      .then(raw => {
+        assert.strictEqual(typeof raw, 'string')
+        assert.strictEqual(calls.length, 2)
+        // after-channel receives the raw string; the subscriber is responsible for parsing
+        assert.strictEqual(calls[1].body, raw)
+      })
+      .finally(unsubscribe)
+  })
+
+  it('propagates after lifecycle rejection through asResponse().json()', () => {
+    const err = lifecycleAbortError()
+    const unsubscribeAfter = subscribeWithHandler([messagesAfterChannel], ctx => blockLifecycle(ctx, err))
+    const unsubscribeBefore = subscribeWithHandler([messagesBeforeChannel], ctx => {
+      ctx.pending.push(Promise.resolve())
+    })
+    const messages = new Messages()
+    messages._nextApiPromise = new FakeAPIPromise({ role: 'assistant', content: [] })
+
+    return assert.rejects(
+      () => messages.create({ messages: [{ role: 'user', content: 'Hi' }] }).asResponse()
+        .then(response => response.json()),
+      e => e === err
+    ).finally(() => {
+      unsubscribeAfter()
+      unsubscribeBefore()
+    })
+  })
+
+  it('publishes asyncEnd exactly once when both parse() and asResponse().json() are called', () => {
+    const apmChannel = tracingChannel('apm:anthropic:request')
+    const apmHandlers = { start () {} }
+    let asyncEndCount = 0
+    apmHandlers.asyncEnd = () => { asyncEndCount++ }
+    apmChannel.subscribe(apmHandlers)
+
+    const { unsubscribe } = subscribeAutoResolve([messagesBeforeChannel, messagesAfterChannel])
+
+    const messages = new Messages()
+    messages._nextApiPromise = new FakeAPIPromise({ role: 'assistant', content: [] })
+    const apiPromise = messages.create({ messages: [{ role: 'user', content: 'Hi' }] })
+
+    return Promise.all([
+      apiPromise.parse(),
+      apiPromise.asResponse().then(response => response.json()),
+    ])
+      .then(() => assert.strictEqual(asyncEndCount, 1))
+      .finally(() => {
+        apmChannel.unsubscribe(apmHandlers)
+        unsubscribe()
+      })
   })
 })

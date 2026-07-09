@@ -135,6 +135,36 @@ function wrapCreate (create) {
 
         return gated
           .then(response => {
+            if (!stream && hasLifecycle && messagesAfterChannel.hasSubscribers) {
+              // Defer finish until body is consumed (json/text) so the after-channel sees the content.
+              function wrapBodyConsume (originalMethod) {
+                return function (...methodArgs) {
+                  if (ctx.finished) {
+                    return originalMethod.apply(this, methodArgs)
+                  }
+
+                  return originalMethod.apply(this, methodArgs).then(body => {
+                    return publishLifecycle(messagesAfterChannel, { args, body, parentSpan }).then(() => {
+                      finish(ctx, body, null)
+                      return body
+                    })
+                  }).catch(error => {
+                    if (!ctx.finished) finish(ctx, null, error)
+                    throw error
+                  })
+                }
+              }
+              if (typeof response.json === 'function') {
+                shimmer.wrap(response, 'json', wrapBodyConsume)
+              }
+
+              if (typeof response.text === 'function') {
+                shimmer.wrap(response, 'text', wrapBodyConsume)
+              }
+
+              return response
+            }
+
             if (!stream && !ctx.finished) finish(ctx, null, null)
             return response
           })

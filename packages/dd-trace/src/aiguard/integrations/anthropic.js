@@ -50,7 +50,16 @@ function onMessagesAfter (ctx) {
   const inputMessages = getMessagesInputMessages(ctx.args?.[0])
   if (!inputMessages?.length) return
 
-  const outputMessages = getMessagesOutputMessages(ctx.body)
+  let body = ctx.body
+  if (typeof body === 'string') {
+    try {
+      body = JSON.parse(body)
+    } catch {
+      return
+    }
+  }
+
+  const outputMessages = getMessagesOutputMessages(body)
   if (!outputMessages.length) return
 
   pushEvaluation(ctx, aiguard, [...inputMessages, ...outputMessages], opts)
