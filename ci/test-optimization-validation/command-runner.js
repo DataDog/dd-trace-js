@@ -77,17 +77,18 @@ function runCommand (command, { env = {}, envMode = 'inherit', outDir, label, ve
       childEnv.NODE_OPTIONS = mergeNodeOptions(command.env.NODE_OPTIONS, env.NODE_OPTIONS)
     }
 
-    const useProcessGroup = shouldUseProcessGroup(command)
+    const useProcessGroup = shouldUseProcessGroup()
     const child = command.usesShell
       ? spawn(command.shellCommand, {
         cwd: command.cwd,
         detached: useProcessGroup,
         env: childEnv,
-        shell: true,
+        shell: command.shell || true,
         stdio: ['ignore', 'pipe', 'pipe'],
       })
       : spawn(command.argv[0], command.argv.slice(1), {
         cwd: command.cwd,
+        detached: useProcessGroup,
         env: childEnv,
         shell: false,
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -162,8 +163,8 @@ function runCommand (command, { env = {}, envMode = 'inherit', outDir, label, ve
   })
 }
 
-function shouldUseProcessGroup (command) {
-  return command.usesShell === true && process.platform !== 'win32'
+function shouldUseProcessGroup () {
+  return process.platform !== 'win32'
 }
 
 function signalChild (child, signal, useProcessGroup) {

@@ -129,6 +129,95 @@ describe('test optimization validation static diagnosis', () => {
     }
   })
 
+  it('does not treat plain dd-trace app initialization as test setup initialization', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
+
+    fs.mkdirSync(path.join(root, 'src'))
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      devDependencies: {
+        'dd-trace': 'file:../dd-trace',
+        jest: '29.7.0',
+      },
+      scripts: {
+        test: 'NODE_OPTIONS="-r dd-trace/ci/init" jest',
+      },
+    }))
+    fs.writeFileSync(path.join(root, 'src', 'server.js'), 'require("dd-trace").init()\n')
+
+    try {
+      const report = runDiagnosis({
+        root,
+        execFile () {
+          throw new Error('git unavailable')
+        },
+      })
+      const titles = report.results.map(result => result.title)
+
+      assert.ok(!titles.includes('Plain dd-trace initialization found in test setup'))
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('reports plain dd-trace initialization in likely test setup files', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
+
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      devDependencies: {
+        'dd-trace': 'file:../dd-trace',
+        jest: '29.7.0',
+      },
+      scripts: {
+        test: 'NODE_OPTIONS="-r dd-trace/ci/init" jest',
+      },
+    }))
+    fs.writeFileSync(path.join(root, 'jest.setup.js'), 'require("dd-trace").init()\n')
+
+    try {
+      const report = runDiagnosis({
+        root,
+        execFile () {
+          throw new Error('git unavailable')
+        },
+      })
+      const result = report.results.find(result => result.title === 'Plain dd-trace initialization found in test setup')
+
+      assert.ok(result)
+      assert.deepStrictEqual(result.locations, ['jest.setup.js'])
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('does not coerce upper-bound-only framework ranges to supported boundary versions', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
+
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      devDependencies: {
+        'dd-trace': 'file:../dd-trace',
+        jest: '<28.0.0',
+      },
+      scripts: {
+        test: 'NODE_OPTIONS="-r dd-trace/ci/init" jest',
+      },
+    }))
+
+    try {
+      const report = runDiagnosis({
+        root,
+        execFile () {
+          throw new Error('git unavailable')
+        },
+      })
+      const titles = report.results.map(result => result.title)
+
+      assert.ok(titles.includes('Jest version could not be determined'))
+      assert.ok(!titles.includes('Jest 28.0.0 is supported'))
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('does not block a root framework entry with an unsupported nested fixture version', () => {
     const diagnosis = getDiagnosisWithNestedMochaError()
     const framework = {

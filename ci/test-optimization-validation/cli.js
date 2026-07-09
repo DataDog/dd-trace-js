@@ -5,6 +5,9 @@
 const fs = require('fs')
 const path = require('path')
 
+const { getFrameworkDefinitions } = require('../diagnose')
+const { DD_MAJOR } = require('../../version')
+
 const { runBasicReporting } = require('./scenarios/basic-reporting')
 const { runEarlyFlakeDetection } = require('./scenarios/early-flake-detection')
 const { runAutoTestRetries } = require('./scenarios/auto-test-retries')
@@ -47,6 +50,7 @@ function parseArgs (argv) {
     out: DEFAULT_OUT,
     frameworks: new Set(),
     scenarios: new Set(getSelectableScenarios()),
+    requestedScenario: null,
     keepTempFiles: false,
     verbose: false,
   }
@@ -64,7 +68,8 @@ function parseArgs (argv) {
         options.frameworks.add(normalizeFrameworkTarget(requireValue(argv, ++i, arg)))
         break
       case '--scenario':
-        options.scenarios = normalizeScenarioSelection(requireValue(argv, ++i, arg))
+        options.requestedScenario = requireValue(argv, ++i, arg)
+        options.scenarios = normalizeScenarioSelection(options.requestedScenario)
         break
       case '--keep-temp-files':
         options.keepTempFiles = true
@@ -183,7 +188,8 @@ async function main (argv) {
           results.push(basicResult)
         }
 
-        if (options.scenarios.has(CI_WIRING_SCENARIO) && hasCiWiringValidation(framework, manifest)) {
+        if (options.scenarios.has(CI_WIRING_SCENARIO) &&
+          shouldRunCiWiringValidation(framework, manifest, options)) {
           if (basicResult && basicResult.status !== 'pass') {
             results.push(getSkippedCiWiringAfterBasicFailure(framework, basicResult))
           } else {
@@ -219,6 +225,10 @@ async function main (argv) {
     process.exitCode = 1
     console.error(err && err.stack ? err.stack : err)
   }
+}
+
+function shouldRunCiWiringValidation (framework, manifest, options) {
+  return hasCiWiringValidation(framework, manifest) || options.requestedScenario === CI_WIRING_SCENARIO
 }
 
 function hasCiWiringValidation (framework, manifest) {
@@ -515,13 +525,8 @@ function findFrameworkConfigFiles (root, frameworkName) {
 }
 
 function getFrameworkConfigPatterns (frameworkName) {
-  return {
-    cypress: [/^cypress\.config\./],
-    jest: [/^jest\.config\./],
-    mocha: [/^\.mocharc\./, /^mocha\.config\./],
-    playwright: [/^playwright\.config\./],
-    vitest: [/^vitest\.config\./, /^vite\.config\./],
-  }[frameworkName] || []
+  const definition = getFrameworkDefinitions(DD_MAJOR).find(definition => definition.id === frameworkName)
+  return definition?.configPatterns || []
 }
 
 function readPackageJson (root) {

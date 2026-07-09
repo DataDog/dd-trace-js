@@ -62,9 +62,39 @@ describe('test optimization validation advanced features', () => {
     assert.match(result.diagnosis, /command exited 1/)
     assert.strictEqual(result.evidence.commandExitCode, 1)
   })
+
+  it('requires Datadog Auto Test Retry evidence for ATR pass', async () => {
+    const outDir = path.join('/tmp', 'dd-validation-atr')
+    const helpers = buildScenarioHelpers({
+      commandExitCode: 0,
+      outDir,
+      scenario: {
+        id: 'atr-fail-once',
+        runCommand: {
+          cwd: outDir,
+          argv: ['node', 'test.js'],
+        },
+      },
+      tests: [
+        { testName: 'generated test', testStatus: 'fail' },
+        { testName: 'generated test', testStatus: 'pass', isRetry: true, retryReason: 'external' },
+      ],
+    })
+    const { runAutoTestRetries } = proxyquire(
+      '../../../../ci/test-optimization-validation/scenarios/auto-test-retries',
+      { './helpers': helpers }
+    )
+
+    const result = await runAutoTestRetries(getRunOptions(outDir))
+
+    assert.strictEqual(result.status, 'fail')
+    assert.match(result.diagnosis, /no test\.retry_reason=auto_test_retry tag/)
+    assert.strictEqual(result.evidence.autoTestRetryEvents, 0)
+    assert.strictEqual(result.evidence.externalRetryEvents, 1)
+  })
 })
 
-function buildScenarioHelpers ({ outDir, scenario, tests }) {
+function buildScenarioHelpers ({ commandExitCode = 1, outDir, scenario, tests }) {
   return {
     async discoverScenarioTests () {
       return {
@@ -130,7 +160,7 @@ function buildScenarioHelpers ({ outDir, scenario, tests }) {
       return {
         outDir,
         result: {
-          exitCode: 1,
+          exitCode: commandExitCode,
           timedOut: false,
         },
       }

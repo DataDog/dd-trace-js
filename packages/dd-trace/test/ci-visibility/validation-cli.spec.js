@@ -344,6 +344,89 @@ describe('test optimization validation cli', () => {
     }
   })
 
+  it('reports missing CI wiring metadata when CI wiring is explicitly selected', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cli-'))
+    const out = path.join(tmpDir, 'results')
+    const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
+    const staticDiagnosisPath = path.join(out, 'static-diagnosis.json')
+    let capturedResults
+    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
+      './mock-intake': {
+        MockIntake: class {
+          constructor () {
+            this.requests = []
+          }
+
+          async start () {}
+          async close () {}
+
+          writeArtifacts () {
+            return writeEmptyRequestsArtifact(out)
+          }
+        },
+      },
+      './setup-runner': {
+        async runSetupCommands () {
+          return { ok: true }
+        },
+      },
+      './static-diagnosis': {
+        getStaticBlocker () {
+          return null
+        },
+        runStaticDiagnosis () {
+          fs.mkdirSync(out, { recursive: true })
+          fs.writeFileSync(staticDiagnosisPath, '{}\n')
+          return {
+            report: {},
+            reportPath: staticDiagnosisPath,
+          }
+        },
+      },
+      './scenarios/basic-reporting': {
+        async runBasicReporting ({ framework }) {
+          return {
+            frameworkId: framework.id,
+            scenario: 'basic-reporting',
+            status: 'pass',
+            diagnosis: 'Basic reporting emitted session, module, suite, and test events.',
+            evidence: {},
+            artifacts: [],
+          }
+        },
+      },
+      './generated-files': {
+        async cleanupGeneratedFiles () {},
+      },
+      './report-writer': {
+        async writeReport ({ results }) {
+          capturedResults = results
+        },
+      },
+    })
+    const manifest = getRunnableManifest(tmpDir)
+    const originalExitCode = process.exitCode
+
+    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
+    process.exitCode = undefined
+
+    try {
+      await main(['--manifest', manifestPath, '--out', out, '--scenario', 'ci-wiring'])
+
+      assert.strictEqual(process.exitCode, 0)
+      assert.deepStrictEqual(capturedResults.map(result => `${result.scenario}:${result.status}`), [
+        'basic-reporting:pass',
+        'ci-wiring:skip',
+      ])
+      assert.match(capturedResults[1].diagnosis, /No replayable CI wiring command was provided/)
+      assert.strictEqual(capturedResults[1].evidence.recommendation, 'Add ciWiringCommand to the manifest when ' +
+        'a CI test step can be safely replayed locally.')
+    } finally {
+      process.exitCode = originalExitCode
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
   it('treats non-runnable discovery entries as non-blocking skipped diagnostics', async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cli-'))
     const out = path.join(tmpDir, 'results')
@@ -536,6 +619,103 @@ describe('test optimization validation cli', () => {
         field: 'devDependencies',
         version: '10.0.0',
       })
+    } finally {
+      process.exitCode = originalExitCode
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('uses static diagnosis framework config patterns in non-runnable status evidence', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cli-'))
+    const out = path.join(tmpDir, 'results')
+    const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
+    const staticDiagnosisPath = path.join(out, 'static-diagnosis.json')
+    let capturedResults
+    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
+      './mock-intake': {
+        MockIntake: class {
+          async start () {
+            throw new Error('intake should not start for non-runnable-only manifests')
+          }
+
+          async close () {}
+
+          writeArtifacts () {
+            return writeEmptyRequestsArtifact(out)
+          }
+        },
+      },
+      './setup-runner': {
+        async runSetupCommands () {
+          throw new Error('setup should not run for non-runnable entries')
+        },
+      },
+      './static-diagnosis': {
+        getStaticBlocker () {
+          return null
+        },
+        runStaticDiagnosis () {
+          fs.mkdirSync(out, { recursive: true })
+          fs.writeFileSync(staticDiagnosisPath, '{}\n')
+          return {
+            report: {},
+            reportPath: staticDiagnosisPath,
+          }
+        },
+      },
+      './generated-files': {
+        async cleanupGeneratedFiles () {},
+      },
+      './report-writer': {
+        async writeReport ({ results }) {
+          capturedResults = results
+        },
+      },
+    })
+    const originalExitCode = process.exitCode
+    const manifest = getRunnableManifest(tmpDir)
+
+    manifest.frameworks = [
+      {
+        id: 'jest:root',
+        framework: 'jest',
+        frameworkVersion: '29.7.0',
+        status: 'requires_manual_setup',
+        project: { root: tmpDir },
+        notes: ['No representative Jest command was selected.'],
+      },
+      {
+        id: 'cypress:root',
+        framework: 'cypress',
+        frameworkVersion: '13.0.0',
+        status: 'requires_manual_setup',
+        project: { root: tmpDir },
+        notes: ['No representative Cypress command was selected.'],
+      },
+      {
+        id: 'cucumber:root',
+        framework: 'cucumber',
+        frameworkVersion: '10.0.0',
+        status: 'requires_manual_setup',
+        project: { root: tmpDir },
+        notes: ['No representative Cucumber command was selected.'],
+      },
+    ]
+    fs.writeFileSync(path.join(tmpDir, 'config-jest.js'), 'module.exports = {}\n')
+    fs.writeFileSync(path.join(tmpDir, 'cypress.json'), '{}\n')
+    fs.writeFileSync(path.join(tmpDir, 'cucumber.js'), 'module.exports = {}\n')
+    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
+    process.exitCode = undefined
+
+    try {
+      await main(['--manifest', manifestPath, '--out', out])
+
+      assert.strictEqual(process.exitCode, 0)
+      assert.deepStrictEqual(capturedResults.map(result => result.evidence.configFiles), [
+        ['config-jest.js'],
+        ['cypress.json'],
+        ['cucumber.js'],
+      ])
     } finally {
       process.exitCode = originalExitCode
       fs.rmSync(tmpDir, { recursive: true, force: true })

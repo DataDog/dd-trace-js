@@ -26,7 +26,7 @@ async function runCiWiring ({ manifest, framework, intake, out, options, basicRe
   const scenarioName = 'ci-wiring'
 
   try {
-    const command = framework.ciWiringCommand
+    const command = getCiWiringCommand(framework)
     if (!command) return getMissingCiWiringCommandResult(framework, manifest)
 
     const outDir = frameworkOutDir(out, framework, scenarioName)
@@ -111,6 +111,40 @@ async function runCiWiring ({ manifest, framework, intake, out, options, basicRe
   } catch (err) {
     return error(framework, scenarioName, err)
   }
+}
+
+/**
+ * Returns the CI wiring command with the replay shell recorded by CI discovery when available.
+ *
+ * @param {object} framework manifest framework entry
+ * @returns {object|undefined} command to run
+ */
+function getCiWiringCommand (framework) {
+  const command = framework.ciWiringCommand
+  if (!command || !command.usesShell || command.shell || !framework.ciWiring?.shell) return command
+
+  const shell = getReplayShell(framework.ciWiring.shell)
+  if (!shell) return command
+
+  return {
+    ...command,
+    shell,
+  }
+}
+
+/**
+ * Resolves a CI shell description to a local shell executable.
+ *
+ * @param {string} shell recorded CI shell
+ * @returns {string|undefined} local shell executable
+ */
+function getReplayShell (shell) {
+  const value = String(shell || '').trim()
+  if (!value) return
+
+  const firstToken = value.split(/\s+/)[0]
+  if (firstToken && value.includes('{0}')) return firstToken
+  if (!/\s/.test(value)) return value
 }
 
 async function maybeRunInitializationProbe ({ command, framework, intake, options, outDir, result, evidence }) {

@@ -167,6 +167,76 @@ describe('test optimization validation command runner', () => {
     }
   })
 
+  it('terminates timed-out argv command process groups', async function () {
+    if (process.platform === 'win32') this.skip()
+
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-runner-'))
+    const marker = path.join(outDir, 'argv-child-survived')
+    const childScript = [
+      'process.on("SIGTERM", () => {})',
+      `setTimeout(() => require("node:fs").writeFileSync(${JSON.stringify(marker)}, "alive"), 750)`,
+      'setInterval(() => {}, 1000)',
+    ].join(';')
+    const parentScript = [
+      'const { spawn } = require("node:child_process")',
+      `spawn(${JSON.stringify(process.execPath)}, ["-e", ${JSON.stringify(childScript)}], { stdio: "ignore" })`,
+      'process.on("SIGTERM", () => process.exit(0))',
+      'setInterval(() => {}, 1000)',
+    ].join(';')
+
+    try {
+      const result = await runCommand({
+        cwd: outDir,
+        argv: [process.execPath, '-e', parentScript],
+        timeoutMs: 500,
+        timeoutKillGraceMs: 50,
+        timeoutFinalizeGraceMs: 50,
+      }, {
+        outDir,
+      })
+
+      await new Promise(resolve => setTimeout(resolve, 600))
+
+      assert.strictEqual(result.timedOut, true)
+      assert.strictEqual(fs.existsSync(marker), false)
+    } finally {
+      fs.rmSync(outDir, { recursive: true, force: true })
+    }
+  })
+
+  it('uses an explicit shell for shell commands', async function () {
+    if (process.platform === 'win32') this.skip()
+
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-runner-'))
+    const marker = path.join(outDir, 'custom-shell-used')
+    const shell = path.join(outDir, 'custom-shell')
+
+    fs.writeFileSync(shell, [
+      '#!/bin/sh',
+      `echo yes > ${JSON.stringify(marker)}`,
+      'exec /bin/sh "$@"',
+      '',
+    ].join('\n'))
+    fs.chmodSync(shell, 0o755)
+
+    try {
+      const result = await runCommand({
+        cwd: outDir,
+        usesShell: true,
+        shellCommand: 'echo ok',
+        shell,
+        timeoutMs: 1000,
+      }, {
+        outDir,
+      })
+
+      assert.strictEqual(result.exitCode, 0)
+      assert.strictEqual(fs.readFileSync(marker, 'utf8').trim(), 'yes')
+    } finally {
+      fs.rmSync(outDir, { recursive: true, force: true })
+    }
+  })
+
   it('redacts secret-like values from command artifacts', async () => {
     const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-runner-'))
 

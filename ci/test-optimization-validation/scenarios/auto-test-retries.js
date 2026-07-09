@@ -55,12 +55,14 @@ async function runAutoTestRetries ({ framework, intake, out, options }) {
     outDir = run.outDir
 
     const tests = testsForDiscoveredScenario(run.events, scenario, discovery)
-    const retryLikeEvents = tests.filter(test => test.isRetry || test.retryReason === 'auto_test_retry')
+    const autoTestRetryEvents = tests.filter(test => test.retryReason === 'auto_test_retry')
+    const externalRetryEvents = tests.filter(test => test.isRetry && test.retryReason !== 'auto_test_retry')
     const evidence = {
       ...discoveryEvidence(discovery),
       commandExitCode: run.result.exitCode,
       matchingTestEvents: tests.length,
-      retryLikeEvents: retryLikeEvents.length,
+      autoTestRetryEvents: autoTestRetryEvents.length,
+      externalRetryEvents: externalRetryEvents.length,
       failedAttempts: tests.filter(test => test.testStatus === 'fail' || test.error === 1).length,
       passedAttempts: tests.filter(test => test.testStatus === 'pass').length,
       samples: testEventSamples(tests),
@@ -81,7 +83,7 @@ async function runAutoTestRetries ({ framework, intake, out, options }) {
       })
     }
 
-    if (tests.length < 2 || retryLikeEvents.length === 0) {
+    if (tests.length < 2 || autoTestRetryEvents.length === 0) {
       return failWithDebugRerun({
         command: scenario.runCommand,
         configureIntake: configureAutoTestRetries,
@@ -110,7 +112,7 @@ async function runAutoTestRetries ({ framework, intake, out, options }) {
 
 function getAutoTestRetriesFailureDiagnosis (framework, evidence) {
   const frameworkName = getFrameworkName(framework)
-  const retryTagSummary = getRetryTagSummary(evidence.retryLikeEvents)
+  const retryTagSummary = getRetryTagSummary(evidence.autoTestRetryEvents)
   return 'Auto Test Retries was enabled, and the generated failing test was reported, but ' +
     `${frameworkName} ` +
     `did not execute a retry attempt. Observed ${formatAttemptCount(evidence.failedAttempts, 'failed')}, ` +

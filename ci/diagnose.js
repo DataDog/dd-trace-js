@@ -1336,7 +1336,7 @@ function collectEvidence (textFiles, env) {
   return {
     ciInitLocations,
     directCiInitLocations: findLocations(textFiles, DIRECT_CI_INIT_RE),
-    wrongInitLocations: findLocations(textFiles, WRONG_INIT_RE),
+    wrongInitLocations: findLocations(textFiles.filter(isTestSetupOrCiFile), WRONG_INIT_RE),
     cypressManualPluginLocations: findLocations(textFiles, CYPRESS_MANUAL_PLUGIN_RE),
     cypressSupportLocations: findLocations(textFiles, CYPRESS_SUPPORT_RE),
     cypressSupportDisabledLocations: findLocations(textFiles, CYPRESS_SUPPORT_DISABLED_RE),
@@ -1685,6 +1685,27 @@ function isWorkflowFile (relativePath) {
 }
 
 /**
+ * Checks whether a scanned file is likely to configure test process initialization.
+ *
+ * @param {object} file scanned text file
+ * @returns {boolean} true when plain dd-trace init should be treated as test setup evidence
+ */
+function isTestSetupOrCiFile (file) {
+  const relativePath = file.relativePath
+  const basename = path.basename(relativePath)
+
+  if (isWorkflowFile(relativePath)) return true
+  if (basename === 'package.json') return true
+  if (/^(?:jest|config-jest|vitest|vite|playwright|cypress|cucumber)\.config\./.test(basename)) return true
+  if (/^\.mocharc\./.test(basename)) return true
+  if (basename === 'cypress.json') return true
+  if (/(?:setup|bootstrap)/i.test(basename)) return true
+  if (relativePath.startsWith('cypress/support/')) return true
+
+  return false
+}
+
+/**
  * Runs git --version to check availability.
  *
  * @param {Function} execFile command runner
@@ -1752,6 +1773,8 @@ function parseJson (content) {
  */
 function coerceVersion (rawVersion) {
   const aliasedVersion = rawVersion.match(/^npm:[^@]+@(.+)$/)?.[1] || rawVersion
+  if (isAmbiguousRange(aliasedVersion)) return
+
   const match = aliasedVersion.match(/\d+(?:\.\d+){0,2}/)
   if (!match) return
 
@@ -1760,6 +1783,19 @@ function coerceVersion (rawVersion) {
     parts.push('0')
   }
   return parts.slice(0, 3).join('.')
+}
+
+/**
+ * Checks whether a manifest dependency range cannot be represented by one comparable version.
+ *
+ * @param {string} rawVersion package manifest version/range
+ * @returns {boolean} true when static diagnosis should ask the user to verify the range
+ */
+function isAmbiguousRange (rawVersion) {
+  const version = String(rawVersion || '').trim()
+  if (!version) return true
+  if (version.includes('||')) return true
+  return /^<=?\s*\d/.test(version)
 }
 
 /**

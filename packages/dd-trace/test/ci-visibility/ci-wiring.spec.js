@@ -79,6 +79,55 @@ describe('test optimization CI wiring validation', () => {
     }
   })
 
+  it('replays shell CI commands with the recorded CI shell', async function () {
+    if (process.platform === 'win32') this.skip()
+
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
+    const marker = path.join(out, 'ci-shell-used')
+    const shell = path.join(out, 'ci-shell')
+    const intake = {
+      port: 8126,
+      requests: [],
+      configure () {},
+      resetRequests () {
+        this.requests = []
+      },
+    }
+
+    fs.writeFileSync(shell, [
+      '#!/bin/sh',
+      `echo yes > ${JSON.stringify(marker)}`,
+      'exec /bin/sh "$@"',
+      '',
+    ].join('\n'))
+    fs.chmodSync(shell, 0o755)
+
+    try {
+      const result = await runCiWiring({
+        framework: {
+          id: 'jest:root',
+          framework: 'jest',
+          ciWiring: {
+            shell,
+          },
+          ciWiringCommand: {
+            cwd: out,
+            usesShell: true,
+            shellCommand: 'echo "1 passing"',
+          },
+        },
+        intake,
+        out,
+        options: { verbose: false },
+      })
+
+      assert.strictEqual(result.evidence.commandExitCode, 0)
+      assert.strictEqual(fs.readFileSync(marker, 'utf8').trim(), 'yes')
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
+
   it('redacts secret-like event data in CI wiring events artifacts', async () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
     const intake = {
