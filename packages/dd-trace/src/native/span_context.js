@@ -30,7 +30,7 @@ const { OpCode } = require('./index')
 // Everything else is a plain meta string or metric number.
 const SPECIAL_KEYS = new Set([
   'service.name', 'resource.name', 'span.type',
-  'error', 'http.status_code', 'error.type', 'span.kind',
+  'error', 'http.status_code', 'error.type', 'error.message', 'error.stack', 'span.kind',
 ])
 
 // Symbol keys for internal backing storage — avoids Object.defineProperty deopt
@@ -371,13 +371,16 @@ class NativeSpanContext extends DatadogSpanContext {
         )
         return
 
-      // Setting error.type implies span.error = 1, except on fs.operation
-      // spans which deliberately don't propagate fs failures up. OTel
-      // `recordException()` sets error.type alongside IGNORE_OTEL_ERROR=true so
-      // that merely recording an exception does NOT flip the error bit (only
-      // setStatus(ERROR) clears the guard) — mirror span_format.js by skipping
-      // SetError when the guard is present.
+      // Any of error.type/message/stack implies span.error = 1 (mirrors the JS
+      // formatter's extractError, which flips the bit on all three), except on
+      // fs.operation spans which deliberately don't propagate fs failures up.
+      // OTel `recordException()` sets error.message alongside
+      // IGNORE_OTEL_ERROR=true so merely recording an exception does NOT flip
+      // the error bit (only setStatus(ERROR) clears the guard) — mirror
+      // span_format.js by skipping SetError when the guard is present.
       case 'error.type':
+      case 'error.message':
+      case 'error.stack':
         if (this._name !== 'fs.operation' && !this.getTag(IGNORE_OTEL_ERROR)) {
           this.#nativeSpans.queueOp(
             OpCode.SetError,

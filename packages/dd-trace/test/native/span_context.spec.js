@@ -193,6 +193,17 @@ describe('NativeSpanContext', () => {
       assert.strictEqual(serviceNameCalls.length, 0, 'bare `service` must not queue SetServiceName')
     })
 
+    it('flips the error bit for error.message / error.stack, not just error.type (matches extractError)', () => {
+      // OTel setStatus(ERROR) sets only error.message; the JS formatter flips
+      // error=1 for any of error.type/message/stack.
+      for (const key of ['error.message', 'error.stack']) {
+        nativeSpans.queueOp.resetHistory()
+        spanContext.setTag(key, 'boom')
+        sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetError, leSpanId, ['i32', 1])
+        sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetMetaAttr, leSpanId, key, 'boom')
+      }
+    })
+
     it('extracts error meta from a plain error-shaped object (duck-typed like util.isError)', () => {
       // gRPC tags `error` with a plain `{ message, code }` object (not an Error
       // instance). Mirror the JS formatter's extractError so error.message meta
