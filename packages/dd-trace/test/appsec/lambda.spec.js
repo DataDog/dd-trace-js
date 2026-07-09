@@ -94,7 +94,7 @@ describe('AppSec Lambda handler', () => {
       assert.equal(span.context().getTag('http.client_ip'), '1.2.3.4')
     })
 
-    it('should call waf.run with mapped addresses using span as the invocation key', () => {
+    it('should call waf.run with mapped addresses, a synthetic req key, and the span as rootSpan', () => {
       const span = fakeSpan()
 
       lambda.onLambdaStartInvocation({
@@ -122,7 +122,8 @@ describe('AppSec Lambda handler', () => {
         [addresses.HTTP_INCOMING_PARAMS]: { id: '123' },
         [addresses.HTTP_INCOMING_COOKIES]: { session: 'abc' },
       })
-      assert.equal(key, span)
+      assert.deepStrictEqual(key, { headers: { host: 'example.com' } })
+      assert.notEqual(key, span)
       assert.equal(raspRule, undefined)
       assert.equal(rootSpan, span)
     })
@@ -197,7 +198,8 @@ describe('AppSec Lambda handler', () => {
         'content-type': 'application/json',
       })
       assert.ok(!('set-cookie' in data.persistent[addresses.HTTP_INCOMING_RESPONSE_HEADERS]))
-      assert.equal(key, span)
+      assert.deepStrictEqual(key, { headers: {} })
+      assert.notEqual(key, span)
 
       sinon.assert.calledOnce(waf.disposeContext)
       sinon.assert.calledOnce(Reporter.finishRequest)
@@ -238,19 +240,35 @@ describe('AppSec Lambda handler', () => {
       assert.equal(args[4], span)
     })
 
-    it('should pass span as req to Reporter.finishRequest', () => {
+    it('should pass the request headers captured at start-invocation as req to Reporter.finishRequest', () => {
       const span = fakeSpan()
 
-      lambda.onLambdaStartInvocation({ span, headers: {}, method: 'GET', path: '/' })
+      lambda.onLambdaStartInvocation({
+        span,
+        headers: { host: 'example.com', 'user-agent': 'system-tests' },
+        method: 'GET',
+        path: '/',
+      })
       lambda.onLambdaEndInvocation({ span, statusCode: '200' })
 
       sinon.assert.calledOnce(Reporter.finishRequest)
       const [req, res, storedHeaders, body, rootSpan] = Reporter.finishRequest.firstCall.args
-      assert.equal(req, span)
+      assert.deepStrictEqual(req, { headers: { host: 'example.com', 'user-agent': 'system-tests' } })
       assert.equal(res, null)
       assert.deepStrictEqual(storedHeaders, {})
       assert.equal(body, undefined)
       assert.equal(rootSpan, span)
+    })
+
+    it('should pass a req with empty headers to Reporter.finishRequest when no headers were captured', () => {
+      const span = fakeSpan()
+
+      lambda.onLambdaStartInvocation({ span, method: 'GET', path: '/' })
+      lambda.onLambdaEndInvocation({ span, statusCode: '200' })
+
+      sinon.assert.calledOnce(Reporter.finishRequest)
+      const req = Reporter.finishRequest.firstCall.args[0]
+      assert.deepStrictEqual(req, { headers: {} })
     })
 
     it('should catch errors and log them', () => {
@@ -264,7 +282,7 @@ describe('AppSec Lambda handler', () => {
       sinon.assert.calledOnce(log.error)
     })
 
-    it('should use span as key for WAF run and dispose across start and end', () => {
+    it('should use the same synthetic req key across WAF run, dispose, and finishRequest', () => {
       const span = fakeSpan()
 
       lambda.onLambdaStartInvocation({
@@ -279,25 +297,30 @@ describe('AppSec Lambda handler', () => {
       const startKey = waf.run.firstCall.args[1]
       const endKey = waf.run.secondCall.args[1]
       const disposeKey = waf.disposeContext.firstCall.args[0]
+      const finishReq = Reporter.finishRequest.firstCall.args[0]
 
-      assert.equal(startKey, span)
-      assert.equal(endKey, span)
-      assert.equal(disposeKey, span)
+      assert.equal(startKey, endKey)
+      assert.equal(startKey, disposeKey)
+      assert.equal(startKey, finishReq)
+      // ...and it is the synthetic req, never the span.
+      assert.notEqual(startKey, span)
+      assert.deepStrictEqual(startKey, { headers: { host: 'example.com' } })
     })
   })
 })
 
 // ─── WAF path safety: contract enforcement for non-HTTP req ───────────────────
 //
-// In Lambda, `req` in the WAF execution path is the span object, which has no
-// HTTP properties (no socket, headers, body, etc.). The tests below exercise
-// the real WAFContextWrapper → Reporter chain with such an object to verify that
-// no unguarded req property access exists.
+// The WAFContextWrapper → Reporter chain (reportAttack, reportMetrics,
+// reportAttributes) must not assume req is an HTTP IncomingMessage. In Lambda
+// the req object is a synthetic { headers } key with no socket, body, or HTTP
+// context attached.
 //
-// A Proxy-based `strictNonHttpReq` is used as the req object. It allows access
-// to properties that have been audited as safe (they return undefined and all
-// call-sites guard against it), and throws on any NEW property access. This
-// forces developers to explicitly acknowledge and guard new req usages.
+// A Proxy-based `strictNonHttpReq` is used here (rather than the real Lambda
+// req) to act as a trip-wire: it allows access to properties that have been
+// audited as safe and throws on any NEW unaudited access. This forces
+// developers to explicitly acknowledge and guard any new req property usage
+// before it ships.
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe('WAF path safety with non-HTTP req', () => {
