@@ -93,7 +93,10 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
 }
 
 function testRuntimeVersionChecks (arg, filename) {
-  context('runtime version check', () => {
+  const skipRuntimeVersionChecks = filename === 'initialize.mjs' && process.versions.node === '22.0.0'
+  const runtimeVersionContext = skipRuntimeVersionChecks ? context.skip : context
+
+  runtimeVersionContext('runtime version check', () => {
     const NODE_OPTIONS = `--${arg} dd-trace/${filename}`
     const entryFile = arg === 'loader' ? 'init/trace.mjs' : 'init/trace.js'
     const doTest = (expectedOut, expectedTelemetryPoints, expectedSource) =>
@@ -106,7 +109,6 @@ function testRuntimeVersionChecks (arg, filename) {
         delete process.env.DD_INJECT_FORCE
       }
     }
-    const node22LoaderRuntimeIt = arg === 'loader' && process.versions.node === '22.0.0' ? it.skip : it
 
     let pkgPath
     let pkgStr
@@ -156,7 +158,7 @@ Found incompatible runtime Node.js ${process.versions.node}, Supported runtimes:
 false
 `, telemetryAbort))
 
-          node22LoaderRuntimeIt('should initialize the tracer, if DD_INJECT_FORCE', () =>
+          it('should initialize the tracer, if DD_INJECT_FORCE', () =>
             doTestForced(`Aborting application instrumentation due to incompatible_runtime.
 Found incompatible runtime Node.js ${process.versions.node}, Supported runtimes: Node.js \
 >=${NODE_MAJOR + 1} <${MAX_NODE_MAJOR}.
@@ -177,13 +179,13 @@ true
         fs.writeFileSync(pkgPath, JSON.stringify(pkg))
       })
 
-      node22LoaderRuntimeIt('should not initialize the tracer', () => doTest('false\n', []))
+      it('should not initialize the tracer', () => doTest('false\n', []))
 
       context('with DD_INJECTION_ENABLED', () => {
         useEnv({ DD_INJECTION_ENABLED })
 
         context('without debug', () => {
-          node22LoaderRuntimeIt('should not initialize the tracer', () => doTest('false\n', telemetryAbort))
+          it('should not initialize the tracer', () => doTest('false\n', telemetryAbort))
 
           it('should initialize the tracer, if DD_INJECT_FORCE', () => doTestForced('true\n', telemetryForced))
         })
@@ -198,7 +200,7 @@ ${engines.node} <${NODE_MAJOR}.
 false
 `, telemetryAbort))
 
-          node22LoaderRuntimeIt('should initialize the tracer, if DD_INJECT_FORCE', () =>
+          it('should initialize the tracer, if DD_INJECT_FORCE', () =>
             doTestForced(`Aborting application instrumentation due to incompatible_runtime.
 Found incompatible runtime Node.js ${process.versions.node}, Supported runtimes: Node.js \
 ${engines.node} <${NODE_MAJOR}.
