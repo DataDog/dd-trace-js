@@ -128,9 +128,8 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
 
-  publish-electron-latest:
-    needs: publish-latest
-    if: github.event_name == 'push' && github.event.ref == 'refs/heads/v5.x'
+  publish-electron:
+    needs: publish
     runs-on: ubuntu-latest
     environment:
       name: npm
@@ -138,7 +137,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
       - uses: ./.github/actions/node
@@ -179,28 +178,6 @@ jobs:
           git push
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-  publish-electron-dev:
-    needs: publish-dev
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    environment:
-      name: npm
-      url: https://npmjs.com/package/dd-trace-electron
-    permissions:
-      id-token: write
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/node
-      - uses: ./.github/actions/install
-      - id: pkg
-        run: |
-          content=`cat ./package.json | tr '\n' ' '`
-          echo "json=$content" >> $GITHUB_OUTPUT
-      - run: npm version --no-git-tag-version ${{ fromJson(steps.pkg.outputs.json).version }}-$(git rev-parse --short HEAD)+${{ github.run_id }}.${{ github.run_attempt }}
-      - run: node scripts/release/publish-electron.js --tag dev
-
   publish-dev:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
@@ -230,3 +207,25 @@ jobs:
           git tag --force dev
           git push https://x-access-token:${{ steps.octo-sts.outputs.token }}@github.com/${{ github.repository }}.git :refs/tags/dev
           git push https://x-access-token:${{ steps.octo-sts.outputs.token }}@github.com/${{ github.repository }}.git --tags
+
+  publish-electron-dev:
+    needs: publish-dev
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment:
+      name: npm
+      url: https://npmjs.com/package/dd-trace-electron
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/node
+      - uses: ./.github/actions/install
+      - id: pkg
+        run: |
+          content=`cat ./package.json | tr '\n' ' '`
+          echo "json=$content" >> $GITHUB_OUTPUT
+      - run: npm version --no-git-tag-version ${{ fromJson(steps.pkg.outputs.json).version }}-$(git rev-parse --short HEAD)+${{ github.run_id }}.${{ github.run_attempt }}
+      - run: node scripts/release/publish-electron.js --tag dev
