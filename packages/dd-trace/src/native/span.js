@@ -101,8 +101,7 @@ function appendSpanEventAttr (chunks, key, value) {
     }
     return
   }
-  chunks.push(encodeLenPrefixedStr(key))
-  chunks.push(encodeAttrScalar(value))
+  chunks.push(encodeLenPrefixedStr(key), encodeAttrScalar(value))
 }
 
 // Encode sanitized span-event attributes (`_sanitizeEventAttributes` leaves
