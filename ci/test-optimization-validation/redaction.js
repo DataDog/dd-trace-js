@@ -64,7 +64,7 @@ const SECRET_FLAG_NAME_PATTERN = new RegExp(
   String.raw`^--(?:${SECRET_FLAG_SOURCE})(?:-[A-Za-z0-9]+)*$`,
   'i'
 )
-const AUTH_HEADER_PATTERN = /\b(Bearer)\s+\S+/gi
+const AUTH_HEADER_PATTERN = /\b(Bearer)\s+([^\s'",}\]]+)/gi
 const SECRET_HEADER_NAME_SOURCE = [
   'dd-api-key',
   'x-api-key',
@@ -214,8 +214,11 @@ function sanitizeArray (value, seen, key) {
   for (let index = 0; index < value.length; index++) {
     const item = value[index]
     if (typeof item === 'string' && SECRET_FLAG_NAME_PATTERN.test(item) && index + 1 < value.length) {
-      sanitized.push(sanitizeString(item), REDACTED)
-      index++
+      sanitized.push(sanitizeString(item))
+      if (!isFlagToken(value[index + 1])) {
+        sanitized.push(REDACTED)
+        index++
+      }
       continue
     }
 
@@ -223,6 +226,10 @@ function sanitizeArray (value, seen, key) {
   }
 
   return sanitized
+}
+
+function isFlagToken (value) {
+  return typeof value === 'string' && /^-{1,2}\S/.test(value)
 }
 
 module.exports = {

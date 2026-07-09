@@ -293,6 +293,35 @@ describe('test optimization validation static diagnosis', () => {
     }
   })
 
+  it('does not coerce bounded framework ranges to unsupported lower-bound versions', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
+
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      devDependencies: {
+        'dd-trace': 'file:../dd-trace',
+        jest: '>=27 <30',
+      },
+      scripts: {
+        test: 'NODE_OPTIONS="-r dd-trace/ci/init" jest',
+      },
+    }))
+
+    try {
+      const report = runDiagnosis({
+        root,
+        execFile () {
+          throw new Error('git unavailable')
+        },
+      })
+      const titles = report.results.map(result => result.title)
+
+      assert.ok(titles.includes('Jest version could not be determined'))
+      assert.ok(!titles.includes('Jest 27.0.0 is not supported'))
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('does not select Jest watchAll scripts as eligible validation commands', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
 

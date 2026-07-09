@@ -1798,7 +1798,7 @@ function isAmbiguousRange (rawVersion) {
   const version = String(rawVersion || '').trim()
   if (!version) return true
   if (version.includes('||')) return true
-  return /^<=?\s*\d/.test(version)
+  return /<=?\s*\d/.test(version)
 }
 
 /**

@@ -95,6 +95,12 @@ describe('test optimization validation redaction', () => {
     assert.doesNotMatch(output, /authorization-colon-secret/)
   })
 
+  it('preserves JSON structure when redacting bearer values', () => {
+    const output = sanitizeString('{"Authorization": "Bearer secret-token"}')
+
+    assert.strictEqual(output, '{"Authorization": "Bearer <redacted>"}')
+  })
+
   it('redacts split secret flag values in arrays', () => {
     const report = sanitizeForReport({
       argv: ['node', 'test.js', '--api-key', 'api-key-secret', '--token', 'token-secret', '--safe', 'visible'],
@@ -116,6 +122,19 @@ describe('test optimization validation redaction', () => {
     assert.deepStrictEqual(report.nested.processArgv, [
       'vitest',
       '--client-secret',
+      '<redacted>',
+    ])
+  })
+
+  it('does not consume consecutive secret flags as each other values', () => {
+    const report = sanitizeForReport({
+      argv: ['node', '--api-key', '--token', 'actual-token-value'],
+    })
+
+    assert.deepStrictEqual(report.argv, [
+      'node',
+      '--api-key',
+      '--token',
       '<redacted>',
     ])
   })
