@@ -2781,6 +2781,8 @@ describeCloudflareWorkers('vitest@3.2.4 with @cloudflare/vitest-pool-workers@0.1
           TEST_DIR: 'ci-visibility/vitest-tests/cloudflare-worker-pool.mjs',
           CLOUDFLARE_WORKERS_POOL: '1',
           USE_VITEST_DEFAULT_POOL: '1',
+          // The emoji keeps this a regression test: Miniflare rejects its UTF-16 surrogate when
+          // DD_GIT_COMMIT_MESSAGE is accidentally propagated through Vitest providedContext headers.
           DD_GIT_COMMIT_MESSAGE: 'ship vitest metadata 😄',
           DD_SERVICE: undefined,
         },
