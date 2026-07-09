@@ -73,9 +73,9 @@ channels.
 The validator separates two questions:
 
 1. **Direct-initialization capability**: can this repository, framework, and selected command report
-   when the validator applies the required Datadog setup directly?
+    when the validator applies the required Datadog setup directly?
 2. **CI wiring**: does the customer's CI-shaped test command already pass the required Datadog setup
-   to the process that actually runs tests?
+    to the process that actually runs tests?
 
 Direct-initialization Basic Reporting is the prerequisite diagnostic control. A Basic Reporting pass
 must not be reported as "CI wiring passed" unless the separate CI wiring path also proves that the
@@ -120,16 +120,16 @@ In large monorepos, do not enumerate every package before checkpointing.
 1. Discover CI workflow definitions before choosing local package scripts.
 2. Identify CI jobs, stages, or steps that install dependencies, set up Node, and run tests.
 3. Reproduce the CI test command shape as faithfully as practical and record whether CI appears to
-   provide Test Optimization initialization to the final test process.
+    provide Test Optimization initialization to the final test process.
 4. Discover every test framework present in the repository.
 5. Install declared project dependencies or run documented setup only when needed for runner
-   availability.
+    availability.
 6. Select `existingTestCommand` for each runnable framework. Prefer the CI-derived test command,
-   but keep it Datadog-clean: do not include CI-provided `NODE_OPTIONS` or Datadog env here.
+    but keep it Datadog-clean: do not include CI-provided `NODE_OPTIONS` or Datadog env here.
 7. Run each selected `existingTestCommand` without adding Datadog instrumentation and record the
-   preflight result.
+    preflight result.
 8. Immediately write `./dd-test-optimization-validation-manifest.json` with framework detection,
-   CI wiring evidence, existing commands, preflight results, and non-runnable reasons.
+    CI wiring evidence, existing commands, preflight results, and non-runnable reasons.
 9. Create and verify temporary generated validation tests for each runnable framework.
 10. Delete temporary files.
 11. Update the manifest with generated test strategies.

@@ -128,7 +128,8 @@ describe('test optimization validation command runner', () => {
 
       assert.strictEqual(result.timedOut, true)
       assert.strictEqual(result.exitCode, null)
-      assert.strictEqual(result.signal, 'SIGKILL')
+      // Windows does not expose Unix-style SIGKILL escalation; SIGTERM terminates the process.
+      assert.strictEqual(result.signal, process.platform === 'win32' ? 'SIGTERM' : 'SIGKILL')
     } finally {
       fs.rmSync(outDir, { recursive: true, force: true })
     }
