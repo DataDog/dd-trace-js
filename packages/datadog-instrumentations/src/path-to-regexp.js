@@ -29,19 +29,28 @@ addHook({ name: 'path-to-regexp', versions: ['*'] }, moduleExports => {
     }
   }
 
-  // Capture only path-to-regexp 8.x's `parse()` (Express 5), identified by a `.tokens` array on the
-  // result. AppSec route normalization consumes this token tree; older majors lack `parse` (0.1.x)
-  // or return a different shape.
+  // Capture only path-to-regexp 8.x's `parse()` (Express 5). Probe it once with a known pattern and
+  // adopt it only if it returns the v8 TokenData shape ({ tokens: [...] }). This keeps a later-loaded
+  // older major (6.x/7.x `parse()` returns a bare array) from overwriting a working v8 adapter and
+  // silently disabling normalization.
   if (typeof moduleExports?.parse === 'function') {
     const parse = moduleExports.parse
-    parseTokens = pattern => {
-      let result
-      try {
-        result = parse(pattern)
-      } catch {
-        return
+    let probe
+    try {
+      probe = parse('/')
+    } catch {
+      // not a usable parser
+    }
+    if (Array.isArray(probe?.tokens)) {
+      parseTokens = pattern => {
+        let result
+        try {
+          result = parse(pattern)
+        } catch {
+          return
+        }
+        if (Array.isArray(result?.tokens)) return result
       }
-      if (Array.isArray(result?.tokens)) return result
     }
   }
 

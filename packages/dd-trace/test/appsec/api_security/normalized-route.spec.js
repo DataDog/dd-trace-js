@@ -343,6 +343,13 @@ describe('normalizeRouteExpress', () => {
       assert.equal(normalize('/foo{bar}baz', {}, '/foobaz'), '/foobaz')
     })
 
+    it('supports multiple static optional groups in one segment (literal, no ambiguity)', () => {
+      assert.equal(normalize('/a{b}{c}', {}, '/abc'), '/abc')
+      assert.equal(normalize('/a{b}{c}', {}, '/ab'), '/ab')
+      assert.equal(normalize('/a{b}{c}', {}, '/ac'), '/ac')
+      assert.equal(normalize('/a{b}{c}', {}, '/a'), '/a')
+    })
+
     it('rolls back a static intra-segment marker when a later segment fails, then uses params', () => {
       // '/foobar' matches the first segment (marker recorded), but '/w' != '/z' fails the tail, so
       // the URL match is abandoned and params (empty) decide: the optional static is absent.

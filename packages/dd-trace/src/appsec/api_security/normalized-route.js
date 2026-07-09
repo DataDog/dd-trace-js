@@ -173,11 +173,11 @@ function compileRoute (route, parse) {
   }
 
   // Reject single-segment shapes the delimiter-agnostic per-segment matcher can't resolve like
-  // path-to-regexp does: a non-terminal wildcard in a segment ('/files/*path.:ext', '/*a-*b'), a
-  // param/wildcard inside an intra-segment optional group ('/:a{.:b}c', '/:a{.:b}-*rest'), or more
-  // than one intra-segment optional group ('/:a{.:b}{-:c}'). Static-only optional groups are fine.
+  // path-to-regexp does: a non-terminal wildcard in a segment ('/files/*path.:ext', '/*a-*b') and a
+  // param/wildcard inside an intra-segment optional group ('/:a{.:b}c', '/:a{.:b}-*rest'). Static
+  // intra-segment optional groups — any number ('/a{b}{c}') — are literal, so the marker matcher
+  // resolves them exactly.
   for (const seg of cleaned) {
-    const intraGroups = new Set()
     seg.wildcardIndex = -1
     let prevDynamic = false
     for (let k = 0; k < seg.tokens.length; k++) {
@@ -191,12 +191,8 @@ function compileRoute (route, parse) {
         if (k !== seg.tokens.length - 1) return null
         seg.wildcardIndex = k
       }
-      if (isStrictDescendant(t.group, seg.group, groupParent)) {
-        if (t.type === 'param' || t.type === 'wildcard') return null
-        intraGroups.add(t.group)
-      }
+      if (dynamic && isStrictDescendant(t.group, seg.group, groupParent)) return null
     }
-    if (intraGroups.size > 1) return null
   }
 
   // An optional group that spans more than one URL segment ('{/:a/:b}', '{b/:c}{/:d}') is atomic in
