@@ -198,7 +198,7 @@ ${engines.node} <${NODE_MAJOR}.
 false
 `, telemetryAbort))
 
-          it('should initialize the tracer, if DD_INJECT_FORCE', () =>
+          node22LoaderRuntimeIt('should initialize the tracer, if DD_INJECT_FORCE', () =>
             doTestForced(`Aborting application instrumentation due to incompatible_runtime.
 Found incompatible runtime Node.js ${process.versions.node}, Supported runtimes: Node.js \
 ${engines.node} <${NODE_MAJOR}.
