@@ -7,7 +7,7 @@ const DISTRIBUTED_TRACE_META_KEY = '_dd_trace_context'
 function joinValues (items, property) {
   let values = ''
   for (const item of items) {
-    const value = item?.[property]
+    const value = item[property]
     if (value) {
       if (values) values += ','
       values += value
@@ -55,8 +55,11 @@ function tagRequestParams (span, request) {
   if (params.arguments) tagArgumentKeys(span, params.arguments)
 }
 
-function tagRequestResult (span, result) {
+function tagRequestResult (span, result, tagError) {
   if (!result) return
+  const isError = tagError && result.isError
+  let errorMessage
+
   if (Array.isArray(result.tools)) {
     const toolNames = joinValues(result.tools, 'name')
     if (toolNames) span.setTag('mcp.tool.names', toolNames)
@@ -91,9 +94,16 @@ function tagRequestResult (span, result) {
         if (contentTypes) contentTypes += ','
         contentTypes += item.type
       }
+      if (isError && errorMessage === undefined && item.type === 'text' && item.text) {
+        errorMessage = item.text
+      }
     }
 
     if (contentTypes) span.setTag('mcp.tool.response.content_types', contentTypes)
+  }
+
+  if (isError) {
+    setErrorTags(span, errorMessage || 'Tool call returned isError: true')
   }
 }
 

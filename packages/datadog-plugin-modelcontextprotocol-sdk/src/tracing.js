@@ -126,10 +126,8 @@ class McpServerRequestPlugin extends McpPlugin {
   onEnd (span, ctx) {
     if (ctx.error) {
       span.setTag('error', ctx.error)
-    } else {
-      tagErrorResult(span, ctx.result)
     }
-    tagRequestResult(span, ctx.result)
+    tagRequestResult(span, ctx.result, !ctx.error)
   }
 }
 
