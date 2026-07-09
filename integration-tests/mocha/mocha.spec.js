@@ -6537,8 +6537,10 @@ describe(`mocha@${MOCHA_VERSION}`, function () {
         assert.strictEqual(test.meta[TEST_RETRY_REASON], TEST_RETRY_REASON_TYPES.atf)
       })
 
-      assert.strictEqual(tests[tests.length - 1].meta[TEST_FINAL_STATUS], 'fail')
-      assert.strictEqual(tests[tests.length - 1].meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
+      const finalStatusTest = tests.find(test => TEST_FINAL_STATUS in test.meta)
+      assert.ok(finalStatusTest)
+      assert.strictEqual(finalStatusTest.meta[TEST_FINAL_STATUS], 'fail')
+      assert.strictEqual(finalStatusTest.meta[TEST_MANAGEMENT_ATTEMPT_TO_FIX_PASSED], 'false')
     }
 
     context('test is not new', () => {
