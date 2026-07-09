@@ -531,8 +531,10 @@ describe('NativeDatadogSpan', () => {
       assert.strictEqual(first.args[0], span._spanContext._nativeSpanId)
       assert.strictEqual(first.args[1], 'exception')
       assert.strictEqual(first.args[2], BigInt(Math.round(2 * 1e6)))
+      // Arrays are flattened into indexed scalar keys (matches the DD
+      // span_events shape / the JS formatter's addArrayOrScalarAttribute).
       assert.deepStrictEqual(decodeSpanEventAttrs(first.args[3]), {
-        msg: 'boom', code: 42n, ratio: 0.5, ok: true, tags: ['a', 'b'],
+        msg: 'boom', code: 42n, ratio: 0.5, ok: true, 'tags.0': 'a', 'tags.1': 'b',
       })
 
       const second = nativeSpans.addSpanEvent.getCall(1)

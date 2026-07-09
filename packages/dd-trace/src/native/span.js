@@ -88,29 +88,34 @@ function encodeAttrScalar (value) {
   return out
 }
 
-// Encode sanitized span-event attributes (`_sanitizeEventAttributes` leaves
-// scalars or arrays of scalars) into the flat little-endian buffer the native
+// Flatten an attribute into the flat little-endian buffer the native
 // `addSpanEvent` decodes (`decode_span_event_attributes` in the pipeline
-// crate): repeated `[key_len:u32][key][tag:u8] + value`, where an array value
-// is `[4][count:u32]` followed by `count` `[item_tag:u8] + scalar` items.
+// crate): repeated `[key_len:u32][key][tag:u8] + value`. Arrays are flattened
+// into indexed scalar keys (`key.0`, `key.1`, ...), mirroring the JS
+// formatter's addArrayOrScalarAttribute — the DD span_events attribute shape is
+// flat, whereas a native array would serialize as an OTLP `{values:[...]}`.
+function appendSpanEventAttr (chunks, key, value) {
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) {
+      appendSpanEventAttr(chunks, `${key}.${i}`, value[i])
+    }
+    return
+  }
+  chunks.push(encodeLenPrefixedStr(key))
+  chunks.push(encodeAttrScalar(value))
+}
+
+// Encode sanitized span-event attributes (`_sanitizeEventAttributes` leaves
+// scalars or arrays of scalars) for `addSpanEvent`.
 function encodeSpanEventAttrs (attributes) {
   if (!attributes) return EMPTY_ATTRS
   const keys = Object.keys(attributes)
   if (keys.length === 0) return EMPTY_ATTRS
   const chunks = []
   for (const key of keys) {
-    chunks.push(encodeLenPrefixedStr(key))
-    const value = attributes[key]
-    if (Array.isArray(value)) {
-      const head = Buffer.allocUnsafe(5)
-      head.writeUInt8(4, 0)
-      head.writeUInt32LE(value.length >>> 0, 1)
-      chunks.push(head)
-      for (const item of value) chunks.push(encodeAttrScalar(item))
-    } else {
-      chunks.push(encodeAttrScalar(value))
-    }
+    appendSpanEventAttr(chunks, key, attributes[key])
   }
+  if (chunks.length === 0) return EMPTY_ATTRS
   return Buffer.concat(chunks)
 }
 
