@@ -1,6 +1,6 @@
 'use strict'
 
-const { format } = require('util')
+const { format, types } = require('util')
 
 // other times we produce an Error in a central location and log it several other places
 class NoTransmitError extends Error {}
@@ -61,7 +61,7 @@ class Log {
 
 function hasErrorStack (value) {
   if (!value || typeof value !== 'object') return false
-  if (value instanceof Error) return true
+  if (types.isNativeError(value)) return true
 
   const stack = Object.getOwnPropertyDescriptor(value, 'stack')
   return Boolean(stack && 'value' in stack && stack.value)

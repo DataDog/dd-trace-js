@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict')
 const { inspect } = require('node:util')
+const vm = require('node:vm')
 
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
@@ -392,6 +393,17 @@ describe('log', () => {
         assert.strictEqual(console.error.firstCall.args[0].message, 'this is an error')
         assert.ok(console.error.secondCall.args[0] instanceof Error)
         assert.strictEqual(console.error.secondCall.args[0].message, 'cause')
+      })
+
+      it('should allow a message + cross-realm Error', () => {
+        const cause = vm.runInNewContext('new Error("cause")')
+
+        log.error('this is an error', cause)
+
+        sinon.assert.calledTwice(console.error)
+        assert.ok(console.error.firstCall.args[0] instanceof Error)
+        assert.strictEqual(console.error.firstCall.args[0].message, 'this is an error')
+        assert.strictEqual(console.error.secondCall.args[0], cause)
       })
 
       it('should allow a message + object with stack', () => {
