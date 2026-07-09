@@ -6,9 +6,18 @@ const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const {
   DISTRIBUTED_TRACE_META_KEY,
   tagErrorResult,
-  tagRequestParams,
   tagRequestResult,
 } = require('./utils')
+
+const MCP_REQUEST_SPAN_NAME = 'mcp.request'
+const CLIENT_TOOL_CALL_RESOURCE = 'client_tool_call'
+const CLIENT_LIST_TOOLS_RESOURCE = 'ClientSession.list_tools'
+const SERVER_TOOL_CALL_RESOURCE = 'server_tool_call'
+
+function getServerRequestResource (request) {
+  if (request?.method === 'tools/call') return SERVER_TOOL_CALL_RESOURCE
+  return request?.method
+}
 
 class McpPlugin extends TracingPlugin {
   bindStart (ctx) {
@@ -59,18 +68,18 @@ class McpPropagationPlugin extends Plugin {
 class McpToolCallPlugin extends McpPlugin {
   static id = 'modelcontextprotocol_client'
   static prefix = 'tracing:orchestrion:@modelcontextprotocol/sdk:Client_callTool'
-  static spanName = 'mcp.client.tool.call'
+  static spanName = MCP_REQUEST_SPAN_NAME
   static kind = 'client'
-  getResource (ctx) { return ctx.arguments?.[0]?.name }
+  getResource () { return CLIENT_TOOL_CALL_RESOURCE }
   onEnd (span, ctx) { tagErrorResult(span, ctx.result) }
 }
 
 class McpListToolsPlugin extends McpPlugin {
   static id = 'modelcontextprotocol_list_tools'
   static prefix = 'tracing:orchestrion:@modelcontextprotocol/sdk:Client_listTools'
-  static spanName = 'mcp.tools.list'
+  static spanName = MCP_REQUEST_SPAN_NAME
   static kind = 'client'
-  getResource () { return 'tools/list' }
+  getResource () { return CLIENT_LIST_TOOLS_RESOURCE }
 }
 
 class McpListResourcesPlugin extends McpPlugin {
@@ -108,9 +117,9 @@ class McpGetPromptPlugin extends McpPlugin {
 class McpServerRequestPlugin extends McpPlugin {
   static id = 'modelcontextprotocol_server'
   static prefix = 'tracing:apm:mcp:server:request'
-  static spanName = 'mcp.server.request'
+  static spanName = MCP_REQUEST_SPAN_NAME
   static kind = 'server'
-  getResource (ctx) { return ctx.request?.method }
+  getResource (ctx) { return getServerRequestResource(ctx.request) }
   getChildOf (ctx) {
     const traceContext = ctx.request?.params?._meta?.[DISTRIBUTED_TRACE_META_KEY]
     if (!traceContext || typeof traceContext !== 'object') return
@@ -122,7 +131,6 @@ class McpServerRequestPlugin extends McpPlugin {
     return childOf
   }
 
-  onStart (span, ctx) { tagRequestParams(span, ctx.request) }
   onEnd (span, ctx) {
     if (ctx.error) {
       span.setTag('error', ctx.error)

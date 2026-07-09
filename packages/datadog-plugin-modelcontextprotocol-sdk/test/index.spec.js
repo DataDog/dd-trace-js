@@ -26,14 +26,14 @@ describe('plugin lifecycle', () => {
 
 function assertClientServerParenting (spans, clientResource) {
   const clientSpan = spans.find(s => {
-    return s.name === 'mcp.client.tool.call' && s.resource === clientResource
+    return s.name === 'mcp.request' && s.resource === clientResource
   })
   const serverSpan = spans.find(s => {
-    return s.name === 'mcp.server.request' && s.resource === 'tools/call'
+    return s.name === 'mcp.request' && s.resource === 'server_tool_call'
   })
 
-  assert.ok(clientSpan, 'mcp.client.tool.call span should exist')
-  assert.ok(serverSpan, 'mcp.server.request span should exist')
+  assert.ok(clientSpan, 'client tool call span should exist')
+  assert.ok(serverSpan, 'server tool call request span should exist')
   assert.strictEqual(
     serverSpan.trace_id.toString(),
     clientSpan.trace_id.toString(),
@@ -44,6 +44,28 @@ function assertClientServerParenting (spans, clientResource) {
     clientSpan.span_id.toString(),
     'server request span parent_id should equal client tool call span_id'
   )
+}
+
+function assertSpanDoesNotHaveTags (span, tagNames) {
+  const meta = span.meta || {}
+  const metrics = span.metrics || {}
+
+  for (const tagName of tagNames) {
+    assert.strictEqual(Object.hasOwn(meta, tagName), false, `${tagName} should not be set as span meta`)
+    assert.strictEqual(Object.hasOwn(metrics, tagName), false, `${tagName} should not be set as span metric`)
+  }
+}
+
+function expectServerRequestWithoutTags (agent, resource, tagNames) {
+  return agent.assertSomeTraces(traces => {
+    const spans = traces.flatMap(trace => trace)
+    const span = spans.find(span => {
+      return span.name === 'mcp.request' && span.resource === resource
+    })
+
+    assert.ok(span, `mcp.request span should exist for ${resource}`)
+    assertSpanDoesNotHaveTags(span, tagNames)
+  })
 }
 
 createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sdk', {
@@ -59,12 +81,12 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
     await testSetup.teardown()
   })
 
-  describe('Client.callTool() - mcp.client.tool.call', () => {
+  describe('Client.callTool() - mcp.request', () => {
     it('should generate span with correct tags (happy path)', async () => {
       const traceAssertion = expectSomeSpan(agent, {
-        name: 'mcp.client.tool.call',
+        name: 'mcp.request',
         type: 'mcp',
-        resource: 'test-tool',
+        resource: 'client_tool_call',
         meta: {
           component: 'modelcontextprotocol_client',
           '_dd.integration': 'modelcontextprotocol_client',
@@ -83,9 +105,9 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
 
     it('should generate span with error tags (error path)', async () => {
       const traceAssertion = expectSomeSpan(agent, {
-        name: 'mcp.client.tool.call',
+        name: 'mcp.request',
         type: 'mcp',
-        resource: 'error-tool',
+        resource: 'client_tool_call',
         error: 1,
         meta: {
           component: 'modelcontextprotocol_client',
@@ -132,12 +154,12 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
     })
   })
 
-  describe('Client.listTools() - mcp.tools.list', () => {
+  describe('Client.listTools() - mcp.request', () => {
     it('should generate span with correct tags (happy path)', async () => {
       const traceAssertion = expectSomeSpan(agent, {
-        name: 'mcp.tools.list',
+        name: 'mcp.request',
         type: 'mcp',
-        resource: 'tools/list',
+        resource: 'ClientSession.list_tools',
         meta: {
           component: 'modelcontextprotocol_list_tools',
           '_dd.integration': 'modelcontextprotocol_list_tools',
@@ -205,130 +227,60 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
     })
   })
 
-  describe('Protocol.setRequestHandler - mcp.server.request', () => {
-    it('should tag mcp.tool.name and argument shape on tools/call', async () => {
-      const traceAssertion = expectSomeSpan(agent, {
-        name: 'mcp.server.request',
-        resource: 'tools/call',
-        meta: {
-          component: 'modelcontextprotocol_server',
-          'mcp.tool.name': 'test-tool',
-          'mcp.request.argument_keys': 'query',
-        },
-        metrics: {
-          'mcp.request.argument_count': 1,
-        },
-      })
+  describe('Protocol.setRequestHandler - mcp.request', () => {
+    it('should not tag tool request arguments or response shape on tools/call', async () => {
+      const traceAssertion = expectServerRequestWithoutTags(agent, 'server_tool_call', [
+        'mcp.tool.name',
+        'mcp.request.argument_keys',
+        'mcp.request.argument_count',
+        'mcp.request.arguments',
+        'mcp.tool.response',
+        'mcp.tool.response.content_count',
+        'mcp.tool.response.content_types',
+      ])
 
       await testSetup.clientCallTool()
 
       return traceAssertion
     })
 
-    it('should tag mcp.tool.response shape on tools/call', async () => {
-      const traceAssertion = expectSomeSpan(agent, {
-        name: 'mcp.server.request',
-        resource: 'tools/call',
-        meta: {
-          'mcp.tool.response.content_types': 'text',
-        },
-        metrics: {
-          'mcp.tool.response.content_count': 1,
-        },
-      })
-
-      await testSetup.clientCallTool()
-
-      return traceAssertion
-    })
-
-    it('should not tag raw tool arguments or response content on tools/call', async () => {
-      const traceAssertion = agent.assertSomeTraces(traces => {
-        const spans = traces.flatMap(trace => trace)
-        const span = spans.find(span => {
-          return span.name === 'mcp.server.request' && span.resource === 'tools/call'
-        })
-
-        assert.ok(span, 'mcp.server.request span should exist')
-        assert.strictEqual(Object.hasOwn(span.meta, 'mcp.request.arguments'), false)
-        assert.strictEqual(Object.hasOwn(span.meta, 'mcp.tool.response'), false)
-      })
-
-      await testSetup.clientCallTool()
-
-      return traceAssertion
-    })
-
-    it('should tag mcp.tool.names on tools/list', async () => {
-      const traceAssertion = expectSomeSpan(agent, {
-        name: 'mcp.server.request',
-        resource: 'tools/list',
-        meta: {
-          component: 'modelcontextprotocol_server',
-          'mcp.tool.names': 'test-tool,error-tool',
-        },
-      })
+    it('should not tag tool inventories on tools/list', async () => {
+      const traceAssertion = expectServerRequestWithoutTags(agent, 'tools/list', ['mcp.tool.names'])
 
       await testSetup.clientListTools()
 
       return traceAssertion
     })
 
-    it('should tag mcp.resource.uri on resources/read', async () => {
-      const traceAssertion = expectSomeSpan(agent, {
-        name: 'mcp.server.request',
-        resource: 'resources/read',
-        meta: {
-          component: 'modelcontextprotocol_server',
-          'mcp.resource.uri': 'file:///test-resource.txt',
-        },
-      })
+    it('should not tag resource URI on resources/read', async () => {
+      const traceAssertion = expectServerRequestWithoutTags(agent, 'resources/read', ['mcp.resource.uri'])
 
       await testSetup.clientReadResource()
 
       return traceAssertion
     })
 
-    it('should tag mcp.resource.uris on resources/list', async () => {
-      const traceAssertion = expectSomeSpan(agent, {
-        name: 'mcp.server.request',
-        resource: 'resources/list',
-        meta: {
-          component: 'modelcontextprotocol_server',
-          'mcp.resource.uris': 'file:///test-resource.txt',
-        },
-      })
+    it('should not tag resource inventories on resources/list', async () => {
+      const traceAssertion = expectServerRequestWithoutTags(agent, 'resources/list', ['mcp.resource.uris'])
 
       await testSetup.clientListResources()
 
       return traceAssertion
     })
 
-    it('should tag mcp.prompt.name and mcp.request.arguments on prompts/get', async () => {
-      const traceAssertion = expectSomeSpan(agent, {
-        name: 'mcp.server.request',
-        resource: 'prompts/get',
-        meta: {
-          component: 'modelcontextprotocol_server',
-          'mcp.prompt.name': 'test-prompt',
-        },
-      })
+    it('should not tag prompt name on prompts/get', async () => {
+      const traceAssertion = expectServerRequestWithoutTags(agent, 'prompts/get', ['mcp.prompt.name'])
 
       await testSetup.clientGetPrompt()
 
       return traceAssertion
     })
 
-    it('should tag mcp.prompt.names and mcp.prompt.descriptions on prompts/list', async () => {
-      const traceAssertion = expectSomeSpan(agent, {
-        name: 'mcp.server.request',
-        resource: 'prompts/list',
-        meta: {
-          component: 'modelcontextprotocol_server',
-          'mcp.prompt.names': 'test-prompt',
-          'mcp.prompt.descriptions': 'A test prompt',
-        },
-      })
+    it('should not tag prompt inventories on prompts/list', async () => {
+      const traceAssertion = expectServerRequestWithoutTags(agent, 'prompts/list', [
+        'mcp.prompt.names',
+        'mcp.prompt.descriptions',
+      ])
 
       await testSetup.clientListPrompts()
 
@@ -337,9 +289,9 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
 
     it('should generate server request span with error when tools/call returns isError', async () => {
       const traceAssertion = expectSomeSpan(agent, {
-        name: 'mcp.server.request',
+        name: 'mcp.request',
         type: 'mcp',
-        resource: 'tools/call',
+        resource: 'server_tool_call',
         error: 1,
         meta: {
           component: 'modelcontextprotocol_server',
@@ -355,9 +307,9 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
 
     it('should finish server request spans with error when tools/call request validation fails', async () => {
       const traceAssertion = expectSomeSpan(agent, {
-        name: 'mcp.server.request',
+        name: 'mcp.request',
         type: 'mcp',
-        resource: 'tools/call',
+        resource: 'server_tool_call',
         error: 1,
         meta: {
           component: 'modelcontextprotocol_server',
@@ -382,7 +334,7 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
       })
 
       const traceAssertion = expectSomeSpan(agent, {
-        name: 'mcp.server.request',
+        name: 'mcp.request',
         type: 'mcp',
         resource: 'resources/templates/list',
         error: 1,
@@ -404,7 +356,7 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
 
     it('should finish server request spans with error for allowlisted unknown methods', async () => {
       const traceAssertion = expectSomeSpan(agent, {
-        name: 'mcp.server.request',
+        name: 'mcp.request',
         type: 'mcp',
         resource: 'tools/unknown',
         error: 1,
@@ -424,7 +376,7 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
   })
 
   describe('context propagation', () => {
-    it('mcp.server.request span should be a child of mcp.client.tool.call span', async () => {
+    it('server tool call request span should be a child of client tool call span', async () => {
       // Client and server run in the same process via InMemoryTransport, so async
       // context propagation carries the client span into the server _onrequest handler.
       // Distributed extraction can split linked spans across trace payloads, so aggregate
@@ -432,7 +384,7 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
       const spans = []
       const traceAssertion = agent.assertSomeTraces(traces => {
         spans.push(...traces.flatMap(trace => trace))
-        assertClientServerParenting(spans, 'test-tool')
+        assertClientServerParenting(spans, 'client_tool_call')
       })
 
       await testSetup.clientCallTool()
@@ -440,7 +392,7 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
       return traceAssertion
     })
 
-    it('mcp.server.request span should use _meta trace context when async context is absent', async () => {
+    it('server tool call request span should use _meta trace context when async context is absent', async () => {
       const { McpServer } = meta.versionMod.get('@modelcontextprotocol/sdk/server/mcp.js')
       const { InMemoryTransport } = meta.versionMod.get('@modelcontextprotocol/sdk/inMemory.js')
       const { Client } = meta.mod
@@ -470,7 +422,7 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
       const spans = []
       const traceAssertion = agent.assertSomeTraces(traces => {
         spans.push(...traces.flatMap(trace => trace))
-        assertClientServerParenting(spans, 'distributed-tool')
+        assertClientServerParenting(spans, 'client_tool_call')
       })
 
       try {
@@ -522,9 +474,9 @@ createIntegrationTestSuite('modelcontextprotocol-sdk', '@modelcontextprotocol/sd
       await disconnectClient.connect(clientTransport)
 
       const traceAssertion = expectSomeSpan(agent, {
-        name: 'mcp.server.request',
+        name: 'mcp.request',
         type: 'mcp',
-        resource: 'tools/call',
+        resource: 'server_tool_call',
         meta: {
           component: 'modelcontextprotocol_server',
           '_dd.integration': 'modelcontextprotocol_server',
