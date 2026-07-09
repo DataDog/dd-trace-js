@@ -47,8 +47,11 @@ function onErrorLog (msg) {
   }
 
   if (cause) {
-    telLog.stack_trace = getErrorStack(cause)
-    telLog.errorType = cause.constructor.name
+    const stack = getErrorStack(cause)
+    telLog.stack_trace = stack
+    if (stack) {
+      telLog.errorType = cause.constructor.name
+    }
   }
 
   onLog(telLog)

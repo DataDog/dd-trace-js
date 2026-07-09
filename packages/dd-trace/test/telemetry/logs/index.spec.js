@@ -1,5 +1,7 @@
 'use strict'
 
+const assert = require('node:assert/strict')
+
 const { describe, it, beforeEach, afterEach } = require('mocha')
 const sinon = require('sinon')
 const proxyquire = require('proxyquire')
@@ -177,12 +179,13 @@ describe('telemetry logs', () => {
           Error.prepareStackTrace = prepareStackTrace
         }
 
-        sinon.assert.calledOnceWithExactly(logCollectorAdd, match({
+        sinon.assert.calledOnce(logCollectorAdd)
+        sinon.assert.calledWithExactly(logCollectorAdd, match({
           message: 'Generic Error',
           level: 'ERROR',
-          errorType: 'Error',
           stack_trace: undefined,
         }))
+        assert.strictEqual(Object.hasOwn(logCollectorAdd.firstCall.args[0], 'errorType'), false)
       })
 
       it('should be called when an error string is published to datadog:log:error', () => {

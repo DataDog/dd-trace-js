@@ -359,16 +359,20 @@ describe('log', () => {
       })
 
       it('should not treat non-errors with falsy stack values as causes', () => {
-        const stackValues = [undefined, null, '']
+        const cases = [
+          { stack: undefined, message: 'payload {"foo":"bar"}' },
+          { stack: null, message: 'payload {"stack":null,"foo":"bar"}' },
+          { stack: '', message: 'payload {"stack":"","foo":"bar"}' },
+        ]
 
-        for (const stack of stackValues) {
+        for (const { stack, message } of cases) {
           console.error.resetHistory()
 
-          log.error('this is an error', { message: 'details', stack })
+          log.error('payload %j', { stack, foo: 'bar' })
 
           sinon.assert.calledOnce(console.error)
           assert.ok(console.error.firstCall.args[0] instanceof Error)
-          assert.match(console.error.firstCall.args[0].message, /details/)
+          assert.strictEqual(console.error.firstCall.args[0].message, message)
         }
       })
 
