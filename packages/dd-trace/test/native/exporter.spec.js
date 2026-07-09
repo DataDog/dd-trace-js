@@ -268,6 +268,13 @@ describe('NativeExporter', () => {
       })
     })
 
+    it('exposes a _writer.flush shim that delegates to flush() (parametric app compat)', (done) => {
+      exporter._writer.flush(() => {
+        sinon.assert.notCalled(nativeSpans.flushSpansGrouped)
+        done()
+      })
+    })
+
     // The success path is one observable sequence — splitting it across 5
     // it() blocks paid for 5x mocha-overhead while testing the same flow.
     // This single test pins all five aspects: flushSpansGrouped is called with the

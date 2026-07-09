@@ -236,6 +236,15 @@ class NativeExporter {
   }
 
   /**
+   * Compatibility shim for external tooling (e.g. the parametric test app) that
+   * reaches `tracer._exporter._writer.flush(cb)`; the legacy AgentExporter
+   * exposed a `_writer`. The native exporter flushes directly.
+   */
+  get _writer () {
+    return { flush: (done) => this.flush(done) }
+  }
+
+  /**
    * Flush pending spans to the agent.
    *
    * @param {Function} [done] - Callback when flush completes
