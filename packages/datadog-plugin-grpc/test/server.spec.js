@@ -509,6 +509,81 @@ describe('Plugin', () => {
           }, done)
         })
       })
+
+      // gRPC serves over a core Node Http2Server. With the http2 server plugin
+      // also enabled, that server's 'stream' events must not be traced by http2:
+      // gRPC owns the span, so a call keeps a single grpc.server span rather than
+      // gaining a web.request span that steals the top frame.
+      describe('with http2 server tracing also enabled', () => {
+        before(() => {
+          return agent.load(['grpc', 'http2'], { client: false })
+            .then(() => {
+              tracer = require('../../dd-trace')
+              grpc = require(`../../../versions/${pkg}@${version}`).get()
+            })
+        })
+
+        after(() => {
+          return agent.close()
+        })
+
+        it('produces only the grpc.server span, no web.request span', async () => {
+          const spans = []
+          const collect = traces => spans.push(...traces.flat())
+          agent.subscribe(collect)
+
+          try {
+            const client = await buildClient({ getUnary: (_, callback) => callback(null, {}) })
+            client.getUnary({ first: 'foobar' }, () => {})
+
+            await agent.assertSomeTraces(traces => {
+              assertObjectContains(traces[0][0], { name: 'grpc.server', meta: { component: 'grpc' } })
+            })
+
+            const httpSpans = spans.filter(span => span.name === 'web.request')
+            assert.deepStrictEqual(httpSpans, [], 'gRPC call must not produce a web.request span')
+
+            // With no web.request span at all, gRPC is necessarily the top server
+            // frame; assert the span is present so a silent drop can't pass this.
+            assert.ok(spans.some(span => span.name === 'grpc.server'), 'expected a grpc.server span')
+          } finally {
+            agent.unsubscribe(collect)
+          }
+        })
+
+        it('does not produce a web.request span for a non-gRPC request to the gRPC port', async () => {
+          const http2 = require('node:http2')
+          await buildClient({ getUnary: (_, callback) => callback(null, {}) })
+
+          const spans = []
+          const collect = traces => spans.push(...traces.flat())
+          agent.subscribe(collect)
+
+          try {
+            // A plain HTTP/2 request with no gRPC content-type: the gRPC server
+            // rejects it with 415, and its 'stream' event must still not be
+            // traced as http2 because gRPC owns the server.
+            await new Promise((resolve, reject) => {
+              const client = http2.connect(`http://localhost:${port}`).on('error', reject)
+              const req = client.request({ ':path': '/', ':method': 'GET' })
+              req.on('error', reject)
+              req.on('end', () => {
+                client.close()
+                resolve()
+              })
+              req.resume()
+              req.end()
+            })
+
+            for (let drain = 0; drain < 5; drain++) await new Promise(setImmediate)
+
+            const httpSpans = spans.filter(span => span.name === 'web.request')
+            assert.deepStrictEqual(httpSpans, [], 'a non-gRPC request to a gRPC server must not be traced as http2')
+          } finally {
+            agent.unsubscribe(collect)
+          }
+        })
+      })
     })
   })
 })

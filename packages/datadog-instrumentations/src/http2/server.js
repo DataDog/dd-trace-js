@@ -5,6 +5,7 @@ const {
   addHook,
 } = require('../helpers/instrument')
 const shimmer = require('../../../datadog-shimmer')
+const { FOREIGN_HTTP2_SERVER } = require('../../../dd-trace/src/constants')
 
 const startServerCh = channel('apm:http2:server:request:start')
 const errorServerCh = channel('apm:http2:server:request:error')
@@ -57,7 +58,12 @@ function wrapEmit (originalEmit) {
   // Named `emit` mirrors the server method so the one-time wrap skips its name
   // rewrite; rest params keep the per-event forwarding allocation-free.
   return function emit (...args) {
-    if (!startServerCh.hasSubscribers) {
+    // A server owned by another instrumentation (e.g. @grpc/grpc-js) drives its
+    // own span lifecycle over the raw 'stream' API, so tracing it here would add
+    // a spurious web.request span on top of that integration's span and steal
+    // the top frame. Skip it entirely; the mark is set at server creation, so
+    // this is one property read on servers we do trace.
+    if (!startServerCh.hasSubscribers || this[FOREIGN_HTTP2_SERVER]) {
       return Reflect.apply(originalEmit, this, args)
     }
 

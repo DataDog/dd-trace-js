@@ -8,6 +8,7 @@ const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
 const web = require('../../dd-trace/src/plugins/util/web')
+const { FOREIGN_HTTP2_SERVER } = require('../../dd-trace/src/constants')
 const { withNamingSchema } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { rawExpectedSchema } = require('./naming')
@@ -602,6 +603,49 @@ describe('Plugin', () => {
               .catch(done)
 
             request(http2, `http://localhost:${port}/user`).catch(() => {})
+          })
+        })
+
+        describe('a server owned by another instrumentation', () => {
+          // Mirrors what the @grpc/grpc-js instrumentation does at server
+          // creation. The mark must make the http2 instrumentation skip the
+          // server entirely so the owning integration keeps the only span.
+          it('produces no web.request span when the server is marked foreign', async () => {
+            const server = http2.createServer()
+            server[FOREIGN_HTTP2_SERVER] = true
+            server.on('stream', (stream) => {
+              stream.respond({ ':status': 200 })
+              stream.end()
+            })
+            await new Promise(resolve => listen(server, resolve))
+
+            let serverSpanCount = 0
+            const countHandler = traces => {
+              serverSpanCount += traces.flat().filter(span => span.name === 'web.request').length
+            }
+            agent.subscribe(countHandler)
+
+            try {
+              await request(http2, `http://localhost:${port}/user`)
+              for (let drain = 0; drain < 5; drain++) await setImmediate()
+              assert.strictEqual(serverSpanCount, 0)
+            } finally {
+              agent.unsubscribe(countHandler)
+            }
+          })
+
+          it('still traces an unmarked server on the same code path', async () => {
+            const server = http2.createServer()
+            server.on('stream', (stream) => {
+              stream.respond({ ':status': 200 })
+              stream.end()
+            })
+            await new Promise(resolve => listen(server, resolve))
+
+            await Promise.all([
+              agent.assertFirstTraceSpan({ name: 'web.request', meta: { component: 'http2' } }),
+              request(http2, `http://localhost:${port}/user`),
+            ])
           })
         })
 
