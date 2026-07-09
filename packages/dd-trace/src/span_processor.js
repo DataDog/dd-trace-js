@@ -12,6 +12,7 @@ const {
   SAMPLING_LIMIT_DECISION,
   SAMPLING_AGENT_DECISION,
   DECISION_MAKER_KEY,
+  ORIGIN_KEY,
 } = require('./constants')
 
 const startedSpans = new WeakSet()
@@ -109,6 +110,14 @@ class SpanProcessor {
       } else if (typeof value === 'number' && !Number.isNaN(value)) {
         this._nativeSpans.queueOp(native.OpCode.SetTraceMetricsAttr, spanId, key, ['f64', value])
       }
+    }
+
+    // The JS formatter stamped `_dd.origin` (the trace's distributed origin,
+    // e.g. `synthetics`) on the chunk root's meta. It lives on `_trace.origin`,
+    // not in `_trace.tags`, so mirror it as trace meta here.
+    const origin = spanContext._trace.origin
+    if (typeof origin === 'string') {
+      this._nativeSpans.queueOp(native.OpCode.SetTraceMetaAttr, spanId, ORIGIN_KEY, origin)
     }
   }
 

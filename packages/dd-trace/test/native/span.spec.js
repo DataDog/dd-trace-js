@@ -279,6 +279,17 @@ describe('NativeDatadogSpan', () => {
       assert.deepStrictEqual(resourceOps, ['test-operation'])
     })
 
+    it('stamps meta.language = javascript at creation (matches the JS formatter)', () => {
+      // The JS formatter set `meta.language = 'javascript'` on every span; native
+      // has no format step and the agent would otherwise backfill `nodejs` from
+      // the Datadog-Meta-Lang header.
+      span = new NativeDatadogSpan(tracer, processor, prioritySampler, {
+        operationName: 'test-operation',
+      }, false, nativeSpans)
+
+      sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetMetaAttr, sinon.match.any, 'language', 'javascript')
+    })
+
     it('skips the default resource when a string resource.name is supplied at creation', () => {
       span = new NativeDatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'test-operation',

@@ -196,6 +196,25 @@ describe('SpanProcessor', () => {
     assert.strictEqual(dm.length, 1)
   })
 
+  it('mirrors the trace origin (_dd.origin) to native trace meta', () => {
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+    finishedSpan.context()._nativeSpanId = 55
+    // `_dd.origin` lives on `_trace.origin`, not `_trace.tags`.
+    trace.origin = 'synthetics'
+    prioritySampler.sample = sinon.stub().callsFake((c) => {
+      c._sampling.priority = 1
+      c._sampling.mechanism = 3
+    })
+
+    processor.process(finishedSpan)
+
+    const origin = nativeSpans.queueOp.getCalls()
+      .filter(c => c.args[0] === fakeOpCode.SetTraceMetaAttr && c.args[2] === '_dd.origin')
+    assert.strictEqual(origin.length, 1)
+    assert.strictEqual(origin[0].args[3], 'synthetics')
+  })
+
   it('mirrors git metadata trace tags to native (tagGitMetadata runs after sample)', () => {
     trace.started = [finishedSpan]
     trace.finished = [finishedSpan]

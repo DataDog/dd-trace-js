@@ -323,6 +323,13 @@ class NativeDatadogSpan extends DatadogSpan {
       nativeSpans.queueOp(OpCode.SetResourceName, spanContext._nativeSpanId, operationName)
     }
 
+    // The JS formatter stamped `meta.language = 'javascript'` on every span at
+    // serialization time. The native pipeline has no format step, and the agent
+    // backfills an unset language from the `Datadog-Meta-Lang: nodejs` header,
+    // so a native span would otherwise export `language: nodejs`. Stamp it here
+    // to match (system-tests assert `language == javascript`).
+    nativeSpans.queueOp(OpCode.SetMetaAttr, spanContext._nativeSpanId, 'language', 'javascript')
+
     return spanContext
   }
 
