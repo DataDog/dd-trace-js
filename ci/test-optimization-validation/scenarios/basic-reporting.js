@@ -242,6 +242,7 @@ function commandOutputShowsTestsRan (lines) {
       /\btests?\b.*\bpassed\b/i.test(line) ||
       /\bSuccessfully ran target\b.*\btest\b/i.test(line) ||
       /\bsuccess:\s*[1-9]\d*\b/i.test(line) ||
+      /\bfailed:\s*[1-9]\d*\b/i.test(line) ||
       /\bTasks:\s*[1-9]\d*\s+successful\b/i.test(line)
   })
 }

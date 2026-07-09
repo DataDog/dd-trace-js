@@ -38,10 +38,14 @@ const VALIDATION_SUPPRESSION_ENV = {
   DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: 'false',
   DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false',
 }
+const TIMEOUT_KILL_GRACE_MS = 5000
+const TIMEOUT_FINALIZE_GRACE_MS = 1000
 
 function runCommand (command, { env = {}, envMode = 'inherit', outDir, label, verbose = false } = {}) {
   const startedAt = Date.now()
   const timeoutMs = command.timeoutMs || 300_000
+  const timeoutKillGraceMs = command.timeoutKillGraceMs || TIMEOUT_KILL_GRACE_MS
+  const timeoutFinalizeGraceMs = command.timeoutFinalizeGraceMs || TIMEOUT_FINALIZE_GRACE_MS
   const result = {
     label,
     command: serializeCommand(command),
@@ -88,9 +92,15 @@ function runCommand (command, { env = {}, envMode = 'inherit', outDir, label, ve
       console.log(`[test-optimization-validator] running ${label || serializeCommand(command)}`)
     }
 
+    let killTimer
+    let finalizeTimer
     const timeout = setTimeout(() => {
       result.timedOut = true
       child.kill('SIGTERM')
+      killTimer = setTimeout(() => {
+        child.kill('SIGKILL')
+        finalizeTimer = setTimeout(() => finalize(null, 'SIGKILL'), timeoutFinalizeGraceMs)
+      }, timeoutKillGraceMs)
     }, timeoutMs)
 
     child.stdout.on('data', chunk => {
@@ -111,6 +121,8 @@ function runCommand (command, { env = {}, envMode = 'inherit', outDir, label, ve
       if (finalized) return
       finalized = true
       clearTimeout(timeout)
+      clearTimeout(killTimer)
+      clearTimeout(finalizeTimer)
       result.exitCode = code
       result.signal = signal
       result.durationMs = Date.now() - startedAt
@@ -153,6 +165,7 @@ function buildDatadogEnv ({ intake, scenario, framework }) {
     DD_TRACE_AGENT_URL: `http://127.0.0.1:${intake.port}`,
     DD_CIVISIBILITY_AGENTLESS_ENABLED: '0',
     DD_CIVISIBILITY_ENABLED: '1',
+    DD_TRACE_ENABLED: 'true',
     ...VALIDATION_SUPPRESSION_ENV,
     DD_SERVICE: 'dd-test-optimization-validation',
     DD_ENV: 'local-validation',

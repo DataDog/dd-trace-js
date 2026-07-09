@@ -515,6 +515,63 @@ describe('test optimization validation report writer', () => {
     }
   })
 
+  it('writes report-level intake artifacts from all scenario request windows', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
+    const out = path.join(tmpDir, 'results')
+    const packageJsonPath = path.join(tmpDir, 'package.json')
+    const intake = new MockIntake({ out })
+    const originalLog = console.log
+
+    fs.mkdirSync(out, { recursive: true })
+    fs.writeFileSync(packageJsonPath, `${JSON.stringify({ name: 'example' }, null, 2)}\n`)
+    intake.record(
+      { method: 'POST', url: '/api/v2/citestcycle', headers: {} },
+      testPayload('first scenario test')
+    )
+    intake.resetRequests()
+    intake.record(
+      { method: 'POST', url: '/api/v2/citestcycle', headers: {} },
+      testPayload('second scenario test')
+    )
+    console.log = () => {}
+
+    try {
+      writeReport({
+        manifest: {
+          repository: {
+            root: tmpDir,
+          },
+          frameworks: [
+            {
+              id: 'jest:root',
+              framework: 'jest',
+              frameworkVersion: '30.1.3',
+              project: {
+                name: 'example',
+                root: tmpDir,
+                packageJson: packageJsonPath,
+              },
+            },
+          ],
+        },
+        results: [],
+        out,
+        intake,
+      })
+
+      const requests = fs.readFileSync(path.join(out, 'intake', 'requests.ndjson'), 'utf8')
+      const normalizedPayloads = fs.readFileSync(path.join(out, 'intake', 'payloads.normalized.ndjson'), 'utf8')
+
+      assert.match(requests, /first scenario test/)
+      assert.match(requests, /second scenario test/)
+      assert.match(normalizedPayloads, /first scenario test/)
+      assert.match(normalizedPayloads, /second scenario test/)
+    } finally {
+      console.log = originalLog
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
   it('includes failure evidence, omitted commands, and static diagnosis notes in human reports', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
     const out = path.join(tmpDir, 'results')
@@ -760,3 +817,21 @@ describe('test optimization validation report writer', () => {
     }
   })
 })
+
+function testPayload (name) {
+  return {
+    events: [
+      {
+        type: 'test',
+        content: {
+          name,
+          meta: {
+            'test.name': name,
+            'test.status': 'pass',
+          },
+          metrics: {},
+        },
+      },
+    ],
+  }
+}

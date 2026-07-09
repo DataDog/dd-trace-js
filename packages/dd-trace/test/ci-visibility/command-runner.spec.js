@@ -38,6 +38,7 @@ describe('test optimization validation command runner', () => {
     assert.strictEqual(env.DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED, 'false')
     assert.strictEqual(env.DD_INSTRUMENTATION_TELEMETRY_ENABLED, 'false')
     assert.strictEqual(env.DD_TEST_FAILED_TEST_REPLAY_ENABLED, 'false')
+    assert.strictEqual(env.DD_TRACE_ENABLED, 'true')
     assert.match(env.NODE_OPTIONS, /[\\/]ci[\\/]init\.js/)
   })
 
@@ -99,6 +100,32 @@ describe('test optimization validation command runner', () => {
       assert.match(result.stderr, /ENOENT/)
       assert.ok(fs.existsSync(path.join(outDir, 'command.json')))
       assert.ok(fs.existsSync(path.join(outDir, 'stderr.txt')))
+    } finally {
+      fs.rmSync(outDir, { recursive: true, force: true })
+    }
+  })
+
+  it('forces timed-out commands to terminate when SIGTERM is ignored', async () => {
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-runner-'))
+
+    try {
+      const result = await runCommand({
+        cwd: outDir,
+        argv: [
+          process.execPath,
+          '-e',
+          'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)',
+        ],
+        timeoutMs: 25,
+        timeoutKillGraceMs: 25,
+        timeoutFinalizeGraceMs: 25,
+      }, {
+        outDir,
+      })
+
+      assert.strictEqual(result.timedOut, true)
+      assert.strictEqual(result.exitCode, null)
+      assert.strictEqual(result.signal, 'SIGKILL')
     } finally {
       fs.rmSync(outDir, { recursive: true, force: true })
     }

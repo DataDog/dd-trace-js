@@ -53,6 +53,12 @@ describe('test optimization validation cli', () => {
     assert.deepStrictEqual([...options.scenarios], ['basic-reporting', 'efd'])
   })
 
+  it('adds basic reporting as a prerequisite for CI wiring scenario selection', () => {
+    const options = parseArgs(['--scenario', 'ci-wiring'])
+
+    assert.deepStrictEqual([...options.scenarios], ['basic-reporting', 'ci-wiring'])
+  })
+
   for (const code of ['EPERM', 'EACCES']) {
     it(`reports fake intake startup ${code} listen failures as execution-environment blockers`, async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cli-'))
@@ -244,6 +250,94 @@ describe('test optimization validation cli', () => {
         reasonCode: 'basic-reporting-failed',
         scenario: 'efd',
       })
+    } finally {
+      process.exitCode = originalExitCode
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('does not run CI wiring when only Basic Reporting is selected', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cli-'))
+    const out = path.join(tmpDir, 'results')
+    const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
+    const staticDiagnosisPath = path.join(out, 'static-diagnosis.json')
+    let capturedResults
+    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
+      './mock-intake': {
+        MockIntake: class {
+          constructor () {
+            this.requests = []
+          }
+
+          async start () {}
+          async close () {}
+
+          writeArtifacts () {
+            return writeEmptyRequestsArtifact(out)
+          }
+        },
+      },
+      './setup-runner': {
+        async runSetupCommands () {
+          return { ok: true }
+        },
+      },
+      './static-diagnosis': {
+        getStaticBlocker () {
+          return null
+        },
+        runStaticDiagnosis () {
+          fs.mkdirSync(out, { recursive: true })
+          fs.writeFileSync(staticDiagnosisPath, '{}\n')
+          return {
+            report: {},
+            reportPath: staticDiagnosisPath,
+          }
+        },
+      },
+      './scenarios/basic-reporting': {
+        async runBasicReporting ({ framework }) {
+          return {
+            frameworkId: framework.id,
+            scenario: 'basic-reporting',
+            status: 'pass',
+            diagnosis: 'Basic reporting emitted session, module, suite, and test events.',
+            evidence: {},
+            artifacts: [],
+          }
+        },
+      },
+      './scenarios/ci-wiring': {
+        async runCiWiring () {
+          throw new Error('CI wiring should not run when only Basic Reporting is selected')
+        },
+      },
+      './generated-files': {
+        async cleanupGeneratedFiles () {},
+      },
+      './report-writer': {
+        async writeReport ({ results }) {
+          capturedResults = results
+        },
+      },
+    })
+    const manifest = getRunnableManifest(tmpDir)
+    const originalExitCode = process.exitCode
+
+    manifest.frameworks[0].ciWiringCommand = {
+      cwd: tmpDir,
+      argv: [process.execPath, '-e', 'console.log("1 passing")'],
+    }
+    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
+    process.exitCode = undefined
+
+    try {
+      await main(['--manifest', manifestPath, '--out', out, '--scenario', 'basic-reporting'])
+
+      assert.strictEqual(process.exitCode, 0)
+      assert.deepStrictEqual(capturedResults.map(result => `${result.scenario}:${result.status}`), [
+        'basic-reporting:pass',
+      ])
     } finally {
       process.exitCode = originalExitCode
       fs.rmSync(tmpDir, { recursive: true, force: true })

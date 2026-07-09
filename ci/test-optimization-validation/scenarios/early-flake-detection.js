@@ -75,12 +75,30 @@ async function runEarlyFlakeDetection ({ framework, intake, out, options }) {
     const evidence = {
       ...discoveryEvidence(discovery),
       commandExitCode: run.result.exitCode,
+      commandTimedOut: run.result.timedOut,
       settingsRequested: requestsUrlIncludes(intake, '/api/v2/libraries/tests/services/setting'),
       knownTestsRequested: requestsUrlIncludes(intake, '/api/v2/ci/libraries/tests'),
       matchingTestEvents: tests.length,
       retryLikeEvents: retriedTests.length,
       earlyFlakeTaggedEvents: tests.filter(test => test.earlyFlakeEnabled).length,
       samples: testEventSamples(tests),
+    }
+
+    if (run.result.exitCode !== 0) {
+      return failWithDebugRerun({
+        command: scenario.runCommand,
+        configureIntake: configureEarlyFlakeDetection,
+        diagnosis: 'The generated new-test command reported Early Flake Detection retry evidence, but the ' +
+          `command exited ${run.result.exitCode}. Early Flake Detection is only valid when the command ` +
+          'completes successfully after retries.',
+        evidence,
+        framework,
+        intake,
+        options,
+        out,
+        outDir,
+        scenarioName,
+      })
     }
 
     if (!evidence.settingsRequested || !evidence.knownTestsRequested) {

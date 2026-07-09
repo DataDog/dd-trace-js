@@ -67,12 +67,30 @@ async function runTestManagement ({ framework, intake, out, options }) {
     const evidence = {
       ...discoveryEvidence(discovery),
       commandExitCode: run.result.exitCode,
+      commandTimedOut: run.result.timedOut,
       settingsRequested: requestsUrlIncludes(intake, '/api/v2/libraries/tests/services/setting'),
       testManagementTestsRequested: requestsUrlIncludes(intake, '/api/v2/test/libraries/test-management/tests'),
       configuredManagedTests: summarizeManagedTests(testManagementTests),
       matchingTestEvents: tests.length,
       quarantinedEvents: quarantinedTests.length,
       samples: testEventSamples(tests),
+    }
+
+    if (run.result.exitCode !== 0) {
+      return failWithDebugRerun({
+        command: scenario.runCommand,
+        configureIntake: configureTestManagement,
+        diagnosis: 'The generated Test Management command reported quarantined-test evidence, but the command ' +
+          `exited ${run.result.exitCode}. Test Management is only valid when the command completes successfully ` +
+          'with the managed test applied.',
+        evidence,
+        framework,
+        intake,
+        options,
+        out,
+        outDir,
+        scenarioName,
+      })
     }
 
     if (tests.length === 0) {

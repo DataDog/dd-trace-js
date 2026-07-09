@@ -4,7 +4,7 @@ const fs = require('fs')
 const path = require('path')
 
 const { buildCiCommandCandidate } = require('../ci-command-candidate')
-const { buildCiWiringEnv, runCommand } = require('../command-runner')
+const { buildCiWiringEnv, runCommand, serializeCommand } = require('../command-runner')
 const { getFrameworkCiDiscoveryContradiction } = require('../ci-discovery')
 const { runInitializationProbe } = require('../init-probe')
 const { normalizeRequests } = require('../payload-normalizer')
@@ -50,6 +50,7 @@ async function runCiWiring ({ manifest, framework, intake, out, options, basicRe
     )
     fs.writeFileSync(path.join(outDir, 'result.json'), `${JSON.stringify(sanitizeForReport(result), null, 2)}\n`)
 
+    const ciWiringPreflight = getComparableCiWiringPreflight(framework, command)
     const evidence = {
       commandExitCode: result.exitCode,
       commandTimedOut: result.timedOut,
@@ -58,7 +59,7 @@ async function runCiWiring ({ manifest, framework, intake, out, options, basicRe
       ciCommandCandidate: buildCiCommandCandidate(framework),
       ciWiring: framework.ciWiring,
       forcedLocalBasicReporting: summarizeBasicReportingResult(basicResult),
-      preflight: summarizePreflight(framework.preflight),
+      preflight: summarizePreflight(ciWiringPreflight),
       ...basicEventEvidence(events),
     }
 
@@ -86,7 +87,7 @@ async function runCiWiring ({ manifest, framework, intake, out, options, basicRe
       )
     }
 
-    if (matchesPreflightExitCode(framework.preflight, result.exitCode)) {
+    if (matchesPreflightExitCode(ciWiringPreflight, result.exitCode)) {
       evidence.commandExitMatchesPreflight = true
       return pass(
         framework,
@@ -317,6 +318,34 @@ function summarizeCiCommandFailure (result, evidence) {
   }
 }
 
+function getComparableCiWiringPreflight (framework, command) {
+  if (framework.ciWiringPreflight?.ran === true) {
+    return {
+      ...framework.ciWiringPreflight,
+      source: 'ciWiringPreflight',
+    }
+  }
+
+  if (commandsHaveSameExecutionShape(command, framework.existingTestCommand)) {
+    return {
+      ...framework.preflight,
+      source: 'existingTestCommand',
+    }
+  }
+
+  return {
+    ran: false,
+    reason: 'No dd-trace-less preflight result was recorded for the selected CI wiring command shape.',
+  }
+}
+
+function commandsHaveSameExecutionShape (left, right) {
+  if (!left || !right) return false
+  if (left.cwd !== right.cwd) return false
+  if (Boolean(left.usesShell) !== Boolean(right.usesShell)) return false
+  return serializeCommand(left) === serializeCommand(right)
+}
+
 function detectDatadogPreloadResolutionFailure (output) {
   if (!/dd-trace(?:\/ci\/init)?/.test(output)) return null
   if (!/MODULE_NOT_FOUND|ERR_MODULE_NOT_FOUND|Cannot find module|Cannot find package/.test(output)) return null
@@ -488,6 +517,7 @@ function commandOutputShowsTestsRan (lines) {
       /\btests?\b.*\b(?:passed|failed)\b/i.test(line) ||
       /\bSuccessfully ran target\b.*\btest\b/i.test(line) ||
       /\bsuccess:\s*[1-9]\d*\b/i.test(line) ||
+      /\bfailed:\s*[1-9]\d*\b/i.test(line) ||
       /\bTasks:\s*[1-9]\d*\s+successful\b/i.test(line)
   })
 }
@@ -502,12 +532,13 @@ function summarizePreflight (preflight) {
   if (!preflight || preflight.ran !== true) {
     return {
       ran: false,
-      reason: 'No dd-trace-less preflight result was recorded in the manifest.',
+      reason: preflight?.reason || 'No dd-trace-less preflight result was recorded in the manifest.',
     }
   }
 
   return {
     ran: true,
+    source: preflight.source,
     exitCode: preflight.exitCode,
     observedTestCount: preflight.observedTestCount,
     stdoutSummary: preflight.stdoutSummary,

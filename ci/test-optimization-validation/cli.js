@@ -39,13 +39,14 @@ const SCENARIOS = {
   'test-management': runTestManagement,
 }
 const BASIC_REPORTING_SCENARIO = 'basic-reporting'
+const CI_WIRING_SCENARIO = 'ci-wiring'
 
 function parseArgs (argv) {
   const options = {
     manifest: DEFAULT_MANIFEST,
     out: DEFAULT_OUT,
     frameworks: new Set(),
-    scenarios: new Set(Object.keys(SCENARIOS)),
+    scenarios: new Set(getSelectableScenarios()),
     keepTempFiles: false,
     verbose: false,
   }
@@ -81,8 +82,8 @@ function parseArgs (argv) {
   }
 
   for (const scenario of options.scenarios) {
-    if (!SCENARIOS[scenario]) {
-      throw new Error(`Unknown scenario "${scenario}". Expected one of: ${Object.keys(SCENARIOS).join(', ')}`)
+    if (!getSelectableScenarios().includes(scenario)) {
+      throw new Error(`Unknown scenario "${scenario}". Expected one of: ${getSelectableScenarios().join(', ')}`)
     }
   }
 
@@ -105,7 +106,7 @@ Options:
   --out <path>            Output directory. Defaults to ${DEFAULT_OUT}
   --framework <id>        Run one framework entry. Can be repeated. A trailing ":" is ignored.
                           A framework kind such as "vitest" runs all matching Vitest entries.
-  --scenario <name>       Run one scenario: ${Object.keys(SCENARIOS).join(', ')}
+  --scenario <name>       Run one scenario: ${getSelectableScenarios().join(', ')}
   --keep-temp-files       Leave generated validation files in place.
   --verbose               Print command progress.
   --help                  Show this help.
@@ -182,7 +183,7 @@ async function main (argv) {
           results.push(basicResult)
         }
 
-        if (hasCiWiringValidation(framework, manifest)) {
+        if (options.scenarios.has(CI_WIRING_SCENARIO) && hasCiWiringValidation(framework, manifest)) {
           if (basicResult && basicResult.status !== 'pass') {
             results.push(getSkippedCiWiringAfterBasicFailure(framework, basicResult))
           } else {
@@ -262,6 +263,10 @@ function getAdvancedScenarios (scenarios) {
   return Object.keys(SCENARIOS).filter(scenario => {
     return scenario !== BASIC_REPORTING_SCENARIO && scenarios.has(scenario)
   })
+}
+
+function getSelectableScenarios () {
+  return [...Object.keys(SCENARIOS), CI_WIRING_SCENARIO]
 }
 
 function getSkippedCiWiringAfterBasicFailure (framework, basicResult) {

@@ -19,7 +19,10 @@ const SHARING_WARNING =
 
 function writeReport ({ manifest, results, out, intake, staticDiagnosis }) {
   const intakeArtifacts = intake.writeArtifacts()
-  const normalizedEvents = normalizeRequests(intake.requests)
+  const artifactRequests = typeof intake.getArtifactRequests === 'function'
+    ? intake.getArtifactRequests()
+    : intake.requests
+  const normalizedEvents = normalizeRequests(artifactRequests)
   const normalizedPath = path.join(out, 'intake', 'payloads.normalized.ndjson')
   const sanitizedEvents = sanitizeForReport(normalizedEvents)
   fs.writeFileSync(
@@ -98,8 +101,8 @@ function renderMarkdown (report) {
   if (diagnosticResults.length > 0) {
     lines.push('', '## Diagnostic-only and Blocked Frameworks', '')
     for (const result of diagnosticResults) {
-      lines.push(`- ${result.status.toUpperCase()} ${result.frameworkId}: ${result.diagnosis}`)
       lines.push(
+        `- ${result.status.toUpperCase()} ${result.frameworkId}: ${result.diagnosis}`,
         '  - Diagnostic-only: no live Test Optimization conclusion was reached for this framework. ' +
         'This records why the framework was not safely validated in this environment.'
       )

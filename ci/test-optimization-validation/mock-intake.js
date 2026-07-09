@@ -39,11 +39,13 @@ class MockIntake {
     this.port = null
     this.server = null
     this.requests = []
+    this.allRequests = []
     this.reset()
   }
 
   reset () {
     this.requests = []
+    this.allRequests = []
     this.settings = { ...DEFAULT_SETTINGS }
     this.knownTests = {}
     this.testManagementTests = {}
@@ -164,18 +166,24 @@ class MockIntake {
       ...extra,
     }
     this.requests.push(request)
+    this.allRequests.push(request)
     if (this.verbose) {
       console.log(`[test-optimization-validator] intake ${req.method} ${req.url}`)
     }
+  }
+
+  getArtifactRequests () {
+    return this.allRequests.length > 0 ? this.allRequests : this.requests
   }
 
   writeArtifacts () {
     const intakeDir = path.join(this.out, 'intake')
     fs.mkdirSync(intakeDir, { recursive: true })
     const requestsPath = path.join(intakeDir, 'requests.ndjson')
+    const requests = this.getArtifactRequests()
     fs.writeFileSync(
       requestsPath,
-      this.requests.map(request => JSON.stringify(sanitizeForReport(request))).join('\n') + '\n'
+      requests.map(request => JSON.stringify(sanitizeForReport(request))).join('\n') + '\n'
     )
     return { requestsPath }
   }

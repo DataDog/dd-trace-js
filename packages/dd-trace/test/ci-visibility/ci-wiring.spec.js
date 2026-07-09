@@ -231,6 +231,50 @@ describe('test optimization CI wiring validation', () => {
     }
   })
 
+  it('treats monorepo runner failure summaries as evidence that tests ran', async () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
+    const intake = {
+      port: 8126,
+      requests: [],
+      configure () {},
+      resetRequests () {
+        this.requests = []
+      },
+    }
+
+    try {
+      const result = await runCiWiring({
+        framework: {
+          id: 'vitest:lage',
+          framework: 'vitest',
+          ciWiringCommand: {
+            cwd: out,
+            argv: [
+              process.execPath,
+              '-e',
+              'console.log("success: 0, skipped: 0, pending: 0, failed: 2"); process.exit(1)',
+            ],
+          },
+        },
+        intake,
+        out,
+        options: { verbose: false },
+        basicResult: {
+          status: 'pass',
+          diagnosis: 'Basic reporting emitted session, module, suite, and test events.',
+        },
+      })
+
+      assert.strictEqual(result.status, 'fail')
+      assert.strictEqual(result.evidence.commandExitCode, 1)
+      assert.strictEqual(result.evidence.eventLevelFailure.kind, 'ci-wiring-no-test-optimization-events')
+      assert.match(result.diagnosis, /test command used by the CI job was identified and ran tests/)
+      assert.doesNotMatch(result.diagnosis, /failed before tests/)
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
+
   it('probes CI wiring when test output shows failing tests', async () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
     const intake = {
@@ -268,6 +312,57 @@ describe('test optimization CI wiring validation', () => {
       assert.strictEqual(result.evidence.initializationProbe.ran, true)
       assert.strictEqual(result.evidence.initializationProbe.reachedAnyNodeProcess, true)
       assert.strictEqual(result.evidence.initializationProbe.reachedTestRunnerProcess, false)
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
+
+  it('does not match CI wiring exit codes against unrelated existing-command preflight', async () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
+    const intake = {
+      port: 8126,
+      requests: [
+        allBasicEventsRequest(),
+      ],
+      configure () {},
+      resetRequests () {},
+    }
+
+    try {
+      const result = await runCiWiring({
+        framework: {
+          id: 'jest:root',
+          framework: 'jest',
+          existingTestCommand: {
+            cwd: out,
+            argv: [process.execPath, '-e', 'console.log("different command"); process.exit(7)'],
+          },
+          ciWiringCommand: {
+            cwd: out,
+            argv: [process.execPath, '-e', 'process.exit(7)'],
+          },
+          preflight: {
+            ran: true,
+            exitCode: 7,
+            observedTestCount: 1,
+          },
+        },
+        intake,
+        out,
+        options: { verbose: false },
+        basicResult: {
+          status: 'pass',
+          diagnosis: 'Basic reporting emitted session, module, suite, and test events.',
+        },
+      })
+
+      assert.strictEqual(result.status, 'fail')
+      assert.strictEqual(result.evidence.commandExitMatchesPreflight, false)
+      assert.deepStrictEqual(result.evidence.preflight, {
+        ran: false,
+        reason: 'No dd-trace-less preflight result was recorded for the selected CI wiring command shape.',
+      })
+      assert.match(result.diagnosis, /emitted Test Optimization events, but the command exited 7/)
     } finally {
       fs.rmSync(out, { recursive: true, force: true })
     }
@@ -467,6 +562,35 @@ function testIntakeRequest (meta) {
           },
         },
       ],
+    },
+  }
+}
+
+function allBasicEventsRequest () {
+  return {
+    method: 'POST',
+    url: '/api/v2/citestcycle',
+    payload: {
+      events: [
+        basicEvent('test_session_end'),
+        basicEvent('test_module_end'),
+        basicEvent('test_suite_end'),
+        basicEvent('test'),
+      ],
+    },
+  }
+}
+
+function basicEvent (type) {
+  return {
+    type,
+    content: {
+      name: 'example test',
+      meta: {
+        'test.name': 'example test',
+        'test.status': 'pass',
+      },
+      metrics: {},
     },
   }
 }
