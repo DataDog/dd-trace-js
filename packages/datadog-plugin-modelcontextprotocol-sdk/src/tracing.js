@@ -6,7 +6,6 @@ const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const {
   DISTRIBUTED_TRACE_META_KEY,
   tagErrorResult,
-  tagRequestResult,
 } = require('./utils')
 
 const MCP_REQUEST_SPAN_NAME = 'mcp.request'
@@ -134,8 +133,9 @@ class McpServerRequestPlugin extends McpPlugin {
   onEnd (span, ctx) {
     if (ctx.error) {
       span.setTag('error', ctx.error)
+    } else {
+      tagErrorResult(span, ctx.result)
     }
-    tagRequestResult(span, ctx.result, !ctx.error)
   }
 }
 

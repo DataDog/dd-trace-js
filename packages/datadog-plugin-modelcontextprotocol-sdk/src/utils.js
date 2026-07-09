@@ -24,12 +24,7 @@ function tagErrorResult (span, result) {
   }
 }
 
-function tagRequestResult (span, result, tagError) {
-  if (tagError) tagErrorResult(span, result)
-}
-
 module.exports = {
   DISTRIBUTED_TRACE_META_KEY,
   tagErrorResult,
-  tagRequestResult,
 }
