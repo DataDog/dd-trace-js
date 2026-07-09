@@ -100,6 +100,16 @@ function appendTag (meta, metrics, key, value, nested) {
 class NativeSpanContext extends DatadogSpanContext {
   #nativeSpans
 
+  // Once this span has been exported, its Create has been removed from the WASM
+  // change-buffer span map. Any further op we queue for it would reference a
+  // missing span, making `flush_change_buffer` throw `span not found` and drop
+  // the *entire* pending batch (orphaning other spans' Creates -> their trace is
+  // lost). Late tags are meaningless anyway: the JS-only pipeline also serializes
+  // spans at export time, so a `setTag` after export never reaches the wire.
+  // Skipping native sync once exported keeps both pipelines consistent and
+  // prevents the batch-drop cascade (see the elasticsearch product-check ping).
+  #exported = false
+
   /**
    * @param {import('./native_spans')} nativeSpans - The NativeSpansInterface instance
    * @param {object} props - SpanContext properties
@@ -148,9 +158,18 @@ class NativeSpanContext extends DatadogSpanContext {
 
   set _name (value) {
     this[NAME_VALUE] = value
-    if (this[NATIVE_READY]) {
+    if (this[NATIVE_READY] && !this.#exported) {
       this._syncNameToNative(value)
     }
+  }
+
+  /**
+   * Mark this span as exported. After export its native Create has been removed
+   * from the change-buffer span map, so all subsequent tag/name syncs are
+   * skipped (see `#exported`).
+   */
+  markExported () {
+    this.#exported = true
   }
 
   /**
@@ -161,6 +180,10 @@ class NativeSpanContext extends DatadogSpanContext {
   setTag (key, value) {
     // Store in JS cache via parent (preserve original type)
     super.setTag(key, value)
+
+    // Already exported: keep the JS cache updated but never queue a native op
+    // for a span whose Create was removed at export (see `#exported`).
+    if (this.#exported) return
 
     // Symbol keys are for internal JS use only (e.g., IGNORE_OTEL_ERROR)
     if (typeof key === 'symbol') return
@@ -205,6 +228,7 @@ class NativeSpanContext extends DatadogSpanContext {
    * @param {object} tags - Tag object to sync
    */
   syncToNativeOnly (tags) {
+    if (this.#exported) return
     const metaBatch = []
     const metricBatch = []
 
@@ -239,6 +263,7 @@ class NativeSpanContext extends DatadogSpanContext {
    * @param {unknown} value
    */
   syncOneTagToNative (key, value) {
+    if (this.#exported) return
     if (value === undefined || value === null) return
     if (typeof key === 'symbol') return
     if (this.#isOtelDeferredKey(key)) return

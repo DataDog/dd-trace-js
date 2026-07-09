@@ -88,6 +88,41 @@ describe('NativeSpanContext', () => {
     })
   })
 
+  describe('markExported', () => {
+    beforeEach(() => {
+      spanContext = new NativeSpanContext(nativeSpans, {
+        traceId: id,
+        spanId: id,
+      })
+    })
+
+    it('stops syncing tags to native once exported, but keeps the JS cache', () => {
+      // Sanity: before export, tags reach native storage.
+      spanContext.setTag('pre', 'x')
+      assert.ok(nativeSpans.queueOp.called, 'expected pre-export tag to reach native')
+
+      spanContext.markExported()
+      nativeSpans.queueOp.resetHistory()
+      nativeSpans.queueBatchMeta.resetHistory()
+      nativeSpans.queueBatchMetrics.resetHistory()
+
+      // After export the span's Create is gone from the WASM change-buffer map;
+      // any further op would throw `span not found` and drop the whole pending
+      // batch. All sync entry points must therefore be native no-ops.
+      spanContext.setTag('peer.service', 'db')
+      spanContext.syncOneTagToNative('k', 'v')
+      spanContext.syncToNativeOnly({ a: 'b', n: 1 })
+
+      assert.strictEqual(nativeSpans.queueOp.callCount, 0)
+      assert.strictEqual(nativeSpans.queueBatchMeta.callCount, 0)
+      assert.strictEqual(nativeSpans.queueBatchMetrics.callCount, 0)
+
+      // The JS tag cache still updates (parity with the JS-only pipeline, which
+      // also serializes spans at export time so late tags never hit the wire).
+      assert.strictEqual(spanContext._tags['peer.service'], 'db')
+    })
+  })
+
   describe('setTag', () => {
     beforeEach(() => {
       spanContext = new NativeSpanContext(nativeSpans, {

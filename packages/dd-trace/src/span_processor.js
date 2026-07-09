@@ -274,6 +274,23 @@ class SpanProcessor {
 
       if (finishedSpansToExport.length !== 0 && trace.isRecording !== false) {
         this._exporter.export(finishedSpansToExport)
+        // The exporter has taken these spans; their native Create is (or is about
+        // to be) removed from the change-buffer map. Mark each context exported
+        // so a late `setTag`/`addTags` can't queue an op for a now-missing span,
+        // which would make `flush_change_buffer` drop the whole next batch.
+        //
+        // Invariant this relies on: every OTHER native write for these spans
+        // (`_syncTraceTagsToNative`, `_syncSamplingToNative`, `applyOtelHttpSemantics`,
+        // span-sampler metrics, finish-time span events/meta_struct) runs earlier in
+        // this same synchronous pass, and `_erase` drops exported spans from
+        // `trace.started` so nothing revisits them. Only externally-driven
+        // `setTag`/`addTags`/name writes can still arrive after export — those are
+        // the ones `#exported` guards. Keep markExported here (after export), not
+        // earlier, or that invariant breaks.
+        for (const span of finishedSpansToExport) {
+          const context = span.context()
+          if (typeof context.markExported === 'function') context.markExported()
+        }
       }
 
       this._erase(trace, active)
