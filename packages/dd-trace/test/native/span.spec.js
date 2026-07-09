@@ -290,6 +290,19 @@ describe('NativeDatadogSpan', () => {
       sinon.assert.calledWith(nativeSpans.queueOp, OpCode.SetMetaAttr, sinon.match.any, 'language', 'javascript')
     })
 
+    it('coerces a non-string operation name so the WASM string table never sees undefined', () => {
+      // The dd-trace-api shim can create a span with an undefined operation
+      // name; the JS formatter exported String(name), so native must too rather
+      // than crash interning `undefined` (getStringId reads `.length`).
+      assert.doesNotThrow(() => {
+        span = new NativeDatadogSpan(tracer, processor, prioritySampler, {
+          operationName: undefined,
+        }, false, nativeSpans)
+      })
+      const createCall = nativeSpans.queueCreateSpan.getCall(0)
+      assert.strictEqual(createCall.args[4], 'undefined')
+    })
+
     it('skips the default resource when a string resource.name is supplied at creation', () => {
       span = new NativeDatadogSpan(tracer, processor, prioritySampler, {
         operationName: 'test-operation',

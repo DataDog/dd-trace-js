@@ -191,7 +191,11 @@ class NativeDatadogSpan extends DatadogSpan {
   _createContext (parent, fields) {
     const nativeSpans = pendingNativeSpans
 
-    const operationName = fields.operationName
+    // Coerce like the JS formatter (`name: String(spanContext._name)`): a span
+    // created with a non-string operation name (e.g. the dd-trace-api shim can
+    // pass `undefined`) must not reach the WASM string table as `undefined`,
+    // which would throw on `.length`. Master exported `String(name)` here.
+    const operationName = String(fields.operationName)
     const tracer = this.tracer()
     const propagationBehavior = tracer?._config?.DD_TRACE_PROPAGATION_BEHAVIOR_EXTRACT
     const tracerService = tracer?._service
