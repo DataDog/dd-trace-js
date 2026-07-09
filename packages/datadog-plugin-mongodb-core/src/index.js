@@ -49,6 +49,20 @@ class MongodbCorePlugin extends DatabasePlugin {
         'out.port': options.port,
       },
     }, ctx)
+    // When DBM propagation is enabled, master sets peer.service as a side effect
+    // of getPeerService mutating the live tags map while building the comment.
+    // In native mode that direct getTags() mutation never reaches the WASM store,
+    // so the exported span would lack peer.service while the comment (built from
+    // live _tags) still carried ddprs=<db>. Set it through the span (WASM-synced)
+    // instead, gated on DBM being active so default-config spans are unchanged
+    // (the spanComputePeerService path already syncs via addTags). The mongo ns
+    // is `dbName` or `dbName.collection`, so keep the first segment — matching
+    // getPeerService (whose `=== undefined` guard is now false, so it won't
+    // re-mutate).
+    if (ns && this.config.dbmPropagationMode !== 'disabled') {
+      const dotIndex = ns.indexOf('.')
+      span.setTag('peer.service', dotIndex === -1 ? ns : ns.slice(0, dotIndex))
+    }
     const comment = this.injectDbmComment(span, ops.comment, serviceResult.name)
     if (comment) {
       ops.comment = comment
