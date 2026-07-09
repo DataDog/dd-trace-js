@@ -1,0 +1,207 @@
+'use strict'
+
+const assert = require('node:assert/strict')
+
+const { describe, it, beforeEach } = require('mocha')
+const msgpack = require('@msgpack/msgpack')
+const sinon = require('sinon')
+const proxyquire = require('proxyquire')
+
+require('../setup/core')
+
+const {
+  MAX_NAME_LENGTH,
+  MAX_SERVICE_LENGTH,
+  MAX_RESOURCE_NAME_LENGTH,
+  MAX_TYPE_LENGTH,
+  DEFAULT_SPAN_NAME,
+  DEFAULT_SERVICE_NAME,
+} = require('../../src/encode/tags-processors')
+const processTags = require('../../src/process-tags')
+
+describe('span-stats-encode', () => {
+  let encoder
+  let writer
+  let logger
+  let stats
+  let bucket
+  let stat
+
+  beforeEach(() => {
+    processTags.initialize()
+
+    logger = {
+      debug: sinon.stub(),
+    }
+    const { SpanStatsEncoder } = proxyquire('../../src/encode/span-stats', {
+      '../log': logger,
+    })
+    writer = { flush: sinon.spy() }
+    encoder = new SpanStatsEncoder(writer)
+
+    stat = {
+      Name: 'web.request',
+      Type: 'web',
+      Service: 'dd-trace',
+      Resource: 'GET',
+      Synthetics: false,
+      HTTPStatusCode: 200,
+      HTTPMethod: 'GET',
+      HTTPEndpoint: '/users/:id',
+      srv_src: 'kafka',
+      Hits: 30799,
+      TopLevelHits: 30799,
+      Duration: 1230,
+      Errors: 0,
+      OkSummary: Buffer.from(''),
+      ErrorSummary: Buffer.from(''),
+    }
+
+    bucket = {
+      Start: 1660000000000,
+      Duration: 10000000000,
+      Stats: [
+        stat,
+      ],
+    }
+
+    stats = {
+      Hostname: 'COMP-C02F806TML87',
+      Env: 'env',
+      Version: '4.0.0-pre',
+      Stats: [
+        bucket,
+      ],
+      Lang: 'javascript',
+      TracerVersion: '1.2.3',
+      RuntimeID: 'some-runtime-id',
+      Sequence: 1,
+      ProcessTags: processTags.serialized,
+    }
+  })
+
+  it('should encode to msgpack', () => {
+    encoder.encode(stats)
+
+    const buffer = encoder.makePayload()
+    const decoded = msgpack.decode(buffer)
+
+    assert.deepStrictEqual(decoded, stats)
+  })
+
+  it('should report its count', () => {
+    assert.strictEqual(encoder.count(), 0)
+
+    encoder.encode(stats)
+
+    assert.strictEqual(encoder.count(), 1)
+
+    encoder.encode(stats)
+
+    assert.strictEqual(encoder.count(), 2)
+  })
+
+  it('should reset after making a payload', () => {
+    encoder.encode(stats)
+    encoder.makePayload()
+
+    assert.strictEqual(encoder.count(), 0)
+  })
+
+  it('should truncate name, service, type and resource when they are too long', () => {
+    const tooLongString = new Array(500).fill('a').join('')
+    const resourceTooLongString = new Array(10000).fill('a').join('')
+    const statsToTruncate = {
+      ...stats,
+      Stats: [
+        {
+          ...bucket,
+          Stats: [
+            {
+              ...stat,
+              Name: tooLongString,
+              Type: tooLongString,
+              Service: tooLongString,
+              Resource: resourceTooLongString,
+            },
+          ],
+        },
+      ],
+    }
+    encoder.encode(statsToTruncate)
+
+    const buffer = encoder.makePayload()
+    const decoded = msgpack.decode(buffer)
+
+    assert.ok(decoded)
+    const decodedStat = decoded.Stats[0].Stats[0]
+    assert.strictEqual(decodedStat.Type.length, MAX_TYPE_LENGTH)
+    assert.strictEqual(decodedStat.Name.length, MAX_NAME_LENGTH)
+    assert.strictEqual(decodedStat.Service.length, MAX_SERVICE_LENGTH)
+    // ellipsis is added
+    assert.strictEqual(decodedStat.Resource.length, MAX_RESOURCE_NAME_LENGTH + 3)
+  })
+
+  it('should fallback to a default name and service if they are not present', () => {
+    const statsToTruncate = {
+      ...stats,
+      Stats: [
+        {
+          ...bucket,
+          Stats: [
+            {
+              ...stat,
+              Name: undefined,
+              Service: undefined,
+            },
+          ],
+        },
+      ],
+    }
+    encoder.encode(statsToTruncate)
+
+    const buffer = encoder.makePayload()
+    const decodedStats = msgpack.decode(buffer)
+    assert.ok(decodedStats)
+
+    const decodedStat = decodedStats.Stats[0].Stats[0]
+    assert.ok(decodedStat)
+    assert.strictEqual(decodedStat.Service, DEFAULT_SERVICE_NAME)
+    assert.strictEqual(decodedStat.Name, DEFAULT_SPAN_NAME)
+  })
+
+  it('should encode HTTPMethod and HTTPEndpoint', () => {
+    encoder.encode(stats)
+
+    const buffer = encoder.makePayload()
+    const decoded = msgpack.decode(buffer)
+
+    const decodedStat = decoded.Stats[0].Stats[0]
+    assert.strictEqual(decodedStat.HTTPMethod, 'GET')
+    assert.strictEqual(decodedStat.HTTPEndpoint, '/users/:id')
+  })
+
+  it('should encode SrvSrc', () => {
+    encoder.encode(stats)
+
+    const buffer = encoder.makePayload()
+    const decoded = msgpack.decode(buffer)
+
+    const decodedStat = decoded.Stats[0].Stats[0]
+    assert.strictEqual(decodedStat.srv_src, 'kafka')
+  })
+
+  it('should encode SrvSrc as empty string when not present', () => {
+    const statsWithoutSrvSrc = {
+      ...stats,
+      Stats: [{ ...bucket, Stats: [{ ...stat, srv_src: undefined }] }],
+    }
+    encoder.encode(statsWithoutSrvSrc)
+
+    const buffer = encoder.makePayload()
+    const decoded = msgpack.decode(buffer)
+
+    const decodedStat = decoded.Stats[0].Stats[0]
+    assert.strictEqual(decodedStat.srv_src, '')
+  })
+})

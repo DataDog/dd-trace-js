@@ -95,8 +95,20 @@ class DatadogTracer {
         clientComputedStats: config.stats?.DD_TRACE_STATS_COMPUTATION_ENABLED || config.apmTracingEnabled === false,
       })
 
+      let otlpStatsExporter
+      if (config.OTEL_TRACES_SPAN_METRICS_ENABLED) {
+        const { createOtlpSpanStatsExporter } = require('../opentelemetry/metrics')
+        otlpStatsExporter = createOtlpSpanStatsExporter(config)
+      }
+
       this._exporter = new NativeExporter(config, this._prioritySampler, this._nativeSpans)
-      this._processor = new SpanProcessor(this._exporter, this._prioritySampler, config, this._nativeSpans)
+      this._processor = new SpanProcessor(
+        this._exporter,
+        this._prioritySampler,
+        config,
+        this._nativeSpans,
+        otlpStatsExporter
+      )
       this._url = agentUrl
 
       log.debug('Native spans mode enabled')

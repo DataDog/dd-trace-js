@@ -117,6 +117,39 @@ describe('SpanProcessor', () => {
     sinon.assert.calledWith(prioritySampler.sample, finishedSpan.context())
   })
 
+  it('should feed formatted spans to OTLP stats while exporting raw spans natively', () => {
+    const formattedSpan = { name: 'formatted', metrics: {}, meta: {} }
+    const spanFormat = sinon.stub().returns(formattedSpan)
+    const onSpanFinished = sinon.stub()
+    const SpanStatsProcessor = sinon.stub().returns({ onSpanFinished })
+    const SpanProcessorWithStats = proxyquire('../src/span_processor', {
+      './span_format': spanFormat,
+      './span_sampler': SpanSampler,
+      './native': { OpCode: fakeOpCode },
+      './span_stats': { SpanStatsProcessor },
+      './service-naming/extra-services': extraServicesStub,
+    })
+    const otlpStatsExporter = { export: sinon.stub() }
+    const processorWithStats = new SpanProcessorWithStats(
+      exporter,
+      prioritySampler,
+      config,
+      nativeSpans,
+      otlpStatsExporter
+    )
+
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+
+    processorWithStats.process(finishedSpan)
+
+    sinon.assert.calledWithNew(SpanStatsProcessor)
+    sinon.assert.calledWith(SpanStatsProcessor, config, otlpStatsExporter)
+    sinon.assert.calledOnceWithExactly(spanFormat, finishedSpan, true, false)
+    sinon.assert.calledOnceWithExactly(onSpanFinished, formattedSpan)
+    sinon.assert.calledOnceWithExactly(exporter.export, [finishedSpan])
+  })
+
   it('writes _dd.p.dm to native trace meta for kept traces (priority >= AUTO_KEEP)', () => {
     trace.started = [finishedSpan]
     trace.finished = [finishedSpan]

@@ -2,9 +2,11 @@
 
 const { AUTO_KEEP } = require('../../../ext/priority')
 const log = require('./log')
+const spanFormat = require('./span_format')
 const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
 const native = require('./native')
+const processTags = require('./process-tags')
 const { registerExtraService } = require('./service-naming/extra-services')
 const {
   SAMPLING_MECHANISM_MANUAL,
@@ -19,15 +21,23 @@ const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
 
 class SpanProcessor {
-  constructor (exporter, prioritySampler, config, nativeSpans) {
+  constructor (exporter, prioritySampler, config, nativeSpans, otlpStatsExporter) {
     this._exporter = exporter
     this._prioritySampler = prioritySampler
     this._config = config
     this._killAll = false
     this._nativeSpans = nativeSpans
 
+    if (otlpStatsExporter) {
+      const { SpanStatsProcessor } = require('./span_stats')
+      this._stats = new SpanStatsProcessor(config, otlpStatsExporter)
+    }
+
     this._spanSampler = new SpanSampler({ spanSamplingRules: config.sampler?.spanSamplingRules, nativeSpans })
     this._gitMetadataTagger = new GitMetadataTagger(config)
+    this._processTags = config.DD_EXPERIMENTAL_PROPAGATE_PROCESS_TAGS_ENABLED
+      ? processTags.serialized
+      : false
   }
 
   sample (span) {
@@ -219,7 +229,7 @@ class SpanProcessor {
       // Mirror trace-level tags (`_dd.p.tid`, other `_dd.p.*`, `baggage.*`, and
       // the git metadata tagged just above) into native storage now that all
       // trace tags are set — tagGitMetadata runs after sample(), so this must
-      // come after it. `_dd.p.dm` is handled by the sampling path.
+      // come after it. `_addDecisionMaker` reconciles `_dd.p.dm` on trace.tags.
       if (spanContext._nativeSpanId !== undefined) {
         this._syncTraceTagsToNative(spanContext, spanContext._nativeSpanId)
       }
@@ -229,6 +239,7 @@ class SpanProcessor {
       // aggregation during flush_chunk.
       const finishedSpansToExport = []
       const otelSemantics = this._config.DD_TRACE_OTEL_SEMANTICS_ENABLED
+      let isFirstSpanInChunk = true
 
       for (const span of started) {
         if (span._duration === undefined) {
@@ -236,6 +247,18 @@ class SpanProcessor {
         } else {
           finishedSpansToExport.push(span)
           const context = span.context()
+
+          // OTLP trace metrics remain a JS-side stats feature. Build the same
+          // formatted span the legacy JS processor used, before OTel HTTP tag
+          // remapping, because SpanStatsProcessor keys on Datadog HTTP tag names
+          // (`http.method`, `http.route`, `http.status_code`, ...). Native trace
+          // export still sends the raw span to WASM below.
+          if (this._stats) {
+            const formattedSpan = spanFormat(span, isFirstSpanInChunk, this._processTags)
+            this._stats.onSpanFinished(formattedSpan)
+          }
+          isFirstSpanInChunk = false
+
           // Remap Datadog HTTP tags to OpenTelemetry names on the native span
           // before export. Done at finish (not per setTag) because the remap
           // needs the full tag set (URL decomposition, status -> error).
