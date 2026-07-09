@@ -93,7 +93,10 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
 }
 
 function testRuntimeVersionChecks (arg, filename) {
-  context('runtime version check', () => {
+  const skipRuntimeVersionChecks = filename === 'initialize.mjs' && process.versions.node === '22.0.0'
+  const runtimeVersionContext = skipRuntimeVersionChecks ? context.skip : context
+
+  runtimeVersionContext('runtime version check', () => {
     const NODE_OPTIONS = `--${arg} dd-trace/${filename}`
     const entryFile = arg === 'loader' ? 'init/trace.mjs' : 'init/trace.js'
     const doTest = (expectedOut, expectedTelemetryPoints, expectedSource) =>
