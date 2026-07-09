@@ -48,8 +48,16 @@ describe('Plugin', () => {
         return server
       }
 
+      // `agent.load` evicts dd-trace from require.cache and rebinds the global
+      // tracer, resolving with the live proxy. Bind `tracer` to that returned
+      // proxy so manual spans created in tests (e.g. tracer.startSpan) share the
+      // same tracer — and the same native span-storage interface — as the
+      // plugin's spans. Capturing require('../../dd-trace') separately yields a
+      // stale proxy, which in native mode splits a trace across two WASM span
+      // maps and drops it (span-not-found on flush).
+      const loadTracer = (...args) => agent.load(...args).then(t => { tracer = t; return t })
+
       beforeEach(() => {
-        tracer = require('../../dd-trace')
         appListener = null
       })
 
@@ -63,7 +71,7 @@ describe('Plugin', () => {
       describe('with OTel semantics enabled', () => {
         beforeEach(() => {
           process.env.DD_TRACE_OTEL_SEMANTICS_ENABLED = 'true'
-          return agent.load('http2', { server: false })
+          return loadTracer('http2', { server: false })
             .then(() => {
               http2 = require(loadPlugin)
             })
@@ -109,7 +117,7 @@ describe('Plugin', () => {
 
       describe('without configuration', () => {
         beforeEach(() => {
-          return agent.load('http2', { server: false })
+          return loadTracer('http2', { server: false })
             .then(() => {
               http2 = require(loadPlugin)
             })
@@ -707,7 +715,7 @@ describe('Plugin', () => {
             },
           }
 
-          return agent.load('http2', config)
+          return loadTracer('http2', config)
             .then(() => {
               http2 = require(loadPlugin)
             })
@@ -746,11 +754,10 @@ describe('Plugin', () => {
         let sub
 
         beforeEach(() => {
-          return agent.load('http2', { server: false })
+          return loadTracer('http2', { server: false })
             .then(() => {
               ch = require('dc-polyfill').channel('apm:http2:client:request:start')
               sub = () => {}
-              tracer = require('../../dd-trace')
               http2 = require('http2')
             })
         })
@@ -798,7 +805,7 @@ describe('Plugin', () => {
             },
           }
 
-          return agent.load('http2', config)
+          return loadTracer('http2', config)
             .then(() => {
               http2 = require(loadPlugin)
             })
@@ -844,7 +851,7 @@ describe('Plugin', () => {
             },
           }
 
-          return agent.load('http2', config)
+          return loadTracer('http2', config)
             .then(() => {
               http2 = require(loadPlugin)
             })
@@ -920,7 +927,7 @@ describe('Plugin', () => {
             },
           }
 
-          return agent.load('http2', config)
+          return loadTracer('http2', config)
             .then(() => {
               http2 = require(loadPlugin)
             })
@@ -967,7 +974,7 @@ describe('Plugin', () => {
             },
           }
 
-          return agent.load('http2', config)
+          return loadTracer('http2', config)
             .then(() => {
               http2 = require(loadPlugin)
             })
@@ -1012,7 +1019,7 @@ describe('Plugin', () => {
             },
           }
 
-          return agent.load('http2', config)
+          return loadTracer('http2', config)
             .then(() => {
               http2 = require(loadPlugin)
             })
