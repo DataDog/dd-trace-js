@@ -361,6 +361,47 @@ describe('test optimization validation command runner', () => {
     }
   })
 
+  it('caps command stdout and stderr artifacts to bounded tails', async () => {
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-runner-'))
+
+    try {
+      const result = await runCommand({
+        cwd: outDir,
+        argv: [
+          process.execPath,
+          '-e',
+          [
+            'process.stdout.write("stdout-start-" + "a".repeat(80) + "-stdout-end")',
+            'process.stderr.write("stderr-start-" + "b".repeat(80) + "-stderr-end")',
+          ].join(';'),
+        ],
+        maxOutputBytes: 32,
+        timeoutMs: 1000,
+      }, {
+        outDir,
+      })
+
+      assert.strictEqual(result.stdoutTruncated, true)
+      assert.strictEqual(result.stderrTruncated, true)
+      assert.match(result.stdout, /stdout-end$/)
+      assert.match(result.stderr, /stderr-end$/)
+      assert.doesNotMatch(result.stdout, /stdout-start/)
+      assert.doesNotMatch(result.stderr, /stderr-start/)
+
+      const stdoutArtifact = fs.readFileSync(path.join(outDir, 'stdout.txt'), 'utf8')
+      const stderrArtifact = fs.readFileSync(path.join(outDir, 'stderr.txt'), 'utf8')
+      const commandArtifact = JSON.parse(fs.readFileSync(path.join(outDir, 'command.json'), 'utf8'))
+
+      assert.match(stdoutArtifact, /output truncated to last 32 bytes/)
+      assert.match(stderrArtifact, /output truncated to last 32 bytes/)
+      assert.strictEqual(commandArtifact.stdoutTruncated, true)
+      assert.strictEqual(commandArtifact.stderrTruncated, true)
+      assert.strictEqual(commandArtifact.maxOutputBytes, 32)
+    } finally {
+      fs.rmSync(outDir, { recursive: true, force: true })
+    }
+  })
+
   it('keeps toolchain env but drops ambient instrumentation from clean env', () => {
     const originalVoltaHome = process.env.VOLTA_HOME
     const originalNodeOptions = process.env.NODE_OPTIONS

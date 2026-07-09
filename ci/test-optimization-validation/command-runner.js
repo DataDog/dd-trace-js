@@ -40,6 +40,7 @@ const VALIDATION_SUPPRESSION_ENV = {
   DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE: 'false',
   DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false',
 }
+const DEFAULT_MAX_OUTPUT_BYTES = 1024 * 1024
 const TIMEOUT_KILL_GRACE_MS = 5000
 const TIMEOUT_FINALIZE_GRACE_MS = 1000
 
@@ -48,6 +49,7 @@ function runCommand (command, { env = {}, envMode = 'inherit', outDir, label, ve
   const timeoutMs = command.timeoutMs || 300_000
   const timeoutKillGraceMs = command.timeoutKillGraceMs || TIMEOUT_KILL_GRACE_MS
   const timeoutFinalizeGraceMs = command.timeoutFinalizeGraceMs || TIMEOUT_FINALIZE_GRACE_MS
+  const maxOutputBytes = command.maxOutputBytes || DEFAULT_MAX_OUTPUT_BYTES
   const result = {
     label,
     command: serializeCommand(command),
@@ -59,7 +61,9 @@ function runCommand (command, { env = {}, envMode = 'inherit', outDir, label, ve
     durationMs: 0,
     timedOut: false,
     stdout: '',
+    stdoutTruncated: false,
     stderr: '',
+    stderrTruncated: false,
     artifacts: {},
   }
 
@@ -115,10 +119,14 @@ function runCommand (command, { env = {}, envMode = 'inherit', outDir, label, ve
     }, timeoutMs)
 
     child.stdout.on('data', chunk => {
-      result.stdout += chunk.toString('utf8')
+      const capture = appendCapturedOutput(result.stdout, chunk, maxOutputBytes)
+      result.stdout = capture.output
+      result.stdoutTruncated = result.stdoutTruncated || capture.truncated
     })
     child.stderr.on('data', chunk => {
-      result.stderr += chunk.toString('utf8')
+      const capture = appendCapturedOutput(result.stderr, chunk, maxOutputBytes)
+      result.stderr = capture.output
+      result.stderrTruncated = result.stderrTruncated || capture.truncated
     })
     child.on('error', err => {
       result.stderr += `${err.stack || err}\n`
@@ -146,8 +154,14 @@ function runCommand (command, { env = {}, envMode = 'inherit', outDir, label, ve
       result.artifacts.stderr = path.join(outDir, 'stderr.txt')
       result.artifacts.command = path.join(outDir, 'command.json')
 
-      fs.writeFileSync(result.artifacts.stdout, sanitizeString(result.stdout))
-      fs.writeFileSync(result.artifacts.stderr, sanitizeString(result.stderr))
+      fs.writeFileSync(
+        result.artifacts.stdout,
+        sanitizeString(formatCapturedOutput(result.stdout, result.stdoutTruncated, maxOutputBytes))
+      )
+      fs.writeFileSync(
+        result.artifacts.stderr,
+        sanitizeString(formatCapturedOutput(result.stderr, result.stderrTruncated, maxOutputBytes))
+      )
       fs.writeFileSync(result.artifacts.command, `${JSON.stringify({
         command: sanitizeString(result.command),
         displayCommand: sanitizeString(result.displayCommand),
@@ -157,11 +171,54 @@ function runCommand (command, { env = {}, envMode = 'inherit', outDir, label, ve
         signal: result.signal,
         durationMs: result.durationMs,
         timedOut: result.timedOut,
+        stdoutTruncated: result.stdoutTruncated,
+        stderrTruncated: result.stderrTruncated,
+        maxOutputBytes,
       }, null, 2)}\n`)
 
       resolve(result)
     }
   })
+}
+
+/**
+ * Appends output while retaining only the latest bytes for diagnostic artifacts.
+ *
+ * @param {string} current currently captured output
+ * @param {Buffer|string} chunk new output chunk
+ * @param {number} maxBytes maximum retained bytes
+ * @returns {{output: string, truncated: boolean}} retained output and truncation flag
+ */
+function appendCapturedOutput (current, chunk, maxBytes) {
+  const next = Buffer.concat([
+    Buffer.from(current),
+    Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk)),
+  ])
+
+  if (next.length <= maxBytes) {
+    return {
+      output: next.toString('utf8'),
+      truncated: false,
+    }
+  }
+
+  return {
+    output: next.subarray(next.length - maxBytes).toString('utf8'),
+    truncated: true,
+  }
+}
+
+/**
+ * Adds truncation context to a captured command output artifact.
+ *
+ * @param {string} output captured output
+ * @param {boolean} truncated whether earlier output was omitted
+ * @param {number} maxBytes maximum retained bytes
+ * @returns {string} output artifact content
+ */
+function formatCapturedOutput (output, truncated, maxBytes) {
+  if (!truncated) return output
+  return `[test-optimization-validator] output truncated to last ${maxBytes} bytes\n${output}`
 }
 
 function shouldUseProcessGroup () {

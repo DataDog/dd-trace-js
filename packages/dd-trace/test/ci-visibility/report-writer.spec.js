@@ -6,6 +6,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const { Readable } = require('node:stream')
 
 const executionEnvironment = require('../../../../ci/test-optimization-validation/execution-environment')
 const { MockIntake } = require('../../../../ci/test-optimization-validation/mock-intake')
@@ -515,6 +516,56 @@ describe('test optimization validation report writer', () => {
     }
   })
 
+  it('does not write raw request bodies when intake decoding fails', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
+    const intake = new MockIntake({ out: tmpDir })
+    const secret = 'decode-body-secret'
+    const rawBody = Buffer.from(`{"message":"API_KEY=${secret}"`)
+    const rawBodyBase64 = rawBody.toString('base64')
+
+    try {
+      await postToIntake(intake, rawBody, {
+        'content-type': 'application/json',
+      })
+
+      const { requestsPath } = intake.writeArtifacts()
+      const requests = fs.readFileSync(requestsPath, 'utf8')
+
+      assert.match(requests, /decodeError/)
+      assert.match(requests, /bodyBytesRead/)
+      assert.doesNotMatch(requests, /rawBodyBase64/)
+      assert.doesNotMatch(requests, new RegExp(secret))
+      assert.doesNotMatch(requests, new RegExp(rawBodyBase64))
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('caps oversized mock intake request body artifacts', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
+    const intake = new MockIntake({ out: tmpDir, maxBodyBytes: 16 })
+    const secret = 'oversized-body-secret'
+
+    try {
+      await postToIntake(intake, Buffer.from(`{"message":"TOKEN=${secret}"}`), {
+        'content-type': 'application/json',
+      })
+
+      const { requestsPath } = intake.writeArtifacts()
+      const [request] = fs.readFileSync(requestsPath, 'utf8')
+        .trim()
+        .split('\n')
+        .map(line => JSON.parse(line))
+
+      assert.strictEqual(request.payload.bodyTruncated, true)
+      assert.strictEqual(request.payload.bodyBytesCaptured, 16)
+      assert.strictEqual(request.payload.maxBodyBytes, 16)
+      assert.doesNotMatch(JSON.stringify(request), new RegExp(secret))
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
   it('writes report-level intake artifacts from all scenario request windows', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
     const out = path.join(tmpDir, 'results')
@@ -885,6 +936,23 @@ describe('test optimization validation report writer', () => {
     }
   })
 })
+
+async function postToIntake (intake, body, headers) {
+  const req = Readable.from([body])
+  req.method = 'POST'
+  req.url = '/api/v2/citestcycle'
+  req.headers = headers
+
+  const res = {
+    setHeader () {},
+    end (body) {
+      this.body = body
+    },
+  }
+
+  await intake.handle(req, res)
+  return res
+}
 
 function testPayload (name) {
   return {

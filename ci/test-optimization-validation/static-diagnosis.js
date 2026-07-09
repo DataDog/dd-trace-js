@@ -9,6 +9,7 @@ const {
   getFrameworkDefinitions,
   runDiagnosis,
 } = require('../diagnose')
+const { sanitizeForReport } = require('./redaction')
 
 const SUPPORTED_FRAMEWORKS = new Set([
   'jest',
@@ -32,7 +33,7 @@ const UNSUPPORTED_FRAMEWORK_NAMES = {
 function runStaticDiagnosis ({ manifest, out }) {
   const report = runDiagnosis({ root: manifest.repository.root })
   const reportPath = path.join(out, 'static-diagnosis.json')
-  fs.writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`)
+  fs.writeFileSync(reportPath, `${JSON.stringify(sanitizeForReport(report), null, 2)}\n`)
   return { report, reportPath }
 }
 

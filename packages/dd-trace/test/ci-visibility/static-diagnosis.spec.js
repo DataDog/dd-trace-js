@@ -6,7 +6,10 @@ const os = require('node:os')
 const path = require('node:path')
 
 const { runDiagnosis } = require('../../../../ci/diagnose')
-const { getStaticBlocker } = require('../../../../ci/test-optimization-validation/static-diagnosis')
+const {
+  getStaticBlocker,
+  runStaticDiagnosis,
+} = require('../../../../ci/test-optimization-validation/static-diagnosis')
 
 describe('test optimization validation static diagnosis', () => {
   it('keeps root package metadata when the text file scan is truncated', () => {
@@ -164,6 +167,38 @@ describe('test optimization validation static diagnosis', () => {
 
       assert.ok(workflowResult)
       assert.deepStrictEqual(workflowResult.locations, ['.azure-pipelines/ci.yml'])
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('redacts secret-like values from the standalone static diagnosis artifact', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
+    const out = path.join(root, 'results')
+
+    fs.mkdirSync(out)
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      devDependencies: {
+        'dd-trace': 'file:../dd-trace',
+        jest: '29.7.0',
+      },
+      scripts: {
+        test: 'DD_API_KEY=static-diagnosis-secret jest',
+      },
+    }))
+
+    try {
+      const staticDiagnosis = runStaticDiagnosis({
+        manifest: {
+          repository: { root },
+        },
+        out,
+      })
+      const artifact = fs.readFileSync(staticDiagnosis.reportPath, 'utf8')
+
+      assert.match(JSON.stringify(staticDiagnosis.report), /static-diagnosis-secret/)
+      assert.match(artifact, /DD_API_KEY=<redacted>/)
+      assert.doesNotMatch(artifact, /static-diagnosis-secret/)
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }

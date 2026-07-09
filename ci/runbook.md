@@ -72,6 +72,13 @@ environment variable structure. Secret-like values are redacted on a best-effort
 files are not public-shareable as-is. Review and redact them before sharing outside trusted
 channels.
 
+## Trusted Code Warning
+
+Live validation runs this repository's setup commands and test commands. Treat those commands as
+arbitrary project code: run this workflow only on trusted checkouts, trusted pull requests, or a
+sandbox whose file, network, and secret access matches the risk you are willing to accept. Do not
+run live validation on untrusted code with production secrets available.
+
 ## Core Model
 
 The validator separates two questions:

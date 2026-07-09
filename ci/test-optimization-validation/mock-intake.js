@@ -11,6 +11,7 @@ const zlib = require('zlib')
 const { decodeBody } = require('./payload-decoder')
 const { sanitizeForReport } = require('./redaction')
 
+const DEFAULT_MAX_BODY_BYTES = 10 * 1024 * 1024
 const DEFAULT_SETTINGS = {
   code_coverage: false,
   tests_skipping: false,
@@ -33,9 +34,10 @@ const DEFAULT_SETTINGS = {
 }
 
 class MockIntake {
-  constructor ({ out, verbose = false }) {
+  constructor ({ out, verbose = false, maxBodyBytes = DEFAULT_MAX_BODY_BYTES }) {
     this.out = out
     this.verbose = verbose
+    this.maxBodyBytes = maxBodyBytes
     this.port = null
     this.server = null
     this.requests = []
@@ -93,8 +95,8 @@ class MockIntake {
   }
 
   async handle (req, res) {
-    const body = await readBody(req)
-    const decoded = body.length > 0 ? decodeSafely(body, req.headers) : null
+    const body = await readBody(req, this.maxBodyBytes)
+    const decoded = decodeSafely(body, req.headers)
     const url = req.url
 
     if (req.method === 'GET' && url === '/info') {
@@ -227,22 +229,57 @@ function closeServer (server) {
 }
 
 function decodeSafely (body, headers) {
+  if (body.truncated) {
+    return {
+      decodeError: `Request body exceeded ${body.maxBodyBytes} bytes and was truncated.`,
+      bodyBytesRead: body.bytesRead,
+      bodyBytesCaptured: body.bytesCaptured,
+      bodyTruncated: true,
+      maxBodyBytes: body.maxBodyBytes,
+    }
+  }
+
+  if (body.content.length === 0) return null
+
   try {
-    return decodeBody(body, headers)
+    return decodeBody(body.content, headers)
   } catch (err) {
     return {
       decodeError: err.message,
-      rawBodyBase64: body.toString('base64'),
+      bodyBytesRead: body.bytesRead,
+      bodyBytesCaptured: body.bytesCaptured,
+      bodyTruncated: false,
     }
   }
 }
 
-function readBody (req) {
+function readBody (req, maxBodyBytes = DEFAULT_MAX_BODY_BYTES) {
   return new Promise((resolve, reject) => {
     const chunks = []
-    req.on('data', chunk => chunks.push(chunk))
+    let bytesRead = 0
+    let bytesCaptured = 0
+
+    req.on('data', chunk => {
+      bytesRead += chunk.length
+      const remaining = maxBodyBytes - bytesCaptured
+      if (remaining <= 0) return
+
+      if (chunk.length <= remaining) {
+        chunks.push(chunk)
+        bytesCaptured += chunk.length
+      } else {
+        chunks.push(chunk.subarray(0, remaining))
+        bytesCaptured += remaining
+      }
+    })
     req.on('error', reject)
-    req.on('end', () => resolve(Buffer.concat(chunks)))
+    req.on('end', () => resolve({
+      content: Buffer.concat(chunks),
+      bytesRead,
+      bytesCaptured,
+      truncated: bytesRead > maxBodyBytes,
+      maxBodyBytes,
+    }))
   })
 }
 
