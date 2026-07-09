@@ -449,6 +449,21 @@ module.exports = {
       versions: ['2.5.6', '3.0.0', '3.4.0'],
     },
   ],
+  mercurius: [
+    {
+      // mercurius peers graphql; pin the only supported major (16) so the
+      // graphql instrumentation's TypeInfo `.enter`/`.leave` calls resolve.
+      name: 'graphql',
+      versions: ['^16.0.0'],
+    },
+    {
+      // mercurius <=14 needs fastify 4 (fastify-plugin ^4), 15+ needs fastify 5
+      // (fastify-plugin ^5). Install both majors; the peer-dependency patcher
+      // picks the one each mercurius version folder accepts.
+      name: 'fastify',
+      versions: ['>=4'],
+    },
+  ],
   mocha: [
     {
       name: 'mocha',
