@@ -166,4 +166,121 @@ describe('sendTelemetry', () => {
       })
     })
   })
+
+  describe('synchronous forwarding', () => {
+    it('forwards synchronously via spawnSync and never spawns an async child', () => {
+      let spawnSyncArgs
+      const telemetryModule = proxyquire('../../src/guardrails/telemetry', {
+        child_process: {
+          spawn () {
+            throw new assert.AssertionError({ message: 'spawn must not be called on the synchronous path' })
+          },
+          spawnSync (path, args, options) {
+            spawnSyncArgs = { path, args, options }
+            return { status: 0 }
+          },
+        },
+      })
+
+      telemetryModule('abort', ['reason:incompatible_runtime'], {
+        result: 'abort',
+        result_class: 'incompatible_runtime',
+        result_reason: 'Incompatible runtime',
+      }, true)
+
+      assert.strictEqual(spawnSyncArgs.args[0], 'library_entrypoint')
+      assert.deepStrictEqual(spawnSyncArgs.options.stdio, ['pipe', 'ignore', 'ignore'])
+      assert.strictEqual(spawnSyncArgs.options.timeout, 1000)
+      assert.strictEqual(spawnSyncArgs.options.killSignal, 'SIGKILL')
+      const parsed = JSON.parse(spawnSyncArgs.options.input)
+      assertObjectContains(parsed, {
+        points: [{ name: 'library_entrypoint.abort', tags: ['reason:incompatible_runtime'] }],
+        metadata: { result: 'abort', result_class: 'incompatible_runtime' },
+      })
+    })
+
+    it('bounds a wedged forwarder with a timeout and logs it instead of hanging', () => {
+      const logged = []
+      const timedOutError = new Error('spawnSync ETIMEDOUT')
+      timedOutError.code = 'ETIMEDOUT'
+      const telemetryModule = proxyquire('../../src/guardrails/telemetry', {
+        './log': { error: (...args) => logged.push(args) },
+        child_process: {
+          spawn () {
+            throw new assert.AssertionError({ message: 'spawn must not be called on the synchronous path' })
+          },
+          spawnSync () {
+            return { error: timedOutError, signal: 'SIGKILL' }
+          },
+        },
+      })
+
+      telemetryModule('abort', ['reason:incompatible_runtime'], {
+        result: 'abort',
+        result_class: 'incompatible_runtime',
+        result_reason: 'Incompatible runtime',
+      }, true)
+
+      assert.deepStrictEqual(logged, [['Telemetry forwarder timed out']])
+    })
+
+    it('logs a non-timeout spawn failure instead of hanging', () => {
+      const logged = []
+      const spawnError = new Error('spawnSync EACCES')
+      spawnError.code = 'EACCES'
+      const telemetryModule = proxyquire('../../src/guardrails/telemetry', {
+        './log': { error: (...args) => logged.push(args) },
+        child_process: {
+          spawn () {
+            throw new assert.AssertionError({ message: 'spawn must not be called on the synchronous path' })
+          },
+          spawnSync () {
+            return { error: spawnError }
+          },
+        },
+      })
+
+      telemetryModule('abort', ['reason:incompatible_runtime'], {
+        result: 'abort',
+        result_class: 'incompatible_runtime',
+        result_reason: 'Incompatible runtime',
+      }, true)
+
+      assert.deepStrictEqual(logged, [['Failed to spawn telemetry forwarder']])
+    })
+
+    it('logs a non-zero forwarder exit code', () => {
+      const logged = []
+      const telemetryModule = proxyquire('../../src/guardrails/telemetry', {
+        './log': { error: (...args) => logged.push(args) },
+        child_process: {
+          spawn () {
+            throw new assert.AssertionError({ message: 'spawn must not be called on the synchronous path' })
+          },
+          spawnSync () {
+            return { status: 1 }
+          },
+        },
+      })
+
+      telemetryModule('abort', ['reason:incompatible_runtime'], {
+        result: 'abort',
+        result_class: 'incompatible_runtime',
+        result_reason: 'Incompatible runtime',
+      }, true)
+
+      assert.deepStrictEqual(logged, [['Telemetry forwarder exited with code', 1]])
+    })
+
+    it('delivers the telemetry payload through the forwarder synchronously', async () => {
+      sendTelemetry('abort', ['reason:incompatible_runtime'], {
+        result: 'abort',
+        result_class: 'incompatible_runtime',
+        result_reason: 'Incompatible runtime',
+      }, true)
+
+      const msgs = await cleanup()
+      assertTelemetryPoints(process.pid, msgs, ['abort', 'reason:incompatible_runtime'])
+    })
+  })
 })
