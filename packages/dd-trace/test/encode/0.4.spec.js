@@ -11,6 +11,7 @@ const sinon = require('sinon')
 const { assertObjectContains } = require('../../../../integration-tests/helpers')
 require('../setup/core')
 const id = require('../../src/id')
+const { MAX_SIZE, OverflowError } = require('../../src/msgpack')
 
 function randString (length) {
   return Array.from({ length }, () => {
@@ -113,6 +114,41 @@ describe('encode', () => {
       encoder.encode(data)
 
       sinon.assert.called(writer.flush)
+    })
+
+    it('should reset and log on ERR_MSGPACK_CHUNK_OVERFLOW instead of throwing', () => {
+      logger.error = sinon.stub()
+      // Queue a fine-shaped trace, then make the next encode hit the cap.
+      // The cap path has to drop the queued payload too — emitting a partial
+      // buffer afterwards would corrupt the wire because the per-trace
+      // string-cache entries point at offsets in `_stringBytes` we just
+      // discarded. The catch path routes through the virtual `reset()` so
+      // subclasses (e.g. `AgentlessCiVisibilityEncoder`) can clear their
+      // own per-payload counters; spying on `encoder.reset` pins that hook.
+      encoder.encode(data)
+      assert.strictEqual(encoder.count(), 1)
+
+      const resetSpy = sinon.spy(encoder, 'reset')
+      const originalReserve = encoder._traceBytes.reserve.bind(encoder._traceBytes)
+      let triggered = false
+      sinon.stub(encoder._traceBytes, 'reserve').callsFake(function (size) {
+        if (triggered) return originalReserve(size)
+        triggered = true
+        throw new OverflowError(MAX_SIZE + 1)
+      })
+
+      encoder.encode(data)
+      assert.strictEqual(encoder.count(), 0, 'encoder must reset, dropping the queued + in-flight traces')
+      sinon.assert.calledOnce(resetSpy)
+      sinon.assert.calledOnce(logger.error)
+      const [message] = logger.error.firstCall.args
+      assert.match(message, /chunk cap/)
+    })
+
+    it('should rethrow non-overflow encoder errors', () => {
+      sinon.stub(encoder._traceBytes, 'reserve').throws(new Error('something else'))
+
+      assert.throws(() => encoder.encode(data), /something else/)
     })
 
     it('should reset after making a payload', () => {
