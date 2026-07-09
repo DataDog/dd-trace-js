@@ -48,6 +48,8 @@ function guard (fn) {
   if (!clobberBailout && (NODE_MAJOR < minMajor || NODE_MAJOR >= nextMajor)) {
     initBailout = true
     var runtimeInfo = 'Incompatible runtime Node.js ' + version + ', supported runtimes: Node.js ' + supportedRange
+    // When not forced, the process bails out here and may call process.exit() right away;
+    // forward synchronously so the telemetry child can't outlive us and wedge the exit.
     telemetry([
       { name: 'abort', tags: ['reason:incompatible_runtime'] },
       { name: 'abort.runtime', tags: [] }
@@ -55,7 +57,7 @@ function guard (fn) {
       result: 'abort',
       result_class: 'incompatible_runtime',
       result_reason: runtimeInfo
-    })
+    }, !forced)
     log.info('Aborting application instrumentation due to incompatible_runtime.')
     log.info('Found incompatible runtime Node.js %s, Supported runtimes: Node.js %s.', version, supportedRange)
     if (forced) {
