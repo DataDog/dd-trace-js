@@ -8,6 +8,7 @@ class Http2ServerPlugin extends ServerPlugin {
   constructor (tracer, config) {
     super(tracer, config)
     this.addBind('apm:http2:server:response:emit', this.bindEmit)
+    this.addSub('apm:http2:server:request:adopt', this.adopt)
   }
 
   static id = 'http2'
@@ -45,14 +46,27 @@ class Http2ServerPlugin extends ServerPlugin {
 
     const context = web.getContext(req)
 
-    // The core stream API has no `res.writeHead`; CORS preflight tagging only
-    // applies to the compatibility response that exposes it.
-    if (!context.instrumented && typeof context.res.writeHead === 'function') {
-      context.res.writeHead = web.wrapWriteHead(context)
-      context.instrumented = true
-    }
+    // A mixed server adopts the real request off this stream later; key the
+    // context on the stream now so that lookup resolves. Skipped for the common
+    // single-listener request, which never adopts.
+    if (ctx.adoptable) web.linkContextToStream(req.stream, context)
+
+    instrumentWriteHead(context)
 
     return ctx.currentStore
+  }
+
+  // A mixed server (raw-stream + 'request' listeners) creates the span from the
+  // 'stream' event with a throwaway adapter. When the compatibility layer then
+  // synthesizes the real request/response off the same stream, point the shared
+  // context at them so `web.setFramework`/`web.setRoute` from the user's
+  // 'request' handler resolve to this span and the finish `hooks.request`
+  // receives the real objects instead of the adapter.
+  adopt (ctx) {
+    const context = web.patch(ctx.req)
+    context.req = ctx.req
+    context.res = ctx.res
+    instrumentWriteHead(context)
   }
 
   bindEmit (ctx) {
@@ -80,6 +94,19 @@ class Http2ServerPlugin extends ServerPlugin {
 
   configure (config) {
     return super.configure(web.normalizeConfig(config))
+  }
+}
+
+// The core stream API has no `res.writeHead`; CORS preflight tagging only
+// applies to the compatibility response that exposes it. Runs once per context:
+// the mixed path calls it again from `adopt` once the real response is in place.
+/**
+ * @param {{ res: { writeHead?: Function }, instrumented?: boolean }} context
+ */
+function instrumentWriteHead (context) {
+  if (!context.instrumented && typeof context.res.writeHead === 'function') {
+    context.res.writeHead = web.wrapWriteHead(context)
+    context.instrumented = true
   }
 }
 

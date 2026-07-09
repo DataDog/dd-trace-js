@@ -7,6 +7,7 @@ const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const agent = require('../../dd-trace/test/plugins/agent')
+const web = require('../../dd-trace/src/plugins/util/web')
 const { withNamingSchema } = require('../../dd-trace/test/setup/mocha')
 const { assertObjectContains } = require('../../../integration-tests/helpers')
 const { rawExpectedSchema } = require('./naming')
@@ -696,6 +697,51 @@ describe('Plugin', () => {
             })
 
             await Promise.all([traceAsserted, request(http2, `http://localhost:${port}/user`)])
+          })
+
+          describe('exposing the real compatibility req/res', () => {
+            let hookRes
+
+            beforeEach(() => {
+              hookRes = undefined
+              agent.reload('http2', {
+                client: false,
+                hooks: {
+                  request (span, req, res) {
+                    hookRes = res
+                  },
+                },
+              })
+            })
+
+            it('hands the real compatibility req/res to the finish hook and web helpers', async () => {
+              let activeInRequestListener
+              const server = http2.createServer((req, res) => {
+                activeInRequestListener = tracer.scope().active()
+                // Setting the route through the shared web lifecycle only reaches
+                // the span when the real `req` resolves to the stream's context.
+                web.setRoute(req, '/users/:id')
+                res.writeHead(200)
+                res.end()
+              })
+              server.on('stream', () => {})
+              await listenAsync(server)
+
+              const traceAsserted = agent.assertFirstTraceSpan(span => {
+                assert.ok(activeInRequestListener, 'request listener ran without an active span')
+                assert.strictEqual(
+                  activeInRequestListener.context().toSpanId(),
+                  span.span_id.toString(),
+                  'the request listener saw a different span than the one that finished'
+                )
+                assertObjectContains(span, { resource: 'GET /users/:id' })
+                // The synthetic stream adapter has no `writeHead`; only the real
+                // `Http2ServerResponse` this path used to expose does.
+                assert.strictEqual(typeof hookRes?.writeHead, 'function')
+              })
+
+              await Promise.all([traceAsserted, request(http2, `http://localhost:${port}/users/42`)])
+            })
           })
         })
       })

@@ -8,6 +8,7 @@ const shimmer = require('../../../datadog-shimmer')
 
 const startServerCh = channel('apm:http2:server:request:start')
 const errorServerCh = channel('apm:http2:server:request:error')
+const adoptServerCh = channel('apm:http2:server:request:adopt')
 const emitCh = channel('apm:http2:server:response:emit')
 
 const HTTP2_HEADER_METHOD = ':method'
@@ -70,10 +71,17 @@ function wrapEmit (originalEmit) {
       // synthesized 'request' that fires nested below then reuses it. A
       // request-only server (no raw-stream listener) is left to the 'request'
       // branch so the compatibility response keeps its richer req/res.
-      if (this.listenerCount('request') === 0 || this.listenerCount('stream') > 1) {
+      const requestListenerCount = this.listenerCount('request')
+      if (requestListenerCount === 0 || this.listenerCount('stream') > 1) {
         const stream = args[1]
         const headers = args[2]
         const ctx = createStreamAdapter(stream, headers)
+        // Only a mixed server (a 'request' listener is present) synthesizes a
+        // real request off this stream and adopts the span later, so only then
+        // does the context need keying on the stream. A raw-stream-only server
+        // never adopts; leaving the flag unset keeps the stream->context write
+        // off its hot path.
+        ctx.adoptable = requestListenerCount !== 0
         tracedStreams.add(stream)
 
         return traceServerRequest(ctx, () => {
@@ -83,13 +91,18 @@ function wrapEmit (originalEmit) {
       }
     } else if (eventName === 'request') {
       const req = args[1]
+      const res = args[2]
+      res.req = req
+
       // A mixed server (raw-stream + 'request' listeners) already created the
       // span from the 'stream' event above; the stream's single 'close' is the
-      // sole finish source, so skip to avoid a second span and a second finish.
-      if (!tracedStreams.has(req.stream)) {
-        const res = args[2]
-        res.req = req
-
+      // sole finish source, so skip creating a second span. The synthesized
+      // request/response are the real objects a user's 'request' handler and
+      // the finish `hooks.request` expect, so hand them to the existing
+      // stream-backed context rather than leaving it on the throwaway adapter.
+      if (tracedStreams.has(req.stream)) {
+        adoptServerCh.publish({ req, res })
+      } else {
         const ctx = { req, res }
         return traceServerRequest(ctx, () => {
           shimmer.wrap(res, 'emit', emit => wrapResponseEmit(emit, ctx))
