@@ -150,7 +150,7 @@ describe('SpanProcessor', () => {
     assert.strictEqual(trace.tags['_dd.p.dm'], undefined)
   })
 
-  it('mirrors a pre-set sampling priority (AppSec force-keep / manual keep / propagation) to native without re-sampling', () => {
+  it('mirrors a pre-set sampling priority (AppSec/manual keep, propagation) without re-sampling', () => {
     trace.started = [finishedSpan]
     trace.finished = [finishedSpan]
     const ctx = finishedSpan.context()

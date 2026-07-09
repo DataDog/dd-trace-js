@@ -3,7 +3,6 @@
 const DatadogSpanContext = require('../opentracing/span_context')
 const { BASE_SERVICE, MEASURED } = require('../../../../ext/tags')
 const { IGNORE_OTEL_ERROR } = require('../constants')
-const { OpCode } = require('./index')
 const {
   applyHttpOtelSemantics,
   DD_HTTP_META_KEYS,
@@ -11,6 +10,7 @@ const {
   OTEL_OUTPUT_META_KEYS,
   OTEL_OUTPUT_METRIC_KEYS,
 } = require('../plugins/util/http-otel-semantics')
+const { OpCode } = require('./index')
 
 /**
  * NativeSpanContext extends DatadogSpanContext to store span data in native Rust storage.
