@@ -2514,6 +2514,13 @@ declare namespace tracer {
      * This plugin automatically instruments the
      * [graphql](https://github.com/graphql/graphql-js) module.
      *
+     * It also instruments [mercurius](https://github.com/mercurius-js/mercurius)
+     * (the Fastify GraphQL adapter): every request through `app.graphql` /
+     * `reply.graphql` opens a top-level `graphql.request` span that parents the
+     * `graphql.parse`/`graphql.validate`/`graphql.execute` spans and carries the
+     * request text. This span is produced even when mercurius serves the query
+     * from its JIT-compiled path, where `graphql.execute` does not run.
+     *
      * The `graphql` integration uses the operation name as the span resource name.
      * If no operation name is set, the resource name will always be just `query`,
      * `mutation` or `subscription`.

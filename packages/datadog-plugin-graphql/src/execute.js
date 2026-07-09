@@ -5,11 +5,9 @@ const dc = require('dc-polyfill')
 const { storage } = require('../../datadog-core')
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
 const GraphQLParsePlugin = require('./parse')
-const { extractErrorIntoSpanEvent, getSignature } = require('./utils')
+const { extractErrorIntoSpanEvent, getOperation, getSignature } = require('./utils')
 
 const legacyStorage = storage('legacy')
-
-const types = new Set(['query', 'mutation', 'subscription'])
 
 const iastResolveCh = dc.channel('apm:graphql:resolve:start')
 const resolverStartCh = dc.channel('datadog:graphql:resolver:start')
@@ -115,9 +113,11 @@ class GraphQLExecutePlugin extends TracingPlugin {
 
     ctx.collapse = this.config.collapse
 
+    const signature = getSignature(document, name, type, this.config.signature)
+
     const span = this.startSpan(this.operationName(), {
       service: this.config.service || this.serviceName(),
-      resource: getSignature(document, name, type, this.config.signature),
+      resource: signature,
       kind: this.constructor.kind,
       type: this.constructor.type,
       meta: {
@@ -666,17 +666,6 @@ function defaultFieldResolver (source, args, contextValue, info) {
     const property = source[info.fieldName]
     if (typeof property === 'function') return source[info.fieldName](args, contextValue, info)
     return property
-  }
-}
-
-function getOperation (document, operationName) {
-  if (!document || !Array.isArray(document.definitions)) return
-
-  for (const definition of document.definitions) {
-    if (definition && types.has(definition.operation) &&
-        (!operationName || definition.name?.value === operationName)) {
-      return definition
-    }
   }
 }
 
