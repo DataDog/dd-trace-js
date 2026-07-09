@@ -17,7 +17,6 @@ describe('vitest@3.2.6 with msw@2.14.6', () => {
   useSandbox([
     'vitest@3.2.6',
     'msw@2.14.6',
-    'tinypool',
   ], true)
 
   before(() => {
@@ -44,7 +43,7 @@ describe('vitest@3.2.6 with msw@2.14.6', () => {
           DD_TRACE_AGENT_PORT: String(receiver.port),
           DD_INSTRUMENTATION_TELEMETRY_ENABLED: 'true',
           DD_TELEMETRY_LOG_COLLECTION_ENABLED: 'true',
-          NODE_OPTIONS: '-r dd-trace/ci/init.js --import dd-trace/initialize.mjs',
+          NODE_OPTIONS: '-r dd-trace/ci/init --import dd-trace/register.js',
           TEST_DIR: 'ci-visibility/vitest-tests/msw-import.mjs',
         },
       }
