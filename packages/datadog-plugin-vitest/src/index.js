@@ -67,7 +67,6 @@ class VitestPlugin extends CiPlugin {
         testCommand: this.command,
         repositoryRoot: this.repositoryRoot,
         codeOwnersEntries: this.codeOwnersEntries,
-        testEnvironmentMetadata: this.testEnvironmentMetadata,
       })
     })
 
@@ -324,7 +323,6 @@ class VitestPlugin extends CiPlugin {
       const {
         codeOwnersEntries,
         repositoryRoot,
-        testEnvironmentMetadata,
         requestErrorTags,
         testSuiteAbsolutePath,
         frameworkVersion,
@@ -334,12 +332,6 @@ class VitestPlugin extends CiPlugin {
 
       const testCommand = ctx.testCommand || 'vitest run'
       const { testSessionId, testModuleId } = ctx
-      if (testEnvironmentMetadata) {
-        this.testEnvironmentMetadata = {
-          ...this.testEnvironmentMetadata,
-          ...testEnvironmentMetadata,
-        }
-      }
       this._setRepositoryRoot(repositoryRoot, codeOwnersEntries)
       this.command = testCommand
       this.frameworkVersion = frameworkVersion
