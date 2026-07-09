@@ -7,7 +7,7 @@ const {
   TELEMETRY_ENDPOINT_PAYLOAD_SERIALIZATION_MS,
   TELEMETRY_ENDPOINT_PAYLOAD_EVENTS_COUNT,
 } = require('../ci-visibility/telemetry')
-const { MsgpackChunk } = require('../msgpack')
+const { MsgpackChunk, MAX_SIZE, OverflowError } = require('../msgpack')
 const { AgentEncoder } = require('./0.4')
 const {
   truncateSpanTestOpt,
@@ -371,6 +371,16 @@ class AgentlessCiVisibilityEncoder extends AgentEncoder {
 
     const eventsBytes = this._traceBytes
     const totalSize = prefixBytes.length + eventsBytes.length
+
+    // The metadata prefix (built here, not during `encode`) and the events are
+    // capped independently, so both can stay under the cap while the assembled
+    // payload crosses it. An oversized metadata tag also overflows the prefix
+    // chunk itself inside `_encodePayloadStart` above; either way the tagged
+    // error propagates to the writer's flush-time catch to drop the payload.
+    if (totalSize > MAX_SIZE) {
+      throw new OverflowError(totalSize)
+    }
+
     const buffer = Buffer.allocUnsafe(totalSize)
     prefixBytes.buffer.copy(buffer, 0, 0, prefixBytes.length)
     eventsBytes.buffer.copy(buffer, prefixBytes.length, 0, eventsBytes.length)

@@ -7,9 +7,7 @@ const addresses = require('./addresses')
 const Reporter = require('./reporter')
 const waf = require('./waf')
 
-// Tracks spans for which start-invocation has been processed, so that
-// end-invocation can gate correctly
-const activeInvocations = new WeakSet()
+const activeInvocations = new WeakMap()
 
 /**
  * Maps pre-extracted HTTP data from the Lambda event to WAF addresses,
@@ -31,7 +29,8 @@ function onLambdaStartInvocation (data) {
       return
     }
 
-    activeInvocations.add(span)
+    const req = { headers: headers ?? {} }
+    activeInvocations.set(span, req)
 
     span.addTags({
       '_dd.appsec.enabled': 1,
@@ -74,7 +73,7 @@ function onLambdaStartInvocation (data) {
       persistent[addresses.HTTP_INCOMING_COOKIES] = cookies
     }
 
-    waf.run({ persistent }, span, undefined, span)
+    waf.run({ persistent }, req, undefined, span)
   } catch (err) {
     log.error('[ASM] Error in Lambda start-invocation handler', err)
   }
@@ -100,6 +99,7 @@ function onLambdaEndInvocation (data) {
       return
     }
 
+    const req = activeInvocations.get(span)
     activeInvocations.delete(span)
 
     let hasPersistentData = false
@@ -118,12 +118,12 @@ function onLambdaEndInvocation (data) {
     }
 
     if (hasPersistentData) {
-      waf.run({ persistent }, span, undefined, span)
+      waf.run({ persistent }, req, undefined, span)
     }
 
-    waf.disposeContext(span)
+    waf.disposeContext(req)
 
-    Reporter.finishRequest(span, null, {}, undefined, span)
+    Reporter.finishRequest(req, null, {}, undefined, span)
   } catch (err) {
     log.error('[ASM] Error in Lambda end-invocation handler', err)
   }

@@ -49,6 +49,16 @@ const { PLAYWRIGHT_VERSION } = process.env
 const latest = 'latest'
 const { oldest } = require('./versions')
 const versions = [oldest, latest]
+const REQUEST_ERROR_TAG_TEST_DIR = './ci-visibility/playwright-tests-request-error-tag'
+
+function assertRequestErrorTag (events, tag) {
+  const eventTypes = ['test_session_end', 'test_module_end', 'test_suite_end', 'test']
+  for (const eventType of eventTypes) {
+    const event = events.find(event => event.type === eventType)
+    assert.ok(event, `should have ${eventType} event`)
+    assert.strictEqual(event.content.meta[tag], 'true', `${eventType} should have ${tag} tag`)
+  }
+}
 
 versions.forEach((version) => {
   if (PLAYWRIGHT_VERSION === 'oldest' && version !== oldest) return
@@ -93,6 +103,28 @@ versions.forEach((version) => {
       await new Promise(resolve => webAppServer.close(resolve))
     })
 
+    async function runRequestErrorTagTest (receiver, run, envVars, tag) {
+      const proc = run(
+        './node_modules/.bin/playwright test -c playwright.config.js',
+        {
+          cwd,
+          env: {
+            ...envVars,
+            PW_BASE_URL: `http://localhost:${webAppPort}`,
+            DD_TEST_SESSION_NAME: 'my-test-session',
+            TEST_DIR: REQUEST_ERROR_TAG_TEST_DIR,
+          },
+        }
+      )
+      const eventsPromise = receiver
+        .gatherPayloadsUntilChildExit(proc, ({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
+          const events = payloads.flatMap(({ payload }) => payload.events)
+          assertRequestErrorTag(events, tag)
+        })
+      const [[exitCode]] = await Promise.all([once(proc, 'exit'), eventsPromise])
+      assert.strictEqual(exitCode, 0)
+    }
+
     const reportMethods = ['agentless', 'evp proxy']
 
     reportMethods.forEach((reportMethod) => {
@@ -105,37 +137,12 @@ versions.forEach((version) => {
                 ? getCiVisAgentlessConfig(receiver.port)
                 : getCiVisEvpProxyConfig(receiver.port)
               receiver.setSettingsResponseCode(404)
-              const eventsPromise = receiver
-                .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-                  const events = payloads.flatMap(({ payload }) => payload.events)
-                  const testSession = events.find(event => event.type === 'test_session_end').content
-                  assert.strictEqual(testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS], 'true')
-                  const testModule = events.find(event => event.type === 'test_module_end')
-                  assert.ok(testModule, 'should have test module event')
-                  assert.strictEqual(
-                    testModule.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS], 'true'
-                  )
-                  const testSuiteEvent = events.find(event => event.type === 'test_suite_end')
-                  assert.ok(testSuiteEvent, 'should have test suite event')
-                  assert.strictEqual(
-                    testSuiteEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS], 'true'
-                  )
-                  const testEvent = events.find(event => event.type === 'test')
-                  assert.ok(testEvent, 'should have test event')
-                  assert.strictEqual(testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS], 'true')
-                })
-              const proc = run(
-                './node_modules/.bin/playwright test -c playwright.config.js',
-                {
-                  cwd,
-                  env: {
-                    ...envVars,
-                    PW_BASE_URL: `http://localhost:${webAppPort}`,
-                    DD_TEST_SESSION_NAME: 'my-test-session',
-                  },
-                }
+              await runRequestErrorTagTest(
+                receiver,
+                run,
+                envVars,
+                DD_CI_LIBRARY_CONFIGURATION_ERROR_SETTINGS
               )
-              await Promise.all([eventsPromise, once(proc, 'exit')])
             })
 
           // No skippable_tests test: playwright does not request skippable suites (TIA unsupported).
@@ -150,40 +157,12 @@ versions.forEach((version) => {
                   : getCiVisEvpProxyConfig(receiver.port)
                 receiver.setSettings({ known_tests_enabled: true })
                 receiver.setKnownTestsResponseCode(404)
-                const eventsPromise = receiver
-                  .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-                    const events = payloads.flatMap(({ payload }) => payload.events)
-                    const testSession = events.find(event => event.type === 'test_session_end').content
-                    assert.strictEqual(
-                      testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS], 'true'
-                    )
-                    const testModule = events.find(event => event.type === 'test_module_end').content
-                    assert.strictEqual(
-                      testModule.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS], 'true'
-                    )
-                    const testSuiteEvent = events.find(event => event.type === 'test_suite_end')
-                    assert.ok(testSuiteEvent, 'should have test suite event')
-                    assert.strictEqual(
-                      testSuiteEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS], 'true'
-                    )
-                    const testEvent = events.find(event => event.type === 'test')
-                    assert.ok(testEvent, 'should have test event')
-                    assert.strictEqual(
-                      testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS], 'true'
-                    )
-                  })
-                const proc = run(
-                  './node_modules/.bin/playwright test -c playwright.config.js',
-                  {
-                    cwd,
-                    env: {
-                      ...envVars,
-                      PW_BASE_URL: `http://localhost:${webAppPort}`,
-                      DD_TEST_SESSION_NAME: 'my-test-session',
-                    },
-                  }
+                await runRequestErrorTagTest(
+                  receiver,
+                  run,
+                  envVars,
+                  DD_CI_LIBRARY_CONFIGURATION_ERROR_KNOWN_TESTS
                 )
-                await Promise.all([eventsPromise, once(proc, 'exit')])
               })
 
             it(
@@ -195,40 +174,12 @@ versions.forEach((version) => {
                   : getCiVisEvpProxyConfig(receiver.port)
                 receiver.setSettings({ test_management: { enabled: true } })
                 receiver.setTestManagementTestsResponseCode(404)
-                const eventsPromise = receiver
-                  .gatherPayloadsMaxTimeout(({ url }) => url.endsWith('/api/v2/citestcycle'), (payloads) => {
-                    const events = payloads.flatMap(({ payload }) => payload.events)
-                    const testSession = events.find(event => event.type === 'test_session_end').content
-                    assert.strictEqual(
-                      testSession.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS], 'true'
-                    )
-                    const testModule = events.find(event => event.type === 'test_module_end').content
-                    assert.strictEqual(
-                      testModule.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS], 'true'
-                    )
-                    const testSuiteEvent = events.find(event => event.type === 'test_suite_end')
-                    assert.ok(testSuiteEvent, 'should have test suite event')
-                    assert.strictEqual(
-                      testSuiteEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS], 'true'
-                    )
-                    const testEvent = events.find(event => event.type === 'test')
-                    assert.ok(testEvent, 'should have test event')
-                    assert.strictEqual(
-                      testEvent.content.meta[DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS], 'true'
-                    )
-                  })
-                const proc = run(
-                  './node_modules/.bin/playwright test -c playwright.config.js',
-                  {
-                    cwd,
-                    env: {
-                      ...envVars,
-                      PW_BASE_URL: `http://localhost:${webAppPort}`,
-                      DD_TEST_SESSION_NAME: 'my-test-session',
-                    },
-                  }
+                await runRequestErrorTagTest(
+                  receiver,
+                  run,
+                  envVars,
+                  DD_CI_LIBRARY_CONFIGURATION_ERROR_TEST_MANAGEMENT_TESTS
                 )
-                await Promise.all([eventsPromise, once(proc, 'exit')])
               })
           })
         })
