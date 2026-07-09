@@ -457,7 +457,6 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, s
       testCommand,
       repositoryRoot: receivedRepositoryRoot,
       codeOwnersEntries,
-      testEnvironmentMetadata,
     } = testSessionConfiguration
     repositoryRoot = receivedRepositoryRoot || repositoryRoot
     if (!shouldInstallNoWorkerInit) {
@@ -467,7 +466,6 @@ async function runMainProcessSetup (ctx, frameworkVersion, testSpecifications, s
         _ddTestCommand: testCommand,
         _ddRepositoryRoot: repositoryRoot,
         _ddCodeOwnersEntries: codeOwnersEntries,
-        _ddTestEnvironmentMetadata: testEnvironmentMetadata,
       }, 'Could not send test session configuration to workers.')
     }
   }
