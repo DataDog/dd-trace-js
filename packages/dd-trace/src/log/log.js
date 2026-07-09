@@ -60,7 +60,11 @@ class Log {
 }
 
 function hasErrorStack (value) {
-  return Boolean(value && typeof value === 'object' && (value instanceof Error || 'stack' in value))
+  if (!value || typeof value !== 'object') return false
+  if (value instanceof Error) return true
+
+  const stack = Object.getOwnPropertyDescriptor(value, 'stack')
+  return Boolean(stack && 'value' in stack && stack.value)
 }
 
 /**

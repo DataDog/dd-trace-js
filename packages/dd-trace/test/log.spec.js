@@ -358,6 +358,20 @@ describe('log', () => {
         assert.strictEqual(console.error.firstCall.args[0].message, 'test')
       })
 
+      it('should not treat non-errors with falsy stack values as causes', () => {
+        const stackValues = [undefined, null, '']
+
+        for (const stack of stackValues) {
+          console.error.resetHistory()
+
+          log.error('this is an error', { message: 'details', stack })
+
+          sinon.assert.calledOnce(console.error)
+          assert.ok(console.error.firstCall.args[0] instanceof Error)
+          assert.match(console.error.firstCall.args[0].message, /details/)
+        }
+      })
+
       it('should convert messages from callbacks to errors', () => {
         log.error(() => 'error')
 
@@ -374,6 +388,17 @@ describe('log', () => {
         assert.strictEqual(console.error.firstCall.args[0].message, 'this is an error')
         assert.ok(console.error.secondCall.args[0] instanceof Error)
         assert.strictEqual(console.error.secondCall.args[0].message, 'cause')
+      })
+
+      it('should allow a message + object with stack', () => {
+        const cause = { message: 'cause', stack: 'Error: cause' }
+
+        log.error('this is an error', cause)
+
+        sinon.assert.calledTwice(console.error)
+        assert.ok(console.error.firstCall.args[0] instanceof Error)
+        assert.strictEqual(console.error.firstCall.args[0].message, 'this is an error')
+        assert.strictEqual(console.error.secondCall.args[0], cause)
       })
 
       it('should not format an error stack while detecting a message + Error', () => {
