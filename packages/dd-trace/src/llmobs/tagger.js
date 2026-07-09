@@ -35,6 +35,7 @@ const {
   INTEGRATION,
   DECORATOR,
   PROPAGATED_ML_APP_KEY,
+  PROPAGATED_SESSION_ID_KEY,
   DEFAULT_PROMPT_NAME,
   INTERNAL_CONTEXT_VARIABLE_KEYS,
   INTERNAL_QUERY_VARIABLE_KEYS,
@@ -139,8 +140,17 @@ class LLMObsTagger {
     if (modelName) this.tagModelName(span, modelName)
     if (modelProvider) this._setTag(span, MODEL_PROVIDER, modelProvider)
 
-    sessionId = sessionId || registry.get(parent)?.[SESSION_ID]
-    if (sessionId) this._setTag(span, SESSION_ID, sessionId)
+    const traceTags = span.context()._trace.tags
+    sessionId = sessionId || registry.get(parent)?.[SESSION_ID] || traceTags[PROPAGATED_SESSION_ID_KEY]
+    if (sessionId) {
+      this._setTag(span, SESSION_ID, sessionId)
+      // The first session set in a trace becomes the trace-level default, stored on the trace-shared
+      // propagating tags. Later spans (including those under a session-less parent) inherit it, and it
+      // rides `x-datadog-tags` across service boundaries. An explicit sessionId still overrides locally.
+      if (traceTags[PROPAGATED_SESSION_ID_KEY] === undefined) {
+        traceTags[PROPAGATED_SESSION_ID_KEY] = sessionId
+      }
+    }
     if (integration) this._setTag(span, INTEGRATION, integration)
     if (_decorator) this._setTag(span, DECORATOR, _decorator)
 
