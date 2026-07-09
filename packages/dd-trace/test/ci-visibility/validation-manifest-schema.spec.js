@@ -111,6 +111,22 @@ describe('test optimization validation manifest schema', () => {
     assert.deepStrictEqual(jsonSchema.$defs.testIdentity.properties.file, nullableAbsolutePath)
   })
 
+  it('publishes runtime conditional requirements in the JSON schema', () => {
+    const frameworkAllOf = jsonSchema.$defs.framework.allOf
+    const commandAllOf = jsonSchema.$defs.command.allOf
+
+    assert.ok(frameworkAllOf.some(condition => {
+      return condition.if?.properties?.status?.enum?.includes('requires_manual_setup') &&
+        condition.then?.required?.includes('notes') &&
+        condition.then?.properties?.notes?.minItems === 1
+    }))
+    assert.ok(commandAllOf.some(condition => {
+      return condition.if?.properties?.usesShell?.const === true &&
+        condition.if?.required?.includes('usesShell') &&
+        condition.then?.required?.includes('shellCommand')
+    }))
+  })
+
   it('requires verified generated strategies to include every validation scenario', () => {
     const manifest = getManifest()
     manifest.frameworks[0].generatedTestStrategy = {

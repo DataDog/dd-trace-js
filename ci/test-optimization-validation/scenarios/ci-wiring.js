@@ -123,12 +123,39 @@ function getCiWiringCommand (framework) {
   const command = framework.ciWiringCommand
   if (!command || !command.usesShell || command.shell || !framework.ciWiring?.shell) return command
 
+  const replayCommand = getTemplateReplayCommand(command, framework.ciWiring.shell)
+  if (replayCommand) return replayCommand
+
   const shell = getReplayShell(framework.ciWiring.shell)
   if (!shell) return command
 
   return {
     ...command,
     shell,
+  }
+}
+
+/**
+ * Translates a CI shell template with a {0} placeholder into a local argv command.
+ *
+ * @param {object} command shell command from the manifest
+ * @param {string} shell recorded CI shell template
+ * @returns {object|undefined} argv command preserving the recorded shell flags
+ */
+function getTemplateReplayCommand (command, shell) {
+  const tokens = tokenizeShellTemplate(shell)
+  if (!tokens.includes('{0}')) return
+
+  const argv = tokens.filter(token => token !== '{0}')
+  const executable = argv[0]
+  if (!isBourneShell(executable)) return
+
+  return {
+    ...command,
+    argv: [...argv, '-c', command.shellCommand],
+    shell: undefined,
+    shellCommand: undefined,
+    usesShell: false,
   }
 }
 
@@ -145,6 +172,27 @@ function getReplayShell (shell) {
   const firstToken = value.split(/\s+/)[0]
   if (firstToken && value.includes('{0}')) return firstToken
   if (!/\s/.test(value)) return value
+}
+
+/**
+ * Splits a CI shell template into tokens for common unquoted shell templates.
+ *
+ * @param {string} shell recorded CI shell template
+ * @returns {string[]} shell template tokens
+ */
+function tokenizeShellTemplate (shell) {
+  return String(shell || '').trim().split(/\s+/).filter(Boolean)
+}
+
+/**
+ * Checks whether a shell executable accepts POSIX -c command replay.
+ *
+ * @param {string|undefined} executable shell executable
+ * @returns {boolean} true for Bourne-style shells
+ */
+function isBourneShell (executable) {
+  const basename = path.basename(String(executable || ''))
+  return basename === 'bash' || basename === 'sh' || basename === 'zsh'
 }
 
 async function maybeRunInitializationProbe ({ command, framework, intake, options, outDir, result, evidence }) {

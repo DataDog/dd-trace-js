@@ -283,6 +283,31 @@
               "preflight"
             ]
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "detected_not_runnable",
+                  "requires_external_service",
+                  "requires_manual_setup",
+                  "unsupported_by_validator",
+                  "unknown"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "notes"
+            ],
+            "properties": {
+              "notes": {
+                "minItems": 1
+              }
+            }
+          }
         }
       ]
     },
@@ -435,6 +460,25 @@
         }
       },
       "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "usesShell"
+            ],
+            "properties": {
+              "usesShell": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "shellCommand"
+            ]
+          }
+        }
+      ],
       "anyOf": [
         {
           "required": [

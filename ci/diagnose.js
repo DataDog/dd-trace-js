@@ -1271,6 +1271,8 @@ function getEligibleCommandMatch (framework) {
     return script
   }
 
+  if (scriptMatches.length > 0) return
+
   if (framework.id === 'jest' || framework.id === 'mocha' || framework.id === 'vitest') {
     return framework.dependencyEntries?.[0] && {
       command: `direct ${framework.id} binary`,
@@ -1288,7 +1290,7 @@ function getEligibleCommandMatch (framework) {
  */
 function isIneligibleFrameworkCommand (frameworkId, command) {
   if (frameworkId === 'vitest' && /\bvitest\s+bench\b/.test(command)) return true
-  if (/\b(?:watch|--watch|--watchAll)\b/.test(command)) return true
+  if (/(?:^|\s)(?:watch|--watch|--watchAll)(?:\s|=|$)/.test(command)) return true
 
   return false
 }

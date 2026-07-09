@@ -128,6 +128,45 @@ describe('test optimization CI wiring validation', () => {
     }
   })
 
+  it('preserves recorded CI shell failure flags when replaying shell templates', async function () {
+    if (process.platform === 'win32') this.skip()
+
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
+    const intake = {
+      port: 8126,
+      requests: [],
+      configure () {},
+      resetRequests () {
+        this.requests = []
+      },
+    }
+
+    try {
+      const result = await runCiWiring({
+        framework: {
+          id: 'jest:root',
+          framework: 'jest',
+          ciWiring: {
+            shell: 'bash --noprofile --norc -eo pipefail {0}',
+          },
+          ciWiringCommand: {
+            cwd: out,
+            usesShell: true,
+            shellCommand: 'false | true',
+          },
+        },
+        intake,
+        out,
+        options: { verbose: false },
+      })
+
+      assert.strictEqual(result.status, 'fail')
+      assert.strictEqual(result.evidence.commandExitCode, 1)
+    } finally {
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
+
   it('redacts secret-like event data in CI wiring events artifacts', async () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
     const intake = {

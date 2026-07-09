@@ -1,7 +1,5 @@
 'use strict'
 
-const path = require('path')
-
 function normalizeRequests (requests) {
   const events = []
   for (const request of requests) {
@@ -55,8 +53,8 @@ function findTestsByIdentity (events, identities) {
 
 function matchesIdentity (test, identity) {
   if (identity.name && !sameOrEndsWith(test.testName, identity.name)) return false
-  if (identity.file && test.testSourceFile && sameOrEndsWith(test.testSourceFile, identity.file)) return true
-  if (identity.suite && test.testSuite && sameOrEndsWith(test.testSuite, identity.suite)) return true
+  if (identity.file && !sameOrEndsWith(test.testSourceFile, identity.file)) return false
+  if (identity.suite && !sameOrEndsWith(test.testSuite, identity.suite)) return false
   return Boolean(identity.name)
 }
 
@@ -64,8 +62,7 @@ function sameOrEndsWith (actual, expected) {
   if (!actual || !expected) return false
   return actual === expected ||
     actual.endsWith(expected) ||
-    expected.endsWith(actual) ||
-    path.basename(actual) === path.basename(expected)
+    expected.endsWith(actual)
 }
 
 module.exports = {

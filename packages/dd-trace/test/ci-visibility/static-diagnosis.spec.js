@@ -218,6 +218,33 @@ describe('test optimization validation static diagnosis', () => {
     }
   })
 
+  it('does not select Jest watchAll scripts as eligible validation commands', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
+
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      devDependencies: {
+        'dd-trace': 'file:../dd-trace',
+        jest: '29.7.0',
+      },
+      scripts: {
+        test: 'NODE_OPTIONS="-r dd-trace/ci/init" jest --watchAll',
+      },
+    }))
+
+    try {
+      const report = runDiagnosis({
+        root,
+        execFile () {
+          throw new Error('git unavailable')
+        },
+      })
+
+      assert.deepStrictEqual(report.eligibleFrameworks, [])
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('does not block a root framework entry with an unsupported nested fixture version', () => {
     const diagnosis = getDiagnosisWithNestedMochaError()
     const framework = {
