@@ -240,7 +240,61 @@ function unformatSpanEvents (span) {
     })
   }
 
+  // Native pipeline (DD_TRACE_NATIVE_SPAN_EVENTS enabled): span events land in
+  // the top-level v0.4 `span_events` field instead of the legacy `meta.events`
+  // JSON string. Attributes arrive as typed OTLP wrappers and arrays are
+  // flattened into indexed scalar keys (`locations.0`, `path.0`, ...), so decode
+  // them back to the same `{ name, startTime, attributes }` shape (arrays
+  // intact) the plugin specs assert against.
+  if (Array.isArray(span.span_events)) {
+    return span.span_events.map(event => {
+      return {
+        name: event.name,
+        // `time_unix_nano` decodes as a BigInt (msgpack `useBigInt64`).
+        startTime: Number(event.time_unix_nano) / 1e6,
+        attributes: decodeNativeSpanEventAttributes(event.attributes),
+      }
+    })
+  }
+
   return [] // Return an empty array if no events are found
+}
+
+// Unwrap a native span-event attribute value from its typed OTLP wrapper
+// (`{ type, string_value | bool_value | int_value | double_value | array_value }`)
+// to a plain JS value. Keyed off the value field (not `type`) so an omitted/zero
+// discriminant is tolerated and an attribute literally named `type` can't collide.
+function unwrapSpanEventAttributeValue (wrapper) {
+  if (wrapper === null || typeof wrapper !== 'object') return wrapper
+  if ('string_value' in wrapper) return wrapper.string_value
+  if ('bool_value' in wrapper) return wrapper.bool_value
+  if ('int_value' in wrapper) return Number(wrapper.int_value) // decodes as BigInt (i64)
+  if ('double_value' in wrapper) return wrapper.double_value
+  if ('array_value' in wrapper) return (wrapper.array_value?.values ?? []).map(unwrapSpanEventAttributeValue)
+  return wrapper
+}
+
+// Decode a native span-event attribute map, unwrapping typed values and
+// re-nesting flattened array keys (`locations.0`, `locations.1`) back into
+// arrays so the shape matches the legacy `meta.events` attributes.
+function decodeNativeSpanEventAttributes (attributes) {
+  if (!attributes || typeof attributes !== 'object') return undefined
+  const keys = Object.keys(attributes)
+  if (keys.length === 0) return undefined
+
+  const out = {}
+  for (const key of keys) {
+    const value = unwrapSpanEventAttributeValue(attributes[key])
+    const indexedKey = /^(.+)\.(\d+)$/.exec(key)
+    if (indexedKey) {
+      const [, base, index] = indexedKey
+      if (!Array.isArray(out[base])) out[base] = []
+      out[base][Number(index)] = value
+    } else {
+      out[key] = value
+    }
+  }
+  return out
 }
 
 /**
