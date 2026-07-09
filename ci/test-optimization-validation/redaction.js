@@ -61,9 +61,19 @@ const SECRET_FLAG_PATTERN = new RegExp(
   'gi'
 )
 const AUTH_HEADER_PATTERN = /\b(Bearer)\s+\S+/gi
+const SECRET_HEADER_NAME_SOURCE = [
+  'dd-api-key',
+  'x-api-key',
+  'api-key',
+  'authorization',
+  'proxy-authorization',
+  'token',
+  'cookie',
+  'set-cookie',
+  SECRET_ASSIGNMENT_NAME_SOURCE,
+].join('|')
 const SECRET_HEADER_PATTERN = new RegExp(
-  String.raw`\b((?:dd-api-key|x-api-key|api-key|authorization|proxy-authorization|token|cookie|set-cookie)` +
-    String.raw`)\s*:\s*("[^"]*"|'[^']*'|[^\r\n,}]+)`,
+  String.raw`\b((?:${SECRET_HEADER_NAME_SOURCE}))\s*:\s*("[^"]*"|'[^']*'|[^\r\n,}]+)`,
   'gi'
 )
 const URL_CREDENTIAL_PATTERN = /([a-z][a-z0-9+.-]*:\/\/[^:\s/@]+:)([^@\s/]+)(@)/gi

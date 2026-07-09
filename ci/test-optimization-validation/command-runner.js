@@ -36,6 +36,7 @@ const VALIDATION_SUPPRESSION_ENV = {
   DD_CIVISIBILITY_GIT_UPLOAD_ENABLED: 'false',
   DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED: 'false',
   DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED: 'false',
+  DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE: 'false',
   DD_TEST_FAILED_TEST_REPLAY_ENABLED: 'false',
 }
 const TIMEOUT_KILL_GRACE_MS = 5000
@@ -65,6 +66,8 @@ function runCommand (command, { env = {}, envMode = 'inherit', outDir, label, ve
 
   return new Promise((resolve) => {
     let finalized = false
+    let processGroupCleanupPending = false
+    let timedOutCloseResult
     const childEnv = {
       ...getBaseEnv(envMode),
       ...command.env,
@@ -74,9 +77,11 @@ function runCommand (command, { env = {}, envMode = 'inherit', outDir, label, ve
       childEnv.NODE_OPTIONS = mergeNodeOptions(command.env.NODE_OPTIONS, env.NODE_OPTIONS)
     }
 
+    const useProcessGroup = shouldUseProcessGroup(command)
     const child = command.usesShell
       ? spawn(command.shellCommand, {
         cwd: command.cwd,
+        detached: useProcessGroup,
         env: childEnv,
         shell: true,
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -96,10 +101,14 @@ function runCommand (command, { env = {}, envMode = 'inherit', outDir, label, ve
     let finalizeTimer
     const timeout = setTimeout(() => {
       result.timedOut = true
-      child.kill('SIGTERM')
+      processGroupCleanupPending = useProcessGroup
+      signalChild(child, 'SIGTERM', useProcessGroup)
       killTimer = setTimeout(() => {
-        child.kill('SIGKILL')
-        finalizeTimer = setTimeout(() => finalize(null, 'SIGKILL'), timeoutFinalizeGraceMs)
+        signalChild(child, 'SIGKILL', useProcessGroup)
+        processGroupCleanupPending = false
+        finalizeTimer = setTimeout(() => {
+          finalize(timedOutCloseResult?.code ?? null, timedOutCloseResult?.signal || 'SIGKILL')
+        }, timeoutFinalizeGraceMs)
       }, timeoutKillGraceMs)
     }, timeoutMs)
 
@@ -114,6 +123,10 @@ function runCommand (command, { env = {}, envMode = 'inherit', outDir, label, ve
       finalize(null, null)
     })
     child.on('close', (code, signal) => {
+      if (processGroupCleanupPending) {
+        timedOutCloseResult = { code, signal }
+        return
+      }
       finalize(code, signal)
     })
 
@@ -147,6 +160,21 @@ function runCommand (command, { env = {}, envMode = 'inherit', outDir, label, ve
       resolve(result)
     }
   })
+}
+
+function shouldUseProcessGroup (command) {
+  return command.usesShell === true && process.platform !== 'win32'
+}
+
+function signalChild (child, signal, useProcessGroup) {
+  try {
+    if (useProcessGroup) {
+      process.kill(-child.pid, signal)
+      return
+    }
+  } catch {}
+
+  child.kill(signal)
 }
 
 function getBaseEnv (envMode) {

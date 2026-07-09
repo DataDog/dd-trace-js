@@ -88,6 +88,42 @@ describe('test optimization validation scenario artifacts', () => {
       fs.rmSync(tmpDir, { recursive: true, force: true })
     }
   })
+
+  it('detects Playwright CLI paths in initialization probe records', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-init-probe-'))
+    const recordsPath = path.join(tmpDir, 'records.ndjson')
+    const playwrightCli = path.join(tmpDir, 'node_modules', 'playwright', 'cli.js')
+
+    fs.mkdirSync(path.dirname(playwrightCli), { recursive: true })
+    fs.writeFileSync(playwrightCli, 'process.exit(0)\n')
+
+    try {
+      execFileSync(process.execPath, [
+        '-r',
+        PROBE_PRELOAD,
+        playwrightCli,
+      ], {
+        cwd: tmpDir,
+        env: {
+          ...process.env,
+          [PROBE_FILE_ENV]: recordsPath,
+          NODE_OPTIONS: '',
+        },
+      })
+
+      const records = fs.readFileSync(recordsPath, 'utf8')
+        .trim()
+        .split('\n')
+        .map(line => JSON.parse(line))
+      const processStart = records.find(record => record.type === 'process-start')
+
+      assert.deepStrictEqual(processStart.detectedTools, [
+        { name: 'playwright', kind: 'test-runner' },
+      ])
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
 })
 
 function testIntakeRequest (meta) {

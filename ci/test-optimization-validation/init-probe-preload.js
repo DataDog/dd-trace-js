@@ -104,8 +104,10 @@ function detectTool (value) {
     return { name: 'cucumber', kind: 'test-runner' }
   }
 
-  if (/\/@playwright\/test\//.test(normalized) ||
+  if (/(^|\/)playwright(?:\.js)?$/.test(normalized) ||
+    /\/(?:@playwright\/test|playwright)\//.test(normalized) ||
     normalized === '@playwright/test' ||
+    normalized === 'playwright' ||
     normalized === 'playwright/test') {
     return { name: 'playwright', kind: 'test-runner' }
   }

@@ -518,6 +518,7 @@ function getFrameworkConfigPatterns (frameworkName) {
   return {
     cypress: [/^cypress\.config\./],
     jest: [/^jest\.config\./],
+    mocha: [/^\.mocharc\./, /^mocha\.config\./],
     playwright: [/^playwright\.config\./],
     vitest: [/^vitest\.config\./, /^vite\.config\./],
   }[frameworkName] || []

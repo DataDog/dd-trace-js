@@ -68,6 +68,7 @@ describe('test optimization validation manifest schema', () => {
         {
           id: 'test-management-target',
           runCommand: getCommand(),
+          testIdentities: [],
         },
       ],
       cleanupPaths: ['test/generated.test.js'],
@@ -80,6 +81,10 @@ describe('test optimization validation manifest schema', () => {
       'frameworks[0].generatedTestStrategy.files[0].contentLines[1] must be a string.',
       'frameworks[0].generatedTestStrategy.scenarios[0].testIdentities[0].file must be an absolute path ' +
         'when present.',
+      'frameworks[0].generatedTestStrategy.scenarios[1].testIdentities must be a non-empty array when ' +
+        'generatedTestStrategy is verified.',
+      'frameworks[0].generatedTestStrategy.scenarios[2].testIdentities must be a non-empty array when ' +
+        'generatedTestStrategy is verified.',
       'frameworks[0].generatedTestStrategy.testDirectory must be an absolute path when present.',
       'frameworks[0].generatedTestStrategy.cleanupPaths[0] must be an absolute path.',
     ])
@@ -109,7 +114,24 @@ describe('test optimization validation manifest schema', () => {
         'when status is verified.',
       'frameworks[0].generatedTestStrategy.scenarios must include generated scenario "test-management-target" ' +
         'when status is verified.',
+      'frameworks[0].generatedTestStrategy.scenarios[0].testIdentities must be a non-empty array when ' +
+        'generatedTestStrategy is verified.',
     ])
+  })
+
+  it('allows proposed generated strategies without test identities', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].generatedTestStrategy = {
+      status: 'proposed',
+      scenarios: [
+        {
+          id: 'basic-pass',
+          runCommand: getCommand(),
+        },
+      ],
+    }
+
+    assert.deepStrictEqual(validateManifest(manifest), [])
   })
 })
 

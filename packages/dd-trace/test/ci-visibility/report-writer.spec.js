@@ -816,6 +816,74 @@ describe('test optimization validation report writer', () => {
       fs.rmSync(tmpDir, { recursive: true, force: true })
     }
   })
+
+  it('marks setup failures as diagnostic-only in the human report', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
+    const out = path.join(tmpDir, 'results')
+    const packageJsonPath = path.join(tmpDir, 'package.json')
+    const manifest = {
+      repository: {
+        root: tmpDir,
+      },
+      frameworks: [
+        {
+          id: 'jest:root',
+          framework: 'jest',
+          frameworkVersion: '29.7.0',
+          project: {
+            name: 'example',
+            root: tmpDir,
+            packageJson: packageJsonPath,
+          },
+        },
+      ],
+    }
+    const results = [
+      {
+        frameworkId: 'jest:root',
+        scenario: 'all',
+        status: 'fail',
+        diagnosis: 'Required setup command failed before live validation.',
+        evidence: {
+          setupFailed: true,
+        },
+        artifacts: [],
+      },
+    ]
+    const intake = {
+      requests: [],
+      writeArtifacts () {
+        const intakeDir = path.join(out, 'intake')
+        fs.mkdirSync(intakeDir, { recursive: true })
+        const requestsPath = path.join(intakeDir, 'requests.ndjson')
+        fs.writeFileSync(requestsPath, '')
+        return { requestsPath }
+      },
+    }
+    const originalLog = console.log
+
+    fs.mkdirSync(out, { recursive: true })
+    fs.writeFileSync(packageJsonPath, `${JSON.stringify({ name: 'example' }, null, 2)}\n`)
+    console.log = () => {}
+
+    try {
+      writeReport({
+        manifest,
+        results,
+        out,
+        intake,
+      })
+
+      const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
+
+      assert.match(markdown, /## Diagnostic-only and Blocked Frameworks/)
+      assert.match(markdown, /FAIL jest:root/)
+      assert.doesNotMatch(markdown, /### Advanced Features/)
+    } finally {
+      console.log = originalLog
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
 })
 
 function testPayload (name) {

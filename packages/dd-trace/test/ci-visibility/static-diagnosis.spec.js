@@ -86,6 +86,49 @@ describe('test optimization validation static diagnosis', () => {
     }
   })
 
+  it('recognizes resolved node_modules dd-trace init preload paths', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
+    const workflowDir = path.join(root, '.github', 'workflows')
+
+    fs.mkdirSync(workflowDir, { recursive: true })
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      devDependencies: {
+        'dd-trace': 'file:../dd-trace',
+        jest: '29.7.0',
+      },
+      scripts: {
+        test: 'jest',
+      },
+    }))
+    fs.writeFileSync(path.join(workflowDir, 'test.yml'), [
+      'name: test',
+      'jobs:',
+      '  unit:',
+      '    runs-on: ubuntu-latest',
+      '    steps:',
+      '      - run: npm test',
+      '        env:',
+      '          NODE_OPTIONS: -r ./node_modules/dd-trace/ci/init.js',
+      '',
+    ].join('\n'))
+
+    try {
+      const report = runDiagnosis({
+        root,
+        execFile () {
+          throw new Error('git unavailable')
+        },
+      })
+      const titles = report.results.map(result => result.title)
+
+      assert.ok(titles.includes('Test Optimization initialization found'))
+      assert.ok(!titles.includes('Missing Test Optimization initialization'))
+      assert.ok(!titles.includes('CI workflows do not show Test Optimization initialization'))
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('does not block a root framework entry with an unsupported nested fixture version', () => {
     const diagnosis = getDiagnosisWithNestedMochaError()
     const framework = {

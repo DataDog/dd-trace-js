@@ -657,6 +657,7 @@ function isDiagnosticOnlyResult (result) {
   if (result.scenario !== 'all') return false
   return result.evidence?.frameworkStatus ||
     result.evidence?.staticDiagnosis ||
+    result.evidence?.setupFailed ||
     result.evidence?.intakeStarted === false
 }
 

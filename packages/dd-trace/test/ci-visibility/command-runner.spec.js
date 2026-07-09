@@ -37,6 +37,7 @@ describe('test optimization validation command runner', () => {
     assert.strictEqual(env.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED, 'false')
     assert.strictEqual(env.DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED, 'false')
     assert.strictEqual(env.DD_INSTRUMENTATION_TELEMETRY_ENABLED, 'false')
+    assert.strictEqual(env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE, 'false')
     assert.strictEqual(env.DD_TEST_FAILED_TEST_REPLAY_ENABLED, 'false')
     assert.strictEqual(env.DD_TRACE_ENABLED, 'true')
     assert.match(env.NODE_OPTIONS, /[\\/]ci[\\/]init\.js/)
@@ -51,6 +52,7 @@ describe('test optimization validation command runner', () => {
     assert.strictEqual(env.DD_CIVISIBILITY_GIT_UNSHALLOW_ENABLED, 'false')
     assert.strictEqual(env.DD_CIVISIBILITY_IMPACTED_TESTS_DETECTION_ENABLED, 'false')
     assert.strictEqual(env.DD_INSTRUMENTATION_TELEMETRY_ENABLED, 'false')
+    assert.strictEqual(env.DD_EXPERIMENTAL_TEST_REQUESTS_FS_CACHE, 'false')
     assert.strictEqual(env.DD_TEST_FAILED_TEST_REPLAY_ENABLED, 'false')
     assert.strictEqual(env.DD_TRACE_DEBUG, '1')
     assert.strictEqual(env.DD_TRACE_LOG_LEVEL, 'debug')
@@ -116,7 +118,8 @@ describe('test optimization validation command runner', () => {
           '-e',
           'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)',
         ],
-        timeoutMs: 25,
+        // Give the child process enough time to start and register its SIGTERM handler.
+        timeoutMs: 500,
         timeoutKillGraceMs: 25,
         timeoutFinalizeGraceMs: 25,
       }, {
@@ -126,6 +129,38 @@ describe('test optimization validation command runner', () => {
       assert.strictEqual(result.timedOut, true)
       assert.strictEqual(result.exitCode, null)
       assert.strictEqual(result.signal, 'SIGKILL')
+    } finally {
+      fs.rmSync(outDir, { recursive: true, force: true })
+    }
+  })
+
+  it('terminates timed-out shell command process groups', async function () {
+    if (process.platform === 'win32') this.skip()
+
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-runner-'))
+    const marker = path.join(outDir, 'shell-child-survived')
+    const childScript = [
+      'process.on("SIGTERM", () => {})',
+      `setTimeout(() => require("node:fs").writeFileSync(${JSON.stringify(marker)}, "alive"), 750)`,
+      'setInterval(() => {}, 1000)',
+    ].join(';')
+
+    try {
+      const result = await runCommand({
+        cwd: outDir,
+        usesShell: true,
+        shellCommand: `${JSON.stringify(process.execPath)} -e ${JSON.stringify(childScript)}`,
+        timeoutMs: 500,
+        timeoutKillGraceMs: 50,
+        timeoutFinalizeGraceMs: 50,
+      }, {
+        outDir,
+      })
+
+      await new Promise(resolve => setTimeout(resolve, 600))
+
+      assert.strictEqual(result.timedOut, true)
+      assert.strictEqual(fs.existsSync(marker), false)
     } finally {
       fs.rmSync(outDir, { recursive: true, force: true })
     }

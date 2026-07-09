@@ -76,4 +76,22 @@ describe('test optimization validation redaction', () => {
     assert.deepStrictEqual(report.missingEnvVars, ['APP_KEY'])
     assert.strictEqual(report.regularCommand, 'API_KEY=<redacted> npm test')
   })
+
+  it('redacts colon-form secret environment output', () => {
+    const output = sanitizeString([
+      'DD_API_KEY: dd-api-key-colon-secret',
+      'API_KEY: api-key-colon-secret',
+      'PASSWORD: password-colon-secret',
+      'authorization: Bearer authorization-colon-secret',
+    ].join('\n'))
+
+    assert.match(output, /DD_API_KEY: <redacted>/)
+    assert.match(output, /API_KEY: <redacted>/)
+    assert.match(output, /PASSWORD: <redacted>/)
+    assert.match(output, /authorization: <redacted>/)
+    assert.doesNotMatch(output, /dd-api-key-colon-secret/)
+    assert.doesNotMatch(output, /api-key-colon-secret/)
+    assert.doesNotMatch(output, /password-colon-secret/)
+    assert.doesNotMatch(output, /authorization-colon-secret/)
+  })
 })

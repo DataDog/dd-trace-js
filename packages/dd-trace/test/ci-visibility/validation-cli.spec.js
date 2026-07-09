@@ -453,6 +453,94 @@ describe('test optimization validation cli', () => {
       fs.rmSync(tmpDir, { recursive: true, force: true })
     }
   })
+
+  it('includes Mocha rc files in non-runnable status evidence', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cli-'))
+    const out = path.join(tmpDir, 'results')
+    const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
+    const staticDiagnosisPath = path.join(out, 'static-diagnosis.json')
+    let capturedResults
+    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
+      './mock-intake': {
+        MockIntake: class {
+          async start () {
+            throw new Error('intake should not start for non-runnable-only manifests')
+          }
+
+          async close () {}
+
+          writeArtifacts () {
+            return writeEmptyRequestsArtifact(out)
+          }
+        },
+      },
+      './setup-runner': {
+        async runSetupCommands () {
+          throw new Error('setup should not run for non-runnable entries')
+        },
+      },
+      './static-diagnosis': {
+        getStaticBlocker () {
+          return null
+        },
+        runStaticDiagnosis () {
+          fs.mkdirSync(out, { recursive: true })
+          fs.writeFileSync(staticDiagnosisPath, '{}\n')
+          return {
+            report: {},
+            reportPath: staticDiagnosisPath,
+          }
+        },
+      },
+      './generated-files': {
+        async cleanupGeneratedFiles () {},
+      },
+      './report-writer': {
+        async writeReport ({ results }) {
+          capturedResults = results
+        },
+      },
+    })
+    const manifest = getRunnableManifest(tmpDir)
+    const originalExitCode = process.exitCode
+
+    manifest.frameworks = [
+      {
+        id: 'mocha:root',
+        framework: 'mocha',
+        frameworkVersion: '10.0.0',
+        status: 'requires_manual_setup',
+        project: {
+          root: tmpDir,
+        },
+        notes: [
+          'No small representative Mocha command was selected.',
+        ],
+      },
+    ]
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), `${JSON.stringify({
+      devDependencies: {
+        mocha: '10.0.0',
+      },
+    }, null, 2)}\n`)
+    fs.writeFileSync(path.join(tmpDir, '.mocharc.json'), '{}\n')
+    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
+    process.exitCode = undefined
+
+    try {
+      await main(['--manifest', manifestPath, '--out', out])
+
+      assert.strictEqual(process.exitCode, 0)
+      assert.deepStrictEqual(capturedResults[0].evidence.configFiles, ['.mocharc.json'])
+      assert.deepStrictEqual(capturedResults[0].evidence.directDependency, {
+        field: 'devDependencies',
+        version: '10.0.0',
+      })
+    } finally {
+      process.exitCode = originalExitCode
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
 })
 
 function getRunnableManifest (root) {

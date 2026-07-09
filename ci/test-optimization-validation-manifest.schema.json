@@ -703,6 +703,18 @@
               "scenarios": {
                 "allOf": [
                   {
+                    "items": {
+                      "required": [
+                        "testIdentities"
+                      ],
+                      "properties": {
+                        "testIdentities": {
+                          "minItems": 1
+                        }
+                      }
+                    }
+                  },
+                  {
                     "contains": {
                       "properties": {
                         "id": {

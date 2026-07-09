@@ -155,7 +155,12 @@ function validateGeneratedTestStrategy (strategy, prefix, errors) {
       requiredString(scenario, 'id', errors, `${prefix}.scenarios[${index}]`)
       enumString(scenario, 'id', GENERATED_SCENARIO_IDS, errors, `${prefix}.scenarios[${index}]`)
       requiredCommand(scenario, 'runCommand', errors, `${prefix}.scenarios[${index}]`)
-      validateScenarioIdentities(scenario, `${prefix}.scenarios[${index}]`, errors)
+      validateScenarioIdentities(
+        scenario,
+        `${prefix}.scenarios[${index}]`,
+        errors,
+        strategy.status === 'verified'
+      )
     }
   }
 
@@ -197,8 +202,17 @@ function requireNonEmptyNotes (framework, errors, prefix) {
   validateStringArray(framework, 'notes', errors, prefix)
 }
 
-function validateScenarioIdentities (scenario, prefix, errors) {
-  if (!Array.isArray(scenario.testIdentities)) return
+function validateScenarioIdentities (scenario, prefix, errors, required = false) {
+  if (!Array.isArray(scenario.testIdentities)) {
+    if (required) {
+      errors.push(`${prefix}.testIdentities must be a non-empty array when generatedTestStrategy is verified.`)
+    }
+    return
+  }
+
+  if (required && scenario.testIdentities.length === 0) {
+    errors.push(`${prefix}.testIdentities must be a non-empty array when generatedTestStrategy is verified.`)
+  }
 
   for (const [index, identity] of scenario.testIdentities.entries()) {
     optionalAbsolutePath(identity, 'file', errors, `${prefix}.testIdentities[${index}]`)
