@@ -152,6 +152,11 @@ class Span extends BridgeSpanBase {
       hostname: _tracer._hostname,
       integrationName: parentTracer?._isOtelLibrary ? 'otel.library' : 'otel',
       tags: {
+        // Apply global/resource tags (DD_TAGS, OTEL_RESOURCE_ATTRIBUTES) as
+        // defaults, mirroring the native path in opentracing/tracer.js. The
+        // explicit service/resource/span.kind below take precedence, and any
+        // user-set OTel attributes applied via setAttributes() still win.
+        ..._tracer._config.tags,
         [SERVICE_NAME]: _tracer._service,
         [RESOURCE_NAME]: spanName,
         [SPAN_KIND]: spanKindNames[kind],

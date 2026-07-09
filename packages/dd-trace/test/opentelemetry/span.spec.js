@@ -47,6 +47,52 @@ describe('OTel Span', () => {
     assert.strictEqual(context._hostname, tracer._hostname)
   })
 
+  it('should apply global config tags (DD_TAGS / OTEL_RESOURCE_ATTRIBUTES) to bridged spans', () => {
+    // OTEL_RESOURCE_ATTRIBUTES and DD_TAGS are parsed into config.tags; the OTel
+    // bridge must apply them to bridged spans just like the native path does.
+    const { tags } = tracer._tracer._config
+    tags.dd_llmobs_enabled = 'false'
+    try {
+      const span = makeSpan('name')
+      assert.strictEqual(span._ddSpan.context().getTag('dd_llmobs_enabled'), 'false')
+    } finally {
+      delete tags.dd_llmobs_enabled
+    }
+  })
+
+  it('should let explicit span attributes take precedence over global config tags', () => {
+    const { tags } = tracer._tracer._config
+    tags.custom_tag = 'from-config'
+    try {
+      const span = makeSpan('name', { attributes: { custom_tag: 'from-span' } })
+      assert.strictEqual(span._ddSpan.context().getTag('custom_tag'), 'from-span')
+    } finally {
+      delete tags.custom_tag
+    }
+  })
+
+  it('should keep explicit service/resource/span.kind over colliding global config tags', () => {
+    // OTEL_RESOURCE_ATTRIBUTES commonly carries service.name (the reserved
+    // SERVICE_NAME key), so it lands in config.tags and collides with the value
+    // the bridge sets deliberately. The reserved value must win regardless of
+    // ordering, so the span's service/resource/span.kind stay correct.
+    const { tags } = tracer._tracer._config
+    tags[SERVICE_NAME] = 'from-config-tags'
+    tags[RESOURCE_NAME] = 'from-config-tags'
+    tags[SPAN_KIND] = 'from-config-tags'
+    try {
+      const span = makeSpan('name', { kind: api.SpanKind.CONSUMER })
+      const context = span._ddSpan.context()
+      assert.strictEqual(context.getTag(SERVICE_NAME), tracer._tracer._service)
+      assert.strictEqual(context.getTag(RESOURCE_NAME), 'name')
+      assert.strictEqual(context.getTag(SPAN_KIND), kinds.CONSUMER)
+    } finally {
+      delete tags[SERVICE_NAME]
+      delete tags[RESOURCE_NAME]
+      delete tags[SPAN_KIND]
+    }
+  })
+
   it('should expose parent span id', () => {
     tracer.trace('outer', (outer) => {
       const span = makeSpan('name', {})

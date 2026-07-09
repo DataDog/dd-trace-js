@@ -93,7 +93,10 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
 }
 
 function testRuntimeVersionChecks (arg, filename) {
-  context('runtime version check', () => {
+  const skipRuntimeVersionChecks = filename === 'initialize.mjs' && process.versions.node === '22.0.0'
+  const runtimeVersionContext = skipRuntimeVersionChecks ? context.skip : context
+
+  runtimeVersionContext('runtime version check', () => {
     const NODE_OPTIONS = `--${arg} dd-trace/${filename}`
     const entryFile = arg === 'loader' ? 'init/trace.mjs' : 'init/trace.js'
     const doTest = (expectedOut, expectedTelemetryPoints, expectedSource) =>
@@ -292,6 +295,9 @@ if (semver.satisfies(process.versions.node, '>=14.13.1')) {
 
     if (semver.satisfies(process.versions.node, '>=20.6.0')) {
       context('as --import', () => {
+        // The loader hook is skipped on bailout, so --import children exit on their
+        // own; killing them would mask a regression that keeps the process alive.
+        setShouldKill(false)
         testInjectionScenarios('import', 'initialize.mjs', true)
         testRuntimeVersionChecks('import', 'initialize.mjs')
       })

@@ -2745,3 +2745,56 @@ versions.forEach((version) => {
     }
   })
 })
+
+const describeCloudflareWorkers = NODE_MAJOR < 20 ? describe.skip : describe
+
+describeCloudflareWorkers('vitest@3.2.4 with @cloudflare/vitest-pool-workers@0.12.21', () => {
+  let cwd, receiver, childProcess, testOutput
+
+  useSandbox([
+    'vitest@3.2.4',
+    '@cloudflare/vitest-pool-workers@0.12.21',
+  ], true)
+
+  before(function () {
+    cwd = sandboxCwd()
+  })
+
+  beforeEach(async function () {
+    testOutput = ''
+    receiver = await new FakeCiVisIntake().start()
+  })
+
+  afterEach(async () => {
+    childProcess?.kill()
+    await receiver?.stop()
+  })
+
+  it('keeps Cloudflare worker pool context safe with Unicode git metadata', async () => {
+    childProcess = exec(
+      './node_modules/.bin/vitest run',
+      {
+        cwd,
+        env: {
+          ...getCiVisAgentlessConfig(receiver.port),
+          NODE_OPTIONS: '--import dd-trace/register.js -r dd-trace/ci/init',
+          TEST_DIR: 'ci-visibility/vitest-tests/cloudflare-worker-pool.mjs',
+          CLOUDFLARE_WORKERS_POOL: '1',
+          USE_VITEST_DEFAULT_POOL: '1',
+          // The emoji keeps this a regression test: Miniflare rejects its UTF-16 surrogate when
+          // DD_GIT_COMMIT_MESSAGE is accidentally propagated through Vitest providedContext headers.
+          DD_GIT_COMMIT_MESSAGE: 'ship vitest metadata 😄',
+          DD_SERVICE: undefined,
+        },
+      }
+    )
+    childProcess.stdout?.on('data', chunk => { testOutput += chunk.toString() })
+    childProcess.stderr?.on('data', chunk => { testOutput += chunk.toString() })
+
+    const [[code]] = await Promise.all([
+      once(childProcess, 'exit'),
+    ])
+
+    assert.strictEqual(code, 0, testOutput)
+  })
+})
