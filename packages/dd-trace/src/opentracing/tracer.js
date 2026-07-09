@@ -159,7 +159,17 @@ class DatadogTracer {
       ctx.setTag('service.name', this._service)
     }
 
-    span.addTags(this._config.tags)
+    // As per unified service tagging, a span whose service differs from the
+    // global service must not inherit the global version. The JS formatter
+    // dropped the `undefined` version override at format time; the native tag
+    // sync skips undefined values (it can't clear an already-synced meta), so
+    // omit version from the config tags up front instead.
+    if (options.tags?.service && options.tags.service !== this._service) {
+      const { version, ...configTagsWithoutVersion } = this._config.tags
+      span.addTags(configTagsWithoutVersion)
+    } else {
+      span.addTags(this._config.tags)
+    }
     span.addTags(options.tags)
 
     return span
