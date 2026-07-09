@@ -150,6 +150,22 @@ describe('SpanProcessor', () => {
     assert.strictEqual(trace.tags['_dd.p.dm'], undefined)
   })
 
+  it('emits an extracted _dd.p.dm (from trace.tags) even when no local mechanism is set', () => {
+    trace.started = [finishedSpan]
+    trace.finished = [finishedSpan]
+    finishedSpan.context()._nativeSpanId = 123
+    // Distributed extract sets _dd.p.dm on trace.tags with no local mechanism.
+    trace.tags['_dd.p.dm'] = '-4'
+    prioritySampler.sample = sinon.stub().callsFake((c) => {
+      c._sampling.priority = 1 // kept, mechanism stays undefined (extracted)
+    })
+    processor.process(finishedSpan)
+    const dm = nativeSpans.queueOp.getCalls()
+      .filter(c => c.args[0] === fakeOpCode.SetTraceMetaAttr && c.args[2] === '_dd.p.dm')
+    assert.strictEqual(dm.length, 1)
+    assert.strictEqual(dm[0].args[3], '-4')
+  })
+
   it('mirrors a pre-set sampling priority (AppSec/manual keep, propagation) without re-sampling', () => {
     trace.started = [finishedSpan]
     trace.finished = [finishedSpan]
@@ -417,7 +433,7 @@ describe('SpanProcessor', () => {
   })
 
   describe('native sampling sync', () => {
-    it('should mirror sampling priority and mechanism to native storage', () => {
+    it('should mirror sampling priority to native storage', () => {
       const ctx = {
         _trace: { tags: {} },
         _sampling: { priority: 1, mechanism: 4 },
@@ -425,20 +441,15 @@ describe('SpanProcessor', () => {
 
       processor._syncSamplingToNative(ctx, 0)
 
-      sinon.assert.calledTwice(nativeSpans.queueOp)
+      // `_dd.p.dm` is no longer emitted here — _addDecisionMaker sets it on
+      // trace.tags and _syncTraceTagsToNative mirrors it.
+      sinon.assert.calledOnce(nativeSpans.queueOp)
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         fakeOpCode.SetTraceMetricsAttr,
         0,
         '_sampling_priority_v1',
         ['f64', 1]
-      )
-      sinon.assert.calledWith(
-        nativeSpans.queueOp,
-        fakeOpCode.SetTraceMetaAttr,
-        0,
-        '_dd.p.dm',
-        '-4'
       )
     })
 
@@ -455,8 +466,8 @@ describe('SpanProcessor', () => {
 
       processor._syncSamplingToNative(ctx, 42)
 
-      // 5 calls: priority, mechanism, rule_psr, limit_psr, agent_psr
-      sinon.assert.callCount(nativeSpans.queueOp, 5)
+      // 4 calls: priority, rule_psr, limit_psr, agent_psr (_dd.p.dm moved out)
+      sinon.assert.callCount(nativeSpans.queueOp, 4)
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         fakeOpCode.SetTraceMetricsAttr,
@@ -488,8 +499,8 @@ describe('SpanProcessor', () => {
 
       processor._syncSamplingToNative(ctx, 0)
 
-      // Only 2 calls: priority + mechanism, no decision metrics
-      sinon.assert.callCount(nativeSpans.queueOp, 2)
+      // Only 1 call: priority (_dd.p.dm moved out), no decision metrics
+      sinon.assert.callCount(nativeSpans.queueOp, 1)
     })
 
     it('should forward only rule_psr when it is the sole decision metric', () => {
@@ -503,8 +514,8 @@ describe('SpanProcessor', () => {
 
       processor._syncSamplingToNative(ctx, 7)
 
-      // 3 calls: priority, mechanism, rule_psr
-      sinon.assert.callCount(nativeSpans.queueOp, 3)
+      // 2 calls: priority, rule_psr (_dd.p.dm moved out)
+      sinon.assert.callCount(nativeSpans.queueOp, 2)
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         fakeOpCode.SetTraceMetricsAttr,
@@ -526,8 +537,8 @@ describe('SpanProcessor', () => {
 
       processor._syncSamplingToNative(ctx, 9)
 
-      // 4 calls: priority, mechanism, rule_psr, agent_psr
-      sinon.assert.callCount(nativeSpans.queueOp, 4)
+      // 3 calls: priority, rule_psr, agent_psr (_dd.p.dm moved out)
+      sinon.assert.callCount(nativeSpans.queueOp, 3)
       sinon.assert.calledWith(
         nativeSpans.queueOp,
         fakeOpCode.SetTraceMetricsAttr,

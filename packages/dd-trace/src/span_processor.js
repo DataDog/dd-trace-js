@@ -90,11 +90,13 @@ class SpanProcessor {
   }
 
   /**
-   * Sync the trace-level tags (chunk/propagation tags such as `_dd.p.tid`)
-   * into native storage. String tags become trace meta, finite numbers become
-   * trace metrics. `_dd.p.dm` is skipped because it is written by the sampling
-   * path (`_syncSamplingToNative` / `_addDecisionMaker`); syncing it again here
-   * would emit a duplicate SetTraceMetaAttr.
+   * Sync the trace-level tags (chunk/propagation tags such as `_dd.p.tid` and
+   * `_dd.p.dm`) into native storage. String tags become trace meta, finite
+   * numbers become trace metrics. `_addDecisionMaker` (run inside sample(),
+   * before this) has already set/cleared `_dd.p.dm` on `trace.tags`, so it is
+   * the single source of truth here — crucially including extracted distributed
+   * traces, whose `_dd.p.dm` arrives on `trace.tags` with no local sampling
+   * mechanism set.
    *
    * @param {object} spanContext - The span context
    * @param {number} spanId - The native span id (op handle)
@@ -103,7 +105,6 @@ class SpanProcessor {
   _syncTraceTagsToNative (spanContext, spanId) {
     const traceTags = spanContext._trace.tags
     for (const key of Object.keys(traceTags)) {
-      if (key === DECISION_MAKER_KEY) continue
       const value = traceTags[key]
       if (typeof value === 'string') {
         this._nativeSpans.queueOp(native.OpCode.SetTraceMetaAttr, spanId, key, value)
@@ -137,19 +138,11 @@ class SpanProcessor {
       ['f64', spanContext._sampling.priority]
     )
 
-    // Sync the decision-maker tag as trace meta, but ONLY for keep decisions
-    // (priority >= AUTO_KEEP) — the legacy priority sampler omits `_dd.p.dm`
-    // for auto-reject (0) / manual-drop (-1) traces, so match that to avoid
-    // emitting decision-maker metadata on dropped traces.
-    if (spanContext._sampling.mechanism !== undefined &&
-        spanContext._sampling.priority >= AUTO_KEEP) {
-      this._nativeSpans.queueOp(
-        native.OpCode.SetTraceMetaAttr,
-        spanId,
-        '_dd.p.dm',
-        `-${spanContext._sampling.mechanism}`
-      )
-    }
+    // `_dd.p.dm` is NOT emitted here: `_addDecisionMaker` sets/clears it on
+    // `trace.tags` (honoring an extracted value, adding the local mechanism for
+    // kept traces, deleting it for drops) and `_syncTraceTagsToNative` mirrors
+    // it. Emitting it here too would duplicate it and miss extracted traces
+    // whose mechanism is unset.
 
     // Forward sampling-decision metrics written by priority_sampler.js
     // Previously span_format.js copied these from _trace[KEY] onto root spans.
