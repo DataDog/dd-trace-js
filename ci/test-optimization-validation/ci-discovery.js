@@ -13,6 +13,8 @@ const DEFAULT_CI_SEARCHES = [
   'bitbucket-pipelines.yaml',
   'azure-pipelines.yml',
   'azure-pipelines.yaml',
+  '.azure-pipelines/*.yml',
+  '.azure-pipelines/*.yaml',
   'Jenkinsfile',
 ]
 

@@ -129,6 +129,46 @@ describe('test optimization validation static diagnosis', () => {
     }
   })
 
+  it('recognizes Azure workflow files under .azure-pipelines', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
+    const workflowDir = path.join(root, '.azure-pipelines')
+
+    fs.mkdirSync(workflowDir, { recursive: true })
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      devDependencies: {
+        'dd-trace': 'file:../dd-trace',
+        jest: '29.7.0',
+      },
+      scripts: {
+        test: 'jest',
+      },
+    }))
+    fs.writeFileSync(path.join(workflowDir, 'ci.yml'), [
+      'jobs:',
+      '- job: unit',
+      '  steps:',
+      '  - script: npm test',
+      '    env:',
+      '      NODE_OPTIONS: -r dd-trace/ci/init',
+      '',
+    ].join('\n'))
+
+    try {
+      const report = runDiagnosis({
+        root,
+        execFile () {
+          throw new Error('git unavailable')
+        },
+      })
+      const workflowResult = report.results.find(result => result.title === 'CI workflow files found')
+
+      assert.ok(workflowResult)
+      assert.deepStrictEqual(workflowResult.locations, ['.azure-pipelines/ci.yml'])
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('does not treat plain dd-trace app initialization as test setup initialization', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
 

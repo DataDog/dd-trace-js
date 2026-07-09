@@ -17,11 +17,15 @@ Write the manifest to:
 
 `./dd-test-optimization-validation-manifest.json`
 
-## Locate Installed Package
+## Record Installed Package Location
 
-Before broad filesystem searches, locate the installed `dd-trace` package with the repository's
-normal Node/package-manager resolution. Try the direct path first, then the cheapest resolver that
-matches this repository:
+Use the same installed `dd-trace` package for this runbook, its reference docs, the manifest schema,
+the example manifest, and the validator. If you are already reading this file from an installed
+`dd-trace` package, record that `ci/` directory and skip package discovery.
+
+If the runbook text was pasted, copied, or opened without a reliable file path, resolve the installed
+package with the repository's normal Node/package-manager resolution. Try the direct path first, then
+the cheapest resolver that matches this repository:
 
 ```bash
 test -f ./node_modules/dd-trace/ci/runbook.md && echo ./node_modules/dd-trace/ci/runbook.md
@@ -31,9 +35,9 @@ pnpm exec node -e "console.log(require.resolve('dd-trace/ci/runbook.md'))"
 npm exec -- node -e "console.log(require.resolve('dd-trace/ci/runbook.md'))"
 ```
 
-Use only the command that works in this repository. Do not run unrestricted recursive `find`
-commands across `node_modules`, workspace caches, or the whole repository unless all resolver
-commands fail.
+Use only the command that works in this repository, then read any referenced `ci/` files from the
+same resolved package. Do not run unrestricted recursive `find` commands across `node_modules`,
+workspace caches, or the whole repository unless all resolver commands fail.
 
 ## Anchor Repository Root
 

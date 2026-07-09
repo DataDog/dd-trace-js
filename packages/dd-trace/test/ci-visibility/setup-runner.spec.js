@@ -45,4 +45,62 @@ describe('test optimization validation setup runner', () => {
 
     fs.rmSync(out, { recursive: true, force: true })
   })
+
+  it('runs setup commands without ambient instrumentation env', async () => {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-setup-'))
+    const originalNodeOptions = process.env.NODE_OPTIONS
+    const originalOtelTracesExporter = process.env.OTEL_TRACES_EXPORTER
+    process.env.NODE_OPTIONS = '--no-warnings'
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
+
+    try {
+      const framework = {
+        id: 'vitest:package',
+        setup: {
+          commands: [
+            {
+              id: 'build',
+              cwd: out,
+              argv: [
+                process.execPath,
+                '-e',
+                [
+                  'assert = require("node:assert/strict")',
+                  'assert.strictEqual(process.env.NODE_OPTIONS, undefined)',
+                  'assert.strictEqual(process.env.OTEL_TRACES_EXPORTER, undefined)',
+                  'assert.strictEqual(process.env.PROJECT_SETUP_ENV, "present")',
+                ].join(';'),
+              ],
+              env: {
+                PROJECT_SETUP_ENV: 'present',
+              },
+              required: true,
+            },
+          ],
+        },
+      }
+
+      const setup = await runSetupCommands({
+        framework,
+        out,
+        options: { verbose: false },
+      })
+
+      assert.strictEqual(setup.ok, true)
+    } finally {
+      if (originalNodeOptions === undefined) {
+        delete process.env.NODE_OPTIONS
+      } else {
+        process.env.NODE_OPTIONS = originalNodeOptions
+      }
+
+      if (originalOtelTracesExporter === undefined) {
+        delete process.env.OTEL_TRACES_EXPORTER
+      } else {
+        process.env.OTEL_TRACES_EXPORTER = originalOtelTracesExporter
+      }
+
+      fs.rmSync(out, { recursive: true, force: true })
+    }
+  })
 })

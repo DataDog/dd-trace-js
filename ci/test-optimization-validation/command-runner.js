@@ -4,7 +4,7 @@
 
 const fs = require('fs')
 const path = require('path')
-const { spawn } = require('child_process')
+const { execFileSync, spawn } = require('child_process')
 
 const { NODE_MAJOR, NODE_MINOR } = require('../../version')
 const { sanitizeString } = require('./redaction')
@@ -189,7 +189,7 @@ function getBaseEnv (envMode) {
   return cleanEnv
 }
 
-function buildDatadogEnv ({ intake, scenario, framework }) {
+function buildDatadogEnv ({ intake, scenario, framework, command }) {
   return {
     DD_TRACE_AGENT_PORT: String(intake.port),
     DD_TRACE_AGENT_URL: `http://127.0.0.1:${intake.port}`,
@@ -201,7 +201,7 @@ function buildDatadogEnv ({ intake, scenario, framework }) {
     DD_ENV: 'local-validation',
     DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
     DD_TAGS: `test_optimization.validation.scenario:${scenario}`,
-    NODE_OPTIONS: withCiPreloads(process.env.NODE_OPTIONS, framework),
+    NODE_OPTIONS: withCiPreloads('', framework, command),
   }
 }
 
@@ -216,10 +216,10 @@ function buildCiWiringEnv ({ intake }) {
   }
 }
 
-function withCiPreloads (nodeOptions = '', framework) {
+function withCiPreloads (nodeOptions = '', framework, command) {
   let result = nodeOptions.trim()
 
-  if (framework?.framework === 'vitest' && supportsImportPreload() && !hasRegister(result)) {
+  if (framework?.framework === 'vitest' && supportsImportPreload(command) && !hasRegister(result)) {
     result = `--import ${formatNodeRequire(REGISTER_PATH)}${result ? ` ${result}` : ''}`
   }
 
@@ -238,13 +238,56 @@ function mergeNodeOptions (...nodeOptions) {
 }
 
 /**
- * Checks whether the current Node.js version supports --import in NODE_OPTIONS.
+ * Checks whether the command Node.js version supports --import in NODE_OPTIONS.
  *
+ * @param {object} [command] test command
  * @returns {boolean} true when --import can be used
  */
-function supportsImportPreload () {
-  if (NODE_MAJOR > 18) return true
-  return NODE_MAJOR === 18 && NODE_MINOR >= 18
+function supportsImportPreload (command) {
+  const version = getCommandNodeVersion(command)
+  if (version) return versionSupportsImportPreload(version)
+
+  if (command) return false
+  return versionSupportsImportPreload(`${NODE_MAJOR}.${NODE_MINOR}.0`)
+}
+
+/**
+ * Resolves the Node.js version for commands that directly execute Node.
+ *
+ * @param {object} [command] test command
+ * @returns {string|undefined} Node.js version
+ */
+function getCommandNodeVersion (command) {
+  if (!command || command.usesShell || !Array.isArray(command.argv)) return
+
+  const { commandIndex, prefixEnv } = parseArgv(command.argv)
+  const executable = command.argv[commandIndex]
+  if (!isNodeExecutable(executable)) return
+
+  try {
+    return String(execFileSync(executable, ['-p', 'process.versions.node'], {
+      cwd: command.cwd,
+      encoding: 'utf8',
+      env: {
+        ...getBaseEnv('clean'),
+        ...prefixEnv,
+        ...command.env,
+      },
+      timeout: 2000,
+    })).trim()
+  } catch {}
+}
+
+/**
+ * Checks whether a Node.js version supports --import in NODE_OPTIONS.
+ *
+ * @param {string} version Node.js version string
+ * @returns {boolean} true when --import can be used
+ */
+function versionSupportsImportPreload (version) {
+  const [major, minor] = String(version).split('.').map(Number)
+  if (major > 18) return true
+  return major === 18 && minor >= 18
 }
 
 function hasCiInit (nodeOptions) {
@@ -311,6 +354,7 @@ function getDisplayDetails (argv) {
 function parseArgv (argv) {
   const result = {
     prefixAssignments: [],
+    prefixEnv: {},
     commandIndex: 0,
     corepackIndex: -1,
     pathAdjusted: false,
@@ -322,10 +366,16 @@ function parseArgv (argv) {
   if (isEnvExecutable(argv[index])) {
     index++
     while (index < argv.length && isEnvAssignment(argv[index])) {
-      if (argv[index].startsWith('PATH=')) {
+      const assignment = argv[index]
+      const equalsIndex = assignment.indexOf('=')
+      const name = assignment.slice(0, equalsIndex)
+      const value = assignment.slice(equalsIndex + 1)
+      result.prefixEnv[name] = value
+
+      if (name === 'PATH') {
         result.pathAdjusted = true
       } else {
-        result.prefixAssignments.push(argv[index])
+        result.prefixAssignments.push(assignment)
       }
       index++
     }

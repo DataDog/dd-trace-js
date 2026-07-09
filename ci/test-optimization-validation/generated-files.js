@@ -4,6 +4,7 @@ const fs = require('fs')
 const path = require('path')
 
 const RUNTIME_FILE_NAMESPACE = 'dd-test-optimization-validation'
+const writtenGeneratedFiles = new Set()
 
 function writeGeneratedFiles (framework) {
   const strategy = framework.generatedTestStrategy
@@ -24,10 +25,12 @@ function writeGeneratedFiles (framework) {
 
       fs.mkdirSync(path.dirname(filename), { recursive: true })
       fs.writeFileSync(filename, content)
+      writtenGeneratedFiles.add(filename)
       written.push(filename)
     }
   } catch (err) {
     cleanupPaths(written)
+    forgetWrittenGeneratedFiles(written)
     throw err
   }
   return written
@@ -61,7 +64,7 @@ function getSafeCleanupPaths (framework, strategy, { includeGeneratedFiles }) {
   for (const cleanupPath of strategy.cleanupPaths || []) {
     const filename = validateCleanupPath(framework, cleanupPath)
     if (generatedFiles.has(filename)) {
-      if (includeGeneratedFiles) cleanupPaths.push(filename)
+      if (includeGeneratedFiles && writtenGeneratedFiles.has(filename)) cleanupPaths.push(filename)
       continue
     }
 
@@ -70,7 +73,11 @@ function getSafeCleanupPaths (framework, strategy, { includeGeneratedFiles }) {
     }
   }
 
-  if (includeGeneratedFiles) cleanupPaths.push(...generatedFiles)
+  if (includeGeneratedFiles) {
+    for (const filename of generatedFiles) {
+      if (writtenGeneratedFiles.has(filename)) cleanupPaths.push(filename)
+    }
+  }
   return [...new Set(cleanupPaths)]
 }
 
@@ -79,9 +86,16 @@ function cleanupPaths (cleanupPaths) {
     try {
       if (isDirectory(cleanupPath)) continue
       fs.rmSync(cleanupPath, { force: true })
+      writtenGeneratedFiles.delete(cleanupPath)
     } catch {
       // Cleanup should be best-effort. The report will contain the command artifacts.
     }
+  }
+}
+
+function forgetWrittenGeneratedFiles (filenames) {
+  for (const filename of filenames) {
+    writtenGeneratedFiles.delete(filename)
   }
 }
 

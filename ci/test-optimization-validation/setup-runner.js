@@ -14,6 +14,7 @@ async function runSetupCommands ({ framework, out, options }) {
     const outDir = path.join(out, 'setup', sanitize(framework.id), `${index + 1}-${sanitize(command.id || 'setup')}`)
     // eslint-disable-next-line no-await-in-loop
     const result = await runCommand(command, {
+      envMode: 'clean',
       outDir,
       label: `${framework.id}:setup:${command.id || index + 1}`,
       verbose: options.verbose,

@@ -123,7 +123,7 @@ function getCiWiringCommand (framework) {
   const command = framework.ciWiringCommand
   if (!command || !command.usesShell || command.shell || !framework.ciWiring?.shell) return command
 
-  const replayCommand = getTemplateReplayCommand(command, framework.ciWiring.shell)
+  const replayCommand = getShellReplayCommand(command, framework.ciWiring.shell)
   if (replayCommand) return replayCommand
 
   const shell = getReplayShell(framework.ciWiring.shell)
@@ -136,17 +136,18 @@ function getCiWiringCommand (framework) {
 }
 
 /**
- * Translates a CI shell template with a {0} placeholder into a local argv command.
+ * Translates a CI shell with flags into a local argv command.
  *
  * @param {object} command shell command from the manifest
- * @param {string} shell recorded CI shell template
+ * @param {string} shell recorded CI shell
  * @returns {object|undefined} argv command preserving the recorded shell flags
  */
-function getTemplateReplayCommand (command, shell) {
+function getShellReplayCommand (command, shell) {
   const tokens = tokenizeShellTemplate(shell)
-  if (!tokens.includes('{0}')) return
+  const hasTemplate = tokens.includes('{0}')
+  if (tokens.length <= 1 && !hasTemplate) return
 
-  const argv = tokens.filter(token => token !== '{0}')
+  const argv = hasTemplate ? tokens.filter(token => token !== '{0}') : tokens
   const executable = argv[0]
   if (!isBourneShell(executable)) return
 

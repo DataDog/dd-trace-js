@@ -1679,6 +1679,7 @@ function isWorkflowFile (relativePath) {
     relativePath === 'bitbucket-pipelines.yaml' ||
     relativePath === 'azure-pipelines.yml' ||
     relativePath === 'azure-pipelines.yaml' ||
+    /^\.azure-pipelines\/.+\.ya?ml$/.test(relativePath) ||
     relativePath === 'Jenkinsfile' ||
     relativePath === '.circleci/config.yml' ||
     relativePath === '.circleci/config.yaml' ||

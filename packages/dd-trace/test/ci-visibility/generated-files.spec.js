@@ -43,6 +43,24 @@ describe('test optimization validation generated files', () => {
     }
   })
 
+  it('does not clean matching generated files that were not written by this run', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-generated-files-'))
+    const filename = path.join(root, 'dd-test-optimization-validation.test.js')
+    const content = 'describe("generated", function () {\n  it("passes", function () {})\n})\n'
+    fs.writeFileSync(filename, content)
+
+    try {
+      const framework = getFramework(root, filename)
+
+      assert.deepStrictEqual(writeGeneratedFiles(framework), [])
+      cleanupGeneratedFiles({ frameworks: [framework] })
+
+      assert.strictEqual(fs.readFileSync(filename, 'utf8'), content)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('refuses generated file paths outside the project root', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-generated-files-'))
     const outside = path.join(os.tmpdir(), 'dd-test-optimization-validation-outside.test.js')

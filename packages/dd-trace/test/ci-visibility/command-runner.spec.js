@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const childProcess = require('node:child_process')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
@@ -55,6 +56,43 @@ describe('test optimization validation command runner', () => {
     assert.match(nodeOptions, /[\\/]ci[\\/]init\.js/)
   })
 
+  it('does not inject --import for Vitest when the command Node does not support it', () => {
+    const { withCiPreloads } = proxyquire('../../../../ci/test-optimization-validation/command-runner', {
+      child_process: {
+        execFileSync () {
+          return '18.17.1\n'
+        },
+        spawn: childProcess.spawn,
+      },
+    })
+    const nodeOptions = withCiPreloads('', { framework: 'vitest' }, {
+      cwd: process.cwd(),
+      argv: ['/opt/node/18.17.1/bin/node', 'node_modules/.bin/vitest', 'run'],
+    })
+
+    assert.doesNotMatch(nodeOptions, /--import/)
+    assert.match(nodeOptions, /[\\/]ci[\\/]init\.js/)
+  })
+
+  it('injects --import for Vitest when the command Node supports it', () => {
+    const { withCiPreloads } = proxyquire('../../../../ci/test-optimization-validation/command-runner', {
+      child_process: {
+        execFileSync () {
+          return '18.18.0\n'
+        },
+        spawn: childProcess.spawn,
+      },
+    })
+    const nodeOptions = withCiPreloads('', { framework: 'vitest' }, {
+      cwd: process.cwd(),
+      argv: ['/opt/node/18.18.0/bin/node', 'node_modules/.bin/vitest', 'run'],
+    })
+
+    assert.match(nodeOptions, /--import/)
+    assert.match(nodeOptions, /[\\/]register\.js/)
+    assert.match(nodeOptions, /[\\/]ci[\\/]init\.js/)
+  })
+
   it('disables unrelated Datadog side channels during forced local validation', () => {
     const env = buildDatadogEnv({
       intake: { port: 1234 },
@@ -70,6 +108,28 @@ describe('test optimization validation command runner', () => {
     assert.strictEqual(env.DD_TEST_FAILED_TEST_REPLAY_ENABLED, 'false')
     assert.strictEqual(env.DD_TRACE_ENABLED, 'true')
     assert.match(env.NODE_OPTIONS, /[\\/]ci[\\/]init\.js/)
+  })
+
+  it('does not add ambient NODE_OPTIONS to forced local validation', () => {
+    const originalNodeOptions = process.env.NODE_OPTIONS
+    process.env.NODE_OPTIONS = '--no-warnings'
+
+    try {
+      const env = buildDatadogEnv({
+        intake: { port: 1234 },
+        scenario: 'basic-reporting',
+        framework: { framework: 'mocha' },
+      })
+
+      assert.doesNotMatch(env.NODE_OPTIONS, /--no-warnings/)
+      assert.match(env.NODE_OPTIONS, /[\\/]ci[\\/]init\.js/)
+    } finally {
+      if (originalNodeOptions === undefined) {
+        delete process.env.NODE_OPTIONS
+      } else {
+        process.env.NODE_OPTIONS = originalNodeOptions
+      }
+    }
   })
 
   it('disables unrelated Datadog side channels during CI wiring replay', () => {
@@ -301,18 +361,21 @@ describe('test optimization validation command runner', () => {
     }
   })
 
-  it('keeps toolchain env but drops Datadog preloads from clean env', () => {
+  it('keeps toolchain env but drops ambient instrumentation from clean env', () => {
     const originalVoltaHome = process.env.VOLTA_HOME
     const originalNodeOptions = process.env.NODE_OPTIONS
+    const originalOtelTracesExporter = process.env.OTEL_TRACES_EXPORTER
 
     process.env.VOLTA_HOME = '/Users/example/.volta'
     process.env.NODE_OPTIONS = '-r dd-trace/ci/init'
+    process.env.OTEL_TRACES_EXPORTER = 'otlp'
 
     try {
       const cleanEnv = getBaseEnv('clean')
 
       assert.strictEqual(cleanEnv.VOLTA_HOME, '/Users/example/.volta')
       assert.strictEqual(cleanEnv.NODE_OPTIONS, undefined)
+      assert.strictEqual(cleanEnv.OTEL_TRACES_EXPORTER, undefined)
     } finally {
       if (originalVoltaHome === undefined) {
         delete process.env.VOLTA_HOME
@@ -324,6 +387,12 @@ describe('test optimization validation command runner', () => {
         delete process.env.NODE_OPTIONS
       } else {
         process.env.NODE_OPTIONS = originalNodeOptions
+      }
+
+      if (originalOtelTracesExporter === undefined) {
+        delete process.env.OTEL_TRACES_EXPORTER
+      } else {
+        process.env.OTEL_TRACES_EXPORTER = originalOtelTracesExporter
       }
     }
   })
