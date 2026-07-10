@@ -7,6 +7,7 @@ const path = require('node:path')
 
 const {
   cleanupGeneratedFiles,
+  cleanupGeneratedRuntimeFiles,
   writeGeneratedFiles,
 } = require('../../../../ci/test-optimization-validation/generated-files')
 
@@ -75,6 +76,27 @@ describe('test optimization validation generated files', () => {
     }
   })
 
+  it('refuses generated file paths that escape through a symbolic-link directory', function () {
+    if (process.platform === 'win32') this.skip()
+
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-generated-files-'))
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-generated-files-outside-'))
+    const linkedDirectory = path.join(root, 'linked')
+    const filename = path.join(linkedDirectory, 'dd-test-optimization-validation.test.js')
+
+    fs.symlinkSync(outside, linkedDirectory)
+
+    try {
+      assert.throws(() => writeGeneratedFiles(getFramework(root, filename)), {
+        message: /outside physical project root|symbolic link/,
+      })
+      assert.strictEqual(fs.existsSync(path.join(outside, path.basename(filename))), false)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+      fs.rmSync(outside, { recursive: true, force: true })
+    }
+  })
+
   it('only cleans generated files and namespaced runtime files', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-generated-files-'))
     const generated = path.join(root, 'dd-test-optimization-validation.test.js')
@@ -90,6 +112,28 @@ describe('test optimization validation generated files', () => {
       cleanupGeneratedFiles({ frameworks: [framework] })
 
       assert.strictEqual(fs.existsSync(generated), false)
+      assert.strictEqual(fs.existsSync(state), false)
+      assert.strictEqual(fs.readFileSync(unrelated, 'utf8'), 'customer data\n')
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('cleans namespaced retry state found beneath a declared generated directory', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-generated-files-'))
+    const generatedDirectory = path.join(root, '__dd_validation__')
+    const generated = path.join(generatedDirectory, 'dd-test-optimization-validation.test.js')
+    const state = path.join(generatedDirectory, '.dd-test-optimization-validation-atr-state')
+    const unrelated = path.join(generatedDirectory, 'keep-me.txt')
+    const framework = getFramework(root, generated, [generatedDirectory])
+
+    try {
+      fs.mkdirSync(generatedDirectory)
+      fs.writeFileSync(state, 'already passed\n')
+      fs.writeFileSync(unrelated, 'customer data\n')
+
+      cleanupGeneratedRuntimeFiles(framework)
+
       assert.strictEqual(fs.existsSync(state), false)
       assert.strictEqual(fs.readFileSync(unrelated, 'utf8'), 'customer data\n')
     } finally {

@@ -40,6 +40,13 @@ describe('test optimization validation payload normalizer', () => {
     assert.deepStrictEqual(findTestsByIdentity(events, [
       {
         name: 'basic-pass',
+        file: '/repo/generated/basic-pass.test.js',
+        suite: 'other suite',
+      },
+    ], { ignoreSuite: true }), [events[0]])
+    assert.deepStrictEqual(findTestsByIdentity(events, [
+      {
+        name: 'basic-pass',
         file: '/repo/missing/basic-pass.test.js',
       },
     ]), [])

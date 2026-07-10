@@ -1,6 +1,5 @@
 'use strict'
 
-const fs = require('fs')
 const path = require('path')
 
 const { buildCiCommandCandidate } = require('../ci-command-candidate')
@@ -9,6 +8,7 @@ const { getFrameworkCiDiscoveryContradiction } = require('../ci-discovery')
 const { runInitializationProbe } = require('../init-probe')
 const { normalizeRequests } = require('../payload-normalizer')
 const { sanitizeForReport } = require('../redaction')
+const { writeFileSafely } = require('../safe-files')
 const { getMissingEventDiagnosis, summarizeTestOutput } = require('./basic-reporting')
 const {
   basicEventEvidence,
@@ -17,6 +17,7 @@ const {
   findInterestingLines,
   frameworkOutDir,
   hasAllBasicEventTypes,
+  incomplete,
   pass,
   skip,
   tailInterestingLines,
@@ -34,6 +35,7 @@ async function runCiWiring ({ manifest, framework, intake, out, options, basicRe
     intake.resetRequests()
 
     const result = await runCommand(command, {
+      artifactRoot: out,
       env: buildCiWiringEnv({ intake }),
       envMode: 'clean',
       outDir,
@@ -44,11 +46,18 @@ async function runCiWiring ({ manifest, framework, intake, out, options, basicRe
     await wait(1000)
     const events = normalizeRequests(intake.requests)
     const sanitizedEvents = sanitizeForReport(events)
-    fs.writeFileSync(
+    writeFileSafely(
+      out,
       path.join(outDir, 'events.ndjson'),
-      sanitizedEvents.map(event => JSON.stringify(event)).join('\n') + '\n'
+      sanitizedEvents.map(event => JSON.stringify(event)).join('\n') + '\n',
+      'CI wiring events artifact'
     )
-    fs.writeFileSync(path.join(outDir, 'result.json'), `${JSON.stringify(sanitizeForReport(result), null, 2)}\n`)
+    writeFileSafely(
+      out,
+      path.join(outDir, 'result.json'),
+      `${JSON.stringify(sanitizeForReport(result), null, 2)}\n`,
+      'CI wiring result artifact'
+    )
 
     const ciWiringPreflight = getComparableCiWiringPreflight(framework, command)
     const evidence = {
@@ -232,7 +241,6 @@ function getMissingCiWiringCommandResult (framework, manifest) {
   }
 
   const ciWiring = framework.ciWiring
-  const status = ciWiring?.status === 'fail' ? 'fail' : 'skip'
   const diagnosis = ciWiring?.diagnosis ||
     ciWiring?.reason ||
     'No replayable CI wiring command was provided in the manifest.'
@@ -242,8 +250,16 @@ function getMissingCiWiringCommandResult (framework, manifest) {
     recommendation: 'Add ciWiringCommand to the manifest when a CI test step can be safely replayed locally.',
   }
 
-  if (status === 'fail') return fail(framework, 'ci-wiring', diagnosis, evidence)
-  return skip(framework, 'ci-wiring', diagnosis, evidence)
+  if (ciWiring?.status === 'skip') return skip(framework, 'ci-wiring', diagnosis, evidence)
+  if (ciWiring?.status === 'pass' || ciWiring?.status === 'fail') {
+    return fail(framework, 'ci-wiring', diagnosis, evidence)
+  }
+  return incomplete(
+    framework,
+    'ci-wiring',
+    `The validation manifest is incomplete: ${diagnosis}`,
+    evidence
+  )
 }
 
 function getCiWiringEventFailure ({ framework, result, evidence, basicResult }) {
@@ -298,9 +314,9 @@ function getCiWiringTestsRanRecommendation ({ basicResult, evidence }) {
   const probeReachedTestRunner = evidence.initializationProbe?.ran === true &&
     evidence.initializationProbe.reachedTestRunnerProcess === true
   const recommendation = probeReachedTestRunner
-    ? 'Verify that the CI workflow actually sets NODE_OPTIONS with dd-trace/ci/init and the required Datadog ' +
-      'environment variables. The NODE_OPTIONS probe reached the test runner for this command shape, so focus ' +
-      'on missing or incomplete CI Datadog configuration before wrapper propagation.'
+    ? 'Update the identified CI test job so NODE_OPTIONS includes `-r dd-trace/ci/init` and the required Datadog ' +
+      'environment variables are present. The NODE_OPTIONS probe reached the test runner for this command ' +
+      'shape, so no package-manager or wrapper change is needed.'
     : 'Verify that the CI workflow sets NODE_OPTIONS with dd-trace/ci/init for the final test runner, and that ' +
       'any package manager, monorepo runner, or wrapper preserves it.'
 

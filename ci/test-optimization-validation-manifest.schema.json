@@ -280,7 +280,8 @@
           "then": {
             "required": [
               "existingTestCommand",
-              "preflight"
+              "preflight",
+              "ciWiring"
             ]
           }
         },
@@ -305,6 +306,54 @@
             "properties": {
               "notes": {
                 "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "ciWiring"
+            ],
+            "properties": {
+              "ciWiring": {
+                "required": [
+                  "status"
+                ],
+                "properties": {
+                  "status": {
+                    "enum": [
+                      "pass",
+                      "fail"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "ciWiringCommand"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "ciWiringCommand"
+            ]
+          },
+          "then": {
+            "properties": {
+              "ciWiring": {
+                "required": [
+                  "provider",
+                  "configFile",
+                  "job",
+                  "step",
+                  "workingDirectory",
+                  "whySelected"
+                ]
               }
             }
           }
@@ -517,6 +566,12 @@
     "preflight": {
       "type": "object",
       "properties": {
+        "status": {
+          "enum": [
+            "pending",
+            "verified"
+          ]
+        },
         "ran": {
           "type": "boolean"
         },
@@ -552,6 +607,9 @@
     },
     "ciWiring": {
       "type": "object",
+      "required": [
+        "status"
+      ],
       "properties": {
         "status": {
           "enum": [
@@ -565,7 +623,7 @@
           "type": "string"
         },
         "configFile": {
-          "type": "string"
+          "$ref": "#/$defs/absolutePathString"
         },
         "workflow": {
           "type": [
@@ -601,9 +659,13 @@
           ]
         },
         "workingDirectory": {
-          "type": [
-            "string",
-            "null"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/absolutePathString"
+            },
+            {
+              "type": "null"
+            }
           ]
         },
         "inheritedEnv": {
@@ -653,9 +715,40 @@
         },
         "diagnosis": {
           "type": "string"
+        },
+        "reason": {
+          "type": "string"
         }
       },
-      "additionalProperties": true
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "skip",
+                  "unknown"
+                ]
+              }
+            }
+          },
+          "then": {
+            "anyOf": [
+              {
+                "required": [
+                  "diagnosis"
+                ]
+              },
+              {
+                "required": [
+                  "reason"
+                ]
+              }
+            ]
+          }
+        }
+      ]
     },
     "generatedTestStrategy": {
       "type": "object",
@@ -665,6 +758,7 @@
       "properties": {
         "status": {
           "enum": [
+            "planned",
             "verified",
             "proposed",
             "not_possible"
@@ -751,7 +845,10 @@
           "if": {
             "properties": {
               "status": {
-                "const": "verified"
+                "enum": [
+                  "planned",
+                  "verified"
+                ]
               }
             }
           },
@@ -767,7 +864,8 @@
                   {
                     "items": {
                       "required": [
-                        "testIdentities"
+                        "testIdentities",
+                        "expectedWithoutDatadog"
                       ],
                       "properties": {
                         "testIdentities": {
@@ -874,10 +972,94 @@
           }
         }
       },
-      "additionalProperties": true
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "basic-pass"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "expectedWithoutDatadog": {
+                "properties": {
+                  "exitCode": {
+                    "const": 0
+                  },
+                  "observedTestCount": {
+                    "const": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "atr-fail-once"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "expectedWithoutDatadog": {
+                "properties": {
+                  "exitCode": {
+                    "const": 1
+                  },
+                  "observedTestCount": {
+                    "const": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "id"
+            ],
+            "properties": {
+              "id": {
+                "const": "test-management-target"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "expectedWithoutDatadog": {
+                "properties": {
+                  "exitCode": {
+                    "const": 0
+                  },
+                  "observedTestCount": {
+                    "const": 1
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
     },
     "expectedWithoutDatadog": {
       "type": "object",
+      "required": [
+        "exitCode",
+        "observedTestCount"
+      ],
       "properties": {
         "exitCode": {
           "type": "number"

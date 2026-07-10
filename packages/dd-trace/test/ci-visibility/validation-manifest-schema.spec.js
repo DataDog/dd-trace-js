@@ -55,6 +55,7 @@ describe('test optimization validation manifest schema', () => {
         {
           id: 'basic-pass',
           runCommand: getCommand(),
+          expectedWithoutDatadog: getExpectedOutcome(0),
           testIdentities: [
             {
               name: 'passes',
@@ -65,10 +66,12 @@ describe('test optimization validation manifest schema', () => {
         {
           id: 'atr-fail-once',
           runCommand: getCommand(),
+          expectedWithoutDatadog: getExpectedOutcome(1),
         },
         {
           id: 'test-management-target',
           runCommand: getCommand(),
+          expectedWithoutDatadog: getExpectedOutcome(0),
           testIdentities: [],
         },
       ],
@@ -83,9 +86,9 @@ describe('test optimization validation manifest schema', () => {
       'frameworks[0].generatedTestStrategy.scenarios[0].testIdentities[0].file must be an absolute path ' +
         'when present.',
       'frameworks[0].generatedTestStrategy.scenarios[1].testIdentities must be a non-empty array when ' +
-        'generatedTestStrategy is verified.',
+        'generatedTestStrategy is planned or verified.',
       'frameworks[0].generatedTestStrategy.scenarios[2].testIdentities must be a non-empty array when ' +
-        'generatedTestStrategy is verified.',
+        'generatedTestStrategy is planned or verified.',
       'frameworks[0].generatedTestStrategy.testDirectory must be an absolute path when present.',
       'frameworks[0].generatedTestStrategy.cleanupPaths[0] must be an absolute path.',
     ])
@@ -125,6 +128,14 @@ describe('test optimization validation manifest schema', () => {
         condition.if?.required?.includes('usesShell') &&
         condition.then?.required?.includes('shellCommand')
     }))
+    assert.ok(frameworkAllOf.some(condition => {
+      return condition.if?.properties?.ciWiring?.properties?.status?.enum?.includes('fail') &&
+        condition.then?.required?.includes('ciWiringCommand')
+    }))
+    assert.deepStrictEqual(jsonSchema.$defs.expectedWithoutDatadog.required, [
+      'exitCode',
+      'observedTestCount',
+    ])
   })
 
   it('requires verified generated strategies to include every validation scenario', () => {
@@ -141,6 +152,7 @@ describe('test optimization validation manifest schema', () => {
         {
           id: 'basic-pass',
           runCommand: getCommand(),
+          expectedWithoutDatadog: getExpectedOutcome(0),
         },
       ],
       cleanupPaths: ['/repo/test/dd-test-optimization-validation.test.js'],
@@ -148,11 +160,11 @@ describe('test optimization validation manifest schema', () => {
 
     assert.deepStrictEqual(validateManifest(manifest), [
       'frameworks[0].generatedTestStrategy.scenarios must include generated scenario "atr-fail-once" ' +
-        'when status is verified.',
+        'when status is planned or verified.',
       'frameworks[0].generatedTestStrategy.scenarios must include generated scenario "test-management-target" ' +
-        'when status is verified.',
+        'when status is planned or verified.',
       'frameworks[0].generatedTestStrategy.scenarios[0].testIdentities must be a non-empty array when ' +
-        'generatedTestStrategy is verified.',
+        'generatedTestStrategy is planned or verified.',
     ])
   })
 
@@ -160,6 +172,7 @@ describe('test optimization validation manifest schema', () => {
     const manifest = getManifest()
     manifest.frameworks[0].generatedTestStrategy = {
       status: 'proposed',
+      reason: 'The selected runner cannot focus generated tests yet.',
       scenarios: [
         {
           id: 'basic-pass',
@@ -169,6 +182,123 @@ describe('test optimization validation manifest schema', () => {
     }
 
     assert.deepStrictEqual(validateManifest(manifest), [])
+  })
+
+  it('requires runnable frameworks to classify CI wiring explicitly', () => {
+    const manifest = getManifest()
+    delete manifest.frameworks[0].ciWiring
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].ciWiring must be an object.',
+    ])
+  })
+
+  it('requires replayable failed CI wiring to include its command', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].ciWiring = { status: 'fail' }
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].ciWiringCommand is required when ciWiring.status is fail.',
+    ])
+  })
+
+  it('requires verified generated commands to isolate one scenario with the expected exit code', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].generatedTestStrategy = {
+      status: 'verified',
+      files: [],
+      cleanupPaths: [],
+      scenarios: [
+        getGeneratedScenario('basic-pass', 1, 3),
+        getGeneratedScenario('atr-fail-once', 0, 3),
+        getGeneratedScenario('test-management-target', 0, 3),
+      ],
+    }
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].generatedTestStrategy.scenarios[0].expectedWithoutDatadog.exitCode must be 0 for basic-pass.',
+      'frameworks[0].generatedTestStrategy.scenarios[0].expectedWithoutDatadog.observedTestCount must be 1 so ' +
+        'the command isolates this scenario.',
+      'frameworks[0].generatedTestStrategy.scenarios[1].expectedWithoutDatadog.exitCode must be 1 for ' +
+        'atr-fail-once.',
+      'frameworks[0].generatedTestStrategy.scenarios[1].expectedWithoutDatadog.observedTestCount must be 1 so ' +
+        'the command isolates this scenario.',
+      'frameworks[0].generatedTestStrategy.scenarios[2].expectedWithoutDatadog.observedTestCount must be 1 so ' +
+        'the command isolates this scenario.',
+    ])
+  })
+
+  it('accepts complete generated strategies that the validator will verify', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].generatedTestStrategy = {
+      status: 'planned',
+      files: [],
+      cleanupPaths: [],
+      scenarios: [
+        getGeneratedScenario('basic-pass', 0, 1),
+        getGeneratedScenario('atr-fail-once', 1, 1),
+        getGeneratedScenario('test-management-target', 0, 1),
+      ],
+    }
+
+    assert.deepStrictEqual(validateManifest(manifest), [])
+  })
+
+  it('requires CI command metadata and matching working directories', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].ciWiring = {
+      status: 'unknown',
+      reason: 'Replayable command selected.',
+    }
+    manifest.frameworks[0].ciWiringCommand = {
+      cwd: '/repo/packages/app',
+      argv: ['npm', 'test'],
+    }
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].ciWiring.provider must be a non-empty string.',
+      'frameworks[0].ciWiring.configFile must be a non-empty string.',
+      'frameworks[0].ciWiring.job must be a non-empty string.',
+      'frameworks[0].ciWiring.step must be a non-empty string.',
+      'frameworks[0].ciWiring.whySelected must be a non-empty string.',
+      'frameworks[0].ciWiring.configFile must be an absolute path.',
+      'frameworks[0].ciWiring.workingDirectory must be an absolute path.',
+      'frameworks[0].ciWiringCommand.cwd must match frameworks[0].ciWiring.workingDirectory.',
+    ])
+  })
+
+  it('requires validator-controlled commands to be free of Datadog initialization', () => {
+    const manifest = getManifest()
+    manifest.frameworks[0].existingTestCommand.env = {
+      DD_API_KEY: 'placeholder',
+      NODE_OPTIONS: '--max-old-space-size=4096 -r dd-trace/ci/init',
+    }
+    manifest.frameworks[0].forcedLocalCommand = {
+      ...getCommand(),
+      env: { DD_CIVISIBILITY_ENABLED: '1' },
+    }
+    manifest.frameworks[0].generatedTestStrategy = {
+      status: 'proposed',
+      reason: 'Scenario selection is not complete.',
+      scenarios: [{
+        id: 'basic-pass',
+        runCommand: {
+          ...getCommand(),
+          env: { NODE_OPTIONS: '-r dd-trace/ci/init' },
+        },
+      }],
+    }
+
+    assert.deepStrictEqual(validateManifest(manifest), [
+      'frameworks[0].existingTestCommand.env.DD_API_KEY must not configure Datadog initialization for local ' +
+        'validation.',
+      'frameworks[0].existingTestCommand.env.NODE_OPTIONS must not configure Datadog initialization for local ' +
+        'validation.',
+      'frameworks[0].forcedLocalCommand.env.DD_CIVISIBILITY_ENABLED must not configure Datadog initialization ' +
+        'for local validation.',
+      'frameworks[0].generatedTestStrategy.scenarios[0].runCommand.env.NODE_OPTIONS must not configure Datadog ' +
+        'initialization for local validation.',
+    ])
   })
 })
 
@@ -195,10 +325,33 @@ function getManifest (frameworkOverrides = {}) {
           ran: true,
           exitCode: 0,
         },
+        ciWiring: {
+          status: 'unknown',
+          reason: 'No replayable CI command was identified.',
+        },
         notes: [],
         ...frameworkOverrides,
       },
     ],
+  }
+}
+
+function getGeneratedScenario (id, exitCode, observedTestCount) {
+  return {
+    id,
+    runCommand: getCommand(),
+    expectedWithoutDatadog: {
+      exitCode,
+      observedTestCount,
+    },
+    testIdentities: [{ name: id, file: `/repo/test/${id}.test.js` }],
+  }
+}
+
+function getExpectedOutcome (exitCode) {
+  return {
+    exitCode,
+    observedTestCount: 1,
   }
 }
 

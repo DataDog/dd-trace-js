@@ -12,6 +12,7 @@ const { DD_MAJOR, VERSION } = require('../version')
 
 const MAX_TEXT_FILE_SIZE = 512 * 1024
 const MAX_SCANNED_FILES = 1500
+const MAX_SCANNED_TEXT_BYTES = 32 * 1024 * 1024
 
 const PACKAGE_SECTIONS = [
   'dependencies',
@@ -49,7 +50,6 @@ const SKIPPED_FILES = new Set([
 const TEXT_EXTENSIONS = new Set([
   '.cjs',
   '.cts',
-  '.env',
   '.js',
   '.json',
   '.mjs',
@@ -62,11 +62,6 @@ const TEXT_EXTENSIONS = new Set([
 ])
 
 const TEXT_FILE_NAMES = new Set([
-  '.env',
-  '.env.ci',
-  '.env.local',
-  '.env.test',
-  '.npmrc',
   'Dockerfile',
   'Jenkinsfile',
   'Makefile',
@@ -226,7 +221,9 @@ const UNSUPPORTED_FRAMEWORKS = [
  * @param {string} [options.root] repository path to inspect
  * @param {NodeJS.ProcessEnv} [options.env] environment to inspect
  * @param {Function} [options.execFile] command runner used for git checks
+ * @param {string} [options.gitExecutable] trusted git executable used for git checks
  * @param {number} [options.maxFiles] maximum number of text files to scan
+ * @param {number} [options.maxTotalBytes] maximum aggregate bytes of text files to scan
  * @returns {object} diagnosis report
  */
 function runDiagnosis (options = {}) {
@@ -234,9 +231,11 @@ function runDiagnosis (options = {}) {
   const env = options.env || getEnvironmentVariables()
   const execFile = options.execFile || execFileSync
   const maxFiles = options.maxFiles || MAX_SCANNED_FILES
+  const maxTotalBytes = options.maxTotalBytes || MAX_SCANNED_TEXT_BYTES
   const results = []
   const files = collectTextFiles(root, maxFiles)
-  const textFiles = readTextFiles(root, files)
+  const textFiles = readTextFiles(root, files, maxTotalBytes)
+  const truncatedFileScan = files.truncated || textFiles.truncated
   const manifests = readPackageManifests(root, textFiles)
   const rootManifest = manifests.find(manifest => manifest.relativePath === 'package.json')
   const rootPackageJsonState = getRootPackageJsonState(root)
@@ -249,13 +248,14 @@ function runDiagnosis (options = {}) {
   const evidence = collectEvidence(textFiles, env)
 
   checkPackageManifest(results, rootManifest, rootPackageJsonState)
-  checkDdTraceDependency(results, manifests, { truncatedFileScan: files.truncated, rootPackageJsonState })
+  checkDdTraceDependency(results, manifests, { root, truncatedFileScan, rootPackageJsonState })
   checkSupportedFrameworks(results, supportedFrameworks)
   checkUnsupportedFrameworks(results, unsupportedFrameworks, supportedFrameworks)
   checkInitialization(results, supportedFrameworks, evidence, env)
   checkFrameworkConfiguration(results, supportedFrameworks, evidence, textFiles, manifests)
   checkCiConfiguration(results, workflowFiles, evidence, env)
-  checkGit(results, root, env, execFile)
+  const gitExecutable = options.gitExecutable || (options.execFile ? 'git' : findTrustedGitExecutable())
+  checkGit(results, root, env, execFile, gitExecutable)
   checkCurrentEnvironment(results, env, evidence)
 
   return {
@@ -263,7 +263,7 @@ function runDiagnosis (options = {}) {
     ddTraceVersion: VERSION,
     ddTraceMajor: DD_MAJOR,
     scannedFileCount: textFiles.length,
-    truncatedFileScan: files.truncated,
+    truncatedFileScan,
     supportedFrameworks: supportedFrameworks.map(serializeSupportedFramework),
     eligibleFrameworks: eligibleFrameworks.map(serializeEligibleFramework),
     unsupportedFrameworks: unsupportedFrameworks.map(serializeUnsupportedFramework),
@@ -482,6 +482,9 @@ function checkPackageManifest (results, rootManifest, rootPackageJsonState) {
  * @param {Array<object>} results mutable result list
  * @param {Array<object>} manifests package manifests
  * @param {object} options dependency check options
+ * @param {string} [options.root] repository root
+ * @param {boolean} [options.truncatedFileScan] whether static file discovery was truncated
+ * @param {object} [options.rootPackageJsonState] root package manifest state
  */
 function checkDdTraceDependency (results, manifests, options = {}) {
   const entries = findDependencyEntries(manifests, ['dd-trace'])
@@ -492,6 +495,21 @@ function checkDdTraceDependency (results, manifests, options = {}) {
       'ok',
       'dd-trace dependency found',
       `Detected dd-trace in ${formatLocations(entries.map(entry => entry.relativePath))}.`
+    )
+    return
+  }
+
+  const installedPackageJson = options.root && path.join(options.root, 'node_modules', 'dd-trace', 'package.json')
+  let installed = false
+  try {
+    installed = installedPackageJson && fs.statSync(installedPackageJson).isFile()
+  } catch {}
+  if (installed) {
+    addResult(
+      results,
+      'ok',
+      'dd-trace package installed',
+      'Detected an installed dd-trace package even though it was not declared in the scanned package manifests.'
     )
     return
   }
@@ -953,9 +971,11 @@ function checkCiConfiguration (results, workflowFiles, evidence, env) {
  * @param {string} root repository root
  * @param {NodeJS.ProcessEnv} env environment
  * @param {Function} execFile command runner
+ * @param {string|undefined} gitExecutable trusted git executable
  */
-function checkGit (results, root, env, execFile) {
-  if (!canRunGit(execFile, root)) {
+function checkGit (results, root, env, execFile, gitExecutable) {
+  const gitEnv = getGitEnvironment(gitExecutable, env)
+  if (!canRunGit(execFile, root, gitExecutable, gitEnv)) {
     addResult(
       results,
       'error',
@@ -968,7 +988,7 @@ function checkGit (results, root, env, execFile) {
 
   addResult(results, 'ok', 'git executable found', 'The current environment can execute git.')
 
-  const insideWorktree = runGit(execFile, root, ['rev-parse', '--is-inside-work-tree'])
+  const insideWorktree = runGit(execFile, root, gitExecutable, gitEnv, ['rev-parse', '--is-inside-work-tree'])
   if (insideWorktree !== 'true') {
     addResult(
       results,
@@ -980,10 +1000,10 @@ function checkGit (results, root, env, execFile) {
     return
   }
 
-  const head = runGit(execFile, root, ['rev-parse', 'HEAD'])
-  const remote = runGit(execFile, root, ['config', '--get', 'remote.origin.url'])
-  const branch = runGit(execFile, root, ['branch', '--show-current'])
-  const shallow = runGit(execFile, root, ['rev-parse', '--is-shallow-repository'])
+  const head = runGit(execFile, root, gitExecutable, gitEnv, ['rev-parse', 'HEAD'])
+  const remote = runGit(execFile, root, gitExecutable, gitEnv, ['config', '--get', 'remote.origin.url'])
+  const branch = runGit(execFile, root, gitExecutable, gitEnv, ['branch', '--show-current'])
+  const shallow = runGit(execFile, root, gitExecutable, gitEnv, ['rev-parse', '--is-shallow-repository'])
 
   if (head) {
     addResult(results, 'ok', 'git commit SHA detected', `Current HEAD is ${head.slice(0, 12)}.`)
@@ -1626,10 +1646,13 @@ function collectTextFiles (root, maxFiles) {
  *
  * @param {string} root repository root
  * @param {string[]} files relative file paths
+ * @param {number} maxTotalBytes maximum aggregate bytes to retain
  * @returns {Array<object>} text file records
  */
-function readTextFiles (root, files) {
+function readTextFiles (root, files, maxTotalBytes) {
   const textFiles = []
+  let totalBytes = 0
+  textFiles.truncated = false
 
   for (const relativePath of files) {
     const absolutePath = path.join(root, relativePath)
@@ -1641,12 +1664,17 @@ function readTextFiles (root, files) {
     }
 
     if (stat.size > MAX_TEXT_FILE_SIZE) continue
+    if (totalBytes + stat.size > maxTotalBytes) {
+      textFiles.truncated = true
+      break
+    }
 
     try {
       textFiles.push({
         relativePath: normalizeRelativePath(relativePath),
         content: fs.readFileSync(absolutePath, 'utf8'),
       })
+      totalBytes += stat.size
     } catch {
       // Ignore files that cannot be read as UTF-8.
     }
@@ -1713,11 +1741,15 @@ function isTestSetupOrCiFile (file) {
  *
  * @param {Function} execFile command runner
  * @param {string} root repository root
+ * @param {string|undefined} gitExecutable trusted git executable
+ * @param {NodeJS.ProcessEnv} env credential-free git environment
  * @returns {boolean} true if git runs
  */
-function canRunGit (execFile, root) {
+function canRunGit (execFile, root, gitExecutable, env) {
+  if (!gitExecutable) return false
+
   try {
-    execFile('git', ['--version'], { cwd: root, stdio: 'pipe' })
+    execFile(gitExecutable, ['--version'], { cwd: root, env, stdio: 'pipe', timeout: 2000 })
     return true
   } catch {
     return false
@@ -1729,15 +1761,67 @@ function canRunGit (execFile, root) {
  *
  * @param {Function} execFile command runner
  * @param {string} root repository root
+ * @param {string} gitExecutable trusted git executable
+ * @param {NodeJS.ProcessEnv} env credential-free git environment
  * @param {string[]} args git arguments
  * @returns {string} command output
  */
-function runGit (execFile, root, args) {
+function runGit (execFile, root, gitExecutable, env, args) {
   try {
-    return String(execFile('git', args, { cwd: root, stdio: 'pipe' })).trim()
+    return String(execFile(gitExecutable, args, { cwd: root, env, stdio: 'pipe', timeout: 2000 })).trim()
   } catch {
     return ''
   }
+}
+
+/**
+ * Resolves git without trusting repository-controlled PATH entries.
+ *
+ * @returns {string|undefined} trusted absolute git path
+ */
+function findTrustedGitExecutable () {
+  const candidates = process.platform === 'win32'
+    ? [
+        String.raw`C:\Program Files\Git\cmd\git.exe`,
+        String.raw`C:\Program Files\Git\bin\git.exe`,
+        String.raw`C:\Program Files (x86)\Git\cmd\git.exe`,
+        String.raw`C:\Program Files (x86)\Git\bin\git.exe`,
+      ]
+    : ['/usr/bin/git', '/usr/local/bin/git', '/opt/homebrew/bin/git']
+
+  for (const candidate of candidates) {
+    let resolved
+    try {
+      resolved = fs.realpathSync(candidate)
+      fs.accessSync(resolved, fs.constants.X_OK)
+    } catch {
+      continue
+    }
+
+    return resolved
+  }
+}
+
+/**
+ * Creates the minimal environment needed by read-only local git metadata commands.
+ *
+ * @param {string|undefined} gitExecutable trusted git executable
+ * @param {NodeJS.ProcessEnv} sourceEnv source environment
+ * @returns {NodeJS.ProcessEnv} credential-free git environment
+ */
+function getGitEnvironment (gitExecutable, sourceEnv) {
+  const env = {
+    GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null',
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_OPTIONAL_LOCKS: '0',
+    GIT_TERMINAL_PROMPT: '0',
+  }
+
+  for (const name of ['COMSPEC', 'ComSpec', 'PATHEXT', 'SystemRoot', 'WINDIR', 'windir']) {
+    if (sourceEnv[name] !== undefined) env[name] = sourceEnv[name]
+  }
+  if (gitExecutable && path.isAbsolute(gitExecutable)) env.PATH = path.dirname(gitExecutable)
+  return env
 }
 
 /**

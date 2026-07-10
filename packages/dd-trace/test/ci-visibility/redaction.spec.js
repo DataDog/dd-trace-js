@@ -95,6 +95,12 @@ describe('test optimization validation redaction', () => {
     assert.doesNotMatch(output, /authorization-colon-secret/)
   })
 
+  it('does not treat natural-language pass labels as secret headers', () => {
+    const input = 'Skipped because basic reporting did not pass: The selected command ran tests.'
+
+    assert.strictEqual(sanitizeString(input), input)
+  })
+
   it('preserves JSON structure when redacting bearer values', () => {
     const output = sanitizeString('{"Authorization": "Bearer secret-token"}')
 
@@ -137,5 +143,34 @@ describe('test optimization validation redaction', () => {
       '--token',
       '<redacted>',
     ])
+  })
+
+  it('redacts common unlabeled token and private-key forms', () => {
+    const githubToken = `ghp_${'a'.repeat(24)}`
+    const jwt = `eyJ${'a'.repeat(12)}.${'b'.repeat(16)}.${'c'.repeat(16)}`
+    const privateKey = [
+      '-----BEGIN PRIVATE KEY-----',
+      'synthetic-private-key-material',
+      '-----END PRIVATE KEY-----',
+    ].join('\n')
+    const output = sanitizeString(`${githubToken}\n${jwt}\n${privateKey}`)
+
+    assert.doesNotMatch(output, new RegExp(githubToken))
+    assert.doesNotMatch(output, new RegExp(jwt.replaceAll('.', '\\.')))
+    assert.doesNotMatch(output, /synthetic-private-key-material/)
+    assert.match(output, /<redacted>/)
+    assert.match(output, /<redacted-private-key>/)
+  })
+
+  it('redacts PAT and JWT aliases and all URL userinfo', () => {
+    const report = sanitizeForReport({
+      GITHUB_PAT: 'github-pat-secret',
+      CI_JOB_JWT: 'job-jwt-secret',
+      remote: 'https://username-only-secret@example.com/repository.git',
+    })
+
+    assert.strictEqual(report.GITHUB_PAT, '<redacted>')
+    assert.strictEqual(report.CI_JOB_JWT, '<redacted>')
+    assert.strictEqual(report.remote, 'https://<redacted>@example.com/repository.git')
   })
 })

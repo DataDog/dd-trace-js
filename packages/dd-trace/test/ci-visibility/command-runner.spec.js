@@ -93,6 +93,28 @@ describe('test optimization validation command runner', () => {
     assert.match(nodeOptions, /[\\/]ci[\\/]init\.js/)
   })
 
+  it('injects --import for Vitest package-manager commands using the command environment Node', () => {
+    const observedExecutables = []
+    const { withCiPreloads } = proxyquire('../../../../ci/test-optimization-validation/command-runner', {
+      child_process: {
+        execFileSync (executable) {
+          observedExecutables.push(executable)
+          return '20.19.0\n'
+        },
+        spawn: childProcess.spawn,
+      },
+    })
+    const nodeOptions = withCiPreloads('', { framework: 'vitest' }, {
+      cwd: process.cwd(),
+      argv: ['pnpm', 'run', 'test'],
+    })
+
+    assert.deepStrictEqual(observedExecutables, ['node'])
+    assert.match(nodeOptions, /--import/)
+    assert.match(nodeOptions, /[\\/]register\.js/)
+    assert.match(nodeOptions, /[\\/]ci[\\/]init\.js/)
+  })
+
   it('disables unrelated Datadog side channels during forced local validation', () => {
     const env = buildDatadogEnv({
       intake: { port: 1234 },
@@ -146,7 +168,71 @@ describe('test optimization validation command runner', () => {
     assert.strictEqual(env.DD_TRACE_DEBUG, '1')
     assert.strictEqual(env.DD_TRACE_LOG_LEVEL, 'debug')
     assert.strictEqual(env.DD_CIVISIBILITY_ENABLED, undefined)
-    assert.strictEqual(env.NODE_OPTIONS, undefined)
+    assert.match(env.NODE_OPTIONS, /transport-preload\.js/)
+    assert.doesNotMatch(env.NODE_OPTIONS, /[\\/]ci[\\/]init\.js/)
+  })
+
+  it('reapplies fake-intake transport before CI-provided NODE_OPTIONS', async () => {
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-runner-'))
+    const env = buildCiWiringEnv({ intake: { port: 43123 } })
+
+    try {
+      const result = await runCommand({
+        cwd: outDir,
+        argv: [
+          process.execPath,
+          '-e',
+          'process.stdout.write(JSON.stringify({' +
+            'agentUrl: process.env.DD_TRACE_AGENT_URL,' +
+            'agentlessUrl: process.env.DD_CIVISIBILITY_AGENTLESS_URL,' +
+            'nodeOptions: process.env.NODE_OPTIONS' +
+          '}))',
+        ],
+        env: {
+          DD_TRACE_AGENT_URL: 'https://example.invalid',
+          NODE_OPTIONS: '--no-warnings',
+        },
+      }, {
+        env,
+        envMode: 'clean',
+        outDir,
+      })
+      const observed = JSON.parse(result.stdout)
+
+      assert.strictEqual(observed.agentUrl, 'http://127.0.0.1:43123')
+      assert.strictEqual(observed.agentlessUrl, 'http://127.0.0.1:43123')
+      assert.ok(observed.nodeOptions.indexOf('transport-preload.js') < observed.nodeOptions.indexOf('--no-warnings'))
+    } finally {
+      fs.rmSync(outDir, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses inline fake-intake and NODE_OPTIONS overrides', async () => {
+    const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-command-runner-'))
+    const env = buildCiWiringEnv({ intake: { port: 43123 } })
+
+    try {
+      await assert.rejects(runCommand({
+        cwd: outDir,
+        usesShell: true,
+        shellCommand: 'NODE_OPTIONS="-r dd-trace/ci/init" npm test',
+      }, {
+        env,
+        envMode: 'clean',
+        outDir,
+      }), /Refusing inline NODE_OPTIONS changes/)
+
+      await assert.rejects(runCommand({
+        cwd: outDir,
+        argv: ['/usr/bin/env', 'DD_TRACE_AGENT_URL=https://example.invalid', 'npm', 'test'],
+      }, {
+        env,
+        envMode: 'clean',
+        outDir,
+      }), /Refusing inline DD_TRACE_AGENT_URL changes/)
+    } finally {
+      fs.rmSync(outDir, { recursive: true, force: true })
+    }
   })
 
   it('collapses node and corepack runtime plumbing for display commands', () => {

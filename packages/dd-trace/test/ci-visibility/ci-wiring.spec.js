@@ -8,6 +8,39 @@ const path = require('node:path')
 const { runCiWiring } = require('../../../../ci/test-optimization-validation/scenarios/ci-wiring')
 
 describe('test optimization CI wiring validation', () => {
+  it('does not turn a failed CI wiring classification into a skip when its command is missing', async () => {
+    const result = await runCiWiring({
+      manifest: {},
+      framework: {
+        id: 'vitest:root',
+        ciWiring: {
+          status: 'fail',
+          diagnosis: 'CI does not configure Datadog initialization.',
+        },
+      },
+    })
+
+    assert.strictEqual(result.status, 'fail')
+    assert.strictEqual(result.diagnosis, 'CI does not configure Datadog initialization.')
+  })
+
+  it('reports unknown CI wiring without a replay command as incomplete', async () => {
+    const result = await runCiWiring({
+      manifest: {},
+      framework: {
+        id: 'vitest:root',
+        ciWiring: {
+          status: 'unknown',
+          reason: 'CI command selection was not completed.',
+        },
+      },
+    })
+
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.manifestIncomplete, true)
+    assert.match(result.diagnosis, /manifest is incomplete/)
+  })
+
   it('does not inherit ambient Datadog initialization from the validator process', async () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-ci-wiring-'))
     const originalNodeOptions = process.env.NODE_OPTIONS

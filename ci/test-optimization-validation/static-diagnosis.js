@@ -1,6 +1,5 @@
 'use strict'
 
-const fs = require('fs')
 const path = require('path')
 
 const satisfies = require('../../vendor/dist/semifies')
@@ -10,6 +9,7 @@ const {
   runDiagnosis,
 } = require('../diagnose')
 const { sanitizeForReport } = require('./redaction')
+const { writeFileSafely } = require('./safe-files')
 
 const SUPPORTED_FRAMEWORKS = new Set([
   'jest',
@@ -33,7 +33,12 @@ const UNSUPPORTED_FRAMEWORK_NAMES = {
 function runStaticDiagnosis ({ manifest, out }) {
   const report = runDiagnosis({ root: manifest.repository.root })
   const reportPath = path.join(out, 'static-diagnosis.json')
-  fs.writeFileSync(reportPath, `${JSON.stringify(sanitizeForReport(report), null, 2)}\n`)
+  writeFileSafely(
+    out,
+    reportPath,
+    `${JSON.stringify(sanitizeForReport(report), null, 2)}\n`,
+    'static diagnosis artifact'
+  )
   return { report, reportPath }
 }
 

@@ -4,8 +4,128 @@ const assert = require('node:assert/strict')
 const path = require('node:path')
 
 const proxyquire = require('proxyquire').noCallThru().noPreserveCache()
+const sinon = require('sinon')
+
+const {
+  eventsOfType,
+  findTestsByIdentity,
+} = require('../../../../ci/test-optimization-validation/payload-normalizer')
+const {
+  requireGeneratedScenario,
+} = require('../../../../ci/test-optimization-validation/scenarios/helpers')
 
 describe('test optimization validation advanced features', () => {
+  it('reports a missing verified generated strategy as incomplete', () => {
+    const result = requireGeneratedScenario({ id: 'vitest:root' }, 'basic-pass', 'efd')
+
+    assert.strictEqual(result.status, 'error')
+    assert.strictEqual(result.evidence.manifestIncomplete, true)
+    assert.match(result.diagnosis, /manifest is incomplete/)
+  })
+
+  it('cleans generated runtime state before recreating generated files', async () => {
+    const calls = []
+    const helpers = proxyquire('../../../../ci/test-optimization-validation/scenarios/helpers', {
+      '../generated-files': {
+        cleanupGeneratedRuntimeFiles () {
+          calls.push('cleanup')
+        },
+        findGeneratedScenario () {
+          return { id: 'atr-fail-once' }
+        },
+        writeGeneratedFiles () {
+          calls.push('write')
+          return ['/repo/dd-test-optimization-validation.test.js']
+        },
+      },
+    })
+
+    await helpers.prepareGeneratedScenario({ generatedTestStrategy: {} }, 'atr-fail-once')
+
+    assert.deepStrictEqual(calls, ['cleanup', 'write'])
+  })
+
+  it('discovers a generated test by name and file when the manifest suite is wrong', async () => {
+    const clock = sinon.useFakeTimers()
+    const outDir = path.join('/tmp', 'dd-validation-discovery')
+    const test = {
+      type: 'test',
+      testName: 'dd-test-optimization-validation basic-pass',
+      testSuite: 'packages/debug/test/dd-test-optimization-validation.test.js',
+      testSourceFile: 'packages/debug/test/dd-test-optimization-validation.test.js',
+    }
+    const helpers = proxyquire('../../../../ci/test-optimization-validation/scenarios/helpers', {
+      '../command-runner': {
+        buildDatadogEnv () {
+          return {}
+        },
+        async runCommand () {
+          return { exitCode: 0 }
+        },
+      },
+      '../generated-files': {
+        cleanupGeneratedRuntimeFiles () {},
+      },
+      '../payload-normalizer': {
+        eventsOfType,
+        findTestsByIdentity,
+        normalizeRequests () {
+          return [test]
+        },
+      },
+      '../redaction': {
+        sanitizeForReport (value) {
+          return value
+        },
+      },
+      '../safe-files': {
+        writeFileSafely () {},
+      },
+    })
+
+    try {
+      const discoveryPromise = helpers.discoverScenarioTests({
+        framework: {
+          id: 'vitest:packages-debug',
+          framework: 'vitest',
+        },
+        intake: {
+          configure () {},
+          requests: [],
+          resetRequests () {},
+        },
+        options: { verbose: false },
+        out: outDir,
+        scenarioName: 'efd',
+        scenario: {
+          runCommand: {
+            cwd: outDir,
+            argv: ['node', 'test.js'],
+          },
+          testIdentities: [{
+            suite: 'dd-test-optimization-validation',
+            name: 'basic-pass',
+            file: '/repo/packages/debug/test/dd-test-optimization-validation.test.js',
+          }],
+        },
+      })
+      await clock.tickAsync(1000)
+      const discovery = await discoveryPromise
+
+      assert.deepStrictEqual(discovery.tests, [test])
+      assert.strictEqual(discovery.identityMatch, 'name-and-file-fallback')
+      assert.deepStrictEqual(discovery.testIdentities, [{
+        discovered: true,
+        suite: test.testSuite,
+        name: test.testName,
+        file: test.testSourceFile,
+        parameters: undefined,
+      }])
+    } finally {
+      clock.restore()
+    }
+  })
+
   it('fails EFD when retry evidence is emitted by a nonzero command', async () => {
     const outDir = path.join('/tmp', 'dd-validation-efd')
     const helpers = buildScenarioHelpers({

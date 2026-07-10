@@ -2,15 +2,29 @@
 
 /* eslint-disable no-console, eslint-rules/eslint-process-env */
 
-const fs = require('fs')
 const path = require('path')
 const { execFileSync, spawn } = require('child_process')
 
 const { NODE_MAJOR, NODE_MINOR } = require('../../version')
 const { sanitizeString } = require('./redaction')
+const { ensureSafeDirectory, writeFileSafely } = require('./safe-files')
 
 const INIT_PATH = path.resolve(__dirname, '..', 'init.js')
 const REGISTER_PATH = path.resolve(__dirname, '..', '..', 'register.js')
+const TRANSPORT_PRELOAD_PATH = path.resolve(__dirname, 'transport-preload.js')
+const VALIDATION_INTAKE_URL_ENV = 'DD_TEST_OPTIMIZATION_VALIDATION_INTAKE_URL'
+const VALIDATION_RESERVED_ENV_NAMES = [
+  'DD_AGENT_HOST',
+  // Also reject the supported alias so repository commands cannot bypass the fake intake.
+  // eslint-disable-next-line eslint-rules/eslint-env-aliases
+  'DD_TRACE_AGENT_HOSTNAME',
+  'DD_TRACE_AGENT_PORT',
+  'DD_TRACE_AGENT_URL',
+  'DD_TRACE_AGENT_UNIX_DOMAIN_SOCKET',
+  'DD_CIVISIBILITY_AGENTLESS_URL',
+  'NODE_OPTIONS',
+  VALIDATION_INTAKE_URL_ENV,
+]
 const CLEAN_ENV_ALLOWLIST = new Set([
   'COMSPEC',
   'ComSpec',
@@ -44,7 +58,9 @@ const DEFAULT_MAX_OUTPUT_BYTES = 1024 * 1024
 const TIMEOUT_KILL_GRACE_MS = 5000
 const TIMEOUT_FINALIZE_GRACE_MS = 1000
 
-function runCommand (command, { env = {}, envMode = 'inherit', outDir, label, verbose = false } = {}) {
+function runCommand (command, options = {}) {
+  const { env = {}, envMode = 'inherit', outDir, label, verbose = false } = options
+  const artifactRoot = options.artifactRoot || path.dirname(outDir)
   const startedAt = Date.now()
   const timeoutMs = command.timeoutMs || 300_000
   const timeoutKillGraceMs = command.timeoutKillGraceMs || TIMEOUT_KILL_GRACE_MS
@@ -67,19 +83,20 @@ function runCommand (command, { env = {}, envMode = 'inherit', outDir, label, ve
     artifacts: {},
   }
 
-  fs.mkdirSync(outDir, { recursive: true })
+  ensureSafeDirectory(artifactRoot, outDir, 'command artifact directory')
 
   return new Promise((resolve) => {
     let finalized = false
     let processGroupCleanupPending = false
     let timedOutCloseResult
+    assertNoInlineValidationEnvOverrides(command, env)
     const childEnv = {
       ...getBaseEnv(envMode),
       ...command.env,
       ...env,
     }
     if (command.env?.NODE_OPTIONS && env.NODE_OPTIONS) {
-      childEnv.NODE_OPTIONS = mergeNodeOptions(command.env.NODE_OPTIONS, env.NODE_OPTIONS)
+      childEnv.NODE_OPTIONS = mergeNodeOptions(env.NODE_OPTIONS, command.env.NODE_OPTIONS)
     }
 
     const useProcessGroup = shouldUseProcessGroup()
@@ -154,15 +171,19 @@ function runCommand (command, { env = {}, envMode = 'inherit', outDir, label, ve
       result.artifacts.stderr = path.join(outDir, 'stderr.txt')
       result.artifacts.command = path.join(outDir, 'command.json')
 
-      fs.writeFileSync(
+      writeFileSafely(
+        artifactRoot,
         result.artifacts.stdout,
-        sanitizeString(formatCapturedOutput(result.stdout, result.stdoutTruncated, maxOutputBytes))
+        sanitizeString(formatCapturedOutput(result.stdout, result.stdoutTruncated, maxOutputBytes)),
+        'command stdout artifact'
       )
-      fs.writeFileSync(
+      writeFileSafely(
+        artifactRoot,
         result.artifacts.stderr,
-        sanitizeString(formatCapturedOutput(result.stderr, result.stderrTruncated, maxOutputBytes))
+        sanitizeString(formatCapturedOutput(result.stderr, result.stderrTruncated, maxOutputBytes)),
+        'command stderr artifact'
       )
-      fs.writeFileSync(result.artifacts.command, `${JSON.stringify({
+      writeFileSafely(artifactRoot, result.artifacts.command, `${JSON.stringify({
         command: sanitizeString(result.command),
         displayCommand: sanitizeString(result.displayCommand),
         commandDetails: result.commandDetails,
@@ -174,7 +195,7 @@ function runCommand (command, { env = {}, envMode = 'inherit', outDir, label, ve
         stdoutTruncated: result.stdoutTruncated,
         stderrTruncated: result.stderrTruncated,
         maxOutputBytes,
-      }, null, 2)}\n`)
+      }, null, 2)}\n`, 'command metadata artifact')
 
       resolve(result)
     }
@@ -247,9 +268,9 @@ function getBaseEnv (envMode) {
 }
 
 function buildDatadogEnv ({ intake, scenario, framework, command }) {
+  const transport = buildValidationTransportEnv(intake)
   return {
-    DD_TRACE_AGENT_PORT: String(intake.port),
-    DD_TRACE_AGENT_URL: `http://127.0.0.1:${intake.port}`,
+    ...transport,
     DD_CIVISIBILITY_AGENTLESS_ENABLED: '0',
     DD_CIVISIBILITY_ENABLED: '1',
     DD_TRACE_ENABLED: 'true',
@@ -258,19 +279,114 @@ function buildDatadogEnv ({ intake, scenario, framework, command }) {
     DD_ENV: 'local-validation',
     DD_CIVISIBILITY_FLAKY_RETRY_COUNT: '2',
     DD_TAGS: `test_optimization.validation.scenario:${scenario}`,
-    NODE_OPTIONS: withCiPreloads('', framework, command),
+    NODE_OPTIONS: mergeNodeOptions(transport.NODE_OPTIONS, withCiPreloads('', framework, command)),
   }
 }
 
 function buildCiWiringEnv ({ intake }) {
   return {
-    DD_TRACE_AGENT_PORT: String(intake.port),
-    DD_TRACE_AGENT_URL: `http://127.0.0.1:${intake.port}`,
-    DD_CIVISIBILITY_AGENTLESS_URL: `http://127.0.0.1:${intake.port}`,
+    ...buildValidationTransportEnv(intake),
     DD_TRACE_DEBUG: '1',
     DD_TRACE_LOG_LEVEL: 'debug',
     ...VALIDATION_SUPPRESSION_ENV,
   }
+}
+
+/**
+ * Builds transport settings that are re-applied inside each Node.js process before dd-trace initializes.
+ *
+ * @param {{port: number}} intake fake intake
+ * @returns {NodeJS.ProcessEnv} validation transport environment
+ */
+function buildValidationTransportEnv (intake) {
+  const url = `http://127.0.0.1:${intake.port}`
+  return {
+    DD_AGENT_HOST: '127.0.0.1',
+    DD_TRACE_AGENT_HOSTNAME: '127.0.0.1',
+    DD_TRACE_AGENT_PORT: String(intake.port),
+    DD_TRACE_AGENT_URL: url,
+    DD_CIVISIBILITY_AGENTLESS_URL: url,
+    [VALIDATION_INTAKE_URL_ENV]: url,
+    NODE_OPTIONS: `-r ${formatNodeRequire(TRANSPORT_PRELOAD_PATH)}`,
+    NO_PROXY: '127.0.0.1,localhost',
+    no_proxy: '127.0.0.1,localhost',
+  }
+}
+
+/**
+ * Rejects command-local assignments that can bypass validator-controlled fake-intake routing.
+ *
+ * @param {object} command command to execute
+ * @param {NodeJS.ProcessEnv} env validator environment overrides
+ */
+function assertNoInlineValidationEnvOverrides (command, env) {
+  if (!env[VALIDATION_INTAKE_URL_ENV]) return
+
+  if (command.usesShell) {
+    rejectReservedShellAssignments(command.shellCommand)
+    return
+  }
+
+  const parsed = parseArgv(command.argv)
+  for (const name of Object.keys(parsed.prefixEnv)) {
+    if (VALIDATION_RESERVED_ENV_NAMES.includes(name)) throwReservedEnvOverride(name)
+  }
+
+  for (let index = 0; index < command.argv.length - 1; index++) {
+    const value = command.argv[index]
+    if ((value === '-u' || value === '--unset') && VALIDATION_RESERVED_ENV_NAMES.includes(command.argv[index + 1])) {
+      throwReservedEnvOverride(command.argv[index + 1])
+    }
+    if (value === '-c' && typeof command.argv[index + 1] === 'string') {
+      rejectReservedShellAssignments(command.argv[index + 1])
+    }
+  }
+}
+
+/**
+ * Rejects reserved variable assignments and removals in shell source.
+ *
+ * @param {string} shellCommand shell source
+ */
+function rejectReservedShellAssignments (shellCommand) {
+  const source = String(shellCommand || '')
+
+  for (const name of VALIDATION_RESERVED_ENV_NAMES) {
+    const escapedName = escapeRegExp(name)
+    const assignment = new RegExp(
+      String.raw`(?:^|[\s;&|()])(?:export\s+|set\s+)?(?:\$env:)?${escapedName}\s*=`,
+      'i'
+    )
+    const removal = new RegExp(
+      String.raw`(?:\bunset\s+|\benv\s+(?:[^;&|]*\s)?(?:-u|--unset)\s+|` +
+      String.raw`\bRemove-Item\s+(?:[^;&|]*\s)?env:)${escapedName}\b`,
+      'i'
+    )
+
+    if (assignment.test(source) || removal.test(source)) throwReservedEnvOverride(name)
+  }
+}
+
+/**
+ * Throws a customer-facing error for unsafe inline validation environment changes.
+ *
+ * @param {string} name reserved environment variable
+ */
+function throwReservedEnvOverride (name) {
+  throw new Error(
+    `Refusing inline ${name} changes during live validation because they can bypass the local fake intake. ` +
+    'Record CI-provided values in command.env so the validator can apply safe transport overrides.'
+  )
+}
+
+/**
+ * Escapes a literal for use in a regular expression.
+ *
+ * @param {string} value literal value
+ * @returns {string} escaped value
+ */
+function escapeRegExp (value) {
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)
 }
 
 function withCiPreloads (nodeOptions = '', framework, command) {
@@ -319,10 +435,10 @@ function getCommandNodeVersion (command) {
 
   const { commandIndex, prefixEnv } = parseArgv(command.argv)
   const executable = command.argv[commandIndex]
-  if (!isNodeExecutable(executable)) return
+  const nodeExecutable = isNodeExecutable(executable) ? executable : 'node'
 
   try {
-    return String(execFileSync(executable, ['-p', 'process.versions.node'], {
+    return String(execFileSync(nodeExecutable, ['-p', 'process.versions.node'], {
       cwd: command.cwd,
       encoding: 'utf8',
       env: {

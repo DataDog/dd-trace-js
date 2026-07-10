@@ -9,6 +9,7 @@ const {
   getDebugAwareDiagnosis,
   getBasicReportingCommand,
   getMissingEventDiagnosis,
+  refineBasicReportingFailure,
   shouldRunDebugRerun,
   summarizeTestOutput,
 } = require('../../../../ci/test-optimization-validation/scenarios/basic-reporting')
@@ -220,5 +221,39 @@ describe('test optimization basic reporting diagnosis', () => {
     assert.match(diagnosis.summary, /selected command ran tests/)
     assert.match(diagnosis.summary, /dd-trace is not initialized in a package manager/)
     assert.deepStrictEqual(diagnosis.signals.testOutputSummary, ['1 passing (2ms)', '1 passing (1ms)'])
+  })
+
+  it('reports a dd-trace preload dependency failure before missing-event diagnosis', () => {
+    const diagnosis = getMissingEventDiagnosis({
+      framework: { framework: 'vitest' },
+      result: {
+        command: 'pnpm test',
+        stdout: '',
+        stderr: "Error: Cannot find module 'dc-polyfill'\nRequire stack:\n- node_modules/dd-trace/ci/init.js\n" +
+          '- node:internal/preload',
+      },
+      evidence: {
+        commandFailure: {
+          buildErrors: ["Error: Cannot find module 'dc-polyfill'"],
+          summary: 'The selected test command failed during project setup/build.',
+        },
+        testSessionEvents: 0,
+        testModuleEvents: 0,
+        testSuiteEvents: 0,
+        testEvents: 0,
+      },
+    })
+
+    assert.strictEqual(diagnosis.kind, 'dd-trace-preload-failed')
+    assert.match(diagnosis.summary, /preload failed before tests started/)
+    assert.match(diagnosis.summary, /No Test Optimization conclusion was reached/)
+    assert.doesNotMatch(diagnosis.summary, /selected command ran tests/i)
+
+    const failure = refineBasicReportingFailure({
+      status: 'fail',
+      diagnosis: diagnosis.summary,
+      evidence: { eventLevelFailure: diagnosis },
+    })
+    assert.strictEqual(failure.status, 'error')
   })
 })

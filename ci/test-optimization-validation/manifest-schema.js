@@ -28,6 +28,12 @@ const STATUSES = new Set([
   'unsupported_by_validator',
   'unknown',
 ])
+const CI_WIRING_STATUSES = new Set([
+  'pass',
+  'fail',
+  'skip',
+  'unknown',
+])
 const UNRESOLVED_PLACEHOLDER_PATTERN = /\$\{[^}]+\}/
 
 const GENERATED_SCENARIO_IDS = new Set([
@@ -35,6 +41,11 @@ const GENERATED_SCENARIO_IDS = new Set([
   'atr-fail-once',
   'test-management-target',
 ])
+const GENERATED_SCENARIO_EXIT_CODES = {
+  'basic-pass': 0,
+  'atr-fail-once': 1,
+  'test-management-target': 0,
+}
 
 function validateManifest (manifest) {
   const errors = []
@@ -102,7 +113,9 @@ function validateFramework (framework, index, errors) {
 
   if (framework.status === 'runnable') {
     requiredCommand(framework, 'existingTestCommand', errors, prefix)
+    validateDatadogCleanCommand(framework.existingTestCommand, `${prefix}.existingTestCommand`, errors)
     requiredObject(framework, 'preflight', errors, prefix)
+    requiredObject(framework, 'ciWiring', errors, prefix)
   } else {
     requireNonEmptyNotes(framework, errors, prefix)
   }
@@ -111,8 +124,13 @@ function validateFramework (framework, index, errors) {
     requiredCommand(framework, 'ciWiringCommand', errors, prefix)
   }
 
+  if (framework.ciWiring) {
+    validateCiWiring(framework, prefix, errors)
+  }
+
   if (framework.forcedLocalCommand) {
     requiredCommand(framework, 'forcedLocalCommand', errors, prefix)
+    validateDatadogCleanCommand(framework.forcedLocalCommand, `${prefix}.forcedLocalCommand`, errors)
   }
 
   if (framework.setup?.commands) {
@@ -131,15 +149,19 @@ function validateFramework (framework, index, errors) {
 }
 
 function validateGeneratedTestStrategy (strategy, prefix, errors) {
-  if (!['verified', 'proposed', 'not_possible'].includes(strategy.status)) {
-    errors.push(`${prefix}.status must be verified, proposed, or not_possible.`)
+  if (!['planned', 'verified', 'proposed', 'not_possible'].includes(strategy.status)) {
+    errors.push(`${prefix}.status must be planned, verified, proposed, or not_possible.`)
   }
 
-  if (strategy.status === 'verified') {
+  const completeStrategy = strategy.status === 'planned' || strategy.status === 'verified'
+  if (completeStrategy) {
     requiredArray(strategy, 'files', errors, prefix)
     requiredArray(strategy, 'scenarios', errors, prefix)
     requiredArray(strategy, 'cleanupPaths', errors, prefix)
     validateCompleteGeneratedScenarioSet(strategy, prefix, errors)
+  } else if ((strategy.status === 'proposed' || strategy.status === 'not_possible') &&
+    (typeof strategy.reason !== 'string' || strategy.reason.trim() === '')) {
+    errors.push(`${prefix}.reason must explain why the generated test strategy is ${strategy.status}.`)
   }
 
   if (Array.isArray(strategy.files)) {
@@ -155,17 +177,81 @@ function validateGeneratedTestStrategy (strategy, prefix, errors) {
       requiredString(scenario, 'id', errors, `${prefix}.scenarios[${index}]`)
       enumString(scenario, 'id', GENERATED_SCENARIO_IDS, errors, `${prefix}.scenarios[${index}]`)
       requiredCommand(scenario, 'runCommand', errors, `${prefix}.scenarios[${index}]`)
+      validateDatadogCleanCommand(scenario.runCommand, `${prefix}.scenarios[${index}].runCommand`, errors)
       validateScenarioIdentities(
         scenario,
         `${prefix}.scenarios[${index}]`,
         errors,
-        strategy.status === 'verified'
+        completeStrategy
       )
+      if (completeStrategy) {
+        validateGeneratedScenarioOutcome(scenario, `${prefix}.scenarios[${index}]`, errors)
+      }
     }
   }
 
   optionalAbsolutePath(strategy, 'testDirectory', errors, prefix)
   optionalAbsolutePathArray(strategy, 'cleanupPaths', errors, prefix)
+}
+
+function validateCiWiring (framework, prefix, errors) {
+  const ciWiring = framework.ciWiring
+  if (!ciWiring || typeof ciWiring !== 'object' || Array.isArray(ciWiring)) {
+    errors.push(`${prefix}.ciWiring must be an object when present.`)
+    return
+  }
+
+  if (!CI_WIRING_STATUSES.has(ciWiring.status)) {
+    errors.push(`${prefix}.ciWiring.status must be pass, fail, skip, or unknown.`)
+  }
+
+  if ((ciWiring.status === 'pass' || ciWiring.status === 'fail') && !framework.ciWiringCommand) {
+    errors.push(`${prefix}.ciWiringCommand is required when ciWiring.status is ${ciWiring.status}.`)
+  }
+
+  if (framework.ciWiringCommand) {
+    for (const field of ['provider', 'configFile', 'job', 'step', 'whySelected']) {
+      requiredString(ciWiring, field, errors, `${prefix}.ciWiring`)
+    }
+    requiredAbsolutePath(ciWiring, 'configFile', errors, `${prefix}.ciWiring`)
+    requiredAbsolutePath(ciWiring, 'workingDirectory', errors, `${prefix}.ciWiring`)
+    if (path.resolve(ciWiring.workingDirectory || '') !== path.resolve(framework.ciWiringCommand.cwd || '')) {
+      errors.push(`${prefix}.ciWiringCommand.cwd must match ${prefix}.ciWiring.workingDirectory.`)
+    }
+  }
+
+  if ((ciWiring.status === 'skip' || ciWiring.status === 'unknown') &&
+    !hasNonEmptyString(ciWiring.diagnosis) && !hasNonEmptyString(ciWiring.reason)) {
+    errors.push(`${prefix}.ciWiring must explain why CI wiring is ${ciWiring.status}.`)
+  }
+}
+
+function hasNonEmptyString (value) {
+  return typeof value === 'string' && value.trim() !== ''
+}
+
+function validateDatadogCleanCommand (command, prefix, errors) {
+  for (const [name, value] of Object.entries(command?.env || {})) {
+    if (name.startsWith('DD_') || (name === 'NODE_OPTIONS' && /dd-trace/.test(String(value)))) {
+      errors.push(`${prefix}.env.${name} must not configure Datadog initialization for local validation.`)
+    }
+  }
+}
+
+function validateGeneratedScenarioOutcome (scenario, prefix, errors) {
+  const expected = scenario.expectedWithoutDatadog
+  if (!expected || typeof expected !== 'object' || Array.isArray(expected)) {
+    errors.push(`${prefix}.expectedWithoutDatadog must be an object when generatedTestStrategy is planned or verified.`)
+    return
+  }
+
+  const expectedExitCode = GENERATED_SCENARIO_EXIT_CODES[scenario.id]
+  if (expectedExitCode !== undefined && expected.exitCode !== expectedExitCode) {
+    errors.push(`${prefix}.expectedWithoutDatadog.exitCode must be ${expectedExitCode} for ${scenario.id}.`)
+  }
+  if (expected.observedTestCount !== 1) {
+    errors.push(`${prefix}.expectedWithoutDatadog.observedTestCount must be 1 so the command isolates this scenario.`)
+  }
 }
 
 function validateCompleteGeneratedScenarioSet (strategy, prefix, errors) {
@@ -178,7 +264,8 @@ function validateCompleteGeneratedScenarioSet (strategy, prefix, errors) {
 
   for (const scenarioId of GENERATED_SCENARIO_IDS) {
     if (!seen.has(scenarioId)) {
-      errors.push(`${prefix}.scenarios must include generated scenario "${scenarioId}" when status is verified.`)
+      errors.push(`${prefix}.scenarios must include generated scenario "${scenarioId}" when status is planned or ` +
+        'verified.')
     }
   }
 }
@@ -205,13 +292,14 @@ function requireNonEmptyNotes (framework, errors, prefix) {
 function validateScenarioIdentities (scenario, prefix, errors, required = false) {
   if (!Array.isArray(scenario.testIdentities)) {
     if (required) {
-      errors.push(`${prefix}.testIdentities must be a non-empty array when generatedTestStrategy is verified.`)
+      errors.push(`${prefix}.testIdentities must be a non-empty array when generatedTestStrategy is planned or ` +
+        'verified.')
     }
     return
   }
 
   if (required && scenario.testIdentities.length === 0) {
-    errors.push(`${prefix}.testIdentities must be a non-empty array when generatedTestStrategy is verified.`)
+    errors.push(`${prefix}.testIdentities must be a non-empty array when generatedTestStrategy is planned or verified.`)
   }
 
   for (const [index, identity] of scenario.testIdentities.entries()) {

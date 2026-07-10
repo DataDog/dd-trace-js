@@ -12,6 +12,95 @@ const {
 } = require('../../../../ci/test-optimization-validation/static-diagnosis')
 
 describe('test optimization validation static diagnosis', () => {
+  it('does not execute git from a repository-controlled PATH directory', function () {
+    if (process.platform === 'win32') this.skip()
+
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
+    const bin = path.join(root, 'node_modules', '.bin')
+    const marker = path.join(root, 'repository-git-executed')
+
+    fs.mkdirSync(bin, { recursive: true })
+    fs.writeFileSync(path.join(root, 'package.json'), '{}\n')
+    fs.writeFileSync(path.join(bin, 'git'), [
+      '#!/bin/sh',
+      `touch ${JSON.stringify(marker)}`,
+      'exit 1',
+      '',
+    ].join('\n'))
+    fs.chmodSync(path.join(bin, 'git'), 0o755)
+
+    try {
+      runDiagnosis({
+        root,
+        env: {
+          ...process.env,
+          PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+        },
+      })
+
+      assert.strictEqual(fs.existsSync(marker), false)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('runs git metadata checks without ambient credentials', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
+    const observedEnvironments = []
+
+    fs.writeFileSync(path.join(root, 'package.json'), '{}\n')
+
+    try {
+      runDiagnosis({
+        root,
+        env: {
+          DD_API_KEY: 'ambient-secret',
+          HOME: '/credential-bearing-home',
+          PATH: '/repository/node_modules/.bin:/usr/bin',
+        },
+        execFile (executable, args, options) {
+          observedEnvironments.push(options.env)
+          if (args[0] === '--version') return 'git version 2.0.0\n'
+          if (args.join(' ') === 'rev-parse --is-inside-work-tree') return 'false\n'
+          return ''
+        },
+      })
+
+      assert.ok(observedEnvironments.length >= 2)
+      for (const env of observedEnvironments) {
+        assert.strictEqual(env.DD_API_KEY, undefined)
+        assert.strictEqual(env.HOME, undefined)
+        assert.strictEqual(env.GIT_CONFIG_NOSYSTEM, '1')
+        assert.strictEqual(env.GIT_TERMINAL_PROMPT, '0')
+      }
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('caps aggregate repository text retained by static diagnosis', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
+
+    fs.writeFileSync(path.join(root, 'package.json'), '{}\n')
+    fs.writeFileSync(path.join(root, 'a.js'), 'a'.repeat(32))
+    fs.writeFileSync(path.join(root, 'b.js'), 'b'.repeat(32))
+
+    try {
+      const report = runDiagnosis({
+        root,
+        maxTotalBytes: 40,
+        execFile () {
+          throw new Error('git unavailable')
+        },
+      })
+
+      assert.strictEqual(report.truncatedFileScan, true)
+      assert.ok(report.scannedFileCount < 3)
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('keeps root package metadata when the text file scan is truncated', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
     const nestedRoot = path.join(root, 'aaaa')
@@ -84,6 +173,43 @@ describe('test optimization validation static diagnosis', () => {
       assert.strictEqual(report.truncatedFileScan, true)
       assert.ok(titles.includes('dd-trace dependency not determined'))
       assert.ok(!titles.includes('dd-trace dependency not found in package.json'))
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('recognizes an installed dd-trace package when manifest discovery is truncated', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-static-diagnosis-'))
+    const nestedRoot = path.join(root, 'aaaa')
+    const installedRoot = path.join(root, 'node_modules', 'dd-trace')
+
+    fs.mkdirSync(nestedRoot)
+    fs.mkdirSync(installedRoot, { recursive: true })
+    fs.writeFileSync(path.join(nestedRoot, 'package.json'), JSON.stringify({
+      devDependencies: { jest: '29.7.0' },
+    }))
+    fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+      devDependencies: { jest: '29.7.0' },
+      scripts: { test: 'jest' },
+    }))
+    fs.writeFileSync(path.join(installedRoot, 'package.json'), JSON.stringify({
+      name: 'dd-trace',
+      version: '7.0.0-pre',
+    }))
+
+    try {
+      const report = runDiagnosis({
+        root,
+        maxFiles: 1,
+        execFile () {
+          throw new Error('git unavailable')
+        },
+      })
+      const titles = report.results.map(result => result.title)
+
+      assert.strictEqual(report.truncatedFileScan, true)
+      assert.ok(titles.includes('dd-trace package installed'))
+      assert.ok(!titles.includes('dd-trace dependency not determined'))
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }

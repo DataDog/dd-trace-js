@@ -2,7 +2,6 @@
 
 /* eslint-disable no-console */
 
-const fs = require('fs')
 const http = require('http')
 const net = require('net')
 const path = require('path')
@@ -10,8 +9,11 @@ const zlib = require('zlib')
 
 const { decodeBody } = require('./payload-decoder')
 const { sanitizeForReport } = require('./redaction')
+const { ensureSafeDirectory, writeFileSafely } = require('./safe-files')
 
 const DEFAULT_MAX_BODY_BYTES = 10 * 1024 * 1024
+const DEFAULT_MAX_DECOMPRESSED_BODY_BYTES = 20 * 1024 * 1024
+const DEFAULT_MAX_REQUESTS = 1000
 const DEFAULT_SETTINGS = {
   code_coverage: false,
   tests_skipping: false,
@@ -34,12 +36,22 @@ const DEFAULT_SETTINGS = {
 }
 
 class MockIntake {
-  constructor ({ out, verbose = false, maxBodyBytes = DEFAULT_MAX_BODY_BYTES }) {
+  constructor ({
+    out,
+    verbose = false,
+    maxBodyBytes = DEFAULT_MAX_BODY_BYTES,
+    maxDecompressedBodyBytes = DEFAULT_MAX_DECOMPRESSED_BODY_BYTES,
+    maxRequests = DEFAULT_MAX_REQUESTS,
+  }) {
     this.out = out
     this.verbose = verbose
     this.maxBodyBytes = maxBodyBytes
+    this.maxDecompressedBodyBytes = maxDecompressedBodyBytes
+    this.maxRequests = maxRequests
+    this.receivedRequestCount = 0
     this.port = null
     this.server = null
+    this.sockets = new Set()
     this.requests = []
     this.allRequests = []
     this.reset()
@@ -74,6 +86,14 @@ class MockIntake {
         res.end(JSON.stringify({ errors: [err.message] }))
       })
     })
+    this.server.headersTimeout = 10_000
+    this.server.requestTimeout = 30_000
+    this.server.keepAliveTimeout = 1000
+    this.server.maxRequestsPerSocket = 100
+    this.server.on('connection', socket => {
+      this.sockets.add(socket)
+      socket.once('close', () => this.sockets.delete(socket))
+    })
 
     try {
       await listenOnLocalhost(this.server)
@@ -89,14 +109,23 @@ class MockIntake {
 
   async close () {
     if (!this.server) return
+    for (const socket of this.sockets) socket.destroy()
+    this.sockets.clear()
     await closeServer(this.server)
     this.server = null
     this.port = null
   }
 
   async handle (req, res) {
+    this.receivedRequestCount++
+    if (this.receivedRequestCount > this.maxRequests) {
+      req.resume()
+      sendJson(res, 429, { errors: ['Validation intake request limit exceeded.'] })
+      return
+    }
+
     const body = await readBody(req, this.maxBodyBytes)
-    const decoded = decodeSafely(body, req.headers)
+    const decoded = decodeSafely(body, req.headers, this.maxDecompressedBodyBytes)
     const url = req.url
 
     if (req.method === 'GET' && url === '/info') {
@@ -180,12 +209,14 @@ class MockIntake {
 
   writeArtifacts () {
     const intakeDir = path.join(this.out, 'intake')
-    fs.mkdirSync(intakeDir, { recursive: true })
+    ensureSafeDirectory(this.out, intakeDir, 'intake artifact directory')
     const requestsPath = path.join(intakeDir, 'requests.ndjson')
     const requests = this.getArtifactRequests()
-    fs.writeFileSync(
+    writeFileSafely(
+      this.out,
       requestsPath,
-      requests.map(request => JSON.stringify(sanitizeForReport(request))).join('\n') + '\n'
+      requests.map(request => JSON.stringify(sanitizeForReport(request))).join('\n') + '\n',
+      'intake requests artifact'
     )
     return { requestsPath }
   }
@@ -228,7 +259,7 @@ function closeServer (server) {
   return new Promise(resolve => server.close(resolve))
 }
 
-function decodeSafely (body, headers) {
+function decodeSafely (body, headers, maxDecompressedBodyBytes) {
   if (body.truncated) {
     return {
       decodeError: `Request body exceeded ${body.maxBodyBytes} bytes and was truncated.`,
@@ -242,7 +273,7 @@ function decodeSafely (body, headers) {
   if (body.content.length === 0) return null
 
   try {
-    return decodeBody(body.content, headers)
+    return decodeBody(body.content, headers, { maxOutputLength: maxDecompressedBodyBytes })
   } catch (err) {
     return {
       decodeError: err.message,
@@ -301,4 +332,8 @@ function sendMaybeGzipJson (req, res, statusCode, body) {
   res.end(response)
 }
 
-module.exports = { MockIntake, DEFAULT_SETTINGS }
+module.exports = {
+  DEFAULT_MAX_DECOMPRESSED_BODY_BYTES,
+  DEFAULT_SETTINGS,
+  MockIntake,
+}

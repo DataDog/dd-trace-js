@@ -1,6 +1,5 @@
 'use strict'
 
-const fs = require('fs')
 const path = require('path')
 
 const { buildDatadogEnv, runCommand } = require('../command-runner')
@@ -14,7 +13,9 @@ const {
   findTestsByIdentity,
   normalizeRequests,
 } = require('../payload-normalizer')
+const { getLocalValidationCommand } = require('../local-command')
 const { sanitizeForReport } = require('../redaction')
+const { writeFileSafely } = require('../safe-files')
 
 const ANSI_PATTERN = new RegExp(`${String.fromCharCode(27)}${String.raw`\[[0-?]*[ -/]*[@-~]`}`, 'g')
 
@@ -34,6 +35,7 @@ async function runInstrumentedCommand ({ framework, intake, out, scenarioName, c
       ...buildDatadogEnv({ intake, scenario: scenarioName, framework, command }),
       ...extraEnv,
     },
+    artifactRoot: out,
     envMode: 'clean',
     outDir,
     label: `${framework.id}:${scenarioName}`,
@@ -43,11 +45,18 @@ async function runInstrumentedCommand ({ framework, intake, out, scenarioName, c
   await wait(1000)
   const events = normalizeRequests(intake.requests)
   const sanitizedEvents = sanitizeForReport(events)
-  fs.writeFileSync(
+  writeFileSafely(
+    out,
     path.join(outDir, 'events.ndjson'),
-    sanitizedEvents.map(event => JSON.stringify(event)).join('\n') + '\n'
+    sanitizedEvents.map(event => JSON.stringify(event)).join('\n') + '\n',
+    'scenario events artifact'
   )
-  fs.writeFileSync(path.join(outDir, 'result.json'), `${JSON.stringify(sanitizeForReport(result), null, 2)}\n`)
+  writeFileSafely(
+    out,
+    path.join(outDir, 'result.json'),
+    `${JSON.stringify(sanitizeForReport(result), null, 2)}\n`,
+    'scenario result artifact'
+  )
 
   return { result, events, outDir }
 }
@@ -130,27 +139,45 @@ async function runDebugInstrumentedCommand ({
 async function prepareGeneratedScenario (framework, scenarioId) {
   const scenario = findGeneratedScenario(framework, scenarioId)
   if (!scenario) return { scenario: null, written: [] }
+  cleanupGeneratedRuntimeFiles(framework)
   const written = await writeGeneratedFiles(framework)
-  return { scenario, written }
+  return {
+    scenario: {
+      ...scenario,
+      runCommand: getLocalValidationCommand(framework, scenario.runCommand),
+    },
+    written,
+  }
 }
 
 function requireGeneratedScenario (framework, scenarioId, scenarioName) {
   const strategy = framework.generatedTestStrategy
-  if (!strategy || strategy.status !== 'verified') {
+  if (strategy?.status === 'not_possible') {
     return skip(
       framework,
       scenarioName,
-      'Skipped because no verified generated test strategy is available for this advanced feature.',
+      `Skipped because this advanced feature is not eligible: ${strategy.reason}`,
+      getGeneratedStrategySkipEvidence(framework, scenarioName, scenarioId)
+    )
+  }
+
+  if (!strategy || strategy.status !== 'verified') {
+    return incomplete(
+      framework,
+      scenarioName,
+      'The validation manifest is incomplete because no verified generated test strategy is available. ' +
+        'No conclusion was reached for this advanced feature.',
       getGeneratedStrategySkipEvidence(framework, scenarioName, scenarioId)
     )
   }
 
   const scenario = findGeneratedScenario(framework, scenarioId)
   if (!scenario) {
-    return skip(
+    return incomplete(
       framework,
       scenarioName,
-      `Skipped because generated scenario "${scenarioId}" is not present in the manifest.`,
+      `The validation manifest is incomplete because generated scenario "${scenarioId}" is missing. ` +
+        'No conclusion was reached for this advanced feature.',
       {
         featureEligibility: {
           eligible: false,
@@ -236,10 +263,18 @@ async function discoverScenarioTests ({ framework, intake, out, scenarioName, sc
     command: scenario.runCommand,
     options,
   })
-  const tests = testsForScenario(baseline.events, scenario)
+  let tests = testsForScenario(baseline.events, scenario)
+  let identityMatch = 'manifest'
+  if (tests.length === 0) {
+    const nameAndFileIdentities = (scenario.testIdentities || [])
+      .filter(identity => identity.name && identity.file)
+    tests = findTestsByIdentity(baseline.events, nameAndFileIdentities, { ignoreSuite: true })
+    if (tests.length > 0) identityMatch = 'name-and-file-fallback'
+  }
   cleanupGeneratedRuntimeFiles(framework)
   return {
     ...baseline,
+    identityMatch,
     tests,
     testIdentities: tests.map(testToIdentity),
   }
@@ -255,6 +290,7 @@ function testsForDiscoveredScenario (events, scenario, discovery) {
 function discoveryEvidence (discovery) {
   return {
     baselineCommandExitCode: discovery.result.exitCode,
+    baselineIdentityMatch: discovery.identityMatch,
     baselineMatchingTestEvents: discovery.tests.length,
     baselineSamples: testEventSamples(discovery.tests),
   }
@@ -397,6 +433,13 @@ function skip (framework, scenario, diagnosis, evidence = {}) {
   return result(framework, scenario, 'skip', diagnosis, evidence, null)
 }
 
+function incomplete (framework, scenario, diagnosis, evidence = {}) {
+  return result(framework, scenario, 'error', diagnosis, {
+    ...evidence,
+    manifestIncomplete: true,
+  }, null)
+}
+
 function error (framework, scenario, err, outDir) {
   return result(framework, scenario, 'error', err && err.stack ? err.stack : String(err), {}, outDir)
 }
@@ -442,6 +485,7 @@ module.exports = {
   findInterestingLines,
   frameworkOutDir,
   hasAllBasicEventTypes,
+  incomplete,
   pass,
   prepareGeneratedScenario,
   requestsUrlIncludes,

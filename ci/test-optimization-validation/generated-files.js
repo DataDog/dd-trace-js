@@ -3,12 +3,15 @@
 const fs = require('fs')
 const path = require('path')
 
+const { createFileSafely, ensureSafeDirectory } = require('./safe-files')
+
 const RUNTIME_FILE_NAMESPACE = 'dd-test-optimization-validation'
+const createdGeneratedDirectories = new Set()
 const writtenGeneratedFiles = new Set()
 
 function writeGeneratedFiles (framework) {
   const strategy = framework.generatedTestStrategy
-  if (!strategy || strategy.status !== 'verified') {
+  if (!strategy || !['planned', 'verified'].includes(strategy.status)) {
     return []
   }
 
@@ -23,13 +26,20 @@ function writeGeneratedFiles (framework) {
         throw new Error(`Refusing to overwrite existing generated validation file with different content: ${filename}`)
       }
 
-      fs.mkdirSync(path.dirname(filename), { recursive: true })
-      fs.writeFileSync(filename, content)
+      const directory = path.dirname(filename)
+      const missingDirectories = getMissingDirectories(framework.project.root, directory)
+      ensureSafeDirectory(framework.project.root, directory, 'generated validation file directory', {
+        allowRootSymlink: true,
+      })
+      for (const createdDirectory of missingDirectories) createdGeneratedDirectories.add(createdDirectory)
+      validateGeneratedFilePath(framework, filename)
+      createFileSafely(framework.project.root, filename, content, 'generated validation file')
       writtenGeneratedFiles.add(filename)
       written.push(filename)
     }
   } catch (err) {
     cleanupPaths(written)
+    cleanupCreatedDirectories(framework.project.root)
     forgetWrittenGeneratedFiles(written)
     throw err
   }
@@ -42,6 +52,46 @@ function cleanupGeneratedFiles (manifest, { keep = false } = {}) {
   for (const framework of manifest.frameworks || []) {
     const strategy = framework.generatedTestStrategy
     cleanupPaths(getSafeCleanupPaths(framework, strategy, { includeGeneratedFiles: true }))
+    cleanupCreatedDirectories(framework.project.root)
+  }
+}
+
+/**
+ * Finds missing directories that the validator will create for one generated file.
+ *
+ * @param {string} root project root
+ * @param {string} directory generated file directory
+ * @returns {string[]} missing directories, from deepest to shallowest
+ */
+function getMissingDirectories (root, directory) {
+  const missing = []
+  let current = path.resolve(directory)
+  const resolvedRoot = path.resolve(root)
+  while (current !== resolvedRoot && isPathInside(resolvedRoot, current) && !fs.existsSync(current)) {
+    missing.push(current)
+    current = path.dirname(current)
+  }
+  return missing
+}
+
+/**
+ * Removes empty generated directories created by this validator process.
+ *
+ * @param {string} root project root
+ */
+function cleanupCreatedDirectories (root) {
+  const resolvedRoot = path.resolve(root)
+  const directories = [...createdGeneratedDirectories]
+    .filter(directory => isPathInside(resolvedRoot, directory))
+    .sort((left, right) => right.length - left.length)
+
+  for (const directory of directories) {
+    try {
+      fs.rmdirSync(directory)
+      createdGeneratedDirectories.delete(directory)
+    } catch (error) {
+      if (error.code === 'ENOENT') createdGeneratedDirectories.delete(directory)
+    }
   }
 }
 
@@ -61,6 +111,10 @@ function getSafeCleanupPaths (framework, strategy, { includeGeneratedFiles }) {
   }
 
   const cleanupPaths = []
+  const runtimeDirectories = new Set()
+  for (const filename of generatedFiles) {
+    runtimeDirectories.add(path.dirname(filename))
+  }
   for (const cleanupPath of strategy.cleanupPaths || []) {
     const filename = validateCleanupPath(framework, cleanupPath)
     if (generatedFiles.has(filename)) {
@@ -68,9 +122,15 @@ function getSafeCleanupPaths (framework, strategy, { includeGeneratedFiles }) {
       continue
     }
 
-    if (isNamespacedRuntimeFile(filename)) {
+    if (isDirectory(filename)) {
+      runtimeDirectories.add(filename)
+    } else if (isNamespacedRuntimeFile(filename)) {
       cleanupPaths.push(filename)
     }
+  }
+
+  for (const directory of runtimeDirectories) {
+    cleanupPaths.push(...findNamespacedRuntimeFiles(framework, directory, generatedFiles))
   }
 
   if (includeGeneratedFiles) {
@@ -79,6 +139,23 @@ function getSafeCleanupPaths (framework, strategy, { includeGeneratedFiles }) {
     }
   }
   return [...new Set(cleanupPaths)]
+}
+
+function findNamespacedRuntimeFiles (framework, directory, generatedFiles) {
+  let entries
+  try {
+    entries = fs.readdirSync(directory, { withFileTypes: true })
+  } catch {
+    return []
+  }
+
+  const files = []
+  for (const entry of entries) {
+    if (!entry.isFile() || !isNamespacedRuntimeFile(entry.name)) continue
+    const filename = validateCleanupPath(framework, path.join(directory, entry.name))
+    if (!generatedFiles.has(filename)) files.push(filename)
+  }
+  return files
 }
 
 function cleanupPaths (cleanupPaths) {
@@ -113,7 +190,39 @@ function validatePathUnderProjectRoot (framework, filename, label) {
   if (!root || !isPathInside(root, resolved)) {
     throw new Error(`Refusing ${label} path outside project root: ${filename}`)
   }
+  validatePhysicalPath(root, resolved, label)
   return resolved
+}
+
+/**
+ * Verifies that an existing parent resolves inside the physical project root.
+ *
+ * @param {string} root project root
+ * @param {string} filename candidate filename
+ * @param {string} label customer-facing path label
+ */
+function validatePhysicalPath (root, filename, label) {
+  const parent = path.dirname(filename)
+  let physicalRoot
+  let physicalParent
+  try {
+    physicalRoot = fs.realpathSync(root)
+    physicalParent = fs.realpathSync(parent)
+  } catch (error) {
+    if (error.code === 'ENOENT') return
+    throw error
+  }
+
+  if (!isPathInside(physicalRoot, physicalParent)) {
+    throw new Error(`Refusing ${label} path outside physical project root: ${filename}`)
+  }
+  try {
+    if (fs.lstatSync(filename).isSymbolicLink()) {
+      throw new Error(`Refusing ${label} symbolic-link target: ${filename}`)
+    }
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+  }
 }
 
 function getProjectRoot (framework) {

@@ -14,6 +14,7 @@ async function runSetupCommands ({ framework, out, options }) {
     const outDir = path.join(out, 'setup', sanitize(framework.id), `${index + 1}-${sanitize(command.id || 'setup')}`)
     // eslint-disable-next-line no-await-in-loop
     const result = await runCommand(command, {
+      artifactRoot: out,
       envMode: 'clean',
       outDir,
       label: `${framework.id}:setup:${command.id || index + 1}`,
@@ -44,10 +45,11 @@ function getSetupFailure (framework, command, result, setupCommands) {
   return {
     frameworkId: framework.id,
     scenario: 'all',
-    status: 'fail',
-    diagnosis: `Required setup command failed before live validation: ${setupName}. ` +
-      'Install/build/setup must pass before Test Optimization can be validated for this framework.',
+    status: 'blocked',
+    diagnosis: `Validation is blocked by required project setup: ${setupName}. ` +
+      'No Test Optimization conclusion was reached for this framework.',
     evidence: {
+      blockedByProjectSetup: true,
       setupFailed: true,
       setupCommand: {
         id: command.id,
@@ -60,7 +62,7 @@ function getSetupFailure (framework, command, result, setupCommands) {
         stderrSummary: tail(result.stderr),
       },
       setupCommands,
-      recommendation: 'Run or fix the documented project setup command, then rerun validation.',
+      recommendation: 'Run or fix the documented project setup command, then rerun validation for this framework.',
     },
     artifacts: [],
   }

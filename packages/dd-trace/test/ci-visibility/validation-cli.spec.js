@@ -15,6 +15,25 @@ const {
   parseArgs,
 } = require('../../../../ci/test-optimization-validation/cli')
 
+const PASSING_VALIDATION_PHASES = {
+  './generated-verifier': {
+    async verifyGeneratedTestStrategy () {
+      return { ok: true }
+    },
+  },
+  './preflight-runner': {
+    async runFrameworkPreflight ({ framework }) {
+      framework.preflight = {
+        ran: true,
+        source: 'validator',
+        exitCode: 0,
+        observedTestCount: 1,
+      }
+      return { ok: true, preflight: framework.preflight }
+    },
+  },
+}
+
 function readMarkdownJsonSection (markdown, title) {
   const pattern = new RegExp(`## ${title}\\n\\n\`\`\`json\\n([\\s\\S]*?)\\n\`\`\``)
   const match = pattern.exec(markdown)
@@ -59,6 +78,107 @@ describe('test optimization validation cli', () => {
     assert.deepStrictEqual([...options.scenarios], ['basic-reporting', 'ci-wiring'])
   })
 
+  it('validates a manifest without creating output or starting live validation', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cli-'))
+    const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
+    const out = path.join(tmpDir, 'results')
+    const logs = []
+    const originalLog = console.log
+    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
+      ...PASSING_VALIDATION_PHASES,
+      './mock-intake': {
+        MockIntake: class {
+          constructor () {
+            throw new Error('live validation should not start')
+          }
+        },
+      },
+      './static-diagnosis': {
+        runStaticDiagnosis () {
+          throw new Error('static diagnosis should not run')
+        },
+      },
+    })
+
+    fs.writeFileSync(manifestPath, `${JSON.stringify(getRunnableManifest(tmpDir), null, 2)}\n`)
+    console.log = message => logs.push(message)
+
+    try {
+      await main(['--manifest', manifestPath, '--out', out, '--validate-manifest'])
+
+      assert.strictEqual(fs.existsSync(out), false)
+      assert.deepStrictEqual(logs, [`Validation manifest is valid: ${manifestPath}`])
+    } finally {
+      console.log = originalLog
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('exits unsuccessfully when a selected advanced feature has only a proposed strategy', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cli-'))
+    const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
+    const out = path.join(tmpDir, 'results')
+    const manifest = getRunnableManifest(tmpDir)
+    const originalExitCode = process.exitCode
+    const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
+      ...PASSING_VALIDATION_PHASES,
+      './mock-intake': {
+        MockIntake: class {
+          constructor () {
+            this.requests = []
+          }
+
+          async start () {}
+          async close () {}
+        },
+      },
+      './report-writer': {
+        async writeReport () {},
+      },
+      './scenarios/basic-reporting': {
+        async runBasicReporting ({ framework }) {
+          return {
+            frameworkId: framework.id,
+            scenario: 'basic-reporting',
+            status: 'pass',
+            diagnosis: 'Basic Reporting passed.',
+            evidence: {},
+            artifacts: [],
+          }
+        },
+      },
+      './setup-runner': {
+        async runSetupCommands () {
+          return { ok: true }
+        },
+      },
+      './static-diagnosis': {
+        getStaticBlocker () {
+          return null
+        },
+        runStaticDiagnosis () {
+          return { report: {} }
+        },
+      },
+    })
+
+    manifest.frameworks[0].generatedTestStrategy = {
+      status: 'proposed',
+      reason: 'The generated test command has not been verified.',
+    }
+    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
+    process.exitCode = undefined
+
+    try {
+      await main(['--manifest', manifestPath, '--out', out, '--scenario', 'efd'])
+
+      assert.strictEqual(process.exitCode, 1)
+    } finally {
+      process.exitCode = originalExitCode
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
   for (const code of ['EPERM', 'EACCES']) {
     it(`reports fake intake startup ${code} listen failures as execution-environment blockers`, async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cli-'))
@@ -71,6 +191,7 @@ describe('test optimization validation cli', () => {
         syscall: 'listen',
       })
       const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
+        ...PASSING_VALIDATION_PHASES,
         './mock-intake': {
           MockIntake: class {
             constructor ({ out }) {
@@ -157,6 +278,7 @@ describe('test optimization validation cli', () => {
     const staticDiagnosisPath = path.join(out, 'static-diagnosis.json')
     let capturedResults
     const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
+      ...PASSING_VALIDATION_PHASES,
       './mock-intake': {
         MockIntake: class {
           constructor () {
@@ -218,10 +340,7 @@ describe('test optimization validation cli', () => {
     const manifest = getRunnableManifest(tmpDir)
     const originalExitCode = process.exitCode
 
-    manifest.frameworks[0].ciWiringCommand = {
-      cwd: tmpDir,
-      argv: [process.execPath, '-e', 'console.log("1 passing")'],
-    }
+    setReplayableCiWiring(manifest.frameworks[0], tmpDir)
     fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
     process.exitCode = undefined
 
@@ -263,6 +382,7 @@ describe('test optimization validation cli', () => {
     const staticDiagnosisPath = path.join(out, 'static-diagnosis.json')
     let capturedResults
     const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
+      ...PASSING_VALIDATION_PHASES,
       './mock-intake': {
         MockIntake: class {
           constructor () {
@@ -324,10 +444,7 @@ describe('test optimization validation cli', () => {
     const manifest = getRunnableManifest(tmpDir)
     const originalExitCode = process.exitCode
 
-    manifest.frameworks[0].ciWiringCommand = {
-      cwd: tmpDir,
-      argv: [process.execPath, '-e', 'console.log("1 passing")'],
-    }
+    setReplayableCiWiring(manifest.frameworks[0], tmpDir)
     fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
     process.exitCode = undefined
 
@@ -344,13 +461,14 @@ describe('test optimization validation cli', () => {
     }
   })
 
-  it('reports missing CI wiring metadata when CI wiring is explicitly selected', async () => {
+  it('reports missing CI wiring metadata as incomplete when CI wiring is explicitly selected', async () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-cli-'))
     const out = path.join(tmpDir, 'results')
     const manifestPath = path.join(tmpDir, 'dd-test-optimization-validation-manifest.json')
     const staticDiagnosisPath = path.join(out, 'static-diagnosis.json')
     let capturedResults
     const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
+      ...PASSING_VALIDATION_PHASES,
       './mock-intake': {
         MockIntake: class {
           constructor () {
@@ -405,6 +523,10 @@ describe('test optimization validation cli', () => {
       },
     })
     const manifest = getRunnableManifest(tmpDir)
+    manifest.frameworks[0].ciWiring = {
+      status: 'unknown',
+      reason: 'No replayable CI command was identified.',
+    }
     const originalExitCode = process.exitCode
 
     fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
@@ -413,12 +535,13 @@ describe('test optimization validation cli', () => {
     try {
       await main(['--manifest', manifestPath, '--out', out, '--scenario', 'ci-wiring'])
 
-      assert.strictEqual(process.exitCode, 0)
+      assert.strictEqual(process.exitCode, 1)
       assert.deepStrictEqual(capturedResults.map(result => `${result.scenario}:${result.status}`), [
         'basic-reporting:pass',
-        'ci-wiring:skip',
+        'ci-wiring:error',
       ])
-      assert.match(capturedResults[1].diagnosis, /No replayable CI wiring command was provided/)
+      assert.match(capturedResults[1].diagnosis, /manifest is incomplete: No replayable CI command was identified/)
+      assert.strictEqual(capturedResults[1].evidence.manifestIncomplete, true)
       assert.strictEqual(capturedResults[1].evidence.recommendation, 'Add ciWiringCommand to the manifest when ' +
         'a CI test step can be safely replayed locally.')
     } finally {
@@ -434,6 +557,7 @@ describe('test optimization validation cli', () => {
     const staticDiagnosisPath = path.join(out, 'static-diagnosis.json')
     let capturedResults
     const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
+      ...PASSING_VALIDATION_PHASES,
       './mock-intake': {
         MockIntake: class {
           constructor () {
@@ -544,6 +668,7 @@ describe('test optimization validation cli', () => {
     const staticDiagnosisPath = path.join(out, 'static-diagnosis.json')
     let capturedResults
     const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
+      ...PASSING_VALIDATION_PHASES,
       './mock-intake': {
         MockIntake: class {
           async start () {
@@ -632,6 +757,7 @@ describe('test optimization validation cli', () => {
     const staticDiagnosisPath = path.join(out, 'static-diagnosis.json')
     let capturedResults
     const { main } = proxyquire('../../../../ci/test-optimization-validation/cli', {
+      ...PASSING_VALIDATION_PHASES,
       './mock-intake': {
         MockIntake: class {
           async start () {
@@ -751,8 +877,28 @@ function getRunnableManifest (root) {
           ran: true,
           exitCode: 0,
         },
+        ciWiring: {
+          status: 'skip',
+          reason: 'No CI test job was found in this fixture.',
+        },
       },
     ],
+  }
+}
+
+function setReplayableCiWiring (framework, root) {
+  framework.ciWiring = {
+    status: 'fail',
+    provider: 'github-actions',
+    configFile: path.join(root, '.github', 'workflows', 'test.yml'),
+    job: 'test',
+    step: 'Run tests',
+    workingDirectory: root,
+    whySelected: 'The step runs the selected representative test command.',
+  }
+  framework.ciWiringCommand = {
+    cwd: root,
+    argv: [process.execPath, '-e', 'console.log("1 passing")'],
   }
 }
 

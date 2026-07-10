@@ -3,6 +3,8 @@
 const fs = require('fs')
 const path = require('path')
 
+const { getLocalValidationCommand } = require('../local-command')
+
 const {
   basicEventEvidence,
   error,
@@ -32,7 +34,7 @@ async function runBasicReporting ({ framework, intake, out, options }) {
       commandExitCode: result.exitCode,
       commandTimedOut: result.timedOut,
       commandDescription: command?.description,
-      forcedLocalCommandUsed: command === framework.forcedLocalCommand,
+      forcedLocalCommandUsed: Boolean(framework.forcedLocalCommand),
       commandOutputSummary: summarizeTestOutput(result.stdout, result.stderr),
       manifestNotes: Array.isArray(framework.notes) ? framework.notes : [],
       preflight: summarizePreflight(framework.preflight),
@@ -40,12 +42,11 @@ async function runBasicReporting ({ framework, intake, out, options }) {
     }
 
     if (!hasAllBasicEventTypes(events)) {
-      const eventLevelFailure = getMissingEventDiagnosis({ framework, result, evidence })
-      evidence.eventLevelFailure = eventLevelFailure
-
       if (result.exitCode !== 0) {
         evidence.commandFailure = summarizeCommandFailure(result, evidence)
       }
+      const eventLevelFailure = getMissingEventDiagnosis({ framework, result, evidence })
+      evidence.eventLevelFailure = eventLevelFailure
 
       return failBasicReportingWithDebugRerun({
         command,
@@ -58,7 +59,8 @@ async function runBasicReporting ({ framework, intake, out, options }) {
         out,
         outDir,
         scenarioName,
-        skipDebug: !shouldRunDebugRerun(eventLevelFailure, result),
+        skipDebug: evidence.commandFailure?.buildErrors?.length > 0 ||
+          !shouldRunDebugRerun(eventLevelFailure, result),
       })
     }
 
@@ -105,7 +107,7 @@ async function runBasicReporting ({ framework, intake, out, options }) {
 }
 
 function getBasicReportingCommand (framework) {
-  return framework.forcedLocalCommand || framework.existingTestCommand
+  return getLocalValidationCommand(framework, framework.forcedLocalCommand || framework.existingTestCommand)
 }
 
 async function failBasicReportingWithDebugRerun (options) {
@@ -115,6 +117,12 @@ async function failBasicReportingWithDebugRerun (options) {
 
 function refineBasicReportingFailure (failure) {
   const evidence = failure.evidence || {}
+  if (['dd-trace-preload-failed', 'command-setup-failed'].includes(evidence.eventLevelFailure?.kind)) {
+    failure.status = 'error'
+    evidence.localDiagnosis = evidence.eventLevelFailure
+    return failure
+  }
+
   const diagnosis = getDebugAwareDiagnosis(failure.diagnosis, evidence)
   if (!diagnosis) return failure
 
@@ -143,8 +151,7 @@ function getDebugAwareDiagnosis (currentDiagnosis, evidence) {
     (evidence.commandOutputSummary || []).join('\n'),
     (debugRerun.stdoutExcerpt || []).join('\n')
   )
-  const testsRan = commandOutputShowsTestsRan(testOutputSummary) ||
-    Number(evidence.preflight?.observedTestCount) > 0
+  const testsRan = commandOutputShowsTestsRan(testOutputSummary)
   const debugLine = findDebugLine(debugRerun, /dd-trace is not initialized in a package manager/i)
   const noDebugEvents = !hasAnyTestOptimizationEvent(debugRerun)
 
@@ -303,9 +310,26 @@ function summarizeCommandFailure (result, evidence) {
 
 function getMissingEventDiagnosis ({ framework, result, evidence }) {
   const missingLevels = getMissingLevels(evidence)
+  const commandFailure = evidence.commandFailure
   const vitestBenchmark = detectVitestBenchmark(framework, result)
   const frameworkSourceTreeRunner = detectFrameworkSourceTreeRunner(framework, result)
   const customJestRunner = detectCustomJestRunner(framework)
+
+  if (commandFailure?.buildErrors?.length > 0 && !hasAnyTestOptimizationEvent(evidence)) {
+    const preloadFailed = /(?:ci\/init\.js|internal\/preload)/.test(`${result.stdout}\n${result.stderr}`)
+    return {
+      kind: preloadFailed ? 'dd-trace-preload-failed' : 'command-setup-failed',
+      missingLevels,
+      signals: commandFailure.buildErrors,
+      summary: preloadFailed
+        ? `The Test Optimization preload failed before tests started: ${commandFailure.buildErrors[0]}. ` +
+          'No Test Optimization conclusion was reached.'
+        : `${commandFailure.summary} No Test Optimization conclusion was reached.`,
+      recommendation: preloadFailed
+        ? 'Repair or reinstall dd-trace so its declared dependencies resolve, then rerun validation.'
+        : 'Fix the selected project command or its setup, then rerun validation.',
+    }
+  }
 
   if (vitestBenchmark) {
     return {

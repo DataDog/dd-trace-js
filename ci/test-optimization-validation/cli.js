@@ -14,6 +14,7 @@ const { runAutoTestRetries } = require('./scenarios/auto-test-retries')
 const { runTestManagement } = require('./scenarios/test-management')
 const { runCiWiring } = require('./scenarios/ci-wiring')
 const { cleanupGeneratedFiles } = require('./generated-files')
+const { verifyGeneratedTestStrategy } = require('./generated-verifier')
 const { serializeDisplayCommand } = require('./command-runner')
 const {
   annotateCiDiscovery,
@@ -25,7 +26,10 @@ const {
 } = require('./execution-environment')
 const { loadManifest } = require('./manifest-loader')
 const { MockIntake } = require('./mock-intake')
+const { formatExecutionPlan } = require('./plan-writer')
+const { runFrameworkPreflight } = require('./preflight-runner')
 const { writeReport } = require('./report-writer')
+const { ensureSafeDirectory } = require('./safe-files')
 const { runSetupCommands } = require('./setup-runner')
 const {
   getStaticBlocker,
@@ -77,6 +81,12 @@ function parseArgs (argv) {
       case '--verbose':
         options.verbose = true
         break
+      case '--validate-manifest':
+        options.validateManifest = true
+        break
+      case '--print-plan':
+        options.printPlan = true
+        break
       case '--help':
       case '-h':
         options.help = true
@@ -114,6 +124,8 @@ Options:
   --scenario <name>       Run one scenario: ${getSelectableScenarios().join(', ')}
   --keep-temp-files       Leave generated validation files in place.
   --verbose               Print command progress.
+  --validate-manifest     Validate the manifest and exit without running project code.
+  --print-plan            Print the normalized execution plan without running project code.
   --help                  Show this help.
 `)
 }
@@ -127,8 +139,26 @@ async function main (argv) {
     }
 
     const manifest = loadManifest(options.manifest)
+    if (options.printPlan) {
+      manifest.frameworks = filterFrameworks(manifest.frameworks, options.frameworks)
+      console.log(formatExecutionPlan({
+        manifest,
+        out: path.resolve(options.out),
+        selectedFrameworkIds: options.frameworks.size > 0
+          ? manifest.frameworks.map(framework => framework.id)
+          : [],
+        requestedScenario: options.requestedScenario,
+        keepTempFiles: options.keepTempFiles,
+        verbose: options.verbose,
+      }))
+      return
+    }
+    if (options.validateManifest) {
+      console.log(`Validation manifest is valid: ${manifest.__path}`)
+      return
+    }
     const out = path.resolve(options.out)
-    fs.mkdirSync(out, { recursive: true })
+    ensureSafeDirectory(manifest.repository.root, out, 'validation output directory', { allowRootSymlink: true })
     const staticDiagnosis = runStaticDiagnosis({ manifest, out })
     annotateCiDiscovery({ manifest, diagnosis: staticDiagnosis.report })
 
@@ -182,9 +212,14 @@ async function main (argv) {
       for (const framework of runnableFrameworks) {
         let basicResult
         if (options.scenarios.has(BASIC_REPORTING_SCENARIO)) {
-          // Scenarios intentionally run in order so each one can reset and configure the shared intake.
+          // The validator owns the dd-trace-less control so ambient agent initialization cannot contaminate it.
           // eslint-disable-next-line no-await-in-loop
-          basicResult = await SCENARIOS[BASIC_REPORTING_SCENARIO]({ manifest, framework, intake, out, options })
+          const preflight = await runFrameworkPreflight({ framework, out, options })
+          // Scenarios intentionally run in order so each one can reset and configure the shared intake.
+          basicResult = preflight.ok
+            // eslint-disable-next-line no-await-in-loop
+            ? await SCENARIOS[BASIC_REPORTING_SCENARIO]({ manifest, framework, intake, out, options })
+            : preflight.failure
           results.push(basicResult)
         }
 
@@ -205,6 +240,22 @@ async function main (argv) {
             results.push(getSkippedAfterBasicFailure(framework, scenario, basicResult))
           }
           continue
+        }
+
+        if (advancedScenarios.length > 0) {
+          // eslint-disable-next-line no-await-in-loop
+          const generatedVerification = await verifyGeneratedTestStrategy({ framework, out, options })
+          if (!generatedVerification.ok) {
+            results.push(generatedVerification.failure)
+            for (const scenario of advancedScenarios) {
+              results.push(getSkippedAfterGeneratedVerificationFailure(
+                framework,
+                scenario,
+                generatedVerification.failure
+              ))
+            }
+            continue
+          }
         }
 
         for (const scenario of advancedScenarios) {
@@ -317,6 +368,27 @@ function getSkippedAfterBasicFailure (framework, scenario, basicResult) {
         eligible: false,
         blockedBy: BASIC_REPORTING_SCENARIO,
         reasonCode: 'basic-reporting-failed',
+        scenario,
+      },
+    },
+    artifacts: [],
+  }
+}
+
+function getSkippedAfterGeneratedVerificationFailure (framework, scenario, failure) {
+  return {
+    frameworkId: framework.id,
+    scenario,
+    status: 'skip',
+    diagnosis: `Skipped because generated test verification did not pass: ${failure.diagnosis}`,
+    evidence: {
+      blockedBy: 'generated-test-verification',
+      verificationStatus: failure.status,
+      verificationDiagnosis: failure.diagnosis,
+      featureEligibility: {
+        eligible: false,
+        blockedBy: 'generated-test-verification',
+        reasonCode: 'generated-test-verification-failed',
         scenario,
       },
     },

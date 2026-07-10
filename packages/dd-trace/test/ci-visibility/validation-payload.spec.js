@@ -200,8 +200,8 @@ describe('test optimization validation payload', () => {
             errorAddress: '127.0.0.1',
             remediation: [
               'Rerun the validator command shown below from the host shell',
-              'Rerun in an agent mode that allows localhost sockets or with sandbox restrictions disabled for ' +
-                'this command',
+              'Rerun in an agent mode that allows localhost sockets while retaining credential, outbound-network, ' +
+                'and filesystem restrictions',
               'Rerun in CI',
             ],
             rerunCommand: 'node /repo/node_modules/dd-trace/ci/validate-test-optimization.js --manifest manifest.json',
@@ -221,7 +221,8 @@ describe('test optimization validation payload', () => {
     assert.strictEqual(payload.checks[0].reason, reason)
     assert.deepStrictEqual(payload.checks[0].remediation, [
       'Rerun the validator command shown below from the host shell',
-      'Rerun in an agent mode that allows localhost sockets or with sandbox restrictions disabled for this command',
+      'Rerun in an agent mode that allows localhost sockets while retaining credential, outbound-network, and ' +
+        'filesystem restrictions',
       'Rerun in CI',
     ])
     assert.deepStrictEqual(payload.checks[0].evidence, {

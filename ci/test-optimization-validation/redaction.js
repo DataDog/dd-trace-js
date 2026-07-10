@@ -21,6 +21,9 @@ const EXACT_SECRET_ASSIGNMENT_NAME_SOURCE = [
   'AUTHORIZATION',
   'PASS',
   'SET-COOKIE',
+  'PAT',
+  'JWT',
+  'WEBHOOK(?:_URL)?',
 ].join('|')
 const SECRET_NAME_CHARS = String.raw`[A-Za-z0-9_.-]`
 const SECRET_ASSIGNMENT_NAME_SOURCE = [
@@ -28,6 +31,7 @@ const SECRET_ASSIGNMENT_NAME_SOURCE = [
   String.raw`[A-Za-z_]${SECRET_NAME_CHARS}*(?:${SECRET_NAME_SOURCE})${SECRET_NAME_CHARS}*`,
   String.raw`[A-Za-z_]${SECRET_NAME_CHARS}*[-_]PASS`,
   String.raw`[A-Za-z_]${SECRET_NAME_CHARS}*[-_]AUTH(?:ORIZATION)?`,
+  String.raw`[A-Za-z_]${SECRET_NAME_CHARS}*[-_](?:PAT|JWT|WEBHOOK(?:_URL)?)`,
   'PASS',
   'AUTH',
   'AUTHORIZATION',
@@ -52,6 +56,7 @@ const SENSITIVE_NAME_PATTERN = new RegExp(`(?:${SECRET_NAME_SOURCE})`, 'i')
 const SENSITIVE_AUTH_NAME_PATTERN = /(?:^|_)AUTH(?:ORIZATION)?(?:_|$)/i
 const SENSITIVE_COOKIE_NAME_PATTERN = /(?:^|_)SET_?COOKIE(?:_|$)|(?:^|_)COOKIE(?:_|$)/i
 const SENSITIVE_PASS_NAME_PATTERN = /(?:^|_)PASS(?:_|$)/i
+const SENSITIVE_TOKEN_ALIAS_NAME_PATTERN = /(?:^|_)(?:PAT|JWT|WEBHOOK(?:_URL)?)(?:_|$)/i
 const SECRET_ASSIGNMENT_PATTERN = new RegExp(
   String.raw`\b(${SECRET_ASSIGNMENT_NAME_SOURCE})\s*=\s*` + SECRET_VALUE_SOURCE,
   'gi'
@@ -65,6 +70,17 @@ const SECRET_FLAG_NAME_PATTERN = new RegExp(
   'i'
 )
 const AUTH_HEADER_PATTERN = /\b(Bearer)\s+([^\s'",}\]]+)/gi
+const PRIVATE_KEY_BLOCK_PATTERN =
+  /-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----[\s\S]*?-----END (?:[A-Z0-9 ]+ )?PRIVATE KEY-----/g
+const JWT_VALUE_PATTERN = /\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b/g
+const KNOWN_TOKEN_VALUE_PATTERN =
+  /\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{20,}|xox[baprs]-[A-Za-z0-9-]{20,})\b/g
+const SECRET_HEADER_ENV_NAME_SOURCE = [
+  String.raw`(?:${SECRET_NAME_SOURCE}|PAT|JWT|WEBHOOK(?:_URL)?)`,
+  String.raw`[A-Za-z_]${SECRET_NAME_CHARS}*(?:${SECRET_NAME_SOURCE})${SECRET_NAME_CHARS}*`,
+  String.raw`[A-Za-z_]${SECRET_NAME_CHARS}*[-_]AUTH(?:ORIZATION)?`,
+  String.raw`[A-Za-z_]${SECRET_NAME_CHARS}*[-_](?:PAT|JWT|WEBHOOK(?:_URL)?)`,
+].join('|')
 const SECRET_HEADER_NAME_SOURCE = [
   'dd-api-key',
   'x-api-key',
@@ -74,13 +90,13 @@ const SECRET_HEADER_NAME_SOURCE = [
   'token',
   'cookie',
   'set-cookie',
-  SECRET_ASSIGNMENT_NAME_SOURCE,
+  SECRET_HEADER_ENV_NAME_SOURCE,
 ].join('|')
 const SECRET_HEADER_PATTERN = new RegExp(
   String.raw`\b((?:${SECRET_HEADER_NAME_SOURCE}))\s*:\s*("[^"]*"|'[^']*'|[^\r\n,}]+)`,
   'gi'
 )
-const URL_CREDENTIAL_PATTERN = /([a-z][a-z0-9+.-]*:\/\/[^:\s/@]+:)([^@\s/]+)(@)/gi
+const URL_CREDENTIAL_PATTERN = /([a-z][a-z0-9+.-]*:\/\/)([^@\s/]+)(@)/gi
 
 const ENV_CONTAINER_KEYS = new Set([
   'safeEnv',
@@ -145,6 +161,9 @@ function sanitizeEnvValue (name, value) {
  */
 function sanitizeString (value) {
   return value
+    .replaceAll(PRIVATE_KEY_BLOCK_PATTERN, '<redacted-private-key>')
+    .replaceAll(JWT_VALUE_PATTERN, REDACTED)
+    .replaceAll(KNOWN_TOKEN_VALUE_PATTERN, REDACTED)
     .replaceAll(SECRET_ASSIGNMENT_PATTERN, `$1=${REDACTED}`)
     .replaceAll(SECRET_FLAG_PATTERN, `$1$2${REDACTED}`)
     .replaceAll(SECRET_HEADER_PATTERN, `$1: ${REDACTED}`)
@@ -163,7 +182,8 @@ function isSensitiveName (name) {
   return SENSITIVE_NAME_PATTERN.test(normalized) ||
     SENSITIVE_AUTH_NAME_PATTERN.test(normalized) ||
     SENSITIVE_COOKIE_NAME_PATTERN.test(normalized) ||
-    SENSITIVE_PASS_NAME_PATTERN.test(normalized)
+    SENSITIVE_PASS_NAME_PATTERN.test(normalized) ||
+    SENSITIVE_TOKEN_ALIAS_NAME_PATTERN.test(normalized)
 }
 
 function sanitizeValue (value, seen, key) {

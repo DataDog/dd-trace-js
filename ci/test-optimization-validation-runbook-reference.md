@@ -148,19 +148,30 @@ Recognize these CI systems and extract test-command evidence when practical:
 If a CI workflow or package script sets `NODE_OPTIONS=...` inline, first decide which validation path
 you are documenting:
 
-- For CI wiring validation, preserve the CI-defined value exactly as configuration evidence, except
-  for replacing secret expansions with placeholders and recording original variable names. Do not
-  move the preload to a different process or rewrite the command into a cleaner local shape.
+- For CI wiring validation, preserve the CI-defined value exactly in `displayCommand` and CI
+  configuration evidence, except for replacing secret expansions with placeholders and recording
+  original variable names. The executable command must still use the safe structured form below.
 - If a simple leading shell assignment such as `NODE_OPTIONS="-r dd-trace/ci/init" pnpm test` can be
   represented as `ciWiringCommand.env.NODE_OPTIONS` without changing process semantics, prefer that
   structured representation. It lets the validator's `NODE_OPTIONS` probe check whether a preload
   reaches the final test runner.
+- The validator refuses inline assignments or removals for `NODE_OPTIONS` and fake-intake transport
+  variables because shell-local values can override diagnostic containment. If the CI command cannot
+  be represented with equivalent structured `command.env` values, record the exact command as
+  evidence and mark local CI wiring replay as requiring manual setup instead of executing it.
 - For direct-initialization validation, do not use a package script with inline Datadog
   `NODE_OPTIONS` unless there is no safer command shape. Prefer a direct runner command and move
   only project-required, non-Datadog Node options into `command.env.NODE_OPTIONS`.
 
 Never add `dd-trace/ci/init`, `dd-trace/register.js`, or Datadog-specific environment variables to
 direct-initialization manifest commands manually.
+
+Do not skip a replayable CI test command merely because CI configures no Datadog initialization.
+Represent the executable command and its non-secret CI environment exactly in `ciWiringCommand`.
+Running that command and observing no Test Optimization events is how the validator proves that the
+CI job is not wired. Use `skip` only when the CI-shaped command cannot be replayed safely or required
+setup is unavailable. `unknown` records incomplete discovery and causes an unsuccessful validation
+unless a replay command supplies the missing evidence.
 
 ## Framework Source Trees
 
@@ -343,7 +354,7 @@ which can make a generated file look missing even though it exists in the nested
 For each runnable framework, include generated file contents as `contentLines`. The validator can
 join those lines with newline characters and write the files exactly.
 
-When `generatedTestStrategy.status` is `verified`, the generated tests must support:
+When `generatedTestStrategy.status` is `planned` or `verified`, the generated tests must support:
 
 - `basic-pass`: a stable passing test used for basic reporting and EFD new-test validation
 - `atr-fail-once`: a test that fails on the first attempt and passes on retry, preferably using a
@@ -354,9 +365,27 @@ Each generated scenario's `runCommand` must run only that scenario. If the frame
 test name, use the framework's focused-name option. If it cannot focus reliably by name, use
 separate generated files per scenario and make each `runCommand` target only that file.
 
+Declare each focused command's Datadog-clean expected outcome. The validator verifies exactly one
+observed test before it runs advanced scenarios. The required `expectedWithoutDatadog` outcomes are:
+
+- `basic-pass`: exit code `0`, observed test count `1`
+- `atr-fail-once`: exit code `1`, observed test count `1`
+- `test-management-target`: exit code `0`, observed test count `1`
+
+If command output does not prove that exactly one test ran, validator-owned verification fails and
+advanced validation remains incomplete. Do not ask the user to approve or run a separate manual
+verification command.
+
+Do not assume a JavaScript `describe()` name becomes `test.suite`. Jest and Vitest commonly report
+the test-file path as the suite and include `describe()` text in the test name. Use `suite: null`
+unless an observed instrumented event proves the exact suite value. A stable test name plus absolute
+file path is sufficient for the validator's baseline identity discovery.
+
 If `atr-fail-once` uses a state file, list that state file in
-`generatedTestStrategy.cleanupPaths`. Do not rely on test code to clean up its own retry state.
+`generatedTestStrategy.cleanupPaths`. The validator removes namespaced retry state before and after
+verification and before advanced scenarios. Do not rely on test code to clean up its own retry
+state.
 
 Before choosing generated test syntax and file extension, inspect the nearest `package.json` and
-mirror the module format used by nearby tests. If generated tests cannot be verified, use
+mirror the module format used by nearby tests. If generated tests cannot be planned concretely, use
 `proposed` or `not_possible` and include the limitation explicitly.

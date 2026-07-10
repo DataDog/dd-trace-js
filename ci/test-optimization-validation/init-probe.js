@@ -5,8 +5,10 @@ const path = require('node:path')
 
 const {
   buildCiWiringEnv,
+  mergeNodeOptions,
   runCommand,
 } = require('./command-runner')
+const { ensureSafeDirectory, writeFileSafely } = require('./safe-files')
 
 const PROBE_PRELOAD = path.join(__dirname, 'init-probe-preload.js')
 const PROBE_FILE_ENV = 'DD_TEST_OPTIMIZATION_INIT_PROBE_FILE'
@@ -27,14 +29,19 @@ async function runInitializationProbe ({ command, framework, intake, outDir, opt
   const recordsPath = path.join(probeOutDir, 'records.ndjson')
   const probeCommand = getProbeCommand(command)
 
-  fs.mkdirSync(probeOutDir, { recursive: true })
-  fs.rmSync(recordsPath, { force: true })
+  ensureSafeDirectory(outDir, probeOutDir, 'initialization probe artifact directory')
+  writeFileSafely(outDir, recordsPath, '', 'initialization probe records')
 
+  const transportEnv = buildCiWiringEnv({ intake })
   const result = await runCommand(probeCommand, {
+    artifactRoot: outDir,
     env: {
-      ...buildCiWiringEnv({ intake }),
+      ...transportEnv,
       [PROBE_FILE_ENV]: recordsPath,
-      NODE_OPTIONS: `-r ${formatNodeRequire(PROBE_PRELOAD)}`,
+      NODE_OPTIONS: mergeNodeOptions(
+        transportEnv.NODE_OPTIONS,
+        `-r ${formatNodeRequire(PROBE_PRELOAD)}`
+      ),
     },
     envMode: 'clean',
     outDir: probeOutDir,

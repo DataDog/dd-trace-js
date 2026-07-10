@@ -63,6 +63,8 @@ describe('test optimization validation scenario artifacts', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-optimization-init-probe-'))
     const recordsPath = path.join(tmpDir, 'records.ndjson')
 
+    fs.writeFileSync(recordsPath, '')
+
     try {
       execFileSync(process.execPath, [
         '-r',
@@ -96,6 +98,7 @@ describe('test optimization validation scenario artifacts', () => {
 
     fs.mkdirSync(path.dirname(playwrightCli), { recursive: true })
     fs.writeFileSync(playwrightCli, 'process.exit(0)\n')
+    fs.writeFileSync(recordsPath, '')
 
     try {
       execFileSync(process.execPath, [

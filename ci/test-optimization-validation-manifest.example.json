@@ -127,16 +127,10 @@
         "shellReason": null
       },
       "preflight": {
-        "ran": true,
-        "command": "existingTestCommand",
-        "exitCode": 0,
-        "durationMs": 12345,
-        "observedTestCount": 1,
-        "stdoutSummary": "1 passing test",
-        "stderrSummary": ""
+        "status": "pending"
       },
       "generatedTestStrategy": {
-        "status": "verified",
+        "status": "planned",
         "reason": null,
         "adapter": "jest",
         "testDirectory": "/absolute/path/to/repo/test",
@@ -202,7 +196,7 @@
             },
             "testIdentities": [
               {
-                "suite": "dd-test-optimization-validation",
+                "suite": null,
                 "name": "basic-pass",
                 "file": "/absolute/path/to/repo/test/dd-test-optimization-validation.test.js",
                 "parameters": null
@@ -231,12 +225,12 @@
               "shellReason": null
             },
             "expectedWithoutDatadog": {
-              "exitCode": 0,
+              "exitCode": 1,
               "observedTestCount": 1
             },
             "testIdentities": [
               {
-                "suite": "dd-test-optimization-validation",
+                "suite": null,
                 "name": "atr-fail-once",
                 "file": "/absolute/path/to/repo/test/dd-test-optimization-validation.test.js",
                 "parameters": null
@@ -270,7 +264,7 @@
             },
             "testIdentities": [
               {
-                "suite": "dd-test-optimization-validation",
+                "suite": null,
                 "name": "test-management-target",
                 "file": "/absolute/path/to/repo/test/dd-test-optimization-validation.test.js",
                 "parameters": null
@@ -278,20 +272,6 @@
             ]
           }
         ],
-        "verification": {
-          "createdTemporaryFiles": true,
-          "ranScenarioIds": [
-            "basic-pass",
-            "atr-fail-once",
-            "test-management-target"
-          ],
-          "exitCode": 0,
-          "durationMs": 12345,
-          "observedTestCount": 1,
-          "cleanupCompleted": true,
-          "stdoutSummary": "1 passing test",
-          "stderrSummary": ""
-        },
         "cleanupPaths": [
           "/absolute/path/to/repo/test/dd-test-optimization-validation.test.js",
           "/absolute/path/to/repo/test/.dd-test-optimization-validation-atr-state"

@@ -145,13 +145,18 @@ function detectTool (value) {
 
 function writeRecord (type, data) {
   try {
-    fs.mkdirSync(path.dirname(probeFile), { recursive: true })
     const record = sanitizeForReport({
       type,
       time: new Date().toISOString(),
       ...data,
     })
-    fs.appendFileSync(probeFile, `${JSON.stringify(record)}\n`)
+    const flags = fs.constants.O_WRONLY | fs.constants.O_APPEND | (fs.constants.O_NOFOLLOW || 0)
+    const file = fs.openSync(probeFile, flags)
+    try {
+      fs.writeFileSync(file, `${JSON.stringify(record)}\n`)
+    } finally {
+      fs.closeSync(file)
+    }
   } catch {
     // The probe must never change test behavior.
   }

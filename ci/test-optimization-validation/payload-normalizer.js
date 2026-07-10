@@ -46,15 +46,15 @@ function eventsOfType (events, type) {
   return events.filter(event => event.type === type)
 }
 
-function findTestsByIdentity (events, identities) {
+function findTestsByIdentity (events, identities, { ignoreSuite = false } = {}) {
   const tests = eventsOfType(events, 'test')
-  return tests.filter(test => identities.some(identity => matchesIdentity(test, identity)))
+  return tests.filter(test => identities.some(identity => matchesIdentity(test, identity, ignoreSuite)))
 }
 
-function matchesIdentity (test, identity) {
+function matchesIdentity (test, identity, ignoreSuite) {
   if (identity.name && !sameOrEndsWith(test.testName, identity.name)) return false
   if (identity.file && !sameOrEndsWith(test.testSourceFile, identity.file)) return false
-  if (identity.suite && !sameOrEndsWith(test.testSuite, identity.suite)) return false
+  if (!ignoreSuite && identity.suite && !sameOrEndsWith(test.testSuite, identity.suite)) return false
   return Boolean(identity.name)
 }
 

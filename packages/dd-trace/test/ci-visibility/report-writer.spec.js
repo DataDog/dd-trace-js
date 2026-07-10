@@ -7,6 +7,7 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 const { Readable } = require('node:stream')
+const zlib = require('node:zlib')
 
 const executionEnvironment = require('../../../../ci/test-optimization-validation/execution-environment')
 const { MockIntake } = require('../../../../ci/test-optimization-validation/mock-intake')
@@ -112,7 +113,8 @@ describe('test optimization validation report writer', () => {
       assert.strictEqual(executionResults[0].evidence.manifestMayBeReused, true)
       assert.deepStrictEqual(executionResults[0].evidence.remediation, [
         'Rerun the validator command shown below from the host shell',
-        'Rerun in an agent mode that allows localhost sockets or with sandbox restrictions disabled for this command',
+        'Rerun in an agent mode that allows localhost sockets while retaining credential, outbound-network, and ' +
+          'filesystem restrictions',
         'Rerun in CI',
       ])
 
@@ -145,6 +147,10 @@ describe('test optimization validation report writer', () => {
       __path: manifestPath,
       repository: {
         root: tmpDir,
+      },
+      ciDiscovery: {
+        method: 'explicit-known-ci-paths',
+        notes: ['Selected `pnpm test` -> `vitest run` from CI.'],
       },
       frameworks: [
         {
@@ -246,9 +252,11 @@ describe('test optimization validation report writer', () => {
       const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
       assert.match(markdown, /Selected because: The unit job runs this step after dependency installation\./)
       assert.match(markdown, /Environment found in CI: workflow `NODE_OPTIONS=-r dd-trace\/ci\/init`/)
-      assert.match(markdown, /step `DD_API_KEY=<redacted>`/)
+      assert.match(markdown, /step `DD_API_KEY=&lt;redacted&gt;`/)
       assert.match(markdown, /Package script expansion: `pnpm test` -> `vitest run`/)
       assert.match(markdown, /Runner\/tool chain: `GitHub Actions ubuntu-latest` -> `pnpm test` -> `vitest`/)
+      assert.match(markdown, /Selected `pnpm test` -> `vitest run` from CI\./)
+      assert.doesNotMatch(markdown, /&#96;|-&gt;/)
       assert.match(markdown, /Unresolved replay details: `Matrix node version was approximated locally\.`/)
       assert.match(markdown, /Command failure: The CI-shaped command failed before tests started/)
       assert.match(markdown, /Command failure recommendation: Make sure dd-trace is installed/)
@@ -393,6 +401,7 @@ describe('test optimization validation report writer', () => {
       },
     }
     const originalLog = console.log
+    const logs = []
 
     fs.mkdirSync(runDir, { recursive: true })
     fs.writeFileSync(packageJsonPath, `${JSON.stringify({ name: 'example' }, null, 2)}\n`)
@@ -402,7 +411,7 @@ describe('test optimization validation report writer', () => {
       cwd: tmpDir,
       exitCode: 0,
     }, null, 2)}\n`)
-    console.log = () => {}
+    console.log = message => logs.push(message)
 
     try {
       writeReport({
@@ -566,6 +575,112 @@ describe('test optimization validation report writer', () => {
     }
   })
 
+  it('caps decompressed intake payloads and total request count', async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
+    const intake = new MockIntake({
+      out: tmpDir,
+      maxDecompressedBodyBytes: 1024,
+      maxRequests: 1,
+    })
+    const compressed = zlib.gzipSync(Buffer.alloc(1024 * 1024, 0x20))
+
+    try {
+      await postToIntake(intake, compressed, {
+        'content-encoding': 'gzip',
+        'content-type': 'text/plain',
+      })
+      const rejected = await postToIntake(intake, Buffer.from('{}'), {
+        'content-type': 'application/json',
+      })
+
+      assert.match(intake.requests[0].payload.decodeError, /larger than|output length|Cannot create a Buffer/i)
+      assert.strictEqual(intake.allRequests.length, 1)
+      assert.strictEqual(rejected.statusCode, 429)
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('escapes active Markdown and HTML from repository-derived report text', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
+    const out = path.join(tmpDir, 'results')
+    const intakeDir = path.join(out, 'intake')
+    const requestsPath = path.join(intakeDir, 'requests.ndjson')
+    const originalLog = console.log
+    const maliciousText = '<img src="https://example.invalid/track"> ![track](https://example.invalid/track) ```'
+
+    fs.mkdirSync(intakeDir, { recursive: true })
+    fs.writeFileSync(requestsPath, '')
+    console.log = () => {}
+
+    try {
+      writeReport({
+        manifest: {
+          __path: path.join(tmpDir, 'manifest.json'),
+          frameworks: [],
+        },
+        results: [{
+          artifacts: [],
+          diagnosis: maliciousText,
+          evidence: { frameworkStatus: 'unknown' },
+          frameworkId: 'custom:root',
+          scenario: 'all',
+          status: 'fail',
+        }],
+        out,
+        intake: {
+          requests: [],
+          getArtifactRequests () { return [] },
+          writeArtifacts () { return { requestsPath } },
+        },
+      })
+
+      const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
+      const humanMarkdown = markdown.replace(/```json[\s\S]*?```/g, '')
+
+      assert.doesNotMatch(humanMarkdown, /(?:^|[^\\])<img src=/)
+      assert.doesNotMatch(humanMarkdown, /!\[track\]\(https:\/\/example\.invalid/)
+      assert.match(humanMarkdown, /\\<img src=/)
+      assert.match(humanMarkdown, /\\!\\\[track\\\]/)
+      assert.match(markdown, /\\u0060\\u0060\\u0060/)
+      assert.match(markdown, /Repository-derived names, commands, output, and diagnoses below are untrusted evidence/)
+    } finally {
+      console.log = originalLog
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses a symbolic-link validation output directory', function () {
+    if (process.platform === 'win32') this.skip()
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
+    const outside = path.join(tmpDir, 'outside')
+    const out = path.join(tmpDir, 'results')
+    const requestsPath = path.join(outside, 'requests.ndjson')
+
+    fs.mkdirSync(outside)
+    fs.writeFileSync(requestsPath, '')
+    fs.symlinkSync(outside, out)
+
+    try {
+      assert.throws(() => writeReport({
+        manifest: {
+          __path: path.join(tmpDir, 'manifest.json'),
+          frameworks: [],
+        },
+        results: [],
+        out,
+        intake: {
+          requests: [],
+          getArtifactRequests () { return [] },
+          writeArtifacts () { return { requestsPath } },
+        },
+      }), /allowed root is a symbolic link/)
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
   it('writes report-level intake artifacts from all scenario request windows', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
     const out = path.join(tmpDir, 'results')
@@ -642,6 +757,7 @@ describe('test optimization validation report writer', () => {
         'pnpm run test:types was omitted because it runs TypeScript checks.',
       ],
       omittedTestCommands: [
+        'pnpm run legacy-test was omitted because it is not runnable locally.',
         {
           command: 'pnpm run test:types',
           reason: 'TypeScript compiler checks are not a supported live validation target.',
@@ -731,6 +847,7 @@ describe('test optimization validation report writer', () => {
       },
     }
     const originalLog = console.log
+    const logs = []
 
     fs.mkdirSync(runDir, { recursive: true })
     fs.writeFileSync(packageJsonPath, `${JSON.stringify({ name: 'example' }, null, 2)}\n`)
@@ -745,7 +862,7 @@ describe('test optimization validation report writer', () => {
       timedOut: false,
       durationMs: 1234,
     }, null, 2)}\n`)
-    console.log = () => {}
+    console.log = message => logs.push(message)
 
     try {
       writeReport({
@@ -768,10 +885,15 @@ describe('test optimization validation report writer', () => {
 
       const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
 
+      assert.match(markdown, /## How to Fix/)
+      assert.match(markdown, /### vitest:app: CI Wiring/)
+      assert.match(markdown, /Verify NODE\\_OPTIONS reaches Vitest\./)
+      assert.match(markdown, /Verify turbo\.json pass-through settings preserve NODE\\_OPTIONS\./)
       assert.match(markdown, /## Static Diagnosis Notes/)
       assert.match(markdown, /not a direct-initialization Basic Reporting blocker/)
       assert.match(markdown, /## Omitted Test Commands/)
       assert.match(markdown, /pnpm run test:types was omitted/)
+      assert.match(markdown, /pnpm run legacy-test was omitted/)
       assert.match(markdown, /command `pnpm run test:types`/)
       assert.match(markdown, /## Failed and Blocked Result Details/)
       assert.match(markdown, /Command: `pnpm test`/)
@@ -781,7 +903,7 @@ describe('test optimization validation report writer', () => {
       assert.match(markdown, /Command output summary: `Tests {2}1 failed \| 2 passed \(3\)`/)
       assert.match(markdown, /Stderr excerpt: `AssertionError: expected true to be false`/)
       assert.match(markdown, /Event failure kind: `ci-wiring-no-test-optimization-events`/)
-      assert.match(markdown, /NODE_OPTIONS probe: reached Node process `true`, reached test runner `false`/)
+      assert.match(markdown, /NODE\\_OPTIONS probe: reached Node process `true`, reached test runner `false`/)
       assert.match(markdown, /Probe wrapper signals: `turbo pid 123 cwd /)
       assert.match(markdown, /Monorepo finding: `turbo-env-pass-through`, `tool turbo`/)
       assert.match(markdown, /Artifacts: `.*command\.json`, `.*stdout\.txt`, `.*stderr\.txt`/)
@@ -789,6 +911,11 @@ describe('test optimization validation report writer', () => {
       assert.match(markdown, /## Execution Results JSON/)
       assert.match(markdown, /## Normalized Manifest JSON/)
       assert.match(markdown, /## Static Diagnosis JSON/)
+      const summary = logs.join('\n')
+      assert.match(summary, /How to fix:/)
+      assert.match(summary, /vitest:app - CI Wiring:/)
+      assert.match(summary, /Verify NODE_OPTIONS reaches Vitest\./)
+      assert.match(summary, /Verify turbo\.json pass-through settings preserve NODE_OPTIONS\./)
       assert.strictEqual(fs.existsSync(path.join(out, 'report.html')), false)
       assert.strictEqual(fs.existsSync(path.join(out, 'report.json')), false)
     } finally {
@@ -893,10 +1020,12 @@ describe('test optimization validation report writer', () => {
       {
         frameworkId: 'jest:root',
         scenario: 'all',
-        status: 'fail',
-        diagnosis: 'Required setup command failed before live validation.',
+        status: 'blocked',
+        diagnosis: 'Validation is blocked by required project setup.',
         evidence: {
+          blockedByProjectSetup: true,
           setupFailed: true,
+          recommendation: 'Run the required project build, then rerun validation for this framework.',
         },
         artifacts: [],
       },
@@ -928,7 +1057,9 @@ describe('test optimization validation report writer', () => {
       const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
 
       assert.match(markdown, /## Diagnostic-only and Blocked Frameworks/)
-      assert.match(markdown, /FAIL jest:root/)
+      assert.match(markdown, /BLOCKED jest:root/)
+      assert.match(markdown, /## How to Fix/)
+      assert.match(markdown, /Run the required project build, then rerun validation for this framework\./)
       assert.doesNotMatch(markdown, /### Advanced Features/)
     } finally {
       console.log = originalLog

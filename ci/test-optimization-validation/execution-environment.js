@@ -13,7 +13,8 @@ const LOCALHOST_BLOCKED_REASON =
 
 const LOCALHOST_BLOCKED_REMEDIATION = [
   'Rerun the validator command shown below from the host shell',
-  'Rerun in an agent mode that allows localhost sockets or with sandbox restrictions disabled for this command',
+  'Rerun in an agent mode that allows localhost sockets while retaining credential, outbound-network, and ' +
+    'filesystem restrictions',
   'Rerun in CI',
 ]
 

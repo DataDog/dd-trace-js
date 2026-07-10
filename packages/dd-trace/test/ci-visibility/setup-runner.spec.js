@@ -36,8 +36,10 @@ describe('test optimization validation setup runner', () => {
     })
 
     assert.strictEqual(setup.ok, false)
-    assert.strictEqual(setup.failure.status, 'fail')
-    assert.match(setup.failure.diagnosis, /Required setup command failed/)
+    assert.strictEqual(setup.failure.status, 'blocked')
+    assert.match(setup.failure.diagnosis, /blocked by required project setup/)
+    assert.match(setup.failure.diagnosis, /No Test Optimization conclusion was reached/)
+    assert.strictEqual(setup.failure.evidence.blockedByProjectSetup, true)
     assert.strictEqual(setup.failure.evidence.setupCommand.exitCode, 2)
     assert.match(setup.failure.evidence.setupCommand.stderrSummary, /missing build artifact/)
     assert.ok(setup.artifacts.some(artifact => path.basename(artifact) === 'command.json'))
