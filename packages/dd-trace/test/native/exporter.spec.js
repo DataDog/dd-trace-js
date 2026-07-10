@@ -35,6 +35,7 @@ describe('NativeExporter', () => {
     nativeSpans = {
       flushChangeQueue: sinon.stub(),
       flushSpansGrouped: sinon.stub().resolves('unchanged'),
+      flushStats: sinon.stub().resolves(true),
       setAgentUrl: sinon.stub(),
       setUseV05: sinon.stub(),
       setOtlpEndpoint: sinon.stub(),
@@ -273,6 +274,15 @@ describe('NativeExporter', () => {
         sinon.assert.notCalled(nativeSpans.flushSpansGrouped)
         done()
       })
+    })
+
+    it('flushStats() force-flushes the native concentrator (parametric stats-flush)', async () => {
+      const result = await exporter.flushStats()
+      sinon.assert.calledOnce(nativeSpans.flushStats)
+      assert.strictEqual(result, true)
+      // stats are NOT flushed by the trace flush path (own 10s cadence)
+      exporter._writer.flush(() => {})
+      sinon.assert.calledOnce(nativeSpans.flushStats)
     })
 
     // The success path is one observable sequence — splitting it across 5

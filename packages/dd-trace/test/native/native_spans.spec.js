@@ -445,6 +445,24 @@ describe('NativeSpansInterface', () => {
     })
   })
 
+  describe('flushStats', () => {
+    it('is a no-op resolving true when stats are disabled', async () => {
+      // the shared instance is built without statsEnabled
+      const result = await nativeSpans.flushStats()
+      assert.strictEqual(result, true)
+      sinon.assert.notCalled(mockState.flushStats)
+    })
+
+    it('force-flushes the native concentrator when stats are enabled', async () => {
+      nativeSpans._options.statsEnabled = true
+      mockState.flushStats.resetHistory()
+      const result = await nativeSpans.flushStats()
+      // force=true so the current (partial) bucket ships, unlike the 10s interval
+      sinon.assert.calledOnceWithExactly(mockState.flushStats, true)
+      assert.strictEqual(result, true)
+    })
+  })
+
   describe('getStringId error recovery', () => {
     it('should not commit to JS map if WASM insert throws', () => {
       mockState.stringTableInsertOne = sinon.stub().throws(new Error('table full'))

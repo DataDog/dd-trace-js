@@ -333,6 +333,21 @@ class NativeSpansInterface {
   }
 
   /**
+   * Force-flush the native stats concentrator to the agent's /v0.6/stats. Sends
+   * the current (possibly partial) buckets, unlike the 10s interval which only
+   * flushes completed ones. Intended for explicit flush points (process exit,
+   * the parametric test client's stats-flush) rather than the hot path. Resolves
+   * to whatever the native flush returns; a no-op resolving `true` when stats
+   * collection is disabled.
+   *
+   * @returns {Promise<boolean>}
+   */
+  flushStats () {
+    if (!this._options.statsEnabled) return Promise.resolve(true)
+    return this._state.flushStats(true)
+  }
+
+  /**
    * Flush the change queue to native storage.
    * This processes all queued operations in Rust.
    */

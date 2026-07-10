@@ -245,6 +245,20 @@ class NativeExporter {
   }
 
   /**
+   * Force-flush the native stats concentrator to /v0.6/stats. Trace flush runs
+   * on a short interval, so stats are NOT flushed there (that would repeatedly
+   * ship the current partial 10s bucket); stats have their own 10s interval.
+   * This is the explicit force-flush used by the parametric test client's
+   * stats-flush endpoint (call it AFTER a trace flush so the just-exported spans
+   * are already in the concentrator).
+   *
+   * @returns {Promise<boolean>}
+   */
+  flushStats () {
+    return this._nativeSpans.flushStats()
+  }
+
+  /**
    * Flush pending spans to the agent.
    *
    * @param {Function} [done] - Callback when flush completes
