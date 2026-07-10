@@ -674,11 +674,11 @@ describe('TracerProxy', () => {
     })
 
     describe('inject', () => {
-      it('should call the underlying NoopTracer', () => {
+      it('should call the underlying NoopTracer without exposing its return value', () => {
         const returnValue = proxy.inject('a', 'b', 'c')
 
         sinon.assert.calledWith(noop.inject, 'a', 'b', 'c')
-        assert.strictEqual(returnValue, 'noop')
+        assert.strictEqual(returnValue, undefined)
       })
     })
 
@@ -915,11 +915,11 @@ describe('TracerProxy', () => {
     })
 
     describe('inject', () => {
-      it('should call the underlying DatadogTracer', () => {
+      it('should call the underlying DatadogTracer without exposing its return value', () => {
         const returnValue = proxy.inject('a', 'b', 'c')
 
         sinon.assert.calledWith(tracer.inject, 'a', 'b', 'c')
-        assert.strictEqual(returnValue, 'tracer')
+        assert.strictEqual(returnValue, undefined)
       })
     })
 

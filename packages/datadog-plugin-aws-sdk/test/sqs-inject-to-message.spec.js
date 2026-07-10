@@ -10,35 +10,37 @@ const Sqs = require('../src/services/sqs')
 
 const QueueUrl = 'http://127.0.0.1:4566/00000000000000000000/test-queue'
 
+/** @typedef {Sqs & { dsmCalls: Array<{ datadog: object | undefined }> }} TestSqs */
+
 /**
- * `Object.create(Sqs.prototype)` skips the heavy constructor wiring in
- * `BaseAwsSdkPlugin`; the methods under test only touch `this.tracer`,
- * `this.config`, and `this.setDSMCheckpoint`, so a hand-rolled stub suffices.
- * The options stub the corresponding `tracer` methods.
- *
  * @param {object} options
  * @param {boolean} [options.dsmEnabled]
- * @param {(span: unknown, format: string, info: object) => boolean} [options.inject]
+ * @param {(span: unknown, format: string, info?: object) => object | undefined} [options.inject]
  * @param {(format: string, attrs: object) => unknown} [options.extract]
  * @param {(carrier: object) => void} [options.decodeDataStreamsContext]
  * @param {(tags: string[], span: unknown, payloadSize: number) => unknown} [options.setCheckpoint]
  * @param {unknown} [options.dataStreamsContext] Value returned by stubbed `setDSMCheckpoint`.
- * @returns {Sqs & { dsmCalls: Array<{ datadog: object | undefined }> }}
+ * @returns {TestSqs}
  */
 function buildPlugin ({
   dsmEnabled = false,
-  inject = () => false,
+  inject = () => undefined,
   extract = () => undefined,
   decodeDataStreamsContext = () => {},
   setCheckpoint = () => null,
   dataStreamsContext = null,
 } = {}) {
-  const plugin = Object.create(Sqs.prototype)
-  // `tracer` is a getter on the base Plugin class that reads `_tracer`.
-  plugin._tracer = { inject, extract, decodeDataStreamsContext, setCheckpoint }
+  const tracer = { inject, extract, decodeDataStreamsContext, setCheckpoint }
+  const plugin = /** @type {TestSqs} */ (new Sqs(tracer, {}))
   plugin.config = { dsmEnabled }
   plugin.dsmCalls = []
-  plugin.setDSMCheckpoint = (span, params) => {
+
+  /**
+   * @param {unknown} span
+   * @param {{ MessageAttributes: Record<string, object> }} params
+   * @returns {unknown}
+   */
+  function setDSMCheckpoint (span, params) {
     // Snapshot `_datadog` at call time; the original code under test mutated
     // the same object after the call, so a reference would race the read.
     plugin.dsmCalls.push({
@@ -48,7 +50,19 @@ function buildPlugin ({
     })
     return dataStreamsContext
   }
+  plugin.setDSMCheckpoint = setDSMCheckpoint
   return plugin
+}
+
+/**
+ * @param {unknown} span
+ * @param {string} format
+ * @param {Record<string, string>} [carrier]
+ * @returns {Record<string, string>}
+ */
+function injectTraceContext (span, format, carrier = {}) {
+  carrier['x-datadog-trace-id'] = '123'
+  return carrier
 }
 
 describe('Sqs plugin injectToMessage', () => {
@@ -68,7 +82,7 @@ describe('Sqs plugin injectToMessage', () => {
   it('passes the injected trace context as the size placeholder', () => {
     const plugin = buildPlugin({
       dsmEnabled: true,
-      inject: (span, format, info) => { info['x-datadog-trace-id'] = '123'; return true },
+      inject: injectTraceContext,
     })
     const params = { MessageBody: 'hello', MessageAttributes: {} }
 
@@ -92,7 +106,7 @@ describe('Sqs plugin injectToMessage', () => {
   it('keeps the trace-only `_datadog` when DSM yields no context', () => {
     const plugin = buildPlugin({
       dsmEnabled: true,
-      inject: (span, format, info) => { info['x-datadog-trace-id'] = '123'; return true },
+      inject: injectTraceContext,
     })
     const params = { MessageBody: 'hello', MessageAttributes: {} }
 
@@ -129,7 +143,7 @@ describe('Sqs plugin injectToMessage', () => {
   it('attaches `_datadog` with the injected trace context when DSM is disabled', () => {
     const plugin = buildPlugin({
       dsmEnabled: false,
-      inject: (span, format, info) => { info['x-datadog-trace-id'] = '123'; return true },
+      inject: injectTraceContext,
     })
     const params = { MessageBody: 'hello', MessageAttributes: {} }
 
@@ -141,10 +155,19 @@ describe('Sqs plugin injectToMessage', () => {
     })
   })
 
+  it('does not attach `_datadog` when DSM is disabled and trace injection writes nothing', () => {
+    const plugin = buildPlugin()
+    const params = { MessageBody: 'hello', MessageAttributes: {} }
+
+    plugin.injectToMessage(null, params, 'http://example/queue', true)
+
+    assert.deepStrictEqual(params.MessageAttributes, {})
+  })
+
   it('skips injection at the SQS quota of 10 attributes', () => {
     const plugin = buildPlugin({
       dsmEnabled: true,
-      inject: (span, format, info) => { info['x-datadog-trace-id'] = '123'; return true },
+      inject: injectTraceContext,
     })
     const MessageAttributes = {}
     for (let i = 0; i < 10; i++) {
@@ -162,7 +185,7 @@ describe('Sqs plugin injectToMessage', () => {
   it('still injects when one slot is free at the SQS quota boundary', () => {
     const plugin = buildPlugin({
       dsmEnabled: false,
-      inject: (span, format, info) => { info['x-datadog-trace-id'] = '123'; return true },
+      inject: injectTraceContext,
     })
     const MessageAttributes = {}
     for (let i = 0; i < 9; i++) {
@@ -181,7 +204,7 @@ describe('Sqs plugin injectToMessage', () => {
   it('counts only own keys against the SQS quota when the object inherits enumerable keys', () => {
     const plugin = buildPlugin({
       dsmEnabled: false,
-      inject: (span, format, info) => { info['x-datadog-trace-id'] = '123'; return true },
+      inject: injectTraceContext,
     })
     const inherited = {}
     for (let i = 0; i < 12; i++) {

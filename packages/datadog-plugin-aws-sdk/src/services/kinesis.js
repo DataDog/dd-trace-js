@@ -12,8 +12,9 @@ function recordDataAsString (data) {
 // delete on consume, so their working set is ~the active shard count.
 const MAX_TRACKED_SHARD_ITERATORS = 1000
 
-// Kinesis rejects a record once its data blob reaches 1 MiB.
-const KINESIS_MAX_RECORD_BYTES = 1_048_576
+// The default Kinesis record limit is 1 MiB. Streams configured for larger records
+// conservatively skip propagation above this point because the request does not expose that limit.
+const KINESIS_DEFAULT_MAX_RECORD_BYTES = 1_048_576
 
 // The DSM pathway field (`dd-pathway-ctx-base64`) always serializes to a fixed 55 bytes: a
 // 21-char key, a 28-char base64 value, and 6 bytes of JSON framing. Mirrors PATHWAY_HEADER_BYTES
@@ -245,6 +246,12 @@ class Kinesis extends BaseAwsSdkPlugin {
     }
   }
 
+  /**
+   * @param {import('../../../dd-trace/src/opentracing/span') | null} span
+   * @param {{ Data: Buffer|string|Uint8Array, PartitionKey?: string } | undefined} params
+   * @param {string} stream
+   * @param {boolean} injectTraceContext
+   */
   injectToMessage (span, params, stream, injectTraceContext) {
     if (!params) {
       return
@@ -259,38 +266,39 @@ class Kinesis extends BaseAwsSdkPlugin {
       }
     }
 
-    const ddInfo = {}
-    let injected = false
+    let ddInfo
     // For now we only inject to the first message; batches may change later.
     if (injectTraceContext) {
-      injected = this.tracer.inject(span, 'text_map', ddInfo)
+      ddInfo = this.tracer.inject(span, 'text_map')
     }
 
     const dsmEnabled = this.config.dsmEnabled
-    if (!injected && !dsmEnabled) return
+    if (!ddInfo && !dsmEnabled) return
 
-    parsedData._datadog = ddInfo
-    // Gate on the 1 MiB Kinesis cap before setDSMCheckpoint: a record we can't ship must not
-    // record a checkpoint. When DSM runs, reserve the fixed-size pathway field the encode below
-    // appends after the gate, so a record that only fits without it records no checkpoint and
-    // never gets written over the cap.
+    parsedData._datadog = ddInfo ?? {}
+    // Gate before setDSMCheckpoint: a record we can't ship must not record a checkpoint.
+    // Reserve the pathway field that DSM appends after the gate.
     let serialized = JSON.stringify(parsedData)
     const reservedBytes = dsmEnabled ? DSM_PATHWAY_FIELD_BYTES : 0
-    if (Buffer.byteLength(serialized, 'utf8') + reservedBytes >= KINESIS_MAX_RECORD_BYTES) {
+    const partitionKeyBytes = Buffer.byteLength(params.PartitionKey ?? '', 'utf8')
+    if (
+      Buffer.byteLength(serialized, 'utf8') + partitionKeyBytes + reservedBytes >
+      KINESIS_DEFAULT_MAX_RECORD_BYTES
+    ) {
       log.info('Payload size too large to pass context')
       return
     }
 
     if (dsmEnabled) {
       const dataStreamsContext = this.setDSMCheckpoint(span, params, stream)
-      if (dataStreamsContext) {
-        DsmPathwayCodec.encode(dataStreamsContext, ddInfo)
-        injected = true
+      ddInfo = DsmPathwayCodec.encode(dataStreamsContext, ddInfo) ?? ddInfo
+      if (ddInfo) {
+        parsedData._datadog = ddInfo
         serialized = JSON.stringify(parsedData)
       }
     }
 
-    if (!injected) return
+    if (!ddInfo) return
 
     params.Data = Buffer.from(serialized, 'utf8')
   }

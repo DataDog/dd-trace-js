@@ -33,15 +33,15 @@ describe('LogPropagator', () => {
   })
 
   describe('inject', () => {
-    it('should inject the span context into the carrier', () => {
-      const carrier = {}
+    it('should inject the span context into a lazily created carrier', () => {
       const spanContext = new SpanContext({
         traceId: id('123', 10),
         spanId: id('456', 10),
       })
 
-      propagator.inject(spanContext, carrier)
+      const carrier = propagator.inject(spanContext)
 
+      assert.ok(carrier)
       assert.ok(Object.hasOwn(carrier, 'dd'), `Available keys: ${inspect(Object.keys(carrier))}`)
       assert.strictEqual(carrier.dd.trace_id, '123')
       assert.strictEqual(carrier.dd.span_id, '456')
@@ -144,11 +144,12 @@ describe('LogPropagator', () => {
 
     it('should not assign dd when no span, service, env, or version is set', () => {
       propagator = new LogPropagator({})
-      const carrier = {}
 
-      propagator.inject(null, carrier)
+      assert.strictEqual(propagator.inject(null), undefined)
+    })
 
-      assert.strictEqual(carrier.dd, undefined)
+    it('should return undefined for a null carrier', () => {
+      assert.strictEqual(propagator.inject(null, null), undefined)
     })
   })
 

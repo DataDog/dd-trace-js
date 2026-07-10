@@ -158,19 +158,31 @@ describe('encoding', () => {
     ctx.hash = computePathwayHash('test-service', 'test-env',
       ['direction:in', 'group:group1', 'topic:topic1', 'type:kafka'], Buffer.from('0000000000000000', 'hex'))
 
-    const injected = DsmPathwayCodec.encode(ctx, carrier)
+    const injectedCarrier = DsmPathwayCodec.encode(ctx, carrier)
 
-    assert.strictEqual(injected, true)
+    assert.strictEqual(injectedCarrier, carrier)
     const expectedBase64Hash = 'Z7CzXmXArPrE58Cfj2LI2cOfj2I='
     assert.strictEqual(carrier['dd-pathway-ctx-base64'], expectedBase64Hash)
   })
 
-  it('returns false and writes nothing when the pathway context has no hash', () => {
-    const carrier = {}
+  it('lazily creates and returns a carrier', () => {
+    const context = {
+      pathwayStartNs: 1685673482722000000,
+      edgeStartNs: 1685673482722000000,
+      hash: computePathwayHash('test-service', 'test-env',
+        ['direction:in', 'group:group1', 'topic:topic1', 'type:kafka'], Buffer.from('0000000000000000', 'hex')),
+    }
+
+    const carrier = DsmPathwayCodec.encode(context)
+
+    assert.ok(carrier)
+    assert.strictEqual(typeof carrier['dd-pathway-ctx-base64'], 'string')
+  })
+
+  it('returns undefined when the pathway context has no hash', () => {
     const contextWithoutHash = /** @type {{ hash: Buffer, pathwayStartNs: number, edgeStartNs: number }} */ ({})
 
-    assert.strictEqual(DsmPathwayCodec.encode(contextWithoutHash, carrier), false)
-    assert.deepStrictEqual(carrier, {})
+    assert.strictEqual(DsmPathwayCodec.encode(contextWithoutHash), undefined)
   })
 
   it('should extract the base64 encoded string from the carrier', () => {

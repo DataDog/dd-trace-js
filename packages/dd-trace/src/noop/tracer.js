@@ -33,9 +33,7 @@ class NoopTracer {
     return this._span
   }
 
-  inject (spanContext, format, carrier) {
-    return false
-  }
+  inject (spanContext, format, carrier) {}
 
   extract (format, carrier) {
     return this._span.context()

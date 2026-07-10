@@ -15,18 +15,20 @@ class DSMTextMapPropagator {
 
   /**
    * @param {object} ctx DSM pathway context.
-   * @param {Record<string, string>} carrier
-   * @returns {boolean} Whether the pathway context was written into `carrier`.
+   * @param {Record<string, string>} [carrier]
+   * @returns {Record<string, string> | undefined}
    */
   inject (ctx, carrier) {
-    if (!this.config.dsmEnabled) return false
+    if (!this.config.dsmEnabled) return
 
-    const injected = DsmPathwayCodec.encode(ctx, carrier)
+    const injectedCarrier = DsmPathwayCodec.encode(ctx, carrier)
+    if (injectedCarrier === undefined) return
 
+    carrier = injectedCarrier
     // eslint-disable-next-line eslint-rules/eslint-log-printf-style
     log.debug(() => `Inject into carrier (DSM): ${JSON.stringify(pick(carrier, logKeys))}.`)
 
-    return injected
+    return carrier
   }
 
   extract (carrier) {

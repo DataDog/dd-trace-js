@@ -322,6 +322,12 @@ class Sqs extends BaseAwsSdkPlugin {
     }
   }
 
+  /**
+   * @param {import('../../../dd-trace/src/opentracing/span') | null} span
+   * @param {{ MessageBody?: string, MessageAttributes?: Record<string, object> } | undefined} params
+   * @param {string} queueUrl
+   * @param {boolean} injectTraceContext
+   */
   injectToMessage (span, params, queueUrl, injectTraceContext) {
     if (!params) {
       params = {}
@@ -333,11 +339,10 @@ class Sqs extends BaseAwsSdkPlugin {
       return
     }
 
-    const ddInfo = {}
-    let injected = false
+    let ddInfo
     // For now we only inject to the first message; batches may change later.
     if (injectTraceContext) {
-      injected = this.tracer.inject(span, 'text_map', ddInfo)
+      ddInfo = this.tracer.inject(span, 'text_map')
     }
 
     if (this.config.dsmEnabled) {
@@ -345,19 +350,19 @@ class Sqs extends BaseAwsSdkPlugin {
       // matches the on-wire payload, then update with the encoded context.
       params.MessageAttributes._datadog = {
         DataType: 'String',
-        StringValue: JSON.stringify(ddInfo),
+        StringValue: JSON.stringify(ddInfo ?? {}),
       }
       const dataStreamsContext = this.setDSMCheckpoint(span, params, queueUrl)
-      if (dataStreamsContext) {
-        DsmPathwayCodec.encode(dataStreamsContext, ddInfo)
+      ddInfo = DsmPathwayCodec.encode(dataStreamsContext, ddInfo) ?? ddInfo
+      if (ddInfo) {
         params.MessageAttributes._datadog.StringValue = JSON.stringify(ddInfo)
-      } else if (!injected) {
+      } else {
         delete params.MessageAttributes._datadog
       }
       return
     }
 
-    if (!injected) return
+    if (!ddInfo) return
 
     params.MessageAttributes._datadog = {
       DataType: 'String',

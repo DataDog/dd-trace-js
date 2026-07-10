@@ -258,9 +258,7 @@ describe('Plugin', () => {
       })
     })
 
-    // `inject` now reports whether it wrote any context into the carrier; with no
-    // configured propagator for the empty test args it writes nothing and returns `false`.
-    describeMethod('inject', false)
+    describeMethod('inject')
     describeMethod('extract', null)
     describeMethod('getRumData', '')
     describeMethod('trace')

@@ -104,8 +104,8 @@ class DatadogTracer {
   /**
    * @param {Span|SpanContext} context
    * @param {string} format
-   * @param {object} carrier
-   * @returns {boolean} Whether anything was written into `carrier`. `false` on error.
+   * @param {object} [carrier]
+   * @returns {object | undefined}
    */
   inject (context, format, carrier) {
     if (context instanceof Span) {
@@ -120,7 +120,6 @@ class DatadogTracer {
     } catch (e) {
       log.error('Error injecting trace', e)
       runtimeMetrics.increment('datadog.tracer.node.inject.errors', true)
-      return false
     }
   }
 

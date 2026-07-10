@@ -1,6 +1,7 @@
 'use strict'
 
 const assert = require('node:assert/strict')
+const { promisify } = require('node:util')
 
 const { afterEach, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
@@ -14,6 +15,11 @@ const { ENTRY_PARENT_HASH } = require('../../dd-trace/src/datastreams/processor'
 const propagationHash = require('../../dd-trace/src/propagation-hash')
 const helpers = require('./kinesis_helpers')
 const { callViaPromise, setup, withAwsSdkVersions } = require('./spec_helpers')
+
+const KINESIS_DEFAULT_MAX_RECORD_BYTES = 1_048_576
+
+/** @typedef {{ resource: string, meta: Record<string, string> }} EncodedSpan */
+/** @typedef {EncodedSpan[][]} EncodedTraces */
 
 describe('Kinesis', function () {
   this.timeout(10000)
@@ -192,21 +198,26 @@ describe('Kinesis', function () {
         helpers.putTestRecord(kinesis, streamNameDSM, helpers.dataBuffer, () => {})
       })
 
-      // Regression: a record whose payload only clears the 1 MiB Kinesis cap once the trace
-      // context is attached must not record a produce checkpoint — the context can never ship,
-      // so the size gate bails before `setDSMCheckpoint` and the `putRecord` span carries no
-      // `pathway.hash`.
-      it('records no DSM checkpoint when attaching context would exceed the 1 MiB cap', done => {
-        // Fits under the cap on its own; adding `_datadog` tips it over.
-        const overCapAfterInject = Buffer.from(JSON.stringify({ myData: 'a'.repeat(1048576 - 100) }))
-
-        agent.assertSomeTraces(traces => {
-          const span = traces[0][0]
+      it('records no DSM checkpoint when context plus the partition key would exceed the default cap', async () => {
+        const partitionKey = 'p'.repeat(256)
+        const data = Buffer.from(JSON.stringify({
+          myData: 'a'.repeat(KINESIS_DEFAULT_MAX_RECORD_BYTES - 500),
+        }))
+        /**
+         * @param {unknown} traces
+         */
+        const assertNoPathwayHash = traces => {
+          const span = /** @type {EncodedTraces} */ (traces)[0][0]
           assert.match(span.resource, /^putRecord/)
           assert.strictEqual(span.meta['pathway.hash'], undefined)
-        }, { spanResourceMatch: /^putRecord/ }).then(done, done)
+        }
+        const tracePromise = agent.assertSomeTraces(assertNoPathwayHash, { spanResourceMatch: /^putRecord/ })
+        const params = { Data: data, PartitionKey: partitionKey, StreamName: streamNameDSM }
+        const requestPromise = promisesSupported
+          ? callViaPromise(kinesis, 'putRecord', params)
+          : promisify(kinesis.putRecord.bind(kinesis))(params)
 
-        helpers.putTestRecord(kinesis, streamNameDSM, overCapAfterInject, () => {})
+        await Promise.all([tracePromise, requestPromise])
       })
 
       it('emits DSM stats to the agent during Kinesis putRecord', done => {
