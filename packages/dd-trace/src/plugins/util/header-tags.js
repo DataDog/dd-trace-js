@@ -29,7 +29,7 @@ function toHeaderTagEntries (input) {
       if (typeof entry !== 'string') {
         continue
       }
-      const separatorIndex = entry.indexOf(':')
+      const separatorIndex = entry.indexOf(':', entry[0] === ':' ? 1 : 0)
       result.push(separatorIndex === -1
         ? [entry.trim().toLowerCase(), undefined]
         : [entry.slice(0, separatorIndex).trim().toLowerCase(), entry.slice(separatorIndex + 1).trim()])

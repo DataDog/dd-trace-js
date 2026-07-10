@@ -38,6 +38,13 @@ describe('plugins/util/header-tags', () => {
     )
   })
 
+  it('accepts HTTP/2 pseudo-headers in the legacy array form', () => {
+    assert.deepStrictEqual(
+      toHeaderTagEntries([':path', ':method:http.request.method']),
+      [[':path', undefined], [':method', 'http.request.method']]
+    )
+  })
+
   it('skips non-string entries in the legacy array form', () => {
     assert.deepStrictEqual(
       toHeaderTagEntries(['x-a:tag', 123, undefined, 'x-b']),
