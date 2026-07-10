@@ -7,6 +7,15 @@ const { validateManifest } = require('../../../../ci/test-optimization-validatio
 describe('test optimization validation manifest schema', () => {
   it('rejects unresolved placeholders in executable command env', () => {
     const errors = validateManifest(getManifest({
+      ciWiring: {
+        status: 'fail',
+        provider: 'github-actions',
+        configFile: '/repo/.github/workflows/test.yml',
+        job: 'test',
+        step: 'Run tests',
+        whySelected: 'This step runs the selected test command.',
+        workingDirectory: '/repo',
+      },
       ciWiringCommand: {
         cwd: '/repo',
         argv: ['npm', 'test'],
@@ -59,6 +68,10 @@ function getManifest (frameworkFields) {
         preflight: {
           ran: true,
           exitCode: 0,
+        },
+        ciWiring: {
+          status: 'skip',
+          reason: 'No replayable CI test command was selected for this fixture.',
         },
         ...frameworkFields,
       },
