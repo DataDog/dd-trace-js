@@ -6,6 +6,7 @@
     "@datadog/native-metrics",
     "@datadog/openfeature-node-server",
     "@datadog/pprof",
-    "@datadog/wasm-js-rewriter"
+    "@datadog/wasm-js-rewriter",
+    "oxc-parser"
   ]
 }

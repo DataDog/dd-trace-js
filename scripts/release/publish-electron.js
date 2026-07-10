@@ -5,7 +5,7 @@
 // Restores the original package.json on success or failure.
 
 const { execSync } = require('node:child_process')
-const { copyFileSync, existsSync, renameSync } = require('node:fs')
+const { copyFileSync, existsSync, readFileSync, renameSync } = require('node:fs')
 const path = require('node:path')
 
 const ROOT = path.join(__dirname, '..', '..')
@@ -26,12 +26,31 @@ if (!existsSync(ELECTRON_JSON)) {
   process.exit(1)
 }
 
+const { version } = JSON.parse(readFileSync(ELECTRON_JSON, 'utf8'))
+
 let backupCreated = false
 try {
   copyFileSync(PACKAGE_JSON, BACKUP)
   backupCreated = true
   copyFileSync(ELECTRON_JSON, PACKAGE_JSON)
-  run(`npm publish ${process.argv.slice(2).join(' ')}`)
+
+  let skip = false
+  try {
+    const published = execSync(
+      `npm view dd-trace-electron@${version} version`,
+      { cwd: ROOT, stdio: 'pipe' }
+    ).toString().trim()
+    if (published === version) {
+      process.stdout.write(`Version ${version} already published, skipping.\n`)
+      skip = true
+    }
+  } catch {
+    // version not found on registry — proceed with publish
+  }
+
+  if (!skip) {
+    run(`npm publish ${process.argv.slice(2).join(' ')}`)
+  }
 } finally {
   if (backupCreated) renameSync(BACKUP, PACKAGE_JSON)
 }

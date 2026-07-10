@@ -129,7 +129,7 @@ jobs:
           GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
 
   publish-electron:
-    needs: publish
+    needs: [setup, publish]
     runs-on: ubuntu-latest
     environment:
       name: npm
@@ -141,7 +141,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/node
-      - run: node scripts/release/publish-electron.js
+      - run: node scripts/release/publish-electron.js --tag ${{ needs.setup.outputs.npm_tag }}
 
   docs:
     needs: [setup, publish]

@@ -118,7 +118,11 @@ class Tracer extends NoopProxy {
       propagationHash.configure(config)
 
       if (config.DD_CRASHTRACKING_ENABLED) {
-        require('./crashtracking').start(config)
+        try {
+          require('./crashtracking').start(config)
+        } catch (e) {
+          log.warn('Crashtracking is not available in this environment', e)
+        }
       }
 
       if (config.DD_HEAP_SNAPSHOT_COUNT > 0) {
