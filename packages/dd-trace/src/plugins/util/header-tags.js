@@ -1,5 +1,7 @@
 'use strict'
 
+const { DD_MAJOR } = require('../../../../../version')
+
 const log = require('../../log')
 
 let hasWarnedLegacyFormat = false
@@ -12,7 +14,8 @@ let hasWarnedLegacyFormat = false
  * plain array iteration.
  *
  * The going-forward shape is an object (`{ 'x-header': 'my.tag' }`). The legacy
- * `['x-header:my.tag']` array is still accepted with a one-time deprecation warning.
+ * `['x-header:my.tag']` array is still accepted with a one-time deprecation warning
+ * on v7.
  *
  * @param {Record<string, string> | string[] | undefined} input
  * @returns {Array<[string, string | undefined]>}
@@ -23,7 +26,9 @@ function toHeaderTagEntries (input) {
   }
 
   if (Array.isArray(input)) {
-    warnLegacyFormat()
+    if (DD_MAJOR >= 7) {
+      warnLegacyFormat()
+    }
     const result = []
     for (const entry of input) {
       if (typeof entry !== 'string') {

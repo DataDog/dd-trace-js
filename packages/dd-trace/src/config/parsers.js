@@ -40,14 +40,14 @@ const transformers = {
    * Normalize the `headerTags` option to an object keyed by header name. The env var
    * is already parsed to an object by the `map` parser; the programmatic option may
    * still be given as the legacy `['header:tag']` array or comma-separated string,
-   * which is converted here with a one-time deprecation warning.
+   * which is converted here with a one-time deprecation warning on v7.
    *
    * @param {Record<string, string> | string[] | string} value
    * @returns {Record<string, string>}
    */
   headerTags (value) {
     if (value && (typeof value === 'string' || Array.isArray(value))) {
-      if (!hasWarnedLegacyHeaderTags) {
+      if (DD_MAJOR >= 7 && !hasWarnedLegacyHeaderTags) {
         hasWarnedLegacyHeaderTags = true
         // Lazy require to avoid the early-load cycle the rest of this module dodges.
         require('../log').warn(

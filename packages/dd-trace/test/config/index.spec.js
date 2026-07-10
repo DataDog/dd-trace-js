@@ -63,7 +63,10 @@ describe('Config', () => {
     sinon.spy(log, 'info')
     sinon.spy(log, 'warn')
     sinon.spy(log, 'error')
-    const parsers = proxyquire.noPreserveCache()('../../src/config/parsers', {})
+    const parsers = proxyquire.noPreserveCache()('../../src/config/parsers', {
+      '../../../../version': { DD_MAJOR: ddMajor },
+      '../log': log,
+    })
     const supportedConfigurations = proxyquire.noPreserveCache()('../../src/config/supported-configurations.json', {})
     const configDefaults = proxyquire.noPreserveCache()('../../src/config/defaults', {
       './supported-configurations.json': supportedConfigurations,
@@ -310,6 +313,16 @@ describe('Config', () => {
     it('normalizes the legacy array programmatic value to an object', () => {
       assert.deepStrictEqual(getConfig({ headerTags: ['x-a : tag', 'x-b'] }).headerTags,
         { 'x-a': 'tag', 'x-b': '' })
+    })
+
+    it('warns when normalizing the legacy array programmatic value on v7', () => {
+      getConfig({ headerTags: ['x-a : tag'] })
+      sinon.assert.calledOnceWithMatch(log.warn, 'The array/string form of `headerTags` is deprecated.')
+    })
+
+    it('does not warn when normalizing the legacy array programmatic value on v6', () => {
+      getConfig({ headerTags: ['x-a : tag'] }, { ddMajor: 6 })
+      sinon.assert.notCalled(log.warn)
     })
 
     it('normalizes the DD_TRACE_HEADER_TAGS env var to an object', () => {

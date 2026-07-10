@@ -272,18 +272,24 @@ Composition is the default; inheritance only when ≤2 sibling types share a com
 
 ### Public TypeScript Types
 
-The repo carries two public TypeScript surfaces:
+The repo carries a separate public TypeScript surface for each supported major:
 
-- `index.d.ts` — current major (master = v6).
-- `index.d.v5.ts` — frozen v5 surface. Swapped over `index.d.ts` by `scripts/release/swap-v5-types.js` during a v5 release.
+- `index.d.ts` — current released major (v6).
+- `index.d.v5.ts` — frozen v5 surface.
+- `index.d.v7.ts` — unreleased v7 surface.
 
-When adding a new public type, add it to both files unless the API is v6-only. v6-only changes — drops, renames, or APIs that don't exist in v5 — go in `index.d.ts` alone. The two files diverge by exactly the v6 cleanups; everything else mirrors.
+`scripts/release/swap-versioned-types.js` swaps the matching versioned file over
+`index.d.ts` during v5 and v7 releases. It leaves `index.d.ts` unchanged for v6.
+
+Update every surface whose runtime major supports the API. A v7-only change goes
+in `index.d.v7.ts`; a change backported to v6 updates `index.d.ts` and
+`index.d.v7.ts`, and also `index.d.v5.ts` when v5 supports it.
 
 ## Adding New Configuration Options
 
 1. **Add default value** in `packages/dd-trace/src/config/defaults.js`
 2. **Map environment variable** in `packages/dd-trace/src/config/index.js` (`#applyEnvironment()` method)
-3. **Add TypeScript definitions** in `index.d.ts`
+3. **Add TypeScript definitions** to each applicable major's declaration file
 4. **Add to telemetry name mapping** (if applicable) in `packages/dd-trace/src/telemetry/telemetry.js`
 5. **Update** `packages/dd-trace/src/config/supported-configurations.json`
 6. **Document** in `docs/API.md` (non-internal/experimental options only)
@@ -311,7 +317,8 @@ cp packages/datadog-plugin-kafkajs/src/index.js packages/datadog-plugin-<name>/s
 ```
 
 Edit `src/index.js`, create `test/index.spec.js`, then register in:
-`packages/dd-trace/src/plugins/index.js`, `index.d.ts`, `docs/test.ts`, `docs/API.md`, `.github/workflows/apm-integrations.yml`
+`packages/dd-trace/src/plugins/index.js`, each applicable major's declaration file,
+`docs/test.ts`, `docs/API.md`, `.github/workflows/apm-integrations.yml`
 
 Validate basic plugin structure with:
 

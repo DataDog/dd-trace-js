@@ -624,7 +624,7 @@ export default [
     ],
     rules: {
       'eslint-rules/eslint-config-names-sync': ['error', {
-        indexDtsPaths: ['index.d.ts', 'index.d.v5.ts'],
+        indexDtsPaths: ['index.d.ts', 'index.d.v5.ts', 'index.d.v7.ts'],
       }],
     },
   },

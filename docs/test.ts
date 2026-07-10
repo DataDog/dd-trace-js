@@ -184,7 +184,7 @@ const httpOptions = {
   allowlist: ['url', /url/, (url: string) => true],
   blocklist: ['url', /url/, (url: string) => true],
   validateStatus: (code: number) => code < 400,
-  headers: { host: '', 'x-tagged': 'my.tag' },
+  headers: ['host'],
   middleware: true
 };
 

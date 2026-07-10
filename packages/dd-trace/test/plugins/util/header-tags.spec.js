@@ -58,6 +58,16 @@ describe('plugins/util/header-tags', () => {
     sinon.assert.calledOnce(log.warn)
   })
 
+  it('does not warn for the legacy array form on v6', () => {
+    ;({ toHeaderTagEntries } = proxyquire('../../../src/plugins/util/header-tags', {
+      '../../../../../version': { DD_MAJOR: 6 },
+      '../../log': log,
+    }))
+
+    toHeaderTagEntries(['x-a:tag'])
+    sinon.assert.notCalled(log.warn)
+  })
+
   it('does not warn for the object form', () => {
     toHeaderTagEntries({ 'x-a': 'tag' })
     sinon.assert.notCalled(log.warn)

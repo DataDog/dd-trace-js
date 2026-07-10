@@ -4,6 +4,36 @@ This guide describes the steps to upgrade dd-trace from a major version to the
 next. If you are having any issues related to migrating, please feel free to
 open an issue or contact our [support](https://www.datadoghq.com/support/) team.
 
+## 6.0 to 7.0 (unreleased)
+
+### `headerTags` prefers an object over an array
+
+The `headerTags` programmatic option and the per-plugin `headers` option
+(`http`, `http2`, the web frameworks) now take an object keyed by header
+name, matching the other mapping-style options (`serviceMapping`,
+`peerServiceMapping`). An empty tag name falls back to
+`http.{request,response}.headers.<header>`.
+
+The legacy `['header:tag']` array (and comma-separated string) still works at
+runtime — it is converted to an object and logs a one-time deprecation
+warning — and will be removed in a future major. `DD_TRACE_HEADER_TAGS`
+keeps parsing the same `'header:tag,header:tag'` string.
+
+```js
+// Deprecated (still works, warns once)
+tracer.init({ headerTags: ['x-user-id:user.id', 'x-team'] })
+tracer.use('http', { client: { headers: ['x-user-id:user.id', 'x-team'] } })
+
+// Preferred
+tracer.init({ headerTags: { 'x-user-id': 'user.id', 'x-team': '' } })
+tracer.use('http', { client: { headers: { 'x-user-id': 'user.id', 'x-team': '' } } })
+```
+
+As a drive-by, the `http2` client now honors custom tag names in this option
+like the `http` and web integrations already did; previously it tagged every
+configured header as `http.{request,response}.headers.<header>` and dropped
+the custom tag name.
+
 ## 5.0 to 6.0
 
 ### Node 18 and 20 are no longer supported
@@ -161,34 +191,6 @@ top-level `appsec.*` fields, and `apmTracingEnabled` (or
 The `ingestion: { sampleRate, rateLimit }` wrapper has been removed. Set
 `sampleRate` and `rateLimit` directly on the top-level `TracerOptions` object,
 or use `DD_TRACE_SAMPLE_RATE` / `DD_TRACE_RATE_LIMIT`.
-
-### `headerTags` prefers an object over an array
-
-The `headerTags` programmatic option and the per-plugin `headers` option
-(`http`, `http2`, the web frameworks) now take an object keyed by header
-name, matching the other mapping-style options (`serviceMapping`,
-`peerServiceMapping`). An empty tag name falls back to
-`http.{request,response}.headers.<header>`.
-
-The legacy `['header:tag']` array (and comma-separated string) still works at
-runtime — it is converted to an object and logs a one-time deprecation
-warning — and will be removed in a future major. `DD_TRACE_HEADER_TAGS`
-keeps parsing the same `'header:tag,header:tag'` string.
-
-```js
-// Deprecated (still works, warns once)
-tracer.init({ headerTags: ['x-user-id:user.id', 'x-team'] })
-tracer.use('http', { client: { headers: ['x-user-id:user.id', 'x-team'] } })
-
-// Preferred
-tracer.init({ headerTags: { 'x-user-id': 'user.id', 'x-team': '' } })
-tracer.use('http', { client: { headers: { 'x-user-id': 'user.id', 'x-team': '' } } })
-```
-
-As a drive-by, the `http2` client now honors custom tag names in this option
-like the `http` and web integrations already did; previously it tagged every
-configured header as `http.{request,response}.headers.<header>` and dropped
-the custom tag name.
 
 ### GraphQL resolver `depth` no longer counts list indices
 

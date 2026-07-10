@@ -290,7 +290,7 @@ To add a new configuration option:
 
 1. **Add the default value** in `packages/dd-trace/src/config/defaults.js`
 2. **Map the environment variable** in `packages/dd-trace/src/config/index.js` (add to destructuring in `#applyEnvironment()` method)
-3. **Add TypeScript definitions** in `index.d.ts`
+3. **Add TypeScript definitions** to each applicable major's declaration file
 4. **Add to telemetry name mapping** (if applicable) in `packages/dd-trace/src/telemetry/telemetry.js`
 5. **Update supported configurations** in `packages/dd-trace/src/config/supported-configurations.json`
 6. **Document the option** in `docs/API.md` (for non-internal/experimental options)
@@ -312,7 +312,7 @@ To create a new plugin for a third-party package, follow these steps:
 6. Edit index.spec.js as appropriate for your new plugin
 7. Add entries to the following files for your new plugin:
   - `packages/dd-trace/src/plugins/index.js`
-  - `index.d.ts`
+  - Each applicable major's declaration file
   - `docs/test.ts`
   - `docs/API.md`
   - `.github/workflows/apm-integrations.yml` (see [Adding a Plugin Test to CI](#adding-a-plugin-test-to-ci))
@@ -738,7 +738,8 @@ Use this checklist:
 
 1. Add the new entry to `packages/dd-trace/src/config/supported-configurations.json`.
 2. Pick the correct `type` and `default`.
-3. Add `configurationNames` if the setting should be exposed via `tracer.init({...})`. Add the documentation to `index.d.ts`.
+3. Add `configurationNames` if the setting should be exposed via `tracer.init({...})`.
+   Add the documentation to each applicable major's declaration file.
 4. Use `internalPropertyName` if the runtime property path should differ.
 5. Add `transform` or `allowed` only if the raw parsed value is not enough.
 6. Add `aliases` or `deprecated` only for compatibility.
