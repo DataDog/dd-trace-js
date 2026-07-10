@@ -86,7 +86,7 @@ class RouterPlugin extends WebPlugin {
       // repeat on the still-live request span instead of a finished one.
       web.root(req)?.addEvent('middleware.next_called_again', {
         'middleware.name': name || '<anonymous>',
-        with_error: error !== undefined && error !== 'route' && error !== 'router',
+        with_error: Boolean(error && error !== 'route' && error !== 'router'),
       })
     })
 

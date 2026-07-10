@@ -2,9 +2,11 @@
 
 const assert = require('node:assert/strict')
 const { AsyncLocalStorage } = require('node:async_hooks')
+const { once } = require('node:events')
 const { inspect } = require('node:util')
 
 const axios = require('axios')
+const dc = require('dc-polyfill')
 const { after, afterEach, before, beforeEach, describe, it } = require('mocha')
 const semver = require('semver')
 const sinon = require('sinon')
@@ -1295,34 +1297,46 @@ describe('Plugin', () => {
           })
         })
 
-        it('records a span event on the request span when a middleware calls next() more than once', done => {
+        it('records whether repeated next() calls receive error arguments', async () => {
           const app = express()
+          const namespace = semver.intersects(version, '<5.0.0') ? 'express' : 'router'
+          const repeatChannel = dc.channel(`apm:${namespace}:middleware:repeat`)
 
           app.use(function twice (req, res, next) {
             next()
-            next()
+            next(null)
+            next(false)
+            next(0)
+            // Publish route sentinels and a truthy error directly so they do not
+            // re-enter the router after the response has ended.
+            repeatChannel.publish({ req, name: 'twice', error: 'route' })
+            repeatChannel.publish({ req, name: 'twice', error: 'router' })
+            repeatChannel.publish({ req, name: 'twice', error: new Error('boom') })
           })
           app.get('/user', (req, res) => res.status(200).send())
 
-          appListener = app.listen(0, 'localhost', () => {
-            const port = appListener.address().port
+          appListener = app.listen(0, 'localhost')
+          await once(appListener, 'listening')
+          const port = appListener.address().port
 
-            agent
-              .assertSomeTraces(traces => {
-                const spans = sort(traces[0])
-                // Span events serialize into `meta.events` on the default
-                // (non-native) encoder path the test agent uses.
-                const events = JSON.parse(spans[0].meta.events)
-                assertObjectContains(events.find(event => event.name === 'middleware.next_called_again'), {
+          await Promise.all([
+            agent.assertSomeTraces(traces => {
+              const spans = sort(traces[0])
+              // Span events serialize into `meta.events` on the default
+              // (non-native) encoder path the test agent uses.
+              const events = JSON.parse(spans[0].meta.events)
+              const repeats = events.filter(event => event.name === 'middleware.next_called_again')
+              const expectedErrors = [false, false, false, false, false, true]
+              assert.strictEqual(repeats.length, expectedErrors.length)
+              for (let i = 0; i < repeats.length; i++) {
+                assertObjectContains(repeats[i], {
                   name: 'middleware.next_called_again',
-                  attributes: { 'middleware.name': 'twice', with_error: false },
+                  attributes: { 'middleware.name': 'twice', with_error: expectedErrors[i] },
                 })
-              })
-              .then(done)
-              .catch(done)
-
-            axios.get(`http://localhost:${port}/user`).catch(done)
-          })
+              }
+            }),
+            axios.get(`http://localhost:${port}/user`),
+          ])
         })
 
         it('should handle middleware exceptions', done => {
