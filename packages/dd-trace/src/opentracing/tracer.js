@@ -5,6 +5,7 @@ const { URL, format } = require('url')
 const SpanProcessor = require('../span_processor')
 const JsSpanProcessor = require('../js_span_processor')
 const getExporter = require('../exporter')
+const exporters = require('../../../../ext/exporters')
 const PrioritySampler = require('../priority_sampler')
 const formats = require('../../../../ext/formats')
 const log = require('../log')
@@ -54,15 +55,25 @@ class DatadogTracer {
     // plain JS spans, the JS span processor (span_format), and a CI-vis
     // exporter (agentless / agent-proxy / test-worker) selected by getExporter.
     // Regular APM tracing uses the native pipeline below.
-    if (config.isCiVisibility) {
-      this._isCiVisibility = true
-      const Exporter = getExporter(config.experimental.exporter)
+    // The electron APM exporter also rides the JS pipeline: it consumes
+    // JS-formatted spans and publishes them over the electron diagnostic
+    // channel instead of shipping to the agent, so it can't use native spans.
+    const useElectronExporter = config.experimental?.exporter === exporters.ELECTRON
+    if (config.isCiVisibility || useElectronExporter) {
+      this._useJsSpans = true
+      this._isCiVisibility = config.isCiVisibility === true
+      const Exporter = useElectronExporter
+        ? require('../exporters/electron')
+        : getExporter(config.experimental.exporter)
       this._exporter = new Exporter(config, this._prioritySampler)
       this._processor = new JsSpanProcessor(this._exporter, this._prioritySampler, config)
       this._url = this._exporter._url
 
-      log.debug('CI Visibility mode enabled (JS span pipeline)')
+      log.debug(useElectronExporter
+        ? 'Electron exporter enabled (JS span pipeline)'
+        : 'CI Visibility mode enabled (JS span pipeline)')
     } else {
+      this._useJsSpans = false
       // Native spans are the only supported APM pipeline. libdatadog is a
       // required dependency; if NativeSpansInterface construction fails, that's
       // a hard error and we let it propagate to the caller.
@@ -142,8 +153,8 @@ class DatadogTracer {
     }
 
     let span
-    if (this._isCiVisibility) {
-      // CI Visibility uses plain JS spans (see the constructor).
+    if (this._useJsSpans) {
+      // CI Visibility + the electron exporter use plain JS spans (see the constructor).
       span = new Span(this, this._processor, this._prioritySampler, fields, this._debug)
     } else {
       const NativeDatadogSpan = getNativeModule().NativeDatadogSpan
