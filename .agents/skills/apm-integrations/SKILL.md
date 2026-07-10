@@ -36,7 +36,7 @@ Both layers are always needed for a new integration.
 
 ## Instrumentation: Orchestrion First
 
-**Orchestrion is the required default when the work exists as a source function.** It rewrites matched CJS/ESM source from JSON config, avoiding runtime monkey-patching and ESM's static-binding traps. Start there for top-level declarations, class/object methods, named expressions, and assignments to named receivers. Use shimmer only when the work is created entirely at runtime or the argument mutation cannot happen from Orchestrion's `bindStart` / subscriber lifecycle.
+**Orchestrion is the required default when the work exists as a source function.** It rewrites matched CJS/ESM source from JavaScript config, avoiding runtime monkey-patching and ESM's static-binding traps. Start there for top-level declarations, class/object methods, named expressions, and assignments to named receivers. Use shimmer only when the work is created entirely at runtime or the argument mutation cannot happen from Orchestrion's `bindStart` / subscriber lifecycle.
 
 Config lives in `packages/datadog-instrumentations/src/helpers/rewriter/instrumentations/<name>.js`. See [Orchestrion Reference](references/orchestrion.md) for the full config format and examples.
 
@@ -109,7 +109,7 @@ Context flows from instrumentation to plugin:
 ### Channel Event Lifecycle
 
 - `runStores()` for **start** events — establishes async context (always)
-- `publish()` for **finish/error** events — notification only
+- `publish()` for **completion/error** events — notification only
 - `hasSubscribers` guard — skip publish/subscriber work when no plugin listens; orchestrion still pays wrapper setup in current templates
 - When shimmer is necessary, prefer `tracingChannel` (from `dc-polyfill`) over manual channels — it provides `start/end/asyncStart/asyncEnd/error` events automatically
 
@@ -119,9 +119,9 @@ Context flows from instrumentation to plugin:
 - **Shimmer + `tracingChannel`** (preferred): `tracing:apm:<name>:<operation>` (set via `static prefix`)
 - **Shimmer + manual channels** (legacy): `apm:{id}:{operation}` (default, no `static prefix` needed)
 
-### `bindStart` / `bindFinish`
+### `bindStart` and completion handlers
 
-Primary plugin methods. Base classes handle most lifecycle; often only `bindStart` is needed to create the span and set tags.
+Use `bindStart` to create the span and return its store. Finish in the event the instrumentation emits: usually `end` for synchronous work, `asyncEnd` for promises/callbacks, and `finish` only for legacy instrumentations that publish it. Orchestrion does not publish `finish`.
 
 ### Subscriber Cardinality (`channel.publish` position)
 

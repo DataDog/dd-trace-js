@@ -13,9 +13,8 @@ Engine: `@apm-js-collab/code-transformer` (mirror of
 > **Verify before relying on a field/transform.** The engine is actively
 > developed and the config surface changes between releases. This doc tracks
 > the vendored version (currently 0.15.0); confirm anything below against the
-> installed source — `lib/transformer.js` (`#fromFunctionQuery`, `#getOperator`,
-> `#visit`) and `lib/transforms.js`. The vendored bundle is single-file with a
-> source map; extract `sourcesContent` to read the originals.
+> package source: `lib/transformer.js` (`#fromFunctionQuery`, `#getOperator`,
+> `#visit`) and `lib/transforms.js`.
 
 ## Decision Rule
 
@@ -46,11 +45,13 @@ packages/datadog-instrumentations/src/
 └── helpers/
     ├── hooks.js                              # Add: '<name>': () => require('../<name>')
     └── rewriter/
-        ├── transforms.js                     # Custom transforms (addTransform)
         └── instrumentations/
             ├── index.js                      # Add: ...require('./<name>')
             └── <name>.js                     # The config array
 ```
+
+Add to `transforms.js` only when the built-in operators cannot express the
+required lifecycle.
 
 Hooks file (`src/<name>.js`):
 
@@ -73,15 +74,14 @@ runs on the matched files. Without this file the rewriter is never triggered.
 {
   module: {
     name: string,            // npm package name, e.g. 'bullmq', '@langchain/core'
-    versionRange: string,    // semver range, e.g. '>=1.0.0' — fail-fast version guard
+    versionRange: string,    // semver range, e.g. '>=1.0.0'
     filePath: string,        // path within the package, e.g. 'dist/cjs/queue.js'
   },
 
-  // One of: functionQuery (preferred) or astQuery (escape hatch).
-  functionQuery: {
-    kind: 'Async' | 'Auto' | 'Callback' | 'Sync',  // operator; default 'Sync'
+  functionQuery?: {
+    kind?: 'Async' | 'Auto' | 'Callback' | 'Sync', // operator; default 'Sync'
     className?: string,            // scope to a class (with methodName, or alone for ctor)
-    methodName?: string,           // class/object method — LITERAL key only (see note)
+    methodName?: string,           // class/object method with an uncomputed identifier key
     privateMethodName?: string,    // #private method
     functionName?: string,         // FunctionDeclaration by name
     expressionName?: string,       // named FunctionExpression / arrow / assignment
@@ -93,15 +93,21 @@ runs on the matched files. Without this file the rewriter is never triggered.
     isExportAlias?: boolean,       // resolve ESM `export { local as exported }` to local
   },
 
-  astQuery?: string,         // raw ESQuery selector; bypasses functionQuery entirely
+  astQuery?: string,         // raw ESQuery selector; replaces functionQuery targeting only
   transform?: string,        // name of a custom transform (overrides kind)
   channelName: string,       // segment of the channel name (see below)
 }
 ```
 
+Without `astQuery`, the targeting fields in `functionQuery` generate the
+selector. `astQuery` replaces only that selector: built-in wrappers still read
+`kind`, `callbackIndex`, `index`, and `returnKind` from `functionQuery`. Pair the
+two for an async, callback, or iterator hook. A custom `transform` can omit
+`functionQuery`.
+
 **Pick the narrowest source match that names the real owner.**
 
-- `methodName` matches literal class/object keys only. Computed keys
+- Use `methodName` for uncomputed identifier keys. Computed keys
   (`{ [name] () {} }`) and string-literal keys need `astQuery`.
 - `functionName` beats shimmer for decorated handles. If `app.decorate('x', fn)`
   exposes work through `app.x` but all paths call `async function foo (…)`, match
@@ -138,10 +144,8 @@ chosen wrapper, patching `next`/`throw`/`return` on the returned iterator and
 publishing to a second `…:next` channel (`Iterator` → sync, `AsyncIterator` →
 promise). Use it with a base `kind` for the call itself — e.g. a method that
 returns `Promise<AsyncIterable>` uses `kind: 'Async', returnKind: 'AsyncIterator'`
-(see `langgraph.js`). This is a two-plugin pattern; read
-[async-iterator-pattern.md](./async-iterator-pattern.md) (note: that doc
-predates the `returnKind` field name — the *mechanism* matches, verify field
-names against the installed version).
+(see `langgraph.js`). Subscribe a second plugin to the `…:next` prefix; see
+`packages/datadog-plugin-langgraph/src/stream.js`.
 
 ## Channel Name Formation
 
@@ -156,9 +160,14 @@ Events: `start`, `asyncStart`, `asyncEnd`, `end`, `error` (plus the
 
 ## Plugin Subscription
 
-Set `static prefix` to the channel base; `TracingPlugin` subscribes
-`start`/`end`/`asyncStart`/`asyncEnd`/`error`/`finish` and routes them to
-`bindStart`/`bindFinish`/`end`/`error`.
+Set `static prefix` to the channel base. Orchestrion emits `start`, `end`,
+`asyncStart`, `asyncEnd`, and `error`; `TracingPlugin` registers same-named
+handlers and `bind<Event>` store transforms that the plugin defines.
+Orchestrion does not emit `finish`, so cleanup in `finish` or `bindFinish` will
+not run. Finish synchronous spans in `end` and promise/callback spans in
+`asyncEnd`.
+
+For a `kind: 'Async'` target that always returns a promise:
 
 ```javascript
 class MyPlugin extends TracingPlugin {
@@ -172,6 +181,10 @@ class MyPlugin extends TracingPlugin {
     }, ctx)
     return ctx.currentStore
   }
+
+  asyncEnd (ctx) {
+    ctx.currentStore?.span.finish()
+  }
 }
 ```
 
@@ -183,34 +196,10 @@ in a `CompositePlugin` (see langchain).
 Multiple module prefixes are manual today. `TracingPlugin.addTraceSub()` and
 `addTraceBind()` read only `this.constructor.prefix`; a `static extraPrefixes`
 field does nothing unless the plugin overrides `addTraceSubs()`, calls `super`,
-then registers the same events for each extra prefix. Use this for forks or
-re-exporting packages that should create the same logical span; see
-`datadog-plugin-graphql/src/execute.js`.
-
-```javascript
-class MyPlugin extends TracingPlugin {
-  static prefix = 'tracing:orchestrion:<npm-package>:Client_query'
-  static extraPrefixes = [
-    'tracing:orchestrion:<fork-package>:Client_query',
-  ]
-
-  addTraceSubs () {
-    super.addTraceSubs()
-
-    for (const prefix of this.constructor.extraPrefixes) {
-      for (const event of ['start', 'end', 'asyncStart', 'asyncEnd', 'error', 'finish']) {
-        const bindName = `bind${event.charAt(0).toUpperCase()}${event.slice(1)}`
-        if (this[event]) {
-          this.addSub(`${prefix}:${event}`, this[event].bind(this))
-        }
-        if (this[bindName]) {
-          this.addBind(`${prefix}:${event}`, this[bindName].bind(this))
-        }
-      }
-    }
-  }
-}
-```
+then repeats the handler/binding registration for the five generated events.
+Use this for forks or re-exporting packages that should create the same logical
+span. See the `addTraceSubs()` loop in
+`packages/datadog-plugin-graphql/src/execute.js`.
 
 ## Custom Transforms
 
@@ -272,7 +261,8 @@ directly.
   `helpers/rewriter/instrumentations/langchain.js`, hooks `src/langchain.js`,
   plugin `packages/datadog-plugin-langchain/src/tracing.js`.
 - **LangGraph** (`returnKind: 'AsyncIterator'`):
-  `helpers/rewriter/instrumentations/langgraph.js`.
+  `helpers/rewriter/instrumentations/langgraph.js` and
+  `packages/datadog-plugin-langgraph/src/stream.js`.
 - **graphql** (`functionName` + `Sync`, and why per-field resolve hooks are
   *not* done via orchestrion): `helpers/rewriter/instrumentations/graphql.js`.
 - **BullMQ** (single package): config
