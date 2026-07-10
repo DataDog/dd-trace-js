@@ -4,7 +4,7 @@
   "main": "typedoc.js",
   "scripts": {
     "build": "typedoc --tsconfig tsconfig.v7.json ../index.d.v7.ts",
-    "pretest": "tsc -p . && tsc -p tsconfig.v7.json",
+    "pretest": "tsc -p . && tsc -p tsconfig.v5.json && tsc -p tsconfig.v7.json",
     "test": "node test"
   },
   "license": "BSD-3-Clause",

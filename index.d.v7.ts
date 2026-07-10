@@ -1256,14 +1256,11 @@ declare namespace tracer {
     /**
      * HTTP headers to extract and attach to spans as tags, keyed by header name. An empty tag
      * name falls back to `http.{request,response}.headers.<header>`.
-     *
-     * The legacy `['x-my-header:my.tag']` array is still accepted at runtime but deprecated;
-     * it logs a warning and will be removed in a future major.
      * @default {}
      * @env DD_TRACE_HEADER_TAGS
      * Programmatic configuration takes precedence over the environment variables listed above.
      */
-    headerTags?: { [header: string]: string } | string[]
+    headerTags?: { [header: string]: string }
 
     /**
      * Whether to use Datadog legacy baggage extraction and injection behavior.
@@ -1993,12 +1990,9 @@ declare namespace tracer {
        * Headers to include in the span metadata, keyed by header name. An empty tag
        * name falls back to `http.{request,response}.headers.<header>`.
        *
-       * The legacy array form (`['x-my-header:my.tag']`) is still accepted but
-       * deprecated; it logs a warning and will be removed in a future major.
-       *
        * @default {}
        */
-      headers?: { [header: string]: string } | string[];
+      headers?: { [header: string]: string };
 
       /**
        * Callback function to determine if there was an error. It should take a

@@ -511,7 +511,7 @@ describe('Plugin', function () {
 
       beforeEach(() => {
         config = {
-          headers: ['x-baz', 'x-foo'],
+          headers: { 'x-baz': '', 'x-foo': '' },
         }
 
         return agent.load('fetch', config)

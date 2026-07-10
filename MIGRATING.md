@@ -6,25 +6,26 @@ open an issue or contact our [support](https://www.datadoghq.com/support/) team.
 
 ## 6.0 to 7.0 (unreleased)
 
-### `headerTags` prefers an object over an array
+### `headerTags` only accepts an object
 
 The `headerTags` programmatic option and the per-plugin `headers` option
-(`http`, `http2`, the web frameworks) now take an object keyed by header
+(`http`, `http2`, the web frameworks) no longer accept the legacy
+`['header:tag']` array. v5 and v6 accept both arrays and objects, and log a
+deprecation warning for arrays. v7 only accepts an object keyed by header
 name, matching the other mapping-style options (`serviceMapping`,
-`peerServiceMapping`). An empty tag name falls back to
-`http.{request,response}.headers.<header>`.
+`peerServiceMapping`).
 
-The legacy `['header:tag']` array (and comma-separated string) still works at
-runtime — it is converted to an object and logs a one-time deprecation
-warning — and will be removed in a future major. `DD_TRACE_HEADER_TAGS`
-keeps parsing the same `'header:tag,header:tag'` string.
+An empty tag name falls back to
+`http.{request,response}.headers.<header>`. The undocumented comma-separated
+programmatic string is removed with the array form. `DD_TRACE_HEADER_TAGS`
+keeps parsing the same `'header:tag,header:tag'` environment variable.
 
 ```js
-// Deprecated (still works, warns once)
+// Before (v5/v6, deprecated)
 tracer.init({ headerTags: ['x-user-id:user.id', 'x-team'] })
 tracer.use('http', { client: { headers: ['x-user-id:user.id', 'x-team'] } })
 
-// Preferred
+// After (v7)
 tracer.init({ headerTags: { 'x-user-id': 'user.id', 'x-team': '' } })
 tracer.use('http', { client: { headers: { 'x-user-id': 'user.id', 'x-team': '' } } })
 ```

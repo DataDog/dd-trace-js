@@ -13,9 +13,9 @@ let hasWarnedLegacyFormat = false
  * Plugins call this once at configure time so the per-request tagging loop stays a
  * plain array iteration.
  *
- * The going-forward shape is an object (`{ 'x-header': 'my.tag' }`). The legacy
- * `['x-header:my.tag']` array is still accepted with a one-time deprecation warning
- * on v7.
+ * The going-forward shape is an object (`{ 'x-header': 'my.tag' }`). Before v7,
+ * the legacy `['x-header:my.tag']` array is accepted with a one-time deprecation
+ * warning.
  *
  * @param {Record<string, string> | string[] | undefined} input
  * @returns {Array<[string, string | undefined]>}
@@ -26,8 +26,9 @@ function toHeaderTagEntries (input) {
   }
 
   if (Array.isArray(input)) {
+    warnArrayFormat()
     if (DD_MAJOR >= 7) {
-      warnLegacyFormat()
+      return []
     }
     const result = []
     for (const entry of input) {
@@ -49,12 +50,15 @@ function toHeaderTagEntries (input) {
   return result
 }
 
-function warnLegacyFormat () {
+function warnArrayFormat () {
   if (hasWarnedLegacyFormat) {
     return
   }
   hasWarnedLegacyFormat = true
-  log.warn('The array form of the plugin `headers` option is deprecated. Pass an object keyed by header name instead.')
+  log.warn(DD_MAJOR >= 7
+    ? 'The array form of the plugin `headers` option is not supported in v7. Pass an object keyed by header name.'
+    : 'The array form of the plugin `headers` option is deprecated and will be removed in v7. ' +
+      'Pass an object keyed by header name.')
 }
 
 module.exports = { toHeaderTagEntries }

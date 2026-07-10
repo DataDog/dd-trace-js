@@ -14,5 +14,17 @@ const httpOptions: plugins.HttpServer = {
   },
 }
 
+const legacyTracerOptions: TracerOptions = {
+  // @ts-expect-error The array form was removed in v7.
+  headerTags: ['x-user-id:user.id'],
+}
+
+const legacyHttpOptions: plugins.HttpServer = {
+  // @ts-expect-error The array form was removed in v7.
+  headers: ['x-user-id:user.id'],
+}
+
 void tracerOptions
 void httpOptions
+void legacyTracerOptions
+void legacyHttpOptions

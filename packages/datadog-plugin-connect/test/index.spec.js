@@ -564,7 +564,7 @@ describe('Plugin', () => {
           return agent.load(['connect', 'http'], [{
             service: 'custom',
             validateStatus: code => code < 400,
-            headers: ['User-Agent'],
+            headers: { 'User-Agent': '' },
           }, { client: false }])
         })
 

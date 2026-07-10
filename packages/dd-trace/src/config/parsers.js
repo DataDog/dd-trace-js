@@ -40,18 +40,28 @@ const transformers = {
    * Normalize the `headerTags` option to an object keyed by header name. The env var
    * is already parsed to an object by the `map` parser; the programmatic option may
    * still be given as the legacy `['header:tag']` array or comma-separated string,
-   * which is converted here with a one-time deprecation warning on v7.
+   * which is converted here with a one-time deprecation warning before v7.
    *
    * @param {Record<string, string> | string[] | string} value
-   * @returns {Record<string, string>}
+   * @param {string} optionName
+   * @param {string} source
+   * @returns {Record<string, string> | undefined}
    */
-  headerTags (value) {
-    if (value && (typeof value === 'string' || Array.isArray(value))) {
-      if (DD_MAJOR >= 7 && !hasWarnedLegacyHeaderTags) {
+  headerTags (value, optionName, source) {
+    if (DD_MAJOR >= 7) {
+      if (value !== undefined && (typeof value !== 'object' || value === null || Array.isArray(value))) {
+        warnInvalidValue(value, optionName, source, '`headerTags` only accepts an object in v7')
+        return
+      }
+      return value
+    }
+    if (typeof value === 'string' || Array.isArray(value)) {
+      if (!hasWarnedLegacyHeaderTags) {
         hasWarnedLegacyHeaderTags = true
         // Lazy require to avoid the early-load cycle the rest of this module dodges.
         require('../log').warn(
-          'The array/string form of `headerTags` is deprecated. Pass an object keyed by header name.'
+          'The array/string form of `headerTags` is deprecated and will be removed in v7. ' +
+          'Pass an object keyed by header name.'
         )
       }
       const entries = {}

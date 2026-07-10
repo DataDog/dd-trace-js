@@ -305,29 +305,68 @@ describe('Config', () => {
   })
 
   describe('headerTags', () => {
-    it('normalizes an object programmatic value', () => {
-      assert.deepStrictEqual(getConfig({ headerTags: { 'x-a': 'tag', 'x-b': '' } }).headerTags,
-        { 'x-a': 'tag', 'x-b': '' })
+    it('accepts an object programmatic value on v5, v6, and v7', () => {
+      for (const ddMajor of [5, 6, 7]) {
+        assert.deepStrictEqual(
+          getConfig({ headerTags: { 'x-a': 'tag', 'x-b': '' } }, { ddMajor }).headerTags,
+          { 'x-a': 'tag', 'x-b': '' }
+        )
+        sinon.assert.notCalled(log.warn)
+      }
     })
 
-    it('normalizes the legacy array programmatic value to an object', () => {
-      assert.deepStrictEqual(getConfig({ headerTags: ['x-a : tag', 'x-b'] }).headerTags,
-        { 'x-a': 'tag', 'x-b': '' })
+    it('normalizes and deprecates the legacy array programmatic value on v5 and v6', () => {
+      for (const ddMajor of [5, 6]) {
+        assert.deepStrictEqual(
+          getConfig({ headerTags: ['x-a : tag', 'x-b'] }, { ddMajor }).headerTags,
+          { 'x-a': 'tag', 'x-b': '' }
+        )
+        sinon.assert.calledOnceWithMatch(
+          log.warn,
+          'The array/string form of `headerTags` is deprecated and will be removed in v7.'
+        )
+      }
     })
 
-    it('warns when normalizing the legacy array programmatic value on v7', () => {
-      getConfig({ headerTags: ['x-a : tag'] })
-      sinon.assert.calledOnceWithMatch(log.warn, 'The array/string form of `headerTags` is deprecated.')
+    it('rejects the legacy array programmatic value on v7', () => {
+      assert.deepStrictEqual(
+        getConfig({ headerTags: ['x-a : tag'] }, { ddMajor: 7 }).headerTags,
+        {}
+      )
+      sinon.assert.calledOnceWithMatch(
+        log.warn,
+        '`headerTags` only accepts an object in v7'
+      )
     })
 
-    it('does not warn when normalizing the legacy array programmatic value on v6', () => {
-      getConfig({ headerTags: ['x-a : tag'] }, { ddMajor: 6 })
-      sinon.assert.notCalled(log.warn)
+    it('normalizes and deprecates the legacy string programmatic value on v5 and v6', () => {
+      for (const ddMajor of [5, 6]) {
+        assert.deepStrictEqual(
+          getConfig({ headerTags: 'x-a : tag' }, { ddMajor }).headerTags,
+          { 'x-a': 'tag' }
+        )
+        sinon.assert.calledOnceWithMatch(
+          log.warn,
+          'The array/string form of `headerTags` is deprecated and will be removed in v7.'
+        )
+      }
+    })
+
+    it('rejects the legacy string programmatic value on v7', () => {
+      assert.deepStrictEqual(
+        getConfig({ headerTags: 'x-a : tag' }, { ddMajor: 7 }).headerTags,
+        {}
+      )
+      sinon.assert.calledOnceWithMatch(
+        log.warn,
+        '`headerTags` only accepts an object in v7'
+      )
     })
 
     it('normalizes the DD_TRACE_HEADER_TAGS env var to an object', () => {
       process.env.DD_TRACE_HEADER_TAGS = 'x-a : tag, x-b : '
       assert.deepStrictEqual(getConfig().headerTags, { 'x-a': 'tag', 'x-b': '' })
+      sinon.assert.notCalled(log.warn)
     })
   })
 

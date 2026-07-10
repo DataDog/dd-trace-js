@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "files": [
+    "../index.d.v5.ts",
+    "test-v5.ts"
+  ]
+}

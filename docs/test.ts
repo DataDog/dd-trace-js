@@ -184,8 +184,12 @@ const httpOptions = {
   allowlist: ['url', /url/, (url: string) => true],
   blocklist: ['url', /url/, (url: string) => true],
   validateStatus: (code: number) => code < 400,
-  headers: ['host'],
+  headers: { host: '', 'x-tagged': 'my.tag' },
   middleware: true
+};
+
+const legacyHttpOptions: plugins.HttpServer = {
+  headers: ['host']
 };
 
 const httpServerOptions: plugins.HttpServer = {

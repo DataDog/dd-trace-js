@@ -634,9 +634,10 @@ The `sampleRate` transform validates and clamps the value to the supported `0..1
 ```
 
 The env var is parsed to an object by the `map` parser. The programmatic option skips
-the parser, so the `headerTags` transform accepts the legacy `['header:tag']` array (or
-comma-separated string), converts it to the same object shape via `tagger.add`, and logs
-a one-time deprecation warning. Both input styles converge on one shape:
+the parser, so on v5 and v6 the `headerTags` transform converts the legacy
+`['header:tag']` array (or comma-separated string) to the same object shape via
+`tagger.add` and logs a one-time deprecation warning. v7 rejects the legacy form.
+Accepted values converge on one shape:
 
 ```bash
 DD_TRACE_HEADER_TAGS="x-user-id : user.id, x-team : team"

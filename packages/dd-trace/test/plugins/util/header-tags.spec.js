@@ -14,6 +14,7 @@ describe('plugins/util/header-tags', () => {
     log = { warn: sinon.spy() }
     // Fresh module per test so the once-only deprecation flag resets.
     ;({ toHeaderTagEntries } = proxyquire('../../../src/plugins/util/header-tags', {
+      '../../../../../version': { DD_MAJOR: 6 },
       '../../log': log,
     }))
   })
@@ -55,21 +56,41 @@ describe('plugins/util/header-tags', () => {
   it('warns exactly once for the legacy array form', () => {
     toHeaderTagEntries(['x-a:tag'])
     toHeaderTagEntries(['x-b:tag'])
-    sinon.assert.calledOnce(log.warn)
+    sinon.assert.calledOnceWithMatch(log.warn, 'deprecated and will be removed in v7')
   })
 
-  it('does not warn for the legacy array form on v6', () => {
+  it('accepts and deprecates the legacy array form on v5', () => {
     ;({ toHeaderTagEntries } = proxyquire('../../../src/plugins/util/header-tags', {
-      '../../../../../version': { DD_MAJOR: 6 },
+      '../../../../../version': { DD_MAJOR: 5 },
       '../../log': log,
     }))
 
-    toHeaderTagEntries(['x-a:tag'])
-    sinon.assert.notCalled(log.warn)
+    assert.deepStrictEqual(toHeaderTagEntries(['x-a:tag']), [['x-a', 'tag']])
+    sinon.assert.calledOnceWithMatch(log.warn, 'deprecated and will be removed in v7')
+  })
+
+  it('rejects the legacy array form on v7', () => {
+    ;({ toHeaderTagEntries } = proxyquire('../../../src/plugins/util/header-tags', {
+      '../../../../../version': { DD_MAJOR: 7 },
+      '../../log': log,
+    }))
+
+    assert.deepStrictEqual(toHeaderTagEntries(['x-a:tag']), [])
+    sinon.assert.calledOnceWithMatch(log.warn, 'not supported in v7')
   })
 
   it('does not warn for the object form', () => {
     toHeaderTagEntries({ 'x-a': 'tag' })
+    sinon.assert.notCalled(log.warn)
+  })
+
+  it('accepts the object form on v7', () => {
+    ;({ toHeaderTagEntries } = proxyquire('../../../src/plugins/util/header-tags', {
+      '../../../../../version': { DD_MAJOR: 7 },
+      '../../log': log,
+    }))
+
+    assert.deepStrictEqual(toHeaderTagEntries({ 'x-a': 'tag' }), [['x-a', 'tag']])
     sinon.assert.notCalled(log.warn)
   })
 })

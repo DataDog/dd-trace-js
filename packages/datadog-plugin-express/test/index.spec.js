@@ -1576,7 +1576,7 @@ describe('Plugin', () => {
           return agent.load(['express', 'http', 'router'], [{
             service: 'custom',
             validateStatus: code => code < 400,
-            headers: ['User-Agent'],
+            headers: { 'User-Agent': '' },
             blocklist: ['/health'],
           }, { client: false }, {}])
         })

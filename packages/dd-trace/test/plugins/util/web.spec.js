@@ -83,10 +83,10 @@ describe('plugins/util/web', () => {
       assert.strictEqual(config.hooks.request(), 'test')
     })
 
-    it('should still accept the legacy array form for headers', () => {
+    it('should reject the legacy array form for headers on v7', () => {
       const config = web.normalizeConfig({ headers: ['test', 'x-tagged:my.tag'] })
 
-      assert.deepStrictEqual(config.headers, [['test', undefined], ['x-tagged', 'my.tag']])
+      assert.deepStrictEqual(config.headers, [])
     })
 
     describe('queryStringObfuscation', () => {
