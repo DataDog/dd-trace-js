@@ -357,6 +357,13 @@
     "auto-instrumented": "True"
   },
   {
+    "dependency": "electron",
+    "integration": "electron",
+    "minimum_tracer_supported": "37.0.0",
+    "max_tracer_supported": "42.1.0",
+    "auto-instrumented": "True"
+  },
+  {
     "dependency": "express",
     "integration": "express",
     "minimum_tracer_supported": "4.0.0",

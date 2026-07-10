@@ -254,7 +254,6 @@ interface Plugins {
   "cypress": tracer.plugins.cypress;
   "dns": tracer.plugins.dns;
   "elasticsearch": tracer.plugins.elasticsearch;
-  /** @deprecated The Electron plugin has moved to the Electron SDK. */
   "electron": tracer.plugins.electron;
   "express": tracer.plugins.express;
   "fastify": tracer.plugins.fastify;
@@ -2552,8 +2551,6 @@ declare namespace tracer {
     /**
      * This plugin automatically instruments the
      * [electron](https://github.com/electron/electron) module.
-     *
-     * @deprecated The Electron plugin has moved to the Electron SDK.
      */
     interface electron extends Instrumentation {
       /**

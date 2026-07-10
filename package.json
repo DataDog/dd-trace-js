@@ -80,6 +80,7 @@
     "test:integration:cypress:coverage": "node ./integration-tests/coverage/run-suite.js --timeout 60000 \"integration-tests/cypress/${SPEC:-cypress-*}.spec.js\"",
     "test:integration:debugger": "mocha --timeout 60000 \"integration-tests/debugger/*.spec.js\"",
     "test:integration:debugger:coverage": "node ./integration-tests/coverage/run-suite.js --timeout 60000 \"integration-tests/debugger/*.spec.js\"",
+    "test:integration:electron": "mocha \"integration-tests/electron/*.spec.js\"",
     "test:integration:esbuild": "mocha --timeout 60000 \"integration-tests/esbuild/*.spec.js\"",
     "test:integration:esbuild:coverage": "node ./integration-tests/coverage/run-suite.js --timeout 60000 \"integration-tests/esbuild/*.spec.js\"",
     "test:integration:webpack": "mocha --timeout 60000 \"integration-tests/webpack/*.spec.js\"",
