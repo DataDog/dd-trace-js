@@ -52,7 +52,7 @@ if (!patched.has(Runner.prototype)) {
       })
     } catch (err) {
       if (shouldSuppress(this)) return fn()
-      throw err
+      return fn(err)
     }
   }
 }

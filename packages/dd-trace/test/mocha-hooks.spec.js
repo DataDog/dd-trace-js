@@ -261,6 +261,40 @@ describe('mocha hooks setup', () => {
     assert.deepStrictEqual(getFailureMessages(result), ['test failed'])
   })
 
+  it('reports before all errors after async before all hooks with allow uncaught enabled', async () => {
+    const result = await runFixture(`
+      describe('suite', () => {
+        before(async () => {})
+
+        before(() => {
+          throw new Error('setup failed')
+        })
+
+        it('does something', () => {})
+      })
+    `, ['--allow-uncaught'])
+
+    assert.deepStrictEqual(getFailureMessages(result), ['setup failed'])
+  })
+
+  it('suppresses after all errors with allow uncaught enabled', async () => {
+    const result = await runFixture(`
+      describe('suite', () => {
+        before(() => {
+          throw new Error('setup failed')
+        })
+
+        after(() => {
+          throw new Error('cleanup failed')
+        })
+
+        it('does something', () => {})
+      })
+    `, ['--allow-uncaught'])
+
+    assert.deepStrictEqual(getFailureMessages(result), ['setup failed'])
+  })
+
   it('does not let a suppressed after each error change bail behavior', async () => {
     const result = await runFixture(`
       describe('suite', () => {
