@@ -39,6 +39,10 @@ jobs:
       packages: write
     with:
       library: nodejs
+      # TEMPORARY: pin system-tests to the branch that flushes native client stats
+      # on /trace/stats/flush (DataDog/system-tests#7293). Revert to the default
+      # (drop this `ref`) once #7293 merges to system-tests main.
+      ref: bengl/parametric-native-stats-flush
       binaries_artifact: system_tests_binaries
       desired_execution_time: 300 # 5 minutes
       scenarios_groups: tracer-release
