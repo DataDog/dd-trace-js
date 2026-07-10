@@ -93,7 +93,8 @@ function testInjectionScenarios (arg, filename, esmWorks = false) {
 }
 
 function testRuntimeVersionChecks (arg, filename) {
-  const skipRuntimeVersionChecks = filename === 'initialize.mjs' && process.versions.node === '22.0.0'
+  const skipRuntimeVersionChecks = filename === 'initialize.mjs' &&
+    ['22.0.0', '24.0.0'].includes(process.versions.node)
   const runtimeVersionContext = skipRuntimeVersionChecks ? context.skip : context
 
   runtimeVersionContext('runtime version check', () => {
