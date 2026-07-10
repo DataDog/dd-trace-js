@@ -1,6 +1,6 @@
 'use strict'
 
-const { storage } = require('../../datadog-core')
+const { kStoreRetirement, storage } = require('../../datadog-core/src/storage')
 
 const legacyStorage = storage('legacy')
 
@@ -36,22 +36,28 @@ class Scope {
   bind (fn, span) {
     if (typeof fn !== 'function') return fn
 
+    if (span === undefined) {
+      const store = legacyStorage.getStore()
+      if (store?.[kStoreRetirement]) {
+        return function (...args) {
+          try {
+            return legacyStorage.run(store, () => fn.apply(this, args))
+          } catch (error) {
+            store.span?.setTag('error', error)
+            throw error
+          }
+        }
+      }
+      span = this.active()
+    }
+
     const scope = this
-    const spanOrActive = this._spanOrActive(span)
 
     return function (...args) {
-      return scope.activate(spanOrActive, () => {
+      return scope.activate(span, () => {
         return fn.apply(this, args)
       })
     }
-  }
-
-  _spanOrActive (span) {
-    return span === undefined ? this.active() : span
-  }
-
-  _isPromise (promise) {
-    return promise && typeof promise.then === 'function'
   }
 }
 

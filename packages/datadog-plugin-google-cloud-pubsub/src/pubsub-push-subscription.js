@@ -1,6 +1,7 @@
 'use strict'
 
 const TracingPlugin = require('../../dd-trace/src/plugins/tracing')
+const { createStoreRetirement, enterSpanForRetirement } = require('../../dd-trace/src/active-span')
 const SpanContext = require('../../dd-trace/src/opentracing/span_context')
 const id = require('../../dd-trace/src/id')
 const log = require('../../dd-trace/src/log')
@@ -32,12 +33,28 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     this.addSub('apm:http:server:request:finish', ({ req }) => {
       this.#finishPushReceiveSpan(req)
     })
+    this.addSub('apm:http:server:request:postfinish', ({ req }) => {
+      this.#retirePushReceiveSpan(req)
+    })
   }
 
+  /**
+   * @param {import('node:http').IncomingMessage} req
+   */
   #finishPushReceiveSpan (req) {
-    const pushReceiveSpan = pushReceiveSpans.get(req)
-    if (pushReceiveSpan && !pushReceiveSpan._duration) {
-      pushReceiveSpan.finish()
+    const entry = pushReceiveSpans.get(req)
+    if (entry && !entry.span._duration) {
+      entry.span.finish()
+    }
+  }
+
+  /**
+   * @param {import('node:http').IncomingMessage} req
+   */
+  #retirePushReceiveSpan (req) {
+    const entry = pushReceiveSpans.get(req)
+    if (entry) {
+      entry.retirement.retire()
       pushReceiveSpans.delete(req)
     }
   }
@@ -61,6 +78,9 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
     return false
   }
 
+  /**
+   * @param {{ req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse }} ctx
+   */
   #createPushReceiveSpanAndActivate (ctx) {
     const { req, res } = ctx
     const messageData = this.#parseMessage(req)
@@ -90,8 +110,9 @@ class GoogleCloudPubsubPushSubscriptionPlugin extends TracingPlugin {
       return
     }
 
-    this.enter(pushReceiveSpan, { req, res })
-    pushReceiveSpans.set(req, pushReceiveSpan)
+    const retirement = createStoreRetirement(pushReceiveSpan.context())
+    enterSpanForRetirement(pushReceiveSpan, { req, res }, retirement)
+    pushReceiveSpans.set(req, { span: pushReceiveSpan, retirement })
   }
 
   #parseMessage (req) {

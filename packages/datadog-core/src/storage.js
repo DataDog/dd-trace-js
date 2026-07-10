@@ -2,6 +2,8 @@
 
 const { AsyncLocalStorage } = require('async_hooks')
 
+const kStoreRetirement = Symbol('dd-trace.store-retirement')
+
 /**
  * `AsyncLocalStorage` with a `getHandle()` escape hatch: a span stashes the
  * active handle at creation (see opentracing/span.js) so a later context can
@@ -19,6 +21,15 @@ const { AsyncLocalStorage } = require('async_hooks')
  * @typedef {Record<string, T>} Store
  */
 class DatadogStorage extends AsyncLocalStorage {
+  /**
+   * @param {Store<unknown>} [store]
+   * @override
+   */
+  enterWith (store) {
+    store?.[kStoreRetirement]?.add(store)
+    return super.enterWith(store)
+  }
+
   /**
    * Passthrough to the real `getStore()`. A span stashes this handle and feeds
    * it back to `getStore(handle)` later. Identical in both modes: under ACF the
@@ -53,6 +64,7 @@ const isACFActive = (() => {
   return active
 })()
 
+/* istanbul ignore if: legacy async_hooks backend is covered on supported Node releases without ACF */
 if (!isACFActive) {
   const superGetStore = AsyncLocalStorage.prototype.getStore
   const superEnterWith = AsyncLocalStorage.prototype.enterWith
@@ -66,6 +78,7 @@ if (!isACFActive) {
    * @param {Store<unknown>} [store]
    */
   DatadogStorage.prototype.enterWith = function enterWith (store) {
+    store?.[kStoreRetirement]?.add(store)
     const handle = { noop: store?.noop }
     stores.set(handle, store)
     superEnterWith.call(this, handle)
@@ -128,4 +141,4 @@ function storage (namespace) {
   return storages[namespace]
 }
 
-module.exports = { storage, isACFActive }
+module.exports = { storage, isACFActive, kStoreRetirement }

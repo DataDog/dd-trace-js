@@ -6,6 +6,12 @@ const {
   finishAllTraceSpans,
   getTestSuitePath,
 } = require('../../plugins/util/test')
+const {
+  createStoreRetirement,
+  enterSpanForRetirement,
+  getLiveSpan,
+  retireStoreGroup,
+} = require('../../active-span')
 const { storage } = require('../../../../datadog-core')
 
 const legacyStorage = storage('legacy')
@@ -22,11 +28,11 @@ class TestApiManualPlugin extends CiPlugin {
       const store = legacyStorage.getStore()
       const testSuiteRelative = getTestSuitePath(testSuite, this.sourceRoot)
       const testSpan = this.startTestSpan(testName, testSuiteRelative)
-      this.enter(testSpan, store)
+      enterSpanForRetirement(testSpan, store, createStoreRetirement(testSpan.context()))
     })
     this.unconfiguredAddSub('dd-trace:ci:manual:test:finish', ({ status, error }) => {
       const store = legacyStorage.getStore()
-      const testSpan = store && store.span
+      const testSpan = getLiveSpan(store)
       if (testSpan) {
         testSpan.setTag(TEST_STATUS, status)
         if (error) {
@@ -34,11 +40,12 @@ class TestApiManualPlugin extends CiPlugin {
         }
         testSpan.finish()
         finishAllTraceSpans(testSpan)
+        retireStoreGroup(store)
       }
     })
     this.unconfiguredAddSub('dd-trace:ci:manual:test:addTags', (tags) => {
       const store = legacyStorage.getStore()
-      const testSpan = store && store.span
+      const testSpan = getLiveSpan(store)
       if (testSpan) {
         testSpan.addTags(tags)
       }

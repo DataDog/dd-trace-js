@@ -119,9 +119,35 @@ describe('SpanProcessor', () => {
     trace.record = false
     trace.started = [finishedSpan]
     trace.finished = [finishedSpan]
-    processor.process(activeSpan)
+    processor.process(finishedSpan)
 
     sinon.assert.notCalled(exporter.export)
+    assert.deepStrictEqual(trace.started, [])
+    assert.deepStrictEqual(trace.finished, [])
+  })
+
+  it('should erase finished spans from an unrecorded partial trace at the flush threshold', () => {
+    trace.record = false
+    trace.started = [activeSpan, finishedSpan, finishedSpan, finishedSpan]
+    trace.finished = [finishedSpan, finishedSpan, finishedSpan]
+
+    processor.process(finishedSpan)
+
+    sinon.assert.notCalled(exporter.export)
+    assert.deepStrictEqual(trace.started, [activeSpan])
+    assert.deepStrictEqual(trace.finished, [])
+  })
+
+  it('should preserve an unrecorded partial trace below the flush threshold', () => {
+    trace.record = false
+    trace.started = [activeSpan, finishedSpan]
+    trace.finished = [finishedSpan]
+
+    processor.process(finishedSpan)
+
+    sinon.assert.notCalled(exporter.export)
+    assert.deepStrictEqual(trace.started, [activeSpan, finishedSpan])
+    assert.deepStrictEqual(trace.finished, [finishedSpan])
   })
 
   it('should export a partial trace with span count above configured threshold', () => {

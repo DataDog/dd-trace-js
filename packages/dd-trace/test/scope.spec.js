@@ -2,12 +2,20 @@
 
 const assert = require('node:assert/strict')
 
-const { describe, it, beforeEach } = require('mocha')
+const { afterEach, beforeEach, describe, it } = require('mocha')
 const sinon = require('sinon')
 
 const { Span } = require('opentracing')
+const { storage } = require('../../datadog-core')
 require('./setup/core')
+const {
+  createStoreRetirement,
+  enterSpanForRetirement,
+  markSpanProcessed,
+} = require('../src/active-span')
 const Scope = require('../src/scope')
+
+const legacyStorage = storage('legacy')
 
 describe('Scope', () => {
   let scope
@@ -18,9 +26,34 @@ describe('Scope', () => {
     span = new Span()
   })
 
+  afterEach(() => {
+    legacyStorage.enterWith(undefined)
+  })
+
   describe('active()', () => {
     it('should return null by default', () => {
       assert.strictEqual(scope.active(), null)
+    })
+
+    it('should return one retired span for the active context', () => {
+      const context = { _baggageItems: {} }
+      const tracer = {}
+      const activeSpan = {
+        _duration: 1,
+        context: () => context,
+        tracer: () => tracer,
+      }
+      const retirement = createStoreRetirement()
+      enterSpanForRetirement(activeSpan, {}, retirement)
+      retirement.retire()
+      markSpanProcessed(activeSpan)
+
+      scope = new Scope()
+      const retiredSpan = scope.active()
+
+      assert.notStrictEqual(retiredSpan, activeSpan)
+      assert.strictEqual(retiredSpan.context(), context)
+      assert.strictEqual(scope.active(), retiredSpan)
     })
   })
 
@@ -129,6 +162,65 @@ describe('Scope', () => {
         sinon.assert.calledWith(span.setTag, 'error', e)
       }
     })
+
+    it('should activate a retired span without restoring its original parent', () => {
+      const context = { _baggageItems: {} }
+      const tracer = {}
+      const activeSpan = {
+        _duration: 1,
+        context: () => context,
+        tracer: () => tracer,
+      }
+      const retirement = createStoreRetirement()
+      enterSpanForRetirement(activeSpan, {}, retirement)
+      retirement.retire()
+      markSpanProcessed(activeSpan)
+
+      scope = new Scope()
+      const retiredSpan = scope.active()
+
+      scope.activate(retiredSpan, () => {
+        assert.strictEqual(scope.active(), retiredSpan)
+      })
+    })
+
+    it('should suppress a retired span when activating null', () => {
+      const context = { _baggageItems: {} }
+      const tracer = {}
+      const activeSpan = {
+        _duration: 1,
+        context: () => context,
+        tracer: () => tracer,
+      }
+      const retirement = createStoreRetirement()
+      enterSpanForRetirement(activeSpan, {}, retirement)
+      retirement.retire()
+      markSpanProcessed(activeSpan)
+
+      scope = new Scope()
+      scope.activate(null, () => {
+        assert.strictEqual(scope.active(), null)
+      })
+    })
+
+    it('should preserve an explicitly activated original span after retirement', () => {
+      const context = { _baggageItems: {} }
+      const tracer = {}
+      const activeSpan = {
+        _duration: 1,
+        context: () => context,
+        tracer: () => tracer,
+      }
+      const retirement = createStoreRetirement()
+      enterSpanForRetirement(activeSpan, {}, retirement)
+      retirement.retire()
+      markSpanProcessed(activeSpan)
+
+      scope = new Scope()
+      scope.activate(activeSpan, () => {
+        assert.strictEqual(scope.active(), activeSpan)
+      })
+    })
   })
 
   describe('bind()', () => {
@@ -161,6 +253,40 @@ describe('Scope', () => {
         fn = scope.bind(fn)
 
         assert.strictEqual(fn(), 'test')
+      })
+
+      it('should observe retirement after binding the active context', () => {
+        const context = { _baggageItems: {} }
+        const tracer = {}
+        const activeSpan = {
+          _duration: 1,
+          context: () => context,
+          tracer: () => tracer,
+        }
+        const retirement = createStoreRetirement()
+        enterSpanForRetirement(activeSpan, {}, retirement)
+
+        scope = new Scope()
+        const fn = scope.bind(() => scope.active())
+        retirement.retire()
+        markSpanProcessed(activeSpan)
+
+        assert.notStrictEqual(fn(), activeSpan)
+        assert.strictEqual(fn().context(), context)
+      })
+
+      it('should tag errors thrown from an implicitly bound retireable context', () => {
+        const error = new Error('boom')
+        const activeSpan = {
+          setTag: sinon.spy(),
+        }
+        enterSpanForRetirement(activeSpan, {}, createStoreRetirement())
+        const fn = scope.bind(() => {
+          throw error
+        })
+
+        assert.throws(fn, error)
+        sinon.assert.calledWith(activeSpan.setTag, 'error', error)
       })
     })
 

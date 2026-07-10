@@ -35,13 +35,12 @@ class DatadogTracingHelper {
    */
   getTraceParent (context) {
     const store = storage('legacy').getStore()
-    const span = store?.span
-    if (span?._spanContext) {
-      const context = span._spanContext
-
-      const traceId = context.toTraceId(true)
-      const spanId = context.toSpanId(true)
-      const version = (context._traceparent && context._traceparent.version) || '00'
+    const parent = store?.span
+    const activeContext = parent?.context?.() ?? parent?._spanContext
+    if (activeContext) {
+      const traceId = activeContext.toTraceId(true)
+      const spanId = activeContext.toSpanId(true)
+      const version = (activeContext._traceparent && activeContext._traceparent.version) || '00'
 
       // always sampled a sampled traceparent due to the following reasons:
       // 1. Datadog spans are sampled on span.finish
@@ -82,7 +81,8 @@ class DatadogTracingHelper {
 
   getActiveContext () {
     const store = storage('legacy').getStore()
-    return store?.span?._spanContext
+    const parent = store?.span
+    return parent?.context?.() ?? parent?._spanContext
   }
 
   /**

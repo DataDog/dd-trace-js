@@ -247,6 +247,8 @@
 /packages/dd-trace/test/opentracing/ @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/remote_config/ @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/remote_config/ @DataDog/apm-sdk-capabilities-js
+/packages/dd-trace/src/active-span.js @DataDog/apm-sdk-capabilities-js
+/packages/dd-trace/test/active-span.spec.js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/baggage.js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/test/baggage.spec.js @DataDog/apm-sdk-capabilities-js
 /packages/dd-trace/src/sampler.js @DataDog/apm-sdk-capabilities-js

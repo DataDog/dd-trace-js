@@ -22,6 +22,7 @@ const startServerCh = channel('apm:http:server:request:start')
 const exitServerCh = channel('apm:http:server:request:exit')
 const errorServerCh = channel('apm:http:server:request:error')
 const finishServerCh = channel('apm:http:server:request:finish')
+const postFinishServerCh = channel('apm:http:server:request:postfinish')
 
 addHook({ name: 'light-my-request', versions: ['>=3'] }, (lightMyRequest) => {
   // Wrap the inject function
@@ -51,29 +52,22 @@ function wrapDispatchFunc (dispatchFunc) {
     // Publish start event (same as HTTP server)
     startServerCh.publish({ req, res, abortController })
 
-    // Track when response finishes via 'finish' event (like HTTP instrumentation)
     let finishCalled = false
-    const onFinish = () => {
-      if (!finishCalled) {
-        finishCalled = true
-        finishServerCh.publish({ req })
-      }
-    }
-
-    // light-my-request Response emits 'finish' when done
-    if (res.on && typeof res.on === 'function') {
-      res.once('finish', onFinish)
-      res.once('close', onFinish)
-    }
-
-    // Also wrap end() as fallback
-    const originalEnd = res.end
-    if (originalEnd) {
-      res.end = function wrappedEnd (...args) {
-        const result = originalEnd.apply(this, args)
-        // Trigger finish if events don't fire
-        setImmediate(onFinish)
-        return result
+    const originalEmit = res.emit
+    if (typeof originalEmit === 'function') {
+      res.emit = function emit (...args) {
+        const eventName = args[0]
+        if ((eventName === 'finish' || eventName === 'close') && !finishCalled) {
+          finishCalled = true
+          const ctx = { req }
+          finishServerCh.publish(ctx)
+          try {
+            return Reflect.apply(originalEmit, this, args)
+          } finally {
+            postFinishServerCh.publish(ctx)
+          }
+        }
+        return Reflect.apply(originalEmit, this, args)
       }
     }
 

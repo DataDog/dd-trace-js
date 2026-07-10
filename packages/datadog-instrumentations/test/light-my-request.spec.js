@@ -12,9 +12,10 @@ withVersions('light-my-request', 'light-my-request', version => describe('light-
   const startServerCh = dc.channel('apm:http:server:request:start')
   const exitServerCh = dc.channel('apm:http:server:request:exit')
   const finishServerCh = dc.channel('apm:http:server:request:finish')
+  const postFinishServerCh = dc.channel('apm:http:server:request:postfinish')
   const errorServerCh = dc.channel('apm:http:server:request:error')
 
-  let startStub, exitStub, finishStub, errorStub
+  let startStub, exitStub, finishStub, postFinishStub, errorStub
   let inject, Fastify
 
   before(async () => {
@@ -31,11 +32,13 @@ withVersions('light-my-request', 'light-my-request', version => describe('light-
     startStub = sinon.stub()
     exitStub = sinon.stub()
     finishStub = sinon.stub()
+    postFinishStub = sinon.stub()
     errorStub = sinon.stub()
 
     startServerCh.subscribe(startStub)
     exitServerCh.subscribe(exitStub)
     finishServerCh.subscribe(finishStub)
+    postFinishServerCh.subscribe(postFinishStub)
     errorServerCh.subscribe(errorStub)
   })
 
@@ -43,6 +46,7 @@ withVersions('light-my-request', 'light-my-request', version => describe('light-
     startServerCh.unsubscribe(startStub)
     exitServerCh.unsubscribe(exitStub)
     finishServerCh.unsubscribe(finishStub)
+    postFinishServerCh.unsubscribe(postFinishStub)
     errorServerCh.unsubscribe(errorStub)
   })
 
@@ -102,7 +106,7 @@ withVersions('light-my-request', 'light-my-request', version => describe('light-
       assert(testCall, 'exit channel should be called for /test request')
     })
 
-    it('should publish to finish channel when response completes', async () => {
+    it('should publish finish and postfinish when the response completes', async () => {
       await app.inject({
         method: 'GET',
         url: '/test',
@@ -119,6 +123,13 @@ withVersions('light-my-request', 'light-my-request', version => describe('light-
       })
 
       assert(testCall, 'finish channel should be called for /test request')
+      const postFinishCall = postFinishStub.getCalls().find(call => {
+        const { req } = call.args[0]
+        return req.url === '/test'
+      })
+
+      assert(postFinishCall, 'postfinish channel should be called for /test request')
+      assert(testCall.calledBefore(postFinishCall))
     })
 
     it('should link res.req for context tracking', async () => {

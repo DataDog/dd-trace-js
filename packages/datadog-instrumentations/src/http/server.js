@@ -10,6 +10,7 @@ const startServerCh = channel('apm:http:server:request:start')
 const exitServerCh = channel('apm:http:server:request:exit')
 const errorServerCh = channel('apm:http:server:request:error')
 const finishServerCh = channel('apm:http:server:request:finish')
+const postFinishServerCh = channel('apm:http:server:request:postfinish')
 const startWriteHeadCh = channel('apm:http:server:response:writeHead:start')
 const finishSetHeaderCh = channel('datadog:http:server:response:set-header:finish')
 const startSetHeaderCh = channel('datadog:http:server:response:set-header:start')
@@ -52,14 +53,20 @@ function wrapResponseEmit (originalEmit) {
   // skips its name rewrite; rest params keep the per-event forwarding
   // allocation-free.
   return function emit (...args) {
-    if (!finishServerCh.hasSubscribers) {
+    if (!finishServerCh.hasSubscribers && !postFinishServerCh.hasSubscribers) {
       return Reflect.apply(originalEmit, this, args)
     }
 
     const eventName = args[0]
     if ((eventName === 'finish' || eventName === 'close') && !requestFinishedSet.has(this)) {
-      finishServerCh.publish({ req: this.req })
+      const ctx = { req: this.req }
+      finishServerCh.publish(ctx)
       requestFinishedSet.add(this)
+      try {
+        return Reflect.apply(originalEmit, this, args)
+      } finally {
+        postFinishServerCh.publish(ctx)
+      }
     }
 
     return Reflect.apply(originalEmit, this, args)

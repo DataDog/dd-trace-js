@@ -6,6 +6,7 @@ const SpanSampler = require('./span_sampler')
 const GitMetadataTagger = require('./git_metadata_tagger')
 const processTags = require('./process-tags')
 const { applyHttpOtelSemantics } = require('./plugins/util/http-otel-semantics')
+const { markSpanProcessed } = require('./active-span')
 
 const startedSpans = new WeakSet()
 const finishedSpans = new WeakSet()
@@ -44,8 +45,23 @@ class SpanProcessor {
     const { flushMinSpans, DD_TRACE_ENABLED } = this._config
     const { started, finished } = trace
 
-    if (trace.record === false) return
+    if (trace.record === false) {
+      if (started.length === finished.length || finished.length >= flushMinSpans) {
+        for (const startedSpan of started) {
+          if (startedSpan._duration === undefined) {
+            active.push(startedSpan)
+          } else {
+            markSpanProcessed(startedSpan)
+          }
+        }
+        this._erase(trace, active)
+      }
+      return
+    }
     if (DD_TRACE_ENABLED === false) {
+      for (const finishedSpan of finished) {
+        markSpanProcessed(finishedSpan)
+      }
       this._erase(trace, active)
       return
     }
@@ -68,6 +84,7 @@ class SpanProcessor {
             applyHttpOtelSemantics(formattedSpan)
           }
           formatted.push(formattedSpan)
+          markSpanProcessed(span)
         }
       }
 

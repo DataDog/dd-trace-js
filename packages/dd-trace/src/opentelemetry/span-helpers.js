@@ -4,6 +4,7 @@ const { performance } = require('node:perf_hooks')
 
 const { timeInputToHrTime } = require('../../../../vendor/dist/@opentelemetry/core')
 
+const { isRetiredSpan } = require('../active-span')
 const { ERROR_MESSAGE, ERROR_STACK, ERROR_TYPE, IGNORE_OTEL_ERROR } = require('../constants')
 const DatadogSpanContext = require('../opentracing/span_context')
 const TraceState = require('../opentracing/propagation/tracestate')
@@ -38,7 +39,7 @@ const { timeOrigin } = performance
  * @param {import('../opentracing/span')} ddSpan
  */
 function isWritable (ddSpan) {
-  return ddSpan._duration === undefined
+  return !isRetiredSpan(ddSpan) && ddSpan._duration === undefined
 }
 
 /**

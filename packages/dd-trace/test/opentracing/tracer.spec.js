@@ -9,6 +9,11 @@ const proxyquire = require('proxyquire')
 
 const opentracing = require('opentracing')
 require('../setup/core')
+const {
+  createStoreRetirement,
+  enterSpanForRetirement,
+  markSpanProcessed,
+} = require('../../src/active-span')
 const SpanContext = require('../../src/opentracing/span_context')
 const formats = require('../../../../ext/formats')
 
@@ -256,6 +261,34 @@ describe('Tracer', () => {
       sinon.assert.calledWith(span.addTags, fields.tags)
     })
 
+    it('should start a child of a retired span', () => {
+      tracer = new Tracer(config)
+      const context = new SpanContext({})
+      const retirement = createStoreRetirement()
+      const parent = {
+        _duration: 1,
+        context: () => context,
+        tracer: () => tracer,
+      }
+      const store = enterSpanForRetirement(parent, {}, retirement)
+      retirement.retire()
+      markSpanProcessed(parent)
+      const retiredSpan = store.span
+
+      tracer.startSpan('name', { childOf: retiredSpan })
+
+      assert.strictEqual(Span.firstCall.args[3].parent, context)
+    })
+
+    it('should start a child of a span context', () => {
+      const context = new SpanContext({})
+      tracer = new Tracer(config)
+
+      tracer.startSpan('name', { childOf: context })
+
+      assert.strictEqual(Span.firstCall.args[3].parent, context)
+    })
+
     it('should preserve the span version when the span service matches the global service', () => {
       fields.tags = {
         service: 'service',
@@ -342,6 +375,25 @@ describe('Tracer', () => {
   })
 
   describe('inject', () => {
+    it('should inject a retired span context', () => {
+      TextMapPropagator.returns(propagator)
+      tracer = new Tracer(config)
+      const context = new SpanContext({})
+      const retirement = createStoreRetirement()
+      const parent = {
+        _duration: 1,
+        context: () => context,
+        tracer: () => tracer,
+      }
+      const store = enterSpanForRetirement(parent, {}, retirement)
+      retirement.retire()
+      markSpanProcessed(parent)
+
+      tracer.inject(store.span, formats.TEXT_MAP, carrier)
+
+      sinon.assert.calledWith(propagator.inject, context, carrier)
+    })
+
     it('should support text map format', () => {
       TextMapPropagator.returns(propagator)
 

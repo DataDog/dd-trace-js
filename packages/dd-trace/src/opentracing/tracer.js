@@ -1,6 +1,7 @@
 'use strict'
 
 const os = require('os')
+const { getRetiredSpanContext } = require('../active-span')
 const SpanProcessor = require('../span_processor')
 const PrioritySampler = require('../priority_sampler')
 const formats = require('../../../../ext/formats')
@@ -102,6 +103,7 @@ class DatadogTracer {
   }
 
   inject (context, format, carrier) {
+    context = getRetiredSpanContext(context) ?? context
     if (context instanceof Span) {
       context = context.context()
     }
@@ -135,6 +137,7 @@ class DatadogTracer {
  * @returns {SpanContext|null}
  */
 function getContext (spanContext) {
+  spanContext = getRetiredSpanContext(spanContext) ?? spanContext
   if (spanContext instanceof Span) {
     spanContext = spanContext.context()
   }
