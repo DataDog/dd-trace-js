@@ -1493,19 +1493,22 @@ describe('Plugin', () => {
         })
 
         withVersions('express', 'loopback', loopbackVersion => {
-          let loopback
+          let createLoopbackExpressApp
 
-          beforeEach(function () {
-            this.timeout(5000)
+          before(() => {
+            // Load the module that owns phase sorting; the public entry also loads unrelated models and connectors.
+            createLoopbackExpressApp = require(`../../../versions/loopback@${loopbackVersion}`)
+              .get('loopback/lib/server-app')
+          })
 
-            // Legacy loopback emits the deprecated `util._extend` at module
-            // load; allow it so the harness deprecation guard does not throw.
+          beforeEach(() => {
+            // Legacy loopback invokes the deprecated `util._extend` while creating an app;
+            // allow it so the harness deprecation guard does not throw.
             temporaryWarningExceptions.add('The `util._extend` API is deprecated. Please use Object.assign() instead.')
-            loopback = require(`../../../versions/loopback@${loopbackVersion}`).get()
           })
 
           it('should handle loopback with express middleware', done => {
-            const app = loopback()
+            const app = createLoopbackExpressApp()
 
             app.get('/dd', (req, res) => {
               res.status(200).send()
@@ -1540,7 +1543,7 @@ describe('Plugin', () => {
           })
 
           it('should handle loopback re-sorting', done => {
-            const app = loopback()
+            const app = createLoopbackExpressApp()
 
             app.middleware('final', [], function throwError (req, res) {
               throw new Error('should not reach')
