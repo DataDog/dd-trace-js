@@ -119,7 +119,7 @@ describe('NativeSpanContext', () => {
 
       // The JS tag cache still updates (parity with the JS-only pipeline, which
       // also serializes spans at export time so late tags never hit the wire).
-      assert.strictEqual(spanContext._tags['peer.service'], 'db')
+      assert.strictEqual(spanContext.getTag('peer.service'), 'db')
     })
   })
 

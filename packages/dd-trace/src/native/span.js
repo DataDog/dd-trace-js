@@ -59,7 +59,7 @@ const EMPTY_ATTRS = Buffer.alloc(0)
 // absent, breaking IAST location matching). Mirror the legacy filter exactly.
 function cleanMetaStructValue (value, seen = new Set()) {
   if (Array.isArray(value)) {
-    if (seen.has(value)) return undefined
+    if (seen.has(value)) return
     seen.add(value)
     const out = []
     for (const item of value) {
@@ -72,7 +72,7 @@ function cleanMetaStructValue (value, seen = new Set()) {
     return out
   }
   if (value !== null && typeof value === 'object') {
-    if (seen.has(value)) return undefined
+    if (seen.has(value)) return
     seen.add(value)
     const out = {}
     for (const key of Object.keys(value)) {
