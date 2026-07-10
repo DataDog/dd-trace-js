@@ -95,6 +95,19 @@ describe('test optimization validation command runner', () => {
     assert.match(nodeOptions, /[\\/]ci[\\/]init\.js/)
   })
 
+  it('injects --import for Vitest shell commands using the validator Node version', () => {
+    const { withCiPreloads } = require('../../../../ci/test-optimization-validation/command-runner')
+    const nodeOptions = withCiPreloads('', { framework: 'vitest' }, {
+      cwd: process.cwd(),
+      usesShell: true,
+      shellCommand: 'pnpm run test',
+    })
+
+    assert.match(nodeOptions, /--import/)
+    assert.match(nodeOptions, /[\\/]register\.js/)
+    assert.match(nodeOptions, /[\\/]ci[\\/]init\.js/)
+  })
+
   it('disables unrelated Datadog side channels during forced local validation', () => {
     const env = buildDatadogEnv({
       intake: { port: 1234 },
@@ -210,6 +223,44 @@ describe('test optimization validation command runner', () => {
         envMode: 'clean',
         outDir,
       }), /Refusing inline DD_TRACE_AGENT_URL changes/)
+
+      await assert.rejects(runCommand({
+        cwd: outDir,
+        argv: ['/usr/bin/env', '--unset=NODE_OPTIONS', 'npm', 'test'],
+      }, {
+        env,
+        envMode: 'clean',
+        outDir,
+      }), /Refusing inline NODE_OPTIONS changes/)
+
+      await assert.rejects(runCommand({
+        cwd: outDir,
+        argv: ['/usr/bin/env', '-i', 'PATH=/usr/bin', 'npm', 'test'],
+      }, {
+        env,
+        envMode: 'clean',
+        outDir,
+      }), /Refusing to clear the command environment/)
+
+      await assert.rejects(runCommand({
+        cwd: outDir,
+        usesShell: true,
+        shellCommand: 'env --unset=NODE_OPTIONS npm test',
+      }, {
+        env,
+        envMode: 'clean',
+        outDir,
+      }), /Refusing inline NODE_OPTIONS changes/)
+
+      await assert.rejects(runCommand({
+        cwd: outDir,
+        usesShell: true,
+        shellCommand: 'env --ignore-environment PATH=/usr/bin npm test',
+      }, {
+        env,
+        envMode: 'clean',
+        outDir,
+      }), /Refusing to clear the command environment/)
     } finally {
       fs.rmSync(outDir, { recursive: true, force: true })
     }

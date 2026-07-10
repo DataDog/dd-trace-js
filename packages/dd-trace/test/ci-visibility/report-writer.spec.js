@@ -693,6 +693,55 @@ describe('test optimization validation report writer', () => {
     }
   })
 
+  it('escapes leading Markdown block syntax in repository-derived report text', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-report-'))
+    const out = path.join(tmpDir, 'results')
+    const intakeDir = path.join(out, 'intake')
+    const requestsPath = path.join(intakeDir, 'requests.ndjson')
+    const originalLog = console.log
+    const diagnoses = ['# heading', '---', '- list item', '+ list item', '1. ordered item', '~~~']
+
+    fs.mkdirSync(intakeDir, { recursive: true })
+    fs.writeFileSync(requestsPath, '')
+    console.log = () => {}
+
+    try {
+      writeReport({
+        manifest: {
+          __path: path.join(tmpDir, 'manifest.json'),
+          frameworks: [],
+        },
+        results: diagnoses.map((diagnosis, index) => ({
+          artifacts: [],
+          diagnosis,
+          evidence: { frameworkStatus: 'unknown' },
+          frameworkId: `custom:${index}`,
+          scenario: 'all',
+          status: 'fail',
+        })),
+        out,
+        intake: {
+          requests: [],
+          getArtifactRequests () { return [] },
+          writeArtifacts () { return { requestsPath } },
+        },
+      })
+
+      const markdown = fs.readFileSync(path.join(out, 'report.md'), 'utf8')
+      const humanMarkdown = markdown.replace(/```json[\s\S]*?```/g, '')
+
+      assert.match(humanMarkdown, /\\# heading/)
+      assert.match(humanMarkdown, /\\---/)
+      assert.match(humanMarkdown, /\\- list item/)
+      assert.match(humanMarkdown, /\\\+ list item/)
+      assert.match(humanMarkdown, /1\\\. ordered item/)
+      assert.match(humanMarkdown, /\\~~~/)
+    } finally {
+      console.log = originalLog
+      fs.rmSync(tmpDir, { recursive: true, force: true })
+    }
+  })
+
   it('refuses a symbolic-link validation output directory', function () {
     if (process.platform === 'win32') this.skip()
 

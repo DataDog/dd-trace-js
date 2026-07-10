@@ -12,6 +12,12 @@ const {
 const { frameworkOutDir } = require('./scenarios/helpers')
 const { getObservedTestCount } = require('./test-output')
 
+const GENERATED_SCENARIO_BY_FEATURE = {
+  efd: 'basic-pass',
+  atr: 'atr-fail-once',
+  'test-management': 'test-management-target',
+}
+
 /**
  * Verifies generated scenario commands without Datadog initialization.
  *
@@ -35,7 +41,7 @@ async function verifyGeneratedTestStrategy ({ framework, out, options }) {
     cleanupGeneratedRuntimeFiles(framework)
     writeGeneratedFiles(framework)
 
-    for (const scenario of strategy.scenarios) {
+    for (const scenario of getScenariosToVerify(strategy.scenarios, options.scenarios)) {
       cleanupGeneratedRuntimeFiles(framework)
       const command = getDatadogCleanCommand(getLocalValidationCommand(framework, scenario.runCommand))
       const outDir = frameworkOutDir(out, framework, `generated-verification-${scenario.id}`)
@@ -94,6 +100,26 @@ async function verifyGeneratedTestStrategy ({ framework, out, options }) {
       },
     }
   }
+}
+
+/**
+ * Selects only generated tests required by the requested advanced checks.
+ *
+ * @param {object[]} scenarios generated test scenarios
+ * @param {Set<string>} [selectedFeatures] validator scenario selection
+ * @returns {object[]} generated scenarios to verify
+ */
+function getScenariosToVerify (scenarios, selectedFeatures) {
+  if (!(selectedFeatures instanceof Set)) return scenarios
+
+  const selectedScenarioIds = new Set()
+  for (const feature of selectedFeatures) {
+    const scenarioId = GENERATED_SCENARIO_BY_FEATURE[feature]
+    if (scenarioId) selectedScenarioIds.add(scenarioId)
+  }
+
+  if (selectedScenarioIds.size === 0) return scenarios
+  return scenarios.filter(scenario => selectedScenarioIds.has(scenario.id))
 }
 
 /**

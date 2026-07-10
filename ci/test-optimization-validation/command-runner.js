@@ -330,15 +330,16 @@ function assertNoInlineValidationEnvOverrides (command, env) {
   }
 
   const parsed = parseArgv(command.argv)
+  if (parsed.ignoreEnvironment) throwEnvironmentReset()
   for (const name of Object.keys(parsed.prefixEnv)) {
+    if (VALIDATION_RESERVED_ENV_NAMES.includes(name)) throwReservedEnvOverride(name)
+  }
+  for (const name of parsed.unsetEnvNames) {
     if (VALIDATION_RESERVED_ENV_NAMES.includes(name)) throwReservedEnvOverride(name)
   }
 
   for (let index = 0; index < command.argv.length - 1; index++) {
     const value = command.argv[index]
-    if ((value === '-u' || value === '--unset') && VALIDATION_RESERVED_ENV_NAMES.includes(command.argv[index + 1])) {
-      throwReservedEnvOverride(command.argv[index + 1])
-    }
     if (value === '-c' && typeof command.argv[index + 1] === 'string') {
       rejectReservedShellAssignments(command.argv[index + 1])
     }
@@ -352,6 +353,9 @@ function assertNoInlineValidationEnvOverrides (command, env) {
  */
 function rejectReservedShellAssignments (shellCommand) {
   const source = String(shellCommand || '')
+  const environmentReset = /\benv(?:\.exe)?\s+(?:(?![;&|()]).)*?(?:-i\b|--ignore-environment\b)/i
+
+  if (environmentReset.test(source)) throwEnvironmentReset()
 
   for (const name of VALIDATION_RESERVED_ENV_NAMES) {
     const escapedName = escapeRegExp(name)
@@ -360,7 +364,7 @@ function rejectReservedShellAssignments (shellCommand) {
       'i'
     )
     const removal = new RegExp(
-      String.raw`(?:\bunset\s+|\benv\s+(?:[^;&|]*\s)?(?:-u|--unset)\s+|` +
+      String.raw`(?:\bunset\s+|\benv(?:\.exe)?\s+(?:(?![;&|()]).)*?(?:-u\s*|--unset(?:=|\s+))|` +
       String.raw`\bRemove-Item\s+(?:[^;&|]*\s)?env:)${escapedName}\b`,
       'i'
     )
@@ -378,6 +382,13 @@ function throwReservedEnvOverride (name) {
   throw new Error(
     `Refusing inline ${name} changes during live validation because they can bypass the local fake intake. ` +
     'Record CI-provided values in command.env so the validator can apply safe transport overrides.'
+  )
+}
+
+function throwEnvironmentReset () {
+  throw new Error(
+    'Refusing to clear the command environment during live validation because this would remove the local fake ' +
+    'intake and Datadog initialization settings.'
   )
 }
 
@@ -433,7 +444,9 @@ function supportsImportPreload (command) {
  * @returns {string|undefined} Node.js version
  */
 function getCommandNodeVersion (command) {
-  if (!command || command.usesShell || !Array.isArray(command.argv)) return
+  if (!command) return
+  if (command.usesShell) return process.versions.node
+  if (!Array.isArray(command.argv)) return
 
   const { commandIndex } = parseArgv(command.argv)
   const executable = command.argv[commandIndex]
@@ -544,8 +557,10 @@ function getDisplayDetails (argv) {
 
 function parseArgv (argv) {
   const result = {
+    ignoreEnvironment: false,
     prefixAssignments: [],
     prefixEnv: {},
+    unsetEnvNames: [],
     commandIndex: 0,
     corepackIndex: -1,
     pathAdjusted: false,
@@ -556,7 +571,30 @@ function parseArgv (argv) {
   let index = 0
   if (isEnvExecutable(argv[index])) {
     index++
-    while (index < argv.length && isEnvAssignment(argv[index])) {
+    while (index < argv.length) {
+      const option = argv[index]
+      if (option === '--') {
+        index++
+        break
+      }
+      if (option === '-i' || option === '--ignore-environment') {
+        result.ignoreEnvironment = true
+        index++
+        continue
+      }
+      if (option === '-u' || option === '--unset') {
+        if (typeof argv[index + 1] === 'string') result.unsetEnvNames.push(argv[index + 1])
+        index += 2
+        continue
+      }
+      const unsetMatch = /^(?:-u|--unset=)(.+)$/.exec(option)
+      if (unsetMatch) {
+        result.unsetEnvNames.push(unsetMatch[1])
+        index++
+        continue
+      }
+      if (!isEnvAssignment(option)) break
+
       const assignment = argv[index]
       const equalsIndex = assignment.indexOf('=')
       const name = assignment.slice(0, equalsIndex)

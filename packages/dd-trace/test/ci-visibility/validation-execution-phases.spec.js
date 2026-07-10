@@ -98,6 +98,34 @@ describe('test optimization validator-owned execution phases', () => {
     }
   })
 
+  it('verifies only generated scenarios required by the selected advanced check', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-generated-'))
+    const generatedFile = path.join(root, 'tests', 'dd-test-optimization-validation', 'scenarios.test.js')
+    const stateFile = path.join(root, 'tests', '.dd-test-optimization-validation-atr-state')
+    const framework = getPlannedFramework(root, generatedFile, stateFile)
+    const out = path.join(root, 'results')
+
+    try {
+      fs.mkdirSync(out)
+      const outcome = await verifyGeneratedTestStrategy({
+        framework,
+        options: {
+          scenarios: new Set(['basic-reporting', 'efd']),
+          verbose: false,
+        },
+        out,
+      })
+
+      assert.strictEqual(outcome.ok, true)
+      assert.deepStrictEqual(
+        framework.generatedTestStrategy.verification.observedScenarios.map(scenario => scenario.id),
+        ['basic-pass']
+      )
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
+
   it('prints normalized commands and absolute paths without executing project code', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-validation-plan-'))
     const manifestPath = path.join(root, 'manifest.json')
@@ -165,12 +193,13 @@ describe('test optimization validator-owned execution phases', () => {
       assert.match(plan, /#### Test Execution With Datadog/)
       assert.doesNotMatch(plan, /#### Test Execution With CI Configuration/)
       assert.match(plan, /#### Temporary Tests Created for Advanced Checks/)
-      assert.match(plan, /#### Generated Test Verification: basic-pass/)
       assert.match(plan, /#### Advanced Check: Auto Test Retries/)
-      assert.match(plan, /#### Generated Test Verification: test-management-target/)
+      assert.doesNotMatch(plan, /#### Advanced Check: Early Flake Detection/)
+      assert.doesNotMatch(plan, /#### Advanced Check: Test Management/)
+      assert.doesNotMatch(plan, /#### Generated Test Verification:/)
       assert.match(fullPlan, /Executions: once, plus at most one initialization-reachability probe/)
       assert.match(plan, /Executions: three times: once without Datadog to verify test isolation/)
-      assert.match(plan, /Executions: once without Datadog/)
+      assert.doesNotMatch(plan, /Executions: once without Datadog/)
       assert.match(plan, /#### Files Removed After Validation/)
       assert.match(plan, /Exact temporary test content/)
       assert.match(plan, /\/\/ generated validation test/)
@@ -240,6 +269,18 @@ describe('test optimization validator-owned execution phases', () => {
       Test Suites: 1 passed, 1 total
       Tests:       3 passed, 3 total
     `), 3)
+  })
+
+  it('counts Playwright test summaries', () => {
+    assert.strictEqual(getObservedTestCount('playwright', `
+      Running 1 test using 1 worker
+      1 passed (1.2s)
+    `), 1)
+    assert.strictEqual(getObservedTestCount('playwright', `
+      1 failed
+      1 passed (2.3s)
+    `), 2)
+    assert.strictEqual(getObservedTestCount('playwright', '1 skipped'), 0)
   })
 })
 

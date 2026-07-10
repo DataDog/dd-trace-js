@@ -168,6 +168,8 @@ function markdownText (value, options = {}) {
     .replaceAll(/\r?\n/g, ' ')
     .replaceAll('\\', '\\\\')
     .replace(/^(\s{0,3})>/, String.raw`$1\>`)
+    .replace(/^(\s{0,3})(#{1,6}|-{1,3}|\+|~{3,})(?=\s|$)/, String.raw`$1\$2`)
+    .replace(/^(\s{0,3}\d+)([.)])(?=\s|$)/, String.raw`$1\$2`)
     .replaceAll('<', String.raw`\<`)
     .replaceAll(/([`!*_[\]()])/g, String.raw`\$1`)
 }

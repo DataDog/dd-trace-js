@@ -14,6 +14,7 @@ function getObservedTestCount (framework, stdout = '', stderr = '') {
   const output = `${stdout}\n${stderr}`.replaceAll(ANSI_PATTERN, '')
   if (framework === 'jest') return getJestObservedTestCount(output)
   if (framework === 'vitest') return getVitestObservedTestCount(output)
+  if (framework === 'playwright') return getPlaywrightObservedTestCount(output)
 
   const totalPatterns = framework === 'node:test'
     ? [/^# tests\s+(\d+)\s*$/gim]
@@ -35,6 +36,22 @@ function getObservedTestCount (framework, stdout = '', stderr = '') {
   }
 
   return getLastMatchCount(output, /\b(\d+)\s+tests?\s+(?:passed|failed)\b/gi)
+}
+
+/**
+ * Counts Playwright tests that completed instead of treating skipped tests as executions.
+ *
+ * @param {string} output test output without ANSI codes
+ * @returns {number|null} executed test count
+ */
+function getPlaywrightObservedTestCount (output) {
+  const observed = sumLastMatchCounts(output, [
+    /^\s*(\d+)\s+passed\b/gim,
+    /^\s*(\d+)\s+failed\b/gim,
+    /^\s*(\d+)\s+flaky\b/gim,
+  ])
+  if (observed !== null) return observed
+  return /^\s*\d+\s+skipped\b/im.test(output) ? 0 : null
 }
 
 /**

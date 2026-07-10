@@ -256,25 +256,19 @@ function appendFrameworkExecutions (lines, framework, requestedScenario) {
       )
     }
     lines.push('')
-    for (const scenario of strategy.scenarios || []) {
+    const selectedScenarios = selectedGeneratedScenario
+      ? (strategy.scenarios || []).filter(scenario => scenario.id === selectedGeneratedScenario)
+      : strategy.scenarios || []
+    for (const scenario of selectedScenarios) {
       const command = getLocalValidationCommand(framework, scenario.runCommand)
-      const featureSelected = !requestedScenario || scenario.id === selectedGeneratedScenario
-      const details = featureSelected
-        ? GENERATED_SCENARIO_DETAILS[scenario.id] || {
-          heading: `Advanced Check: ${scenario.id}`,
-          description: 'Runs a temporary test to verify this advanced feature.',
-        }
-        : {
-            heading: `Generated Test Verification: ${scenario.id}`,
-            description: 'Checks this temporary test once without Datadog because the validator verifies the ' +
-              'complete generated strategy before the selected advanced check.',
-          }
+      const details = GENERATED_SCENARIO_DETAILS[scenario.id] || {
+        heading: `Advanced Check: ${scenario.id}`,
+        description: 'Runs a temporary test to verify this advanced feature.',
+      }
       appendCommandSection(lines, details.heading, command, {
         description: details.description,
-        executions: featureSelected
-          ? 'three times: once without Datadog to verify test isolation, once to discover the reported test ' +
-            'identity, and once with the feature enabled; on failure, at most one additional debug rerun'
-          : 'once without Datadog',
+        executions: 'three times: once without Datadog to verify test isolation, once to discover the reported ' +
+          'test identity, and once with the feature enabled; on failure, at most one additional debug rerun',
       })
     }
     lines.push(
