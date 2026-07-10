@@ -668,14 +668,17 @@ describe('NativeExporter', () => {
       sinon.assert.calledOnce(onFirstFlush)
     })
 
-    it('does not publish when the flush rejects', async () => {
+    it('publishes even when the send rejects (so abort.integration fires without an agent)', async () => {
+      // The channel is announced when the send is attempted, not when it
+      // succeeds — logAbortedIntegrations must run even against an unreachable
+      // agent (the guardrails harness has no agent).
       nativeSpans.flushSpansGrouped.rejects(new Error('Network error'))
 
       exporter.export([createMockSpan(1n)])
       exporter.flush()
       await clock.tickAsync(0)
 
-      sinon.assert.notCalled(onFirstFlush)
+      sinon.assert.calledOnce(onFirstFlush)
     })
   })
 

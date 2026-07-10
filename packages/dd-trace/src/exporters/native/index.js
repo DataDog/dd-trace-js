@@ -326,6 +326,17 @@ class NativeExporter {
     // would cause unbounded memory growth proportional to total requests.
     // Note: flushChangeQueue is called inside flushSpansGrouped.
     runtimeMetrics.increment(`${METRIC_PREFIX}.requests`, true)
+    // Announce the first flush when the send is *attempted*, not when it
+    // succeeds — matching the legacy AgentWriter, which publishes before sending.
+    // `logAbortedIntegrations` (register.js) subscribes to this channel to emit
+    // `library_entrypoint.abort.integration`; gating it on send success meant a
+    // refused/unreachable agent (e.g. the guardrails harness with no agent) never
+    // fired it. At this point `_pendingSpans` is non-empty (flush() returned
+    // early otherwise), so a real send is happening.
+    if (!this.#firstFlushSent && firstFlushChannel.hasSubscribers) {
+      this.#firstFlushSent = true
+      firstFlushChannel.publish()
+    }
     // At `flushInterval: 0` the legacy AgentWriter sent one trace per request
     // (each finished trace flushed immediately). The batched single-payload form
     // — used at flushInterval>0 to cut request overhead — would instead deliver
@@ -354,10 +365,6 @@ class NativeExporter {
         // back into the priority sampler so adaptive (agent-driven) sampling
         // works in native mode, matching the legacy AgentWriter behaviour.
         this.#updateSamplingRates(response)
-        if (!this.#firstFlushSent) {
-          this.#firstFlushSent = true
-          firstFlushChannel.publish()
-        }
         // Drain any spans that arrived while the send was in flight.
         if (this._pendingSpans.length > 0) {
           this.flush()
