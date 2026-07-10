@@ -564,7 +564,7 @@ describe('Plugin', () => {
             // rejects it with 415, and its 'stream' event must still not be
             // traced as http2 because gRPC owns the server.
             await new Promise((resolve, reject) => {
-              const client = http2.connect(`http://localhost:${port}`).on('error', reject)
+              const client = http2.connect(`http://127.0.0.1:${port}`).on('error', reject)
               const req = client.request({ ':path': '/', ':method': 'GET' })
               req.on('error', reject)
               req.on('end', () => {
